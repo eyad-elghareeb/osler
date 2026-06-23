@@ -37,7 +37,7 @@ fn main() {
     }
 
     let root_files = [
-        "favicon.svg",
+        "assets/favicon.svg",
         "sw.js",
         "manifest.webmanifest",
         "index-engine.css",

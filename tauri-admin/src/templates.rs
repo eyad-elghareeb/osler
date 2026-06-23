@@ -157,7 +157,7 @@ pub fn create_written_html(config: &Value, questions: &Value) -> String {
 </script>
 <title>{title}</title>
 <link rel="manifest" href="manifest.webmanifest">
-<link rel="apple-touch-icon" href="favicon.svg">
+<link rel="apple-touch-icon" href="assets/favicon.svg">
 <script>
 if ('serviceWorker' in navigator) {{
   window.addEventListener('load', function () {{
@@ -348,7 +348,7 @@ pub fn create_index_html(folder_rel: &str, title: &str, description: &str) -> St
 </script>
 <title>{page_title}</title>
 <meta name="theme-color" content="#0d1117">
-<link rel="icon" type="image/svg+xml" href="{prefix}favicon.svg">
+<link rel="icon" type="image/svg+xml" href="{prefix}assets/favicon.svg">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=Playfair+Display:wght@700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="{prefix}index-engine.css">

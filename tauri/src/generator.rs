@@ -77,13 +77,13 @@ fn make_manifest(name: &str) -> String {
     "background_color": "#0d1117",
     "theme_color": "#0d1117",
     "icons": [
-        {{"src": "favicon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any"}},
-        {{"src": "icon-48.png", "sizes": "48x48", "type": "image/png", "purpose": "any"}},
-        {{"src": "icon-72.png", "sizes": "72x72", "type": "image/png", "purpose": "any"}},
-        {{"src": "icon-96.png", "sizes": "96x96", "type": "image/png", "purpose": "any"}},
-        {{"src": "icon-144.png", "sizes": "144x144", "type": "image/png", "purpose": "any"}},
-        {{"src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable"}},
-        {{"src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable"}}
+        {{"src": "assets/favicon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any"}},
+        {{"src": "assets/icon-48.png", "sizes": "48x48", "type": "image/png", "purpose": "any"}},
+        {{"src": "assets/icon-72.png", "sizes": "72x72", "type": "image/png", "purpose": "any"}},
+        {{"src": "assets/icon-96.png", "sizes": "96x96", "type": "image/png", "purpose": "any"}},
+        {{"src": "assets/icon-144.png", "sizes": "144x144", "type": "image/png", "purpose": "any"}},
+        {{"src": "assets/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable"}},
+        {{"src": "assets/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable"}}
     ]
 }}"##, name, name, name)
 }
@@ -155,7 +155,7 @@ self.addEventListener('install', function (event) {{
     var REQUIRED = [
       'quiz-engine.js', 'bank-engine.js', 'flashcard-engine.js', 'written-engine.js',
       'index-engine.js', 'search-engine.js', 'sync-engine.js',
-      'index-engine.css', 'index.html', 'tracker-map.json', 'manifest.webmanifest', 'favicon.svg'
+      'index-engine.css', 'index.html', 'tracker-map.json', 'manifest.webmanifest', 'assets/favicon.svg'
     ];
     await Promise.all(REQUIRED.map(function (rel) {{
       return cache.add(hrefFromScope(scope, rel));
@@ -233,8 +233,8 @@ async function handleAsset(event, request) {{
       var SHARED = [
         'quiz-engine.js', 'bank-engine.js', 'flashcard-engine.js', 'written-engine.js',
         'index-engine.js', 'search-engine.js', 'sync-engine.js',
-        'index-engine.css', 'manifest.webmanifest', 'favicon.svg',
-        'icon-48.png', 'icon-72.png', 'icon-96.png', 'icon-144.png', 'icon-192.png', 'icon-512.png',
+        'index-engine.css', 'manifest.webmanifest', 'assets/favicon.svg',
+        'assets/icon-48.png', 'assets/icon-72.png', 'assets/icon-96.png', 'assets/icon-144.png', 'assets/icon-192.png', 'assets/icon-512.png',
         'tracker-map.json'
       ];
       if (SHARED.indexOf(filename) !== -1) {{
@@ -276,7 +276,7 @@ fn gen_index_html(
     let q_json = serde_json::to_string_pretty(quizzes).unwrap_or_default();
     let sw_path = format!("{}sw.js", engine_prefix);
     let manifest_path = format!("{}manifest.webmanifest", engine_prefix);
-    let favicon_path = format!("{}favicon.svg", engine_prefix);
+    let favicon_path = format!("{}assets/favicon.svg", engine_prefix);
     let engine_path = format!("{}index-engine.js", engine_prefix);
     let css_path = format!("{}index-engine.css", engine_prefix);
 
@@ -367,12 +367,12 @@ if('serviceWorker' in navigator){{window.addEventListener('load',function(){{nav
 
 fn icon_png_data(size: u32) -> Option<&'static [u8]> {
     match size {
-        48 => Some(include_bytes!("../../icon-48.png")),
-        72 => Some(include_bytes!("../../icon-72.png")),
-        96 => Some(include_bytes!("../../icon-96.png")),
-        144 => Some(include_bytes!("../../icon-144.png")),
-        192 => Some(include_bytes!("../../icon-192.png")),
-        512 => Some(include_bytes!("../../icon-512.png")),
+        48 => Some(include_bytes!("../../assets/icon-48.png")),
+        72 => Some(include_bytes!("../../assets/icon-72.png")),
+        96 => Some(include_bytes!("../../assets/icon-96.png")),
+        144 => Some(include_bytes!("../../assets/icon-144.png")),
+        192 => Some(include_bytes!("../../assets/icon-192.png")),
+        512 => Some(include_bytes!("../../assets/icon-512.png")),
         _ => None,
     }
 }
@@ -396,16 +396,16 @@ pub fn build_project_zip(config: &ProjectConfig) -> Result<Vec<u8>, String> {
         "written-engine.js".into(),
         "sync-engine.js".into(),
         "tracker-map.json".into(),
-        "favicon.svg".into(),
+        "assets/favicon.svg".into(),
         "manifest.webmanifest".into(),
         "netlify.toml".into(),
         "vercel.json".into(),
-        "icon-48.png".into(),
-        "icon-72.png".into(),
-        "icon-96.png".into(),
-        "icon-144.png".into(),
-        "icon-192.png".into(),
-        "icon-512.png".into(),
+        "assets/icon-48.png".into(),
+        "assets/icon-72.png".into(),
+        "assets/icon-96.png".into(),
+        "assets/icon-144.png".into(),
+        "assets/icon-192.png".into(),
+        "assets/icon-512.png".into(),
     ];
 
     // Collect folder structure for root index
@@ -509,7 +509,7 @@ pub fn build_project_zip(config: &ProjectConfig) -> Result<Vec<u8>, String> {
     add_str(&mut zip, "ai-assistant-engine.js", engines::AI_ASSISTANT_ENGINE_JS)?;
 
     // Static assets
-    add_str(&mut zip, "favicon.svg", engines::FAVICON_SVG)?;
+    add_str(&mut zip, "assets/favicon.svg", engines::FAVICON_SVG)?;
     add_str(&mut zip, "netlify.toml", engines::NETLIFY_TOML)?;
     add_str(&mut zip, "vercel.json", engines::VERCEL_JSON)?;
     add_str(&mut zip, "manifest.webmanifest", &make_manifest(project_name))?;
@@ -562,7 +562,7 @@ pub fn build_project_zip(config: &ProjectConfig) -> Result<Vec<u8>, String> {
     // Icon files (PNG)
     for size in &[48u32, 72, 96, 144, 192, 512] {
         if let Some(data) = icon_png_data(*size) {
-            let fname = format!("icon-{}.png", size);
+            let fname = format!("assets/icon-{}.png", size);
             add_bytes(&mut zip, &fname, data)?;
         }
     }

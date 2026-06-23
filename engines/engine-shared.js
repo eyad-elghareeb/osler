@@ -100,8 +100,8 @@
       EngineShared._addLink('preconnect', 'https://fonts.gstatic.com', {crossOrigin: ''});
       EngineShared._addLink('stylesheet', 'https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=Playfair+Display:wght@700&display=swap');
       EngineShared._addLink('manifest',   root + 'manifest.webmanifest');
-      EngineShared._addLink('icon',       root + 'favicon.svg', {type: 'image/svg+xml'});
-      EngineShared._addLink('apple-touch-icon', root + 'favicon.svg');
+      EngineShared._addLink('icon',       root + 'assets/favicon.svg', {type: 'image/svg+xml'});
+      EngineShared._addLink('apple-touch-icon', root + 'assets/favicon.svg');
     },
 
     /* ── HTML escaping ────────────────────────────────────── */

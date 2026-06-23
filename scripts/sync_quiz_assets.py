@@ -350,8 +350,8 @@ def update_service_worker() -> bool:
     shared_assets = [
         'quiz-engine.js', 'bank-engine.js', 'flashcard-engine.js', 'written-engine.js', 'index-engine.js', 'index-engine.css',
         'engine-shared.js', 'engine-shared.css', 'engine-tracker.js',
-        'manifest.webmanifest', 'favicon.svg',
-        'icon-48.png', 'icon-72.png', 'icon-96.png', 'icon-144.png', 'icon-192.png', 'icon-512.png',
+        'manifest.webmanifest', 'assets/favicon.svg',
+        'assets/icon-48.png', 'assets/icon-72.png', 'assets/icon-96.png', 'assets/icon-144.png', 'assets/icon-192.png', 'assets/icon-512.png',
         'tracker-map.json'
     ]
     

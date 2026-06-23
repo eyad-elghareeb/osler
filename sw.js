@@ -38,13 +38,13 @@ var PRECACHE_REL_PATHS = [
   'quiz-template.html',
   'written-template.html',
   'written-maker.html',
-  'favicon.svg',
-  'icon-48.png',
-  'icon-72.png',
-  'icon-96.png',
-  'icon-144.png',
-  'icon-192.png',
-  'icon-512.png',
+  'assets/favicon.svg',
+  'assets/icon-48.png',
+  'assets/icon-72.png',
+  'assets/icon-96.png',
+  'assets/icon-144.png',
+  'assets/icon-192.png',
+  'assets/icon-512.png',
   'engines/index-engine.css',
   'manifest.webmanifest',
   'tracker-map.json'
@@ -121,7 +121,7 @@ self.addEventListener('install', function (event) {
         'engines/index-engine.css',
         'index.html',
         'manifest.webmanifest',
-        'favicon.svg'
+        'assets/favicon.svg'
       ];
 
       /* 1. Critical assets — DO NOT CATCH (fails install on error) */
@@ -240,13 +240,13 @@ function handleAsset(event, request) {
           'engines/written-engine.js',
   'engines/index-engine.css',
           'manifest.webmanifest',
-          'favicon.svg',
-          'icon-48.png',
-          'icon-72.png',
-          'icon-96.png',
-          'icon-144.png',
-          'icon-192.png',
-          'icon-512.png',
+          'assets/favicon.svg',
+          'assets/icon-48.png',
+          'assets/icon-72.png',
+          'assets/icon-96.png',
+          'assets/icon-144.png',
+          'assets/icon-192.png',
+          'assets/icon-512.png',
           'tracker-map.json'
         ];
         if (SHARED.indexOf(filename) !== -1) {
@@ -282,7 +282,7 @@ function shouldNetworkFirst(req) {
     var u = new URL(req.url);
     if (u.origin !== self.location.origin) return false;
     var p = u.pathname;
-    return p.endsWith('manifest.webmanifest') || p.endsWith('favicon.svg');
+    return p.endsWith('manifest.webmanifest') || p.endsWith('assets/favicon.svg');
   } catch (e) {
     return false;
   }
