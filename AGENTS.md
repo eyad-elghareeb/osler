@@ -16,12 +16,12 @@
 1. **Think Before Coding** — State assumptions. If uncertain, ask.
 2. **Simplicity First** — Minimum code that solves the problem.
 3. **Surgical Changes** — Touch only what you must. Match existing style.
-4. **Read the plan first** — `v6-plan.md` has the full implementation plan, dependency graph, and per-phase file manifests.
+4. **Read the plan first** — `v1-osler-plan-enhanced.md` has the full implementation plan with validation findings. `llm-execution-guide.md` has per-session execution steps.
 
 ## Dependency Map
 
 ```
-Phase 0 ──▶ Phase 1 ──▶ Phase 2 ──▶ Phase 3 ──▶ Phase 4 ──▶ Phase 7
+Phase 0 ──▶ Phase 1 ──▶ Phase 2 ──▶ Phase 3 ──▶ Phase 4 ──▶ Phase 7 ──▶ Phase 8
                 │                                          ▲
                 └──▶ Phase 5 ──▶ Phase 6 ──────────────────┘
 ```
