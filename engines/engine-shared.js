@@ -379,5 +379,15 @@
     import(_libBase + 'dom.js').then(function(m) {
       EngineShared.escHtml = m.escHtml;
     }).catch(function() {}),
+    import(_libBase + 'tracker.js').then(function(m) {
+      window.OslerTracker = {
+        recordQuizAnswer: m.recordQuizAnswer,
+        flagQuizItem: m.flagQuizItem,
+        rateFlashcard: m.rateFlashcard,
+        getDueFlashcards: m.getDueFlashcards,
+        getFlashcardState: m.getFlashcardState,
+        getQuizProgress: m.getQuizProgress,
+      };
+    }).catch(function() {}),
   ]);
 })();

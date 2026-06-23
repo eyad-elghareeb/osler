@@ -328,6 +328,13 @@
             <div class="mo-title">Spaced</div>
           </div>
         </label>
+        <label class="mode-label">
+          <input type="radio" name="study-mode" value="due">
+          <div class="mode-option">
+            <div class="mo-title">Due</div>
+            <div class="mo-sub" id="due-count-hint">Loading...</div>
+          </div>
+        </label>
       </div>
     </div>
 
@@ -875,6 +882,37 @@
       return picked.map(function(i) { return FLASHCARD_BANK[i]; });
     }
 
+    // Due mode — filter by SM-2 due cards
+    if (state.mode === 'due') {
+      if (window.OslerTracker) {
+        var allUids = FLASHCARD_BANK.map(function(c) { return c.id || c.uid || ''; });
+        OslerTracker.getDueFlashcards(allUids).then(function(dueList) {
+          var dueUids = {};
+          dueList.forEach(function(d) { dueUids[d.uid] = true; });
+          var dueIndices = [];
+          for (var i = 0; i < bankSize; i++) {
+            var uid = FLASHCARD_BANK[i].id || FLASHCARD_BANK[i].uid || '';
+            if (dueUids[uid]) dueIndices.push(i);
+          }
+          if (dueIndices.length === 0) {
+            showToast('No due cards! Great job.');
+            return;
+          }
+          var n = Math.min(count, dueIndices.length);
+          var picked = order === 'sequential'
+            ? dueIndices.sort(function(a,b){return a-b;}).slice(0, n)
+            : shuffle(dueIndices).slice(0, n);
+          progress.shownIndices = arrayUnique(progress.shownIndices.concat(picked));
+          progress.totalSessions++;
+          saveBankProgress(progress);
+          SESSION_CARD_INDICES = picked;
+          SESSION_CARDS = picked.map(function(i) { return FLASHCARD_BANK[i]; });
+          finishSessionStart();
+        });
+        return;
+      }
+    }
+
     // Classic mode
     var unshown = allIndices.filter(function(i) { return progress.shownIndices.indexOf(i) === -1; });
     var maxAllowed = unshown.length > 0 ? unshown.length : bankSize;
@@ -956,6 +994,15 @@
     }
   }
 
+  function updateDueCount() {
+    var el = document.getElementById('due-count-hint');
+    if (!window.OslerTracker || !el) return;
+    var allUids = FLASHCARD_BANK.map(function(c) { return c.id || c.uid || ''; });
+    OslerTracker.getDueFlashcards(allUids).then(function(dueList) {
+      el.textContent = dueList.length + ' due';
+    }).catch(function() { el.textContent = ''; });
+  }
+
   function adjustCount(delta) {
     var inp = document.getElementById('q-count-input');
     var bankSize = FLASHCARD_BANK.length;
@@ -994,6 +1041,7 @@
       selected.classList.add('mode-selected');
       selected.style.borderColor = 'var(--accent)';
       selected.style.background  = 'var(--accent-dim)';
+      if (this.value === 'due') updateDueCount();
     });
   });
   (function() {
@@ -1053,6 +1101,7 @@
 
     adjustCount(0);
     updateStartScreenStats();
+    updateDueCount();
 
     var savedTheme = localStorage.getItem('quiz-theme');
     if (savedTheme) document.documentElement.setAttribute('data-theme', savedTheme);
@@ -1077,28 +1126,33 @@
     state.mode = mode;
     clearProgress();
 
-    SESSION_CARDS = selectSessionCards(count, order);
-
-    if (!SESSION_CARDS || SESSION_CARDS.length === 0) {
-      showToast('No cards selected. Try resetting deck progress.');
-      return;
+    function finishSessionStart() {
+      if (!SESSION_CARDS || SESSION_CARDS.length === 0) {
+        showToast('No cards selected. Try resetting deck progress.');
+        return;
+      }
+      state.current   = 0;
+      state.flipped   = {};
+      state.flagged   = {};
+      state.ratings   = {};
+      state.revealedClozes = {};
+      state.elapsed   = 0;
+      state.submitted = false;
+      document.documentElement.style.setProperty('--q-count', SESSION_CARDS.length);
+      showScreen('study-screen');
+      document.getElementById('timer-display').classList.remove('hidden');
+      buildNavGrid();
+      updateNavGrid();
+      renderCard(0);
+      startTimer();
     }
 
-    state.current   = 0;
-    state.flipped   = {};
-    state.flagged   = {};
-    state.ratings   = {};
-    state.revealedClozes = {};
-    state.elapsed   = 0;
-    state.submitted = false;
-
-    document.documentElement.style.setProperty('--q-count', SESSION_CARDS.length);
-    showScreen('study-screen');
-    document.getElementById('timer-display').classList.remove('hidden');
-    buildNavGrid();
-    updateNavGrid();
-    renderCard(0);
-    startTimer();
+    if (mode === 'due') {
+      selectSessionCards(count, order);
+    } else {
+      SESSION_CARDS = selectSessionCards(count, order);
+      finishSessionStart();
+    }
   }
   window.startStudy = startStudy;
   window.adjustCount = adjustCount;
@@ -1369,6 +1423,7 @@
   };
 
   /* ── Rate Card ────────────────────────────────────────────── */
+  var RATING_MAP = { 'again': 0, 'hard': 1, 'good': 2, 'easy': 3 };
   window.rateCard = function(rating) {
     var idx = state.current;
     state.ratings[idx] = rating;
@@ -1381,6 +1436,15 @@
     debounceSaveProgress();
     updateNavGrid(idx);
     updateNavStats();
+
+    if (window.OslerTracker) {
+      var card = SESSION_CARDS[idx];
+      var uid = card.id || card.uid || ('card_' + (card.idx || idx));
+      var sm2Rating = RATING_MAP[rating];
+      if (sm2Rating !== undefined) {
+        OslerTracker.rateFlashcard(uid, sm2Rating);
+      }
+    }
 
     if (state.current < SESSION_CARDS.length - 1) {
       setTimeout(function() { nextCard(); }, 300);
