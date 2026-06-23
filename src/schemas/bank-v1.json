@@ -1,0 +1,52 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://osler.app/schemas/bank-v1.json",
+  "title": "Bank (Passage-Based) Content",
+  "type": "object",
+  "required": ["meta", "type", "passages"],
+  "properties": {
+    "meta": {
+      "type": "object",
+      "required": ["uid", "title", "schemaVersion", "createdAt", "updatedAt"],
+      "properties": {
+        "uid": { "type": "string" },
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "icon": { "type": "string" },
+        "tags": { "type": "array", "items": { "type": "string" } },
+        "schemaVersion": { "type": "string", "pattern": "^\\d+\\.\\d+$" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      }
+    },
+    "type": { "type": "string", "pattern": "^bank$" },
+    "passages": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "content", "questions"],
+        "properties": {
+          "id": { "type": "string" },
+          "content": { "type": "string" },
+          "questions": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["id", "question", "options", "correct"],
+              "properties": {
+                "id": { "type": "string" },
+                "passageId": { "type": "string" },
+                "question": { "type": "string" },
+                "options": { "type": "array", "items": { "type": "string" }, "minItems": 2 },
+                "correct": { "type": "integer", "minimum": 0 },
+                "explanation": { "type": "string" },
+                "tags": { "type": "array", "items": { "type": "string" } },
+                "difficulty": { "type": "integer", "minimum": 1, "maximum": 5 }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
