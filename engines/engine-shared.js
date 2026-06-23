@@ -360,4 +360,24 @@
 
   /* ── Run initHead by default ──────────────────────────── */
   EngineShared.initHead();
+
+  /* ── Lib module bridge (Phase 0) ─────────────────────────────────
+     When dist/ is served with src/lib/ accessible (development),
+     dynamically import the ES modules and replace inline methods
+     so engines transparently use the extracted lib code.
+     If import fails (production CDN), inline code continues to work.
+     Phase 4 will make this the primary path.                      */
+  var _libBase = ENGINE_BASE.replace(/dist\/$/, 'src/lib/');
+  Promise.all([
+    import(_libBase + 'theme.js').then(function(m) {
+      EngineShared.toggleTheme = m.toggleTheme;
+      EngineShared.updateThemeIcon = m.updateThemeIcons;
+    }).catch(function() {}),
+    import(_libBase + 'toast.js').then(function(m) {
+      EngineShared.showToast = m.showToast;
+    }).catch(function() {}),
+    import(_libBase + 'dom.js').then(function(m) {
+      EngineShared.escHtml = m.escHtml;
+    }).catch(function() {}),
+  ]);
 })();
