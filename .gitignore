@@ -26,6 +26,7 @@ bin/
 obj/
 lib/
 !src/lib/
+!tests/unit/lib/
 pkg/
 _deps/
 build/Release
