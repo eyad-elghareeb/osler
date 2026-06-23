@@ -905,8 +905,17 @@
       var photoBanner = create('div', 'panel');
       photoBanner.style.padding = '12px';
       photoBanner.style.marginBottom = '8px';
-      photoBanner.innerHTML = '<div style="display:flex;align-items:center;gap:8px;color:var(--muted);font-size:.85rem"><span>'+EngineShared.icon('camera')+'</span> Photo answer attached for all parts</div>'
-        + '<img src="data:' + parentPhoto.mimeType + ';base64,' + parentPhoto.data + '" style="max-height:160px;border-radius:8px;max-width:100%;display:block;margin:8px auto 0;object-fit:contain;background:var(--surface-2)">';
+      var pbLabel = document.createElement('div');
+      pbLabel.style.cssText = 'display:flex;align-items:center;gap:8px;color:var(--muted);font-size:.85rem';
+      var pbIcon = document.createElement('span');
+      pbIcon.innerHTML = EngineShared.icon('camera');
+      pbLabel.appendChild(pbIcon);
+      pbLabel.appendChild(document.createTextNode(' Photo answer attached for all parts'));
+      photoBanner.appendChild(pbLabel);
+      var pbImg = document.createElement('img');
+      pbImg.src = 'data:' + parentPhoto.mimeType + ';base64,' + parentPhoto.data;
+      pbImg.style.cssText = 'max-height:160px;border-radius:8px;max-width:100%;display:block;margin:8px auto 0;object-fit:contain;background:var(--surface-2)';
+      photoBanner.appendChild(pbImg);
       container.appendChild(photoBanner);
     }
 
@@ -1039,17 +1048,20 @@
       score.textContent = scoreText;
       evalHead.appendChild(score);
       var vDiv = create('div');
-      vDiv.innerHTML = '<div class="verdict">' + (passed ? 'Passed' : 'Needs revision') + '</div>'
-        + '<div class="eval-source">' + (parentEval.source || 'Evaluation') + '</div>';
+      var vVerdict = create('div', 'verdict', passed ? 'Passed' : 'Needs revision');
+      vDiv.appendChild(vVerdict);
+      vDiv.appendChild(create('div', 'eval-source', parentEval.source || 'Evaluation'));
       evalHead.appendChild(vDiv);
       overallDiv.appendChild(evalHead);
 
       var compareGrid = create('div', 'compare-grid');
       var userCard = create('div', 'panel compare-card user');
-      userCard.innerHTML = '<div class="compare-title">Your combined answer</div><div class="compare-body">' + EngineShared.escHtml(combinedUserAnswer) + '</div>';
+      userCard.appendChild(create('div', 'compare-title', 'Your combined answer'));
+      userCard.appendChild(create('div', 'compare-body', EngineShared.escHtml(combinedUserAnswer)));
       compareGrid.appendChild(userCard);
       var modelCard = create('div', 'panel compare-card model');
-      modelCard.innerHTML = '<div class="compare-title">Combined model answer</div><div class="compare-body">' + EngineShared.escHtml(combinedModelAnswer) + '</div>';
+      modelCard.appendChild(create('div', 'compare-title', 'Combined model answer'));
+      modelCard.appendChild(create('div', 'compare-body', EngineShared.escHtml(combinedModelAnswer)));
       compareGrid.appendChild(modelCard);
       overallDiv.appendChild(compareGrid);
 
@@ -1076,8 +1088,17 @@
         photoDiv.style.borderTop = '1px solid var(--border)';
         photoDiv.style.paddingTop = '12px';
         photoDiv.style.marginTop = '12px';
-        photoDiv.innerHTML = '<img src="data:' + parentPhoto.mimeType + ';base64,' + parentPhoto.data + '" class="feedback-photo">'
-          + (parentEval.transcription ? '<div class="transcription-box" style="margin-top:8px"><div class="transcription-label">AI Transcription</div><div class="transcription-text">' + EngineShared.escHtml(parentEval.transcription) + '</div></div>' : '');
+        var pImg = document.createElement('img');
+        pImg.src = 'data:' + parentPhoto.mimeType + ';base64,' + parentPhoto.data;
+        pImg.className = 'feedback-photo';
+        photoDiv.appendChild(pImg);
+        if (parentEval.transcription) {
+          var tBox = create('div', '');
+          tBox.style.marginTop = '8px';
+          tBox.appendChild(create('div', 'transcription-label', 'AI Transcription'));
+          tBox.appendChild(create('div', 'transcription-text', EngineShared.escHtml(parentEval.transcription)));
+          photoDiv.appendChild(tBox);
+        }
         overallDiv.appendChild(photoDiv);
       }
 
@@ -1119,7 +1140,7 @@
       btnBar.appendChild(passBtn);
 
       var retryBtn = create('button', 'btn btn-secondary');
-      retryBtn.innerHTML = '\u21BA Retry';
+      retryBtn.textContent = '\u21BA Retry';
       retryBtn.type = 'button';
       retryBtn.addEventListener('click', function (idx) {
         return function () {
@@ -1975,8 +1996,16 @@
 
     // Compare mini
     var compare = create('div', 'compare-mini');
-    compare.innerHTML = '<div class="compare-mini-card user"><div class="cm-title">Your answer</div><div class="cm-body">' + EngineShared.escHtml(answer) + '</div></div>'
-      + '<div class="compare-mini-card model"><div class="cm-title">Model answer</div><div class="cm-body">' + md(modelAnswer) + '</div></div>';
+    var uc = create('div', 'compare-mini-card user');
+    uc.appendChild(create('div', 'cm-title', 'Your answer'));
+    uc.appendChild(create('div', 'cm-body', EngineShared.escHtml(answer)));
+    compare.appendChild(uc);
+    var mc = create('div', 'compare-mini-card model');
+    mc.appendChild(create('div', 'cm-title', 'Model answer'));
+    var mcBody = create('div', 'cm-body');
+    mcBody.innerHTML = md(modelAnswer);
+    mc.appendChild(mcBody);
+    compare.appendChild(mc);
     fb.appendChild(compare);
 
     // Eval head
@@ -1986,8 +2015,11 @@
     score.textContent = evaluation.score === null || evaluation.score === undefined ? 'Self' : String(evaluation.score);
     eHead.appendChild(score);
     var vDiv = create('div');
-    vDiv.innerHTML = '<div class="child-verdict">' + (passed ? 'Passed' : 'Needs revision') + '</div>'
-      + '<div style="font-size:.75rem;color:var(--muted)">' + (evaluation.source || 'Evaluation') + '</div>';
+    vDiv.appendChild(create('div', 'child-verdict', passed ? 'Passed' : 'Needs revision'));
+    var srcDiv = create('div');
+    srcDiv.style.cssText = 'font-size:.75rem;color:var(--muted)';
+    srcDiv.textContent = evaluation.source || 'Evaluation';
+    vDiv.appendChild(srcDiv);
     eHead.appendChild(vDiv);
     fb.appendChild(eHead);
 
@@ -2033,7 +2065,7 @@
     // Action row: Retry + Next
     var actionRow = create('div', 'action-row');
     var retryBtn = create('button', 'btn btn-secondary');
-    retryBtn.innerHTML = '↺ Retry';
+    retryBtn.textContent = '↺ Retry';
     retryBtn.type = 'button';
     retryBtn.addEventListener('click', function () {
       submitChildForAiGrade(pIdx, cIdx);
@@ -2194,13 +2226,31 @@
         var header = document.createElement('div');
         header.className = 'result-item-header';
         header.onclick = function() { toggleResultItem(this); };
-        var childSummary = isSkipped ? '' : ' · ' + passCount + '/' + (passCount + failCount) + ' passed';
-        header.innerHTML = '<div class="result-status-icon">' + statusIcon + '</div>'
-          + '<div class="result-q-meta">'
-          + '<div class="result-q-num">Question ' + (i + 1) + (isFlagged ? ' · '+EngineShared.icon('flag')+' Flagged' : '') + childSummary + '</div>'
-          + '<div class="result-q-text">' + q.question + '</div>'
-          + '</div>'
-          + '<div class="expand-arrow">▼</div>';
+        var childSummary = isSkipped ? '' : ' \u00b7 ' + passCount + '/' + (passCount + failCount) + ' passed';
+
+        var statusIconDiv = document.createElement('div');
+        statusIconDiv.className = 'result-status-icon';
+        statusIconDiv.innerHTML = statusIcon;
+        header.appendChild(statusIconDiv);
+
+        var meta = document.createElement('div');
+        meta.className = 'result-q-meta';
+        var num = document.createElement('div');
+        num.className = 'result-q-num';
+        num.innerHTML = 'Question ' + (i + 1) + (isFlagged ? ' \u00b7 ' + EngineShared.icon('flag') + ' Flagged' : '') + childSummary;
+        meta.appendChild(num);
+        var qText = document.createElement('div');
+        qText.className = 'result-q-text';
+        qText.textContent = q.question;
+        meta.appendChild(qText);
+        header.appendChild(meta);
+
+        var arrow = document.createElement('div');
+        arrow.className = 'expand-arrow';
+        arrow.textContent = '\u25bc';
+        header.appendChild(arrow);
+
+        el.appendChild(header);
 
         var body = document.createElement('div');
         body.className = 'result-item-body';
@@ -2210,21 +2260,47 @@
             var childEval = childEvals[ci];
             var childPassed = childEval ? isPassed(childEval) : null;
             var childAnswer = (state.childAnswers[i] && state.childAnswers[i][ci]) || '';
-            var childIcon = childEval ? (childPassed ? ''+EngineShared.icon('check-circle')+'' : ''+EngineShared.icon('x-circle')+'') : '—';
+            var childIcon = childEval ? (childPassed ? EngineShared.icon('check-circle') : EngineShared.icon('x-circle')) : '\u2014';
             var childModel = child.modelAnswer || q.modelAnswer;
-            body.innerHTML += '<div style="margin:8px 0;padding:8px 10px;background:var(--surface2);border-radius:8px;border-left:3px solid ' + (childPassed ? 'var(--ok)' : (childEval ? 'var(--bad)' : 'var(--border)')) + '">'
-              + '<div style="font-weight:700;font-size:.85rem;margin-bottom:4px;color:var(--accent)">' + childIcon + ' ' + (child.label || 'Part ' + (ci+1)) + ' — ' + (child.question || '') + '</div>'
-              + '<div style="font-size:.85rem;margin:2px 0"><strong>Your answer:</strong> ' + (childAnswer || 'Not answered') + '</div>'
-              + '<div style="font-size:.85rem"><strong>Model:</strong> ' + childModel + '</div>'
-              + (childEval && childEval.feedback ? '<div style="font-size:.82rem;color:var(--muted);margin-top:4px">' + childEval.feedback + '</div>' : '')
-              + '</div>';
+
+            var childBlock = document.createElement('div');
+            childBlock.style.cssText = 'margin:8px 0;padding:8px 10px;background:var(--surface2);border-radius:8px;border-left:3px solid ' + (childPassed ? 'var(--ok)' : (childEval ? 'var(--bad)' : 'var(--border)'));
+
+            var titleLine = document.createElement('div');
+            titleLine.style.cssText = 'font-weight:700;font-size:.85rem;margin-bottom:4px;color:var(--accent)';
+            titleLine.innerHTML = childIcon + ' ' + (child.label || 'Part ' + (ci+1)) + ' \u2014 ' + (child.question || '');
+            childBlock.appendChild(titleLine);
+
+            var yourLine = document.createElement('div');
+            yourLine.style.cssText = 'font-size:.85rem;margin:2px 0';
+            yourLine.innerHTML = '<strong>Your answer:</strong> ' + (childAnswer || 'Not answered');
+            childBlock.appendChild(yourLine);
+
+            var modelLine = document.createElement('div');
+            modelLine.style.cssText = 'font-size:.85rem';
+            modelLine.innerHTML = '<strong>Model:</strong> ' + childModel;
+            childBlock.appendChild(modelLine);
+
+            if (childEval && childEval.feedback) {
+              var fbLine = document.createElement('div');
+              fbLine.style.cssText = 'font-size:.82rem;color:var(--muted);margin-top:4px';
+              fbLine.textContent = childEval.feedback;
+              childBlock.appendChild(fbLine);
+            }
+
+            body.appendChild(childBlock);
           });
         }
         if (q.explanation) {
-          body.innerHTML += '<div class="explanation-box"><strong>Explanation</strong>' + md(q.explanation) + '</div>';
+          var explBox = document.createElement('div');
+          explBox.className = 'explanation-box';
+          var explStrong = document.createElement('strong');
+          explStrong.textContent = 'Explanation';
+          explBox.appendChild(explStrong);
+          explBox.innerHTML += md(q.explanation);
+          body.appendChild(explBox);
         }
 
-        el.appendChild(header);
         el.appendChild(body);
         list.appendChild(el);
         return;
@@ -2257,39 +2333,79 @@
       var header = document.createElement('div');
       header.className = 'result-item-header';
       header.onclick = function() { toggleResultItem(this); };
-      header.innerHTML = '<div class="result-status-icon">' + statusIcon + '</div>'
-        + '<div class="result-q-meta">'
-        + '<div class="result-q-num">Question ' + (i + 1) + (isFlagged ? ' · '+EngineShared.icon('flag')+' Flagged' : '') + '</div>'
-        + '<div class="result-q-text">' + q.question + '</div>'
-        + '</div>'
-        + '<div class="expand-arrow">▼</div>';
+
+      var statusIconDiv = document.createElement('div');
+      statusIconDiv.className = 'result-status-icon';
+      statusIconDiv.innerHTML = statusIcon;
+      header.appendChild(statusIconDiv);
+
+      var meta = document.createElement('div');
+      meta.className = 'result-q-meta';
+      var num = document.createElement('div');
+      num.className = 'result-q-num';
+      num.innerHTML = 'Question ' + (i + 1) + (isFlagged ? ' \u00b7 ' + EngineShared.icon('flag') + ' Flagged' : '');
+      meta.appendChild(num);
+      var qText = document.createElement('div');
+      qText.className = 'result-q-text';
+      qText.textContent = q.question;
+      meta.appendChild(qText);
+      header.appendChild(meta);
+
+      var arrow = document.createElement('div');
+      arrow.className = 'expand-arrow';
+      arrow.textContent = '\u25bc';
+      header.appendChild(arrow);
+
+      el.appendChild(header);
 
       var body = document.createElement('div');
       body.className = 'result-item-body';
 
-      var bodyHTML = '';
       if (!isSkipped) {
-        bodyHTML += '<div class="answer-row user-answer">'
-          + '<span class="ar-label">Your Answer</span>'
-          + '<span class="ar-text">' + (userAnswer || '(No answer written)') + '</span>'
-          + '</div>';
-      }
-      bodyHTML += '<div class="answer-row model-answer">'
-        + '<span class="ar-label">Model Answer</span>'
-        + '<span class="ar-text">' + (q.modelAnswer ? md(q.modelAnswer) : '(No model answer supplied)') + '</span>'
-        + '</div>';
-      if (q.explanation) {
-        bodyHTML += '<div class="explanation-box"><strong>Explanation</strong>' + md(q.explanation) + '</div>';
+        var userRow = document.createElement('div');
+        userRow.className = 'answer-row user-answer';
+        var urLabel = document.createElement('span');
+        urLabel.className = 'ar-label';
+        urLabel.textContent = 'Your Answer';
+        userRow.appendChild(urLabel);
+        var urText = document.createElement('span');
+        urText.className = 'ar-text';
+        urText.textContent = userAnswer || '(No answer written)';
+        userRow.appendChild(urText);
+        body.appendChild(userRow);
       }
 
-      body.innerHTML = bodyHTML;
-      el.appendChild(header);
+      var modelRow = document.createElement('div');
+      modelRow.className = 'answer-row model-answer';
+      var mrLabel = document.createElement('span');
+      mrLabel.className = 'ar-label';
+      mrLabel.textContent = 'Model Answer';
+      modelRow.appendChild(mrLabel);
+      var mrText = document.createElement('span');
+      mrText.className = 'ar-text';
+      mrText.innerHTML = q.modelAnswer ? md(q.modelAnswer) : '(No model answer supplied)';
+      modelRow.appendChild(mrText);
+      body.appendChild(modelRow);
+
+      if (q.explanation) {
+        var explBox = document.createElement('div');
+        explBox.className = 'explanation-box';
+        var explStrong = document.createElement('strong');
+        explStrong.textContent = 'Explanation';
+        explBox.appendChild(explStrong);
+        explBox.innerHTML += md(q.explanation);
+        body.appendChild(explBox);
+      }
+
       el.appendChild(body);
       list.appendChild(el);
     });
 
     if (itemsRendered === 0) {
-      list.innerHTML = '<div style="color:var(--text-muted);font-size:0.9rem;padding:1rem 0;">No questions in this category.</div>';
+      var emptyDiv = document.createElement('div');
+      emptyDiv.style.cssText = 'color:var(--text-muted);font-size:0.9rem;padding:1rem 0;';
+      emptyDiv.textContent = 'No questions in this category.';
+      list.appendChild(emptyDiv);
     }
   }
 

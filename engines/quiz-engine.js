@@ -957,73 +957,163 @@ function renderQuestion(idx) {
   const isLast = idx === QUESTIONS.length - 1;
   const sel = state.answers[idx];
 
-  // In learning mode, check if answered
   const isLearning = state.mode === 'learning';
   const isAnswered = sel !== undefined;
 
-  // progress
   const done = Object.keys(state.answers).length;
   document.getElementById('progress-fill').style.width = (done / QUESTIONS.length * 100) + '%';
 
   const area = document.getElementById('question-area');
-  area.innerHTML = `
-    <div class="q-header">
-      <span class="q-number-badge">Q ${idx+1} / ${QUESTIONS.length}</span>
-      <div class="q-text">${q.question}</div>
-      <div class="q-actions">
-        <button class="flag-btn ${state.flagged[idx]?'active':''}" onclick="toggleFlag(${idx})" id="flag-btn-${idx}">
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="${state.flagged[idx]?'currentColor':'none'}" stroke="currentColor" stroke-width="2.2"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg>
-          ${state.flagged[idx] ? 'Flagged' : 'Flag'}
-        </button>
-        ${state.isHighlighterMode && state.highlights[idx] && state.highlights[idx].length > 0 ? '<button class="flag-btn" onclick="clearAllHighlights('+idx+')" title="Clear all highlights for this question" style="font-size:0.75rem;">'+EngineShared.icon('x')+' Clear</button>' : ''}
-      </div>
-    </div>
+  area.innerHTML = '';
 
-    <div class="options-list" id="options-list">
-      ${q.options.map((opt, i) => {
-        let extraStyle = '';
-        let keyStyle = '';
-        if (isLearning && isAnswered) {
-          if (i === q.correct) {
-            extraStyle = 'border-color: var(--correct) !important; background: var(--correct-bg) !important; pointer-events: none;';
-            keyStyle = 'background: var(--correct) !important; color: white !important; border-color: var(--correct) !important;';
-          } else if (sel === i) {
-            extraStyle = 'border-color: var(--wrong) !important; background: var(--wrong-bg) !important; pointer-events: none;';
-            keyStyle = 'background: var(--wrong) !important; color: white !important; border-color: var(--wrong) !important;';
-          } else {
-            extraStyle = 'pointer-events: none;';
-          }
-        }
-        return `
-        <input type="radio" name="q_opt" id="opt_${i}" value="${i}" ${sel===i?'checked':''} ${isLearning && isAnswered ? 'disabled' : ''} onchange="selectAnswer(${idx},${i})">
-        <label class="option-label" for="opt_${i}" data-opt-idx="${i}" style="${extraStyle}">
-          <span class="option-key" style="${keyStyle}">${KEYS[i]}</span>
-          <span class="option-text">${opt}</span>
-        </label>
-        `;
-      }).join('')}
-    </div>
+  /* ── Q-HEADER ── */
+  const qHeader = document.createElement('div');
+  qHeader.className = 'q-header';
+  const badge = document.createElement('span');
+  badge.className = 'q-number-badge';
+  badge.textContent = 'Q ' + (idx + 1) + ' / ' + QUESTIONS.length;
+  qHeader.appendChild(badge);
+  const qText = document.createElement('div');
+  qText.className = 'q-text';
+  qText.innerHTML = q.question;
+  qHeader.appendChild(qText);
+  const qActions = document.createElement('div');
+  qActions.className = 'q-actions';
 
-    ${(isLearning && isAnswered) ? `
-      <div class="explanation-box" style="margin-top: 1rem;">
-        <strong>${sel === q.correct ? ''+EngineShared.icon('check-circle')+' Correct!' : ''+EngineShared.icon('x-circle')+' Incorrect'}</strong>
-        ${q.explanation}
-      </div>
-    ` : ''}
+  /* flag button */
+  const flagBtn = document.createElement('button');
+  flagBtn.className = 'flag-btn' + (state.flagged[idx] ? ' active' : '');
+  flagBtn.id = 'flag-btn-' + idx;
+  flagBtn.onclick = function() { toggleFlag(idx); };
+  var fSvg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  fSvg.setAttribute('width', '13');
+  fSvg.setAttribute('height', '13');
+  fSvg.setAttribute('viewBox', '0 0 24 24');
+  fSvg.setAttribute('fill', state.flagged[idx] ? 'currentColor' : 'none');
+  fSvg.setAttribute('stroke', 'currentColor');
+  fSvg.setAttribute('stroke-width', '2.2');
+  var fPath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+  fPath.setAttribute('d', 'M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z');
+  fSvg.appendChild(fPath);
+  var fLine = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+  fLine.setAttribute('x1', '4'); fLine.setAttribute('y1', '22');
+  fLine.setAttribute('x2', '4'); fLine.setAttribute('y2', '15');
+  fSvg.appendChild(fLine);
+  flagBtn.appendChild(fSvg);
+  flagBtn.appendChild(document.createTextNode(state.flagged[idx] ? ' Flagged' : ' Flag'));
+  qActions.appendChild(flagBtn);
 
-    <div class="q-nav-btns">
-      ${idx > 0 ? `<button class="btn-nav" onclick="goTo(${idx-1})">← Previous</button>` : ''}
-      ${!isLast ? `<button class="btn-nav primary" onclick="nextQuestion()">Next →</button>` : ''}
-      ${isLast  ? `<button class="btn-nav submit-btn" onclick="attemptSubmit()">'+EngineShared.icon('check')+' Submit Quiz</button>` : ''}
-    </div>
-  `;
+  /* clear highlights button */
+  if (state.isHighlighterMode && state.highlights[idx] && state.highlights[idx].length > 0) {
+    var clrBtn = document.createElement('button');
+    clrBtn.className = 'flag-btn';
+    clrBtn.style.fontSize = '0.75rem';
+    clrBtn.onclick = function() { clearAllHighlights(idx); };
+    clrBtn.title = 'Clear all highlights for this question';
+    clrBtn.innerHTML = EngineShared.icon('x') + ' Clear';
+    qActions.appendChild(clrBtn);
+  }
+
+  qHeader.appendChild(qActions);
+  area.appendChild(qHeader);
+
+  /* ── OPTIONS LIST ── */
+  const optList = document.createElement('div');
+  optList.className = 'options-list';
+  optList.id = 'options-list';
+
+  for (var i = 0; i < q.options.length; i++) {
+    var opt = q.options[i];
+    var extraStyle = '';
+    var keyStyle = '';
+    if (isLearning && isAnswered) {
+      if (i === q.correct) {
+        extraStyle = 'border-color: var(--correct) !important; background: var(--correct-bg) !important; pointer-events: none;';
+        keyStyle = 'background: var(--correct) !important; color: white !important; border-color: var(--correct) !important;';
+      } else if (sel === i) {
+        extraStyle = 'border-color: var(--wrong) !important; background: var(--wrong-bg) !important; pointer-events: none;';
+        keyStyle = 'background: var(--wrong) !important; color: white !important; border-color: var(--wrong) !important;';
+      } else {
+        extraStyle = 'pointer-events: none;';
+      }
+    }
+
+    var radio = document.createElement('input');
+    radio.type = 'radio';
+    radio.name = 'q_opt';
+    radio.id = 'opt_' + i;
+    radio.value = i;
+    if (sel === i) radio.checked = true;
+    if (isLearning && isAnswered) radio.disabled = true;
+    radio.onchange = function(ci) { return function() { selectAnswer(idx, ci); }; }(i);
+    optList.appendChild(radio);
+
+    var label = document.createElement('label');
+    label.className = 'option-label';
+    label.setAttribute('for', 'opt_' + i);
+    label.dataset.optIdx = i;
+    if (extraStyle) label.style.cssText = extraStyle;
+
+    var keySpan = document.createElement('span');
+    keySpan.className = 'option-key';
+    if (keyStyle) keySpan.style.cssText = keyStyle;
+    keySpan.textContent = KEYS[i];
+    label.appendChild(keySpan);
+
+    var textSpan = document.createElement('span');
+    textSpan.className = 'option-text';
+    textSpan.innerHTML = opt;
+    label.appendChild(textSpan);
+
+    optList.appendChild(label);
+  }
+  area.appendChild(optList);
+
+  /* ── EXPLANATION (learning mode) ── */
+  if (isLearning && isAnswered) {
+    var explBox = document.createElement('div');
+    explBox.className = 'explanation-box';
+    explBox.style.marginTop = '1rem';
+    var strong = document.createElement('strong');
+    strong.innerHTML = sel === q.correct ? EngineShared.icon('check-circle') + ' Correct!' : EngineShared.icon('x-circle') + ' Incorrect';
+    explBox.appendChild(strong);
+    explBox.innerHTML += q.explanation;
+    area.appendChild(explBox);
+  }
+
+  /* ── NAV BUTTONS ── */
+  var navBtns = document.createElement('div');
+  navBtns.className = 'q-nav-btns';
+
+  if (idx > 0) {
+    var prevBtn = document.createElement('button');
+    prevBtn.className = 'btn-nav';
+    prevBtn.onclick = function() { goTo(idx - 1); };
+    prevBtn.textContent = '\u2190 Previous';
+    navBtns.appendChild(prevBtn);
+  }
+  if (!isLast) {
+    var nextBtn = document.createElement('button');
+    nextBtn.className = 'btn-nav primary';
+    nextBtn.onclick = function() { nextQuestion(); };
+    nextBtn.textContent = 'Next \u2192';
+    navBtns.appendChild(nextBtn);
+  }
+  if (isLast) {
+    var subBtn = document.createElement('button');
+    subBtn.className = 'btn-nav submit-btn';
+    subBtn.onclick = function() { attemptSubmit(); };
+    subBtn.innerHTML = EngineShared.icon('check') + ' Submit Quiz';
+    navBtns.appendChild(subBtn);
+  }
+
+  area.appendChild(navBtns);
 
   updateNavGrid(idx);
   updateNavStats();
   area.scrollTop = 0;
 
-  // Apply highlights & strikethrough after DOM is built
-  delete _hlCache[idx];  // DOM is fresh, must re-apply
+  delete _hlCache[idx];
   applyBulkHighlights(idx);
 }
 
@@ -1066,11 +1156,10 @@ function toggleFlag(idx) {
     btn.classList.toggle('active', state.flagged[idx]);
     const svgEl = btn.querySelector('svg');
     if(svgEl) svgEl.setAttribute('fill', state.flagged[idx] ? 'currentColor' : 'none');
-    btn.innerHTML = `
-      <svg width="13" height="13" viewBox="0 0 24 24" fill="${state.flagged[idx]?'currentColor':'none'}" stroke="currentColor" stroke-width="2.2"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg>
-      ${state.flagged[idx] ? 'Flagged' : 'Flag'}
-    `;
-    btn.classList.toggle('active', state.flagged[idx]);
+    var textNode = btn.childNodes[btn.childNodes.length - 1];
+    if (textNode && textNode.nodeType === 3) {
+      textNode.textContent = state.flagged[idx] ? 'Flagged' : 'Flag';
+    }
   }
   updateNavGrid(idx);
   updateNavStats();
@@ -1081,9 +1170,15 @@ function toggleFlag(idx) {
 /* ── NAV GRID ────────────────────────────────────────────── */
 function buildNavGrid() {
   const grid = document.getElementById('nav-grid');
-  grid.innerHTML = QUESTIONS.map((_, i) => `
-    <button class="nav-btn" id="nav-btn-${i}" onclick="goTo(${i})">${i+1}</button>
-  `).join('');
+  grid.innerHTML = '';
+  for (let i = 0; i < QUESTIONS.length; i++) {
+    const btn = document.createElement('button');
+    btn.className = 'nav-btn';
+    btn.id = 'nav-btn-' + i;
+    btn.textContent = i + 1;
+    btn.onclick = function() { goTo(i); };
+    grid.appendChild(btn);
+  }
 }
 
 let lastCurrentIdx = -1;
@@ -1271,37 +1366,71 @@ function renderResultItems(filter) {
       const correctOptText = q.options[q.correct];
 
       const el = document.createElement('div');
-      el.className = `result-item ${statusClass}`;
+      el.className = 'result-item ' + statusClass;
       el.dataset.idx = i;
 
-      el.innerHTML = `
-        <div class="result-item-header" onclick="toggleResultItem(this)">
-          <div class="result-status-icon">${statusIcon}</div>
-          <div class="result-q-meta">
-            <div class="result-q-num">Question ${i+1}${isFlagged ? ' · '+EngineShared.icon('flag')+' Flagged' : ''}</div>
-            <div class="result-q-text">${q.question}</div>
-          </div>
-          <div class="expand-arrow">▼</div>
-        </div>
-        <div class="result-item-body">
-          ${!isSkipped ? `
-            <div class="answer-row your-answer ${isCorrect?'is-correct':''}">
-              <span class="ar-label">Your Answer</span>
-              <span>${KEYS[ans]}. ${userOptText}</span>
-            </div>
-          ` : ''}
-          ${!isCorrect ? `
-            <div class="answer-row correct-answer">
-              <span class="ar-label">Correct Answer</span>
-              <span>${KEYS[q.correct]}. ${correctOptText}</span>
-            </div>
-          ` : ''}
-          <div class="explanation-box">
-            <strong>Explanation</strong>
-            ${q.explanation}
-          </div>
-        </div>
-      `;
+      const header = document.createElement('div');
+      header.className = 'result-item-header';
+      header.onclick = function() { toggleResultItem(header); };
+
+      const sIcon = document.createElement('div');
+      sIcon.className = 'result-status-icon';
+      sIcon.innerHTML = statusIcon;
+      header.appendChild(sIcon);
+
+      const meta = document.createElement('div');
+      meta.className = 'result-q-meta';
+      const qNum = document.createElement('div');
+      qNum.className = 'result-q-num';
+      qNum.textContent = 'Question ' + (i + 1) + (isFlagged ? ' \u00B7 ' + EngineShared.icon('flag') + ' Flagged' : '');
+      meta.appendChild(qNum);
+      const qTxt = document.createElement('div');
+      qTxt.className = 'result-q-text';
+      qTxt.innerHTML = q.question;
+      meta.appendChild(qTxt);
+      header.appendChild(meta);
+
+      const arrow = document.createElement('div');
+      arrow.className = 'expand-arrow';
+      arrow.textContent = '\u25BC';
+      header.appendChild(arrow);
+      el.appendChild(header);
+
+      const body = document.createElement('div');
+      body.className = 'result-item-body';
+
+      if (!isSkipped) {
+        const ar = document.createElement('div');
+        ar.className = 'answer-row your-answer' + (isCorrect ? ' is-correct' : '');
+        const arLbl = document.createElement('span');
+        arLbl.className = 'ar-label';
+        arLbl.textContent = 'Your Answer';
+        ar.appendChild(arLbl);
+        ar.appendChild(document.createTextNode(' ' + KEYS[ans] + '. '));
+        ar.appendChild(document.createTextNode(userOptText));
+        body.appendChild(ar);
+      }
+      if (!isCorrect) {
+        const ar2 = document.createElement('div');
+        ar2.className = 'answer-row correct-answer';
+        const arLbl2 = document.createElement('span');
+        arLbl2.className = 'ar-label';
+        arLbl2.textContent = 'Correct Answer';
+        ar2.appendChild(arLbl2);
+        ar2.appendChild(document.createTextNode(' ' + KEYS[q.correct] + '. '));
+        ar2.appendChild(document.createTextNode(correctOptText));
+        body.appendChild(ar2);
+      }
+
+      const expBox = document.createElement('div');
+      expBox.className = 'explanation-box';
+      const expStrong = document.createElement('strong');
+      expStrong.textContent = 'Explanation';
+      expBox.appendChild(expStrong);
+      expBox.innerHTML += q.explanation;
+      body.appendChild(expBox);
+
+      el.appendChild(body);
       list.appendChild(el);
     }
 
@@ -1309,7 +1438,10 @@ function renderResultItems(filter) {
       renderResultItemsRafId = requestAnimationFrame(renderChunk);
     } else {
       if(itemsRendered === 0) {
-        list.innerHTML = `<div style="color:var(--text-muted);font-size:0.9rem;padding:1rem 0;">No questions in this category.</div>`;
+        var emptyMsg = document.createElement('div');
+        emptyMsg.style.cssText = 'color:var(--text-muted);font-size:0.9rem;padding:1rem 0;';
+        emptyMsg.textContent = 'No questions in this category.';
+        list.appendChild(emptyMsg);
       }
       renderResultItemsRafId = null;
     }

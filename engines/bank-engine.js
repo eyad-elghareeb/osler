@@ -1419,60 +1419,151 @@ function renderQuestion(idx) {
     (done / SESSION_QUESTIONS.length * 100) + '%';
 
   const area = document.getElementById('question-area');
-  area.innerHTML = `
-    <div class="q-header">
-      <span class="q-number-badge">Q ${idx+1} / ${SESSION_QUESTIONS.length}</span>
-      <div class="q-text">${q.question}</div>
-      <div class="q-actions">
-        <button class="flag-btn ${state.flagged[idx]?'active':''}" onclick="toggleFlag(${idx})" id="flag-btn-${idx}">
-          <svg width="13" height="13" viewBox="0 0 24 24"
-               fill="${state.flagged[idx]?'currentColor':'none'}"
-               stroke="currentColor" stroke-width="2.2">
-            <path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/>
-            <line x1="4" y1="22" x2="4" y2="15"/>
-          </svg>
-          ${state.flagged[idx] ? 'Flagged' : 'Flag'}
-        </button>
-        ${state.isHighlighterMode && state.highlights[_hlGlobalIdx(idx)] && state.highlights[_hlGlobalIdx(idx)].length > 0 ? '<button class="flag-btn" onclick="clearAllHighlights('+idx+')" title="Clear all highlights for this question" style="font-size:0.75rem;">'+EngineShared.icon('x')+' Clear</button>' : ''}
-      </div>
-    </div>
+  area.innerHTML = '';
 
-    <div class="options-list">
-      ${q.options.map((opt, i) => {
-        let extra = '', keyStyle = '';
-        if (isLearning && isAnswered) {
-          if (i === q.correct) {
-            extra = 'border-color: var(--correct) !important; background: var(--correct-bg) !important; pointer-events: none;';
-            keyStyle = 'background: var(--correct) !important; color: white !important; border-color: var(--correct) !important;';
-          } else if (sel === i) {
-            extra = 'border-color: var(--wrong) !important; background: var(--wrong-bg) !important; pointer-events: none;';
-            keyStyle = 'background: var(--wrong) !important; color: white !important; border-color: var(--wrong) !important;';
-          } else {
-            extra = 'pointer-events: none;';
-          }
-        }
-        return `
-          <input type="radio" name="q_opt" id="opt_${i}" value="${i}"
-                 ${sel===i?'checked':''} ${isLearning && isAnswered ? 'disabled' : ''}
-                 onchange="selectAnswer(${idx},${i})">
-          <label class="option-label" for="opt_${i}" data-opt-idx="${i}" style="${extra}">
-            <span class="option-key" style="${keyStyle}">${KEYS[i]}</span>
-            <span class="option-text">${opt}</span>
-          </label>`;
-      }).join('')}
-    </div>
+  /* ── Q-HEADER ── */
+  const qHeader = document.createElement('div');
+  qHeader.className = 'q-header';
+  const badge = document.createElement('span');
+  badge.className = 'q-number-badge';
+  badge.textContent = 'Q ' + (idx + 1) + ' / ' + SESSION_QUESTIONS.length;
+  qHeader.appendChild(badge);
+  const qText = document.createElement('div');
+  qText.className = 'q-text';
+  qText.innerHTML = q.question;
+  qHeader.appendChild(qText);
+  const qActions = document.createElement('div');
+  qActions.className = 'q-actions';
 
-    ${(isLearning && isAnswered) ? `
-      <div class="explanation-box" style="margin-top: 1rem;">
-        <strong>${sel === q.correct ? ''+EngineShared.icon('check-circle')+' Correct!' : ''+EngineShared.icon('x-circle')+' Incorrect'}</strong>
-        ${q.explanation}
-      </div>` : ''}
+  /* flag button */
+  const flagBtn = document.createElement('button');
+  flagBtn.className = 'flag-btn' + (state.flagged[idx] ? ' active' : '');
+  flagBtn.id = 'flag-btn-' + idx;
+  flagBtn.onclick = function() { toggleFlag(idx); };
+  var fSvg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  fSvg.setAttribute('width', '13');
+  fSvg.setAttribute('height', '13');
+  fSvg.setAttribute('viewBox', '0 0 24 24');
+  fSvg.setAttribute('fill', state.flagged[idx] ? 'currentColor' : 'none');
+  fSvg.setAttribute('stroke', 'currentColor');
+  fSvg.setAttribute('stroke-width', '2.2');
+  var fPath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+  fPath.setAttribute('d', 'M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z');
+  fSvg.appendChild(fPath);
+  var fLine = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+  fLine.setAttribute('x1', '4'); fLine.setAttribute('y1', '22');
+  fLine.setAttribute('x2', '4'); fLine.setAttribute('y2', '15');
+  fSvg.appendChild(fLine);
+  flagBtn.appendChild(fSvg);
+  flagBtn.appendChild(document.createTextNode(state.flagged[idx] ? ' Flagged' : ' Flag'));
+  qActions.appendChild(flagBtn);
 
-    <div class="q-nav-btns">
-      ${idx > 0         ? `<button class="btn-nav" onclick="goTo(${idx-1})">← Previous</button>` : ''}
-      ${!isLast         ? `<button class="btn-nav primary" onclick="nextQuestion()">Next →</button>` : ''}
-      ${isLast          ? `<button class="btn-nav submit-btn" onclick="attemptSubmit()">'+EngineShared.icon('check')+' Submit</button>` : ''}
-    </div>`;
+  /* clear highlights button */
+  if (state.isHighlighterMode && state.highlights[_hlGlobalIdx(idx)] && state.highlights[_hlGlobalIdx(idx)].length > 0) {
+    var clrBtn = document.createElement('button');
+    clrBtn.className = 'flag-btn';
+    clrBtn.style.fontSize = '0.75rem';
+    clrBtn.onclick = function() { clearAllHighlights(idx); };
+    clrBtn.title = 'Clear all highlights for this question';
+    clrBtn.innerHTML = EngineShared.icon('x') + ' Clear';
+    qActions.appendChild(clrBtn);
+  }
+
+  qHeader.appendChild(qActions);
+  area.appendChild(qHeader);
+
+  /* ── OPTIONS LIST ── */
+  const optList = document.createElement('div');
+  optList.className = 'options-list';
+
+  for (var i = 0; i < q.options.length; i++) {
+    var opt = q.options[i];
+    var extraStyle = '';
+    var keyStyle = '';
+    if (isLearning && isAnswered) {
+      if (i === q.correct) {
+        extraStyle = 'border-color: var(--correct) !important; background: var(--correct-bg) !important; pointer-events: none;';
+        keyStyle = 'background: var(--correct) !important; color: white !important; border-color: var(--correct) !important;';
+      } else if (sel === i) {
+        extraStyle = 'border-color: var(--wrong) !important; background: var(--wrong-bg) !important; pointer-events: none;';
+        keyStyle = 'background: var(--wrong) !important; color: white !important; border-color: var(--wrong) !important;';
+      } else {
+        extraStyle = 'pointer-events: none;';
+      }
+    }
+
+    var radio = document.createElement('input');
+    radio.type = 'radio';
+    radio.name = 'q_opt';
+    radio.id = 'opt_' + i;
+    radio.value = i;
+    if (sel === i) radio.checked = true;
+    if (isLearning && isAnswered) radio.disabled = true;
+    radio.onchange = function(ci) { return function() { selectAnswer(idx, ci); }; }(i);
+    optList.appendChild(radio);
+
+    var label = document.createElement('label');
+    label.className = 'option-label';
+    label.setAttribute('for', 'opt_' + i);
+    label.dataset.optIdx = i;
+    if (extraStyle) label.style.cssText = extraStyle;
+
+    var keySpan = document.createElement('span');
+    keySpan.className = 'option-key';
+    if (keyStyle) keySpan.style.cssText = keyStyle;
+    keySpan.textContent = KEYS[i];
+    label.appendChild(keySpan);
+
+    var textSpan = document.createElement('span');
+    textSpan.className = 'option-text';
+    textSpan.innerHTML = opt;
+    label.appendChild(textSpan);
+
+    optList.appendChild(label);
+  }
+  area.appendChild(optList);
+
+  /* ── EXPLANATION (learning mode) ── */
+  if (isLearning && isAnswered) {
+    var explBox = document.createElement('div');
+    explBox.className = 'explanation-box';
+    explBox.style.marginTop = '1rem';
+    var strong = document.createElement('strong');
+    strong.innerHTML = (sel === q.correct ? EngineShared.icon('check-circle') + ' Correct!' : EngineShared.icon('x-circle') + ' Incorrect');
+    explBox.appendChild(strong);
+    var explText = document.createElement('span');
+    explText.innerHTML = q.explanation;
+    explBox.appendChild(explText);
+    area.appendChild(explBox);
+  }
+
+  /* ── NAV BUTTONS ── */
+  var navBtns = document.createElement('div');
+  navBtns.className = 'q-nav-btns';
+
+  if (idx > 0) {
+    var prevBtn = document.createElement('button');
+    prevBtn.className = 'btn-nav';
+    prevBtn.onclick = function() { goTo(idx - 1); };
+    prevBtn.textContent = '\u2190 Previous';
+    navBtns.appendChild(prevBtn);
+  }
+  if (!isLast) {
+    var nextBtn = document.createElement('button');
+    nextBtn.className = 'btn-nav primary';
+    nextBtn.onclick = function() { nextQuestion(); };
+    nextBtn.textContent = 'Next \u2192';
+    navBtns.appendChild(nextBtn);
+  }
+  if (isLast) {
+    var subBtn = document.createElement('button');
+    subBtn.className = 'btn-nav submit-btn';
+    subBtn.onclick = function() { attemptSubmit(); };
+    subBtn.innerHTML = EngineShared.icon('check') + ' Submit';
+    navBtns.appendChild(subBtn);
+  }
+
+  area.appendChild(navBtns);
 
   updateNavGrid(idx);
   updateNavStats();
@@ -1509,10 +1600,23 @@ function toggleFlag(idx) {
   state.flagged[idx] = !state.flagged[idx];
   const btn = document.getElementById(`flag-btn-${idx}`);
   if(btn) {
-    btn.innerHTML = `
-      <svg width="13" height="13" viewBox="0 0 24 24" fill="${state.flagged[idx]?'currentColor':'none'}" stroke="currentColor" stroke-width="2.2"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg>
-      ${state.flagged[idx] ? 'Flagged' : 'Flag'}
-    `;
+    btn.innerHTML = '';
+    var fSvg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    fSvg.setAttribute('width', '13');
+    fSvg.setAttribute('height', '13');
+    fSvg.setAttribute('viewBox', '0 0 24 24');
+    fSvg.setAttribute('fill', state.flagged[idx] ? 'currentColor' : 'none');
+    fSvg.setAttribute('stroke', 'currentColor');
+    fSvg.setAttribute('stroke-width', '2.2');
+    var fPath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    fPath.setAttribute('d', 'M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z');
+    fSvg.appendChild(fPath);
+    var fLine = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+    fLine.setAttribute('x1', '4'); fLine.setAttribute('y1', '22');
+    fLine.setAttribute('x2', '4'); fLine.setAttribute('y2', '15');
+    fSvg.appendChild(fLine);
+    btn.appendChild(fSvg);
+    btn.appendChild(document.createTextNode(state.flagged[idx] ? ' Flagged' : ' Flag'));
     btn.classList.toggle('active', state.flagged[idx]);
   }
   updateNavGrid(idx);
@@ -1524,9 +1628,15 @@ function toggleFlag(idx) {
 /* ─── NAV GRID ───────────────────────────────────────────────── */
 function buildNavGrid() {
   const grid = document.getElementById('nav-grid');
-  grid.innerHTML = SESSION_QUESTIONS.map((_, i) =>
-    `<button class="nav-btn" id="nav-btn-${i}" onclick="goTo(${i})">${i+1}</button>`
-  ).join('');
+  grid.innerHTML = '';
+  for (var i = 0; i < SESSION_QUESTIONS.length; i++) {
+    var btn = document.createElement('button');
+    btn.className = 'nav-btn';
+    btn.id = 'nav-btn-' + i;
+    btn.onclick = (function(ci) { return function() { goTo(ci); }; })(i);
+    btn.textContent = i + 1;
+    grid.appendChild(btn);
+  }
 }
 
 let lastCurrentIdx = -1;
@@ -1719,32 +1829,76 @@ function renderResultItems(filter) {
       const corrOpt = q.options[q.correct];
 
       const el = document.createElement('div');
-      el.className = `result-item ${statusClass}`;
-      el.innerHTML = `
-        <div class="result-item-header" onclick="toggleResultItem(this)">
-          <div class="result-status-icon">${icon}</div>
-          <div class="result-q-meta">
-            <div class="result-q-num">Question ${i+1}${isFlagged?' · '+EngineShared.icon('flag')+' Flagged':''}</div>
-            <div class="result-q-text">${q.question}</div>
-          </div>
-          <div class="expand-arrow">▼</div>
-        </div>
-        <div class="result-item-body">
-          ${!isSkipped ? `
-            <div class="answer-row your-answer ${isCorrect?'is-correct':''}">
-              <span class="ar-label">Your Answer</span>
-              <span>${KEYS[ans]}. ${userOpt}</span>
-            </div>` : ''}
-          ${!isCorrect ? `
-            <div class="answer-row correct-answer">
-              <span class="ar-label">Correct Answer</span>
-              <span>${KEYS[q.correct]}. ${corrOpt}</span>
-            </div>` : ''}
-          <div class="explanation-box">
-            <strong>Explanation</strong>
-            ${q.explanation}
-          </div>
-        </div>`;
+      el.className = 'result-item ' + statusClass;
+
+      var header = document.createElement('div');
+      header.className = 'result-item-header';
+      header.onclick = function() { toggleResultItem(this); };
+
+      var statusIcon = document.createElement('div');
+      statusIcon.className = 'result-status-icon';
+      statusIcon.innerHTML = icon;
+      header.appendChild(statusIcon);
+
+      var meta = document.createElement('div');
+      meta.className = 'result-q-meta';
+      var num = document.createElement('div');
+      num.className = 'result-q-num';
+      num.innerHTML = 'Question ' + (i+1) + (isFlagged ? ' \u00b7 ' + EngineShared.icon('flag') + ' Flagged' : '');
+      meta.appendChild(num);
+      var qText = document.createElement('div');
+      qText.className = 'result-q-text';
+      qText.innerHTML = q.question;
+      meta.appendChild(qText);
+      header.appendChild(meta);
+
+      var arrow = document.createElement('div');
+      arrow.className = 'expand-arrow';
+      arrow.textContent = '\u25bc';
+      header.appendChild(arrow);
+
+      el.appendChild(header);
+
+      var body = document.createElement('div');
+      body.className = 'result-item-body';
+
+      if (!isSkipped) {
+        var yr = document.createElement('div');
+        yr.className = 'answer-row your-answer' + (isCorrect ? ' is-correct' : '');
+        var yrLabel = document.createElement('span');
+        yrLabel.className = 'ar-label';
+        yrLabel.textContent = 'Your Answer';
+        yr.appendChild(yrLabel);
+        var yrVal = document.createElement('span');
+        yrVal.textContent = KEYS[ans] + '. ' + userOpt;
+        yr.appendChild(yrVal);
+        body.appendChild(yr);
+      }
+
+      if (!isCorrect) {
+        var cr = document.createElement('div');
+        cr.className = 'answer-row correct-answer';
+        var crLabel = document.createElement('span');
+        crLabel.className = 'ar-label';
+        crLabel.textContent = 'Correct Answer';
+        cr.appendChild(crLabel);
+        var crVal = document.createElement('span');
+        crVal.textContent = KEYS[q.correct] + '. ' + corrOpt;
+        cr.appendChild(crVal);
+        body.appendChild(cr);
+      }
+
+      var expl = document.createElement('div');
+      expl.className = 'explanation-box';
+      var explStrong = document.createElement('strong');
+      explStrong.textContent = 'Explanation';
+      expl.appendChild(explStrong);
+      var explSpan = document.createElement('span');
+      explSpan.innerHTML = q.explanation;
+      expl.appendChild(explSpan);
+      body.appendChild(expl);
+
+      el.appendChild(body);
       list.appendChild(el);
     }
 
@@ -1752,7 +1906,10 @@ function renderResultItems(filter) {
       renderResultItemsRafId = requestAnimationFrame(renderChunk);
     } else {
       if (itemsRendered === 0) {
-        list.innerHTML = `<div style="color:var(--text-muted);font-size:0.9rem;padding:1rem 0;">No questions in this category.</div>`;
+        var emptyDiv = document.createElement('div');
+        emptyDiv.style.cssText = 'color:var(--text-muted);font-size:0.9rem;padding:1rem 0;';
+        emptyDiv.textContent = 'No questions in this category.';
+        list.appendChild(emptyDiv);
       }
       renderResultItemsRafId = null;
     }

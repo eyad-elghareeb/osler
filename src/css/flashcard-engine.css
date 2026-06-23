@@ -6,7 +6,7 @@
 .flashcard-wrapper { width: 100%; max-width: 860px; perspective: 1200px; flex: 1; display: flex; min-height: 0; }
 .flashcard { width: 100%; min-height: 0; max-height: 85vh; position: relative; transform-style: preserve-3d; transition: transform var(--card-flip); cursor: pointer; }
 .flashcard.flipped { transform: rotateY(180deg); }
-.flashcard-face { position: absolute; inset: 0; backface-visibility: hidden; -webkit-backface-visibility: hidden; border-radius: 16px; border: 1.5px solid var(--border); padding: 1.5rem 1.75rem; display: flex; flex-direction: column; overflow-y: auto; box-shadow: var(--shadow); transition: border-color var(--transition), box-shadow var(--transition); scroll-behavior: smooth; }
+.flashcard-face { position: absolute; inset: 0; backface-visibility: hidden; -webkit-backface-visibility: hidden; border-radius: var(--radius-lg); border: 1.5px solid var(--border); padding: 1.5rem 1.75rem; display: flex; flex-direction: column; overflow-y: auto; box-shadow: var(--shadow); transition: border-color var(--transition), box-shadow var(--transition); scroll-behavior: smooth; }
 .flashcard-face:hover { border-color: var(--accent); }
 .flashcard-front { background: var(--surface); }
 .flashcard-back { background: var(--surface); transform: rotateY(180deg); }

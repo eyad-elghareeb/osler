@@ -942,7 +942,20 @@
       return '<div class="osce-map-step '+cls+'"><span>'+s[0]+' — <em style="font-weight:400">'+s[1]+'</em></span></div>';
     }).join('');
   }
-  function _updateMap() { var el=document.getElementById('osce-map-steps'); if(el) el.innerHTML=_mapHTML(); }
+  function _updateMap() {
+    var el = document.getElementById('osce-map-steps'); if (!el) return;
+    var active = _mapStep();
+    el.innerHTML = '';
+    _MAP_STEPS.forEach(function(s, i) {
+      var cls = i < active ? 'done' : i === active ? 'active' : '';
+      var step = document.createElement('div');
+      step.className = 'osce-map-step ' + cls;
+      var sp = document.createElement('span');
+      sp.innerHTML = s[0] + ' — <em style="font-weight:400">' + s[1] + '</em>';
+      step.appendChild(sp);
+      el.appendChild(step);
+    });
+  }
 
   /* ── Voice Engine (Gemini Live only) ─────────────────────────────── */
   var _Voice = (function () {
@@ -1006,7 +1019,20 @@
         if (!uel) {
           uel = document.createElement('div'); uel.id = 'osce-interim-user';
           uel.className = 'osce-msg student interim';
-          uel.innerHTML = '<div class="osce-msg-lbl">'+EngineShared.icon('mic')+' You</div><div class="osce-bubble osce-interim"><span class="osce-interim-text"></span><span class="osce-interim-cursor">▊</span></div>';
+          var lbl = document.createElement('div');
+          lbl.className = 'osce-msg-lbl';
+          lbl.innerHTML = EngineShared.icon('mic') + ' You';
+          uel.appendChild(lbl);
+          var bub = document.createElement('div');
+          bub.className = 'osce-bubble osce-interim';
+          var txt = document.createElement('span');
+          txt.className = 'osce-interim-text';
+          bub.appendChild(txt);
+          var curs = document.createElement('span');
+          curs.className = 'osce-interim-cursor';
+          curs.textContent = '\u258a';
+          bub.appendChild(curs);
+          uel.appendChild(bub);
           box.appendChild(uel);
         }
         uel.querySelector('.osce-interim-text').textContent = _liveInterimText;
@@ -1507,11 +1533,23 @@
     var ov = document.createElement('div');
     ov.id = 'osce-lightbox';
     ov.style.cssText = 'position:fixed;inset:0;z-index:10000;background:rgba(0,0,0,.88);display:flex;flex-direction:column;align-items:center;justify-content:center;cursor:pointer;padding:1rem';
-    ov.innerHTML =
-      '<div style="max-width:min(94vw,1200px);max-height:92vh;display:flex;flex-direction:column;gap:.5rem">' +
-      (title ? '<div style="color:#e6edf3;font-size:.85rem;font-weight:700;text-align:center">'+_esc(title)+'</div>' : '') +
-      '<img src="'+src+'" style="display:block;max-width:100%;max-height:80vh;border-radius:8px;object-fit:contain;background:#000">' +
-      '<div style="color:#8b949e;font-size:.72rem;text-align:center">Click anywhere to close</div></div>';
+    var cont = document.createElement('div');
+    cont.style.cssText = 'max-width:min(94vw,1200px);max-height:92vh;display:flex;flex-direction:column;gap:.5rem';
+    if (title) {
+      var tDiv = document.createElement('div');
+      tDiv.style.cssText = 'color:#e6edf3;font-size:.85rem;font-weight:700;text-align:center';
+      tDiv.textContent = _esc(title);
+      cont.appendChild(tDiv);
+    }
+    var img = document.createElement('img');
+    img.src = src;
+    img.style.cssText = 'display:block;max-width:100%;max-height:80vh;border-radius:8px;object-fit:contain;background:#000';
+    cont.appendChild(img);
+    var hint = document.createElement('div');
+    hint.style.cssText = 'color:#8b949e;font-size:.72rem;text-align:center';
+    hint.textContent = 'Click anywhere to close';
+    cont.appendChild(hint);
+    ov.appendChild(cont);
     ov.addEventListener('click', function() { document.body.removeChild(ov); });
     document.body.appendChild(ov);
   }
@@ -1817,11 +1855,14 @@
       var isModel = m.role === 'model';
       var div = document.createElement('div');
       div.className = 'osce-msg ' + (isModel ? 'patient' : 'student');
-      if (isDataInterp) {
-        div.innerHTML = '<div class="osce-msg-lbl">' + (isModel ? ''+EngineShared.icon('user')+' ' + examinerLabel : ''+EngineShared.icon('activity')+' You') + '</div><div class="osce-bubble">' + _md(m.text) + '</div>';
-      } else {
-        div.innerHTML = '<div class="osce-msg-lbl">' + (isModel ? ''+EngineShared.icon('user')+'‍'+EngineShared.icon('activity')+' ' + examinerLabel : ''+EngineShared.icon('activity')+' You') + '</div><div class="osce-bubble">' + _md(m.text) + '</div>';
-      }
+      var lbl = document.createElement('div');
+      lbl.className = 'osce-msg-lbl';
+      lbl.innerHTML = isModel ? (isDataInterp ? EngineShared.icon('user') + ' ' + examinerLabel : EngineShared.icon('user') + '\u200d' + EngineShared.icon('activity') + ' ' + examinerLabel) : EngineShared.icon('activity') + ' You';
+      div.appendChild(lbl);
+      var bub = document.createElement('div');
+      bub.className = 'osce-bubble';
+      bub.innerHTML = _md(m.text);
+      div.appendChild(bub);
       frag.appendChild(div);
     }
     if (frag.childNodes.length) {
@@ -1839,7 +1880,21 @@
       var isDataInterp = _activeCase && _activeCase.type === 'data-interp';
       var label = isDataInterp ? ''+EngineShared.icon('user')+' '+_esc((_activeCase.examiner||{}).name||'Examiner') : ''+EngineShared.icon('user')+'‍'+EngineShared.icon('activity')+' '+_esc(_getSpeaker(_activeCase).name);
       var d = document.createElement('div'); d.id = 'osce-thinking-el'; d.className = 'osce-thinking';
-      d.innerHTML = '<div class="osce-thinking-lbl">'+label+'</div><div class="osce-thinking-bub"><span class="osce-dots"><span></span><span></span><span></span></span><span class="osce-thinking-txt">'+(isDataInterp?'evaluating…':'typing…')+'</span></div>';
+      var tl = document.createElement('div');
+      tl.className = 'osce-thinking-lbl';
+      tl.innerHTML = label;
+      d.appendChild(tl);
+      var tb = document.createElement('div');
+      tb.className = 'osce-thinking-bub';
+      var dots = document.createElement('span');
+      dots.className = 'osce-dots';
+      for (var _td = 0; _td < 3; _td++) { dots.appendChild(document.createElement('span')); }
+      tb.appendChild(dots);
+      var txt = document.createElement('span');
+      txt.className = 'osce-thinking-txt';
+      txt.textContent = isDataInterp ? 'evaluating\u2026' : 'typing\u2026';
+      tb.appendChild(txt);
+      d.appendChild(tb);
       box.appendChild(d); box.scrollTop = box.scrollHeight;
     } else if (!show && ex) { ex.remove(); }
   }
@@ -1848,9 +1903,18 @@
     var e = document.getElementById('osce-error-bar'); if (!e) return;
     if (msg) {
       e.className = 'osce-error-bar show';
-      e.innerHTML = ''+EngineShared.icon('alert-triangle')+' '+_esc(msg)+(showRetry&&_lastFailedText?
-        ' <button id="osce-retry-btn" style="margin-left:.5rem;padding:.14rem .48rem;border-radius:4px;border:1px solid var(--wrong);background:transparent;color:var(--wrong);cursor:pointer;font-size:.78rem">↻ Retry</button>':'');
-      if (showRetry) { var btn=document.getElementById('osce-retry-btn'); if(btn) btn.addEventListener('click',_onRetry); }
+      e.innerHTML = '';
+      var iconSpan = document.createElement('span');
+      iconSpan.innerHTML = EngineShared.icon('alert-triangle') + ' ' + _esc(msg);
+      e.appendChild(iconSpan);
+      if (showRetry && _lastFailedText) {
+        var retryBtn = document.createElement('button');
+        retryBtn.id = 'osce-retry-btn';
+        retryBtn.style.cssText = 'margin-left:.5rem;padding:.14rem .48rem;border-radius:4px;border:1px solid var(--wrong);background:transparent;color:var(--wrong);cursor:pointer;font-size:.78rem';
+        retryBtn.textContent = '\u21bb Retry';
+        retryBtn.addEventListener('click', _onRetry);
+        e.appendChild(retryBtn);
+      }
     } else { e.className = 'osce-error-bar'; }
   }
 
@@ -1922,15 +1986,28 @@
     var overlay = document.getElementById('osce-reset-overlay');
     if (!overlay) {
       overlay = document.createElement('div'); overlay.id = 'osce-reset-overlay'; overlay.className = 'osce-reset-overlay';
-      overlay.innerHTML =
-        '<div class="osce-reset-modal">' +
-          '<h3>Reset Consultation?</h3>' +
-          '<p>This will clear the entire conversation, timer, and progress. This cannot be undone.</p>' +
-          '<div class="osce-reset-actions">' +
-            '<button class="osce-reset-cancel" id="osce-reset-cancel-btn">Go Back</button>' +
-            '<button class="osce-reset-danger" id="osce-reset-confirm-btn">Reset Now</button>' +
-          '</div>' +
-        '</div>';
+      var modal = document.createElement('div');
+      modal.className = 'osce-reset-modal';
+      var h3 = document.createElement('h3');
+      h3.textContent = 'Reset Consultation?';
+      modal.appendChild(h3);
+      var p = document.createElement('p');
+      p.textContent = 'This will clear the entire conversation, timer, and progress. This cannot be undone.';
+      modal.appendChild(p);
+      var actions = document.createElement('div');
+      actions.className = 'osce-reset-actions';
+      var cancelBtn = document.createElement('button');
+      cancelBtn.className = 'osce-reset-cancel';
+      cancelBtn.id = 'osce-reset-cancel-btn';
+      cancelBtn.textContent = 'Go Back';
+      actions.appendChild(cancelBtn);
+      var confirmBtn = document.createElement('button');
+      confirmBtn.className = 'osce-reset-danger';
+      confirmBtn.id = 'osce-reset-confirm-btn';
+      confirmBtn.textContent = 'Reset Now';
+      actions.appendChild(confirmBtn);
+      modal.appendChild(actions);
+      overlay.appendChild(modal);
       document.body.appendChild(overlay);
       document.getElementById('osce-reset-cancel-btn').addEventListener('click', _closeResetModal);
       document.getElementById('osce-reset-confirm-btn').addEventListener('click', _confirmResetAction);
@@ -1960,10 +2037,22 @@
     var d = document.getElementById('osce-debrief');
     if (!d) { d = document.createElement('div'); d.id = 'osce-debrief'; d.className = 'osce-debrief-overlay'; document.body.appendChild(d); }
     d.className = 'osce-debrief-overlay open';
-    d.innerHTML = '<div class="osce-debrief-modal" style="padding:2rem;text-align:center">' +
-      '<div class="osce-thinking-bub" style="display:inline-flex;margin-bottom:1rem"><span class="osce-dots"><span></span><span></span><span></span></span></div>' +
-      '<div style="font-size:.95rem;color:var(--text-muted)">Examiner is reviewing your consultation…</div>' +
-      '</div>';
+    var dm = document.createElement('div');
+    dm.className = 'osce-debrief-modal';
+    dm.style.cssText = 'padding:2rem;text-align:center';
+    var bub = document.createElement('div');
+    bub.className = 'osce-thinking-bub';
+    bub.style.cssText = 'display:inline-flex;margin-bottom:1rem';
+    var dots = document.createElement('span');
+    dots.className = 'osce-dots';
+    for (var _dd = 0; _dd < 3; _dd++) { dots.appendChild(document.createElement('span')); }
+    bub.appendChild(dots);
+    dm.appendChild(bub);
+    var label = document.createElement('div');
+    label.style.cssText = 'font-size:.95rem;color:var(--text-muted)';
+    label.textContent = 'Examiner is reviewing your consultation\u2026';
+    dm.appendChild(label);
+    d.appendChild(dm);
   }
 
   function _hideDebrief() { var d=document.getElementById('osce-debrief'); if(d){d.className='osce-debrief-overlay';} }

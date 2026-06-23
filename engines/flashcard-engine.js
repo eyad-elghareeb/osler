@@ -1274,58 +1274,118 @@
     }
 
     var area = document.getElementById('card-area');
-    var html = '';
+    area.innerHTML = '';
 
-    // Flag button on top
-    html += '<div style="width:100%;max-width:860px;display:flex;justify-content:flex-end;gap:0.5rem;">';
-    html += '<button class="flag-btn ' + (state.flagged[idx] ? 'active' : '') + '" onclick="toggleFlag()">';
-    html += '<svg width="13" height="13" viewBox="0 0 24 24" fill="' + (state.flagged[idx] ? 'currentColor' : 'none') + '" stroke="currentColor" stroke-width="2.2"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg>';
-    html += (state.flagged[idx] ? 'Flagged' : 'Flag');
-    html += '</button></div>';
+    /* ── FLAG BUTTON ── */
+    var flagRow = document.createElement('div');
+    flagRow.style.cssText = 'width:100%;max-width:860px;display:flex;justify-content:flex-end;gap:0.5rem;';
+    var flagBtn = document.createElement('button');
+    flagBtn.className = 'flag-btn' + (state.flagged[idx] ? ' active' : '');
+    flagBtn.onclick = function() { toggleFlag(); };
+    var fSvg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    fSvg.setAttribute('width', '13');
+    fSvg.setAttribute('height', '13');
+    fSvg.setAttribute('viewBox', '0 0 24 24');
+    fSvg.setAttribute('fill', state.flagged[idx] ? 'currentColor' : 'none');
+    fSvg.setAttribute('stroke', 'currentColor');
+    fSvg.setAttribute('stroke-width', '2.2');
+    var fPath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    fPath.setAttribute('d', 'M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z');
+    fSvg.appendChild(fPath);
+    var fLine = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+    fLine.setAttribute('x1', '4'); fLine.setAttribute('y1', '22');
+    fLine.setAttribute('x2', '4'); fLine.setAttribute('y2', '15');
+    fSvg.appendChild(fLine);
+    flagBtn.appendChild(fSvg);
+    flagBtn.appendChild(document.createTextNode(state.flagged[idx] ? ' Flagged' : ' Flag'));
+    flagRow.appendChild(flagBtn);
+    area.appendChild(flagRow);
 
-    // Flashcard
-    html += '<div class="flashcard-wrapper card-entering">';
-    html += '<div class="flashcard' + (isFlipped ? ' flipped' : '') + '" id="flashcard" onclick="flipCard()">';
+    /* ── FLASHCARD ── */
+    var wrapper = document.createElement('div');
+    wrapper.className = 'flashcard-wrapper card-entering';
+    var flashcard = document.createElement('div');
+    flashcard.className = 'flashcard' + (isFlipped ? ' flipped' : '');
+    flashcard.id = 'flashcard';
+    flashcard.onclick = function() { flipCard(); };
 
     // Front face
-    html += '<div class="flashcard-face flashcard-front">';
-    html += '<div class="card-face-header">';
-    html += '<span class="card-type-badge ' + (isBasic ? 'basic' : 'cloze') + '">' + (isBasic ? 'Basic' : 'Cloze') + '</span>';
-    html += '<span class="card-number-badge">C ' + (idx + 1) + ' / ' + SESSION_CARDS.length + '</span>';
-    html += '<span class="card-face-label">Front</span>';
-    html += '</div>';
-    html += '<div class="card-content">' + frontContent + '</div>';
+    var frontFace = document.createElement('div');
+    frontFace.className = 'flashcard-face flashcard-front';
+    var fh = document.createElement('div');
+    fh.className = 'card-face-header';
+    var ftBadge = document.createElement('span');
+    ftBadge.className = 'card-type-badge ' + (isBasic ? 'basic' : 'cloze');
+    ftBadge.textContent = isBasic ? 'Basic' : 'Cloze';
+    fh.appendChild(ftBadge);
+    var fNum = document.createElement('span');
+    fNum.className = 'card-number-badge';
+    fNum.textContent = 'C ' + (idx + 1) + ' / ' + SESSION_CARDS.length;
+    fh.appendChild(fNum);
+    var fLabel = document.createElement('span');
+    fLabel.className = 'card-face-label';
+    fLabel.textContent = 'Front';
+    fh.appendChild(fLabel);
+    frontFace.appendChild(fh);
+    var fContent = document.createElement('div');
+    fContent.className = 'card-content';
+    fContent.innerHTML = frontContent;
+    frontFace.appendChild(fContent);
     if (card.tags && card.tags.length) {
-      html += '<div class="card-tags">';
+      var fTags = document.createElement('div');
+      fTags.className = 'card-tags';
       card.tags.forEach(function(tag) {
-        html += '<span class="card-tag">' + escapeHTML(tag) + '</span>';
+        var tagEl = document.createElement('span');
+        tagEl.className = 'card-tag';
+        tagEl.textContent = escapeHTML(tag);
+        fTags.appendChild(tagEl);
       });
-      html += '</div>';
+      frontFace.appendChild(fTags);
     }
-    html += '</div>';
+    flashcard.appendChild(frontFace);
 
     // Back face
-    html += '<div class="flashcard-face flashcard-back">';
-    html += '<div class="card-face-header">';
-    html += '<span class="card-type-badge ' + (isBasic ? 'basic' : 'cloze') + '">' + (isBasic ? 'Basic' : 'Cloze') + '</span>';
-    html += '<span class="card-number-badge">C ' + (idx + 1) + ' / ' + SESSION_CARDS.length + '</span>';
-    html += '<span class="card-face-label">Back</span>';
-    html += '</div>';
-    html += '<div class="card-content">' + backContent + '</div>';
+    var backFace = document.createElement('div');
+    backFace.className = 'flashcard-face flashcard-back';
+    var bh = document.createElement('div');
+    bh.className = 'card-face-header';
+    var btBadge = document.createElement('span');
+    btBadge.className = 'card-type-badge ' + (isBasic ? 'basic' : 'cloze');
+    btBadge.textContent = isBasic ? 'Basic' : 'Cloze';
+    bh.appendChild(btBadge);
+    var bNum = document.createElement('span');
+    bNum.className = 'card-number-badge';
+    bNum.textContent = 'C ' + (idx + 1) + ' / ' + SESSION_CARDS.length;
+    bh.appendChild(bNum);
+    var bLabel = document.createElement('span');
+    bLabel.className = 'card-face-label';
+    bLabel.textContent = 'Back';
+    bh.appendChild(bLabel);
+    backFace.appendChild(bh);
+    var bContent = document.createElement('div');
+    bContent.className = 'card-content';
+    bContent.innerHTML = backContent;
+    backFace.appendChild(bContent);
     if (card.tags && card.tags.length) {
-      html += '<div class="card-tags">';
+      var bTags = document.createElement('div');
+      bTags.className = 'card-tags';
       card.tags.forEach(function(tag) {
-        html += '<span class="card-tag">' + escapeHTML(tag) + '</span>';
+        var tagEl = document.createElement('span');
+        tagEl.className = 'card-tag';
+        tagEl.textContent = escapeHTML(tag);
+        bTags.appendChild(tagEl);
       });
-      html += '</div>';
+      backFace.appendChild(bTags);
     }
-    html += '</div>';
+    flashcard.appendChild(backFace);
 
-    html += '</div></div>'; // .flashcard, .flashcard-wrapper
+    wrapper.appendChild(flashcard);
+    area.appendChild(wrapper);
 
-    // Cloze reveal buttons (for multi-cloze cards that aren't flipped yet)
+    /* ── CLOZE REVEAL BAR ── */
     if (isCloze && clozes.length > 1 && !isFlipped) {
-      html += '<div class="cloze-reveal-bar">';
+      var clozeBar = document.createElement('div');
+      clozeBar.className = 'cloze-reveal-bar';
       var uniqueClozes = [];
       var seenCNums = {};
       clozes.forEach(function(c) {
@@ -1337,32 +1397,75 @@
       uniqueClozes.forEach(function(c) {
         var revealed = state.revealedClozes[idx] && state.revealedClozes[idx].has(c.cNum);
         var colorClass = 'c' + c.cNum;
-        html += '<button class="cloze-reveal-btn ' + colorClass + ' ' + (revealed ? 'revealed' : '') + '" onclick="event.stopPropagation();revealCloze(' + c.cNum + ')">';
-        html += '<span class="cloze-idx">' + c.cNum + '</span>' + (revealed ? 'Revealed' : 'Reveal c' + c.cNum);
-        html += '</button>';
+        var cb = document.createElement('button');
+        cb.className = 'cloze-reveal-btn ' + colorClass + ' ' + (revealed ? 'revealed' : '');
+        cb.onclick = function(e) { e.stopPropagation(); revealCloze(c.cNum); };
+        var cIdx = document.createElement('span');
+        cIdx.className = 'cloze-idx';
+        cIdx.textContent = c.cNum;
+        cb.appendChild(cIdx);
+        cb.appendChild(document.createTextNode(revealed ? 'Revealed' : 'Reveal c' + c.cNum));
+        clozeBar.appendChild(cb);
       });
-      html += '</div>';
+      area.appendChild(clozeBar);
     }
-    // Single-cloze or flipped: no button bar, just auto-reveal on flip
 
-    // Rating section (shown after flip via CSS)
-    html += '<div class="rating-section' + (isFlipped ? ' visible' : '') + '">';
-    html += '<div class="rating-label">How well did you know this?</div>';
-    html += '<div class="rating-grid">';
-    html += '<button class="rating-btn rate-again" onclick="rateCard(\'again\')"><span class="rating-key">1</span>Again</button>';
-    html += '<button class="rating-btn rate-hard" onclick="rateCard(\'hard\')"><span class="rating-key">2</span>Hard</button>';
-    html += '<button class="rating-btn rate-good" onclick="rateCard(\'good\')"><span class="rating-key">3</span>Good</button>';
-    html += '<button class="rating-btn rate-easy" onclick="rateCard(\'easy\')"><span class="rating-key">4</span>Easy</button>';
-    html += '</div></div>';
+    /* ── RATING SECTION ── */
+    var ratingSec = document.createElement('div');
+    ratingSec.className = 'rating-section' + (isFlipped ? ' visible' : '');
+    var rLabel = document.createElement('div');
+    rLabel.className = 'rating-label';
+    rLabel.textContent = 'How well did you know this?';
+    ratingSec.appendChild(rLabel);
+    var rGrid = document.createElement('div');
+    rGrid.className = 'rating-grid';
 
-    // Navigation
-    html += '<div class="card-nav-btns">';
-    if (idx > 0) html += '<button class="btn-nav" onclick="goTo(' + (idx - 1) + ')">Previous</button>';
-    if (!isLast) html += '<button class="btn-nav primary" onclick="nextCard()">Next</button>';
-    if (isLast)  html += '<button class="btn-nav submit-btn" onclick="attemptFinish()">Finish Session</button>';
-    html += '</div>';
+    var ratings = [
+      { cls: 'rate-again', text: 'Again', key: '1', fn: function() { rateCard('again'); } },
+      { cls: 'rate-hard',  text: 'Hard',  key: '2', fn: function() { rateCard('hard'); } },
+      { cls: 'rate-good',  text: 'Good',  key: '3', fn: function() { rateCard('good'); } },
+      { cls: 'rate-easy',  text: 'Easy',  key: '4', fn: function() { rateCard('easy'); } }
+    ];
+    ratings.forEach(function(r) {
+      var rb = document.createElement('button');
+      rb.className = 'rating-btn ' + r.cls;
+      rb.onclick = r.fn;
+      var rk = document.createElement('span');
+      rk.className = 'rating-key';
+      rk.textContent = r.key;
+      rb.appendChild(rk);
+      rb.appendChild(document.createTextNode(r.text));
+      rGrid.appendChild(rb);
+    });
 
-    area.innerHTML = html;
+    ratingSec.appendChild(rGrid);
+    area.appendChild(ratingSec);
+
+    /* ── NAV BUTTONS ── */
+    var navBtns = document.createElement('div');
+    navBtns.className = 'card-nav-btns';
+    if (idx > 0) {
+      var prevBtn = document.createElement('button');
+      prevBtn.className = 'btn-nav';
+      prevBtn.onclick = function() { goTo(idx - 1); };
+      prevBtn.textContent = 'Previous';
+      navBtns.appendChild(prevBtn);
+    }
+    if (!isLast) {
+      var nextBtn = document.createElement('button');
+      nextBtn.className = 'btn-nav primary';
+      nextBtn.onclick = function() { nextCard(); };
+      nextBtn.textContent = 'Next';
+      navBtns.appendChild(nextBtn);
+    }
+    if (isLast) {
+      var finBtn = document.createElement('button');
+      finBtn.className = 'btn-nav submit-btn';
+      finBtn.onclick = function() { attemptFinish(); };
+      finBtn.textContent = 'Finish Session';
+      navBtns.appendChild(finBtn);
+    }
+    area.appendChild(navBtns);
     updateNavGrid(idx);
     updateNavStats();
     area.scrollTop = 0;
@@ -1491,9 +1594,17 @@
   /* ── Nav Grid ─────────────────────────────────────────────── */
   function buildNavGrid() {
     var grid = document.getElementById('nav-grid');
-    grid.innerHTML = SESSION_CARDS.map(function(_, i) {
-      return '<button class="nav-btn" id="nav-btn-' + i + '" onclick="goTo(' + i + ')">' + (i + 1) + '</button>';
-    }).join('');
+    grid.innerHTML = '';
+    for (var i = 0; i < SESSION_CARDS.length; i++) {
+      (function(ci) {
+        var btn = document.createElement('button');
+        btn.className = 'nav-btn';
+        btn.id = 'nav-btn-' + ci;
+        btn.onclick = function() { goTo(ci); };
+        btn.textContent = ci + 1;
+        grid.appendChild(btn);
+      })(i);
+    }
   }
 
   var lastCurrentIdx = -1;
@@ -1636,25 +1747,79 @@
 
       var el = document.createElement('div');
       el.className = 'result-item ' + statusClass;
-      el.innerHTML =
-        '<div class="result-item-header" onclick="toggleResultItem(this)">' +
-          '<div class="result-status-icon">' + icon + '</div>' +
-          '<div class="result-q-meta">' +
-            '<div class="result-q-num">Card ' + (i + 1) + (isFlagged ? ' - Flagged' : '') + ' - ' + (card.type === 'basic' ? 'Basic' : 'Cloze') + '</div>' +
-            '<div class="result-q-text">' + escapeHTML(frontText) + '</div>' +
-          '</div>' +
-          '<div class="expand-arrow">&#9660;</div>' +
-        '</div>' +
-        '<div class="result-item-body">' +
-          '<div class="answer-row front-side"><span class="ar-label">Front</span><span>' + escapeHTML(frontText) + '</span></div>' +
-          '<div class="answer-row back-side"><span class="ar-label">Back</span><span>' + escapeHTML(backText) + '</span></div>' +
-          (r ? '<div class="explanation-box"><strong>Your Rating</strong>' + ratingLabel + '</div>' : '') +
-        '</div>';
+
+      var header = document.createElement('div');
+      header.className = 'result-item-header';
+      header.onclick = function() { toggleResultItem(this); };
+
+      var statusIcon = document.createElement('div');
+      statusIcon.className = 'result-status-icon';
+      statusIcon.textContent = icon;
+      header.appendChild(statusIcon);
+
+      var meta = document.createElement('div');
+      meta.className = 'result-q-meta';
+      var num = document.createElement('div');
+      num.className = 'result-q-num';
+      num.textContent = 'Card ' + (i + 1) + (isFlagged ? ' - Flagged' : '') + ' - ' + (card.type === 'basic' ? 'Basic' : 'Cloze');
+      meta.appendChild(num);
+      var qText = document.createElement('div');
+      qText.className = 'result-q-text';
+      qText.textContent = escapeHTML(frontText);
+      meta.appendChild(qText);
+      header.appendChild(meta);
+
+      var arrow = document.createElement('div');
+      arrow.className = 'expand-arrow';
+      arrow.textContent = '\u25bc';
+      header.appendChild(arrow);
+
+      el.appendChild(header);
+
+      var body = document.createElement('div');
+      body.className = 'result-item-body';
+
+      var frontRow = document.createElement('div');
+      frontRow.className = 'answer-row front-side';
+      var frLabel = document.createElement('span');
+      frLabel.className = 'ar-label';
+      frLabel.textContent = 'Front';
+      frontRow.appendChild(frLabel);
+      var frVal = document.createElement('span');
+      frVal.textContent = escapeHTML(frontText);
+      frontRow.appendChild(frVal);
+      body.appendChild(frontRow);
+
+      var backRow = document.createElement('div');
+      backRow.className = 'answer-row back-side';
+      var brLabel = document.createElement('span');
+      brLabel.className = 'ar-label';
+      brLabel.textContent = 'Back';
+      backRow.appendChild(brLabel);
+      var brVal = document.createElement('span');
+      brVal.textContent = escapeHTML(backText);
+      backRow.appendChild(brVal);
+      body.appendChild(backRow);
+
+      if (r) {
+        var expl = document.createElement('div');
+        expl.className = 'explanation-box';
+        var explStrong = document.createElement('strong');
+        explStrong.textContent = 'Your Rating';
+        expl.appendChild(explStrong);
+        expl.appendChild(document.createTextNode(ratingLabel));
+        body.appendChild(expl);
+      }
+
+      el.appendChild(body);
       list.appendChild(el);
     });
 
     if (itemsRendered === 0) {
-      list.innerHTML = '<div style="color:var(--text-muted);font-size:0.9rem;padding:1rem 0;">No cards in this category.</div>';
+      var emptyDiv = document.createElement('div');
+      emptyDiv.style.cssText = 'color:var(--text-muted);font-size:0.9rem;padding:1rem 0;';
+      emptyDiv.textContent = 'No cards in this category.';
+      list.appendChild(emptyDiv);
     }
   }
 

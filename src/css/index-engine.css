@@ -267,7 +267,7 @@ button, a { cursor: pointer; font-family: inherit; border: none; outline: none; 
 }
 .modal-overlay.open { display: flex; }
 .modal {
-  background: var(--surface); border: 1px solid var(--border); border-radius: 16px;
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg);
   padding: 2rem; max-width: 420px; width: 100%; box-shadow: var(--shadow);
   animation: slideUp 0.25s ease;
   will-change: transform, opacity;
@@ -277,14 +277,14 @@ button, a { cursor: pointer; font-family: inherit; border: none; outline: none; 
 .modal p  { color: var(--text-muted); font-size: 0.9rem; line-height: 1.6; margin-bottom: 1.25rem; }
 .modal-actions { display: flex; gap: 0.75rem; }
 .modal-actions .btn-cancel {
-  flex: 1; padding: 0.75rem; border-radius: 10px;
+  flex: 1; padding: 0.75rem; border-radius: var(--radius-md);
   background: var(--surface2); border: 1.5px solid var(--border);
   color: var(--text); font-weight: 600; cursor: pointer;
   transition: border-color 0.2s var(--ease-out), background 0.2s var(--ease-out);
 }
 .modal-actions .btn-cancel:hover { border-color: var(--accent); }
 .modal-actions .btn-confirm {
-  flex: 1; padding: 0.75rem; border-radius: 10px;
+  flex: 1; padding: 0.75rem; border-radius: var(--radius-md);
   background: var(--accent); border: none;
   color: #fff; font-weight: 600; cursor: pointer;
   transition: opacity 0.2s ease;
@@ -340,7 +340,7 @@ button, a { cursor: pointer; font-family: inherit; border: none; outline: none; 
 .dash-master-toggle {
   background: var(--surface2); border: 1px solid var(--border); font-size: 0.72rem; font-weight: 700;
   color: var(--text-muted); cursor: pointer; padding: 0.45rem 0.75rem;
-  border-radius: 6px; transition: all 0.2s var(--ease-out); white-space: nowrap;
+  border-radius: var(--radius-sm); transition: all 0.2s var(--ease-out); white-space: nowrap;
   text-transform: uppercase; letter-spacing: 0.04em;
   margin-right: 0.2rem; min-width: 100px; text-align: center;
 }
@@ -460,7 +460,7 @@ button, a { cursor: pointer; font-family: inherit; border: none; outline: none; 
 .dash-q-item:last-child { margin-bottom: 0; }
 .dash-q-item:hover { border-color: var(--accent); }
 .dash-q-icon {
-  width: 24px; height: 24px; border-radius: 6px;
+  width: 24px; height: 24px; border-radius: var(--radius-sm);
   display: flex; align-items: center; justify-content: center;
   font-size: 0.7rem; font-weight: 700; flex-shrink: 0; margin-top: 0.1rem;
 }
@@ -518,7 +518,7 @@ button, a { cursor: pointer; font-family: inherit; border: none; outline: none; 
 .dash-empty p { font-size: 0.9rem; line-height: 1.5; }
 
 @media (max-width: 480px) {
-  .dash-modal { max-height: 90vh; border-radius: 16px; }
+  .dash-modal { max-height: 90vh; border-radius: var(--radius-lg); }
   .dash-summary { grid-template-columns: repeat(3, 1fr); gap: 0.5rem; padding: 1rem; }
   .dash-stat { padding: 0.6rem; }
   .dash-stat .ds-val { font-size: 1.2rem; }
@@ -532,7 +532,7 @@ button, a { cursor: pointer; font-family: inherit; border: none; outline: none; 
 .auth-btn { display: flex; align-items: center; gap: 0.4rem; padding: 0.35rem 0.7rem; border-radius: 8px; border: 1px solid var(--border); background: var(--surface2); color: var(--text); font-size: 0.8rem; cursor: pointer; transition: border-color var(--transition); }
 .auth-btn:hover { border-color: var(--accent); }
 .auth-avatar { width: 22px; height: 22px; border-radius: 50%; background: var(--accent-dim); display: flex; align-items: center; justify-content: center; font-size: 0.75rem; font-weight: 700; color: var(--accent); flex-shrink: 0; }
-.auth-menu { display: none; position: absolute; top: 100%; right: 0; margin-top: 4px; min-width: 200px; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; box-shadow: var(--shadow); z-index: 200; overflow: hidden; }
+.auth-menu { display: none; position: absolute; top: 100%; right: 0; margin-top: 4px; min-width: 200px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-md); box-shadow: var(--shadow); z-index: 200; overflow: hidden; }
 .auth-menu.open { display: block; }
 .auth-menu-item { display: flex; align-items: center; gap: 0.5rem; width: 100%; padding: 0.6rem 0.85rem; border: none; background: none; color: var(--text); font-size: 0.82rem; cursor: pointer; text-align: left; transition: background var(--transition-fast); font-family: inherit; }
 .auth-menu-item:hover { background: var(--surface2); }
