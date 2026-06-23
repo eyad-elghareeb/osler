@@ -25,6 +25,7 @@ out/
 bin/
 obj/
 lib/
+!src/lib/
 pkg/
 _deps/
 build/Release
