@@ -95,7 +95,7 @@
     initHead: function() {
       var root = ENGINE_BASE + '../';
       EngineShared._addMeta('theme-color', '#0d1117');
-      EngineShared._addLink('stylesheet', ENGINE_BASE + 'engine-shared.css');
+      EngineShared._addLink('stylesheet', ENGINE_BASE + 'shared.css');
       EngineShared._addLink('preconnect', 'https://fonts.googleapis.com');
       EngineShared._addLink('preconnect', 'https://fonts.gstatic.com', {crossOrigin: ''});
       EngineShared._addLink('stylesheet', 'https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=Playfair+Display:wght@700&display=swap');
