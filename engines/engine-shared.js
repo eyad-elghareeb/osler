@@ -361,6 +361,14 @@
   /* ── Run initHead by default ──────────────────────────── */
   EngineShared.initHead();
 
+  /* ── Icon bridge (Phase 4) ──────────────────────────────────────
+     Synchronous fallback: returns empty SVG until async import loads.
+     Engines call EngineShared.icon('name', size) to get SVG strings. */
+  var _iconsCache = null;
+  EngineShared.icon = function(n, s) {
+    return _iconsCache ? _iconsCache.icon(n, s) : '<svg width="'+(s||20)+'" height="'+(s||20)+'"></svg>';
+  };
+
   /* ── Lib module bridge (Phase 0) ─────────────────────────────────
      When dist/ is served with src/lib/ accessible (development),
      dynamically import the ES modules and replace inline methods
@@ -398,6 +406,9 @@
         trackComplete: m.trackComplete,
         trackExport: m.trackExport,
       };
+    }).catch(function() {}),
+    import(_libBase + 'icons.js').then(function(m) {
+      _iconsCache = m;
     }).catch(function() {}),
   ]);
 })();

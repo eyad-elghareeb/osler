@@ -80,7 +80,7 @@
       uid:         textOr(pickField(raw, 'uid', 'id'), slugify(title) || 'osce_cases'),
       title:       title,
       description: textOr(pickField(raw, 'description', 'desc', 'subtitle'), 'Practice history-taking with an AI virtual patient, then get examiner feedback.'),
-      icon:        textOr(pickField(raw, 'icon', 'emoji'), '🩺')
+      icon:        textOr(pickField(raw, 'icon', 'emoji'), ''+EngineShared.icon('activity')+'')
     };
   }
   function normalizeCase(raw, idx) {
@@ -1006,7 +1006,7 @@
         if (!uel) {
           uel = document.createElement('div'); uel.id = 'osce-interim-user';
           uel.className = 'osce-msg student interim';
-          uel.innerHTML = '<div class="osce-msg-lbl">🎤 You</div><div class="osce-bubble osce-interim"><span class="osce-interim-text"></span><span class="osce-interim-cursor">▊</span></div>';
+          uel.innerHTML = '<div class="osce-msg-lbl">'+EngineShared.icon('mic')+' You</div><div class="osce-bubble osce-interim"><span class="osce-interim-text"></span><span class="osce-interim-cursor">▊</span></div>';
           box.appendChild(uel);
         }
         uel.querySelector('.osce-interim-text').textContent = _liveInterimText;
@@ -1314,12 +1314,12 @@
       voiceOn = !voiceOn;
       if (voiceOn && !_hasApiKey()) {
         voiceOn = false; _updateUI();
-        showToast('Set a Gemini API key in ⚙ Settings first.');
+        showToast('Set a Gemini API key in '+EngineShared.icon('settings')+' Settings first.');
         return;
       }
       localStorage.setItem(STORAGE.voiceOn, voiceOn);
       _updateUI();
-      if (!voiceOn) { stopSpeaking(); _stopGeminiLive(); showToast('🔇 Voice off'); return; }
+      if (!voiceOn) { stopSpeaking(); _stopGeminiLive(); showToast(''+EngineShared.icon('volume-x')+' Voice off'); return; }
       _startGeminiLive();
     }
 
@@ -1360,7 +1360,7 @@
       _timerRemaining = saved.timerRemaining || _timerRemaining;
       _timerStarted = false;
       _openConversation();
-      setTimeout(function () { showToast('📋 Session restored — continue your consultation.'); }, 500);
+      setTimeout(function () { showToast(''+EngineShared.icon('clipboard')+' Session restored — continue your consultation.'); }, 500);
     } else {
       _showDoorCard();
     }
@@ -1385,8 +1385,8 @@
     var t = localStorage.getItem(STORAGE.theme)||'dark';
     t = t==='dark'?'light':'dark';
     localStorage.setItem(STORAGE.theme, t); _applyTheme();
-    var el = document.getElementById('osce-theme-btn'); if (el) el.textContent = t==='dark'?'☀️':'🌙';
-    var el2 = document.getElementById('osce-lobby-theme'); if (el2) el2.textContent = t==='dark'?'☀️':'🌙';
+    var el = document.getElementById('osce-theme-btn'); if (el) el.textContent = t==='dark'?''+EngineShared.icon('sun')+'':''+EngineShared.icon('moon')+'';
+    var el2 = document.getElementById('osce-lobby-theme'); if (el2) el2.textContent = t==='dark'?''+EngineShared.icon('sun')+'':''+EngineShared.icon('moon')+'';
   }
 
   /* ── Difficulty chip class ────────────────────────────────────── */
@@ -1396,7 +1396,7 @@
   function _showDoorCard() {
     var p = _activeCase.patient;
     var av = renderAvatar(buildAvatarParams(p.gender, p.age, p.avatarSeed));
-    var themeIcon = (localStorage.getItem(STORAGE.theme)||'dark')==='dark'?'☀️':'🌙';
+    var themeIcon = (localStorage.getItem(STORAGE.theme)||'dark')==='dark'?''+EngineShared.icon('sun')+'':''+EngineShared.icon('moon')+'';
     var dur = Math.floor(_stationDuration()/60);
     var isDataInterp = _activeCase.type === 'data-interp';
     var root = _ensureRoot();
@@ -1404,17 +1404,17 @@
       '<div class="osce-lobby">' +
         '<div class="osce-lobby-card">' +
           '<div class="osce-lobby-top">' +
-            '<div class="osce-lobby-kicker">'+ (isDataInterp ? '🧑‍🏫 OSCE Data Interpretation' : '🩺 OSCE Virtual Patient') +'</div>' +
+            '<div class="osce-lobby-kicker">'+ (isDataInterp ? ''+EngineShared.icon('user')+' OSCE Data Interpretation' : ''+EngineShared.icon('activity')+' OSCE Virtual Patient') +'</div>' +
             '<div style="display:flex;gap:.4rem">' +
               '<button class="osce-icon-btn" id="osce-lobby-back" title="Back to Hub">←</button>' +
-              '<button class="osce-icon-btn" id="osce-lobby-settings" title="AI Settings">⚙</button>' +
+              '<button class="osce-icon-btn" id="osce-lobby-settings" title="AI Settings">'+EngineShared.icon('settings')+'</button>' +
               '<button class="osce-icon-btn" id="osce-lobby-theme" title="Toggle theme">'+themeIcon+'</button>' +
             '</div>' +
           '</div>' +
           (isDataInterp
             ? '<div class="osce-lobby-hero" style="grid-template-columns:1fr">' +
                 '<div>' +
-                  '<div class="osce-pt-name">🧑‍🏫 '+_esc((_activeCase.examiner||{}).name||'Examiner')+'</div>' +
+                  '<div class="osce-pt-name">'+EngineShared.icon('user')+' '+_esc((_activeCase.examiner||{}).name||'Examiner')+'</div>' +
                   '<div class="osce-pt-chips">' +
                     '<span class="osce-chip-meta sp">'+_esc(_activeCase.specialty)+'</span>' +
                     '<span class="osce-chip-meta '+_diffClass(_activeCase.difficulty)+'">'+_esc(_activeCase.difficulty)+'</span>' +
@@ -1496,7 +1496,7 @@
     }).join('');
     if (collapsed) {
       return '<div class="osce-collapse-wrap">' +
-        '<button class="osce-collapse-btn" data-collapse="osce-lobby-tables">📊 Lab Data <span class="chev">▼</span></button>' +
+        '<button class="osce-collapse-btn" data-collapse="osce-lobby-tables">'+EngineShared.icon('bar-chart')+' Lab Data <span class="chev">▼</span></button>' +
         '<div class="osce-collapse-content" id="osce-lobby-tables">'+content+'</div></div>';
     }
     return content;
@@ -1530,7 +1530,7 @@
     if (!content) return '';
     if (collapsed) {
       return '<div class="osce-images-wrap">' +
-        '<button class="osce-collapse-btn osce-img-toggle" data-collapse="osce-lobby-images">🖼️ Clinical Images ('+images.length+') <span class="chev">▼</span></button>' +
+        '<button class="osce-collapse-btn osce-img-toggle" data-collapse="osce-lobby-images">'+EngineShared.icon('image')+' Clinical Images ('+images.length+') <span class="chev">▼</span></button>' +
         '<div class="osce-collapse-content osce-images-content" id="osce-lobby-images">'+content+'</div></div>';
     }
     return '<div class="osce-images-wrap">'+content+'</div>';
@@ -1587,10 +1587,10 @@
   function _openConversation() {
     var p = _activeCase.patient;
     var av = renderAvatar(buildAvatarParams(p.gender, p.age, p.avatarSeed));
-    var themeIcon = (localStorage.getItem(STORAGE.theme)||'dark')==='dark'?'☀️':'🌙';
+    var themeIcon = (localStorage.getItem(STORAGE.theme)||'dark')==='dark'?''+EngineShared.icon('sun')+'':''+EngineShared.icon('moon')+'';
     var dur = Math.floor(_stationDuration()/60);
     var prog = _gamifiedProgress();
-    var voiceIcon = _Voice.isOn() ? '🎤' : '🎤';
+    var voiceIcon = _Voice.isOn() ? ''+EngineShared.icon('mic')+'' : ''+EngineShared.icon('mic')+'';
     var root = _ensureRoot();
 
     root.innerHTML =
@@ -1598,9 +1598,9 @@
         /* HEADER */
         '<div class="osce-hdr">' +
           '<button class="osce-icon-btn" id="osce-back-btn" title="Back to door card" style="flex-shrink:0">←</button>' +
-          '<button class="osce-icon-btn" id="osce-drawer-btn" title="'+( _activeCase.type==='data-interp'?'Case data':'Patient info')+'" style="display:none;flex-shrink:0">☰</button>' +
+          '<button class="osce-icon-btn" id="osce-drawer-btn" title="'+( _activeCase.type==='data-interp'?'Case data':'Patient info')+'" style="display:none;flex-shrink:0">'+EngineShared.icon('menu')+'</button>' +
           '<div class="osce-hdr-title">' +
-            '<div class="c">'+( _activeCase.type==='data-interp'?'🧑‍🏫 '+_esc((_activeCase.examiner||{}).name||'Examiner'):_esc(_activeCase.title))+'</div>' +
+            '<div class="c">'+( _activeCase.type==='data-interp'?''+EngineShared.icon('user')+' '+_esc((_activeCase.examiner||{}).name||'Examiner'):_esc(_activeCase.title))+'</div>' +
             '<div class="t">'+_esc(_activeCase.task)+'</div>' +
           '</div>' +
           '<div class="osce-hdr-right">' +
@@ -1609,7 +1609,7 @@
               '<div class="osce-timer-lbl">'+dur+' min</div>' +
             '</div>' +
             '<button class="osce-icon-btn" id="osce-theme-btn" title="Toggle theme">'+themeIcon+'</button>' +
-            '<button class="osce-icon-btn" id="osce-settings-btn" title="AI Settings">⚙</button>' +
+            '<button class="osce-icon-btn" id="osce-settings-btn" title="AI Settings">'+EngineShared.icon('settings')+'</button>' +
           '</div>' +
         '</div>' +
         /* TIMER BAR */
@@ -1624,7 +1624,7 @@
               /* ── DATA-INTERP SIDEBAR ── */
               '<div class="osce-sb-card">' +
                 '<div class="osce-pt-id" style="grid-template-columns:1fr">' +
-                  '<div><div class="osce-pt-nm">🧑‍🏫 '+_esc((_activeCase.examiner||{}).name||'Examiner')+'</div><div class="osce-pt-sb">'+_esc((_activeCase.examiner||{}).title||'Consultant')+'</div></div>' +
+                  '<div><div class="osce-pt-nm">'+EngineShared.icon('user')+' '+_esc((_activeCase.examiner||{}).name||'Examiner')+'</div><div class="osce-pt-sb">'+_esc((_activeCase.examiner||{}).title||'Consultant')+'</div></div>' +
                 '</div>' +
               '</div>' +
               '<div class="osce-sb-card">' +
@@ -1692,13 +1692,13 @@
             '<div class="osce-waveform" id="osce-waveform"><div class="osce-wbar"></div><div class="osce-wbar"></div><div class="osce-wbar"></div><div class="osce-wbar"></div><div class="osce-wbar"></div></div>' +
           '</div>' +
           '<div class="osce-input-row">' +
-            '<button class="osce-mic-btn" id="osce-mic-btn" title="Toggle voice mode">🎤</button>' +
+            '<button class="osce-mic-btn" id="osce-mic-btn" title="Toggle voice mode">'+EngineShared.icon('mic')+'</button>' +
             '<textarea class="osce-textarea" id="osce-input" placeholder="Ask the patient a question…" rows="1"></textarea>' +
             '<button class="osce-send-btn" id="osce-send-btn">Send →</button>' +
           '</div>' +
           '<div class="osce-submit-row">' +
             '<span class="osce-turn-badge" id="osce-turn-badge">Q 0/'+MAX_TURNS+'</span>' +
-            '<button class="osce-submit-btn" id="osce-submit-btn">Submit for Examiner Feedback ✓</button>' +
+            '<button class="osce-submit-btn" id="osce-submit-btn">Submit for Examiner Feedback '+EngineShared.icon('check')+'</button>' +
             '<button class="osce-reset-btn" id="osce-reset-btn">↺ Reset</button>' +
           '</div>' +
         '</div>' +
@@ -1777,9 +1777,9 @@
     overlay.innerHTML =
       '<div class="osce-drawer-backdrop" id="osce-drawer-backdrop"></div>' +
       '<div class="osce-drawer-panel">' +
-        '<div style="display:flex;justify-content:flex-end;margin-bottom:.2rem"><button class="osce-icon-btn" id="osce-drawer-close">✕</button></div>' +
+        '<div style="display:flex;justify-content:flex-end;margin-bottom:.2rem"><button class="osce-icon-btn" id="osce-drawer-close">'+EngineShared.icon('x')+'</button></div>' +
         (isDataInterp
-          ? '<div class="osce-sb-card"><div class="osce-pt-id" style="grid-template-columns:1fr"><div><div class="osce-pt-nm">🧑‍🏫 '+_esc((_activeCase.examiner||{}).name||'Examiner')+'</div><div class="osce-pt-sb">'+_esc((_activeCase.examiner||{}).title||'Consultant')+'</div></div></div></div>' +
+          ? '<div class="osce-sb-card"><div class="osce-pt-id" style="grid-template-columns:1fr"><div><div class="osce-pt-nm">'+EngineShared.icon('user')+' '+_esc((_activeCase.examiner||{}).name||'Examiner')+'</div><div class="osce-pt-sb">'+_esc((_activeCase.examiner||{}).title||'Consultant')+'</div></div></div></div>' +
             '<div class="osce-sb-card"><div class="osce-sb-lbl">Instructions</div><div class="osce-instr-box"><div class="osce-instr-txt">'+_esc(_activeCase.task)+'</div></div></div>' +
             (_renderDataTables(_activeCase.dataPresented&&_activeCase.dataPresented.tables)||'') + (_renderCaseImages(_activeCase.dataPresented&&_activeCase.dataPresented.images)||'')
           : '<div class="osce-sb-card"><div class="osce-pt-id"><div class="osce-av-mini">'+av+'</div><div><div class="osce-pt-nm">'+_esc(p.name)+'</div><div class="osce-pt-sb">'+p.age+' yrs • '+_esc(p.gender)+'</div></div></div></div>' +
@@ -1818,9 +1818,9 @@
       var div = document.createElement('div');
       div.className = 'osce-msg ' + (isModel ? 'patient' : 'student');
       if (isDataInterp) {
-        div.innerHTML = '<div class="osce-msg-lbl">' + (isModel ? '🧑‍🏫 ' + examinerLabel : '🩺 You') + '</div><div class="osce-bubble">' + _md(m.text) + '</div>';
+        div.innerHTML = '<div class="osce-msg-lbl">' + (isModel ? ''+EngineShared.icon('user')+' ' + examinerLabel : ''+EngineShared.icon('activity')+' You') + '</div><div class="osce-bubble">' + _md(m.text) + '</div>';
       } else {
-        div.innerHTML = '<div class="osce-msg-lbl">' + (isModel ? '🧑‍⚕️ ' + examinerLabel : '🩺 You') + '</div><div class="osce-bubble">' + _md(m.text) + '</div>';
+        div.innerHTML = '<div class="osce-msg-lbl">' + (isModel ? ''+EngineShared.icon('user')+'‍'+EngineShared.icon('activity')+' ' + examinerLabel : ''+EngineShared.icon('activity')+' You') + '</div><div class="osce-bubble">' + _md(m.text) + '</div>';
       }
       frag.appendChild(div);
     }
@@ -1837,7 +1837,7 @@
     var ex = document.getElementById('osce-thinking-el');
     if (show && !ex) {
       var isDataInterp = _activeCase && _activeCase.type === 'data-interp';
-      var label = isDataInterp ? '🧑‍🏫 '+_esc((_activeCase.examiner||{}).name||'Examiner') : '🧑‍⚕️ '+_esc(_getSpeaker(_activeCase).name);
+      var label = isDataInterp ? ''+EngineShared.icon('user')+' '+_esc((_activeCase.examiner||{}).name||'Examiner') : ''+EngineShared.icon('user')+'‍'+EngineShared.icon('activity')+' '+_esc(_getSpeaker(_activeCase).name);
       var d = document.createElement('div'); d.id = 'osce-thinking-el'; d.className = 'osce-thinking';
       d.innerHTML = '<div class="osce-thinking-lbl">'+label+'</div><div class="osce-thinking-bub"><span class="osce-dots"><span></span><span></span><span></span></span><span class="osce-thinking-txt">'+(isDataInterp?'evaluating…':'typing…')+'</span></div>';
       box.appendChild(d); box.scrollTop = box.scrollHeight;
@@ -1848,7 +1848,7 @@
     var e = document.getElementById('osce-error-bar'); if (!e) return;
     if (msg) {
       e.className = 'osce-error-bar show';
-      e.innerHTML = '⚠ '+_esc(msg)+(showRetry&&_lastFailedText?
+      e.innerHTML = ''+EngineShared.icon('alert-triangle')+' '+_esc(msg)+(showRetry&&_lastFailedText?
         ' <button id="osce-retry-btn" style="margin-left:.5rem;padding:.14rem .48rem;border-radius:4px;border:1px solid var(--wrong);background:transparent;color:var(--wrong);cursor:pointer;font-size:.78rem">↻ Retry</button>':'');
       if (showRetry) { var btn=document.getElementById('osce-retry-btn'); if(btn) btn.addEventListener('click',_onRetry); }
     } else { e.className = 'osce-error-bar'; }
@@ -1879,10 +1879,10 @@
   function _onSend() {
     var input = document.getElementById('osce-input');
     var text = (input.value||'').trim(); if (!text) return;
-    if (!_hasApiKey()) { showToast('Configure your Gemini API key in ⚙ Settings first'); _openSettings(); return; }
+    if (!_hasApiKey()) { showToast('Configure your Gemini API key in '+EngineShared.icon('settings')+' Settings first'); _openSettings(); return; }
     var turns = _userTurnCount();
     if (turns >= MAX_TURNS) { showToast('Maximum '+MAX_TURNS+' questions reached. Click Submit for feedback.'); return; }
-    if (turns >= WARN_TURNS) showToast('⚠ '+(MAX_TURNS-turns)+' questions remaining — consider submitting.');
+    if (turns >= WARN_TURNS) showToast(''+EngineShared.icon('alert-triangle')+' '+(MAX_TURNS-turns)+' questions remaining — consider submitting.');
     _lastFailedText = text; input.value = ''; input.style.height = 'auto';
     _Voice.stopSpeaking();
     _transcript.push({role:'user',text:text}); _renderTranscript(); _updateStationStats();
@@ -1905,7 +1905,7 @@
   }
 
   function _onSubmit() {
-    if (!_hasApiKey()) { showToast('Configure your Gemini API key in ⚙ Settings first'); _openSettings(); return; }
+    if (!_hasApiKey()) { showToast('Configure your Gemini API key in '+EngineShared.icon('settings')+' Settings first'); _openSettings(); return; }
     if (!_transcript.filter(function(m){return m.role==='user';}).length) { showToast('Answer at least one question first.'); return; }
     _stopTimer(); _cancelPending(); _Voice.stopSpeaking(); _Voice.disable(); _showDebriefLoading();
     _abort = new AbortController();
@@ -1947,7 +1947,7 @@
     _stopTimer(); _cancelPending(); _clearSession();
     _transcript = []; _renderedCount = 0; _timerRemaining = _activeCase.time || EXAM_TIME; _timerStarted = false;
     _showDoorCard();
-    showToast('🔄 Consultation reset — start fresh.');
+    showToast(''+EngineShared.icon('refresh-cw')+' Consultation reset — start fresh.');
   }
 
   function _cancelPending() {
@@ -1998,8 +1998,8 @@
     }).join('');
 
     /* Criteria */
-    var askedHTML = (result.asked.length?result.asked:['(none matched)']).map(function(x,i){return '<li class="osce-asked-item" style="animation-delay:'+(i*.05)+'s">✓ '+_esc(x)+'</li>';}).join('');
-    var missedHTML = (result.missed.length?result.missed:['(nothing missed — excellent coverage)']).map(function(x,i){return '<li class="osce-missed-item" style="animation-delay:'+(i*.05)+'s">✗ '+_esc(x)+'</li>';}).join('');
+    var askedHTML = (result.asked.length?result.asked:['(none matched)']).map(function(x,i){return '<li class="osce-asked-item" style="animation-delay:'+(i*.05)+'s">'+EngineShared.icon('check')+' '+_esc(x)+'</li>';}).join('');
+    var missedHTML = (result.missed.length?result.missed:['(nothing missed — excellent coverage)']).map(function(x,i){return '<li class="osce-missed-item" style="animation-delay:'+(i*.05)+'s">'+EngineShared.icon('x')+' '+_esc(x)+'</li>';}).join('');
 
     /* Achievements */
     var badges = _buildAchievements(result, timeUsedPct, turnCount);
@@ -2025,30 +2025,30 @@
             '</div>' +
           '</div>' +
           /* ── Domain Scores ── */
-          '<div class="osce-db-section"><div class="osce-db-sec-title">📊 Domain Scores</div><div class="osce-domain-grid">'+domainHTML+'</div></div>' +
+          '<div class="osce-db-section"><div class="osce-db-sec-title">'+EngineShared.icon('bar-chart')+' Domain Scores</div><div class="osce-domain-grid">'+domainHTML+'</div></div>' +
           /* ── Performance Radar ── */
-          '<div class="osce-db-section"><div class="osce-db-sec-title">🕸 Performance Radar</div>' +
+          '<div class="osce-db-section"><div class="osce-db-sec-title">'+EngineShared.icon('activity')+' Performance Radar</div>' +
             '<div class="osce-radar-wrap"><svg class="osce-radar-svg-el" viewBox="0 0 160 160">'+radarSVG+'</svg>' +
             '<div class="osce-radar-legend">'+radarLegend+'</div></div>' +
           '</div>' +
           /* ── Examiner Feedback ── */
-          '<div class="osce-db-section"><div class="osce-db-sec-title">💬 Examiner Feedback</div><div class="osce-feedback-box">'+_md(result.feedback)+'</div>' +
-            '<div class="osce-dx-box"><span>🩺</span><div><strong>Hidden diagnosis:</strong> '+_esc(hp.diagnosis||'(not specified)')+'</div></div>' +
+          '<div class="osce-db-section"><div class="osce-db-sec-title">'+EngineShared.icon('message-circle')+' Examiner Feedback</div><div class="osce-feedback-box">'+_md(result.feedback)+'</div>' +
+            '<div class="osce-dx-box"><span>'+EngineShared.icon('activity')+'</span><div><strong>Hidden diagnosis:</strong> '+_esc(hp.diagnosis||'(not specified)')+'</div></div>' +
           '</div>' +
           /* ── Criteria Review ── */
-          '<div class="osce-db-section"><div class="osce-db-sec-title">📋 Criteria Review</div>' +
+          '<div class="osce-db-section"><div class="osce-db-sec-title">'+EngineShared.icon('clipboard')+' Criteria Review</div>' +
             '<div class="osce-criteria-grid">' +
-              '<div class="osce-criteria-sec"><h4>✓ Covered ('+result.asked.length+')</h4><ul>'+askedHTML+'</ul></div>' +
-              '<div class="osce-criteria-sec"><h4>✗ Missed ('+result.missed.length+')</h4><ul>'+missedHTML+'</ul></div>' +
+              '<div class="osce-criteria-sec"><h4>'+EngineShared.icon('check')+' Covered ('+result.asked.length+')</h4><ul>'+askedHTML+'</ul></div>' +
+              '<div class="osce-criteria-sec"><h4>'+EngineShared.icon('x')+' Missed ('+result.missed.length+')</h4><ul>'+missedHTML+'</ul></div>' +
             '</div>' +
           '</div>' +
           /* ── Achievements ── */
-          (badges.length?'<div class="osce-db-section"><div class="osce-db-sec-title">🏆 Achievements</div><div class="osce-badges">'+badgesHTML+'</div></div>':'') +
+          (badges.length?'<div class="osce-db-section"><div class="osce-db-sec-title">'+EngineShared.icon('award')+' Achievements</div><div class="osce-badges">'+badgesHTML+'</div></div>':'') +
           /* ── Actions (identical to quiz-engine result-actions) ── */
           '<div class="result-actions">' +
             '<button class="btn-restart btn-secondary" id="osce-db-back">← Back to Consultation</button>' +
             '<button class="btn-restart" id="osce-db-new">↻ Try Again</button>' +
-            '<button class="btn-restart btn-secondary" id="osce-db-hub">🏠 Back to Hub</button>' +
+            '<button class="btn-restart btn-secondary" id="osce-db-hub">'+EngineShared.icon('home')+' Back to Hub</button>' +
           '</div>' +
         '</div>' +
       '</div>';
@@ -2107,15 +2107,15 @@
   /* ── Achievements ────────────────────────────────────────────── */
   function _buildAchievements(result, timeUsedPct, turnCount) {
     var b = [];
-    if (result.score >= 80) b.push(['🌟','Outstanding','Score ≥ 80','gold']);
-    else if (result.score >= 50) b.push(['✅','Passed','Station passed','green']);
-    if (result.missed.length === 0 && result.asked.length > 0) b.push(['🎯','Full Coverage','All criteria covered','green']);
-    if (result.domains.communication >= 22) b.push(['💬','Communicator','Communication ≥ 22/25','blue']);
-    if (result.domains.professionalism >= 22) b.push(['🎖','Professional','Professionalism ≥ 22/25','blue']);
-    if (result.domains.clinicalReasoning >= 22) b.push(['🧠','Clinician','Clinical reasoning ≥ 22/25','purple']);
-    if (result.domains.infoGathering >= 22) b.push(['🔍','Thorough','Info gathering ≥ 22/25','purple']);
-    if (typeof timeUsedPct === 'number' && timeUsedPct < 65 && result.score >= 50) b.push(['⚡','Efficient','Completed quickly','gold']);
-    if (typeof turnCount === 'number' && turnCount >= 15 && result.score >= 50) b.push(['💪','Persistent','15+ questions asked','blue']);
+    if (result.score >= 80) b.push([''+EngineShared.icon('star')+'','Outstanding','Score ≥ 80','gold']);
+    else if (result.score >= 50) b.push([''+EngineShared.icon('check-circle')+'','Passed','Station passed','green']);
+    if (result.missed.length === 0 && result.asked.length > 0) b.push([''+EngineShared.icon('target')+'','Full Coverage','All criteria covered','green']);
+    if (result.domains.communication >= 22) b.push([''+EngineShared.icon('message-circle')+'','Communicator','Communication ≥ 22/25','blue']);
+    if (result.domains.professionalism >= 22) b.push([''+EngineShared.icon('medal')+'','Professional','Professionalism ≥ 22/25','blue']);
+    if (result.domains.clinicalReasoning >= 22) b.push([''+EngineShared.icon('zap')+'','Clinician','Clinical reasoning ≥ 22/25','purple']);
+    if (result.domains.infoGathering >= 22) b.push([''+EngineShared.icon('search')+'','Thorough','Info gathering ≥ 22/25','purple']);
+    if (typeof timeUsedPct === 'number' && timeUsedPct < 65 && result.score >= 50) b.push([''+EngineShared.icon('zap')+'','Efficient','Completed quickly','gold']);
+    if (typeof turnCount === 'number' && turnCount >= 15 && result.score >= 50) b.push([''+EngineShared.icon('zap')+'','Persistent','15+ questions asked','blue']);
     return b;
   }
 
@@ -2159,7 +2159,7 @@
     var div = document.createElement('div'); div.id = 'osce-sov'; div.className = 'open';
     div.innerHTML =
       '<div id="osce-smodal">' +
-        '<div class="osce-sh"><h3>⚙ AI & Voice Settings</h3><button class="osce-icon-btn" id="osce-s-close">✕</button></div>' +
+        '<div class="osce-sh"><h3>'+EngineShared.icon('settings')+' AI & Voice Settings</h3><button class="osce-icon-btn" id="osce-s-close">'+EngineShared.icon('x')+'</button></div>' +
         '<div class="osce-sbody">' +
           '<div class="osce-stitle">Gemini API</div>' +
           '<div class="field-box">' +
@@ -2216,30 +2216,30 @@
   function _saveKey() {
     var v=document.getElementById('osce-key-input').value.trim();
     EngineShared.airWriteGeminiKey(v);
-    var st=document.getElementById('settings-status'); if(st)st.textContent=v?'✓ API key saved.':'✗ API key cleared.';
+    var st=document.getElementById('settings-status'); if(st)st.textContent=v?''+EngineShared.icon('check')+' API key saved.':''+EngineShared.icon('x')+' API key cleared.';
     _closeSettings();
   }
   function _clearKey() {
     EngineShared.airWriteGeminiKey('');
     var ki=document.getElementById('osce-key-input'); if(ki)ki.value='';
-    var st=document.getElementById('settings-status'); if(st)st.textContent='✗ API key cleared.';
+    var st=document.getElementById('settings-status'); if(st)st.textContent=''+EngineShared.icon('x')+' API key cleared.';
   }
   function _testKey() {
     var v=document.getElementById('osce-key-input').value.trim();
-    var st=document.getElementById('settings-status'); if(!v){st.textContent='✗ No key entered.';return;}
+    var st=document.getElementById('settings-status'); if(!v){st.textContent=''+EngineShared.icon('x')+' No key entered.';return;}
     st.textContent='Testing…';
     fetch('https://generativelanguage.googleapis.com/v1beta/models',{headers:{'x-goog-api-key':v}})
       .then(function(r){return r.text().then(function(t){return{status:r.status,body:t};});})
       .then(function(resp){
-        var data; try{data=JSON.parse(resp.body);}catch(e){st.textContent='✗ Parse error';return;}
+        var data; try{data=JSON.parse(resp.body);}catch(e){st.textContent=''+EngineShared.icon('x')+' Parse error';return;}
         if(resp.status===200&&data&&data.models&&data.models.length){
-          st.textContent='✓ Key valid ('+data.models.length+' models available).';
+          st.textContent=''+EngineShared.icon('check')+' Key valid ('+data.models.length+' models available).';
         } else {
           var msg=(data&&data.error&&data.error.message)||'Unexpected response';
-          st.textContent='✗ '+msg;
+          st.textContent=''+EngineShared.icon('x')+' '+msg;
         }
       })
-      .catch(function(){st.textContent='✗ Connection failed. Check key or network.';});
+      .catch(function(){st.textContent=''+EngineShared.icon('x')+' Connection failed. Check key or network.';});
   }
 
   /* ── Navigate to parent index ───────────────────────────────── */

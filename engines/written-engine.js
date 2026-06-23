@@ -347,7 +347,7 @@
       '    </svg>',
       '    Back to Hub',
       '  </a>',
-      '  <button class="btn btn-icon" id="theme-start" type="button" title="Toggle theme">☀</button>',
+      '  <button class="btn btn-icon" id="theme-start" type="button" title="Toggle theme">'+EngineShared.icon('sun')+'</button>',
       '  <div class="start-shell">',
       '    <div class="start-card">',
       '      <div class="start-icon" id="start-icon"></div>',
@@ -364,7 +364,7 @@
       '          <label class="field-label" for="model-select" style="margin-bottom:8px">AI model</label>',
       '          <div class="api-row">',
       '            <select id="model-select"></select>',
-      '            <button class="btn btn-icon settings-gear" id="settings-btn" type="button" title="API Key Settings ⚙">⚙</button>',
+      '            <button class="btn btn-icon settings-gear" id="settings-btn" type="button" title="API Key Settings '+EngineShared.icon('settings')+'">'+EngineShared.icon('settings')+'</button>',
       '          </div>',
       '          <div class="field-note" id="question-count"></div>',
       '        </div>',
@@ -381,13 +381,13 @@
       '    <div class="topbar-title" id="practice-title"></div>',
       '    <div class="topbar-spacer"></div>',
       '    <div class="topbar-actions">',
-      '      <button class="icon-btn" id="flag-question" type="button" title="Flag question">⚑</button>',
-      '      <a class="icon-btn" href="index.html" id="hub-link-practice" title="Back to Hub">🏠</a>',
-      '      <button class="icon-btn" id="theme-practice" type="button" title="Toggle theme">☀</button>',
+      '      <button class="icon-btn" id="flag-question" type="button" title="Flag question">'+EngineShared.icon('flag')+'</button>',
+      '      <a class="icon-btn" href="index.html" id="hub-link-practice" title="Back to Hub">'+EngineShared.icon('home')+'</a>',
+      '      <button class="icon-btn" id="theme-practice" type="button" title="Toggle theme">'+EngineShared.icon('sun')+'</button>',
       '      <button class="icon-btn danger" id="reset-progress" type="button" title="Reset Progress">↻</button>',
       '    </div>',
       '  </header>',
-      '  <div class="loading" id="loading"><div class="loading-box" id="loading-box"><div class="brain-icon">🧠</div><strong>Analyzing your answer</strong><div class="field-note" id="loading-note"></div><div class="field-note" id="loading-timer" style="font-size:.85rem;color:var(--accent);margin-top:4px;font-weight:600"></div><button class="btn btn-secondary" id="cancel-grading" type="button" style="margin-top:10px;display:none">Cancel</button></div></div>',
+      '  <div class="loading" id="loading"><div class="loading-box" id="loading-box"><div class="brain-icon">'+EngineShared.icon('zap')+'</div><strong>Analyzing your answer</strong><div class="field-note" id="loading-note"></div><div class="field-note" id="loading-timer" style="font-size:.85rem;color:var(--accent);margin-top:4px;font-weight:600"></div><button class="btn btn-secondary" id="cancel-grading" type="button" style="margin-top:10px;display:none">Cancel</button></div></div>',
       '  <div class="layout">',
       '    <main class="content">',
       '      <div class="work-grid" id="work-grid">',
@@ -401,7 +401,7 @@
       '            <div class="photo-preview-box">',
       '              <img class="photo-preview-img" id="photo-preview-img">',
       '              <div class="photo-preview-actions">',
-      '                <button class="btn btn-secondary" id="photo-retake-btn" type="button">📷 Retake</button>',
+      '                <button class="btn btn-secondary" id="photo-retake-btn" type="button">'+EngineShared.icon('camera')+' Retake</button>',
       '                <button class="btn btn-secondary" id="photo-remove-btn" type="button">Remove</button>',
       '              </div>',
       '            </div>',
@@ -410,7 +410,7 @@
       '            <div class="counter" id="answer-counter">0 words | 0 characters</div>',
       '            <div class="action-row">',
       '              <button class="btn btn-secondary" id="skip-question" type="button">Skip</button>',
-      '              <button class="btn btn-secondary" id="photo-toggle" type="button">📷 Photo</button>',
+      '              <button class="btn btn-secondary" id="photo-toggle" type="button">'+EngineShared.icon('camera')+' Photo</button>',
       '              <button class="btn btn-secondary" id="self-grade" type="button">Manual Grade</button>',
       '              <button class="btn btn-primary" id="ai-grade" type="button">Grade with AI</button>',
       '            </div>',
@@ -475,8 +475,8 @@
       '  <header class="result-topbar">',
       '    <h2>Assessment Results</h2>',
       '    <div class="topbar-actions">',
-      '      <a class="icon-btn" href="index.html" id="hub-link-result" title="Back to Hub">🏠</a>',
-      '      <button class="icon-btn" id="theme-result" type="button" title="Toggle theme">☀</button>',
+      '      <a class="icon-btn" href="index.html" id="hub-link-result" title="Back to Hub">'+EngineShared.icon('home')+'</a>',
+      '      <button class="icon-btn" id="theme-result" type="button" title="Toggle theme">'+EngineShared.icon('sun')+'</button>',
       '      <button class="icon-btn danger" id="reset-result" type="button" title="Reset Progress">↻</button>',
       '    </div>',
       '  </header>',
@@ -530,15 +530,15 @@
       '    </div>',
       '    <div class="result-tabs">',
       '      <button class="tab-btn active" onclick="filterResults(\'all\', this)">All Questions</button>',
-      '      <button class="tab-btn" onclick="filterResults(\'pass\', this)">✓ Passed</button>',
-      '      <button class="tab-btn" onclick="filterResults(\'fail\', this)">✗ Failed</button>',
+      '      <button class="tab-btn" onclick="filterResults(\'pass\', this)">'+EngineShared.icon('check')+' Passed</button>',
+      '      <button class="tab-btn" onclick="filterResults(\'fail\', this)">'+EngineShared.icon('x')+' Failed</button>',
       '      <button class="tab-btn" onclick="filterResults(\'skipped\', this)">— Skipped</button>',
-      '      <button class="tab-btn" onclick="filterResults(\'flagged\', this)">⚑ Flagged</button>',
+      '      <button class="tab-btn" onclick="filterResults(\'flagged\', this)">'+EngineShared.icon('flag')+' Flagged</button>',
       '    </div>',
       '    <div class="result-list" id="result-list"></div>',
       '    <div class="result-actions">',
       '      <button class="btn-restart" onclick="restartAssessment()">↺ Start Again</button>',
-      '      <a class="btn-restart btn-secondary" href="index.html" id="hub-link-result-action">🏠 Return to Hub</a>',
+      '      <a class="btn-restart btn-secondary" href="index.html" id="hub-link-result-action">'+EngineShared.icon('home')+' Return to Hub</a>',
       '    </div>',
       '  </div>',
       '</section>',
@@ -546,16 +546,16 @@
       '<div class="modal-overlay" id="camera-modal">',
       '  <div class="modal" style="max-width:520px">',
       '    <div class="dash-header" style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem">',
-      '      <h3 style="margin:0">📷 Capture Answer Photo</h3>',
-      '      <button class="icon-btn" id="camera-close-btn" type="button" title="Close">✕</button>',
+      '      <h3 style="margin:0">'+EngineShared.icon('camera')+' Capture Answer Photo</h3>',
+      '      <button class="icon-btn" id="camera-close-btn" type="button" title="Close">'+EngineShared.icon('x')+'</button>',
       '    </div>',
       '    <div id="camera-viewfinder-section">',
       '      <video id="camera-video" autoplay playsinline style="width:100%;border-radius:10px;background:#000;max-height:60vh;display:block"></video>',
       '      <canvas id="camera-canvas" style="display:none"></canvas>',
       '      <div style="display:flex;justify-content:center;gap:1rem;margin-top:1rem;align-items:center">',
-      '        <button class="btn btn-secondary" id="camera-upload-btn" type="button">📁 Upload</button>',
+      '        <button class="btn btn-secondary" id="camera-upload-btn" type="button">'+EngineShared.icon('folder-open')+' Upload</button>',
       '        <button class="btn btn-primary" id="camera-capture-btn" type="button" style="width:56px;height:56px;border-radius:50%;font-size:1.8rem;padding:0;display:flex;align-items:center;justify-content:center">●</button>',
-      '        <button class="btn btn-icon" id="camera-switch-btn" type="button" title="Switch camera">🔄</button>',
+      '        <button class="btn btn-icon" id="camera-switch-btn" type="button" title="Switch camera">'+EngineShared.icon('refresh-cw')+'</button>',
       '      </div>',
       '    </div>',
       '    <div id="camera-crop-section" style="display:none">',
@@ -581,14 +581,14 @@
       '<div class="modal-overlay" id="settings-modal">',
       '  <div class="modal" style="max-width:440px">',
       '    <div class="dash-header" style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem">',
-      '      <h3 style="margin:0">⚙ Settings</h3>',
-      '      <button class="icon-btn" id="settings-close-btn" type="button" title="Close">✕</button>',
+      '      <h3 style="margin:0">'+EngineShared.icon('settings')+' Settings</h3>',
+      '      <button class="icon-btn" id="settings-close-btn" type="button" title="Close">'+EngineShared.icon('x')+'</button>',
       '    </div>',
     '    <div class="field-box">',
       '      <label class="field-label" for="settings-api-key">Gemini API Key</label>',
       '      <div class="api-row">',
       '        <input id="settings-api-key" type="password" autocomplete="off" placeholder="Enter your Gemini API key">',
-      '        <button class="btn btn-icon" id="settings-key-toggle" type="button" title="Show/Hide key">👁</button>',
+      '        <button class="btn btn-icon" id="settings-key-toggle" type="button" title="Show/Hide key">'+EngineShared.icon('eye')+'</button>',
       '      </div>',
       '      <div class="field-note">Get a free key at <a href="https://aistudio.google.com/apikey" target="_blank">AI Studio</a>. Manual grading works without a key.</div>',
       '      <div style="display:flex;gap:8px;margin-top:10px">',
@@ -639,7 +639,7 @@
     updateResumeButton();
     if (!_readKey()) {
       setTimeout(function () {
-        EngineShared.showToast('⚙ Set your Gemini API key in Settings for AI grading');
+        EngineShared.showToast(''+EngineShared.icon('settings')+' Set your Gemini API key in Settings for AI grading');
       }, 500);
     }
   }
@@ -867,7 +867,7 @@
         input.style.display = 'none';
         photoArea.style.display = 'block';
         $('#photo-preview-img').src = 'data:' + state.photoAnswers[index].mimeType + ';base64,' + state.photoAnswers[index].data;
-        $('#answer-counter').textContent = '📷 Photo answer';
+        $('#answer-counter').textContent = ''+EngineShared.icon('camera')+' Photo answer';
       } else {
         input.style.display = '';
         photoArea.style.display = 'none';
@@ -905,7 +905,7 @@
       var photoBanner = create('div', 'panel');
       photoBanner.style.padding = '12px';
       photoBanner.style.marginBottom = '8px';
-      photoBanner.innerHTML = '<div style="display:flex;align-items:center;gap:8px;color:var(--muted);font-size:.85rem"><span>📷</span> Photo answer attached for all parts</div>'
+      photoBanner.innerHTML = '<div style="display:flex;align-items:center;gap:8px;color:var(--muted);font-size:.85rem"><span>'+EngineShared.icon('camera')+'</span> Photo answer attached for all parts</div>'
         + '<img src="data:' + parentPhoto.mimeType + ';base64,' + parentPhoto.data + '" style="max-height:160px;border-radius:8px;max-width:100%;display:block;margin:8px auto 0;object-fit:contain;background:var(--surface-2)">';
       container.appendChild(photoBanner);
     }
@@ -979,7 +979,7 @@
     var batchRow = create('div', 'batch-grade-row');
     if (!hasAllChildModelAnswers) {
       var batchNote = create('div', 'child-reminder');
-      batchNote.textContent = '💡 Parts share a single model answer. Use "Grade All with AI" to grade all parts together, or grade individually with Manual Grade.';
+      batchNote.textContent = ''+EngineShared.icon('lightbulb')+' Parts share a single model answer. Use "Grade All with AI" to grade all parts together, or grade individually with Manual Grade.';
       container.appendChild(batchNote);
     }
 
@@ -992,7 +992,7 @@
     batchRow.appendChild(manualBatchBtn);
 
     var photoBtn = create('button', 'btn btn-secondary');
-    photoBtn.textContent = '📷 Photo';
+    photoBtn.textContent = ''+EngineShared.icon('camera')+' Photo';
     photoBtn.type = 'button';
     photoBtn.addEventListener('click', function () {
       $('#photo-toggle').click();
@@ -2176,8 +2176,8 @@
         var failCount = evaluatedChildren.filter(function (e) { return !isPassed(e); }).length;
         isSkipped = evaluatedChildren.length === 0;
         if (isSkipped) { statusClass = 'skipped'; statusIcon = '—'; }
-        else if (failCount > 0) { statusClass = 'fail'; statusIcon = '✗'; }
-        else { statusClass = 'pass'; statusIcon = '✓'; }
+        else if (failCount > 0) { statusClass = 'fail'; statusIcon = ''+EngineShared.icon('x')+''; }
+        else { statusClass = 'pass'; statusIcon = ''+EngineShared.icon('check')+''; }
 
         var showItem = filter === 'all'
           || (filter === 'pass' && statusClass === 'pass' && !isSkipped)
@@ -2197,7 +2197,7 @@
         var childSummary = isSkipped ? '' : ' · ' + passCount + '/' + (passCount + failCount) + ' passed';
         header.innerHTML = '<div class="result-status-icon">' + statusIcon + '</div>'
           + '<div class="result-q-meta">'
-          + '<div class="result-q-num">Question ' + (i + 1) + (isFlagged ? ' · ⚑ Flagged' : '') + childSummary + '</div>'
+          + '<div class="result-q-num">Question ' + (i + 1) + (isFlagged ? ' · '+EngineShared.icon('flag')+' Flagged' : '') + childSummary + '</div>'
           + '<div class="result-q-text">' + q.question + '</div>'
           + '</div>'
           + '<div class="expand-arrow">▼</div>';
@@ -2210,7 +2210,7 @@
             var childEval = childEvals[ci];
             var childPassed = childEval ? isPassed(childEval) : null;
             var childAnswer = (state.childAnswers[i] && state.childAnswers[i][ci]) || '';
-            var childIcon = childEval ? (childPassed ? '✅' : '❌') : '—';
+            var childIcon = childEval ? (childPassed ? ''+EngineShared.icon('check-circle')+'' : ''+EngineShared.icon('x-circle')+'') : '—';
             var childModel = child.modelAnswer || q.modelAnswer;
             body.innerHTML += '<div style="margin:8px 0;padding:8px 10px;background:var(--surface2);border-radius:8px;border-left:3px solid ' + (childPassed ? 'var(--ok)' : (childEval ? 'var(--bad)' : 'var(--border)')) + '">'
               + '<div style="font-weight:700;font-size:.85rem;margin-bottom:4px;color:var(--accent)">' + childIcon + ' ' + (child.label || 'Part ' + (ci+1)) + ' — ' + (child.question || '') + '</div>'
@@ -2247,7 +2247,7 @@
 
       itemsRendered++;
 
-      statusIcon = isSkipped ? '—' : (evPassed ? '✓' : '✗');
+      statusIcon = isSkipped ? '—' : (evPassed ? ''+EngineShared.icon('check')+'' : ''+EngineShared.icon('x')+'');
       var userAnswer = state.answers[i] || '';
 
       var el = document.createElement('div');
@@ -2259,7 +2259,7 @@
       header.onclick = function() { toggleResultItem(this); };
       header.innerHTML = '<div class="result-status-icon">' + statusIcon + '</div>'
         + '<div class="result-q-meta">'
-        + '<div class="result-q-num">Question ' + (i + 1) + (isFlagged ? ' · ⚑ Flagged' : '') + '</div>'
+        + '<div class="result-q-num">Question ' + (i + 1) + (isFlagged ? ' · '+EngineShared.icon('flag')+' Flagged' : '') + '</div>'
         + '<div class="result-q-text">' + q.question + '</div>'
         + '</div>'
         + '<div class="expand-arrow">▼</div>';
@@ -2452,7 +2452,7 @@
           var ce = childEvals[ci];
           var cp = ce ? isPassed(ce) : null;
           var ca = childAnswers[ci] || '';
-          var cIcon = ce ? (cp ? '✅' : '❌') : '—';
+          var cIcon = ce ? (cp ? ''+EngineShared.icon('check-circle')+'' : ''+EngineShared.icon('x-circle')+'') : '—';
           answerHtml += '<div style="margin:8px 0;padding:8px 10px;background:#f8f6f1;border-radius:6px;border-left:3px solid ' + (cp ? '#16a34a' : (ce ? '#dc2626' : '#d0ccc5')) + '">'
             + '<div style="font-weight:700;font-size:11px;margin-bottom:2px;color:#c27803">' + cIcon + ' ' + (child.label || 'Part ' + (ci+1)) + ' — ' + EngineShared.escHtml(child.question) + '</div>'
             + '<div style="font-size:10px;margin:2px 0"><strong>Answer:</strong> ' + EngineShared.escHtml(ca || 'Not answered') + '</div>'
@@ -2577,7 +2577,7 @@
   function testSettingsKey() {
     var value = ($('#settings-api-key').value || '').trim();
     if (!value) {
-      $('#settings-status').textContent = '✗ No key entered.';
+      $('#settings-status').textContent = ''+EngineShared.icon('x')+' No key entered.';
       return;
     }
     $('#settings-status').textContent = 'Testing...';
@@ -2585,13 +2585,13 @@
       .then(function (r) { return r.json(); })
       .then(function (data) {
         if (data && data.models && data.models.length) {
-          $('#settings-status').textContent = '✓ Key is valid (' + data.models.length + ' models available).';
+          $('#settings-status').textContent = ''+EngineShared.icon('check')+' Key is valid (' + data.models.length + ' models available).';
         } else {
-          $('#settings-status').textContent = '✗ Unexpected response. Check the key.';
+          $('#settings-status').textContent = ''+EngineShared.icon('x')+' Unexpected response. Check the key.';
         }
       })
       .catch(function () {
-        $('#settings-status').textContent = '✗ Connection failed. Check the key or your network.';
+        $('#settings-status').textContent = ''+EngineShared.icon('x')+' Connection failed. Check the key or your network.';
       });
   }
 
@@ -2605,7 +2605,7 @@
   function updateThemeButtons() {
     var isDark = document.documentElement.getAttribute('data-theme') === 'dark';
     $all('#theme-start,#theme-practice,#theme-result').forEach(function (btn) {
-      btn.textContent = isDark ? '☀' : '☾';
+      btn.textContent = isDark ? ''+EngineShared.icon('sun')+'' : ''+EngineShared.icon('moon')+'';
     });
   }
 

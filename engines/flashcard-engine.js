@@ -33,7 +33,7 @@
      "uid": "unique-id",
      "title": "My Flashcard Deck",
      "description": "A deck about ...",
-     "icon": "🃏"
+     "icon": "'+EngineShared.icon('layers')+'"
    }
    ================================================================ */
 (function () {
@@ -272,10 +272,10 @@
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
     Menu
   </a>
-  <button class="theme-btn-fixed theme-toggle-btn" onclick="toggleTheme()" title="Toggle theme">☀</button>
+  <button class="theme-btn-fixed theme-toggle-btn" onclick="toggleTheme()" title="Toggle theme">'+EngineShared.icon('sun')+'</button>
 
   <div class="start-card">
-    <div class="start-icon" id="start-icon">🃏</div>
+    <div class="start-icon" id="start-icon">'+EngineShared.icon('layers')+'</div>
     <h1 id="bank-title">Flashcard Deck</h1>
     <p class="subtitle" id="bank-subtitle">Study your flashcards</p>
 
@@ -372,7 +372,7 @@
     <div class="topbar-actions">
 
       <button class="icon-btn" onclick="toggleTheme()" title="Toggle theme">
-        <span id="theme-toggle-icon">☀</span>
+        <span id="theme-toggle-icon">'+EngineShared.icon('sun')+'</span>
       </button>
       <button class="icon-btn danger" onclick="confirmResetProgress()" title="Quit session">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
@@ -415,9 +415,9 @@
   <div class="result-topbar">
     <h2>Session Complete</h2>
     <div class="topbar-actions">
-      <a href="#" class="icon-btn" onclick="navigateToIndex(event); return false;" title="Back to Hub">🏠</a>
+      <a href="#" class="icon-btn" onclick="navigateToIndex(event); return false;" title="Back to Hub">'+EngineShared.icon('home')+'</a>
       <button class="icon-btn" onclick="toggleTheme()" title="Toggle theme">
-        <span class="theme-toggle-btn">☀</span>
+        <span class="theme-toggle-btn">'+EngineShared.icon('sun')+'</span>
       </button>
     </div>
   </div>
@@ -711,7 +711,7 @@
     var icon = document.getElementById('theme-toggle-icon');
     if (icon) {
       var isDark = document.documentElement.getAttribute('data-theme') === 'dark';
-      icon.textContent = isDark ? '☀' : '🌙';
+      icon.textContent = isDark ? ''+EngineShared.icon('sun')+'' : ''+EngineShared.icon('moon')+'';
       icon.classList.remove('theme-spinning');
       void icon.offsetWidth;
       icon.classList.add('theme-spinning');

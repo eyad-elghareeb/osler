@@ -47,9 +47,9 @@
   _dashEl.id = 'tracker-dashboard';
   _dashEl.innerHTML = '<div class="dash-modal">' +
     '<div class="dash-header">' +
-      '<h2 id="dash-title-text">📊 Question Tracker</h2>' +
+      '<h2 id="dash-title-text">'+EngineShared.icon('bar-chart')+' Question Tracker</h2>' +
       '<button id="dash-master-toggle" class="dash-master-toggle" onclick="toggleMasterSelection()">Select All</button>' +
-      '<button class="dash-close-btn" onclick="closeTrackerDashboard()">✕</button>' +
+      '<button class="dash-close-btn" onclick="closeTrackerDashboard()">'+EngineShared.icon('x')+'</button>' +
     '</div>' +
     '<div class="dash-scope-bar" id="dash-scope-bar">' +
       '<div id="dash-scope-tabs"></div>' +
@@ -61,8 +61,8 @@
     '</div>' +
     '<div class="dash-body" id="dash-body"></div>' +
     '<div class="dash-footer">' +
-      '<button class="btn-dash-action" onclick="exportTrackerToPDF()" title="Export to PDF">📄 Export PDF</button>' +
-      '<button class="btn-dash-action btn-dash-danger" onclick="confirmClearTrackerData()">🗑 Clear All</button>' +
+      '<button class="btn-dash-action" onclick="exportTrackerToPDF()" title="Export to PDF">'+EngineShared.icon('file-text')+' Export PDF</button>' +
+      '<button class="btn-dash-action btn-dash-danger" onclick="confirmClearTrackerData()">'+EngineShared.icon('trash-2')+' Clear All</button>' +
       '<button class="btn-dash-review" id="btn-start-review" onclick="startReviewMode()">▶ Start Review</button>' +
     '</div>' +
   '</div>';
@@ -1085,7 +1085,7 @@
       
       renderDashboard();
       updateBadge();
-      EngineShared.showToast('🗑 Questions cleared for this section!');
+      EngineShared.showToast(''+EngineShared.icon('trash-2')+' Questions cleared for this section!');
     } catch (e) {}
   };
   
@@ -1430,7 +1430,7 @@
 
     var container = document.createElement('div');
 
-    var currentChunkHtml = '<h1 style="font-size:22px;margin:0 0 4px;font-family:Georgia,serif;">📊 Question Tracker</h1>'
+    var currentChunkHtml = '<h1 style="font-size:22px;margin:0 0 4px;font-family:Georgia,serif;">'+EngineShared.icon('bar-chart')+' Question Tracker</h1>'
       + '<p style="color:#78716c;margin:0 0 4px;font-size:13px;">Scope: ' + scopeLabel + ' &mdash; ' + now + '</p>'
       + '<div style="background:#f8f6f1;border-radius:12px;padding:18px 20px;margin-bottom:22px;border:1px solid #d0ccc5;display:flex;gap:18px;align-items:center;flex-wrap:wrap;">'
       +   '<div style="flex:1;min-width:180px;">'

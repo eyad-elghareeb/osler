@@ -1315,24 +1315,24 @@ var SyncEngine = {
             <div class="dash-overlay" id="sync-dashboard">
                 <div class="dash-modal" style="max-width: 580px;">
                     <div class="dash-header">
-                        <h2>🔄 Sync Progress</h2>
-                        <button class="dash-close-btn" onclick="SyncEngine.ui.closeModal()">✕</button>
+                        <h2>'+EngineShared.icon('refresh-cw')+' Sync Progress</h2>
+                        <button class="dash-close-btn" onclick="SyncEngine.ui.closeModal()">'+EngineShared.icon('x')+'</button>
                     </div>
                     <div class="dash-scope-bar" style="display:flex; overflow-x:auto;">
-                        <button class="dash-scope-tab active" id="sync-tab-btn-webrtc" onclick="SyncEngine.ui.switchTab('webrtc')">📡 Nearby Devices</button>
-                        <button class="dash-scope-tab" id="sync-tab-btn-qr" onclick="SyncEngine.ui.switchTab('qr')">📷 QR Sync</button>
-                        <button class="dash-scope-tab" id="sync-tab-btn-file" onclick="SyncEngine.ui.switchTab('file')">📁 File</button>
+                        <button class="dash-scope-tab active" id="sync-tab-btn-webrtc" onclick="SyncEngine.ui.switchTab('webrtc')">'+EngineShared.icon('wifi')+' Nearby Devices</button>
+                        <button class="dash-scope-tab" id="sync-tab-btn-qr" onclick="SyncEngine.ui.switchTab('qr')">'+EngineShared.icon('camera')+' QR Sync</button>
+                        <button class="dash-scope-tab" id="sync-tab-btn-file" onclick="SyncEngine.ui.switchTab('file')">'+EngineShared.icon('folder-open')+' File</button>
                     </div>
                     <div class="dash-body" style="min-height: 280px; position: relative;">
                         <div id="sync-tab-webrtc" style="display: block; overflow: hidden;">
                             <div style="text-align: center; margin-bottom: 1.5rem;">
                                 <div id="sync-webrtc-radar-container" style="display: inline-block; padding: 10px; overflow: visible;">
-                                    <div id="sync-webrtc-radar" style="font-size: 2.5rem; animation: pulse 2s infinite; transform-origin: center;">📡</div>
+                                    <div id="sync-webrtc-radar" style="font-size: 2.5rem; animation: pulse 2s infinite; transform-origin: center;">'+EngineShared.icon('wifi')+'</div>
                                 </div>
                                 <p style="color: var(--text-muted); font-size: 0.95rem; margin-top: 0.5rem;">Looking for devices on the same network...</p>
                             <div style="display: flex; align-items: center; justify-content: center; gap: 1.5rem; margin-bottom: 0.75rem; padding: 0.4rem 1rem;">
-                                <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer; font-size: 0.9rem; color: var(--text);"><span>🔒</span> Pull Only <input type="checkbox" id="sync-pull-only-toggle" ${SyncEngine.webrtc.pullOnly ? 'checked' : ''} onchange="SyncEngine.webrtc.setPullOnly(this.checked)" style="accent-color: var(--accent); transform: scale(1.1);"></label>
-                                <button class="btn-dash-action" onclick="SyncEngine.ui.openScopeModal()" style="font-size: 0.85rem; padding: 0.4rem 0.8rem;">⚙ Configure Scope</button>
+                                <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer; font-size: 0.9rem; color: var(--text);"><span>'+EngineShared.icon('lock')+'</span> Pull Only <input type="checkbox" id="sync-pull-only-toggle" ${SyncEngine.webrtc.pullOnly ? 'checked' : ''} onchange="SyncEngine.webrtc.setPullOnly(this.checked)" style="accent-color: var(--accent); transform: scale(1.1);"></label>
+                                <button class="btn-dash-action" onclick="SyncEngine.ui.openScopeModal()" style="font-size: 0.85rem; padding: 0.4rem 0.8rem;">'+EngineShared.icon('settings')+' Configure Scope</button>
                             </div>
                                 <div style="display: flex; justify-content: center; gap: 15px; margin-top: 4px;">
                                     <div id="sync-room-id" style="font-size: 0.7rem; color: var(--text-muted); opacity: 0.6;">Room ID: Identifying...</div>
@@ -1369,14 +1369,14 @@ var SyncEngine = {
                                     <button class="btn-dash-action" onclick="SyncEngine.ui.nextQR()" style="padding: 0.3rem 0.6rem;">></button>
                                 </div>
                                 <div style="margin-top: 1rem; border-top: 1px solid var(--border); padding-top: 1.5rem;">
-                                    <button class="btn-dash-action" onclick="SyncEngine.ui.toggleQRScanner(true)">📷 Scan Another Device</button>
+                                    <button class="btn-dash-action" onclick="SyncEngine.ui.toggleQRScanner(true)">'+EngineShared.icon('camera')+' Scan Another Device</button>
                                 </div>
                             </div>
                             <div id="sync-qr-scan-section" style="display: none;">
                                 <p style="margin-bottom: 1rem; color: var(--text-muted); font-size: 0.95rem;">Point your camera at a QR code.</p>
                                 <div id="sync-reader" style="width: 100%; max-width: 320px; margin: 0 auto; border-radius: 12px; overflow: hidden; border: 1px solid var(--border); position: relative;"></div>
                                 <div id="sync-camera-controls" style="margin-top: 10px; display: none;">
-                                    <button class="btn-dash-action" id="sync-switch-camera-btn" onclick="SyncEngine.ui.switchCamera()" style="font-size: 0.8rem; padding: 0.4rem 0.8rem;">🔄 Switch Camera</button>
+                                    <button class="btn-dash-action" id="sync-switch-camera-btn" onclick="SyncEngine.ui.switchCamera()" style="font-size: 0.8rem; padding: 0.4rem 0.8rem;">'+EngineShared.icon('refresh-cw')+' Switch Camera</button>
                                 </div>
                                 <div id="sync-scan-progress" style="margin-top: 1.25rem; font-weight: 600; font-size: 0.9rem; color: var(--accent); display: none;">
                                     Scanning: <span id="sync-scan-count">0</span> / <span id="sync-scan-total">?</span> parts
@@ -1385,19 +1385,19 @@ var SyncEngine = {
                                     </div>
                                 </div>
                                 <div style="margin-top: 1.5rem;">
-                                    <button class="btn-dash-action" onclick="SyncEngine.ui.toggleQRScanner(false)">🔙 Show My Code</button>
+                                    <button class="btn-dash-action" onclick="SyncEngine.ui.toggleQRScanner(false)">'+EngineShared.icon('arrow-left')+' Show My Code</button>
                                 </div>
                             </div>
                         </div>
                         <div id="sync-tab-file" style="display: none; text-align: center;">
                             <div style="padding: 1.5rem; background: var(--surface2); border: 1px solid var(--border); border-radius: 12px; margin-bottom: 1rem;">
-                                <div style="font-size: 2.2rem; margin-bottom: 0.5rem;">📥</div>
+                                <div style="font-size: 2.2rem; margin-bottom: 0.5rem;">'+EngineShared.icon('inbox')+'</div>
                                 <p style="font-weight: 600; margin-bottom: 0.25rem; color: var(--text);">Backup Progress</p>
                                 <p style="color: var(--text-muted); font-size: 0.9rem; margin-bottom: 1rem;">Save your current progress offline to a secure file.</p>
                                 <button class="btn-dash-action" onclick="SyncEngine.ui.downloadBackup()">Download Backup</button>
                             </div>
                             <div style="padding: 1.5rem; background: var(--surface2); border: 1px dashed var(--border); border-radius: 12px;">
-                                <div style="font-size: 2.2rem; margin-bottom: 0.5rem;">📁</div>
+                                <div style="font-size: 2.2rem; margin-bottom: 0.5rem;">'+EngineShared.icon('folder-open')+'</div>
                                 <p style="font-weight: 600; margin-bottom: 0.25rem; color: var(--text);">Restore Progress</p>
                                 <p style="color: var(--text-muted); font-size: 0.9rem; margin-bottom: 1rem;">Select a backup file to securely load your progress.</p>
                                 <input type="file" id="sync-file-input" accept=".quizbackup,.txt,.json" style="display: none;" onchange="SyncEngine.ui.handleFileUpload(event)">
@@ -1510,9 +1510,9 @@ var SyncEngine = {
                 if (now - dev.lastSeen > 15000) { delete SyncEngine.webrtc.devices[id]; continue; }
                 count++;
                 var isTrusted = SyncEngine._isTrustedDevice(id);
-                var trustedBadge = isTrusted ? '<span style="font-size:0.7rem;padding:2px 6px;border-radius:6px;font-weight:600;margin-left:6px;background:rgba(255,193,7,0.15);color:#ffc107;">⭐ Trusted</span>' : '';
-                var pullOnlyBadge = dev.pullOnly ? '<span style="font-size:0.7rem;padding:2px 6px;border-radius:6px;font-weight:600;margin-left:6px;background:rgba(33,150,243,0.15);color:#2196f3;">🔒 Pull Only</span>' : '';
-                html += '<div class="device-item"><div class="device-info"><div class="device-name">📱 ' + dev.name + trustedBadge + pullOnlyBadge + '</div><div style="font-size: 0.75rem; color: var(--text-muted);">Local Network Device</div></div><button class="btn-dash-action" onclick="SyncEngine.webrtc.connectToDevice(\'' + id + '\')">Sync</button></div>';
+                var trustedBadge = isTrusted ? '<span style="font-size:0.7rem;padding:2px 6px;border-radius:6px;font-weight:600;margin-left:6px;background:rgba(255,193,7,0.15);color:#ffc107;">'+EngineShared.icon('star')+' Trusted</span>' : '';
+                var pullOnlyBadge = dev.pullOnly ? '<span style="font-size:0.7rem;padding:2px 6px;border-radius:6px;font-weight:600;margin-left:6px;background:rgba(33,150,243,0.15);color:#2196f3;">'+EngineShared.icon('lock')+' Pull Only</span>' : '';
+                html += '<div class="device-item"><div class="device-info"><div class="device-name">'+EngineShared.icon('smartphone')+' ' + dev.name + trustedBadge + pullOnlyBadge + '</div><div style="font-size: 0.75rem; color: var(--text-muted);">Local Network Device</div></div><button class="btn-dash-action" onclick="SyncEngine.webrtc.connectToDevice(\'' + id + '\')">Sync</button></div>';
             }
             if (count === 0) html = '<p style="text-align: center; color: var(--text-muted); font-size: 0.9rem; padding: 1.5rem 1rem;">No devices found. Ensure other devices have the Sync modal open and are connected to the internet on the same WiFi network.</p>';
             listEl.innerHTML = html;
@@ -1527,15 +1527,15 @@ var SyncEngine = {
             if (preview) {
                 previewHTML = '<div style="margin:0.5rem 0;padding:0.5rem;background:var(--surface1);border-radius:8px;font-size:0.8rem;color:var(--text-muted);">'
                     + '<div style="font-weight:600;margin-bottom:4px;color:var(--text);">Import Preview:</div>'
-                    + (preview.trackerCount > 0 ? '<div>📊 ' + preview.trackerCount + ' tracker(s)</div>' : '')
-                    + (preview.progressCount > 0 ? '<div>📈 ' + preview.progressCount + ' progress record(s)</div>' : '')
+                    + (preview.trackerCount > 0 ? '<div>'+EngineShared.icon('bar-chart')+' ' + preview.trackerCount + ' tracker(s)</div>' : '')
+                    + (preview.progressCount > 0 ? '<div>'+EngineShared.icon('trending-up')+' ' + preview.progressCount + ' progress record(s)</div>' : '')
                     + (preview.subjects.length > 0 ? '<div style="margin-top:4px;">Subjects: ' + preview.subjects.map(function(s){return s.name;}).join(', ') + '</div>' : '')
                     + '</div>';
             }
             var el = document.createElement('div');
             el.id = 'sync-confirm-' + fromId;
             el.style.cssText = 'background:var(--surface2);border:1px solid var(--border);border-radius:12px;padding:1rem;margin:0.5rem;box-shadow:0 -2px 12px rgba(0,0,0,0.2);animation:slideUp 0.3s ease;';
-            el.innerHTML = '<div style="display:flex;align-items:center;justify-content:space-between;"><div style="font-weight:600;color:var(--text);font-size:0.95rem;">📱 Incoming Sync</div><div style="font-size:0.8rem;color:var(--accent);">from <strong>' + fromName + '</strong></div></div>'
+            el.innerHTML = '<div style="display:flex;align-items:center;justify-content:space-between;"><div style="font-weight:600;color:var(--text);font-size:0.95rem;">'+EngineShared.icon('smartphone')+' Incoming Sync</div><div style="font-size:0.8rem;color:var(--accent);">from <strong>' + fromName + '</strong></div></div>'
                 + previewHTML
                 + '<label style="display:flex;align-items:center;gap:0.4rem;font-size:0.8rem;color:var(--text-muted);margin:0.5rem 0;cursor:pointer;"><input type="checkbox" id="sync-trust-' + fromId + '" style="accent-color:var(--accent);"> Always trust this device</label>'
                 + '<div style="display:flex;gap:0.5rem;justify-content:flex-end;">'
@@ -1611,7 +1611,7 @@ var SyncEngine = {
             var savedSubjects = saved.subjects || [];
             var html = '<div class="dash-overlay open" style="z-index:2200;" onclick="if(event.target===this)SyncEngine.ui.closeScopeModal()">'
                 + '<div class="dash-modal" style="max-width:380px;">'
-                + '<div class="dash-header"><h2>⚙ Sync Scope</h2><button class="dash-close-btn" onclick="SyncEngine.ui.closeScopeModal()">✕</button></div>'
+                + '<div class="dash-header"><h2>'+EngineShared.icon('settings')+' Sync Scope</h2><button class="dash-close-btn" onclick="SyncEngine.ui.closeScopeModal()">'+EngineShared.icon('x')+'</button></div>'
                 + '<div class="dash-body" style="padding:0.75rem 1.25rem;">';
             for (var i = 0; i < subjects.length; i++) {
                 var s = subjects[i];
@@ -1787,7 +1787,7 @@ var SyncEngine = {
             var switchBtn = document.getElementById('sync-camera-controls');
             if (!readerEl) return;
             if (!window.isSecureContext && location.hostname !== 'localhost' && location.hostname !== '127.0.0.1') {
-                readerEl.innerHTML = '<div style="padding: 2rem 1rem; color: var(--wrong);">⚠️ Camera requires HTTPS. Use File sync instead.</div>';
+                readerEl.innerHTML = '<div style="padding: 2rem 1rem; color: var(--wrong);">'+EngineShared.icon('alert-triangle')+'️ Camera requires HTTPS. Use File sync instead.</div>';
                 return;
             }
             var isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);

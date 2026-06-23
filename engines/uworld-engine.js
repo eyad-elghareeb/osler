@@ -486,7 +486,7 @@
   color: #ffffff !important;
 }
 .option-card.feedback-correct .option-circle::after {
-  content: '✓'; font-size: 0.8rem;
+  content: ''+EngineShared.icon('check')+''; font-size: 0.8rem;
 }
 .option-card.feedback-correct .option-circle span {
   display: none;
@@ -502,7 +502,7 @@
   color: #ffffff !important;
 }
 .option-card.feedback-incorrect .option-circle::after {
-  content: '✕'; font-size: 0.8rem;
+  content: ''+EngineShared.icon('x')+''; font-size: 0.8rem;
 }
 .option-card.feedback-incorrect .option-circle span {
   display: none;
@@ -1468,10 +1468,10 @@
     </svg>
     Back to Hub
   </a>
-  <button class="theme-btn-fixed theme-toggle-btn" onclick="toggleTheme()" title="Toggle theme">☀</button>
+  <button class="theme-btn-fixed theme-toggle-btn" onclick="toggleTheme()" title="Toggle theme">'+EngineShared.icon('sun')+'</button>
 
   <div class="start-card">
-    <div class="start-icon" id="start-icon">🗃️</div>
+    <div class="start-icon" id="start-icon">'+EngineShared.icon('archive')+'</div>
     <h1 id="bank-title">Question Bank</h1>
     <p class="subtitle" id="bank-subtitle">USMLE Computer-Based Testing Simulation</p>
 
@@ -1524,13 +1524,13 @@
         <label class="mode-label">
           <input type="radio" name="quiz-mode" value="learning" checked>
           <div class="mode-option">
-            <div class="mo-title">📚 Tutor Mode</div>
+            <div class="mo-title">'+EngineShared.icon('book')+' Tutor Mode</div>
           </div>
         </label>
         <label class="mode-label">
           <input type="radio" name="quiz-mode" value="exam">
           <div class="mode-option">
-            <div class="mo-title">📝 Timed Mode</div>
+            <div class="mo-title">'+EngineShared.icon('edit')+' Timed Mode</div>
           </div>
         </label>
       </div>
@@ -1542,27 +1542,27 @@
         <label class="mode-label">
           <input type="radio" name="quiz-order" value="sequential" checked>
           <div class="mode-option">
-            <div class="mo-title">📋 Sequential</div>
+            <div class="mo-title">'+EngineShared.icon('clipboard')+' Sequential</div>
           </div>
         </label>
         <label class="mode-label">
           <input type="radio" name="quiz-order" value="random">
           <div class="mode-option">
-            <div class="mo-title">🔀 Random</div>
+            <div class="mo-title">'+EngineShared.icon('shuffle')+' Random</div>
           </div>
         </label>
       </div>
     </div>
 
     <button class="btn-start" onclick="startQuiz()">Start Test →</button>
-    <button class="reset-bank-btn" onclick="openBankResetModal()">🗑 Reset Coverage History</button>
+    <button class="reset-bank-btn" onclick="openBankResetModal()">'+EngineShared.icon('trash-2')+' Reset Coverage History</button>
   </div>
 </div>
 
 <!-- Bank Reset Confirmation Modal -->
 <div class="modal-overlay" id="bank-reset-modal">
   <div class="modal">
-    <h3>🧹 Reset Coverage History?</h3>
+    <h3>'+EngineShared.icon('eraser')+' Reset Coverage History?</h3>
     <p>This will forget which questions you have already seen and reset the covered count to 0. Your progress in any active session will NOT be affected. Continue?</p>
     <div class="modal-actions">
       <button class="btn-cancel" onclick="closeBankResetModal()">Cancel</button>
@@ -1583,7 +1583,7 @@
       <div class="cbt-header-status" id="header-item-number">Item 1 of 20</div>
       <div class="cbt-header-status" style="margin-left:-8px;"><span id="header-block-number">Block 1 of 1</span></div>
       <button class="cbt-mark-btn" onclick="toggleFlagCurrent()" id="mark-btn">
-        <span style="font-size:1rem;">⚑</span> Mark
+        <span style="font-size:1rem;">'+EngineShared.icon('flag')+'</span> Mark
       </button>
     </div>
     
@@ -1631,8 +1631,8 @@
           <button class="hl-color-btn hl-c2" onclick="hlSelectColor(2); event.stopPropagation();" title="Green (2)"></button>
           <button class="hl-color-btn hl-c3" onclick="hlSelectColor(3); event.stopPropagation();" title="Pink (3)"></button>
           <button class="hl-color-btn hl-c4" onclick="hlSelectColor(4); event.stopPropagation();" title="Blue (4)"></button>
-          <button class="hl-erase-btn" onclick="hlSelectColor(0); event.stopPropagation();" title="Eraser">🧹</button>
-          <button class="hl-close-btn" onclick="disableHighlighterMode(); event.stopPropagation();" title="Close Highlighter">✕</button>
+          <button class="hl-erase-btn" onclick="hlSelectColor(0); event.stopPropagation();" title="Eraser">'+EngineShared.icon('eraser')+'</button>
+          <button class="hl-close-btn" onclick="disableHighlighterMode(); event.stopPropagation();" title="Close Highlighter">'+EngineShared.icon('x')+'</button>
         </div>
       </div>
 
@@ -1717,7 +1717,7 @@
   <div class="cbt-drawer" id="lab-drawer">
     <div class="drawer-header">
       <span class="drawer-title">Reference Ranges</span>
-      <button class="drawer-close" onclick="toggleLabDrawer()">✕</button>
+      <button class="drawer-close" onclick="toggleLabDrawer()">'+EngineShared.icon('x')+'</button>
     </div>
     <div class="lab-tabs">
       <button class="lab-tab-btn active" onclick="switchLabTab('serum')">Serum</button>
@@ -1745,7 +1745,7 @@
   <div class="cbt-drawer" id="notepad-drawer">
     <div class="drawer-header">
       <span class="drawer-title">Notepad Scratchpad</span>
-      <button class="drawer-close" onclick="toggleNotepadDrawer()">✕</button>
+      <button class="drawer-close" onclick="toggleNotepadDrawer()">'+EngineShared.icon('x')+'</button>
     </div>
     <div class="drawer-content">
       <p style="font-size:0.85rem;color:var(--text-muted);margin:0 0 12px;line-height:1.4;">Scratchpad is shared and persists throughout your session. Auto-saves to your local cache.</p>
@@ -1758,7 +1758,7 @@
   <div class="floating-calc" id="floating-calc">
     <div class="calc-header" id="calc-handle">
       <span>CALCULATOR</span>
-      <span class="calc-close" onclick="toggleCalculator()">✕</span>
+      <span class="calc-close" onclick="toggleCalculator()">'+EngineShared.icon('x')+'</span>
     </div>
     <input type="text" class="calc-screen" id="calc-screen" value="0" readonly>
     <div class="calc-grid">
@@ -1792,10 +1792,10 @@
 <!-- SESSION RESULTS SCREEN -->
 <div id="result-screen" class="screen">
   <div class="result-topbar">
-    <h2>📊 Session Results</h2>
+    <h2>'+EngineShared.icon('bar-chart')+' Session Results</h2>
     <div class="topbar-actions">
-      <a href="#" class="hub-back-btn" style="position:static;" onclick="navigateToIndex(event); return false;">🏠 Hub</a>
-      <button class="theme-btn-fixed" style="position:static;" onclick="toggleTheme()">☀</button>
+      <a href="#" class="hub-back-btn" style="position:static;" onclick="navigateToIndex(event); return false;">'+EngineShared.icon('home')+' Hub</a>
+      <button class="theme-btn-fixed" style="position:static;" onclick="toggleTheme()">'+EngineShared.icon('sun')+'</button>
     </div>
   </div>
   
@@ -1859,17 +1859,17 @@
     <!-- Review Tabs and Question Review Area -->
     <div class="result-tabs">
       <button class="tab-btn active" onclick="filterResults('all', this)">All Questions</button>
-      <button class="tab-btn" onclick="filterResults('correct', this)">✓ Correct</button>
-      <button class="tab-btn" onclick="filterResults('wrong', this)">✗ Wrong</button>
+      <button class="tab-btn" onclick="filterResults('correct', this)">'+EngineShared.icon('check')+' Correct</button>
+      <button class="tab-btn" onclick="filterResults('wrong', this)">'+EngineShared.icon('x')+' Wrong</button>
       <button class="tab-btn" onclick="filterResults('skipped', this)">— Skipped</button>
-      <button class="tab-btn" onclick="filterResults('flagged', this)">⚑ Flagged</button>
+      <button class="tab-btn" onclick="filterResults('flagged', this)">'+EngineShared.icon('flag')+' Flagged</button>
     </div>
     
     <div class="result-list" id="result-list"></div>
     
     <div class="result-actions">
       <button class="btn-restart" onclick="onNewSessionClick(event)">↺ Start New Block</button>
-      <a href="#" class="btn-restart btn-secondary" onclick="navigateToIndex(event); return false;">🏠 Back to Quiz Hub</a>
+      <a href="#" class="btn-restart btn-secondary" onclick="navigateToIndex(event); return false;">'+EngineShared.icon('home')+' Back to Quiz Hub</a>
     </div>
   </div>
 </div>
@@ -2244,7 +2244,7 @@
         return;
       }
       
-      EngineShared.showToast("📂 Restore previous block progress?", [
+      EngineShared.showToast("'+EngineShared.icon('folder-open')+' Restore previous block progress?", [
         {
           label: "Restore",
           primary: true,
@@ -2404,7 +2404,7 @@
       const hlBtn = document.getElementById('highlighter-toggle');
       if (hlBtn) hlBtn.classList.add('active');
       if (!state.submitted) renderQuestion(state.current);
-      EngineShared.showToast('🖍 Highlighter ON');
+      EngineShared.showToast(''+EngineShared.icon('pen-tool')+' Highlighter ON');
     } else {
       _togglePicker();
     }
@@ -2739,7 +2739,7 @@
     closeBankResetModal();
     localStorage.removeItem(BANK_PROGRESS_KEY);
     updateStartScreenStats();
-    EngineShared.showToast('🔄 Coverage history reset!');
+    EngineShared.showToast(''+EngineShared.icon('refresh-cw')+' Coverage history reset!');
   };
 
   function updateStartScreenStats() {
@@ -2792,7 +2792,7 @@
       progress.shownIndices = [];
       unshown = [...allIndices];
       saveBankProgress(progress);
-      EngineShared.showToast('🎉 Full cycle complete! Starting fresh — cycle ' + (progress.cycleCount + 1));
+      EngineShared.showToast(''+EngineShared.icon('award')+' Full cycle complete! Starting fresh — cycle ' + (progress.cycleCount + 1));
       picked = order === 'sequential'
         ? unshown.sort((a, b) => a - b).slice(0, n)
         : shuffle(unshown).slice(0, n);
@@ -3068,7 +3068,7 @@
             <span>${KEYS[i]}</span>
           </div>
           <div class="option-text">${opt}</div>
-          <button class="option-strike-btn${isStruck?' active':''}" onclick="event.stopPropagation(); toggleCardStrikethrough(${idx}, ${i})" title="Strikethrough (S)">✕</button>
+          <button class="option-strike-btn${isStruck?' active':''}" onclick="event.stopPropagation(); toggleCardStrikethrough(${idx}, ${i})" title="Strikethrough (S)">'+EngineShared.icon('x')+'</button>
         </div>
       `;
     }).join('');
@@ -3228,7 +3228,7 @@
     updateNavStats();
     EngineShared.debounceSave(saveProgress);
     
-    EngineShared.showToast(state.flagged[idx] ? '⚑ Item bookmarked' : 'Item bookmark removed');
+    EngineShared.showToast(state.flagged[idx] ? ''+EngineShared.icon('flag')+' Item bookmarked' : 'Item bookmark removed');
   };
 
   /* ─── ZOOM SCALE SYSTEM ───────────────────────────────────────── */
@@ -3347,7 +3347,7 @@
     const text = document.getElementById('notepad-text').value;
     state.notepadText = text;
     localStorage.setItem(`uworld_notepad_${BANK_CONFIG.uid}`, text);
-    EngineShared.showToast('💾 Scratchpad note cached successfully');
+    EngineShared.showToast(''+EngineShared.icon('download')+' Scratchpad note cached successfully');
   };
 
   /* ─── SIDEBAR QUESTION NAVIGATION GRID ────────────────────────── */
@@ -3456,11 +3456,11 @@
     document.getElementById('res-time').textContent = timeStr;
 
     let grade = '';
-    if (pct >= 90) grade = '🏆 Outstanding Performance!';
-    else if (pct >= 75) grade = '🌟 Great Work!';
-    else if (pct >= 60) grade = '👍 Passing Grade!';
-    else if (pct >= 40) grade = '📚 Study High-Yield Topics!';
-    else grade = '💪 Keep Practicing — You Got This!';
+    if (pct >= 90) grade = ''+EngineShared.icon('award')+' Outstanding Performance!';
+    else if (pct >= 75) grade = ''+EngineShared.icon('star')+' Great Work!';
+    else if (pct >= 60) grade = ''+EngineShared.icon('thumbs-up')+' Passing Grade!';
+    else if (pct >= 40) grade = ''+EngineShared.icon('book')+' Study High-Yield Topics!';
+    else grade = ''+EngineShared.icon('zap')+' Keep Practicing — You Got This!';
     
     document.getElementById('res-grade').textContent = grade;
 
@@ -3489,7 +3489,7 @@
       if (!show) return;
       itemsRendered++;
 
-      const icon = isSkipped ? '—' : (isCorrect ? '✓' : '✗');
+      const icon = isSkipped ? '—' : (isCorrect ? ''+EngineShared.icon('check')+'' : ''+EngineShared.icon('x')+'');
       const userOpt = ans !== undefined ? q.options[ans] : 'Not answered';
       const corrOpt = q.options[q.correct];
 
@@ -3499,7 +3499,7 @@
         <div class="result-item-header" onclick="toggleResultItem(this)">
           <div class="result-status-icon">${icon}</div>
           <div class="result-q-meta">
-            <div class="result-q-num">Question ${i + 1}${isFlagged ? ' · ⚑ Flagged' : ''}</div>
+            <div class="result-q-num">Question ${i + 1}${isFlagged ? ' · '+EngineShared.icon('flag')+' Flagged' : ''}</div>
             <div class="result-q-text">${q.question.split('\n\n')[0]}</div>
           </div>
           <div class="expand-arrow">▼</div>

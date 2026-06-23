@@ -1,6 +1,6 @@
 /* ================================================================
    ai-assistant-engine.js  —  Optional AI assistant for quiz/bank engines.
-   Lazy-loaded only when user clicks the 🤖 button or expands study notes.
+   Lazy-loaded only when user clicks the '+EngineShared.icon('bot')+' button or expands study notes.
    Requires internet connection — NOT cached by service worker.
    Shares localStorage keys with written-engine.js so one key works everywhere.
    ================================================================ */
@@ -318,15 +318,15 @@
     div.innerHTML =
       '<div id="ai-assistant-modal">' +
         '<div id="ai-assistant-header">' +
-          '<h3>🤖 AI Assistant</h3>' +
+          '<h3>'+EngineShared.icon('bot')+' AI Assistant</h3>' +
           '<div style="display:flex;gap:.5rem;align-items:center">' +
-            '<button class="icon-btn" id="ai-settings-gear" title="AI Settings" style="font-size:1rem">⚙</button>' +
-            '<button class="icon-btn" id="ai-close-btn" title="Close">✕</button>' +
+            '<button class="icon-btn" id="ai-settings-gear" title="AI Settings" style="font-size:1rem">'+EngineShared.icon('settings')+'</button>' +
+            '<button class="icon-btn" id="ai-close-btn" title="Close">'+EngineShared.icon('x')+'</button>' +
           '</div>' +
         '</div>' +
         '<div id="ai-assistant-context">' +
           '<div id="ai-context-header" onclick="_toggleContext()">' +
-            '<span>📋 Question</span>' +
+            '<span>'+EngineShared.icon('clipboard')+' Question</span>' +
             '<span class="collapse-arrow">▾</span>' +
           '</div>' +
           '<div id="ai-context-body"></div>' +
@@ -403,7 +403,7 @@
     if (questionObj.options && Array.isArray(questionObj.options)) {
       questionObj.options.forEach(function (opt, i) {
         var chk = '';
-        if (typeof questionObj.correct === 'number' && i === questionObj.correct) chk = ' ✓';
+        if (typeof questionObj.correct === 'number' && i === questionObj.correct) chk = ' '+EngineShared.icon('check')+'';
         html += '<div class="opt-line" dir="auto">' + (keys[i] || i) + '. ' + _escapeHtml(opt) + chk + '</div>';
       });
     }
@@ -441,7 +441,7 @@
 
     var apiKey = _readKey();
     if (!apiKey) {
-      showToast('⚠ Configure your Gemini API key in AI Settings');
+      showToast(''+EngineShared.icon('alert-triangle')+' Configure your Gemini API key in AI Settings');
       _openSettings();
       return;
     }
@@ -483,7 +483,7 @@
         var thinkingEl = _$('ai-thinking-msg');
         if (thinkingEl) thinkingEl.remove();
         errorEl.className = 'show';
-        errorEl.textContent = '⚠ ' + friendlyAiError(err);
+        errorEl.textContent = ''+EngineShared.icon('alert-triangle')+' ' + friendlyAiError(err);
       })
       .finally(function () {
         sendBtn.disabled = false;
@@ -506,8 +506,8 @@
     div.innerHTML =
       '<div id="ai-settings-modal">' +
         '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem">' +
-          '<h3 style="margin:0">⚙ AI Settings</h3>' +
-          '<button class="icon-btn" id="ai-settings-close" title="Close">✕</button>' +
+          '<h3 style="margin:0">'+EngineShared.icon('settings')+' AI Settings</h3>' +
+          '<button class="icon-btn" id="ai-settings-close" title="Close">'+EngineShared.icon('x')+'</button>' +
         '</div>' +
         '<div class="field-box">' +
           '<label class="field-label" for="ai-key-input">Gemini API Key</label>' +
@@ -623,7 +623,7 @@
   function _testSettingsKey() {
     var value = (_$('ai-key-input').value || '').trim();
     if (!value) {
-      _$('ai-settings-status').textContent = '✗ No key entered.';
+      _$('ai-settings-status').textContent = ''+EngineShared.icon('x')+' No key entered.';
       return;
     }
     _$('ai-settings-status').textContent = 'Testing...';
@@ -631,13 +631,13 @@
       .then(function (r) { return r.json(); })
       .then(function (data) {
         if (data && data.models && data.models.length) {
-          _$('ai-settings-status').textContent = '✓ Key is valid (' + data.models.length + ' models available).';
+          _$('ai-settings-status').textContent = ''+EngineShared.icon('check')+' Key is valid (' + data.models.length + ' models available).';
         } else {
-          _$('ai-settings-status').textContent = '✗ Unexpected response. Check the key.';
+          _$('ai-settings-status').textContent = ''+EngineShared.icon('x')+' Unexpected response. Check the key.';
         }
       })
       .catch(function () {
-        _$('ai-settings-status').textContent = '✗ Connection failed. Check key or network.';
+        _$('ai-settings-status').textContent = ''+EngineShared.icon('x')+' Connection failed. Check key or network.';
       });
   }
 
@@ -658,7 +658,7 @@
     container.innerHTML =
       '<div id="study-notes-card">' +
         '<div id="study-notes-header">' +
-          '<span>📚 Study Notes <span style="font-weight:400;font-size:.75rem;color:var(--text-muted);margin-left:.5rem">(' + wrongResult.count + ' mistakes)</span></span>' +
+          '<span>'+EngineShared.icon('book')+' Study Notes <span style="font-weight:400;font-size:.75rem;color:var(--text-muted);margin-left:.5rem">(' + wrongResult.count + ' mistakes)</span></span>' +
           '<span class="arrow" id="notes-arrow">▼</span>' +
         '</div>' +
         '<div id="study-notes-body">' +
@@ -716,7 +716,7 @@
         // Add regenerate button
         var regenBtn = document.createElement('button');
         regenBtn.className = 'regenerate-btn';
-        regenBtn.textContent = '🔄 Regenerate';
+        regenBtn.textContent = ''+EngineShared.icon('refresh-cw')+' Regenerate';
         regenBtn.addEventListener('click', function () {
           _notesGenerated = false;
           _generateNotes(_notesQuestions, _notesAnswers);
@@ -726,7 +726,7 @@
       .catch(function (err) {
         _$('notes-loading').style.display = 'none';
         _$('notes-error').style.display = 'block';
-        _$('notes-error').innerHTML = '⚠ ' + _escapeHtml(friendlyAiError(err)) + ' <span class="retry-btn" id="notes-retry-btn">Retry</span>';
+        _$('notes-error').innerHTML = ''+EngineShared.icon('alert-triangle')+' ' + _escapeHtml(friendlyAiError(err)) + ' <span class="retry-btn" id="notes-retry-btn">Retry</span>';
         _$('notes-retry-btn').addEventListener('click', function () {
           _notesGenerated = false;
           _generateNotes(_notesQuestions, _notesAnswers);
