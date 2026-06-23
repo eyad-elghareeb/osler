@@ -412,18 +412,18 @@ var SyncEngine = {
 
     // --- Trusted Devices ---
     _getTrustedDevices: function() {
-        try { return JSON.parse(localStorage.getItem('quiztool_trusted_devices') || '[]'); } catch(e) { return []; }
+        try { return JSON.parse(localStorage.getItem('osler_trusted_devices') || '[]'); } catch(e) { return []; }
     },
     _addTrustedDevice: function(deviceId, deviceName) {
         var trusted = this._getTrustedDevices();
         if (!trusted.find(function(d) { return d.id === deviceId; })) {
             trusted.push({ id: deviceId, name: deviceName, trustedAt: Date.now() });
-            this._safeSetItem('quiztool_trusted_devices', JSON.stringify(trusted));
+            this._safeSetItem('osler_trusted_devices', JSON.stringify(trusted));
         }
     },
     _removeTrustedDevice: function(deviceId) {
         var trusted = this._getTrustedDevices().filter(function(d) { return d.id !== deviceId; });
-        this._safeSetItem('quiztool_trusted_devices', JSON.stringify(trusted));
+        this._safeSetItem('osler_trusted_devices', JSON.stringify(trusted));
     },
     _isTrustedDevice: function(deviceId) {
         return this._getTrustedDevices().some(function(d) { return d.id === deviceId; });
@@ -799,19 +799,19 @@ var SyncEngine = {
     webrtc: {
         deviceId: (function() {
             try {
-                var id = localStorage.getItem('quiztool-sync-device-id');
-                if (!id) { id = Math.random().toString(36).substr(2, 6).toUpperCase(); localStorage.setItem('quiztool-sync-device-id', id); }
+                var id = localStorage.getItem('osler-sync-device-id');
+                if (!id) { id = Math.random().toString(36).substr(2, 6).toUpperCase(); localStorage.setItem('osler-sync-device-id', id); }
                 return id;
             } catch(e) { return Math.random().toString(36).substr(2, 6).toUpperCase(); }
         })(),
         deviceName: (function() {
             try {
-                var name = localStorage.getItem('quiztool-sync-device-name');
+                var name = localStorage.getItem('osler-sync-device-name');
                 if (!name) {
                     var adj = ['Red','Blue','Gold','Swift','Calm','Bold','Wise','Keen'];
                     var noun = ['Owl','Fox','Bear','Wolf','Hawk','Lion','Stag','Lynx'];
                     name = adj[Math.floor(Math.random()*adj.length)] + ' ' + noun[Math.floor(Math.random()*noun.length)];
-                    localStorage.setItem('quiztool-sync-device-name', name);
+                    localStorage.setItem('osler-sync-device-name', name);
                 }
                 return name;
             } catch(e) { return 'Device'; }
@@ -827,11 +827,11 @@ var SyncEngine = {
         _reassembly: {},
         _iceQueue: {},
         _relayUsedFor: {},
-        pullOnly: (function() { try { return localStorage.getItem('quiztool_sync_pull_only') === 'true'; } catch(e) { return false; } })(),
+        pullOnly: (function() { try { return localStorage.getItem('osler_sync_pull_only') === 'true'; } catch(e) { return false; } })(),
 
         setPullOnly: function(val) {
             this.pullOnly = val;
-            SyncEngine._safeSetItem('quiztool_sync_pull_only', val ? 'true' : 'false');
+            SyncEngine._safeSetItem('osler_sync_pull_only', val ? 'true' : 'false');
             var toggle = document.getElementById('sync-pull-only-toggle');
             if (toggle) toggle.checked = val;
             SyncEngine.ui.updateDeviceList();
@@ -856,7 +856,7 @@ var SyncEngine = {
             this._discovering = true;
             SyncEngine.ui.setStatus('Initializing discovery...');
             this._getPublicIP((ip) => {
-                this._hashString('quiztool-v2-' + ip).then((hash) => {
+                this._hashString('osler-v2-' + ip).then((hash) => {
                     this.roomHash = hash.substring(0, 8).toUpperCase();
                     SyncEngine.ui.setRoomId(this.roomHash);
                     this._connectMQTT();
@@ -932,7 +932,7 @@ var SyncEngine = {
             this.mqttClient.connect({
                 useSSL: true, timeout: 5, keepAliveInterval: 30,
                 onSuccess: function() {
-                    self.mqttClient.subscribe('quiztool/sync/v2/' + self.roomHash + '/#');
+                    self.mqttClient.subscribe('osler/sync/v2/' + self.roomHash + '/#');
                     self._discovering = false;
                     self.broadcastPresence();
                     self._startHeartbeat();
@@ -956,7 +956,7 @@ var SyncEngine = {
                 var PahoMsg = this._getPahoMsg();
                 if (!PahoMsg) return;
                 var msg = new PahoMsg(JSON.stringify({ type: 'presence', id: this.deviceId, name: this.deviceName, pullOnly: this.pullOnly }));
-                msg.destinationName = 'quiztool/sync/v2/' + this.roomHash + '/presence/' + this.deviceId;
+                msg.destinationName = 'osler/sync/v2/' + this.roomHash + '/presence/' + this.deviceId;
                 this.mqttClient.send(msg);
             } catch(e) { console.warn('Presence broadcast failed:', e); }
         },
@@ -1135,7 +1135,7 @@ var SyncEngine = {
                 var PahoMsg = this._getPahoMsg();
                 if (!PahoMsg) return;
                 var msg = new PahoMsg(JSON.stringify(Object.assign({ type: 'signal', from: this.deviceId, target: targetId }, data)));
-                msg.destinationName = 'quiztool/sync/v2/' + this.roomHash + '/signal/' + targetId;
+                msg.destinationName = 'osler/sync/v2/' + this.roomHash + '/signal/' + targetId;
                 this.mqttClient.send(msg);
             } catch(e) { console.error('Signal send failed:', e); }
         },
@@ -1158,7 +1158,7 @@ var SyncEngine = {
                 var msg = new PahoMsg(JSON.stringify({
                     type: 'relay', sender: this.deviceId, target: targetId, data: data, isResponse: !!isResponse
                 }));
-                msg.destinationName = 'quiztool/sync/v2/' + this.roomHash + '/relay/' + targetId;
+                msg.destinationName = 'osler/sync/v2/' + this.roomHash + '/relay/' + targetId;
                 this.mqttClient.send(msg);
                 if (!isResponse) SyncEngine.ui.setStatus('Sync sent via Relay!', true);
             } catch(e) { console.error('Relay failed:', e); }
@@ -1598,10 +1598,10 @@ var SyncEngine = {
             return subjects;
         },
         _getSavedScope: function() {
-            try { return JSON.parse(localStorage.getItem('quiztool_sync_scope') || '{}'); } catch(e) { return {}; }
+            try { return JSON.parse(localStorage.getItem('osler_sync_scope') || '{}'); } catch(e) { return {}; }
         },
         _saveScope: function(scope) {
-            try { localStorage.setItem('quiztool_sync_scope', JSON.stringify(scope)); } catch(e) {}
+            try { localStorage.setItem('osler_sync_scope', JSON.stringify(scope)); } catch(e) {}
         },
 
         openScopeModal: function() {
@@ -1825,7 +1825,7 @@ var SyncEngine = {
                                 var PahoMsg = SyncEngine.webrtc._getPahoMsg();
                                 if (PahoMsg) {
                                     var ack = new PahoMsg(JSON.stringify({ type: 'qtp-ack', idx: String(parsed.seq), total: String(parsed.total), target: 'all' }));
-                                    ack.destinationName = 'quiztool/sync/v2/' + SyncEngine.webrtc.roomHash + '/signal/all';
+                                    ack.destinationName = 'osler/sync/v2/' + SyncEngine.webrtc.roomHash + '/signal/all';
                                     SyncEngine.webrtc.mqttClient.send(ack);
                                 }
                             } catch(e) {}

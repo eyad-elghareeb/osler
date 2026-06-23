@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-QuizTool PDF Generator — Premium Impeccable-Grade Design.
+Osler PDF Generator — Premium Impeccable-Grade Design.
 
 Design principles:
   · No side-stripe borders (ABSOLUTE BAN) — full hairline outline or bg tint only
@@ -1527,7 +1527,7 @@ def generate_pdf(config_path, output_path):
         topMargin    = layout["mt"],
         bottomMargin = layout["mb"],
         title    = title,
-        author   = cover_cfg.get("author", "QuizTool"),
+        author   = cover_cfg.get("author", "Osler"),
         subject  = cover_cfg.get("subtitle", "Quiz PDF"),
     )
     doc._header_title = title[:55]

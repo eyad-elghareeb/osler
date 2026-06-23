@@ -371,7 +371,7 @@ pub fn create_index_html(folder_rel: &str, title: &str, description: &str) -> St
       <p>{hero_description}</p>
     </header>
     <div class="quiz-grid" id="quiz-grid"></div>
-    <div class="footer-note">Made By: <a href="https://github.com/eyad-elghareeb/QuizTool">QuizTool</a></div>
+    <div class="footer-note">Made By: <a href="https://github.com/eyad-elghareeb/osler">Osler</a></div>
   </div>
 
 <script src="{prefix}index-engine.js"></script>

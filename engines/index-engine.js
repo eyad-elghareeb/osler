@@ -484,7 +484,7 @@
   /* ── Extract a clean folder display name from a full HTML <title> ── */
   function cleanTitle(raw) {
     if (!raw) return '';
-    // Strip common prefixes like "QuizTool - ", "MU61 Quiz - ", "Quiz Site - ", etc.
+    // Strip common prefixes like "Osler - ", "MU61 Quiz - ", "Quiz Site - ", etc.
     return raw.replace(/^(?:QuizTool|MU61\s+Quiz|Mansoura\s+MCQ|Quiz\s+Site)\s*[-–—]\s*/i, '').trim();
   }
   window.cleanTitle = cleanTitle;

@@ -2162,7 +2162,7 @@
           '<div class="field-box">' +
             '<label class="field-label" for="osce-key-input">Gemini API Key</label>' +
             '<div class="api-row"><input id="osce-key-input" type="password" autocomplete="off" placeholder="Enter your Gemini API key"></div>' +
-            '<div class="field-note">Get a free key at <a href="https://aistudio.google.com/apikey" target="_blank">AI Studio</a>. Shared with all QuizTool engines.</div>' +
+            '<div class="field-note">Get a free key at <a href="https://aistudio.google.com/apikey" target="_blank">AI Studio</a>.    Shared with all Osler engines.</div>' +
             '<div class="btn-row"><button class="btn btn-primary" id="osce-key-save">Save</button><button class="btn btn-secondary" id="osce-key-clear">Clear</button><button class="btn btn-secondary" id="osce-key-test">Test</button></div>' +
             '<div id="settings-status"></div>' +
           '</div>' +

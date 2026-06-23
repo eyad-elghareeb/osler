@@ -1,8 +1,8 @@
 [package]
-name = "quiztool-admin"
+name = "osler-admin"
 version = "5.1.0"
-description = "QuizTool Admin Dashboard — Native Tauri v2 desktop app (no Python required)"
-authors = ["QuizTool"]
+description = "Osler Admin Dashboard — Native Tauri v2 desktop app (no Python required)"
+authors = ["Osler"]
 edition = "2021"
 
 [build-dependencies]

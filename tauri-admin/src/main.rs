@@ -86,7 +86,7 @@ fn canonicalize_path(p: PathBuf) -> PathBuf {
     }
 }
 
-// ── URI scheme: quiztool-admin:// → serves the SPA ───────────────────────────
+// ── URI scheme: osler-admin:// → serves the SPA ───────────────────────────
 fn handle_admin_request(req: Request<Vec<u8>>, port: u16) -> Response<Vec<u8>> {
     let uri = req.uri().to_string();
     if uri.contains("/admin/pdf-exporter") {
@@ -112,9 +112,9 @@ fn handle_admin_request(req: Request<Vec<u8>>, port: u16) -> Response<Vec<u8>> {
 
 fn start_file_watcher(app_handle: tauri::AppHandle, root: PathBuf) {
     std::thread::Builder::new()
-        .name("quiztool-watcher".into())
+        .name("osler-watcher".into())
         .spawn(move || {
-            let skip_dirs = [".git", "node_modules", "target", "__pycache__", ".quiztool", "tauri-admin", "tauri", "gen"];
+            let skip_dirs = [".git", "node_modules", "target", "__pycache__", ".osler", "tauri-admin", "tauri", "gen"];
 
             let (tx, rx) = std::sync::mpsc::channel();
             let mut watcher = match notify::recommended_watcher(move |res| {
@@ -177,7 +177,7 @@ fn main() {
     tauri::Builder::default()
         .manage(ProjectRoot(Mutex::new(project_root.clone())))
         .manage(server)
-        .register_uri_scheme_protocol("quiztool-admin", move |_app, req| {
+        .register_uri_scheme_protocol("osler-admin", move |_app, req| {
             handle_admin_request(req, port)
         })
         .setup(move |app| {
@@ -216,5 +216,5 @@ fn main() {
             commands::check_pdf_deps,
         ])
         .run(tauri::generate_context!())
-        .expect("error while running QuizTool Admin");
+        .expect("error while running Osler Admin");
 }

@@ -1,5 +1,5 @@
 /* ================================================================
-   engine-shared.js  —  Shared utilities for all QuizTool engines.
+   engine-shared.js  —  Shared utilities for all Osler engines.
    Load this BEFORE the individual engine file.
    Auto-detects its own base URL so it works at any folder depth.
    ================================================================ */

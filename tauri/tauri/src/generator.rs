@@ -1,4 +1,4 @@
-// QuizTool — Project ZIP Generator (pure Rust, ported from generate_project.py)
+// Osler — Project ZIP Generator (pure Rust, ported from generate_project.py)
 // =============================================================================
 // Builds a full quiz project ZIP with engines, hub pages, SW, workflows, etc.
 // All engine files are embedded at compile time via the `engines` module.
@@ -530,15 +530,15 @@ pub fn build_project_zip(config: &ProjectConfig) -> Result<Vec<u8>, String> {
 
     // Native Admin App — bundled so users can launch tauri-admin from their project
     let admin_filename = if cfg!(target_os = "windows") {
-        "QuizTool-Admin.exe"
+        "Osler-Admin.exe"
     } else if cfg!(target_os = "macos") {
-        "QuizTool-Admin.dmg"
+        "Osler-Admin.dmg"
     } else if cfg!(target_os = "linux") {
-        "QuizTool-Admin.AppImage"
+        "Osler-Admin.AppImage"
     } else {
-        "QuizTool-Admin"
+        "Osler-Admin"
     };
-    add_bytes(&mut zip, admin_filename, engines::QUIZTOOL_ADMIN_BINARY)?;
+    add_bytes(&mut zip, admin_filename, engines::OSLER_ADMIN_BINARY)?;
 
     // Service worker with all paths
     let sw_content = generate_sw_js(project_name, &all_file_paths);

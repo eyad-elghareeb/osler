@@ -1,4 +1,4 @@
-// QuizTool — Embeds core engine files as Rust constants.
+// Osler — Embeds core engine files as Rust constants.
 // These are bundled into the binary at compile time and written into
 // generated project ZIPs. No external files needed at runtime.
 
@@ -23,9 +23,9 @@ pub const FAVICON_SVG: &str = r##"<svg xmlns="http://www.w3.org/2000/svg" viewBo
   <rect x="32" y="44" width="36" height="12" rx="2" fill="#f0a500"/>
 </svg>"##;
 
-pub const FOOTER_NOTE: &str = "Made By: <a href=\"https://github.com/eyad-elghareeb/QuizTool\" target=\"_blank\" rel=\"noopener noreferrer\">QuizTool</a>";
+pub const FOOTER_NOTE: &str = "Made By: <a href=\"https://github.com/eyad-elghareeb/osler\" target=\"_blank\" rel=\"noopener noreferrer\">Osler</a>";
 
-pub const GITIGNORE_CONTENT: &str = "# Compiled and build artifacts\n*.pyc\n__pycache__/\n*.o\n*.obj\n*.class\n*.exe\n*.dll\n*.so\n*.a\n*.out\n\nnode_modules/\nvenv/\n.venv/\n.env\n.env.local\n.env.*\n\n*.log\n*.tmp\n*.swp\n*.swo\n\n.vscode/\n.idea/\n\n.DS_Store\nThumbs.db\n\ncoverage/\nhtmlcov/\n.coverage\n\ndist/\nbuild/\ntarget/\n.gradle/\n\n.mypy_cache/\n.pytest_cache/\n\n*.zip\n*.gz\n*.tar\n*.tgz\n*.bz2\n*.xz\n*.7z\n*.rar\n\n.quiztool/\n.qwen/\n";
+pub const GITIGNORE_CONTENT: &str = "# Compiled and build artifacts\n*.pyc\n__pycache__/\n*.o\n*.obj\n*.class\n*.exe\n*.dll\n*.so\n*.a\n*.out\n\nnode_modules/\nvenv/\n.venv/\n.env\n.env.local\n.env.*\n\n*.log\n*.tmp\n*.swp\n*.swo\n\n.vscode/\n.idea/\n\n.DS_Store\nThumbs.db\n\ncoverage/\nhtmlcov/\n.coverage\n\ndist/\nbuild/\ntarget/\n.gradle/\n\n.mypy_cache/\n.pytest_cache/\n\n*.zip\n*.gz\n*.tar\n*.tgz\n*.bz2\n*.xz\n*.7z\n*.rar\n\n.osler/\n.qwen/\n";
 
 pub const NETLIFY_TOML: &str = "[build]\n  publish = \".\"\n  command = \"\"\n\n[[headers]]\n  for = \"/sw.js\"\n  [headers.values]\n    Cache-Control = \"no-cache\"\n\n[[headers]]\n  for = \"/manifest.webmanifest\"\n  [headers.values]\n    Content-Type = \"application/manifest+json\"\n";
 
@@ -151,16 +151,16 @@ pub const STANDARDIZE_SCRIPT: &str = include_str!("../../scripts/standardize_qui
 // Platform-specific Tauri admin binary bundled into generated project ZIPs
 // so users can launch the native admin dashboard from their project folder.
 #[cfg(target_os = "windows")]
-pub const QUIZTOOL_ADMIN_BINARY: &[u8] = include_bytes!("../../tauri-admin/target/release/quiztool-admin.exe");
+pub const OSLER_ADMIN_BINARY: &[u8] = include_bytes!("../../tauri-admin/target/release/osler-admin.exe");
 
 #[cfg(target_os = "macos")]
-pub const QUIZTOOL_ADMIN_BINARY: &[u8] = include_bytes!("../../tauri-admin/target/release/quiztool-admin.dmg");
+pub const OSLER_ADMIN_BINARY: &[u8] = include_bytes!("../../tauri-admin/target/release/osler-admin.dmg");
 
 #[cfg(target_os = "linux")]
-pub const QUIZTOOL_ADMIN_BINARY: &[u8] = include_bytes!("../../tauri-admin/target/release/quiztool-admin.AppImage");
+pub const OSLER_ADMIN_BINARY: &[u8] = include_bytes!("../../tauri-admin/target/release/osler-admin.AppImage");
 
 #[cfg(not(any(target_os = "windows", target_os = "macos", target_os = "linux")))]
-pub const QUIZTOOL_ADMIN_BINARY: &[u8] = &[];
+pub const OSLER_ADMIN_BINARY: &[u8] = &[];
 
 // Frontend HTML embedded at compile time — extracted to disk at startup
 // so Tauri can find it relative to the executable.

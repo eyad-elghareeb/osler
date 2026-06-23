@@ -1,4 +1,4 @@
-// QuizTool — HTTP API helpers for GitHub, Netlify, and Vercel
+// Osler — HTTP API helpers for GitHub, Netlify, and Vercel
 // =============================================================
 // Uses ureq for synchronous HTTPS requests. No async runtime needed.
 // Ported from generate_project.py's _gh_request, _netlify_request, _vercel_request
@@ -17,7 +17,7 @@ fn make_request(method: &str, url: &str, token: Option<&str>, body: Option<&[u8]
         .build();
 
     let mut req = agent.request(method, url)
-        .set("User-Agent", "QuizTool-Generator");
+        .set("User-Agent", "Osler-Generator");
 
     if let Some(tok) = token {
         req = req.set("Authorization", &format!("Bearer {}", tok));
@@ -70,7 +70,7 @@ pub fn gh_request(method: &str, path: &str, token: &str, json_data: Option<&Valu
         .request(method, &url)
         .set("Authorization", &format!("token {}", token))
         .set("Accept", "application/vnd.github+json")
-        .set("User-Agent", "QuizTool-Generator")
+        .set("User-Agent", "Osler-Generator")
         .set("X-GitHub-Api-Version", "2022-11-28");
 
     if let Some(jd) = json_data {
@@ -128,7 +128,7 @@ pub fn github_verify(token: &str) -> GithubUserInfo {
     let resp = match agent.get("https://api.github.com/user")
         .set("Authorization", &format!("token {}", token))
         .set("Accept", "application/vnd.github+json")
-        .set("User-Agent", "QuizTool-Generator")
+        .set("User-Agent", "Osler-Generator")
         .set("X-GitHub-Api-Version", "2022-11-28")
         .call()
     {
@@ -210,7 +210,7 @@ pub fn github_publish(token: &str, config_json: &Value, visibility: &str) -> Res
     // Create repository
     let create_body = serde_json::json!({
         "name": repo_name,
-        "description": format!("{} — Quiz Site powered by QuizTool", project_name),
+        "description": format!("{} — Quiz Site powered by Osler", project_name),
         "private": visibility == "private",
         "auto_init": false
     });
@@ -264,7 +264,7 @@ pub fn github_publish(token: &str, config_json: &Value, visibility: &str) -> Res
     }
 
     // Write deploy metadata
-    let deploy_dir = temp_dir.join(".quiztool");
+    let deploy_dir = temp_dir.join(".osler");
     std::fs::create_dir_all(&deploy_dir).ok();
     let deploy_meta = serde_json::json!({
         "provider": "github",
@@ -285,7 +285,7 @@ pub fn github_publish(token: &str, config_json: &Value, visibility: &str) -> Res
     run_git(&temp_dir, &["config", "user.name", &username], &git_env)?;
     run_git(&temp_dir, &["config", "user.email", &format!("{}@users.noreply.github.com", username)], &git_env)?;
     run_git(&temp_dir, &["add", "-A"], &git_env)?;
-    run_git(&temp_dir, &["commit", "-m", "Initial commit from QuizTool Generator"], &git_env)?;
+    run_git(&temp_dir, &["commit", "-m", "Initial commit from Osler Generator"], &git_env)?;
     run_git(&temp_dir, &["branch", "-M", "main"], &git_env)?;
 
     let remote_url = format!("https://{}@github.com/{}/{}.git", username, username, repo_name);
@@ -564,7 +564,7 @@ pub fn netlify_publish(token: &str, config_json: &Value) -> Result<Value, String
         .unwrap_or_else(|| format!("https://app.netlify.com/sites/{}/overview", site_name));
 
     // Write deploy metadata
-    let deploy_dir = temp_dir.join(".quiztool");
+    let deploy_dir = temp_dir.join(".osler");
     std::fs::create_dir_all(&deploy_dir).ok();
     let deploy_meta = serde_json::json!({
         "provider": "netlify",
@@ -654,7 +654,7 @@ pub fn vercel_publish(token: &str, config_json: &Value) -> Result<Value, String>
             "installCommand": null,
             "outputDirectory": null
         },
-        "meta": { "source": "quiztool-generator" }
+        "meta": { "source": "osler-generator" }
     });
 
     let (deploy_status, deploy_data) = make_json_request(
@@ -702,7 +702,7 @@ pub fn vercel_publish(token: &str, config_json: &Value) -> Result<Value, String>
     let provider_url = deploy_data.get("inspectorUrl").and_then(|v| v.as_str()).unwrap_or(&live_url).to_string();
 
     // Write deploy metadata
-    let deploy_dir = temp_dir.join(".quiztool");
+    let deploy_dir = temp_dir.join(".osler");
     std::fs::create_dir_all(&deploy_dir).ok();
     let deploy_meta = serde_json::json!({
         "provider": "vercel",

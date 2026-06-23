@@ -20,7 +20,7 @@ const EMBED_PDF_GENERATOR: &str = include_str!("../../scripts/pdf_generator.py")
 const EMBED_ENSURE_DEPS: &str    = include_str!("../../scripts/ensure_pdf_deps.py");
 
 fn scripts_dir() -> PathBuf {
-    std::env::temp_dir().join("quiztool-pdf-scripts")
+    std::env::temp_dir().join("osler-pdf-scripts")
 }
 
 fn extract_script(name: &str, content: &str) -> Result<PathBuf, String> {
@@ -278,7 +278,7 @@ pub fn generate_pdf(config: &ExportConfig) -> Result<Vec<u8>, String> {
     let script_path = extract_script("pdf_generator.py", EMBED_PDF_GENERATOR)?;
 
     // Temp dir for config and output
-    let work_dir = std::env::temp_dir().join("quiztool-pdf");
+    let work_dir = std::env::temp_dir().join("osler-pdf");
     std::fs::create_dir_all(&work_dir)
         .map_err(|e| format!("Failed to create temp dir: {e}"))?;
 

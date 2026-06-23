@@ -7,7 +7,7 @@ fn main() {
     let out_dir = env::var("OUT_DIR").unwrap();
     
     let project_dir = PathBuf::from(manifest_dir);
-    let quiztool_root = project_dir.parent().unwrap();
+    let osler_root = project_dir.parent().unwrap();
     let dest_dir = PathBuf::from(out_dir).join("engines");
 
     fs::create_dir_all(&dest_dir).unwrap();
@@ -28,7 +28,7 @@ fn main() {
     ];
 
     for file in &engine_files {
-        let src = quiztool_root.join("engines").join(file);
+        let src = osler_root.join("engines").join(file);
         let dest = dest_dir.join(file);
         if src.exists() {
             fs::copy(&src, &dest).unwrap_or_else(|_| panic!("Failed to copy {}", file));
@@ -48,9 +48,9 @@ fn main() {
         let src = if *file == "pdf-exporter.html" {
             project_dir.join("frontend/pdf-exporter.html")
         } else if *file == "index-engine.css" {
-            quiztool_root.join("engines").join(file)
+            osler_root.join("engines").join(file)
         } else {
-            quiztool_root.join(file)
+            osler_root.join(file)
         };
         let dest = dest_dir.join(file);
         if src.exists() {

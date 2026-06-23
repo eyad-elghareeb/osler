@@ -1,23 +1,23 @@
 {
   "$schema": "https://raw.githubusercontent.com/tauri-apps/tauri/dev/crates/tauri-cli/config.schema.json",
-  "productName": "QuizTool Admin",
+  "productName": "Osler Admin",
   "version": "5.1.0",
-  "identifier": "com.quiztool.admin",
+  "identifier": "com.osler.admin",
   "build": {
     "beforeBuildCommand": "",
     "beforeDevCommand": "",
-    "devUrl": "quiztool-admin://localhost/",
+    "devUrl": "osler-admin://localhost/",
     "frontendDist": "frontend"
   },
   "app": {
     "withGlobalTauri": true,
     "security": {
-      "csp": "default-src 'self' quiztool-admin: 'unsafe-inline' 'unsafe-eval'; connect-src *; img-src 'self' http://127.0.0.1:* data: blob: https:; font-src 'self' data: https://fonts.gstatic.com https://fonts.googleapis.com; frame-src http://127.0.0.1:* 'self'"
+      "csp": "default-src 'self' osler-admin: 'unsafe-inline' 'unsafe-eval'; connect-src *; img-src 'self' http://127.0.0.1:* data: blob: https:; font-src 'self' data: https://fonts.gstatic.com https://fonts.googleapis.com; frame-src http://127.0.0.1:* 'self'"
     },
     "windows": [
       {
-        "title": "QuizTool Admin Dashboard",
-        "url": "quiztool-admin://localhost/",
+        "title": "Osler Admin Dashboard",
+        "url": "osler-admin://localhost/",
         "width": 1400,
         "height": 900,
         "minWidth": 900,

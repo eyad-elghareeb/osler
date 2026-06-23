@@ -37,7 +37,7 @@ fn root(state: &State<ProjectRoot>) -> PathBuf {
     state.0.lock().unwrap().clone()
 }
 
-const SKIP_DIRS: &[&str] = &["node_modules", "target", "__pycache__", ".git", ".quiztool", "tauri-admin", "tauri", "gen"];
+const SKIP_DIRS: &[&str] = &["node_modules", "target", "__pycache__", ".git", ".osler", "tauri-admin", "tauri", "gen"];
 
 fn should_skip(name: &str) -> bool {
     SKIP_DIRS.contains(&name) || name.starts_with('.')
@@ -712,8 +712,8 @@ pub fn open_in_browser(url: String, _state: State<ProjectRoot>, server: State<Qu
         url
     } else {
         // Convert to local server URL
-        let rel = if url.starts_with("quiztool-preview://localhost/") {
-            url.trim_start_matches("quiztool-preview://localhost/").split('?').next().unwrap_or("")
+        let rel = if url.starts_with("osler-preview://localhost/") {
+            url.trim_start_matches("osler-preview://localhost/").split('?').next().unwrap_or("")
         } else if url.starts_with("http://127.0.0.1") {
             // Already a server URL
             return open::that(url).map_err(|e| e.to_string());
@@ -729,7 +729,7 @@ pub fn open_in_browser(url: String, _state: State<ProjectRoot>, server: State<Qu
 #[tauri::command]
 pub fn read_saved_token(provider: String, state: State<ProjectRoot>) -> Option<String> {
     let root = root(&state);
-    let path = root.join(".quiztool").join("tokens.json");
+    let path = root.join(".osler").join("tokens.json");
     let text = std::fs::read_to_string(&path).ok()?;
     let map: serde_json::Map<String, Value> = serde_json::from_str(&text).ok()?;
     map.get(&provider).and_then(|v| v.as_str()).map(|s| s.to_string())
@@ -903,15 +903,15 @@ fn extract_questions_from_value(val: &Value) -> Option<Vec<Value>> {
 #[tauri::command]
 pub fn save_token(provider: String, token: String, state: State<ProjectRoot>) -> Result<(), String> {
     let root = root(&state);
-    let dir = root.join(".quiztool");
+    let dir = root.join(".osler");
     std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
-    // Ensure .quiztool/ is gitignored
+    // Ensure .osler/ is gitignored
     {
         let gi = root.join(".gitignore");
         let content = std::fs::read_to_string(&gi).unwrap_or_default();
-        if !content.lines().any(|l| l == ".quiztool/") {
+        if !content.lines().any(|l| l == ".osler/") {
             let suffix = if content.ends_with('\n') { "" } else { "\n" };
-            let _ = std::fs::write(&gi, format!("{}{}.quiztool/\n", content, suffix));
+            let _ = std::fs::write(&gi, format!("{}{}.osler/\n", content, suffix));
         }
     }
     let path = dir.join("tokens.json");

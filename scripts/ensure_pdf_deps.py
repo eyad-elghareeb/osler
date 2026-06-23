@@ -1,4 +1,4 @@
-"""QuizTool PDF Dependencies — first-run check & install.
+"""Osler PDF Dependencies — first-run check & install.
 
 Usage:
     python ensure_pdf_deps.py

@@ -13,7 +13,7 @@ const CREATE_NO_WINDOW: u32 = 0x08000000;
 // ── Deploy metadata ───────────────────────────────────────────────────────────
 
 fn deploy_dir(project_root: &Path) -> PathBuf {
-    project_root.join(".quiztool")
+    project_root.join(".osler")
 }
 
 fn deploy_meta_path(project_root: &Path) -> PathBuf {
@@ -29,8 +29,8 @@ pub fn read_deploy_metadata(project_root: &Path) -> Option<Value> {
 pub fn write_deploy_metadata(project_root: &Path, meta: &Value) {
     let dir = deploy_dir(project_root);
     let _ = std::fs::create_dir_all(&dir);
-    // ensure .quiztool/ is in .gitignore
-    ensure_gitignore_entry(project_root, ".quiztool/");
+    // ensure .osler/ is in .gitignore
+    ensure_gitignore_entry(project_root, ".osler/");
     if let Ok(s) = serde_json::to_string_pretty(meta) {
         let _ = std::fs::write(deploy_meta_path(project_root), s);
     }
@@ -92,7 +92,7 @@ fn http_request(
         .timeout_read(std::time::Duration::from_secs(timeout + 30))
         .build();
 
-    let mut req = agent.request(method, url).set("User-Agent", "QuizTool-Admin");
+    let mut req = agent.request(method, url).set("User-Agent", "Osler-Admin");
     if let Some(tok) = token {
         req = req.set("Authorization", &format!("{} {}", token_prefix, tok));
     }
@@ -133,7 +133,7 @@ fn gh(method: &str, path: &str, token: &str, body: Option<&Value>) -> Result<(u1
         .request(method, &format!("https://api.github.com{}", path))
         .set("Authorization", &format!("token {}", token))
         .set("Accept", "application/vnd.github+json")
-        .set("User-Agent", "QuizTool-Admin")
+        .set("User-Agent", "Osler-Admin")
         .set("X-GitHub-Api-Version", "2022-11-28");
 
     let result = if let Some(b) = body {
@@ -245,7 +245,7 @@ pub fn deploy_to_github(project_root: &Path, metadata: &Value, token: &str, comm
     let repo = github.get("repo").and_then(|v| v.as_str()).ok_or("Missing GitHub repo")?;
     let branch = github.get("branch").and_then(|v| v.as_str()).unwrap_or("main");
 
-    ensure_gitignore_entry(project_root, ".quiztool/");
+    ensure_gitignore_entry(project_root, ".osler/");
 
     // Pull
     let (pc, _, pe) = run_git_cwd(&["pull", "--rebase", "--autostash"], project_root);
@@ -267,7 +267,7 @@ pub fn deploy_to_github(project_root: &Path, metadata: &Value, token: &str, comm
     let _ = run_git_cwd(&["remote", "set-url", "origin", &remote_url], project_root);
 
     // Push with GIT_ASKPASS
-    let tmp_dir = std::env::temp_dir().join("quiztool-admin-askpass");
+    let tmp_dir = std::env::temp_dir().join("osler-admin-askpass");
     let _ = std::fs::create_dir_all(&tmp_dir);
     let askpass = tmp_dir.join("askpass.bat");
     let _ = std::fs::write(&askpass,
@@ -412,7 +412,7 @@ pub fn deploy_to_vercel(project_root: &Path, metadata: &mut Value, token: &str) 
         "target": "production",
         "files": files,
         "projectSettings": { "framework": null, "buildCommand": null, "devCommand": null, "installCommand": null, "outputDirectory": null },
-        "meta": { "source": "quiztool-admin-dashboard" }
+        "meta": { "source": "osler-admin-dashboard" }
     });
 
     let (status, deploy_data) = http_request(

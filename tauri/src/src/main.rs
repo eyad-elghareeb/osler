@@ -1,4 +1,4 @@
-// QuizTool Generator — Fully Standalone Tauri v2 Desktop App
+// Osler Generator — Fully Standalone Tauri v2 Desktop App
 // ============================================================
 // All generator logic is embedded in Rust. No Python, no Flask,
 // no sidecar, no external process dependencies. This single EXE
@@ -6,7 +6,7 @@
 // GitHub/Netlify/Vercel APIs directly.
 //
 // Build: cargo build --release (from tauri/ directory)
-// Output: tauri/target/release/quiztool-tauri.exe
+// Output: tauri/target/release/osler-tauri.exe
 
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
@@ -91,7 +91,7 @@ fn download_local(
     };
     let safe_name = api_helpers::safe_project_slug(&project_name);
 
-    // Persist to sibling directory of QuizTool root, not temp dir
+    // Persist to sibling directory of Osler root, not temp dir
     let exe_dir = std::env::current_exe()
         .ok()
         .and_then(|p| p.parent().map(|d| d.to_path_buf()))
@@ -142,7 +142,7 @@ fn get_last_project_dir(state: tauri::State<AppState>) -> Option<String> {
 
 fn main() {
     tauri::Builder::default()
-        .register_uri_scheme_protocol("quiztool", move |_app, request| {
+        .register_uri_scheme_protocol("osler", move |_app, request| {
             let path = request.uri().path().trim_start_matches('/');
             if path.is_empty() || path == "index.html" {
                 tauri::http::Response::builder()
@@ -172,5 +172,5 @@ fn main() {
             get_last_project_dir,
         ])
         .run(tauri::generate_context!())
-        .expect("Failed to run QuizTool application");
+        .expect("Failed to run Osler application");
 }

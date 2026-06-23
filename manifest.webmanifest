@@ -1,7 +1,7 @@
 {
-  "name": "QuizTool",
-  "short_name": "QuizTool",
-  "description": "Interactive quiz authoring toolkit and project generator.",
+  "name": "Osler",
+  "short_name": "Osler",
+  "description": "Medical study platform — offline-first PWA.",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
