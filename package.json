@@ -10,6 +10,7 @@
     "test:watch": "vitest",
     "test:e2e": "playwright test",
     "validate": "node scripts/validate-content.js",
+    "validate-schemas": "node scripts/validate-schemas.js",
     "check": "npm run build && npm test && npm run validate",
     "export-schemas": "node scripts/export-schemas.js"
   },
