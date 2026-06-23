@@ -182,6 +182,31 @@
   }
 
   /* ── Parameterized saveTrackerData ── */
+  function getOslerUid(cfg) {
+    return cfg.uid || location.pathname;
+  }
+
+  function persistToIndexedDB(data) {
+    try {
+      import('../src/lib/storage.js').then(function(mod) {
+        mod.put('userContent', {
+          uid: 'tracker_' + data.uid,
+          type: 'tracker',
+          data: data,
+          updatedAt: new Date().toISOString()
+        }).catch(function() {});
+      }).catch(function() {});
+    } catch(e) {}
+  }
+
+  function removeFromIndexedDB(uid) {
+    try {
+      import('../src/lib/storage.js').then(function(mod) {
+        mod.deleteEntry('userContent', 'tracker_' + uid).catch(function() {});
+      }).catch(function() {});
+    } catch(e) {}
+  }
+
   function saveTrackerData(params) {
     try {
       var cfg = params.config || getConfig();
@@ -224,7 +249,8 @@
         if (isFlagged) flaggedQs.push(qData);
       });
 
-      var storageKey = getStorageKey(cfg.uid || location.pathname);
+      var uid = getOslerUid(cfg);
+      var storageKey = getStorageKey(uid);
       var existingRaw = localStorage.getItem(storageKey);
       var existingData = null;
       if (existingRaw) {
@@ -252,8 +278,9 @@
 
       if (!wrongQs.length && !flaggedQs.length) {
         localStorage.removeItem(storageKey);
+        removeFromIndexedDB(uid);
         var keysList = getSafeTrackerKeys();
-        localStorage.setItem(KEYS_LIST_KEY, JSON.stringify(keysList.filter(function(k) { return k !== (cfg.uid || location.pathname); })));
+        localStorage.setItem(KEYS_LIST_KEY, JSON.stringify(keysList.filter(function(k) { return k !== uid; })));
         updateDashboardBadge();
         return;
       }
@@ -261,7 +288,7 @@
       var folderPath = computeFolderPath();
 
       var data = {
-        uid:         cfg.uid || location.pathname,
+        uid:         uid,
         title:       cfg.title || document.title,
         timestamp:   Date.now(),
         totalQs:     typeof questionBank !== 'undefined' ? questionBank.length : (existingData ? Math.max(existingData.totalQs || 0, qs.length) : qs.length),
@@ -277,9 +304,10 @@
       function _persistTracker(folderTitle) {
         if (folderTitle) data.folderTitle = folderTitle;
         try {
-          localStorage.setItem(getStorageKey(data.uid), JSON.stringify(data));
+          localStorage.setItem(storageKey, JSON.stringify(data));
+          persistToIndexedDB(data);
           var keysList = getSafeTrackerKeys();
-          if (keysList.indexOf(data.uid) === -1) { keysList.push(data.uid); }
+          if (keysList.indexOf(uid) === -1) { keysList.push(uid); }
           localStorage.setItem(KEYS_LIST_KEY, JSON.stringify(keysList));
           updateDashboardBadge();
         } catch (e) {
