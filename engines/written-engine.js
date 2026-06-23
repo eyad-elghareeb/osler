@@ -1210,6 +1210,9 @@
     var photo = state.photoAnswers && state.photoAnswers[currentIndex] && state.photoAnswers[currentIndex].data;
     var hasContent = !!(answer || photo);
     state.answers[currentIndex] = answer;
+    if (window.OslerAnalytics) {
+      OslerAnalytics.trackAnswer('written', config.uid, currentIndex, hasContent ? 'submitted' : 'skipped');
+    }
     state.evaluations[currentIndex] = {
       score: null,
       passed: hasContent,
@@ -1267,6 +1270,9 @@
     }
 
     state.answers[currentIndex] = answer;
+    if (window.OslerAnalytics) {
+      OslerAnalytics.trackAnswer('written', config.uid, currentIndex, 'ai_submitted');
+    }
     _writeKey(apiKey);
     localStorage.setItem(STORAGE.model, $('#model-select').value);
 

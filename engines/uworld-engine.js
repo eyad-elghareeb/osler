@@ -3160,6 +3160,10 @@
     if (state.strikethrough[gIdx] && state.strikethrough[gIdx][optIdx]) return;
 
     state.answers[qIdx] = optIdx;
+    if (window.OslerAnalytics) {
+      var qi = SESSION_QUESTION_INDICES[qIdx];
+      OslerAnalytics.trackAnswer('uworld', BANK_CONFIG.uid, qIdx, optIdx === QUESTIONS[qi].correct ? 'correct' : 'incorrect');
+    }
     EngineShared.debounceSave(saveProgress);
 
     updateNavGrid(qIdx);

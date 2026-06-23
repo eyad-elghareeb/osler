@@ -1427,6 +1427,11 @@
   window.rateCard = function(rating) {
     var idx = state.current;
     state.ratings[idx] = rating;
+    if (window.OslerAnalytics) {
+      var card = SESSION_CARDS[idx];
+      var uid = card.id || card.uid || ('card_' + (card.idx || idx));
+      OslerAnalytics.trackAnswer('flashcard', BANK_CONFIG.uid, uid, rating);
+    }
 
     var progress = getBankProgress();
     var bankIdx = SESSION_CARD_INDICES[idx];

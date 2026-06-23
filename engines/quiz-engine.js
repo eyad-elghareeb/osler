@@ -1032,6 +1032,9 @@ function selectAnswer(qIdx, optIdx) {
   if (state.mode === 'learning' && state.answers[qIdx] !== undefined) return;
 
   state.answers[qIdx] = optIdx;
+  if (window.OslerAnalytics) {
+    OslerAnalytics.trackAnswer('quiz', QUIZ_CONFIG.uid, qIdx, optIdx === QUESTIONS[qIdx].correct ? 'correct' : 'incorrect');
+  }
   EngineShared.debounceSave(saveProgress); // persist answer immediately
 
   if (state.mode === 'learning') {

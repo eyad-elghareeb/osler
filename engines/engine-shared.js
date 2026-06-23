@@ -389,5 +389,15 @@
         getQuizProgress: m.getQuizProgress,
       };
     }).catch(function() {}),
+    import(_libBase + 'analytics.js').then(function(m) {
+      window.OslerAnalytics = {
+        track: m.track,
+        trackStudyStart: m.trackStudyStart,
+        trackAnswer: m.trackAnswer,
+        trackFlag: m.trackFlag,
+        trackComplete: m.trackComplete,
+        trackExport: m.trackExport,
+      };
+    }).catch(function() {}),
   ]);
 })();

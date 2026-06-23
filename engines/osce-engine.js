@@ -1910,6 +1910,9 @@
     _stopTimer(); _cancelPending(); _Voice.stopSpeaking(); _Voice.disable(); _showDebriefLoading();
     _abort = new AbortController();
     var scoreFn = _activeCase.type === 'data-interp' ? scoreDataInterpExam : scoreInterview;
+    if (window.OslerAnalytics) {
+      OslerAnalytics.trackAnswer('osce', (_data||{}).config.uid, _activeCaseIdx, 'submitted');
+    }
     scoreFn(_activeCase, _transcript, _abort.signal)
       .then(function (result) { _clearSession(); _showDebrief(result); })
       .catch(function (err) { _hideDebrief(); _setError('Examiner feedback failed: '+_friendlyAiError(err)); });
