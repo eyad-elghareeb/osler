@@ -3,18 +3,16 @@ import { vi } from 'vitest';
 
 const store = {};
 
+const lsmem = {};
+
 Object.defineProperty(globalThis, 'localStorage', {
   value: {
-    getItem: vi.fn(key => store[key] ?? null),
-    setItem: vi.fn((key, value) => {
-      store[key] = String(value);
-    }),
-    removeItem: vi.fn(key => {
-      delete store[key];
-    }),
-    clear: vi.fn(() => {
-      Object.keys(store).forEach(key => delete store[key]);
-    }),
+    get length() { return Object.keys(lsmem).length; },
+    key: vi.fn(i => Object.keys(lsmem)[i] ?? null),
+    getItem: vi.fn(key => lsmem[key] ?? null),
+    setItem: vi.fn((key, value) => { lsmem[key] = String(value); }),
+    removeItem: vi.fn(key => { delete lsmem[key]; }),
+    clear: vi.fn(() => { Object.keys(lsmem).forEach(k => delete lsmem[k]); }),
   },
   writable: true,
   configurable: true,
