@@ -9,6 +9,9 @@ const ENGINES_DIR = join(ROOT, 'engines');
 const DIST_DIR = join(ROOT, 'dist');
 const ASSETS_DIR = join(ROOT, 'assets');
 const SRC_CSS_DIR = join(ROOT, 'src', 'css');
+const SRC_LIB_DIR = join(ROOT, 'src', 'lib');
+const SRC_SCHEMAS_DIR = join(ROOT, 'src', 'schemas');
+const CONTENT_DIR = join(ROOT, 'content');
 
 if (!existsSync(DIST_DIR)) mkdirSync(DIST_DIR, { recursive: true });
 
@@ -91,7 +94,14 @@ async function runBuild() {
   const assetCount = copyDir(ASSETS_DIR, assetsDist);
   console.log(`Copied ${assetCount} asset files → dist/assets/`);
 
-  const rootFiles = ['manifest.webmanifest', 'sw.js'];
+  const libCount = copyDir(SRC_LIB_DIR, join(DIST_DIR, 'src', 'lib'), file => file.endsWith('.js'));
+  const schemaCount = copyDir(SRC_SCHEMAS_DIR, join(DIST_DIR, 'src', 'schemas'), file => file.endsWith('.json'));
+  const contentCount = copyDir(CONTENT_DIR, join(DIST_DIR, 'content'), file => file.endsWith('.json'));
+  console.log(`Copied ${libCount} lib files → dist/src/lib/`);
+  console.log(`Copied ${schemaCount} schema files → dist/src/schemas/`);
+  console.log(`Copied ${contentCount} content files → dist/content/`);
+
+  const rootFiles = ['manifest.webmanifest', 'sw.js', 'player.html'];
   for (const f of rootFiles) {
     const src = join(ROOT, f);
     const dst = join(DIST_DIR, f);
