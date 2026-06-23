@@ -94,6 +94,55 @@ async function idbClear(storeName) {
   });
 }
 
+export async function evictFromStore(storeName, filterFn) {
+  if (hasIndexedDB) {
+    return idbEvict(storeName, filterFn);
+  }
+  return lsEvict(storeName, filterFn);
+}
+
+async function idbEvict(storeName, filterFn) {
+  return openDB().then((db) => {
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(storeName, 'readwrite');
+      const store = tx.objectStore(storeName);
+      const cursorReq = store.openCursor();
+      let deleted = 0;
+      cursorReq.onsuccess = () => {
+        const cursor = cursorReq.result;
+        if (cursor) {
+          if (filterFn(cursor.value)) {
+            cursor.delete();
+            deleted++;
+          }
+          cursor.continue();
+        }
+      };
+      tx.oncomplete = () => { db.close(); resolve(deleted); };
+      tx.onerror = () => { db.close(); reject(new Error(`evict error: ${tx.error?.message}`)); };
+    });
+  });
+}
+
+function lsEvict(storeName, filterFn) {
+  const prefix = `${storeName}_`;
+  let deleted = 0;
+  try {
+    const keysToRemove = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (k?.startsWith(prefix)) {
+        try {
+          const val = JSON.parse(localStorage.getItem(k));
+          if (filterFn(val)) keysToRemove.push(k);
+        } catch {}
+      }
+    }
+    keysToRemove.forEach(k => { localStorage.removeItem(k); deleted++; });
+  } catch {}
+  return Promise.resolve(deleted);
+}
+
 const ls = {
   get(storeName, key) {
     try {
@@ -160,6 +209,15 @@ export async function put(storeName, value) {
     try {
       return await idbPut(storeName, value);
     } catch (error) {
+      const isQuota = error instanceof DOMException && (
+        error.name === 'QuotaExceededError' || error.name === 'AbortError'
+      );
+      if (isQuota) {
+        try {
+          const { onQuotaExceeded } = await import('./quota.js');
+          return await onQuotaExceeded(() => idbPut(storeName, value));
+        } catch { throw error; }
+      }
       throw error;
     }
   }
