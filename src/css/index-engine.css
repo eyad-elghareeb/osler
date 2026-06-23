@@ -524,3 +524,19 @@ button, a { cursor: pointer; font-family: inherit; border: none; outline: none; 
   .dash-stat .ds-val { font-size: 1.2rem; }
   .dash-body { padding: 0.75rem 1rem; }
 }
+
+/* ═══════════════════════════════════════════
+   AUTH UI
+═══════════════════════════════════════════ */
+.auth-dropdown { position: relative; }
+.auth-btn { display: flex; align-items: center; gap: 0.4rem; padding: 0.35rem 0.7rem; border-radius: 8px; border: 1px solid var(--border); background: var(--surface2); color: var(--text); font-size: 0.8rem; cursor: pointer; transition: border-color var(--transition); }
+.auth-btn:hover { border-color: var(--accent); }
+.auth-avatar { width: 22px; height: 22px; border-radius: 50%; background: var(--accent-dim); display: flex; align-items: center; justify-content: center; font-size: 0.75rem; font-weight: 700; color: var(--accent); flex-shrink: 0; }
+.auth-menu { display: none; position: absolute; top: 100%; right: 0; margin-top: 4px; min-width: 200px; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; box-shadow: var(--shadow); z-index: 200; overflow: hidden; }
+.auth-menu.open { display: block; }
+.auth-menu-item { display: flex; align-items: center; gap: 0.5rem; width: 100%; padding: 0.6rem 0.85rem; border: none; background: none; color: var(--text); font-size: 0.82rem; cursor: pointer; text-align: left; transition: background var(--transition-fast); font-family: inherit; }
+.auth-menu-item:hover { background: var(--surface2); }
+.auth-menu-item .icon { width: 18px; height: 18px; flex-shrink: 0; }
+.auth-provider-btn { display: flex; align-items: center; gap: 0.5rem; width: 100%; padding: 0.7rem 0.85rem; border-radius: 8px; border: 1px solid var(--border); background: var(--surface2); color: var(--text); font-size: 0.85rem; cursor: pointer; transition: border-color var(--transition); font-family: inherit; }
+.auth-provider-btn:hover { border-color: var(--accent); }
+.auth-divider { height: 1px; background: var(--border); margin: 0.25rem 0; }
