@@ -1,0 +1,2 @@
+:root { --osce-surface: #1a1f2e; --osce-border: #2a3044; --osce-text: #e8edf5; --osce-muted: #8892a8; --osce-accent: #f0a500; --osce-correct: #2ea043; --osce-wrong: #da3633; --osce-chat-user: #1e2a4a; --osce-chat-ai: #1a2332; }
+[data-theme="light"] { --osce-surface: #f3f0eb; --osce-border: #d0ccc5; --osce-text: #1c1917; --osce-muted: #78716c; --osce-accent: #c27803; --osce-chat-user: #e8e0d5; --osce-chat-ai: #f8f6f1; }

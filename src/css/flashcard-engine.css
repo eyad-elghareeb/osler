@@ -1,0 +1,24 @@
+:root { --card-flip: 0.5s cubic-bezier(0.16, 1, 0.3, 1); }
+.start-icon { width: 60px; height: 60px; font-size: 1.7rem; margin-bottom: 1.25rem; }
+.card-area { flex: 1; overflow-y: auto; padding: 0.75rem 1rem; display: flex; flex-direction: column; align-items: center; gap: 0.75rem; contain: layout style; }
+.card-area::-webkit-scrollbar { width: 6px; }
+.card-area::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+.flashcard-wrapper { width: 100%; max-width: 860px; perspective: 1200px; flex: 1; display: flex; min-height: 0; }
+.flashcard { width: 100%; min-height: 0; max-height: 85vh; position: relative; transform-style: preserve-3d; transition: transform var(--card-flip); cursor: pointer; }
+.flashcard.flipped { transform: rotateY(180deg); }
+.flashcard-face { position: absolute; inset: 0; backface-visibility: hidden; -webkit-backface-visibility: hidden; border-radius: 16px; border: 1.5px solid var(--border); padding: 1.5rem 1.75rem; display: flex; flex-direction: column; overflow-y: auto; box-shadow: var(--shadow); transition: border-color var(--transition), box-shadow var(--transition); scroll-behavior: smooth; }
+.flashcard-face:hover { border-color: var(--accent); }
+.flashcard-front { background: var(--surface); }
+.flashcard-back { background: var(--surface); transform: rotateY(180deg); }
+.rating-section { width: 100%; max-width: 860px; display: none; animation: fadeUp 0.3s ease-out both; }
+.rating-section.visible { display: block; }
+.rating-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.5rem; }
+.rating-btn { padding: 0.7rem 0.5rem; border-radius: var(--radius); border: 1.5px solid var(--border); background: var(--surface); color: var(--text); font-size: 0.78rem; font-weight: 600; text-align: center; transition: all var(--transition); display: flex; flex-direction: column; align-items: center; gap: 0.2rem; }
+.card-nav-btns { width: 100%; max-width: 860px; display: flex; gap: 0.75rem; flex-wrap: wrap; }
+.cloze-reveal-bar { width: 100%; max-width: 860px; display: flex; gap: 0.5rem; flex-wrap: wrap; justify-content: center; margin-top: 0.5rem; }
+@media (max-width: 640px) {
+  .card-area .flashcard-wrapper { max-width: 100%; }
+  .flashcard-face { padding: 1.25rem 1rem 4rem; }
+  .rating-grid { grid-template-columns: repeat(2, 1fr); }
+  .card-area { padding: 0.5rem; }
+}

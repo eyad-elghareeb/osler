@@ -1,0 +1,43 @@
+{
+  "$schema": "https://raw.githubusercontent.com/tauri-apps/tauri/dev/crates/tauri-cli/config.schema.json",
+  "productName": "QuizTool Admin",
+  "version": "5.1.0",
+  "identifier": "com.quiztool.admin",
+  "build": {
+    "beforeBuildCommand": "",
+    "beforeDevCommand": "",
+    "devUrl": "quiztool-admin://localhost/",
+    "frontendDist": "frontend"
+  },
+  "app": {
+    "withGlobalTauri": true,
+    "security": {
+      "csp": "default-src 'self' quiztool-admin: 'unsafe-inline' 'unsafe-eval'; connect-src *; img-src 'self' http://127.0.0.1:* data: blob: https:; font-src 'self' data: https://fonts.gstatic.com https://fonts.googleapis.com; frame-src http://127.0.0.1:* 'self'"
+    },
+    "windows": [
+      {
+        "title": "QuizTool Admin Dashboard",
+        "url": "quiztool-admin://localhost/",
+        "width": 1400,
+        "height": 900,
+        "minWidth": 900,
+        "minHeight": 650,
+        "center": true,
+        "resizable": true,
+        "fullscreen": false,
+        "dragDropEnabled": false
+      }
+    ]
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "windows": {},
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.ico"
+    ]
+  }
+}

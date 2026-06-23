@@ -7,7 +7,7 @@
 ## Progress
 
 ```
-Phase 0 — Foundation       [  ]  2 weeks   10 files    3 verification commands
+Phase 0 — Foundation       [✓]  2 weeks   10 files    3 verification commands  (2026-06-23)
 Phase 1 — Content Format   [  ]  1 week     9 files    3 verification commands
 Phase 2 — IndexedDB        [  ]  2 weeks    7 files    4 verification commands
 Phase 3 — Firebase & Sync  [  ]  2 weeks    6 files    4 verification commands
