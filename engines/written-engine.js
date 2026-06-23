@@ -466,8 +466,8 @@
       '    <h3>Reset Progress?</h3>',
       '    <p>Are you sure you want to reset your progress? This cannot be undone.</p>',
       '    <div class="modal-actions">',
-      '      <button class="btn btn-cancel" id="close-reset-modal">Go Back</button>',
-      '      <button class="btn btn-confirm danger" id="confirm-reset-action">Reset Now</button>',
+      '      <button type="button" class="btn btn-cancel" id="close-reset-modal">Go Back</button>',
+      '      <button type="button" class="btn btn-confirm danger" id="confirm-reset-action">Reset Now</button>',
       '    </div>',
       '  </div>',
       '</div>',
@@ -517,7 +517,7 @@
       '          <span class="export-badge" id="badge-flagged">0</span>',
       '        </label>',
       '      </div>',
-      '      <button class="btn-export-pdf" onclick="exportToPDF()">',
+      '      <button type="button" class="btn-export-pdf" onclick="exportToPDF()">',
       '        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">',
       '          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>',
       '          <polyline points="14 2 14 8 20 8"></polyline>',
@@ -529,15 +529,15 @@
       '      </button>',
       '    </div>',
       '    <div class="result-tabs">',
-      '      <button class="tab-btn active" onclick="filterResults(\'all\', this)">All Questions</button>',
-      '      <button class="tab-btn" onclick="filterResults(\'pass\', this)">'+EngineShared.icon('check')+' Passed</button>',
-      '      <button class="tab-btn" onclick="filterResults(\'fail\', this)">'+EngineShared.icon('x')+' Failed</button>',
-      '      <button class="tab-btn" onclick="filterResults(\'skipped\', this)">— Skipped</button>',
-      '      <button class="tab-btn" onclick="filterResults(\'flagged\', this)">'+EngineShared.icon('flag')+' Flagged</button>',
+      '      <button type="button" class="tab-btn active" onclick="filterResults(\'all\', this)">All Questions</button>',
+      '      <button type="button" class="tab-btn" onclick="filterResults(\'pass\', this)">'+EngineShared.icon('check')+' Passed</button>',
+      '      <button type="button" class="tab-btn" onclick="filterResults(\'fail\', this)">'+EngineShared.icon('x')+' Failed</button>',
+      '      <button type="button" class="tab-btn" onclick="filterResults(\'skipped\', this)">— Skipped</button>',
+      '      <button type="button" class="tab-btn" onclick="filterResults(\'flagged\', this)">'+EngineShared.icon('flag')+' Flagged</button>',
       '    </div>',
       '    <div class="result-list" id="result-list"></div>',
       '    <div class="result-actions">',
-      '      <button class="btn-restart" onclick="restartAssessment()">↺ Start Again</button>',
+      '      <button type="button" class="btn-restart" onclick="restartAssessment()">↺ Start Again</button>',
       '      <a class="btn-restart btn-secondary" href="index.html" id="hub-link-result-action">'+EngineShared.icon('home')+' Return to Hub</a>',
       '    </div>',
       '  </div>',
@@ -1232,7 +1232,9 @@
     var hasContent = !!(answer || photo);
     state.answers[currentIndex] = answer;
     if (window.OslerAnalytics) {
-      OslerAnalytics.trackAnswer('written', config.uid, currentIndex, hasContent ? 'submitted' : 'skipped');
+      // V20 taxonomy: outcome must be 'correct' | 'wrong' | 'skipped' | 'rating_N' | null
+      // For written assessments, 'answered' action maps to 'skipped' if empty, else null (no right/wrong yet).
+      OslerAnalytics.trackAnswer('written', config.uid, currentIndex, hasContent ? null : 'skipped');
     }
     state.evaluations[currentIndex] = {
       score: null,
@@ -1292,7 +1294,8 @@
 
     state.answers[currentIndex] = answer;
     if (window.OslerAnalytics) {
-      OslerAnalytics.trackAnswer('written', config.uid, currentIndex, 'ai_submitted');
+      // V20 taxonomy: 'ai_submitted' isn't valid; use null (no right/wrong yet for AI-graded written).
+      OslerAnalytics.trackAnswer('written', config.uid, currentIndex, null);
     }
     _writeKey(apiKey);
     localStorage.setItem(STORAGE.model, $('#model-select').value);

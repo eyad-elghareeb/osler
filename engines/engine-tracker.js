@@ -186,25 +186,80 @@
     return cfg.uid || location.pathname;
   }
 
+  // H20 fix: stop polluting userContent with tracker_* entries.
+  // engine-tracker.js is the LEGACY tracker used by quiz-engine.js and
+  // bank-engine.js (P2.6/P2.7 not yet completed). It now writes to the
+  // CORRECT store (quizTracker) with the correct composite key shape
+  // [contentUid, itemId], so Phase 3 sync reading quizTracker will see data.
+  //
+  // Once P2.6/P2.7 fully wires engines to src/lib/tracker.js, this legacy
+  // tracker can be deleted entirely.
+  function _resolveStoragePath() {
+    // engine-tracker.js is loaded from engines/, so storage.js is at
+    // ../src/lib/storage.js (dev) or ../../src/lib/storage.js (dist/engines/).
+    // Use EngineShared.ENGINE_BASE if available for robustness.
+    var base = (typeof EngineShared !== 'undefined' && EngineShared.ENGINE_BASE) || '';
+    var candidates = [
+      '../src/lib/storage.js',
+      '../../src/lib/storage.js',
+      base + '../src/lib/storage.js',
+      base + 'src/lib/storage.js',
+    ];
+    return candidates;
+  }
+
   function persistToIndexedDB(data) {
     try {
-      import('../src/lib/storage.js').then(function(mod) {
-        mod.put('userContent', {
-          uid: 'tracker_' + data.uid,
-          type: 'tracker',
-          data: data,
-          updatedAt: new Date().toISOString()
-        }).catch(function() {});
-      }).catch(function() {});
-    } catch(e) {}
+      var candidates = _resolveStoragePath();
+      var idx = 0;
+      function tryNext() {
+        if (idx >= candidates.length) {
+          console.warn('[engine-tracker] Could not load storage.js from any candidate path.');
+          return;
+        }
+        import(candidates[idx++]).then(function(mod) {
+          // Write ONE summary entry per contentUid to quizTracker, using
+          // the special itemId 'session-summary' so it doesn't collide with
+          // per-item entries that P2.6 will create.
+          return mod.put('quizTracker', {
+            contentUid: data.uid,
+            itemId: 'session-summary',
+            wrongCount: data.wrongCount || 0,
+            flaggedCount: data.flaggedCount || 0,
+            wrong: data.wrong || [],
+            flagged: data.flagged || [],
+            folderPath: data.folderPath || '',
+            folderTitle: data.folderTitle || '',
+            updatedAt: new Date().toISOString(),
+          });
+        }).catch(function(e) {
+          if (idx < candidates.length) tryNext();
+          else console.warn('[engine-tracker] persistToIndexedDB failed:', e);
+        });
+      }
+      tryNext();
+    } catch(e) {
+      console.warn('[engine-tracker] persistToIndexedDB setup error:', e);
+    }
   }
 
   function removeFromIndexedDB(uid) {
     try {
-      import('../src/lib/storage.js').then(function(mod) {
-        mod.deleteEntry('userContent', 'tracker_' + uid).catch(function() {});
-      }).catch(function() {});
-    } catch(e) {}
+      var candidates = _resolveStoragePath();
+      var idx = 0;
+      function tryNext() {
+        if (idx >= candidates.length) return;
+        import(candidates[idx++]).then(function(mod) {
+          return mod.deleteEntry('quizTracker', [uid, 'session-summary']);
+        }).catch(function(e) {
+          if (idx < candidates.length) tryNext();
+          else console.warn('[engine-tracker] removeFromIndexedDB failed:', e);
+        });
+      }
+      tryNext();
+    } catch(e) {
+      console.warn('[engine-tracker] removeFromIndexedDB setup error:', e);
+    }
   }
 
   function saveTrackerData(params) {

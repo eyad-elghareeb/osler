@@ -11,7 +11,8 @@ const PRECACHE_URLS = [
   'index-engine.js',
   'uworld-engine.js',
   'search-engine.js',
-  'sync-engine.js',
+  // 'sync-engine.js' removed (H8 fix): legacy WebRTC/MQTT sync engine deleted.
+  // Firebase sync lives in src/lib/sync.js, loaded via the lib-bridge.
   'ai-assistant-engine.js',
   'engine-tracker.js',
   'shared.css',

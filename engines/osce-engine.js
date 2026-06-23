@@ -1432,9 +1432,9 @@
           '<div class="osce-lobby-top">' +
             '<div class="osce-lobby-kicker">'+ (isDataInterp ? ''+EngineShared.icon('user')+' OSCE Data Interpretation' : ''+EngineShared.icon('activity')+' OSCE Virtual Patient') +'</div>' +
             '<div style="display:flex;gap:.4rem">' +
-              '<button class="osce-icon-btn" id="osce-lobby-back" title="Back to Hub">←</button>' +
-              '<button class="osce-icon-btn" id="osce-lobby-settings" title="AI Settings">'+EngineShared.icon('settings')+'</button>' +
-              '<button class="osce-icon-btn" id="osce-lobby-theme" title="Toggle theme">'+themeIcon+'</button>' +
+              '<button type="button" class="osce-icon-btn" id="osce-lobby-back" title="Back to Hub">←</button>' +
+              '<button type="button" class="osce-icon-btn" id="osce-lobby-settings" title="AI Settings">'+EngineShared.icon('settings')+'</button>' +
+              '<button type="button" class="osce-icon-btn" id="osce-lobby-theme" title="Toggle theme">'+themeIcon+'</button>' +
             '</div>' +
           '</div>' +
           (isDataInterp
@@ -1494,8 +1494,8 @@
             ) +
           '</div>' +
           '<div class="osce-lobby-actions">' +
-            '<button class="osce-primary-btn" id="osce-start-btn">'+(isDataInterp?'Begin Exam →':'Enter Room →')+'</button>' +
-            '<button class="osce-secondary-btn" id="osce-lobby-settings2">AI Settings</button>' +
+            '<button type="button" class="osce-primary-btn" id="osce-start-btn">'+(isDataInterp?'Begin Exam →':'Enter Room →')+'</button>' +
+            '<button type="button" class="osce-secondary-btn" id="osce-lobby-settings2">AI Settings</button>' +
           '</div>' +
         '</div>' +
       '</div>';
@@ -1522,7 +1522,7 @@
     }).join('');
     if (collapsed) {
       return '<div class="osce-collapse-wrap">' +
-        '<button class="osce-collapse-btn" data-collapse="osce-lobby-tables">'+EngineShared.icon('bar-chart')+' Lab Data <span class="chev">▼</span></button>' +
+        '<button type="button" class="osce-collapse-btn" data-collapse="osce-lobby-tables">'+EngineShared.icon('bar-chart')+' Lab Data <span class="chev">▼</span></button>' +
         '<div class="osce-collapse-content" id="osce-lobby-tables">'+content+'</div></div>';
     }
     return content;
@@ -1568,7 +1568,7 @@
     if (!content) return '';
     if (collapsed) {
       return '<div class="osce-images-wrap">' +
-        '<button class="osce-collapse-btn osce-img-toggle" data-collapse="osce-lobby-images">'+EngineShared.icon('image')+' Clinical Images ('+images.length+') <span class="chev">▼</span></button>' +
+        '<button type="button" class="osce-collapse-btn osce-img-toggle" data-collapse="osce-lobby-images">'+EngineShared.icon('image')+' Clinical Images ('+images.length+') <span class="chev">▼</span></button>' +
         '<div class="osce-collapse-content osce-images-content" id="osce-lobby-images">'+content+'</div></div>';
     }
     return '<div class="osce-images-wrap">'+content+'</div>';
@@ -1635,7 +1635,7 @@
       '<div class="osce-room">' +
         /* HEADER */
         '<div class="osce-hdr">' +
-          '<button class="osce-icon-btn" id="osce-back-btn" title="Back to door card" style="flex-shrink:0">←</button>' +
+          '<button type="button" class="osce-icon-btn" id="osce-back-btn" title="Back to door card" style="flex-shrink:0">←</button>' +
           '<button class="osce-icon-btn" id="osce-drawer-btn" title="'+( _activeCase.type==='data-interp'?'Case data':'Patient info')+'" style="display:none;flex-shrink:0">'+EngineShared.icon('menu')+'</button>' +
           '<div class="osce-hdr-title">' +
             '<div class="c">'+( _activeCase.type==='data-interp'?''+EngineShared.icon('user')+' '+_esc((_activeCase.examiner||{}).name||'Examiner'):_esc(_activeCase.title))+'</div>' +
@@ -1646,8 +1646,8 @@
               '<div class="osce-timer '+_timerState(_timerRemaining)+'" id="osce-timer-num">'+_formatTime(_timerRemaining)+'</div>' +
               '<div class="osce-timer-lbl">'+dur+' min</div>' +
             '</div>' +
-            '<button class="osce-icon-btn" id="osce-theme-btn" title="Toggle theme">'+themeIcon+'</button>' +
-            '<button class="osce-icon-btn" id="osce-settings-btn" title="AI Settings">'+EngineShared.icon('settings')+'</button>' +
+            '<button type="button" class="osce-icon-btn" id="osce-theme-btn" title="Toggle theme">'+themeIcon+'</button>' +
+            '<button type="button" class="osce-icon-btn" id="osce-settings-btn" title="AI Settings">'+EngineShared.icon('settings')+'</button>' +
           '</div>' +
         '</div>' +
         /* TIMER BAR */
@@ -1701,13 +1701,13 @@
               '<div class="osce-sb-card">' +
                 '<div class="osce-sb-lbl" style="margin-bottom:.4rem">Quick Prompts</div>' +
                 '<div class="osce-chips-wrap">' +
-                  '<button class="osce-qchip" data-p="Can you tell me more about what brought you in today?">Open</button>' +
-                  '<button class="osce-qchip" data-p="When did this start, and what were you doing at the time?">Timing</button>' +
-                  '<button class="osce-qchip" data-p="On a scale of 1-10, how bad is it?">Severity</button>' +
-                  '<button class="osce-qchip" data-p="Does anything make it better or worse?">Triggers</button>' +
-                  '<button class="osce-qchip" data-p="Do you have any medical conditions or take any regular medicines?">PMH/Meds</button>' +
-                  '<button class="osce-qchip" data-p="Is there anything you are particularly worried this might be?">ICE</button>' +
-                  '<button class="osce-qchip" data-p="Does this run in your family?">Family Hx</button>' +
+                  '<button type="button" class="osce-qchip" data-p="Can you tell me more about what brought you in today?">Open</button>' +
+                  '<button type="button" class="osce-qchip" data-p="When did this start, and what were you doing at the time?">Timing</button>' +
+                  '<button type="button" class="osce-qchip" data-p="On a scale of 1-10, how bad is it?">Severity</button>' +
+                  '<button type="button" class="osce-qchip" data-p="Does anything make it better or worse?">Triggers</button>' +
+                  '<button type="button" class="osce-qchip" data-p="Do you have any medical conditions or take any regular medicines?">PMH/Meds</button>' +
+                  '<button type="button" class="osce-qchip" data-p="Is there anything you are particularly worried this might be?">ICE</button>' +
+                  '<button type="button" class="osce-qchip" data-p="Does this run in your family?">Family Hx</button>' +
                 '</div>' +
               '</div>'
             ) +
@@ -1730,14 +1730,14 @@
             '<div class="osce-waveform" id="osce-waveform"><div class="osce-wbar"></div><div class="osce-wbar"></div><div class="osce-wbar"></div><div class="osce-wbar"></div><div class="osce-wbar"></div></div>' +
           '</div>' +
           '<div class="osce-input-row">' +
-            '<button class="osce-mic-btn" id="osce-mic-btn" title="Toggle voice mode">'+EngineShared.icon('mic')+'</button>' +
+            '<button type="button" class="osce-mic-btn" id="osce-mic-btn" title="Toggle voice mode">'+EngineShared.icon('mic')+'</button>' +
             '<textarea class="osce-textarea" id="osce-input" placeholder="Ask the patient a question…" rows="1"></textarea>' +
-            '<button class="osce-send-btn" id="osce-send-btn">Send →</button>' +
+            '<button type="button" class="osce-send-btn" id="osce-send-btn">Send →</button>' +
           '</div>' +
           '<div class="osce-submit-row">' +
             '<span class="osce-turn-badge" id="osce-turn-badge">Q 0/'+MAX_TURNS+'</span>' +
-            '<button class="osce-submit-btn" id="osce-submit-btn">Submit for Examiner Feedback '+EngineShared.icon('check')+'</button>' +
-            '<button class="osce-reset-btn" id="osce-reset-btn">↺ Reset</button>' +
+            '<button type="button" class="osce-submit-btn" id="osce-submit-btn">Submit for Examiner Feedback '+EngineShared.icon('check')+'</button>' +
+            '<button type="button" class="osce-reset-btn" id="osce-reset-btn">↺ Reset</button>' +
           '</div>' +
         '</div>' +
       '</div>';
@@ -1815,7 +1815,7 @@
     overlay.innerHTML =
       '<div class="osce-drawer-backdrop" id="osce-drawer-backdrop"></div>' +
       '<div class="osce-drawer-panel">' +
-        '<div style="display:flex;justify-content:flex-end;margin-bottom:.2rem"><button class="osce-icon-btn" id="osce-drawer-close">'+EngineShared.icon('x')+'</button></div>' +
+        '<div style="display:flex;justify-content:flex-end;margin-bottom:.2rem"><button type="button" class="osce-icon-btn" id="osce-drawer-close">'+EngineShared.icon('x')+'</button></div>' +
         (isDataInterp
           ? '<div class="osce-sb-card"><div class="osce-pt-id" style="grid-template-columns:1fr"><div><div class="osce-pt-nm">'+EngineShared.icon('user')+' '+_esc((_activeCase.examiner||{}).name||'Examiner')+'</div><div class="osce-pt-sb">'+_esc((_activeCase.examiner||{}).title||'Consultant')+'</div></div></div></div>' +
             '<div class="osce-sb-card"><div class="osce-sb-lbl">Instructions</div><div class="osce-instr-box"><div class="osce-instr-txt">'+_esc(_activeCase.task)+'</div></div></div>' +
@@ -1824,11 +1824,11 @@
             '<div class="osce-sb-card"><div class="osce-sb-lbl">Instructions</div><div class="osce-instr-box"><div class="osce-instr-txt">'+_esc(_activeCase.task)+'</div></div></div>' +
             '<div class="osce-sb-card"><div class="osce-sb-lbl">Consultation Map</div><div class="osce-map-steps">'+_mapHTML()+'</div></div>' +
             '<div class="osce-sb-card"><div class="osce-sb-lbl">Quick Prompts</div><div class="osce-chips-wrap">'+
-              '<button class="osce-qchip" data-p="Can you tell me more about what brought you in today?">Open</button>'+
-              '<button class="osce-qchip" data-p="When did this start?">Timing</button>'+
-              '<button class="osce-qchip" data-p="Does anything make it better or worse?">Triggers</button>'+
-              '<button class="osce-qchip" data-p="Do you have any medical conditions or take any regular medicines?">PMH/Meds</button>'+
-              '<button class="osce-qchip" data-p="Is there anything you are particularly worried this might be?">ICE</button>'+
+              '<button type="button" class="osce-qchip" data-p="Can you tell me more about what brought you in today?">Open</button>'+
+              '<button type="button" class="osce-qchip" data-p="When did this start?">Timing</button>'+
+              '<button type="button" class="osce-qchip" data-p="Does anything make it better or worse?">Triggers</button>'+
+              '<button type="button" class="osce-qchip" data-p="Do you have any medical conditions or take any regular medicines?">PMH/Meds</button>'+
+              '<button type="button" class="osce-qchip" data-p="Is there anything you are particularly worried this might be?">ICE</button>'+
             '</div></div>'
         ) +
       '</div>';
@@ -1976,7 +1976,8 @@
     _abort = new AbortController();
     var scoreFn = _activeCase.type === 'data-interp' ? scoreDataInterpExam : scoreInterview;
     if (window.OslerAnalytics) {
-      OslerAnalytics.trackAnswer('osce', (_data||{}).config.uid, _activeCaseIdx, 'submitted');
+      // V20 taxonomy: 'submitted' isn't valid; use null (OSCE has no single right/wrong).
+      OslerAnalytics.trackAnswer('osce', (_data||{}).config.uid, _activeCaseIdx, null);
     }
     scoreFn(_activeCase, _transcript, _abort.signal)
       .then(function (result) { _clearSession(); _showDebrief(result); })
@@ -2138,9 +2139,9 @@
           (badges.length?'<div class="osce-db-section"><div class="osce-db-sec-title">'+EngineShared.icon('award')+' Achievements</div><div class="osce-badges">'+badgesHTML+'</div></div>':'') +
           /* ── Actions (identical to quiz-engine result-actions) ── */
           '<div class="result-actions">' +
-            '<button class="btn-restart btn-secondary" id="osce-db-back">← Back to Consultation</button>' +
-            '<button class="btn-restart" id="osce-db-new">↻ Try Again</button>' +
-            '<button class="btn-restart btn-secondary" id="osce-db-hub">'+EngineShared.icon('home')+' Back to Hub</button>' +
+            '<button type="button" class="btn-restart btn-secondary" id="osce-db-back">← Back to Consultation</button>' +
+            '<button type="button" class="btn-restart" id="osce-db-new">↻ Try Again</button>' +
+            '<button type="button" class="btn-restart btn-secondary" id="osce-db-hub">'+EngineShared.icon('home')+' Back to Hub</button>' +
           '</div>' +
         '</div>' +
       '</div>';
@@ -2251,14 +2252,14 @@
     var div = document.createElement('div'); div.id = 'osce-sov'; div.className = 'open';
     div.innerHTML =
       '<div id="osce-smodal">' +
-        '<div class="osce-sh"><h3>'+EngineShared.icon('settings')+' AI & Voice Settings</h3><button class="osce-icon-btn" id="osce-s-close">'+EngineShared.icon('x')+'</button></div>' +
+        '<div class="osce-sh"><h3>'+EngineShared.icon('settings')+' AI & Voice Settings</h3><button type="button" class="osce-icon-btn" id="osce-s-close">'+EngineShared.icon('x')+'</button></div>' +
         '<div class="osce-sbody">' +
           '<div class="osce-stitle">Gemini API</div>' +
           '<div class="field-box">' +
             '<label class="field-label" for="osce-key-input">Gemini API Key</label>' +
             '<div class="api-row"><input id="osce-key-input" type="password" autocomplete="off" placeholder="Enter your Gemini API key"></div>' +
             '<div class="field-note">Get a free key at <a href="https://aistudio.google.com/apikey" target="_blank">AI Studio</a>.    Shared with all Osler engines.</div>' +
-            '<div class="btn-row"><button class="btn btn-primary" id="osce-key-save">Save</button><button class="btn btn-secondary" id="osce-key-clear">Clear</button><button class="btn btn-secondary" id="osce-key-test">Test</button></div>' +
+            '<div class="btn-row"><button type="button" class="btn btn-primary" id="osce-key-save">Save</button><button type="button" class="btn btn-secondary" id="osce-key-clear">Clear</button><button type="button" class="btn btn-secondary" id="osce-key-test">Test</button></div>' +
             '<div id="settings-status"></div>' +
           '</div>' +
           '<div class="osce-stitle">AI Model</div>' +
@@ -2268,7 +2269,7 @@
             '<div class="osce-stitle">Live Model (Gemini Live voice)</div>' +
             '<div class="field-box"><label class="field-label">Live Model</label><select id="osce-live-model-sel"></select></div>' +
           '</div>' +
-        '<div class="osce-sf"><div class="btn-row"><button class="btn btn-primary" id="osce-s-done">Done</button></div></div>' +
+        '<div class="osce-sf"><div class="btn-row"><button type="button" class="btn btn-primary" id="osce-s-done">Done</button></div></div>' +
       '</div>';
     document.body.appendChild(div);
 

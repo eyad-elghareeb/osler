@@ -138,6 +138,21 @@
         .replace(/>/g, '&gt;')
         .replace(/"/g, '&quot;');
     }
+
+    // H13 fix: init auth + auto-sync on player.html so users studying in
+    // the universal viewer sync their progress without navigating back to hub.
+    // This is a non-blocking best-effort init — failures are logged but don't
+    // prevent content from rendering.
+    (async function initAuthAndSync() {
+      try {
+        const auth = await import('./src/lib/auth.js');
+        const sync = await import('./src/lib/sync.js');
+        if (auth.initAuth) auth.initAuth();
+        if (sync.initAutoSync) sync.initAutoSync();
+      } catch (e) {
+        console.warn('[player] Auth/sync init skipped (non-blocking):', e);
+      }
+    })();
   </script>
 </body>
 </html>

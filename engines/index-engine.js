@@ -7,7 +7,7 @@
   'use strict';
 
   var _cs = document.currentScript;
-  var ENGINE_BASE = _cs ? _cs.src.replace(/[^\/]*$/, '') : '';
+  var ENGINE_BASE = _cs ? _cs.src.replace(/[^\/]*$/, '') : (window.__INDEX_ENGINE_BASE || '');
   var ROOT_BASE = ENGINE_BASE.replace(/[^\/]+\/$/, '');
 
   /* ── Inject tracker dashboard extra styles ─────────────────── */
@@ -38,7 +38,7 @@
   var _modalEl = document.createElement('div');
   _modalEl.className = 'modal-overlay';
   _modalEl.id = 'clear-tracker-modal';
-  _modalEl.innerHTML = '<div class="modal"><h3>Clear Questions?</h3><p id="clear-tracker-message">Are you sure you want to clear all questions for this section? This cannot be undone.</p><div class="modal-actions"><button class="btn-cancel" onclick="closeClearTrackerModal()">Go Back</button><button class="btn-confirm danger" onclick="clearAllTrackerData()">Clear Now</button></div></div>';
+  _modalEl.innerHTML = '<div class="modal"><h3>Clear Questions?</h3><p id="clear-tracker-message">Are you sure you want to clear all questions for this section? This cannot be undone.</p><div class="modal-actions"><button type="button" class="btn-cancel" onclick="closeClearTrackerModal()">Go Back</button><button type="button" class="btn-confirm danger" onclick="clearAllTrackerData()">Clear Now</button></div></div>';
   document.body.appendChild(_modalEl);
   
   /* ── Tracker Dashboard HTML ───────────────────────────────── */
@@ -48,8 +48,8 @@
   _dashEl.innerHTML = '<div class="dash-modal">' +
     '<div class="dash-header">' +
       '<h2 id="dash-title-text">'+EngineShared.icon('bar-chart')+' Question Tracker</h2>' +
-      '<button id="dash-master-toggle" class="dash-master-toggle" onclick="toggleMasterSelection()">Select All</button>' +
-      '<button class="dash-close-btn" onclick="closeTrackerDashboard()">'+EngineShared.icon('x')+'</button>' +
+      '<button type="button" id="dash-master-toggle" class="dash-master-toggle" onclick="toggleMasterSelection()">Select All</button>' +
+      '<button type="button" class="dash-close-btn" onclick="closeTrackerDashboard()">'+EngineShared.icon('x')+'</button>' +
     '</div>' +
     '<div class="dash-scope-bar" id="dash-scope-bar">' +
       '<div id="dash-scope-tabs"></div>' +
@@ -61,42 +61,55 @@
     '</div>' +
     '<div class="dash-body" id="dash-body"></div>' +
     '<div class="dash-footer">' +
-      '<button class="btn-dash-action" onclick="exportTrackerToPDF()" title="Export to PDF">'+EngineShared.icon('file-text')+' Export PDF</button>' +
-      '<button class="btn-dash-action btn-dash-danger" onclick="confirmClearTrackerData()">'+EngineShared.icon('trash-2')+' Clear All</button>' +
-      '<button class="btn-dash-review" id="btn-start-review" onclick="startReviewMode()">▶ Start Review</button>' +
+      '<button type="button" class="btn-dash-action" onclick="exportTrackerToPDF()" title="Export to PDF">'+EngineShared.icon('file-text')+' Export PDF</button>' +
+      '<button type="button" class="btn-dash-action btn-dash-danger" onclick="confirmClearTrackerData()">'+EngineShared.icon('trash-2')+' Clear All</button>' +
+      '<button type="button" class="btn-dash-review" id="btn-start-review" onclick="startReviewMode()">▶ Start Review</button>' +
     '</div>' +
   '</div>';
   document.body.appendChild(_dashEl);
 
-  // Backward compatibility: inject Sync button into topbar if missing
+  // Backward compatibility: inject Sync button into topbar if missing.
+  // H8 fix: rewired to call Firebase sync (src/lib/sync.js) instead of the
+  // legacy WebRTC/MQTT sync-engine.js which was deleted.
   var topbar = document.querySelector('.topbar');
   var trackerBtn = document.querySelector('.btn-tracker');
   if (topbar && trackerBtn && !document.querySelector('.btn-sync')) {
     var syncBtn = document.createElement('button');
     syncBtn.className = 'icon-btn btn-sync';
+    syncBtn.setAttribute('type', 'button');
+    syncBtn.setAttribute('aria-label', 'Sync progress with cloud');
     syncBtn.setAttribute('onclick', 'openSyncModal()');
     syncBtn.title = 'Sync Progress';
     syncBtn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M21 2v6h-6"></path><path d="M3 12a9 9 0 0 1 15-6.7L21 8"></path><path d="M3 22v-6h6"></path><path d="M21 12a9 9 0 0 1-15 6.7L3 16"></path></svg>';
     trackerBtn.parentNode.insertBefore(syncBtn, trackerBtn.nextSibling);
   }
 
-  /* ── Sync Engine Loader ───────────────────────────────────── */
+  /* ── Sync trigger (Firebase sync via src/lib/sync.js) ──────── */
+  // Replaces the legacy WebRTC/MQTT sync-engine.js (H8 fix). Calls the
+  // bridge exposed by engine-shared.js → src/lib/sync.js.
   window.openSyncModal = function() {
-    if (window.SyncEngine) {
-      window.SyncEngine.ui.openModal();
+    if (!window.OslerSync) {
+      // Sync lib not loaded yet (lib-bridge in engine-shared.js failed or
+      // user not signed in). Show a friendly toast.
+      if (window.OslerAuth && window.OslerAuth.currentUser) {
+        EngineShared.showToast('Sync unavailable. Sign in first.');
+      } else {
+        EngineShared.showToast('Sync unavailable. Sign in to your account to sync.');
+      }
       return;
     }
-    
-    // Resolve the correct path to sync-engine.js from the current index file
-    var s = document.createElement('script');
-    s.src = ENGINE_BASE + 'sync-engine.js';
-    s.onload = function() {
-      if (window.SyncEngine) window.SyncEngine.ui.openModal();
-    };
-    s.onerror = function() {
-      EngineShared.showToast('Error loading sync engine');
-    };
-    document.body.appendChild(s);
+    // The Firebase sync runs invisibly; show a toast confirming the trigger.
+    EngineShared.showToast('Syncing…');
+    window.OslerSync.syncFull(window.OslerAuth.currentUser().uid)
+      .then(function(result) {
+        var pushed = (result.pushed || []).reduce(function(n, s) { return n + s.pushed; }, 0);
+        var pulled = (result.pulled || []).reduce(function(n, s) { return n + s.pulled; }, 0);
+        EngineShared.showToast('Synced: ' + pushed + ' pushed, ' + pulled + ' pulled.');
+      })
+      .catch(function(e) {
+        console.error('[sync] syncFull failed:', e);
+        EngineShared.showToast('Sync failed: ' + (e.message || 'unknown error'));
+      });
   };
 
   /* ── Global Search (lazy-loaded) ──────────────────────────── */
@@ -110,7 +123,7 @@
     _searchBar.innerHTML =
       '<span class="search-bar-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg></span>' +
       '<input class="search-bar-input" id="search-bar-input" type="text" placeholder="Search quizzes..." onclick="openSearch()" readonly>' +
-      '<button class="icon-btn btn-search-mobile" id="btn-search-mobile" onclick="openSearch()" title="Search quizzes"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg></button>';
+      '<button type="button" class="icon-btn btn-search-mobile" id="btn-search-mobile" onclick="openSearch()" title="Search quizzes"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg></button>';
     // Inject search bar CSS (small — keep here so layout is ready immediately)
     var _searchBarStyle = document.createElement('style');
     _searchBarStyle.textContent =
@@ -228,45 +241,88 @@
     }).join('');
   };
 
-  /* ── My Content section ────────────────────────────────────── */
-  window.renderUserContent = function () {
-    var grid = document.getElementById('quiz-grid');
-    if (!grid) return;
-    if (typeof QUIZZES !== 'undefined' && QUIZZES.length > 0) return;
+  /* ── My Content section ──────────────────────────────────────
+     H25 fix: "My Content" now renders as a SEPARATE section below the quiz
+     grid, not a replacement for it. Both can coexist.
 
-    import(ENGINE_BASE.replace(/dist\/$/, 'src/lib/') + 'storage.js').then(function(m) {
-      return m.getAll('userContent');
-    }).then(function(entries) {
-      if (!entries || entries.length === 0) {
-        grid.innerHTML = '<div class="dash-empty" style="grid-column:1/-1;padding:2rem"><p>No content yet. Create quizzes, flashcards, and more to see them here.</p></div>';
+     The hub template should include a `<div id="user-content-grid">` element;
+     if missing, this function creates one below the main quiz grid. */
+  window.renderUserContent = function () {
+    var mainGrid = document.getElementById('quiz-grid');
+    if (!mainGrid) return;
+
+    // Find or create the dedicated user-content grid.
+    var ucGrid = document.getElementById('user-content-grid');
+    if (!ucGrid) {
+      var wrapper = document.createElement('section');
+      wrapper.className = 'user-content-section';
+      wrapper.innerHTML = '<h2 class="user-content-title">My Content</h2>' +
+                          '<div id="user-content-grid" class="quiz-grid"></div>';
+      mainGrid.parentNode.insertBefore(wrapper, mainGrid.nextSibling);
+      ucGrid = document.getElementById('user-content-grid');
+    }
+    if (!ucGrid) return;
+
+    // Use the lib-bridge path resolution (B3 fix) instead of the broken regex.
+    var libCandidates = [
+      ROOT_BASE + 'src/lib/storage.js',
+      ENGINE_BASE + 'src/lib/storage.js',
+    ];
+    var idx = 0;
+    function tryLoad() {
+      if (idx >= libCandidates.length) {
+        console.warn('[index-engine] Could not load storage.js from any candidate path.');
+        ucGrid.innerHTML = '<div class="dash-empty"><p>My Content unavailable (storage module not loaded).</p></div>';
         return;
       }
-      var byType = {};
-      entries.forEach(function(entry) {
-        var type = entry.type || 'unknown';
-        if (!byType[type]) byType[type] = [];
-        byType[type].push(entry);
-      });
-      var typeLabels = { 'quiz': '\uD83D\uDCDD', 'bank': '\uD83D\uDCDA', 'flashcard': '\uD83C\uDCCF', 'written': '\u270D\uFE0F', 'osce': '\uD83D\uDC68\u200D\u2695\uFE0F' };
-      var html = '<h2 style="font-family:\'Playfair Display\',serif;grid-column:1/-1;margin:1.5rem 0 0.5rem;font-size:1.3rem">My Content</h2>';
-      Object.keys(byType).forEach(function(type) {
-        byType[type].forEach(function(entry) {
-          var icon = typeLabels[type] || '\uD83D\uDCC4';
+      import(libCandidates[idx++]).then(function(m) {
+        return m.getAll('userContent');
+      }).then(function(entries) {
+        if (!entries || entries.length === 0) {
+          ucGrid.innerHTML = '<div class="dash-empty"><p>No personal content yet. Use the Admin Dashboard to create quizzes, flashcards, and more.</p></div>';
+          return;
+        }
+        // Filter out engine-tracker pollution (H20 fix): only show entries
+        // that look like real user-authored content, not `tracker_*` backups.
+        entries = entries.filter(function(e) {
+          return e && e.uid && !String(e.uid).startsWith('tracker_');
+        });
+        if (entries.length === 0) {
+          ucGrid.innerHTML = '<div class="dash-empty"><p>No personal content yet.</p></div>';
+          return;
+        }
+
+        // Use Lucide icon names instead of emoji (Phase 4 emoji ban).
+        // Icons are bridged via EngineShared.icon(); fall back to a generic
+        // "file" icon if the bridge hasn't loaded.
+        var typeIconName = { 'quiz': 'file-question', 'bank': 'library', 'flashcard': 'layers', 'written': 'pen-tool', 'osce': 'stethoscope' };
+        var html = '';
+        entries.forEach(function(entry) {
+          var iconName = typeIconName[entry.type] || 'file';
+          var iconSvg = (window.OslerUI && window.OslerUI.icons) ? window.OslerUI.icons.icon(iconName) : EngineShared.icon(iconName);
           var lastStudied = entry.updatedAt ? new Date(entry.updatedAt).toLocaleDateString() : '';
           html += '<div class="quiz-card">'
-            + '<div class="card-icon">' + icon + '</div>'
+            + '<div class="card-icon">' + iconSvg + '</div>'
             + '<h2 class="card-title">' + escHtml(entry.title || 'Untitled') + '</h2>'
-            + '<p class="card-desc">' + escHtml(entry.description || type) + '</p>'
+            + '<p class="card-desc">' + escHtml(entry.description || entry.type || '') + '</p>'
             + '<div class="card-meta">'
             +   (lastStudied ? '<span class="meta-badge">' + lastStudied + '</span>' : '')
             + '</div>'
             + '<a href="player.html?uid=' + encodeURIComponent(entry.uid || '') + '" class="btn-take-quiz">Open \u2192</a>'
             + '</div>';
         });
+        ucGrid.innerHTML = html;
+        if (window.staggerCards) setTimeout(window.staggerCards, 50);
+      }).catch(function(e) {
+        if (idx < libCandidates.length) {
+          tryLoad(); // try next candidate
+        } else {
+          console.warn('[index-engine] renderUserContent failed:', e);
+          ucGrid.innerHTML = '<div class="dash-empty"><p>My Content unavailable.</p></div>';
+        }
       });
-      grid.innerHTML = html;
-      if (window.staggerCards) setTimeout(window.staggerCards, 50);
-    }).catch(function() {});
+    }
+    tryLoad();
   };
 
   /* ── Tracker storage ───────────────────────────────────────── */
@@ -693,7 +749,7 @@
       tabs.forEach(function (t, i) {
         var isActive = t.id === currentScope && (t.id === 'all' || t.path === currentScopePath);
         var isLocked = _inReviewSetup ? ' disabled' : '';
-      scopeHTML += '<button class="dash-scope-tab' + (isActive ? ' active' : '') + isLocked
+      scopeHTML += '<button type="button" class="dash-scope-tab' + (isActive ? ' active' : '') + isLocked
           + '" data-scope="' + t.id + '" data-path="' + (t.path || '') + '"'
           + ' onclick="switchDashScope(\'' + t.id + '\',\'' + (t.path || '') + '\')">'
           + escHtml(t.label) + '</button>';
@@ -927,7 +983,7 @@
       +   '<div class="dash-q-num">Q' + ((q.idx || 0) + 1) + ' \u00B7 ' + typeLabel + '</div>'
       +   '<div class="dash-q-text">' + esc + '</div>'
       + '</div>'
-      + '<button class="dash-q-remove" onclick="removeTrackerItem(\'' + uid + '\',' + (q.idx || 0) + ')" title="Remove">\u2715</button>'
+      + '<button type="button" class="dash-q-remove" onclick="removeTrackerItem(\'' + uid + '\',' + (q.idx || 0) + ')" title="Remove">\u2715</button>'
       + '</div>';
   }
 

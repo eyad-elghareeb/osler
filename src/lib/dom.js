@@ -6,6 +6,7 @@ export function createElement(tag, attrs, ...children) {
   const el = document.createElement(tag);
   if (attrs) {
     for (const [key, val] of Object.entries(attrs)) {
+      if (val == null || val === false) continue;
       if (key.startsWith('on') && typeof val === 'function') {
         el.addEventListener(key.slice(2).toLowerCase(), val);
       } else if (key === 'style' && typeof val === 'object') {
@@ -14,6 +15,17 @@ export function createElement(tag, attrs, ...children) {
         el.className = val;
       } else if (key === 'dataset') {
         Object.assign(el.dataset, val);
+      } else if (key === 'htmlFor') {
+        // JS reserved word → HTML 'for' attribute (used in <label for=...>).
+        el.setAttribute('for', val);
+      } else if (key.startsWith('aria') || key.startsWith('data')) {
+        // Convert ariaLabel → aria-label, dataFoo → data-foo.
+        const attrName = key.replace(/([A-Z])/g, '-$1').toLowerCase();
+        el.setAttribute(attrName, val);
+      } else if (key in el && typeof el[key] !== 'function') {
+        // Use property setter for known DOM props (value, checked, disabled, type, etc.)
+        // so form state updates correctly.
+        try { el[key] = val; } catch { el.setAttribute(key, val); }
       } else {
         el.setAttribute(key, val);
       }

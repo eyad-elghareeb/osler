@@ -3,6 +3,8 @@
 
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+// Phase 5 reconciliation (B9 fix): declare new stub modules here.
+// lib.rs re-exports them for integration tests.
 mod commands;
 mod deploy;
 mod git;
@@ -10,6 +12,10 @@ mod parser;
 mod pdf;
 mod server;
 mod templates;
+// Phase 5 stubs (B9 fix):
+mod auth;
+mod mcp_server;
+mod validation;
 
 use commands::ProjectRoot;
 use notify::{EventKind, RecursiveMode, Watcher};
@@ -214,6 +220,17 @@ fn main() {
             commands::load_exports_batch,
             commands::export_pdf,
             commands::check_pdf_deps,
+            // Phase 5 stub commands (B9 fix — registered now so cargo build verifies
+            // they compile; Phase 5 sessions will implement them).
+            auth::auth_login_github,
+            auth::auth_poll_github,
+            auth::auth_get_token,
+            auth::auth_clear_token,
+            auth::auth_user_info,
+            mcp_server::mcp_start_server,
+            mcp_server::mcp_stop_server,
+            mcp_server::mcp_list_tools,
+            validation::validate_content,
         ])
         .run(tauri::generate_context!())
         .expect("error while running Osler Admin");

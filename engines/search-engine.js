@@ -62,7 +62,7 @@
       '<div class="search-modal-header">' +
         '<span class="search-modal-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg></span>' +
         '<input class="search-modal-input" id="search-modal-input" type="text" placeholder="Search quizzes..." autocomplete="off">' +
-        '<button class="search-modal-close" onclick="window.__searchEngineClose()">\u2715</button>' +
+        '<button type="button" class="search-modal-close" onclick="window.__searchEngineClose()">\u2715</button>' +
       '</div>' +
       '<div class="search-content-toggle" id="search-content-toggle" onclick="window.__toggleContentSearch()">' +
         '<span class="sct-label"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="margin-right:0.3rem;vertical-align:middle"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 015.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>Search questions</span>' +

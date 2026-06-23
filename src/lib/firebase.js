@@ -15,7 +15,12 @@ const config = {
   measurementId: env.VITE_FIREBASE_MEASUREMENT_ID,
 };
 
-const hasConfig = config.apiKey && config.projectId;
+// H18 fix: validate ALL required fields, not just apiKey + projectId.
+// Missing appId/authDomain causes runtime errors when Firebase tries to
+// make auth/firestore calls.
+const REQUIRED_FIELDS = ['apiKey', 'authDomain', 'projectId', 'appId'];
+const missingFields = REQUIRED_FIELDS.filter(f => !config[f]);
+const hasConfig = missingFields.length === 0;
 
 let app = null;
 let auth = null;
@@ -32,11 +37,25 @@ if (hasConfig) {
     connectFirestoreEmulator(db, 'localhost', 8080);
   }
 
+  // H18 fix: expose analytics on window.firebase so src/lib/analytics.js
+  // can forward events. Previously analytics was only exported as a module
+  // binding that started as null and was never read by the analytics module.
   isSupported().then((yes) => {
-    if (yes) analytics = getAnalytics(app);
+    if (yes) {
+      analytics = getAnalytics(app);
+      if (typeof window !== 'undefined') {
+        window.firebase = window.firebase || {};
+        window.firebase.analytics = analytics;
+      }
+    }
+  }).catch((e) => {
+    console.warn('[firebase] Analytics not supported:', e);
   });
 } else {
-  console.warn('Firebase: no config found. Auth and sync will be disabled.');
+  console.warn(
+    `[firebase] Missing required config fields: [${missingFields.join(', ')}]. ` +
+    `Auth and sync will be disabled. Set these in .env (see .env.example).`
+  );
 }
 
 export { app, auth, db, analytics };

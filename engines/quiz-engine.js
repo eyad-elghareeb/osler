@@ -70,9 +70,9 @@
     <div class="time-section" id="time-section">
       <div class="section-label">Time Limit <span style="color:var(--text-muted);font-size:0.75rem;font-weight:400;margin-left:0.35rem">(min)</span></div>
       <div class="time-controls">
-        <button class="time-adj-btn" onclick="adjustTime(-5)">−5</button>
+        <button type="button" class="time-adj-btn" onclick="adjustTime(-5)">−5</button>
         <input type="number" id="time-input" class="time-input" min="1" max="300" value="30">
-        <button class="time-adj-btn" onclick="adjustTime(5)">+5</button>
+        <button type="button" class="time-adj-btn" onclick="adjustTime(5)">+5</button>
       </div>
     </div>
 
@@ -97,7 +97,7 @@
       </div>
     </div>
     
-    <button class="btn-start" onclick="startQuiz()">Start Quiz →</button>
+    <button type="button" class="btn-start" onclick="startQuiz()">Start Quiz →</button>
   </div>
 </div>
 
@@ -113,11 +113,11 @@
       <span id="timer-text">00:00</span>
     </div>
     <div class="topbar-actions">
-      <div class="icon-btn hl-mode-btn" role="button" tabindex="0" onclick="toggleHighlighterMode()" title="Highlighter Mode (H)" aria-label="Highlighter Mode (H)">'+EngineShared.icon('pen-tool')+'<span class="hl-last-dot" style="background:rgba(255,213,79,0.8);"></span><div class="hl-color-picker" id="hl-color-picker-1"><button class="hl-color-btn cb-1 selected" onclick="hlSelectColor(1); event.stopPropagation();" title="Yellow (1)" aria-label="Yellow (1)"></button><button class="hl-color-btn cb-2" onclick="hlSelectColor(2); event.stopPropagation();" title="Green (2)" aria-label="Green (2)"></button><button class="hl-color-btn cb-3" onclick="hlSelectColor(3); event.stopPropagation();" title="Blue (3)" aria-label="Blue (3)"></button><button class="hl-color-btn cb-4" onclick="hlSelectColor(4); event.stopPropagation();" title="Red (4)" aria-label="Red (4)"></button><button class="hl-erase-btn" onclick="hlSelectColor(0); event.stopPropagation();" title="Eraser" aria-label="Eraser">'+EngineShared.icon('eraser')+'</button><button class="hl-close-btn" onclick="disableHighlighterMode(); event.stopPropagation();" title="Close Highlighter" aria-label="Close Highlighter">'+EngineShared.icon('x')+'</button></div></div>
-      <button class="icon-btn" onclick="openAiAssistant()" title="Ask AI (needs internet)" aria-label="Ask AI (needs internet)">'+EngineShared.icon('bot')+'</button>
+      <div class="icon-btn hl-mode-btn" role="button" tabindex="0" onclick="toggleHighlighterMode()" title="Highlighter Mode (H)" aria-label="Highlighter Mode (H)">'+EngineShared.icon('pen-tool')+'<span class="hl-last-dot" style="background:rgba(255,213,79,0.8);"></span><div class="hl-color-picker" id="hl-color-picker-1"><button type="button" class="hl-color-btn cb-1 selected" onclick="hlSelectColor(1); event.stopPropagation();" title="Yellow (1)" aria-label="Yellow (1)"></button><button type="button" class="hl-color-btn cb-2" onclick="hlSelectColor(2); event.stopPropagation();" title="Green (2)" aria-label="Green (2)"></button><button type="button" class="hl-color-btn cb-3" onclick="hlSelectColor(3); event.stopPropagation();" title="Blue (3)" aria-label="Blue (3)"></button><button type="button" class="hl-color-btn cb-4" onclick="hlSelectColor(4); event.stopPropagation();" title="Red (4)" aria-label="Red (4)"></button><button type="button" class="hl-erase-btn" onclick="hlSelectColor(0); event.stopPropagation();" title="Eraser" aria-label="Eraser">'+EngineShared.icon('eraser')+'</button><button type="button" class="hl-close-btn" onclick="disableHighlighterMode(); event.stopPropagation();" title="Close Highlighter" aria-label="Close Highlighter">'+EngineShared.icon('x')+'</button></div></div>
+      <button type="button" class="icon-btn" onclick="openAiAssistant()" title="Ask AI (needs internet)" aria-label="Ask AI (needs internet)">'+EngineShared.icon('bot')+'</button>
       <a href="#" class="icon-btn" title="Back to Hub" onclick="navigateToIndex(event); return false;">'+EngineShared.icon('home')+'</a>
-      <button class="icon-btn theme-toggle-btn" onclick="toggleTheme()" title="Toggle theme" aria-label="Toggle theme">'+EngineShared.icon('sun')+'</button>
-      <button class="icon-btn danger" onclick="confirmResetProgress()" title="Reset Progress" aria-label="Reset Progress">↻</button>
+      <button type="button" class="icon-btn theme-toggle-btn" onclick="toggleTheme()" title="Toggle theme" aria-label="Toggle theme">'+EngineShared.icon('sun')+'</button>
+      <button type="button" class="icon-btn danger" onclick="confirmResetProgress()" title="Reset Progress" aria-label="Reset Progress">↻</button>
     </div>
   </div>
 
@@ -161,11 +161,11 @@
   <div class="result-topbar">
     <h2>'+EngineShared.icon('bar-chart')+' Quiz Results</h2>
     <div class="topbar-actions">
-      <div class="icon-btn hl-mode-btn" role="button" tabindex="0" onclick="toggleHighlighterMode()" title="Highlighter Mode (H)" aria-label="Highlighter Mode (H)">'+EngineShared.icon('pen-tool')+'<span class="hl-last-dot" style="background:rgba(255,213,79,0.8);"></span><div class="hl-color-picker" id="hl-color-picker-2"><button class="hl-color-btn cb-1 selected" onclick="hlSelectColor(1); event.stopPropagation();" title="Yellow (1)" aria-label="Yellow (1)"></button><button class="hl-color-btn cb-2" onclick="hlSelectColor(2); event.stopPropagation();" title="Green (2)" aria-label="Green (2)"></button><button class="hl-color-btn cb-3" onclick="hlSelectColor(3); event.stopPropagation();" title="Blue (3)" aria-label="Blue (3)"></button><button class="hl-color-btn cb-4" onclick="hlSelectColor(4); event.stopPropagation();" title="Red (4)" aria-label="Red (4)"></button><button class="hl-erase-btn" onclick="hlSelectColor(0); event.stopPropagation();" title="Eraser" aria-label="Eraser">'+EngineShared.icon('eraser')+'</button><button class="hl-close-btn" onclick="disableHighlighterMode(); event.stopPropagation();" title="Close Highlighter" aria-label="Close Highlighter">'+EngineShared.icon('x')+'</button></div></div>
-      <button class="icon-btn" onclick="openAiAssistant()" title="Ask AI (needs internet)" aria-label="Ask AI (needs internet)">'+EngineShared.icon('bot')+'</button>
+      <div class="icon-btn hl-mode-btn" role="button" tabindex="0" onclick="toggleHighlighterMode()" title="Highlighter Mode (H)" aria-label="Highlighter Mode (H)">'+EngineShared.icon('pen-tool')+'<span class="hl-last-dot" style="background:rgba(255,213,79,0.8);"></span><div class="hl-color-picker" id="hl-color-picker-2"><button type="button" class="hl-color-btn cb-1 selected" onclick="hlSelectColor(1); event.stopPropagation();" title="Yellow (1)" aria-label="Yellow (1)"></button><button type="button" class="hl-color-btn cb-2" onclick="hlSelectColor(2); event.stopPropagation();" title="Green (2)" aria-label="Green (2)"></button><button type="button" class="hl-color-btn cb-3" onclick="hlSelectColor(3); event.stopPropagation();" title="Blue (3)" aria-label="Blue (3)"></button><button type="button" class="hl-color-btn cb-4" onclick="hlSelectColor(4); event.stopPropagation();" title="Red (4)" aria-label="Red (4)"></button><button type="button" class="hl-erase-btn" onclick="hlSelectColor(0); event.stopPropagation();" title="Eraser" aria-label="Eraser">'+EngineShared.icon('eraser')+'</button><button type="button" class="hl-close-btn" onclick="disableHighlighterMode(); event.stopPropagation();" title="Close Highlighter" aria-label="Close Highlighter">'+EngineShared.icon('x')+'</button></div></div>
+      <button type="button" class="icon-btn" onclick="openAiAssistant()" title="Ask AI (needs internet)" aria-label="Ask AI (needs internet)">'+EngineShared.icon('bot')+'</button>
       <a href="#" class="icon-btn" title="Back to Hub" onclick="navigateToIndex(event); return false;">'+EngineShared.icon('home')+'</a>
-      <button class="icon-btn theme-toggle-btn" onclick="toggleTheme()" title="Toggle theme" aria-label="Toggle theme">'+EngineShared.icon('sun')+'</button>
-      <button class="icon-btn danger" onclick="confirmResetProgress()" title="Reset Progress" aria-label="Reset Progress">↻</button>
+      <button type="button" class="icon-btn theme-toggle-btn" onclick="toggleTheme()" title="Toggle theme" aria-label="Toggle theme">'+EngineShared.icon('sun')+'</button>
+      <button type="button" class="icon-btn danger" onclick="confirmResetProgress()" title="Reset Progress" aria-label="Reset Progress">↻</button>
     </div>
   </div>
   <div class="result-body">
@@ -215,7 +215,7 @@
           <span class="export-badge" id="badge-flagged">0</span>
         </label>
       </div>
-      <button class="btn-export-pdf" onclick="exportToPDF()">
+      <button type="button" class="btn-export-pdf" onclick="exportToPDF()">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
           <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
           <polyline points="14 2 14 8 20 8"></polyline>
@@ -229,18 +229,18 @@
 
     <!-- Tabs -->
     <div class="result-tabs">
-      <button class="tab-btn active" onclick="filterResults('all', this)">All Questions</button>
-      <button class="tab-btn" onclick="filterResults('correct', this)">'+EngineShared.icon('check')+' Correct</button>
-      <button class="tab-btn" onclick="filterResults('wrong', this)">'+EngineShared.icon('x')+' Wrong</button>
-      <button class="tab-btn" onclick="filterResults('skipped', this)">— Skipped</button>
-      <button class="tab-btn" onclick="filterResults('flagged', this)">'+EngineShared.icon('flag')+' Flagged</button>
+      <button type="button" class="tab-btn active" onclick="filterResults('all', this)">All Questions</button>
+      <button type="button" class="tab-btn" onclick="filterResults('correct', this)">'+EngineShared.icon('check')+' Correct</button>
+      <button type="button" class="tab-btn" onclick="filterResults('wrong', this)">'+EngineShared.icon('x')+' Wrong</button>
+      <button type="button" class="tab-btn" onclick="filterResults('skipped', this)">— Skipped</button>
+      <button type="button" class="tab-btn" onclick="filterResults('flagged', this)">'+EngineShared.icon('flag')+' Flagged</button>
     </div>
 
     <!-- Result items -->
     <div class="result-list" id="result-list"></div>
 
     <div class="result-actions">
-      <button class="btn-restart" onclick="restartQuiz()">↺ Retake Quiz</button>
+      <button type="button" class="btn-restart" onclick="restartQuiz()">↺ Retake Quiz</button>
       <a href="#" class="btn-restart btn-secondary" onclick="navigateToIndex(event); return false;">'+EngineShared.icon('home')+' Return to Hub</a>
     </div>
   </div>
@@ -252,8 +252,8 @@
     <h3>Submit Quiz?</h3>
     <p>You have <span class="modal-unanswered" id="modal-unanswered">—</span> unanswered question(s). Are you sure you want to submit?</p>
     <div class="modal-actions">
-      <button class="btn-cancel" onclick="closeModal()">Go Back</button>
-      <button class="btn-confirm" onclick="confirmSubmit()">Submit Now</button>
+      <button type="button" class="btn-cancel" onclick="closeModal()">Go Back</button>
+      <button type="button" class="btn-confirm" onclick="confirmSubmit()">Submit Now</button>
     </div>
   </div>
 </div>
@@ -264,8 +264,8 @@
     <h3>Reset Progress?</h3>
     <p>Are you sure you want to reset your progress? This cannot be undone.</p>
     <div class="modal-actions">
-      <button class="btn-cancel" onclick="closeResetModal()">Go Back</button>
-      <button class="btn-confirm danger" onclick="confirmResetAction()">Reset Now</button>
+      <button type="button" class="btn-cancel" onclick="closeResetModal()">Go Back</button>
+      <button type="button" class="btn-confirm danger" onclick="confirmResetAction()">Reset Now</button>
     </div>
   </div>
 </div>
@@ -1129,7 +1129,8 @@ function selectAnswer(qIdx, optIdx) {
 
   state.answers[qIdx] = optIdx;
   if (window.OslerAnalytics) {
-    OslerAnalytics.trackAnswer('quiz', QUIZ_CONFIG.uid, qIdx, optIdx === QUESTIONS[qIdx].correct ? 'correct' : 'incorrect');
+    // V20 taxonomy: outcome must be 'correct' | 'wrong' | 'skipped' | 'rating_N' | null
+    OslerAnalytics.trackAnswer('quiz', QUIZ_CONFIG.uid, qIdx, optIdx === QUESTIONS[qIdx].correct ? 'correct' : 'wrong');
   }
   EngineShared.debounceSave(saveProgress); // persist answer immediately
 
@@ -2105,7 +2106,7 @@ document.head.appendChild(_kbStyle);
 var _kbHelpHTML = '';
 _kbHelpHTML += '<div class="kb-help-overlay" id="kb-help-overlay" onclick="if(event.target===this)closeKbHelp()">';
 _kbHelpHTML += '  <div class="kb-help-card">';
-_kbHelpHTML += '    <button class="kb-close-btn" onclick="closeKbHelp()">'+EngineShared.icon('x')+'</button>';
+_kbHelpHTML += '    <button type="button" class="kb-close-btn" onclick="closeKbHelp()">'+EngineShared.icon('x')+'</button>';
 _kbHelpHTML += '    <h3>⌨️ Keyboard Shortcuts</h3>';
 _kbHelpHTML += '    <div class="kb-shortcut-list">';
 

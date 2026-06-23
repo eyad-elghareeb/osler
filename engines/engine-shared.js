@@ -370,45 +370,166 @@
   };
 
   /* ── Lib module bridge (Phase 0) ─────────────────────────────────
-     When dist/ is served with src/lib/ accessible (development),
-     dynamically import the ES modules and replace inline methods
-     so engines transparently use the extracted lib code.
-     If import fails (production CDN), inline code continues to work.
-     Phase 4 will make this the primary path.                      */
-  var _libBase = ENGINE_BASE.replace(/dist\/$/, 'src/lib/');
-  Promise.all([
-    import(_libBase + 'theme.js').then(function(m) {
-      EngineShared.toggleTheme = m.toggleTheme;
-      EngineShared.updateThemeIcon = m.updateThemeIcons;
-    }).catch(function() {}),
-    import(_libBase + 'toast.js').then(function(m) {
-      EngineShared.showToast = m.showToast;
-    }).catch(function() {}),
-    import(_libBase + 'dom.js').then(function(m) {
-      EngineShared.escHtml = m.escHtml;
-    }).catch(function() {}),
-    import(_libBase + 'tracker.js').then(function(m) {
-      window.OslerTracker = {
-        recordQuizAnswer: m.recordQuizAnswer,
-        flagQuizItem: m.flagQuizItem,
-        rateFlashcard: m.rateFlashcard,
-        getDueFlashcards: m.getDueFlashcards,
-        getFlashcardState: m.getFlashcardState,
-        getQuizProgress: m.getQuizProgress,
-      };
-    }).catch(function() {}),
-    import(_libBase + 'analytics.js').then(function(m) {
-      window.OslerAnalytics = {
-        track: m.track,
-        trackStudyStart: m.trackStudyStart,
-        trackAnswer: m.trackAnswer,
-        trackFlag: m.trackFlag,
-        trackComplete: m.trackComplete,
-        trackExport: m.trackExport,
-      };
-    }).catch(function() {}),
-    import(_libBase + 'icons.js').then(function(m) {
-      _iconsCache = m;
-    }).catch(function() {}),
-  ]);
+     Dynamically imports the ES modules in src/lib/ and wires them onto
+     EngineShared / window.OslerTracker / window.OslerAnalytics /
+     window.OslerAnki so engines transparently use the extracted lib code.
+
+     B3 fix: robust path resolution. The old `ENGINE_BASE.replace(/dist\/$/, 'src/lib/')`
+     only worked when ENGINE_BASE literally ended in "dist/". In production
+     (served from dist/), ENGINE_BASE ends in "/" so the regex didn't match
+     and imports became "./tracker.js" (404). The new approach:
+       1. Try ROOT_BASE + 'src/lib/' (covers both dev and dist layouts,
+          since src/lib/ is copied to dist/src/lib/ by build.js).
+       2. Fall back to ENGINE_BASE + 'src/lib/' if that fails.
+
+     B3 fix: every import failure is logged to console.warn — no more
+     .catch(function(){}) silent swallowing.
+
+     B3 fix: bridge coverage expanded — gemini.js, keyboard.js, ui.js,
+     anki.js now bridged too. setupShortcuts delegates to keyboard.js
+     instead of duplicating the implementation. */
+  function _resolveLibPath(filename) {
+    // ROOT_BASE is one level up from ENGINE_BASE — i.e. the project root
+    // whether we're in dist/ or engines/. src/lib/ lives at the project root.
+    var candidates = [
+      ROOT_BASE + 'src/lib/' + filename,
+      ENGINE_BASE + 'src/lib/' + filename,
+      ENGINE_BASE + filename, // last-ditch: file sitting next to engine
+    ];
+    return candidates;
+  }
+
+  function _importLib(filename, label, wireFn) {
+    var candidates = _resolveLibPath(filename);
+    var idx = 0;
+    function tryNext() {
+      if (idx >= candidates.length) {
+        console.warn('[engine-shared] Failed to load ' + label + ' from any candidate path:', candidates);
+        return;
+      }
+      var url = candidates[idx++];
+      import(url).then(function(m) {
+        wireFn(m);
+      }).catch(function(e) {
+        // Try the next candidate. Common cause: 404 in production layout.
+        if (idx < candidates.length) {
+          tryNext();
+        } else {
+          console.warn('[engine-shared] ' + label + ' import failed (' + url + '):', e);
+        }
+      });
+    }
+    tryNext();
+  }
+
+  _importLib('theme.js', 'theme.js', function(m) {
+    if (typeof m.toggleTheme === 'function') EngineShared.toggleTheme = m.toggleTheme;
+    if (typeof m.updateThemeIcons === 'function') EngineShared.updateThemeIcon = m.updateThemeIcons;
+    if (typeof m.getTheme === 'function') EngineShared.getTheme = m.getTheme;
+  });
+
+  _importLib('toast.js', 'toast.js', function(m) {
+    if (typeof m.showToast === 'function') EngineShared.showToast = m.showToast;
+  });
+
+  _importLib('dom.js', 'dom.js', function(m) {
+    if (typeof m.escHtml === 'function') EngineShared.escHtml = m.escHtml;
+    if (typeof m.createElement === 'function') EngineShared.createElement = m.createElement;
+    if (typeof m.h === 'function') EngineShared.h = m.h;
+  });
+
+  _importLib('tracker.js', 'tracker.js', function(m) {
+    // Expose the FULL tracker API (was only 6 of 11 methods — H20 fix).
+    window.OslerTracker = {
+      getQuizProgress: m.getQuizProgress,
+      recordQuizAnswer: m.recordQuizAnswer,
+      flagQuizItem: m.flagQuizItem,
+      getQuizStats: m.getQuizStats,
+      getFlashcardState: m.getFlashcardState,
+      rateFlashcard: m.rateFlashcard,
+      getDueFlashcards: m.getDueFlashcards,
+      getWrittenProgress: m.getWrittenProgress,
+      recordWrittenAnswer: m.recordWrittenAnswer,
+      getOsceProgress: m.getOsceProgress,
+      recordOsceAnswer: m.recordOsceAnswer,
+    };
+  });
+
+  _importLib('analytics.js', 'analytics.js', function(m) {
+    window.OslerAnalytics = {
+      track: m.track,
+      trackStudyStart: m.trackStudyStart,
+      trackAnswer: m.trackAnswer,
+      trackFlag: m.trackFlag,
+      trackComplete: m.trackComplete,
+      trackExport: m.trackExport,
+    };
+  });
+
+  _importLib('icons.js', 'icons.js', function(m) {
+    _iconsCache = m;
+    // Re-render any icons that were rendered before the lib loaded.
+    // Dispatch a custom event engines can listen for.
+    try {
+      document.dispatchEvent(new CustomEvent('osler:icons-loaded'));
+    } catch (e) { /* old IE */ }
+  });
+
+  _importLib('anki.js', 'anki.js', function(m) {
+    window.OslerAnki = {
+      exportToTSV: m.exportToTSV,
+      importFromTSV: m.importFromTSV,
+      detectCloze: m.detectCloze,
+      downloadTSV: m.downloadTSV,
+    };
+  });
+
+  _importLib('keyboard.js', 'keyboard.js', function(m) {
+    // Delegate setupShortcuts to keyboard.js instead of duplicating (H16 fix).
+    if (typeof m.setupShortcuts === 'function') {
+      EngineShared.setupShortcuts = m.setupShortcuts;
+    }
+    if (typeof m.teardownShortcuts === 'function') {
+      EngineShared.teardownShortcuts = m.teardownShortcuts;
+    }
+  });
+
+  _importLib('ui.js', 'ui.js', function(m) {
+    window.OslerUI = {
+      Card: m.Card,
+      Button: m.Button,
+      Modal: m.Modal,
+      InstallPrompt: m.InstallPrompt,
+      CmdKPalette: m.CmdKPalette,
+    };
+  });
+
+  _importLib('gemini.js', 'gemini.js', function(m) {
+    window.OslerGemini = m; // ai-assistant-engine.js can delegate to this
+  });
+
+  // H8 fix: expose sync.js + auth.js bridges so engines can trigger sync
+  // without going through the deleted legacy sync-engine.js.
+  _importLib('sync.js', 'sync.js', function(m) {
+    window.OslerSync = {
+      syncPush: m.syncPush,
+      syncPull: m.syncPull,
+      syncFull: m.syncFull,
+      initAutoSync: m.initAutoSync,
+    };
+  });
+
+  _importLib('auth.js', 'auth.js', function(m) {
+    window.OslerAuth = {
+      currentUser: m.currentUser,
+      subscribe: m.subscribe,
+      signInAsGuest: m.signInAsGuest,
+      signInWithGoogle: m.signInWithGoogle,
+      signInWithGitHub: m.signInWithGitHub,
+      signOut: m.signOut,
+      upgradeAccount: m.upgradeAccount,
+      initAuth: m.initAuth,
+    };
+  });
+
 })();

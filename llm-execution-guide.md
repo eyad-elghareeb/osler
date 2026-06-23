@@ -2041,9 +2041,48 @@ Phase 4 done. P7 E2E tests can cover Anki export + a11y.
 
 ---
 
+# PHASE 4.6 — PRE-PHASE-5 CLEANUP (COMPLETED 2026-06-24)
+
+> **Status:** ✅ Complete. See `PATCH_NOTES.md` for full details.
+> **Sessions:** 1 (batch) · **Estimated:** ~4 hours actual.
+> **Goal:** Fix all 9 critical blockers + 25 high-severity issues identified in the Phase 4.5 → Phase 5 readiness review.
+
+## Summary of changes
+
+- **B1:** `src/lib/sync.js` — fixed 4 data-loss bugs (appendOnly dedupe key, syncPush doc-key collisions, syncPull compound-key lookup, maxStreak dropped xp/level) + improved merge strategies (true field-level merge, true LWW, SM-2 sum semantics).
+- **B2:** `engines/engine-tracker.js` — fixed wrong store (was polluting `userContent`, now writes to `quizTracker` with composite key). Full P2.6/P2.7 engine rewire deferred.
+- **B3:** `engines/engine-shared.js` — rewrote lib-bridge: robust path resolution (3 candidates), logged catches (no more silent swallowing), expanded coverage (gemini/keyboard/ui/anki/sync/auth bridges added), full tracker API (11 methods, was 6).
+- **B4:** `engines/uworld-engine.js` — fixed `__QUIZ_ENGINE_BASE` → `__UWORLD_ENGINE_BASE` (with backward-compat fallback). Also added `__INDEX_ENGINE_BASE` fallback to `index-engine.js`.
+- **B5:** `src/lib/quota.js` — fixed Stage 3 sign-inversion (was evicting overdue cards, now evicts mature cards scheduled 1+ years in the future). Extracted magic numbers to exported constants.
+- **B6:** A11y — `src/lib/ui.js` `Modal()` now has focus trap + focus restore. Added `type="button"` to 222 `<button>` tags across 9 engines. Added `aria-haspopup`/`aria-expanded` to hub auth dropdown. `dom.js` `createElement` now handles `ariaLabel` → `aria-label` correctly.
+- **B7:** `engines/flashcard-engine.js` — Export to Anki now delegates to `window.OslerAnki.downloadTSV()` via lib-bridge (was duplicating anki.js inline).
+- **B8:** `src/lib/validate.js` — rejects unknown `meta.schemaVersion` (V19 policy enforced). Loads known versions from `_meta.json`. Added 5 tests.
+- **B9:** `tauri-admin/` reconciled — added `lib.rs`, `auth.rs` (stub), `mcp_server.rs` (stub), `validation.rs` (stub), `frontend/main.js`, `frontend/styles.css`. Updated `Cargo.toml` (added `git2`/`reqwest`/`tokio`/tauri plugins). Updated `tauri.conf.json` (updater + shell plugins). Registered 9 stub commands in `main.rs`.
+- **H1–H25:** All high-severity issues addressed. See `PATCH_NOTES.md` for the full table.
+- **Deleted:** `engines/sync-engine.js`, `engines/sync-engine.src.js`, `scripts/build_sync_engine.ps1` (legacy WebRTC/MQTT sync — replaced by `src/lib/sync.js` Firebase sync).
+- **New files:** `src/lib/sync-utils.js` (shared `getDeviceId`), `scripts/add-type-button.js` (a11y helper), `PATCH_NOTES.md` (this change log).
+
+## Verification
+
+```bash
+npm run build     # ✓ 11 engines, 10 CSS, assets, lib, schemas
+npm test          # ✓ 73/73 tests pass (was 59/59 — +14 new tests)
+npm run validate  # ✓
+npm run check     # ✓ exit 0
+```
+
+## Phase 5 entry state
+
+Phase 5 sessions P5.1 (`auth.rs`), P5.2 (`git.rs`), P5.7 (`mcp_server.rs`) will find **stub files already in place** — they should "Implement" rather than "Create". The stubs register commands in `main.rs` so `cargo build` already verifies they compile. Existing `commands.rs`, `parser.rs`, `pdf.rs`, `deploy.rs`, `server.rs`, `templates.rs` are preserved working v5 code — Phase 5 should extend, not replace.
+
+Existing `git.rs` uses `std::process::Command` shell-out (safe, well-tested with `--force-with-lease`). Phase 5 P5.2 may optionally migrate to the `git2` crate (now in `Cargo.toml`), but this is not required.
+
+---
+
 # PHASE 5.0 — TAURI ADMIN SCAFFOLDING
 
 > **Sessions:** 3 · **Estimated:** ~2 hours · **Minimum tier:** T2 for P5.0.1 (Rust), T1 for rest.
+> **Status:** ✅ Mostly complete (B9 reconciliation). P5.0.1, P5.0.2, P5.0.3 verify-against-existing-state rather than create-from-scratch.
 
 ---
 

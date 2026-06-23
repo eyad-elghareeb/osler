@@ -1,7 +1,7 @@
 (function() {
   'use strict';
 
-  var ENGINE_BASE = EngineShared.ENGINE_BASE || (window.__QUIZ_ENGINE_BASE || '');
+  var ENGINE_BASE = EngineShared.ENGINE_BASE || (window.__UWORLD_ENGINE_BASE || window.__QUIZ_ENGINE_BASE || '');
 
   window.toggleTheme = EngineShared.toggleTheme;
   window.navigateToIndex = EngineShared.navigateToIndex;
@@ -1468,7 +1468,7 @@
     </svg>
     Back to Hub
   </a>
-  <button class="theme-btn-fixed theme-toggle-btn" onclick="toggleTheme()" title="Toggle theme">'+EngineShared.icon('sun')+'</button>
+  <button type="button" class="theme-btn-fixed theme-toggle-btn" onclick="toggleTheme()" title="Toggle theme">'+EngineShared.icon('sun')+'</button>
 
   <div class="start-card">
     <div class="start-icon" id="start-icon">'+EngineShared.icon('archive')+'</div>
@@ -1503,18 +1503,18 @@
     <div class="setting-section">
       <div class="section-label">Number of Questions</div>
       <div class="time-controls">
-        <button class="time-adj-btn" onclick="adjustCount(-5)">−5</button>
+        <button type="button" class="time-adj-btn" onclick="adjustCount(-5)">−5</button>
         <input type="number" id="q-count-input" class="time-input" min="1" value="20" oninput="onCustomCount(this.value)">
-        <button class="time-adj-btn" onclick="adjustCount(5)">+5</button>
+        <button type="button" class="time-adj-btn" onclick="adjustCount(5)">+5</button>
       </div>
     </div>
 
     <div class="setting-section" id="time-section">
       <div class="section-label">Time Limit (mins)</div>
       <div class="time-controls">
-        <button class="time-adj-btn" onclick="adjustTime(-5)">−5</button>
+        <button type="button" class="time-adj-btn" onclick="adjustTime(-5)">−5</button>
         <input type="number" id="time-input" class="time-input" min="1" max="300" value="30">
-        <button class="time-adj-btn" onclick="adjustTime(5)">+5</button>
+        <button type="button" class="time-adj-btn" onclick="adjustTime(5)">+5</button>
       </div>
     </div>
 
@@ -1554,8 +1554,8 @@
       </div>
     </div>
 
-    <button class="btn-start" onclick="startQuiz()">Start Test →</button>
-    <button class="reset-bank-btn" onclick="openBankResetModal()">'+EngineShared.icon('trash-2')+' Reset Coverage History</button>
+    <button type="button" class="btn-start" onclick="startQuiz()">Start Test →</button>
+    <button type="button" class="reset-bank-btn" onclick="openBankResetModal()">'+EngineShared.icon('trash-2')+' Reset Coverage History</button>
   </div>
 </div>
 
@@ -1565,8 +1565,8 @@
     <h3>'+EngineShared.icon('eraser')+' Reset Coverage History?</h3>
     <p>This will forget which questions you have already seen and reset the covered count to 0. Your progress in any active session will NOT be affected. Continue?</p>
     <div class="modal-actions">
-      <button class="btn-cancel" onclick="closeBankResetModal()">Cancel</button>
-      <button class="btn-confirm danger" onclick="confirmBankReset()">Reset Now</button>
+      <button type="button" class="btn-cancel" onclick="closeBankResetModal()">Cancel</button>
+      <button type="button" class="btn-confirm danger" onclick="confirmBankReset()">Reset Now</button>
     </div>
   </div>
 </div>
@@ -1576,49 +1576,49 @@
   <!-- Topbar Header -->
   <div class="cbt-header">
     <div class="cbt-header-left">
-      <button class="cbt-utility-btn" onclick="toggleNavPane()" title="Navigate block">
+      <button type="button" class="cbt-utility-btn" onclick="toggleNavPane()" title="Navigate block">
         <svg fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
         <span>Index</span>
       </button>
       <div class="cbt-header-status" id="header-item-number">Item 1 of 20</div>
       <div class="cbt-header-status" style="margin-left:-8px;"><span id="header-block-number">Block 1 of 1</span></div>
-      <button class="cbt-mark-btn" onclick="toggleFlagCurrent()" id="mark-btn">
+      <button type="button" class="cbt-mark-btn" onclick="toggleFlagCurrent()" id="mark-btn">
         <span style="font-size:1rem;">'+EngineShared.icon('flag')+'</span> Mark
       </button>
     </div>
     
     <div class="cbt-header-center">
-      <button class="cbt-nav-arrow" onclick="goToPrev()">
+      <button type="button" class="cbt-nav-arrow" onclick="goToPrev()">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="15 18 9 12 15 6"/></svg>
         <span>PREVIOUS</span>
       </button>
-      <button class="cbt-nav-arrow" onclick="goToNext()">
+      <button type="button" class="cbt-nav-arrow" onclick="goToNext()">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="9 18 15 12 9 6"/></svg>
         <span>NEXT</span>
       </button>
     </div>
     
     <div class="cbt-header-right">
-      <button class="cbt-utility-btn" onclick="toggleLabDrawer()" title="Lab reference values">
+      <button type="button" class="cbt-utility-btn" onclick="toggleLabDrawer()" title="Lab reference values">
         <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M19.48 9.44c.07-.36.11-.73.11-1.11a7.78 7.78 0 0 0-1.89-5.06l-.28-.3a1.5 1.5 0 0 0-2.22.1l-1.92 2.2a14.86 14.86 0 0 0-2.56-.26 14.73 14.73 0 0 0-2.56.26l-1.92-2.2a1.5 1.5 0 0 0-2.22-.1l-.28.3a7.78 7.78 0 0 0-1.89 5.06c0 .38.04.75.11 1.11A11.7 11.7 0 0 0 2 13v6a3 3 0 0 0 3 3h14a3 3 0 0 0 3-3v-6a11.7 11.7 0 0 0-2.52-3.56z"/></svg>
         <span>Lab Values</span>
       </button>
-      <button class="cbt-utility-btn" onclick="toggleNotepadDrawer()" title="Notepad scratchpad">
+      <button type="button" class="cbt-utility-btn" onclick="toggleNotepadDrawer()" title="Notepad scratchpad">
         <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M9 12h6m-6 4h6m2 5H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5.586a1 1 0 0 1 .707.293l5.414 5.414a1 1 0 0 1 .293.707V19a2 2 0 0 1-2 2z"/></svg>
         <span>Notes</span>
       </button>
-      <button class="cbt-utility-btn" onclick="toggleCalculator()" title="Show/hide calculator">
+      <button type="button" class="cbt-utility-btn" onclick="toggleCalculator()" title="Show/hide calculator">
         <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="4" y="2" width="16" height="20" rx="2"/><line x1="8" y1="6" x2="16" y2="6"/><line x1="8" y1="10" x2="16" y2="10"/><line x1="8" y1="14" x2="16" y2="14"/><line x1="8" y1="18" x2="16" y2="18"/></svg>
         <span>Calculator</span>
       </button>
-      <button class="cbt-utility-btn" onclick="toggleTheme()" title="Reverse Color Toggle">
+      <button type="button" class="cbt-utility-btn" onclick="toggleTheme()" title="Reverse Color Toggle">
         <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 2a10 10 0 0 0 0 20v-2a8 8 0 0 1 0-16z"/></svg>
         <span>Reverse Color</span>
       </button>
       
       <!-- Highlighter Widget -->
       <div style="position: relative; display: flex; align-items: center;">
-        <button class="cbt-utility-btn" id="highlighter-toggle" onclick="toggleHighlighterMode()" title="Toggle Highlighter Mode (H)">
+        <button type="button" class="cbt-utility-btn" id="highlighter-toggle" onclick="toggleHighlighterMode()" title="Toggle Highlighter Mode (H)">
           <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
             <path d="M15.24 4.31l4.45 4.45L8.73 19.72H4.28v-4.45L15.24 4.31zM3 21h18"/>
           </svg>
@@ -1627,19 +1627,19 @@
           </span>
         </button>
         <div class="hl-color-picker" id="hl-picker" style="display: none;">
-          <button class="hl-color-btn hl-c1" onclick="hlSelectColor(1); event.stopPropagation();" title="Yellow (1)"></button>
-          <button class="hl-color-btn hl-c2" onclick="hlSelectColor(2); event.stopPropagation();" title="Green (2)"></button>
-          <button class="hl-color-btn hl-c3" onclick="hlSelectColor(3); event.stopPropagation();" title="Pink (3)"></button>
-          <button class="hl-color-btn hl-c4" onclick="hlSelectColor(4); event.stopPropagation();" title="Blue (4)"></button>
-          <button class="hl-erase-btn" onclick="hlSelectColor(0); event.stopPropagation();" title="Eraser">'+EngineShared.icon('eraser')+'</button>
-          <button class="hl-close-btn" onclick="disableHighlighterMode(); event.stopPropagation();" title="Close Highlighter">'+EngineShared.icon('x')+'</button>
+          <button type="button" class="hl-color-btn hl-c1" onclick="hlSelectColor(1); event.stopPropagation();" title="Yellow (1)"></button>
+          <button type="button" class="hl-color-btn hl-c2" onclick="hlSelectColor(2); event.stopPropagation();" title="Green (2)"></button>
+          <button type="button" class="hl-color-btn hl-c3" onclick="hlSelectColor(3); event.stopPropagation();" title="Pink (3)"></button>
+          <button type="button" class="hl-color-btn hl-c4" onclick="hlSelectColor(4); event.stopPropagation();" title="Blue (4)"></button>
+          <button type="button" class="hl-erase-btn" onclick="hlSelectColor(0); event.stopPropagation();" title="Eraser">'+EngineShared.icon('eraser')+'</button>
+          <button type="button" class="hl-close-btn" onclick="disableHighlighterMode(); event.stopPropagation();" title="Close Highlighter">'+EngineShared.icon('x')+'</button>
         </div>
       </div>
 
       <div class="zoom-controls">
-        <button class="zoom-btn" onclick="zoomDecrease()" title="Decrease text size">−</button>
-        <button class="zoom-btn active" onclick="setZoom('m')" title="Reset to default text size">A</button>
-        <button class="zoom-btn" onclick="zoomIncrease()" title="Increase text size">+</button>
+        <button type="button" class="zoom-btn" onclick="zoomDecrease()" title="Decrease text size">−</button>
+        <button type="button" class="zoom-btn active" onclick="setZoom('m')" title="Reset to default text size">A</button>
+        <button type="button" class="zoom-btn" onclick="zoomIncrease()" title="Increase text size">+</button>
       </div>
     </div>
   </div>
@@ -1706,10 +1706,10 @@
         <span>Block Time Remaining:</span>
         <span id="timer-text">00:00:00</span>
       </div>
-      <button class="cbt-lock-btn" onclick="togglePauseTimer()" id="pause-btn">Pause</button>
+      <button type="button" class="cbt-lock-btn" onclick="togglePauseTimer()" id="pause-btn">Pause</button>
     </div>
     <div class="cbt-footer-right">
-      <button class="cbt-end-btn" onclick="attemptSubmit()">End Block</button>
+      <button type="button" class="cbt-end-btn" onclick="attemptSubmit()">End Block</button>
     </div>
   </div>
 
@@ -1717,13 +1717,13 @@
   <div class="cbt-drawer" id="lab-drawer">
     <div class="drawer-header">
       <span class="drawer-title">Reference Ranges</span>
-      <button class="drawer-close" onclick="toggleLabDrawer()">'+EngineShared.icon('x')+'</button>
+      <button type="button" class="drawer-close" onclick="toggleLabDrawer()">'+EngineShared.icon('x')+'</button>
     </div>
     <div class="lab-tabs">
-      <button class="lab-tab-btn active" onclick="switchLabTab('serum')">Serum</button>
-      <button class="lab-tab-btn" onclick="switchLabTab('csf')">CSF</button>
-      <button class="lab-tab-btn" onclick="switchLabTab('blood')">Blood/ABG</button>
-      <button class="lab-tab-btn" onclick="switchLabTab('urine')">Urine</button>
+      <button type="button" class="lab-tab-btn active" onclick="switchLabTab('serum')">Serum</button>
+      <button type="button" class="lab-tab-btn" onclick="switchLabTab('csf')">CSF</button>
+      <button type="button" class="lab-tab-btn" onclick="switchLabTab('blood')">Blood/ABG</button>
+      <button type="button" class="lab-tab-btn" onclick="switchLabTab('urine')">Urine</button>
     </div>
     <input type="text" class="lab-search-input" id="lab-search" placeholder="Search reference ranges..." oninput="filterLabValues()">
     <div class="drawer-content" id="lab-content" style="padding:0;">
@@ -1745,12 +1745,12 @@
   <div class="cbt-drawer" id="notepad-drawer">
     <div class="drawer-header">
       <span class="drawer-title">Notepad Scratchpad</span>
-      <button class="drawer-close" onclick="toggleNotepadDrawer()">'+EngineShared.icon('x')+'</button>
+      <button type="button" class="drawer-close" onclick="toggleNotepadDrawer()">'+EngineShared.icon('x')+'</button>
     </div>
     <div class="drawer-content">
       <p style="font-size:0.85rem;color:var(--text-muted);margin:0 0 12px;line-height:1.4;">Scratchpad is shared and persists throughout your session. Auto-saves to your local cache.</p>
       <textarea class="notepad-textarea" id="notepad-text" placeholder="Type clinical notes, formulas, or mnemonic tags here..."></textarea>
-      <button class="notepad-save-btn" onclick="saveNotepadText()">Save Note</button>
+      <button type="button" class="notepad-save-btn" onclick="saveNotepadText()">Save Note</button>
     </div>
   </div>
 
@@ -1762,29 +1762,29 @@
     </div>
     <input type="text" class="calc-screen" id="calc-screen" value="0" readonly>
     <div class="calc-grid">
-      <button class="calc-btn clear" onclick="calcInput('C')">C</button>
-      <button class="calc-btn op" onclick="calcInput('sqrt')">√</button>
-      <button class="calc-btn op" onclick="calcInput('inv')">1/x</button>
-      <button class="calc-btn op" onclick="calcInput('/')">÷</button>
+      <button type="button" class="calc-btn clear" onclick="calcInput('C')">C</button>
+      <button type="button" class="calc-btn op" onclick="calcInput('sqrt')">√</button>
+      <button type="button" class="calc-btn op" onclick="calcInput('inv')">1/x</button>
+      <button type="button" class="calc-btn op" onclick="calcInput('/')">÷</button>
       
-      <button class="calc-btn" onclick="calcInput('7')">7</button>
-      <button class="calc-btn" onclick="calcInput('8')">8</button>
-      <button class="calc-btn" onclick="calcInput('9')">9</button>
-      <button class="calc-btn op" onclick="calcInput('*')">×</button>
+      <button type="button" class="calc-btn" onclick="calcInput('7')">7</button>
+      <button type="button" class="calc-btn" onclick="calcInput('8')">8</button>
+      <button type="button" class="calc-btn" onclick="calcInput('9')">9</button>
+      <button type="button" class="calc-btn op" onclick="calcInput('*')">×</button>
       
-      <button class="calc-btn" onclick="calcInput('4')">4</button>
-      <button class="calc-btn" onclick="calcInput('5')">5</button>
-      <button class="calc-btn" onclick="calcInput('6')">6</button>
-      <button class="calc-btn op" onclick="calcInput('-')">−</button>
+      <button type="button" class="calc-btn" onclick="calcInput('4')">4</button>
+      <button type="button" class="calc-btn" onclick="calcInput('5')">5</button>
+      <button type="button" class="calc-btn" onclick="calcInput('6')">6</button>
+      <button type="button" class="calc-btn op" onclick="calcInput('-')">−</button>
       
-      <button class="calc-btn" onclick="calcInput('1')">1</button>
-      <button class="calc-btn" onclick="calcInput('2')">2</button>
-      <button class="calc-btn" onclick="calcInput('3')">3</button>
-      <button class="calc-btn op" onclick="calcInput('+')">+</button>
+      <button type="button" class="calc-btn" onclick="calcInput('1')">1</button>
+      <button type="button" class="calc-btn" onclick="calcInput('2')">2</button>
+      <button type="button" class="calc-btn" onclick="calcInput('3')">3</button>
+      <button type="button" class="calc-btn op" onclick="calcInput('+')">+</button>
       
-      <button class="calc-btn" onclick="calcInput('0')">0</button>
-      <button class="calc-btn" onclick="calcInput('.')">.</button>
-      <button class="calc-btn equals" onclick="calcInput('=')">=</button>
+      <button type="button" class="calc-btn" onclick="calcInput('0')">0</button>
+      <button type="button" class="calc-btn" onclick="calcInput('.')">.</button>
+      <button type="button" class="calc-btn equals" onclick="calcInput('=')">=</button>
     </div>
   </div>
 </div>
@@ -1795,7 +1795,7 @@
     <h2>'+EngineShared.icon('bar-chart')+' Session Results</h2>
     <div class="topbar-actions">
       <a href="#" class="hub-back-btn" style="position:static;" onclick="navigateToIndex(event); return false;">'+EngineShared.icon('home')+' Hub</a>
-      <button class="theme-btn-fixed" style="position:static;" onclick="toggleTheme()">'+EngineShared.icon('sun')+'</button>
+      <button type="button" class="theme-btn-fixed" style="position:static;" onclick="toggleTheme()">'+EngineShared.icon('sun')+'</button>
     </div>
   </div>
   
@@ -1845,7 +1845,7 @@
           <span class="export-badge" id="badge-flagged">0</span>
         </label>
       </div>
-      <button class="btn-export-pdf" onclick="exportToPDF()">
+      <button type="button" class="btn-export-pdf" onclick="exportToPDF()">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
           <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
           <polyline points="14 2 14 8 20 8"></polyline>
@@ -1858,17 +1858,17 @@
 
     <!-- Review Tabs and Question Review Area -->
     <div class="result-tabs">
-      <button class="tab-btn active" onclick="filterResults('all', this)">All Questions</button>
-      <button class="tab-btn" onclick="filterResults('correct', this)">'+EngineShared.icon('check')+' Correct</button>
-      <button class="tab-btn" onclick="filterResults('wrong', this)">'+EngineShared.icon('x')+' Wrong</button>
-      <button class="tab-btn" onclick="filterResults('skipped', this)">— Skipped</button>
-      <button class="tab-btn" onclick="filterResults('flagged', this)">'+EngineShared.icon('flag')+' Flagged</button>
+      <button type="button" class="tab-btn active" onclick="filterResults('all', this)">All Questions</button>
+      <button type="button" class="tab-btn" onclick="filterResults('correct', this)">'+EngineShared.icon('check')+' Correct</button>
+      <button type="button" class="tab-btn" onclick="filterResults('wrong', this)">'+EngineShared.icon('x')+' Wrong</button>
+      <button type="button" class="tab-btn" onclick="filterResults('skipped', this)">— Skipped</button>
+      <button type="button" class="tab-btn" onclick="filterResults('flagged', this)">'+EngineShared.icon('flag')+' Flagged</button>
     </div>
     
     <div class="result-list" id="result-list"></div>
     
     <div class="result-actions">
-      <button class="btn-restart" onclick="onNewSessionClick(event)">↺ Start New Block</button>
+      <button type="button" class="btn-restart" onclick="onNewSessionClick(event)">↺ Start New Block</button>
       <a href="#" class="btn-restart btn-secondary" onclick="navigateToIndex(event); return false;">'+EngineShared.icon('home')+' Back to Quiz Hub</a>
     </div>
   </div>
@@ -1880,8 +1880,8 @@
     <h3>End This Block?</h3>
     <p>You have <span class="modal-unanswered" id="modal-unanswered">—</span> unanswered item(s) in this block. Are you sure you want to end it now?</p>
     <div class="modal-actions">
-      <button class="btn-cancel" onclick="closeModal()">Go Back</button>
-      <button class="btn-confirm danger" onclick="confirmSubmit()">End Block</button>
+      <button type="button" class="btn-cancel" onclick="closeModal()">Go Back</button>
+      <button type="button" class="btn-confirm danger" onclick="confirmSubmit()">End Block</button>
     </div>
   </div>
 </div>
@@ -1892,8 +1892,8 @@
     <h3>Restart Session?</h3>
     <p>Do you want to reset your current block progress? Current answers will be cleared.</p>
     <div class="modal-actions">
-      <button class="btn-cancel" onclick="closeResetModal()">Go Back</button>
-      <button class="btn-confirm danger" onclick="confirmResetAction()">Restart Block</button>
+      <button type="button" class="btn-cancel" onclick="closeResetModal()">Go Back</button>
+      <button type="button" class="btn-confirm danger" onclick="confirmResetAction()">Restart Block</button>
     </div>
   </div>
 </div>
@@ -3068,7 +3068,7 @@
             <span>${KEYS[i]}</span>
           </div>
           <div class="option-text">${opt}</div>
-          <button class="option-strike-btn${isStruck?' active':''}" onclick="event.stopPropagation(); toggleCardStrikethrough(${idx}, ${i})" title="Strikethrough (S)">'+EngineShared.icon('x')+'</button>
+          <button type="button" class="option-strike-btn${isStruck?' active':''}" onclick="event.stopPropagation(); toggleCardStrikethrough(${idx}, ${i})" title="Strikethrough (S)">'+EngineShared.icon('x')+'</button>
         </div>
       `;
     }).join('');
@@ -3162,7 +3162,10 @@
     state.answers[qIdx] = optIdx;
     if (window.OslerAnalytics) {
       var qi = SESSION_QUESTION_INDICES[qIdx];
-      OslerAnalytics.trackAnswer('uworld', BANK_CONFIG.uid, qIdx, optIdx === QUESTIONS[qi].correct ? 'correct' : 'incorrect');
+      // V20 taxonomy: contentType must be quiz|bank|flashcard|written|osce
+      // (uworld is treated as 'quiz' for analytics purposes),
+      // outcome must be 'correct' | 'wrong' | 'skipped' | 'rating_N' | null
+      OslerAnalytics.trackAnswer('quiz', BANK_CONFIG.uid, qIdx, optIdx === QUESTIONS[qi].correct ? 'correct' : 'wrong');
     }
     EngineShared.debounceSave(saveProgress);
 
@@ -3354,7 +3357,7 @@
   function buildNavGrid() {
     const grid = document.getElementById('nav-grid');
     grid.innerHTML = SESSION_QUESTIONS.map((_, i) => `
-      <button class="cbt-nav-btn" id="nav-btn-${i}" onclick="goTo(${i})">
+      <button type="button" class="cbt-nav-btn" id="nav-btn-${i}" onclick="goTo(${i})">
         <span class="unanswered-dot">•</span>
         <span class="q-num">${i + 1}</span>
         <span class="marked-triangle">▶</span>

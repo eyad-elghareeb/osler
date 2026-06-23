@@ -277,7 +277,7 @@
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
     Menu
   </a>
-  <button class="theme-btn-fixed theme-toggle-btn" onclick="toggleTheme()" title="Toggle theme" aria-label="Toggle theme">'+EngineShared.icon('sun')+'</button>
+  <button type="button" class="theme-btn-fixed theme-toggle-btn" onclick="toggleTheme()" title="Toggle theme" aria-label="Toggle theme">'+EngineShared.icon('sun')+'</button>
 
   <div class="start-card">
     <div class="start-icon" id="start-icon">'+EngineShared.icon('layers')+'</div>
@@ -312,9 +312,9 @@
     <div class="q-count-section">
       <div class="section-label">Cards per session</div>
       <div class="time-controls">
-        <button class="time-adj-btn" onclick="adjustCount(-5)">-5</button>
+        <button type="button" class="time-adj-btn" onclick="adjustCount(-5)">-5</button>
         <input type="number" id="q-count-input" class="time-input" value="20" min="1" onchange="onCustomCount(this.value)">
-        <button class="time-adj-btn" onclick="adjustCount(5)">+5</button>
+        <button type="button" class="time-adj-btn" onclick="adjustCount(5)">+5</button>
       </div>
     </div>
 
@@ -361,8 +361,8 @@
       </div>
     </div>
 
-    <button class="btn-start" onclick="startStudy()">Start Studying</button>
-    <button class="reset-bank-btn" onclick="resetBankProgress()">Reset Deck Progress</button>
+    <button type="button" class="btn-start" onclick="startStudy()">Start Studying</button>
+    <button type="button" class="reset-bank-btn" onclick="resetBankProgress()">Reset Deck Progress</button>
   </div>
 </div>
 
@@ -376,10 +376,10 @@
     </div>
     <div class="topbar-actions">
 
-      <button class="icon-btn" onclick="toggleTheme()" title="Toggle theme" aria-label="Toggle theme">
+      <button type="button" class="icon-btn" onclick="toggleTheme()" title="Toggle theme" aria-label="Toggle theme">
         <span id="theme-toggle-icon">'+EngineShared.icon('sun')+'</span>
       </button>
-      <button class="icon-btn danger" onclick="confirmResetProgress()" title="Quit session" aria-label="Quit session">
+      <button type="button" class="icon-btn danger" onclick="confirmResetProgress()" title="Quit session" aria-label="Quit session">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
       </button>
     </div>
@@ -421,7 +421,7 @@
     <h2>Session Complete</h2>
     <div class="topbar-actions">
       <a href="#" class="icon-btn" onclick="navigateToIndex(event); return false;" title="Back to Hub">'+EngineShared.icon('home')+'</a>
-      <button class="icon-btn" onclick="toggleTheme()" title="Toggle theme" aria-label="Toggle theme">
+      <button type="button" class="icon-btn" onclick="toggleTheme()" title="Toggle theme" aria-label="Toggle theme">
         <span class="theme-toggle-btn">'+EngineShared.icon('sun')+'</span>
       </button>
     </div>
@@ -470,7 +470,7 @@
           <span class="export-badge" id="badge-flagged">0</span>
         </label>
       </div>
-      <button class="btn-export-pdf" onclick="exportToPDF()">
+      <button type="button" class="btn-export-pdf" onclick="exportToPDF()">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
           <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
           <polyline points="14 2 14 8 20 8"></polyline>
@@ -490,14 +490,14 @@
       </button>
     </div>
     <div class="result-tabs" id="result-tabs">
-      <button class="tab-btn active" onclick="filterResults('all',this)">All</button>
-      <button class="tab-btn" onclick="filterResults('flagged',this)">Flagged</button>
-      <button class="tab-btn" onclick="filterResults('again',this)">Again</button>
+      <button type="button" class="tab-btn active" onclick="filterResults('all',this)">All</button>
+      <button type="button" class="tab-btn" onclick="filterResults('flagged',this)">Flagged</button>
+      <button type="button" class="tab-btn" onclick="filterResults('again',this)">Again</button>
     </div>
     <div class="result-list" id="result-list"></div>
     <div class="result-actions">
-      <button class="btn-restart" onclick="onNewSessionClick(event)">New Session</button>
-      <button class="btn-secondary" onclick="navigateToIndex(event)">Back to Hub</button>
+      <button type="button" class="btn-restart" onclick="onNewSessionClick(event)">New Session</button>
+      <button type="button" class="btn-secondary" onclick="navigateToIndex(event)">Back to Hub</button>
     </div>
   </div>
 </div>
@@ -508,8 +508,8 @@
     <h3>Finish Session?</h3>
     <p id="finish-modal-msg">Complete your study session and view results.</p>
     <div class="modal-actions">
-      <button class="btn-cancel" onclick="closeFinishModal()">Keep Studying</button>
-      <button class="btn-confirm" onclick="confirmFinishAction()">Finish Session</button>
+      <button type="button" class="btn-cancel" onclick="closeFinishModal()">Keep Studying</button>
+      <button type="button" class="btn-confirm" onclick="confirmFinishAction()">Finish Session</button>
     </div>
   </div>
 </div>
@@ -518,8 +518,8 @@
     <h3>End Session?</h3>
     <p>Your progress in this session will be lost. Cards you have already seen will still be marked as reviewed.</p>
     <div class="modal-actions">
-      <button class="btn-cancel" onclick="closeResetModal()">Cancel</button>
-      <button class="btn-confirm" onclick="confirmResetAction()">End Session</button>
+      <button type="button" class="btn-cancel" onclick="closeResetModal()">Cancel</button>
+      <button type="button" class="btn-confirm" onclick="confirmResetAction()">End Session</button>
     </div>
   </div>
 </div>
@@ -528,8 +528,8 @@
     <h3>Reset Deck Progress?</h3>
     <p>This will forget which cards you have already seen and reset all ratings. Your flashcards themselves will not be deleted.</p>
     <div class="modal-actions">
-      <button class="btn-cancel" onclick="closeResetDeckModal()">Cancel</button>
-      <button class="btn-confirm danger" onclick="confirmResetDeckAction()">Reset Progress</button>
+      <button type="button" class="btn-cancel" onclick="closeResetDeckModal()">Cancel</button>
+      <button type="button" class="btn-confirm danger" onclick="confirmResetDeckAction()">Reset Progress</button>
     </div>
   </div>
 </div>
@@ -546,7 +546,7 @@
       <tr><td><span class="kbd">/</span></td><td>Show keyboard shortcuts</td></tr>
       <tr><td><span class="kbd">Esc</span></td><td>Close help / modals</td></tr>
     </table>
-    <div class="kb-close"><button class="btn" onclick="closeKbHelp()">Close</button></div>
+    <div class="kb-close"><button type="button" class="btn" onclick="closeKbHelp()">Close</button></div>
   </div>
 </div>
 
@@ -1262,6 +1262,7 @@
   /* ── Render Card ──────────────────────────────────────────── */
   function renderCard(idx) {
     state.current = idx;
+    state.cardShownAt = Date.now();  // for SM-2 avgTimePerReview
     var card = SESSION_CARDS[idx];
     var isFlipped = !!state.flipped[idx];
     var isLast = idx === SESSION_CARDS.length - 1;
@@ -1546,14 +1547,27 @@
   };
 
   /* ── Rate Card ────────────────────────────────────────────── */
+  // Maps UI rating labels to SM-2 quality scores (0=Again, 1=Hard, 2=Good, 3=Easy).
   var RATING_MAP = { 'again': 0, 'hard': 1, 'good': 2, 'easy': 3 };
+  // V20 analytics taxonomy outcome mapping.
+  // The taxonomy requires outcome in: rating_1|rating_2|rating_3|rating_4|null
+  // (rating_1 = Again, rating_2 = Hard, rating_3 = Good, rating_4 = Easy).
+  var RATING_OUTCOME = { 'again': 'rating_1', 'hard': 'rating_2', 'good': 'rating_3', 'easy': 'rating_4' };
+
   window.rateCard = function(rating) {
     var idx = state.current;
     state.ratings[idx] = rating;
+
+    // Compute elapsed time on this card for SM-2 avgTimePerReview.
+    var elapsedMs = state.cardShownAt ? (Date.now() - state.cardShownAt) : 0;
+
+    var card = SESSION_CARDS[idx];
+    var uid = card.id || card.uid || ('card_' + (card.idx || idx));
+
+    // V20 analytics — use rating_N outcome, not the raw label.
     if (window.OslerAnalytics) {
-      var card = SESSION_CARDS[idx];
-      var uid = card.id || card.uid || ('card_' + (card.idx || idx));
-      OslerAnalytics.trackAnswer('flashcard', BANK_CONFIG.uid, uid, rating);
+      var outcome = RATING_OUTCOME[rating] || null;
+      OslerAnalytics.trackAnswer('flashcard', BANK_CONFIG.uid, uid, outcome, elapsedMs);
     }
 
     var progress = getBankProgress();
@@ -1565,12 +1579,11 @@
     updateNavGrid(idx);
     updateNavStats();
 
+    // SM-2: pass elapsedMs so tracker.rateFlashcard can update avgTimePerReview.
     if (window.OslerTracker) {
-      var card = SESSION_CARDS[idx];
-      var uid = card.id || card.uid || ('card_' + (card.idx || idx));
       var sm2Rating = RATING_MAP[rating];
       if (sm2Rating !== undefined) {
-        OslerTracker.rateFlashcard(uid, sm2Rating);
+        OslerTracker.rateFlashcard(uid, sm2Rating, elapsedMs);
       }
     }
 
@@ -2023,36 +2036,50 @@
   };
 
   /* ── Export to Anki (TSV) ──────────────────────────────────── */
+  // Delegates to src/lib/anki.js (single source of truth for TSV format).
+  // The lib-bridge in engine-shared.js exposes anki.exportToTSV / downloadTSV
+  // via window.OslerAnki. Falls back to a tiny inline impl only if the bridge
+  // failed to load (with a console warning) — never silently.
   window.exportToAnki = function() {
-    var lines = ['#front\tback\ttags'];
-    var CLOZE_ANKI_RE = /\{\{c(\d+)::([^}]+)(?:::[^}]*)?\}\}/g;
-    SESSION_CARDS.forEach(function(card) {
-      var front, back;
-      if (card.type === 'cloze') {
-        front = card.text || '';
-        back = (card.text || '').replace(CLOZE_ANKI_RE, function(m, cNum, ans) { return ans; }).replace(/\{\{c\d+::[^}]+(?:::.*?)?\}\}/g, '');
-      } else {
-        front = card.front || '';
-        back = card.back || '';
-      }
-      front = front.replace(/\t/g, ' ').replace(/"/g, '""');
-      back = back.replace(/\t/g, ' ').replace(/"/g, '""');
-      if (front.indexOf('\n') > -1 || front.indexOf('"') > -1) front = '"' + front + '"';
-      if (back.indexOf('\n') > -1 || back.indexOf('"') > -1) back = '"' + back + '"';
-      var tags = Array.isArray(card.tags) ? card.tags.join(' ') : (card.tags || '');
-      lines.push(front + '\t' + back + '\t' + tags);
+    var cards = (SESSION_CARDS || []).map(function(card) {
+      return {
+        front: card.type === 'cloze' ? (card.text || '') : (card.front || ''),
+        back: card.back || '',
+        tags: Array.isArray(card.tags) ? card.tags : (card.tags || []),
+        cloze: card.type === 'cloze' ? (card.text || '') : null,
+      };
     });
-    var tsv = lines.join('\n');
-    var blob = new Blob([tsv], { type: 'text/tab-separated-values;charset=utf-8' });
-    var url = URL.createObjectURL(blob);
-    var a = document.createElement('a');
-    a.href = url;
-    a.download = 'osler-flashcards-' + Date.now() + '.txt';
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-    showToast('Exported ' + (lines.length - 1) + ' cards to Anki TSV');
+
+    var filename = 'osler-flashcards-' + Date.now() + '.txt';
+    if (window.OslerAnki && typeof window.OslerAnki.downloadTSV === 'function') {
+      window.OslerAnki.downloadTSV(cards, filename);
+      showToast('Exported ' + cards.length + ' cards to Anki TSV');
+    } else {
+      console.warn('[flashcard-engine] OslerAnki bridge unavailable; falling back to inline TSV.');
+      // Minimal inline fallback — kept short on purpose; the canonical impl
+      // lives in src/lib/anki.js. Remove this fallback once lib-bridge is
+      // guaranteed to load (Phase 5+).
+      var lines = ['#front\tback\ttags'];
+      cards.forEach(function(c) {
+        var f = String(c.front || '').replace(/\t/g, ' ').replace(/"/g, '""');
+        var b = String(c.back || '').replace(/\t/g, ' ').replace(/"/g, '""');
+        if (f.indexOf('\n') > -1 || f.indexOf('"') > -1) f = '"' + f + '"';
+        if (b.indexOf('\n') > -1 || b.indexOf('"') > -1) b = '"' + b + '"';
+        var t = Array.isArray(c.tags) ? c.tags.join(' ') : (c.tags || '');
+        lines.push(f + '\t' + b + '\t' + t);
+      });
+      var tsv = lines.join('\n');
+      var blob = new Blob([tsv], { type: 'text/tab-separated-values;charset=utf-8' });
+      var url = URL.createObjectURL(blob);
+      var a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      showToast('Exported ' + (lines.length - 1) + ' cards to Anki TSV (fallback)');
+    }
   };
 
   /* ── Confirm Reset (mid-session) ──────────────────────────── */

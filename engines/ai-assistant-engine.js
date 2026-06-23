@@ -14,8 +14,13 @@
     maxWait:'gemini_max_wait',
     retry:  'gemini_retry_level'
   };
-  /* ── Models ──────────────────────────────────────────────────── */
-  var MODELS = [
+  /* ── Models ────────────────────────────────────────────────────
+     H15 fix: delegate to src/lib/gemini.js (single source of truth).
+     Fall back to a local list ONLY if the lib-bridge hasn't loaded yet
+     (e.g. very first render before dynamic import completes). The local
+     list mirrors gemini.js but is kept minimal — adding a model means
+     updating src/lib/gemini.js, not this file. */
+  var _FALLBACK_MODELS = [
     ['gemini-3.1-flash-lite', 'Gemini 3.1 Flash-Lite (default, fast & modern)'],
     ['gemini-3.5-flash',      'Gemini 3.5 Flash (latest, strongest Flash)'],
     ['gemini-3.1-pro-preview', 'Gemini 3.1 Pro Preview (most capable, premium)'],
@@ -23,6 +28,17 @@
     ['gemma-4-31b-it',        'Gemma 4 31B IT (larger open model)'],
     ['gemini-2.5-flash',      'Gemini 2.5 Flash (older fallback)']
   ];
+  function _getModels() {
+    if (window.OslerGemini && Array.isArray(window.OslerGemini.MODELS)) {
+      // Convert [{id, label}] or [[id, label]] to [[id, label]] form.
+      return window.OslerGemini.MODELS.map(function(m) {
+        return Array.isArray(m) ? m : [m.id, m.label];
+      });
+    }
+    return _FALLBACK_MODELS;
+  }
+  // Backward-compat: engines that reference MODELS directly still work.
+  var MODELS = _FALLBACK_MODELS;
 
   /* ── API key access (thin wrappers over EngineShared) ────────── */
   function _readKey()        { return EngineShared.airReadGeminiKey(); }
@@ -320,8 +336,8 @@
         '<div id="ai-assistant-header">' +
           '<h3>'+EngineShared.icon('bot')+' AI Assistant</h3>' +
           '<div style="display:flex;gap:.5rem;align-items:center">' +
-            '<button class="icon-btn" id="ai-settings-gear" title="AI Settings" style="font-size:1rem">'+EngineShared.icon('settings')+'</button>' +
-            '<button class="icon-btn" id="ai-close-btn" title="Close">'+EngineShared.icon('x')+'</button>' +
+            '<button type="button" class="icon-btn" id="ai-settings-gear" title="AI Settings" style="font-size:1rem">'+EngineShared.icon('settings')+'</button>' +
+            '<button type="button" class="icon-btn" id="ai-close-btn" title="Close">'+EngineShared.icon('x')+'</button>' +
           '</div>' +
         '</div>' +
         '<div id="ai-assistant-context">' +
@@ -335,7 +351,7 @@
         '<div id="ai-chat-error"></div>' +
         '<div id="ai-input-wrap">' +
           '<textarea id="ai-input" dir="auto" placeholder="Ask anything about this question..." rows="1"></textarea>' +
-          '<button id="ai-send-btn">Ask</button>' +
+          '<button type="button" id="ai-send-btn">Ask</button>' +
         '</div>' +
       '</div>';
     document.body.appendChild(div);
@@ -507,7 +523,7 @@
       '<div id="ai-settings-modal">' +
         '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem">' +
           '<h3 style="margin:0">'+EngineShared.icon('settings')+' AI Settings</h3>' +
-          '<button class="icon-btn" id="ai-settings-close" title="Close">'+EngineShared.icon('x')+'</button>' +
+          '<button type="button" class="icon-btn" id="ai-settings-close" title="Close">'+EngineShared.icon('x')+'</button>' +
         '</div>' +
         '<div class="field-box">' +
           '<label class="field-label" for="ai-key-input">Gemini API Key</label>' +
@@ -516,9 +532,9 @@
           '</div>' +
           '<div class="field-note">Get a free key at <a href="https://aistudio.google.com/apikey" target="_blank" style="color:var(--accent)">AI Studio</a>. AI assistant requires a key.</div>' +
           '<div class="btn-row">' +
-            '<button class="btn-primary" id="ai-key-save">Save</button>' +
-            '<button class="btn-secondary" id="ai-key-clear">Clear</button>' +
-            '<button class="btn-secondary" id="ai-key-test">Test Connection</button>' +
+            '<button type="button" class="btn-primary" id="ai-key-save">Save</button>' +
+            '<button type="button" class="btn-secondary" id="ai-key-clear">Clear</button>' +
+            '<button type="button" class="btn-secondary" id="ai-key-test">Test Connection</button>' +
           '</div>' +
           '<div id="ai-settings-status" style="font-size:.8rem;margin-top:6px"></div>' +
         '</div>' +
