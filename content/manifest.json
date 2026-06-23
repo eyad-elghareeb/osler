@@ -1,0 +1,18 @@
+{
+  "type": "hub",
+  "meta": {
+    "uid": "manifest",
+    "title": "Content Manifest",
+    "schemaVersion": "1.0",
+    "createdAt": "2026-06-23T00:00:00Z",
+    "updatedAt": "2026-06-23T00:00:00Z"
+  },
+  "items": [
+    {
+      "uid": "sample-quiz-001",
+      "type": "quiz",
+      "title": "Sample Quiz",
+      "path": "sample-quiz.json"
+    }
+  ]
+}
