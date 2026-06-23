@@ -1909,6 +1909,7 @@
       e.appendChild(iconSpan);
       if (showRetry && _lastFailedText) {
         var retryBtn = document.createElement('button');
+        retryBtn.type = 'button';
         retryBtn.id = 'osce-retry-btn';
         retryBtn.style.cssText = 'margin-left:.5rem;padding:.14rem .48rem;border-radius:4px;border:1px solid var(--wrong);background:transparent;color:var(--wrong);cursor:pointer;font-size:.78rem';
         retryBtn.textContent = '\u21bb Retry';
@@ -1997,11 +1998,13 @@
       var actions = document.createElement('div');
       actions.className = 'osce-reset-actions';
       var cancelBtn = document.createElement('button');
+      cancelBtn.type = 'button';
       cancelBtn.className = 'osce-reset-cancel';
       cancelBtn.id = 'osce-reset-cancel-btn';
       cancelBtn.textContent = 'Go Back';
       actions.appendChild(cancelBtn);
       var confirmBtn = document.createElement('button');
+      confirmBtn.type = 'button';
       confirmBtn.className = 'osce-reset-danger';
       confirmBtn.id = 'osce-reset-confirm-btn';
       confirmBtn.textContent = 'Reset Now';

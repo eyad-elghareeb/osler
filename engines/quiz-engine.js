@@ -113,11 +113,11 @@
       <span id="timer-text">00:00</span>
     </div>
     <div class="topbar-actions">
-      <div class="icon-btn hl-mode-btn" role="button" tabindex="0" onclick="toggleHighlighterMode()" title="Highlighter Mode (H)">'+EngineShared.icon('pen-tool')+'<span class="hl-last-dot" style="background:rgba(255,213,79,0.8);"></span><div class="hl-color-picker" id="hl-color-picker-1"><button class="hl-color-btn cb-1 selected" onclick="hlSelectColor(1); event.stopPropagation();" title="Yellow (1)"></button><button class="hl-color-btn cb-2" onclick="hlSelectColor(2); event.stopPropagation();" title="Green (2)"></button><button class="hl-color-btn cb-3" onclick="hlSelectColor(3); event.stopPropagation();" title="Blue (3)"></button><button class="hl-color-btn cb-4" onclick="hlSelectColor(4); event.stopPropagation();" title="Red (4)"></button><button class="hl-erase-btn" onclick="hlSelectColor(0); event.stopPropagation();" title="Eraser">'+EngineShared.icon('eraser')+'</button><button class="hl-close-btn" onclick="disableHighlighterMode(); event.stopPropagation();" title="Close Highlighter">'+EngineShared.icon('x')+'</button></div></div>
-      <button class="icon-btn" onclick="openAiAssistant()" title="Ask AI (needs internet)">'+EngineShared.icon('bot')+'</button>
+      <div class="icon-btn hl-mode-btn" role="button" tabindex="0" onclick="toggleHighlighterMode()" title="Highlighter Mode (H)" aria-label="Highlighter Mode (H)">'+EngineShared.icon('pen-tool')+'<span class="hl-last-dot" style="background:rgba(255,213,79,0.8);"></span><div class="hl-color-picker" id="hl-color-picker-1"><button class="hl-color-btn cb-1 selected" onclick="hlSelectColor(1); event.stopPropagation();" title="Yellow (1)" aria-label="Yellow (1)"></button><button class="hl-color-btn cb-2" onclick="hlSelectColor(2); event.stopPropagation();" title="Green (2)" aria-label="Green (2)"></button><button class="hl-color-btn cb-3" onclick="hlSelectColor(3); event.stopPropagation();" title="Blue (3)" aria-label="Blue (3)"></button><button class="hl-color-btn cb-4" onclick="hlSelectColor(4); event.stopPropagation();" title="Red (4)" aria-label="Red (4)"></button><button class="hl-erase-btn" onclick="hlSelectColor(0); event.stopPropagation();" title="Eraser" aria-label="Eraser">'+EngineShared.icon('eraser')+'</button><button class="hl-close-btn" onclick="disableHighlighterMode(); event.stopPropagation();" title="Close Highlighter" aria-label="Close Highlighter">'+EngineShared.icon('x')+'</button></div></div>
+      <button class="icon-btn" onclick="openAiAssistant()" title="Ask AI (needs internet)" aria-label="Ask AI (needs internet)">'+EngineShared.icon('bot')+'</button>
       <a href="#" class="icon-btn" title="Back to Hub" onclick="navigateToIndex(event); return false;">'+EngineShared.icon('home')+'</a>
-      <button class="icon-btn theme-toggle-btn" onclick="toggleTheme()" title="Toggle theme">'+EngineShared.icon('sun')+'</button>
-      <button class="icon-btn danger" onclick="confirmResetProgress()" title="Reset Progress">↻</button>
+      <button class="icon-btn theme-toggle-btn" onclick="toggleTheme()" title="Toggle theme" aria-label="Toggle theme">'+EngineShared.icon('sun')+'</button>
+      <button class="icon-btn danger" onclick="confirmResetProgress()" title="Reset Progress" aria-label="Reset Progress">↻</button>
     </div>
   </div>
 
@@ -161,11 +161,11 @@
   <div class="result-topbar">
     <h2>'+EngineShared.icon('bar-chart')+' Quiz Results</h2>
     <div class="topbar-actions">
-      <div class="icon-btn hl-mode-btn" role="button" tabindex="0" onclick="toggleHighlighterMode()" title="Highlighter Mode (H)">'+EngineShared.icon('pen-tool')+'<span class="hl-last-dot" style="background:rgba(255,213,79,0.8);"></span><div class="hl-color-picker" id="hl-color-picker-2"><button class="hl-color-btn cb-1 selected" onclick="hlSelectColor(1); event.stopPropagation();" title="Yellow (1)"></button><button class="hl-color-btn cb-2" onclick="hlSelectColor(2); event.stopPropagation();" title="Green (2)"></button><button class="hl-color-btn cb-3" onclick="hlSelectColor(3); event.stopPropagation();" title="Blue (3)"></button><button class="hl-color-btn cb-4" onclick="hlSelectColor(4); event.stopPropagation();" title="Red (4)"></button><button class="hl-erase-btn" onclick="hlSelectColor(0); event.stopPropagation();" title="Eraser">'+EngineShared.icon('eraser')+'</button><button class="hl-close-btn" onclick="disableHighlighterMode(); event.stopPropagation();" title="Close Highlighter">'+EngineShared.icon('x')+'</button></div></div>
-      <button class="icon-btn" onclick="openAiAssistant()" title="Ask AI (needs internet)">'+EngineShared.icon('bot')+'</button>
+      <div class="icon-btn hl-mode-btn" role="button" tabindex="0" onclick="toggleHighlighterMode()" title="Highlighter Mode (H)" aria-label="Highlighter Mode (H)">'+EngineShared.icon('pen-tool')+'<span class="hl-last-dot" style="background:rgba(255,213,79,0.8);"></span><div class="hl-color-picker" id="hl-color-picker-2"><button class="hl-color-btn cb-1 selected" onclick="hlSelectColor(1); event.stopPropagation();" title="Yellow (1)" aria-label="Yellow (1)"></button><button class="hl-color-btn cb-2" onclick="hlSelectColor(2); event.stopPropagation();" title="Green (2)" aria-label="Green (2)"></button><button class="hl-color-btn cb-3" onclick="hlSelectColor(3); event.stopPropagation();" title="Blue (3)" aria-label="Blue (3)"></button><button class="hl-color-btn cb-4" onclick="hlSelectColor(4); event.stopPropagation();" title="Red (4)" aria-label="Red (4)"></button><button class="hl-erase-btn" onclick="hlSelectColor(0); event.stopPropagation();" title="Eraser" aria-label="Eraser">'+EngineShared.icon('eraser')+'</button><button class="hl-close-btn" onclick="disableHighlighterMode(); event.stopPropagation();" title="Close Highlighter" aria-label="Close Highlighter">'+EngineShared.icon('x')+'</button></div></div>
+      <button class="icon-btn" onclick="openAiAssistant()" title="Ask AI (needs internet)" aria-label="Ask AI (needs internet)">'+EngineShared.icon('bot')+'</button>
       <a href="#" class="icon-btn" title="Back to Hub" onclick="navigateToIndex(event); return false;">'+EngineShared.icon('home')+'</a>
-      <button class="icon-btn theme-toggle-btn" onclick="toggleTheme()" title="Toggle theme">'+EngineShared.icon('sun')+'</button>
-      <button class="icon-btn danger" onclick="confirmResetProgress()" title="Reset Progress">↻</button>
+      <button class="icon-btn theme-toggle-btn" onclick="toggleTheme()" title="Toggle theme" aria-label="Toggle theme">'+EngineShared.icon('sun')+'</button>
+      <button class="icon-btn danger" onclick="confirmResetProgress()" title="Reset Progress" aria-label="Reset Progress">↻</button>
     </div>
   </div>
   <div class="result-body">
@@ -741,6 +741,7 @@ function applyBulkHighlights(qIdx) {
       var existing = label.querySelector('.st-toggle-btn');
       if (existing) { existing.classList.toggle('active', !!stMap[i]); return; }
       var btn = document.createElement('button');
+      btn.type = 'button';
       btn.className = 'st-toggle-btn' + (stMap[i] ? ' active' : '');
       btn.title = 'Strikethrough (S)';
       btn.textContent = ''+EngineShared.icon('x')+'';
@@ -982,6 +983,7 @@ function renderQuestion(idx) {
 
   /* flag button */
   const flagBtn = document.createElement('button');
+  flagBtn.type = 'button';
   flagBtn.className = 'flag-btn' + (state.flagged[idx] ? ' active' : '');
   flagBtn.id = 'flag-btn-' + idx;
   flagBtn.onclick = function() { toggleFlag(idx); };
@@ -1006,6 +1008,7 @@ function renderQuestion(idx) {
   /* clear highlights button */
   if (state.isHighlighterMode && state.highlights[idx] && state.highlights[idx].length > 0) {
     var clrBtn = document.createElement('button');
+    clrBtn.type = 'button';
     clrBtn.className = 'flag-btn';
     clrBtn.style.fontSize = '0.75rem';
     clrBtn.onclick = function() { clearAllHighlights(idx); };
@@ -1087,6 +1090,7 @@ function renderQuestion(idx) {
 
   if (idx > 0) {
     var prevBtn = document.createElement('button');
+    prevBtn.type = 'button';
     prevBtn.className = 'btn-nav';
     prevBtn.onclick = function() { goTo(idx - 1); };
     prevBtn.textContent = '\u2190 Previous';
@@ -1094,6 +1098,7 @@ function renderQuestion(idx) {
   }
   if (!isLast) {
     var nextBtn = document.createElement('button');
+    nextBtn.type = 'button';
     nextBtn.className = 'btn-nav primary';
     nextBtn.onclick = function() { nextQuestion(); };
     nextBtn.textContent = 'Next \u2192';
@@ -1101,6 +1106,7 @@ function renderQuestion(idx) {
   }
   if (isLast) {
     var subBtn = document.createElement('button');
+    subBtn.type = 'button';
     subBtn.className = 'btn-nav submit-btn';
     subBtn.onclick = function() { attemptSubmit(); };
     subBtn.innerHTML = EngineShared.icon('check') + ' Submit Quiz';
@@ -1173,6 +1179,7 @@ function buildNavGrid() {
   grid.innerHTML = '';
   for (let i = 0; i < QUESTIONS.length; i++) {
     const btn = document.createElement('button');
+    btn.type = 'button';
     btn.className = 'nav-btn';
     btn.id = 'nav-btn-' + i;
     btn.textContent = i + 1;

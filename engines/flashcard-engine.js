@@ -257,6 +257,11 @@
 .ripple::after { content: ''; position: absolute; border-radius: 50%; background: rgba(255,255,255,0.15); width: 100px; height: 100px; margin-top: -50px; margin-left: -50px; top: 50%; left: 50%; transform: scale(0); opacity: 1; pointer-events: none; }
 .ripple:active::after { animation: rippleAnim 0.5s ease-out; }
 @keyframes rippleAnim { from { transform: scale(0); opacity: 0.6; } to { transform: scale(4); opacity: 0; } }
+@media (prefers-reduced-motion: reduce) {
+  .flashcard-wrapper.card-entering { animation: none !important; }
+  .flashcard.flipped .flashcard-face { animation: none !important; transition: none !important; }
+  .ripple::after { display: none !important; }
+}
 `);
 
   /* ════════════════════════════════════════════════════════════════
@@ -272,7 +277,7 @@
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
     Menu
   </a>
-  <button class="theme-btn-fixed theme-toggle-btn" onclick="toggleTheme()" title="Toggle theme">'+EngineShared.icon('sun')+'</button>
+  <button class="theme-btn-fixed theme-toggle-btn" onclick="toggleTheme()" title="Toggle theme" aria-label="Toggle theme">'+EngineShared.icon('sun')+'</button>
 
   <div class="start-card">
     <div class="start-icon" id="start-icon">'+EngineShared.icon('layers')+'</div>
@@ -371,10 +376,10 @@
     </div>
     <div class="topbar-actions">
 
-      <button class="icon-btn" onclick="toggleTheme()" title="Toggle theme">
+      <button class="icon-btn" onclick="toggleTheme()" title="Toggle theme" aria-label="Toggle theme">
         <span id="theme-toggle-icon">'+EngineShared.icon('sun')+'</span>
       </button>
-      <button class="icon-btn danger" onclick="confirmResetProgress()" title="Quit session">
+      <button class="icon-btn danger" onclick="confirmResetProgress()" title="Quit session" aria-label="Quit session">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
       </button>
     </div>
@@ -416,7 +421,7 @@
     <h2>Session Complete</h2>
     <div class="topbar-actions">
       <a href="#" class="icon-btn" onclick="navigateToIndex(event); return false;" title="Back to Hub">'+EngineShared.icon('home')+'</a>
-      <button class="icon-btn" onclick="toggleTheme()" title="Toggle theme">
+      <button class="icon-btn" onclick="toggleTheme()" title="Toggle theme" aria-label="Toggle theme">
         <span class="theme-toggle-btn">'+EngineShared.icon('sun')+'</span>
       </button>
     </div>
@@ -474,6 +479,14 @@
           <polyline points="10 9 9 9 8 9"></polyline>
         </svg>
         Export to PDF
+      </button>
+      <button class="btn-export-pdf" onclick="exportToAnki()" style="margin-left:0.5rem" type="button">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+          <polyline points="7 10 12 15 17 10"></polyline>
+          <line x1="12" y1="15" x2="12" y2="3"></line>
+        </svg>
+        Export to Anki
       </button>
     </div>
     <div class="result-tabs" id="result-tabs">
@@ -1280,6 +1293,7 @@
     var flagRow = document.createElement('div');
     flagRow.style.cssText = 'width:100%;max-width:860px;display:flex;justify-content:flex-end;gap:0.5rem;';
     var flagBtn = document.createElement('button');
+    flagBtn.type = 'button';
     flagBtn.className = 'flag-btn' + (state.flagged[idx] ? ' active' : '');
     flagBtn.onclick = function() { toggleFlag(); };
     var fSvg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
@@ -1308,6 +1322,7 @@
     flashcard.className = 'flashcard' + (isFlipped ? ' flipped' : '');
     flashcard.id = 'flashcard';
     flashcard.onclick = function() { flipCard(); };
+    flashcard.onkeydown = function(e) { if (e.key === ' ' || e.key === 'Enter') { e.preventDefault(); flipCard(); } };
 
     // Front face
     var frontFace = document.createElement('div');
@@ -1398,6 +1413,7 @@
         var revealed = state.revealedClozes[idx] && state.revealedClozes[idx].has(c.cNum);
         var colorClass = 'c' + c.cNum;
         var cb = document.createElement('button');
+        cb.type = 'button';
         cb.className = 'cloze-reveal-btn ' + colorClass + ' ' + (revealed ? 'revealed' : '');
         cb.onclick = function(e) { e.stopPropagation(); revealCloze(c.cNum); };
         var cIdx = document.createElement('span');
@@ -1428,6 +1444,7 @@
     ];
     ratings.forEach(function(r) {
       var rb = document.createElement('button');
+      rb.type = 'button';
       rb.className = 'rating-btn ' + r.cls;
       rb.onclick = r.fn;
       var rk = document.createElement('span');
@@ -1446,6 +1463,7 @@
     navBtns.className = 'card-nav-btns';
     if (idx > 0) {
       var prevBtn = document.createElement('button');
+      prevBtn.type = 'button';
       prevBtn.className = 'btn-nav';
       prevBtn.onclick = function() { goTo(idx - 1); };
       prevBtn.textContent = 'Previous';
@@ -1453,6 +1471,7 @@
     }
     if (!isLast) {
       var nextBtn = document.createElement('button');
+      nextBtn.type = 'button';
       nextBtn.className = 'btn-nav primary';
       nextBtn.onclick = function() { nextCard(); };
       nextBtn.textContent = 'Next';
@@ -1460,6 +1479,7 @@
     }
     if (isLast) {
       var finBtn = document.createElement('button');
+      finBtn.type = 'button';
       finBtn.className = 'btn-nav submit-btn';
       finBtn.onclick = function() { attemptFinish(); };
       finBtn.textContent = 'Finish Session';
@@ -1598,6 +1618,7 @@
     for (var i = 0; i < SESSION_CARDS.length; i++) {
       (function(ci) {
         var btn = document.createElement('button');
+        btn.type = 'button';
         btn.className = 'nav-btn';
         btn.id = 'nav-btn-' + ci;
         btn.onclick = function() { goTo(ci); };
@@ -1999,6 +2020,39 @@
       s.onerror = function() { showToast('Failed to load PDF library'); };
       document.head.appendChild(s);
     }
+  };
+
+  /* ── Export to Anki (TSV) ──────────────────────────────────── */
+  window.exportToAnki = function() {
+    var lines = ['#front\tback\ttags'];
+    var CLOZE_ANKI_RE = /\{\{c(\d+)::([^}]+)(?:::[^}]*)?\}\}/g;
+    SESSION_CARDS.forEach(function(card) {
+      var front, back;
+      if (card.type === 'cloze') {
+        front = card.text || '';
+        back = (card.text || '').replace(CLOZE_ANKI_RE, function(m, cNum, ans) { return ans; }).replace(/\{\{c\d+::[^}]+(?:::.*?)?\}\}/g, '');
+      } else {
+        front = card.front || '';
+        back = card.back || '';
+      }
+      front = front.replace(/\t/g, ' ').replace(/"/g, '""');
+      back = back.replace(/\t/g, ' ').replace(/"/g, '""');
+      if (front.indexOf('\n') > -1 || front.indexOf('"') > -1) front = '"' + front + '"';
+      if (back.indexOf('\n') > -1 || back.indexOf('"') > -1) back = '"' + back + '"';
+      var tags = Array.isArray(card.tags) ? card.tags.join(' ') : (card.tags || '');
+      lines.push(front + '\t' + back + '\t' + tags);
+    });
+    var tsv = lines.join('\n');
+    var blob = new Blob([tsv], { type: 'text/tab-separated-values;charset=utf-8' });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url;
+    a.download = 'osler-flashcards-' + Date.now() + '.txt';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    showToast('Exported ' + (lines.length - 1) + ' cards to Anki TSV');
   };
 
   /* ── Confirm Reset (mid-session) ──────────────────────────── */
