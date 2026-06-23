@@ -1,3 +1,12 @@
+export const MODELS = [
+  ['gemini-3.1-flash-lite', 'Gemini 3.1 Flash-Lite (default, fast & modern)'],
+  ['gemini-3.5-flash',      'Gemini 3.5 Flash (latest, strongest Flash)'],
+  ['gemini-3.1-pro-preview', 'Gemini 3.1 Pro Preview (most capable, premium)'],
+  ['gemma-4-26b-a4b-it',    'Gemma 4 26B IT (open model, strong & free)'],
+  ['gemma-4-31b-it',        'Gemma 4 31B IT (larger open model)'],
+  ['gemini-2.5-flash',      'Gemini 2.5 Flash (older fallback)']
+];
+
 const AIR_OK = [0x71, 0x75, 0x69, 0x7A, 0x74, 0x6F, 0x6F, 0x6C];
 
 function obfuscate(str) {
@@ -85,4 +94,55 @@ export function tryRequests(systemPrompt, contents, apiKey, model, models, cance
       });
   };
   return next();
+}
+
+export function getClient(apiKey) {
+  return {
+    apiKey,
+    request: (systemPrompt, contents, model, temperature, cancelSignal) =>
+      request(systemPrompt, contents, apiKey, model, cancelSignal, temperature),
+    tryRequests: (systemPrompt, contents, model, cancelSignal, temperature, onFallback) =>
+      tryRequests(systemPrompt, contents, apiKey, model, MODELS, cancelSignal, temperature, 15000, onFallback),
+    extractText,
+    friendlyError,
+    readKey,
+    writeKey,
+    hasKey,
+  };
+}
+
+export async function streamGenerate(systemPrompt, userPrompt, apiKey, model, onChunk, cancelSignal) {
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:streamGenerateContent?alt=sse`;
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
+    body: JSON.stringify({
+      systemInstruction: { parts: [{ text: systemPrompt }] },
+      contents: [{ parts: [{ text: userPrompt }] }],
+      generationConfig: { temperature: 0.4 }
+    }),
+    signal: cancelSignal || null,
+  });
+  if (!res.ok) throw new Error(`Gemini streaming error ${res.status}`);
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split('\n');
+    buffer = lines.pop() || '';
+    for (const line of lines) {
+      if (line.startsWith('data: ')) {
+        const data = line.slice(6).trim();
+        if (!data || data === '[DONE]') continue;
+        try {
+          const parsed = JSON.parse(data);
+          const text = extractText(parsed);
+          if (text && onChunk) onChunk(text);
+        } catch (_) { /* skip malformed chunks */ }
+      }
+    }
+  }
 }
