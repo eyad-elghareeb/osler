@@ -6,7 +6,7 @@
   'use strict';
 
   /* ── Compute base path from our own script URL ──────────────── */
-  var ENGINE_BASE = EngineShared.ENGINE_BASE || (window.__QUIZ_ENGINE_BASE || '');
+  var ENGINE_BASE = EngineShared.ENGINE_BASE || (window.__BANK_ENGINE_BASE || window.__QUIZ_ENGINE_BASE || '');
 
   // Bridge EngineShared functions to global scope for onclick="" attributes in template
   window.toggleTheme = EngineShared.toggleTheme;
