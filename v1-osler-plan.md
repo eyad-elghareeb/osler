@@ -1,5 +1,7 @@
 # Osler V1 — Implementation Plan
 
+> **Rename note:** This file was renamed from `v6-plan.md` to `v1-osler-plan.md` on 2026-06-23.
+
 > Companion file. I check this before every session. Each phase has file manifests, implementation order, and one-line verification commands.
 
 ---
@@ -15,8 +17,9 @@ Phase 4 — UI & Anki        [  ]  1.5 weeks  4 files    2 verification commands
 Phase 5 — GitHub CMS       [  ]  4 weeks   16 files    3 verification commands
 Phase 6 — AI Pipeline      [  ]  1 week     5 files    3 verification commands
 Phase 7 — Test & Ship      [  ]  1.5 weeks 14 files    3 verification commands
+Phase 8 — Update System    [  ]  2 weeks   10 files    3 verification commands
                         ─────────
-                        15 weeks total
+                        17 weeks total
 ```
 
 ---
@@ -31,6 +34,8 @@ Phase 7 — Test & Ship      [  ]  1.5 weeks 14 files    3 verification commands
 | `npm run validate` | Validate all JSON in content/ against schemas |
 | `npm run check` | build + test + validate in sequence |
 | `npm run export-schemas` | Copy schemas → .agents/context/ |
+| `npm run check-updates` | Generate update manifest, verify bundle integrity |
+| `npm run update-bundle` | Build update bundle ZIP with latest engines |
 
 **CI:** `npm run check` on every PR, `npm run test:e2e` on main merge, auto-deploy to Pages.
 
@@ -39,7 +44,7 @@ Phase 7 — Test & Ship      [  ]  1.5 weeks 14 files    3 verification commands
 ## Dependency Graph
 
 ```
-Phase 0 ──▶ Phase 1 ──▶ Phase 2 ──▶ Phase 3 ──▶ Phase 4 ──▶ Phase 7
+Phase 0 ──▶ Phase 1 ──▶ Phase 2 ──▶ Phase 3 ──▶ Phase 4 ──▶ Phase 7 ──▶ Phase 8
                 │                                          ▲
                 └──▶ Phase 5 ──▶ Phase 6 ──────────────────┘
 ```
@@ -318,6 +323,121 @@ npm run export-schemas           # Schemas in .agents/context/
 npm run check                   # Build + validate + unit tests pass
 npm run test:e2e                # 10+ Playwright journeys pass
 npx lighthouse http://localhost:5500 --view  # 90+ all categories
+```
+
+---
+
+## Phase 8 — Update System (2 weeks)
+
+**Depends on:** Phase 5 (admin dashboard), Phase 7 (CI/CD)
+**Verification:** `npm run build && npm test && npm run check-updates`
+
+### Architecture
+
+The update system has two tiers:
+
+```
+Main Repo (osler) ──▶ GitHub Releases ──▶ Admin Dashboard (self-update)
+                  │
+                  └──▶ Engine Update Bundle ──▶ Generated Instances (push update)
+```
+
+### Tier 1 — Admin Dashboard Self-Update
+
+The Tauri admin app checks for new releases on startup and periodically. When an update is found, it downloads the new binary and applies it.
+
+| File | Action |
+|------|--------|
+| `tauri-admin/src/updater.rs` | Create — GitHub Releases API check, download, hash verify, swap |
+| `tauri-admin/src/commands.rs` | Update — add `check_update`, `apply_update`, `get_update_status` commands |
+| `tauri-admin/frontend/index.html` | Update — add Update page with status, progress, changelog |
+| `tauri-admin/tauri.conf.json` | Update — add updater plugin config |
+
+**Updater flow:**
+```
+Admin starts → Updater checks GitHub Releases API → compares semver
+→ if newer: notify user with changelog → user clicks "Update & Restart"
+→ download binary to temp dir → hash verify → swap executable → restart
+```
+
+**Fallbacks:**
+- No network → skip check, show "Update unavailable (offline)"
+- Hash mismatch → abort, log error, notify user
+- Permission denied → show manual download instructions
+- Admin can disable auto-check in Settings
+
+### Tier 2 — Engine Updates to Generated Instances
+
+The admin dashboard maintains a manifest of "component versions" from the main repo. When engines or critical code changes in the main repo, the admin can push updates to all managed instances.
+
+| File | Action |
+|------|--------|
+| `src/lib/update-manifest.json` | Create — version manifest shipped with each build |
+| `tauri-admin/src/bundle_engines.rs` | Create — extract engines + critical assets into update bundle |
+| `tauri-admin/src/push_update.rs` | Create — push bundle to instance repos via PR |
+| `tauri-admin/frontend/index.html` | Update — add "Managed Instances" page with update status |
+| `sw.js` | Update — check for update manifest on service worker activation |
+| `tauri-admin/src/commands.rs` | Update — add `bundle_update`, `push_update`, `check_instance_versions` |
+| `tests/e2e/update-bundle.spec.js` | Create — e2e test for bundle generation |
+| `tests/e2e/update-push.spec.js` | Create — e2e test for push to instance |
+
+**Update bundle contents:**
+```
+update-v1.2.3.zip
+├── engines/
+│   ├── quiz-engine.js
+│   ├── bank-engine.js
+│   ├── flashcard-engine.js
+│   ├── written-engine.js
+│   ├── osce-engine.js
+│   ├── ai-assistant-engine.js
+│   ├── sync-engine.js
+│   └── search-engine.js
+├── assets/
+│   ├── icon-48.png ... icon-512.png
+│   └── favicon.svg
+├── sw.js
+├── manifest.webmanifest
+├── tracker-map.json
+└── update-manifest.json       # { version, hash, requiredVersion, changelog }
+```
+
+**Push flow:**
+```
+Admin selects instances → "Push Update v1.2.3"
+→ For each instance: clone → checkout update-branch → apply bundle files
+→ commit → push → open PR with auto-generated title "[Update] v1.2.3"
+→ (optional) auto-merge if CI passes
+```
+
+**Instance-side update detection:**
+```
+Service worker activates → checks update-manifest.json for version
+→ if mismatched with stored version → show "Update available" badge in hub
+→ (future: auto-update on next load)
+```
+
+**Security:**
+- Update bundles are signed with a release key (hash in `update-manifest.json`)
+- Admin must authenticate via GitHub OAuth before pushing to instances
+- Push targets only instance repos the admin has write access to
+
+**Rollback:**
+- Each push creates a git tag `update-v1.2.3-previous`
+- Rollback = checkout tag, force-push
+- Admin page shows last 5 updates per instance with rollback button
+
+```
+Order: version manifest → bundler → updater.rs → push_update.rs → SW update check
+→ Admin UI pages (Update + Managed Instances) → e2e tests
+```
+
+```bash
+npm run build                         # Builds engines + generates update-manifest.json
+cd tauri-admin && cargo build         # Admin builds with updater
+npm run test:e2e -- --grep=update     # Update bundle and push tests pass
+# Manual: admin installs update → restarts → shows new version
+# Manual: admin pushes engine update to instance → instance shows update badge
 ```
 
 ---
