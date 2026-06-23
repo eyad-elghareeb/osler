@@ -44,6 +44,7 @@
   <script src="../dist/index-engine.js"></script>
   <script type="module">
     import { subscribe, signInAsGuest, signInWithGoogle, signInWithGitHub, signOut, initAuth } from '../src/lib/auth.js';
+    import { initAutoSync } from '../src/lib/sync.js';
 
     function renderAuth(user) {
       const container = document.getElementById('auth-dropdown');
@@ -98,6 +99,8 @@
 
     subscribe(renderAuth);
     initAuth();
+    initAutoSync();
+    if (window.renderUserContent) window.renderUserContent();
   </script>
 </body>
 </html>

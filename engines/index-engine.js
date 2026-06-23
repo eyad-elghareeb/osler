@@ -228,6 +228,47 @@
     }).join('');
   };
 
+  /* ── My Content section ────────────────────────────────────── */
+  window.renderUserContent = function () {
+    var grid = document.getElementById('quiz-grid');
+    if (!grid) return;
+    if (typeof QUIZZES !== 'undefined' && QUIZZES.length > 0) return;
+
+    import(ENGINE_BASE.replace(/dist\/$/, 'src/lib/') + 'storage.js').then(function(m) {
+      return m.getAll('userContent');
+    }).then(function(entries) {
+      if (!entries || entries.length === 0) {
+        grid.innerHTML = '<div class="dash-empty" style="grid-column:1/-1;padding:2rem"><p>No content yet. Create quizzes, flashcards, and more to see them here.</p></div>';
+        return;
+      }
+      var byType = {};
+      entries.forEach(function(entry) {
+        var type = entry.type || 'unknown';
+        if (!byType[type]) byType[type] = [];
+        byType[type].push(entry);
+      });
+      var typeLabels = { 'quiz': '\uD83D\uDCDD', 'bank': '\uD83D\uDCDA', 'flashcard': '\uD83C\uDCCF', 'written': '\u270D\uFE0F', 'osce': '\uD83D\uDC68\u200D\u2695\uFE0F' };
+      var html = '<h2 style="font-family:\'Playfair Display\',serif;grid-column:1/-1;margin:1.5rem 0 0.5rem;font-size:1.3rem">My Content</h2>';
+      Object.keys(byType).forEach(function(type) {
+        byType[type].forEach(function(entry) {
+          var icon = typeLabels[type] || '\uD83D\uDCC4';
+          var lastStudied = entry.updatedAt ? new Date(entry.updatedAt).toLocaleDateString() : '';
+          html += '<div class="quiz-card">'
+            + '<div class="card-icon">' + icon + '</div>'
+            + '<h2 class="card-title">' + escHtml(entry.title || 'Untitled') + '</h2>'
+            + '<p class="card-desc">' + escHtml(entry.description || type) + '</p>'
+            + '<div class="card-meta">'
+            +   (lastStudied ? '<span class="meta-badge">' + lastStudied + '</span>' : '')
+            + '</div>'
+            + '<a href="player.html?uid=' + encodeURIComponent(entry.uid || '') + '" class="btn-take-quiz">Open \u2192</a>'
+            + '</div>';
+        });
+      });
+      grid.innerHTML = html;
+      if (window.staggerCards) setTimeout(window.staggerCards, 50);
+    }).catch(function() {});
+  };
+
   /* ── Tracker storage ───────────────────────────────────────── */
   var STORAGE_PREFIX = 'quiz_tracker_v2_';
   var KEYS_LIST_KEY  = 'quiz_tracker_keys';
@@ -1505,6 +1546,7 @@
         card.style.setProperty('--i', i);
       });
     }
+    window.staggerCards = staggerCards;
 
     /* Patch renderQuizzes to stagger after each render */
     var _origRender = window.renderQuizzes;
