@@ -183,5 +183,9 @@ credentials/
 .virtualenvs/
 .vim/
 
+# Playwright
+test-results/
+playwright-report/
+
 # Downloaded PDF premium fonts
 scripts/fonts/

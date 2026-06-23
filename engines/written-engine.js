@@ -1851,7 +1851,6 @@
 
   function extractGeminiText(payload) { return EngineShared.airExtractGeminiText(payload); }
   function friendlyAiError(error) { return EngineShared.airFriendlyError(error); }
-  }
 
   function parseJsonResponse(text) {
     if (!text) throw new Error('Gemini response did not include text.');

@@ -52,7 +52,6 @@
     return EngineShared.airTryRequests(systemPrompt, contents, apiKey, attempts, cancelSignal, 0.3, _getMaxWaitMs());
   }
 
-  /* ── Markdown renderer (lightweight) 
   function _renderMarkdown(text) {
     if (!text) return '';
     text = String(text);
