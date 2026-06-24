@@ -11,7 +11,7 @@
     "test:e2e": "playwright test",
     "validate": "node scripts/validate-content.js",
     "validate-schemas": "node scripts/validate-schemas.js",
-    "check": "npm run build && npm test && npm run validate",
+    "check": "npm run build && npm test && npm run validate && npm run validate-schemas",
     "export-schemas": "node scripts/export-schemas.js"
   },
   "devDependencies": {

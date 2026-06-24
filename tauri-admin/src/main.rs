@@ -13,6 +13,7 @@ mod pdf;
 mod server;
 mod templates;
 // Phase 5 stubs (B9 fix):
+mod analytics;
 mod auth;
 mod mcp_server;
 mod validation;
@@ -182,6 +183,9 @@ fn main() {
 
     tauri::Builder::default()
         .plugin(tauri_plugin_store::Builder::default().build())
+        // Phase 6.5 fix #13: register tauri-plugin-dialog for file pickers
+        // (Anki CSV import, JSON file open/save in the ContentEditor).
+        .plugin(tauri_plugin_dialog::init())
         .manage(ProjectRoot(Mutex::new(project_root.clone())))
         .manage(server)
         .register_uri_scheme_protocol("osler-admin", move |_app, req| {
@@ -238,6 +242,8 @@ fn main() {
             mcp_server::mcp_list_tools,
             validation::validate_content,
             commands::generate_content,
+            // Phase 6.5 fix #18: real Firestore-backed analytics query.
+            analytics::query_analytics,
         ])
         .run(tauri::generate_context!())
         .expect("error while running Osler Admin");

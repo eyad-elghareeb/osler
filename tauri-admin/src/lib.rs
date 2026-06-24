@@ -4,11 +4,8 @@
 // tests and so cargo test has a lib target. The actual Tauri boot still lives
 // in main.rs (which calls into these modules).
 //
-// Phase 5 sessions will add new modules here as they're created:
-//   - mod auth;          (P5.1 — GitHub OAuth + safe-storage)
-//   - mod mcp_server;    (P5.7 — 14 MCP tools)
-//   - mod validation;    (Phase 5 — wraps src/schemas/* for live preview validation)
-//   - mod updater;       (Phase 8 — Tier 1 self-update)
+// Future Phase 8 modules (not yet created):
+//   - mod updater;        (Phase 8 — Tier 1 self-update)
 //   - mod bundle_engines; (Phase 8 — Tier 2 update bundle)
 //   - mod push_update;    (Phase 8 — Tier 2 push to instances)
 
@@ -20,9 +17,11 @@ pub mod pdf;
 pub mod server;
 pub mod templates;
 
-// Phase 5 stubs — these modules will be filled in by Phase 5 sessions.
-// Declared here so cargo build catches missing files early and so the
-// invoke_handler in main.rs can reference them.
+// Phase 5 modules — auth.rs (Device Flow + keychain storage, P5.1),
+// mcp_server.rs (14 MCP tools over stdio JSON-RPC, P5.7), validation.rs
+// (schema-based content validation, P5.3). All implemented in Phase 5/6.5.
+// analytics.rs (Firestore-backed study-event query, Phase 6.5 fix #18).
+pub mod analytics;
 pub mod auth;
 pub mod mcp_server;
 pub mod validation;

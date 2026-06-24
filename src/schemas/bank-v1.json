@@ -1,5 +1,5 @@
 {
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "https://osler.app/schemas/bank-v1.json",
   "title": "Bank (Passage-Based) Content",
   "type": "object",
@@ -32,7 +32,7 @@
             "type": "array",
             "items": {
               "type": "object",
-              "required": ["id", "question", "options", "correct"],
+              "required": ["id", "passageId", "question", "options", "correct"],
               "properties": {
                 "id": { "type": "string" },
                 "passageId": { "type": "string" },

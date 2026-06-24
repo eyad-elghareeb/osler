@@ -7,7 +7,8 @@ pub const INDEX_ENGINE_CSS: &str = include_str!("../../engines/index-engine.css"
 pub const SEARCH_ENGINE_JS: &str = include_str!("../../engines/search-engine.js");
 pub const QUIZ_ENGINE_JS: &str = include_str!("../../engines/quiz-engine.js");
 pub const BANK_ENGINE_JS: &str = include_str!("../../engines/bank-engine.js");
-pub const SYNC_ENGINE_JS: &str = include_str!("../../engines/sync-engine.js");
+// Phase 6.5 fix #1: legacy WebRTC/MQTT sync-engine.js deleted (H8 fix finally
+// applied). Firebase sync lives in src/lib/sync.js (bridged via window.OslerSync).
 pub const FLASHCARD_ENGINE_JS: &str = include_str!("../../engines/flashcard-engine.js");
 pub const WRITTEN_ENGINE_JS: &str = include_str!("../../engines/written-engine.js");
 pub const OSCE_ENGINE_JS: &str = include_str!("../../engines/osce-engine.js");

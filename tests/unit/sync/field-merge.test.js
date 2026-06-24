@@ -30,6 +30,40 @@ describe('fieldMergeByUpdatedAt', () => {
     expect(result.updatedAt).toBe('2026-06-03T10:00:00Z');
   });
 
+  // Phase 6.5 fix #3: spec says "equal timestamps (take remote)".
+  // Previously `>=` made local win on tie; now `>` makes remote win.
+  it('takes remote fields when updatedAt is equal (tie-breaker = remote)', () => {
+    const local = {
+      wrongCount: 5, flagged: true, notes: 'local',
+      updatedAt: '2026-06-03T10:00:00Z',
+    };
+    const remote = {
+      wrongCount: 2, flagged: false, notes: 'remote',
+      updatedAt: '2026-06-03T10:00:00Z',
+    };
+    const result = fieldMergeByUpdatedAt(local, remote);
+    expect(result.wrongCount).toBe(2);
+    expect(result.flagged).toBe(false);
+    expect(result.notes).toBe('remote');
+    expect(result.updatedAt).toBe('2026-06-03T10:00:00Z');
+  });
+
+  it('takes remote fields when remote updatedAt is newer', () => {
+    const local = {
+      wrongCount: 5, flagged: true, notes: 'local',
+      updatedAt: '2026-06-02T10:00:00Z',
+    };
+    const remote = {
+      wrongCount: 2, flagged: false, notes: 'remote',
+      updatedAt: '2026-06-03T10:00:00Z',
+    };
+    const result = fieldMergeByUpdatedAt(local, remote);
+    expect(result.wrongCount).toBe(2);
+    expect(result.flagged).toBe(false);
+    expect(result.notes).toBe('remote');
+    expect(result.updatedAt).toBe('2026-06-03T10:00:00Z');
+  });
+
   it('per-field merge with different fields updated on each side', () => {
     const local = {
       wrongCount: 5, flagged: true,

@@ -28,19 +28,43 @@
       reviewFilter.textContent = 'Needs Review';
       reviewFilter.title = 'Filter files flagged as needing review';
       reviewFilter.style.cssText = 'position:absolute;right:6.5rem;top:0.35rem;z-index:2;font-size:0.72rem;';
-      reviewFilter.onclick = function () {
+      reviewFilter.onclick = async function () {
         const rows = document.querySelectorAll('.tree-row');
         let found = 0;
-        rows.forEach(function (row) {
+        reviewFilter.textContent = 'Scanning…';
+        // Phase 6.5 fix #7: previously this filter grepped `row.dataset.path`
+        // for the literal strings 'aiQualityAlert' / 'Needs Review' — which
+        // never appear in filesystem paths, so the filter always returned 0.
+        // Now we open each JSON file, parse it, and inspect `meta.aiQualityAlert`
+        // / `meta.aiQualityScore` — the actual fields set by content-gen.js.
+        for (const row of rows) {
           const path = row.dataset.path || '';
-          if (path.includes('aiQualityAlert') || path.includes('Needs Review')) {
+          // Only check JSON files (skip HTML / folders / dotfiles).
+          if (!path.endsWith('.json')) {
+            row.style.display = 'none';
+            continue;
+          }
+          let isNeedsReview = false;
+          try {
+            const content = await window.__TAURI__.core.invoke('load_file', { path });
+            const parsed = JSON.parse(content);
+            const alert = parsed?.meta?.aiQualityAlert;
+            const score = parsed?.meta?.aiQualityScore;
+            if (alert === 'Needs Review' || (typeof score === 'number' && score < 0.7)) {
+              isNeedsReview = true;
+            }
+          } catch (e) {
+            // File isn't valid JSON or load_file failed — skip silently.
+            // Don't hide the row, just don't mark it as needing review.
+          }
+          if (isNeedsReview) {
             row.style.display = 'flex';
             row.style.background = 'rgba(218,54,51,0.08)';
             found++;
           } else {
             row.style.display = 'none';
           }
-        });
+        }
         reviewFilter.textContent = found > 0 ? found + ' need review' : 'Needs Review';
         if (found === 0) {
           setTimeout(function () { reviewFilter.textContent = 'Needs Review'; }, 1500);

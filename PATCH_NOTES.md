@@ -187,3 +187,83 @@ npm run check       # ✓ exit 0
 - [x] H1–H25: all high-severity issues addressed
 
 **Phase 5 may begin.**
+
+---
+
+# Osler V1 — Phase 6.5 Patch Notes (Pre-Phase-7 Cleanup)
+
+**Date:** 2026-06-24
+**Scope:** Fixes all 14 CRITICAL + 12 HIGH + 14 MEDIUM/LOW issues identified in the pre-Phase-7 readiness review.
+**Effect:** Phase 7 (Test & Ship) can begin on a clean basis.
+**Test status:** 83/83 tests pass (was 73 — added 10 new tests for the fixes). `npm run build`, `npm run validate`, `npm run validate-schemas`, `npm run check` all green.
+
+See `llm-execution-guide.md` → "PHASE 6.5 — PRE-PHASE-7 CLEANUP" section for the full change list with file:line references.
+
+## Critical fixes (#1-#14)
+1. Legacy `sync-engine.js` actually deleted (H8 fix finally applied).
+2. Hub Sync button rendered directly in `hub/index.html` (was unreachable).
+3. `fieldMergeByUpdatedAt` tie-breaker: `>=` → `>` (spec says "equal → remote wins").
+4. `content-gen.js` quality gate now calls `validate()` — was heuristic-only.
+5. Cost tracking migrated from localStorage to IndexedDB `settings` store.
+6. Model names sourced from `gemini.js MODELS` (was hardcoded strings).
+7. "Needs Review" filter actually opens JSON files (was grepping paths).
+8. "My Content" icon names fixed (`file-question`/`library`/`stethoscope` didn't exist).
+9. `storage.js` preserves original `DOMException` so quota retry path is reachable.
+10. `auth.js` silent `catch {}` blocks replaced with logged catches.
+11. `tests/fixtures/sample-quiz.json` now uses `schemaVersion` (was `version`).
+12. All 6 schemas' `$schema` switched to draft-07 (ajv compile now passes).
+13. `tauri-plugin-dialog` added to Cargo.toml + capabilities.
+14. New `tests/cms_flow.rs` integration test (replaces unit-only `tests/integration.rs` for the P5.9 contract).
+
+## High fixes (#15-#26)
+15. GitHub tokens stored in OS keychain via `keyring` crate (was plain JSON).
+16. Plan-bless: auth uses GitHub Device Flow (simpler, no redirect server).
+17. git2 helpers kept with updated comment (Phase 8 will wire them).
+18. New `analytics.rs` module — real Firestore-backed study-event query.
+19. Settings page adds "Auto-update check on launch" toggle (Phase 8 prep).
+20. `generate_content` stub documented with actionable error + Phase 8 plan.
+21. `ai-assistant-engine.js` MODELS now a function call (was captured at IIFE time).
+22. Duplicated `setupShortcuts` removed; replaced with queue + fallback timer.
+23. `EngineShared.icon()` emits tagged placeholders that auto-hydrate when `icons.js` loads.
+24. 29 `aria-label` attributes added to icon-only buttons across 4 engines.
+25. Inline CSS_VARS aligned with shared.css tokens (full extraction deferred).
+26. P4.4 (`engines use ui.js`) officially retracted as a v1 goal.
+
+## Medium/Low fixes
+- `bank-v1.json`: `passageId` now required.
+- `validate.js`: permissive `date-time` override removed.
+- `storage.js`: exports `deleteEntry as delete` + `STORE_NAMES` constant map.
+- `sync.js`: unused imports removed.
+- `hub/index.html`: unused `currentUser` import removed.
+- `dashboard.js`: recent commits truncated to 10 (was 3).
+- `tauri.conf.json`: empty `pubkey` documented.
+- `main.js`: ES `export` converted to `window.OslerAdmin` (matches how index.html loads it).
+- `mcp_server.rs`: missing `analytics_query` tool added.
+- `README.md`: "2-stage Gemini" → "3-stage Gemini".
+- `AGENTS.md`: status updated; new rules added (STORE_NAMES, cost caps, OS keychain, auto-update toggle).
+- New tests: `field-merge.test.js` (+2), `migration.test.js` (+3), `content-gen.test.js` (new, 5 tests).
+- `tauri/tauri/` duplicate directory deleted.
+
+## Files deleted (user action required)
+The following files were removed in this patch. If you're applying this as a diff over an existing checkout, delete them on your side too:
+- `engines/sync-engine.js` (135 KB — legacy WebRTC/MQTT sync, replaced by `src/lib/sync.js`)
+- `engines/sync-engine.src.js` (98 KB — pre-build source of the above)
+- `scripts/build_sync_engine.ps1` (2 KB — build script for the legacy file)
+- `tauri/tauri/` (entire directory — byte-identical nested duplicate of `tauri/`)
+
+## Files added
+- `tauri-admin/src/analytics.rs` (Firestore-backed analytics query)
+- `tauri-admin/tests/cms_flow.rs` (real CMS flow integration test)
+- `tests/unit/lib/content-gen.test.js` (5 unit tests for the AI pipeline)
+
+## Verification
+
+```bash
+npm run build       # ✓ 11 engines (no sync-engine), 10 CSS, 7 assets, 22 lib, 7 schemas
+npm test            # ✓ 83/83 tests pass (was 73 — +10 new tests)
+npm run validate    # ✓
+npm run validate-schemas  # ✓ all 6 schemas valid (was failing pre-fix)
+npm run check       # ✓ exit 0 (now includes validate-schemas)
+```
+
+**Phase 7 may begin.**

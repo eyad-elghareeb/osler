@@ -5,7 +5,7 @@
     "description": "A sample quiz for testing the engine",
     "icon": "heart",
     "tags": ["cardiology", "sample"],
-    "version": 1,
+    "schemaVersion": "1.0",
     "createdAt": "2026-06-23T00:00:00Z",
     "updatedAt": "2026-06-23T00:00:00Z"
   },

@@ -154,7 +154,7 @@ self.addEventListener('install', function (event) {{
     var cache = await caches.open(CACHE_NAME);
     var REQUIRED = [
       'quiz-engine.js', 'bank-engine.js', 'flashcard-engine.js', 'written-engine.js',
-      'index-engine.js', 'search-engine.js', 'sync-engine.js',
+      'index-engine.js', 'search-engine.js',
       'index-engine.css', 'index.html', 'tracker-map.json', 'manifest.webmanifest', 'assets/favicon.svg'
     ];
     await Promise.all(REQUIRED.map(function (rel) {{
@@ -232,7 +232,7 @@ async function handleAsset(event, request) {{
       var filename = url.pathname.split('/').pop();
       var SHARED = [
         'quiz-engine.js', 'bank-engine.js', 'flashcard-engine.js', 'written-engine.js',
-        'index-engine.js', 'search-engine.js', 'sync-engine.js',
+        'index-engine.js', 'search-engine.js',
         'index-engine.css', 'manifest.webmanifest', 'assets/favicon.svg',
         'assets/icon-48.png', 'assets/icon-72.png', 'assets/icon-96.png', 'assets/icon-144.png', 'assets/icon-192.png', 'assets/icon-512.png',
         'tracker-map.json'
@@ -394,7 +394,7 @@ pub fn build_project_zip(config: &ProjectConfig) -> Result<Vec<u8>, String> {
         "bank-engine.js".into(),
         "flashcard-engine.js".into(),
         "written-engine.js".into(),
-        "sync-engine.js".into(),
+        // Phase 6.5 fix #1: legacy sync-engine.js removed.
         "tracker-map.json".into(),
         "assets/favicon.svg".into(),
         "manifest.webmanifest".into(),
@@ -502,7 +502,7 @@ pub fn build_project_zip(config: &ProjectConfig) -> Result<Vec<u8>, String> {
     add_str(&mut zip, "engine-tracker.js", engines::ENGINE_TRACKER_JS)?;
     add_str(&mut zip, "quiz-engine.js", engines::QUIZ_ENGINE_JS)?;
     add_str(&mut zip, "bank-engine.js", engines::BANK_ENGINE_JS)?;
-    add_str(&mut zip, "sync-engine.js", engines::SYNC_ENGINE_JS)?;
+    // Phase 6.5 fix #1: sync-engine.js no longer bundled.
     add_str(&mut zip, "flashcard-engine.js", engines::FLASHCARD_ENGINE_JS)?;
     add_str(&mut zip, "written-engine.js", engines::WRITTEN_ENGINE_JS)?;
     add_str(&mut zip, "osce-engine.js", engines::OSCE_ENGINE_JS)?;

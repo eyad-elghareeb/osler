@@ -9,7 +9,7 @@
 | Name | Osler V1 |
 | Type | Medical study platform — offline-first PWA + Tauri admin dashboard |
 | Deployment | GitHub Pages (site) + Tauri (admin desktop app) |
-| Status | Phase 0 — Foundation |
+| Status | Phase 6 complete — Phase 7 (Test & Ship) next |
 
 ## Rules
 
@@ -33,8 +33,11 @@ Phase 0 ──▶ Phase 1 ──▶ Phase 2 ──▶ Phase 3 ──▶ Phase 4 
 - **Schema-first** — Every content type has a JSON Schema in `src/schemas/`. Validate before commit. `meta.schemaVersion` must be a known version in `_meta.json` (V19 policy enforced by `src/lib/validate.js`).
 - **Never hardcode engine paths** — Use `__{NAME}_ENGINE_BASE` for dynamic path resolution. Every engine must use its OWN constant (e.g. `__UWORLD_ENGINE_BASE`, not `__QUIZ_ENGINE_BASE`).
 - **CSS in src/css/** — Extracted from engine inline strings, built via esbuild.
-- **IndexedDB over localStorage** — Per-type tracker tables, quota management. The only localStorage exceptions are: theme (UI state), `osler_device_id` (anonymous device metadata, not user data), and `osler_migrated_v1` / `osler_migration_errors_v1` (migration flags).
+- **IndexedDB over localStorage** — Per-type tracker tables, quota management. The only localStorage exceptions are: theme (UI state), `osler_device_id` (anonymous device metadata, not user data), `osler_migrated_v1` / `osler_migration_errors_v1` (migration flags), and the admin-app-only `osler_auto_update_check` toggle (Settings page persistence fallback when tauri-plugin-store isn't wired).
 - **Shared device ID** — `src/lib/sync-utils.js` is the single source of truth for `getDeviceId()`. Both `sync.js` and `analytics.js` import from it. Do NOT duplicate.
+- **Store name constants** — `src/lib/storage.js` exports `STORES` (config array) and `STORE_NAMES` (frozen map). Import `STORE_NAMES` and use `STORE_NAMES.quizTracker` etc. instead of hardcoding string literals like `'quizTracker'`.
+- **Cost caps** — `src/lib/content-gen.js` exports `DAILY_CAP` and `MONTHLY_CAP`. The admin dashboard imports these instead of duplicating magic numbers.
+- **OS keychain for secrets** — `tauri-admin` uses the `keyring` crate (macOS Keychain / Windows Credential Manager / Linux Secret Service) for GitHub + deploy tokens. Do NOT store secrets in `tauri-plugin-store` (which writes plain JSON to the app data dir).
 - **Lib-bridge** — `engines/engine-shared.js` dynamically imports `src/lib/*.js` and exposes them on `window.OslerTracker`, `window.OslerAnalytics`, `window.OslerAnki`, `window.OslerUI`, `window.OslerGemini`, `window.OslerSync`, `window.OslerAuth`. Engines should use these bridges, not duplicate the lib code.
 - **No silent catches** — `.catch(function(){})` is forbidden. Use `.catch(e => console.warn('[module] ...', e))` at minimum so bugs are visible.
 - **V20 analytics taxonomy** — `contentType` must be `quiz|bank|flashcard|written|osce`. `outcome` must be `correct|wrong|skipped|rating_1|rating_2|rating_3|rating_4|null`. `analytics.track()` validates and warns on unknown values.

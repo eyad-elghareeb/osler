@@ -153,7 +153,14 @@ pub fn parse_github_remote(remote: &str) -> Option<(String, String)> {
 }
 
 // ── git2-based helpers (Phase 5.2) ─────────────────────────────────────────
-// Used by P5.3 (ContentEditor) and MCP tools. Suppress dead_code until P5.3 lands.
+// Phase 6.5 fix #17: kept as `#[allow(dead_code)]` for Phase 8 use. The
+// working `git_commit` / `git_push` / `git_force_push` commands still shell
+// out via std::process::Command because the shell-out impl is well-tested
+// with --force-with-lease and integrates with the user's git config (signing
+// keys, hooks, etc.). These git2 helpers will be wired to new commands in
+// Phase 8 when the push_update.rs module needs programmatic clone/commit/push
+// without spawning a subprocess. Migrating the existing shell-out commands
+// to git2 is OPTIONAL per the plan — both impls coexist fine.
 
 #[allow(dead_code)]
 fn git2_callbacks(token: &str) -> RemoteCallbacks<'static> {

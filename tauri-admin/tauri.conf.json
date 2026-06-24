@@ -47,6 +47,7 @@
       "endpoints": [
         "https://github.com/osler-app/osler/releases/latest/download/latest.json"
       ],
+      "_pubkey_note": "Phase 6.5: empty pubkey disables signature verification. Phase 8 P8.7 will run `tauri signer generate` to produce a key pair, set the private key as the signing key in CI, and paste the PUBLIC key here. Until then, updates will be rejected by tauri-plugin-updater at runtime — see https://v2.tauri.app/plugin/updater/#signing",
       "pubkey": "",
       "windows": {
         "installMode": "passive"

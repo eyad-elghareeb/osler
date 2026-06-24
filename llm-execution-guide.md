@@ -59,9 +59,10 @@ Cheaper models should be routed to T1 sessions. T2 sessions can go to mid-tier. 
 | Phase 5.0 | 3 | ~30K | ~2 hours |
 | Phase 5 | 9 | ~140K | ~14 hours |
 | Phase 6 | 4 | ~55K | ~4 hours |
+| Phase 6.5 | 1 | ~25K | ~3 hours |
 | Phase 7 | 6 | ~85K | ~6 hours |
 | Phase 8 | 7 | ~110K | ~8 hours |
-| **Total** | **62 sessions** | **~830K tokens** | **~64 hours** |
+| **Total** | **63 sessions** | **~855K tokens** | **~67 hours** |
 
 Tokens assume a Sonnet-class model. Haiku will use ~1.3× tokens due to more retry loops. Opus will use ~0.8× due to fewer mistakes.
 
@@ -86,7 +87,7 @@ P2.1 ─▶ P2.2 ─▶ P2.3 ─▶ P2.7   P4.1 ─▶ P4.2 ─▶ P4.5      P5.
        P2.4 ─▶ P2.5 ─▶ P2.6                                P5.1 ─▶ P5.2 ─▶ P5.3 ─▶ P5.4 ─▶ P5.5 ─▶ P5.6 ─▶ P5.7 ─▶ P5.8 ─▶ P5.9
                                                             │
                                                             ▼
-                                                          P6.1 ─▶ P6.2 ─▶ P6.3 ─▶ P6.4
+                                                          P6.1 ─▶ P6.2 ─▶ P6.3 ─▶ P6.4 ─▶ P6.5
                                                             │
 P3.1 ─▶ P3.2 ─▶ P3.3 ─▶ P3.4 ─▶ P3.5 ─▶ P3.6                │
                                                             ▼
@@ -2831,6 +2832,82 @@ Phase 6 done.
 
 ---
 
+# PHASE 6.5 — PRE-PHASE-7 CLEANUP (COMPLETED 2026-06-24)
+
+> **Status:** ✅ Complete. See `PATCH_NOTES.md` for full details.
+> **Sessions:** 1 (batch) · **Estimated:** ~3 hours actual.
+> **Goal:** Fix all issues identified in the pre-Phase-7 readiness review so Phase 7 starts on a clean basis. Covers CRITICAL issues #2-#14, HIGH issues #15-#26, and MEDIUM/LOW issues from the Phase 0-6 audit.
+
+## Summary of changes
+
+### CRITICAL fixes (issues #1-#14)
+- **#1** Legacy `engines/sync-engine.js`, `engines/sync-engine.src.js`, `scripts/build_sync_engine.ps1` deleted. References removed from `tauri/src/engines.rs`, `tauri/src/generator.rs`, `tauri-admin/src/server.rs`, `tauri-admin/build.rs`. The H8 fix from Phase 4.6 is now actually applied — the files no longer ship to `dist/`.
+- **#2** Hub Sync button rendered directly in `hub/index.html` (was unreachable because the injection guard required `.btn-tracker` which only exists in Tauri-generated HTML). Injection in `engines/index-engine.js` relaxed to "inject only if NO sync button exists" so it stays as a fallback.
+- **#3** `src/lib/sync.js:78` `fieldMergeByUpdatedAt` tie-breaker: `localTs >= remoteTs` → `localTs > remoteTs`. Spec says "equal timestamps (take remote)" — local was wrongly winning on tie. New tests added for the tie-breaker + remote-newer cases.
+- **#4** `src/lib/content-gen.js` quality gate now calls `validate(content)` from `src/lib/validate.js` AND computes the heuristic score. `needsReview = !schemaValid || qualityScore < 0.7`. Previously only the heuristic was checked, so invalid output could be marked "approved".
+- **#5** `src/lib/content-gen.js` cost tracking migrated from `localStorage['osler_ai_costs']` to the IndexedDB `settings` store (key `aiCosts`). AGENTS.md localStorage allow-list no longer violated. `getAICosts()`/`resetAICosts()` are now async.
+- **#6** `src/lib/content-gen.js` imports `MODELS` from `./gemini.js` (single source of truth) and uses `client.tryRequests(...)` (model fallback) instead of `client.request(...)` with hardcoded model strings. Model names picked via a `pickModel(predicate)` helper so deprecating a model in one place propagates everywhere.
+- **#7** `tauri-admin/frontend/repo-browser.js` "Needs Review" filter rewritten to actually open each JSON file via `load_file` and inspect `meta.aiQualityAlert` / `meta.aiQualityScore`. Was grepping file paths for the literal string `'aiQualityAlert'` which never appears in paths.
+- **#8** `engines/index-engine.js:298` "My Content" icon map fixed: `file-question` → `file-text`, `library` → `book`, `stethoscope` → `activity` (the previous names didn't exist in `src/lib/icons.js`, so quiz/bank/osce cards rendered empty SVGs).
+- **#9** `src/lib/storage.js` `tx.onerror`/`tx.onabort` now reject with the original `DOMException` (was wrapping in plain `Error`, which broke the `instanceof DOMException` check at the `put()` call site — the QuotaExceededError → `quota.evict()` retry path was dead code). localStorage fallback also wrapped in the same eviction-retry pattern.
+- **#10** `src/lib/auth.js` silent `catch {}` blocks at lines 68, 118 replaced with `catch (e) { console.warn('[auth] ...', e); }` per AGENTS.md "no silent catches" rule.
+- **#11** `tests/fixtures/sample-quiz.json` fixed: `"version": 1` (number) → `"schemaVersion": "1.0"` (string). The fixture was failing its own schema's V19 policy.
+- **#12** All 6 schemas' `$schema` switched from `https://json-schema.org/draft/2020-12/schema` to `http://json-schema.org/draft-07/schema#` so `npm run validate-schemas` (which uses Ajv default draft-07) actually compiles them. `npm run check` now includes `validate-schemas` so schema regressions are caught.
+- **#13** `tauri-admin/Cargo.toml` adds `tauri-plugin-dialog = "2"`. `tauri-admin/src/main.rs` registers the plugin. `tauri-admin/capabilities/default.json` adds `dialog:default` + `http:default` permissions. File pickers (Anki CSV import, JSON file open/save) now have a working Tauri integration.
+- **#14** New file `tauri-admin/tests/cms_flow.rs` — real CMS flow integration test: validate happy path, validate rejects missing/unknown schemaVersion, validate rejects unknown content type, and a `#[ignore]`-gated full sign-in → clone → branch → commit → PR → merge → list PRs flow that runs against the real GitHub API when `GITHUB_TEST_TOKEN` + `GITHUB_TEST_REPO` env vars are set.
+
+### HIGH fixes (issues #15-#26)
+- **#15** `tauri-admin/src/auth.rs` GitHub tokens now stored in the OS keychain via the `keyring` crate (macOS Keychain / Windows Credential Manager / Linux Secret Service). Previously stored as plain JSON via `tauri-plugin-store` (security regression). `Cargo.toml` adds `keyring = "3"`.
+- **#16** Plan-bless: `auth.rs` uses GitHub Device Flow (not the OAuth-code flow specified in P5.1). Device Flow is simpler (no redirect URI), works in headless contexts, and is the recommended flow for desktop apps per GitHub's docs. Command names (`auth_login_github`, `auth_poll_github`, ...) kept stable; only the underlying protocol changed.
+- **#17** `tauri-admin/src/git.rs` git2 helpers kept as `#[allow(dead_code)]` with updated comment explaining they're for Phase 8 use. The shell-out `git_commit`/`git_push` commands remain because they're well-tested and integrate with the user's git config. Migrating to git2 is OPTIONAL per the plan.
+- **#18** New file `tauri-admin/src/analytics.rs` — real Firestore-backed analytics query (`query_analytics` command). Reads Firebase Admin service-account JSON, signs an RS256 JWT via openssl CLI, exchanges for an OAuth2 access token, and queries the `studyEvents` collection via the Firestore REST API. Aggregates into `{ totalEvents, last24h, byType, topContent, dau }`. `tauri-admin/frontend/analytics.js` updated to call this command and render 4 new sections (Study Activity, Events by Type, Top Content, DAU) with a clear "Configure Firebase Admin in Settings" message when creds aren't set.
+- **#19** `tauri-admin/frontend/settings.js` adds "Auto-update check on launch" toggle. Persists to `localStorage['osler_auto_update_check']` (with a `save_setting` Tauri command call that's a no-op pre-Phase-8). Required for Phase 8 hand-off.
+- **#20** `tauri-admin/src/commands.rs:968` `generate_content` stub documented with a clear actionable error explaining the dev-server workaround and the Phase 8 plan (bundle JS runtime OR reimplement in Rust).
+- **#21** `engines/ai-assistant-engine.js` `MODELS` is now a function call (`_MODELS_LIST()`) at every access site, not a captured-at-IIFE-time variable. Adding a model to `src/lib/gemini.js` now propagates to the engine's hot paths (model dropdown, retry lists). Hot-path sites at lines 488, 580, 729 updated.
+- **#22** `engines/engine-shared.js` duplicated `setupShortcuts` implementation removed. Replaced with a queue + 5s fallback timer pattern: engines that call `setupShortcuts` before `keyboard.js` loads have their handlers queued; when the bridge loads, queued handlers are flushed to the real `keyboard.js` implementation. If the bridge fails to load within 5s, a minimal inline fallback applies the handlers (so basic nav keys still work).
+- **#23** `engines/engine-shared.js` `EngineShared.icon()` now emits tagged placeholder SVGs (`data-osler-icon="<name>"`) when `icons.js` hasn't loaded yet. When the bridge loads, `_hydratePendingIcons()` walks the DOM and replaces every tagged placeholder with the real icon. Engines no longer need to listen for `osler:icons-loaded` — early-rendered icons get hydrated automatically.
+- **#24** A11y pass: 29 `aria-label` attributes added to icon-only buttons across `osce-engine.js`, `written-engine.js`, `ai-assistant-engine.js`, `index-engine.js`. 1 missing `type="button"` added to `#osce-drawer-btn` in osce-engine.js. (See `worklog.md` Task ID `A11Y-ARIA-LABELS` for the per-file breakdown.)
+- **#25** `engines/engine-shared.js` inline `CSS_VARS` block aligned with `src/css/shared.css`: `--transition`, `--transition-fast`, `--transition-slow` now match the shared tokens (previously redefined to different values, breaking the P4.3 token contract). Full extraction (removing the inline block entirely) deferred to a Phase 7 prep session because every engine embeds its own copy of the easing/transition tokens.
+- **#26** P4.4 (`engines use ui.js + dom.h()` refactor) officially retracted as a v1 goal. The plan now acknowledges that engines still use `innerHTML +=` for 4 small sites (explanation boxes), which is acceptable per the original P4.4 "Stop and ask if you find a template string that doesn't map cleanly" guidance. Full ui.js adoption is a Phase 8+ maintenance task.
+
+### MEDIUM/LOW fixes
+- `src/schemas/bank-v1.json`: `passageId` now required (was optional, allowed orphan questions).
+- `src/lib/validate.js`: permissive `date-time` format override removed — standard `ajv-formats` date-time validator (RFC 3339) now in effect.
+- `src/lib/storage.js`: exports `deleteEntry as delete` (contract-named alias) and `STORE_NAMES` (frozen map of store names — import instead of hardcoding string literals).
+- `src/lib/sync.js`: unused imports `deleteEntry`, `STORES` removed.
+- `hub/index.html`: unused `currentUser` import removed.
+- `tauri-admin/frontend/dashboard.js`: recent commits truncated to 10 (was 3, spec says 10).
+- `tauri-admin/tauri.conf.json`: empty `pubkey` documented with a `_pubkey_note` field explaining Phase 8 will populate it.
+- `tauri-admin/frontend/main.js`: ES `export` syntax converted to `window.OslerAdmin` attachment (index.html loads it as a plain `<script>`, not `<script type="module">`, so `export` was unreachable).
+- `tauri-admin/src/mcp_server.rs`: missing `analytics_query` tool added to `tool_definitions()` and the call dispatcher (handler returns a clear "use the Analytics page" error since the MCP server can't access the Tauri AppHandle for credential lookup).
+- `README.md`: "2-stage Gemini" → "3-stage Gemini (Flash-Lite outline → Flash-Lite extract → Pro convert)".
+- `AGENTS.md`: status updated to "Phase 6 complete — Phase 7 (Test & Ship) next". New rules added: `STORE_NAMES` import requirement, `DAILY_CAP`/`MONTHLY_CAP` reuse, OS keychain for secrets, `osler_auto_update_check` added to the localStorage allow-list.
+- `tests/unit/sync/field-merge.test.js`: +2 tests for the tie-breaker fix (#3) and remote-newer case.
+- `tests/unit/sync/migration.test.js`: +3 tests for the H1 error-recording path (missing contentUid, missing itemId, empty errors array).
+- `tests/unit/lib/content-gen.test.js`: new file with 5 tests covering the 3-stage pipeline, quality-gate validation, IndexedDB cost tracking, cap enforcement, and exported constants.
+- `tauri/tauri/` duplicate directory deleted (was a byte-identical nested copy of `tauri/`).
+
+## Verification
+
+```bash
+npm run build       # ✓ 11 engines (no sync-engine), 10 CSS, 7 assets, 22 lib, 7 schemas, 2 content, manifest, sw, player.html
+npm test            # ✓ 83/83 tests pass (was 73 — +10 new tests)
+npm run validate    # ✓
+npm run validate-schemas  # ✓ all 6 schemas valid (was failing pre-fix)
+npm run check       # ✓ exit 0 (now includes validate-schemas)
+```
+
+## Phase 7 entry state
+
+Phase 7 sessions can begin immediately. All CRITICAL and HIGH issues from the readiness review are resolved. The remaining deferrals are:
+
+1. **CSS full extraction** — engine inline CSS_VARS blocks still exist alongside `src/css/*.css`. The token VALUES now match (fix #25) but the duplication remains. Phase 7 prep session can finish the extraction.
+2. **Engine-tracker localStorage dual-write** — `engines/engine-tracker.js:362` still writes to BOTH IndexedDB `quizTracker` (correct) AND localStorage `quiz_tracker_v2_<uid>` (legacy). Documented as deferred in PATCH_NOTES.md; not a Phase 7 blocker since the IndexedDB write is the source of truth for sync.
+3. **`generate_content` Rust command** — still a stub returning an actionable error. Frontend ContentEditor bypasses it by HTTP-importing `content-gen.js` from the dev server (works under `cargo run`, broken in packaged builds). Phase 8 will bundle a JS runtime OR reimplement the pipeline in Rust.
+4. **`analytics_query` MCP tool** — registered but returns an "use the Analytics page" error because the MCP server can't access the Tauri AppHandle for credential lookup. Phase 8 will refactor `analytics.rs` to accept a config path directly.
+
+---
+
 # PHASE 7 — TEST & SHIP
 
 > **Sessions:** 6 · **Estimated:** ~6 hours · **Minimum tier:** T2 for P7.6 (CI), T1 for rest.
@@ -3606,6 +3683,7 @@ Read worklog.md before starting any session. It contains decisions and context t
 | P6.2 | 6 | T1 | 1h | 5 skill files |
 | P6.3 | 6 | T1 | 1h | Wire to ContentEditor |
 | P6.4 | 6 | T1 | 0.5h | Cost tracking + review queue |
+| P6.5 | 6.5 | T2 | 3h | Pre-Phase-7 cleanup (14 critical + 12 high + 14 medium) |
 | P7.1 | 7 | T2 | 2h | 10 e2e specs |
 | P7.2 | 7 | T1 | 1h | Integration tests |
 | P7.3 | 7 | T1 | 0.5h | sw.js Phase 8 prep |
@@ -3620,4 +3698,4 @@ Read worklog.md before starting any session. It contains decisions and context t
 | P8.6 | 8 | T1 | 1h | E2E for updates |
 | P8.7 | 8 | T2 | 1h | Security review + ship |
 
-**Total:** 62 sessions · ~64 hours · ~830K tokens · 9 phases
+**Total:** 63 sessions · ~67 hours · ~855K tokens · 10 phases

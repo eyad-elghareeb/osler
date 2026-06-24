@@ -11,7 +11,7 @@ Medical study platform — offline-first PWAs, Firebase sync, GitHub CMS, and AI
 - **Firebase** — auth (guest → Google → GitHub), Firestore sync, Analytics
 - **PWA** — offline-first with service worker
 - **Admin Dashboard** — Tauri desktop app for GitHub CMS content management
-- **AI Pipeline** — 2-stage Gemini for content generation (Flash-Lite → Pro)
+- **AI Pipeline** — 3-stage Gemini for content generation (Flash-Lite outline → Flash-Lite extract → Pro convert)
 
 ## Project Structure
 

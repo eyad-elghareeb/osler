@@ -37,27 +37,36 @@
     }
     return _FALLBACK_MODELS;
   }
-  // Backward-compat: engines that reference MODELS directly still work.
-  var MODELS = _FALLBACK_MODELS;
+  // Phase 6.5 fix #21: call _getModels() at access time, NOT at module load.
+  // Previously `var MODELS = _FALLBACK_MODELS;` captured the fallback at IIFE
+  // execution time, so adding a model to src/lib/gemini.js would NOT
+  // propagate to the engine's hot paths (model dropdown, retry lists, etc.).
+  // Now MODELS is a getter function call — every access reflects the current
+  // bridge state. For backward-compat, we expose `MODELS` as a property on
+  // the engine's exported API and re-evaluate on each use.
+  function MODELS() { return _getModels(); }
+  // Array-like helpers that re-evaluate on each call.
+  function _MODELS_LIST() { return _getModels(); }
 
   /* ── API key access (thin wrappers over EngineShared) ────────── */
   function _readKey()        { return EngineShared.airReadGeminiKey(); }
   function _writeKey(plain)  { EngineShared.airWriteGeminiKey(plain); }
   function _hasApiKey()      { return EngineShared.airHasGeminiKey(); }
 
-  function _getSavedModel()  { return localStorage.getItem(_SK.model) || MODELS[0][0]; }
+  function _getSavedModel()  { return localStorage.getItem(_SK.model) || _MODELS_LIST()[0][0]; }
   function _getModelLabel(id) {
-    for (var i = 0; i < MODELS.length; i++) { if (MODELS[i][0] === id) return MODELS[i][1]; }
+    var models = _MODELS_LIST();
+    for (var i = 0; i < models.length; i++) { if (models[i][0] === id) return models[i][1]; }
     return id;
   }
   function _getMaxWaitMs()   { var v = localStorage.getItem(_SK.maxWait) || '15'; var n = parseInt(v, 10); return n > 0 ? n * 1000 : 0; }
   function _getRetryLevel()  { return localStorage.getItem(_SK.retry) || 'balanced'; }
-  function modelIsAvailable(modelId) { return MODELS.some(function (m) { return m[0] === modelId; }); }
+  function modelIsAvailable(modelId) { return _MODELS_LIST().some(function (m) { return m[0] === modelId; }); }
 
   /* ── Gemini transport (thin wrappers over EngineShared) ──────── */
   function extractGeminiText(payload)  { return EngineShared.airExtractGeminiText(payload); }
   function friendlyAiError(error)      { return EngineShared.airFriendlyError(error); }
-  function buildGeminiAttempts(model)  { return EngineShared.airBuildAttempts(model, MODELS, _getRetryLevel()); }
+  function buildGeminiAttempts(model)  { return EngineShared.airBuildAttempts(model, _MODELS_LIST(), _getRetryLevel()); }
   function tryGeminiRequests(systemPrompt, userPrompt, apiKey, attempts, cancelSignal) {
     return EngineShared.airTryRequests(systemPrompt, [{parts:[{text:userPrompt}]}], apiKey, attempts, cancelSignal, 0.3, _getMaxWaitMs());
   }
@@ -336,8 +345,8 @@
         '<div id="ai-assistant-header">' +
           '<h3>'+EngineShared.icon('bot')+' AI Assistant</h3>' +
           '<div style="display:flex;gap:.5rem;align-items:center">' +
-            '<button type="button" class="icon-btn" id="ai-settings-gear" title="AI Settings" style="font-size:1rem">'+EngineShared.icon('settings')+'</button>' +
-            '<button type="button" class="icon-btn" id="ai-close-btn" title="Close">'+EngineShared.icon('x')+'</button>' +
+            '<button type="button" class="icon-btn" id="ai-settings-gear" title="AI Settings" aria-label="AI Settings" style="font-size:1rem">'+EngineShared.icon('settings')+'</button>' +
+            '<button type="button" class="icon-btn" id="ai-close-btn" title="Close" aria-label="Close">'+EngineShared.icon('x')+'</button>' +
           '</div>' +
         '</div>' +
         '<div id="ai-assistant-context">' +
@@ -476,7 +485,7 @@
     contents.push({ role: 'user', parts: [{ text: _buildUserPrompt(_currentQuestion, question) }] });
 
     var model = _getSavedModel();
-    if (!modelIsAvailable(model)) model = MODELS[0][0];
+    if (!modelIsAvailable(model)) model = _MODELS_LIST()[0][0];
     var attempts = buildGeminiAttempts(model);
 
     var sendBtn = _$('ai-send-btn');
@@ -523,7 +532,7 @@
       '<div id="ai-settings-modal">' +
         '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem">' +
           '<h3 style="margin:0">'+EngineShared.icon('settings')+' AI Settings</h3>' +
-          '<button type="button" class="icon-btn" id="ai-settings-close" title="Close">'+EngineShared.icon('x')+'</button>' +
+          '<button type="button" class="icon-btn" id="ai-settings-close" title="Close" aria-label="Close">'+EngineShared.icon('x')+'</button>' +
         '</div>' +
         '<div class="field-box">' +
           '<label class="field-label" for="ai-key-input">Gemini API Key</label>' +
@@ -568,7 +577,7 @@
 
     // Populate model dropdown
     var modelSelect = _$('ai-model-select');
-    MODELS.forEach(function (m) {
+    _MODELS_LIST().forEach(function (m) {
       var opt = document.createElement('option');
       opt.value = m[0];
       opt.textContent = m[1];
@@ -717,7 +726,7 @@
 
     var apiKey = _readKey();
     var model = _getSavedModel();
-    if (!modelIsAvailable(model)) model = MODELS[0][0];
+    if (!modelIsAvailable(model)) model = _MODELS_LIST()[0][0];
     var attempts = buildGeminiAttempts(model);
 
     _$('notes-loading').style.display = 'flex';

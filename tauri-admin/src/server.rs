@@ -63,7 +63,7 @@ fn lookup_embedded(filename: &str) -> Option<(&'static [u8], &'static str)> {
         "index-engine.js"      => Some((engine_bytes!("index-engine.js"),      "application/javascript; charset=utf-8")),
         "search-engine.js"     => Some((engine_bytes!("search-engine.js"),     "application/javascript; charset=utf-8")),
         "index-engine.css"     => Some((engine_bytes!("index-engine.css"),     "text/css; charset=utf-8")),
-        "sync-engine.js"       => Some((engine_bytes!("sync-engine.js"),       "application/javascript; charset=utf-8")),
+        // Phase 6.5 fix #1: legacy sync-engine.js removed.
         "assets/favicon.svg"   => Some((engine_bytes!("assets/favicon.svg"),    "image/svg+xml")),
         "favicon.ico"          => Some((engine_bytes!("assets/favicon.svg"),    "image/svg+xml")),
         "sw.js"                => Some((engine_bytes!("sw.js"),                "application/javascript; charset=utf-8")),

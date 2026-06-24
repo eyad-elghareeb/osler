@@ -1,6 +1,6 @@
 import { collection, doc, getDoc, setDoc, getDocs, writeBatch } from 'firebase/firestore';
 import { db } from './firebase.js';
-import { get, getAll, put, deleteEntry, STORES } from './storage.js';
+import { get, getAll, put } from './storage.js';
 import { subscribe } from './auth.js';
 import { getDeviceId } from './sync-utils.js';
 
@@ -75,7 +75,9 @@ export function fieldMergeByUpdatedAt(local, remote) {
 
   const localTs = local.updatedAt || '';
   const remoteTs = remote.updatedAt || '';
-  const localNewer = localTs >= remoteTs;
+  // Phase 6.5 fix (issue #3): spec says "equal timestamps (take remote)".
+  // Strict `>` means remote wins on tie; old `>=` made local win on tie.
+  const localNewer = localTs > remoteTs;
 
   for (const key of allKeys) {
     const lv = local[key];

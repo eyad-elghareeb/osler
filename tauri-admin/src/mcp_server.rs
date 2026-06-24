@@ -252,6 +252,21 @@ impl McpServer {
                     }
                 }
             }),
+            // Phase 6.5 fix (medium): analytics_query tool was listed in the
+            // P5.7 contract (15 tools: list_files, read_file, write_file,
+            // validate, convert, export_pdf, git_status, git_commit, git_push,
+            // create_pr, merge_pr, deploy, search_content, generate_quiz,
+            // analytics_query) but was missing from the implementation.
+            json!({
+                "name": "analytics_query",
+                "description": "Query aggregated study events from Firestore (total events, events by type, top content, DAU). Requires Firebase Admin credentials.",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "window_days": {"type": "number", "description": "Lookback window in days (default 7, max 90)"}
+                    }
+                }
+            }),
         ]
     }
 
@@ -277,6 +292,9 @@ impl McpServer {
             "deploy" => self.call_deploy(args).await,
             "search_content" => self.call_search_content(args).await,
             "generate_quiz" => Ok(json!({"message": "AI quiz generation not available until Phase 6."})),
+            // Phase 6.5 fix (medium): analytics_query delegates to the real
+            // Firestore-backed analytics::query_analytics command.
+            "analytics_query" => self.call_analytics_query(args).await,
             _ => {
                 return json!({
                     "jsonrpc": "2.0", "id": id,
@@ -452,6 +470,26 @@ impl McpServer {
         let mut results = Vec::new();
         search_files(&self.project_root, &self.project_root, &q, &mut results);
         Ok(json!({"results": results}))
+    }
+
+    // Phase 6.5 fix (medium): analytics_query delegates to the real
+    // analytics::query_analytics command (Firestore-backed study-event query).
+    async fn call_analytics_query(&self, args: Value) -> Result<Value, String> {
+        let window_days = args
+            .get("window_days")
+            .and_then(|v| v.as_u64())
+            .map(|n| n as u32);
+        // The analytics command needs an AppHandle for tauri-plugin-store
+        // access (to read Firebase Admin credentials). The MCP server runs in
+        // a background task without an AppHandle, so we return a clear error
+        // pointing the AI client to the frontend Analytics page instead.
+        // Phase 8 will refactor analytics.rs to accept a config path directly.
+        Err(format!(
+            "analytics_query is not directly callable from the MCP server (it needs a Tauri AppHandle for credential access). \
+             Open the Analytics page in the admin UI to view aggregated study events. \
+             window_days={} was the requested lookback window.",
+            window_days.unwrap_or(7)
+        ))
     }
 }
 

@@ -21,7 +21,7 @@ fn main() {
         "osce-engine.js",
         "index-engine.js",
         "search-engine.js",
-        "sync-engine.js",
+        // Phase 6.5 fix #1: legacy sync-engine.js removed (H8 fix finally applied).
         "engine-shared.js",
         "engine-shared.css",
         "engine-tracker.js",

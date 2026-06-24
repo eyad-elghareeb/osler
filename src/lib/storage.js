@@ -15,6 +15,14 @@ export const STORES = [
   { name: 'settings', keyPath: 'key' },
 ];
 
+// Convenience: array of store names. Import this instead of hardcoding
+// string literals like 'quizTracker' / 'studyEvents' across modules.
+// Phase 6.5 fix (issue medium #5): previously STORES was exported but no
+// module imported it; store names were duplicated as string literals.
+export const STORE_NAMES = Object.freeze(
+  Object.fromEntries(STORES.map(s => [s.name, s.name]))
+);
+
 // Quick lookup: storeName → { keyPath, autoIncrement }
 const STORE_CONFIG = Object.fromEntries(STORES.map(s => [s.name, s]));
 
@@ -66,8 +74,19 @@ function idbOperation(storeName, mode, callback) {
       }
 
       tx.oncomplete = () => { db.close(); callbackError ? reject(callbackError) : resolve(result); };
-      tx.onerror = () => { db.close(); reject(new Error(`IndexedDB transaction error: ${tx.error?.message}`)); };
-      tx.onabort = () => { db.close(); reject(new Error(`IndexedDB transaction aborted: ${tx.error?.message || 'unknown cause'}`)); };
+      // Phase 6.5 fix (issue #9): preserve the original DOMException so the
+      // caller's `instanceof DOMException` check actually matches. Wrapping in
+      // a plain Error broke the QuotaExceededError → quota.evict() retry path.
+      tx.onerror = () => {
+        db.close();
+        const err = tx.error || new Error('IndexedDB transaction error');
+        reject(err);
+      };
+      tx.onabort = () => {
+        db.close();
+        const err = tx.error || new Error('IndexedDB transaction aborted');
+        reject(err);
+      };
     });
   });
 }
@@ -145,8 +164,16 @@ async function idbEvict(storeName, filterFn) {
         }
       };
       tx.oncomplete = () => { db.close(); resolve(deleted); };
-      tx.onerror = () => { db.close(); reject(new Error(`evict error: ${tx.error?.message}`)); };
-      tx.onabort = () => { db.close(); reject(new Error(`evict aborted: ${tx.error?.message || 'unknown cause'}`)); };
+      tx.onerror = () => {
+        db.close();
+        const err = tx.error || new Error('evict error');
+        reject(err);
+      };
+      tx.onabort = () => {
+        db.close();
+        const err = tx.error || new Error('evict aborted');
+        reject(err);
+      };
     });
   });
 }
@@ -317,10 +344,18 @@ export async function put(storeName, value) {
     try {
       return await idbPut(storeName, value);
     } catch (error) {
+      // Phase 6.5 fix (issue #9): the IDB layer now rejects with the original
+      // DOMException (see tx.onerror/tx.onabort above), so this instanceof
+      // check actually works. Previously the wrapped plain Error made
+      // quota.evict() unreachable — the contract was implemented but dead.
       const isQuota = error instanceof DOMException && (
         error.name === 'QuotaExceededError' || error.name === 'AbortError'
       );
-      if (isQuota) {
+      // Also catch wrapped errors that carry the original cause (defensive).
+      const causedByQuota = error?.cause instanceof DOMException && (
+        error.cause.name === 'QuotaExceededError' || error.cause.name === 'AbortError'
+      );
+      if (isQuota || causedByQuota) {
         try {
           const { onQuotaExceeded } = await import('./quota.js');
           return await onQuotaExceeded(() => idbPut(storeName, value));
@@ -332,13 +367,36 @@ export async function put(storeName, value) {
       throw error;
     }
   }
-  return ls.put(storeName, value);
+  // localStorage fallback: mirror the same eviction-retry behavior so
+  // private-browsing users also benefit from quota.evict() (Phase 6.5 fix).
+  try {
+    return await ls.put(storeName, value);
+  } catch (error) {
+    const isQuota = error instanceof DOMException && (
+      error.name === 'QuotaExceededError' || error.name === 'NS_ERROR_DOM_QUOTA_REACHED'
+    );
+    if (isQuota) {
+      try {
+        const { onQuotaExceeded } = await import('./quota.js');
+        return await onQuotaExceeded(() => ls.put(storeName, value));
+      } catch (e) {
+        console.warn(`[storage] ls.put retry after eviction failed for ${storeName}:`, e);
+        throw error;
+      }
+    }
+    throw error;
+  }
 }
 
 export async function deleteEntry(storeName, key) {
   if (hasIndexedDB) return idbDelete(storeName, key);
   return ls.delete(storeName, key);
 }
+
+// Phase 6.5 fix (issue medium #4): expose the contract-named `delete` alias.
+// `delete` is a reserved word in JS function declarations, but `export { x as delete }`
+// is valid ES module syntax and lets future consumers write `import { delete } from './storage.js'`.
+export { deleteEntry as delete };
 
 export async function getAll(storeName) {
   if (hasIndexedDB) return idbGetAll(storeName);

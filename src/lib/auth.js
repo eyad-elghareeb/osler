@@ -65,7 +65,8 @@ export async function signInAsGuest() {
   const result = await signInAnonymously(auth);
   _guestCredential = result;
   // Cache the guest UID so signOut can detect "we already had a guest".
-  try { localStorage.setItem(GUEST_UID_KEY, result.user.uid); } catch {}
+  try { localStorage.setItem(GUEST_UID_KEY, result.user.uid); }
+  catch (e) { console.warn('[auth] localStorage.setItem(GUEST_UID_KEY) failed:', e); }
   const user = { ...result.user.toJSON(), isGuest: true, provider: 'guest' };
   notify(user);
   await setAuthProvider('guest');
@@ -115,7 +116,8 @@ export async function signOut() {
   // their data is preserved remotely and syncPull will retrieve it.
   const guest = await signInAnonymously(auth);
   _guestCredential = guest;
-  try { localStorage.setItem(GUEST_UID_KEY, guest.user.uid); } catch {}
+  try { localStorage.setItem(GUEST_UID_KEY, guest.user.uid); }
+  catch (e) { console.warn('[auth] localStorage.setItem(GUEST_UID_KEY) failed:', e); }
   // Note: spread guest.user (not guest itself) — guest is a UserCredential,
   // not a User. H4 fix.
   const user = { ...guest.user.toJSON(), isGuest: true, provider: 'guest' };
@@ -182,10 +184,26 @@ export async function initAuth() {
   onAuthStateChanged(auth, async (firebaseUser) => {
     if (firebaseUser) {
       const saved = await getAuthProvider();
+      // Phase 6.5 fix #10 + #15: infer provider from providerData instead of
+      // hardcoding 'google' as the fallback. If settings is missing (fresh
+      // device, storage failure) and the user signed in via GitHub, we
+      // previously mislabeled them as 'google'. Now infer from
+      // firebaseUser.providerData[0].providerId.
+      let inferredProvider = saved?.value;
+      if (!inferredProvider) {
+        if (firebaseUser.isAnonymous) {
+          inferredProvider = 'guest';
+        } else {
+          const pd = firebaseUser.providerData?.[0]?.providerId || '';
+          if (pd.includes('github')) inferredProvider = 'github';
+          else if (pd.includes('google')) inferredProvider = 'google';
+          else inferredProvider = 'google'; // last-resort default; rare
+        }
+      }
       const user = {
         ...firebaseUser.toJSON(),
         isGuest: firebaseUser.isAnonymous,
-        provider: saved?.value || (firebaseUser.isAnonymous ? 'guest' : 'google'),
+        provider: inferredProvider,
       };
       notify(user);
     } else {

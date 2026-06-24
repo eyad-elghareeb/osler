@@ -49,7 +49,7 @@
     '<div class="dash-header">' +
       '<h2 id="dash-title-text">'+EngineShared.icon('bar-chart')+' Question Tracker</h2>' +
       '<button type="button" id="dash-master-toggle" class="dash-master-toggle" onclick="toggleMasterSelection()">Select All</button>' +
-      '<button type="button" class="dash-close-btn" onclick="closeTrackerDashboard()">'+EngineShared.icon('x')+'</button>' +
+      '<button type="button" class="dash-close-btn" onclick="closeTrackerDashboard()" aria-label="Close">'+EngineShared.icon('x')+'</button>' +
     '</div>' +
     '<div class="dash-scope-bar" id="dash-scope-bar">' +
       '<div id="dash-scope-tabs"></div>' +
@@ -71,9 +71,14 @@
   // Backward compatibility: inject Sync button into topbar if missing.
   // H8 fix: rewired to call Firebase sync (src/lib/sync.js) instead of the
   // legacy WebRTC/MQTT sync-engine.js which was deleted.
+  // Phase 6.5 fix #2: hub/index.html now renders the Sync button directly
+  // (the old guard required `.btn-tracker` which only exists in Tauri-generated
+  // HTML). The injection here remains as a fallback for Tauri/admin contexts
+  // where the topbar is rendered server-side. We inject only if NO sync button
+  // already exists anywhere on the page.
   var topbar = document.querySelector('.topbar');
-  var trackerBtn = document.querySelector('.btn-tracker');
-  if (topbar && trackerBtn && !document.querySelector('.btn-sync')) {
+  var existingSync = document.querySelector('.btn-sync, .btn-sync-hub');
+  if (topbar && !existingSync) {
     var syncBtn = document.createElement('button');
     syncBtn.className = 'icon-btn btn-sync';
     syncBtn.setAttribute('type', 'button');
@@ -81,7 +86,10 @@
     syncBtn.setAttribute('onclick', 'openSyncModal()');
     syncBtn.title = 'Sync Progress';
     syncBtn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M21 2v6h-6"></path><path d="M3 12a9 9 0 0 1 15-6.7L21 8"></path><path d="M3 22v-6h6"></path><path d="M21 12a9 9 0 0 1-15 6.7L3 16"></path></svg>';
-    trackerBtn.parentNode.insertBefore(syncBtn, trackerBtn.nextSibling);
+    // Insert into topbar-actions if present, else append to topbar.
+    var topbarActions = topbar.querySelector('.topbar-actions');
+    if (topbarActions) topbarActions.appendChild(syncBtn);
+    else topbar.appendChild(syncBtn);
   }
 
   /* ── Sync trigger (Firebase sync via src/lib/sync.js) ──────── */
@@ -123,7 +131,7 @@
     _searchBar.innerHTML =
       '<span class="search-bar-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg></span>' +
       '<input class="search-bar-input" id="search-bar-input" type="text" placeholder="Search quizzes..." onclick="openSearch()" readonly>' +
-      '<button type="button" class="icon-btn btn-search-mobile" id="btn-search-mobile" onclick="openSearch()" title="Search quizzes"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg></button>';
+      '<button type="button" class="icon-btn btn-search-mobile" id="btn-search-mobile" onclick="openSearch()" title="Search quizzes" aria-label="Search quizzes"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg></button>';
     // Inject search bar CSS (small — keep here so layout is ready immediately)
     var _searchBarStyle = document.createElement('style');
     _searchBarStyle.textContent =
@@ -294,11 +302,14 @@
 
         // Use Lucide icon names instead of emoji (Phase 4 emoji ban).
         // Icons are bridged via EngineShared.icon(); fall back to a generic
-        // "file" icon if the bridge hasn't loaded.
-        var typeIconName = { 'quiz': 'file-question', 'bank': 'library', 'flashcard': 'layers', 'written': 'pen-tool', 'osce': 'stethoscope' };
+        // "file-text" icon if the bridge hasn't loaded.
+        // Phase 6.5 fix #8: 3 of 5 previous names did not exist in icons.js
+        // (file-question, library, stethoscope) → My Content cards rendered
+        // empty SVGs. Replaced with names that actually exist in icons.js.
+        var typeIconName = { 'quiz': 'file-text', 'bank': 'book', 'flashcard': 'layers', 'written': 'pen-tool', 'osce': 'activity' };
         var html = '';
         entries.forEach(function(entry) {
-          var iconName = typeIconName[entry.type] || 'file';
+          var iconName = typeIconName[entry.type] || 'file-text';
           var iconSvg = (window.OslerUI && window.OslerUI.icons) ? window.OslerUI.icons.icon(iconName) : EngineShared.icon(iconName);
           var lastStudied = entry.updatedAt ? new Date(entry.updatedAt).toLocaleDateString() : '';
           html += '<div class="quiz-card">'
@@ -983,7 +994,7 @@
       +   '<div class="dash-q-num">Q' + ((q.idx || 0) + 1) + ' \u00B7 ' + typeLabel + '</div>'
       +   '<div class="dash-q-text">' + esc + '</div>'
       + '</div>'
-      + '<button type="button" class="dash-q-remove" onclick="removeTrackerItem(\'' + uid + '\',' + (q.idx || 0) + ')" title="Remove">\u2715</button>'
+      + '<button type="button" class="dash-q-remove" onclick="removeTrackerItem(\'' + uid + '\',' + (q.idx || 0) + ')" title="Remove" aria-label="Remove">\u2715</button>'
       + '</div>';
   }
 

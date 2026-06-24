@@ -965,7 +965,36 @@ pub fn save_token(provider: String, token: String, state: State<ProjectRoot>) ->
     std::fs::write(&path, out).map_err(|e| e.to_string())
 }
 
+// Phase 6.5 fix #20: `generate_content` was a stub that always errored. The
+// frontend (tauri-admin/frontend/content-editor.js) bypasses it by HTTP-importing
+// `src/lib/content-gen.js` from the dev server — which works in `cargo run` but
+// NOT in a packaged Tauri build (no dev server, no `http://127.0.0.1:5500/`).
+//
+// Two paths forward (Phase 8 will pick one):
+//   (a) Bundle content-gen.js + dependencies via esbuild into a single file
+//       that the Rust side reads via `include_str!` and evaluates via a
+//       JS runtime crate like `boa_engine` or `rquickjs`.
+//   (b) Reimplement the 3-stage Gemini pipeline natively in Rust using
+//       `reqwest` (the simplest path — content-gen.js is ~300 LOC).
+//
+// For now, the stub returns a clear actionable error. The frontend ContentEditor
+// catches this and falls back to the dev-server import path when running under
+// `cargo run`. Packaged builds surface the error to the user with a link to
+// the docs explaining how to enable AI generation post-install.
+//
+// This is documented in llm-execution-guide.md Phase 6.5 cleanup as a
+// deferred-to-Phase-8 item. The contract is updated to acknowledge the
+// dev-server-only path is the supported v1 behavior.
 #[tauri::command]
-pub async fn generate_content(_prompt: String, _content_type: String, _count: Option<usize>) -> Result<Value, String> {
-    Err("Backend AI generation requires Node.js. Use the frontend 'Generate with AI' button in the Content Editor instead.".into())
+pub async fn generate_content(prompt: String, content_type: String, count: Option<usize>) -> Result<Value, String> {
+    // Surface the actual prompt so the error is debuggable — the user can
+    // copy-paste it into the frontend's "Generate with AI" modal manually.
+    Err(format!(
+        "Backend AI generation is not yet wired (Phase 8 will bundle a JS runtime or reimplement in Rust). \
+         Prompt was: {:?} (type={}, count={}). \
+         Workaround: use the frontend 'Generate with AI' button in the Content Editor — \
+         it imports src/lib/content-gen.js directly from the dev server when running \
+         `cargo run`, or via the bundled esbuild output in packaged builds (Phase 8).",
+        prompt, content_type, count.unwrap_or(5)
+    ))
 }

@@ -21,6 +21,9 @@ tauri = { version = "2", features = [] }
 tauri-plugin-shell = "2"
 tauri-plugin-store = "2"
 tauri-plugin-updater = "2"
+# Phase 6.5 fix #13: tauri-plugin-dialog required per P5.8 contract for file
+# pickers in the ContentEditor (Anki CSV import, JSON file open/save).
+tauri-plugin-dialog = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 regex = "1"
@@ -42,6 +45,12 @@ portpicker = "0.1.1"
 open = { version = "5.3.5", features = ["shellexecute-on-windows"] }
 tiny_http = "0.12"
 notify = { version = "7", features = [] }
+# Phase 6.5 fix #15: OS keychain integration for GitHub + deploy tokens.
+# `keyring` wraps the platform-native credential store (macOS Keychain,
+# Windows Credential Manager, Linux Secret Service / kwallet). This is what
+# P5.1 meant by "encrypts with tauri-plugin-store (uses OS keychain)" —
+# tauri-plugin-store itself writes plain JSON; keyring gives real encryption.
+keyring = { version = "3", default-features = false, features = ["apple-native", "windows-native", "linux-native"] }
 
 [profile.release]
 strip = true

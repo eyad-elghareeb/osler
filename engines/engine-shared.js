@@ -10,7 +10,26 @@
   var ENGINE_BASE = _cs ? _cs.src.replace(/[^\/]*$/, '') : '';
   var ROOT_BASE = ENGINE_BASE.replace(/[^\/]+\/$/, '');
 
-  /* ── CSS variables (injected inline so they're available synchronously) ── */
+  /* ── CSS variables (injected inline so they're available synchronously) ──
+     Phase 6.5 fix #25 (partial): the inline CSS_VARS block previously
+     REDEFINED `--transition`, `--transition-fast`, and `--transition-slow`
+     to different values than `src/css/shared.css` defines, breaking the
+     P4.3 CSS token contract (engine inline CSS overrode shared.css tokens,
+     so any token "extraction" in shared.css was invisible to engine-styled
+     elements).
+
+     The fix: align the inline values with shared.css so they no longer
+     conflict. The full extraction (removing the inline block entirely and
+     loading shared.css via <link>) is deferred to a Phase 7 prep session
+     because every engine embeds its own copy of the easing/transition
+     tokens and removing them all at once risks visual regressions.
+
+     Values now match src/css/shared.css:
+       --transition:       0.22s cubic-bezier(0.16, 1, 0.3, 1)
+       --transition-fast:  150ms ease
+       --transition-slow:  350ms cubic-bezier(0.16, 1, 0.3, 1)
+     (cubic-bezier easing is also exposed as --ease-out for engine-internal
+     animation styles that already reference it.) */
   var CSS_VARS = `:root {
   --bg:         #0d1117;
   --surface:    #161b22;
@@ -29,9 +48,12 @@
   --skip:       #6e7681;
   --radius:     12px;
   --shadow:     0 4px 24px rgba(0,0,0,0.4);
-  --transition: 0.2s ease-out;
-  --transition-fast: 0.12s ease-out;
-  --transition-slow: 0.35s ease-out;
+  --ease-out:         cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-spring:      cubic-bezier(0.34, 1.56, 0.64, 1);
+  --ease-in-out:      cubic-bezier(0.65, 0, 0.35, 1);
+  --transition:       0.22s cubic-bezier(0.16, 1, 0.3, 1);
+  --transition-fast:  150ms ease;
+  --transition-slow:  350ms cubic-bezier(0.16, 1, 0.3, 1);
   --nav-size:   280px;
 }
 [data-theme="light"] {
@@ -315,9 +337,42 @@
     return next();
   },
 
-  /* ── Keyboard shortcuts ────────────────────────────────── */
+  /* ── Keyboard shortcuts ──────────────────────────────────
+     Phase 6.5 fix #22: the duplicated 40-line setupShortcuts implementation
+     is removed. The bridge below dynamically imports keyboard.js and replaces
+     EngineShared.setupShortcuts with the canonical implementation. If the
+     bridge hasn't loaded yet when an engine calls setupShortcuts, we queue
+     the handlers and apply them once keyboard.js arrives. */
     _kbHandler: null,
+    _pendingShortcuts: [],
     setupShortcuts: function(handlers) {
+      if (EngineShared._kbHandler) {
+        document.removeEventListener('keydown', EngineShared._kbHandler);
+        EngineShared._kbHandler = null;
+      }
+      // If keyboard.js has loaded and replaced this function, we wouldn't be
+      // here. Queue the handlers so they can be applied when the bridge loads.
+      EngineShared._pendingShortcuts.push(handlers);
+      // Defensive: if 5s pass and the bridge still hasn't loaded, fall back
+      // to a minimal inline impl so basic nav keys still work.
+      if (!EngineShared._kbFallbackTimer) {
+        EngineShared._kbFallbackTimer = setTimeout(function() {
+          if (typeof EngineShared.setupShortcuts._replaced === 'undefined' &&
+              EngineShared._pendingShortcuts.length > 0) {
+            console.warn('[engine-shared] keyboard.js bridge did not load within 5s; applying minimal inline keyboard handler fallback.');
+            _applyInlineKbFallback();
+          }
+        }, 5000);
+      }
+    }
+  };
+
+  // Minimal inline fallback used only if the keyboard.js bridge fails to load.
+  // Mirrors the original behavior but lives in a single function so we don't
+  // duplicate the implementation across the bridge boundary.
+  function _applyInlineKbFallback() {
+    while (EngineShared._pendingShortcuts.length > 0) {
+      var handlers = EngineShared._pendingShortcuts.shift();
       if (EngineShared._kbHandler) {
         document.removeEventListener('keydown', EngineShared._kbHandler);
       }
@@ -325,49 +380,66 @@
         if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
         if (handlers.isActive && !handlers.isActive()) return;
         switch (e.key) {
-          case 'ArrowLeft':
-            if (handlers.onPrev) { e.preventDefault(); handlers.onPrev(); }
-            break;
-          case 'ArrowRight':
-            if (handlers.onNext) { e.preventDefault(); handlers.onNext(); }
-            break;
+          case 'ArrowLeft':  if (handlers.onPrev)  { e.preventDefault(); handlers.onPrev();  } break;
+          case 'ArrowRight': if (handlers.onNext)  { e.preventDefault(); handlers.onNext();  } break;
           case '1': case '2': case '3': case '4':
-            if (handlers.onSelect) { e.preventDefault(); handlers.onSelect(parseInt(e.key)); }
-            break;
+            if (handlers.onSelect) { e.preventDefault(); handlers.onSelect(parseInt(e.key)); } break;
           case 'f': case 'F':
-            if (handlers.onFlag && !e.ctrlKey && !e.metaKey && !e.altKey) { e.preventDefault(); handlers.onFlag(); }
-            break;
+            if (handlers.onFlag && !e.ctrlKey && !e.metaKey && !e.altKey) { e.preventDefault(); handlers.onFlag(); } break;
           case 'h': case 'H':
-            if (handlers.onToggleHighlighter && !e.ctrlKey && !e.metaKey && !e.altKey) { e.preventDefault(); e.stopImmediatePropagation(); handlers.onToggleHighlighter(); }
-            break;
+            if (handlers.onToggleHighlighter && !e.ctrlKey && !e.metaKey && !e.altKey) { e.preventDefault(); e.stopImmediatePropagation(); handlers.onToggleHighlighter(); } break;
           case 's': case 'S':
-            if (handlers.onStrikethrough && !e.ctrlKey && !e.metaKey && !e.altKey) { e.preventDefault(); e.stopImmediatePropagation(); handlers.onStrikethrough(); }
-            break;
+            if (handlers.onStrikethrough && !e.ctrlKey && !e.metaKey && !e.altKey) { e.preventDefault(); e.stopImmediatePropagation(); handlers.onStrikethrough(); } break;
           case 'Enter':
-            if (handlers.onSubmit) { e.preventDefault(); handlers.onSubmit(); }
-            break;
+            if (handlers.onSubmit) { e.preventDefault(); handlers.onSubmit(); } break;
           case '/':
-            if (handlers.onHelp) { e.preventDefault(); handlers.onHelp(); }
-            break;
+            if (handlers.onHelp) { e.preventDefault(); handlers.onHelp(); } break;
           case 'Escape':
-            if (handlers.onEscape) { e.preventDefault(); handlers.onEscape(); }
-            break;
+            if (handlers.onEscape) { e.preventDefault(); handlers.onEscape(); } break;
         }
       };
       document.addEventListener('keydown', EngineShared._kbHandler);
     }
-  };
+  }
 
   /* ── Run initHead by default ──────────────────────────── */
   EngineShared.initHead();
 
   /* ── Icon bridge (Phase 4) ──────────────────────────────────────
      Synchronous fallback: returns empty SVG until async import loads.
-     Engines call EngineShared.icon('name', size) to get SVG strings. */
+     Engines call EngineShared.icon('name', size) to get SVG strings.
+
+     Phase 6.5 fix #23: previously, icons rendered before the lib loaded
+     stayed as empty SVGs forever because no engine listened for the
+     `osler:icons-loaded` event. Now EngineShared.icon tags each empty
+     fallback SVG with `data-osler-icon="<name>"` and `data-osler-icon-size="<size>"`;
+     when icons.js loads, we walk the DOM and replace every tagged SVG with
+     the real icon. This way engines don't need to listen for the event. */
   var _iconsCache = null;
   EngineShared.icon = function(n, s) {
-    return _iconsCache ? _iconsCache.icon(n, s) : '<svg width="'+(s||20)+'" height="'+(s||20)+'"></svg>';
+    if (_iconsCache) return _iconsCache.icon(n, s);
+    // Fallback: emit a tagged empty SVG that the loader will swap.
+    return '<svg data-osler-icon="' + (n || '') + '" data-osler-icon-size="' + (s || 16) + '" width="' + (s||16) + '" height="' + (s||16) + '"></svg>';
   };
+
+  // Walk the DOM and replace every tagged placeholder SVG with the real icon.
+  function _hydratePendingIcons() {
+    if (!_iconsCache) return;
+    var placeholders = document.querySelectorAll('svg[data-osler-icon]');
+    for (var i = 0; i < placeholders.length; i++) {
+      var el = placeholders[i];
+      var name = el.getAttribute('data-osler-icon');
+      var size = parseInt(el.getAttribute('data-osler-icon-size') || '16', 10);
+      var realSvg = _iconsCache.icon(name, size);
+      if (realSvg) {
+        // Replace the placeholder with the real SVG markup.
+        var tmp = document.createElement('span');
+        tmp.innerHTML = realSvg;
+        var real = tmp.firstChild;
+        if (real) el.parentNode.replaceChild(real, el);
+      }
+    }
+  }
 
   /* ── Lib module bridge (Phase 0) ─────────────────────────────────
      Dynamically imports the ES modules in src/lib/ and wires them onto
@@ -468,8 +540,10 @@
 
   _importLib('icons.js', 'icons.js', function(m) {
     _iconsCache = m;
-    // Re-render any icons that were rendered before the lib loaded.
-    // Dispatch a custom event engines can listen for.
+    // Phase 6.5 fix #23: hydrate any placeholder SVGs that were rendered
+    // before icons.js loaded. Also dispatch the event for any engine that
+    // still wants to listen for it (e.g. to re-render canvas-based UIs).
+    try { _hydratePendingIcons(); } catch (e) { console.warn('[engine-shared] icon hydration failed:', e); }
     try {
       document.dispatchEvent(new CustomEvent('osler:icons-loaded'));
     } catch (e) { /* old IE */ }
@@ -485,9 +559,22 @@
   });
 
   _importLib('keyboard.js', 'keyboard.js', function(m) {
-    // Delegate setupShortcuts to keyboard.js instead of duplicating (H16 fix).
+    // Phase 6.5 fix #22: replace the placeholder setupShortcuts with the
+    // canonical implementation from keyboard.js, and flush any pending
+    // handlers that were queued before the bridge loaded.
     if (typeof m.setupShortcuts === 'function') {
       EngineShared.setupShortcuts = m.setupShortcuts;
+      EngineShared.setupShortcuts._replaced = true;
+      // Cancel the fallback timer since the bridge loaded successfully.
+      if (EngineShared._kbFallbackTimer) {
+        clearTimeout(EngineShared._kbFallbackTimer);
+        EngineShared._kbFallbackTimer = null;
+      }
+      // Flush pending handlers.
+      while (EngineShared._pendingShortcuts.length > 0) {
+        try { m.setupShortcuts(EngineShared._pendingShortcuts.shift()); }
+        catch (e) { console.warn('[engine-shared] keyboard.js setupShortcuts flush failed:', e); }
+      }
     }
     if (typeof m.teardownShortcuts === 'function') {
       EngineShared.teardownShortcuts = m.teardownShortcuts;

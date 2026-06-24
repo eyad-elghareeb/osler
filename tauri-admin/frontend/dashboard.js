@@ -14,8 +14,8 @@
       const headers = { Authorization: 'Bearer ' + token, Accept: 'application/vnd.github+json', 'User-Agent': 'Osler-Admin/5.1' };
       const [repoData, pullsData, commitsData] = await Promise.all([
         fetch('https://api.github.com/repos/' + owner + '/' + repo, { headers }).then(r => r.json()).catch(() => null),
-        fetch('https://api.github.com/repos/' + owner + '/' + repo + '/pulls?state=open&sort=updated&per_page=5', { headers }).then(r => r.json()).catch(() => null),
-        fetch('https://api.github.com/repos/' + owner + '/' + repo + '/commits?per_page=5', { headers }).then(r => r.json()).catch(() => null),
+        fetch('https://api.github.com/repos/' + owner + '/' + repo + '/pulls?state=open&sort=updated&per_page=10', { headers }).then(r => r.json()).catch(() => null),
+        fetch('https://api.github.com/repos/' + owner + '/' + repo + '/commits?per_page=10', { headers }).then(r => r.json()).catch(() => null),
       ]);
       renderGitHubWidgets(repoData, pullsData, commitsData);
     } catch { /* silently degrade - no token or network */ }
@@ -58,7 +58,7 @@
     if (commits && Array.isArray(commits) && commits.length) {
       html += '<div style="margin-top:0.5rem;"><span style="font-weight:600;font-size:0.8rem;">Recent Commits</span></div>';
       html += '<div class="overview-list">';
-      commits.slice(0, 3).forEach(c => {
+      commits.slice(0, 10).forEach(c => {
         const msg = c.commit ? c.commit.message || '' : '';
         const shortMsg = msg.split('\n')[0].slice(0, 60);
         html += '<div class="recent-file-row" style="cursor:default;">';

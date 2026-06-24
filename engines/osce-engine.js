@@ -1432,9 +1432,9 @@
           '<div class="osce-lobby-top">' +
             '<div class="osce-lobby-kicker">'+ (isDataInterp ? ''+EngineShared.icon('user')+' OSCE Data Interpretation' : ''+EngineShared.icon('activity')+' OSCE Virtual Patient') +'</div>' +
             '<div style="display:flex;gap:.4rem">' +
-              '<button type="button" class="osce-icon-btn" id="osce-lobby-back" title="Back to Hub">←</button>' +
-              '<button type="button" class="osce-icon-btn" id="osce-lobby-settings" title="AI Settings">'+EngineShared.icon('settings')+'</button>' +
-              '<button type="button" class="osce-icon-btn" id="osce-lobby-theme" title="Toggle theme">'+themeIcon+'</button>' +
+              '<button type="button" class="osce-icon-btn" id="osce-lobby-back" title="Back to Hub" aria-label="Back to Hub">←</button>' +
+              '<button type="button" class="osce-icon-btn" id="osce-lobby-settings" title="AI Settings" aria-label="AI Settings">'+EngineShared.icon('settings')+'</button>' +
+              '<button type="button" class="osce-icon-btn" id="osce-lobby-theme" title="Toggle theme" aria-label="Toggle theme">'+themeIcon+'</button>' +
             '</div>' +
           '</div>' +
           (isDataInterp
@@ -1635,8 +1635,8 @@
       '<div class="osce-room">' +
         /* HEADER */
         '<div class="osce-hdr">' +
-          '<button type="button" class="osce-icon-btn" id="osce-back-btn" title="Back to door card" style="flex-shrink:0">←</button>' +
-          '<button class="osce-icon-btn" id="osce-drawer-btn" title="'+( _activeCase.type==='data-interp'?'Case data':'Patient info')+'" style="display:none;flex-shrink:0">'+EngineShared.icon('menu')+'</button>' +
+          '<button type="button" class="osce-icon-btn" id="osce-back-btn" title="Back to door card" aria-label="Back to door card" style="flex-shrink:0">←</button>' +
+          '<button type="button" class="osce-icon-btn" id="osce-drawer-btn" title="'+( _activeCase.type==='data-interp'?'Case data':'Patient info')+'" aria-label="'+( _activeCase.type==='data-interp'?'Case data':'Patient info')+'" style="display:none;flex-shrink:0">'+EngineShared.icon('menu')+'</button>' +
           '<div class="osce-hdr-title">' +
             '<div class="c">'+( _activeCase.type==='data-interp'?''+EngineShared.icon('user')+' '+_esc((_activeCase.examiner||{}).name||'Examiner'):_esc(_activeCase.title))+'</div>' +
             '<div class="t">'+_esc(_activeCase.task)+'</div>' +
@@ -1646,8 +1646,8 @@
               '<div class="osce-timer '+_timerState(_timerRemaining)+'" id="osce-timer-num">'+_formatTime(_timerRemaining)+'</div>' +
               '<div class="osce-timer-lbl">'+dur+' min</div>' +
             '</div>' +
-            '<button type="button" class="osce-icon-btn" id="osce-theme-btn" title="Toggle theme">'+themeIcon+'</button>' +
-            '<button type="button" class="osce-icon-btn" id="osce-settings-btn" title="AI Settings">'+EngineShared.icon('settings')+'</button>' +
+            '<button type="button" class="osce-icon-btn" id="osce-theme-btn" title="Toggle theme" aria-label="Toggle theme">'+themeIcon+'</button>' +
+            '<button type="button" class="osce-icon-btn" id="osce-settings-btn" title="AI Settings" aria-label="AI Settings">'+EngineShared.icon('settings')+'</button>' +
           '</div>' +
         '</div>' +
         /* TIMER BAR */
@@ -1730,7 +1730,7 @@
             '<div class="osce-waveform" id="osce-waveform"><div class="osce-wbar"></div><div class="osce-wbar"></div><div class="osce-wbar"></div><div class="osce-wbar"></div><div class="osce-wbar"></div></div>' +
           '</div>' +
           '<div class="osce-input-row">' +
-            '<button type="button" class="osce-mic-btn" id="osce-mic-btn" title="Toggle voice mode">'+EngineShared.icon('mic')+'</button>' +
+            '<button type="button" class="osce-mic-btn" id="osce-mic-btn" title="Toggle voice mode" aria-label="Toggle voice mode">'+EngineShared.icon('mic')+'</button>' +
             '<textarea class="osce-textarea" id="osce-input" placeholder="Ask the patient a question…" rows="1"></textarea>' +
             '<button type="button" class="osce-send-btn" id="osce-send-btn">Send →</button>' +
           '</div>' +
@@ -1815,7 +1815,7 @@
     overlay.innerHTML =
       '<div class="osce-drawer-backdrop" id="osce-drawer-backdrop"></div>' +
       '<div class="osce-drawer-panel">' +
-        '<div style="display:flex;justify-content:flex-end;margin-bottom:.2rem"><button type="button" class="osce-icon-btn" id="osce-drawer-close">'+EngineShared.icon('x')+'</button></div>' +
+        '<div style="display:flex;justify-content:flex-end;margin-bottom:.2rem"><button type="button" class="osce-icon-btn" id="osce-drawer-close" aria-label="Close">'+EngineShared.icon('x')+'</button></div>' +
         (isDataInterp
           ? '<div class="osce-sb-card"><div class="osce-pt-id" style="grid-template-columns:1fr"><div><div class="osce-pt-nm">'+EngineShared.icon('user')+' '+_esc((_activeCase.examiner||{}).name||'Examiner')+'</div><div class="osce-pt-sb">'+_esc((_activeCase.examiner||{}).title||'Consultant')+'</div></div></div></div>' +
             '<div class="osce-sb-card"><div class="osce-sb-lbl">Instructions</div><div class="osce-instr-box"><div class="osce-instr-txt">'+_esc(_activeCase.task)+'</div></div></div>' +
@@ -2252,7 +2252,7 @@
     var div = document.createElement('div'); div.id = 'osce-sov'; div.className = 'open';
     div.innerHTML =
       '<div id="osce-smodal">' +
-        '<div class="osce-sh"><h3>'+EngineShared.icon('settings')+' AI & Voice Settings</h3><button type="button" class="osce-icon-btn" id="osce-s-close">'+EngineShared.icon('x')+'</button></div>' +
+        '<div class="osce-sh"><h3>'+EngineShared.icon('settings')+' AI & Voice Settings</h3><button type="button" class="osce-icon-btn" id="osce-s-close" aria-label="Close">'+EngineShared.icon('x')+'</button></div>' +
         '<div class="osce-sbody">' +
           '<div class="osce-stitle">Gemini API</div>' +
           '<div class="field-box">' +

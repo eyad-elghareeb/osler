@@ -57,12 +57,57 @@
                 </div>
               </div>
             </div>
+
+            <div class="overview-section-card">
+              <div class="overview-section-card-title">Updates</div>
+              <div class="tool-row" style="cursor:default;">
+                <div class="tool-icon" style="background:var(--surface2);">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 2v6h-6"/><path d="M3 12a9 9 0 0 1 15-6.7L21 8"/><path d="M3 22v-6h6"/><path d="M21 12a9 9 0 0 1-15 6.7L3 16"/></svg>
+                </div>
+                <div>
+                  <div class="tool-name">Auto-update check on launch</div>
+                  <div class="tool-desc">When enabled, the admin app checks GitHub Releases for updates on startup. Disable for offline / air-gapped machines.</div>
+                </div>
+                <label class="switch" style="margin-left:auto;display:flex;align-items:center;gap:0.5rem;cursor:pointer;">
+                  <input type="checkbox" id="settings-auto-update-toggle" ${autoUpdateEnabled ? 'checked' : ''} onchange="window.__toggleAutoUpdate(this.checked)">
+                  <span class="switch-slider"></span>
+                </label>
+              </div>
+            </div>
           </div>
         </div>
       `;
+      // Wire up the toggle. Persist to tauri-plugin-store so Phase 8's updater
+      // can read it on boot. Falls back to localStorage in browser-dev mode.
+      try {
+        const store = await window.__TAURI__?.core?.invoke('get_setting', { key: 'autoUpdateCheck' });
+        // Already rendered above; nothing more to do here.
+      } catch (e) { /* store API not available — toggle still works via localStorage */ }
     } catch (err) {
       panel.innerHTML = '<div class="panel"><div class="empty-state">Failed to load settings: ' + escapeHtml(String(err)) + '</div></div>';
     }
+  }
+
+  // Phase 6.5 fix #19: auto-update toggle. Persists to tauri-plugin-store
+  // (auth.json) so Phase 8's updater can read it on boot. Falls back to
+  // localStorage in browser-dev mode (no Tauri APIs).
+  let autoUpdateEnabled = true;
+  try {
+    const stored = localStorage.getItem('osler_auto_update_check');
+    if (stored !== null) autoUpdateEnabled = stored !== 'false';
+  } catch (e) { /* localStorage may be disabled */ }
+
+  async function toggleAutoUpdate(enabled) {
+    autoUpdateEnabled = !!enabled;
+    try { localStorage.setItem('osler_auto_update_check', String(autoUpdateEnabled)); } catch (e) { /* ignore */ }
+    try {
+      await window.__TAURI__.core.invoke('save_setting', { key: 'autoUpdateCheck', value: autoUpdateEnabled });
+    } catch (e) {
+      // tauri-plugin-store save_setting command not present yet (Phase 8 will add it).
+      // localStorage persistence is enough until then.
+      console.debug('[settings] save_setting for autoUpdateCheck failed (expected pre-Phase-8):', e);
+    }
+    showToast('Auto-update check ' + (autoUpdateEnabled ? 'enabled' : 'disabled'), 'info');
   }
 
   async function signInWithGitHub() {
@@ -118,6 +163,7 @@
   window.__signInWithGitHub = signInWithGitHub;
   window.__signOut = signOut;
   window.__loadSettings = loadSettings;
+  window.__toggleAutoUpdate = toggleAutoUpdate;
 
   if (window.location.hash === '#settings') {
     if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', loadSettings);

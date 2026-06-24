@@ -1,4 +1,20 @@
-import { getClient } from './gemini.js';
+import { getClient, MODELS } from './gemini.js';
+import { get, put } from './storage.js';
+import { validate } from './validate.js';
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Phase 6.5 fixes applied here (issues #4, #5, #6 + medium cap-export):
+//   #4  Quality gate now calls `validate(content)` and routes invalid output
+//       to "Needs Review" — previously only the heuristic score was checked.
+//   #5  Cost tracking migrated from `localStorage['osler_ai_costs']` to the
+//       IndexedDB `settings` store (key `aiCosts`), per AGENTS.md localStorage
+//       allow-list. All reads/writes are now async.
+//   #6  Gemini model names sourced from `MODELS` in `./gemini.js` (single source
+//       of truth) and requests go through `client.tryRequests` so model fallback
+//       actually fires when a model is deprecated.
+//   med `DAILY_CAP` and `MONTHLY_CAP` are now exported so `dashboard.js` can
+//       reuse them instead of duplicating magic numbers.
+// ─────────────────────────────────────────────────────────────────────────────
 
 const TYPE_CONFIG = {
   quiz: {
@@ -34,19 +50,41 @@ const TYPE_CONFIG = {
 };
 
 const STAGE_COSTS = {
-  outline: { tokensPerItem: 200 },
-  extract: { tokensPerItem: 400 },
-  convert: { tokensPerItem: 800 },
+  outline: { tokensPerItem: 200, ratePer1k: 0.015 },
+  extract: { tokensPerItem: 400, ratePer1k: 0.015 },
+  convert: { tokensPerItem: 800, ratePer1k: 0.50 },
 };
 
-const DAILY_CAP = 20;
-const MONTHLY_CAP = 200;
+// Exported so the admin dashboard can render cap values without duplicating
+// magic numbers (Phase 6.5 medium fix).
+export const DAILY_CAP = 20;
+export const MONTHLY_CAP = 200;
 
-function loadCosts() {
+// Model selection: prefer Flash-Lite for cheap stages, Pro for the conversion
+// stage. Pulled from `MODELS` (single source of truth in gemini.js) so adding
+// or deprecating a model in one place propagates everywhere (Phase 6.5 fix #6).
+function pickModel(predicate) {
+  const entry = MODELS.find(m => predicate(m[0]));
+  return entry ? entry[0] : MODELS[0][0];
+}
+const OUTLINE_MODEL = pickModel(name => name.includes('flash-lite'));
+const EXTRACT_MODEL = OUTLINE_MODEL; // both cheap stages use Flash-Lite
+const CONVERT_MODEL = pickModel(name => name.includes('pro'));
+
+// ─── Cost tracking (IndexedDB `settings` store, key `aiCosts`) ───────────────
+
+const COSTS_KEY = 'aiCosts';
+
+function _freshCosts() {
+  const today = new Date().toISOString().slice(0, 10);
+  const monthKey = today.slice(0, 7);
+  return { today: 0, month: 0, date: today, monthKey };
+}
+
+async function loadCosts() {
   try {
-    const raw = localStorage.getItem('osler_ai_costs');
-    if (!raw) return { today: 0, month: 0, date: '', monthKey: '' };
-    const c = JSON.parse(raw);
+    const entry = await get('settings', COSTS_KEY);
+    const c = entry?.value || _freshCosts();
     const today = new Date().toISOString().slice(0, 10);
     const monthKey = today.slice(0, 7);
     if (c.date !== today) c.today = 0;
@@ -54,35 +92,49 @@ function loadCosts() {
     c.date = today;
     c.monthKey = monthKey;
     return c;
-  } catch { return { today: 0, month: 0, date: '', monthKey: '' }; }
+  } catch (e) {
+    console.warn('[content-gen] loadCosts failed, using fresh counters:', e);
+    return _freshCosts();
+  }
 }
 
-function saveCosts(c) {
-  localStorage.setItem('osler_ai_costs', JSON.stringify(c));
+async function saveCosts(c) {
+  try {
+    await put('settings', { key: COSTS_KEY, value: c });
+  } catch (e) {
+    // Storage failure must not break generation, but the cost cap will
+    // effectively reset on next successful write. Surface the warning.
+    console.warn('[content-gen] saveCosts failed (cost tracking degraded):', e);
+  }
 }
 
-function estimateCost(stage, itemCount) {
+export function estimateCost(stage, itemCount) {
   const cfg = STAGE_COSTS[stage];
   if (!cfg) return 0;
   const tokens = cfg.tokensPerItem * itemCount;
-  const rate = stage === 'convert' ? 0.50 / 1000 : 0.015 / 1000;
-  return +(tokens * rate).toFixed(4);
+  return +((tokens * cfg.ratePer1k) / 1000).toFixed(4);
 }
 
-function checkCap() {
-  const c = loadCosts();
-  if (c.today >= DAILY_CAP) throw new Error(`Daily AI cost cap reached ($${DAILY_CAP}). Reset tomorrow or adjust caps.`);
-  if (c.month >= MONTHLY_CAP) throw new Error(`Monthly AI cost cap reached ($${MONTHLY_CAP}). Reset next month or adjust caps.`);
+async function checkCap() {
+  const c = await loadCosts();
+  if (c.today >= DAILY_CAP) {
+    throw new Error(`Daily AI cost cap reached ($${DAILY_CAP}). Reset tomorrow or adjust caps in content-gen.js.`);
+  }
+  if (c.month >= MONTHLY_CAP) {
+    throw new Error(`Monthly AI cost cap reached ($${MONTHLY_CAP}). Reset next month or adjust caps in content-gen.js.`);
+  }
 }
 
-function addCost(stage, itemCount) {
+async function addCost(stage, itemCount) {
   const cost = estimateCost(stage, itemCount);
-  const c = loadCosts();
+  const c = await loadCosts();
   c.today = +(c.today + cost).toFixed(4);
   c.month = +(c.month + cost).toFixed(4);
-  saveCosts(c);
+  await saveCosts(c);
   return cost;
 }
+
+// ─── Prompts ─────────────────────────────────────────────────────────────────
 
 const OUTLINE_SYSTEM = `You are a medical education content planner. Given a user request, produce a JSON outline of the content to create.
 Return ONLY valid JSON with this shape:
@@ -113,6 +165,8 @@ Schema requirements per type:
 - osce: { "meta": { ... }, "type": "osce", "stations": [{ "id": "<unique>", "scenario": "...", "redFlags": [...], "differential": [...], "rubric": [...] }] }
 
 Return ONLY valid JSON. Use a unique alphanumeric ID for each item (e.g. "q_001", "passage_01"). Use the current date-time in ISO format for createdAt and updatedAt.`;
+
+// ─── Quality scoring ─────────────────────────────────────────────────────────
 
 function calcQuality(content, contentType) {
   const cfg = TYPE_CONFIG[contentType];
@@ -164,33 +218,52 @@ function calcQuality(content, contentType) {
   return +(scores / items.length).toFixed(2);
 }
 
+// ─── JSON extraction helper ──────────────────────────────────────────────────
+
+function parseJsonLoose(text, arrayMode = false) {
+  try {
+    return JSON.parse(text);
+  } catch {
+    const m = arrayMode
+      ? text.match(/\[[\s\S]*\]/)
+      : text.match(/\{[\s\S]*\}/);
+    if (m) return JSON.parse(m[0]);
+    throw new Error(`Failed to parse JSON from Gemini response (arrayMode=${arrayMode})`);
+  }
+}
+
+// ─── Main pipeline ───────────────────────────────────────────────────────────
+
 export async function generateContent(prompt, contentType, opts = {}) {
   const apiKey = opts.apiKey || (await import('./gemini.js')).readKey();
   if (!apiKey) throw new Error('Gemini API key not set. Configure it in Settings.');
   const client = getClient(apiKey);
   const cfg = TYPE_CONFIG[contentType];
-  if (!cfg) throw new Error(`Unknown content type: ${contentType}. Must be one of: ${Object.keys(TYPE_CONFIG).join(', ')}`);
+  if (!cfg) {
+    throw new Error(`Unknown content type: ${contentType}. Must be one of: ${Object.keys(TYPE_CONFIG).join(', ')}`);
+  }
   const count = opts.count || 5;
   const stages = [];
   let outline = null;
 
-  try { checkCap(); } catch (e) { throw e; }
+  await checkCap();
 
   const cancelSignal = opts.cancelSignal || null;
 
-  // Stage 1: NL → outline
+  // Stage 1: NL → outline. Prompt includes the schema reference per P6.1.
   const outlinePrompt = `Create an outline for ${count} ${contentType} items on this topic: "${prompt}".
-Generate exactly ${count} items. Return JSON with title, description, count=${count}, topics, difficulty, tags.`;
-  const outlineText = await client.request(OUTLINE_SYSTEM, [{ parts: [{ text: outlinePrompt }] }], 'gemini-3.1-flash-lite', 0.3, cancelSignal);
-  try {
-    outline = JSON.parse(outlineText);
-  } catch {
-    const jsonMatch = outlineText.match(/\{[\s\S]*\}/);
-    if (jsonMatch) outline = JSON.parse(jsonMatch[0]);
-    else throw new Error('Failed to parse outline from Gemini response');
-  }
+Generate exactly ${count} items. Return JSON with title, description, count=${count}, topics, difficulty, tags.
+The content will be validated against the ${cfg.schema} JSON Schema.`;
+  const outlineText = await client.tryRequests(
+    OUTLINE_SYSTEM,
+    [{ parts: [{ text: outlinePrompt }] }],
+    OUTLINE_MODEL,
+    cancelSignal,
+    0.3
+  );
+  outline = parseJsonLoose(outlineText, false);
   const itemCount = outline.count || count;
-  stages.push({ name: 'outline', model: 'gemini-3.1-flash-lite', cost: addCost('outline', itemCount) });
+  stages.push({ name: 'outline', model: OUTLINE_MODEL, cost: await addCost('outline', itemCount) });
 
   // Stage 2: outline → extracted fields
   const extractPrompt = `Generate ${itemCount} ${contentType} items for: ${outline.title}
@@ -202,47 +275,52 @@ Return a JSON array of exactly ${itemCount} items. Each item should have fields 
 ${cfg.fields}
 
 Make the content clinically accurate and educationally valuable.`;
-  const extractText = await client.request(EXTRACT_SYSTEM, [{ parts: [{ text: extractPrompt }] }], 'gemini-3.1-flash-lite', 0.3, cancelSignal);
-  let extractedItems;
-  try {
-    extractedItems = JSON.parse(extractText);
-  } catch {
-    const arrMatch = extractText.match(/\[[\s\S]*\]/);
-    if (arrMatch) extractedItems = JSON.parse(arrMatch[0]);
-    else throw new Error('Failed to parse extracted items from Gemini response');
-  }
+  const extractText = await client.tryRequests(
+    EXTRACT_SYSTEM,
+    [{ parts: [{ text: extractPrompt }] }],
+    EXTRACT_MODEL,
+    cancelSignal,
+    0.3
+  );
+  let extractedItems = parseJsonLoose(extractText, true);
   if (!Array.isArray(extractedItems)) extractedItems = [extractedItems];
-  stages.push({ name: 'extract', model: 'gemini-3.1-flash-lite', cost: addCost('extract', extractedItems.length) });
+  stages.push({ name: 'extract', model: EXTRACT_MODEL, cost: await addCost('extract', extractedItems.length) });
 
-  // Stage 3: Conversion
+  // Stage 3: Conversion (Pro model)
   const now = new Date().toISOString();
-  const convertSystem = CONVERT_SYSTEM_PREFIX + `The current date-time is ${now}. Use this for createdAt and updatedAt.`;
+  const convertSystem = CONVERT_SYSTEM_PREFIX + `\nThe current date-time is ${now}. Use this for createdAt and updatedAt.`;
   const convertPrompt = `Convert these ${contentType} items into the final schema format. Title: "${outline.title}". Description: "${outline.description || prompt}".
 Items to convert:
 ${JSON.stringify(extractedItems, null, 2)}
 
 Return the complete ${contentType} content object matching the schema, with meta including uid (e.g. "gen_${contentType}_001"), title, description, and all items with unique IDs.`;
-  const convertText = await client.request(convertSystem, [{ parts: [{ text: convertPrompt }] }], 'gemini-3.1-pro-preview', 0.2, cancelSignal);
-  let finalContent;
-  try {
-    finalContent = JSON.parse(convertText);
-  } catch {
-    const objMatch = convertText.match(/\{[\s\S]*\}/);
-    if (objMatch) finalContent = JSON.parse(objMatch[0]);
-    else throw new Error('Failed to parse final content from Gemini response');
-  }
-  stages.push({ name: 'convert', model: 'gemini-3.1-pro-preview', cost: addCost('convert', itemCount) });
+  const convertText = await client.tryRequests(
+    convertSystem,
+    [{ parts: [{ text: convertPrompt }] }],
+    CONVERT_MODEL,
+    cancelSignal,
+    0.2
+  );
+  let finalContent = parseJsonLoose(convertText, false);
+  stages.push({ name: 'convert', model: CONVERT_MODEL, cost: await addCost('convert', itemCount) });
 
-  // Quality gate
+  // ─── Quality gate (Phase 6.5 fix #4): validate + heuristic score ───────────
   const qualityScore = calcQuality(finalContent, contentType);
+  const { valid: schemaValid, errors: validationErrors } = validate(finalContent);
   finalContent.meta = finalContent.meta || {};
   finalContent.meta.aiQualityScore = qualityScore;
   finalContent.meta.aiGenerated = true;
   finalContent.meta.aiPrompts = [{ stage: 'user', text: prompt }];
 
-  const needsReview = qualityScore < 0.7;
+  // Needs Review if EITHER the schema rejects the content OR the heuristic
+  // score falls below 0.7. Previously only the heuristic was checked, so
+  // invalid output (e.g. out-of-range `correct` index) could be approved.
+  const needsReview = !schemaValid || qualityScore < 0.7;
   if (needsReview) {
     finalContent.meta.aiQualityAlert = 'Needs Review';
+    if (!schemaValid) {
+      finalContent.meta.aiValidationErrors = validationErrors;
+    }
   }
 
   const totalCost = stages.reduce((s, st) => s + st.cost, 0);
@@ -251,6 +329,8 @@ Return the complete ${contentType} content object matching the schema, with meta
     content: finalContent,
     qualityScore,
     needsReview,
+    schemaValid,
+    validationErrors: schemaValid ? [] : validationErrors,
     cost: +totalCost.toFixed(4),
     stages,
     outline,
@@ -258,12 +338,12 @@ Return the complete ${contentType} content object matching the schema, with meta
   };
 }
 
-export function getAICosts() {
+export async function getAICosts() {
   return loadCosts();
 }
 
-export function resetAICosts() {
-  saveCosts({ today: 0, month: 0, date: new Date().toISOString().slice(0, 10), monthKey: new Date().toISOString().slice(0, 7) });
+export async function resetAICosts() {
+  await saveCosts(_freshCosts());
 }
 
 export { TYPE_CONFIG, estimateCost, checkCap };

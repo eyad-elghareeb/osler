@@ -25,12 +25,22 @@
     .auth-menu-item .icon { width: 18px; height: 18px; }
     .auth-provider-btn { display: flex; align-items: center; gap: 0.5rem; width: 100%; padding: 0.7rem 0.85rem; border-radius: 8px; border: 1px solid var(--border); background: var(--surface2); color: var(--text); font-size: 0.85rem; cursor: pointer; transition: border-color var(--transition); }
     .auth-provider-btn:hover { border-color: var(--accent); }
+    /* Phase 6.5 fix #2: hub Sync button — was unreachable because the injection
+       guard in index-engine.js required a `.btn-tracker` element that only exists
+       in Tauri-generated HTML. Now we render the button directly in hub/index.html. */
+    .btn-sync-hub { display: flex; align-items: center; gap: 0.35rem; padding: 0.35rem 0.6rem; border-radius: 8px; border: 1px solid var(--border); background: var(--surface2); color: var(--text); font-size: 0.78rem; cursor: pointer; transition: border-color var(--transition); }
+    .btn-sync-hub:hover { border-color: var(--accent); }
+    .btn-sync-hub svg { width: 14px; height: 14px; }
   </style>
 </head>
 <body>
   <div class="topbar">
     <span class="topbar-title">Osler</span>
     <div class="topbar-actions">
+      <button class="btn-sync-hub" type="button" aria-label="Sync progress with cloud" title="Sync Progress" onclick="openSyncModal()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M21 2v6h-6"></path><path d="M3 12a9 9 0 0 1 15-6.7L21 8"></path><path d="M3 22v-6h6"></path><path d="M21 12a9 9 0 0 1-15 6.7L3 16"></path></svg>
+        <span>Sync</span>
+      </button>
       <div class="auth-dropdown" id="auth-dropdown"></div>
     </div>
   </div>
@@ -43,7 +53,7 @@
   <script src="../dist/engine-shared.js"></script>
   <script src="../dist/index-engine.js"></script>
   <script type="module">
-    import { subscribe, signInAsGuest, signInWithGoogle, signInWithGitHub, signOut, upgradeAccount, initAuth, currentUser } from '../src/lib/auth.js';
+    import { subscribe, signInAsGuest, signInWithGoogle, signInWithGitHub, signOut, upgradeAccount, initAuth } from '../src/lib/auth.js';
     import { initAutoSync } from '../src/lib/sync.js';
 
     // H6 fix: render auth UI for all three states (null, guest, signed-in).

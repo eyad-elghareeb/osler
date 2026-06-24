@@ -10,7 +10,7 @@ describe('migration.js', () => {
     const keysToRemove = [];
     for (let i = 0; i < localStorage.length; i++) {
       const k = localStorage.key(i);
-      if (k?.startsWith(prefix) || k === 'osler_migrated_v1') keysToRemove.push(k);
+      if (k?.startsWith(prefix) || k === 'osler_migrated_v1' || k === 'osler_migration_errors_v1') keysToRemove.push(k);
     }
     keysToRemove.forEach(k => localStorage.removeItem(k));
   });
@@ -60,5 +60,46 @@ describe('migration.js', () => {
 
     expect(localStorage.getItem('osler_quiz_example')).not.toBeNull();
     expect(localStorage.getItem('osler_migrated_v1')).toBe('true');
+  });
+
+  // Phase 6.5 fix (medium): cover the H1 error-recording path that was
+  // previously untested. Three scenarios: (a) missing contentUid → recorded,
+  // (b) missing itemId → recorded, (c) migration flag NOT set when errors>0.
+  it('records migration errors for entries missing contentUid', async () => {
+    // Missing contentUid and uid — should be skipped + recorded.
+    localStorage.setItem('osler_quiz_bad1', JSON.stringify({
+      itemId: 'q1', wrongCount: 1,
+    }));
+
+    const { migrateFromV5, getMigrationErrors } = await import('../../../src/lib/migration.js');
+    const result = await migrateFromV5();
+
+    expect(result.migrated).toBe(false);
+    expect(result.results.errors).toBe(1);
+    expect(localStorage.getItem('osler_migrated_v1')).toBeNull();
+
+    const errors = getMigrationErrors();
+    expect(errors.length).toBe(1);
+    expect(errors[0].key).toBe('osler_quiz_bad1');
+    expect(errors[0].reason).toContain('contentUid');
+  });
+
+  it('records migration errors for entries missing itemId', async () => {
+    localStorage.setItem('osler_quiz_bad2', JSON.stringify({
+      contentUid: 'cardio', wrongCount: 1,
+    }));
+
+    const { migrateFromV5, getMigrationErrors } = await import('../../../src/lib/migration.js');
+    const result = await migrateFromV5();
+
+    expect(result.migrated).toBe(false);
+    const errors = getMigrationErrors();
+    expect(errors.length).toBe(1);
+    expect(errors[0].reason).toContain('itemId');
+  });
+
+  it('returns empty array from getMigrationErrors when no errors recorded', async () => {
+    const { getMigrationErrors } = await import('../../../src/lib/migration.js');
+    expect(getMigrationErrors()).toEqual([]);
   });
 });

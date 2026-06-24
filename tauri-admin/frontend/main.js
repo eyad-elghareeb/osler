@@ -7,6 +7,12 @@
 //
 // Phase 5 sessions will progressively migrate the inline UI to use these
 // helpers instead of `window.__TAURI__.*` directly.
+//
+// Phase 6.5 fix (medium): index.html loads this file as a plain `<script src>`
+// (NOT `<script type="module">`), so ES `export` syntax is unreachable from
+// other scripts. Converted to attach helpers to `window.OslerAdmin` so any
+// script on the page can use them. Once Phase 8 migrates index.html to load
+// scripts as modules, we can switch back to `export`.
 
 // Detect Tauri 2 environment. The bridge is exposed on window.__TAURI__
 // when withGlobalTauri: true (set in tauri.conf.json).
@@ -17,7 +23,7 @@ const TAURI_AVAILABLE = typeof window !== 'undefined' && window.__TAURI__;
  * Falls back to a no-op reject in non-Tauri environments (e.g. when
  * opening frontend/index.html directly in a browser for dev).
  */
-export async function invoke(cmd, args = {}) {
+async function invoke(cmd, args = {}) {
   if (!TAURI_AVAILABLE) {
     return Promise.reject(new Error(`invoke('${cmd}') called outside Tauri environment`));
   }
@@ -27,7 +33,7 @@ export async function invoke(cmd, args = {}) {
 /**
  * Listen to a Tauri event (e.g. 'files-changed' emitted by main.rs).
  */
-export async function listen(event, handler) {
+async function listen(event, handler) {
   if (!TAURI_AVAILABLE) return () => {};
   return window.__TAURI__.event.listen(event, handler);
 }
@@ -35,7 +41,7 @@ export async function listen(event, handler) {
 /**
  * Open a URL in the user's default browser.
  */
-export async function openUrl(url) {
+async function openUrl(url) {
   if (!TAURI_AVAILABLE) {
     window.open(url, '_blank');
     return;
@@ -48,10 +54,10 @@ export async function openUrl(url) {
  * full router when the frontend is migrated to use modular pages.
  *
  * Usage:
- *   router.register('dashboard', () => { ... });
- *   router.navigate('dashboard');
+ *   OslerAdmin.router.register('dashboard', () => { ... });
+ *   OslerAdmin.router.navigate('dashboard');
  */
-export const router = {
+const router = {
   _routes: {},
   register(path, handler) { this._routes[path] = handler; },
   navigate(path) {
@@ -74,6 +80,12 @@ export const router = {
     this._dispatch(initial);
   },
 };
+
+// Expose on window.OslerAdmin so non-module scripts can use these helpers.
+// (Phase 8 will switch index.html to type="module" and we can revert to `export`.)
+if (typeof window !== 'undefined') {
+  window.OslerAdmin = { invoke, listen, openUrl, router, TAURI_AVAILABLE };
+}
 
 // Auto-init router on DOMContentLoaded.
 if (typeof document !== 'undefined') {

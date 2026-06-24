@@ -10,10 +10,10 @@ import metaRegistry from '../schemas/_meta.json' with { type: 'json' };
 
 const ajv = new Ajv({ allErrors: true, strict: false, validateSchema: false });
 addFormats(ajv);
-ajv.addFormat('date-time', {
-  type: 'string',
-  validate: value => /^\d{4}-\d{2}-\d{2}$/.test(value) || !Number.isNaN(Date.parse(value)),
-});
+// Phase 6.5 fix (medium): removed the permissive date-time override that
+// accepted date-only strings ("2026-06-23") as valid date-time. The standard
+// ajv-formats date-time validator enforces RFC 3339 (e.g. "2026-06-23T00:00:00Z"),
+// matching the schema intent. All existing fixtures use full ISO 8601 datetimes.
 
 // Schema registry keyed by `${type}:${version}` so we can dispatch on
 // meta.schemaVersion. Today only v1 schemas exist; when v2 lands, add a
