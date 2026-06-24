@@ -663,6 +663,36 @@ pub fn git_force_push(state: State<ProjectRoot>) -> Result<Value, String> {
 }
 
 #[tauri::command]
+pub async fn git_clone(url: String, token: String, dst: String) -> Result<Value, String> {
+    let path = std::path::PathBuf::from(&dst);
+    git::clone_repo(&url, &token, &path)?;
+    Ok(json!({ "message": "Clone completed.", "path": dst }))
+}
+
+#[tauri::command]
+pub async fn create_pr(
+    owner: String, repo: String,
+    head: String, base: String,
+    title: String, body: String,
+    token: String,
+) -> Result<Value, String> {
+    git::create_pr(&owner, &repo, &head, &base, &title, &body, &token).await
+}
+
+#[tauri::command]
+pub async fn merge_pr(
+    owner: String, repo: String,
+    pr_number: u64, token: String,
+) -> Result<Value, String> {
+    git::merge_pr(&owner, &repo, pr_number, &token).await
+}
+
+#[tauri::command]
+pub async fn list_prs(owner: String, repo: String, token: String) -> Result<Value, String> {
+    git::list_prs(&owner, &repo, &token).await
+}
+
+#[tauri::command]
 pub fn provider_verify(provider: String, token: String, _state: State<ProjectRoot>) -> Result<Value, String> {
     let provider = provider.trim().to_lowercase();
     if !["github", "netlify", "vercel"].contains(&provider.as_str()) {

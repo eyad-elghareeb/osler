@@ -1,9 +1,9 @@
-// git.rs — Git operations using std::process::Command
-// Ported from admin-dashboard.py git_available, get_git_status, git_commit, git_pull, git_push
+// git.rs — Git operations using std::process::Command + git2
 
 use serde_json::{json, Value};
 use std::path::Path;
 use std::process::Command;
+use git2::{Cred, FetchOptions, PushOptions, RemoteCallbacks, Repository, Signature};
 
 #[cfg(windows)]
 use std::os::windows::process::CommandExt;
@@ -150,4 +150,176 @@ pub fn parse_github_remote(remote: &str) -> Option<(String, String)> {
         }
     }
     None
+}
+
+// ── git2-based helpers (Phase 5.2) ─────────────────────────────────────────
+// Used by P5.3 (ContentEditor) and MCP tools. Suppress dead_code until P5.3 lands.
+
+#[allow(dead_code)]
+fn git2_callbacks(token: &str) -> RemoteCallbacks<'static> {
+    let token = token.to_string();
+    let mut cb = RemoteCallbacks::new();
+    cb.credentials(move |_url, _username, _allowed| {
+        Cred::userpass_plaintext("token", &token)
+    });
+    cb
+}
+
+#[allow(dead_code)]
+pub fn clone_repo(url: &str, token: &str, dst: &Path) -> Result<Repository, String> {
+    let cb = git2_callbacks(token);
+    let mut fo = FetchOptions::new();
+    fo.remote_callbacks(cb);
+    let mut builder = git2::build::RepoBuilder::new();
+    builder.fetch_options(fo);
+    builder.clone(url, dst).map_err(|e| format!("Clone failed: {}", e))
+}
+
+#[allow(dead_code)]
+pub fn checkout_branch(repo: &Repository, branch: &str) -> Result<(), String> {
+    if repo.find_branch(branch, git2::BranchType::Local).is_ok() {
+        let oid = repo.refname_to_id(&format!("refs/heads/{}", branch))
+            .map_err(|e| e.to_string())?;
+        let obj = repo.find_object(oid, None).map_err(|e| e.to_string())?;
+        repo.checkout_tree(&obj, None).map_err(|e| e.to_string())?;
+        repo.set_head(&format!("refs/heads/{}", branch)).map_err(|e| e.to_string())?;
+        return Ok(());
+    }
+    let oid = repo.refname_to_id("HEAD").map_err(|e| e.to_string())?;
+    let commit = repo.find_commit(oid).map_err(|e| e.to_string())?;
+    repo.branch(branch, &commit, false).map_err(|e| e.to_string())?;
+    repo.set_head(&format!("refs/heads/{}", branch)).map_err(|e| e.to_string())?;
+    let obj = repo.find_object(commit.id(), None).map_err(|e| e.to_string())?;
+    repo.checkout_tree(&obj, None).map_err(|e| e.to_string())
+}
+
+#[allow(dead_code)]
+pub fn commit_file(repo: &Repository, rel_path: &str, content: &str, message: &str) -> Result<git2::Oid, String> {
+    let blob_oid = repo.blob(content.as_bytes()).map_err(|e| e.to_string())?;
+    let parent = repo.head()
+        .ok()
+        .and_then(|h| h.target())
+        .and_then(|oid| repo.find_commit(oid).ok());
+    let tree_oid = if let Some(p) = &parent {
+        let tree = p.tree().map_err(|e| e.to_string())?;
+        let mut builder = repo.treebuilder(Some(&tree)).map_err(|e| e.to_string())?;
+        builder
+            .insert(rel_path, blob_oid, 0o100644)
+            .map_err(|e| e.to_string())?;
+        builder.write().map_err(|e| e.to_string())?
+    } else {
+        let mut builder = repo.treebuilder(None).map_err(|e| e.to_string())?;
+        builder
+            .insert(rel_path, blob_oid, 0o100644)
+            .map_err(|e| e.to_string())?;
+        builder.write().map_err(|e| e.to_string())?
+    };
+    let tree = repo.find_tree(tree_oid).map_err(|e| e.to_string())?;
+    let sig =
+        Signature::now("Osler Admin", "admin@osler.app").map_err(|e| e.to_string())?;
+    let parents: Vec<&git2::Commit> = parent.iter().collect();
+    repo.commit(Some("HEAD"), &sig, &sig, message, &tree, &parents)
+        .map_err(|e| e.to_string())
+}
+
+#[allow(dead_code)]
+pub fn push(repo: &Repository, branch: &str, token: &str) -> Result<(), String> {
+    let cb = git2_callbacks(token);
+    let mut po = PushOptions::new();
+    po.remote_callbacks(cb);
+    let mut remote = repo.find_remote("origin").map_err(|e| e.to_string())?;
+    let refspec = format!("refs/heads/{}:refs/heads/{}", branch, branch);
+    remote.push(&[&refspec], Some(&mut po)).map_err(|e| e.to_string())
+}
+
+pub async fn create_pr(
+    owner: &str,
+    repo_name: &str,
+    head: &str,
+    base: &str,
+    title: &str,
+    body: &str,
+    token: &str,
+) -> Result<Value, String> {
+    let url = format!("https://api.github.com/repos/{}/{}/pulls", owner, repo_name);
+    let payload = json!({
+        "title": title,
+        "head": head,
+        "base": base,
+        "body": body,
+    });
+    let client = reqwest::Client::builder()
+        .user_agent("Osler-Admin/5.1")
+        .build()
+        .map_err(|e| e.to_string())?;
+    let resp = client
+        .post(&url)
+        .header("Authorization", format!("Bearer {}", token))
+        .header("Accept", "application/vnd.github+json")
+        .json(&payload)
+        .send()
+        .await
+        .map_err(|e| format!("Create PR request failed: {}", e))?;
+    let data: Value = resp
+        .json()
+        .await
+        .map_err(|e| format!("Failed to parse PR response: {}", e))?;
+    Ok(data)
+}
+
+pub async fn merge_pr(
+    owner: &str,
+    repo_name: &str,
+    pr_number: u64,
+    token: &str,
+) -> Result<Value, String> {
+    let url = format!(
+        "https://api.github.com/repos/{}/{}/pulls/{}/merge",
+        owner, repo_name, pr_number
+    );
+    let payload = json!({"merge_method": "squash"});
+    let client = reqwest::Client::builder()
+        .user_agent("Osler-Admin/5.1")
+        .build()
+        .map_err(|e| e.to_string())?;
+    let resp = client
+        .put(&url)
+        .header("Authorization", format!("Bearer {}", token))
+        .header("Accept", "application/vnd.github+json")
+        .json(&payload)
+        .send()
+        .await
+        .map_err(|e| format!("Merge PR request failed: {}", e))?;
+    let data: Value = resp
+        .json()
+        .await
+        .map_err(|e| format!("Failed to parse merge response: {}", e))?;
+    Ok(data)
+}
+
+pub async fn list_prs(
+    owner: &str,
+    repo_name: &str,
+    token: &str,
+) -> Result<Value, String> {
+    let url = format!(
+        "https://api.github.com/repos/{}/{}/pulls?state=open&sort=updated&direction=desc",
+        owner, repo_name
+    );
+    let client = reqwest::Client::builder()
+        .user_agent("Osler-Admin/5.1")
+        .build()
+        .map_err(|e| e.to_string())?;
+    let resp = client
+        .get(&url)
+        .header("Authorization", format!("Bearer {}", token))
+        .header("Accept", "application/vnd.github+json")
+        .send()
+        .await
+        .map_err(|e| format!("List PRs request failed: {}", e))?;
+    let data: Value = resp
+        .json()
+        .await
+        .map_err(|e| format!("Failed to parse PR list: {}", e))?;
+    Ok(data)
 }
