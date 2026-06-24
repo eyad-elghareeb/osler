@@ -17,6 +17,10 @@ mod analytics;
 mod auth;
 mod mcp_server;
 mod validation;
+// Phase 8 modules:
+mod bundle_engines;
+mod push_update;
+mod updater;
 
 use commands::ProjectRoot;
 use notify::{EventKind, RecursiveMode, Watcher};
@@ -244,6 +248,18 @@ fn main() {
             commands::generate_content,
             // Phase 6.5 fix #18: real Firestore-backed analytics query.
             analytics::query_analytics,
+            // Phase 8 commands:
+            commands::bundle_update,
+            commands::bundle_verify,
+            commands::check_update,
+            commands::get_update_status,
+            commands::apply_update,
+            commands::push_update,
+            commands::check_instance_versions,
+            commands::get_push_status,
+            commands::save_instance,
+            commands::delete_instance,
+            commands::load_instances,
         ])
         .run(tauri::generate_context!())
         .expect("error while running Osler Admin");

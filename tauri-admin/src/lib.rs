@@ -4,10 +4,9 @@
 // tests and so cargo test has a lib target. The actual Tauri boot still lives
 // in main.rs (which calls into these modules).
 //
-// Future Phase 8 modules (not yet created):
-//   - mod updater;        (Phase 8 — Tier 1 self-update)
-//   - mod bundle_engines; (Phase 8 — Tier 2 update bundle)
-//   - mod push_update;    (Phase 8 — Tier 2 push to instances)
+pub mod bundle_engines;
+pub mod push_update;
+pub mod updater;
 
 pub mod commands;
 pub mod deploy;

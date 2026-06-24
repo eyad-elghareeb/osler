@@ -1,5 +1,5 @@
 // commands.rs — All 19+ Tauri IPC commands (1:1 with Flask routes)
-use crate::{deploy, git, parser, pdf, templates};
+use crate::{bundle_engines, deploy, git, parser, pdf, templates};
 use crate::server::QuizServer;
 use base64::Engine;
 use regex::Regex;
@@ -963,6 +963,157 @@ pub fn save_token(provider: String, token: String, state: State<ProjectRoot>) ->
     }
     let out = serde_json::to_string_pretty(&Value::Object(map)).map_err(|e| e.to_string())?;
     std::fs::write(&path, out).map_err(|e| e.to_string())
+}
+
+// ── Phase 8: Tier 1 self-update commands ─────────────────────────────────────
+
+#[tauri::command]
+pub async fn check_update() -> Result<Value, String> {
+    let result = tauri::async_runtime::spawn_blocking(move || {
+        updater::check_for_update()
+    })
+    .await
+    .map_err(|e| e.to_string())?;
+    result.map(|state| json!(state)).map_err(|e| e)
+}
+
+#[tauri::command]
+pub fn get_update_status() -> Value {
+    updater::get_update_status_command()
+}
+
+#[tauri::command]
+pub async fn apply_update() -> Result<Value, String> {
+    let (binary, total_size) = tauri::async_runtime::spawn_blocking(move || {
+        updater::download_update()
+    })
+    .await
+    .map_err(|e| e.to_string())?
+    .map_err(|e| e)?;
+
+    updater::swap_executable(&binary)?;
+
+    Ok(json!({
+        "message": "Update downloaded and applied. Restart the application to complete the update.",
+        "size": total_size,
+        "restartRequired": true,
+    }))
+}
+
+// ── Phase 8: Tier 2 push update commands ────────────────────────────────────
+
+#[tauri::command]
+pub async fn push_update(
+    version: String,
+    changelog: Option<String>,
+    token: String,
+    instance_names: Option<Vec<String>>,
+    state: State<'_, ProjectRoot>,
+) -> Result<Value, String> {
+    let root = state.0.lock().unwrap().clone();
+    let changelog = changelog.unwrap_or_default();
+    let names = instance_names.unwrap_or_default();
+    let results = push_update::push_update(&root, &version, &changelog, &token, &names)
+        .await
+        .map_err(|e| e)?;
+    Ok(json!({
+        "results": results,
+        "total": results.len(),
+        "successful": results.iter().filter(|r| r.success).count(),
+        "failed": results.iter().filter(|r| !r.success).count(),
+    }))
+}
+
+#[tauri::command]
+pub async fn check_instance_versions(
+    token: String,
+    state: State<'_, ProjectRoot>,
+) -> Result<Value, String> {
+    let root = state.0.lock().unwrap().clone();
+    let instances = push_update::load_instances(&root)?;
+    let versions = push_update::check_instance_versions(&instances, &token)?;
+    Ok(json!({ "instances": versions }))
+}
+
+#[tauri::command]
+pub fn get_push_status() -> Value {
+    push_update::get_push_status_command()
+}
+
+#[tauri::command]
+pub fn save_instance(
+    name: String,
+    repo_owner: String,
+    repo_name: String,
+    branch: Option<String>,
+    deploy_url: Option<String>,
+    state: State<ProjectRoot>,
+) -> Result<Value, String> {
+    let root = root(&state);
+    let mut instances = push_update::load_instances(&root)?;
+    let existing = instances.iter_mut().find(|i| i.name == name);
+    if let Some(inst) = existing {
+        inst.repo_owner = repo_owner;
+        inst.repo_name = repo_name;
+        inst.branch = branch;
+        inst.deploy_url = deploy_url;
+    } else {
+        instances.push(push_update::ManagedInstance {
+            name,
+            repo_owner,
+            repo_name,
+            branch,
+            deploy_url,
+        });
+    }
+    push_update::save_instances(&root, &instances)?;
+    Ok(json!({ "message": "Instance saved.", "instances": instances }))
+}
+
+#[tauri::command]
+pub fn delete_instance(name: String, state: State<ProjectRoot>) -> Result<Value, String> {
+    let root = root(&state);
+    let mut instances = push_update::load_instances(&root)?;
+    instances.retain(|i| i.name != name);
+    push_update::save_instances(&root, &instances)?;
+    Ok(json!({ "message": "Instance deleted.", "instances": instances }))
+}
+
+#[tauri::command]
+pub fn load_instances(state: State<ProjectRoot>) -> Result<Value, String> {
+    let root = root(&state);
+    let instances = push_update::load_instances(&root)?;
+    Ok(json!({ "instances": instances }))
+}
+
+// ── Phase 8: update bundle commands ─────────────────────────────────────────
+
+#[tauri::command]
+pub fn bundle_update(version: String, changelog: Option<String>, state: State<ProjectRoot>) -> Result<Value, String> {
+    let root = root(&state);
+    let changelog = changelog.unwrap_or_default();
+    let bundle_bytes = bundle_engines::create_update_bundle(&root, &version, &changelog)?;
+    let b64 = base64::engine::general_purpose::STANDARD.encode(&bundle_bytes);
+    let manifest = bundle_engines::generate_update_manifest(&root, &version, &changelog)?;
+    Ok(json!({
+        "bundle_base64": b64,
+        "size": bundle_bytes.len(),
+        "manifest": manifest,
+        "version": version,
+    }))
+}
+
+#[tauri::command]
+pub fn bundle_verify(data_base64: String) -> Result<Value, String> {
+    let bundle_bytes = base64::engine::general_purpose::STANDARD
+        .decode(&data_base64)
+        .map_err(|e| format!("Invalid base64: {}", e))?;
+    let (hash, manifest) = bundle_engines::verify_bundle(&bundle_bytes)?;
+    Ok(json!({
+        "valid": true,
+        "hash": hash,
+        "manifest": manifest,
+    }))
 }
 
 // Phase 6.5 fix #20: `generate_content` was a stub that always errored. The

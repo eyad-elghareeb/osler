@@ -1,5 +1,32 @@
 {
   "version": "1.0.0",
   "build": "2026-06-24T00:00:00Z",
-  "description": "Osler V1 — Phase 7 release"
+  "description": "Osler V1 — Phase 7 release",
+  "bundleHash": "",
+  "requiredVersion": "5.1.0",
+  "changelog": "",
+  "engines": [
+    "engine-shared.js",
+    "engine-tracker.js",
+    "index-engine.js",
+    "quiz-engine.js",
+    "bank-engine.js",
+    "flashcard-engine.js",
+    "written-engine.js",
+    "osce-engine.js",
+    "uworld-engine.js",
+    "ai-assistant-engine.js",
+    "sync-engine.js",
+    "search-engine.js"
+  ],
+  "assets": [
+    "icon-48.png",
+    "icon-72.png",
+    "icon-96.png",
+    "icon-144.png",
+    "icon-192.png",
+    "icon-512.png",
+    "favicon.svg"
+  ],
+  "generatedAt": "2026-06-24T00:00:00Z"
 }

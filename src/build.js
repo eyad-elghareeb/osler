@@ -1,7 +1,8 @@
 import { build } from 'esbuild';
-import { copyFileSync, mkdirSync, readdirSync, existsSync, statSync } from 'fs';
+import { copyFileSync, mkdirSync, readdirSync, existsSync, statSync, readFileSync, writeFileSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
+import { createHash } from 'crypto';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, '..');
@@ -131,6 +132,33 @@ async function runBuild() {
       copyFileSync(src, dst);
       console.log(`Copied ${f} → dist/`);
     }
+  }
+
+  // ── Phase 8: generate bundleHash for update-manifest.json ──────────────
+  const umSrc = join(ROOT, 'update-manifest.json');
+  const umDst = join(DIST_DIR, 'update-manifest.json');
+  if (existsSync(umSrc)) {
+    const manifest = JSON.parse(readFileSync(umSrc, 'utf-8'));
+    const engineFiles = manifest.engines || [];
+    const assetFiles = manifest.assets || [];
+    const bundleItems = [
+      ...engineFiles.map(f => join(DIST_DIR, f)),
+      ...assetFiles.map(f => join(DIST_DIR, 'assets', f)),
+      join(DIST_DIR, 'sw.js'),
+      join(DIST_DIR, 'manifest.webmanifest'),
+      join(DIST_DIR, 'update-manifest.json'),
+    ];
+    const hash = createHash('sha256');
+    for (const item of bundleItems) {
+      if (existsSync(item)) {
+        hash.update(readFileSync(item));
+      }
+    }
+    manifest.bundleHash = hash.digest('hex');
+    manifest.generatedAt = new Date().toISOString();
+    manifest.build = new Date().toISOString();
+    writeFileSync(umDst, JSON.stringify(manifest, null, 2), 'utf-8');
+    console.log(`Generated update-manifest.json with bundleHash: ${manifest.bundleHash.substring(0, 16)}...`);
   }
 
   console.log('Build complete.');

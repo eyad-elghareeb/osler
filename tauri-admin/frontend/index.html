@@ -982,6 +982,20 @@
       '/admin/save-token': { cmd: 'save_token', method: 'POST' },
       '/admin/parse-json-questions': { cmd: 'parse_json_questions', method: 'POST' },
       '/admin/load-exports-batch': { cmd: 'load_exports_batch', method: 'POST' },
+      // Phase 8: update bundle
+      '/admin/bundle-update': { cmd: 'bundle_update', method: 'POST' },
+      '/admin/bundle-verify': { cmd: 'bundle_verify', method: 'POST' },
+      // Phase 8: Tier 1 self-update
+      '/admin/check-update': { cmd: 'check_update', method: 'POST' },
+      '/admin/get-update-status': { cmd: 'get_update_status', method: 'GET' },
+      '/admin/apply-update': { cmd: 'apply_update', method: 'POST' },
+      // Phase 8: Tier 2 push to instances
+      '/admin/push-update': { cmd: 'push_update', method: 'POST' },
+      '/admin/check-instance-versions': { cmd: 'check_instance_versions', method: 'POST' },
+      '/admin/get-push-status': { cmd: 'get_push_status', method: 'GET' },
+      '/admin/save-instance': { cmd: 'save_instance', method: 'POST' },
+      '/admin/delete-instance': { cmd: 'delete_instance', method: 'POST' },
+      '/admin/load-instances': { cmd: 'load_instances', method: 'GET' },
     };
 
     async function fetchJson(url, options = {}) {
