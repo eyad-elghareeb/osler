@@ -1,0 +1,11 @@
+{
+  "identifier": "default",
+  "description": "Default capabilities for Osler Admin",
+  "windows": ["main"],
+  "permissions": [
+    "core:default",
+    "store:default",
+    "shell:allow-open",
+    "updater:default"
+  ]
+}
