@@ -181,6 +181,7 @@ fn main() {
     let port = server.port;
 
     tauri::Builder::default()
+        .plugin(tauri_plugin_store::Builder::default().build())
         .manage(ProjectRoot(Mutex::new(project_root.clone())))
         .manage(server)
         .register_uri_scheme_protocol("osler-admin", move |_app, req| {
