@@ -1,0 +1,33 @@
+{
+  "meta": {
+    "uid": "sample-flashcard-001",
+    "title": "Sample Cardiology Flashcards",
+    "description": "Flashcards for cardiology review",
+    "icon": "layers",
+    "tags": ["cardiology", "flashcard"],
+    "schemaVersion": "1.0",
+    "createdAt": "2026-06-23T00:00:00Z",
+    "updatedAt": "2026-06-23T00:00:00Z"
+  },
+  "type": "flashcard",
+  "cards": [
+    {
+      "id": "fc-001",
+      "front": "What is the most common cause of heart failure?",
+      "back": "Coronary artery disease",
+      "tags": ["heart-failure"]
+    },
+    {
+      "id": "fc-002",
+      "front": "First-line medication for stable angina",
+      "back": "Beta-blockers",
+      "tags": ["ischemia"]
+    },
+    {
+      "id": "fc-003",
+      "front": "Normal PR interval on ECG",
+      "back": "0.12-0.20 seconds (3-5 small squares)",
+      "tags": ["ecg"]
+    }
+  ]
+}

@@ -55,6 +55,8 @@ self.addEventListener('install', event => {
   );
 });
 
+const CURRENT_VERSION = '1.0.0';
+
 self.addEventListener('activate', event => {
   event.waitUntil(
     caches.keys().then(keys =>
@@ -62,6 +64,20 @@ self.addEventListener('activate', event => {
         keys.filter(k => k !== STATIC_CACHE && k !== CONTENT_CACHE).map(k => caches.delete(k))
       )
     ).then(() => self.clients.claim())
+    .then(() => {
+      return fetch('update-manifest.json', { cache: 'no-cache' }).then(res => {
+        if (!res.ok) return;
+        return res.json().then(manifest => {
+          if (manifest.version && manifest.version !== CURRENT_VERSION) {
+            return self.clients.matchAll().then(clients => {
+              clients.forEach(client => {
+                client.postMessage({ type: 'update-available', version: manifest.version });
+              });
+            });
+          }
+        });
+      }).catch(() => {});
+    })
   );
 });
 

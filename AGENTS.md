@@ -9,7 +9,8 @@
 | Name | Osler V1 |
 | Type | Medical study platform — offline-first PWA + Tauri admin dashboard |
 | Deployment | GitHub Pages (site) + Tauri (admin desktop app) |
-| Status | Phase 6 complete — Phase 7 (Test & Ship) next |
+| Status | Phase 7 complete — Phase 8 (Admin Dashboard) next |
+| CI | [![CI](https://github.com/b1scoito/osler/actions/workflows/ci.yml/badge.svg)](https://github.com/b1scoito/osler/actions/workflows/ci.yml) |
 
 ## Rules
 

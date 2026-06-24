@@ -1601,6 +1601,25 @@
 
   /* ── Init ──────────────────────────────────────────────────── */
   updateBadge();
+
+  /* Listen for SW update-available messages (Phase 8 prep) */
+  if (navigator.serviceWorker) {
+    navigator.serviceWorker.addEventListener('message', function (event) {
+      if (event.data && event.data.type === 'update-available') {
+        var badge = document.getElementById('update-badge');
+        if (!badge) {
+          badge = document.createElement('div');
+          badge.id = 'update-badge';
+          badge.style.cssText = 'position:fixed;top:0.5rem;right:0.5rem;z-index:9999;background:var(--accent);color:#fff;padding:0.4rem 0.75rem;border-radius:8px;font-size:0.78rem;font-weight:600;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,0.15);display:flex;align-items:center;gap:0.35rem';
+          badge.innerHTML = EngineShared.icon('refresh-cw') + ' Update v' + event.data.version + ' available';
+          badge.title = 'Refresh to update';
+          badge.addEventListener('click', function () { location.reload(); });
+          document.body.appendChild(badge);
+        }
+      }
+    });
+  }
+
   window.__indexEngineReady = true;
 
   /* ── Animation Helpers ─────────────────────────────────────── */

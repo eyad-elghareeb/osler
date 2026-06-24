@@ -1,0 +1,31 @@
+{
+  "meta": {
+    "uid": "sample-bank-001",
+    "title": "Sample Cardiology Question Bank",
+    "description": "A sample question bank with passages",
+    "icon": "book",
+    "tags": ["cardiology", "bank"],
+    "schemaVersion": "1.0",
+    "createdAt": "2026-06-23T00:00:00Z",
+    "updatedAt": "2026-06-23T00:00:00Z"
+  },
+  "type": "bank",
+  "passages": [
+    {
+      "id": "p-001",
+      "content": "A 65-year-old male presents with chest pain and shortness of breath. He has a history of hypertension and diabetes.",
+      "questions": [
+        {
+          "id": "bq-001",
+          "passageId": "p-001",
+          "question": "What is the most likely diagnosis?",
+          "options": ["Unstable angina", "Acute myocardial infarction", "Heart failure", "Pulmonary embolism", "Aortic dissection"],
+          "correct": 1,
+          "explanation": "The presentation of chest pain with SOB in a patient with HTN and diabetes suggests acute MI.",
+          "tags": ["mi"],
+          "difficulty": 3
+        }
+      ]
+    }
+  ]
+}

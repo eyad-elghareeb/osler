@@ -1,0 +1,36 @@
+{
+  "meta": {
+    "uid": "sample-osce-001",
+    "title": "Sample OSCE Station",
+    "description": "A sample OSCE clinical scenario",
+    "icon": "activity",
+    "tags": ["osce", "cardiology"],
+    "schemaVersion": "1.0",
+    "createdAt": "2026-06-23T00:00:00Z",
+    "updatedAt": "2026-06-23T00:00:00Z"
+  },
+  "type": "osce",
+  "stations": [
+    {
+      "id": "osce-001",
+      "scenario": "A 55-year-old patient presents with acute onset central chest pain radiating to the left arm, associated with nausea and diaphoresis. BP 90/60, HR 110, O2 sat 94%.",
+      "redFlags": [
+        "Hypotension (BP 90/60)",
+        "Tachycardia (HR 110)",
+        "Radiation to left arm"
+      ],
+      "differential": [
+        "ST-elevation myocardial infarction",
+        "Non-ST-elevation myocardial infarction",
+        "Aortic dissection",
+        "Pulmonary embolism"
+      ],
+      "rubric": [
+        "Recognizes red flags",
+        "Orders appropriate investigations",
+        "Identifies correct differential",
+        "Recommends appropriate management"
+      ]
+    }
+  ]
+}

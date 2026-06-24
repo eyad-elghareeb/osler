@@ -1,0 +1,27 @@
+{
+  "meta": {
+    "uid": "sample-written-001",
+    "title": "Sample Written Assessment",
+    "description": "A sample written assessment prompt",
+    "icon": "edit",
+    "tags": ["written", "cardiology"],
+    "schemaVersion": "1.0",
+    "createdAt": "2026-06-23T00:00:00Z",
+    "updatedAt": "2026-06-23T00:00:00Z"
+  },
+  "type": "written",
+  "prompts": [
+    {
+      "id": "w-001",
+      "prompt": "Describe the pathophysiology of heart failure with reduced ejection fraction (HFrEF). Include the role of the renin-angiotensin-aldosterone system.",
+      "rubric": [
+        "Explains reduced contractility",
+        "Describes RAAS activation",
+        "Mentions compensatory mechanisms",
+        "Discusses progression over time"
+      ],
+      "wordLimit": 500,
+      "tags": ["heart-failure"]
+    }
+  ]
+}

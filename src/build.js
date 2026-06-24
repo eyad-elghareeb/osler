@@ -11,6 +11,7 @@ const ASSETS_DIR = join(ROOT, 'assets');
 const SRC_CSS_DIR = join(ROOT, 'src', 'css');
 const SRC_LIB_DIR = join(ROOT, 'src', 'lib');
 const SRC_SCHEMAS_DIR = join(ROOT, 'src', 'schemas');
+const HUB_DIR = join(ROOT, 'hub');
 const CONTENT_DIR = join(ROOT, 'content');
 
 if (!existsSync(DIST_DIR)) mkdirSync(DIST_DIR, { recursive: true });
@@ -44,7 +45,7 @@ async function buildEngines() {
       outfile: dst,
       bundle: false,
       format: 'iife',
-      target: 'es2020',
+    target: 'es2020',
       allowOverwrite: true,
     });
     return file;
@@ -83,6 +84,21 @@ async function buildCss() {
   return results.filter(r => r.status === 'fulfilled').length;
 }
 
+async function buildPlayerMain() {
+  const src = join(ROOT, 'src', 'player-main.js');
+  const dst = join(DIST_DIR, 'player-main.js');
+  await build({
+    entryPoints: [src],
+    outfile: dst,
+    bundle: true,
+    format: 'iife',
+    platform: 'browser',
+    target: 'es2022',
+    allowOverwrite: true,
+  });
+  console.log('Built player-main.js → dist/ (bundled with deps)');
+}
+
 async function runBuild() {
   const engineCount = await buildEngines();
   console.log(`Processed ${engineCount} engine files via esbuild`);
@@ -94,6 +110,10 @@ async function runBuild() {
   const assetCount = copyDir(ASSETS_DIR, assetsDist);
   console.log(`Copied ${assetCount} asset files → dist/assets/`);
 
+  const hubDist = join(DIST_DIR, 'hub');
+  const hubCount = copyDir(HUB_DIR, hubDist);
+  console.log(`Copied ${hubCount} hub files → dist/hub/`);
+
   const libCount = copyDir(SRC_LIB_DIR, join(DIST_DIR, 'src', 'lib'), file => file.endsWith('.js'));
   const schemaCount = copyDir(SRC_SCHEMAS_DIR, join(DIST_DIR, 'src', 'schemas'), file => file.endsWith('.json'));
   const contentCount = copyDir(CONTENT_DIR, join(DIST_DIR, 'content'), file => file.endsWith('.json'));
@@ -101,7 +121,9 @@ async function runBuild() {
   console.log(`Copied ${schemaCount} schema files → dist/src/schemas/`);
   console.log(`Copied ${contentCount} content files → dist/content/`);
 
-  const rootFiles = ['manifest.webmanifest', 'sw.js', 'player.html'];
+  await buildPlayerMain();
+
+  const rootFiles = ['manifest.webmanifest', 'sw.js', 'player.html', 'update-manifest.json'];
   for (const f of rootFiles) {
     const src = join(ROOT, f);
     const dst = join(DIST_DIR, f);

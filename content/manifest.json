@@ -13,6 +13,30 @@
       "type": "quiz",
       "title": "Sample Quiz",
       "path": "sample-quiz.json"
+    },
+    {
+      "uid": "sample-flashcard-001",
+      "type": "flashcard",
+      "title": "Sample Flashcards",
+      "path": "sample-flashcard.json"
+    },
+    {
+      "uid": "sample-bank-001",
+      "type": "bank",
+      "title": "Sample Bank",
+      "path": "sample-bank.json"
+    },
+    {
+      "uid": "sample-written-001",
+      "type": "written",
+      "title": "Sample Written",
+      "path": "sample-written.json"
+    },
+    {
+      "uid": "sample-osce-001",
+      "type": "osce",
+      "title": "Sample OSCE",
+      "path": "sample-osce.json"
     }
   ]
 }

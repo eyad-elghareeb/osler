@@ -11,7 +11,7 @@ export default defineConfig({
     headless: true,
   },
   webServer: {
-    command: 'npx serve dist -l 5500',
+    command: 'npx http-server dist -p 5500 -c-1 --cors',
     port: 5500,
     timeout: 120000,
     reuseExistingServer: true,
