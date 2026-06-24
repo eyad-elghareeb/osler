@@ -54,6 +54,9 @@ fn main() {
         };
         let dest = dest_dir.join(file);
         if src.exists() {
+            if let Some(parent) = dest.parent() {
+                fs::create_dir_all(parent).unwrap();
+            }
             fs::copy(&src, &dest).unwrap_or_else(|_| panic!("Failed to copy {}", file));
             println!("cargo:rerun-if-changed={}", src.display());
         }

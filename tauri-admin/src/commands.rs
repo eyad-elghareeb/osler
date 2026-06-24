@@ -237,6 +237,13 @@ fn find_python() -> Option<String> {
 
 // ── Commands ──────────────────────────────────────────────────────────────────
 
+/// Ping command for Phase 5.0 verification.
+/// Frontend can `await invoke('ping')` to verify the Tauri IPC bridge works.
+#[tauri::command]
+pub fn ping() -> String {
+    "pong".to_string()
+}
+
 #[tauri::command]
 pub async fn list_files(state: State<'_, ProjectRoot>) -> Result<Value, String> {
     let root = state.0.lock().unwrap().clone();

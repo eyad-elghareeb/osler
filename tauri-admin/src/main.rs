@@ -192,6 +192,7 @@ fn main() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            commands::ping,
             commands::list_files,
             commands::project_state,
             commands::load_file,
