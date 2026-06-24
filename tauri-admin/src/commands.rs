@@ -964,3 +964,8 @@ pub fn save_token(provider: String, token: String, state: State<ProjectRoot>) ->
     let out = serde_json::to_string_pretty(&Value::Object(map)).map_err(|e| e.to_string())?;
     std::fs::write(&path, out).map_err(|e| e.to_string())
 }
+
+#[tauri::command]
+pub async fn generate_content(_prompt: String, _content_type: String, _count: Option<usize>) -> Result<Value, String> {
+    Err("Backend AI generation requires Node.js. Use the frontend 'Generate with AI' button in the Content Editor instead.".into())
+}

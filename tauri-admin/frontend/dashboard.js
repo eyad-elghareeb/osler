@@ -79,9 +79,33 @@
     return String(v ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
   }
 
+  function renderAICostWidget() {
+    const overviewGrid = document.querySelector('.overview-grid');
+    if (!overviewGrid) return;
+    let raw;
+    try { raw = JSON.parse(localStorage.getItem('osler_ai_costs') || '{}'); } catch { raw = {}; }
+    const today = raw.today || 0;
+    const month = raw.month || 0;
+    const card = document.createElement('div');
+    card.className = 'overview-card';
+    card.style.gridColumn = '1 / -1';
+    card.innerHTML = '<div style="font-size:0.72rem;font-weight:700;text-transform:uppercase;letter-spacing:0.09em;color:var(--text-muted);margin-bottom:0.65rem;">AI Usage Costs</div>' +
+      '<div style="display:flex;gap:1.5rem;">' +
+      '<div><span style="font-size:0.75rem;color:var(--text-muted);">Today</span><br><span style="font-size:1.15rem;font-weight:700;' + (today >= 20 ? 'color:var(--wrong);' : '') + '">$' + today.toFixed(2) + '</span></div>' +
+      '<div><span style="font-size:0.75rem;color:var(--text-muted);">This Month</span><br><span style="font-size:1.15rem;font-weight:700;' + (month >= 200 ? 'color:var(--wrong);' : '') + '">$' + month.toFixed(2) + '</span></div>' +
+      '<div><span style="font-size:0.75rem;color:var(--text-muted);">Daily Cap</span><br><span style="font-size:1.15rem;font-weight:700;">$20.00</span></div>' +
+      '<div><span style="font-size:0.75rem;color:var(--text-muted);">Monthly Cap</span><br><span style="font-size:1.15rem;font-weight:700;">$200.00</span></div>' +
+      '</div>';
+    overviewGrid.appendChild(card);
+  }
+
   if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', () => setTimeout(loadDashboardData, 500));
+    document.addEventListener('DOMContentLoaded', () => {
+      setTimeout(loadDashboardData, 500);
+      setTimeout(renderAICostWidget, 600);
+    });
   } else {
     setTimeout(loadDashboardData, 500);
+    setTimeout(renderAICostWidget, 600);
   }
 })();

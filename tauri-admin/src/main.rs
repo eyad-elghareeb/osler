@@ -237,6 +237,7 @@ fn main() {
             mcp_server::mcp_stop_server,
             mcp_server::mcp_list_tools,
             validation::validate_content,
+            commands::generate_content,
         ])
         .run(tauri::generate_context!())
         .expect("error while running Osler Admin");

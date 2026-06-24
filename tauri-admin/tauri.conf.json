@@ -12,7 +12,7 @@
   "app": {
     "withGlobalTauri": true,
     "security": {
-      "csp": "default-src 'self' osler-admin: 'unsafe-inline' 'unsafe-eval'; connect-src *; img-src 'self' http://127.0.0.1:* data: blob: https:; font-src 'self' data: https://fonts.gstatic.com https://fonts.googleapis.com; frame-src http://127.0.0.1:* 'self'"
+      "csp": "default-src 'self' osler-admin: 'unsafe-inline' 'unsafe-eval'; connect-src *; img-src 'self' http://127.0.0.1:* data: blob: https:; font-src 'self' data: https://fonts.gstatic.com https://fonts.googleapis.com; frame-src http://127.0.0.1:* 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' http://127.0.0.1:*"
     },
     "windows": [
       {

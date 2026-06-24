@@ -23,6 +23,30 @@
     if (searchWrap) {
       searchWrap.style.position = 'relative';
       searchWrap.appendChild(toggle);
+      const reviewFilter = document.createElement('button');
+      reviewFilter.className = 'mini-btn';
+      reviewFilter.textContent = 'Needs Review';
+      reviewFilter.title = 'Filter files flagged as needing review';
+      reviewFilter.style.cssText = 'position:absolute;right:6.5rem;top:0.35rem;z-index:2;font-size:0.72rem;';
+      reviewFilter.onclick = function () {
+        const rows = document.querySelectorAll('.tree-row');
+        let found = 0;
+        rows.forEach(function (row) {
+          const path = row.dataset.path || '';
+          if (path.includes('aiQualityAlert') || path.includes('Needs Review')) {
+            row.style.display = 'flex';
+            row.style.background = 'rgba(218,54,51,0.08)';
+            found++;
+          } else {
+            row.style.display = 'none';
+          }
+        });
+        reviewFilter.textContent = found > 0 ? found + ' need review' : 'Needs Review';
+        if (found === 0) {
+          setTimeout(function () { reviewFilter.textContent = 'Needs Review'; }, 1500);
+        }
+      };
+      searchWrap.appendChild(reviewFilter);
     }
 
     if (isBrowser) {
