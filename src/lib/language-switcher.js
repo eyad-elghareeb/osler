@@ -118,11 +118,4 @@ export function mountLanguageSwitcher() {
   }
 }
 
-// Auto-mount on DOMContentLoaded (browser only)
-if (typeof document !== 'undefined') {
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', mountLanguageSwitcher);
-  } else {
-    mountLanguageSwitcher();
-  }
-}
+// Auto-mount disabled — initV2Hub in hub-v2-patch.js calls mountLanguageSwitcher explicitly

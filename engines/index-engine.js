@@ -8,7 +8,15 @@
 
   var _cs = document.currentScript;
   var ENGINE_BASE = _cs ? _cs.src.replace(/[^\/]*$/, '') : (window.__INDEX_ENGINE_BASE || '');
-  var ROOT_BASE = ENGINE_BASE.replace(/[^\/]+\/$/, '');
+  var ROOT_BASE = (function(base) {
+    try {
+      var u = new URL(base);
+      var p = u.pathname.replace(/\/$/, '').split('/');
+      if (p.length <= 1) return base;
+      p.pop();
+      return u.origin + p.join('/') + '/';
+    } catch(e) { return base; }
+  })(ENGINE_BASE);
 
   /* ── Inject tracker dashboard extra styles ─────────────────── */
   var _trackerStyle = document.createElement('style');
@@ -96,9 +104,8 @@
   // Replaces the legacy WebRTC/MQTT sync-engine.js (H8 fix). Calls the
   // bridge exposed by engine-shared.js → src/lib/sync.js.
   window.openSyncModal = function() {
-    if (!window.OslerSync) {
-      // Sync lib not loaded yet (lib-bridge in engine-shared.js failed or
-      // user not signed in). Show a friendly toast.
+    var user = window.OslerAuth && window.OslerAuth.currentUser && window.OslerAuth.currentUser();
+    if (!window.OslerSync || !user) {
       if (window.OslerAuth && window.OslerAuth.currentUser) {
         EngineShared.showToast('Sync unavailable. Sign in first.');
       } else {
@@ -108,7 +115,7 @@
     }
     // The Firebase sync runs invisibly; show a toast confirming the trigger.
     EngineShared.showToast('Syncing…');
-    window.OslerSync.syncFull(window.OslerAuth.currentUser().uid)
+    window.OslerSync.syncFull(user.uid)
       .then(function(result) {
         var pushed = (result.pushed || []).reduce(function(n, s) { return n + s.pushed; }, 0);
         var pulled = (result.pulled || []).reduce(function(n, s) { return n + s.pulled; }, 0);
@@ -267,7 +274,7 @@
       wrapper.className = 'user-content-section';
       wrapper.innerHTML = '<h2 class="user-content-title">My Content</h2>' +
                           '<div id="user-content-grid" class="quiz-grid"></div>';
-      mainGrid.parentNode.insertBefore(wrapper, mainGrid.nextSibling);
+      mainGrid.insertAdjacentElement('afterend', wrapper);
       ucGrid = document.getElementById('user-content-grid');
     }
     if (!ucGrid) return;
@@ -288,7 +295,7 @@
         return m.getAll('userContent');
       }).then(function(entries) {
         if (!entries || entries.length === 0) {
-          ucGrid.innerHTML = '<div class="dash-empty"><p>No personal content yet. Use the Admin Dashboard to create quizzes, flashcards, and more.</p></div>';
+          ucGrid.innerHTML = '<div class="dash-empty"><div class="empty-icon">+</div><p>No personal content yet. Use the Admin Dashboard (desktop app) to create quizzes, flashcards, and more.</p></div>';
           return;
         }
         // Filter out engine-tracker pollution (H20 fix): only show entries

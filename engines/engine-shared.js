@@ -9,11 +9,15 @@
   var _cs = document.currentScript;
   var ENGINE_BASE = _cs ? _cs.src.replace(/[^\/]*$/, '') : '';
   var ROOT_BASE = (function(base) {
-    var s = base.replace(/\/$/, '');
-    var i = s.lastIndexOf('/');
-    var protoEnd = base.indexOf('://') + 3;
-    var firstSlash = base.indexOf('/', protoEnd);
-    return (i >= firstSlash && i > 0) ? s.substring(0, i + 1) : base;
+    try {
+      var u = new URL(base);
+      var pathParts = u.pathname.replace(/\/$/, '').split('/');
+      if (pathParts.length <= 1) return base;
+      pathParts.pop();
+      return u.origin + pathParts.join('/') + '/';
+    } catch(e) {
+      return base;
+    }
   })(ENGINE_BASE);
 
   /* ── CSS variables (injected inline so they're available synchronously) ──
@@ -352,28 +356,36 @@
       EngineShared._pdfmakeQueue.push(cb);
       if (EngineShared._pdfmakeLoaded) return;
       EngineShared._pdfmakeLoaded = true;
-      var loaded = 0;
-      var total = 2;
-      function onLoaded() {
-        loaded++;
-        if (loaded >= total) {
-          // Short delay to let pdfmake.min.js finish any deferred init
-          setTimeout(function() {
-            EngineShared._pdfmakeQueue.splice(0).forEach(function(f) { try { f(); } catch(e) {} });
-          }, 50);
-        }
-      }
-      // Load pdfmake from CDN. Also inject a local fallback script tag.
-      var urls = [
+      // Load pdfmake.min.js first, then vfs_fonts.js — sequential to avoid race
+      var _loadNext = function(urls, idx, onDone) {
+        if (idx >= urls.length) { onDone(); return; }
+        var s = document.createElement('script');
+        s.src = urls[idx];
+        s.onload = function() { _loadNext(urls, idx + 1, onDone); };
+        s.onerror = function() {
+          console.warn('[engine-shared] pdfmake script failed to load:', urls[idx]);
+          _loadNext(urls, idx + 1, onDone);
+        };
+        document.head.appendChild(s);
+      };
+      _loadNext([
         'https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.10/pdfmake.min.js',
         'https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.10/vfs_fonts.js'
-      ];
-      for (var i = 0; i < urls.length; i++) {
-        var s = document.createElement('script');
-        s.src = urls[i];
-        s.onload = onLoaded;
-        document.head.appendChild(s);
-      }
+      ], 0, function() {
+        // Retry up to 15s (150 × 100ms) to let pdfmake finish deferred init
+        var retries = 0;
+        (function attempPdf() {
+          if (typeof pdfmake !== 'undefined') {
+            EngineShared._pdfmakeQueue.splice(0).forEach(function(f) { try { f(); } catch(e) {} });
+          } else if (retries < 150) {
+            retries++;
+            setTimeout(attempPdf, 100);
+          } else {
+            console.warn('[engine-shared] pdfmake failed to load after 15s');
+            EngineShared._pdfmakeQueue.splice(0);
+          }
+        })();
+      });
     },
 
     _htmlToPdfContent: function(html) {

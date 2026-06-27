@@ -5,9 +5,10 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="description" content="Osler — Medical Study Platform">
   <title>Osler</title>
-  <link rel="manifest" href="../manifest.webmanifest">
-  <link rel="stylesheet" href="../dist/index-engine.css">
-  <link rel="stylesheet" href="../dist/shared.css">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="stylesheet" href="index-engine.css">
+  <link rel="stylesheet" href="shared.css">
+  <link rel="stylesheet" href="i18n.css">
   <script type="importmap">
   {
     "imports": {
@@ -15,7 +16,10 @@
       "firebase/auth": "https://www.gstatic.com/firebasejs/12.15.0/firebase-auth.js",
       "firebase/firestore": "https://www.gstatic.com/firebasejs/12.15.0/firebase-firestore.js",
       "firebase/storage": "https://www.gstatic.com/firebasejs/12.15.0/firebase-storage.js",
-      "firebase/analytics": "https://www.gstatic.com/firebasejs/12.15.0/firebase-analytics.js"
+      "firebase/analytics": "https://www.gstatic.com/firebasejs/12.15.0/firebase-analytics.js",
+      "analytics.js": "./src/lib/analytics.js",
+      "ajv": "https://esm.sh/ajv@8.17.1",
+      "ajv-formats": "https://esm.sh/ajv-formats@3.0.1"
     }
   }
   </script>
@@ -24,7 +28,6 @@
     .topbar { position: sticky; top: 0; z-index: 100; display: flex; align-items: center; height: 48px; padding: 0 1rem; background: var(--surface); border-bottom: 1px solid var(--border); }
     .topbar-title { font-family: 'Playfair Display', serif; font-size: 1.1rem; font-weight: 700; }
     .topbar-actions { margin-left: auto; display: flex; align-items: center; gap: 0.5rem; }
-    #quiz-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 1rem; padding: 1.5rem; max-width: 1200px; margin: 0 auto; }
     .auth-dropdown { position: relative; }
     .auth-btn { display: flex; align-items: center; gap: 0.4rem; padding: 0.35rem 0.7rem; border-radius: 8px; border: 1px solid var(--border); background: var(--surface2); color: var(--text); font-size: 0.8rem; cursor: pointer; transition: border-color var(--transition); }
     .auth-btn:hover { border-color: var(--accent); }
@@ -36,29 +39,89 @@
     .auth-menu-item .icon { width: 18px; height: 18px; }
     .auth-provider-btn { display: flex; align-items: center; gap: 0.5rem; width: 100%; padding: 0.7rem 0.85rem; border-radius: 8px; border: 1px solid var(--border); background: var(--surface2); color: var(--text); font-size: 0.85rem; cursor: pointer; transition: border-color var(--transition); }
     .auth-provider-btn:hover { border-color: var(--accent); }
-    /* Phase 6.5 fix #2: hub Sync button — was unreachable because the injection
-       guard in index-engine.js required a `.btn-tracker` element that only exists
-       in Tauri-generated HTML. Now we render the button directly in hub/index.html. */
+    .icon-btn { display: flex; align-items: center; justify-content: center; width: 32px; height: 32px; border-radius: 8px; border: 1px solid var(--border); background: var(--surface2); color: var(--text); cursor: pointer; transition: border-color var(--transition); }
+    .icon-btn:hover { border-color: var(--accent); }
+    .icon-btn svg { width: 16px; height: 16px; }
     .btn-sync-hub { display: flex; align-items: center; gap: 0.35rem; padding: 0.35rem 0.6rem; border-radius: 8px; border: 1px solid var(--border); background: var(--surface2); color: var(--text); font-size: 0.78rem; cursor: pointer; transition: border-color var(--transition); }
     .btn-sync-hub:hover { border-color: var(--accent); }
     .btn-sync-hub svg { width: 14px; height: 14px; }
+    .user-content-section { max-width: 1200px; margin: 0 auto; padding: 1.5rem; border-top: 1px solid var(--border); }
+    .user-content-title { font-family: 'Playfair Display', serif; font-size: 1.3rem; font-weight: 700; color: var(--accent); margin: 0 0 0.75rem; display: flex; align-items: center; gap: 0.5rem; }
+    .dash-empty { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 2rem; color: var(--text-muted); font-style: italic; text-align: center; gap: 0.5rem; }
+    .dash-empty p { margin: 0; font-size: 0.9rem; line-height: 1.5; }
+    .dash-empty .empty-icon { font-size: 2rem; opacity: 0.5; }
+    @keyframes modalIn { from { opacity: 0; transform: translateY(28px) scale(0.93); } to { opacity: 1; transform: translateY(0) scale(1); } }
+    .hub-header { max-width: 1200px; margin: 0 auto; padding: 0.75rem 1.5rem 0; display: flex; align-items: center; gap: 0.5rem; }
+    .user-content-toolbar { display: flex; gap: 0.4rem; }
+    .user-content-toolbar .btn { display: inline-flex; align-items: center; gap: 0.35rem; padding: 0.35rem 0.7rem; border-radius: 8px; border: 1px solid var(--border); background: var(--surface2); color: var(--text); font-size: 0.78rem; cursor: pointer; transition: border-color var(--transition); font-family: 'Outfit', sans-serif; font-weight: 500; }
+    .user-content-toolbar .btn:hover { border-color: var(--accent); }
+    .user-content-toolbar .btn svg { width: 14px; height: 14px; }
+    .uc-badge { display: inline-flex; align-items: center; padding: 0.15rem 0.5rem; border-radius: 4px; background: var(--accent-dim); color: var(--accent); font-size: 0.65rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; margin-left: 0.4rem; }
+    .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.7); z-index: 2100; display: flex; align-items: center; justify-content: center; padding: 1rem; }
+    .modal { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 2rem; max-width: 520px; width: 100%; box-shadow: var(--shadow); animation: modalIn 0.38s var(--ease-spring) both; }
+    .modal h2 { font-family: 'Playfair Display', serif; font-size: 1.2rem; margin: 0 0 0.75rem; }
+    .modal p { color: var(--text-muted); font-size: 0.88rem; line-height: 1.6; margin: 0 0 1rem; }
+    .modal-close { float: right; background: none; border: none; color: var(--text-muted); font-size: 1.3rem; cursor: pointer; padding: 0; line-height: 1; }
+    .modal-close:hover { color: var(--text); }
+    .modal-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 1rem; }
+    .modal-footer { display: flex; gap: 0.75rem; margin-top: 1.25rem; justify-content: flex-end; }
+    .modal-footer .btn { padding: 0.6rem 1.2rem; border-radius: 10px; border: 1.5px solid var(--border); background: var(--surface2); color: var(--text); font-weight: 600; font-size: 0.85rem; cursor: pointer; transition: border-color var(--transition); font-family: 'Outfit', sans-serif; }
+    .modal-footer .btn:hover { border-color: var(--accent); }
+    .modal-footer .btn-primary { background: var(--accent); border-color: var(--accent); color: #000; }
+    .modal-body { max-height: 60vh; overflow-y: auto; }
+    .uc-type-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 0.75rem; margin-top: 0.5rem; }
+    .uc-type-card { display: flex; flex-direction: column; align-items: center; gap: 0.3rem; padding: 1rem; border-radius: 12px; border: 1px solid var(--border); background: var(--surface2); cursor: pointer; transition: border-color var(--transition); }
+    .uc-type-card:hover { border-color: var(--accent); }
+    .uc-type-icon { font-size: 1.5rem; }
+    .uc-type-name { font-weight: 600; font-size: 0.85rem; }
+    .uc-type-desc { font-size: 0.7rem; color: var(--text-muted); text-align: center; }
+    .uc-editor-layout { display: flex; gap: 1rem; }
+    .uc-editor-left { flex: 0 0 200px; display: flex; flex-direction: column; gap: 0.75rem; }
+    .uc-editor-right { flex: 1; min-width: 0; }
+    .uc-field { display: flex; flex-direction: column; gap: 0.25rem; }
+    .uc-field span { font-size: 0.75rem; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.04em; }
+    .uc-field input, .uc-field select { padding: 0.4rem 0.6rem; border-radius: 6px; border: 1px solid var(--border); background: var(--surface); color: var(--text); font-size: 0.82rem; font-family: 'Outfit', sans-serif; outline: none; }
+    .uc-field input:focus, .uc-field select:focus { border-color: var(--accent); }
+    .uc-json-input { width: 100%; min-height: 260px; padding: 0.6rem; border-radius: 8px; border: 1px solid var(--border); background: #0d1117; color: #e6edf3; font-family: 'Menlo', 'Consolas', monospace; font-size: 0.78rem; line-height: 1.5; resize: vertical; outline: none; }
+    .uc-json-input:focus { border-color: var(--accent); }
+    .uc-validation { margin-top: 0.4rem; font-size: 0.78rem; }
+    .uc-ok { color: var(--correct); }
+    .uc-error { color: var(--wrong); }
+    .uc-item-row { display: flex; align-items: center; gap: 0.6rem; padding: 0.5rem 0; border-bottom: 1px solid var(--border); cursor: pointer; }
+    .uc-item-row:last-child { border-bottom: none; }
+    .uc-item-title { font-weight: 600; font-size: 0.85rem; }
+    .uc-item-meta { font-size: 0.72rem; color: var(--text-muted); }
+    .uc-empty, .uc-loading { padding: 1.5rem; text-align: center; color: var(--text-muted); font-style: italic; }
+    .uc-import-preview { margin-top: 1rem; }
+    .uc-pack-meta { font-size: 0.85rem; margin-bottom: 0.5rem; }
+    .uc-item-list { list-style: none; padding: 0; margin: 0; font-size: 0.82rem; display: flex; flex-direction: column; gap: 0.25rem; }
+    .uc-item-list li { padding: 0.2rem 0; }
+    #quiz-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 1rem; padding: 1.5rem; max-width: 1200px; margin: 0 auto; }
   </style>
 </head>
 <body>
   <div class="topbar">
     <span class="topbar-title">Osler</span>
     <div class="topbar-actions">
+      <button class="icon-btn theme-toggle-btn" type="button" aria-label="Toggle theme" title="Toggle theme" onclick="toggleTheme()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+      </button>
+      <button class="icon-btn" type="button" aria-label="Question tracker" title="Question Tracker" onclick="openTrackerDashboard()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M3 3v18h18"/><path d="M7 16l4-8 4 4 4-6"/></svg>
+      </button>
       <button class="btn-sync-hub" type="button" aria-label="Sync progress with cloud" title="Sync Progress" onclick="openSyncModal()">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M21 2v6h-6"></path><path d="M3 12a9 9 0 0 1 15-6.7L21 8"></path><path d="M3 22v-6h6"></path><path d="M21 12a9 9 0 0 1-15 6.7L3 16"></path></svg>
         <span>Sync</span>
       </button>
+      <div data-lang-switcher></div>
       <div class="auth-dropdown" id="auth-dropdown"></div>
     </div>
   </div>
+  <div class="hub-header"></div>
   <div id="quiz-grid"></div>
 
   <script>
-    window.ENGINE_BASE = '../dist/';
+    window.ENGINE_BASE = './';
 
     var TYPE_ICONS = { quiz:'clipboard', bank:'book', flashcard:'layers', written:'pen-tool', osce:'activity' };
     var TYPE_NAMES  = { quiz:'Quiz', bank:'Question Bank', flashcard:'Flashcards', written:'Written', osce:'OSCE' };
@@ -80,11 +143,12 @@
       document.getElementById('quiz-grid').innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:3rem 1rem;color:var(--text-muted)"><p>No content available. Add sample content files to the <code>content/</code> directory.</p></div>';
     });
   </script>
-  <script src="../dist/engine-shared.js"></script>
-  <script src="../dist/index-engine.js"></script>
+  <script src="engine-shared.js"></script>
+  <script src="index-engine.js"></script>
   <script type="module">
     import { subscribe, signInAsGuest, signInWithGoogle, signInWithGitHub, signOut, upgradeAccount, initAuth } from '../src/lib/auth.js';
     import { initAutoSync } from '../src/lib/sync.js';
+    import { initV2Hub } from '../src/lib/hub-v2-patch.js';
 
     // H6 fix: render auth UI for all three states (null, guest, signed-in).
     // - null (cold load): show "Continue as Guest" + Google + GitHub buttons.
@@ -221,6 +285,7 @@
     initAuth();
     initAutoSync();
     if (window.renderUserContent) window.renderUserContent();
+    try { initV2Hub(); } catch (e) { console.warn('[hub] V2 init failed:', e); }
   </script>
 </body>
 </html>

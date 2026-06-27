@@ -11,6 +11,7 @@ const DIST_DIR = join(ROOT, 'dist');
 const ASSETS_DIR = join(ROOT, 'assets');
 const SRC_CSS_DIR = join(ROOT, 'src', 'css');
 const SRC_LIB_DIR = join(ROOT, 'src', 'lib');
+const SRC_I18N_DIR = join(ROOT, 'src', 'i18n');
 const SRC_SCHEMAS_DIR = join(ROOT, 'src', 'schemas');
 const HUB_DIR = join(ROOT, 'hub');
 const CONTENT_DIR = join(ROOT, 'content');
@@ -115,14 +116,33 @@ async function runBuild() {
   const hubCount = copyDir(HUB_DIR, hubDist);
   console.log(`Copied ${hubCount} hub files → dist/hub/`);
 
+  // Copy hub/index.html → dist/index.html as the landing page
+  const hubIndexSrc = join(HUB_DIR, 'index.html');
+  const hubIndexDst = join(DIST_DIR, 'index.html');
+  if (existsSync(hubIndexSrc)) {
+    copyFileSync(hubIndexSrc, hubIndexDst);
+    console.log('Copied index.html → dist/ (landing page)');
+  }
+
   const libCount = copyDir(SRC_LIB_DIR, join(DIST_DIR, 'src', 'lib'), file => file.endsWith('.js'));
+  const i18nCount = copyDir(SRC_I18N_DIR, join(DIST_DIR, 'src', 'i18n'), file => file.endsWith('.json'));
   const schemaCount = copyDir(SRC_SCHEMAS_DIR, join(DIST_DIR, 'src', 'schemas'), file => file.endsWith('.json'));
   const contentCount = copyDir(CONTENT_DIR, join(DIST_DIR, 'content'), file => file.endsWith('.json'));
   console.log(`Copied ${libCount} lib files → dist/src/lib/`);
+  console.log(`Copied ${i18nCount} i18n files → dist/src/i18n/`);
   console.log(`Copied ${schemaCount} schema files → dist/src/schemas/`);
   console.log(`Copied ${contentCount} content files → dist/content/`);
 
   await buildPlayerMain();
+
+  // Copy analytics.js + its deps to dist root as fallback for dynamic import in engine-shared.js
+  const _fallbackLibs = ['analytics.js', 'storage.js', 'sync-utils.js'];
+  for (const f of _fallbackLibs) {
+    const src = join(SRC_LIB_DIR, f);
+    const dst = join(DIST_DIR, f);
+    if (existsSync(src)) { copyFileSync(src, dst); }
+  }
+  console.log('Copied fallback libs → dist/ (analytics.js, storage.js, sync-utils.js)');
 
   const rootFiles = ['manifest.webmanifest', 'sw.js', 'player.html', 'update-manifest.json'];
   for (const f of rootFiles) {
