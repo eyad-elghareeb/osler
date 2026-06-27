@@ -1716,7 +1716,7 @@ function checkSavedProgress() {
     pendingRestoreData = data;
 
     // Show toast with optional restore button
-    EngineShared.showToast("'+EngineShared.icon('folder-open')+' Previous progress found!", [
+    EngineShared.showToast(EngineShared.icon('folder-open')+' Previous progress found!', [
       {
         label: "Restore",
         primary: true,

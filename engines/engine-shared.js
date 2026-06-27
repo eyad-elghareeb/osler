@@ -343,18 +343,95 @@
     return next();
   },
 
-  /* ── PDF export (vector-based via browser print) ─────── */
+  /* ── PDF export (vector text, direct download via pdfmake) ─── */
+    _pdfmakeLoaded: false,
+    _pdfmakeQueue: [],
+
+    _loadPdfmake: function(cb) {
+      if (typeof pdfmake !== 'undefined') { cb(); return; }
+      EngineShared._pdfmakeQueue.push(cb);
+      if (EngineShared._pdfmakeLoaded) return;
+      EngineShared._pdfmakeLoaded = true;
+      [].forEach.call([
+        'https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.10/pdfmake.min.js',
+        'https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.10/vfs_fonts.js'
+      ], function(src) {
+        var s = document.createElement('script');
+        s.src = src;
+        s.onload = function() {
+          EngineShared._pdfmakeQueue.splice(0).forEach(function(f) { try { f(); } catch(e) {} });
+        };
+        document.head.appendChild(s);
+      });
+    },
+
+    _htmlToPdfContent: function(html) {
+      var stack = [];
+      var div = document.createElement('div');
+      div.innerHTML = html;
+      function walk(el) {
+        for (var i = 0; i < el.childNodes.length; i++) {
+          var node = el.childNodes[i];
+          if (node.nodeType === 3) {
+            var t = node.textContent.replace(/\s+/g, ' ').trim();
+            if (t) stack.push(t);
+          } else if (node.nodeType === 1) {
+            var tag = node.tagName.toLowerCase();
+            if (tag === 'br') { stack.push({}); continue; }
+            if (tag === 'h2' || tag === 'h3') {
+              var str = node.textContent.replace(/\s+/g, ' ').trim();
+              if (str) stack.push({ text: str, bold: true, margin: [0, tag==='h2'?10:6, 0, 4] });
+              continue;
+            }
+            if (tag === 'strong' || tag === 'b') {
+              var str2 = node.textContent.replace(/\s+/g, ' ').trim();
+              if (str2) stack.push({ text: str2, bold: true });
+              continue;
+            }
+            walk(node);
+          }
+        }
+      }
+      walk(div);
+      return stack;
+    },
+
     exportToPDF: function(containerOrHtml, filename) {
-      var html = typeof containerOrHtml === 'string' ? containerOrHtml : containerOrHtml.innerHTML;
-      var win = window.open('', '_blank');
-      if (!win) { EngineShared.showToast('Pop-up blocked. Allow pop-ups for PDF export.'); return; }
-      win.document.write('<!DOCTYPE html><html><head><meta charset="utf-8"><title>' + (filename || 'export') + '</title>');
-      win.document.write('<style>html,body{margin:0;padding:0}body{font-family:Arial,Helvetica,sans-serif;color:#000;padding:20px}@page{margin:15mm}img{max-width:100%}table{border-collapse:collapse;width:100%}td,th{border:1px solid #ccc;padding:6px;text-align:left;font-size:11px}.pdf-export-section{page-break-inside:avoid}.pdf-chunk{page-break-after:always;margin-bottom:20px}.no-break{page-break-inside:avoid}@media print{body{padding:0}}</style></head><body>');
-      win.document.write('<div class="pdf-chunk">' + html + '</div>');
-      win.document.write('</body></html>');
-      win.document.close();
-      win.focus();
-      setTimeout(function() { win.print(); }, 300);
+      var container = typeof containerOrHtml === 'string' ? null : containerOrHtml;
+      var dd = {
+        pageSize: 'A4',
+        pageMargins: [15, 15, 15, 15],
+        content: [],
+        defaultStyle: { font: 'Helvetica', fontSize: 9, lineHeight: 1.4 }
+      };
+      if (container) {
+        var chunks = Array.from(container.children);
+        chunks.forEach(function(chunk, ci) {
+          if (ci > 0) dd.content.push({ text: '', pageBreak: 'before' });
+          var items = EngineShared._htmlToPdfContent(chunk.innerHTML);
+          items.forEach(function(item) {
+            if (typeof item === 'object' && Object.keys(item).length === 0) {
+              dd.content.push({ text: '', margin: [0, 2, 0, 0] });
+            } else if (typeof item === 'string') {
+              dd.content.push({ text: item, margin: [0, 1, 0, 0] });
+            } else {
+              dd.content.push(item);
+            }
+          });
+        });
+      } else {
+        dd.content.push({ text: typeof containerOrHtml === 'string' ? EngineShared._stripHtml(containerOrHtml) : '', margin: [0, 10, 0, 0] });
+      }
+      EngineShared._loadPdfmake(function() {
+        try { pdfmake.createPdf(dd).download(filename || 'export'); }
+        catch(e) { console.error('[PDF] create failed:', e); EngineShared.showToast('PDF generation failed. Try the export again.'); }
+      });
+    },
+
+    _stripHtml: function(html) {
+      var d = document.createElement('div');
+      d.innerHTML = html;
+      return d.textContent.replace(/\s+/g, ' ').trim();
     },
 
     /* ── Keyboard shortcuts ──────────────────────────────────

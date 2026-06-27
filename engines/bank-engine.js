@@ -940,7 +940,7 @@ function checkSavedProgress() {
     const maxAge = 7 * 24 * 60 * 60 * 1000;
     if (Date.now() - data.timestamp > maxAge) { localStorage.removeItem(STORAGE_KEY); return; }
     pendingRestoreData = data;
-    EngineShared.showToast("'+EngineShared.icon('folder-open')+' Previous progress found!", [
+    EngineShared.showToast(EngineShared.icon('folder-open')+' Previous progress found!', [
       { label: "Restore", primary: true, onClick: function() { clearTimeout(restoreToastTimeout); doRestoreProgress(pendingRestoreData); } },
       { label: "Dismiss", primary: false, onClick: function() { clearTimeout(restoreToastTimeout); pendingRestoreData = null; clearProgress(); } }
     ]);

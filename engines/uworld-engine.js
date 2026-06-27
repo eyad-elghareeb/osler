@@ -2242,7 +2242,7 @@ var ENGINE_BASE = EngineShared.ENGINE_BASE || (window.__UWORLD_ENGINE_BASE || wi
         return;
       }
       
-      EngineShared.showToast("'+EngineShared.icon('folder-open')+' Restore previous block progress?", [
+      EngineShared.showToast(EngineShared.icon('folder-open')+' Restore previous block progress?', [
         {
           label: "Restore",
           primary: true,
