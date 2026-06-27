@@ -1392,6 +1392,8 @@
       '  const QUESTION_BANK = QUESTIONS;\n' +
       '</script>\n' +
       '</head>\n<body>\n' +
+      '<script src="engine-shared.js"></script>\n' +
+      '<script src="engine-tracker.js"></script>\n' +
       '<script src="' + engineScript + '"></script>\n' +
       '<script>\n' +
       '  (function(){\n' +

@@ -347,114 +347,65 @@
     return next();
   },
 
-  /* ── PDF export (vector text, direct download via pdfmake) ─── */
-    _pdfmakeLoaded: false,
-    _pdfmakeQueue: [],
+  /* ── PDF export (html2pdf with high-res canvas + print-to-PDF fallback) ─── */
+    _html2pdfLoaded: false,
+    _html2pdfQueue: [],
 
-    _loadPdfmake: function(cb) {
-      if (typeof pdfmake !== 'undefined') { cb(); return; }
-      EngineShared._pdfmakeQueue.push(cb);
-      if (EngineShared._pdfmakeLoaded) return;
-      EngineShared._pdfmakeLoaded = true;
-      // Load pdfmake.min.js first, then vfs_fonts.js — sequential to avoid race
-      var _loadNext = function(urls, idx, onDone) {
-        if (idx >= urls.length) { onDone(); return; }
-        var s = document.createElement('script');
-        s.src = urls[idx];
-        s.onload = function() { _loadNext(urls, idx + 1, onDone); };
-        s.onerror = function() {
-          console.warn('[engine-shared] pdfmake script failed to load:', urls[idx]);
-          _loadNext(urls, idx + 1, onDone);
-        };
-        document.head.appendChild(s);
+    _loadHtml2pdf: function(cb) {
+      if (typeof html2pdf !== 'undefined') { cb(); return; }
+      EngineShared._html2pdfQueue.push(cb);
+      if (EngineShared._html2pdfLoaded) return;
+      EngineShared._html2pdfLoaded = true;
+      var s = document.createElement('script');
+      s.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.4/html2pdf.bundle.min.js';
+      s.onload = function() {
+        EngineShared._html2pdfQueue.splice(0).forEach(function(f) { try { f(); } catch(e) {} });
       };
-      _loadNext([
-        'https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.10/pdfmake.min.js',
-        'https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.10/vfs_fonts.js'
-      ], 0, function() {
-        // Retry up to 15s (150 × 100ms) to let pdfmake finish deferred init
-        var retries = 0;
-        (function attempPdf() {
-          if (typeof pdfmake !== 'undefined') {
-            EngineShared._pdfmakeQueue.splice(0).forEach(function(f) { try { f(); } catch(e) {} });
-          } else if (retries < 150) {
-            retries++;
-            setTimeout(attempPdf, 100);
-          } else {
-            console.warn('[engine-shared] pdfmake failed to load after 15s');
-            EngineShared._pdfmakeQueue.splice(0);
-          }
-        })();
-      });
-    },
-
-    _htmlToPdfContent: function(html) {
-      var stack = [];
-      var div = document.createElement('div');
-      div.innerHTML = html;
-      function walk(el) {
-        for (var i = 0; i < el.childNodes.length; i++) {
-          var node = el.childNodes[i];
-          if (node.nodeType === 3) {
-            var t = node.textContent.replace(/\s+/g, ' ').trim();
-            if (t) stack.push(t);
-          } else if (node.nodeType === 1) {
-            var tag = node.tagName.toLowerCase();
-            if (tag === 'br') { stack.push({}); continue; }
-            if (tag === 'h2' || tag === 'h3') {
-              var str = node.textContent.replace(/\s+/g, ' ').trim();
-              if (str) stack.push({ text: str, bold: true, margin: [0, tag==='h2'?10:6, 0, 4] });
-              continue;
-            }
-            if (tag === 'strong' || tag === 'b') {
-              var str2 = node.textContent.replace(/\s+/g, ' ').trim();
-              if (str2) stack.push({ text: str2, bold: true });
-              continue;
-            }
-            walk(node);
-          }
-        }
-      }
-      walk(div);
-      return stack;
+      s.onerror = function() {
+        console.warn('[engine-shared] html2pdf CDN load failed');
+        EngineShared._html2pdfQueue.splice(0);
+      };
+      document.head.appendChild(s);
     },
 
     exportToPDF: function(containerOrHtml, filename) {
-      var container = typeof containerOrHtml === 'string' ? null : containerOrHtml;
-      var dd = {
-        pageSize: 'A4',
-        pageMargins: [15, 15, 15, 15],
-        content: [],
-        defaultStyle: { font: 'Helvetica', fontSize: 9, lineHeight: 1.4 }
-      };
-      if (container) {
-        var chunks = Array.from(container.children);
-        chunks.forEach(function(chunk, ci) {
-          if (ci > 0) dd.content.push({ text: '', pageBreak: 'before' });
-          var items = EngineShared._htmlToPdfContent(chunk.innerHTML);
-          items.forEach(function(item) {
-            if (typeof item === 'object' && Object.keys(item).length === 0) {
-              dd.content.push({ text: '', margin: [0, 2, 0, 0] });
-            } else if (typeof item === 'string') {
-              dd.content.push({ text: item, margin: [0, 1, 0, 0] });
-            } else {
-              dd.content.push(item);
-            }
-          });
-        });
-      } else {
-        dd.content.push({ text: typeof containerOrHtml === 'string' ? EngineShared._stripHtml(containerOrHtml) : '', margin: [0, 10, 0, 0] });
+      var element = typeof containerOrHtml === 'string' ? null : containerOrHtml;
+      if (!element) {
+        // Fallback: if we only have text, use print to PDF
+        EngineShared.exportToPrint(containerOrHtml, filename);
+        return;
       }
-      EngineShared._loadPdfmake(function() {
-        try { pdfmake.createPdf(dd).download(filename || 'export'); }
-        catch(e) { console.error('[PDF] create failed:', e); EngineShared.showToast('PDF generation failed. Try the export again.'); }
+      EngineShared._loadHtml2pdf(function() {
+        try {
+          html2pdf().set({
+            margin: 5,
+            filename: filename || 'export.pdf',
+            image: { type: 'jpeg', quality: 0.98 },
+            html2canvas: { scale: 3, logging: false, useCORS: true },
+            jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
+          }).from(element).save();
+        } catch(e) {
+          console.error('[PDF] html2pdf failed:', e);
+          EngineShared.showToast('PDF generation failed. Using print instead.');
+          EngineShared.exportToPrint(element, filename);
+        }
       });
     },
 
-    _stripHtml: function(html) {
-      var d = document.createElement('div');
-      d.innerHTML = html;
-      return d.textContent.replace(/\s+/g, ' ').trim();
+    exportToPrint: function(content, filename) {
+      var w = window.open('', '_blank');
+      if (!w) { EngineShared.showToast('Pop-up blocked. Allow pop-ups for this site.'); return; }
+      var html = '<!DOCTYPE html><html><head><meta charset="utf-8"><title>' + (filename || 'export') + '</title>';
+      html += '<style>body{font-family:system-ui,sans-serif;padding:16px;font-size:11pt;line-height:1.5;color:#000}';
+      html += '@page{margin:12mm}';
+      html += 'pre{white-space:pre-wrap;background:#f5f5f5;padding:8px;border-radius:4px;font-size:9pt}';
+      html += 'table{border-collapse:collapse;width:100%}td,th{border:1px solid #ccc;padding:4px 8px;font-size:9pt}';
+      html += '</style></head><body>';
+      html += typeof content === 'string' ? content : content.innerHTML || '';
+      html += '<script>window.onload=function(){setTimeout(function(){window.print();window.close()},300)}<\/script>';
+      html += '</body></html>';
+      w.document.write(html);
+      w.document.close();
     },
 
     /* ── Keyboard shortcuts ──────────────────────────────────
@@ -536,10 +487,33 @@
      when icons.js loads, we walk the DOM and replace every tagged SVG with
      the real icon. This way engines don't need to listen for the event. */
   var _iconsCache = null;
+  var _inlineIcons = {
+    'x': '<line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>',
+    'check': '<polyline points="20 6 9 17 4 12"/>',
+    'chevron-down': '<polyline points="6 9 12 15 18 9"/>',
+    'chevron-up': '<polyline points="18 15 12 9 6 15"/>',
+    'arrow-left': '<line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/>',
+    'arrow-right': '<line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/>',
+    'moon': '<path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>',
+    'sun': '<circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>',
+    'bar-chart': '<line x1="12" y1="20" x2="12" y2="10"/><line x1="18" y1="20" x2="18" y2="4"/><line x1="6" y1="20" x2="6" y2="16"/>',
+    'sync': '<path d="M21 2v6h-6"/><path d="M3 12a9 9 0 0 1 15-6.7L21 8"/><path d="M3 22v-6h6"/><path d="M21 12a9 9 0 0 1-15 6.7L3 16"/>',
+    'search': '<circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/>',
+    'user': '<path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>',
+    'plus': '<line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>',
+    'trash-2': '<polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>',
+    'download': '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>',
+    'upload': '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>',
+    'play': '<polygon points="5 3 19 12 5 21 5 3"/>',
+    'flag': '<path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/>',
+    'clock': '<circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>',
+  };
   EngineShared.icon = function(n, s) {
     if (_iconsCache) return _iconsCache.icon(n, s);
-    // Fallback: emit a tagged empty SVG that the loader will swap.
-    return '<svg data-osler-icon="' + (n || '') + '" data-osler-icon-size="' + (s || 16) + '" width="' + (s||16) + '" height="' + (s||16) + '"></svg>';
+    var path = _inlineIcons[n];
+    var size = s || 16;
+    if (path) return '<svg width="' + size + '" height="' + size + '" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' + path + '</svg>';
+    return '<svg data-osler-icon="' + (n || '') + '" data-osler-icon-size="' + size + '" width="' + size + '" height="' + size + '"></svg>';
   };
 
   // Walk the DOM and replace every tagged placeholder SVG with the real icon.
