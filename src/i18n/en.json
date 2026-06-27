@@ -1,0 +1,168 @@
+{
+  "common": {
+    "cancel": "Cancel",
+    "save": "Save",
+    "delete": "Delete",
+    "edit": "Edit",
+    "ok": "OK",
+    "loading": "Loading...",
+    "error": "Error",
+    "success": "Success",
+    "back": "Back",
+    "next": "Next",
+    "previous": "Previous",
+    "submit": "Submit",
+    "close": "Close"
+  },
+  "hub": {
+    "title": "Osler",
+    "search": "Search content...",
+    "filterByTag": "Filter by tag",
+    "noResults": "No content matches your search.",
+    "allContent": "All content",
+    "myContent": "My content"
+  },
+  "userContent": {
+    "create": "Create",
+    "export": "Export",
+    "import": "Import",
+    "mine": "Mine",
+    "mineTitle": "You authored this content",
+    "createTitle": "Create Content",
+    "createPrompt": "Pick a content type to author:",
+    "titleField": "Title",
+    "tagsField": "Tags (comma-separated)",
+    "langField": "Language",
+    "exportTitle": "Export Content Pack",
+    "importTitle": "Import Content Pack",
+    "importPrompt": "Pick a .json content pack file to import.",
+    "noItems": "You have no custom content to export."
+  },
+  "contentTypes": {
+    "quiz": "Quiz",
+    "quizDesc": "Multiple-choice timed quiz",
+    "bank": "Bank",
+    "bankDesc": "Untimed question bank",
+    "flashcard": "Flashcard",
+    "flashcardDesc": "SM-2 spaced repetition",
+    "written": "Written",
+    "writtenDesc": "Free-text with self-rating",
+    "osce": "OSCE",
+    "osceDesc": "Clinical simulation"
+  },
+  "quiz": {
+    "start": "Start quiz",
+    "next": "Next",
+    "previous": "Previous",
+    "submit": "Submit",
+    "correct": "Correct!",
+    "wrong": "Incorrect",
+    "explanation": "Explanation",
+    "results": {
+      "title": "Quiz Results",
+      "score": "You scored {{score}} out of {{total}}",
+      "time": "Time: {{time}}",
+      "pass": "Pass",
+      "fail": "Fail"
+    }
+  },
+  "bank": {
+    "showAnswer": "Show answer",
+    "hideAnswer": "Hide answer",
+    "markedForReview": "Marked for review",
+    "item": "Item {{current}} of {{total}}"
+  },
+  "flashcard": {
+    "showAnswer": "Show answer",
+    "again": "Again",
+    "hard": "Hard",
+    "good": "Good",
+    "easy": "Easy",
+    "dueToday": "{{count}} due today",
+    "newToday": "{{count}} new",
+    "sessionComplete": "Session complete! Reviewed {{count}} cards."
+  },
+  "written": {
+    "submit": "Submit response",
+    "wordCount": "{{count}} words",
+    "minWords": "Minimum {{count}} words required",
+    "rate": "Rate your response",
+    "modelAnswer": "Model answer"
+  },
+  "osce": {
+    "historyStage": "History",
+    "examinationStage": "Examination",
+    "investigationsStage": "Investigations",
+    "diagnosisStage": "Diagnosis",
+    "managementStage": "Management",
+    "askQuestion": "Ask",
+    "performManeuver": "Perform",
+    "orderTest": "Order",
+    "submitDiagnosis": "Submit diagnosis",
+    "submitManagement": "Submit management",
+    "results": {
+      "title": "OSCE Results",
+      "score": "Score: {{score}} / 100",
+      "pass": "Pass",
+      "fail": "Fail"
+    }
+  },
+  "aiTutor": {
+    "title": "AI Tutor",
+    "button": "Ask AI",
+    "placeholder": "Ask a question about this item...",
+    "send": "Send",
+    "thinking": "Thinking...",
+    "error": "Sorry, I couldn't get a response. Please try again.",
+    "clearHistory": "Clear history",
+    "disclaimer": "AI responses may be inaccurate. Verify important medical information with trusted sources.",
+    "dailyCapReached": "Daily AI limit reached. Try again tomorrow.",
+    "reportResponse": "Report this response"
+  },
+  "auth": {
+    "signIn": "Sign in",
+    "signOut": "Sign out",
+    "signInWithGoogle": "Sign in with Google",
+    "signInWithGitHub": "Sign in with GitHub",
+    "guestMode": "Guest mode",
+    "syncEnabled": "Sync enabled",
+    "syncDisabled": "Sync disabled"
+  },
+  "settings": {
+    "title": "Settings",
+    "theme": "Theme",
+    "themeLight": "Light",
+    "themeDark": "Dark",
+    "themeSystem": "System",
+    "language": "Language",
+    "sync": "Sync",
+    "syncNow": "Sync now",
+    "lastSync": "Last sync: {{time}}",
+    "exportData": "Export my data",
+    "clearData": "Clear local data"
+  },
+  "tour": {
+    "welcome": "Welcome to Osler",
+    "welcomeDesc": "Let's take a quick tour of the key features.",
+    "next": "Next",
+    "skip": "Skip tour",
+    "done": "Done",
+    "step1Title": "Browse content",
+    "step1Desc": "Pick a quiz, flashcard deck, or other content from the hub.",
+    "step2Title": "Study",
+    "step2Desc": "Answer questions, rate flashcards, or take notes. Your progress is saved automatically.",
+    "step3Title": "Create your own",
+    "step3Desc": "Click Create to author your own quizzes and flashcards.",
+    "step4Title": "Sync across devices",
+    "step4Desc": "Sign in to sync your progress and custom content across devices.",
+    "step5Title": "Ask the AI tutor",
+    "step5Desc": "Click Ask AI on any item to get a contextual explanation."
+  },
+  "errors": {
+    "networkError": "Network error. Please check your connection.",
+    "firebaseConfigMissing": "Firebase is not configured. Sync and AI tutor are disabled.",
+    "validationFailed": "Content failed validation. See console for details.",
+    "syncFailed": "Sync failed. Will retry automatically.",
+    "storageQuota": "Storage almost full. Export your data to free up space."
+  }
+}
