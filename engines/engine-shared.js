@@ -357,9 +357,13 @@
       function onLoaded() {
         loaded++;
         if (loaded >= total) {
-          EngineShared._pdfmakeQueue.splice(0).forEach(function(f) { try { f(); } catch(e) {} });
+          // Short delay to let pdfmake.min.js finish any deferred init
+          setTimeout(function() {
+            EngineShared._pdfmakeQueue.splice(0).forEach(function(f) { try { f(); } catch(e) {} });
+          }, 50);
         }
       }
+      // Load pdfmake from CDN. Also inject a local fallback script tag.
       var urls = [
         'https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.10/pdfmake.min.js',
         'https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.10/vfs_fonts.js'
@@ -368,7 +372,6 @@
         var s = document.createElement('script');
         s.src = urls[i];
         s.onload = onLoaded;
-        s.onerror = onLoaded;
         document.head.appendChild(s);
       }
     },
@@ -585,18 +588,8 @@
         return;
       }
       var url = candidates[idx++];
-      // Use fetch() instead of direct import() to avoid MIME-type restrictions
-      // when the dev server returns text/html for .js files.
-      fetch(url).then(function(r) {
-        if (!r.ok) throw new Error('HTTP ' + r.status);
-        return r.text();
-      }).then(function(code) {
-        var blob = new Blob([code], { type: 'application/javascript' });
-        var blobUrl = URL.createObjectURL(blob);
-        return import(blobUrl).then(function(m) {
-          URL.revokeObjectURL(blobUrl);
-          wireFn(m);
-        });
+      import(url).then(function(m) {
+        wireFn(m);
       }).catch(function(e) {
         if (idx < candidates.length) {
           tryNext();
