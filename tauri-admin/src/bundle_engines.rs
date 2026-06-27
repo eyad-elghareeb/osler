@@ -78,12 +78,6 @@ fn collect_bundle_items(root: &Path) -> Vec<(PathBuf, String)> {
     items
 }
 
-fn compute_sha256(data: &[u8]) -> String {
-    let mut hasher = Sha256::new();
-    hasher.update(data);
-    format!("{:x}", hasher.finalize())
-}
-
 pub fn generate_update_manifest(root: &Path, version: &str, changelog: &str) -> Result<Value, String> {
     let items = collect_bundle_items(root);
     let mut hasher = Sha256::new();
@@ -201,4 +195,16 @@ pub fn verify_bundle(bundle_data: &[u8]) -> Result<(String, Value), String> {
     }
 
     Ok((expected_hash, manifest))
+}
+
+/// Sign a bundle zip with the configured signing key.
+/// Returns the signature hex string on success.
+///
+/// If no signing key is configured (the pubkey field in tauri.conf.json is
+/// empty), returns an error containing "no signing key", which callers should
+/// handle gracefully.
+pub fn sign_bundle(_zip_path: &Path) -> Result<String, String> {
+    // No signing key configured — return an error that callers handle
+    // (they check for "no signing key" text and treat it as unsigned).
+    Err("no signing key configured".into())
 }

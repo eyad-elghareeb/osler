@@ -4,6 +4,7 @@ use serde_json::{json, Value};
 use std::path::Path;
 use std::process::Command;
 use git2::{Cred, FetchOptions, PushOptions, RemoteCallbacks, Repository, Signature};
+use reqwest::blocking::Client;
 
 #[cfg(windows)]
 use std::os::windows::process::CommandExt;
@@ -329,4 +330,217 @@ pub async fn list_prs(
         .await
         .map_err(|e| format!("Failed to parse PR list: {}", e))?;
     Ok(data)
+}
+
+// =============================================================================
+// GithubApi — REST client for the GitHub API, used by GithubPagesDeployer
+// =============================================================================
+
+use crate::providers::ProviderError;
+
+const GH_API: &str = "https://api.github.com";
+const UA: &str = "Osler-Admin/2.0";
+
+pub struct GithubApi {
+    token: String,
+    client: Client,
+}
+
+impl GithubApi {
+    pub fn new(token: String) -> Self {
+        Self {
+            token,
+            client: Client::new(),
+        }
+    }
+
+    fn gh_get(&self, path: &str) -> Result<(u16, Value), ProviderError> {
+        let resp = self.client
+            .get(&format!("{}{}", GH_API, path))
+            .header("Authorization", format!("Bearer {}", self.token))
+            .header("Accept", "application/vnd.github+json")
+            .header("User-Agent", UA)
+            .send()
+            .map_err(|e| ProviderError::Network(e.to_string()))?;
+        let status = resp.status().as_u16();
+        let body_text = resp.text().map_err(|e| ProviderError::Network(e.to_string()))?;
+        let body: Value = serde_json::from_str(&body_text)
+            .unwrap_or(Value::Null);
+        Ok((status, body))
+    }
+
+    fn gh_post(&self, path: &str, body: &Value) -> Result<(u16, Value), ProviderError> {
+        let resp = self.client
+            .post(&format!("{}{}", GH_API, path))
+            .header("Authorization", format!("Bearer {}", self.token))
+            .header("Accept", "application/vnd.github+json")
+            .header("User-Agent", UA)
+            .json(body)
+            .send()
+            .map_err(|e| ProviderError::Network(e.to_string()))?;
+        let status = resp.status().as_u16();
+        let body_text = resp.text().map_err(|e| ProviderError::Network(e.to_string()))?;
+        let body: Value = serde_json::from_str(&body_text)
+            .unwrap_or(Value::Null);
+        Ok((status, body))
+    }
+
+    fn gh_patch(&self, path: &str, body: &Value) -> Result<(u16, Value), ProviderError> {
+        let resp = self.client
+            .patch(&format!("{}{}", GH_API, path))
+            .header("Authorization", format!("Bearer {}", self.token))
+            .header("Accept", "application/vnd.github+json")
+            .header("User-Agent", UA)
+            .json(body)
+            .send()
+            .map_err(|e| ProviderError::Network(e.to_string()))?;
+        let status = resp.status().as_u16();
+        let body_text = resp.text().map_err(|e| ProviderError::Network(e.to_string()))?;
+        let body: Value = serde_json::from_str(&body_text)
+            .unwrap_or(Value::Null);
+        Ok((status, body))
+    }
+
+    pub fn repo_exists(&self, owner: &str, repo: &str) -> Result<bool, ProviderError> {
+        let (status, _) = self.gh_get(&format!("/repos/{}/{}", owner, repo))?;
+        Ok(status == 200)
+    }
+
+    pub fn create_repo(&self, owner: &str, repo: &str) -> Result<(), ProviderError> {
+        let body = json!({
+            "name": repo,
+            "auto_init": false,
+            "private": false,
+        });
+        let (status, _) = self.gh_post(&format!("/repos/{}/{}", owner, repo), &body)?;
+        if status == 201 { Ok(()) }
+        else { Err(ProviderError::Config(format!("Failed to create repo: status {}", status))) }
+    }
+
+    pub fn get_default_branch_sha(&self, owner: &str, repo: &str) -> Result<String, ProviderError> {
+        let (status, body) = self.gh_get(&format!("/repos/{}/{}", owner, repo))?;
+        if status != 200 {
+            return Err(ProviderError::Config(format!("Failed to get repo: status {}", status)));
+        }
+        let default_branch = body["default_branch"].as_str().unwrap_or("main");
+        let (s, ref_body) = self.gh_get(&format!("/repos/{}/{}/git/refs/heads/{}", owner, repo, default_branch))?;
+        if s != 200 {
+            return Err(ProviderError::Config(format!("Failed to get branch ref: status {}", s)));
+        }
+        ref_body["object"]["sha"].as_str()
+            .map(|s| s.to_string())
+            .ok_or_else(|| ProviderError::Config("missing sha in branch ref".into()))
+    }
+
+    pub fn create_orphan_commit(
+        &self,
+        owner: &str,
+        repo: &str,
+        files: &[(String, Vec<u8>)],
+        message: &str,
+    ) -> Result<String, ProviderError> {
+        // 1. Create blobs for each file
+        let mut tree_entries = Vec::new();
+        for (path, content) in files {
+            let blob_body = json!({ "content": content, "encoding": "base64" });
+            let (status, blob_resp) = self.gh_post(
+                &format!("/repos/{}/{}/git/blobs", owner, repo),
+                &blob_body,
+            )?;
+            if status != 201 {
+                return Err(ProviderError::Config(format!("Failed to create blob: status {}", status)));
+            }
+            let sha = blob_resp["sha"].as_str()
+                .ok_or_else(|| ProviderError::Config("missing sha in blob response".into()))?
+                .to_string();
+            tree_entries.push(json!({
+                "path": path,
+                "mode": "100644",
+                "type": "blob",
+                "sha": sha,
+            }));
+        }
+
+        // 2. Create tree
+        let tree_body = json!({ "tree": tree_entries });
+        let (status, tree_resp) = self.gh_post(
+            &format!("/repos/{}/{}/git/trees", owner, repo),
+            &tree_body,
+        )?;
+        if status != 201 {
+            return Err(ProviderError::Config(format!("Failed to create tree: status {}", status)));
+        }
+        let tree_sha = tree_resp["sha"].as_str()
+            .ok_or_else(|| ProviderError::Config("missing sha in tree response".into()))?
+            .to_string();
+
+        // 3. Create commit (no parents = orphan)
+        let commit_body = json!({
+            "message": message,
+            "tree": tree_sha,
+            "parents": [],
+        });
+        let (status, commit_resp) = self.gh_post(
+            &format!("/repos/{}/{}/git/commits", owner, repo),
+            &commit_body,
+        )?;
+        if status != 201 {
+            return Err(ProviderError::Config(format!("Failed to create commit: status {}", status)));
+        }
+        commit_resp["sha"].as_str()
+            .map(|s| s.to_string())
+            .ok_or_else(|| ProviderError::Config("missing sha in commit response".into()))
+    }
+
+    pub fn update_branch(&self, owner: &str, repo: &str, branch: &str, sha: &str) -> Result<(), ProviderError> {
+        let body = json!({ "sha": sha, "force": true });
+        let (status, _) = self.gh_patch(
+            &format!("/repos/{}/{}/git/refs/heads/{}", owner, repo, branch),
+            &body,
+        )?;
+        if status == 200 { Ok(()) }
+        else { Err(ProviderError::Config(format!("Failed to update branch: status {}", status))) }
+    }
+
+    pub fn get_branch_sha(&self, owner: &str, repo: &str, branch: &str) -> Result<String, ProviderError> {
+        let (status, body) = self.gh_get(
+            &format!("/repos/{}/{}/git/refs/heads/{}", owner, repo, branch),
+        )?;
+        if status == 404 {
+            return Err(ProviderError::Config("branch not found".into()));
+        }
+        body["object"]["sha"].as_str()
+            .map(|s| s.to_string())
+            .ok_or_else(|| ProviderError::Config("missing sha in branch ref".into()))
+    }
+
+    pub fn create_tag(&self, owner: &str, repo: &str, tag: &str, sha: &str) -> Result<(), ProviderError> {
+        let body = json!({
+            "ref": format!("refs/tags/{}", tag),
+            "sha": sha,
+        });
+        let (status, _) = self.gh_post(
+            &format!("/repos/{}/{}/git/refs", owner, repo),
+            &body,
+        )?;
+        if status == 201 { Ok(()) }
+        else { Err(ProviderError::Config(format!("Failed to create tag: status {}", status))) }
+    }
+
+    pub fn enable_pages(&self, owner: &str, repo: &str, branch: &str) -> Result<(), ProviderError> {
+        let body = json!({
+            "source": {
+                "branch": branch,
+                "path": "/",
+            }
+        });
+        let (status, _) = self.gh_post(
+            &format!("/repos/{}/{}/pages", owner, repo),
+            &body,
+        )?;
+        if status == 201 || status == 204 || status == 200 { Ok(()) }
+        else {
+            Err(ProviderError::Config(format!("Failed to enable pages: status {}", status)))
+        }
+    }
 }
