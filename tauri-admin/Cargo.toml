@@ -17,7 +17,7 @@ path = "src/main.rs"
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
-tauri = { version = "2", features = [] }
+tauri = { version = "2", features = ["tray-icon"] }
 tauri-plugin-shell = "2"
 tauri-plugin-store = "2"
 tauri-plugin-updater = "2"
@@ -53,6 +53,9 @@ notify = { version = "7", features = [] }
 # P5.1 meant by "encrypts with tauri-plugin-store (uses OS keychain)" —
 # tauri-plugin-store itself writes plain JSON; keyring gives real encryption.
 keyring = { version = "3", default-features = false, features = ["apple-native", "windows-native", "linux-native"] }
+# V2 Phase 13/15 additions:
+thiserror = "1"
+tempfile = "3"
 
 [profile.release]
 strip = true

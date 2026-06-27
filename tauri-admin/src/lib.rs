@@ -25,6 +25,20 @@ pub mod auth;
 pub mod mcp_server;
 pub mod validation;
 
+// V2 modules (Phase 13/15) — deploy providers, generator bundle, preview,
+// keyring credential store, and V2 command handlers.
+pub mod providers;
+pub mod keyring_store;
+pub mod deploy_orchestrator;
+pub mod generator_bundle;
+pub mod preview_server;
+pub mod commands_v2;
+
+// Merged Generator modules — ZIP assembly, HTTP API helpers, embedded engine assets.
+pub mod generator_zip;
+pub mod api_helpers;
+pub mod engine_assets;
+
 // Re-export commonly used types for tests and convenience.
 pub use commands::ProjectRoot;
 

@@ -21,9 +21,21 @@ mod validation;
 mod bundle_engines;
 mod push_update;
 mod updater;
+// V2 modules (Phase 13/15):
+mod providers;
+mod keyring_store;
+mod deploy_orchestrator;
+mod generator_bundle;
+mod preview_server;
+mod commands_v2;
+// Merged Generator modules:
+mod generator_zip;
+mod api_helpers;
+mod engine_assets;
 
 use commands::ProjectRoot;
 use notify::{EventKind, RecursiveMode, Watcher};
+use serde_json::Value;
 use std::path::PathBuf;
 use std::sync::Mutex;
 use std::time::Duration;
@@ -104,6 +116,11 @@ fn handle_admin_request(req: Request<Vec<u8>>, port: u16) -> Response<Vec<u8>> {
         return serve_embedded(include_bytes!(concat!(env!("OUT_DIR"), "/engines/pdf-exporter.html")), "text/html; charset=utf-8");
     }
 
+    // Serve the standalone generator wizard for the iframe
+    if uri.contains("/generator.html") {
+        return serve_embedded(include_str!("../frontend/generator.html").as_bytes(), "text/html; charset=utf-8");
+    }
+
     // Inject the server port into the HTML
     let script = format!("<script>window.__QUIZ_SERVER_PORT = {};</script>", port);
     let mut html = FRONTEND_HTML.to_string();
@@ -179,6 +196,105 @@ fn start_file_watcher(app_handle: tauri::AppHandle, root: PathBuf) {
         .ok();
 }
 
+// ══════════════════════════════════════════════════════════════════════════════
+//  MERGED GENERATOR COMMANDS (from tauri/src/main.rs)
+// ══════════════════════════════════════════════════════════════════════════════
+
+struct GeneratorState {
+    last_project_dir: Mutex<Option<String>>,
+}
+
+#[tauri::command]
+fn generate_zip(config: generator_zip::ProjectConfig) -> Result<Vec<u8>, String> {
+    generator_zip::build_project_zip(&config)
+}
+
+#[tauri::command]
+fn github_verify(token: String) -> api_helpers::GithubUserInfo {
+    api_helpers::github_verify(&token)
+}
+
+#[tauri::command]
+fn github_publish(token: String, config: Value, visibility: String) -> Result<Value, String> {
+    api_helpers::github_publish(&token, &config, &visibility)
+}
+
+#[tauri::command]
+fn netlify_verify(token: String) -> api_helpers::NetlifyUserInfo {
+    api_helpers::netlify_verify(&token)
+}
+
+#[tauri::command]
+fn netlify_publish(token: String, config: Value) -> Result<Value, String> {
+    api_helpers::netlify_publish(&token, &config)
+}
+
+#[tauri::command]
+fn vercel_verify(token: String) -> api_helpers::VercelUserInfo {
+    api_helpers::vercel_verify(&token)
+}
+
+#[tauri::command]
+fn vercel_publish(token: String, config: Value) -> Result<Value, String> {
+    api_helpers::vercel_publish(&token, &config)
+}
+
+#[tauri::command]
+fn download_local(
+    config: generator_zip::ProjectConfig,
+    state: tauri::State<GeneratorState>,
+) -> Result<Value, String> {
+    let zip_bytes = generator_zip::build_project_zip(&config)?;
+    let project_name = if config.project_name.is_empty() {
+        "quiz-project".to_string()
+    } else {
+        config.project_name.clone()
+    };
+    let safe_name = api_helpers::safe_project_slug(&project_name);
+
+    let exe_dir = std::env::current_exe()
+        .ok()
+        .and_then(|p| p.parent().map(|d| d.to_path_buf()))
+        .unwrap_or_else(|| std::env::current_dir().unwrap_or_default());
+    let projects_dir = if exe_dir.join("engines").join("index-engine.js").exists() || exe_dir.join("manifest.webmanifest").exists() {
+        exe_dir.parent().unwrap_or(&exe_dir).to_path_buf()
+    } else {
+        exe_dir
+    };
+    let project_dir = projects_dir.join(&safe_name);
+    std::fs::create_dir_all(&project_dir).map_err(|e| format!("Failed to create dir: {}", e))?;
+
+    let cursor = std::io::Cursor::new(&zip_bytes);
+    let mut archive = zip::ZipArchive::new(cursor).map_err(|e| format!("Failed to read ZIP: {}", e))?;
+    for i in 0..archive.len() {
+        let mut file = archive.by_index(i).map_err(|e| format!("Failed to read ZIP entry: {}", e))?;
+        let outpath = project_dir.join(file.name());
+        if file.name().ends_with('/') {
+            std::fs::create_dir_all(&outpath).ok();
+        } else {
+            if let Some(parent) = outpath.parent() {
+                std::fs::create_dir_all(parent).ok();
+            }
+            let mut outfile = std::fs::File::create(&outpath).map_err(|e| format!("Failed to create file: {}", e))?;
+            std::io::copy(&mut file, &mut outfile).map_err(|e| format!("Failed to extract: {}", e))?;
+        }
+    }
+
+    let dir_str = project_dir.to_string_lossy().to_string();
+    *state.last_project_dir.lock().unwrap() = Some(dir_str.clone());
+
+    Ok(serde_json::json!({
+        "ok": true,
+        "project_dir": dir_str,
+        "project_name": safe_name
+    }))
+}
+
+#[tauri::command]
+fn get_last_project_dir(state: tauri::State<GeneratorState>) -> Option<String> {
+    state.last_project_dir.lock().unwrap().clone()
+}
+
 // ── Main ──────────────────────────────────────────────────────────────────────
 fn main() {
     let project_root = canonicalize_path(get_project_root());
@@ -191,6 +307,9 @@ fn main() {
         // (Anki CSV import, JSON file open/save in the ContentEditor).
         .plugin(tauri_plugin_dialog::init())
         .manage(ProjectRoot(Mutex::new(project_root.clone())))
+        .manage(GeneratorState {
+            last_project_dir: Mutex::new(None),
+        })
         .manage(server)
         .register_uri_scheme_protocol("osler-admin", move |_app, req| {
             handle_admin_request(req, port)
@@ -260,6 +379,28 @@ fn main() {
             commands::save_instance,
             commands::delete_instance,
             commands::load_instances,
+            // V2 commands (Phase 13/15):
+            commands_v2::generator_assemble_bundle,
+            commands_v2::generator_start_preview,
+            commands_v2::generator_stop_preview,
+            commands_v2::generator_preview_status,
+            commands_v2::deploy_v2,
+            commands_v2::deploy_v2_rollback,
+            commands_v2::deploy_v2_history,
+            commands_v2::keyring_set,
+            commands_v2::keyring_get,
+            commands_v2::keyring_delete,
+            commands_v2::keyring_test,
+            // Merged Generator commands:
+            generate_zip,
+            github_verify,
+            github_publish,
+            netlify_verify,
+            netlify_publish,
+            vercel_verify,
+            vercel_publish,
+            download_local,
+            get_last_project_dir,
         ])
         .run(tauri::generate_context!())
         .expect("error while running Osler Admin");

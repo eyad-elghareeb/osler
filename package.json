@@ -14,7 +14,10 @@
     "check": "npm run build && npm test && npm run validate && npm run validate-schemas",
     "export-schemas": "node scripts/export-schemas.js",
     "check-updates": "node -e \"const m=JSON.parse(require('fs').readFileSync('dist/update-manifest.json','utf8')); console.log('Version:', m.version); console.log('Bundle hash:', m.bundleHash); console.log('Engines:', m.engines.length);\"",
-    "update-bundle": "cd tauri-admin && cargo run -- bundle_update"
+    "update-bundle": "cd tauri-admin && cargo run -- bundle_update",
+    "docs:serve": "cd docs && mkdocs serve",
+    "docs:build": "cd docs && mkdocs build",
+    "docs:deploy": "cd docs && mkdocs gh-deploy"
   },
   "devDependencies": {
     "@playwright/test": "^1.48.0",
@@ -26,9 +29,11 @@
     "happy-dom": "^20.10.6",
     "jsdom": "^29.1.1",
     "lighthouse": "^13.4.0",
+    "shepherd.js": "^11.0.0",
     "vitest": "^2.1.0"
   },
   "dependencies": {
-    "firebase": "^12.15.0"
+    "firebase": "^12.15.0",
+    "i18next": "^23.0.0"
   }
 }
