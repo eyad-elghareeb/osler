@@ -308,6 +308,8 @@ export async function importContentPack(input, opts = {}) {
 
   for (const item of parsed.items) {
     const uid = item.meta.uid;
+    // Ensure top-level uid for IndexedDB store (keyPath: 'uid')
+    const storeItem = { ...item, uid: item.uid || uid };
 
     if (localUids.has(uid)) {
       if (onConflict === 'skip') {
@@ -317,7 +319,7 @@ export async function importContentPack(input, opts = {}) {
       if (onConflict === 'overwrite') {
         // Direct put (don't bump updatedAt — preserve the imported item's timestamps)
         try {
-          await put('userContent', item);
+          await put('userContent', storeItem);
           imported++;
         } catch (e) {
           errors.push({ message: `Failed to overwrite ${uid}: ${e.message}` });
@@ -328,9 +330,10 @@ export async function importContentPack(input, opts = {}) {
         // Generate a new UID with an import suffix
         const newUid = `${uid}-imp-${Date.now().toString(36)}`;
         const renamedItem = {
-          ...item,
+          ...storeItem,
+          uid: newUid,
           meta: {
-            ...item.meta,
+            ...storeItem.meta,
             uid: newUid,
             // Mark as imported (don't bump updatedAt — preserve original)
             importedFrom: uid,
@@ -349,7 +352,7 @@ export async function importContentPack(input, opts = {}) {
 
     // No conflict — direct put
     try {
-      await put('userContent', item);
+      await put('userContent', storeItem);
       imported++;
     } catch (e) {
       errors.push({ message: `Failed to import ${uid}: ${e.message}` });

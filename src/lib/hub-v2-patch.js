@@ -83,11 +83,3 @@ export function cleanupV2Engine() {
   }
 }
 
-// Auto-init on DOMContentLoaded (browser only)
-if (typeof document !== 'undefined') {
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', initV2Hub);
-  } else {
-    initV2Hub();
-  }
-}

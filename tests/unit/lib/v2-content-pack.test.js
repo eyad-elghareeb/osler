@@ -44,7 +44,7 @@ describe('content-pack (V2)', () => {
     it('builds a pack with correct format metadata', () => {
       const items = [{
         type: 'quiz',
-        meta: { uid: 'q1', title: 'Test Quiz', schemaVersion: '1.0', createdAt: '...', updatedAt: '...', lang: 'en' },
+        meta: { uid: 'q1', title: 'Test Quiz', schemaVersion: '1.0', createdAt: '2026-06-27T00:00:00Z', updatedAt: '2026-06-27T00:00:00Z', lang: 'en' },
         questions: [],
       }];
 
@@ -71,10 +71,12 @@ describe('content-pack (V2)', () => {
         exportedBy: { uid: 'u1', displayName: 'User' },
         items: [{
           type: 'quiz',
-          meta: { uid: 'q1', title: 'Q1', schemaVersion: '1.0', createdAt: '...', updatedAt: '...', lang: 'en' },
-          settings: {},
+          meta: { uid: 'q1', title: 'Q1', schemaVersion: '1.0', createdAt: '2026-06-27T00:00:00Z', updatedAt: '2026-06-27T00:00:00Z', lang: 'en' },
           questions: [{
-            id: 'qq1', stem: '?', options: [{ id: 'a', text: 'A', correct: true }],
+            id: 'qq1',
+            question: 'What is the capital of France?',
+            options: ['Paris', 'London'],
+            correct: 0,
           }],
         }],
       });
@@ -125,8 +127,8 @@ describe('content-pack (V2)', () => {
         packVersion: '1.0',
         exportedAt: '...',
         items: [
-          { type: 'quiz', meta: { uid: 'dup', title: 'A', schemaVersion: '1.0', createdAt: '...', updatedAt: '...', lang: 'en' }, questions: [] },
-          { type: 'quiz', meta: { uid: 'dup', title: 'B', schemaVersion: '1.0', createdAt: '...', updatedAt: '...', lang: 'en' }, questions: [] },
+          { type: 'quiz', meta: { uid: 'dup', title: 'A', schemaVersion: '1.0', createdAt: '2026-06-27T00:00:00Z', updatedAt: '2026-06-27T00:00:00Z', lang: 'en' }, questions: [] },
+          { type: 'quiz', meta: { uid: 'dup', title: 'B', schemaVersion: '1.0', createdAt: '2026-06-27T00:00:00Z', updatedAt: '2026-06-27T00:00:00Z', lang: 'en' }, questions: [] },
         ],
       });
 
@@ -146,7 +148,7 @@ describe('content-pack (V2)', () => {
         exportedAt: '2026-06-27T00:00:00Z',
         items: [{
           type: 'flashcard',
-          meta: { uid: 'fc-001', title: 'Cards', schemaVersion: '1.0', createdAt: '...', updatedAt: '...', lang: 'en' },
+          meta: { uid: 'fc-001', title: 'Cards', schemaVersion: '1.0', createdAt: '2026-06-27T00:00:00Z', updatedAt: '2026-06-27T00:00:00Z', lang: 'en' },
           settings: {},
           cards: [{ id: 'c1', front: 'F', back: 'B' }],
         }],
@@ -157,6 +159,7 @@ describe('content-pack (V2)', () => {
       expect(result.imported).toBe(1);
 
       const stored = await getAll('userContent');
+
       expect(stored).toHaveLength(1);
       expect(stored[0].uid).toBe('fc-001');
     });
@@ -174,7 +177,7 @@ describe('content-pack (V2)', () => {
         exportedAt: '2026-06-27T00:00:00Z',
         items: [{
           type: 'flashcard',
-          meta: { uid: 'fc-001', title: 'New', schemaVersion: '1.0', createdAt: '...', updatedAt: '...', lang: 'en' },
+          meta: { uid: 'fc-001', title: 'New', schemaVersion: '1.0', createdAt: '2026-06-27T00:00:00Z', updatedAt: '2026-06-27T00:00:00Z', lang: 'en' },
           cards: [],
         }],
       });
@@ -197,7 +200,7 @@ describe('content-pack (V2)', () => {
         exportedAt: '2026-06-27T00:00:00Z',
         items: [{
           type: 'flashcard',
-          meta: { uid: 'fc-001', title: 'New Title', schemaVersion: '1.0', createdAt: '...', updatedAt: '...', lang: 'en' },
+          meta: { uid: 'fc-001', title: 'New Title', schemaVersion: '1.0', createdAt: '2026-06-27T00:00:00Z', updatedAt: '2026-06-27T00:00:00Z', lang: 'en' },
           cards: [],
         }],
       });
@@ -222,7 +225,7 @@ describe('content-pack (V2)', () => {
         exportedAt: '2026-06-27T00:00:00Z',
         items: [{
           type: 'flashcard',
-          meta: { uid: 'fc-001', title: 'Imported', schemaVersion: '1.0', createdAt: '...', updatedAt: '...', lang: 'en' },
+          meta: { uid: 'fc-001', title: 'Imported', schemaVersion: '1.0', createdAt: '2026-06-27T00:00:00Z', updatedAt: '2026-06-27T00:00:00Z', lang: 'en' },
           cards: [],
         }],
       });

@@ -26,6 +26,7 @@ import {
   getSelectedEngines,
   selectContent,
   addUpload,
+  removeUpload,
   setTheme,
   setAuthMode,
   validateFirebaseConfig,

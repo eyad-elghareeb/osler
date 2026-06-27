@@ -357,7 +357,7 @@
       if (EngineShared._html2pdfLoaded) return;
       EngineShared._html2pdfLoaded = true;
       var s = document.createElement('script');
-      s.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.4/html2pdf.bundle.min.js';
+      s.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.3/html2pdf.bundle.min.js';
       s.onload = function() {
         EngineShared._html2pdfQueue.splice(0).forEach(function(f) { try { f(); } catch(e) {} });
       };

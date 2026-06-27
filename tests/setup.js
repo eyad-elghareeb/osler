@@ -1,5 +1,9 @@
 import 'fake-indexeddb/auto';
+import { IDBFactory } from 'fake-indexeddb';
 import { vi } from 'vitest';
+
+// Each instance provides an isolated in-memory IndexedDB.
+export class FakedDB extends IDBFactory {}
 
 const store = {};
 
