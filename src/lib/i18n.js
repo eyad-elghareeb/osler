@@ -14,8 +14,8 @@
    reload requires a frontend framework, which V2 explicitly avoids).
    ================================================================ */
 
-import en from '../i18n/en.json';
-import ar from '../i18n/ar.json';
+import en from '../i18n/en.json' with { type: 'json' };
+import ar from '../i18n/ar.json' with { type: 'json' };
 
 const BUNDLES = { en, ar };
 const SUPPORTED_LANGS = ['en', 'ar'];
