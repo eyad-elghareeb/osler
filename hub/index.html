@@ -8,6 +8,17 @@
   <link rel="manifest" href="../manifest.webmanifest">
   <link rel="stylesheet" href="../dist/index-engine.css">
   <link rel="stylesheet" href="../dist/shared.css">
+  <script type="importmap">
+  {
+    "imports": {
+      "firebase/app": "https://www.gstatic.com/firebasejs/12.15.0/firebase-app.js",
+      "firebase/auth": "https://www.gstatic.com/firebasejs/12.15.0/firebase-auth.js",
+      "firebase/firestore": "https://www.gstatic.com/firebasejs/12.15.0/firebase-firestore.js",
+      "firebase/storage": "https://www.gstatic.com/firebasejs/12.15.0/firebase-storage.js",
+      "firebase/analytics": "https://www.gstatic.com/firebasejs/12.15.0/firebase-analytics.js"
+    }
+  }
+  </script>
   <style>
     body { margin: 0; padding: 0; background: var(--bg); color: var(--text); font-family: 'Outfit', sans-serif; }
     .topbar { position: sticky; top: 0; z-index: 100; display: flex; align-items: center; height: 48px; padding: 0 1rem; background: var(--surface); border-bottom: 1px solid var(--border); }
