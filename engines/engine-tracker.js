@@ -346,7 +346,7 @@
         uid:         uid,
         title:       cfg.title || document.title,
         timestamp:   Date.now(),
-        totalQs:     typeof questionBank !== 'undefined' ? questionBank.length : (existingData ? Math.max(existingData.totalQs || 0, qs.length) : qs.length),
+        totalQs:     questionBank ? questionBank.length : (existingData ? Math.max(existingData.totalQs || 0, qs.length) : qs.length),
         wrongCount:  wrongQs.length,
         flaggedCount: flaggedQs.length,
         wrong:       wrongQs,

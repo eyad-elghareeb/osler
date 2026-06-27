@@ -352,17 +352,25 @@
       EngineShared._pdfmakeQueue.push(cb);
       if (EngineShared._pdfmakeLoaded) return;
       EngineShared._pdfmakeLoaded = true;
-      [].forEach.call([
+      var loaded = 0;
+      var total = 2;
+      function onLoaded() {
+        loaded++;
+        if (loaded >= total) {
+          EngineShared._pdfmakeQueue.splice(0).forEach(function(f) { try { f(); } catch(e) {} });
+        }
+      }
+      var urls = [
         'https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.10/pdfmake.min.js',
         'https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.10/vfs_fonts.js'
-      ], function(src) {
+      ];
+      for (var i = 0; i < urls.length; i++) {
         var s = document.createElement('script');
-        s.src = src;
-        s.onload = function() {
-          EngineShared._pdfmakeQueue.splice(0).forEach(function(f) { try { f(); } catch(e) {} });
-        };
+        s.src = urls[i];
+        s.onload = onLoaded;
+        s.onerror = onLoaded;
         document.head.appendChild(s);
-      });
+      }
     },
 
     _htmlToPdfContent: function(html) {
@@ -577,10 +585,19 @@
         return;
       }
       var url = candidates[idx++];
-      import(url).then(function(m) {
-        wireFn(m);
+      // Use fetch() instead of direct import() to avoid MIME-type restrictions
+      // when the dev server returns text/html for .js files.
+      fetch(url).then(function(r) {
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        return r.text();
+      }).then(function(code) {
+        var blob = new Blob([code], { type: 'application/javascript' });
+        var blobUrl = URL.createObjectURL(blob);
+        return import(blobUrl).then(function(m) {
+          URL.revokeObjectURL(blobUrl);
+          wireFn(m);
+        });
       }).catch(function(e) {
-        // Try the next candidate. Common cause: 404 in production layout.
         if (idx < candidates.length) {
           tryNext();
         } else {

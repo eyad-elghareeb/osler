@@ -1723,7 +1723,7 @@ function confirmSubmit() {
     state: state,
     keys: KEYS,
     sessionIndices: typeof SESSION_QUESTION_INDICES !== 'undefined' ? SESSION_QUESTION_INDICES : null,
-    questionBank: typeof QUESTION_BANK !== 'undefined' ? QUESTION_BANK : null,
+    questionBank: window.QUESTION_BANK,
     onNavigate: EngineShared.navigateToIndex,
     onToast: EngineShared.showToast
   });
