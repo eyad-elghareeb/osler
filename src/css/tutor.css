@@ -83,6 +83,7 @@
 
 [dir="rtl"] .tutor-modal {
   border-radius: 12px 12px 0 0; /* round the opposite side in RTL */
+  animation-name: tutor-slide-in-rtl;
 }
 
 @keyframes tutor-slide-in {
@@ -90,7 +91,7 @@
   to { transform: translateX(0); }
 }
 
-[dir="rtl"] @keyframes tutor-slide-in {
+@keyframes tutor-slide-in-rtl {
   from { transform: translateX(-100%); }
   to { transform: translateX(0); }
 }

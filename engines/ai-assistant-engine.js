@@ -508,7 +508,7 @@
         var thinkingEl = _$('ai-thinking-msg');
         if (thinkingEl) thinkingEl.remove();
         errorEl.className = 'show';
-        errorEl.textContent = ''+EngineShared.icon('alert-triangle')+' ' + friendlyAiError(err);
+        errorEl.innerHTML = ''+EngineShared.icon('alert-triangle')+' ' + EngineShared.escHtml(friendlyAiError(err));
       })
       .finally(function () {
         sendBtn.disabled = false;
@@ -648,7 +648,7 @@
   function _testSettingsKey() {
     var value = (_$('ai-key-input').value || '').trim();
     if (!value) {
-      _$('ai-settings-status').textContent = ''+EngineShared.icon('x')+' No key entered.';
+      _$('ai-settings-status').innerHTML = ''+EngineShared.icon('x')+' No key entered.';
       return;
     }
     _$('ai-settings-status').textContent = 'Testing...';
@@ -656,13 +656,13 @@
       .then(function (r) { return r.json(); })
       .then(function (data) {
         if (data && data.models && data.models.length) {
-          _$('ai-settings-status').textContent = ''+EngineShared.icon('check')+' Key is valid (' + data.models.length + ' models available).';
+          _$('ai-settings-status').innerHTML = ''+EngineShared.icon('check')+' Key is valid (' + data.models.length + ' models available).';
         } else {
-          _$('ai-settings-status').textContent = ''+EngineShared.icon('x')+' Unexpected response. Check the key.';
+          _$('ai-settings-status').innerHTML = ''+EngineShared.icon('x')+' Unexpected response. Check the key.';
         }
       })
       .catch(function () {
-        _$('ai-settings-status').textContent = ''+EngineShared.icon('x')+' Connection failed. Check key or network.';
+        _$('ai-settings-status').innerHTML = ''+EngineShared.icon('x')+' Connection failed. Check key or network.';
       });
   }
 
@@ -741,7 +741,7 @@
         // Add regenerate button
         var regenBtn = document.createElement('button');
         regenBtn.className = 'regenerate-btn';
-        regenBtn.textContent = ''+EngineShared.icon('refresh-cw')+' Regenerate';
+        regenBtn.innerHTML = ''+EngineShared.icon('refresh-cw')+' Regenerate';
         regenBtn.addEventListener('click', function () {
           _notesGenerated = false;
           _generateNotes(_notesQuestions, _notesAnswers);

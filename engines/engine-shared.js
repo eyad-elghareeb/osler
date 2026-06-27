@@ -8,7 +8,13 @@
 
   var _cs = document.currentScript;
   var ENGINE_BASE = _cs ? _cs.src.replace(/[^\/]*$/, '') : '';
-  var ROOT_BASE = ENGINE_BASE.replace(/[^\/]+\/$/, '');
+  var ROOT_BASE = (function(base) {
+    var s = base.replace(/\/$/, '');
+    var i = s.lastIndexOf('/');
+    var protoEnd = base.indexOf('://') + 3;
+    var firstSlash = base.indexOf('/', protoEnd);
+    return (i >= firstSlash && i > 0) ? s.substring(0, i + 1) : base;
+  })(ENGINE_BASE);
 
   /* ── CSS variables (injected inline so they're available synchronously) ──
      Phase 6.5 fix #25 (partial): the inline CSS_VARS block previously
@@ -160,7 +166,7 @@
       var t = document.getElementById('toast');
       t.innerHTML = '';
       var msgSpan = document.createElement('span');
-      msgSpan.textContent = msg;
+      msgSpan.innerHTML = msg;
       msgSpan.style.flex = '1';
       t.appendChild(msgSpan);
       if (actions.length > 0) {
@@ -337,7 +343,21 @@
     return next();
   },
 
-  /* ── Keyboard shortcuts ──────────────────────────────────
+  /* ── PDF export (vector-based via browser print) ─────── */
+    exportToPDF: function(containerOrHtml, filename) {
+      var html = typeof containerOrHtml === 'string' ? containerOrHtml : containerOrHtml.innerHTML;
+      var win = window.open('', '_blank');
+      if (!win) { EngineShared.showToast('Pop-up blocked. Allow pop-ups for PDF export.'); return; }
+      win.document.write('<!DOCTYPE html><html><head><meta charset="utf-8"><title>' + (filename || 'export') + '</title>');
+      win.document.write('<style>html,body{margin:0;padding:0}body{font-family:Arial,Helvetica,sans-serif;color:#000;padding:20px}@page{margin:15mm}img{max-width:100%}table{border-collapse:collapse;width:100%}td,th{border:1px solid #ccc;padding:6px;text-align:left;font-size:11px}.pdf-export-section{page-break-inside:avoid}.pdf-chunk{page-break-after:always;margin-bottom:20px}.no-break{page-break-inside:avoid}@media print{body{padding:0}}</style></head><body>');
+      win.document.write('<div class="pdf-chunk">' + html + '</div>');
+      win.document.write('</body></html>');
+      win.document.close();
+      win.focus();
+      setTimeout(function() { win.print(); }, 300);
+    },
+
+    /* ── Keyboard shortcuts ──────────────────────────────────
      Phase 6.5 fix #22: the duplicated 40-line setupShortcuts implementation
      is removed. The bridge below dynamically imports keyboard.js and replaces
      EngineShared.setupShortcuts with the canonical implementation. If the

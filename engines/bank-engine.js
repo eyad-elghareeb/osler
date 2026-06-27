@@ -2,11 +2,10 @@
    bank-engine.js  —  Shared engine for all question-bank files.
    Load this after defining BANK_CONFIG and QUESTION_BANK globals.
    ================================================================ */
-(function () {
-  'use strict';
+'use strict';
 
-  /* ── Compute base path from our own script URL ──────────────── */
-  var ENGINE_BASE = EngineShared.ENGINE_BASE || (window.__BANK_ENGINE_BASE || window.__QUIZ_ENGINE_BASE || '');
+/* ── Compute base path from our own script URL ──────────────── */
+var ENGINE_BASE = EngineShared.ENGINE_BASE || (window.__BANK_ENGINE_BASE || window.__QUIZ_ENGINE_BASE || '');
 
   // Bridge EngineShared functions to global scope for onclick="" attributes in template
   window.toggleTheme = EngineShared.toggleTheme;
@@ -112,10 +111,9 @@
     </svg>
     Back to Hub
   </a>
-  <button type="button" class="theme-btn-fixed theme-toggle-btn" onclick="toggleTheme()" title="Toggle theme" aria-label="Toggle theme">'+EngineShared.icon('sun')+'</button>
+  <button type="button" class="theme-btn-fixed theme-toggle-btn" onclick="toggleTheme()" title="Toggle theme" aria-label="Toggle theme">${EngineShared.icon('sun')}</button>
 
   <div class="start-card">
-<div class="start-icon" id="start-icon">'+EngineShared.icon('archive')+'</div>
     <h1 id="bank-title">Question Bank</h1>
     <p class="subtitle" id="bank-subtitle">A smart question bank that shows you fresh questions every session.</p>
 
@@ -173,13 +171,13 @@
         <label class="mode-label">
           <input type="radio" name="quiz-mode" value="exam" checked>
           <div class="mode-option mode-selected">
-            <div class="mo-title">'+EngineShared.icon('edit')+' Exam Mode</div>
+            <div class="mo-title">${EngineShared.icon('clock')} Exam Mode</div>
           </div>
         </label>
         <label class="mode-label">
           <input type="radio" name="quiz-mode" value="learning">
           <div class="mode-option">
-            <div class="mo-title">'+EngineShared.icon('book')+' Learning Mode</div>
+            <div class="mo-title">${EngineShared.icon('book')} Learning Mode</div>
           </div>
         </label>
       </div>
@@ -192,20 +190,20 @@
         <label class="mode-label">
           <input type="radio" name="quiz-order" value="sequential" checked>
           <div class="mode-option mode-order-selected">
-            <div class="mo-title">'+EngineShared.icon('clipboard')+' Sequential</div>
+            <div class="mo-title">${EngineShared.icon('clipboard')} Sequential</div>
           </div>
         </label>
         <label class="mode-label">
           <input type="radio" name="quiz-order" value="random">
           <div class="mode-option">
-            <div class="mo-title">'+EngineShared.icon('shuffle')+' Random</div>
+            <div class="mo-title">${EngineShared.icon('shuffle')} Random</div>
           </div>
         </label>
       </div>
     </div>
 
     <button type="button" class="btn-start" onclick="startQuiz()">Start Session →</button>
-    <button type="button" class="reset-bank-btn" onclick="resetBankProgress()">'+EngineShared.icon('trash-2')+' Reset Bank Progress</button>
+    <button type="button" class="reset-bank-btn" onclick="resetBankProgress()">${EngineShared.icon('trash-2')} Reset Bank Progress</button>
   </div>
 </div>
 
@@ -220,10 +218,10 @@
       <span id="timer-text">00:00</span>
     </div>
     <div class="topbar-actions">
-      <div class="icon-btn hl-mode-btn" role="button" tabindex="0" onclick="toggleHighlighterMode()" title="Highlighter Mode (H)" aria-label="Highlighter Mode (H)">'+EngineShared.icon('pen-tool')+'<span class="hl-last-dot" style="background:rgba(255,213,79,0.8);"></span><div class="hl-color-picker" id="hl-color-picker-1"><button type="button" class="hl-color-btn cb-1 selected" onclick="hlSelectColor(1); event.stopPropagation();" title="Yellow (1)" aria-label="Yellow (1)"></button><button type="button" class="hl-color-btn cb-2" onclick="hlSelectColor(2); event.stopPropagation();" title="Green (2)" aria-label="Green (2)"></button><button type="button" class="hl-color-btn cb-3" onclick="hlSelectColor(3); event.stopPropagation();" title="Blue (3)" aria-label="Blue (3)"></button><button type="button" class="hl-color-btn cb-4" onclick="hlSelectColor(4); event.stopPropagation();" title="Red (4)" aria-label="Red (4)"></button><button type="button" class="hl-erase-btn" onclick="hlSelectColor(0); event.stopPropagation();" title="Eraser" aria-label="Eraser">'+EngineShared.icon('eraser')+'</button><button type="button" class="hl-close-btn" onclick="disableHighlighterMode(); event.stopPropagation();" title="Close Highlighter" aria-label="Close Highlighter">'+EngineShared.icon('x')+'</button></div></div>
-      <button type="button" class="icon-btn" onclick="openAiAssistant()" title="Ask AI (needs internet)" aria-label="Ask AI (needs internet)">'+EngineShared.icon('bot')+'</button>
-      <a href="#" class="icon-btn" title="Back to Hub" onclick="navigateToIndex(event); return false;">'+EngineShared.icon('home')+'</a>
-      <button type="button" class="icon-btn theme-toggle-btn" onclick="toggleTheme()" title="Toggle theme" aria-label="Toggle theme">'+EngineShared.icon('sun')+'</button>
+      <div class="icon-btn hl-mode-btn" role="button" tabindex="0" onclick="toggleHighlighterMode()" title="Highlighter Mode (H)" aria-label="Highlighter Mode (H)">${EngineShared.icon('pen-tool')}<span class="hl-last-dot" style="background:rgba(255,213,79,0.8);"></span><div class="hl-color-picker" id="hl-color-picker-1"><button type="button" class="hl-color-btn cb-1 selected" onclick="hlSelectColor(1); event.stopPropagation();" title="Yellow (1)" aria-label="Yellow (1)"></button><button type="button" class="hl-color-btn cb-2" onclick="hlSelectColor(2); event.stopPropagation();" title="Green (2)" aria-label="Green (2)"></button><button type="button" class="hl-color-btn cb-3" onclick="hlSelectColor(3); event.stopPropagation();" title="Blue (3)" aria-label="Blue (3)"></button><button type="button" class="hl-color-btn cb-4" onclick="hlSelectColor(4); event.stopPropagation();" title="Red (4)" aria-label="Red (4)"></button><button type="button" class="hl-erase-btn" onclick="hlSelectColor(0); event.stopPropagation();" title="Eraser" aria-label="Eraser">${EngineShared.icon('eraser')}</button><button type="button" class="hl-close-btn" onclick="disableHighlighterMode(); event.stopPropagation();" title="Close Highlighter" aria-label="Close Highlighter">${EngineShared.icon('x')}</button></div></div>
+      <button type="button" class="icon-btn" onclick="openAiAssistant()" title="Ask AI (needs internet)" aria-label="Ask AI (needs internet)">${EngineShared.icon('bot')}</button>
+      <a href="#" class="icon-btn" title="Back to Hub" onclick="navigateToIndex(event); return false;">${EngineShared.icon('home')}</a>
+      <button type="button" class="icon-btn theme-toggle-btn" onclick="toggleTheme()" title="Toggle theme" aria-label="Toggle theme">${EngineShared.icon('sun')}</button>
       <button type="button" class="icon-btn danger" onclick="confirmResetProgress()" title="Reset Progress" aria-label="Reset Progress">↻</button>
     </div>
   </div>
@@ -256,12 +254,12 @@
 <!-- ═══════════════════════════ RESULTS SCREEN ═══════════════════════════ -->
 <div id="result-screen" class="screen">
   <div class="result-topbar">
-    <h2>'+EngineShared.icon('bar-chart')+' Session Results</h2>
+    <h2>${EngineShared.icon('bar-chart')} Session Results</h2>
     <div class="topbar-actions">
-      <div class="icon-btn hl-mode-btn" role="button" tabindex="0" onclick="toggleHighlighterMode()" title="Highlighter Mode (H)" aria-label="Highlighter Mode (H)">'+EngineShared.icon('pen-tool')+'<span class="hl-last-dot" style="background:rgba(255,213,79,0.8);"></span><div class="hl-color-picker" id="hl-color-picker-2"><button type="button" class="hl-color-btn cb-1 selected" onclick="hlSelectColor(1); event.stopPropagation();" title="Yellow (1)" aria-label="Yellow (1)"></button><button type="button" class="hl-color-btn cb-2" onclick="hlSelectColor(2); event.stopPropagation();" title="Green (2)" aria-label="Green (2)"></button><button type="button" class="hl-color-btn cb-3" onclick="hlSelectColor(3); event.stopPropagation();" title="Blue (3)" aria-label="Blue (3)"></button><button type="button" class="hl-color-btn cb-4" onclick="hlSelectColor(4); event.stopPropagation();" title="Red (4)" aria-label="Red (4)"></button><button type="button" class="hl-erase-btn" onclick="hlSelectColor(0); event.stopPropagation();" title="Eraser" aria-label="Eraser">'+EngineShared.icon('eraser')+'</button><button type="button" class="hl-close-btn" onclick="disableHighlighterMode(); event.stopPropagation();" title="Close Highlighter" aria-label="Close Highlighter">'+EngineShared.icon('x')+'</button></div></div>
-      <button type="button" class="icon-btn" onclick="openAiAssistant()" title="Ask AI (needs internet)" aria-label="Ask AI (needs internet)">'+EngineShared.icon('bot')+'</button>
-      <a href="#" class="icon-btn" title="Back to Hub" onclick="navigateToIndex(event); return false;">'+EngineShared.icon('home')+'</a>
-      <button type="button" class="icon-btn theme-toggle-btn" onclick="toggleTheme()" title="Toggle theme" aria-label="Toggle theme">'+EngineShared.icon('sun')+'</button>
+      <div class="icon-btn hl-mode-btn" role="button" tabindex="0" onclick="toggleHighlighterMode()" title="Highlighter Mode (H)" aria-label="Highlighter Mode (H)">${EngineShared.icon('pen-tool')}<span class="hl-last-dot" style="background:rgba(255,213,79,0.8);"></span><div class="hl-color-picker" id="hl-color-picker-2"><button type="button" class="hl-color-btn cb-1 selected" onclick="hlSelectColor(1); event.stopPropagation();" title="Yellow (1)" aria-label="Yellow (1)"></button><button type="button" class="hl-color-btn cb-2" onclick="hlSelectColor(2); event.stopPropagation();" title="Green (2)" aria-label="Green (2)"></button><button type="button" class="hl-color-btn cb-3" onclick="hlSelectColor(3); event.stopPropagation();" title="Blue (3)" aria-label="Blue (3)"></button><button type="button" class="hl-color-btn cb-4" onclick="hlSelectColor(4); event.stopPropagation();" title="Red (4)" aria-label="Red (4)"></button><button type="button" class="hl-erase-btn" onclick="hlSelectColor(0); event.stopPropagation();" title="Eraser" aria-label="Eraser">${EngineShared.icon('eraser')}</button><button type="button" class="hl-close-btn" onclick="disableHighlighterMode(); event.stopPropagation();" title="Close Highlighter" aria-label="Close Highlighter">${EngineShared.icon('x')}</button></div></div>
+      <button type="button" class="icon-btn" onclick="openAiAssistant()" title="Ask AI (needs internet)" aria-label="Ask AI (needs internet)">${EngineShared.icon('bot')}</button>
+      <a href="#" class="icon-btn" title="Back to Hub" onclick="navigateToIndex(event); return false;">${EngineShared.icon('home')}</a>
+      <button type="button" class="icon-btn theme-toggle-btn" onclick="toggleTheme()" title="Toggle theme" aria-label="Toggle theme">${EngineShared.icon('sun')}</button>
     </div>
   </div>
   <div class="result-body">
@@ -324,15 +322,15 @@
 
     <div class="result-tabs">
       <button type="button" class="tab-btn active" onclick="filterResults('all', this)">All Questions</button>
-      <button type="button" class="tab-btn" onclick="filterResults('correct', this)">'+EngineShared.icon('check')+' Correct</button>
-      <button type="button" class="tab-btn" onclick="filterResults('wrong', this)">'+EngineShared.icon('x')+' Wrong</button>
+      <button type="button" class="tab-btn" onclick="filterResults('correct', this)">${EngineShared.icon('check')} Correct</button>
+      <button type="button" class="tab-btn" onclick="filterResults('wrong', this)">${EngineShared.icon('x')} Wrong</button>
       <button type="button" class="tab-btn" onclick="filterResults('skipped', this)">— Skipped</button>
-      <button type="button" class="tab-btn" onclick="filterResults('flagged', this)">'+EngineShared.icon('flag')+' Flagged</button>
+      <button type="button" class="tab-btn" onclick="filterResults('flagged', this)">${EngineShared.icon('flag')} Flagged</button>
     </div>
     <div class="result-list" id="result-list"></div>
     <div class="result-actions">
       <button type="button" class="btn-restart" onclick="onNewSessionClick(event)">↺ New Session</button>
-      <a href="#" class="btn-restart btn-secondary" onclick="navigateToIndex(event); return false;">'+EngineShared.icon('home')+' Return to Hub</a>
+      <a href="#" class="btn-restart btn-secondary" onclick="navigateToIndex(event); return false;">${EngineShared.icon('home')} Return to Hub</a>
     </div>
   </div>
 </div>
@@ -372,7 +370,6 @@
       navigator.serviceWorker.register(ENGINE_BASE + 'sw.js').catch(function () {});
     });
   }
-})();
 
 /* ================================================================
    BANK ENGINE
@@ -805,7 +802,7 @@ function applyBulkHighlights(sessionIdx) {
       btn.type = 'button';
       btn.className = 'st-toggle-btn' + (stMap[i] ? ' active' : '');
       btn.title = 'Strikethrough (S)';
-      btn.textContent = ''+EngineShared.icon('x')+'';
+      btn.innerHTML = ''+EngineShared.icon('x')+'';
       btn.onclick = (function(ci) { return function(e) { e.preventDefault(); e.stopPropagation(); toggleStrikethrough(state.current, ci); }; })(i);
       label.appendChild(btn);
     });
@@ -1633,7 +1630,7 @@ function toggleFlag(idx) {
   updateNavGrid(idx);
   updateNavStats();
   EngineShared.debounceSave(saveProgress);
-  EngineShared.showToast(state.flagged[idx] ? `'+EngineShared.icon('flag')+' Question ${idx+1} flagged` : `Question ${idx+1} unflagged`);
+  EngineShared.showToast(state.flagged[idx] ? `${EngineShared.icon('flag')} Question ${idx+1} flagged` : `Question ${idx+1} unflagged`);
 }
 
 /* ─── NAV GRID ───────────────────────────────────────────────── */
@@ -1784,7 +1781,7 @@ function buildResults() {
   else if(pct>=60) grade=''+EngineShared.icon('thumbs-up')+' Good Effort!';
   else if(pct>=40) grade=''+EngineShared.icon('book')+' Keep Studying!';
   else grade=''+EngineShared.icon('zap')+' Don\'t Give Up!';
-  document.getElementById('res-grade').textContent = grade;
+  document.getElementById('res-grade').innerHTML = grade;
 
   var notesPlaceholder = document.getElementById('study-notes-placeholder');
   if (!notesPlaceholder) {
@@ -2179,45 +2176,8 @@ function exportToPDF() {
     }
   });
 
-  var filename = title.replace(/[^a-z0-9]/gi, '_').toLowerCase() + '_results.pdf';
-  var opt = {
-    margin:      [10, 10, 10, 10],
-    filename:    filename,
-    image:       { type: 'jpeg', quality: 0.97 },
-    html2canvas: { scale: 2, useCORS: true, logging: false },
-    jsPDF:       { unit: 'mm', format: 'a4', orientation: 'portrait' }
-  };
-
-  function runExport() {
-    if (typeof html2pdf === 'undefined') {
-      EngineShared.showToast('PDF library still loading, try again in a moment');
-      return;
-    }
-    try {
-      var children = Array.from(container.children);
-      if (children.length === 0) return;
-
-      var worker = html2pdf().set(opt).from(children[0]).toPdf();
-
-      children.slice(1).forEach(function(child) {
-        worker = worker.get('pdf').then(function(pdf) {
-          pdf.addPage();
-        }).from(child).toContainer().toCanvas().toPdf();
-      });
-
-      worker.save().catch(function(err) { console.error('PDF export error:', err); });
-    } catch (err) { console.error('PDF export error:', err); }
-  }
-
-  if (typeof html2pdf !== 'undefined') {
-    runExport();
-  } else {
-    var s = document.createElement('script');
-    s.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js';
-    s.onload  = runExport;
-    s.onerror = function() { EngineShared.showToast('Failed to load PDF library'); };
-    document.head.appendChild(s);
-  }
+  var filename = title.replace(/[^a-z0-9]/gi, '_').toLowerCase() + '_results';
+  EngineShared.exportToPDF(container, filename);
 }
 
 /* ─── BOOT ───────────────────────────────────────────────────── */
@@ -2354,7 +2314,7 @@ window.exportTrackerToPDF = function() {
 
   var container = document.createElement('div');
 
-  var currentChunkHtml = '<h1 style="font-size:22px;margin:0 0 4px;font-family:Georgia,serif;">'+EngineShared.icon('bar-chart')+' Question Tracker</h1>'
+  var currentChunkHtml = '<h1 style="font-size:22px;margin:0 0 4px;font-family:Georgia,serif;">' + EngineShared.icon('bar-chart') + ' Question Tracker</h1>'
     + '<p style="color:#78716c;margin:0 0 4px;font-size:13px;">Scope: ' + scopeLabel + ' &mdash; ' + now + '</p>'
     + '<div style="background:#f8f6f1;border-radius:12px;padding:18px 20px;margin-bottom:22px;border:1px solid #d0ccc5;display:flex;gap:18px;align-items:center;flex-wrap:wrap;">'
     +   '<div style="flex:1;min-width:180px;">'
@@ -2427,28 +2387,8 @@ window.exportTrackerToPDF = function() {
     container.appendChild(chunkDiv);
   }
 
-  var filename = 'question_tracker_' + scopeLabel.replace(/[^a-z0-9]/gi, '_').toLowerCase() + '.pdf';
-  var opt = { margin: [10,10,10,10], filename: filename, image: { type: 'jpeg', quality: 0.97 }, html2canvas: { scale: 2, useCORS: true, logging: false }, jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' } };
-
-  function runExport() {
-    var children = Array.from(container.children);
-    if (children.length === 0) return;
-    var worker = html2pdf().set(opt).from(children[0]).toPdf();
-    children.slice(1).forEach(function(child) {
-      worker = worker.get('pdf').then(function(pdf) { pdf.addPage(); }).from(child).toContainer().toCanvas().toPdf();
-    });
-    worker.save().catch(function() {});
-  }
-
-  if (typeof html2pdf !== 'undefined') {
-    runExport();
-  } else {
-    var s = document.createElement('script');
-    s.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js';
-    s.onload  = runExport;
-    s.onerror = function() { EngineShared.showToast('Failed to load PDF library'); };
-    document.head.appendChild(s);
-  }
+  var filename = 'question_tracker_' + scopeLabel.replace(/[^a-z0-9]/gi, '_').toLowerCase();
+  EngineShared.exportToPDF(container, filename);
 };
 
 EngineTracker.updateDashboardBadge();

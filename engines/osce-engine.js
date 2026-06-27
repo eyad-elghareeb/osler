@@ -854,7 +854,7 @@
     return h;
   }
   function showToast(msg) {
-    var t = document.createElement('div'); t.className = 'toast'; t.textContent = msg;
+    var t = document.createElement('div'); t.className = 'toast'; t.innerHTML = msg;
     document.body.appendChild(t);
     requestAnimationFrame(function () { t.classList.add('show'); });
     setTimeout(function () { t.classList.remove('show'); }, 2200);
@@ -1411,8 +1411,8 @@
     var t = localStorage.getItem(STORAGE.theme)||'dark';
     t = t==='dark'?'light':'dark';
     localStorage.setItem(STORAGE.theme, t); _applyTheme();
-    var el = document.getElementById('osce-theme-btn'); if (el) el.textContent = t==='dark'?''+EngineShared.icon('sun')+'':''+EngineShared.icon('moon')+'';
-    var el2 = document.getElementById('osce-lobby-theme'); if (el2) el2.textContent = t==='dark'?''+EngineShared.icon('sun')+'':''+EngineShared.icon('moon')+'';
+    var el = document.getElementById('osce-theme-btn'); if (el) el.innerHTML = t==='dark'?''+EngineShared.icon('sun')+'':''+EngineShared.icon('moon')+'';
+    var el2 = document.getElementById('osce-lobby-theme'); if (el2) el2.innerHTML = t==='dark'?''+EngineShared.icon('sun')+'':''+EngineShared.icon('moon')+'';
   }
 
   /* ── Difficulty chip class ────────────────────────────────────── */
@@ -2309,30 +2309,30 @@
   function _saveKey() {
     var v=document.getElementById('osce-key-input').value.trim();
     EngineShared.airWriteGeminiKey(v);
-    var st=document.getElementById('settings-status'); if(st)st.textContent=v?''+EngineShared.icon('check')+' API key saved.':''+EngineShared.icon('x')+' API key cleared.';
+    var st=document.getElementById('settings-status'); if(st)st.innerHTML=v?''+EngineShared.icon('check')+' API key saved.':''+EngineShared.icon('x')+' API key cleared.';
     _closeSettings();
   }
   function _clearKey() {
     EngineShared.airWriteGeminiKey('');
     var ki=document.getElementById('osce-key-input'); if(ki)ki.value='';
-    var st=document.getElementById('settings-status'); if(st)st.textContent=''+EngineShared.icon('x')+' API key cleared.';
+    var st=document.getElementById('settings-status'); if(st)st.innerHTML=''+EngineShared.icon('x')+' API key cleared.';
   }
   function _testKey() {
     var v=document.getElementById('osce-key-input').value.trim();
-    var st=document.getElementById('settings-status'); if(!v){st.textContent=''+EngineShared.icon('x')+' No key entered.';return;}
-    st.textContent='Testing…';
+    var st=document.getElementById('settings-status'); if(!v){st.innerHTML=''+EngineShared.icon('x')+' No key entered.';return;}
+    st.innerHTML='Testing\u2026';
     fetch('https://generativelanguage.googleapis.com/v1beta/models',{headers:{'x-goog-api-key':v}})
       .then(function(r){return r.text().then(function(t){return{status:r.status,body:t};});})
       .then(function(resp){
-        var data; try{data=JSON.parse(resp.body);}catch(e){st.textContent=''+EngineShared.icon('x')+' Parse error';return;}
+        var data; try{data=JSON.parse(resp.body);}catch(e){st.innerHTML=''+EngineShared.icon('x')+' Parse error';return;}
         if(resp.status===200&&data&&data.models&&data.models.length){
-          st.textContent=''+EngineShared.icon('check')+' Key valid ('+data.models.length+' models available).';
+          st.innerHTML=''+EngineShared.icon('check')+' Key valid ('+data.models.length+' models available).';
         } else {
           var msg=(data&&data.error&&data.error.message)||'Unexpected response';
-          st.textContent=''+EngineShared.icon('x')+' '+msg;
+          st.innerHTML=''+EngineShared.icon('x')+' '+EngineShared.escHtml(msg);
         }
       })
-      .catch(function(){st.textContent=''+EngineShared.icon('x')+' Connection failed. Check key or network.';});
+      .catch(function(){st.innerHTML=''+EngineShared.icon('x')+' Connection failed. Check key or network.';});
   }
 
   /* ── Navigate to parent index ───────────────────────────────── */

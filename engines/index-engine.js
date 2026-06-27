@@ -1564,39 +1564,8 @@
       container.appendChild(chunkDiv);
     }
 
-    var filename = 'question_tracker_' + scopeLabel.replace(/[^a-z0-9]/gi, '_').toLowerCase() + '.pdf';
-    var opt = {
-      margin: [10, 10, 10, 10],
-      filename: filename,
-      image: { type: 'jpeg', quality: 0.97 },
-      html2canvas: { scale: 2, useCORS: true, logging: false },
-      jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
-    };
-
-    function runExport() {
-      var children = Array.from(container.children);
-      if (children.length === 0) return;
-      
-      var worker = html2pdf().set(opt).from(children[0]).toPdf();
-      
-      children.slice(1).forEach(function(child) {
-        worker = worker.get('pdf').then(function(pdf) {
-          pdf.addPage();
-        }).from(child).toContainer().toCanvas().toPdf();
-      });
-      
-      worker.save().catch(function () {});
-    }
-
-    if (typeof html2pdf !== 'undefined') {
-      runExport();
-    } else {
-      var s = document.createElement('script');
-      s.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js';
-      s.onload = runExport;
-      s.onerror = function () { EngineShared.showToast('Failed to load PDF library'); };
-      document.head.appendChild(s);
-    }
+    var filename = 'question_tracker_' + scopeLabel.replace(/[^a-z0-9]/gi, '_').toLowerCase();
+    EngineShared.exportToPDF(container, filename);
   };
 
   /* ── Init ──────────────────────────────────────────────────── */

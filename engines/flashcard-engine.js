@@ -724,7 +724,7 @@
     var icon = document.getElementById('theme-toggle-icon');
     if (icon) {
       var isDark = document.documentElement.getAttribute('data-theme') === 'dark';
-      icon.textContent = isDark ? ''+EngineShared.icon('sun')+'' : ''+EngineShared.icon('moon')+'';
+      icon.innerHTML = isDark ? ''+EngineShared.icon('sun')+'' : ''+EngineShared.icon('moon')+'';
       icon.classList.remove('theme-spinning');
       void icon.offsetWidth;
       icon.classList.add('theme-spinning');
@@ -2003,36 +2003,8 @@
       }
     });
 
-    var filename = (BANK_CONFIG.uid || 'flashcard-session').replace(/[^a-z0-9]/gi, '_').toLowerCase() + '_report.pdf';
-    var opt = {
-      margin:      [10, 10, 10, 10],
-      filename:    filename,
-      image:       { type: 'jpeg', quality: 0.97 },
-      html2canvas: { scale: 2, useCORS: true, logging: false },
-      jsPDF:       { unit: 'mm', format: 'a4', orientation: 'portrait' }
-    };
-
-    function runExport() {
-      var children = Array.from(container.children);
-      if (children.length === 0) return;
-      var worker = html2pdf().set(opt).from(children[0]).toPdf();
-      children.slice(1).forEach(function(child) {
-        worker = worker.get('pdf').then(function(pdf) {
-          pdf.addPage();
-        }).from(child).toContainer().toCanvas().toPdf();
-      });
-      worker.save().catch(function() {});
-    }
-
-    if (typeof html2pdf !== 'undefined') {
-      runExport();
-    } else {
-      var s = document.createElement('script');
-      s.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js';
-      s.onload  = runExport;
-      s.onerror = function() { showToast('Failed to load PDF library'); };
-      document.head.appendChild(s);
-    }
+    var filename = (BANK_CONFIG.uid || 'flashcard-session').replace(/[^a-z0-9]/gi, '_').toLowerCase() + '_report';
+    EngineShared.exportToPDF(container, filename);
   };
 
   /* ── Export to Anki (TSV) ──────────────────────────────────── */

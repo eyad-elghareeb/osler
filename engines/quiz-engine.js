@@ -3,11 +3,10 @@
    Load this after defining QUIZ_CONFIG and QUESTIONS globals.
    Auto-detects its own base URL so it works at any folder depth.
    ================================================================ */
-(function () {
-  'use strict';
+'use strict';
 
-  /* ── Compute base path from our own script URL ──────────────── */
-  var ENGINE_BASE = EngineShared.ENGINE_BASE || (window.__QUIZ_ENGINE_BASE || '');
+/* ── Compute base path from our own script URL ──────────────── */
+var ENGINE_BASE = EngineShared.ENGINE_BASE || (window.__QUIZ_ENGINE_BASE || '');
 
   // Bridge EngineShared functions to global scope for onclick="" attributes in template
   window.toggleTheme = EngineShared.toggleTheme;
@@ -56,7 +55,6 @@
   </a>
 
   <div class="start-card">
-    <div class="start-icon">'+EngineShared.icon('edit')+'</div>
     <h1 id="quiz-title">Quiz Title</h1>
     <p class="subtitle" id="quiz-desc">Answer all questions before the timer runs out.</p>
     <div class="meta-grid">
@@ -83,14 +81,14 @@
         <label style="cursor: pointer;">
           <input type="radio" name="quiz-mode" value="exam" checked style="display: none;">
           <div style="padding: 0.85rem; border-radius: var(--radius); border: 1.5px solid var(--border); background: var(--surface2); transition: all var(--transition); text-align: center;" class="mode-option mode-selected">
-            <div style="font-weight: 600; font-size: 0.95rem;">'+EngineShared.icon('edit')+' Exam Mode</div>
+            <div style="font-weight: 600; font-size: 0.95rem;">${EngineShared.icon('clock')} Exam Mode</div>
             <div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 0.25rem;">Timer + blind answers</div>
           </div>
         </label>
         <label style="cursor: pointer;">
           <input type="radio" name="quiz-mode" value="learning" style="display: none;">
           <div style="padding: 0.85rem; border-radius: var(--radius); border: 1.5px solid var(--border); background: var(--surface2); transition: all var(--transition); text-align: center;" class="mode-option">
-            <div style="font-weight: 600; font-size: 0.95rem;">'+EngineShared.icon('book')+' Learning Mode</div>
+            <div style="font-weight: 600; font-size: 0.95rem;">${EngineShared.icon('book')} Learning Mode</div>
             <div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 0.25rem;">Instant feedback</div>
           </div>
         </label>
@@ -113,10 +111,10 @@
       <span id="timer-text">00:00</span>
     </div>
     <div class="topbar-actions">
-      <div class="icon-btn hl-mode-btn" role="button" tabindex="0" onclick="toggleHighlighterMode()" title="Highlighter Mode (H)" aria-label="Highlighter Mode (H)">'+EngineShared.icon('pen-tool')+'<span class="hl-last-dot" style="background:rgba(255,213,79,0.8);"></span><div class="hl-color-picker" id="hl-color-picker-1"><button type="button" class="hl-color-btn cb-1 selected" onclick="hlSelectColor(1); event.stopPropagation();" title="Yellow (1)" aria-label="Yellow (1)"></button><button type="button" class="hl-color-btn cb-2" onclick="hlSelectColor(2); event.stopPropagation();" title="Green (2)" aria-label="Green (2)"></button><button type="button" class="hl-color-btn cb-3" onclick="hlSelectColor(3); event.stopPropagation();" title="Blue (3)" aria-label="Blue (3)"></button><button type="button" class="hl-color-btn cb-4" onclick="hlSelectColor(4); event.stopPropagation();" title="Red (4)" aria-label="Red (4)"></button><button type="button" class="hl-erase-btn" onclick="hlSelectColor(0); event.stopPropagation();" title="Eraser" aria-label="Eraser">'+EngineShared.icon('eraser')+'</button><button type="button" class="hl-close-btn" onclick="disableHighlighterMode(); event.stopPropagation();" title="Close Highlighter" aria-label="Close Highlighter">'+EngineShared.icon('x')+'</button></div></div>
-      <button type="button" class="icon-btn" onclick="openAiAssistant()" title="Ask AI (needs internet)" aria-label="Ask AI (needs internet)">'+EngineShared.icon('bot')+'</button>
-      <a href="#" class="icon-btn" title="Back to Hub" onclick="navigateToIndex(event); return false;">'+EngineShared.icon('home')+'</a>
-      <button type="button" class="icon-btn theme-toggle-btn" onclick="toggleTheme()" title="Toggle theme" aria-label="Toggle theme">'+EngineShared.icon('sun')+'</button>
+      <div class="icon-btn hl-mode-btn" role="button" tabindex="0" onclick="toggleHighlighterMode()" title="Highlighter Mode (H)" aria-label="Highlighter Mode (H)">${EngineShared.icon('pen-tool')}<span class="hl-last-dot" style="background:rgba(255,213,79,0.8);"></span><div class="hl-color-picker" id="hl-color-picker-1"><button type="button" class="hl-color-btn cb-1 selected" onclick="hlSelectColor(1); event.stopPropagation();" title="Yellow (1)" aria-label="Yellow (1)"></button><button type="button" class="hl-color-btn cb-2" onclick="hlSelectColor(2); event.stopPropagation();" title="Green (2)" aria-label="Green (2)"></button><button type="button" class="hl-color-btn cb-3" onclick="hlSelectColor(3); event.stopPropagation();" title="Blue (3)" aria-label="Blue (3)"></button><button type="button" class="hl-color-btn cb-4" onclick="hlSelectColor(4); event.stopPropagation();" title="Red (4)" aria-label="Red (4)"></button><button type="button" class="hl-erase-btn" onclick="hlSelectColor(0); event.stopPropagation();" title="Eraser" aria-label="Eraser">${EngineShared.icon('eraser')}</button><button type="button" class="hl-close-btn" onclick="disableHighlighterMode(); event.stopPropagation();" title="Close Highlighter" aria-label="Close Highlighter">${EngineShared.icon('x')}</button></div></div>
+      <button type="button" class="icon-btn" onclick="openAiAssistant()" title="Ask AI (needs internet)" aria-label="Ask AI (needs internet)">${EngineShared.icon('bot')}</button>
+      <a href="#" class="icon-btn" title="Back to Hub" onclick="navigateToIndex(event); return false;">${EngineShared.icon('home')}</a>
+      <button type="button" class="icon-btn theme-toggle-btn" onclick="toggleTheme()" title="Toggle theme" aria-label="Toggle theme">${EngineShared.icon('sun')}</button>
       <button type="button" class="icon-btn danger" onclick="confirmResetProgress()" title="Reset Progress" aria-label="Reset Progress">↻</button>
     </div>
   </div>
@@ -159,12 +157,12 @@
 <!-- ═══════════════════════════ RESULTS ═════════════════════════ -->
 <div id="result-screen" class="screen">
   <div class="result-topbar">
-    <h2>'+EngineShared.icon('bar-chart')+' Quiz Results</h2>
+    <h2>${EngineShared.icon('bar-chart')} Quiz Results</h2>
     <div class="topbar-actions">
-      <div class="icon-btn hl-mode-btn" role="button" tabindex="0" onclick="toggleHighlighterMode()" title="Highlighter Mode (H)" aria-label="Highlighter Mode (H)">'+EngineShared.icon('pen-tool')+'<span class="hl-last-dot" style="background:rgba(255,213,79,0.8);"></span><div class="hl-color-picker" id="hl-color-picker-2"><button type="button" class="hl-color-btn cb-1 selected" onclick="hlSelectColor(1); event.stopPropagation();" title="Yellow (1)" aria-label="Yellow (1)"></button><button type="button" class="hl-color-btn cb-2" onclick="hlSelectColor(2); event.stopPropagation();" title="Green (2)" aria-label="Green (2)"></button><button type="button" class="hl-color-btn cb-3" onclick="hlSelectColor(3); event.stopPropagation();" title="Blue (3)" aria-label="Blue (3)"></button><button type="button" class="hl-color-btn cb-4" onclick="hlSelectColor(4); event.stopPropagation();" title="Red (4)" aria-label="Red (4)"></button><button type="button" class="hl-erase-btn" onclick="hlSelectColor(0); event.stopPropagation();" title="Eraser" aria-label="Eraser">'+EngineShared.icon('eraser')+'</button><button type="button" class="hl-close-btn" onclick="disableHighlighterMode(); event.stopPropagation();" title="Close Highlighter" aria-label="Close Highlighter">'+EngineShared.icon('x')+'</button></div></div>
-      <button type="button" class="icon-btn" onclick="openAiAssistant()" title="Ask AI (needs internet)" aria-label="Ask AI (needs internet)">'+EngineShared.icon('bot')+'</button>
-      <a href="#" class="icon-btn" title="Back to Hub" onclick="navigateToIndex(event); return false;">'+EngineShared.icon('home')+'</a>
-      <button type="button" class="icon-btn theme-toggle-btn" onclick="toggleTheme()" title="Toggle theme" aria-label="Toggle theme">'+EngineShared.icon('sun')+'</button>
+      <div class="icon-btn hl-mode-btn" role="button" tabindex="0" onclick="toggleHighlighterMode()" title="Highlighter Mode (H)" aria-label="Highlighter Mode (H)">${EngineShared.icon('pen-tool')}<span class="hl-last-dot" style="background:rgba(255,213,79,0.8);"></span><div class="hl-color-picker" id="hl-color-picker-2"><button type="button" class="hl-color-btn cb-1 selected" onclick="hlSelectColor(1); event.stopPropagation();" title="Yellow (1)" aria-label="Yellow (1)"></button><button type="button" class="hl-color-btn cb-2" onclick="hlSelectColor(2); event.stopPropagation();" title="Green (2)" aria-label="Green (2)"></button><button type="button" class="hl-color-btn cb-3" onclick="hlSelectColor(3); event.stopPropagation();" title="Blue (3)" aria-label="Blue (3)"></button><button type="button" class="hl-color-btn cb-4" onclick="hlSelectColor(4); event.stopPropagation();" title="Red (4)" aria-label="Red (4)"></button><button type="button" class="hl-erase-btn" onclick="hlSelectColor(0); event.stopPropagation();" title="Eraser" aria-label="Eraser">${EngineShared.icon('eraser')}</button><button type="button" class="hl-close-btn" onclick="disableHighlighterMode(); event.stopPropagation();" title="Close Highlighter" aria-label="Close Highlighter">${EngineShared.icon('x')}</button></div></div>
+      <button type="button" class="icon-btn" onclick="openAiAssistant()" title="Ask AI (needs internet)" aria-label="Ask AI (needs internet)">${EngineShared.icon('bot')}</button>
+      <a href="#" class="icon-btn" title="Back to Hub" onclick="navigateToIndex(event); return false;">${EngineShared.icon('home')}</a>
+      <button type="button" class="icon-btn theme-toggle-btn" onclick="toggleTheme()" title="Toggle theme" aria-label="Toggle theme">${EngineShared.icon('sun')}</button>
       <button type="button" class="icon-btn danger" onclick="confirmResetProgress()" title="Reset Progress" aria-label="Reset Progress">↻</button>
     </div>
   </div>
@@ -230,10 +228,10 @@
     <!-- Tabs -->
     <div class="result-tabs">
       <button type="button" class="tab-btn active" onclick="filterResults('all', this)">All Questions</button>
-      <button type="button" class="tab-btn" onclick="filterResults('correct', this)">'+EngineShared.icon('check')+' Correct</button>
-      <button type="button" class="tab-btn" onclick="filterResults('wrong', this)">'+EngineShared.icon('x')+' Wrong</button>
+      <button type="button" class="tab-btn" onclick="filterResults('correct', this)">${EngineShared.icon('check')} Correct</button>
+      <button type="button" class="tab-btn" onclick="filterResults('wrong', this)">${EngineShared.icon('x')} Wrong</button>
       <button type="button" class="tab-btn" onclick="filterResults('skipped', this)">— Skipped</button>
-      <button type="button" class="tab-btn" onclick="filterResults('flagged', this)">'+EngineShared.icon('flag')+' Flagged</button>
+      <button type="button" class="tab-btn" onclick="filterResults('flagged', this)">${EngineShared.icon('flag')} Flagged</button>
     </div>
 
     <!-- Result items -->
@@ -241,7 +239,7 @@
 
     <div class="result-actions">
       <button type="button" class="btn-restart" onclick="restartQuiz()">↺ Retake Quiz</button>
-      <a href="#" class="btn-restart btn-secondary" onclick="navigateToIndex(event); return false;">'+EngineShared.icon('home')+' Return to Hub</a>
+      <a href="#" class="btn-restart btn-secondary" onclick="navigateToIndex(event); return false;">${EngineShared.icon('home')} Return to Hub</a>
     </div>
   </div>
 </div>
@@ -283,8 +281,6 @@
       navigator.serviceWorker.register(ENGINE_BASE + 'sw.js').catch(function () {});
     });
   }
-
-})();
 
 /* ================================================================
    ENGINE — functions exposed globally so onclick="" attrs work.
@@ -744,7 +740,7 @@ function applyBulkHighlights(qIdx) {
       btn.type = 'button';
       btn.className = 'st-toggle-btn' + (stMap[i] ? ' active' : '');
       btn.title = 'Strikethrough (S)';
-      btn.textContent = ''+EngineShared.icon('x')+'';
+      btn.innerHTML = ''+EngineShared.icon('x')+'';
       btn.onclick = (function(ci) { return function(e) { e.preventDefault(); e.stopPropagation(); toggleStrikethrough(state.current, ci); }; })(i);
       label.appendChild(btn);
     });
@@ -1171,7 +1167,7 @@ function toggleFlag(idx) {
   updateNavGrid(idx);
   updateNavStats();
   EngineShared.debounceSave(saveProgress); // persist flag immediately
-  EngineShared.showToast(state.flagged[idx] ? `'+EngineShared.icon('flag')+' Question ${idx+1} flagged` : `Question ${idx+1} unflagged`);
+  EngineShared.showToast(state.flagged[idx] ? `${EngineShared.icon('flag')} Question ${idx+1} flagged` : `Question ${idx+1} unflagged`);
 }
 
 /* ── NAV GRID ────────────────────────────────────────────── */
@@ -1315,7 +1311,7 @@ function buildResults() {
   else if(pct>=60) grade = ''+EngineShared.icon('thumbs-up')+' Good Effort!';
   else if(pct>=40) grade = ''+EngineShared.icon('book')+' Keep Studying!';
   else grade = ''+EngineShared.icon('zap')+' Don\'t Give Up!';
-  document.getElementById('res-grade').textContent = grade;
+  document.getElementById('res-grade').innerHTML = grade;
 
   // Study notes placeholder (injected by ai-assistant-engine if API key exists)
   var notesPlaceholder = document.getElementById('study-notes-placeholder');
@@ -1390,7 +1386,7 @@ function renderResultItems(filter) {
       meta.className = 'result-q-meta';
       const qNum = document.createElement('div');
       qNum.className = 'result-q-num';
-      qNum.textContent = 'Question ' + (i + 1) + (isFlagged ? ' \u00B7 ' + EngineShared.icon('flag') + ' Flagged' : '');
+      qNum.innerHTML = 'Question ' + (i + 1) + (isFlagged ? ' \u00B7 ' + EngineShared.icon('flag') + ' Flagged' : '');
       meta.appendChild(qNum);
       const qTxt = document.createElement('div');
       qTxt.className = 'result-q-text';
@@ -1947,39 +1943,8 @@ function exportToPDF() {
     }
   });
 
-  var filename = title.replace(/[^a-z0-9]/gi, '_').toLowerCase() + '_results.pdf';
-  var opt = {
-    margin:      [10, 10, 10, 10],
-    filename:    filename,
-    image:       { type: 'jpeg', quality: 0.97 },
-    html2canvas: { scale: 2, useCORS: true, logging: false },
-    jsPDF:       { unit: 'mm', format: 'a4', orientation: 'portrait' }
-  };
-
-  function runExport() {
-    var children = Array.from(container.children);
-    if (children.length === 0) return;
-    
-    var worker = html2pdf().set(opt).from(children[0]).toPdf();
-    
-    children.slice(1).forEach(function(child) {
-      worker = worker.get('pdf').then(function(pdf) {
-        pdf.addPage();
-      }).from(child).toContainer().toCanvas().toPdf();
-    });
-    
-    worker.save().catch(function() {});
-  }
-
-  if (typeof html2pdf !== 'undefined') {
-    runExport();
-  } else {
-    var s = document.createElement('script');
-    s.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js';
-    s.onload  = runExport;
-    s.onerror = function() { EngineShared.showToast('Failed to load PDF library'); };
-    document.head.appendChild(s);
-  }
+  var filename = title.replace(/[^a-z0-9]/gi, '_').toLowerCase() + '_results';
+  EngineShared.exportToPDF(container, filename);
 }
 
 /* ── BOOT ────────────────────────────────────────────────── */
@@ -2217,5 +2182,3 @@ window.closeKbHelp = function() {
   }
 })();
 
-/* ── html2pdf (loaded lazily inside exportToPDF when needed) ────── */
-window.__HTML2PDF_SRC = 'https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js';

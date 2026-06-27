@@ -6,7 +6,7 @@ export function showToast(msg, actions) {
   if (!t) return;
   t.innerHTML = '';
   const msgSpan = document.createElement('span');
-  msgSpan.textContent = msg;
+  msgSpan.innerHTML = msg;
   msgSpan.style.flex = '1';
   t.appendChild(msgSpan);
   if (actions.length > 0) {

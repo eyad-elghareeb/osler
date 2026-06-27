@@ -45,8 +45,8 @@ async function buildEngines() {
       entryPoints: [src],
       outfile: dst,
       bundle: false,
-      format: 'iife',
-    target: 'es2020',
+      format: 'esm',
+      target: 'es2020',
       allowOverwrite: true,
     });
     return file;

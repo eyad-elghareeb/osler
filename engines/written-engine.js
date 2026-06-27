@@ -867,7 +867,7 @@
         input.style.display = 'none';
         photoArea.style.display = 'block';
         $('#photo-preview-img').src = 'data:' + state.photoAnswers[index].mimeType + ';base64,' + state.photoAnswers[index].data;
-        $('#answer-counter').textContent = ''+EngineShared.icon('camera')+' Photo answer';
+        $('#answer-counter').innerHTML = ''+EngineShared.icon('camera')+' Photo answer';
       } else {
         input.style.display = '';
         photoArea.style.display = 'none';
@@ -988,7 +988,7 @@
     var batchRow = create('div', 'batch-grade-row');
     if (!hasAllChildModelAnswers) {
       var batchNote = create('div', 'child-reminder');
-      batchNote.textContent = ''+EngineShared.icon('lightbulb')+' Parts share a single model answer. Use "Grade All with AI" to grade all parts together, or grade individually with Manual Grade.';
+      batchNote.innerHTML = ''+EngineShared.icon('lightbulb')+' Parts share a single model answer. Use "Grade All with AI" to grade all parts together, or grade individually with Manual Grade.';
       container.appendChild(batchNote);
     }
 
@@ -1001,7 +1001,7 @@
     batchRow.appendChild(manualBatchBtn);
 
     var photoBtn = create('button', 'btn btn-secondary');
-    photoBtn.textContent = ''+EngineShared.icon('camera')+' Photo';
+    photoBtn.innerHTML = ''+EngineShared.icon('camera')+' Photo';
     photoBtn.type = 'button';
     photoBtn.addEventListener('click', function () {
       $('#photo-toggle').click();
@@ -2189,7 +2189,7 @@
     else if (pct >= 60) grade = 'Good Effort!';
     else if (pct >= 40) grade = 'Keep Studying!';
     else grade = 'Keep Practicing!';
-    document.getElementById('res-grade').textContent = grade;
+    document.getElementById('res-grade').innerHTML = grade;
 
     renderResultItems('all');
     updateExportBadges();
@@ -2607,39 +2607,8 @@
       }
     });
 
-    var filename = title.replace(/[^a-z0-9]/gi, '_').toLowerCase() + '_results.pdf';
-    var opt = {
-      margin: [10, 10, 10, 10],
-      filename: filename,
-      image: { type: 'jpeg', quality: 0.97 },
-      html2canvas: { scale: 2, useCORS: true, logging: false },
-      jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
-    };
-
-    function runExport() {
-      var children = Array.from(container.children);
-      if (children.length === 0) return;
-
-      var worker = html2pdf().set(opt).from(children[0]).toPdf();
-
-      children.slice(1).forEach(function(child) {
-        worker = worker.get('pdf').then(function(pdf) {
-          pdf.addPage();
-        }).from(child).toContainer().toCanvas().toPdf();
-      });
-
-      worker.save().catch(function() {});
-    }
-
-    if (typeof html2pdf !== 'undefined') {
-      runExport();
-    } else {
-      var s = document.createElement('script');
-      s.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js';
-      s.onload = runExport;
-      s.onerror = function() { EngineShared.showToast('Failed to load PDF library'); };
-      document.head.appendChild(s);
-    }
+    var filename = title.replace(/[^a-z0-9]/gi, '_').toLowerCase() + '_results';
+    EngineShared.exportToPDF(container, filename);
   }
 
   function confirmResetProgress() {
@@ -2696,7 +2665,7 @@
   function testSettingsKey() {
     var value = ($('#settings-api-key').value || '').trim();
     if (!value) {
-      $('#settings-status').textContent = ''+EngineShared.icon('x')+' No key entered.';
+      $('#settings-status').innerHTML = ''+EngineShared.icon('x')+' No key entered.';
       return;
     }
     $('#settings-status').textContent = 'Testing...';
@@ -2704,13 +2673,13 @@
       .then(function (r) { return r.json(); })
       .then(function (data) {
         if (data && data.models && data.models.length) {
-          $('#settings-status').textContent = ''+EngineShared.icon('check')+' Key is valid (' + data.models.length + ' models available).';
+          $('#settings-status').innerHTML = ''+EngineShared.icon('check')+' Key is valid (' + data.models.length + ' models available).';
         } else {
-          $('#settings-status').textContent = ''+EngineShared.icon('x')+' Unexpected response. Check the key.';
+          $('#settings-status').innerHTML = ''+EngineShared.icon('x')+' Unexpected response. Check the key.';
         }
       })
       .catch(function () {
-        $('#settings-status').textContent = ''+EngineShared.icon('x')+' Connection failed. Check the key or your network.';
+        $('#settings-status').innerHTML = ''+EngineShared.icon('x')+' Connection failed. Check the key or your network.';
       });
   }
 
@@ -2724,7 +2693,7 @@
   function updateThemeButtons() {
     var isDark = document.documentElement.getAttribute('data-theme') === 'dark';
     $all('#theme-start,#theme-practice,#theme-result').forEach(function (btn) {
-      btn.textContent = isDark ? ''+EngineShared.icon('sun')+'' : ''+EngineShared.icon('moon')+'';
+      btn.innerHTML = isDark ? ''+EngineShared.icon('sun')+'' : ''+EngineShared.icon('moon')+'';
     });
   }
 

@@ -1,7 +1,6 @@
-(function() {
-  'use strict';
+'use strict';
 
-  var ENGINE_BASE = EngineShared.ENGINE_BASE || (window.__UWORLD_ENGINE_BASE || window.__QUIZ_ENGINE_BASE || '');
+var ENGINE_BASE = EngineShared.ENGINE_BASE || (window.__UWORLD_ENGINE_BASE || window.__QUIZ_ENGINE_BASE || '');
 
   window.toggleTheme = EngineShared.toggleTheme;
   window.navigateToIndex = EngineShared.navigateToIndex;
@@ -1468,10 +1467,9 @@
     </svg>
     Back to Hub
   </a>
-  <button type="button" class="theme-btn-fixed theme-toggle-btn" onclick="toggleTheme()" title="Toggle theme">'+EngineShared.icon('sun')+'</button>
+  <button type="button" class="theme-btn-fixed theme-toggle-btn" onclick="toggleTheme()" title="Toggle theme">${EngineShared.icon('sun')}</button>
 
   <div class="start-card">
-    <div class="start-icon" id="start-icon">'+EngineShared.icon('archive')+'</div>
     <h1 id="bank-title">Question Bank</h1>
     <p class="subtitle" id="bank-subtitle">USMLE Computer-Based Testing Simulation</p>
 
@@ -1524,13 +1522,13 @@
         <label class="mode-label">
           <input type="radio" name="quiz-mode" value="learning" checked>
           <div class="mode-option">
-            <div class="mo-title">'+EngineShared.icon('book')+' Tutor Mode</div>
+            <div class="mo-title">${EngineShared.icon('book')} Tutor Mode</div>
           </div>
         </label>
         <label class="mode-label">
           <input type="radio" name="quiz-mode" value="exam">
           <div class="mode-option">
-            <div class="mo-title">'+EngineShared.icon('edit')+' Timed Mode</div>
+            <div class="mo-title">${EngineShared.icon('clock')} Timed Mode</div>
           </div>
         </label>
       </div>
@@ -1542,27 +1540,27 @@
         <label class="mode-label">
           <input type="radio" name="quiz-order" value="sequential" checked>
           <div class="mode-option">
-            <div class="mo-title">'+EngineShared.icon('clipboard')+' Sequential</div>
+            <div class="mo-title">${EngineShared.icon('clipboard')} Sequential</div>
           </div>
         </label>
         <label class="mode-label">
           <input type="radio" name="quiz-order" value="random">
           <div class="mode-option">
-            <div class="mo-title">'+EngineShared.icon('shuffle')+' Random</div>
+            <div class="mo-title">${EngineShared.icon('shuffle')} Random</div>
           </div>
         </label>
       </div>
     </div>
 
     <button type="button" class="btn-start" onclick="startQuiz()">Start Test →</button>
-    <button type="button" class="reset-bank-btn" onclick="openBankResetModal()">'+EngineShared.icon('trash-2')+' Reset Coverage History</button>
+    <button type="button" class="reset-bank-btn" onclick="openBankResetModal()">${EngineShared.icon('trash-2')} Reset Coverage History</button>
   </div>
 </div>
 
 <!-- Bank Reset Confirmation Modal -->
 <div class="modal-overlay" id="bank-reset-modal">
   <div class="modal">
-    <h3>'+EngineShared.icon('eraser')+' Reset Coverage History?</h3>
+    <h3>${EngineShared.icon('eraser')} Reset Coverage History?</h3>
     <p>This will forget which questions you have already seen and reset the covered count to 0. Your progress in any active session will NOT be affected. Continue?</p>
     <div class="modal-actions">
       <button type="button" class="btn-cancel" onclick="closeBankResetModal()">Cancel</button>
@@ -1583,7 +1581,7 @@
       <div class="cbt-header-status" id="header-item-number">Item 1 of 20</div>
       <div class="cbt-header-status" style="margin-left:-8px;"><span id="header-block-number">Block 1 of 1</span></div>
       <button type="button" class="cbt-mark-btn" onclick="toggleFlagCurrent()" id="mark-btn">
-        <span style="font-size:1rem;">'+EngineShared.icon('flag')+'</span> Mark
+        <span style="font-size:1rem;">${EngineShared.icon('flag')}</span> Mark
       </button>
     </div>
     
@@ -1631,8 +1629,8 @@
           <button type="button" class="hl-color-btn hl-c2" onclick="hlSelectColor(2); event.stopPropagation();" title="Green (2)"></button>
           <button type="button" class="hl-color-btn hl-c3" onclick="hlSelectColor(3); event.stopPropagation();" title="Pink (3)"></button>
           <button type="button" class="hl-color-btn hl-c4" onclick="hlSelectColor(4); event.stopPropagation();" title="Blue (4)"></button>
-          <button type="button" class="hl-erase-btn" onclick="hlSelectColor(0); event.stopPropagation();" title="Eraser">'+EngineShared.icon('eraser')+'</button>
-          <button type="button" class="hl-close-btn" onclick="disableHighlighterMode(); event.stopPropagation();" title="Close Highlighter">'+EngineShared.icon('x')+'</button>
+          <button type="button" class="hl-erase-btn" onclick="hlSelectColor(0); event.stopPropagation();" title="Eraser">${EngineShared.icon('eraser')}</button>
+          <button type="button" class="hl-close-btn" onclick="disableHighlighterMode(); event.stopPropagation();" title="Close Highlighter">${EngineShared.icon('x')}</button>
         </div>
       </div>
 
@@ -1717,7 +1715,7 @@
   <div class="cbt-drawer" id="lab-drawer">
     <div class="drawer-header">
       <span class="drawer-title">Reference Ranges</span>
-      <button type="button" class="drawer-close" onclick="toggleLabDrawer()">'+EngineShared.icon('x')+'</button>
+      <button type="button" class="drawer-close" onclick="toggleLabDrawer()">${EngineShared.icon('x')}</button>
     </div>
     <div class="lab-tabs">
       <button type="button" class="lab-tab-btn active" onclick="switchLabTab('serum')">Serum</button>
@@ -1745,7 +1743,7 @@
   <div class="cbt-drawer" id="notepad-drawer">
     <div class="drawer-header">
       <span class="drawer-title">Notepad Scratchpad</span>
-      <button type="button" class="drawer-close" onclick="toggleNotepadDrawer()">'+EngineShared.icon('x')+'</button>
+      <button type="button" class="drawer-close" onclick="toggleNotepadDrawer()">${EngineShared.icon('x')}</button>
     </div>
     <div class="drawer-content">
       <p style="font-size:0.85rem;color:var(--text-muted);margin:0 0 12px;line-height:1.4;">Scratchpad is shared and persists throughout your session. Auto-saves to your local cache.</p>
@@ -1758,7 +1756,7 @@
   <div class="floating-calc" id="floating-calc">
     <div class="calc-header" id="calc-handle">
       <span>CALCULATOR</span>
-      <span class="calc-close" onclick="toggleCalculator()">'+EngineShared.icon('x')+'</span>
+      <span class="calc-close" onclick="toggleCalculator()">${EngineShared.icon('x')}</span>
     </div>
     <input type="text" class="calc-screen" id="calc-screen" value="0" readonly>
     <div class="calc-grid">
@@ -1792,10 +1790,10 @@
 <!-- SESSION RESULTS SCREEN -->
 <div id="result-screen" class="screen">
   <div class="result-topbar">
-    <h2>'+EngineShared.icon('bar-chart')+' Session Results</h2>
+    <h2>${EngineShared.icon('bar-chart')} Session Results</h2>
     <div class="topbar-actions">
-      <a href="#" class="hub-back-btn" style="position:static;" onclick="navigateToIndex(event); return false;">'+EngineShared.icon('home')+' Hub</a>
-      <button type="button" class="theme-btn-fixed" style="position:static;" onclick="toggleTheme()">'+EngineShared.icon('sun')+'</button>
+      <a href="#" class="hub-back-btn" style="position:static;" onclick="navigateToIndex(event); return false;">${EngineShared.icon('home')} Hub</a>
+      <button type="button" class="theme-btn-fixed" style="position:static;" onclick="toggleTheme()">${EngineShared.icon('sun')}</button>
     </div>
   </div>
   
@@ -1859,17 +1857,17 @@
     <!-- Review Tabs and Question Review Area -->
     <div class="result-tabs">
       <button type="button" class="tab-btn active" onclick="filterResults('all', this)">All Questions</button>
-      <button type="button" class="tab-btn" onclick="filterResults('correct', this)">'+EngineShared.icon('check')+' Correct</button>
-      <button type="button" class="tab-btn" onclick="filterResults('wrong', this)">'+EngineShared.icon('x')+' Wrong</button>
+      <button type="button" class="tab-btn" onclick="filterResults('correct', this)">${EngineShared.icon('check')} Correct</button>
+      <button type="button" class="tab-btn" onclick="filterResults('wrong', this)">${EngineShared.icon('x')} Wrong</button>
       <button type="button" class="tab-btn" onclick="filterResults('skipped', this)">— Skipped</button>
-      <button type="button" class="tab-btn" onclick="filterResults('flagged', this)">'+EngineShared.icon('flag')+' Flagged</button>
+      <button type="button" class="tab-btn" onclick="filterResults('flagged', this)">${EngineShared.icon('flag')} Flagged</button>
     </div>
     
     <div class="result-list" id="result-list"></div>
     
     <div class="result-actions">
       <button type="button" class="btn-restart" onclick="onNewSessionClick(event)">↺ Start New Block</button>
-      <a href="#" class="btn-restart btn-secondary" onclick="navigateToIndex(event); return false;">'+EngineShared.icon('home')+' Back to Quiz Hub</a>
+      <a href="#" class="btn-restart btn-secondary" onclick="navigateToIndex(event); return false;">${EngineShared.icon('home')} Back to Quiz Hub</a>
     </div>
   </div>
 </div>
@@ -3465,7 +3463,7 @@
     else if (pct >= 40) grade = ''+EngineShared.icon('book')+' Study High-Yield Topics!';
     else grade = ''+EngineShared.icon('zap')+' Keep Practicing — You Got This!';
     
-    document.getElementById('res-grade').textContent = grade;
+    document.getElementById('res-grade').innerHTML = grade;
 
     renderResultItems('all');
     updateExportBadges();
@@ -3675,31 +3673,8 @@
     chunkDiv.innerHTML = `<div style="font-family:Arial,sans-serif;max-width:760px;margin:0 auto;padding:20px;color:#1a2332;background:#ffffff;">${currentChunkHtml}</div>`;
     container.appendChild(chunkDiv);
 
-    var filename = title.replace(/[^a-z0-9]/gi, '_').toLowerCase() + '_results.pdf';
-    var opt = {
-      margin: [10, 10, 10, 10],
-      filename: filename,
-      image: { type: 'jpeg', quality: 0.98 },
-      html2canvas: { scale: 2, useCORS: true, logging: false },
-      jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
-    };
-
-    function runExport() {
-      if (typeof html2pdf === 'undefined') {
-        EngineShared.showToast('PDF library loading failed. Try reloading.');
-        return;
-      }
-      html2pdf().set(opt).from(container.children[0]).save();
-    }
-
-    if (typeof html2pdf !== 'undefined') {
-      runExport();
-    } else {
-      var s = document.createElement('script');
-      s.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js';
-      s.onload = runExport;
-      document.head.appendChild(s);
-    }
+    var filename = title.replace(/[^a-z0-9]/gi, '_').toLowerCase() + '_results';
+    EngineShared.exportToPDF(container, filename);
   };
 
   /* ─── KEYBOARD SHORTCUTS ─────────────────────────────────────── */
@@ -3878,6 +3853,4 @@
       };
     }
   })();
-
-})();
 

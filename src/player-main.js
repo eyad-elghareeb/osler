@@ -19,6 +19,9 @@ async function main() {
     setGlobals(content);
 
     await loadScript('engine-shared.js');
+    if (content.type === 'quiz' || content.type === 'bank') {
+      await loadScript('engine-tracker.js');
+    }
     await loadScript(ENGINE_FILES[content.type]);
   } catch (error) {
     renderError(error, root);
