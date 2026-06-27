@@ -159,6 +159,15 @@ async function runBuild() {
     manifest.build = new Date().toISOString();
     writeFileSync(umDst, JSON.stringify(manifest, null, 2), 'utf-8');
     console.log(`Generated update-manifest.json with bundleHash: ${manifest.bundleHash.substring(0, 16)}...`);
+
+    // Inject CURRENT_VERSION into dist/sw.js (the root sw.js keeps __SW_VERSION__ placeholder)
+    const swDst2 = join(DIST_DIR, 'sw.js');
+    if (existsSync(swDst2)) {
+      let swContent = readFileSync(swDst2, 'utf-8');
+      swContent = swContent.replace('__SW_VERSION__', manifest.version);
+      writeFileSync(swDst2, swContent, 'utf-8');
+      console.log(`Injected CURRENT_VERSION=${manifest.version} into dist/sw.js`);
+    }
   }
 
   console.log('Build complete.');

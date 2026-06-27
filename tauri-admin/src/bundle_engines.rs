@@ -16,7 +16,6 @@ pub const ENGINE_FILES: &[&str] = &[
     "osce-engine.js",
     "uworld-engine.js",
     "ai-assistant-engine.js",
-    "sync-engine.js",
     "search-engine.js",
 ];
 
@@ -134,7 +133,7 @@ pub fn create_update_bundle(root: &Path, version: &str, changelog: &str) -> Resu
         if rel_path == &"update-manifest.json".to_string() {
             continue;
         }
-        let options = FileOptions::default()
+        let options: FileOptions<'_, ()> = FileOptions::default()
             .compression_method(zip::CompressionMethod::Deflated)
             .unix_permissions(0o644);
         zip.start_file(rel_path, options)
@@ -143,7 +142,7 @@ pub fn create_update_bundle(root: &Path, version: &str, changelog: &str) -> Resu
             .map_err(|e| format!("Failed to write {} to zip: {}", rel_path, e))?;
     }
 
-    let options = FileOptions::default()
+    let options: FileOptions<'_, ()> = FileOptions::default()
         .compression_method(zip::CompressionMethod::Deflated)
         .unix_permissions(0o644);
     zip.start_file("update-manifest.json", options)
@@ -163,18 +162,20 @@ pub fn verify_bundle(bundle_data: &[u8]) -> Result<(String, Value), String> {
 
     let manifest_idx = archive.index_for_name("update-manifest.json")
         .ok_or("update-manifest.json not found in bundle")?;
-    let mut manifest_file = archive.by_index(manifest_idx)
-        .map_err(|e| format!("Failed to read manifest: {}", e))?;
-    let mut manifest_bytes = Vec::new();
-    manifest_file.read_to_end(&mut manifest_bytes)
-        .map_err(|e| format!("Failed to read manifest bytes: {}", e))?;
-    let manifest: Value = serde_json::from_slice(&manifest_bytes)
-        .map_err(|e| format!("Invalid manifest JSON: {}", e))?;
-
-    let expected_hash = manifest["bundleHash"]
-        .as_str()
-        .ok_or("bundleHash missing from manifest")?
-        .to_string();
+    let (expected_hash, manifest) = {
+        let mut manifest_file = archive.by_index(manifest_idx)
+            .map_err(|e| format!("Failed to read manifest: {}", e))?;
+        let mut manifest_bytes = Vec::new();
+        manifest_file.read_to_end(&mut manifest_bytes)
+            .map_err(|e| format!("Failed to read manifest bytes: {}", e))?;
+        let manifest: Value = serde_json::from_slice(&manifest_bytes)
+            .map_err(|e| format!("Invalid manifest JSON: {}", e))?;
+        let expected_hash = manifest["bundleHash"]
+            .as_str()
+            .ok_or("bundleHash missing from manifest")?
+            .to_string();
+        Ok::<_, String>((expected_hash, manifest))
+    }?;
 
     let mut hasher = Sha256::new();
 

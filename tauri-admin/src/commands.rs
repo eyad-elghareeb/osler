@@ -1,5 +1,5 @@
 // commands.rs — All 19+ Tauri IPC commands (1:1 with Flask routes)
-use crate::{bundle_engines, deploy, git, parser, pdf, templates};
+use crate::{bundle_engines, deploy, git, parser, pdf, push_update, templates, updater};
 use crate::server::QuizServer;
 use base64::Engine;
 use regex::Regex;

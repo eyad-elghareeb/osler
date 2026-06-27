@@ -16,7 +16,6 @@
     "osce-engine.js",
     "uworld-engine.js",
     "ai-assistant-engine.js",
-    "sync-engine.js",
     "search-engine.js"
   ],
   "assets": [

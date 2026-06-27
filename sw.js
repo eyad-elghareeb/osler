@@ -55,7 +55,8 @@ self.addEventListener('install', event => {
   );
 });
 
-const CURRENT_VERSION = '1.0.0';
+// Build-time placeholder — build.js replaces this with the actual version from update-manifest.json.
+const CURRENT_VERSION = '__SW_VERSION__';
 
 self.addEventListener('activate', event => {
   event.waitUntil(
