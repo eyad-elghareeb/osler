@@ -1,13 +1,13 @@
 {
   "meta": {
     "uid": "sample-osce-001",
-    "title": "Sample OSCE Station",
-    "description": "A sample OSCE clinical scenario",
+    "title": "Clinical Skills OSCE Stations",
+    "description": "6 OSCE stations for clinical skills practice covering emergency medicine, cardiology, neurology, and respiratory",
     "icon": "activity",
-    "tags": ["osce", "cardiology"],
+    "tags": ["osce", "cardiology", "neurology", "emergency", "respiratory"],
     "schemaVersion": "1.0",
     "createdAt": "2026-06-23T00:00:00Z",
-    "updatedAt": "2026-06-23T00:00:00Z"
+    "updatedAt": "2026-06-27T00:00:00Z"
   },
   "type": "osce",
   "stations": [
@@ -15,21 +15,160 @@
       "id": "osce-001",
       "scenario": "A 55-year-old patient presents with acute onset central chest pain radiating to the left arm, associated with nausea and diaphoresis. BP 90/60, HR 110, O2 sat 94%.",
       "redFlags": [
-        "Hypotension (BP 90/60)",
+        "Hypotension (BP 90/60) suggesting cardiogenic shock",
         "Tachycardia (HR 110)",
-        "Radiation to left arm"
+        "Radiation of pain to left arm",
+        "Associated autonomic symptoms (nausea, diaphoresis)"
       ],
       "differential": [
         "ST-elevation myocardial infarction",
         "Non-ST-elevation myocardial infarction",
         "Aortic dissection",
-        "Pulmonary embolism"
+        "Pulmonary embolism",
+        "Pericarditis"
       ],
       "rubric": [
-        "Recognizes red flags",
-        "Orders appropriate investigations",
-        "Identifies correct differential",
-        "Recommends appropriate management"
+        "Recognizes red flags and activates STEMI protocol",
+        "Orders stat ECG and interprets correctly",
+        "Obtains cardiac biomarkers (troponin)",
+        "Gives appropriate analgesia (morphine) and antiplatelets (aspirin)",
+        "Calls cardiology for emergent PCI evaluation",
+        "Manages hypotension appropriately (fluids, inotropes if needed)"
+      ]
+    },
+    {
+      "id": "osce-002",
+      "scenario": "A 28-year-old woman presents with acute dyspnea, pleuritic chest pain, and hemoptysis 10 days after a long-haul flight. She is on oral contraceptives. HR 105, RR 24, O2 sat 89% on room air, BP 110/70.",
+      "redFlags": [
+        "Recent prolonged immobility (long-haul flight)",
+        "Oral contraceptive use (hypercoagulable state)",
+        "Tachycardia and tachypnea",
+        "Hypoxia (O2 sat 89%)",
+        "Classic triad: dyspnea, pleuritic pain, hemoptysis"
+      ],
+      "differential": [
+        "Pulmonary embolism",
+        "Community-acquired pneumonia",
+        "Pneumothorax",
+        "Pericarditis",
+        "Costochondritis"
+      ],
+      "rubric": [
+        "Assesses Wells criteria for PE probability",
+        "Orders D-dimer (elevated confirms need for imaging)",
+        "Orders CTPA (gold standard for diagnosis)",
+        "Starts anticoagulation (LMWH or heparin) empirically if high probability",
+        "Assesses for contraindications to thrombolysis",
+        "Provides supplemental oxygen and monitors vitals"
+      ]
+    },
+    {
+      "id": "osce-003",
+      "scenario": "A 72-year-old man with hypertension and diabetes presents with sudden-onset right-sided weakness, facial droop, and inability to speak. Symptoms began 90 minutes ago. BP 185/100, HR 88, O2 sat 97%.",
+      "redFlags": [
+        "Acute onset of focal neurological deficits",
+        "Time of onset known (<90 minutes — within tPA window)",
+        "Hypertension (BP 185/100)",
+        "Aphasia and hemiparesis suggest left MCA territory"
+      ],
+      "differential": [
+        "Ischemic stroke (MCA territory)",
+        "Intracerebral hemorrhage",
+        "Transient ischemic attack",
+        "Seizure with Todd paralysis",
+        "Hypoglycemia with focal deficits"
+      ],
+      "rubric": [
+        "Performs rapid NIH Stroke Scale assessment",
+        "Checks blood glucose to rule out hypoglycemia",
+        "Orders stat non-contrast CT head to exclude hemorrhage",
+        "Calculates that patient is within tPA window (3 hours)",
+        "Reviews tPA contraindications (recent surgery, bleeding history, etc.)",
+        "Manages BP to <185/110 for tPA eligibility",
+        "Discusses risks/benefits with patient/family",
+        "Administers alteplase if eligible and arranges stroke unit admission"
+      ]
+    },
+    {
+      "id": "osce-004",
+      "scenario": "A 45-year-old with known asthma presents with severe dyspnea, wheezing, and difficulty speaking in full sentences. She has been using her salbutamol inhaler every 2 hours without relief. RR 32, HR 115, O2 sat 87%, PEFR 30% of predicted.",
+      "redFlags": [
+        "Unable to speak in full sentences (severe distress)",
+        "Peak expiratory flow rate <33% predicted",
+        "Tachycardia (HR 115) and tachypnea (RR 32)",
+        "Hypoxia (O2 sat 87%)",
+        "Poor response to bronchodilator therapy"
+      ],
+      "differential": [
+        "Acute severe asthma exacerbation",
+        "COPD exacerbation (if smoker)",
+        "Anaphylaxis",
+        "Foreign body aspiration",
+        "Vocal cord dysfunction"
+      ],
+      "rubric": [
+        "Assesses severity using PEFR, O2 sat, and speaking ability",
+        "Administers high-flow oxygen to target SpO2 94-98%",
+        "Gives continuous nebulized salbutamol with ipratropium bromide",
+        "Administers systemic corticosteroids (IV hydrocortisone or oral prednisolone) within 1 hour",
+        "Considers IV magnesium sulfate for severe refractory asthma",
+        "Monitors response with serial PEFR measurements",
+        "Assesses for signs of life-threatening asthma (silent chest, cyanosis, exhaustion)",
+        "Arranges ICU admission if poor response or worsening"
+      ]
+    },
+    {
+      "id": "osce-005",
+      "scenario": "A 35-year-old alcoholic presents with hematemesis (bright red blood) and melena. He appears pale and diaphoretic. HR 110, BP 85/60, RR 20, O2 sat 96%. Abdominal exam shows distension and shifting dullness.",
+      "redFlags": [
+        "Hemodynamic instability (tachycardia, hypotension)",
+        "Active hematemesis suggesting variceal or arterial bleeding",
+        "Signs of chronic liver disease (ascites — shifting dullness)",
+        "Alcoholism history — high risk for varices",
+        "Pallor and diaphoresis suggesting significant blood loss"
+      ],
+      "differential": [
+        "Esophageal variceal hemorrhage",
+        "Peptic ulcer disease with bleeding",
+        "Mallory-Weiss tear",
+        "Gastric erosions / portal hypertensive gastropathy",
+        "Esophagitis"
+      ],
+      "rubric": [
+        "Performs ABCDE assessment and starts IV resuscitation",
+        "Orders type and crossmatch, CBC, coagulation profile, LFTs",
+        "Starts IV fluids and considers blood transfusion (target Hb >7-8)",
+        "Administers IV PPI (pantoprazole) empirically",
+        "Considers IV ceftriaxone for spontaneous bacterial peritonitis prophylaxis",
+        "Administers IV octreotide (somatostatin analog) for suspected variceal bleeding",
+        "Arranges urgent upper endoscopy for diagnosis and treatment",
+        "Prepares for possible balloon tamponade if massive bleeding"
+      ]
+    },
+    {
+      "id": "osce-006",
+      "scenario": "A 60-year-old hypertensive patient on lisinopril presents to the emergency department with angioedema — swelling of the lips, tongue, and periorbital area with stridor. BP 140/85, HR 95, RR 24, O2 sat 91%.",
+      "redFlags": [
+        "Airway compromise (stridor, tongue swelling)",
+        "O2 sat 91% — impending respiratory failure",
+        "ACE inhibitor-associated angioedema (rapid onset)",
+        "Facial and oropharyngeal involvement"
+      ],
+      "differential": [
+        "ACE inhibitor-induced angioedema",
+        "Anaphylaxis (food, drug, insect sting)",
+        "Hereditary angioedema (C1 esterase inhibitor deficiency)",
+        "Idiopathic angioedema",
+        "Periorbital cellulitis"
+      ],
+      "rubric": [
+        "Assesses airway urgently — prepares for difficult intubation",
+        "Calls anesthesia/ENT for airway evaluation",
+        "Discontinues ACE inhibitor immediately and documents allergy",
+        "Administers IV antihistamines (diphenhydramine) and corticosteroids",
+        "Considers fresh frozen plasma (contains ACE) or icatibant for severe cases",
+        "Monitors closely in ICU or high-acuity setting",
+        "Educates patient on avoiding all ACE inhibitors and ARBs (cross-reaction risk)"
       ]
     }
   ]

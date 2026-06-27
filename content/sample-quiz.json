@@ -1,42 +1,150 @@
 {
   "meta": {
     "uid": "sample-quiz-001",
-    "title": "Sample Cardiology Quiz",
-    "description": "A sample quiz for testing the engine",
-    "icon": "heart",
-    "tags": ["cardiology", "sample"],
+    "title": "Multisystem Medical Quiz",
+    "description": "15 board-style questions spanning cardiology, neurology, pulmonology, pharmacology, and gastroenterology",
+    "icon": "clipboard",
+    "tags": ["cardiology", "neurology", "pulmonology", "pharmacology", "gastroenterology", "sample"],
     "schemaVersion": "1.0",
     "createdAt": "2026-06-23T00:00:00Z",
-    "updatedAt": "2026-06-23T00:00:00Z"
+    "updatedAt": "2026-06-27T00:00:00Z"
   },
   "type": "quiz",
   "questions": [
     {
       "id": "q-001",
-      "question": "What is the most common cause of heart failure?",
-      "options": ["Coronary artery disease", "Valvular heart disease", "Cardiomyopathy", "Hypertension", "Congenital heart disease"],
-      "correct": 0,
-      "explanation": "Coronary artery disease is the most common cause of heart failure, accounting for approximately 50-60% of cases.",
-      "tags": ["heart-failure"],
+      "question": "A 58-year-old male with a history of hypertension presents with acute retrosternal chest pain radiating to the left arm. ECG shows ST-elevation in leads V1-V4. What is the most appropriate next step?",
+      "options": ["Administer sublingual nitroglycerin and observe", "Immediate percutaneous coronary intervention", "Start oral beta-blocker and discharge", "CT angiogram of the chest", "Treadmill stress test"],
+      "correct": 1,
+      "explanation": "STEMI requires emergent revascularization — percutaneous coronary intervention (PCI) within 90 minutes of arrival is the gold standard for ST-elevation MI.",
+      "tags": ["cardiology", "stemil"],
       "difficulty": 3
     },
     {
       "id": "q-002",
-      "question": "Which medication is first-line for stable angina?",
-      "options": ["Nitroglycerin", "Beta-blockers", "Calcium channel blockers", "Aspirin", "Statins"],
+      "question": "A 72-year-old woman with atrial fibrillation develops acute-onset right-sided weakness and aphasia. Symptoms began 2 hours ago. CT head shows no hemorrhage. What is the most appropriate treatment?",
+      "options": ["Aspirin 325 mg daily", "Intravenous alteplase (tPA)", "Heparin infusion", "Carotid endarterectomy", "Warfarin loading"],
       "correct": 1,
-      "explanation": "Beta-blockers are first-line for stable angina as they reduce myocardial oxygen demand.",
-      "tags": ["ischemia"],
-      "difficulty": 2
+      "explanation": "Ischemic stroke presenting within 3 hours of onset (extended to 4.5 hours in eligible patients) with no hemorrhage on CT is treated with IV alteplase (tPA).",
+      "tags": ["neurology", "stroke"],
+      "difficulty": 3
     },
     {
       "id": "q-003",
-      "question": "What is the normal PR interval on ECG?",
-      "options": ["0.08-0.10 seconds", "0.12-0.20 seconds", "0.20-0.24 seconds", "0.24-0.28 seconds", "0.28-0.32 seconds"],
+      "question": "A 65-year-old with COPD presents with increasing dyspnea and purulent sputum for 4 days. Oxygen saturation is 88% on room air. Chest X-ray shows no consolidation. What is the most likely diagnosis?",
+      "options": ["Community-acquired pneumonia", "Acute exacerbation of COPD", "Pulmonary embolism", "Congestive heart failure", "Bronchogenic carcinoma"],
       "correct": 1,
-      "explanation": "The normal PR interval is 0.12-0.20 seconds (3-5 small squares).",
-      "tags": ["ecg"],
-      "difficulty": 1
+      "explanation": "Acute exacerbation of COPD is characterized by increased dyspnea, sputum volume, and purulence in a COPD patient without radiographic signs of pneumonia.",
+      "tags": ["pulmonology", "copd"],
+      "difficulty": 2
+    },
+    {
+      "id": "q-004",
+      "question": "Which of the following beta-blockers is preferred in a patient with asthma who requires rate control for atrial fibrillation?",
+      "options": ["Propranolol", "Metoprolol", "Atenolol", "Esmolol", "Carvedilol"],
+      "correct": 2,
+      "explanation": "Atenolol is a cardioselective beta-1 blocker that minimizes bronchospasm risk in asthmatics compared to non-selective agents like propranolol.",
+      "tags": ["pharmacology", "beta-blockers"],
+      "difficulty": 2
+    },
+    {
+      "id": "q-005",
+      "question": "A 45-year-old with epigastric pain and melena undergoes upper endoscopy showing a 2cm duodenal ulcer with a visible vessel. Which treatment reduces the risk of rebleeding most effectively?",
+      "options": ["High-dose PPI monotherapy", "Endoscopic clipping plus high-dose PPI", "H. pylori triple therapy alone", "Surgical vagotomy and antrectomy", "Octreotide infusion"],
+      "correct": 1,
+      "explanation": "Combination endoscopic therapy (clipping or cautery) plus high-dose PPI is superior to either modality alone for preventing rebleeding in high-risk peptic ulcers.",
+      "tags": ["gastroenterology", "ulcer"],
+      "difficulty": 3
+    },
+    {
+      "id": "q-006",
+      "question": "A 55-year-old diabetic presents with sudden-onset severe headache, nausea, and photophobia. Lumbar puncture shows elevated opening pressure, 500 WBCs (80% neutrophils), low glucose, and high protein. What is the most likely organism?",
+      "options": ["Neisseria meningitidis", "Streptococcus pneumoniae", "Listeria monocytogenes", "Haemophilus influenzae", "Escherichia coli"],
+      "correct": 1,
+      "explanation": "S. pneumoniae is the most common cause of bacterial meningitis in adults, presenting with purulent CSF (polymorphonuclear predominance), low glucose, and high protein.",
+      "tags": ["neurology", "infectious-disease"],
+      "difficulty": 3
+    },
+    {
+      "id": "q-007",
+      "question": "A patient on warfarin for mechanical mitral valve presents with an INR of 5.8 and minor epistaxis. What is the most appropriate management?",
+      "options": ["Hold warfarin, give vitamin K 1-2 mg orally", "Administer FFP 2 units immediately", "Hold warfarin and observe", "Give vitamin K 10 mg IV", "Start heparin infusion"],
+      "correct": 0,
+      "explanation": "INR >5 with minor bleeding: hold warfarin and give low-dose oral vitamin K (1-2.5 mg). High-dose vitamin K or FFP is reserved for major or life-threatening bleeding.",
+      "tags": ["pharmacology", "anticoagulation"],
+      "difficulty": 2
+    },
+    {
+      "id": "q-008",
+      "question": "A 60-year-old alcoholic presents with hematemesis. On exam, he has splenomegaly and caput medusae. What is the most likely source of bleeding?",
+      "options": ["Mallory-Weiss tear", "Gastric ulcer", "Esophageal varices", "Duodenal ulcer", "Gastric erosions"],
+      "correct": 2,
+      "explanation": "Caput medusae and splenomegaly indicate portal hypertension. Esophageal varices are the most common source of upper GI bleeding in patients with cirrhosis and portal hypertension.",
+      "tags": ["gastroenterology", "cirrhosis"],
+      "difficulty": 2
+    },
+    {
+      "id": "q-009",
+      "question": "A 35-year-old woman presents with pleuritic chest pain, dyspnea, and hemoptysis. She recently returned from a long-haul flight. D-dimer is elevated. What is the most appropriate next imaging study?",
+      "options": ["Chest X-ray", "CT pulmonary angiogram", "V/Q scan", "Echocardiogram", "MRI chest"],
+      "correct": 1,
+      "explanation": "CT pulmonary angiography (CTPA) is the gold standard for diagnosing pulmonary embolism with high sensitivity and specificity, superior to V/Q scan when CXR is abnormal.",
+      "tags": ["pulmonology", "pe"],
+      "difficulty": 2
+    },
+    {
+      "id": "q-010",
+      "question": "Which of the following is the most common cause of secondary hypertension in a 30-year-old male?",
+      "options": ["Renal artery stenosis", "Chronic kidney disease", "Primary aldosteronism", "Pheochromocytoma", "Coarctation of the aorta"],
+      "correct": 2,
+      "explanation": "Primary aldosteronism is the most common identifiable cause of secondary hypertension, especially in young patients with resistant hypertension or hypokalemia.",
+      "tags": ["cardiology", "hypertension"],
+      "difficulty": 2
+    },
+    {
+      "id": "q-011",
+      "question": "A 75-year-old man with Parkinson's disease on levodopa/carbidopa develops worsening tremor, bradykinesia, and confusion. What is the most likely cause?",
+      "options": ["Disease progression requiring higher dose", "Levodopa-induced dyskinesia", "Neuroleptic malignant syndrome", "On-off phenomenon", "Dementia with Lewy bodies"],
+      "correct": 3,
+      "explanation": "The on-off phenomenon refers to unpredictable fluctuations in motor response to levodopa as the disease progresses. Wearing-off periods cause recurrence of parkinsonian symptoms.",
+      "tags": ["neurology", "parkinsons"],
+      "difficulty": 3
+    },
+    {
+      "id": "q-012",
+      "question": "A patient with heart failure with reduced ejection fraction (HFrEF) has an LVEF of 30%. Which combination of medications has the strongest mortality benefit?",
+      "options": ["ACE inhibitor + beta-blocker + aldosterone antagonist", "Digoxin + diuretic + beta-blocker", "Hydralazine + nitrate + diuretic", "ACE inhibitor + ARB + digoxin", "Calcium channel blocker + beta-blocker"],
+      "correct": 0,
+      "explanation": "Triple therapy with ACE inhibitor (or ARB), beta-blocker, and aldosterone antagonist has a Class I recommendation for HFrEF with the strongest mortality reduction in trials.",
+      "tags": ["cardiology", "heart-failure"],
+      "difficulty": 3
+    },
+    {
+      "id": "q-013",
+      "question": "A 22-year-old medical student develops acute watery diarrhea, abdominal cramps, and nausea after eating undercooked chicken at a restaurant. Symptoms began 12 hours after the meal. What is the most likely causative organism?",
+      "options": ["Campylobacter jejuni", "Salmonella enteritidis", "Enterotoxigenic E. coli", "Shigella sonnei", "Staphylococcus aureus"],
+      "correct": 0,
+      "explanation": "Campylobacter jejuni is the most common cause of acute bacterial gastroenteritis, typically from undercooked poultry, with an incubation period of 12-72 hours.",
+      "tags": ["gastroenterology", "infectious-disease"],
+      "difficulty": 2
+    },
+    {
+      "id": "q-014",
+      "question": "Which of the following medications used for smoking cessation is a partial agonist at nicotinic acetylcholine receptors?",
+      "options": ["Nicotine patch", "Bupropion", "Varenicline", "Clonidine", "Nortriptyline"],
+      "correct": 2,
+      "explanation": "Varenicline (Chantix) is a partial agonist at alpha-4 beta-2 nicotinic acetylcholine receptors, reducing craving and withdrawal symptoms while blocking nicotine's rewarding effects.",
+      "tags": ["pharmacology", "smoking-cessation"],
+      "difficulty": 2
+    },
+    {
+      "id": "q-015",
+      "question": "A 68-year-old with severe COPD is started on long-term oxygen therapy. Which of the following criteria supports this decision?",
+      "options": ["PaO2 < 55 mm Hg or SpO2 < 88% at rest", "PaO2 56-60 mm Hg with polycythemia", "Exercise-induced desaturation to 89%", "Nocturnal desaturation to 85%", "All of the above are correct criteria"],
+      "correct": 4,
+      "explanation": "Long-term oxygen therapy (LTOT) is indicated for PaO2 <55 mm Hg or SpO2 <88 at rest; PaO2 56-60 with end-organ damage (polycythemia, cor pulmonale); exercise desaturation <88%; or nocturnal desaturation.",
+      "tags": ["pulmonology", "copd"],
+      "difficulty": 3
     }
   ]
 }

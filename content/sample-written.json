@@ -1,27 +1,83 @@
 {
   "meta": {
     "uid": "sample-written-001",
-    "title": "Sample Written Assessment",
-    "description": "A sample written assessment prompt",
-    "icon": "edit",
-    "tags": ["written", "cardiology"],
+    "title": "Clinical Written Assessment",
+    "description": "5 written assessment prompts covering cardiology, neurology, pulmonology, pharmacology, and gastroenterology",
+    "icon": "pen-tool",
+    "tags": ["written", "cardiology", "neurology", "pulmonology", "pharmacology", "gastroenterology"],
     "schemaVersion": "1.0",
     "createdAt": "2026-06-23T00:00:00Z",
-    "updatedAt": "2026-06-23T00:00:00Z"
+    "updatedAt": "2026-06-27T00:00:00Z"
   },
   "type": "written",
   "prompts": [
     {
       "id": "w-001",
-      "prompt": "Describe the pathophysiology of heart failure with reduced ejection fraction (HFrEF). Include the role of the renin-angiotensin-aldosterone system.",
+      "prompt": "Describe the pathophysiology of heart failure with reduced ejection fraction (HFrEF). Include the role of the renin-angiotensin-aldosterone system, compensatory mechanisms, and how these lead to disease progression over time.",
       "rubric": [
-        "Explains reduced contractility",
-        "Describes RAAS activation",
-        "Mentions compensatory mechanisms",
-        "Discusses progression over time"
+        "Explains reduced myocardial contractility",
+        "Describes RAAS activation in response to decreased cardiac output",
+        "Mentions sympathetic nervous system activation and its effects",
+        "Discusses ventricular remodeling as a compensatory mechanism that becomes maladaptive",
+        "Explains how compensatory mechanisms accelerate disease progression over time"
       ],
       "wordLimit": 500,
-      "tags": ["heart-failure"]
+      "tags": ["heart-failure", "cardiology"]
+    },
+    {
+      "id": "w-002",
+      "prompt": "Outline the diagnostic approach and initial management of a patient presenting with acute ischemic stroke within the first 4.5 hours. Include appropriate imaging, treatment decisions, and contraindications to thrombolysis.",
+      "rubric": [
+        "Describes immediate assessment including NIH stroke scale and vitals",
+        "Identifies need for non-contrast CT head to exclude hemorrhage",
+        "Lists indications for IV alteplase (tPA) within 3-4.5 hour window",
+        "Lists contraindications to thrombolysis (recent surgery, bleeding, INR >1.7, etc.)",
+        "Discusses blood pressure management before and after thrombolysis",
+        "Mentions mechanical thrombectomy for large vessel occlusion"
+      ],
+      "wordLimit": 400,
+      "tags": ["stroke", "neurology"]
+    },
+    {
+      "id": "w-003",
+      "prompt": "Compare and contrast the pathophysiology, clinical presentation, and management of asthma versus COPD. Focus on the key differences in airway inflammation, reversibility, and pharmacologic treatment approaches.",
+      "rubric": [
+        "Distinguishes eosinophilic inflammation (asthma) from neutrophilic (COPD)",
+        "Describes reversible vs largely fixed airway obstruction",
+        "Compares typical age of onset and triggers",
+        "Outlines stepwise asthma management (SABA → ICS → LABA → biologics)",
+        "Outlines COPD management (bronchodilators → ICS for exacerbations → LTOT)",
+        "Mentions key diagnostic differences (methacholine challenge for asthma, PFTs for COPD)"
+      ],
+      "wordLimit": 500,
+      "tags": ["pulmonology", "asthma", "copd"]
+    },
+    {
+      "id": "w-004",
+      "prompt": "A 65-year-old man on warfarin for mechanical mitral valve presents with an INR of 7.2 and melena. Detail the pathophysiology of warfarin's anticoagulant effect, the management of this supratherapeutic INR with bleeding, and how you would transition to a different anticoagulant if needed.",
+      "rubric": [
+        "Explains warfarin's mechanism (inhibition of vitamin K-dependent factors II, VII, IX, X)",
+        "Recognizes need for immediate reversal due to major bleeding",
+        "Describes appropriate use of vitamin K, FFP, and PCC (prothrombin complex concentrate)",
+        "Discusses holding warfarin and assessing bleeding source",
+        "Explains bridging options (UFH or LMWH) if long-term anticoagulation is required"
+      ],
+      "wordLimit": 400,
+      "tags": ["pharmacology", "anticoagulation"]
+    },
+    {
+      "id": "w-005",
+      "prompt": "A 35-year-old female presents with intermittent epigastric pain, bloating, and diarrhea. She has a family history of celiac disease. Describe the diagnostic workup for celiac disease, including appropriate serologic testing, the role of endoscopy with biopsy, and the management approach including dietary counseling.",
+      "rubric": [
+        "Lists appropriate serologic tests (tTG-IgA, total IgA, EMA)",
+        "Explains need for gluten-containing diet before testing",
+        "Describes endoscopic findings (villous atrophy, crypt hyperplasia) and Marsh staging",
+        "Discusses lifelong gluten-free diet as cornerstone of treatment",
+        "Mentions monitoring for complications (osteoporosis, lymphoma risk) and nutritional deficiencies",
+        "Addresses family screening recommendations"
+      ],
+      "wordLimit": 450,
+      "tags": ["gastroenterology", "celiac"]
     }
   ]
 }

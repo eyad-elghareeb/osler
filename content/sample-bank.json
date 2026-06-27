@@ -1,28 +1,142 @@
 {
   "meta": {
     "uid": "sample-bank-001",
-    "title": "Sample Cardiology Question Bank",
-    "description": "A sample question bank with passages",
+    "title": "Clinical Vignette Bank",
+    "description": "5 clinical vignettes with attached questions spanning cardiology, neurology, pulmonology, and gastroenterology",
     "icon": "book",
-    "tags": ["cardiology", "bank"],
+    "tags": ["cardiology", "neurology", "pulmonology", "gastroenterology", "clinical-vignettes"],
     "schemaVersion": "1.0",
     "createdAt": "2026-06-23T00:00:00Z",
-    "updatedAt": "2026-06-23T00:00:00Z"
+    "updatedAt": "2026-06-27T00:00:00Z"
   },
   "type": "bank",
   "passages": [
     {
       "id": "p-001",
-      "content": "A 65-year-old male presents with chest pain and shortness of breath. He has a history of hypertension and diabetes.",
+      "content": "A 65-year-old male with a 40-pack-year smoking history presents with progressive dyspnea on exertion, chronic cough with purulent sputum, and frequent respiratory infections. He has a barrel-shaped chest, prolonged expiration, and distant breath sounds. Oxygen saturation is 89% on room air. Pulmonary function tests show FEV1/FVC ratio of 0.55 and FEV1 45% of predicted.",
       "questions": [
         {
           "id": "bq-001",
           "passageId": "p-001",
+          "question": "What is the most likely GOLD stage of this patient's disease?",
+          "options": ["GOLD 1 (Mild) — FEV1 ≥ 80%", "GOLD 2 (Moderate) — FEV1 50-79%", "GOLD 3 (Severe) — FEV1 30-49%", "GOLD 4 (Very Severe) — FEV1 < 30%", "Cannot be determined without DLCO"],
+          "correct": 2,
+          "explanation": "With FEV1 45% of predicted, this patient has GOLD 3 (Severe) COPD. FEV1 30-49% predicted classifies as severe obstruction.",
+          "tags": ["copd", "pulmonology"],
+          "difficulty": 2
+        },
+        {
+          "id": "bq-002",
+          "passageId": "p-001",
+          "question": "Which of the following interventions has been shown to reduce mortality in this patient's condition?",
+          "options": ["Inhaled beta-agonists alone", "Long-term oxygen therapy (LTOT)", "Pulmonary rehabilitation", "Smoking cessation", "Both LTOT and smoking cessation reduce mortality"],
+          "correct": 4,
+          "explanation": "Smoking cessation is the only intervention that slows disease progression in COPD. LTOT reduces mortality in patients with severe resting hypoxemia (PaO2 <55 mm Hg).",
+          "tags": ["copd", "pulmonology"],
+          "difficulty": 3
+        }
+      ]
+    },
+    {
+      "id": "p-002",
+      "content": "A 45-year-old woman presents with acute-onset severe headache described as 'the worst headache of my life,' accompanied by neck stiffness and photophobia. CT head without contrast shows hyperdense material in the subarachnoid space. Her blood pressure is 180/95 mm Hg. She has no previous history of hypertension.",
+      "questions": [
+        {
+          "id": "bq-003",
+          "passageId": "p-002",
+          "question": "What is the most likely underlying cause of this patient's presentation?",
+          "options": ["Hypertensive emergency", "Arteriovenous malformation rupture", "Berry aneurysm rupture", "Traumatic subarachnoid hemorrhage", "Cerebral venous sinus thrombosis"],
+          "correct": 2,
+          "explanation": "The classic presentation of 'worst headache of life' with subarachnoid hemorrhage on CT in a middle-aged adult is most commonly due to rupture of a saccular (berry) aneurysm, often in the circle of Willis.",
+          "tags": ["neurology", "stroke"],
+          "difficulty": 3
+        },
+        {
+          "id": "bq-004",
+          "passageId": "p-002",
+          "question": "What is the most appropriate initial blood pressure target for this patient before definitive treatment?",
+          "options": ["SBP < 120 mm Hg", "SBP < 140 mm Hg", "SBP < 160 mm Hg", "MAP < 130 mm Hg", "No blood pressure lowering until aneurysm is secured"],
+          "correct": 2,
+          "explanation": "Before aneurysm clipping or coiling, SBP should be lowered to <160 mm Hg to reduce rebleeding risk while maintaining cerebral perfusion. Aggressive lowering to <120 may cause cerebral ischemia.",
+          "tags": ["neurology", "stroke"],
+          "difficulty": 3
+        }
+      ]
+    },
+    {
+      "id": "p-003",
+      "content": "A 50-year-old male with a 15-year history of type 2 diabetes and hypertension presents with bilateral lower extremity edema, foamy urine, and fatigue. Urinalysis shows 4+ protein. Serum albumin is 2.1 g/dL. 24-hour urine protein is 5.8 g. Renal biopsy shows diffuse thickening of the glomerular basement membrane on electron microscopy.",
+      "questions": [
+        {
+          "id": "bq-005",
+          "passageId": "p-003",
           "question": "What is the most likely diagnosis?",
-          "options": ["Unstable angina", "Acute myocardial infarction", "Heart failure", "Pulmonary embolism", "Aortic dissection"],
+          "options": ["Minimal change disease", "Focal segmental glomerulosclerosis", "Diabetic nephropathy with membranous nephropathy", "Membranoproliferative glomerulonephritis", "IgA nephropathy"],
+          "correct": 2,
+          "explanation": "Diabetic patients with nephrotic-range proteinuria, diffuse GBM thickening on EM, and long-standing diabetes have diabetic nephropathy. The coexistence of membranous nephropathy is also possible given the nephrotic presentation.",
+          "tags": ["nephrology", "diabetes"],
+          "difficulty": 3
+        },
+        {
+          "id": "bq-006",
+          "passageId": "p-003",
+          "question": "Which of the following medication classes has been shown to slow progression of nephropathy in this patient?",
+          "options": ["Thiazide diuretics", "ACE inhibitors or ARBs", "Calcium channel blockers", "Beta-blockers", "SGLT2 inhibitors"],
           "correct": 1,
-          "explanation": "The presentation of chest pain with SOB in a patient with HTN and diabetes suggests acute MI.",
-          "tags": ["mi"],
+          "explanation": "ACE inhibitors and ARBs reduce proteinuria and slow progression of diabetic nephropathy by reducing intraglomerular pressure, independent of their blood pressure-lowering effects.",
+          "tags": ["pharmacology", "nephrology"],
+          "difficulty": 2
+        }
+      ]
+    },
+    {
+      "id": "p-004",
+      "content": "A 30-year-old woman presents with episodic epigastric pain that is worse on an empty stomach and improves with eating. She has nocturnal pain that wakes her from sleep. She denies NSAID use. Stool is positive for occult blood. Upper endoscopy reveals a 1.5 cm ulcer in the duodenal bulb with clean base.",
+      "questions": [
+        {
+          "id": "bq-007",
+          "passageId": "p-004",
+          "question": "What is the single most appropriate next step in management?",
+          "options": ["Start high-dose PPI and schedule repeat endoscopy in 8 weeks", "Biopsy the ulcer margins for malignancy", "Test for H. pylori — if positive, start triple therapy", "Start H2 receptor antagonist and discharge", "Refer for surgical vagotomy"],
+          "correct": 2,
+          "explanation": "All duodenal ulcer patients should be tested for H. pylori. If positive, eradication with triple or quadruple therapy is indicated. Biopsy is less critical for clean-base duodenal ulcers (low malignant potential).",
+          "tags": ["gastroenterology", "h-pylori"],
+          "difficulty": 2
+        },
+        {
+          "id": "bq-008",
+          "passageId": "p-004",
+          "question": "If this patient's H. pylori test is positive, which one-week triple therapy regimen is most appropriate?",
+          "options": ["PPI + amoxicillin + clarithromycin", "PPI + metronidazole + tetracycline", "Bismuth + metronidazole + tetracycline + PPI", "PPI + amoxicillin + levofloxacin", "H2 blocker + amoxicillin + clarithromycin"],
+          "correct": 0,
+          "explanation": "First-line triple therapy for H. pylori consists of a PPI, amoxicillin, and clarithromycin for 7-14 days. In penicillin-allergic patients, metronidazole replaces amoxicillin.",
+          "tags": ["gastroenterology", "pharmacology"],
+          "difficulty": 2
+        }
+      ]
+    },
+    {
+      "id": "p-005",
+      "content": "A 68-year-old man with history of anterior MI 3 years ago presents with progressive dyspnea on exertion, orthopnea, paroxysmal nocturnal dyspnea, and bilateral pedal edema. LVEF on echocardiogram is 35%. He is currently on lisinopril and furosemide. Labs show K+ 4.8, Cr 1.1, BNP elevated.",
+      "questions": [
+        {
+          "id": "bq-009",
+          "passageId": "p-005",
+          "question": "Which medication should be added to this patient's regimen to improve mortality?",
+          "options": ["Digoxin", "Carvedilol", "Diltiazem", "Spironolactone", "Hydralazine + isosorbide dinitrate"],
+          "correct": 1,
+          "explanation": "Beta-blockers (specifically carvedilol, bisoprolol, and metoprolol succinate) reduce mortality in HFrEF regardless of severity. Carvedilol is preferred post-MI with HF.",
+          "tags": ["cardiology", "heart-failure"],
+          "difficulty": 2
+        },
+        {
+          "id": "bq-010",
+          "passageId": "p-005",
+          "question": "If this patient remains symptomatic after optimized medical therapy for 3 months, what intervention should be considered next?",
+          "options": ["Implantable cardioverter-defibrillator (ICD)", "Cardiac resynchronization therapy (CRT-D)", "Heart transplant evaluation", "Left ventricular assist device (LVAD)", "Increase furosemide dose"],
+          "correct": 0,
+          "explanation": "For patients with LVEF <35% despite 3+ months of optimal medical therapy, an ICD is recommended for primary prevention of sudden cardiac death. CRT-D is added if QRS >150 ms with LBBB.",
+          "tags": ["cardiology", "heart-failure"],
           "difficulty": 3
         }
       ]

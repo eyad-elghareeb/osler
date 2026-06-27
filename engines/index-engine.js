@@ -237,8 +237,9 @@
     var grid = document.getElementById('quiz-grid');
     if (!grid || typeof QUIZZES === 'undefined') return;
     grid.innerHTML = QUIZZES.map(function (quiz) {
+      var iconHtml = quiz._iconRaw || (EngineShared.icon && typeof EngineShared.icon === 'function' ? EngineShared.icon(quiz.icon) : escHtml(quiz.icon));
       return '<div class="quiz-card">'
-        + '<div class="card-icon">' + escHtml(quiz.icon) + '</div>'
+        + '<div class="card-icon">' + iconHtml + '</div>'
         + '<h2 class="card-title">' + escHtml(quiz.title) + '</h2>'
         + '<p class="card-desc">' + escHtml(quiz.description) + '</p>'
         + '<div class="card-meta">'

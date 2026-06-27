@@ -48,7 +48,26 @@
 
   <script>
     window.ENGINE_BASE = '../dist/';
-    window.QUIZZES = [];
+
+    var TYPE_ICONS = { quiz:'clipboard', bank:'book', flashcard:'layers', written:'pen-tool', osce:'activity' };
+    var TYPE_NAMES  = { quiz:'Quiz', bank:'Question Bank', flashcard:'Flashcards', written:'Written', osce:'OSCE' };
+
+    fetch('../content/manifest.json').then(function(r) { return r.json(); }).then(function(manifest) {
+      window.QUIZZES = (manifest.items || []).map(function(item) {
+        return {
+          icon: TYPE_ICONS[item.type] || 'file-text',
+          title: item.title,
+          description: (TYPE_NAMES[item.type] || item.type) + ' \u2022 ' + (item.tags || []).join(', '),
+          tags: item.tags || [],
+          url: 'player.html?uid=' + encodeURIComponent(item.uid)
+        };
+      });
+      if (window.renderQuizzes) window.renderQuizzes();
+    }).catch(function(e) {
+      console.warn('[hub] Failed to load manifest:', e);
+      window.QUIZZES = [];
+      document.getElementById('quiz-grid').innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:3rem 1rem;color:var(--text-muted)"><p>No content available. Add sample content files to the <code>content/</code> directory.</p></div>';
+    });
   </script>
   <script src="../dist/engine-shared.js"></script>
   <script src="../dist/index-engine.js"></script>
