@@ -1,1 +1,0 @@
-{"default":{"identifier":"default","description":"Default capabilities for Osler Admin","local":true,"windows":["main"],"permissions":["core:default","store:default","shell:allow-open","updater:default","dialog:default"]}}

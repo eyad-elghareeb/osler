@@ -1,0 +1,2752 @@
+"use client";
+
+import * as React from "react";
+import { motion, AnimatePresence } from "framer-motion";
+import {
+  ChevronLeft,
+  ChevronRight,
+  Flag,
+  Check,
+  X,
+  Clock,
+  Pause,
+  Play,
+  GraduationCap,
+  RotateCcw,
+  Award,
+  Home,
+  BarChart3,
+  Plus,
+  ListChecks,
+  Loader2,
+  Timer,
+  Sparkles,
+  FileText,
+  Calculator as CalcIcon,
+  FlaskConical,
+  BookOpen,
+  Highlighter,
+  Eraser,
+  StickyNote,
+  Type,
+  Minus,
+  Plus as PlusIcon,
+  Trash2,
+  Eye,
+  CheckCircle2,
+  Circle,
+  PenTool,
+  Activity,
+  User,
+  AlertTriangle,
+  Stethoscope,
+  ListCollapse,
+  History,
+  TrendingUp,
+  Target,
+} from "lucide-react";
+import { loadAllContent, ENGINE_META } from "@/lib/osler/content";
+import type {
+  AnyContent,
+  BankContent,
+  EngineType,
+  FlashcardContent,
+  ManifestItem,
+  OsceContent,
+  QuizContent,
+  WrittenContent,
+} from "@/lib/osler/types";
+import {
+  storage,
+  sessions,
+  highlights,
+  stickyNotes,
+  writtenDrafts,
+  type SavedSession,
+  type HighlightItem,
+  type StickyNoteData,
+  type WrittenDraft,
+} from "@/lib/osler/storage";
+import { ARTICLES } from "@/lib/osler/articles";
+import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { LabValuesSidebar } from "./lab-values";
+import { CalculatorModal } from "./calculator";
+import { StickyNoteCard, STICKY_COLORS } from "./sticky-note";
+import { FloatingArticleModal } from "./article-modal";
+import { AiAssistant } from "./ai-assistant";
+
+const LETTERS = ["A", "B", "C", "D", "E", "F", "G", "H"];
+const HIGHLIGHT_COLORS = ["#fef08a", "#86efac", "#93c5fd", "#fbcfe8", "#c4b5fd", "#fdba74"];
+
+interface QBankStudioProps {
+  activeItem?: ManifestItem | null;
+  activeContent?: AnyContent | null;
+  onExit: () => void;
+  onOpenPack?: (item: ManifestItem) => void;
+}
+
+type QuizMode = "home" | "quiz" | "results";
+type TestMode = "tutor" | "timed";
+type HomeTab = "create" | "previous" | "performance";
+
+interface SessionData {
+  itemId: string;
+  itemTitle: string;
+  engine: EngineType;
+  mode: TestMode;
+  questions: SessionQuestion[];
+  answers: Record<number, number>;
+  revealed: Record<number, boolean>;
+  flagged: Record<number, boolean>;
+  current: number;
+  startedAt: number;
+  completedAt?: number;
+  examTimeRemaining: number;
+  examPaused: boolean;
+  sessionId: string;
+  // Written drafts: questionId → { text, rubricChecked, submitted }
+  writtenDrafts: Record<string, WrittenDraft>;
+  // OSCE/Flashcard rubric state: questionId → boolean[]
+  rubricState: Record<string, boolean[]>;
+  // Flashcard ratings: questionId → "easy" | "hard" | "unknown"
+  ratings: Record<string, "easy" | "hard" | "unknown">;
+  // Strikethroughs: questionIdx → number[] (choice indices)
+  strikethroughs: Record<number, number[]>;
+}
+
+interface SessionQuestion {
+  id: string;
+  stem: string;
+  choices: string[];
+  correct: number; // -1 for non-MCQ
+  explanation: string;
+  tags?: string[];
+  difficulty?: string;
+  rubric?: string[];
+  redFlags?: string[];
+  differential?: string[];
+}
+
+interface TextControls {
+  fontSize: number;
+  lineHeight: number;
+}
+
+export function QBankStudio({
+  activeItem,
+  activeContent,
+  onExit,
+  onOpenPack,
+}: QBankStudioProps) {
+  const [mode, setMode] = React.useState<QuizMode>("home");
+  const [session, setSession] = React.useState<SessionData | null>(null);
+  const [testMode, setTestMode] = React.useState<TestMode>("tutor");
+  const [homeTab, setHomeTab] = React.useState<HomeTab>("create");
+  const [, force] = React.useReducer((x) => x + 1, 0);
+
+  // Tools state (calculator, lab values, article modal, AI)
+  const [calculatorOpen, setCalculatorOpen] = React.useState(false);
+  const [labValuesOpen, setLabValuesOpen] = React.useState(false);
+  const [articleModalId, setArticleModalId] = React.useState<string | null>(null);
+  const [aiAssistantOpen, setAiAssistantOpen] = React.useState(false);
+  const [navOpenMobile, setNavOpenMobile] = React.useState(false);
+
+  const startSession = React.useCallback(
+    (item: ManifestItem, content: AnyContent) => {
+      const questions = contentToQuestions(content);
+      if (questions.length === 0) return;
+      const totalTime = questions.length * 60;
+      const sessionId = `${item.uid}-${Date.now()}`;
+
+      // Load existing written drafts
+      const drafts = writtenDrafts.get(item.uid);
+
+      setSession({
+        itemId: item.uid,
+        itemTitle: item.title,
+        engine: item.type,
+        mode: testMode,
+        questions,
+        answers: {},
+        revealed: {},
+        flagged: {},
+        current: 0,
+        startedAt: Date.now(),
+        examTimeRemaining: totalTime,
+        examPaused: false,
+        sessionId,
+        writtenDrafts: drafts,
+        rubricState: {},
+        ratings: {},
+        strikethroughs: {},
+      });
+      setMode("quiz");
+    },
+    [testMode]
+  );
+
+  // Start a session when a content pack is provided
+  React.useEffect(() => {
+    if (activeItem && activeContent) {
+      startSession(activeItem, activeContent);
+    } else if (!activeItem && mode !== "home") {
+      setMode("home");
+      setSession(null);
+    }
+  }, [activeItem?.uid, activeContent?.meta.uid, startSession]);
+
+  const endSession = React.useCallback(() => {
+    setSession((s) => {
+      if (!s) return s;
+      const completed = { ...s, completedAt: Date.now() };
+      // Save to sessions list
+      saveSession(completed);
+      return completed;
+    });
+    setMode("results");
+  }, []);
+
+  const restartSession = () => {
+    if (activeItem && activeContent) {
+      storage.clearPack(activeItem.uid);
+      highlights.clearAll(activeItem.uid);
+      stickyNotes.clearAll(activeItem.uid);
+      writtenDrafts.clear(activeItem.uid);
+      startSession(activeItem, activeContent);
+    }
+  };
+
+  const exitToHome = () => {
+    setMode("home");
+    setSession(null);
+    onExit();
+  };
+
+  // Timer tick for timed mode
+  React.useEffect(() => {
+    if (mode !== "quiz" || !session || session.mode !== "timed" || session.examPaused)
+      return;
+    const t = setInterval(() => {
+      setSession((s) => {
+        if (!s) return s;
+        const next = s.examTimeRemaining - 1;
+        if (next <= 0) {
+          return { ...s, examTimeRemaining: 0, completedAt: Date.now() };
+        }
+        return { ...s, examTimeRemaining: next };
+      });
+    }, 1000);
+    return () => clearInterval(t);
+  }, [mode, session?.mode, session?.examPaused]);
+
+  // Auto-end when timer hits 0
+  React.useEffect(() => {
+    if (
+      session &&
+      session.mode === "timed" &&
+      session.examTimeRemaining === 0 &&
+      mode === "quiz"
+    ) {
+      endSession();
+    }
+  }, [session?.examTimeRemaining, endSession]);
+
+  // Record answers to storage when revealed
+  const recordAnswer = (idx: number, q: SessionQuestion) => {
+    if (!session || !activeItem) return;
+    const selected = session.answers[idx];
+    const correct = selected === q.correct;
+    storage.recordAnswer(
+      activeItem.uid,
+      q.id,
+      session.engine,
+      selected,
+      correct,
+      !!session.flagged[idx]
+    );
+    force();
+  };
+
+  if (mode === "quiz" && session) {
+    return (
+      <>
+        <QuizView
+          session={session}
+          activeItem={activeItem!}
+          calculatorOpen={calculatorOpen}
+          labValuesOpen={labValuesOpen}
+          aiAssistantOpen={aiAssistantOpen}
+          navOpenMobile={navOpenMobile}
+          onToggleCalculator={() => setCalculatorOpen((o) => !o)}
+          onToggleLabValues={() => setLabValuesOpen((o) => !o)}
+          onToggleAiAssistant={() => setAiAssistantOpen((o) => !o)}
+          onToggleNavMobile={() => setNavOpenMobile((o) => !o)}
+          onOpenArticle={(id) => setArticleModalId(id)}
+          onSelect={(idx) => {
+            if (session.revealed[session.current]) return;
+            setSession((s) =>
+              s ? { ...s, answers: { ...s.answers, [s.current]: idx } } : s
+            );
+          }}
+          onToggleStrikethrough={(idx) => {
+            setSession((s) => {
+              if (!s) return s;
+              const cur = s.strikethroughs[s.current] ?? [];
+              const next = cur.includes(idx)
+                ? cur.filter((i) => i !== idx)
+                : [...cur, idx];
+              return {
+                ...s,
+                strikethroughs: { ...s.strikethroughs, [s.current]: next },
+              };
+            });
+          }}
+          onSubmit={() => {
+            const q = session.questions[session.current];
+            setSession((s) =>
+              s
+                ? { ...s, revealed: { ...s.revealed, [s.current]: true } }
+                : s
+            );
+            if (q && q.correct >= 0) {
+              recordAnswer(session.current, q);
+            } else if (q) {
+              // Non-MCQ: record based on rubric/written
+              const rubricState = session.rubricState[q.id] ?? [];
+              const rubricScore = rubricState.filter(Boolean).length;
+              const correct =
+                q.rubric && q.rubric.length > 0
+                  ? rubricScore / q.rubric.length >= 0.6
+                  : true;
+              storage.recordAnswer(
+                activeItem!.uid,
+                q.id,
+                session.engine,
+                undefined,
+                correct,
+                !!session.flagged[session.current]
+              );
+              force();
+            }
+          }}
+          onWrittenDraftChange={(qid, draft) => {
+            setSession((s) => {
+              if (!s) return s;
+              const drafts = { ...s.writtenDrafts, [qid]: draft };
+              writtenDrafts.save(s.itemId, drafts);
+              return { ...s, writtenDrafts: drafts };
+            });
+          }}
+          onRubricToggle={(qid, idx) => {
+            setSession((s) => {
+              if (!s) return s;
+              const cur = s.rubricState[qid] ?? [];
+              const q = s.questions.find((q) => q.id === qid);
+              const maxLen = q?.rubric?.length ?? 0;
+              const next = [...cur];
+              while (next.length < maxLen) next.push(false);
+              next[idx] = !next[idx];
+              return {
+                ...s,
+                rubricState: { ...s.rubricState, [qid]: next },
+              };
+            });
+          }}
+          onRate={(qid, rating) => {
+            setSession((s) => {
+              if (!s) return s;
+              return {
+                ...s,
+                ratings: { ...s.ratings, [qid]: rating },
+              };
+            });
+            // Record answer for flashcard
+            const q = session.questions.find((q) => q.id === qid);
+            if (q) {
+              storage.recordAnswer(
+                activeItem!.uid,
+                qid,
+                session.engine,
+                undefined,
+                rating === "easy",
+                !!session.flagged[session.current]
+              );
+            }
+            force();
+          }}
+          onToggleFlag={() => {
+            setSession((s) =>
+              s
+                ? {
+                    ...s,
+                    flagged: {
+                      ...s.flagged,
+                      [s.current]: !s.flagged[s.current],
+                    },
+                  }
+                : s
+            );
+          }}
+          onTogglePause={() =>
+            setSession((s) => (s ? { ...s, examPaused: !s.examPaused } : s))
+          }
+          onPrev={() =>
+            setSession((s) =>
+              s ? { ...s, current: Math.max(0, s.current - 1) } : s
+            )
+          }
+          onNext={() => {
+            if (session.current >= session.questions.length - 1) {
+              endSession();
+            } else {
+              setSession((s) => (s ? { ...s, current: s.current + 1 } : s));
+            }
+          }}
+          onJumpTo={(i) =>
+            setSession((s) => (s ? { ...s, current: i } : s))
+          }
+          onRetry={() => {
+            setSession((s) => {
+              if (!s) return s;
+              const q = s.questions[s.current];
+              const newAnswers = { ...s.answers };
+              delete newAnswers[s.current];
+              const newRevealed = { ...s.revealed };
+              delete newRevealed[s.current];
+              const newRatings = { ...s.ratings };
+              delete newRatings[q.id];
+              return {
+                ...s,
+                answers: newAnswers,
+                revealed: newRevealed,
+                ratings: newRatings,
+              };
+            });
+          }}
+          onGoHome={exitToHome}
+          onFinish={endSession}
+        />
+        {/* Floating tools */}
+        <AnimatePresence>
+          {calculatorOpen && (
+            <CalculatorModal onClose={() => setCalculatorOpen(false)} />
+          )}
+        </AnimatePresence>
+        <AnimatePresence>
+          {labValuesOpen && (
+            <motion.div
+              initial={{ x: 320, opacity: 0 }}
+              animate={{ x: 0, opacity: 1 }}
+              exit={{ x: 320, opacity: 0 }}
+              transition={{ type: "spring", damping: 28, stiffness: 300 }}
+              className="fixed right-0 top-12 bottom-0 z-40 w-80 border-l border-border bg-card shadow-xl"
+            >
+              <LabValuesSidebar onClose={() => setLabValuesOpen(false)} />
+            </motion.div>
+          )}
+        </AnimatePresence>
+        <FloatingArticleModal
+          articleId={articleModalId}
+          onClose={() => setArticleModalId(null)}
+        />
+        <AiAssistant
+          open={aiAssistantOpen}
+          onClose={() => setAiAssistantOpen(false)}
+          questionContext={
+            session.questions[session.current]
+              ? {
+                  stem: session.questions[session.current].stem,
+                  engine: session.engine,
+                  submitted: session.revealed[session.current] || false,
+                }
+              : undefined
+          }
+        />
+      </>
+    );
+  }
+
+  if (mode === "results" && session && activeItem) {
+    return (
+      <ResultsView
+        session={session}
+        item={activeItem}
+        onGoHome={exitToHome}
+        onRestart={restartSession}
+      />
+    );
+  }
+
+  return (
+    <HomeView
+      testMode={testMode}
+      onTestModeChange={setTestMode}
+      onOpenPack={onOpenPack}
+      homeTab={homeTab}
+      onHomeTabChange={setHomeTab}
+    />
+  );
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+ * HOME VIEW
+ * ───────────────────────────────────────────────────────────────────────── */
+function HomeView({
+  testMode,
+  onTestModeChange,
+  onOpenPack,
+  homeTab,
+  onHomeTabChange,
+}: {
+  testMode: TestMode;
+  onTestModeChange: (m: TestMode) => void;
+  onOpenPack?: (item: ManifestItem) => void;
+  homeTab: HomeTab;
+  onHomeTabChange: (t: HomeTab) => void;
+}) {
+  const [data, setData] = React.useState<{
+    items: Array<{ item: ManifestItem; content: AnyContent | null }>;
+  } | null>(null);
+  const [, force] = React.useReducer((x) => x + 1, 0);
+  const [savedSessions, setSavedSessions] = React.useState<SavedSession[]>([]);
+
+  React.useEffect(() => {
+    loadAllContent().then(setData).catch(console.error);
+  }, []);
+
+  React.useEffect(() => {
+    const update = () => setSavedSessions(sessions.list());
+    update();
+    return sessions.subscribe(update);
+  }, []);
+
+  React.useEffect(() => storage.subscribe(force), []);
+
+  const progress = storage.allProgress();
+  const correctTotal = progress.reduce((a, b) => a + b.correct, 0);
+  const attemptedTotal = progress.reduce((a, b) => a + b.attempted, 0);
+  const accuracy = attemptedTotal
+    ? Math.round((correctTotal / attemptedTotal) * 100)
+    : 0;
+
+  return (
+    <div className="flex h-[calc(100vh-3.5rem)] overflow-hidden bg-background">
+      <div className="flex-1 min-w-0 overflow-y-auto medos-scroll-y safe-pb">
+        <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-6 min-w-0">
+          {/* Page header */}
+          <div className="mb-6">
+            <h1 className="text-2xl font-semibold tracking-tight text-foreground">
+              QBank Studio
+            </h1>
+            <p className="text-sm text-muted-foreground mt-1">
+              Build a test from any content pack — quiz, bank, flashcards,
+              written prompts, or OSCE stations — with full UWorld-style tools.
+            </p>
+          </div>
+
+          {/* Tab bar */}
+          <div className="border-b border-border mb-6">
+            <nav className="-mb-px flex gap-0">
+              {[
+                { id: "create" as const, label: "Create Test", icon: Plus },
+                { id: "previous" as const, label: "Previous Tests", icon: History },
+                { id: "performance" as const, label: "Performance", icon: BarChart3 },
+              ].map((t) => {
+                const Icon = t.icon;
+                const active = homeTab === t.id;
+                return (
+                  <button
+                    key={t.id}
+                    onClick={() => onHomeTabChange(t.id)}
+                    className={cn(
+                      "relative flex items-center gap-2 px-5 py-3 text-sm font-medium transition-colors",
+                      active
+                        ? "border-b-2 border-primary text-primary"
+                        : "border-b-2 border-transparent text-muted-foreground hover:text-foreground"
+                    )}
+                  >
+                    <Icon className="size-4" />
+                    {t.label}
+                  </button>
+                );
+              })}
+            </nav>
+          </div>
+
+          {homeTab === "create" && (
+            <CreateTestTab
+              data={data}
+              testMode={testMode}
+              onTestModeChange={onTestModeChange}
+              onOpenPack={onOpenPack}
+            />
+          )}
+          {homeTab === "previous" && (
+            <PreviousTestsTab
+              sessions={savedSessions}
+              onDelete={(id) => sessions.delete(id)}
+            />
+          )}
+          {homeTab === "performance" && (
+            <PerformanceTab
+              accuracy={accuracy}
+              attempted={attemptedTotal}
+              correct={correctTotal}
+              packs={progress.length}
+              sessions={savedSessions}
+              data={data}
+            />
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function CreateTestTab({
+  data,
+  testMode,
+  onTestModeChange,
+  onOpenPack,
+}: {
+  data: { items: Array<{ item: ManifestItem; content: AnyContent | null }> } | null;
+  testMode: TestMode;
+  onTestModeChange: (m: TestMode) => void;
+  onOpenPack?: (item: ManifestItem) => void;
+}) {
+  return (
+    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="lg:col-span-2 space-y-5">
+        {/* Section 1: Test Mode */}
+        <div className="qbank-card">
+          <SectionHeader number={1} title="Select Test Mode" subtitle="Choose how you want to take this test." />
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-4">
+            <button
+              onClick={() => onTestModeChange("timed")}
+              className={cn("qbank-mode-card", testMode === "timed" && "active")}
+            >
+              <div className="qbank-mode-card-icon">
+                <Timer className="size-5" />
+              </div>
+              <div className="flex-1">
+                <div className="font-semibold text-sm">Timed</div>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Simulates actual exam conditions. Test must be completed in
+                  the allotted time (1 min/question).
+                </p>
+              </div>
+            </button>
+            <button
+              onClick={() => onTestModeChange("tutor")}
+              className={cn("qbank-mode-card", testMode === "tutor" && "active")}
+            >
+              <div className="qbank-mode-card-icon">
+                <Sparkles className="size-5" />
+              </div>
+              <div className="flex-1">
+                <div className="font-semibold text-sm">Tutor</div>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Get immediate feedback and explanations after each question.
+                </p>
+              </div>
+            </button>
+          </div>
+        </div>
+
+        {/* Section 2: Available content packs */}
+        <div className="qbank-card">
+          <SectionHeader
+            number={2}
+            title="Available Content Packs"
+            subtitle="Click a pack to start a new test. Each pack uses the QBank Studio quiz UI with full tools (highlighter, sticky notes, calculator, lab values)."
+          />
+          <div className="mt-4 space-y-2">
+            {!data ? (
+              <div className="flex items-center justify-center py-8">
+                <Loader2 className="size-5 animate-spin text-muted-foreground" />
+              </div>
+            ) : data.items.length === 0 ? (
+              <div className="text-center py-8 text-sm text-muted-foreground">
+                No content packs available.
+              </div>
+            ) : (
+              data.items.map(({ item, content }) => (
+                <PackRow
+                  key={item.uid}
+                  item={item}
+                  content={content}
+                  onOpen={() => onOpenPack?.(item)}
+                />
+              ))
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Right rail — Test Summary */}
+      <div className="lg:col-span-1">
+        <div className="lg:sticky lg:top-6 space-y-4">
+          <div className="qbank-card">
+            <h3 className="text-base font-semibold text-foreground flex items-center gap-2">
+              <FileText className="size-4 text-primary" />
+              Test Summary
+            </h3>
+            <div className="mt-4 space-y-2.5 text-sm">
+              <SummaryRow label="Test Mode" value={testMode === "timed" ? "Timed" : "Tutor"} />
+              <SummaryRow
+                label="Question Count"
+                value={data?.items.reduce(
+                  (a, x) => a + (x.content ? countQuestions(x.content) : 0),
+                  0
+                ) ?? 0}
+              />
+              <SummaryRow label="Engines" value="5 (Quiz, Bank, Flashcards, Written, OSCE)" />
+              <SummaryRow label="Time per Question" value="1 min" />
+              <SummaryRow label="Tools" value="Highlighter, Sticky Notes, Calculator, Lab Values" />
+            </div>
+          </div>
+
+          {/* Tools preview */}
+          <div className="qbank-card">
+            <h3 className="text-sm font-semibold mb-3 flex items-center gap-2">
+              <Sparkles className="size-4 text-primary" />
+              Tools Available During Test
+            </h3>
+            <div className="grid grid-cols-2 gap-2 text-xs">
+              <ToolBadge icon={Highlighter} label="Highlighter" />
+              <ToolBadge icon={StickyNote} label="Sticky Notes" />
+              <ToolBadge icon={CalcIcon} label="Calculator" />
+              <ToolBadge icon={FlaskConical} label="Lab Values" />
+              <ToolBadge icon={Type} label="Text Settings" />
+              <ToolBadge icon={BookOpen} label="Articles" />
+              <ToolBadge icon={Flag} label="Flag Questions" />
+              <ToolBadge icon={Eraser} label="Strikethrough" />
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ToolBadge({
+  icon: Icon,
+  label,
+}: {
+  icon: React.ComponentType<{ className?: string }>;
+  label: string;
+}) {
+  return (
+    <div className="flex items-center gap-1.5 px-2 py-1.5 rounded-md bg-muted/50 text-xs">
+      <Icon className="size-3.5 text-primary shrink-0" />
+      <span className="truncate">{label}</span>
+    </div>
+  );
+}
+
+function PackRow({
+  item,
+  content,
+  onOpen,
+}: {
+  item: ManifestItem;
+  content: AnyContent | null;
+  onOpen: () => void;
+}) {
+  if (!content) return null;
+  const progress = storage.packProgress(item.uid);
+  const count = countQuestions(content);
+  const accuracy =
+    progress.attempted > 0
+      ? Math.round((progress.correct / progress.attempted) * 100)
+      : 0;
+
+  return (
+    <button
+      type="button"
+      onClick={onOpen}
+      className="w-full text-left p-3 rounded-xl border border-border bg-card hover:border-primary/40 hover:bg-primary/5 transition-all flex items-start gap-3"
+    >
+      <div className={cn("size-9 rounded-lg flex items-center justify-center shrink-0 bg-primary/15 text-primary")}>
+        <ListChecks className="size-4" />
+      </div>
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-2 mb-0.5 flex-wrap">
+          <span className="text-sm font-semibold truncate">{item.title}</span>
+          <Badge variant="secondary" className="text-[10px]">
+            {ENGINE_META[item.type].label}
+          </Badge>
+        </div>
+        <p className="text-xs text-muted-foreground line-clamp-2 mb-1.5">
+          {content.meta.description}
+        </p>
+        <div className="flex items-center gap-3 text-[11px] text-muted-foreground">
+          <span>{count} questions</span>
+          {progress.attempted > 0 ? (
+            <>
+              <span>·</span>
+              <span className="text-emerald-500">{progress.correct} correct</span>
+              <span>·</span>
+              <span>{accuracy}% accuracy</span>
+            </>
+          ) : (
+            <span className="text-primary">· Ready to start</span>
+          )}
+        </div>
+      </div>
+      <ChevronRight className="size-4 text-muted-foreground shrink-0 mt-1.5" />
+    </button>
+  );
+}
+
+function PreviousTestsTab({
+  sessions: sessionList,
+  onDelete,
+}: {
+  sessions: SavedSession[];
+  onDelete: (id: string) => void;
+}) {
+  if (sessionList.length === 0) {
+    return (
+      <div className="qbank-card text-center py-12">
+        <History className="size-10 text-muted-foreground mx-auto mb-3" />
+        <h3 className="text-base font-semibold mb-1">No previous tests</h3>
+        <p className="text-sm text-muted-foreground">
+          Complete a test to see it here. All tests are saved automatically.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-3">
+      {sessionList.map((s) => {
+        const total = s.totalQuestions;
+        const pct = total ? Math.round((s.correctCount / total) * 100) : 0;
+        return (
+          <div
+            key={s.id}
+            className="qbank-card flex items-center gap-4"
+          >
+            <div
+              className={cn(
+                "size-12 rounded-xl flex items-center justify-center shrink-0 text-sm font-bold",
+                pct >= 70
+                  ? "bg-blue-500/15 text-blue-500"
+                  : pct >= 50
+                  ? "bg-amber-500/15 text-amber-500"
+                  : "bg-red-500/15 text-red-500"
+              )}
+            >
+              {pct}%
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 mb-0.5 flex-wrap">
+                <span className="text-sm font-semibold truncate">{s.packTitle}</span>
+                <Badge variant="secondary" className="text-[10px] capitalize">
+                  {s.engine}
+                </Badge>
+                <Badge variant="outline" className="text-[10px] capitalize">
+                  {s.mode}
+                </Badge>
+              </div>
+              <div className="flex items-center gap-3 text-[11px] text-muted-foreground">
+                <span>{s.correctCount}/{total} correct</span>
+                <span>·</span>
+                <span>{s.answeredCount} answered</span>
+                <span>·</span>
+                <span>{s.flaggedCount} flagged</span>
+                <span>·</span>
+                <span>{new Date(s.startedAt).toLocaleDateString()}</span>
+              </div>
+            </div>
+            <button
+              onClick={() => onDelete(s.id)}
+              className="size-8 rounded-md hover:bg-destructive/10 hover:text-destructive flex items-center justify-center shrink-0 transition-colors"
+              title="Delete session"
+            >
+              <Trash2 className="size-4" />
+            </button>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function PerformanceTab({
+  accuracy,
+  attempted,
+  correct,
+  packs,
+  sessions: sessionList,
+  data,
+}: {
+  accuracy: number;
+  attempted: number;
+  correct: number;
+  packs: number;
+  sessions: SavedSession[];
+  data: { items: Array<{ item: ManifestItem; content: AnyContent | null }> } | null;
+}) {
+  // Engine breakdown
+  const engineStats = React.useMemo(() => {
+    const stats: Record<string, { attempted: number; correct: number }> = {};
+    const allProgress = storage.allProgress();
+    allProgress.forEach((p) => {
+      const item = data?.items.find((x) => x.item.uid === p.uid);
+      if (!item) return;
+      const eng = item.item.type;
+      if (!stats[eng]) stats[eng] = { attempted: 0, correct: 0 };
+      stats[eng].attempted += p.attempted;
+      stats[eng].correct += p.correct;
+    });
+    return stats;
+  }, [data]);
+
+  return (
+    <div className="space-y-4">
+      {/* Top stats */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <PerfCard label="Packs Started" value={packs} color="text-primary" icon={BookOpen} />
+        <PerfCard label="Attempted" value={attempted} color="text-foreground" icon={Target} />
+        <PerfCard label="Correct" value={correct} color="text-emerald-500" icon={Award} />
+        <PerfCard label="Accuracy" value={`${accuracy}%`} color="text-amber-500" icon={TrendingUp} />
+      </div>
+
+      {/* Engine breakdown */}
+      <div className="qbank-card">
+        <h3 className="text-base font-semibold mb-3 flex items-center gap-2">
+          <BarChart3 className="size-4 text-primary" /> Performance by Engine
+        </h3>
+        {Object.keys(engineStats).length === 0 ? (
+          <div className="text-center py-8 text-sm text-muted-foreground">
+            No data yet. Start a test to see analytics.
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {Object.entries(engineStats).map(([eng, stat]) => {
+              const pct = stat.attempted
+                ? Math.round((stat.correct / stat.attempted) * 100)
+                : 0;
+              return (
+                <div key={eng}>
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-sm font-medium capitalize">
+                      {ENGINE_META[eng as EngineType].label}
+                    </span>
+                    <span className="text-sm tabular-nums">
+                      <span className="font-semibold">{pct}%</span>
+                      <span className="text-xs text-muted-foreground ml-2">
+                        {stat.correct}/{stat.attempted}
+                      </span>
+                    </span>
+                  </div>
+                  <div className="h-2 rounded-full bg-muted overflow-hidden">
+                    <div
+                      className="h-full rounded-full transition-all"
+                      style={{
+                        width: `${pct}%`,
+                        backgroundColor:
+                          pct >= 70
+                            ? "oklch(0.55 0.18 250)"
+                            : pct >= 50
+                            ? "oklch(0.78 0.16 80)"
+                            : "oklch(0.62 0.22 25)",
+                      }}
+                    />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* Recent sessions chart */}
+      {sessionList.length > 0 && (
+        <div className="qbank-card">
+          <h3 className="text-base font-semibold mb-3 flex items-center gap-2">
+            <TrendingUp className="size-4 text-primary" /> Recent Test Scores
+          </h3>
+          <div className="flex items-end gap-2 h-40">
+            {sessionList.slice(-10).map((s) => {
+              const pct = s.totalQuestions
+                ? Math.round((s.correctCount / s.totalQuestions) * 100)
+                : 0;
+              return (
+                <div
+                  key={s.id}
+                  className="flex-1 flex flex-col items-center gap-1 group"
+                >
+                  <div className="text-[10px] font-semibold tabular-nums opacity-0 group-hover:opacity-100 transition-opacity">
+                    {pct}%
+                  </div>
+                  <div
+                    className="w-full rounded-t-md transition-all"
+                    style={{
+                      height: `${Math.max(pct, 5)}%`,
+                      backgroundColor:
+                        pct >= 70
+                          ? "oklch(0.55 0.18 250)"
+                          : pct >= 50
+                          ? "oklch(0.78 0.16 80)"
+                          : "oklch(0.62 0.22 25)",
+                    }}
+                    title={`${s.packTitle}: ${pct}%`}
+                  />
+                  <div className="text-[9px] text-muted-foreground truncate w-full text-center">
+                    {new Date(s.startedAt).toLocaleDateString(undefined, {
+                      month: "short",
+                      day: "numeric",
+                    })}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function PerfCard({
+  label,
+  value,
+  color,
+  icon: Icon,
+}: {
+  label: string;
+  value: string | number;
+  color: string;
+  icon: React.ComponentType<{ className?: string }>;
+}) {
+  return (
+    <div className="qbank-card flex flex-col gap-1">
+      <div className="flex items-center justify-between">
+        <span className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+          {label}
+        </span>
+        <Icon className={cn("size-4", color)} />
+      </div>
+      <div className={cn("text-2xl font-bold", color)}>{value}</div>
+    </div>
+  );
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+ * QUIZ VIEW — Full QBank Studio with all tools
+ * ───────────────────────────────────────────────────────────────────────── */
+function QuizView({
+  session,
+  activeItem,
+  calculatorOpen,
+  labValuesOpen,
+  aiAssistantOpen,
+  navOpenMobile,
+  onToggleCalculator,
+  onToggleLabValues,
+  onToggleAiAssistant,
+  onToggleNavMobile,
+  onOpenArticle,
+  onSelect,
+  onToggleStrikethrough,
+  onSubmit,
+  onWrittenDraftChange,
+  onRubricToggle,
+  onRate,
+  onToggleFlag,
+  onTogglePause,
+  onPrev,
+  onNext,
+  onJumpTo,
+  onRetry,
+  onGoHome,
+  onFinish,
+}: {
+  session: SessionData;
+  activeItem: ManifestItem;
+  calculatorOpen: boolean;
+  labValuesOpen: boolean;
+  aiAssistantOpen: boolean;
+  navOpenMobile: boolean;
+  onToggleCalculator: () => void;
+  onToggleLabValues: () => void;
+  onToggleAiAssistant: () => void;
+  onToggleNavMobile: () => void;
+  onOpenArticle: (id: string) => void;
+  onSelect: (idx: number) => void;
+  onToggleStrikethrough: (idx: number) => void;
+  onSubmit: () => void;
+  onWrittenDraftChange: (qid: string, draft: WrittenDraft) => void;
+  onRubricToggle: (qid: string, idx: number) => void;
+  onRate: (qid: string, rating: "easy" | "hard" | "unknown") => void;
+  onToggleFlag: () => void;
+  onTogglePause: () => void;
+  onPrev: () => void;
+  onNext: () => void;
+  onJumpTo: (i: number) => void;
+  onRetry: () => void;
+  onGoHome: () => void;
+  onFinish: () => void;
+}) {
+  const q = session.questions[session.current];
+  const isLast = session.current >= session.questions.length - 1;
+  const submitted = session.revealed[session.current] || false;
+  const selected = session.answers[session.current];
+  const isMCQ = q ? q.correct >= 0 : false;
+  const isPausedOrLocked = session.examPaused;
+  const engineLabel = ENGINE_META[session.engine].label;
+
+  // Highlighter state
+  const [highlightMode, setHighlightMode] = React.useState(false);
+  const [highlightColor, setHighlightColor] = React.useState(HIGHLIGHT_COLORS[0]);
+  const [eraserMode, setEraserMode] = React.useState(false);
+  const [colorPickerOpen, setColorPickerOpen] = React.useState(false);
+  const [textSettingsOpen, setTextSettingsOpen] = React.useState(false);
+  const [textControls, setTextControls] = React.useState<TextControls>({
+    fontSize: 15,
+    lineHeight: 1.7,
+  });
+  const [articleSearchOpen, setArticleSearchOpen] = React.useState(false);
+  const [mobileTutorTab, setMobileTutorTab] = React.useState<"question" | "answer">("question");
+
+  // Sticky notes
+  const [notes, setNotes] = React.useState<StickyNoteData[]>([]);
+  const noteColorIdx = React.useRef(0);
+  const questionBodyRef = React.useRef<HTMLElement>(null);
+
+  const tc = textControls;
+  const stemStyle = React.useMemo(
+    () => ({ fontSize: `${tc.fontSize}px`, lineHeight: tc.lineHeight }),
+    [tc.fontSize, tc.lineHeight]
+  );
+
+  // Load highlights + sticky notes for current question
+  React.useEffect(() => {
+    setNotes(stickyNotes.get(activeItem.uid, session.current));
+    setMobileTutorTab("question");
+  }, [activeItem.uid, session.current]);
+
+  // Highlight mode: auto-apply on text selection
+  React.useEffect(() => {
+    if (!highlightMode) return;
+    const handler = () => {
+      if (submitted) return;
+      const sel = window.getSelection();
+      if (!sel || sel.isCollapsed || sel.rangeCount === 0) return;
+      const text = sel.toString().trim();
+      if (!text) return;
+      const hl: HighlightItem = {
+        id: crypto.randomUUID(),
+        color: highlightColor,
+        text,
+        target: "stem",
+      };
+      highlights.add(activeItem.uid, session.current, hl);
+      window.getSelection()?.removeAllRanges();
+    };
+    document.addEventListener("mouseup", handler);
+    return () => document.removeEventListener("mouseup", handler);
+  }, [highlightMode, highlightColor, activeItem.uid, session.current, submitted]);
+
+  // Eraser mode: click to remove most recent highlight
+  React.useEffect(() => {
+    if (!eraserMode) return;
+    const handler = () => {
+      const all = highlights.get(activeItem.uid, session.current);
+      if (all.length > 0) {
+        highlights.remove(activeItem.uid, session.current, all[all.length - 1].id);
+      }
+    };
+    document.addEventListener("click", handler);
+    return () => document.removeEventListener("click", handler);
+  }, [eraserMode, activeItem.uid, session.current]);
+
+  // Keyboard shortcuts
+  React.useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+      if (e.key === "f" || e.key === "F") { e.preventDefault(); onToggleFlag(); }
+      if (e.key === "ArrowLeft") { e.preventDefault(); onPrev(); }
+      if (e.key === "ArrowRight") { e.preventDefault(); onNext(); }
+      if (isMCQ && !submitted) {
+        const num = parseInt(e.key);
+        if (num >= 1 && num <= q.choices.length) {
+          e.preventDefault();
+          onSelect(num - 1);
+        }
+      }
+      if (e.key === "Enter" && !submitted) {
+        if (isMCQ ? selected !== undefined : true) {
+          e.preventDefault();
+          onSubmit();
+        }
+      }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [q, isMCQ, submitted, selected, onToggleFlag, onPrev, onNext, onSelect, onSubmit]);
+
+  if (!q) return null;
+
+  const addStickyNote = () => {
+    const note: StickyNoteData = {
+      id: crypto.randomUUID(),
+      x: 100 + Math.random() * 200,
+      y: 100 + Math.random() * 100,
+      text: "",
+      color: STICKY_COLORS[noteColorIdx.current % STICKY_COLORS.length],
+    };
+    noteColorIdx.current++;
+    stickyNotes.add(activeItem.uid, session.current, note);
+    setNotes(stickyNotes.get(activeItem.uid, session.current));
+  };
+
+  const updateNote = (id: string, text: string) => {
+    stickyNotes.update(activeItem.uid, session.current, id, text);
+    setNotes(stickyNotes.get(activeItem.uid, session.current));
+  };
+
+  const moveNote = (id: string, x: number, y: number) => {
+    stickyNotes.move(activeItem.uid, session.current, id, x, y);
+    setNotes(stickyNotes.get(activeItem.uid, session.current));
+  };
+
+  const deleteNote = (id: string) => {
+    stickyNotes.delete(activeItem.uid, session.current, id);
+    setNotes(stickyNotes.get(activeItem.uid, session.current));
+  };
+
+  const currentHighlights = highlights.get(activeItem.uid, session.current);
+  const strikethroughs = session.strikethroughs[session.current] ?? [];
+  const elapsedTime = Math.floor((Date.now() - session.startedAt) / 1000);
+
+  // Written draft
+  const writtenDraft = session.writtenDrafts[q.id] ?? {
+    text: "",
+    rubricChecked: q.rubric ? q.rubric.map(() => false) : [],
+    submitted: false,
+  };
+  const rubricState = session.rubricState[q.id] ?? (q.rubric ? q.rubric.map(() => false) : []);
+  const rating = session.ratings[q.id];
+
+  const answeredCount = Object.keys(session.answers).filter(
+    (k) => session.answers[+k] !== undefined
+  ).length;
+  const flaggedCount = Object.values(session.flagged).filter(Boolean).length;
+  const correctCount = session.questions.filter(
+    (qq, i) => session.revealed[i] && session.answers[i] === qq.correct
+  ).length;
+  const incorrectCount = answeredCount - correctCount;
+  const progressPct = session.questions.length
+    ? Math.round((answeredCount / session.questions.length) * 100)
+    : 0;
+
+  const onTextControlChange = (key: keyof TextControls, value: number) => {
+    setTextControls((c) => ({ ...c, [key]: value }));
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 bg-background flex flex-col safe-screen">
+      {/* ── Top bar (UWorld navy) ─────────────────────────────────────────── */}
+      <header
+        className="h-12 flex items-center pl-2 sm:pl-4 pr-0 gap-2 shrink-0 border-b border-primary-foreground/10 safe-pt"
+        style={{ backgroundColor: "var(--primary)", color: "var(--primary-foreground)" }}
+      >
+        <button onClick={onGoHome} className="flex items-center gap-2 hover:opacity-80 transition-opacity shrink-0 medos-touch-target" title="Back to QBank">
+          <div className="size-7 rounded-lg bg-primary-foreground/15 flex items-center justify-center">
+            <GraduationCap className="size-4" />
+          </div>
+          <span className="hidden sm:inline text-sm font-semibold tracking-tight">QBank Studio</span>
+        </button>
+
+        <div className="h-5 w-px bg-primary-foreground/20 hidden sm:block" />
+
+        <div className="hidden sm:flex items-center gap-2 text-xs opacity-90">
+          <span className="font-medium">{activeItem.title}</span>
+          <span className="opacity-50">·</span>
+          <span className="capitalize">{session.mode} Mode</span>
+        </div>
+
+        <button
+          onClick={onToggleNavMobile}
+          className="lg:hidden size-8 rounded-lg bg-primary-foreground/15 hover:bg-primary-foreground/25 flex items-center justify-center mr-1 medos-touch-target"
+          title="Question navigator"
+        >
+          <ListChecks className="size-4" />
+        </button>
+
+        <div className="flex-1 flex items-center justify-center min-w-0">
+          <div className="text-sm font-semibold tracking-wide truncate">
+            Question {session.current + 1}
+            <span className="opacity-70 font-normal"> of {session.questions.length}</span>
+          </div>
+        </div>
+
+        {/* Text settings popover */}
+        <Popover open={textSettingsOpen} onOpenChange={setTextSettingsOpen}>
+          <PopoverTrigger asChild>
+            <button
+              className="size-7 rounded-lg bg-primary-foreground/15 hover:bg-primary-foreground/25 flex items-center justify-center transition-colors"
+              title="Text settings"
+            >
+              <Type className="size-3.5" />
+            </button>
+          </PopoverTrigger>
+          <PopoverContent align="end" className="w-auto p-3">
+            <div className="flex flex-col gap-3">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
+                  Text settings
+                </span>
+              </div>
+              <div className="flex flex-col gap-2.5">
+                <div className="flex items-center gap-2">
+                  <span className="text-[11px] text-muted-foreground w-16">Font size</span>
+                  <button
+                    onClick={() => onTextControlChange("fontSize", Math.max(12, tc.fontSize - 1))}
+                    className="size-6 rounded bg-primary-foreground/15 hover:bg-primary-foreground/25 flex items-center justify-center transition-colors"
+                  >
+                    <Minus className="size-3" />
+                  </button>
+                  <span className="text-xs font-mono tabular-nums w-5 text-center">{tc.fontSize}</span>
+                  <button
+                    onClick={() => onTextControlChange("fontSize", Math.min(22, tc.fontSize + 1))}
+                    className="size-6 rounded bg-primary-foreground/15 hover:bg-primary-foreground/25 flex items-center justify-center transition-colors"
+                  >
+                    <PlusIcon className="size-3" />
+                  </button>
+                  <div className="flex items-center gap-1 ml-1">
+                    {[13, 15, 17, 19, 21].map((s) => (
+                      <button
+                        key={s}
+                        onClick={() => onTextControlChange("fontSize", s)}
+                        className={`size-5 rounded text-[10px] font-mono transition-colors ${
+                          tc.fontSize === s ? "bg-primary text-primary-foreground" : "bg-primary-foreground/10 hover:bg-primary-foreground/20"
+                        }`}
+                      >
+                        {s}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-[11px] text-muted-foreground w-16">Line height</span>
+                  <button
+                    onClick={() => onTextControlChange("lineHeight", Math.max(1.3, +(tc.lineHeight - 0.2).toFixed(1)))}
+                    className="size-6 rounded bg-primary-foreground/15 hover:bg-primary-foreground/25 flex items-center justify-center transition-colors"
+                  >
+                    <Minus className="size-3" />
+                  </button>
+                  <span className="text-xs font-mono tabular-nums w-5 text-center">{tc.lineHeight}</span>
+                  <button
+                    onClick={() => onTextControlChange("lineHeight", Math.min(2.5, +(tc.lineHeight + 0.2).toFixed(1)))}
+                    className="size-6 rounded bg-primary-foreground/15 hover:bg-primary-foreground/25 flex items-center justify-center transition-colors"
+                  >
+                    <PlusIcon className="size-3" />
+                  </button>
+                  <div className="flex items-center gap-1 ml-1">
+                    {[1.3, 1.5, 1.7, 2.0, 2.3].map((lh) => (
+                      <button
+                        key={lh}
+                        onClick={() => onTextControlChange("lineHeight", lh)}
+                        className={`size-5 rounded text-[10px] font-mono transition-colors ${
+                          tc.lineHeight === lh ? "bg-primary text-primary-foreground" : "bg-primary-foreground/10 hover:bg-primary-foreground/20"
+                        }`}
+                      >
+                        {lh}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </PopoverContent>
+        </Popover>
+
+        <div className="flex items-center gap-1">
+          <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-sm font-mono tabular-nums ${
+            session.mode === "timed"
+              ? session.examTimeRemaining < 300 ? "bg-red-500/100 text-white" : "bg-primary-foreground/15"
+              : "bg-primary-foreground/15"
+          }`}>
+            <Clock className="size-3.5" />
+            {session.mode === "timed" ? formatTime(session.examTimeRemaining) : formatTime(elapsedTime)}
+          </div>
+          <button
+            onClick={onTogglePause}
+            className="size-7 rounded-lg bg-primary-foreground/15 hover:bg-primary-foreground/25 flex items-center justify-center transition-colors"
+            title={isPausedOrLocked ? "Resume" : "Pause"}
+          >
+            {isPausedOrLocked ? <Play className="size-3.5" /> : <Pause className="size-3.5" />}
+          </button>
+        </div>
+
+        {/* Highlight mode toggle + color picker popover */}
+        <Popover open={colorPickerOpen} onOpenChange={(open) => {
+          setColorPickerOpen(open);
+          if (open) { setHighlightMode(true); setEraserMode(false); }
+        }}>
+          <PopoverTrigger asChild>
+            <button
+              className={`size-7 rounded-lg flex items-center justify-center transition-colors ${
+                highlightMode ? "bg-amber-400 text-amber-950" : "bg-primary-foreground/15 hover:bg-primary-foreground/25"
+              }`}
+              title="Highlight text"
+            >
+              <Highlighter className="size-3.5" />
+            </button>
+          </PopoverTrigger>
+          <PopoverContent align="end" className="w-auto p-3">
+            <div className="flex flex-col gap-2">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-1.5">
+                  <Highlighter className="size-3 text-amber-500" />
+                  <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
+                    Highlight color
+                  </span>
+                </div>
+                <button
+                  onClick={() => { setColorPickerOpen(false); setHighlightMode(false); }}
+                  className="size-5 rounded flex items-center justify-center hover:bg-muted transition-colors"
+                  title="Disable highlighter"
+                >
+                  <X className="size-3" />
+                </button>
+              </div>
+              <div className="flex items-center gap-1.5">
+                {HIGHLIGHT_COLORS.map((c) => (
+                  <button
+                    key={c}
+                    onClick={() => setHighlightColor(c)}
+                    className={`size-6 rounded-full border-2 transition-all ${
+                      highlightColor === c ? "border-foreground scale-110" : "border-transparent hover:scale-110"
+                    }`}
+                    style={{ backgroundColor: c }}
+                    title={`Highlight ${c}`}
+                  />
+                ))}
+              </div>
+              <div className="text-[10px] text-muted-foreground">
+                Select text to highlight. {currentHighlights.length} highlights on this question.
+              </div>
+            </div>
+          </PopoverContent>
+        </Popover>
+
+        {/* Eraser mode button */}
+        <button
+          onClick={() => {
+            if (!eraserMode) { setEraserMode(true); setHighlightMode(false); setColorPickerOpen(false); }
+            else { setEraserMode(false); }
+          }}
+          className={`size-7 rounded-lg flex items-center justify-center transition-colors ${
+            eraserMode ? "bg-red-400 text-red-950" : "bg-primary-foreground/15 hover:bg-primary-foreground/25"
+          }`}
+          title="Erase highlights"
+        >
+          <Eraser className="size-3.5" />
+        </button>
+
+        {/* Sticky note button */}
+        <button
+          onClick={addStickyNote}
+          className="size-7 rounded-lg bg-primary-foreground/15 hover:bg-primary-foreground/25 flex items-center justify-center transition-colors"
+          title="Add sticky note"
+        >
+          <StickyNote className="size-3.5" />
+        </button>
+      </header>
+
+      {/* ── Body: Question panel ─────────────────────────────────────────── */}
+      <div className="flex flex-1 min-h-0 relative">
+
+        {/* Floating navigator overlay (desktop + mobile) */}
+        <AnimatePresence>
+          {navOpenMobile && (
+            <motion.div
+              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+              className="absolute inset-0 z-30 flex items-start justify-center pt-16 bg-background/60 backdrop-blur-[2px]"
+            >
+              <motion.div
+                initial={{ scale: 0.95, opacity: 0, y: -8 }}
+                animate={{ scale: 1, opacity: 1, y: 0 }}
+                exit={{ scale: 0.95, opacity: 0, y: -8 }}
+                transition={{ type: "spring", damping: 25, stiffness: 300 }}
+                onClick={(e) => e.stopPropagation()}
+                className="bg-card border border-border rounded-2xl shadow-2xl w-[90vw] max-w-xl max-h-[70vh] overflow-hidden"
+              >
+                <div className="px-4 py-3 border-b border-border flex items-center justify-between bg-primary text-primary-foreground">
+                  <span className="text-sm font-semibold">Question Navigator</span>
+                  <button onClick={onToggleNavMobile} className="size-7 rounded-lg hover:bg-primary-foreground/15 flex items-center justify-center">
+                    <X className="size-4" />
+                  </button>
+                </div>
+                <div className="overflow-y-auto medos-scroll p-4">
+                  <NavigatorPanel
+                    session={session}
+                    answeredCount={answeredCount} flaggedCount={flaggedCount}
+                    correctCount={correctCount} incorrectCount={incorrectCount}
+                    progressPct={progressPct}
+                    onJumpTo={(idx) => { onJumpTo(idx); onToggleNavMobile(); }}
+                    onEndTest={() => { onFinish(); onToggleNavMobile(); }}
+                  />
+                </div>
+                <div className="px-4 py-2.5 border-t border-border flex items-center justify-between text-xs text-muted-foreground">
+                  <span>{answeredCount}/{session.questions.length} answered</span>
+                  <span>{flaggedCount} flagged</span>
+                </div>
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Simple question navigator (left strip) */}
+        <div className="hidden md:flex flex-col w-12 shrink-0 border-r border-border bg-sidebar">
+          <div className="flex-1 overflow-y-auto medos-scroll p-1 space-y-0.5">
+            {session.questions.map((_, i) => {
+              const ans = session.answers[i];
+              const isCurrent = i === session.current;
+              const isFlagged = session.flagged[i];
+              const isRevealed = session.revealed[i];
+              const isCorrect = ans !== undefined && session.questions[i]?.correct === ans;
+              const isIncorrect = ans !== undefined && !isCorrect;
+              let bg = "bg-sidebar text-muted-foreground border-transparent";
+              if (isCurrent) bg = "ring-2 ring-primary bg-sidebar-accent text-foreground";
+              else if (isFlagged) bg = "bg-amber-500/20 text-amber-400 border-amber-500/30";
+              else if (isRevealed && isCorrect) bg = "bg-blue-500/20 text-blue-300";
+              else if (isRevealed && isIncorrect) bg = "bg-red-500/20 text-red-300";
+              else if (ans !== undefined) bg = "bg-primary/25 text-primary";
+              return (
+                <button
+                  key={i}
+                  onClick={() => onJumpTo(i)}
+                  className={`w-full aspect-square rounded text-[10px] font-semibold border transition-all ${bg}`}
+                  title={`Q${i + 1}`}
+                >
+                  {i + 1}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Center — Question panel */}
+        <main ref={questionBodyRef} className="flex-1 min-w-0 flex flex-col bg-background">
+          <AnimatePresence>
+            {isPausedOrLocked && (
+              <motion.div
+                initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                className="absolute inset-0 z-30 bg-background/95 flex items-center justify-center"
+              >
+                <div className="text-center max-w-md">
+                  <div className="size-16 rounded-full bg-amber-500/15 border-2 border-amber-500/30 flex items-center justify-center mx-auto mb-4">
+                    <Pause className="size-7 text-amber-400" />
+                  </div>
+                  <h3 className="text-xl font-semibold text-foreground">Test Paused</h3>
+                  <p className="text-sm text-muted-foreground mt-2 mb-6">
+                    The timer is stopped. Click Resume to continue your test.
+                  </p>
+                  <Button onClick={onTogglePause} variant="default" className="rounded-xl">
+                    <Play className="size-4 mr-2" /> Resume Test
+                  </Button>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          {/* Mobile tutor-mode tab switcher — shown only on phones after submit */}
+          {submitted && session.mode === "tutor" && (
+            <div className="md:hidden flex border-b border-border bg-muted/30 safe-pt">
+              <button
+                onClick={() => setMobileTutorTab("question")}
+                className={`flex-1 py-2.5 text-xs font-medium transition-colors ${
+                  mobileTutorTab === "question" ? "text-primary border-b-2 border-primary" : "text-muted-foreground"
+                }`}
+              >
+                Question
+              </button>
+              <button
+                onClick={() => setMobileTutorTab("answer")}
+                className={`flex-1 py-2.5 text-xs font-medium transition-colors ${
+                  mobileTutorTab === "answer" ? "text-primary border-b-2 border-primary" : "text-muted-foreground"
+                }`}
+              >
+                Explanation
+              </button>
+            </div>
+          )}
+
+          <div
+            className={`flex-1 min-h-0 medos-qbank-split ${submitted && session.mode === "tutor" ? "flex flex-row" : "overflow-y-auto medos-scroll"}`}
+          >
+            {q ? (
+              <>
+                {/* Left column: question + choices */}
+                <div
+                  className={`medos-qbank-qcol ${submitted && session.mode === "tutor" ? "w-[55%] overflow-y-auto medos-scroll border-r border-border" : ""} ${mobileTutorTab === "answer" ? "hidden md:block" : ""}`}
+                >
+                  <div className={`${submitted && session.mode === "tutor" ? "px-4 sm:px-6 py-4" : "px-4 sm:px-6 lg:px-8 py-6 max-w-5xl"}`}>
+                    {/* Question header */}
+                    <div className="flex flex-wrap items-center justify-between gap-2 pb-3 mb-4 border-b border-border">
+                      <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                        <Badge variant="outline" className="text-[10px] font-medium rounded-md">{engineLabel}</Badge>
+                        <span className="opacity-50">·</span>
+                        <span className="capitalize">{q.difficulty ?? "standard"}</span>
+                      </div>
+                      <div className="text-xs text-muted-foreground">
+                        Question ID: <span className="tabular-nums">#{q.id}</span>
+                      </div>
+                    </div>
+
+                    {/* Stem */}
+                    <div className="relative">
+                      <div
+                        className="uworld-prose"
+                        style={stemStyle}
+                      >
+                        <p style={{ whiteSpace: "pre-wrap" }}>{q.stem}</p>
+                      </div>
+                    </div>
+
+                    {/* Choices (MCQ only) */}
+                    {isMCQ ? (
+                      <div className="mt-6 space-y-2.5">
+                        <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">
+                          {submitted ? "Read-only review" : "Select one answer"}
+                        </div>
+                        {submitted && (
+                          <div className="mb-3 flex items-center gap-4 text-xs text-muted-foreground bg-muted/30 rounded-lg px-3 py-2 border border-border">
+                            <div className="flex items-center gap-1.5">
+                              {selected === q.correct ? (
+                                <><Check className="size-3.5 text-blue-500" /><span className="text-blue-500 font-semibold">Correct</span></>
+                              ) : (
+                                <><X className="size-3.5 text-red-500" /><span className="text-red-500 font-semibold">Incorrect</span></>
+                              )}
+                            </div>
+                            <div className="flex items-center gap-1.5">
+                              <Timer className="size-3.5" />
+                              <span className="font-mono tabular-nums">{formatTime(elapsedTime)}</span>
+                              <span className="opacity-60">Time spent</span>
+                            </div>
+                          </div>
+                        )}
+                        {q.choices.map((choice, idx) => {
+                          const isSelected = selected === idx;
+                          const isCorrect = idx === q.correct;
+                          const showResult = submitted;
+                          const hasStrikethrough = strikethroughs.includes(idx);
+                          let stateClass = "border-border bg-card hover:border-primary/50 hover:bg-primary/5";
+                          let letterBg = "border-border bg-background text-muted-foreground";
+                          let letterContent: React.ReactNode = LETTERS[idx];
+
+                          if (showResult) {
+                            if (isCorrect) {
+                              stateClass = "border-blue-600 bg-blue-500/10";
+                              letterBg = "bg-blue-500/100 text-white border-blue-600";
+                              letterContent = <Check className="size-4" />;
+                            } else if (isSelected && !isCorrect) {
+                              stateClass = "border-red-500 bg-red-500/10";
+                              letterBg = "bg-red-500/100 text-white border-red-500";
+                              letterContent = <X className="size-4" />;
+                            } else {
+                              stateClass = "border-border bg-card opacity-60";
+                            }
+                          } else if (isSelected) {
+                            stateClass = "border-primary bg-primary/5";
+                            letterBg = "bg-primary text-primary-foreground border-primary";
+                          }
+
+                          return (
+                            <button
+                              key={idx}
+                              disabled={submitted}
+                              onClick={() => onSelect(idx)}
+                              onContextMenu={(e) => {
+                                e.preventDefault();
+                                onToggleStrikethrough(idx);
+                              }}
+                              className={`w-full text-left p-3 sm:p-3.5 rounded-xl border-2 transition-all flex items-start gap-3 ${stateClass} ${
+                                submitted ? "cursor-default" : "cursor-pointer"
+                              } ${hasStrikethrough ? "opacity-60" : ""} medos-touch-target`}
+                            >
+                              <div className={`size-7 rounded-full border-2 flex items-center justify-center text-sm font-semibold shrink-0 ${letterBg}`}>
+                                {letterContent}
+                              </div>
+                              <div className={`flex-1 min-w-0 uworld-prose text-[14px] leading-relaxed pt-0.5 ${hasStrikethrough ? "line-through text-muted-foreground" : ""}`}>
+                                {choice}
+                              </div>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    ) : null}
+
+                    {/* Written engine: textarea + rubric */}
+                    {session.engine === "written" && (
+                      <WrittenEngineView
+                        question={q}
+                        draft={writtenDraft}
+                        submitted={submitted}
+                        onTextChange={(text) =>
+                          onWrittenDraftChange(q.id, { ...writtenDraft, text })
+                        }
+                        onRubricToggle={(idx) => {
+                          const cur = writtenDraft.rubricChecked;
+                          const next = [...cur];
+                          while (next.length < (q.rubric?.length ?? 0)) next.push(false);
+                          next[idx] = !next[idx];
+                          onWrittenDraftChange(q.id, { ...writtenDraft, rubricChecked: next });
+                        }}
+                      />
+                    )}
+
+                    {/* OSCE engine: red flags + differential + rubric */}
+                    {session.engine === "osce" && (
+                      <OsceEngineView
+                        question={q}
+                        rubricState={rubricState}
+                        submitted={submitted}
+                        onRubricToggle={(idx) => onRubricToggle(q.id, idx)}
+                      />
+                    )}
+
+                    {/* Flashcard: rating buttons (after reveal) */}
+                    {session.engine === "flashcard" && submitted && (
+                      <div className="mt-6">
+                        <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">
+                          Rate this card
+                        </h4>
+                        <div className="grid grid-cols-3 gap-2">
+                          <button
+                            onClick={() => onRate(q.id, "hard")}
+                            className={`px-3 py-2 rounded-lg text-sm font-medium border-2 transition-all ${
+                              rating === "hard"
+                                ? "border-red-500 bg-red-500/10 text-red-500"
+                                : "border-border hover:border-red-500/40"
+                            }`}
+                          >
+                            <X className="size-4 mx-auto mb-1" />
+                            Hard
+                          </button>
+                          <button
+                            onClick={() => onRate(q.id, "unknown")}
+                            className={`px-3 py-2 rounded-lg text-sm font-medium border-2 transition-all ${
+                              rating === "unknown"
+                                ? "border-amber-500 bg-amber-500/10 text-amber-500"
+                                : "border-border hover:border-amber-500/40"
+                            }`}
+                          >
+                            <Eye className="size-4 mx-auto mb-1" />
+                            Review
+                          </button>
+                          <button
+                            onClick={() => onRate(q.id, "easy")}
+                            className={`px-3 py-2 rounded-lg text-sm font-medium border-2 transition-all ${
+                              rating === "easy"
+                                ? "border-emerald-500 bg-emerald-500/10 text-emerald-500"
+                                : "border-border hover:border-emerald-500/40"
+                            }`}
+                          >
+                            <Check className="size-4 mx-auto mb-1" />
+                            Easy
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Right column: explanation (split-screen in tutor mode + after submit) */}
+                {submitted && session.mode === "tutor" && (
+                  <div
+                    className={`medos-qbank-acol w-[45%] overflow-y-auto medos-scroll bg-muted/20 ${mobileTutorTab === "question" ? "hidden md:block" : ""}`}
+                  >
+                    <div className="px-4 sm:px-6 py-4">
+                      <ExplanationCard q={q} selected={selected} nonMcq={!isMCQ} />
+                    </div>
+                  </div>
+                )}
+
+                {/* Non-MCQ explanation panel (written, osce, flashcard) */}
+                {submitted && !isMCQ && session.mode !== "tutor" && (
+                  <div className="border-t border-border bg-muted/20 px-4 sm:px-6 py-4">
+                    <div className="max-w-3xl mx-auto">
+                      <ExplanationCard q={q} selected={undefined} nonMcq />
+                    </div>
+                  </div>
+                )}
+              </>
+            ) : (
+              <div className="flex-1 flex items-center justify-center py-20">
+                <div className="text-center">
+                  <div className="size-10 border-2 border-primary/30 border-t-primary rounded-full animate-spin mx-auto" />
+                  <p className="text-sm text-muted-foreground mt-3">Loading question…</p>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Bottom action bar — desktop */}
+          <footer className="hidden sm:flex border-t border-border bg-card px-3 sm:px-6 py-2.5 items-center gap-2 shrink-0">
+            <Button variant="outline" size="sm" onClick={onPrev} disabled={session.current === 0} className="h-9 rounded-lg">
+              <ChevronLeft className="size-4 mr-1" /> Previous
+            </Button>
+
+            <div className="flex-1" />
+
+            <div className="flex items-center gap-1">
+              <Button variant="outline" size="sm" onClick={onToggleCalculator} className={`h-9 px-2.5 rounded-lg ${calculatorOpen ? "border-primary bg-primary/10 text-primary" : ""}`} title="Calculator">
+                <CalcIcon className="size-4" />
+              </Button>
+              <Button variant="outline" size="sm" onClick={onToggleLabValues} className={`h-9 px-2.5 rounded-lg ${labValuesOpen ? "border-primary bg-primary/10 text-primary" : ""}`} title="Lab Values">
+                <FlaskConical className="size-4" />
+              </Button>
+              <Button
+                variant="outline" size="sm"
+                onClick={onToggleAiAssistant}
+                className={`h-9 px-2.5 rounded-lg ${aiAssistantOpen ? "border-primary bg-primary/10 text-primary" : ""}`}
+                title="AI Assistant"
+              >
+                <Sparkles className="size-4" />
+              </Button>
+              <Popover open={articleSearchOpen} onOpenChange={setArticleSearchOpen}>
+                <PopoverTrigger asChild>
+                  <Button variant="outline" size="sm" className="h-9 px-2.5 rounded-lg" title="Open Article">
+                    <BookOpen className="size-4" />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent align="end" className="w-72 p-0 max-h-64 overflow-y-auto">
+                  <div className="py-1">
+                    <div className="px-4 py-2 text-xs font-bold uppercase tracking-wider text-primary border-b border-border">Open Article</div>
+                    {Object.values(ARTICLES).map((a) => (
+                      <button
+                        key={a.id}
+                        onClick={() => {
+                          onOpenArticle(a.id);
+                          setArticleSearchOpen(false);
+                        }}
+                        className="w-full text-left text-sm px-4 py-2.5 hover:bg-muted transition-colors flex items-center gap-2 border-b border-border/40 last:border-0"
+                      >
+                        <FileText className="size-3.5 shrink-0 text-muted-foreground" />
+                        <span className="truncate">{a.title}</span>
+                      </button>
+                    ))}
+                  </div>
+                </PopoverContent>
+              </Popover>
+            </div>
+
+            <div className="h-5 w-px bg-border mx-1 hidden sm:block" />
+
+            <Button
+              variant="outline" size="sm" onClick={onToggleFlag}
+              className={`h-9 rounded-lg ${session.flagged[session.current] ? "border-amber-400 bg-amber-500/10 text-amber-300 hover:bg-amber-500/15" : ""}`}
+              title={session.flagged[session.current] ? "Unflag this question" : "Flag for review"}
+            >
+              <Flag className={`size-4 ${session.flagged[session.current] ? "fill-amber-500 text-amber-500" : ""}`} />
+              <span className="hidden sm:inline ml-1">{session.flagged[session.current] ? "Flagged" : "Flag"}</span>
+            </Button>
+
+            <div className="h-5 w-px bg-border mx-1 hidden sm:block" />
+
+            {!submitted && isMCQ && (
+              <Button size="sm" onClick={onSubmit} disabled={selected === undefined} className="h-9 rounded-lg">
+                Submit Answer
+              </Button>
+            )}
+            {!submitted && !isMCQ && (
+              <Button size="sm" onClick={onSubmit} className="h-9 rounded-lg">
+                {session.engine === "flashcard" ? "Reveal Answer" : "Submit & Self-Grade"}
+              </Button>
+            )}
+            {submitted && session.mode === "tutor" && (
+              <Button variant="outline" size="sm" onClick={onRetry} className="h-9 rounded-lg" title="Retry this question">
+                <RotateCcw className="size-4 mr-1" />
+                <span className="hidden sm:inline">Retry</span>
+              </Button>
+            )}
+
+            <Button
+              size="sm" onClick={onNext} className="h-9 rounded-lg"
+              variant={isLast ? "destructive" : "default"}
+            >
+              {isLast ? (
+                <>End Test <ChevronRight className="size-4 ml-1" /></>
+              ) : submitted && session.mode === "tutor" ? (
+                <>Next Question <ChevronRight className="size-4 ml-1" /></>
+              ) : (
+                <>Next <ChevronRight className="size-4 ml-1" /></>
+              )}
+            </Button>
+          </footer>
+
+          {/* Bottom action bar — mobile (compact) */}
+          <footer className="sm:hidden border-t border-border bg-card px-3 py-2 flex items-center gap-2 shrink-0 safe-pb medos-tap-none">
+            <Button
+              variant="outline" size="icon"
+              onClick={onPrev} disabled={session.current === 0}
+              className="size-10 rounded-lg shrink-0 medos-touch-target"
+              title="Previous"
+            >
+              <ChevronLeft className="size-4" />
+            </Button>
+
+            <Button
+              variant="outline" size="icon"
+              onClick={onToggleFlag}
+              className={`size-10 rounded-lg shrink-0 medos-touch-target ${session.flagged[session.current] ? "border-amber-400 bg-amber-500/10 text-amber-300" : ""}`}
+              title={session.flagged[session.current] ? "Unflag" : "Flag"}
+            >
+              <Flag className={`size-4 ${session.flagged[session.current] ? "fill-amber-500 text-amber-500" : ""}`} />
+            </Button>
+
+            {/* Tools dropdown for mobile */}
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button variant="outline" size="icon" className="size-10 rounded-lg shrink-0 medos-touch-target" title="Tools">
+                  <CalcIcon className="size-4" />
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent align="center" className="min-w-44">
+                <div className="py-1">
+                  <button onClick={onToggleCalculator} className="w-full text-left text-sm px-3 py-2 hover:bg-muted flex items-center gap-2">
+                    <CalcIcon className="size-4" /> Calculator
+                  </button>
+                  <button onClick={onToggleLabValues} className="w-full text-left text-sm px-3 py-2 hover:bg-muted flex items-center gap-2">
+                    <FlaskConical className="size-4" /> Lab Values
+                  </button>
+                  <button onClick={onToggleAiAssistant} className="w-full text-left text-sm px-3 py-2 hover:bg-muted flex items-center gap-2">
+                    <Sparkles className="size-4" /> AI Assistant
+                  </button>
+                  <button onClick={() => setArticleSearchOpen(true)} className="w-full text-left text-sm px-3 py-2 hover:bg-muted flex items-center gap-2">
+                    <BookOpen className="size-4" /> Articles
+                  </button>
+                  {submitted && session.mode === "tutor" && (
+                    <button onClick={onRetry} className="w-full text-left text-sm px-3 py-2 hover:bg-muted flex items-center gap-2">
+                      <RotateCcw className="size-4" /> Retry
+                    </button>
+                  )}
+                </div>
+              </PopoverContent>
+            </Popover>
+
+            {/* Primary action button — fills remaining space */}
+            {!submitted && isMCQ ? (
+              <Button
+                size="sm" onClick={onSubmit} disabled={selected === undefined}
+                className="flex-1 h-10 rounded-lg medos-touch-target"
+              >
+                Submit Answer
+              </Button>
+            ) : !submitted && !isMCQ ? (
+              <Button
+                size="sm" onClick={onSubmit}
+                className="flex-1 h-10 rounded-lg medos-touch-target"
+              >
+                {session.engine === "flashcard" ? "Reveal Answer" : "Submit"}
+              </Button>
+            ) : (
+              <Button
+                size="sm" onClick={onNext}
+                variant={isLast ? "destructive" : "default"}
+                className="flex-1 h-10 rounded-lg medos-touch-target"
+              >
+                {isLast
+                  ? "End Test"
+                  : submitted && session.mode === "tutor"
+                  ? "Next Question"
+                  : "Next"}
+                <ChevronRight className="size-4 ml-1" />
+              </Button>
+            )}
+          </footer>
+        </main>
+      </div>
+
+      {/* Floating sticky notes */}
+      {notes.map((note) => (
+        <StickyNoteCard
+          key={note.id}
+          note={note}
+          onUpdate={(text) => updateNote(note.id, text)}
+          onDelete={() => deleteNote(note.id)}
+          onMove={(x, y) => moveNote(note.id, x, y)}
+        />
+      ))}
+    </div>
+  );
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+ * WRITTEN ENGINE VIEW
+ * ───────────────────────────────────────────────────────────────────────── */
+function WrittenEngineView({
+  question,
+  draft,
+  submitted,
+  onTextChange,
+  onRubricToggle,
+}: {
+  question: SessionQuestion;
+  draft: WrittenDraft;
+  submitted: boolean;
+  onTextChange: (text: string) => void;
+  onRubricToggle: (idx: number) => void;
+}) {
+  const wordCount = draft.text.trim().split(/\s+/).filter(Boolean).length;
+  return (
+    <div className="mt-6 space-y-4">
+      <div>
+        <div className="flex items-center justify-between mb-2">
+          <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+            Your Response
+          </label>
+          <span className="text-xs text-muted-foreground tabular-nums">
+            {wordCount} words
+          </span>
+        </div>
+        <textarea
+          value={draft.text}
+          onChange={(e) => onTextChange(e.target.value)}
+          disabled={submitted}
+          placeholder="Type your answer here…"
+          className="osler-written-area"
+          style={{ minHeight: 220 }}
+        />
+      </div>
+
+      {question.rubric && question.rubric.length > 0 && (
+        <div className="qbank-card">
+          <h4 className="text-sm font-semibold mb-1 flex items-center gap-2">
+            <Sparkles className="size-4 text-primary" />
+            Self-Grading Rubric
+          </h4>
+          <p className="text-xs text-muted-foreground mb-3">
+            {submitted
+              ? "Review the rubric items you addressed."
+              : "Check each criterion you addressed in your response."}
+          </p>
+          <div className="space-y-1.5">
+            {question.rubric.map((item, i) => {
+              const checked = draft.rubricChecked[i] ?? false;
+              return (
+                <button
+                  key={i}
+                  type="button"
+                  disabled={submitted}
+                  onClick={() => onRubricToggle(i)}
+                  className={cn(
+                    "w-full flex items-start gap-2.5 px-3 py-2 rounded-md text-left text-sm transition-colors",
+                    checked
+                      ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
+                      : "hover:bg-muted",
+                    submitted && "cursor-default opacity-70"
+                  )}
+                >
+                  {checked ? (
+                    <CheckCircle2 className="size-4 text-emerald-500 shrink-0 mt-0.5" />
+                  ) : (
+                    <Circle className="size-4 text-muted-foreground shrink-0 mt-0.5" />
+                  )}
+                  <span>{item}</span>
+                </button>
+              );
+            })}
+          </div>
+          <div className="mt-3 pt-3 border-t border-border text-xs text-muted-foreground">
+            Score:{" "}
+            <span className="font-semibold text-foreground">
+              {draft.rubricChecked.filter(Boolean).length}
+            </span>{" "}
+            / {question.rubric.length}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+ * OSCE ENGINE VIEW
+ * ───────────────────────────────────────────────────────────────────────── */
+function OsceEngineView({
+  question,
+  rubricState,
+  submitted,
+  onRubricToggle,
+}: {
+  question: SessionQuestion;
+  rubricState: boolean[];
+  submitted: boolean;
+  onRubricToggle: (idx: number) => void;
+}) {
+  return (
+    <div className="mt-6 space-y-4">
+      {/* Patient scenario */}
+      <div className="osler-osce-patient">
+        <div className="osler-osce-patient-avatar">
+          <User className="size-7" />
+        </div>
+        <div className="flex-1">
+          <div className="flex items-center gap-2 mb-2">
+            <Activity className="size-4 text-primary" />
+            <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+              Patient Scenario
+            </h3>
+          </div>
+        </div>
+      </div>
+
+      {/* Red Flags */}
+      {question.redFlags && question.redFlags.length > 0 && (
+        <div className="bg-red-500/8 border border-red-500/25 border-l-4 border-l-red-500 rounded-lg p-4">
+          <h4 className="flex items-center gap-2 text-sm font-semibold mb-2 text-red-500">
+            <AlertTriangle className="size-4" />
+            Red Flags
+          </h4>
+          <ul className="space-y-1">
+            {question.redFlags.map((flag, i) => (
+              <li key={i} className="text-sm flex items-start gap-2">
+                <span className="text-red-500 mt-1">•</span>
+                <span className="leading-relaxed">{flag}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {/* Differential Diagnosis */}
+      {question.differential && question.differential.length > 0 && (
+        <div className="qbank-card">
+          <h4 className="flex items-center gap-2 text-sm font-semibold mb-2">
+            <Stethoscope className="size-4 text-primary" />
+            Differential Diagnosis
+          </h4>
+          <div className="flex flex-wrap gap-1.5">
+            {question.differential.map((d, i) => (
+              <span
+                key={i}
+                className="px-2.5 py-1 rounded-md text-xs bg-muted text-foreground border border-border"
+              >
+                {d}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Performance Rubric */}
+      {question.rubric && question.rubric.length > 0 && (
+        <div className="qbank-card">
+          <div className="flex items-center justify-between mb-1">
+            <h4 className="flex items-center gap-2 text-sm font-semibold">
+              <ListChecks className="size-4 text-primary" />
+              Performance Rubric
+            </h4>
+            <span className="text-xs text-muted-foreground">
+              Score:{" "}
+              <span className="font-semibold text-foreground">
+                {rubricState.filter(Boolean).length}
+              </span>{" "}
+              / {question.rubric.length}
+            </span>
+          </div>
+          <p className="text-xs text-muted-foreground mb-3">
+            {submitted
+              ? "Review the items you addressed."
+              : "Check each item you addressed during this station."}
+          </p>
+          <div className="space-y-1.5">
+            {question.rubric.map((item, i) => {
+              const checked = rubricState[i] ?? false;
+              return (
+                <button
+                  key={i}
+                  type="button"
+                  disabled={submitted}
+                  onClick={() => onRubricToggle(i)}
+                  className={cn(
+                    "w-full flex items-start gap-2.5 px-3 py-2 rounded-md text-left text-sm transition-colors",
+                    checked
+                      ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
+                      : "hover:bg-muted",
+                    submitted && "cursor-default opacity-70"
+                  )}
+                >
+                  {checked ? (
+                    <CheckCircle2 className="size-4 text-emerald-500 shrink-0 mt-0.5" />
+                  ) : (
+                    <Circle className="size-4 text-muted-foreground shrink-0 mt-0.5" />
+                  )}
+                  <span>{item}</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+ * NAVIGATOR PANEL — Question grid (NBME-style compact)
+ * ───────────────────────────────────────────────────────────────────────── */
+interface NavigatorPanelProps {
+  session: SessionData;
+  answeredCount: number;
+  flaggedCount: number;
+  correctCount: number;
+  incorrectCount: number;
+  progressPct: number;
+  onJumpTo: (idx: number) => void;
+  onEndTest: () => void;
+}
+
+function NavigatorPanel(p: NavigatorPanelProps) {
+  const total = p.session.questions.length;
+  return (
+    <div className="flex flex-col h-full">
+      {/* NBME-style compact header */}
+      <div className="px-3 py-2.5 border-b border-sidebar-border flex items-center justify-between">
+        <span className="text-[11px] font-semibold uppercase tracking-wider text-foreground">Navigator</span>
+        <span className="text-[11px] text-muted-foreground tabular-nums">{p.answeredCount}/{total}</span>
+      </div>
+
+      {/* Question grid - NBME compact style */}
+      <div className="flex-1 overflow-y-auto medos-scroll p-3">
+        <div className="grid grid-cols-5 gap-1">
+          {p.session.questions.map((_, i) => {
+            const ans = p.session.answers[i];
+            const isFlagged = p.session.flagged[i];
+            const isCurrent = i === p.session.current;
+            const isRevealed = p.session.revealed[i];
+            const isCorrect = ans !== undefined && p.session.questions[i]?.correct === ans;
+            const isIncorrect = ans !== undefined && !isCorrect;
+
+            let cellClass = "bg-sidebar text-muted-foreground border-sidebar-border hover:bg-sidebar-accent";
+            if (isRevealed && isCorrect) cellClass = "bg-blue-500/20 text-blue-300 border-blue-500/30 hover:bg-blue-500/30";
+            else if (isRevealed && isIncorrect) cellClass = "bg-red-500/20 text-red-300 border-red-500/30 hover:bg-red-500/30";
+            else if (ans !== undefined) cellClass = "bg-primary/25 text-primary border-primary/40 hover:bg-primary/35";
+
+            return (
+              <button
+                key={i}
+                onClick={() => p.onJumpTo(i)}
+                className={`relative aspect-square rounded-md text-[11px] font-semibold border transition-all ${cellClass} ${
+                  isCurrent ? "ring-2 ring-primary ring-offset-1 ring-offset-sidebar" : ""
+                }`}
+                title={`Q${i + 1}${ans !== undefined ? (isRevealed ? (isCorrect ? " ✓" : " ✗") : " •") : ""}${isFlagged ? " ⚑" : ""}`}
+              >
+                {i + 1}
+                {isFlagged && <span className="absolute -top-0.5 -right-0.5 size-2 rounded-full bg-amber-400 border border-sidebar" />}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Compact inline legend */}
+        <div className="mt-4 pt-3 border-t border-sidebar-border flex flex-wrap gap-2.5 text-[10px] text-muted-foreground">
+          <span className="flex items-center gap-1"><span className="size-2.5 rounded bg-sidebar border border-sidebar-border" /> Unans</span>
+          <span className="flex items-center gap-1"><span className="size-2.5 rounded bg-primary/25 border border-primary/40" /> Ans</span>
+          {p.session.mode === "tutor" && (
+            <>
+              <span className="flex items-center gap-1"><span className="size-2.5 rounded bg-blue-500/20 border border-blue-500/30" /> Corr</span>
+              <span className="flex items-center gap-1"><span className="size-2.5 rounded bg-red-500/20 border border-red-500/30" /> Inc</span>
+            </>
+          )}
+          <span className="flex items-center gap-1"><span className="size-2.5 rounded-full bg-amber-400" /> Flag</span>
+        </div>
+      </div>
+
+      {/* Compact end test button */}
+      <div className="p-2 border-t border-sidebar-border">
+        <Button variant="ghost" size="sm" onClick={p.onEndTest} className="w-full h-8 text-xs rounded-md text-destructive hover:text-destructive hover:bg-destructive/10">
+          End Test
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+ * EXPLANATION CARD — 1:1 copy from medos-lite
+ * ───────────────────────────────────────────────────────────────────────── */
+function ExplanationCard({
+  q,
+  selected,
+  nonMcq,
+}: {
+  q: SessionQuestion;
+  selected: number | undefined;
+  nonMcq?: boolean;
+}) {
+  if (nonMcq) {
+    return (
+      <div className="rounded-xl border-2 border-blue-600 overflow-hidden">
+        <div className="px-4 py-3 flex items-center gap-3 bg-blue-500/10 text-blue-300">
+          <div className="size-9 rounded-full flex items-center justify-center shrink-0 bg-blue-500/100 text-white">
+            <Sparkles className="size-5" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="text-base font-bold">Answer Revealed</div>
+            <div className="text-xs mt-0.5">
+              Review the explanation and reference material below.
+            </div>
+          </div>
+        </div>
+        <div className="bg-card px-5 py-4">
+          <div className="flex items-center gap-2 mb-3">
+            <Lightbulb className="size-4 text-primary" />
+            <h3 className="text-sm font-semibold text-foreground">Explanation</h3>
+          </div>
+          <div className="uworld-prose text-[14px]" style={{ whiteSpace: "pre-wrap" }}>
+            {q.explanation || "No explanation provided."}
+          </div>
+          {q.tags && q.tags.length > 0 && (
+            <div className="mt-4 pt-3 border-t border-border flex flex-wrap gap-1.5">
+              {q.tags.map((t) => (
+                <Badge key={t} variant="outline" className="text-[10px] rounded-md">
+                  #{t}
+                </Badge>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  const isCorrect = selected === q.correct;
+  const correctLetter = LETTERS[q.correct] ?? "?";
+  const selectedLetter = selected !== undefined ? LETTERS[selected] : "—";
+
+  return (
+    <div className={`rounded-xl border-2 overflow-hidden ${isCorrect ? "border-blue-600" : "border-red-500"}`}>
+      <div className={`px-4 py-3 flex items-center gap-3 ${isCorrect ? "bg-blue-500/10 text-blue-300" : "bg-red-500/10 text-red-300"}`}>
+        <div className={`size-9 rounded-full flex items-center justify-center shrink-0 ${isCorrect ? "bg-blue-500/100 text-white" : "bg-red-500/100 text-white"}`}>
+          {isCorrect ? <Check className="size-5" /> : <X className="size-5" />}
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="text-base font-bold">{isCorrect ? "Correct!" : "Incorrect"}</div>
+          <div className="text-xs mt-0.5">
+            Your answer: <strong>{selectedLetter}</strong>
+            {!isCorrect && (
+              <>
+                {"  ·  "}Correct answer: <strong>{correctLetter}</strong>
+              </>
+            )}
+          </div>
+        </div>
+      </div>
+      <div className="bg-card px-5 py-4">
+        <div className="flex items-center gap-2 mb-3">
+          <Lightbulb className="size-4 text-primary" />
+          <h3 className="text-sm font-semibold text-foreground">Explanation</h3>
+        </div>
+        <div className="uworld-prose text-[14px]" style={{ whiteSpace: "pre-wrap" }}>
+          {q.explanation || "No explanation provided."}
+        </div>
+        {q.tags && q.tags.length > 0 && (
+          <div className="mt-4 pt-3 border-t border-border flex flex-wrap gap-1.5">
+            <Badge variant="secondary" className="text-[10px] rounded-md capitalize">{q.difficulty ?? "standard"}</Badge>
+            {q.tags.map((t) => (
+              <Badge key={t} variant="outline" className="text-[10px] rounded-md">
+                #{t}
+              </Badge>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// Lightbulb icon (not in lucide-react, using Lightbulb from lucide)
+function Lightbulb({ className }: { className?: string }) {
+  return <Sparkles className={className} />;
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+ * RESULTS VIEW
+ * ───────────────────────────────────────────────────────────────────────── */
+function ResultsView({
+  session,
+  item,
+  onGoHome,
+  onRestart,
+}: {
+  session: SessionData;
+  item: ManifestItem;
+  onGoHome: () => void;
+  onRestart: () => void;
+}) {
+  const total = session.questions.length;
+  const answeredCount = Object.keys(session.answers).filter(
+    (k) => session.answers[+k] !== undefined
+  ).length;
+  const correctCount = session.questions.filter(
+    (q, i) => session.revealed[i] && session.answers[i] === q.correct
+  ).length;
+  // For non-MCQ, count rubric/rating-based correct
+  const nonMcqCorrect = session.questions.filter((q, i) => {
+    if (q.correct >= 0) return false;
+    if (!session.revealed[i]) return false;
+    if (session.engine === "flashcard") return session.ratings[q.id] === "easy";
+    if (session.engine === "written" || session.engine === "osce") {
+      const rubric = session.rubricState[q.id] ?? [];
+      return (
+        q.rubric &&
+        q.rubric.length > 0 &&
+        rubric.filter(Boolean).length / q.rubric.length >= 0.6
+      );
+    }
+    return false;
+  }).length;
+  const totalCorrect = correctCount + nonMcqCorrect;
+  const incorrectCount = answeredCount - correctCount;
+  const flaggedCount = Object.values(session.flagged).filter(Boolean).length;
+  const pct = total ? Math.round((totalCorrect / total) * 100) : 0;
+  const totalTimeSec = Math.floor(
+    ((session.completedAt ?? Date.now()) - session.startedAt) / 1000
+  );
+  const avgTimeSec = answeredCount ? Math.round(totalTimeSec / answeredCount) : 0;
+  const percentile = Math.min(99, Math.max(1, Math.round(pct * 0.9 + 5)));
+
+  return (
+    <div className="h-[calc(100vh-3.5rem)] overflow-y-auto medos-scroll">
+      <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-4">
+        <div className="flex items-center justify-between flex-wrap gap-3">
+          <div>
+            <h1 className="text-2xl font-semibold text-foreground">Test Results</h1>
+            <p className="text-sm text-muted-foreground mt-1">
+              {item.title} · {total} questions ·{" "}
+              {session.mode === "timed" ? "Timed" : "Tutor"} mode
+            </p>
+          </div>
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={onRestart} className="rounded-xl">
+              <RotateCcw className="size-4 mr-1.5" /> Restart
+            </Button>
+            <Button variant="outline" onClick={onGoHome} className="rounded-xl">
+              <Home className="size-4 mr-1.5" /> Back to QBank
+            </Button>
+          </div>
+        </div>
+
+        <div className="qbank-card">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-center">
+            <div className="text-center lg:border-r lg:border-border lg:pr-6">
+              <div className="text-xs uppercase tracking-wider text-muted-foreground mb-1">
+                Your Score
+              </div>
+              <div className="flex items-baseline justify-center gap-1">
+                <span
+                  className={cn(
+                    "text-5xl font-bold tabular-nums",
+                    pct >= 70
+                      ? "text-blue-500"
+                      : pct >= 50
+                      ? "text-amber-500"
+                      : "text-red-500"
+                  )}
+                >
+                  {pct}%
+                </span>
+              </div>
+              <div className="text-xs text-muted-foreground mt-1">
+                {totalCorrect} of {total} correct
+              </div>
+            </div>
+
+            <div className="text-center lg:border-r lg:border-border lg:pr-6">
+              <div className="text-xs uppercase tracking-wider text-muted-foreground mb-1">
+                Percentile Rank
+              </div>
+              <div className="text-5xl font-bold tabular-nums text-primary">
+                {percentile}
+                <span className="text-2xl font-normal text-muted-foreground">th</span>
+              </div>
+              <div className="text-xs text-muted-foreground mt-1">
+                You scored higher than {percentile}% of users.
+              </div>
+            </div>
+
+            <div className="space-y-2 text-sm">
+              <SummaryRow label="Answered" value={`${answeredCount}/${total}`} />
+              <SummaryRow label="Incorrect" value={`${incorrectCount}`} />
+              <SummaryRow label="Flagged" value={`${flaggedCount}`} />
+              <SummaryRow label="Total Time" value={formatTime(totalTimeSec)} />
+              <SummaryRow label="Avg / Question" value={formatTime(avgTimeSec)} />
+            </div>
+          </div>
+        </div>
+
+        <div className="qbank-card">
+          <h3 className="text-sm font-semibold mb-3">Score Distribution</h3>
+          <div className="flex h-3 rounded-full overflow-hidden bg-muted">
+            <div
+              className="bg-blue-500"
+              style={{ width: `${(totalCorrect / total) * 100}%` }}
+            />
+            <div
+              className="bg-red-500"
+              style={{ width: `${(incorrectCount / total) * 100}%` }}
+            />
+            <div
+              className="bg-muted-foreground/30"
+              style={{ width: `${((total - answeredCount) / total) * 100}%` }}
+            />
+          </div>
+          <div className="mt-2 flex items-center gap-4 text-xs text-muted-foreground flex-wrap">
+            <span className="flex items-center gap-1.5">
+              <span className="size-2.5 rounded-full bg-blue-500" /> Correct
+            </span>
+            <span className="flex items-center gap-1.5">
+              <span className="size-2.5 rounded-full bg-red-500" /> Incorrect
+            </span>
+            <span className="flex items-center gap-1.5">
+              <span className="size-2.5 rounded-full bg-muted-foreground/30" /> Unanswered
+            </span>
+          </div>
+        </div>
+
+        <div className="qbank-card">
+          <h3 className="text-base font-semibold mb-3 flex items-center gap-2">
+            <Award className="size-4 text-primary" /> Question Review
+          </h3>
+          <div className="space-y-2">
+            {session.questions.map((q, i) => {
+              const ans = session.answers[i];
+              const submittedQ = session.revealed[i];
+              const isMCQ = q.correct >= 0;
+              const isCorrect = isMCQ
+                ? submittedQ && ans === q.correct
+                : session.engine === "flashcard"
+                ? session.ratings[q.id] === "easy"
+                : submittedQ &&
+                  q.rubric &&
+                  q.rubric.length > 0 &&
+                  (session.rubricState[q.id] ?? []).filter(Boolean).length /
+                    q.rubric.length >=
+                    0.6;
+              return (
+                <div
+                  key={q.id}
+                  className="flex items-center gap-3 p-3 rounded-md border border-border bg-card"
+                >
+                  <div
+                    className={cn(
+                      "w-7 h-7 rounded-full flex items-center justify-center text-xs font-semibold shrink-0",
+                      isCorrect
+                        ? "bg-blue-500/15 text-blue-500"
+                        : submittedQ
+                        ? "bg-red-500/15 text-red-500"
+                        : "bg-muted text-muted-foreground"
+                    )}
+                  >
+                    {submittedQ ? (isCorrect ? "✓" : "✗") : i + 1}
+                  </div>
+                  <p className="text-xs line-clamp-2 flex-1">{q.stem}</p>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+ * Helpers
+ * ───────────────────────────────────────────────────────────────────────── */
+function SectionHeader({
+  number,
+  title,
+  subtitle,
+}: {
+  number: number;
+  title: string;
+  subtitle?: string;
+}) {
+  return (
+    <div className="qbank-card-header">
+      <div className="qbank-card-number">{number}</div>
+      <div>
+        <h3 className="text-base font-semibold text-foreground">{title}</h3>
+        {subtitle && (
+          <p className="text-xs text-muted-foreground mt-0.5">{subtitle}</p>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function SummaryRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex items-center justify-between">
+      <span className="text-muted-foreground">{label}</span>
+      <span className="font-semibold tabular-nums">{value}</span>
+    </div>
+  );
+}
+
+function formatTime(sec: number): string {
+  if (sec < 0) sec = 0;
+  const h = Math.floor(sec / 3600);
+  const m = Math.floor((sec % 3600) / 60);
+  const s = sec % 60;
+  if (h > 0)
+    return `${h}:${m.toString().padStart(2, "0")}:${s.toString().padStart(2, "0")}`;
+  return `${m.toString().padStart(2, "0")}:${s.toString().padStart(2, "0")}`;
+}
+
+function countQuestions(content: AnyContent): number {
+  switch (content.type) {
+    case "quiz":
+      return content.questions.length;
+    case "bank":
+      return content.passages.reduce((a, p) => a + p.questions.length, 0);
+    case "flashcard":
+      return content.cards.length;
+    case "written":
+      return content.prompts.length;
+    case "osce":
+      return content.stations.length;
+    default:
+      return 0;
+  }
+}
+
+function contentToQuestions(content: AnyContent): SessionQuestion[] {
+  const out: SessionQuestion[] = [];
+  if (content.type === "quiz") {
+    (content as QuizContent).questions.forEach((q) => {
+      out.push({
+        id: q.id,
+        stem: q.question,
+        choices: q.options,
+        correct: q.correct,
+        explanation: q.explanation,
+        tags: q.tags,
+        difficulty: q.difficulty ? `${q.difficulty}/5` : undefined,
+      });
+    });
+  } else if (content.type === "bank") {
+    (content as BankContent).passages.forEach((p) => {
+      p.questions.forEach((q) => {
+        out.push({
+          id: q.id,
+          stem: `${p.content}\n\n${q.question}`,
+          choices: q.options,
+          correct: q.correct,
+          explanation: q.explanation,
+          tags: q.tags,
+          difficulty: q.difficulty ? `${q.difficulty}/5` : undefined,
+        });
+      });
+    });
+  } else if (content.type === "flashcard") {
+    (content as FlashcardContent).cards.forEach((c) => {
+      out.push({
+        id: c.id,
+        stem: c.front,
+        choices: [],
+        correct: -1,
+        explanation: c.back,
+        tags: c.tags,
+      });
+    });
+  } else if (content.type === "written") {
+    (content as WrittenContent).prompts.forEach((p) => {
+      out.push({
+        id: p.id,
+        stem: p.prompt,
+        choices: [],
+        correct: -1,
+        explanation:
+          p.rubric.length > 0
+            ? `Self-grading rubric:\n${p.rubric.map((r, i) => `${i + 1}. ${r}`).join("\n")}`
+            : "",
+        rubric: p.rubric,
+        tags: p.tags,
+      });
+    });
+  } else if (content.type === "osce") {
+    (content as OsceContent).stations.forEach((s) => {
+      out.push({
+        id: s.id,
+        stem: s.scenario,
+        choices: [],
+        correct: -1,
+        explanation:
+          s.rubric.length > 0
+            ? `Performance rubric:\n${s.rubric.map((r, i) => `${i + 1}. ${r}`).join("\n")}`
+            : "",
+        rubric: s.rubric,
+        redFlags: s.redFlags,
+        differential: s.differential,
+        tags: ["osce"],
+      });
+    });
+  }
+  return out;
+}
+
+function saveSession(s: SessionData) {
+  const total = s.questions.length;
+  const answeredCount = Object.keys(s.answers).filter(
+    (k) => s.answers[+k] !== undefined
+  ).length;
+  const mcqCorrect = s.questions.filter(
+    (q, i) => s.revealed[i] && s.answers[i] === q.correct
+  ).length;
+  const nonMcqCorrect = s.questions.filter((q, i) => {
+    if (q.correct >= 0) return false;
+    if (!s.revealed[i]) return false;
+    if (s.engine === "flashcard") return s.ratings[q.id] === "easy";
+    if (s.engine === "written" || s.engine === "osce") {
+      const rubric = s.rubricState[q.id] ?? [];
+      return (
+        q.rubric &&
+        q.rubric.length > 0 &&
+        rubric.filter(Boolean).length / q.rubric.length >= 0.6
+      );
+    }
+    return false;
+  }).length;
+  const correctCount = mcqCorrect + nonMcqCorrect;
+  const incorrectCount = answeredCount - mcqCorrect;
+  const flaggedCount = Object.values(s.flagged).filter(Boolean).length;
+
+  const saved: SavedSession = {
+    id: s.sessionId,
+    packUid: s.itemId,
+    packTitle: s.itemTitle,
+    engine: s.engine,
+    mode: s.mode,
+    totalQuestions: total,
+    answeredCount,
+    correctCount,
+    incorrectCount,
+    flaggedCount,
+    startedAt: s.startedAt,
+    completedAt: s.completedAt,
+    answers: s.answers,
+    revealed: s.revealed,
+    flagged: s.flagged,
+    current: s.current,
+    examTimeRemaining: s.examTimeRemaining,
+    writtenDrafts: s.writtenDrafts,
+    rubricState: s.rubricState,
+    ratings: s.ratings,
+  };
+  sessions.save(saved);
+}
