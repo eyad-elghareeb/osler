@@ -40,6 +40,8 @@ export interface HighlightItem {
   color: string;
   text: string;
   target: string; // "stem" | "choice-0" | "choice-1" | ... | "explanation" | "article"
+  ranges?: { start: number; end: number }[];
+  createdAt?: string;
 }
 
 /* ── Sticky Notes ───────────────────────────────────────────────────── */

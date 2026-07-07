@@ -299,6 +299,27 @@ html::-webkit-scrollbar-thumb:hover {
   border-bottom: 1px dashed color-mix(in oklch, var(--primary) 60%, transparent);
 }
 
+/* ── Highlight spans (QBank + Library) ──────────────────────────────── */
+[data-osler-hl-id] {
+  cursor: pointer;
+  transition: opacity 0.15s;
+  border-radius: 2px;
+  padding: 0 1px;
+}
+[data-osler-hl-id]:hover {
+  opacity: 0.7;
+}
+
+.osler-article-highlight {
+  border-radius: 2px;
+  padding: 0 1px;
+  cursor: pointer;
+  transition: opacity 0.15s;
+}
+.osler-article-highlight:hover {
+  opacity: 0.7;
+}
+
 /* ───────────────────────────────────────────────────────────────────────
  * UWorld-aligned utility classes (used by QBank Studio v2)
  * ─────────────────────────────────────────────────────────────────────── */

@@ -29,6 +29,7 @@ import {
 import { cn } from "@/lib/utils";
 import { useArticleHighlighter } from "@/hooks/use-article-highlighter";
 import { HighlighterToolbar } from "./highlighter-toolbar";
+import { applyHighlightsToHtml } from "@/lib/osler/article-highlights";
 
 interface LibraryProps {
   initialArticleId?: string;
@@ -160,23 +161,69 @@ export function Library({ initialArticleId }: LibraryProps) {
     return new Set(searchHits);
   }, [searchHits]);
 
-  // Highlight mode auto-select
+  const articleContentRef = React.useRef<HTMLDivElement>(null);
+
+  // Process article HTML with highlights applied
+  const processedArticleHtml = React.useMemo(() => {
+    if (!activeArticle) return "";
+    return applyHighlightsToHtml(activeArticle.html, hlCtrl.highlights as any);
+  }, [activeArticle?.html, hlCtrl.highlights]);
+
+  // Direct DOM highlight mode: capture text selection on article content
   React.useEffect(() => {
-    if (!hlCtrl.highlightMode || !activeArticleId || !hlCtrl.iframeRef.current) return;
-    const iframe = hlCtrl.iframeRef.current;
-    const doc = iframe.contentDocument;
-    if (!doc) return;
+    if (!hlCtrl.highlightMode || !activeArticleId) return;
+    const el = articleContentRef.current;
+    if (!el) return;
     const handler = () => {
-      const sel = doc.getSelection();
+      const sel = window.getSelection();
       if (!sel || sel.isCollapsed || sel.rangeCount === 0) return;
       const text = sel.toString().trim();
       if (!text) return;
-      hlCtrl.setHighlightMode(false);
+
+      // Compute absolute offset within the article content
+      const range = sel.getRangeAt(0).cloneRange();
+      const headRange = document.createRange();
+      headRange.selectNodeContents(el);
+      headRange.setEnd(range.startContainer, range.startOffset);
+      const absStart = headRange.toString().length;
+      const absEnd = absStart + text.length;
+
+      hlCtrl.onAdd(text, hlCtrl.highlightColor, absStart >= 0 ? [{ start: absStart, end: absEnd }] : []);
       sel.removeAllRanges();
     };
-    doc.addEventListener("mouseup", handler);
-    return () => doc.removeEventListener("mouseup", handler);
-  }, [hlCtrl.highlightMode, activeArticleId]);
+    el.addEventListener("mouseup", handler);
+    return () => el.removeEventListener("mouseup", handler);
+  }, [hlCtrl.highlightMode, hlCtrl.highlightColor, activeArticleId, hlCtrl.onAdd]);
+
+  // Escape exits highlight mode
+  React.useEffect(() => {
+    if (!hlCtrl.highlightMode) return;
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === "Escape") hlCtrl.setHighlightMode(false);
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [hlCtrl.highlightMode, hlCtrl.setHighlightMode]);
+
+  // Click highlight spans to remove them (only when NOT in highlight mode)
+  React.useEffect(() => {
+    const el = articleContentRef.current;
+    if (!el || hlCtrl.highlightMode) return;
+    const handler = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      const span = target.closest("[data-osler-hl-id]") as HTMLElement | null;
+      if (span) {
+        const id = span.getAttribute("data-osler-hl-id");
+        if (id) {
+          e.preventDefault();
+          e.stopPropagation();
+          hlCtrl.onRemove(id);
+        }
+      }
+    };
+    el.addEventListener("click", handler);
+    return () => el.removeEventListener("click", handler);
+  }, [hlCtrl.onRemove, hlCtrl.highlights, hlCtrl.highlightMode]);
 
   const bookmarkedArticles = React.useMemo(
     () => FLAT_ARTICLES.filter((a) => bookmarks.has(a.articleId)),
@@ -283,7 +330,8 @@ export function Library({ initialArticleId }: LibraryProps) {
                   }}
                 >
                   <div
-                    dangerouslySetInnerHTML={{ __html: activeArticle.html }}
+                    ref={articleContentRef}
+                    dangerouslySetInnerHTML={{ __html: processedArticleHtml }}
                   />
                 </motion.div>
               )}

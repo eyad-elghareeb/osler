@@ -78,6 +78,7 @@ import { CalculatorModal } from "./calculator";
 import { StickyNoteCard, STICKY_COLORS } from "./sticky-note";
 import { FloatingArticleModal } from "./article-modal";
 import { AiAssistant } from "./ai-assistant";
+import { HighlightedContent } from "./highlighted-content";
 import { useShortcutBindings, useShortcutListener } from "@/hooks/use-shortcuts";
 import { defaultBindings } from "@/lib/osler/shortcuts";
 
@@ -1111,6 +1112,7 @@ function QuizView({
   const [highlightMode, setHighlightMode] = React.useState(false);
   const [highlightColor, setHighlightColor] = React.useState(HIGHLIGHT_COLORS[0]);
   const [eraserMode, setEraserMode] = React.useState(false);
+  const [hlVersion, setHlVersion] = React.useState(0);
   const [colorPickerOpen, setColorPickerOpen] = React.useState(false);
   const [textSettingsOpen, setTextSettingsOpen] = React.useState(false);
   const [textControls, setTextControls] = React.useState<TextControls>({
@@ -1143,31 +1145,67 @@ function QuizView({
   React.useEffect(() => {
     if (!highlightMode) return;
     const handler = () => {
-      if (submitted) return;
       const sel = window.getSelection();
       if (!sel || sel.isCollapsed || sel.rangeCount === 0) return;
       const text = sel.toString().trim();
       if (!text) return;
+
+      const range = sel.getRangeAt(0);
+      let target = "stem";
+      let targetText = q.stem;
+
+      let el: HTMLElement | null = range.startContainer instanceof Text
+        ? range.startContainer.parentElement
+        : range.startContainer as HTMLElement;
+      while (el) {
+        const ci = el.getAttribute("data-choice-idx");
+        if (ci !== null) {
+          const idx = parseInt(ci, 10);
+          target = `choice-${idx}`;
+          targetText = q.choices[idx] ?? "";
+          break;
+        }
+        if (el.getAttribute("data-explanation") !== null) {
+          target = "explanation";
+          targetText = q.explanation;
+          break;
+        }
+        el = el.parentElement;
+      }
+
+      const idx = targetText.indexOf(text);
+      const ranges = idx >= 0 ? [{ start: idx, end: idx + text.length }] : [];
+
       const hl: HighlightItem = {
         id: crypto.randomUUID(),
         color: highlightColor,
         text,
-        target: "stem",
+        target,
+        ranges,
+        createdAt: new Date().toISOString(),
       };
       highlights.add(activeItem.uid, session.current, hl);
+      setHlVersion((v) => v + 1);
       window.getSelection()?.removeAllRanges();
     };
     document.addEventListener("mouseup", handler);
     return () => document.removeEventListener("mouseup", handler);
-  }, [highlightMode, highlightColor, activeItem.uid, session.current, submitted]);
+  }, [highlightMode, highlightColor, activeItem.uid, session.current, q]);
 
-  // Eraser mode: click to remove most recent highlight
+  // Eraser mode: click a highlight span to remove it
   React.useEffect(() => {
     if (!eraserMode) return;
-    const handler = () => {
-      const all = highlights.get(activeItem.uid, session.current);
-      if (all.length > 0) {
-        highlights.remove(activeItem.uid, session.current, all[all.length - 1].id);
+    const handler = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      const span = target.closest("[data-osler-hl-id]") as HTMLElement | null;
+      if (span) {
+        const id = span.getAttribute("data-osler-hl-id");
+        if (id) {
+          e.preventDefault();
+          e.stopPropagation();
+          highlights.remove(activeItem.uid, session.current, id);
+          setHlVersion((v) => v + 1);
+        }
       }
     };
     document.addEventListener("click", handler);
@@ -1234,7 +1272,11 @@ function QuizView({
 
   if (!q) return null;
 
-  const currentHighlights = highlights.get(activeItem.uid, session.current);
+  const currentHighlights = React.useMemo(
+    () => highlights.get(activeItem.uid, session.current),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [activeItem.uid, session.current, hlVersion]
+  );
   const strikethroughs = session.strikethroughs[session.current] ?? [];
   const elapsedTime = Math.floor((Date.now() - session.startedAt) / 1000);
 
@@ -1622,7 +1664,10 @@ function QuizView({
                         className="uworld-prose"
                         style={stemStyle}
                       >
-                        <p style={{ whiteSpace: "pre-wrap" }}>{q.stem}</p>
+                        <HighlightedContent
+                          text={q.stem}
+                          highlights={currentHighlights}
+                        />
                       </div>
                     </div>
 
@@ -1677,6 +1722,7 @@ function QuizView({
                           return (
                             <button
                               key={idx}
+                              data-choice-idx={idx}
                               disabled={submitted}
                               onClick={() => onSelect(idx)}
                               onContextMenu={(e) => {
@@ -1691,7 +1737,10 @@ function QuizView({
                                 {letterContent}
                               </div>
                               <div className={`flex-1 min-w-0 uworld-prose text-[14px] leading-relaxed pt-0.5 ${hasStrikethrough ? "line-through text-muted-foreground" : ""}`}>
-                                {choice}
+                                <HighlightedContent
+                                  text={choice}
+                                  highlights={currentHighlights}
+                                />
                               </div>
                             </button>
                           );
@@ -1780,7 +1829,7 @@ function QuizView({
                     className={`medos-qbank-acol w-[45%] overflow-y-auto medos-scroll bg-muted/20 ${mobileTutorTab === "question" ? "hidden md:block" : ""}`}
                   >
                     <div className="px-4 sm:px-6 py-4">
-                      <ExplanationCard q={q} selected={selected} nonMcq={!isMCQ} />
+                      <ExplanationCard q={q} selected={selected} nonMcq={!isMCQ} highlights={currentHighlights} packUid={activeItem.uid} questionIdx={session.current} eraserMode={eraserMode} />
                     </div>
                   </div>
                 )}
@@ -1789,7 +1838,7 @@ function QuizView({
                 {submitted && !isMCQ && session.mode !== "tutor" && (
                   <div className="border-t border-border bg-muted/20 px-4 sm:px-6 py-4">
                     <div className="max-w-3xl mx-auto">
-                      <ExplanationCard q={q} selected={undefined} nonMcq />
+                      <ExplanationCard q={q} selected={undefined} nonMcq highlights={currentHighlights} packUid={activeItem.uid} questionIdx={session.current} eraserMode={eraserMode} />
                     </div>
                   </div>
                 )}
@@ -2356,11 +2405,23 @@ function ExplanationCard({
   q,
   selected,
   nonMcq,
+  highlights: questionHighlights,
+  packUid,
+  questionIdx,
+  eraserMode,
+  onRemoveHighlight,
 }: {
   q: SessionQuestion;
   selected: number | undefined;
   nonMcq?: boolean;
+  highlights?: HighlightItem[];
+  packUid?: string;
+  questionIdx?: number;
+  eraserMode?: boolean;
+  onRemoveHighlight?: (id: string) => void;
 }) {
+  const hl = questionHighlights ?? [];
+
   if (nonMcq) {
     return (
       <div className="rounded-xl border-2 border-blue-600 overflow-hidden">
@@ -2375,13 +2436,16 @@ function ExplanationCard({
             </div>
           </div>
         </div>
-        <div className="bg-card px-5 py-4">
+        <div className="bg-card px-5 py-4" data-explanation>
           <div className="flex items-center gap-2 mb-3">
             <Lightbulb className="size-4 text-primary" />
             <h3 className="text-sm font-semibold text-foreground">Explanation</h3>
           </div>
           <div className="uworld-prose text-[14px]" style={{ whiteSpace: "pre-wrap" }}>
-            {q.explanation || "No explanation provided."}
+            <HighlightedContent
+              text={q.explanation || "No explanation provided."}
+              highlights={hl}
+            />
           </div>
           {q.tags && q.tags.length > 0 && (
             <div className="mt-4 pt-3 border-t border-border flex flex-wrap gap-1.5">
@@ -2419,13 +2483,16 @@ function ExplanationCard({
           </div>
         </div>
       </div>
-      <div className="bg-card px-5 py-4">
+      <div className="bg-card px-5 py-4" data-explanation>
         <div className="flex items-center gap-2 mb-3">
           <Lightbulb className="size-4 text-primary" />
           <h3 className="text-sm font-semibold text-foreground">Explanation</h3>
         </div>
         <div className="uworld-prose text-[14px]" style={{ whiteSpace: "pre-wrap" }}>
-          {q.explanation || "No explanation provided."}
+          <HighlightedContent
+            text={q.explanation || "No explanation provided."}
+            highlights={hl}
+          />
         </div>
         {q.tags && q.tags.length > 0 && (
           <div className="mt-4 pt-3 border-t border-border flex flex-wrap gap-1.5">

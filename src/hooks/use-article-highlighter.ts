@@ -23,6 +23,7 @@ export interface UseArticleHighlighterReturn {
   iframeRef: React.RefObject<HTMLIFrameElement | null>;
   refresh: () => void;
   onColorPick: (color?: string) => void;
+  onAdd: (text: string, color: string, ranges?: ArticleHighlightItem["ranges"]) => void;
   onRemove: (id: string) => void;
   clearAll: () => void;
 }
@@ -183,6 +184,24 @@ export function useArticleHighlighter(
   }, [articleId]);
   onRemoveRef.current = onRemove;
 
+  const onAdd = React.useCallback((text: string, color: string, ranges?: ArticleHighlightItem["ranges"]) => {
+    if (articleId == null) return;
+    const aid = String(articleId);
+    const newItem: ArticleHighlightItem = {
+      id: `hl-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      color,
+      text,
+      target: "body",
+      ranges: ranges ?? [],
+      createdAt: new Date().toISOString(),
+    };
+    setHighlights((prev) => {
+      const next = [...prev, newItem];
+      articleHighlights.save(aid, next);
+      return next;
+    });
+  }, [articleId]);
+
   const attachIframeListeners = React.useCallback(() => {
     const iframe = iframeRef.current;
     const doc = iframe?.contentDocument;
@@ -303,6 +322,7 @@ export function useArticleHighlighter(
     iframeRef,
     refresh,
     onColorPick,
+    onAdd,
     onRemove,
     clearAll,
   };

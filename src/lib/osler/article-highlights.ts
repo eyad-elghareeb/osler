@@ -84,7 +84,7 @@ export function applyHighlightsToHtml(
       span.style.backgroundColor = hl.color;
       span.style.borderRadius = "2px";
       span.style.padding = "0 1px";
-      span.setAttribute("data-highlight-id", hl.id);
+      span.setAttribute("data-osler-hl-id", hl.id);
       try { rng.surroundContents(span); } catch {
         const frag = rng.extractContents();
         span.appendChild(frag);
@@ -94,4 +94,21 @@ export function applyHighlightsToHtml(
   }
 
   return root.innerHTML;
+}
+
+export function escapeHtml(str: string): string {
+  return str
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
+export function applyHighlightsToText(
+  text: string,
+  highlights: ArticleHighlightItem[]
+): string {
+  const html = escapeHtml(text);
+  return applyHighlightsToHtml(html, highlights);
 }
