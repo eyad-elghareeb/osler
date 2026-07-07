@@ -624,6 +624,13 @@ function ContentTab({
   onOpenPack?: (item: ManifestItem) => void;
 }) {
   const [searchQuery, setSearchQuery] = React.useState("");
+  const [debouncedSearchQuery, setDebouncedSearchQuery] = React.useState("");
+
+  React.useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearchQuery(searchQuery), 200);
+    return () => clearTimeout(t);
+  }, [searchQuery]);
+
   const [expandedFolders, setExpandedFolders] = React.useState<Record<string, boolean>>(() => {
     const init: Record<string, boolean> = {};
     Object.keys(ENGINE_META).forEach((k) => { init[k] = true; });
@@ -648,8 +655,8 @@ function ContentTab({
   // Filter by search (run unconditionally)
   const filtered = React.useMemo(() => {
     if (!data) return {};
-    if (!searchQuery.trim()) return grouped;
-    const q = searchQuery.toLowerCase();
+    if (!debouncedSearchQuery.trim()) return grouped;
+    const q = debouncedSearchQuery.toLowerCase();
     const result: Record<string, typeof data.items> = {};
     for (const [type, items] of Object.entries(grouped)) {
       const matched = items.filter(
@@ -661,7 +668,7 @@ function ContentTab({
       if (matched.length > 0) result[type] = matched;
     }
     return result;
-  }, [grouped, searchQuery, data]);
+  }, [grouped, debouncedSearchQuery, data]);
 
   if (!data) {
     return (

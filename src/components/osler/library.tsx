@@ -23,6 +23,7 @@ import {
 import {
   ARTICLE_TOC,
   ARTICLES,
+  searchArticles as searchAllArticles,
   type ArticleTocNode,
   type Article,
 } from "@/lib/osler/articles";
@@ -57,11 +58,14 @@ function flattenToc(
 
 const FLAT_ARTICLES = flattenToc(ARTICLE_TOC);
 
-function searchArticles(query: string): string[] {
-  const q = query.toLowerCase();
-  return FLAT_ARTICLES
+function searchArticles(query: string): Set<string> {
+  const q = query.toLowerCase().trim();
+  if (!q) return new Set(FLAT_ARTICLES.map((a) => a.articleId));
+  const byToc = FLAT_ARTICLES
     .filter((a) => a.label.toLowerCase().includes(q) || a.path.some((p) => p.toLowerCase().includes(q)))
     .map((a) => a.articleId);
+  const byArticle = searchAllArticles(q).map((a) => a.id);
+  return new Set([...byToc, ...byArticle]);
 }
 
 export function Library({ initialArticleId }: LibraryProps) {
@@ -78,6 +82,12 @@ export function Library({ initialArticleId }: LibraryProps) {
   const [loading, setLoading] = React.useState(false);
   const [sidebarTab, setSidebarTab] = React.useState<SidebarTab>("toc");
   const [searchQuery, setSearchQuery] = React.useState("");
+  const [debouncedSearchQuery, setDebouncedSearchQuery] = React.useState("");
+
+  React.useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearchQuery(searchQuery), 200);
+    return () => clearTimeout(t);
+  }, [searchQuery]);
 
   const hlCtrl = useArticleHighlighter({
     source: "library",
@@ -154,11 +164,11 @@ export function Library({ initialArticleId }: LibraryProps) {
     setSidebarOpen(false);
   };
 
-  const searchHits = searchQuery.trim() ? searchArticles(searchQuery) : null;
+  const searchHits = debouncedSearchQuery.trim() ? searchArticles(debouncedSearchQuery) : null;
 
   const matchedArticleIds = React.useMemo(() => {
     if (!searchHits) return null;
-    return new Set(searchHits);
+    return searchHits;
   }, [searchHits]);
 
   const articleContentRef = React.useRef<HTMLDivElement>(null);

@@ -23,6 +23,7 @@ export function FloatingArticleModal({
 }: FloatingArticleModalProps) {
   const [activeId, setActiveId] = React.useState(articleId);
   const [query, setQuery] = React.useState("");
+  const [debouncedQuery, setDebouncedQuery] = React.useState("");
   const [showSidebar, setShowSidebar] = React.useState(false);
   const [bookmarks, setBookmarks] = React.useState<Set<string>>(new Set());
 
@@ -46,8 +47,13 @@ export function FloatingArticleModal({
     } catch {}
   }, []);
 
+  React.useEffect(() => {
+    const t = setTimeout(() => setDebouncedQuery(query), 200);
+    return () => clearTimeout(t);
+  }, [query]);
+
   const article: Article | null = activeId ? ARTICLES[activeId] : null;
-  const searchResults = query ? searchArticles(query) : Object.values(ARTICLES);
+  const searchResults = debouncedQuery ? searchArticles(debouncedQuery) : Object.values(ARTICLES);
 
   const handleOpen = (id: string) => {
     setActiveId(id);
