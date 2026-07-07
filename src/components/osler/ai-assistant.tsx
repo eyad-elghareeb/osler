@@ -10,12 +10,29 @@ import {
   Trash2,
   Loader2,
   X,
-  BookOpen,
-  Lightbulb,
+  Settings,
+  ChevronDown,
+  ChevronUp,
+  AlertCircle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { ARTICLES } from "@/lib/osler/articles";
 import { cn } from "@/lib/utils";
+import { usePlatform } from "@/hooks/use-platform";
+
+const MODELS = [
+  ["gemini-3.1-flash-lite", "Gemini 3.1 Flash-Lite (default, fast & modern)"],
+  ["gemini-3.5-flash", "Gemini 3.5 Flash (latest, strongest Flash)"],
+  ["gemini-3.1-pro-preview", "Gemini 3.1 Pro Preview (most capable, premium)"],
+  ["gemma-4-26b-a4b-it", "Gemma 4 26B IT (open model, strong & free)"],
+  ["gemma-4-31b-it", "Gemma 4 31B IT (larger open model)"],
+  ["gemini-2.5-flash", "Gemini 2.5 Flash (older fallback)"],
+] as const;
+
+const STORAGE_KEYS = {
+  apiKey: "osler_gemini_api_key",
+  model: "osler_gemini_model",
+  maxWait: "osler_gemini_max_wait",
+} as const;
 
 interface Message {
   id: string;
@@ -38,26 +55,101 @@ const SUGGESTIONS = [
 ];
 
 interface AiAssistantProps {
-  /** Optional slide-in panel mode (used from QBank Studio) */
   open?: boolean;
   onClose?: () => void;
-  /** Current question context (for QBank integration) */
   questionContext?: {
     stem: string;
+    choices?: string[];
+    correct?: number;
     engine: string;
     submitted: boolean;
   };
+}
+
+function buildSystemPrompt(): string {
+  return [
+    "You are a medical quiz tutor and study assistant for USMLE prep.",
+    "",
+    "Your purpose is to help students understand medical concepts, clarify doubts, and deepen their knowledge through clear, focused explanations.",
+    "",
+    "Rules:",
+    "- Answer in 1-3 short sentences or a few bullet points.",
+    "- Be direct and concise. No introductions, no conclusions, no fluff.",
+    "- When explaining concepts, reference the specific question context provided.",
+    "- If you need more information to give a precise answer, ask a focused follow-up question.",
+    "- Always maintain an encouraging, educational tone.",
+    "- Use clear language appropriate for medical students.",
+    "",
+    "Scope:",
+    "- Focus on medical and health sciences education.",
+    "- For questions outside this scope, politely redirect to the question at hand.",
+  ].join("\n");
+}
+
+function buildUserPrompt(context: NonNullable<AiAssistantProps["questionContext"]>, userQuery: string): string {
+  const keys = ["A", "B", "C", "D", "E", "F", "G", "H"];
+  let ctx = "## Current Question\n" + (context.stem || "");
+  if (context.choices?.length) {
+    context.choices.forEach((opt, i) => {
+      ctx += "\n" + (keys[i] || i) + ". " + opt;
+    });
+    const correctIdx = context.correct != null ? context.correct - 1 : -1;
+    if (correctIdx >= 0 && context.choices[correctIdx]) {
+      ctx += "\n\nCorrect answer: " + (keys[correctIdx] || correctIdx) + ". " + context.choices[correctIdx];
+    }
+  }
+  ctx += "\n\n## My Question\n" + userQuery;
+  return ctx;
+}
+
+function renderMarkdown(text: string): string {
+  if (!text) return "";
+  let t = String(text);
+  t = t.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  t = t.replace(/```(\w*)\n?([\s\S]*?)```/g, (_, _lang, code) => {
+    const c = code.replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    return `<pre class="bg-muted p-3 rounded-lg overflow-x-auto text-xs my-2"><code>${c}</code></pre>`;
+  });
+  t = t.replace(/`([^`]+)`/g, '<code class="bg-muted px-1.5 py-0.5 rounded text-xs">$1</code>');
+  t = t.replace(/^### (.+)$/gm, '<h4 class="text-sm font-semibold mt-3 mb-1">$1</h4>');
+  t = t.replace(/^## (.+)$/gm, '<h3 class="text-base font-semibold mt-3 mb-1">$1</h3>');
+  t = t.replace(/^# (.+)$/gm, '<h2 class="text-lg font-semibold mt-3 mb-1">$1</h2>');
+  t = t.replace(/^&gt; (.+)$/gm, '<blockquote class="border-l-2 border-primary pl-3 my-2 text-muted-foreground text-sm">$1</blockquote>');
+  t = t.replace(/\*\*(.+?)\*\*/g, '<strong class="font-semibold">$1</strong>');
+  t = t.replace(/\*([^*]+)\*/g, '<em class="italic">$1</em>');
+  t = t.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener" class="text-primary underline">$1</a>');
+  t = t.replace(/^- (.+)$/gm, '<li class="text-sm ml-4 list-disc">$1</li>');
+  t = t.replace(/^\d+\. (.+)$/gm, '<li class="text-sm ml-4 list-decimal">$1</li>');
+  t = t.replace(/\n\n/g, '</p><p class="my-1.5">');
+  t = '<p class="my-1.5">' + t + "</p>";
+  return t;
 }
 
 export function AiAssistant({
   open,
   onClose,
   questionContext,
-}: AiAssistantProps = {}) {
+}: AiAssistantProps) {
+  const platform = usePlatform();
   const [messages, setMessages] = React.useState<Message[]>(() => loadChat());
   const [input, setInput] = React.useState("");
   const [loading, setLoading] = React.useState(false);
+  const [error, setError] = React.useState<string | null>(null);
+  const [showSettings, setShowSettings] = React.useState(false);
+  const [showContext, setShowContext] = React.useState(false);
+
+  const [apiKey, setApiKey] = React.useState("");
+  const [model, setModel] = React.useState<string>(MODELS[0][0]);
+  const [maxWait, setMaxWait] = React.useState("30");
+
   const scrollRef = React.useRef<HTMLDivElement>(null);
+  const inputRef = React.useRef<HTMLTextAreaElement>(null);
+
+  React.useEffect(() => {
+    setApiKey(localStorage.getItem(STORAGE_KEYS.apiKey) || "");
+    setModel(localStorage.getItem(STORAGE_KEYS.model) || MODELS[0][0]);
+    setMaxWait(localStorage.getItem(STORAGE_KEYS.maxWait) || "30");
+  }, []);
 
   // Persist
   React.useEffect(() => {
@@ -67,15 +159,54 @@ export function AiAssistant({
 
   // Auto-scroll
   React.useEffect(() => {
-    scrollRef.current?.scrollTo({
+    if (!scrollRef.current) return;
+    scrollRef.current.scrollTo({
       top: scrollRef.current.scrollHeight,
       behavior: "smooth",
     });
   }, [messages, loading]);
 
+  // Initialize welcome message on open / question change
+  React.useEffect(() => {
+    if (open) {
+      setMessages([
+        {
+          id: crypto.randomUUID(),
+          role: "assistant",
+          content: `Hi! Ask me anything about this question — I can explain concepts, clarify why an answer is right or wrong, or dive deeper into any topic.`,
+          timestamp: Date.now(),
+        },
+      ]);
+      setError(null);
+      setTimeout(() => inputRef.current?.focus(), 150);
+    }
+  }, [open, questionContext?.stem]);
+
+  const saveApiKey = (key: string) => {
+    setApiKey(key);
+    localStorage.setItem(STORAGE_KEYS.apiKey, key);
+  };
+  const saveModel = (m: string) => {
+    setModel(m);
+    localStorage.setItem(STORAGE_KEYS.model, m);
+  };
+  const saveMaxWait = (w: string) => {
+    setMaxWait(w);
+    localStorage.setItem(STORAGE_KEYS.maxWait, w);
+  };
+
   const send = async (text: string) => {
     const trimmed = text.trim();
     if (!trimmed || loading) return;
+    if (!apiKey) {
+      setError("Configure your Gemini API key in settings first.");
+      setShowSettings(true);
+      return;
+    }
+
+    setInput("");
+    setError(null);
+    setLoading(true);
 
     const userMsg: Message = {
       id: crypto.randomUUID(),
@@ -84,33 +215,87 @@ export function AiAssistant({
       timestamp: Date.now(),
     };
     setMessages((m) => [...m, userMsg]);
-    setInput("");
-    setLoading(true);
 
-    // Simulated assistant response
-    setTimeout(() => {
-      const reply: Message = {
+    try {
+      const chatMessages = messages.map((m) => ({
+        role: m.role === "user" ? "user" : "model",
+        parts: [{ text: m.content }],
+      }));
+      chatMessages.push({
+        role: "user",
+        parts: [
+          {
+            text: questionContext
+              ? buildUserPrompt(questionContext, trimmed)
+              : trimmed,
+          },
+        ],
+      });
+
+      const controller = new AbortController();
+      const timeoutMs = parseInt(maxWait) * 1000 || 30000;
+      const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
+      const res = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            systemInstruction: { parts: [{ text: buildSystemPrompt() }] },
+            contents: chatMessages,
+            generationConfig: { temperature: 0.3, maxOutputTokens: 1024 },
+          }),
+          signal: controller.signal,
+        }
+      );
+      clearTimeout(timeoutId);
+
+      if (!res.ok) {
+        const errBody = await res.text().catch(() => "");
+        throw new Error(errBody || `HTTP ${res.status}`);
+      }
+
+      const data = await res.json();
+      const reply =
+        data?.candidates?.[0]?.content?.parts?.[0]?.text || "No response from AI.";
+      setMessages((prev) => [...prev, {
         id: crypto.randomUUID(),
         role: "assistant",
-        content: generateReply(trimmed, questionContext),
+        content: reply,
         timestamp: Date.now(),
-      };
-      setMessages((m) => [...m, reply]);
+      }]);
+    } catch (err: any) {
+      if (err.name === "AbortError") {
+        setError("Request timed out. Try a shorter question or increase the max wait time.");
+      } else {
+        setError(
+          err.message?.includes("API_KEY")
+            ? "Invalid API key. Check your settings."
+            : err.message || "Request failed."
+        );
+      }
+    } finally {
       setLoading(false);
-    }, 700 + Math.random() * 800);
+    }
   };
 
   const clear = () => {
-    setMessages([]);
-    if (typeof window !== "undefined") {
-      localStorage.removeItem(STORAGE_KEY);
-    }
+    setMessages([
+      {
+        id: crypto.randomUUID(),
+        role: "assistant",
+        content: "Chat cleared. Ask me anything about this question!",
+        timestamp: Date.now(),
+      },
+    ]);
+    setError(null);
   };
 
   const content = (
     <div className="flex flex-col h-full">
       {/* Header */}
-      <div className="flex items-center gap-3 px-4 md:px-6 py-3 border-b border-border bg-card/40">
+      <div className="flex items-center gap-3 px-4 md:px-6 py-3 border-b border-border bg-card/40 shrink-0">
         <div className="w-9 h-9 rounded-full bg-primary/15 text-primary flex items-center justify-center">
           <Bot className="size-5" />
         </div>
@@ -122,43 +307,138 @@ export function AiAssistant({
               : "Ask about any medical topic"}
           </p>
         </div>
-        {onClose && (
-          <Button variant="ghost" size="sm" onClick={onClose} className="size-8 p-0">
-            <X className="size-4" />
-          </Button>
-        )}
-        {messages.length > 0 && !onClose ? (
+        <div className="flex items-center gap-1">
+          <button
+            onClick={() => setShowSettings(!showSettings)}
+            className={`size-7 rounded-lg flex items-center justify-center transition-colors ${
+              showSettings ? "bg-primary/15 text-primary" : "hover:bg-muted text-muted-foreground"
+            }`}
+            title="Settings"
+          >
+            <Settings className="size-3.5" />
+          </button>
+          {onClose && (
+            <button
+              onClick={onClose}
+              className="size-7 rounded-lg hover:bg-muted flex items-center justify-center transition-colors"
+            >
+              <X className="size-4" />
+            </button>
+          )}
+        </div>
+        {messages.length > 0 && !onClose && (
           <Button variant="ghost" size="sm" onClick={clear}>
             <Trash2 className="size-3.5" />
             <span className="hidden sm:inline">Clear</span>
           </Button>
-        ) : null}
+        )}
       </div>
+
+      {/* Settings panel */}
+      <AnimatePresence>
+        {showSettings && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: "auto", opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            className="overflow-hidden border-b border-border"
+          >
+            <div className="p-4 space-y-3 bg-muted/30">
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold text-muted-foreground">Gemini API Key</label>
+                <div className="flex gap-2">
+                  <input
+                    type="password"
+                    value={apiKey}
+                    onChange={(e) => saveApiKey(e.target.value)}
+                    placeholder="Enter your Gemini API key"
+                    className="flex-1 h-8 rounded-lg border border-border bg-card px-3 text-xs outline-none focus:border-primary"
+                  />
+                </div>
+                <p className="text-[10px] text-muted-foreground">
+                  Get a free key at{" "}
+                  <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener" className="text-primary underline">
+                    AI Studio
+                  </a>
+                </p>
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold text-muted-foreground">Model</label>
+                <select
+                  value={model}
+                  onChange={(e) => saveModel(e.target.value)}
+                  className="w-full h-8 rounded-lg border border-border bg-card px-3 text-xs outline-none focus:border-primary"
+                >
+                  {MODELS.map(([id, label]) => (
+                    <option key={id} value={id}>{label}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold text-muted-foreground">Max Wait</label>
+                <select
+                  value={maxWait}
+                  onChange={(e) => saveMaxWait(e.target.value)}
+                  className="w-full h-8 rounded-lg border border-border bg-card px-3 text-xs outline-none focus:border-primary"
+                >
+                  <option value="15">15 seconds</option>
+                  <option value="30">30 seconds</option>
+                  <option value="60">60 seconds</option>
+                  <option value="120">2 minutes</option>
+                </select>
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Question context toggle */}
+      {questionContext && (
+        <div className="border-b border-border shrink-0">
+          <button
+            onClick={() => setShowContext(!showContext)}
+            className="w-full flex items-center justify-between px-4 py-2 text-xs text-muted-foreground hover:bg-muted/40 transition-colors"
+          >
+            <span className="font-medium">Question context</span>
+            {showContext ? <ChevronUp className="size-3" /> : <ChevronDown className="size-3" />}
+          </button>
+          <AnimatePresence>
+            {showContext && (
+              <motion.div
+                initial={{ height: 0 }}
+                animate={{ height: "auto" }}
+                exit={{ height: 0 }}
+                className="overflow-hidden"
+              >
+                <div className="px-4 py-2 bg-muted/20 text-xs space-y-1 max-h-28 overflow-y-auto">
+                  <p className="font-medium text-foreground">{questionContext.stem?.slice(0, 200)}</p>
+                  {questionContext.choices?.map((opt, i) => {
+                    const letter = String.fromCharCode(65 + i);
+                    const isCorrect = questionContext.correct != null && i + 1 === questionContext.correct;
+                    return (
+                      <p key={i} className={`pl-2 ${isCorrect ? "text-primary font-medium" : "text-muted-foreground"}`}>
+                        {letter}. {opt} {isCorrect ? "✓" : ""}
+                      </p>
+                    );
+                  })}
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
+      )}
 
       {/* Messages */}
       <div
         ref={scrollRef}
         className="flex-1 overflow-y-auto osler-scroll px-4 md:px-6 py-4 space-y-3"
       >
-        {/* Question context banner */}
-        {questionContext && !questionContext.submitted && (
-          <div className="bg-primary/8 border border-primary/25 rounded-lg p-3 mb-2">
-            <div className="flex items-center gap-2 text-xs font-semibold text-primary mb-1">
-              <Lightbulb className="size-3.5" />
-              Current Question Context
-            </div>
-            <p className="text-xs text-muted-foreground line-clamp-3">
-              {questionContext.stem}
-            </p>
-          </div>
-        )}
-
         {messages.length === 0 ? (
           <EmptyState onSuggestion={(s) => send(s)} />
         ) : (
           messages.map((m) => <ChatBubble key={m.id} msg={m} />)
         )}
-        {loading ? (
+        {loading && (
           <div className="flex gap-2 items-center text-muted-foreground text-sm">
             <div className="w-7 h-7 rounded-full bg-primary/15 text-primary flex items-center justify-center shrink-0">
               <Bot className="size-4" />
@@ -168,7 +448,13 @@ export function AiAssistant({
               <span>Thinking…</span>
             </div>
           </div>
-        ) : null}
+        )}
+        {error && (
+          <div className="flex items-start gap-2 px-3 py-2 rounded-lg bg-destructive/10 border border-destructive/20 text-destructive text-xs">
+            <AlertCircle className="size-3.5 shrink-0 mt-0.5" />
+            <p>{error}</p>
+          </div>
+        )}
       </div>
 
       {/* Input */}
@@ -177,10 +463,11 @@ export function AiAssistant({
           e.preventDefault();
           send(input);
         }}
-        className="border-t border-border bg-card/40 p-3 md:p-4"
+        className="border-t border-border bg-card/40 p-3 md:p-4 shrink-0"
       >
         <div className="flex items-end gap-2">
           <textarea
+            ref={inputRef}
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => {
@@ -203,24 +490,37 @@ export function AiAssistant({
             <Send className="size-4" />
           </Button>
         </div>
-        <p className="text-[10px] text-muted-foreground mt-1.5 hidden sm:block">
-          Press Enter to send · Shift+Enter for newline
-        </p>
+        <div className="flex items-center justify-between mt-1.5">
+          <p className="text-[10px] text-muted-foreground hidden sm:block">
+            Press Enter to send · Shift+Enter for newline
+          </p>
+          <button
+            type="button"
+            onClick={clear}
+            className="text-[10px] text-muted-foreground hover:text-foreground transition-colors"
+          >
+            Clear chat
+          </button>
+        </div>
       </form>
     </div>
   );
 
-  // Slide-in panel mode (from QBank Studio)
   if (open !== undefined && onClose) {
     return (
       <AnimatePresence>
         {open && (
           <motion.div
-            initial={{ x: 360, opacity: 0 }}
-            animate={{ x: 0, opacity: 1 }}
-            exit={{ x: 360, opacity: 0 }}
-            transition={{ type: "spring", damping: 28, stiffness: 300 }}
-            className="fixed right-0 top-12 bottom-0 z-40 w-full sm:w-96 border-l border-border bg-card shadow-xl flex flex-col"
+            initial={platform.isPhone ? { y: "100%", opacity: 0 } : { x: 360, opacity: 0 }}
+            animate={platform.isPhone ? { y: 0, opacity: 1 } : { x: 0, opacity: 1 }}
+            exit={platform.isPhone ? { y: "100%", opacity: 0 } : { x: 360, opacity: 0 }}
+            transition={platform.isPhone
+              ? { type: "spring", damping: 32, stiffness: 320 }
+              : { type: "spring", damping: 28, stiffness: 300 }}
+            className={platform.isPhone
+              ? "fixed inset-0 z-50 bg-card flex flex-col"
+              : "fixed right-0 top-12 bottom-0 z-50 w-full sm:w-96 border-l border-border bg-card shadow-xl flex flex-col"
+            }
           >
             {content}
           </motion.div>
@@ -229,7 +529,6 @@ export function AiAssistant({
     );
   }
 
-  // Full page mode (from nav)
   return content;
 }
 
@@ -288,194 +587,14 @@ function ChatBubble({ msg }: { msg: Message }) {
           isUser ? "user" : "assistant"
         )}
       >
-        {formatContent(msg.content)}
+        {isUser ? (
+          <p>{msg.content}</p>
+        ) : (
+          <div dangerouslySetInnerHTML={{ __html: renderMarkdown(msg.content) }} />
+        )}
       </div>
     </motion.div>
   );
-}
-
-function formatContent(text: string): React.ReactNode {
-  return text.split("\n").map((line, i) => {
-    if (!line.trim()) return <br key={i} />;
-    if (/^[•\-*]\s/.test(line)) {
-      return (
-        <p key={i} style={{ paddingLeft: "0.6rem" }}>
-          {line.replace(/^[•\-*]\s/, "• ")}
-        </p>
-      );
-    }
-    return <p key={i}>{line}</p>;
-  });
-}
-
-function generateReply(
-  question: string,
-  context?: { stem: string; engine: string; submitted: boolean }
-): string {
-  const q = question.toLowerCase();
-
-  // Context-aware response
-  if (context && !context.submitted) {
-    return [
-      "Based on the current question, here are some key concepts to consider:",
-      "",
-      "1. **Identify the chief complaint** — What is the primary clinical presentation?",
-      "2. **Consider the differential** — What conditions could cause this presentation?",
-      "3. **Pick the gold-standard test** — What imaging or lab would confirm the diagnosis?",
-      "4. **Know the first-line treatment** — What's the standard of care?",
-      "",
-      "Try to reason through the question stem step by step. Look for key clues like vital signs, lab values, and imaging findings that narrow the differential.",
-      "",
-      "(This is a simulated hint. In production, the AI would analyze the specific question and provide targeted guidance without revealing the answer.)",
-    ].join("\n");
-  }
-
-  if (q.includes("stroke") || q.includes("thrombolysis") || q.includes("tpa")) {
-    return [
-      "Acute ischemic stroke thrombolysis — IV alteplase (tPA) indications:",
-      "• Symptom onset within 3 hours (extended to 4.5 hours in eligible patients)",
-      "• Ischemic stroke confirmed on non-contrast CT (no hemorrhage)",
-      "• Measurable neurological deficit on NIHSS",
-      "",
-      "Key contraindications:",
-      "• Intracranial hemorrhage on imaging",
-      "• Recent surgery or major trauma (<14 days)",
-      "• Active bleeding or coagulopathy (INR >1.7, platelets <100k)",
-      "• Sustained BP >185/110 despite treatment",
-      "• Glucose <50 mg/dL (correct first)",
-      "",
-      "Before tPA: lower BP to <185/110. After tPA: keep BP <180/105 for 24 hours, no anticoagulants/antiplatelets for 24h.",
-    ].join("\n");
-  }
-  if (q.includes("copd") || q.includes("gold")) {
-    return [
-      "COPD GOLD classification — based on post-bronchodilator FEV1 % predicted:",
-      "• GOLD 1 (Mild): FEV1 ≥ 80%",
-      "• GOLD 2 (Moderate): FEV1 50–79%",
-      "• GOLD 3 (Severe): FEV1 30–49%",
-      "• GOLD 4 (Very Severe): FEV1 < 30%",
-      "",
-      "Management by severity:",
-      "• Group A: SABA or SAMA PRN",
-      "• Group B: LABA + LAMA",
-      "• Group C/D: LABA + LAMA + ICS (if eos ≥ 300 or exacerbations)",
-      "",
-      "Two interventions reduce mortality: smoking cessation and long-term oxygen therapy (LTOT) for severe resting hypoxemia (PaO2 < 55 mm Hg).",
-    ].join("\n");
-  }
-  if (q.includes("heart failure") || q.includes("systolic") || q.includes("diastolic")) {
-    return [
-      "Heart failure — systolic (HFrEF) vs diastolic (HFpEF):",
-      "",
-      "HFrEF (EF ≤ 40%):",
-      "• Reduced contractility → low forward output",
-      "• RAAS and SNS activation cause maladaptive remodeling",
-      "• First-line: beta-blocker + ACEi/ARB/ARNI + SGLT2i + MRA",
-      "",
-      "HFpEF (EF ≥ 50%):",
-      "• Stiff ventricle → impaired filling, preserved EF",
-      "• Diuretics for congestion; treat comorbidities (HTN, AF, diabetes)",
-      "• SGLT2i shown to reduce HF hospitalizations",
-      "",
-      "Common to both: diuretics for volume overload, salt restriction, daily weights.",
-    ].join("\n");
-  }
-  if (q.includes("pe") || q.includes("pulmonary embolism") || q.includes("embolism")) {
-    return [
-      "Pulmonary embolism workup:",
-      "• Wells criteria → low/medium/high pre-test probability",
-      "• If low probability + D-dimer negative → PE excluded",
-      "• If D-dimer positive or higher probability → CT pulmonary angiography (CTPA)",
-      "• V/Q scan if CT contraindicated (renal failure, contrast allergy)",
-      "",
-      "ECG findings: sinus tachycardia, S1Q3T3, right axis deviation, T-wave inversions V1-V4.",
-      "CXR: usually normal; may show Westermark sign or Hampton's hump.",
-      "",
-      "Treatment: anticoagulation (LMWH, DOAC, or warfarin). Thrombolysis for massive PE with hemodynamic instability.",
-    ].join("\n");
-  }
-  if (q.includes("abg") || q.includes("arterial blood gas")) {
-    return [
-      "Arterial blood gas interpretation — 5-step approach:",
-      "",
-      "1. pH: <7.35 acidosis, >7.45 alkalosis",
-      "2. PaCO2: respiratory component (↑ = acidosis, ↓ = alkalosis)",
-      "3. HCO3: metabolic component (↑ = alkalosis, ↓ = acidosis)",
-      "4. Compensation: opposite direction of primary disturbance",
-      "5. ΔΔ formula: determine if mixed disorder",
-      "",
-      "Quick compensations:",
-      "• Metabolic acidosis: PaCO2 ≈ 1.5 × HCO3 + 8 (±2)",
-      "• Metabolic alkalosis: PaCO2 ↑ by 0.7 × ΔHCO3",
-      "• Respiratory acidosis (acute): HCO3 ↑ 1 mEq/L per 10 mmHg PaCO2 ↑",
-      "• Respiratory acidosis (chronic): HCO3 ↑ 3-4 mEq/L per 10 mmHg",
-    ].join("\n");
-  }
-  if (q.includes("asthma")) {
-    return [
-      "Asthma vs COPD comparison:",
-      "",
-      "Asthma:",
-      "• Type 2 (Th2) inflammation — eosinophils, IL-4, IL-5, IL-13",
-      "• Reversible airflow obstruction (≥12% + 200mL FEV1 improvement post-SABA)",
-      "• Onset usually in childhood, triggers (allergens, exercise, cold air)",
-      "• Treatment: ICS-formoterol PRN (GINA Track 1) + maintenance ICS",
-      "",
-      "COPD:",
-      "• Neutrophilic inflammation, protease-antiprotease imbalance",
-      "• Largely fixed obstruction (FEV1/FVC <0.7 post-bronchodilator)",
-      "• Onset usually >40, smoking history",
-      "• Treatment: LABA + LAMA ± ICS; smoking cessation + LTOT reduce mortality",
-    ].join("\n");
-  }
-  if (q.includes("cirrhosis") || q.includes("portal")) {
-    return [
-      "Cirrhosis complications and management:",
-      "",
-      "Portal hypertension complications:",
-      "• Varices: non-selective beta-blocker (propranolol) for primary prophylaxis",
-      "• Ascites: sodium restriction + spironolactone + furosemide (100:40 ratio)",
-      "• SBP: cefotaxime if ascitic PMN ≥250; norfloxacin prophylaxis",
-      "• Hepatic encephalopathy: lactulose + rifaximin; treat precipitant",
-      "• HRS: octreotide + midodrine + albumin; terlipressin; transplant",
-      "",
-      "Screening:",
-      "• Varices: EGD every 1-3 years",
-      "• HCC: ultrasound ± AFP every 6 months",
-      "",
-      "Child-Pugh and MELD-Na scores estimate prognosis and transplant priority.",
-    ].join("\n");
-  }
-  if (q.includes("stemi") || q.includes("mi") || q.includes("infarction")) {
-    return [
-      "Acute STEMI management:",
-      "",
-      "Initial (MONA-B):",
-      "• Morphine for refractory pain",
-      "• Oxygen only if SpO2 <90%",
-      "• Nitroglycerin for ongoing pain (avoid in RV infarct, hypotension)",
-      "• Aspirin 162-325 mg chewed",
-      "• Beta-blocker (avoid in acute HF, hypotension, severe asthma)",
-      "",
-      "Reperfusion:",
-      "• Primary PCI within 90 min (door-to-balloon) — preferred",
-      "• If PCI >120 min: fibrinolytics (alteplase/tenecteplase) within 30 min",
-      "",
-      "Post-PCI: DAPT (aspirin + ticagrelor/clopidogrel) 12 months + high-intensity statin + ACEi (especially anterior STEMI)",
-    ].join("\n");
-  }
-  return [
-    `Question: "${question}"`,
-    "",
-    "Here's a structured approach to any medical question:",
-    "• Identify the chief complaint and key vitals",
-    "• Form a differential based on symptom pattern",
-    "• Pick the gold-standard imaging or lab test",
-    "• State the first-line treatment and any contraindications",
-    "• Consider complications and prognosis",
-    "",
-    "(This is a simulated response for demo purposes — in production this would call the Osler AI engine with full medical knowledge base.)",
-  ].join("\n");
 }
 
 function loadChat(): Message[] {

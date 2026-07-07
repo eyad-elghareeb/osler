@@ -44,6 +44,7 @@ import {
   History,
   TrendingUp,
   Target,
+  Keyboard,
 } from "lucide-react";
 import { loadAllContent, ENGINE_META } from "@/lib/osler/content";
 import type {
@@ -77,6 +78,8 @@ import { CalculatorModal } from "./calculator";
 import { StickyNoteCard, STICKY_COLORS } from "./sticky-note";
 import { FloatingArticleModal } from "./article-modal";
 import { AiAssistant } from "./ai-assistant";
+import { useShortcutBindings, useShortcutListener } from "@/hooks/use-shortcuts";
+import { defaultBindings } from "@/lib/osler/shortcuts";
 
 const LETTERS = ["A", "B", "C", "D", "E", "F", "G", "H"];
 const HIGHLIGHT_COLORS = ["#fef08a", "#86efac", "#93c5fd", "#fbcfe8", "#c4b5fd", "#fdba74"];
@@ -442,7 +445,7 @@ export function QBankStudio({
               animate={{ x: 0, opacity: 1 }}
               exit={{ x: 320, opacity: 0 }}
               transition={{ type: "spring", damping: 28, stiffness: 300 }}
-              className="fixed right-0 top-12 bottom-0 z-40 w-80 border-l border-border bg-card shadow-xl"
+              className="fixed right-0 top-12 bottom-0 z-50 w-80 border-l border-border bg-card shadow-xl"
             >
               <LabValuesSidebar onClose={() => setLabValuesOpen(false)} />
             </motion.div>
@@ -459,6 +462,8 @@ export function QBankStudio({
             session.questions[session.current]
               ? {
                   stem: session.questions[session.current].stem,
+                  choices: session.questions[session.current].choices,
+                  correct: session.questions[session.current].correct,
                   engine: session.engine,
                   submitted: session.revealed[session.current] || false,
                 }
@@ -1114,6 +1119,8 @@ function QuizView({
   });
   const [articleSearchOpen, setArticleSearchOpen] = React.useState(false);
   const [mobileTutorTab, setMobileTutorTab] = React.useState<"question" | "answer">("question");
+  const [showShortcuts, setShowShortcuts] = React.useState(false);
+  const bindings = useShortcutBindings();
 
   // Sticky notes
   const [notes, setNotes] = React.useState<StickyNoteData[]>([]);
@@ -1167,6 +1174,19 @@ function QuizView({
     return () => document.removeEventListener("click", handler);
   }, [eraserMode, activeItem.uid, session.current]);
 
+  const addStickyNote = React.useCallback(() => {
+    const note: StickyNoteData = {
+      id: crypto.randomUUID(),
+      x: 100 + Math.random() * 200,
+      y: 100 + Math.random() * 100,
+      text: "",
+      color: STICKY_COLORS[noteColorIdx.current % STICKY_COLORS.length],
+    };
+    noteColorIdx.current++;
+    stickyNotes.add(activeItem.uid, session.current, note);
+    setNotes(stickyNotes.get(activeItem.uid, session.current));
+  }, [activeItem.uid, session.current]);
+
   // Keyboard shortcuts
   React.useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -1174,6 +1194,11 @@ function QuizView({
       if (e.key === "f" || e.key === "F") { e.preventDefault(); onToggleFlag(); }
       if (e.key === "ArrowLeft") { e.preventDefault(); onPrev(); }
       if (e.key === "ArrowRight") { e.preventDefault(); onNext(); }
+      if (e.key === "?" && !e.shiftKey) { e.preventDefault(); setShowShortcuts((s) => !s); }
+      if (e.key === "a" && !e.shiftKey && !e.ctrlKey && !e.metaKey) { e.preventDefault(); onToggleAiAssistant(); }
+      if (e.key === "h" || e.key === "H") { e.preventDefault(); setHighlightMode((m) => !m); }
+      if (e.key === "e" || e.key === "E") { e.preventDefault(); setEraserMode((m) => !m); }
+      if (e.key === "n" || e.key === "N") { e.preventDefault(); addStickyNote(); }
       if (isMCQ && !submitted) {
         const num = parseInt(e.key);
         if (num >= 1 && num <= q.choices.length) {
@@ -1190,22 +1215,7 @@ function QuizView({
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [q, isMCQ, submitted, selected, onToggleFlag, onPrev, onNext, onSelect, onSubmit]);
-
-  if (!q) return null;
-
-  const addStickyNote = () => {
-    const note: StickyNoteData = {
-      id: crypto.randomUUID(),
-      x: 100 + Math.random() * 200,
-      y: 100 + Math.random() * 100,
-      text: "",
-      color: STICKY_COLORS[noteColorIdx.current % STICKY_COLORS.length],
-    };
-    noteColorIdx.current++;
-    stickyNotes.add(activeItem.uid, session.current, note);
-    setNotes(stickyNotes.get(activeItem.uid, session.current));
-  };
+  }, [q, isMCQ, submitted, selected, onToggleFlag, onPrev, onNext, onSelect, onSubmit, onToggleAiAssistant, setHighlightMode, setEraserMode, addStickyNote]);
 
   const updateNote = (id: string, text: string) => {
     stickyNotes.update(activeItem.uid, session.current, id, text);
@@ -1221,6 +1231,8 @@ function QuizView({
     stickyNotes.delete(activeItem.uid, session.current, id);
     setNotes(stickyNotes.get(activeItem.uid, session.current));
   };
+
+  if (!q) return null;
 
   const currentHighlights = highlights.get(activeItem.uid, session.current);
   const strikethroughs = session.strikethroughs[session.current] ?? [];
@@ -1840,6 +1852,14 @@ function QuizView({
                   </div>
                 </PopoverContent>
               </Popover>
+              <Button
+                variant="outline" size="sm"
+                onClick={() => setShowShortcuts((s) => !s)}
+                className={`h-9 px-2.5 rounded-lg ${showShortcuts ? "border-primary bg-primary/10 text-primary" : ""}`}
+                title="Keyboard shortcuts"
+              >
+                <Keyboard className="size-4" />
+              </Button>
             </div>
 
             <div className="h-5 w-px bg-border mx-1 hidden sm:block" />
@@ -1979,6 +1999,60 @@ function QuizView({
           onMove={(x, y) => moveNote(note.id, x, y)}
         />
       ))}
+
+      {/* Keyboard shortcuts help */}
+      <AnimatePresence>
+        {showShortcuts && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4"
+            onClick={() => setShowShortcuts(false)}
+          >
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="bg-card border border-border rounded-xl shadow-2xl max-w-lg w-full p-5 max-h-[80vh] overflow-y-auto"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-sm font-semibold flex items-center gap-2">
+                  <Keyboard className="size-4" />
+                  Keyboard Shortcuts
+                </h3>
+                <button
+                  onClick={() => setShowShortcuts(false)}
+                  className="size-7 rounded-lg hover:bg-muted flex items-center justify-center"
+                >
+                  <X className="size-4" />
+                </button>
+              </div>
+              <div className="space-y-2.5">
+                {[
+                  ["← / →", "Previous / Next question"],
+                  ["1–8", "Select answer choice"],
+                  ["Enter", "Submit answer"],
+                  ["F", "Flag / Unflag question"],
+                  ["A", "Toggle AI Assistant"],
+                  ["H", "Toggle highlight mode"],
+                  ["E", "Toggle eraser mode"],
+                  ["N", "Add sticky note"],
+                  ["?", "Toggle this help panel"],
+                ].map(([keys, desc]) => (
+                  <div key={keys} className="flex items-center justify-between text-sm">
+                    <span className="text-muted-foreground">{desc}</span>
+                    <kbd className="px-2 py-0.5 rounded border border-border bg-muted/50 text-xs font-mono tabular-nums">
+                      {keys}
+                    </kbd>
+                  </div>
+                ))}
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

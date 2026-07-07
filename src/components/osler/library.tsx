@@ -13,12 +13,12 @@ import {
   PanelLeft,
   Loader2,
   Library as LibraryIcon,
-  Highlighter,
-  X,
-  Trash2,
   Type,
   Minus,
   Plus as PlusIcon,
+  Search,
+  BookmarkX,
+  List,
 } from "lucide-react";
 import {
   ARTICLE_TOC,
@@ -26,17 +26,42 @@ import {
   type ArticleTocNode,
   type Article,
 } from "@/lib/osler/articles";
-import { articleHighlights, type HighlightItem } from "@/lib/osler/storage";
 import { cn } from "@/lib/utils";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-
-const HIGHLIGHT_COLORS = ["#fef08a", "#86efac", "#93c5fd", "#fbcfe8", "#c4b5fd", "#fdba74"];
+import { useArticleHighlighter } from "@/hooks/use-article-highlighter";
+import { HighlighterToolbar } from "./highlighter-toolbar";
 
 interface LibraryProps {
   initialArticleId?: string;
 }
 
 const BOOKMARKS_KEY = "osler-article-bookmarks";
+
+type SidebarTab = "toc" | "bookmarks";
+
+function flattenToc(
+  nodes: ArticleTocNode[]
+): { id: string; label: string; articleId: string; path: string[] }[] {
+  const result: { id: string; label: string; articleId: string; path: string[] }[] = [];
+  const walk = (ns: ArticleTocNode[], parents: string[]) => {
+    for (const n of ns) {
+      if (n.articleId) {
+        result.push({ id: n.id, label: n.label, articleId: n.articleId, path: [...parents, n.label] });
+      }
+      if (n.children) walk(n.children, [...parents, n.label]);
+    }
+  };
+  walk(nodes, []);
+  return result;
+}
+
+const FLAT_ARTICLES = flattenToc(ARTICLE_TOC);
+
+function searchArticles(query: string): string[] {
+  const q = query.toLowerCase();
+  return FLAT_ARTICLES
+    .filter((a) => a.label.toLowerCase().includes(q) || a.path.some((p) => p.toLowerCase().includes(q)))
+    .map((a) => a.articleId);
+}
 
 export function Library({ initialArticleId }: LibraryProps) {
   const [expandedNodes, setExpandedNodes] = React.useState<Set<string>>(
@@ -47,16 +72,17 @@ export function Library({ initialArticleId }: LibraryProps) {
   );
   const [bookmarks, setBookmarks] = React.useState<Set<string>>(new Set());
   const [zoom, setZoom] = React.useState(100);
+  const [fontSize, setFontSize] = React.useState(15);
   const [sidebarOpen, setSidebarOpen] = React.useState(false);
   const [loading, setLoading] = React.useState(false);
+  const [sidebarTab, setSidebarTab] = React.useState<SidebarTab>("toc");
+  const [searchQuery, setSearchQuery] = React.useState("");
 
-  // Highlighter state
-  const [highlightMode, setHighlightMode] = React.useState(false);
-  const [highlightColor, setHighlightColor] = React.useState(HIGHLIGHT_COLORS[0]);
-  const [colorPickerOpen, setColorPickerOpen] = React.useState(false);
-  const [currentHighlights, setCurrentHighlights] = React.useState<HighlightItem[]>([]);
-  const [fontSize, setFontSize] = React.useState(15);
-  const articleRef = React.useRef<HTMLDivElement>(null);
+  const hlCtrl = useArticleHighlighter({
+    source: "library",
+    articleId: activeArticleId,
+    enabled: true,
+  });
 
   // Load bookmarks
   React.useEffect(() => {
@@ -75,16 +101,24 @@ export function Library({ initialArticleId }: LibraryProps) {
     }
   }, [initialArticleId]);
 
-  const activeArticle = activeArticleId ? ARTICLES[activeArticleId] : null;
-
-  // Load highlights when article changes
+  // Expand TOC nodes to show bookmarked articles
   React.useEffect(() => {
-    if (activeArticleId) {
-      setCurrentHighlights(articleHighlights.get(activeArticleId));
-    } else {
-      setCurrentHighlights([]);
-    }
-  }, [activeArticleId]);
+    if (bookmarks.size === 0) return;
+    const paths = FLAT_ARTICLES.filter((a) => bookmarks.has(a.articleId));
+    setExpandedNodes((prev) => {
+      const next = new Set(prev);
+      for (const p of paths) {
+        const parts = p.path.slice(0, -1);
+        for (const name of parts) {
+          const node = findNodeByLabel(name);
+          if (node) next.add(node.id);
+        }
+      }
+      return next;
+    });
+  }, [bookmarks]);
+
+  const activeArticle = activeArticleId ? ARTICLES[activeArticleId] : null;
 
   // Simulated article load
   React.useEffect(() => {
@@ -119,40 +153,35 @@ export function Library({ initialArticleId }: LibraryProps) {
     setSidebarOpen(false);
   };
 
-  // Highlight mode: auto-apply on text selection
+  const searchHits = searchQuery.trim() ? searchArticles(searchQuery) : null;
+
+  const matchedArticleIds = React.useMemo(() => {
+    if (!searchHits) return null;
+    return new Set(searchHits);
+  }, [searchHits]);
+
+  // Highlight mode auto-select
   React.useEffect(() => {
-    if (!highlightMode || !activeArticleId) return;
+    if (!hlCtrl.highlightMode || !activeArticleId || !hlCtrl.iframeRef.current) return;
+    const iframe = hlCtrl.iframeRef.current;
+    const doc = iframe.contentDocument;
+    if (!doc) return;
     const handler = () => {
-      const sel = window.getSelection();
+      const sel = doc.getSelection();
       if (!sel || sel.isCollapsed || sel.rangeCount === 0) return;
       const text = sel.toString().trim();
       if (!text) return;
-      // Check selection is within the article
-      const range = sel.getRangeAt(0);
-      if (!articleRef.current?.contains(range.commonAncestorContainer)) return;
-
-      const hl: HighlightItem = {
-        id: crypto.randomUUID(),
-        color: highlightColor,
-        text,
-        target: "article",
-      };
-      const updated = [...currentHighlights, hl];
-      setCurrentHighlights(updated);
-      articleHighlights.save(activeArticleId, updated);
-      window.getSelection()?.removeAllRanges();
+      hlCtrl.setHighlightMode(false);
+      sel.removeAllRanges();
     };
-    document.addEventListener("mouseup", handler);
-    return () => document.removeEventListener("mouseup", handler);
-  }, [highlightMode, highlightColor, activeArticleId, currentHighlights]);
+    doc.addEventListener("mouseup", handler);
+    return () => doc.removeEventListener("mouseup", handler);
+  }, [hlCtrl.highlightMode, activeArticleId]);
 
-  const clearHighlights = () => {
-    if (!activeArticleId) return;
-    if (window.confirm(`Clear all ${currentHighlights.length} highlights?`)) {
-      articleHighlights.clear(activeArticleId);
-      setCurrentHighlights([]);
-    }
-  };
+  const bookmarkedArticles = React.useMemo(
+    () => FLAT_ARTICLES.filter((a) => bookmarks.has(a.articleId)),
+    [bookmarks]
+  );
 
   return (
     <div className="flex h-[calc(100vh-3.5rem)] overflow-hidden bg-background">
@@ -183,13 +212,19 @@ export function Library({ initialArticleId }: LibraryProps) {
               className="absolute left-0 top-0 bottom-0 w-80 max-w-[85vw] bg-sidebar"
               onClick={(e) => e.stopPropagation()}
             >
-              <TocSidebar
+              <SidebarContent
                 expanded={expandedNodes}
                 onToggle={toggleExpand}
                 activeId={activeArticleId}
                 onOpen={openArticle}
                 bookmarks={bookmarks}
                 onToggleBookmark={toggleBookmark}
+                searchQuery={searchQuery}
+                onSearchChange={setSearchQuery}
+                matchedArticleIds={matchedArticleIds}
+                sidebarTab={sidebarTab}
+                onTabChange={setSidebarTab}
+                bookmarkedArticles={bookmarkedArticles}
               />
             </motion.div>
           </motion.div>
@@ -198,13 +233,19 @@ export function Library({ initialArticleId }: LibraryProps) {
 
       {/* Desktop sidebar */}
       <aside className="hidden md:flex flex-col w-72 shrink-0 border-r border-border bg-sidebar">
-        <TocSidebar
+        <SidebarContent
           expanded={expandedNodes}
           onToggle={toggleExpand}
           activeId={activeArticleId}
           onOpen={openArticle}
           bookmarks={bookmarks}
           onToggleBookmark={toggleBookmark}
+          searchQuery={searchQuery}
+          onSearchChange={setSearchQuery}
+          matchedArticleIds={matchedArticleIds}
+          sidebarTab={sidebarTab}
+          onTabChange={setSidebarTab}
+          bookmarkedArticles={bookmarkedArticles}
         />
       </aside>
 
@@ -220,19 +261,9 @@ export function Library({ initialArticleId }: LibraryProps) {
               onZoomIn={() => setZoom((z) => Math.min(140, z + 10))}
               onZoomOut={() => setZoom((z) => Math.max(80, z - 10))}
               onResetZoom={() => setZoom(100)}
-              highlightMode={highlightMode}
-              onToggleHighlightMode={() => setHighlightMode((m) => !m)}
-              colorPickerOpen={colorPickerOpen}
-              onColorPickerOpenChange={(o) => {
-                setColorPickerOpen(o);
-                if (o) setHighlightMode(true);
-              }}
-              highlightColor={highlightColor}
-              onColorChange={setHighlightColor}
-              highlightCount={currentHighlights.length}
-              onClearHighlights={clearHighlights}
               fontSize={fontSize}
               onFontSizeChange={setFontSize}
+              hlCtrl={hlCtrl}
             />
             <div className="flex-1 overflow-y-auto medos-scroll">
               {loading ? (
@@ -245,32 +276,40 @@ export function Library({ initialArticleId }: LibraryProps) {
                   initial={{ opacity: 0, y: 6 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ duration: 0.25 }}
-                  className="library-article"
-                  ref={articleRef}
+                  className="library-article relative"
                   style={{
                     fontSize: `${(zoom / 100) * fontSize}px`,
                     lineHeight: 1.7,
                   }}
-                  dangerouslySetInnerHTML={{ __html: activeArticle.html }}
-                />
+                >
+                  <div
+                    dangerouslySetInnerHTML={{ __html: activeArticle.html }}
+                  />
+                </motion.div>
               )}
             </div>
           </>
         ) : (
-          <EmptyState />
+          <EmptyState onOpen={openArticle} />
         )}
       </main>
     </div>
   );
 }
 
-function TocSidebar({
+function SidebarContent({
   expanded,
   onToggle,
   activeId,
   onOpen,
   bookmarks,
   onToggleBookmark,
+  searchQuery,
+  onSearchChange,
+  matchedArticleIds,
+  sidebarTab,
+  onTabChange,
+  bookmarkedArticles,
 }: {
   expanded: Set<string>;
   onToggle: (id: string) => void;
@@ -278,35 +317,127 @@ function TocSidebar({
   onOpen: (id: string) => void;
   bookmarks: Set<string>;
   onToggleBookmark: (id: string) => void;
+  searchQuery: string;
+  onSearchChange: (q: string) => void;
+  matchedArticleIds: Set<string> | null;
+  sidebarTab: SidebarTab;
+  onTabChange: (t: SidebarTab) => void;
+  bookmarkedArticles: { id: string; label: string; articleId: string }[];
 }) {
   return (
     <div className="flex flex-col h-full">
-      <div className="px-4 py-3 border-b border-border">
-        <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-2">
-          <BookOpen className="size-3.5" />
-          Article Library
-        </h3>
+      <div className="px-3 pt-3 pb-2 border-b border-border space-y-2">
+        <div className="flex items-center justify-between">
+          <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-2">
+            <BookOpen className="size-3.5" />
+            Article Library
+          </h3>
+          <div className="flex items-center gap-0.5">
+            <button
+              onClick={() => onTabChange("toc")}
+              className={cn(
+                "size-7 rounded-md flex items-center justify-center transition-colors",
+                sidebarTab === "toc"
+                  ? "bg-primary/15 text-primary"
+                  : "text-muted-foreground hover:bg-muted/60"
+              )}
+              title="Table of contents"
+            >
+              <List className="size-3.5" />
+            </button>
+            <button
+              onClick={() => onTabChange("bookmarks")}
+              className={cn(
+                "size-7 rounded-md flex items-center justify-center transition-colors",
+                sidebarTab === "bookmarks"
+                  ? "bg-primary/15 text-primary"
+                  : "text-muted-foreground hover:bg-muted/60"
+              )}
+              title="Bookmarks"
+            >
+              <Bookmark className="size-3.5" />
+            </button>
+          </div>
+        </div>
+        {/* Search */}
+        <div className="relative">
+          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground pointer-events-none" />
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => {
+              onSearchChange(e.target.value);
+              if (e.target.value) onTabChange("toc");
+            }}
+            placeholder="Search articles…"
+            className="w-full h-8 rounded-md border border-border bg-card pl-8 pr-3 text-xs outline-none focus:border-primary transition-colors placeholder:text-muted-foreground/50"
+          />
+        </div>
       </div>
       <div className="flex-1 overflow-y-auto medos-scroll p-2 space-y-0.5">
-        {ARTICLE_TOC.map((node) => (
-          <TocNode
-            key={node.id}
-            node={node}
-            depth={0}
-            expanded={expanded}
-            onToggle={onToggle}
-            activeId={activeId}
-            onOpen={onOpen}
-            bookmarks={bookmarks}
-            onToggleBookmark={onToggleBookmark}
-          />
-        ))}
+        {sidebarTab === "bookmarks" && bookmarkedArticles.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-10 text-center">
+            <BookmarkX className="size-8 text-muted-foreground/40 mb-2" />
+            <p className="text-xs text-muted-foreground">No bookmarks yet</p>
+            <p className="text-[10px] text-muted-foreground/60 mt-1">
+              Bookmark articles by clicking the bookmark icon
+            </p>
+          </div>
+        ) : sidebarTab === "bookmarks" ? (
+          <div className="space-y-0.5">
+            {bookmarkedArticles.map((a) => (
+              <button
+                key={a.articleId}
+                onClick={() => onOpen(a.articleId)}
+                className={cn(
+                  "library-toc-item w-full",
+                  a.articleId === activeId && "active"
+                )}
+              >
+                <BookOpen className="size-3.5 text-muted-foreground shrink-0" />
+                <span className="flex-1 truncate">{a.label}</span>
+                <BookmarkCheck className="size-3 text-primary shrink-0" />
+              </button>
+            ))}
+          </div>
+        ) : (
+          ARTICLE_TOC.map((node) => (
+            <TocNode
+              key={node.id}
+              node={node}
+              depth={0}
+              expanded={expanded}
+              onToggle={onToggle}
+              activeId={activeId}
+              onOpen={onOpen}
+              bookmarks={bookmarks}
+              onToggleBookmark={onToggleBookmark}
+              searchQuery={searchQuery}
+              matchedArticleIds={matchedArticleIds}
+            />
+          ))
+        )}
       </div>
-      <div className="px-3 py-2 border-t border-border text-[10px] text-muted-foreground">
-        {Object.keys(ARTICLES).length} articles · {bookmarks.size} bookmarked
+      <div className="px-3 py-2 border-t border-border text-[10px] text-muted-foreground flex items-center justify-between">
+        <span>{Object.keys(ARTICLES).length} articles</span>
+        <span>{bookmarks.size} bookmarked</span>
       </div>
     </div>
   );
+}
+
+function findNodeByLabel(label: string): ArticleTocNode | null {
+  const walk = (ns: ArticleTocNode[]): ArticleTocNode | null => {
+    for (const n of ns) {
+      if (n.label === label) return n;
+      if (n.children) {
+        const found = walk(n.children);
+        if (found) return found;
+      }
+    }
+    return null;
+  };
+  return walk(ARTICLE_TOC);
 }
 
 function TocNode({
@@ -318,6 +449,8 @@ function TocNode({
   onOpen,
   bookmarks,
   onToggleBookmark,
+  searchQuery,
+  matchedArticleIds,
 }: {
   node: ArticleTocNode;
   depth: number;
@@ -327,39 +460,65 @@ function TocNode({
   onOpen: (id: string) => void;
   bookmarks: Set<string>;
   onToggleBookmark: (id: string) => void;
+  searchQuery: string;
+  matchedArticleIds: Set<string> | null;
 }) {
   const isExpanded = expanded.has(node.id);
   const isLeaf = !!node.articleId;
   const isActive = node.articleId === activeId;
-  const isBookmarked = node.articleId
-    ? bookmarks.has(node.articleId)
-    : false;
+  const isBookmarked = node.articleId ? bookmarks.has(node.articleId) : false;
+
+  // Filter based on search
+  if (searchQuery.trim()) {
+    if (isLeaf) {
+      if (!matchedArticleIds?.has(node.articleId!)) return null;
+    } else {
+      const hasMatchBelow = node.children?.some((c) => {
+        if (c.articleId && matchedArticleIds?.has(c.articleId)) return true;
+        const walk = (ns: ArticleTocNode[]): boolean =>
+          ns.some((n) => n.articleId && matchedArticleIds?.has(n.articleId) || (n.children && walk(n.children)));
+        return c.children ? walk(c.children) : false;
+      });
+      if (!hasMatchBelow) return null;
+    }
+  }
 
   return (
     <div>
-      <button
-        onClick={() => {
-          if (isLeaf) {
-            onOpen(node.articleId!);
-          } else {
-            onToggle(node.id);
-          }
-        }}
-        className={cn("library-toc-item w-full", isActive && "active")}
-        style={{ paddingLeft: `${0.75 + depth * 1}rem` }}
-      >
-        {!isLeaf ? (
-          <ChevronRight
-            className={cn("library-toc-chevron", isExpanded && "expanded")}
-          />
-        ) : (
-          <BookOpen className="size-3.5 text-muted-foreground shrink-0" />
+      <div className="flex items-center group">
+        <button
+          onClick={() => {
+            if (isLeaf) {
+              onOpen(node.articleId!);
+            } else {
+              onToggle(node.id);
+            }
+          }}
+          className={cn("library-toc-item flex-1 min-w-0", isActive && "active")}
+          style={{ paddingLeft: `${0.75 + depth * 1}rem` }}
+        >
+          {!isLeaf ? (
+            <ChevronRight
+              className={cn("library-toc-chevron", isExpanded && "expanded")}
+            />
+          ) : (
+            <BookOpen className="size-3.5 text-muted-foreground shrink-0" />
+          )}
+          <span className="flex-1 truncate">{node.label}</span>
+          {isLeaf && isBookmarked && (
+            <BookmarkCheck className="size-3 text-primary shrink-0 ml-1" />
+          )}
+        </button>
+        {isLeaf && (
+          <button
+            onClick={() => onToggleBookmark(node.articleId!)}
+            className="opacity-0 group-hover:opacity-100 size-6 rounded-md hover:bg-muted flex items-center justify-center shrink-0 mr-1 transition-opacity"
+            title={isBookmarked ? "Remove bookmark" : "Bookmark"}
+          >
+            <Bookmark className={cn("size-3", isBookmarked ? "text-primary fill-primary" : "text-muted-foreground")} />
+          </button>
         )}
-        <span className="flex-1 truncate">{node.label}</span>
-        {isLeaf && isBookmarked && (
-          <BookmarkCheck className="size-3 text-primary shrink-0" />
-        )}
-      </button>
+      </div>
       {!isLeaf && isExpanded && node.children && (
         <div className="library-toc-children">
           {node.children.map((c) => (
@@ -373,6 +532,8 @@ function TocNode({
               onOpen={onOpen}
               bookmarks={bookmarks}
               onToggleBookmark={onToggleBookmark}
+              searchQuery={searchQuery}
+              matchedArticleIds={matchedArticleIds}
             />
           ))}
         </div>
@@ -389,16 +550,9 @@ function ArticleHeader({
   onZoomIn,
   onZoomOut,
   onResetZoom,
-  highlightMode,
-  onToggleHighlightMode,
-  colorPickerOpen,
-  onColorPickerOpenChange,
-  highlightColor,
-  onColorChange,
-  highlightCount,
-  onClearHighlights,
   fontSize,
   onFontSizeChange,
+  hlCtrl,
 }: {
   article: Article;
   isBookmarked: boolean;
@@ -407,17 +561,12 @@ function ArticleHeader({
   onZoomIn: () => void;
   onZoomOut: () => void;
   onResetZoom: () => void;
-  highlightMode: boolean;
-  onToggleHighlightMode: () => void;
-  colorPickerOpen: boolean;
-  onColorPickerOpenChange: (o: boolean) => void;
-  highlightColor: string;
-  onColorChange: (c: string) => void;
-  highlightCount: number;
-  onClearHighlights: () => void;
   fontSize: number;
   onFontSizeChange: (s: number) => void;
+  hlCtrl: ReturnType<typeof useArticleHighlighter>;
 }) {
+  const [fontPopoverOpen, setFontPopoverOpen] = React.useState(false);
+
   return (
     <header className="shrink-0 border-b border-border bg-card/40 backdrop-blur-sm px-4 sm:px-6 py-2.5 flex items-center gap-3 flex-wrap">
       <div className="flex items-center gap-2 text-xs text-muted-foreground flex-1 min-w-0">
@@ -432,33 +581,44 @@ function ArticleHeader({
         </div>
 
         {/* Font size */}
-        <Popover>
-          <PopoverTrigger asChild>
-            <button className="osler-icon-btn size-8" title="Font size">
-              <Type className="size-4" />
-            </button>
-          </PopoverTrigger>
-          <PopoverContent align="end" className="w-auto p-3">
-            <div className="flex items-center gap-2">
-              <span className="text-[11px] text-muted-foreground w-16">Font size</span>
-              <button
-                onClick={() => onFontSizeChange(Math.max(12, fontSize - 1))}
-                className="size-6 rounded bg-muted hover:bg-muted/70 flex items-center justify-center"
+        <div className="relative">
+          <button
+            onClick={() => setFontPopoverOpen(!fontPopoverOpen)}
+            className="osler-icon-btn size-8"
+            title="Font size"
+          >
+            <Type className="size-4" />
+          </button>
+          <AnimatePresence>
+            {fontPopoverOpen && (
+              <motion.div
+                initial={{ opacity: 0, y: 4 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: 4 }}
+                className="absolute right-0 top-full mt-1 z-30 bg-card border border-border rounded-lg shadow-lg p-3 w-auto"
               >
-                <Minus className="size-3" />
-              </button>
-              <span className="text-xs font-mono tabular-nums w-5 text-center">
-                {fontSize}
-              </span>
-              <button
-                onClick={() => onFontSizeChange(Math.min(22, fontSize + 1))}
-                className="size-6 rounded bg-muted hover:bg-muted/70 flex items-center justify-center"
-              >
-                <PlusIcon className="size-3" />
-              </button>
-            </div>
-          </PopoverContent>
-        </Popover>
+                <div className="flex items-center gap-2">
+                  <span className="text-[11px] text-muted-foreground w-16">Font size</span>
+                  <button
+                    onClick={() => onFontSizeChange(Math.max(12, fontSize - 1))}
+                    className="size-6 rounded bg-muted hover:bg-muted/70 flex items-center justify-center"
+                  >
+                    <Minus className="size-3" />
+                  </button>
+                  <span className="text-xs font-mono tabular-nums w-5 text-center">
+                    {fontSize}
+                  </span>
+                  <button
+                    onClick={() => onFontSizeChange(Math.min(22, fontSize + 1))}
+                    className="size-6 rounded bg-muted hover:bg-muted/70 flex items-center justify-center"
+                  >
+                    <PlusIcon className="size-3" />
+                  </button>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
 
         {/* Zoom */}
         <div className="flex items-center gap-0.5 mr-1">
@@ -488,67 +648,7 @@ function ArticleHeader({
         </div>
 
         {/* Highlighter */}
-        <Popover open={colorPickerOpen} onOpenChange={onColorPickerOpenChange}>
-          <PopoverTrigger asChild>
-            <button
-              className={cn(
-                "osler-icon-btn size-8",
-                highlightMode && "bg-amber-400 text-amber-950"
-              )}
-              title="Highlight text"
-            >
-              <Highlighter className="size-4" />
-            </button>
-          </PopoverTrigger>
-          <PopoverContent align="end" className="w-auto p-3">
-            <div className="flex flex-col gap-2">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-1.5">
-                  <Highlighter className="size-3 text-amber-500" />
-                  <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
-                    Highlight Color
-                  </span>
-                </div>
-                <button
-                  onClick={() => {
-                    onColorPickerOpenChange(false);
-                    onToggleHighlightMode();
-                  }}
-                  className="size-5 rounded flex items-center justify-center hover:bg-muted"
-                >
-                  <X className="size-3" />
-                </button>
-              </div>
-              <div className="flex items-center gap-1.5">
-                {HIGHLIGHT_COLORS.map((c) => (
-                  <button
-                    key={c}
-                    onClick={() => onColorChange(c)}
-                    className={cn(
-                      "size-6 rounded-full border-2 transition-all",
-                      highlightColor === c
-                        ? "border-foreground scale-110"
-                        : "border-transparent hover:scale-110"
-                    )}
-                    style={{ backgroundColor: c }}
-                  />
-                ))}
-              </div>
-              <div className="text-[10px] text-muted-foreground">
-                Select text to highlight. {highlightCount} highlights.
-              </div>
-              {highlightCount > 0 && (
-                <button
-                  onClick={onClearHighlights}
-                  className="text-[10px] text-destructive hover:underline flex items-center gap-1"
-                >
-                  <Trash2 className="size-3" />
-                  Clear all highlights
-                </button>
-              )}
-            </div>
-          </PopoverContent>
-        </Popover>
+        <HighlighterToolbar ctrl={hlCtrl} compact />
 
         {/* Bookmark */}
         <button
@@ -572,7 +672,8 @@ function ArticleHeader({
   );
 }
 
-function EmptyState() {
+function EmptyState({ onOpen }: { onOpen: (id: string) => void }) {
+  const popular = Object.values(ARTICLES).slice(0, 6);
   return (
     <div className="flex-1 flex flex-col items-center justify-center text-center px-4 py-12">
       <div className="w-16 h-16 rounded-full bg-primary/15 text-primary flex items-center justify-center mb-4">
@@ -584,19 +685,18 @@ function EmptyState() {
         article from the sidebar to start reading.
       </p>
       <div className="grid grid-cols-2 md:grid-cols-3 gap-2 max-w-lg">
-        {Object.values(ARTICLES)
-          .slice(0, 6)
-          .map((a) => (
-            <div
-              key={a.id}
-              className="text-xs px-3 py-2 rounded-md border border-border bg-card"
-            >
-              <div className="font-medium truncate">{a.title}</div>
-              <div className="text-muted-foreground text-[10px] mt-0.5">
-                {a.specialty} · {a.readTimeMin} min
-              </div>
+        {popular.map((a) => (
+          <button
+            key={a.id}
+            onClick={() => onOpen(a.id)}
+            className="text-left text-xs px-3 py-2 rounded-md border border-border bg-card hover:border-primary/40 transition-colors"
+          >
+            <div className="font-medium truncate">{a.title}</div>
+            <div className="text-muted-foreground text-[10px] mt-0.5">
+              {a.specialty} · {a.readTimeMin} min
             </div>
-          ))}
+          </button>
+        ))}
       </div>
     </div>
   );
