@@ -154,10 +154,10 @@ public/
 ## Run it locally
 
 ```bash
-bun install
-bun run dev        # http://localhost:3000
-bun run build      # production build
-bun run lint       # eslint
+npm install
+npm run dev        # http://localhost:3000
+npm run build      # production build
+npm run lint       # eslint
 ```
 
 ## Replacing the mock AI assistant
