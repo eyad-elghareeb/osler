@@ -1,7 +1,7 @@
 {
   "meta": {
     "uid": "sample-flashcard-001",
-    "title": "Medical Board Review Flashcards",
+    "title": "Medical Board Review",
     "description": "18 high-yield flashcards for USMLE/board review across cardiology, neurology, pulmonology, pharmacology, and gastroenterology",
     "icon": "layers",
     "tags": ["cardiology", "neurology", "pulmonology", "pharmacology", "gastroenterology", "board-review"],
@@ -10,111 +10,136 @@
     "updatedAt": "2026-06-27T00:00:00Z"
   },
   "type": "flashcard",
+  "subdecks": [
+    { "id": "cardiology", "title": "Cardiology", "description": "Heart failure, angina, ECG, hypertension" },
+    { "id": "neurology", "title": "Neurology", "description": "Stroke, meningitis, Parkinson's" },
+    { "id": "pulmonology", "title": "Pulmonology", "description": "PE, COPD" },
+    { "id": "pharmacology", "title": "Pharmacology", "description": "ACE inhibitors, varenicline, warfarin" },
+    { "id": "gastroenterology", "title": "Gastroenterology", "description": "H. pylori, GI bleeding, gastroenteritis" }
+  ],
   "cards": [
     {
       "id": "fc-001",
+      "subdeckId": "cardiology",
       "front": "What is the most common cause of heart failure?",
       "back": "Coronary artery disease (accounts for 50-60% of cases)",
       "tags": ["cardiology", "heart-failure"]
     },
     {
       "id": "fc-002",
+      "subdeckId": "cardiology",
       "front": "First-line medication for stable angina",
       "back": "Beta-blockers — they reduce myocardial oxygen demand by decreasing heart rate and contractility",
       "tags": ["cardiology", "ischemia"]
     },
     {
       "id": "fc-003",
+      "subdeckId": "cardiology",
       "front": "Normal PR interval on ECG",
       "back": "0.12-0.20 seconds (3-5 small squares)",
       "tags": ["cardiology", "ecg"]
     },
     {
       "id": "fc-004",
+      "subdeckId": "cardiology",
       "front": "Most common cause of secondary hypertension in young adults",
       "back": "Primary aldosteronism (Conn syndrome) — suspect in resistant hypertension with hypokalemia",
       "tags": ["cardiology", "hypertension"]
     },
     {
       "id": "fc-005",
+      "subdeckId": "pulmonology",
       "front": "Gold standard for diagnosing pulmonary embolism",
       "back": "CT pulmonary angiography (CTPA)",
       "tags": ["pulmonology", "pe"]
     },
     {
       "id": "fc-006",
+      "subdeckId": "pulmonology",
       "front": "GOLD stage classification for COPD severity based on FEV1",
       "back": "GOLD 1: ≥80% — Mild | GOLD 2: 50-79% — Moderate | GOLD 3: 30-49% — Severe | GOLD 4: <30% — Very Severe",
       "tags": ["pulmonology", "copd"]
     },
     {
       "id": "fc-007",
+      "subdeckId": "pulmonology",
       "front": "Which COPD intervention reduces mortality?",
       "back": "Smoking cessation slows disease progression. Long-term oxygen therapy (PaO2 <55 or SpO2 <88%) also reduces mortality.",
       "tags": ["pulmonology", "copd"]
     },
     {
       "id": "fc-008",
+      "subdeckId": "neurology",
       "front": "Time window for IV alteplase (tPA) in ischemic stroke",
       "back": "Within 3 hours of symptom onset (extended to 4.5 hours for eligible patients)",
       "tags": ["neurology", "stroke"]
     },
     {
       "id": "fc-009",
+      "subdeckId": "neurology",
       "front": "Classic triad of bacterial meningitis in CSF",
       "back": "1) Elevated WBC (polymorphonuclear predominance) | 2) Low glucose | 3) High protein",
       "tags": ["neurology", "infectious-disease"]
     },
     {
       "id": "fc-010",
+      "subdeckId": "neurology",
       "front": "Most common bacterial cause of meningitis in adults",
       "back": "Streptococcus pneumoniae",
       "tags": ["neurology", "infectious-disease"]
     },
     {
       "id": "fc-011",
+      "subdeckId": "gastroenterology",
       "front": "First-line triple therapy for H. pylori eradication",
       "back": "PPI + Amoxicillin + Clarithromycin for 7-14 days",
       "tags": ["gastroenterology", "h-pylori"]
     },
     {
       "id": "fc-012",
+      "subdeckId": "gastroenterology",
       "front": "Most common source of upper GI bleeding in patients with portal hypertension",
       "back": "Esophageal varices (caput medusae and splenomegaly are physical exam clues)",
       "tags": ["gastroenterology", "cirrhosis"]
     },
     {
       "id": "fc-013",
+      "subdeckId": "gastroenterology",
       "front": "Most common cause of acute bacterial gastroenteritis",
       "back": "Campylobacter jejuni (from undercooked poultry, incubation 12-72 hours)",
       "tags": ["gastroenterology", "infectious-disease"]
     },
     {
       "id": "fc-014",
+      "subdeckId": "pharmacology",
       "front": "ACE inhibitors mechanism of action",
       "back": "Inhibit angiotensin-converting enzyme → decreased angiotensin II → vasodilation, decreased aldosterone, decreased afterload",
       "tags": ["pharmacology", "ace-inhibitors"]
     },
     {
       "id": "fc-015",
+      "subdeckId": "pharmacology",
       "front": "Varenicline mechanism for smoking cessation",
       "back": "Partial agonist at alpha-4 beta-2 nicotinic acetylcholine receptors — reduces cravings and blocks nicotine reward",
       "tags": ["pharmacology", "smoking-cessation"]
     },
     {
       "id": "fc-016",
+      "subdeckId": "pharmacology",
       "front": "Management of warfarin with INR >5 and minor bleeding",
       "back": "Hold warfarin + give vitamin K 1-2.5 mg orally. High-dose vitamin K or FFP reserved for major bleeding.",
       "tags": ["pharmacology", "anticoagulation"]
     },
     {
       "id": "fc-017",
+      "subdeckId": "neurology",
       "front": "Hallmark symptom of Parkinson's disease",
       "back": "Resting tremor (pill-rolling), bradykinesia, cogwheel rigidity, postural instability — asymmetric onset",
       "tags": ["neurology", "parkinsons"]
     },
     {
       "id": "fc-018",
+      "subdeckId": "cardiology",
       "front": "Triple therapy for HFrEF with strongest mortality benefit",
       "back": "ACE inhibitor (or ARB) + Beta-blocker + Aldosterone antagonist",
       "tags": ["cardiology", "heart-failure"]

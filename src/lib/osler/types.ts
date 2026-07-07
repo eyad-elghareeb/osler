@@ -71,18 +71,29 @@ export interface BankContent {
   passages: BankPassage[];
 }
 
+/* ── Flashcard Subdeck ─────────────────────────────────────────────── */
+export interface FlashcardSubdeck {
+  id: string;
+  title: string;
+  description?: string;
+  parentId?: string;
+  icon?: string;
+}
+
 /* ── Flashcard ───────────────────────────────────────────────────────── */
 export interface Flashcard {
   id: string;
   front: string;
   back: string;
   tags?: string[];
+  subdeckId?: string;
 }
 
 export interface FlashcardContent {
   meta: ContentMeta;
   type: "flashcard";
   cards: Flashcard[];
+  subdecks?: FlashcardSubdeck[];
 }
 
 /* ── Written ─────────────────────────────────────────────────────────── */
