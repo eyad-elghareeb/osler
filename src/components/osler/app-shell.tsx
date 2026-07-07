@@ -169,8 +169,8 @@ export function AppShell({
             </div>
           </button>
 
-          {/* Desktop nav items (medos-lite pattern) */}
-          <nav className="flex items-center gap-1 ml-1">
+          {/* Desktop nav items — hidden on mobile (replaced by bottom tab bar) */}
+          <nav className="hidden md:flex items-center gap-1 ml-1">
             <NavButton
               active={isDashboard}
               onClick={() => onViewChange("dashboard")}
