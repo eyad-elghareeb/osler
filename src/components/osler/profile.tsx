@@ -11,18 +11,22 @@ import {
   Calendar,
   Zap,
   Flame,
+  Settings as SettingsIcon,
+  Cog,
 } from "lucide-react";
 import { storage } from "@/lib/osler/storage";
 import { loadAllContent, ENGINE_META } from "@/lib/osler/content";
 import type { AnyContent, ManifestItem } from "@/lib/osler/types";
+import type { OslerView } from "./app-shell";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 
 interface ProfileProps {
   username: string;
+  onViewChange?: (v: OslerView) => void;
 }
 
-export function Profile({ username }: ProfileProps) {
+export function Profile({ username, onViewChange }: ProfileProps) {
   const [data, setData] = React.useState<{
     items: Array<{ item: ManifestItem; content: AnyContent | null }>;
   } | null>(null);
@@ -85,6 +89,16 @@ export function Profile({ username }: ProfileProps) {
               {attemptedTotal} questions answered
             </span>
           </div>
+          {onViewChange && (
+            <button
+              onClick={() => onViewChange("settings")}
+              className="size-9 rounded-lg hover:bg-muted/60 transition-colors flex items-center justify-center shrink-0"
+              aria-label="Settings"
+              title="Settings"
+            >
+              <Cog className="size-4 text-muted-foreground hover:text-foreground transition-colors" />
+            </button>
+          )}
         </motion.div>
 
         {/* Stats grid */}

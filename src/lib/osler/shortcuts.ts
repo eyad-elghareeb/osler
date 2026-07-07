@@ -1,4 +1,4 @@
-export type ShortcutScope = "global" | "qbank" | "reader";
+export type ShortcutScope = "global" | "qbank" | "flashcard" | "reader";
 
 export interface ShortcutAction {
   id: string;
@@ -19,6 +19,7 @@ export const SHORTCUT_ACTIONS: readonly ShortcutAction[] = [
   { id: "global.dashboard", label: "Go to Dashboard", description: "Jump to the dashboard view.", scope: "global", defaultBinding: "g d" },
   { id: "global.library", label: "Go to Library", description: "Jump to the article library.", scope: "global", defaultBinding: "g l" },
   { id: "global.qbank", label: "Go to Q-Bank Studio", description: "Jump to the Q-Bank studio.", scope: "global", defaultBinding: "g q" },
+  { id: "global.flashcards", label: "Go to Flashcards", description: "Jump to the flashcard decks.", scope: "global", defaultBinding: "g f" },
   { id: "global.settings", label: "Go to Settings", description: "Jump to the settings page.", scope: "global", defaultBinding: "g s" },
   { id: "global.profile", label: "Go to Profile", description: "Jump to the user profile page.", scope: "global", defaultBinding: "g p" },
   { id: "qbank.next", label: "Next question", description: "Move to the next question.", scope: "qbank", defaultBinding: "arrowright" },
@@ -37,6 +38,11 @@ export const SHORTCUT_ACTIONS: readonly ShortcutAction[] = [
   { id: "qbank.pause", label: "Pause / resume timed test", description: "Pause or resume the timer.", scope: "qbank", defaultBinding: "space" },
   { id: "qbank.endTest", label: "End test early", description: "End the current test and go to results.", scope: "qbank", defaultBinding: "mod+shift+e" },
   { id: "qbank.goHome", label: "Back to QBank home", description: "Leave the current question and return home.", scope: "qbank", defaultBinding: "escape" },
+  { id: "flashcard.flip", label: "Flip card", description: "Flip the current flashcard.", scope: "flashcard", defaultBinding: "space" },
+  { id: "flashcard.again", label: "Rate Again", description: "Mark card as Again.", scope: "flashcard", defaultBinding: "1" },
+  { id: "flashcard.hard", label: "Rate Hard", description: "Mark card as Hard.", scope: "flashcard", defaultBinding: "2" },
+  { id: "flashcard.good", label: "Rate Good", description: "Mark card as Good.", scope: "flashcard", defaultBinding: "3" },
+  { id: "flashcard.easy", label: "Rate Easy", description: "Mark card as Easy.", scope: "flashcard", defaultBinding: "4" },
   { id: "reader.close", label: "Close article / modal", description: "Close the article modal.", scope: "reader", defaultBinding: "escape" },
   { id: "reader.bookmark", label: "Bookmark article", description: "Toggle the bookmark on the current article.", scope: "reader", defaultBinding: "mod+d" },
   { id: "reader.zoomIn", label: "Zoom in", description: "Increase article text zoom.", scope: "reader", defaultBinding: "mod+=" },

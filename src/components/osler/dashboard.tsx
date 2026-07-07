@@ -6,6 +6,7 @@ import {
   ArrowRight,
   BookOpen,
   ListChecks,
+  Layers,
   Bot,
   BarChart3,
   Clock,
@@ -223,6 +224,12 @@ export function Dashboard({
             title="Q-Bank Studio"
             subtitle="Build a test from any pack"
             onClick={() => onViewChange("qbank")}
+          />
+          <QuickAction
+            icon={Layers}
+            title="Flashcard Decks"
+            subtitle="Spaced-repetition study decks"
+            onClick={() => onViewChange("flashcards")}
           />
           <QuickAction
             icon={BookOpen}

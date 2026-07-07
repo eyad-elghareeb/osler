@@ -7,6 +7,7 @@ import {
   LayoutDashboard,
   BookOpen,
   ListChecks,
+  Layers,
   Sun,
   Moon,
   LogOut,
@@ -37,6 +38,7 @@ export type OslerView =
   | "dashboard"
   | "library"
   | "qbank"
+  | "flashcards"
   | "profile"
   | "settings";
 
@@ -192,6 +194,14 @@ export function AppShell({
               onClick={() => onViewChange("qbank")}
               icon={ListChecks}
               label="Q-Bank Studio"
+              layoutId="nav-active"
+            />
+
+            <NavButton
+              active={view === "flashcards"}
+              onClick={() => onViewChange("flashcards")}
+              icon={Layers}
+              label="Flashcards"
               layoutId="nav-active"
             />
           </nav>

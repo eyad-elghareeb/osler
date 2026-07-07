@@ -433,3 +433,121 @@ export const writtenDrafts = {
     localStorage.removeItem(`${WRITTEN_DRAFTS_KEY}:${packUid}`);
   },
 };
+
+/* ── Flashcard Review Data (spaced repetition) ──────────────────────── */
+const FLASHCARD_REVIEW_KEY = "osler-flashcard-review-v1";
+
+export interface FlashcardReviewRecord {
+  ease: number;
+  interval: number;
+  dueDate: number;
+  lastReviewed: number;
+  reviewCount: number;
+  correctCount: number;
+}
+
+function readFlashcardReviews(): Record<string, FlashcardReviewRecord> {
+  if (typeof window === "undefined") return {};
+  try {
+    const raw = localStorage.getItem(FLASHCARD_REVIEW_KEY);
+    if (!raw) return {};
+    return JSON.parse(raw);
+  } catch {
+    return {};
+  }
+}
+
+function writeFlashcardReviews(data: Record<string, FlashcardReviewRecord>) {
+  if (typeof window === "undefined") return;
+  localStorage.setItem(FLASHCARD_REVIEW_KEY, JSON.stringify(data));
+  window.dispatchEvent(new CustomEvent("osler-flashcard-changed"));
+}
+
+export const flashcardReview = {
+  get(cardId: string): FlashcardReviewRecord | null {
+    return readFlashcardReviews()[cardId] ?? null;
+  },
+
+  getAll(): Record<string, FlashcardReviewRecord> {
+    return readFlashcardReviews();
+  },
+
+  getCardsDue(deckUid: string, cardIds: string[]): string[] {
+    const reviews = readFlashcardReviews();
+    const now = Date.now();
+    return cardIds.filter((id) => {
+      const r = reviews[`${deckUid}:${id}`];
+      return !r || r.dueDate <= now;
+    });
+  },
+
+  recordReview(
+    deckUid: string,
+    cardId: string,
+    rating: "again" | "hard" | "good" | "easy",
+  ) {
+    const key = `${deckUid}:${cardId}`;
+    const reviews = readFlashcardReviews();
+    const prev = reviews[key];
+
+    const now = Date.now();
+    const msPerDay = 86400000;
+
+    let ease = prev?.ease ?? 2.5;
+    let interval = prev?.interval ?? 0;
+
+    switch (rating) {
+      case "again":
+        ease = Math.max(1.3, ease - 0.2);
+        interval = 1;
+        break;
+      case "hard":
+        ease = Math.max(1.3, ease - 0.15);
+        interval = Math.max(1, Math.round(interval * 1.2));
+        break;
+      case "good":
+        interval = interval === 0 ? 1 : Math.round(interval * ease);
+        break;
+      case "easy":
+        ease += 0.15;
+        interval = interval === 0 ? 2 : Math.round(interval * ease * 1.3);
+        break;
+    }
+
+    reviews[key] = {
+      ease: Math.round(ease * 100) / 100,
+      interval,
+      dueDate: now + interval * msPerDay,
+      lastReviewed: now,
+      reviewCount: (prev?.reviewCount ?? 0) + 1,
+      correctCount: rating === "good" || rating === "easy"
+        ? (prev?.correctCount ?? 0) + 1
+        : (prev?.correctCount ?? 0),
+    };
+
+    writeFlashcardReviews(reviews);
+  },
+
+  clearDeck(deckUid: string, cardIds: string[]) {
+    const reviews = readFlashcardReviews();
+    for (const id of cardIds) {
+      delete reviews[`${deckUid}:${id}`];
+    }
+    writeFlashcardReviews(reviews);
+  },
+
+  clearAll() {
+    writeFlashcardReviews({});
+  },
+
+  subscribe(cb: () => void): () => void {
+    if (typeof window === "undefined") return () => {};
+    const handler = () => cb();
+    window.addEventListener("osler-flashcard-changed", handler);
+    window.addEventListener("storage", handler);
+    return () => {
+      window.removeEventListener("osler-flashcard-changed", handler);
+      window.removeEventListener("storage", handler);
+    };
+  },
+};

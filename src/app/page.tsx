@@ -6,6 +6,7 @@ import { LoginScreen } from "@/components/osler/login-screen";
 import { Dashboard } from "@/components/osler/dashboard";
 import { Library } from "@/components/osler/library";
 import { QBankStudio } from "@/components/osler/qbank-studio";
+import { FlashcardStudio } from "@/components/osler/flashcard-studio";
 import { AiAssistant } from "@/components/osler/ai-assistant";
 import { Profile } from "@/components/osler/profile";
 import { Settings } from "@/components/osler/settings";
@@ -111,7 +112,17 @@ export default function Home() {
         />
       ) : null}
 
-      {view === "profile" ? <Profile username={username} /> : null}
+      {view === "flashcards" ? (
+        <FlashcardStudio
+          activeItem={activeItem}
+          activeContent={activeContent}
+          onExit={handleExitQBank}
+          onOpenPack={openPack}
+          onNavigateHome={() => setView("dashboard")}
+        />
+      ) : null}
+
+      {view === "profile" ? <Profile username={username} onViewChange={setView} /> : null}
 
       {view === "settings" ? <Settings /> : null}
     </AppShell>

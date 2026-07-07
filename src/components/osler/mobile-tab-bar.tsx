@@ -5,8 +5,9 @@ import {
   LayoutDashboard,
   BookOpen,
   ListChecks,
+  Layers,
   User as UserIcon,
-  Settings as SettingsIcon,
+  Cog,
 } from "lucide-react";
 import type { OslerView } from "./app-shell";
 
@@ -24,10 +25,19 @@ interface TabItem {
 const TABS: TabItem[] = [
   { id: "dashboard", label: "Home", icon: LayoutDashboard },
   { id: "library", label: "Library", icon: BookOpen },
+  { id: "flashcards", label: "Cards", icon: Layers },
   { id: "qbank", label: "Q-Bank", icon: ListChecks },
   { id: "profile", label: "Profile", icon: UserIcon },
-  { id: "settings", label: "Settings", icon: SettingsIcon },
 ];
+
+function ProfileIcon({ className }: { className?: string }) {
+  return (
+    <span className="relative inline-flex items-center justify-center">
+      <UserIcon className={className} />
+      <Cog className="absolute -bottom-0.5 -right-0.5 size-2.5 text-muted-foreground" />
+    </span>
+  );
+}
 
 export function MobileTabBar({ view, onViewChange }: MobileTabBarProps) {
   return (
@@ -37,7 +47,7 @@ export function MobileTabBar({ view, onViewChange }: MobileTabBarProps) {
       aria-label="Primary"
     >
       {TABS.map((tab) => {
-        const Icon = tab.icon;
+        const Icon = tab.id === "profile" ? ProfileIcon : tab.icon;
         const active = tab.id === view;
         return (
           <button
