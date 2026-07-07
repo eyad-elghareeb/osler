@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   ChevronLeft,
   ChevronRight,
+  ChevronDown,
   Flag,
   Check,
   X,
@@ -13,13 +14,12 @@ import {
   Play,
   GraduationCap,
   RotateCcw,
-  Award,
   Home,
-  BarChart3,
   Plus,
   ListChecks,
   Loader2,
   Timer,
+  Timer as TimerIcon,
   Sparkles,
   FileText,
   Calculator as CalcIcon,
@@ -42,9 +42,12 @@ import {
   Stethoscope,
   ListCollapse,
   History,
-  TrendingUp,
-  Target,
   Keyboard,
+  Folder,
+  Grid3x3,
+  Search,
+  SlidersHorizontal,
+  ArrowUpDown,
 } from "lucide-react";
 import { loadAllContent, ENGINE_META } from "@/lib/osler/content";
 import type {
@@ -94,7 +97,7 @@ interface QBankStudioProps {
 
 type QuizMode = "home" | "quiz" | "results";
 type TestMode = "tutor" | "timed";
-type HomeTab = "create" | "previous" | "performance";
+type HomeTab = "content" | "create" | "previous";
 
 interface SessionData {
   itemId: string;
@@ -148,8 +151,9 @@ export function QBankStudio({
   const [mode, setMode] = React.useState<QuizMode>("home");
   const [session, setSession] = React.useState<SessionData | null>(null);
   const [testMode, setTestMode] = React.useState<TestMode>("tutor");
-  const [homeTab, setHomeTab] = React.useState<HomeTab>("create");
+  const [homeTab, setHomeTab] = React.useState<HomeTab>("content");
   const [, force] = React.useReducer((x) => x + 1, 0);
+  const pendingQuestionLimitRef = React.useRef(0);
 
   // Tools state (calculator, lab values, article modal, AI)
   const [calculatorOpen, setCalculatorOpen] = React.useState(false);
@@ -159,9 +163,12 @@ export function QBankStudio({
   const [navOpenMobile, setNavOpenMobile] = React.useState(false);
 
   const startSession = React.useCallback(
-    (item: ManifestItem, content: AnyContent) => {
-      const questions = contentToQuestions(content);
+    (item: ManifestItem, content: AnyContent, maxQuestions?: number) => {
+      let questions = contentToQuestions(content);
       if (questions.length === 0) return;
+      if (maxQuestions && maxQuestions > 0 && maxQuestions < questions.length) {
+        questions = questions.slice(0, maxQuestions);
+      }
       const totalTime = questions.length * 60;
       const sessionId = `${item.uid}-${Date.now()}`;
 
@@ -195,7 +202,9 @@ export function QBankStudio({
   // Start a session when a content pack is provided
   React.useEffect(() => {
     if (activeItem && activeContent) {
-      startSession(activeItem, activeContent);
+      const limit = pendingQuestionLimitRef.current;
+      pendingQuestionLimitRef.current = 0;
+      startSession(activeItem, activeContent, limit || undefined);
     } else if (!activeItem && mode !== "home") {
       setMode("home");
       setSession(null);
@@ -493,6 +502,7 @@ export function QBankStudio({
       onOpenPack={onOpenPack}
       homeTab={homeTab}
       onHomeTabChange={setHomeTab}
+      onSetQuestionLimit={(n) => { pendingQuestionLimitRef.current = n; }}
     />
   );
 }
@@ -506,12 +516,14 @@ function HomeView({
   onOpenPack,
   homeTab,
   onHomeTabChange,
+  onSetQuestionLimit,
 }: {
   testMode: TestMode;
   onTestModeChange: (m: TestMode) => void;
   onOpenPack?: (item: ManifestItem) => void;
   homeTab: HomeTab;
   onHomeTabChange: (t: HomeTab) => void;
+  onSetQuestionLimit?: (n: number) => void;
 }) {
   const [data, setData] = React.useState<{
     items: Array<{ item: ManifestItem; content: AnyContent | null }>;
@@ -531,13 +543,6 @@ function HomeView({
 
   React.useEffect(() => storage.subscribe(force), []);
 
-  const progress = storage.allProgress();
-  const correctTotal = progress.reduce((a, b) => a + b.correct, 0);
-  const attemptedTotal = progress.reduce((a, b) => a + b.attempted, 0);
-  const accuracy = attemptedTotal
-    ? Math.round((correctTotal / attemptedTotal) * 100)
-    : 0;
-
   return (
     <div className="flex h-[calc(100vh-3.5rem)] overflow-hidden bg-background">
       <div className="flex-1 min-w-0 overflow-y-auto medos-scroll-y safe-pb">
@@ -548,8 +553,7 @@ function HomeView({
               QBank Studio
             </h1>
             <p className="text-sm text-muted-foreground mt-1">
-              Build a test from any content pack — quiz, bank, flashcards,
-              written prompts, or OSCE stations — with full UWorld-style tools.
+              Browse premade content packs or build a custom test with UWorld-style tools.
             </p>
           </div>
 
@@ -557,9 +561,9 @@ function HomeView({
           <div className="border-b border-border mb-6">
             <nav className="-mb-px flex gap-0">
               {[
+                { id: "content" as const, label: "Content", icon: Grid3x3 },
                 { id: "create" as const, label: "Create Test", icon: Plus },
                 { id: "previous" as const, label: "Previous Tests", icon: History },
-                { id: "performance" as const, label: "Performance", icon: BarChart3 },
               ].map((t) => {
                 const Icon = t.icon;
                 const active = homeTab === t.id;
@@ -582,12 +586,19 @@ function HomeView({
             </nav>
           </div>
 
+          {homeTab === "content" && (
+            <ContentTab
+              data={data}
+              onOpenPack={onOpenPack}
+            />
+          )}
           {homeTab === "create" && (
             <CreateTestTab
               data={data}
               testMode={testMode}
               onTestModeChange={onTestModeChange}
               onOpenPack={onOpenPack}
+              onSetQuestionLimit={onSetQuestionLimit}
             />
           )}
           {homeTab === "previous" && (
@@ -596,98 +607,390 @@ function HomeView({
               onDelete={(id) => sessions.delete(id)}
             />
           )}
-          {homeTab === "performance" && (
-            <PerformanceTab
-              accuracy={accuracy}
-              attempted={attemptedTotal}
-              correct={correctTotal}
-              packs={progress.length}
-              sessions={savedSessions}
-              data={data}
-            />
-          )}
         </div>
       </div>
     </div>
   );
 }
 
+/* ─────────────────────────────────────────────────────────────────────────
+ * CONTENT TAB — Grid of premade content packs grouped by engine type
+ * ───────────────────────────────────────────────────────────────────────── */
+function ContentTab({
+  data,
+  onOpenPack,
+}: {
+  data: { items: Array<{ item: ManifestItem; content: AnyContent | null }> } | null;
+  onOpenPack?: (item: ManifestItem) => void;
+}) {
+  const [searchQuery, setSearchQuery] = React.useState("");
+  const [expandedFolders, setExpandedFolders] = React.useState<Record<string, boolean>>(() => {
+    const init: Record<string, boolean> = {};
+    Object.keys(ENGINE_META).forEach((k) => { init[k] = true; });
+    return init;
+  });
+
+  const toggleFolder = (type: string) => {
+    setExpandedFolders((prev) => ({ ...prev, [type]: !prev[type] }));
+  };
+
+  // Group items by engine type (run unconditionally before any early return)
+  const grouped = React.useMemo(() => {
+    if (!data) return {};
+    const map: Record<string, typeof data.items> = {};
+    for (const entry of data.items) {
+      if (!map[entry.item.type]) map[entry.item.type] = [];
+      map[entry.item.type].push(entry);
+    }
+    return map;
+  }, [data]);
+
+  // Filter by search (run unconditionally)
+  const filtered = React.useMemo(() => {
+    if (!data) return {};
+    if (!searchQuery.trim()) return grouped;
+    const q = searchQuery.toLowerCase();
+    const result: Record<string, typeof data.items> = {};
+    for (const [type, items] of Object.entries(grouped)) {
+      const matched = items.filter(
+        (entry) =>
+          entry.item.title.toLowerCase().includes(q) ||
+          entry.content?.meta.description?.toLowerCase().includes(q) ||
+          entry.item.tags?.some((t) => t.toLowerCase().includes(q))
+      );
+      if (matched.length > 0) result[type] = matched;
+    }
+    return result;
+  }, [grouped, searchQuery, data]);
+
+  if (!data) {
+    return (
+      <div className="flex items-center justify-center py-16">
+        <Loader2 className="size-5 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
+  if (data.items.length === 0) {
+    return (
+      <div className="qbank-card text-center py-16">
+        <Grid3x3 className="size-10 text-muted-foreground mx-auto mb-3" />
+        <h3 className="text-base font-semibold mb-1">No content packs</h3>
+        <p className="text-sm text-muted-foreground">
+          No content packs are available. Add packs to the manifest to get started.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-3">
+      {/* Search */}
+      <div className="relative">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
+        <input
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          placeholder="Search content packs by title, description, or tag…"
+          className="w-full h-10 pl-10 pr-4 rounded-xl border border-border bg-card text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+        />
+      </div>
+
+      {/* Folder groups */}
+      {Object.entries(filtered).map(([type, items]) => {
+        const meta = ENGINE_META[type as EngineType];
+        const isOpen = expandedFolders[type] ?? true;
+        return (
+          <div key={type} className="qbank-card p-0 overflow-hidden">
+            {/* Folder header */}
+            <button
+              onClick={() => toggleFolder(type)}
+              className="w-full flex items-center gap-3 px-5 py-3.5 hover:bg-muted/40 transition-colors text-left"
+            >
+              <Folder className="size-5 text-primary shrink-0" />
+              <div className="flex-1 min-w-0">
+                <span className="text-sm font-semibold text-foreground">{meta.label}</span>
+                <span className="text-xs text-muted-foreground ml-2">({items.length} pack{items.length > 1 ? "s" : ""})</span>
+              </div>
+              <ChevronDown
+                className={cn(
+                  "size-4 text-muted-foreground transition-transform shrink-0",
+                  isOpen && "rotate-180"
+                )}
+              />
+            </button>
+
+            {/* Grid content */}
+            <AnimatePresence initial={false}>
+              {isOpen && (
+                <motion.div
+                  initial={{ height: 0, opacity: 0 }}
+                  animate={{ height: "auto", opacity: 1 }}
+                  exit={{ height: 0, opacity: 0 }}
+                  transition={{ duration: 0.2 }}
+                  className="overflow-hidden"
+                >
+                  <div className="px-5 pb-4 pt-1 border-t border-border">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 mt-3">
+                      {items.map(({ item, content }) => {
+                        if (!content) return null;
+                        const count = countQuestions(content);
+                        const packProgress = storage.packProgress(item.uid);
+                        const accuracy = packProgress.attempted > 0
+                          ? Math.round((packProgress.correct / packProgress.attempted) * 100)
+                          : 0;
+                        return (
+                          <button
+                            key={item.uid}
+                            onClick={() => onOpenPack?.(item)}
+                            className="text-left p-4 rounded-xl border border-border bg-card hover:border-primary/40 hover:bg-primary/5 transition-all flex flex-col gap-2 group"
+                          >
+                            <div className="flex items-start justify-between gap-2">
+                              <div className="size-9 rounded-lg flex items-center justify-center shrink-0 bg-primary/15 text-primary">
+                                <ListChecks className="size-4" />
+                              </div>
+                              <Badge variant="secondary" className="text-[10px] shrink-0">
+                                {meta.label}
+                              </Badge>
+                            </div>
+                            <div className="min-w-0">
+                              <span className="text-sm font-semibold text-foreground block truncate">
+                                {item.title}
+                              </span>
+                              <p className="text-xs text-muted-foreground line-clamp-2 mt-1 leading-relaxed">
+                                {content.meta.description}
+                              </p>
+                            </div>
+                            <div className="flex items-center gap-2 text-[11px] text-muted-foreground mt-auto">
+                              <span>{count} question{count !== 1 ? "s" : ""}</span>
+                              {packProgress.attempted > 0 && (
+                                <>
+                                  <span>·</span>
+                                  <span className="text-emerald-500">{accuracy}%</span>
+                                </>
+                              )}
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
+        );
+      })}
+
+      {Object.keys(filtered).length === 0 && (
+        <div className="qbank-card text-center py-12">
+          <Search className="size-8 text-muted-foreground mx-auto mb-2" />
+          <p className="text-sm text-muted-foreground">No packs match your search.</p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+ * CREATE TEST TAB — MedOs-lite style test builder
+ * ───────────────────────────────────────────────────────────────────────── */
 function CreateTestTab({
   data,
   testMode,
   onTestModeChange,
   onOpenPack,
+  onSetQuestionLimit,
 }: {
   data: { items: Array<{ item: ManifestItem; content: AnyContent | null }> } | null;
   testMode: TestMode;
   onTestModeChange: (m: TestMode) => void;
   onOpenPack?: (item: ManifestItem) => void;
+  onSetQuestionLimit?: (n: number) => void;
 }) {
+  const [batchSize, setBatchSize] = React.useState(20);
+  const [customBatchInput, setCustomBatchInput] = React.useState("");
+  const [selectedEngineTypes, setSelectedEngineTypes] = React.useState<string[]>([]);
+  const [selectedTags, setSelectedTags] = React.useState<string[]>([]);
+  const [query, setQuery] = React.useState("");
+  const [sort, setSort] = React.useState<"default" | "random">("default");
+
+  // Compute available tags from all content packs
+  const allTags = React.useMemo(() => {
+    if (!data) return [];
+    const tagSet = new Set<string>();
+    for (const { content } of data.items) {
+      content?.meta.tags?.forEach((t) => tagSet.add(t));
+    }
+    return Array.from(tagSet).sort();
+  }, [data]);
+
+  // Filter packs based on selections
+  const filteredPacks = React.useMemo(() => {
+    if (!data) return [];
+    let packs = [...data.items];
+    if (selectedEngineTypes.length > 0) {
+      packs = packs.filter((p) => selectedEngineTypes.includes(p.item.type));
+    }
+    if (selectedTags.length > 0) {
+      packs = packs.filter((p) =>
+        p.content?.meta.tags?.some((t) => selectedTags.includes(t))
+      );
+    }
+    if (query.trim()) {
+      const q = query.toLowerCase();
+      packs = packs.filter(
+        (p) =>
+          p.item.title.toLowerCase().includes(q) ||
+          p.content?.meta.description?.toLowerCase().includes(q)
+      );
+    }
+    if (sort === "random") {
+      packs = [...packs].sort(() => Math.random() - 0.5);
+    }
+    return packs;
+  }, [data, selectedEngineTypes, selectedTags, query, sort]);
+
+  const totalAvailable = filteredPacks.reduce(
+    (sum, p) => sum + (p.content ? countQuestions(p.content) : 0),
+    0
+  );
+  const actualBatchSize = customBatchInput.trim()
+    ? Math.min(parseInt(customBatchInput) || 0, totalAvailable)
+    : Math.min(batchSize, totalAvailable);
+
+  const engineOptions = Object.entries(ENGINE_META).map(([key, meta]) => ({
+    id: key,
+    label: meta.label,
+  }));
+
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      {/* Builder column */}
       <div className="lg:col-span-2 space-y-5">
         {/* Section 1: Test Mode */}
         <div className="qbank-card">
           <SectionHeader number={1} title="Select Test Mode" subtitle="Choose how you want to take this test." />
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-4">
-            <button
+            <ModeCard
+              active={testMode === "timed"}
               onClick={() => onTestModeChange("timed")}
-              className={cn("qbank-mode-card", testMode === "timed" && "active")}
-            >
-              <div className="qbank-mode-card-icon">
-                <Timer className="size-5" />
-              </div>
-              <div className="flex-1">
-                <div className="font-semibold text-sm">Timed</div>
-                <p className="text-xs text-muted-foreground mt-0.5">
-                  Simulates actual exam conditions. Test must be completed in
-                  the allotted time (1 min/question).
-                </p>
-              </div>
-            </button>
-            <button
+              icon={TimerIcon}
+              label="Timed"
+              description="Simulates actual exam conditions. The test must be completed in the allotted time."
+            />
+            <ModeCard
+              active={testMode === "tutor"}
               onClick={() => onTestModeChange("tutor")}
-              className={cn("qbank-mode-card", testMode === "tutor" && "active")}
-            >
-              <div className="qbank-mode-card-icon">
-                <Sparkles className="size-5" />
-              </div>
-              <div className="flex-1">
-                <div className="font-semibold text-sm">Tutor</div>
-                <p className="text-xs text-muted-foreground mt-0.5">
-                  Get immediate feedback and explanations after each question.
-                </p>
-              </div>
-            </button>
+              icon={Sparkles}
+              label="Tutor"
+              description="Get immediate feedback and explanations after each question."
+            />
           </div>
         </div>
 
-        {/* Section 2: Available content packs */}
+        {/* Section 2: Number of Questions */}
         <div className="qbank-card">
-          <SectionHeader
-            number={2}
-            title="Available Content Packs"
-            subtitle="Click a pack to start a new test. Each pack uses the QBank Studio quiz UI with full tools (highlighter, sticky notes, calculator, lab values)."
-          />
-          <div className="mt-4 space-y-2">
-            {!data ? (
-              <div className="flex items-center justify-center py-8">
-                <Loader2 className="size-5 animate-spin text-muted-foreground" />
-              </div>
-            ) : data.items.length === 0 ? (
-              <div className="text-center py-8 text-sm text-muted-foreground">
-                No content packs available.
-              </div>
-            ) : (
-              data.items.map(({ item, content }) => (
-                <PackRow
-                  key={item.uid}
-                  item={item}
-                  content={content}
-                  onOpen={() => onOpenPack?.(item)}
-                />
-              ))
+          <SectionHeader number={2} title="Number of Questions" subtitle="Pick a preset or enter a custom value." />
+          <div className="mt-4 flex flex-wrap items-center gap-2">
+            {[10, 20, 40, 60].map((n) => (
+              <button
+                key={n}
+                onClick={() => {
+                  setBatchSize(n);
+                  setCustomBatchInput("");
+                }}
+                className={cn(
+                  "px-4 py-2 rounded-xl text-sm font-medium border-2 transition-all",
+                  batchSize === n && !customBatchInput
+                    ? "border-primary bg-primary/10 text-primary"
+                    : "border-border bg-card text-foreground hover:border-primary/40 hover:bg-primary/5"
+                )}
+              >
+                {n}
+              </button>
+            ))}
+            <div className="flex items-center gap-2 ml-1">
+              <input
+                type="number" min={1} max={200}
+                value={customBatchInput}
+                onChange={(e) => {
+                  setCustomBatchInput(e.target.value);
+                  const v = parseInt(e.target.value);
+                  if (v > 0 && v <= 200) setBatchSize(v);
+                }}
+                placeholder="Custom"
+                className="w-24 h-9 rounded-xl border border-border bg-card text-sm px-3 focus:outline-none focus:ring-2 focus:ring-primary/30 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+              />
+              <span className="text-xs text-muted-foreground">questions</span>
+            </div>
+            <div className="ml-auto text-xs text-muted-foreground">
+              {totalAvailable} available
+            </div>
+          </div>
+        </div>
+
+        {/* Section 3: Content Selection */}
+        <div className="qbank-card">
+          <SectionHeader number={3} title="Select Content" subtitle="Filter by engine type and tags to include." />
+          <div className="mt-4 space-y-4">
+            {/* Search */}
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
+              <input
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Search packs by title or description…"
+                className="w-full h-10 pl-10 pr-4 rounded-xl border border-border bg-card text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+              />
+            </div>
+
+            {/* Engine type checkboxes */}
+            <CheckboxColumn
+              title="Engine Types (Subjects)"
+              items={engineOptions.map((e) => ({
+                id: e.id,
+                label: e.label,
+                count: data?.items.filter((p) => p.item.type === e.id && (selectedTags.length === 0 || p.content?.meta.tags?.some((t) => selectedTags.includes(t)))).length ?? 0,
+              }))}
+              selected={selectedEngineTypes}
+              onChange={setSelectedEngineTypes}
+              onClear={() => setSelectedEngineTypes([])}
+            />
+
+            {/* Tags */}
+            {allTags.length > 0 && (
+              <CheckboxColumn
+                title="Tags (Topics)"
+                items={allTags.map((t) => ({
+                  id: t,
+                  label: t,
+                  count: data?.items.filter(
+                    (p) =>
+                      p.content?.meta.tags?.includes(t) &&
+                      (selectedEngineTypes.length === 0 || selectedEngineTypes.includes(p.item.type))
+                  ).length ?? 0,
+                }))}
+                selected={selectedTags}
+                onChange={setSelectedTags}
+                onClear={() => setSelectedTags([])}
+              />
             )}
+          </div>
+        </div>
+
+        {/* Section 4: Ordering */}
+        <div className="qbank-card">
+          <SectionHeader number={4} title="Question Order" subtitle="Choose how questions are ordered in your test." />
+          <div className="mt-4">
+            <select
+              value={sort}
+              onChange={(e) => setSort(e.target.value as "default" | "random")}
+              className="w-full sm:w-64 h-9 rounded-xl border border-border bg-card text-sm px-3 focus:outline-none focus:ring-2 focus:ring-primary/30"
+            >
+              <option value="default">Default Order</option>
+              <option value="random">Randomized</option>
+            </select>
           </div>
         </div>
       </div>
@@ -703,34 +1006,86 @@ function CreateTestTab({
             <div className="mt-4 space-y-2.5 text-sm">
               <SummaryRow label="Test Mode" value={testMode === "timed" ? "Timed" : "Tutor"} />
               <SummaryRow
-                label="Question Count"
-                value={data?.items.reduce(
-                  (a, x) => a + (x.content ? countQuestions(x.content) : 0),
-                  0
-                ) ?? 0}
+                label="Questions"
+                value={actualBatchSize > 0 ? String(actualBatchSize) : "—"}
               />
-              <SummaryRow label="Engines" value="5 (Quiz, Bank, Flashcards, Written, OSCE)" />
-              <SummaryRow label="Time per Question" value="1 min" />
-              <SummaryRow label="Tools" value="Highlighter, Sticky Notes, Calculator, Lab Values" />
+              <SummaryRow
+                label="Engines"
+                value={selectedEngineTypes.length > 0 ? selectedEngineTypes.length + " selected" : "All"}
+              />
+              <SummaryRow
+                label="Tags"
+                value={selectedTags.length > 0 ? selectedTags.length + " selected" : "All"}
+              />
+              <SummaryRow label="Packs" value={String(filteredPacks.length)} />
+              <SummaryRow label="Total Available" value={String(totalAvailable)} />
+            </div>
+
+            <div className="mt-5 pt-4 border-t border-border">
+              <Button
+                onClick={() => {
+                  onSetQuestionLimit?.(actualBatchSize);
+                  if (filteredPacks.length > 0 && filteredPacks[0].content) {
+                    onOpenPack?.(filteredPacks[0].item);
+                  }
+                }}
+                disabled={filteredPacks.length === 0 || actualBatchSize === 0}
+                className="w-full h-11 text-sm font-semibold rounded-xl"
+              >
+                <Plus className="size-4 mr-2" />
+                Create Test
+              </Button>
+              <p className="text-[11px] text-muted-foreground text-center mt-2">
+                {filteredPacks.length > 0
+                  ? `Create a test with ${actualBatchSize} question${actualBatchSize !== 1 ? "s" : ""} from ${filteredPacks[0].item.title}.`
+                  : "Adjust filters to find available content."}
+              </p>
             </div>
           </div>
 
-          {/* Tools preview */}
-          <div className="qbank-card">
-            <h3 className="text-sm font-semibold mb-3 flex items-center gap-2">
-              <Sparkles className="size-4 text-primary" />
-              Tools Available During Test
-            </h3>
-            <div className="grid grid-cols-2 gap-2 text-xs">
-              <ToolBadge icon={Highlighter} label="Highlighter" />
-              <ToolBadge icon={StickyNote} label="Sticky Notes" />
-              <ToolBadge icon={CalcIcon} label="Calculator" />
-              <ToolBadge icon={FlaskConical} label="Lab Values" />
-              <ToolBadge icon={Type} label="Text Settings" />
-              <ToolBadge icon={BookOpen} label="Articles" />
-              <ToolBadge icon={Flag} label="Flag Questions" />
-              <ToolBadge icon={Eraser} label="Strikethrough" />
+          {/* Selected packs preview */}
+          {filteredPacks.length > 0 && (
+            <div className="qbank-card">
+              <h3 className="text-sm font-semibold text-foreground flex items-center gap-2 mb-3">
+                <ListChecks className="size-4 text-primary" />
+                Matching Packs
+              </h3>
+              <div className="space-y-2 max-h-64 overflow-y-auto medos-scroll">
+                {filteredPacks.slice(0, 20).map(({ item, content }) => (
+                  <div
+                    key={item.uid}
+                    className="flex items-center gap-2 px-2 py-1.5 rounded-lg bg-muted/30"
+                  >
+                    <div className="size-6 rounded flex items-center justify-center bg-primary/15 text-primary shrink-0">
+                      <ListChecks className="size-3" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <span className="text-xs font-medium truncate block">{item.title}</span>
+                      <span className="text-[10px] text-muted-foreground">
+                        {ENGINE_META[item.type].label}
+                        {content && ` · ${countQuestions(content)} questions`}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+                {filteredPacks.length > 20 && (
+                  <p className="text-xs text-muted-foreground text-center pt-1">
+                    +{filteredPacks.length - 20} more
+                  </p>
+                )}
+              </div>
             </div>
+          )}
+
+          <div className="qbank-card">
+            <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
+              <Lightbulb className="size-4 text-amber-500" />
+              Tip
+            </h3>
+            <p className="text-xs text-muted-foreground mt-2 leading-relaxed">
+              Use <strong>Tutor mode</strong> for first-pass learning — you see the explanation immediately after submitting. Use{" "}
+              <strong>Timed mode</strong> to practice pacing under real exam conditions.
+            </p>
           </div>
         </div>
       </div>
@@ -738,72 +1093,118 @@ function CreateTestTab({
   );
 }
 
-function ToolBadge({
+/* ─────────────────────────────────────────────────────────────────────────
+ * CHECKBOX COLUMN — Multi-select with select-all (UWorld-style)
+ * ───────────────────────────────────────────────────────────────────────── */
+function CheckboxColumn({
+  title,
+  items,
+  selected,
+  onChange,
+  onClear,
+}: {
+  title: string;
+  items: { id: string; label: string; count: number }[];
+  selected: string[];
+  onChange: (ids: string[]) => void;
+  onClear: () => void;
+}) {
+  const allSelected = items.length > 0 && selected.length === items.length;
+  const someSelected = selected.length > 0 && !allSelected;
+  const allCheckboxRef = React.useRef<HTMLInputElement>(null);
+
+  React.useEffect(() => {
+    if (allCheckboxRef.current) {
+      allCheckboxRef.current.indeterminate = someSelected;
+    }
+  }, [someSelected]);
+
+  const toggleAll = () => {
+    if (allSelected) onClear();
+    else onChange(items.map((i) => i.id));
+  };
+
+  const toggleOne = (id: string) => {
+    if (selected.includes(id)) onChange(selected.filter((x) => x !== id));
+    else onChange([...selected, id]);
+  };
+
+  return (
+    <div className="rounded-xl border border-border bg-card overflow-hidden flex flex-col">
+      <div className="px-3 py-2.5 bg-muted/40 border-b border-border flex items-center gap-2">
+        <input
+          ref={allCheckboxRef}
+          type="checkbox"
+          checked={allSelected}
+          onChange={toggleAll}
+          className="size-3.5 rounded accent-primary"
+          title="Select all"
+        />
+        <span className="text-xs font-semibold uppercase tracking-wider text-foreground flex-1">{title}</span>
+        <span className="text-[10px] text-muted-foreground tabular-nums">
+          {selected.length}/{items.length}
+        </span>
+      </div>
+      <div className="max-h-48 overflow-y-auto medos-scroll p-1.5">
+        {items.length === 0 ? (
+          <p className="text-xs text-muted-foreground text-center py-4">No items available.</p>
+        ) : (
+          items.map((item) => {
+            const isSel = selected.includes(item.id);
+            return (
+              <label
+                key={item.id}
+                className={`flex items-center gap-2 px-2 py-1.5 rounded-lg cursor-pointer transition-colors ${
+                  isSel ? "bg-primary/8" : "hover:bg-muted/60"
+                }`}
+              >
+                <input
+                  type="checkbox"
+                  checked={isSel}
+                  onChange={() => toggleOne(item.id)}
+                  className="size-3.5 rounded accent-primary"
+                />
+                <span className={`text-sm flex-1 truncate ${isSel ? "text-foreground font-medium" : "text-foreground"}`}>
+                  {item.label}
+                </span>
+                <span className="text-[10px] text-muted-foreground tabular-nums shrink-0">({item.count})</span>
+              </label>
+            );
+          })
+        )}
+      </div>
+    </div>
+  );
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+ * MODE CARD — Selectable card for Timed/Tutor mode
+ * ───────────────────────────────────────────────────────────────────────── */
+function ModeCard({
+  active,
+  onClick,
   icon: Icon,
   label,
+  description,
 }: {
+  active: boolean;
+  onClick: () => void;
   icon: React.ComponentType<{ className?: string }>;
   label: string;
+  description: string;
 }) {
-  return (
-    <div className="flex items-center gap-1.5 px-2 py-1.5 rounded-md bg-muted/50 text-xs">
-      <Icon className="size-3.5 text-primary shrink-0" />
-      <span className="truncate">{label}</span>
-    </div>
-  );
-}
-
-function PackRow({
-  item,
-  content,
-  onOpen,
-}: {
-  item: ManifestItem;
-  content: AnyContent | null;
-  onOpen: () => void;
-}) {
-  if (!content) return null;
-  const progress = storage.packProgress(item.uid);
-  const count = countQuestions(content);
-  const accuracy =
-    progress.attempted > 0
-      ? Math.round((progress.correct / progress.attempted) * 100)
-      : 0;
-
   return (
     <button
-      type="button"
-      onClick={onOpen}
-      className="w-full text-left p-3 rounded-xl border border-border bg-card hover:border-primary/40 hover:bg-primary/5 transition-all flex items-start gap-3"
+      onClick={onClick}
+      className={cn("qbank-mode-card", active && "active")}
     >
-      <div className={cn("size-9 rounded-lg flex items-center justify-center shrink-0 bg-primary/15 text-primary")}>
-        <ListChecks className="size-4" />
+      <div className="qbank-mode-card-icon">
+        <Icon className="size-5" />
       </div>
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-2 mb-0.5 flex-wrap">
-          <span className="text-sm font-semibold truncate">{item.title}</span>
-          <Badge variant="secondary" className="text-[10px]">
-            {ENGINE_META[item.type].label}
-          </Badge>
-        </div>
-        <p className="text-xs text-muted-foreground line-clamp-2 mb-1.5">
-          {content.meta.description}
-        </p>
-        <div className="flex items-center gap-3 text-[11px] text-muted-foreground">
-          <span>{count} questions</span>
-          {progress.attempted > 0 ? (
-            <>
-              <span>·</span>
-              <span className="text-emerald-500">{progress.correct} correct</span>
-              <span>·</span>
-              <span>{accuracy}% accuracy</span>
-            </>
-          ) : (
-            <span className="text-primary">· Ready to start</span>
-          )}
-        </div>
+      <div className="flex-1">
+        <div className="font-semibold text-sm">{label}</div>
+        <p className="text-xs text-muted-foreground mt-0.5">{description}</p>
       </div>
-      <ChevronRight className="size-4 text-muted-foreground shrink-0 mt-1.5" />
     </button>
   );
 }
@@ -883,166 +1284,7 @@ function PreviousTestsTab({
   );
 }
 
-function PerformanceTab({
-  accuracy,
-  attempted,
-  correct,
-  packs,
-  sessions: sessionList,
-  data,
-}: {
-  accuracy: number;
-  attempted: number;
-  correct: number;
-  packs: number;
-  sessions: SavedSession[];
-  data: { items: Array<{ item: ManifestItem; content: AnyContent | null }> } | null;
-}) {
-  // Engine breakdown
-  const engineStats = React.useMemo(() => {
-    const stats: Record<string, { attempted: number; correct: number }> = {};
-    const allProgress = storage.allProgress();
-    allProgress.forEach((p) => {
-      const item = data?.items.find((x) => x.item.uid === p.uid);
-      if (!item) return;
-      const eng = item.item.type;
-      if (!stats[eng]) stats[eng] = { attempted: 0, correct: 0 };
-      stats[eng].attempted += p.attempted;
-      stats[eng].correct += p.correct;
-    });
-    return stats;
-  }, [data]);
 
-  return (
-    <div className="space-y-4">
-      {/* Top stats */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <PerfCard label="Packs Started" value={packs} color="text-primary" icon={BookOpen} />
-        <PerfCard label="Attempted" value={attempted} color="text-foreground" icon={Target} />
-        <PerfCard label="Correct" value={correct} color="text-emerald-500" icon={Award} />
-        <PerfCard label="Accuracy" value={`${accuracy}%`} color="text-amber-500" icon={TrendingUp} />
-      </div>
-
-      {/* Engine breakdown */}
-      <div className="qbank-card">
-        <h3 className="text-base font-semibold mb-3 flex items-center gap-2">
-          <BarChart3 className="size-4 text-primary" /> Performance by Engine
-        </h3>
-        {Object.keys(engineStats).length === 0 ? (
-          <div className="text-center py-8 text-sm text-muted-foreground">
-            No data yet. Start a test to see analytics.
-          </div>
-        ) : (
-          <div className="space-y-3">
-            {Object.entries(engineStats).map(([eng, stat]) => {
-              const pct = stat.attempted
-                ? Math.round((stat.correct / stat.attempted) * 100)
-                : 0;
-              return (
-                <div key={eng}>
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="text-sm font-medium capitalize">
-                      {ENGINE_META[eng as EngineType].label}
-                    </span>
-                    <span className="text-sm tabular-nums">
-                      <span className="font-semibold">{pct}%</span>
-                      <span className="text-xs text-muted-foreground ml-2">
-                        {stat.correct}/{stat.attempted}
-                      </span>
-                    </span>
-                  </div>
-                  <div className="h-2 rounded-full bg-muted overflow-hidden">
-                    <div
-                      className="h-full rounded-full transition-all"
-                      style={{
-                        width: `${pct}%`,
-                        backgroundColor:
-                          pct >= 70
-                            ? "oklch(0.55 0.18 250)"
-                            : pct >= 50
-                            ? "oklch(0.78 0.16 80)"
-                            : "oklch(0.62 0.22 25)",
-                      }}
-                    />
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </div>
-
-      {/* Recent sessions chart */}
-      {sessionList.length > 0 && (
-        <div className="qbank-card">
-          <h3 className="text-base font-semibold mb-3 flex items-center gap-2">
-            <TrendingUp className="size-4 text-primary" /> Recent Test Scores
-          </h3>
-          <div className="flex items-end gap-2 h-40">
-            {sessionList.slice(-10).map((s) => {
-              const pct = s.totalQuestions
-                ? Math.round((s.correctCount / s.totalQuestions) * 100)
-                : 0;
-              return (
-                <div
-                  key={s.id}
-                  className="flex-1 flex flex-col items-center gap-1 group"
-                >
-                  <div className="text-[10px] font-semibold tabular-nums opacity-0 group-hover:opacity-100 transition-opacity">
-                    {pct}%
-                  </div>
-                  <div
-                    className="w-full rounded-t-md transition-all"
-                    style={{
-                      height: `${Math.max(pct, 5)}%`,
-                      backgroundColor:
-                        pct >= 70
-                          ? "oklch(0.55 0.18 250)"
-                          : pct >= 50
-                          ? "oklch(0.78 0.16 80)"
-                          : "oklch(0.62 0.22 25)",
-                    }}
-                    title={`${s.packTitle}: ${pct}%`}
-                  />
-                  <div className="text-[9px] text-muted-foreground truncate w-full text-center">
-                    {new Date(s.startedAt).toLocaleDateString(undefined, {
-                      month: "short",
-                      day: "numeric",
-                    })}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-function PerfCard({
-  label,
-  value,
-  color,
-  icon: Icon,
-}: {
-  label: string;
-  value: string | number;
-  color: string;
-  icon: React.ComponentType<{ className?: string }>;
-}) {
-  return (
-    <div className="qbank-card flex flex-col gap-1">
-      <div className="flex items-center justify-between">
-        <span className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
-          {label}
-        </span>
-        <Icon className={cn("size-4", color)} />
-      </div>
-      <div className={cn("text-2xl font-bold", color)}>{value}</div>
-    </div>
-  );
-}
 
 /* ─────────────────────────────────────────────────────────────────────────
  * QUIZ VIEW — Full QBank Studio with all tools
@@ -2660,7 +2902,7 @@ function ResultsView({
 
         <div className="qbank-card">
           <h3 className="text-base font-semibold mb-3 flex items-center gap-2">
-            <Award className="size-4 text-primary" /> Question Review
+            <ListChecks className="size-4 text-primary" /> Question Review
           </h3>
           <div className="space-y-2">
             {session.questions.map((q, i) => {
