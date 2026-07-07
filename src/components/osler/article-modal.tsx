@@ -2,8 +2,13 @@
 
 import * as React from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { BookOpen, X, Clock, ChevronRight, Search } from "lucide-react";
+import { BookOpen, X, Clock, ChevronRight, Search, Bookmark, BookmarkCheck } from "lucide-react";
 import { ARTICLES, searchArticles, type Article } from "@/lib/osler/articles";
+import { cn } from "@/lib/utils";
+import { useArticleHighlighter } from "@/hooks/use-article-highlighter";
+import { HighlighterToolbar } from "./highlighter-toolbar";
+
+const BOOKMARKS_KEY = "osler-article-bookmarks";
 
 interface FloatingArticleModalProps {
   articleId: string | null;
@@ -19,11 +24,27 @@ export function FloatingArticleModal({
   const [activeId, setActiveId] = React.useState(articleId);
   const [query, setQuery] = React.useState("");
   const [showSidebar, setShowSidebar] = React.useState(false);
+  const [bookmarks, setBookmarks] = React.useState<Set<string>>(new Set());
+
+  const hlCtrl = useArticleHighlighter({
+    source: "library",
+    articleId: activeId,
+    enabled: true,
+  });
 
   React.useEffect(() => {
     setActiveId(articleId);
     if (articleId) setShowSidebar(false);
   }, [articleId]);
+
+  // Load bookmarks
+  React.useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      const raw = localStorage.getItem(BOOKMARKS_KEY);
+      if (raw) setBookmarks(new Set(JSON.parse(raw)));
+    } catch {}
+  }, []);
 
   const article: Article | null = activeId ? ARTICLES[activeId] : null;
   const searchResults = query ? searchArticles(query) : Object.values(ARTICLES);
@@ -35,6 +56,43 @@ export function FloatingArticleModal({
     onOpenArticle?.(id);
   };
 
+  const toggleBookmark = React.useCallback(() => {
+    if (!activeId) return;
+    setBookmarks((prev) => {
+      const next = new Set(prev);
+      if (next.has(activeId)) next.delete(activeId);
+      else next.add(activeId);
+      if (typeof window !== "undefined") {
+        localStorage.setItem(BOOKMARKS_KEY, JSON.stringify(Array.from(next)));
+      }
+      return next;
+    });
+  }, [activeId]);
+
+  // Keyboard shortcuts
+  React.useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        if (showSidebar) { setShowSidebar(false); return; }
+        if (hlCtrl.highlightMode) { hlCtrl.setHighlightMode(false); return; }
+        onClose();
+      }
+      if ((e.ctrlKey || e.metaKey) && e.key === "d") {
+        e.preventDefault();
+        toggleBookmark();
+      }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [onClose, showSidebar, hlCtrl.highlightMode, hlCtrl.setHighlightMode, toggleBookmark]);
+
+  // Sync activeId with articleId when closed
+  React.useEffect(() => {
+    if (!articleId) {
+      hlCtrl.setHighlightMode(false);
+    }
+  }, [articleId]);
+
   return (
     <AnimatePresence>
       {articleId && (
@@ -43,7 +101,10 @@ export function FloatingArticleModal({
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
           className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4"
-          onClick={onClose}
+          onClick={() => {
+            if (hlCtrl.highlightMode) { hlCtrl.setHighlightMode(false); }
+            else { onClose(); }
+          }}
         >
           <motion.div
             initial={{ scale: 0.95, opacity: 0, y: 12 }}
@@ -74,13 +135,32 @@ export function FloatingArticleModal({
                   </span>
                 </div>
               )}
-              <button
-                onClick={onClose}
-                className="size-8 rounded-md hover:bg-muted flex items-center justify-center shrink-0"
-                title="Close"
-              >
-                <X className="size-4" />
-              </button>
+              <div className="flex items-center gap-1 shrink-0">
+                <HighlighterToolbar ctrl={hlCtrl} compact />
+                <button
+                  onClick={toggleBookmark}
+                  className={cn(
+                    "size-8 rounded-md flex items-center justify-center transition-colors shrink-0",
+                    activeId && bookmarks.has(activeId)
+                      ? "text-primary bg-primary/10 hover:bg-primary/15"
+                      : "text-muted-foreground hover:bg-muted"
+                  )}
+                  title={activeId && bookmarks.has(activeId) ? "Remove bookmark" : "Bookmark article"}
+                >
+                  {activeId && bookmarks.has(activeId) ? (
+                    <BookmarkCheck className="size-4" />
+                  ) : (
+                    <Bookmark className="size-4" />
+                  )}
+                </button>
+                <button
+                  onClick={onClose}
+                  className="size-8 rounded-md hover:bg-muted flex items-center justify-center shrink-0"
+                  title="Close"
+                >
+                  <X className="size-4" />
+                </button>
+              </div>
             </header>
 
             <div className="flex-1 flex min-h-0">
@@ -134,9 +214,30 @@ export function FloatingArticleModal({
               {/* Article content */}
               <div className="flex-1 overflow-y-auto medos-scroll">
                 {article ? (
-                  <div
-                    className="library-article"
-                    dangerouslySetInnerHTML={{ __html: article.html }}
+                  <iframe
+                    ref={hlCtrl.iframeRef}
+                    title={article.title}
+                    srcDoc={`<html><head><style>
+                      body { font-family: system-ui, sans-serif; padding: 2rem; max-width: 800px; margin: 0 auto; color: #1a1a1a; line-height: 1.7; font-size: 15px; }
+                      h1 { font-size: 1.6rem; font-weight: 700; margin: 0 0 0.75rem; line-height: 1.3; }
+                      h2 { font-size: 1.25rem; font-weight: 600; margin: 1.5rem 0 0.5rem; line-height: 1.35; }
+                      h3 { font-size: 1.05rem; font-weight: 600; margin: 1.25rem 0 0.4rem; line-height: 1.4; }
+                      p { margin: 0 0 0.75rem; line-height: 1.7; }
+                      ul, ol { margin: 0 0 0.75rem; padding-left: 1.5rem; }
+                      li { margin-bottom: 0.25rem; line-height: 1.6; }
+                      strong { font-weight: 600; }
+                      em { font-style: italic; }
+                      a { color: #2563eb; text-decoration: underline; }
+                      code { font-size: 0.85em; padding: 0.15rem 0.35rem; border-radius: 4px; background: #e5e7eb; }
+                      blockquote { border-left: 3px solid #d1d5db; margin: 0.75rem 0; padding: 0.5rem 1rem; color: #6b7280; }
+                      table { width: 100%; border-collapse: collapse; margin: 0.75rem 0; }
+                      th, td { border: 1px solid #d1d5db; padding: 0.5rem 0.75rem; text-align: left; }
+                      th { font-weight: 600; background: #f3f4f6; }
+                      .callout { background: #f9fafb; border-left: 4px solid #2563eb; padding: 0.75rem 1rem; border-radius: 6px; margin: 0.75rem 0; }
+                      .warning { background: #fefce8; border-left: 4px solid #eab308; padding: 0.75rem 1rem; border-radius: 6px; margin: 0.75rem 0; }
+                    </style></head><body>${article.html}</body></html>`}
+                    className="w-full h-full border-0"
+                    sandbox="allow-same-origin"
                   />
                 ) : (
                   <div className="flex items-center justify-center h-full text-sm text-muted-foreground">
@@ -151,3 +252,5 @@ export function FloatingArticleModal({
     </AnimatePresence>
   );
 }
+
+
