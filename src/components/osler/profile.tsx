@@ -65,7 +65,7 @@ export function Profile({ username, onViewChange }: ProfileProps) {
   }, [progress, data]);
 
   return (
-    <div className="h-full overflow-y-auto medos-scroll">
+    <div className="h-full overflow-y-auto medos-scroll pb-[calc(3.5rem+env(safe-area-inset-bottom))] md:pb-0">
       <div className="max-w-4xl mx-auto px-4 md:px-8 py-8">
         {/* Profile header */}
         <motion.div

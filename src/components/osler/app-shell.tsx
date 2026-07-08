@@ -313,7 +313,7 @@ export function AppShell({
       </header>
 
       {/* Main content — scrolls independently so scrollbar doesn't touch the topbar */}
-      <main className="flex-1 min-h-0 overflow-y-auto medos-scroll-y pb-[calc(4rem+env(safe-area-inset-bottom))] md:pb-0">
+      <main className="flex-1 min-h-0 overflow-y-auto medos-scroll-y">
         <AnimatePresence mode="sync" initial={false}>
           <motion.div
             key={view}

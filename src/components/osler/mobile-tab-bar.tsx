@@ -11,6 +11,7 @@ import {
   Stethoscope,
 } from "lucide-react";
 import type { OslerView } from "./app-shell";
+import { cn } from "@/lib/utils";
 
 interface MobileTabBarProps {
   view: OslerView;
@@ -42,9 +43,16 @@ function ProfileIcon({ className }: { className?: string }) {
 }
 
 export function MobileTabBar({ view, onViewChange }: MobileTabBarProps) {
+  // Hide the global bar inside full-screen engine views that manage their
+  // own layout (and already reserve space / render their own chrome).
+  const hiddenViews: OslerView[] = ["qbank", "flashcards", "osce"];
+  const hidden = hiddenViews.includes(view);
   return (
     <nav
-      className="medos-tabbar medos-tap-none md:hidden fixed inset-x-0 bottom-0 z-50 flex"
+      className={cn(
+        "medos-tabbar medos-tap-none md:hidden fixed inset-x-0 bottom-0 z-50 flex",
+        hidden && "hidden"
+      )}
       role="tablist"
       aria-label="Primary"
     >
