@@ -3794,18 +3794,19 @@ function contentToQuestions(content: AnyContent): SessionQuestion[] {
     });
   } else if (content.type === "osce") {
     (content as OsceContent).stations.forEach((s) => {
+      const rubricArr = s.rubric?.mustAsk || [];
       out.push({
         id: s.id,
-        stem: s.scenario,
+        stem: s.task || s.title,
         choices: [],
         correct: -1,
         explanation:
-          s.rubric.length > 0
-            ? `Performance rubric:\n${s.rubric.map((r, i) => `${i + 1}. ${r}`).join("\n")}`
+          rubricArr.length > 0
+            ? `Performance rubric:\n${rubricArr.map((r: string, i: number) => `${i + 1}. ${r}`).join("\n")}`
             : "",
-        rubric: s.rubric,
-        redFlags: s.redFlags,
-        differential: s.differential,
+        rubric: rubricArr,
+        redFlags: s.hiddenProfile?.redFlags || [],
+        differential: s.hiddenProfile?.keySymptoms || [],
         tags: ["osce"],
       });
     });

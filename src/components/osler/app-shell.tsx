@@ -15,6 +15,7 @@ import {
   ChevronDown,
   Search,
   Settings as SettingsIcon,
+  Stethoscope,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -40,6 +41,7 @@ export type OslerView =
   | "library"
   | "qbank"
   | "flashcards"
+  | "osce"
   | "profile"
   | "settings";
 
@@ -204,6 +206,14 @@ export function AppShell({
               onClick={() => onViewChange("flashcards")}
               icon={Layers}
               label="Flashcards"
+              layoutId="nav-active"
+            />
+
+            <NavButton
+              active={view === "osce"}
+              onClick={() => onViewChange("osce")}
+              icon={Stethoscope}
+              label="OSCE Studio"
               layoutId="nav-active"
             />
           </nav>

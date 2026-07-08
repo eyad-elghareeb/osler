@@ -45,6 +45,19 @@ const STORAGE_KEYS = {
   maxWait: "osler_gemini_max_wait",
 } as const;
 
+const OSCE_VOICE_MODELS = [
+  ["gemini-3.1-flash-live-preview", "Gemini 3.1 Flash Live (recommended)"],
+  ["gemini-live-2.5-flash-native-audio", "Gemini Live 2.5 Flash — native audio"],
+  ["gemini-live-2.5-flash-preview-native-audio-09-2025", "Gemini 2.5 Flash Live — native audio preview"],
+] as const;
+
+const OSCE_STORAGE_KEYS = {
+  liveModel: "osler_osce_live_model",
+  voiceOn: "osler_osce_voice_on",
+  ttsVoice: "osler_osce_tts_voice",
+  ttsRate: "osler_osce_tts_rate",
+} as const;
+
 /* ─── Section tabs ──────────────────────────────────────────────────── */
 
 type SettingsSection = "ai" | "shortcuts" | "danger";
@@ -284,6 +297,53 @@ function AiSettingsSection() {
             {testResult}
           </p>
         )}
+
+        {/* ── OSCE Voice Settings ── */}
+        <div className="pt-4 border-t border-border/60">
+          <h3 className="text-sm font-semibold flex items-center gap-2 mb-1">
+            <Sparkles className="size-4 text-primary" />
+            OSCE Voice & Live Model
+          </h3>
+          <p className="text-xs text-muted-foreground mb-4">
+            Configure voice settings for the OSCE Virtual Patient Simulator.
+          </p>
+          <div className="space-y-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold text-muted-foreground">Live Voice Model</label>
+                <select
+                  value={typeof window !== "undefined" ? localStorage.getItem(OSCE_STORAGE_KEYS.liveModel) || OSCE_VOICE_MODELS[0][0] : OSCE_VOICE_MODELS[0][0]}
+                  onChange={(e) => { localStorage.setItem(OSCE_STORAGE_KEYS.liveModel, e.target.value); }}
+                  className="w-full h-9 rounded-lg border border-border bg-card px-3 text-sm outline-none focus:border-primary"
+                >
+                  {OSCE_VOICE_MODELS.map(([id, label]) => (
+                    <option key={id} value={id}>{label}</option>
+                  ))}
+                </select>
+                <p className="text-[11px] text-muted-foreground">
+                  Used for real-time voice conversation in OSCE (Gemini Live API).
+                </p>
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold text-muted-foreground">TTS Rate</label>
+                <select
+                  value={typeof window !== "undefined" ? localStorage.getItem(OSCE_STORAGE_KEYS.ttsRate) || "0.95" : "0.95"}
+                  onChange={(e) => { localStorage.setItem(OSCE_STORAGE_KEYS.ttsRate, e.target.value); }}
+                  className="w-full h-9 rounded-lg border border-border bg-card px-3 text-sm outline-none focus:border-primary"
+                >
+                  <option value="0.5">Very Slow (0.5x)</option>
+                  <option value="0.75">Slow (0.75x)</option>
+                  <option value="0.95">Normal (0.95x)</option>
+                  <option value="1.2">Fast (1.2x)</option>
+                  <option value="1.5">Very Fast (1.5x)</option>
+                </select>
+                <p className="text-[11px] text-muted-foreground">
+                  Speech synthesis rate for patient responses.
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
 
         {/* Action bar */}
         <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-border/60">

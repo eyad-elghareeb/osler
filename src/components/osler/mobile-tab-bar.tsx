@@ -8,6 +8,7 @@ import {
   Layers,
   User as UserIcon,
   Cog,
+  Stethoscope,
 } from "lucide-react";
 import type { OslerView } from "./app-shell";
 
@@ -27,6 +28,7 @@ const TABS: TabItem[] = [
   { id: "library", label: "Library", icon: BookOpen },
   { id: "flashcards", label: "Cards", icon: Layers },
   { id: "qbank", label: "Q-Bank", icon: ListChecks },
+  { id: "osce", label: "OSCE", icon: Stethoscope },
   { id: "profile", label: "Profile", icon: UserIcon },
 ];
 

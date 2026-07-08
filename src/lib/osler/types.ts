@@ -124,12 +124,73 @@ export interface WrittenContent {
 }
 
 /* ── OSCE ────────────────────────────────────────────────────────────── */
+export interface OscePatient {
+  name: string;
+  age: number;
+  gender: string;
+  avatarSeed: string;
+  opening: string;
+}
+
+export interface OsceHiddenProfile {
+  diagnosis: string;
+  keySymptoms: string[];
+  redFlags: string[];
+  pastHistory: string[];
+  vitalSigns: string;
+}
+
+export interface OsceRubric {
+  mustAsk: string[];
+  bonus: string[];
+}
+
+export interface OsceExaminer {
+  name: string;
+  title: string;
+}
+
+export interface OsceDataTable {
+  title?: string;
+  headers?: string[];
+  rows?: string[][];
+}
+
+export interface OsceDataImage {
+  title?: string;
+  caption?: string;
+  src?: string;
+  url?: string;
+  data?: string;
+  alt?: string;
+}
+
+export interface OsceDataPresented {
+  scenario?: string;
+  tables?: OsceDataTable[];
+  images?: OsceDataImage[];
+}
+
+export interface OsceQuestion {
+  question: string;
+  answer?: string;
+  rubric?: string;
+}
+
 export interface OsceStation {
   id: string;
-  scenario: string;
-  redFlags: string[];
-  differential: string[];
-  rubric: string[];
+  title: string;
+  type: "history" | "data-interp";
+  specialty: string;
+  difficulty: string;
+  task: string;
+  time: number;
+  examiner: OsceExaminer;
+  dataPresented?: OsceDataPresented | null;
+  questions: OsceQuestion[];
+  patient: OscePatient;
+  hiddenProfile: OsceHiddenProfile;
+  rubric: OsceRubric;
 }
 
 export interface OsceContent {
