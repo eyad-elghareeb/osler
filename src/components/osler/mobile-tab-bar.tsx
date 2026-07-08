@@ -44,7 +44,7 @@ function ProfileIcon({ className }: { className?: string }) {
 export function MobileTabBar({ view, onViewChange }: MobileTabBarProps) {
   return (
     <nav
-      className="medos-tabbar safe-bottom medos-tap-none md:hidden shrink-0 flex"
+      className="medos-tabbar medos-tap-none md:hidden shrink-0 flex"
       role="tablist"
       aria-label="Primary"
     >

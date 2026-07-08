@@ -12,7 +12,9 @@ type BeforeInstallPromptEvent = Event & {
 
 function isIos() {
   if (typeof navigator === "undefined") return false;
-  return /iP(hone|ad|od)/.test(navigator.userAgent) && !("MSStream" in window);
+  const ua = navigator.userAgent;
+  const iosDevice = /iP(hone|ad|od)/.test(ua) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+  return iosDevice && !("MSStream" in window);
 }
 
 export function PwaInstallButton({ className }: { className?: string }) {
@@ -38,6 +40,9 @@ export function PwaInstallButton({ className }: { className?: string }) {
   }, []);
 
   if (installed) return null;
+  if (typeof window !== "undefined" && window.matchMedia("(display-mode: standalone)").matches) {
+    return null;
+  }
 
   const canPrompt = Boolean(deferred);
   const showIos = isIos() && !canPrompt;

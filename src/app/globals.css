@@ -631,6 +631,10 @@ input, textarea, [contenteditable="true"], .medos-article, .uworld-prose, .ai-ch
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
   border-top: 1px solid var(--border);
+  /* Sit above the home indicator and never get clipped by the shell's
+   * overflow:hidden on mobile (URL-bar / dynamic viewport). */
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  padding-bottom: max(env(safe-area-inset-bottom, 0px), 0.5rem);
 }
 .medos-tabbar-item {
   position: relative;

@@ -27,6 +27,12 @@
       "purpose": "any"
     },
     {
+      "src": "/assets/icons/icon-1024.png",
+      "sizes": "1024x1024",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
       "src": "/assets/icons/maskable-192.png",
       "sizes": "192x192",
       "type": "image/png",
@@ -37,18 +43,6 @@
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "maskable"
-    },
-    {
-      "src": "/assets/icons/icon-1024.png",
-      "sizes": "1024x1024",
-      "type": "image/png",
-      "purpose": "any"
-    },
-    {
-      "src": "/assets/icons/icon.svg",
-      "sizes": "any",
-      "type": "image/svg+xml",
-      "purpose": "any"
     }
   ],
   "shortcuts": [
@@ -56,25 +50,37 @@
       "name": "Quiz",
       "short_name": "Quiz",
       "url": "/?view=quiz",
-      "description": "Start a quick quiz"
+      "description": "Start a quick quiz",
+      "icons": [
+        { "src": "/assets/icons/icon-192.png", "sizes": "192x192", "type": "image/png" }
+      ]
     },
     {
       "name": "Question Bank",
       "short_name": "Bank",
       "url": "/?view=bank",
-      "description": "Practice the question bank"
+      "description": "Practice the question bank",
+      "icons": [
+        { "src": "/assets/icons/icon-192.png", "sizes": "192x192", "type": "image/png" }
+      ]
     },
     {
       "name": "Flashcards",
       "short_name": "Cards",
       "url": "/?view=flashcard",
-      "description": "Review flashcards"
+      "description": "Review flashcards",
+      "icons": [
+        { "src": "/assets/icons/icon-192.png", "sizes": "192x192", "type": "image/png" }
+      ]
     },
     {
       "name": "OSCE",
       "short_name": "OSCE",
       "url": "/?view=osce",
-      "description": "Train with OSCE cases"
+      "description": "Train with OSCE cases",
+      "icons": [
+        { "src": "/assets/icons/icon-192.png", "sizes": "192x192", "type": "image/png" }
+      ]
     }
   ],
   "screenshots": [
@@ -83,6 +89,12 @@
       "sizes": "512x512",
       "type": "image/png",
       "form_factor": "wide"
+    },
+    {
+      "src": "/assets/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "form_factor": "narrow"
     }
   ]
 }
