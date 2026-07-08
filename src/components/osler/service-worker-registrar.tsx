@@ -24,7 +24,10 @@ export function ServiceWorkerRegistrar() {
     if (document.readyState === "complete") {
       onLoad();
     } else {
-      window.addEventListener("load", onLoad);
+      window.addEventListener("load", onLoad, { once: true });
+      // Register immediately too, so the SW is active (and able to trigger
+      // `beforeinstallprompt`) even if the load event is delayed on mobile.
+      onLoad();
       return () => window.removeEventListener("load", onLoad);
     }
   }, []);
