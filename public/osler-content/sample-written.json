@@ -14,6 +14,7 @@
     {
       "id": "w-001",
       "prompt": "Describe the pathophysiology of heart failure with reduced ejection fraction (HFrEF). Include the role of the renin-angiotensin-aldosterone system, compensatory mechanisms, and how these lead to disease progression over time.",
+      "modelAnswer": "HFrEF begins with an initial insult (e.g., MI, hypertension, valvular disease) that reduces myocardial contractility and cardiac output. The body activates compensatory mechanisms: (1) the sympathetic nervous system increases heart rate and contractility via catecholamines, and (2) the RAAS is activated — decreased renal perfusion stimulates renin release, leading to angiotensin II production (vasoconstriction, aldosterone secretion). Aldosterone causes sodium and water retention, increasing preload. Initially these maintain cardiac output, but chronically they become maladaptive: sustained catecholamine exposure causes ß-receptor downregulation and myocyte toxicity, angiotensin II promotes fibrosis and ventricular remodeling, and aldosterone leads to myocardial fibrosis and worsening diastolic dysfunction. Over time, the LV dilates and becomes more spherical (eccentric remodeling), increasing wall stress and oxygen demand, which further depresses contractility in a vicious cycle. This neurohormonal model is the basis for guideline-directed therapy with ß-blockers, ACEi/ARBs, MRAs, and SGLT2i.",
       "rubric": [
         "Explains reduced myocardial contractility",
         "Describes RAAS activation in response to decreased cardiac output",
@@ -21,12 +22,14 @@
         "Discusses ventricular remodeling as a compensatory mechanism that becomes maladaptive",
         "Explains how compensatory mechanisms accelerate disease progression over time"
       ],
+      "explanation": "HFrEF pathophysiology centers on the neurohormonal model. The key insight is that compensatory mechanisms (SNS activation, RAAS) are initially helpful but become harmful over time. Modern treatment targets these pathways: ß-blockers for SNS, ACEi/ARBs for angiotensin II, MRAs for aldosterone, and SGLT2i for additional cardiovascular benefit. Understanding this progression is essential for rational pharmacotherapy.",
       "wordLimit": 500,
       "tags": ["heart-failure", "cardiology"]
     },
     {
       "id": "w-002",
       "prompt": "Outline the diagnostic approach and initial management of a patient presenting with acute ischemic stroke within the first 4.5 hours. Include appropriate imaging, treatment decisions, and contraindications to thrombolysis.",
+      "modelAnswer": "On arrival, perform an NIH Stroke Scale assessment and obtain stat non-contrast CT head to exclude intracranial hemorrhage (the absolute contraindication to thrombolysis). Check blood glucose (hypoglycemia mimics stroke), CBC, INR/aPTT, and electrolyte panel. If symptom onset is within 3 hours and no contraindications, administer IV alteplase (0.9 mg/kg, 10% bolus, remainder over 60 min). The window extends to 4.5 hours for patients under 80, not on anticoagulants, without both diabetes and prior stroke, and NIHSS < 25. Contraindications include: intracranial hemorrhage on CT, recent major surgery/trauma within 14 days, GI/GU bleeding within 21 days, INR > 1.7 or elevated aPTT, platelets < 100,000, systolic BP > 185 or diastolic > 110 refractory to treatment, rapid symptom improvement, and seizure at onset. For large vessel occlusion (MCA/ICA), consider mechanical thrombectomy with CT angiography up to 24 hours from last known well if perfusion imaging shows salvageable tissue. Maintain BP < 185/110 before thrombolysis and < 180/105 for 24 hours after. Admit to stroke unit or ICU for monitoring.",
       "rubric": [
         "Describes immediate assessment including NIH stroke scale and vitals",
         "Identifies need for non-contrast CT head to exclude hemorrhage",
@@ -35,12 +38,14 @@
         "Discusses blood pressure management before and after thrombolysis",
         "Mentions mechanical thrombectomy for large vessel occlusion"
       ],
+      "explanation": "Acute stroke management is time-critical. The CT head is the first and most important step — alteplase is absolutely contraindicated if hemorrhage is present. The 3-hour window is standard; the 4.5-hour window has additional criteria. BP control is crucial both before (to allow safe thrombolysis) and after (to reduce hemorrhagic conversion risk). Thrombectomy has revolutionized large vessel occlusion management and extends the treatment window significantly.",
       "wordLimit": 400,
       "tags": ["stroke", "neurology"]
     },
     {
       "id": "w-003",
       "prompt": "Compare and contrast the pathophysiology, clinical presentation, and management of asthma versus COPD. Focus on the key differences in airway inflammation, reversibility, and pharmacologic treatment approaches.",
+      "modelAnswer": "Asthma is typically eosinophilic inflammation driven by Th2-mediated IgE responses to allergens, with mast cell degranulation, release of leukotrienes and prostaglandins, and airway hyperresponsiveness. The inflammation is predominantly in the large airways and is largely reversible, either spontaneously or with treatment. Onset is usually childhood or young adulthood, with episodic symptoms (wheezing, cough, chest tightness) triggered by allergens, exercise, or respiratory infections. COPD involves neutrophilic and CD8+ T-cell inflammation due to chronic exposure to noxious particles (typically cigarette smoke), with destruction of alveolar walls (emphysema) and small airway fibrosis. Airflow limitation is largely fixed and progressive. Onset is after age 40 with progressive dyspnea, chronic cough, and sputum production. Asthma management follows a stepwise approach: SABA as needed → low-dose ICS → ICS/LABA → add LAMA, montelukast, or theophylline → biologics (anti-IgE, anti-IL5, anti-IL4R) for severe disease. COPD management: bronchodilators (LAMA/LABA) as mainstay, ICS only for exacerbators (eosinophilic phenotype), pulmonary rehabilitation, and long-term oxygen therapy for chronic hypoxemia. Both benefit from smoking cessation, vaccinations, and pulmonary rehabilitation.",
       "rubric": [
         "Distinguishes eosinophilic inflammation (asthma) from neutrophilic (COPD)",
         "Describes reversible vs largely fixed airway obstruction",
@@ -49,12 +54,14 @@
         "Outlines COPD management (bronchodilators → ICS for exacerbations → LTOT)",
         "Mentions key diagnostic differences (methacholine challenge for asthma, PFTs for COPD)"
       ],
+      "explanation": "The most important clinical distinction is reversibility: asthma is reversible (either spontaneously or with bronchodilators), while COPD airflow limitation is largely fixed. This drives different treatment approaches — asthma is anti-inflammatory centered (ICS are first-line), while COPD is bronchodilator-centered (ICS reserved for exacerbators). Spirometry is diagnostic for both but shows different patterns: obstructive with reversibility in asthma, persistent obstruction with reduced DLCO in COPD (emphysema).",
       "wordLimit": 500,
       "tags": ["pulmonology", "asthma", "copd"]
     },
     {
       "id": "w-004",
       "prompt": "A 65-year-old man on warfarin for mechanical mitral valve presents with an INR of 7.2 and melena. Detail the pathophysiology of warfarin's anticoagulant effect, the management of this supratherapeutic INR with bleeding, and how you would transition to a different anticoagulant if needed.",
+      "modelAnswer": "Warfarin inhibits vitamin K epoxide reductase (VKORC1), blocking the recycling of vitamin K and thereby preventing the gamma-carboxylation of clotting factors II, VII, IX, and X (and proteins C and S). With a supratherapeutic INR of 7.2 and active bleeding (melena indicates upper GI bleeding), the patient requires immediate reversal. Give IV vitamin K 5-10 mg slow infusion PLUS 4-factor prothrombin complex concentrate (PCC, e.g., Kcentra) for rapid reversal — PCC provides the vitamin K-dependent factors directly and reverses the INR within minutes. If PCC is unavailable, give fresh frozen plasma (FFP) 10-15 mL/kg. Hold warfarin. Assess the bleeding source with upper endoscopy. For ongoing anticoagulation (mechanical mitral valve requires lifelong anticoagulation), options are limited — warfarin is the only approved agent for mechanical mitral valves; DOACs are contraindicated. After reversal, restart warfarin with careful bridging using IV unfractionated heparin (no LMWH due to renal concerns is reasonable in acute setting). Monitor INR closely, aiming for target 2.5-3.5 for mechanical mitral valve. Consider lower initial warfarin doses and more frequent INR monitoring.",
       "rubric": [
         "Explains warfarin's mechanism (inhibition of vitamin K-dependent factors II, VII, IX, X)",
         "Recognizes need for immediate reversal due to major bleeding",
@@ -62,12 +69,14 @@
         "Discusses holding warfarin and assessing bleeding source",
         "Explains bridging options (UFH or LMWH) if long-term anticoagulation is required"
       ],
+      "explanation": "This case tests management of warfarin-related major bleeding. PCC is preferred over FFP because it provides a smaller volume, is faster, and carries less infection/transfusion risk. Vitamin K is given to sustain reversal (PCC/FFP provide immediate but temporary correction). For mechanical valves, DOACs are contraindicated, so warfarin must be restarted — this makes the bridging decision critical. Upper GI bleeding with melena requires endoscopy for both diagnosis and potential intervention.",
       "wordLimit": 400,
       "tags": ["pharmacology", "anticoagulation"]
     },
     {
       "id": "w-005",
       "prompt": "A 35-year-old female presents with intermittent epigastric pain, bloating, and diarrhea. She has a family history of celiac disease. Describe the diagnostic workup for celiac disease, including appropriate serologic testing, the role of endoscopy with biopsy, and the management approach including dietary counseling.",
+      "modelAnswer": "First, ensure the patient is on a gluten-containing diet for at least 4-6 weeks before testing (otherwise serology and histology may be falsely negative). First-line serology: tissue transglutaminase IgA (tTG-IgA) plus total IgA level (to rule out IgA deficiency, which would cause false-negative tTG-IgA). If IgA deficient, check IgG-based tests (tTG-IgG or DGP-IgG). If serology is positive or clinical suspicion is high despite negative serology, refer for upper endoscopy with multiple duodenal biopsies (at least 4 from the duodenum and 1-2 from the bulb). Histology shows villous atrophy, crypt hyperplasia, and increased intraepithelial lymphocytes (Marsh classification: 0-3). HLA DQ2/DQ8 genotyping has high negative predictive value — absence essentially rules out celiac disease, but presence is common (30% of population) so it is not diagnostic. Management: lifelong strict gluten-free diet (avoid wheat, barley, rye, and cross-contamination). Refer to a dietitian specializing in celiac disease. Check for nutritional deficiencies (iron, B12, folate, vitamin D, calcium) and bone density (DXA scan) at diagnosis. Monitor for complications: persistent symptoms may indicate refractory celiac disease, enteropathy-associated T-cell lymphoma, or other autoimmune conditions. Screen first-degree relatives with serology. Follow up with repeat serology at 6-12 months to assess adherence.",
       "rubric": [
         "Lists appropriate serologic tests (tTG-IgA, total IgA, EMA)",
         "Explains need for gluten-containing diet before testing",
@@ -76,8 +85,47 @@
         "Mentions monitoring for complications (osteoporosis, lymphoma risk) and nutritional deficiencies",
         "Addresses family screening recommendations"
       ],
+      "explanation": "The key diagnostic principle is that testing requires ongoing gluten exposure — a common reason for false-negative results is prior self-initiation of a gluten-free diet. Serology is the first step, but endoscopy with biopsy remains the gold standard for confirmation. The gluten-free diet is lifelong and requires careful dietary counseling. Celiac disease is associated with several autoimmune conditions (type 1 diabetes, autoimmune thyroiditis) and complications including osteoporosis, lymphoma, and refractory celiac disease.",
       "wordLimit": 450,
       "tags": ["gastroenterology", "celiac"]
+    },
+    {
+      "id": "w-006",
+      "prompt": "A 55-year-old man with a 30-pack-year smoking history presents with progressive dyspnea, chronic cough, and recent hemoptysis. Chest X-ray shows a right hilar mass. You suspect lung cancer. Describe the diagnostic approach, staging workup, and management options based on stage, using the provided sub-questions.",
+      "modelAnswer": "Start with a contrast-enhanced CT chest and upper abdomen (including adrenals and liver). Obtain tissue diagnosis via bronchoscopy with endobronchial ultrasound (EBUS-TBNA) for central lesions or CT-guided biopsy for peripheral lesions. Stage using the TNM 8th edition system: CT for T and N, PET-CT for M stage, and if negative for distant mets but N2/N3 disease suspected, mediastinoscopy for confirmatory nodal staging. Brain MRI is recommended for Stages II-IV. Management: Stage I-II — surgical resection (lobectomy with mediastinal lymph node dissection) or SBRT for medically inoperable. Stage IIIA — multimodality: neoadjuvant chemoimmunotherapy followed by surgery, or definitive chemoradiation with durvalumab consolidation. Stage IIIB/IV — systemic therapy: platinum doublet with checkpoint inhibitor (pembrolizumab for PD-L1 >= 50%, else chemo-immunotherapy), with molecular testing guiding targeted therapy if EGFR, ALK, ROS1, or other driver mutations are present. Palliative RT for symptomatic mets.",
+      "rubric": [
+        "Describes appropriate initial imaging (CT chest, PET-CT)",
+        "Discusses tissue diagnosis methods (bronchoscopy, EBUS, CT-guided biopsy)",
+        "Outlines TNM staging and role of brain MRI",
+        "Differentiates management by stage (surgery, SBRT, chemoradiation, systemic therapy)",
+        "Mentions molecular testing and targeted therapy/immunotherapy options"
+      ],
+      "explanation": "Lung cancer staging drives treatment — early stage is surgical, locally advanced is multimodality, and metastatic is systemic. The shift toward neoadjuvant chemoimmunotherapy (CheckMate-816) and consolidative durvalumab after chemoradiation (PACIFIC) has improved outcomes. Molecular testing (EGFR, ALK, ROS1, BRAF, NTRK, RET, MET, KRAS G12C, PD-L1) is now standard for non-squamous NSCLC.",
+      "wordLimit": 500,
+      "tags": ["pulmonology", "oncology", "lung-cancer"],
+      "children": [
+        {
+          "id": "w-006-a",
+          "label": "Part A — Diagnosis",
+          "question": "What imaging and tissue sampling would you obtain, and what key findings would you look for?",
+          "modelAnswer": "Contrast-enhanced CT chest/upper abdomen to characterize the mass and assess mediastinal involvement, adrenal/liver mets. PET-CT for staging. Tissue via EBUS-TBNA for mediastinal nodes or CT-guided biopsy for peripheral lesions. Look for cell type (small cell vs non-small cell), and order IHC for adenocarcinoma vs squamous.",
+          "explanation": "EBUS-TBNA has largely replaced mediastinoscopy for initial nodal staging. For peripheral lesions not accessible by bronchoscopy, CT-guided or radial EBUS guidance is appropriate."
+        },
+        {
+          "id": "w-006-b",
+          "label": "Part B — Staging",
+          "question": "Using the TNM 8th edition, stage a T2aN2M0 tumor. What does this imply for management?",
+          "modelAnswer": "T2aN2M0 is Stage IIIA (T2a = tumor 3-5 cm, N2 = ipsilateral mediastinal nodal involvement, M0 = no distant mets). Stage IIIA is potentially curable with multimodality therapy: neoadjuvant chemoimmunotherapy followed by surgery, or definitive chemoradiation plus durvalumab for 12 months. A multidisciplinary tumor board discussion is essential.",
+          "explanation": "The distinction between IIIA (potentially resectable) and IIIB (unresectable) depends on N2 vs N3 involvement. Controversy remains about the best approach for IIIA — modern trials favor neoadjuvant chemoimmunotherapy."
+        },
+        {
+          "id": "w-006-c",
+          "label": "Part C — Targeted Therapy",
+          "question": "When would you order molecular testing, and which actionable mutations would change your management?",
+          "modelAnswer": "Molecular testing is indicated for all non-squamous NSCLC (adenocarcinoma, large cell, NOS) and never-smokers regardless of histology. Key actionable mutations: EGFR (osimertinib), ALK (alectinib), ROS1 (entrectinib), BRAF V600E (dabrafenib + trametinib), NTRK (larotrectinib), RET (selpercatinib), MET exon14 skipping (tepotinib), and KRAS G12C (sotorasib). PD-L1 TPS guides immunotherapy decisions. Testing should be done on biopsy tissue or liquid biopsy if tissue insufficient.",
+          "explanation": "Targeted therapies have transformed NSCLC management — oral TKIs offer higher response rates and better tolerability than chemotherapy. Sequential therapy (targeted first, then chemo-immunotherapy at progression) is the standard approach for driver-positive disease."
+        }
+      ]
     }
   ]
 }

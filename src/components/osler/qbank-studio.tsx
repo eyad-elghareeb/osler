@@ -70,6 +70,7 @@ import {
   type HighlightItem,
   type StickyNoteData,
   type WrittenDraft,
+  type WrittenEvaluation,
 } from "@/lib/osler/storage";
 import { ARTICLES } from "@/lib/osler/articles";
 import { cn } from "@/lib/utils";
@@ -84,6 +85,7 @@ import { AiAssistant } from "./ai-assistant";
 import { HighlightedContent } from "./highlighted-content";
 import { useShortcutBindings, useShortcutListener } from "@/hooks/use-shortcuts";
 import { defaultBindings } from "@/lib/osler/shortcuts";
+import { gradeWithAI, createManualEvaluation } from "@/lib/osler/grading";
 
 const LETTERS = ["A", "B", "C", "D", "E", "F", "G", "H"];
 const HIGHLIGHT_COLORS = ["#fef08a", "#86efac", "#93c5fd", "#fbcfe8", "#c4b5fd", "#fdba74"];
@@ -124,17 +126,28 @@ interface SessionData {
   strikethroughs: Record<number, number[]>;
 }
 
+interface SessionQuestionChild {
+  id: string;
+  label?: string;
+  question?: string;
+  modelAnswer?: string;
+  rubric?: string;
+  explanation?: string;
+}
+
 interface SessionQuestion {
   id: string;
   stem: string;
   choices: string[];
   correct: number; // -1 for non-MCQ
   explanation: string;
+  modelAnswer?: string;
   tags?: string[];
   difficulty?: string;
   rubric?: string[];
   redFlags?: string[];
   differential?: string[];
+  children?: SessionQuestionChild[];
 }
 
 interface TextControls {
@@ -350,7 +363,12 @@ export function QBankStudio({
               if (!s) return s;
               const drafts = { ...s.writtenDrafts, [qid]: draft };
               writtenDrafts.save(s.itemId, drafts);
-              return { ...s, writtenDrafts: drafts };
+              // Auto-reveal when evaluation is set (shows the right 45% column)
+              const next: SessionData = { ...s, writtenDrafts: drafts };
+              if (draft.evaluation && !next.revealed[next.current]) {
+                next.revealed = { ...next.revealed, [next.current]: true };
+              }
+              return next;
             });
           }}
           onRubricToggle={(qid, idx) => {
@@ -800,7 +818,7 @@ function ContentTab({
 }
 
 /* ─────────────────────────────────────────────────────────────────────────
- * CREATE TEST TAB — MedOs-lite style test builder
+ * CREATE TEST TAB — Test builder
  * ───────────────────────────────────────────────────────────────────────── */
 function CreateTestTab({
   data,
@@ -1373,6 +1391,80 @@ function QuizView({
   const [showShortcuts, setShowShortcuts] = React.useState(false);
   const bindings = useShortcutBindings();
 
+  // Written AI grading state
+  const [writtenAIGrading, setWrittenAIGrading] = React.useState<string | null>(null);
+  const [writtenChildGrading, setWrittenChildGrading] = React.useState<{ qId: string; childIdx: number } | null>(null);
+  const writtenAbortRef = React.useRef<AbortController | null>(null);
+
+  const handleWrittenAIGrade = React.useCallback(
+    async (q: SessionQuestion, draft: WrittenDraft) => {
+      const apiKey = localStorage.getItem("osler_gemini_api_key");
+      if (!apiKey) {
+        createManualEvaluation(draft.text);
+        return;
+      }
+      setWrittenAIGrading(q.id);
+      const abort = new AbortController();
+      writtenAbortRef.current = abort;
+      try {
+        const evaluation = await gradeWithAI({
+          question: q.stem,
+          modelAnswer: q.modelAnswer,
+          rubric: q.rubric,
+          userAnswer: draft.text,
+          signal: abort.signal,
+        });
+        onWrittenDraftChange(q.id, {
+          ...draft,
+          submitted: true,
+          evaluation,
+        });
+      } catch (err) {
+        if ((err as Error)?.name === "AbortError") return;
+        const manual = createManualEvaluation(draft.text);
+        onWrittenDraftChange(q.id, {
+          ...draft,
+          submitted: true,
+          evaluation: manual,
+        });
+      } finally {
+        setWrittenAIGrading(null);
+        writtenAbortRef.current = null;
+      }
+    },
+    [onWrittenDraftChange],
+  );
+
+  const handleWrittenChildAIGrade = React.useCallback(
+    async (q: SessionQuestion, draft: WrittenDraft, childIdx: number) => {
+      const apiKey = localStorage.getItem("osler_gemini_api_key");
+      if (!apiKey) return;
+      const child = q.children?.[childIdx];
+      if (!child) return;
+      const childAns = draft.childAnswers?.[childIdx] ?? "";
+      if (!childAns.trim()) return;
+      setWrittenChildGrading({ qId: q.id, childIdx });
+      try {
+        const evaluation = await gradeWithAI({
+          question: child.question || q.stem,
+          modelAnswer: child.modelAnswer || q.modelAnswer,
+          userAnswer: childAns,
+        });
+        const childEvals = [...(draft.childEvaluations ?? [])];
+        childEvals[childIdx] = evaluation;
+        onWrittenDraftChange(q.id, { ...draft, childEvaluations: childEvals });
+      } catch {
+        const manual = createManualEvaluation(childAns);
+        const childEvals = [...(draft.childEvaluations ?? [])];
+        childEvals[childIdx] = manual;
+        onWrittenDraftChange(q.id, { ...draft, childEvaluations: childEvals });
+      } finally {
+        setWrittenChildGrading(null);
+      }
+    },
+    [onWrittenDraftChange],
+  );
+
   // Sticky notes
   const [notes, setNotes] = React.useState<StickyNoteData[]>([]);
   const noteColorIdx = React.useRef(0);
@@ -1535,6 +1627,13 @@ function QuizView({
     rubricChecked: q.rubric ? q.rubric.map(() => false) : [],
     submitted: false,
   };
+  const writtenVerdict: "pass" | "fail" | null =
+    writtenDraft.evaluation?.manualVerdict === "pass"
+      ? "pass"
+      : writtenDraft.evaluation?.manualVerdict === "fail"
+        ? "fail"
+        : null;
+  const writtenPassed = writtenVerdict === "pass" || (writtenVerdict === null && writtenDraft.evaluation?.passed === true);
   const rubricState = session.rubricState[q.id] ?? (q.rubric ? q.rubric.map(() => false) : []);
   const rating = session.ratings[q.id];
 
@@ -1997,12 +2096,13 @@ function QuizView({
                       </div>
                     ) : null}
 
-                    {/* Written engine: textarea + rubric */}
+                    {/* Written engine: textarea + grading */}
                     {session.engine === "written" && (
                       <WrittenEngineView
                         question={q}
                         draft={writtenDraft}
                         submitted={submitted}
+                        grading={writtenAIGrading === q.id}
                         onTextChange={(text) =>
                           onWrittenDraftChange(q.id, { ...writtenDraft, text })
                         }
@@ -2013,6 +2113,56 @@ function QuizView({
                           next[idx] = !next[idx];
                           onWrittenDraftChange(q.id, { ...writtenDraft, rubricChecked: next });
                         }}
+                        onGradeAI={() => handleWrittenAIGrade(q, writtenDraft)}
+                        onGradeManual={() => {
+                          const eval_ = createManualEvaluation(writtenDraft.text);
+                          onWrittenDraftChange(q.id, {
+                            ...writtenDraft,
+                            submitted: true,
+                            evaluation: eval_,
+                          });
+                        }}
+                        onPassFail={(v) => {
+                          const ev = writtenDraft.evaluation;
+                          if (!ev) {
+                            const manual = createManualEvaluation(writtenDraft.text);
+                            manual.manualVerdict = v;
+                            manual.passed = v === "pass";
+                            onWrittenDraftChange(q.id, {
+                              ...writtenDraft,
+                              submitted: true,
+                              evaluation: manual,
+                            });
+                          } else {
+                            onWrittenDraftChange(q.id, {
+                              ...writtenDraft,
+                              evaluation: { ...ev, manualVerdict: v, passed: v === "pass" },
+                            });
+                          }
+                        }}
+                        onChildTextChange={(childIdx, text) => {
+                          const childAnswers = [...(writtenDraft.childAnswers ?? [])];
+                          while (childAnswers.length <= childIdx) childAnswers.push("");
+                          childAnswers[childIdx] = text;
+                          onWrittenDraftChange(q.id, { ...writtenDraft, childAnswers });
+                        }}
+                        onChildGradeAI={(childIdx) => handleWrittenChildAIGrade(q, writtenDraft, childIdx)}
+                        onChildGradeManual={(childIdx) => {
+                          const childAns = writtenDraft.childAnswers?.[childIdx] ?? "";
+                          const eval_ = createManualEvaluation(childAns);
+                          const childEvals = [...(writtenDraft.childEvaluations ?? [])];
+                          childEvals[childIdx] = eval_;
+                          onWrittenDraftChange(q.id, { ...writtenDraft, childEvaluations: childEvals });
+                        }}
+                        onChildPassFail={(childIdx, v) => {
+                          const childEvals = [...(writtenDraft.childEvaluations ?? [])];
+                          const ev = childEvals[childIdx];
+                          if (ev) {
+                            childEvals[childIdx] = { ...ev, manualVerdict: v, passed: v === "pass" };
+                            onWrittenDraftChange(q.id, { ...writtenDraft, childEvaluations: childEvals });
+                          }
+                        }}
+                        childGrading={writtenChildGrading?.qId === q.id ? writtenChildGrading.childIdx : null}
                       />
                     )}
 
@@ -2072,22 +2222,106 @@ function QuizView({
                   </div>
                 </div>
 
-                {/* Right column: explanation (split-screen in tutor mode + after submit) */}
+                {/* Right column: explanation / evaluation (split-screen in tutor mode) */}
                 {submitted && session.mode === "tutor" && (
                   <div
                     className={`medos-qbank-acol w-[45%] overflow-y-auto medos-scroll bg-muted/20 ${mobileTutorTab === "question" ? "hidden md:block" : ""}`}
                   >
                     <div className="px-4 sm:px-6 py-4">
-                      <ExplanationCard q={q} selected={selected} nonMcq={!isMCQ} highlights={currentHighlights} packUid={activeItem.uid} questionIdx={session.current} eraserMode={eraserMode} />
+                      {session.engine === "written" ? (
+                        <WrittenEvaluationPanel
+                          draft={writtenDraft}
+                          question={q}
+                          passed={writtenPassed}
+                          isManual={writtenDraft.evaluation?.score === null}
+                          onRubricToggle={(idx) => {
+                            const cur = writtenDraft.rubricChecked;
+                            const next = [...cur];
+                            while (next.length < (q.rubric?.length ?? 0)) next.push(false);
+                            next[idx] = !next[idx];
+                            onWrittenDraftChange(q.id, { ...writtenDraft, rubricChecked: next });
+                          }}
+                          onPassFail={(v) => {
+                            const ev = writtenDraft.evaluation;
+                            if (!ev) {
+                              const manual = createManualEvaluation(writtenDraft.text);
+                              manual.manualVerdict = v;
+                              manual.passed = v === "pass";
+                              onWrittenDraftChange(q.id, {
+                                ...writtenDraft,
+                                submitted: true,
+                                evaluation: manual,
+                              });
+                            } else {
+                              onWrittenDraftChange(q.id, {
+                                ...writtenDraft,
+                                evaluation: { ...ev, manualVerdict: v, passed: v === "pass" },
+                              });
+                            }
+                          }}
+                          onChildPassFail={(childIdx, v) => {
+                            const childEvals = [...(writtenDraft.childEvaluations ?? [])];
+                            const ev = childEvals[childIdx];
+                            if (ev) {
+                              childEvals[childIdx] = { ...ev, manualVerdict: v, passed: v === "pass" };
+                              onWrittenDraftChange(q.id, { ...writtenDraft, childEvaluations: childEvals });
+                            }
+                          }}
+                        />
+                      ) : (
+                        <ExplanationCard q={q} selected={selected} nonMcq={!isMCQ} highlights={currentHighlights} packUid={activeItem.uid} questionIdx={session.current} eraserMode={eraserMode} />
+                      )}
                     </div>
                   </div>
                 )}
 
-                {/* Non-MCQ explanation panel (written, osce, flashcard) */}
+                {/* Non-MCQ explanation panel — bottom panel when not in tutor mode */}
                 {submitted && !isMCQ && session.mode !== "tutor" && (
                   <div className="border-t border-border bg-muted/20 px-4 sm:px-6 py-4">
                     <div className="max-w-3xl mx-auto">
-                      <ExplanationCard q={q} selected={undefined} nonMcq highlights={currentHighlights} packUid={activeItem.uid} questionIdx={session.current} eraserMode={eraserMode} />
+                      {session.engine === "written" ? (
+                        <WrittenEvaluationPanel
+                          draft={writtenDraft}
+                          question={q}
+                          passed={writtenPassed}
+                          isManual={writtenDraft.evaluation?.score === null}
+                          onRubricToggle={(idx) => {
+                            const cur = writtenDraft.rubricChecked;
+                            const next = [...cur];
+                            while (next.length < (q.rubric?.length ?? 0)) next.push(false);
+                            next[idx] = !next[idx];
+                            onWrittenDraftChange(q.id, { ...writtenDraft, rubricChecked: next });
+                          }}
+                          onPassFail={(v) => {
+                            const ev = writtenDraft.evaluation;
+                            if (!ev) {
+                              const manual = createManualEvaluation(writtenDraft.text);
+                              manual.manualVerdict = v;
+                              manual.passed = v === "pass";
+                              onWrittenDraftChange(q.id, {
+                                ...writtenDraft,
+                                submitted: true,
+                                evaluation: manual,
+                              });
+                            } else {
+                              onWrittenDraftChange(q.id, {
+                                ...writtenDraft,
+                                evaluation: { ...ev, manualVerdict: v, passed: v === "pass" },
+                              });
+                            }
+                          }}
+                          onChildPassFail={(childIdx, v) => {
+                            const childEvals = [...(writtenDraft.childEvaluations ?? [])];
+                            const ev = childEvals[childIdx];
+                            if (ev) {
+                              childEvals[childIdx] = { ...ev, manualVerdict: v, passed: v === "pass" };
+                              onWrittenDraftChange(q.id, { ...writtenDraft, childEvaluations: childEvals });
+                            }
+                          }}
+                        />
+                      ) : (
+                        <ExplanationCard q={q} selected={undefined} nonMcq highlights={currentHighlights} packUid={activeItem.uid} questionIdx={session.current} eraserMode={eraserMode} />
+                      )}
                     </div>
                   </div>
                 )}
@@ -2178,7 +2412,7 @@ function QuizView({
                 Submit Answer
               </Button>
             )}
-            {!submitted && !isMCQ && (
+            {!submitted && !isMCQ && session.engine !== "written" && (
               <Button size="sm" onClick={onSubmit} className="h-9 rounded-lg">
                 {session.engine === "flashcard" ? "Reveal Answer" : "Submit & Self-Grade"}
               </Button>
@@ -2262,7 +2496,7 @@ function QuizView({
               >
                 Submit Answer
               </Button>
-            ) : !submitted && !isMCQ ? (
+            ) : !submitted && !isMCQ && session.engine !== "written" ? (
               <Button
                 size="sm" onClick={onSubmit}
                 className="flex-1 h-10 rounded-lg medos-touch-target"
@@ -2355,6 +2589,113 @@ function QuizView({
   );
 }
 
+/* ── Written evaluation display ──────────────────────────────────────── */
+function WrittenEvaluationCard({
+  evaluation,
+  verdict,
+  onPassFail,
+}: {
+  evaluation: WrittenEvaluation;
+  verdict: "pass" | "fail" | null;
+  onPassFail?: (v: "pass" | "fail") => void;
+}) {
+  const passed = verdict === "pass" || (verdict === null && evaluation.passed);
+  const isManual = evaluation.score === null;
+  return (
+    <div className="space-y-4">
+      {/* Score + verdict */}
+      <div className="flex items-center gap-4">
+        <div
+          className={cn(
+            "size-14 rounded-full flex items-center justify-center text-lg font-bold border-[3px] shrink-0",
+            passed
+              ? "border-emerald-500 bg-emerald-500/10 text-emerald-500"
+              : "border-red-500 bg-red-500/10 text-red-500",
+          )}
+        >
+          {evaluation.score !== null ? evaluation.score : "—"}
+        </div>
+        <div>
+          <div className="text-base font-bold">{passed ? "Passed" : "Needs revision"}</div>
+          <div className="text-xs text-muted-foreground">{evaluation.source}</div>
+        </div>
+      </div>
+
+      {/* Strengths */}
+      {evaluation.strengths.length > 0 && (
+        <div className="space-y-1.5">
+          {evaluation.strengths.map((s, i) => (
+            <div key={i} className="flex items-start gap-2 text-sm">
+              <Check className="size-4 text-emerald-500 shrink-0 mt-0.5" />
+              <span>{s}</span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Gaps */}
+      {evaluation.gaps.length > 0 && (
+        <div className="space-y-1.5">
+          {evaluation.gaps.map((g, i) => (
+            <div key={i} className="flex items-start gap-2 text-sm">
+              <span className="size-1.5 rounded-full bg-red-400 shrink-0 mt-2" />
+              <span className="text-muted-foreground">{g}</span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Feedback */}
+      {evaluation.feedback && (
+        <div className="text-sm text-foreground bg-muted/30 rounded-lg px-3 py-2.5 leading-relaxed">
+          {evaluation.feedback}
+        </div>
+      )}
+
+      {/* Manual override */}
+      {onPassFail && (
+        <div className="flex gap-3 pt-3 border-t border-border">
+          <button
+            type="button"
+            onClick={() => onPassFail("pass")}
+            className={cn(
+              "flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-sm font-semibold border-2 transition-all",
+              passed
+                ? "border-emerald-500 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
+                : "border-border hover:border-emerald-500/40 hover:bg-emerald-500/5",
+            )}
+          >
+            <Check className="size-4" />
+            Pass
+          </button>
+          <button
+            type="button"
+            onClick={() => onPassFail("fail")}
+            className={cn(
+              "flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-sm font-semibold border-2 transition-all",
+              !passed
+                ? "border-red-500 bg-red-500/10 text-red-500"
+                : "border-border hover:border-red-500/40 hover:bg-red-500/5",
+            )}
+          >
+            <X className="size-4" />
+            Fail
+          </button>
+        </div>
+      )}
+
+      {/* Self-grading rubric — only after AI fails / manual grade */}
+      {isManual && (
+        <div className="pt-3 border-t border-border">
+          <p className="text-xs text-muted-foreground mb-2">
+            AI grading was unavailable — use this rubric to self-grade each criterion:
+          </p>
+        </div>
+      )}
+    </div>
+  );
+}
+
 /* ─────────────────────────────────────────────────────────────────────────
  * WRITTEN ENGINE VIEW
  * ───────────────────────────────────────────────────────────────────────── */
@@ -2364,80 +2705,408 @@ function WrittenEngineView({
   submitted,
   onTextChange,
   onRubricToggle,
+  onGradeAI,
+  onGradeManual,
+  onPassFail,
+  grading,
+  onChildTextChange,
+  onChildGradeAI,
+  onChildGradeManual,
+  onChildPassFail,
+  childGrading,
 }: {
   question: SessionQuestion;
   draft: WrittenDraft;
   submitted: boolean;
   onTextChange: (text: string) => void;
   onRubricToggle: (idx: number) => void;
+  onGradeAI?: () => void;
+  onGradeManual?: () => void;
+  onPassFail?: (v: "pass" | "fail") => void;
+  grading?: boolean;
+  onChildTextChange?: (childIdx: number, text: string) => void;
+  onChildGradeAI?: (childIdx: number) => void;
+  onChildGradeManual?: (childIdx: number) => void;
+  onChildPassFail?: (childIdx: number, v: "pass" | "fail") => void;
+  childGrading?: number | null;
 }) {
   const wordCount = draft.text.trim().split(/\s+/).filter(Boolean).length;
-  return (
-    <div className="mt-6 space-y-4">
-      <div>
-        <div className="flex items-center justify-between mb-2">
-          <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-            Your Response
-          </label>
-          <span className="text-xs text-muted-foreground tabular-nums">
-            {wordCount} words
-          </span>
-        </div>
-        <textarea
-          value={draft.text}
-          onChange={(e) => onTextChange(e.target.value)}
-          disabled={submitted}
-          placeholder="Type your answer here…"
-          className="osler-written-area"
-          style={{ minHeight: 220 }}
-        />
-      </div>
+  const hasEvaluation = !!draft.evaluation;
+  const verdict: "pass" | "fail" | null =
+    draft.evaluation?.manualVerdict === "pass"
+      ? "pass"
+      : draft.evaluation?.manualVerdict === "fail"
+        ? "fail"
+        : null;
+  const isManual = draft.evaluation?.score === null;
+  const passed = verdict === "pass" || (verdict === null && draft.evaluation?.passed === true);
+  const children = question.children ?? [];
 
-      {question.rubric && question.rubric.length > 0 && (
-        <div className="qbank-card">
-          <h4 className="text-sm font-semibold mb-1 flex items-center gap-2">
-            <Sparkles className="size-4 text-primary" />
-            Self-Grading Rubric
-          </h4>
-          <p className="text-xs text-muted-foreground mb-3">
-            {submitted
-              ? "Review the rubric items you addressed."
-              : "Check each criterion you addressed in your response."}
-          </p>
-          <div className="space-y-1.5">
-            {question.rubric.map((item, i) => {
-              const checked = draft.rubricChecked[i] ?? false;
+  // ── Input mode (before submit) ───────────────────────────────────────
+  if (!submitted && !hasEvaluation) {
+    return (
+      <div className="mt-6 space-y-4">
+        <div>
+          <div className="flex items-center justify-between mb-2">
+            <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              Your Response
+            </label>
+            <span className="text-xs text-muted-foreground tabular-nums">
+              {wordCount} words
+            </span>
+          </div>
+          <textarea
+            value={draft.text}
+            onChange={(e) => onTextChange(e.target.value)}
+            placeholder="Type your answer here…"
+            className="osler-written-area"
+            style={{ minHeight: 220 }}
+          />
+        </div>
+
+        {/* Grade buttons */}
+        <div className="flex gap-2">
+          <button
+            type="button"
+            onClick={onGradeManual}
+            disabled={!draft.text.trim()}
+            className="px-4 py-2 rounded-lg text-sm font-medium border border-border hover:border-primary/40 transition-colors disabled:opacity-50"
+          >
+            Manual Grade
+          </button>
+          <button
+            type="button"
+            onClick={onGradeAI}
+            disabled={grading || !draft.text.trim()}
+            className="px-4 py-2 rounded-lg text-sm font-medium bg-primary text-primary-foreground hover:opacity-90 transition-opacity disabled:opacity-50"
+          >
+            {grading ? (
+              <span className="flex items-center gap-2">
+                <Loader2 className="size-4 animate-spin" />
+                Grading…
+              </span>
+            ) : (
+              "Grade with AI"
+            )}
+          </button>
+        </div>
+
+        {grading && (
+          <div className="flex items-center gap-2 text-xs text-muted-foreground bg-muted/30 rounded-lg px-3 py-2">
+            <Loader2 className="size-3.5 animate-spin" />
+            Analyzing your answer…
+          </div>
+        )}
+
+        {/* Children questions — per-part textareas */}
+        {children.length > 0 && (
+          <div className="space-y-5 pt-4 border-t border-border">
+            <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              Part Questions
+            </h4>
+            {children.map((child, ci) => {
+              const childAns = draft.childAnswers?.[ci] ?? "";
               return (
-                <button
-                  key={i}
-                  type="button"
-                  disabled={submitted}
-                  onClick={() => onRubricToggle(i)}
-                  className={cn(
-                    "w-full flex items-start gap-2.5 px-3 py-2 rounded-md text-left text-sm transition-colors",
-                    checked
-                      ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
-                      : "hover:bg-muted",
-                    submitted && "cursor-default opacity-70"
+                <div key={child.id} className="space-y-2 pl-4 border-l-2 border-muted">
+                  <div className="text-xs font-semibold text-muted-foreground">
+                    {child.label || `Part ${ci + 1}`}
+                  </div>
+                  {child.question && (
+                    <div className="text-sm text-foreground mb-1.5">{child.question}</div>
                   )}
-                >
-                  {checked ? (
-                    <CheckCircle2 className="size-4 text-emerald-500 shrink-0 mt-0.5" />
-                  ) : (
-                    <Circle className="size-4 text-muted-foreground shrink-0 mt-0.5" />
+                  <textarea
+                    value={childAns}
+                    onChange={(e) => onChildTextChange?.(ci, e.target.value)}
+                    placeholder={`Answer for ${child.label || `part ${ci + 1}`}…`}
+                    className="osler-written-area"
+                    style={{ minHeight: 120 }}
+                  />
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => onChildGradeManual?.(ci)}
+                      disabled={!childAns.trim()}
+                      className="px-3 py-1.5 rounded-md text-xs font-medium border border-border hover:border-primary/40 transition-colors disabled:opacity-50"
+                    >
+                      Manual Grade
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => onChildGradeAI?.(ci)}
+                      disabled={childGrading === ci || !childAns.trim()}
+                      className="px-3 py-1.5 rounded-md text-xs font-medium bg-primary text-primary-foreground hover:opacity-90 transition-opacity disabled:opacity-50"
+                    >
+                      {childGrading === ci ? (
+                        <span className="flex items-center gap-1.5">
+                          <Loader2 className="size-3 animate-spin" />
+                          Grading…
+                        </span>
+                      ) : (
+                        "Grade with AI"
+                      )}
+                    </button>
+                  </div>
+                  {draft.childEvaluations?.[ci] && (
+                    <div className="mt-2">
+                      <WrittenEvaluationCard
+                        evaluation={draft.childEvaluations[ci]!}
+                        verdict={null}
+                      />
+                    </div>
                   )}
-                  <span>{item}</span>
-                </button>
+                </div>
               );
             })}
           </div>
-          <div className="mt-3 pt-3 border-t border-border text-xs text-muted-foreground">
-            Score:{" "}
+        )}
+      </div>
+    );
+  }
+
+  // ── Evaluation mode — only comparison content; evaluation card is in parent's right column ──
+  return (
+    <div className="space-y-5">
+      {/* Compare grid */}
+      <div className="space-y-4">
+        <div>
+          <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2 flex items-center gap-1.5">
+            <span className="size-2 rounded-full bg-amber-500" />
+            Your Answer
+          </h4>
+          <div className="text-sm whitespace-pre-wrap leading-relaxed text-foreground bg-muted/30 rounded-lg p-4 min-h-[80px] max-h-[400px] overflow-y-auto">
+            {draft.text.trim() || (
+              <span className="text-muted-foreground italic">(No answer written)</span>
+            )}
+          </div>
+        </div>
+        <div>
+          <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2 flex items-center gap-1.5">
+            <span className="size-2 rounded-full bg-primary" />
+            Model Answer
+          </h4>
+          <div className="text-sm whitespace-pre-wrap leading-relaxed text-foreground bg-primary/5 rounded-lg p-4 min-h-[80px] max-h-[400px] overflow-y-auto">
+            {question.modelAnswer || (
+              <span className="text-muted-foreground italic">(No model answer supplied)</span>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* "No evaluation yet" prompt (only shown when no draft evaluation exists) */}
+      {!draft.evaluation && (
+        <div className="rounded-xl border-2 border-border overflow-hidden">
+          <div className="bg-card px-5 py-4">
+            <div className="flex items-center gap-2 mb-3">
+              <Sparkles className="size-4 text-primary" />
+              <h3 className="text-sm font-semibold text-foreground">Evaluation</h3>
+            </div>
+            <p className="text-sm text-muted-foreground mb-4">
+              Compare your response with the model answer above, then grade it.
+            </p>
+            <div className="flex justify-center gap-3">
+              <button
+                type="button"
+                onClick={onGradeManual}
+                className="px-5 py-2.5 rounded-lg text-sm font-medium border border-border hover:border-primary/40 transition-colors"
+              >
+                Manual Grade
+              </button>
+              <button
+                type="button"
+                onClick={onGradeAI}
+                disabled={grading}
+                className="px-5 py-2.5 rounded-lg text-sm font-medium bg-primary text-primary-foreground hover:opacity-90 transition-opacity disabled:opacity-50"
+              >
+                {grading ? (
+                  <span className="flex items-center gap-2">
+                    <Loader2 className="size-4 animate-spin" />
+                    Grading…
+                  </span>
+                ) : (
+                  "Grade with AI"
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ── Written evaluation panel (renders in parent's 45% right column) ─── */
+function WrittenEvaluationPanel({
+  draft,
+  question,
+  passed,
+  isManual,
+  onRubricToggle,
+  onPassFail,
+  onChildPassFail,
+}: {
+  draft: WrittenDraft;
+  question: SessionQuestion;
+  passed: boolean;
+  isManual: boolean;
+  onRubricToggle: (idx: number) => void;
+  onPassFail?: (v: "pass" | "fail") => void;
+  onChildPassFail?: (childIdx: number, v: "pass" | "fail") => void;
+}) {
+  const children = question.children ?? [];
+  if (!draft.evaluation) return null;
+  return (
+    <div className={`rounded-xl border-2 overflow-hidden ${passed ? "border-emerald-600" : "border-red-500"}`}>
+      {/* ── Header bar (like MCQ correct/incorrect header) ────────── */}
+      <div className={`px-4 py-3 flex items-center gap-3 ${passed ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400" : "bg-red-500/10 text-red-500"}`}>
+        <div className={`size-9 rounded-full flex items-center justify-center shrink-0 border-[3px] font-bold text-sm ${passed ? "border-emerald-500 bg-emerald-500/10 text-emerald-500" : "border-red-500 bg-red-500/10 text-red-500"}`}>
+          {draft.evaluation.score !== null ? draft.evaluation.score : "—"}
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="text-base font-bold">{passed ? "Passed" : "Needs revision"}</div>
+          <div className="text-xs mt-0.5 opacity-80">{draft.evaluation.source}</div>
+        </div>
+      </div>
+
+      {/* ── Strengths, gaps, feedback ────────────────────────────── */}
+      <div className="bg-card px-5 py-3 space-y-3 border-b border-border/60">
+        {draft.evaluation.strengths.length > 0 && (
+          <div className="space-y-1">
+            {draft.evaluation.strengths.map((s, i) => (
+              <div key={i} className="flex items-start gap-2 text-sm">
+                <Check className="size-4 text-emerald-500 shrink-0 mt-0.5" />
+                <span>{s}</span>
+              </div>
+            ))}
+          </div>
+        )}
+        {draft.evaluation.gaps.length > 0 && (
+          <div className="space-y-1">
+            {draft.evaluation.gaps.map((g, i) => (
+              <div key={i} className="flex items-start gap-2 text-sm">
+                <span className="size-1.5 rounded-full bg-red-400 shrink-0 mt-2" />
+                <span className="text-muted-foreground">{g}</span>
+              </div>
+            ))}
+          </div>
+        )}
+        {draft.evaluation.feedback && (
+          <div className="text-sm text-foreground bg-muted/30 rounded-lg px-3 py-2 leading-relaxed">
+            {draft.evaluation.feedback}
+          </div>
+        )}
+      </div>
+
+      {/* ── Rubric (manual grading only) ─────────────────────────── */}
+      {isManual && question.rubric && question.rubric.length > 0 && (
+        <div className="bg-card px-5 py-3 space-y-2 border-b border-border/60">
+          <h4 className="text-xs font-semibold flex items-center gap-2">
+            <ListChecks className="size-3.5 text-primary" />
+            Self-Grading Rubric
+          </h4>
+          {question.rubric.map((item, i) => {
+            const checked = draft.rubricChecked[i] ?? false;
+            return (
+              <button
+                key={i}
+                type="button"
+                onClick={() => onRubricToggle(i)}
+                className={cn(
+                  "w-full flex items-start gap-2.5 px-3 py-2 rounded-md text-left text-sm transition-colors",
+                  checked
+                    ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
+                    : "hover:bg-muted",
+                )}
+              >
+                {checked ? (
+                  <CheckCircle2 className="size-4 text-emerald-500 shrink-0 mt-0.5" />
+                ) : (
+                  <Circle className="size-4 text-muted-foreground shrink-0 mt-0.5" />
+                )}
+                <span>{item}</span>
+              </button>
+            );
+          })}
+          <div className="pt-2 border-t border-border text-xs text-muted-foreground">
+            Self score:{" "}
             <span className="font-semibold text-foreground">
               {draft.rubricChecked.filter(Boolean).length}
             </span>{" "}
             / {question.rubric.length}
           </div>
+        </div>
+      )}
+
+      {/* ── Explanation — main body (like MCQ explanation section) ── */}
+      {question.explanation && (
+        <div className="bg-card px-5 py-4" data-explanation>
+          <div className="flex items-center gap-2 mb-3">
+            <Sparkles className="size-4 text-primary" />
+            <h3 className="text-sm font-semibold text-foreground">Explanation</h3>
+          </div>
+          <div className="uworld-prose text-[14px] whitespace-pre-wrap leading-relaxed text-foreground">
+            {question.explanation}
+          </div>
+        </div>
+      )}
+
+      {/* ── Pass/Fail override ───────────────────────────────────── */}
+      {onPassFail && (
+        <div className="bg-card px-5 py-3 border-t border-border/60 flex gap-3">
+          <button
+            type="button"
+            onClick={() => onPassFail("pass")}
+            className={cn(
+              "flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-sm font-semibold border-2 transition-all",
+              passed
+                ? "border-emerald-500 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
+                : "border-border hover:border-emerald-500/40 hover:bg-emerald-500/5",
+            )}
+          >
+            <Check className="size-4" />
+            Pass
+          </button>
+          <button
+            type="button"
+            onClick={() => onPassFail("fail")}
+            className={cn(
+              "flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-sm font-semibold border-2 transition-all",
+              !passed
+                ? "border-red-500 bg-red-500/10 text-red-500"
+                : "border-border hover:border-red-500/40 hover:bg-red-500/5",
+            )}
+          >
+            <X className="size-4" />
+            Fail
+          </button>
+        </div>
+      )}
+
+      {/* ── Children evaluations ─────────────────────────────────── */}
+      {children.length > 0 && (
+        <div className="bg-card px-5 py-3 border-t border-border/60 space-y-4">
+          <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+            Part Evaluations
+          </h4>
+          {children.map((child, ci) => {
+            const childEval = draft.childEvaluations?.[ci];
+            if (!childEval) return null;
+            return (
+              <div key={child.id} className="space-y-1.5">
+                <div className="text-xs font-medium text-muted-foreground">
+                  {child.label || `Part ${ci + 1}`}
+                </div>
+                <WrittenEvaluationCard
+                  evaluation={childEval}
+                  verdict={null}
+                  onPassFail={
+                    onChildPassFail
+                      ? (v) => onChildPassFail(ci, v)
+                      : undefined
+                  }
+                />
+              </div>
+            );
+          })}
         </div>
       )}
     </div>
@@ -2648,7 +3317,7 @@ function NavigatorPanel(p: NavigatorPanelProps) {
 }
 
 /* ─────────────────────────────────────────────────────────────────────────
- * EXPLANATION CARD — 1:1 copy from medos-lite
+ * EXPLANATION CARD
  * ───────────────────────────────────────────────────────────────────────── */
 function ExplanationCard({
   q,
@@ -3056,17 +3725,28 @@ function contentToQuestions(content: AnyContent): SessionQuestion[] {
     });
   } else if (content.type === "written") {
     (content as WrittenContent).prompts.forEach((p) => {
+      const children = p.children?.map((c) => ({
+        id: c.id,
+        label: c.label,
+        question: c.question,
+        modelAnswer: c.modelAnswer,
+        rubric: c.rubric,
+        explanation: c.explanation,
+      }));
       out.push({
         id: p.id,
         stem: p.prompt,
         choices: [],
         correct: -1,
-        explanation:
+        modelAnswer: p.modelAnswer,
+        explanation: p.explanation ?? (
           p.rubric.length > 0
             ? `Self-grading rubric:\n${p.rubric.map((r, i) => `${i + 1}. ${r}`).join("\n")}`
-            : "",
+            : ""
+        ),
         rubric: p.rubric,
         tags: p.tags,
+        children,
       });
     });
   } else if (content.type === "osce") {

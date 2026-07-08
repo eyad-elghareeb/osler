@@ -1,15 +1,201 @@
 /**
  * Osler storage — progress tracking + sessions + highlights + sticky notes.
- * All via localStorage. Mirrors medos-lite's storage capabilities.
+ * Powered by IndexedDB for robust, large-capacity local persistence.
  */
 
 import type { EngineType } from "./types";
 
-const KEY = "osler-progress-v1";
-const SESSIONS_KEY = "osler-qbank-sessions-v1";
-const HIGHLIGHTS_KEY = "osler-highlights-v1";
-const STICKY_NOTES_KEY = "osler-sticky-notes-v1";
-const WRITTEN_DRAFTS_KEY = "osler-written-drafts-v1";
+const DB_NAME = "osler-db-v1";
+const DB_VERSION = 1;
+
+/* ── IndexedDB helpers ──────────────────────────────────────────────── */
+
+let dbInstance: IDBDatabase | null = null;
+let dbReady: Promise<IDBDatabase> | null = null;
+
+function openDB(): Promise<IDBDatabase> {
+  if (dbInstance) return Promise.resolve(dbInstance);
+  if (dbReady) return dbReady;
+
+  dbReady = new Promise<IDBDatabase>((resolve, reject) => {
+    if (typeof window === "undefined") {
+      reject(new Error("IndexedDB not available in SSR"));
+      return;
+    }
+    const req = indexedDB.open(DB_NAME, DB_VERSION);
+
+    req.onupgradeneeded = () => {
+      const db = req.result;
+      if (!db.objectStoreNames.contains("progress")) {
+        db.createObjectStore("progress", { keyPath: "key" });
+      }
+      if (!db.objectStoreNames.contains("sessions")) {
+        db.createObjectStore("sessions", { keyPath: "id" });
+      }
+      if (!db.objectStoreNames.contains("highlights")) {
+        db.createObjectStore("highlights", { keyPath: "key" });
+      }
+      if (!db.objectStoreNames.contains("articleHighlights")) {
+        db.createObjectStore("articleHighlights", { keyPath: "articleId" });
+      }
+      if (!db.objectStoreNames.contains("stickyNotes")) {
+        db.createObjectStore("stickyNotes", { keyPath: "key" });
+      }
+      if (!db.objectStoreNames.contains("writtenDrafts")) {
+        db.createObjectStore("writtenDrafts", { keyPath: "key" });
+      }
+      if (!db.objectStoreNames.contains("flashcardReviews")) {
+        db.createObjectStore("flashcardReviews", { keyPath: "key" });
+      }
+    };
+
+    req.onsuccess = () => {
+      dbInstance = req.result;
+      resolve(dbInstance);
+    };
+
+    req.onerror = () => reject(req.error);
+  });
+
+  return dbReady;
+}
+
+async function idbGet<T>(storeName: string, key: string): Promise<T | null> {
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(storeName, "readonly");
+    const store = tx.objectStore(storeName);
+    const req = store.get(key);
+    req.onsuccess = () => {
+      resolve(req.result?.value ?? null);
+    };
+    req.onerror = () => reject(req.error);
+  });
+}
+
+async function idbGetAll<T>(storeName: string): Promise<T[]> {
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(storeName, "readonly");
+    const store = tx.objectStore(storeName);
+    const req = store.getAll();
+    req.onsuccess = () => {
+      resolve(req.result ?? []);
+    };
+    req.onerror = () => reject(req.error);
+  });
+}
+
+async function idbPut(storeName: string, key: string, value: unknown): Promise<void> {
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(storeName, "readwrite");
+    const store = tx.objectStore(storeName);
+    store.put({ key, value });
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
+async function idbDelete(storeName: string, key: string): Promise<void> {
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(storeName, "readwrite");
+    const store = tx.objectStore(storeName);
+    store.delete(key);
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
+async function idbClear(storeName: string): Promise<void> {
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(storeName, "readwrite");
+    const store = tx.objectStore(storeName);
+    store.clear();
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
+async function idbPutBatch(storeName: string, entries: Array<{ key: string; value: unknown }>): Promise<void> {
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(storeName, "readwrite");
+    const store = tx.objectStore(storeName);
+    for (const entry of entries) {
+      store.put(entry);
+    }
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
+/* ── In-memory cache for synchronous reads (hydration from IDB) ─────── */
+
+const memoryCache = new Map<string, unknown>();
+let cacheHydrated = false;
+
+async function hydrateCache(): Promise<void> {
+  if (cacheHydrated) return;
+  try {
+    const db = await openDB();
+    const storeNames = Array.from(db.objectStoreNames);
+    const tx = db.transaction(storeNames, "readonly");
+    for (const name of storeNames) {
+      const store = tx.objectStore(name);
+      const req = store.getAll();
+      await new Promise<void>((resolve, reject) => {
+        req.onsuccess = () => {
+          for (const item of req.result ?? []) {
+            if (item.key && item.value !== undefined) {
+              memoryCache.set(`${name}:${item.key}`, item.value);
+            }
+          }
+          resolve();
+        };
+        req.onerror = () => reject(req.error);
+      });
+    }
+    cacheHydrated = true;
+  } catch (e) {
+    console.warn("Failed to hydrate IndexedDB cache:", e);
+  }
+}
+
+// Start hydrating immediately
+if (typeof window !== "undefined") {
+  hydrateCache().catch(() => {});
+}
+
+function getCached<T>(storeName: string, key: string): T | null {
+  return (memoryCache.get(`${storeName}:${key}`) as T) ?? null;
+}
+
+function setCached(storeName: string, key: string, value: unknown): void {
+  memoryCache.set(`${storeName}:${key}`, value);
+}
+
+function deleteCached(storeName: string, key: string): void {
+  memoryCache.delete(`${storeName}:${key}`);
+}
+
+function clearCached(storeName: string): void {
+  // Delete all keys that start with storeName:
+  for (const k of memoryCache.keys()) {
+    if (k.startsWith(`${storeName}:`)) memoryCache.delete(k);
+  }
+}
+
+/* ── Event dispatching (same as before for reactivity) ─────────────── */
+
+function dispatchChange(event: string) {
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(new CustomEvent(event));
+}
+
+/* ── Types ──────────────────────────────────────────────────────────── */
 
 export interface QuestionRecord {
   uid: string;
@@ -30,21 +216,15 @@ export interface PackProgress {
   lastAttempt: number | null;
 }
 
-interface ProgressDB {
-  records: Record<string, QuestionRecord>;
-}
-
-/* ── Highlights ─────────────────────────────────────────────────────── */
 export interface HighlightItem {
   id: string;
   color: string;
   text: string;
-  target: string; // "stem" | "choice-0" | "choice-1" | ... | "explanation" | "article"
+  target: string;
   ranges?: { start: number; end: number }[];
   createdAt?: string;
 }
 
-/* ── Sticky Notes ───────────────────────────────────────────────────── */
 export interface StickyNoteData {
   id: string;
   x: number;
@@ -53,14 +233,25 @@ export interface StickyNoteData {
   color: string;
 }
 
-/* ── Written Drafts ─────────────────────────────────────────────────── */
+export interface WrittenEvaluation {
+  score: number | null;
+  passed: boolean;
+  strengths: string[];
+  gaps: string[];
+  feedback: string;
+  source: string;
+  manualVerdict?: "pass" | "fail" | null;
+}
+
 export interface WrittenDraft {
   text: string;
   rubricChecked: boolean[];
   submitted: boolean;
+  evaluation?: WrittenEvaluation | null;
+  childAnswers?: string[];
+  childEvaluations?: (WrittenEvaluation | null)[];
 }
 
-/* ── Session (saved test) ───────────────────────────────────────────── */
 export interface SavedSession {
   id: string;
   packUid: string;
@@ -74,7 +265,6 @@ export interface SavedSession {
   flaggedCount: number;
   startedAt: number;
   completedAt?: number;
-  // Full session state for resume
   answers: Record<number, number>;
   revealed: Record<number, boolean>;
   flagged: Record<number, boolean>;
@@ -85,28 +275,8 @@ export interface SavedSession {
   ratings?: Record<string, "easy" | "hard" | "unknown">;
 }
 
-function readProgress(): ProgressDB {
-  if (typeof window === "undefined") return { records: {} };
-  try {
-    const raw = localStorage.getItem(KEY);
-    if (!raw) return { records: {} };
-    return JSON.parse(raw) as ProgressDB;
-  } catch {
-    return { records: {} };
-  }
-}
-
-function writeProgress(db: ProgressDB) {
-  if (typeof window === "undefined") return;
-  try {
-    localStorage.setItem(KEY, JSON.stringify(db));
-    window.dispatchEvent(new CustomEvent("osler-progress-changed"));
-  } catch (e) {
-    console.warn("Failed to write progress:", e);
-  }
-}
-
 /* ── Progress (question-level) ──────────────────────────────────────── */
+
 export const storage = {
   recordAnswer(
     uid: string,
@@ -116,40 +286,47 @@ export const storage = {
     correct: boolean,
     flagged: boolean
   ) {
-    const db = readProgress();
     const key = `${uid}:${qid}`;
-    db.records[key] = {
-      uid,
-      qid,
-      engine,
-      selected,
-      correct,
-      flagged,
-      timestamp: Date.now(),
+    const record: QuestionRecord = {
+      uid, qid, engine, selected, correct, flagged, timestamp: Date.now(),
     };
-    writeProgress(db);
+    setCached("progress", key, record);
+    idbPut("progress", key, record).catch(console.warn);
+    dispatchChange("osler-progress-changed");
   },
 
   getRecord(uid: string, qid: string): QuestionRecord | null {
-    const db = readProgress();
-    return db.records[`${uid}:${qid}`] ?? null;
+    return getCached<QuestionRecord>("progress", `${uid}:${qid}`);
   },
 
-  clearPack(uid: string) {
-    const db = readProgress();
-    Object.keys(db.records).forEach((k) => {
-      if (k.startsWith(`${uid}:`)) delete db.records[k];
-    });
-    writeProgress(db);
+  async clearPack(uid: string) {
+    // Gather all keys for this pack from cache
+    const keysToDelete: string[] = [];
+    for (const [k] of memoryCache) {
+      if (k.startsWith(`progress:${uid}:`)) {
+        keysToDelete.push(k.replace("progress:", ""));
+        memoryCache.delete(k);
+      }
+    }
+    for (const key of keysToDelete) {
+      await idbDelete("progress", key).catch(console.warn);
+    }
+    dispatchChange("osler-progress-changed");
   },
 
-  clearAll() {
-    writeProgress({ records: {} });
+  async clearAll() {
+    clearCached("progress");
+    await idbClear("progress").catch(console.warn);
+    dispatchChange("osler-progress-changed");
   },
 
   packProgress(uid: string): PackProgress {
-    const db = readProgress();
-    const records = Object.values(db.records).filter((r) => r.uid === uid);
+    const records: QuestionRecord[] = [];
+    for (const [k, v] of memoryCache) {
+      if (k.startsWith("progress:") && (v as QuestionRecord).uid === uid) {
+        records.push(v as QuestionRecord);
+      }
+    }
     return {
       uid,
       attempted: records.length,
@@ -163,13 +340,15 @@ export const storage = {
   },
 
   allProgress(): PackProgress[] {
-    const db = readProgress();
     const byUid = new Map<string, QuestionRecord[]>();
-    Object.values(db.records).forEach((r) => {
-      const list = byUid.get(r.uid) ?? [];
-      list.push(r);
-      byUid.set(r.uid, list);
-    });
+    for (const [k, v] of memoryCache) {
+      if (k.startsWith("progress:")) {
+        const r = v as QuestionRecord;
+        const list = byUid.get(r.uid) ?? [];
+        list.push(r);
+        byUid.set(r.uid, list);
+      }
+    }
     return Array.from(byUid.entries()).map(([uid, records]) => ({
       uid,
       attempted: records.length,
@@ -192,43 +371,39 @@ export const storage = {
   },
 };
 
-/* ── Saved Sessions (previous tests) ────────────────────────────────── */
-function readSessions(): SavedSession[] {
-  if (typeof window === "undefined") return [];
-  try {
-    const raw = localStorage.getItem(SESSIONS_KEY);
-    if (!raw) return [];
-    return JSON.parse(raw) as SavedSession[];
-  } catch {
-    return [];
-  }
-}
+/* ── Saved Sessions ─────────────────────────────────────────────────── */
 
-function writeSessions(sessions: SavedSession[]) {
-  if (typeof window === "undefined") return;
-  localStorage.setItem(SESSIONS_KEY, JSON.stringify(sessions));
-  window.dispatchEvent(new CustomEvent("osler-sessions-changed"));
+function sessionKey(id: string): string {
+  return `session:${id}`;
 }
 
 export const sessions = {
   list(): SavedSession[] {
-    return readSessions().sort(
-      (a, b) => (b.startedAt ?? 0) - (a.startedAt ?? 0)
-    );
+    const sessions: SavedSession[] = [];
+    for (const [k, v] of memoryCache) {
+      if (k.startsWith("sessions:session:")) {
+        sessions.push(v as SavedSession);
+      }
+    }
+    return sessions.sort((a, b) => (b.startedAt ?? 0) - (a.startedAt ?? 0));
   },
 
   save(session: SavedSession) {
-    const all = readSessions().filter((s) => s.id !== session.id);
-    all.push(session);
-    writeSessions(all);
+    const key = sessionKey(session.id);
+    setCached("sessions", key, session);
+    idbPut("sessions", key, session).catch(console.warn);
+    dispatchChange("osler-sessions-changed");
   },
 
   delete(id: string) {
-    writeSessions(readSessions().filter((s) => s.id !== id));
+    const key = sessionKey(id);
+    deleteCached("sessions", key);
+    idbDelete("sessions", key).catch(console.warn);
+    dispatchChange("osler-sessions-changed");
   },
 
   get(id: string): SavedSession | null {
-    return readSessions().find((s) => s.id === id) ?? null;
+    return getCached<SavedSession>("sessions", sessionKey(id));
   },
 
   subscribe(cb: () => void): () => void {
@@ -244,198 +419,177 @@ export const sessions = {
 };
 
 /* ── Highlights (per question in a pack) ────────────────────────────── */
-function highlightsKey(packUid: string): string {
-  return `${HIGHLIGHTS_KEY}:${packUid}`;
-}
 
-function readHighlights(packUid: string): Record<number, HighlightItem[]> {
-  if (typeof window === "undefined") return {};
-  try {
-    const raw = localStorage.getItem(highlightsKey(packUid));
-    if (!raw) return {};
-    return JSON.parse(raw);
-  } catch {
-    return {};
-  }
-}
-
-function writeHighlights(
-  packUid: string,
-  data: Record<number, HighlightItem[]>
-) {
-  if (typeof window === "undefined") return;
-  localStorage.setItem(highlightsKey(packUid), JSON.stringify(data));
+function highlightsKey(packUid: string, questionIdx?: number): string {
+  return questionIdx !== undefined
+    ? `${packUid}:${questionIdx}`
+    : packUid;
 }
 
 export const highlights = {
   get(packUid: string, questionIdx: number): HighlightItem[] {
-    return readHighlights(packUid)[questionIdx] ?? [];
+    const key = highlightsKey(packUid, questionIdx);
+    return getCached<HighlightItem[]>("highlights", key) ?? [];
   },
 
   getAll(packUid: string): Record<number, HighlightItem[]> {
-    return readHighlights(packUid);
+    const result: Record<number, HighlightItem[]> = {};
+    const prefix = `highlights:${packUid}:`;
+    for (const [k, v] of memoryCache) {
+      if (k.startsWith(prefix)) {
+        const idx = parseInt(k.replace(prefix, ""), 10);
+        if (!isNaN(idx)) result[idx] = v as HighlightItem[];
+      }
+    }
+    return result;
   },
 
   add(packUid: string, questionIdx: number, item: HighlightItem) {
-    const data = readHighlights(packUid);
-    if (!data[questionIdx]) data[questionIdx] = [];
-    data[questionIdx].push(item);
-    writeHighlights(packUid, data);
+    const existing = highlights.get(packUid, questionIdx);
+    const updated = [...existing, item];
+    const key = highlightsKey(packUid, questionIdx);
+    setCached("highlights", key, updated);
+    idbPut("highlights", key, updated).catch(console.warn);
   },
 
   remove(packUid: string, questionIdx: number, id: string) {
-    const data = readHighlights(packUid);
-    if (!data[questionIdx]) return;
-    data[questionIdx] = data[questionIdx].filter((h) => h.id !== id);
-    writeHighlights(packUid, data);
+    const existing = highlights.get(packUid, questionIdx);
+    const updated = existing.filter((h) => h.id !== id);
+    const key = highlightsKey(packUid, questionIdx);
+    setCached("highlights", key, updated);
+    idbPut("highlights", key, updated).catch(console.warn);
   },
 
   clear(packUid: string, questionIdx: number) {
-    const data = readHighlights(packUid);
-    delete data[questionIdx];
-    writeHighlights(packUid, data);
+    const key = highlightsKey(packUid, questionIdx);
+    deleteCached("highlights", key);
+    idbDelete("highlights", key).catch(console.warn);
   },
 
   clearAll(packUid: string) {
-    if (typeof window === "undefined") return;
-    localStorage.removeItem(highlightsKey(packUid));
+    const prefix = `highlights:${packUid}:`;
+    const keys: string[] = [];
+    for (const [k] of memoryCache) {
+      if (k.startsWith(prefix)) keys.push(k);
+    }
+    for (const k of keys) {
+      const rawKey = k.replace("highlights:", "");
+      memoryCache.delete(k);
+      idbDelete("highlights", rawKey).catch(console.warn);
+    }
   },
 };
 
 /* ── Article Highlights ─────────────────────────────────────────────── */
-const ARTICLE_HL_KEY = "osler-article-highlights-v1";
 
 export const articleHighlights = {
   get(articleId: string): HighlightItem[] {
-    if (typeof window === "undefined") return [];
-    try {
-      const raw = localStorage.getItem(ARTICLE_HL_KEY);
-      if (!raw) return [];
-      const data = JSON.parse(raw) as Record<string, HighlightItem[]>;
-      return data[articleId] ?? [];
-    } catch {
-      return [];
-    }
+    return getCached<HighlightItem[]>("articleHighlights", articleId) ?? [];
   },
 
   save(articleId: string, items: HighlightItem[]) {
-    if (typeof window === "undefined") return;
-    try {
-      const raw = localStorage.getItem(ARTICLE_HL_KEY);
-      const data = raw ? JSON.parse(raw) : {};
-      data[articleId] = items;
-      localStorage.setItem(ARTICLE_HL_KEY, JSON.stringify(data));
-    } catch {}
+    setCached("articleHighlights", articleId, items);
+    idbPut("articleHighlights", articleId, items).catch(console.warn);
   },
 
   clear(articleId: string) {
-    if (typeof window === "undefined") return;
-    try {
-      const raw = localStorage.getItem(ARTICLE_HL_KEY);
-      const data = raw ? JSON.parse(raw) : {};
-      delete data[articleId];
-      localStorage.setItem(ARTICLE_HL_KEY, JSON.stringify(data));
-    } catch {}
+    deleteCached("articleHighlights", articleId);
+    idbDelete("articleHighlights", articleId).catch(console.warn);
   },
 };
 
 /* ── Sticky Notes (per question in a pack) ──────────────────────────── */
-function stickyNotesKey(packUid: string): string {
-  return `${STICKY_NOTES_KEY}:${packUid}`;
-}
 
-function readStickyNotes(packUid: string): Record<number, StickyNoteData[]> {
-  if (typeof window === "undefined") return {};
-  try {
-    const raw = localStorage.getItem(stickyNotesKey(packUid));
-    if (!raw) return {};
-    return JSON.parse(raw);
-  } catch {
-    return {};
-  }
-}
-
-function writeStickyNotes(
-  packUid: string,
-  data: Record<number, StickyNoteData[]>
-) {
-  if (typeof window === "undefined") return;
-  localStorage.setItem(stickyNotesKey(packUid), JSON.stringify(data));
+function stickyNotesKey(packUid: string, questionIdx?: number): string {
+  return questionIdx !== undefined
+    ? `${packUid}:${questionIdx}`
+    : packUid;
 }
 
 export const stickyNotes = {
   get(packUid: string, questionIdx: number): StickyNoteData[] {
-    return readStickyNotes(packUid)[questionIdx] ?? [];
+    const key = stickyNotesKey(packUid, questionIdx);
+    return getCached<StickyNoteData[]>("stickyNotes", key) ?? [];
   },
 
   add(packUid: string, questionIdx: number, note: StickyNoteData) {
-    const data = readStickyNotes(packUid);
-    if (!data[questionIdx]) data[questionIdx] = [];
-    data[questionIdx].push(note);
-    writeStickyNotes(packUid, data);
+    const existing = stickyNotes.get(packUid, questionIdx);
+    const updated = [...existing, note];
+    const key = stickyNotesKey(packUid, questionIdx);
+    setCached("stickyNotes", key, updated);
+    idbPut("stickyNotes", key, updated).catch(console.warn);
   },
 
   update(packUid: string, questionIdx: number, id: string, text: string) {
-    const data = readStickyNotes(packUid);
-    if (!data[questionIdx]) return;
-    const note = data[questionIdx].find((n) => n.id === id);
-    if (note) note.text = text;
-    writeStickyNotes(packUid, data);
+    const existing = stickyNotes.get(packUid, questionIdx);
+    const note = existing.find((n) => n.id === id);
+    if (note) {
+      note.text = text;
+      const key = stickyNotesKey(packUid, questionIdx);
+      setCached("stickyNotes", key, existing);
+      idbPut("stickyNotes", key, existing).catch(console.warn);
+    }
   },
 
   move(packUid: string, questionIdx: number, id: string, x: number, y: number) {
-    const data = readStickyNotes(packUid);
-    if (!data[questionIdx]) return;
-    const note = data[questionIdx].find((n) => n.id === id);
+    const existing = stickyNotes.get(packUid, questionIdx);
+    const note = existing.find((n) => n.id === id);
     if (note) {
       note.x = x;
       note.y = y;
+      const key = stickyNotesKey(packUid, questionIdx);
+      setCached("stickyNotes", key, existing);
+      idbPut("stickyNotes", key, existing).catch(console.warn);
     }
-    writeStickyNotes(packUid, data);
   },
 
   delete(packUid: string, questionIdx: number, id: string) {
-    const data = readStickyNotes(packUid);
-    if (!data[questionIdx]) return;
-    data[questionIdx] = data[questionIdx].filter((n) => n.id !== id);
-    writeStickyNotes(packUid, data);
+    const existing = stickyNotes.get(packUid, questionIdx);
+    const updated = existing.filter((n) => n.id !== id);
+    const key = stickyNotesKey(packUid, questionIdx);
+    setCached("stickyNotes", key, updated);
+    idbPut("stickyNotes", key, updated).catch(console.warn);
   },
 
   clearAll(packUid: string) {
-    if (typeof window === "undefined") return;
-    localStorage.removeItem(stickyNotesKey(packUid));
+    const prefix = `stickyNotes:${packUid}:`;
+    const keys: string[] = [];
+    for (const [k] of memoryCache) {
+      if (k.startsWith(prefix)) keys.push(k);
+    }
+    for (const k of keys) {
+      const rawKey = k.replace("stickyNotes:", "");
+      memoryCache.delete(k);
+      idbDelete("stickyNotes", rawKey).catch(console.warn);
+    }
   },
 };
 
 /* ── Written Drafts (per pack) ──────────────────────────────────────── */
+
+function writtenDraftsKey(packUid: string): string {
+  return packUid;
+}
+
 export const writtenDrafts = {
   get(packUid: string): Record<string, WrittenDraft> {
-    if (typeof window === "undefined") return {};
-    try {
-      const raw = localStorage.getItem(`${WRITTEN_DRAFTS_KEY}:${packUid}`);
-      if (!raw) return {};
-      return JSON.parse(raw);
-    } catch {
-      return {};
-    }
+    return getCached<Record<string, WrittenDraft>>("writtenDrafts", writtenDraftsKey(packUid)) ?? {};
   },
 
   save(packUid: string, drafts: Record<string, WrittenDraft>) {
-    if (typeof window === "undefined") return;
-    localStorage.setItem(
-      `${WRITTEN_DRAFTS_KEY}:${packUid}`,
-      JSON.stringify(drafts)
-    );
+    const key = writtenDraftsKey(packUid);
+    setCached("writtenDrafts", key, drafts);
+    idbPut("writtenDrafts", key, drafts).catch(console.warn);
   },
 
   clear(packUid: string) {
-    if (typeof window === "undefined") return;
-    localStorage.removeItem(`${WRITTEN_DRAFTS_KEY}:${packUid}`);
+    const key = writtenDraftsKey(packUid);
+    deleteCached("writtenDrafts", key);
+    idbDelete("writtenDrafts", key).catch(console.warn);
   },
 };
 
 /* ── Flashcard Review Data (spaced repetition) ──────────────────────── */
-const FLASHCARD_REVIEW_KEY = "osler-flashcard-review-v1";
 
 export interface FlashcardReviewRecord {
   ease: number;
@@ -446,37 +600,38 @@ export interface FlashcardReviewRecord {
   correctCount: number;
 }
 
-function readFlashcardReviews(): Record<string, FlashcardReviewRecord> {
-  if (typeof window === "undefined") return {};
-  try {
-    const raw = localStorage.getItem(FLASHCARD_REVIEW_KEY);
-    if (!raw) return {};
-    return JSON.parse(raw);
-  } catch {
-    return {};
-  }
-}
-
-function writeFlashcardReviews(data: Record<string, FlashcardReviewRecord>) {
-  if (typeof window === "undefined") return;
-  localStorage.setItem(FLASHCARD_REVIEW_KEY, JSON.stringify(data));
-  window.dispatchEvent(new CustomEvent("osler-flashcard-changed"));
+function flashcardKey(deckUid: string, cardId: string): string {
+  return `${deckUid}:${cardId}`;
 }
 
 export const flashcardReview = {
   get(cardId: string): FlashcardReviewRecord | null {
-    return readFlashcardReviews()[cardId] ?? null;
+    // Search through cache for this cardId
+    for (const [k, v] of memoryCache) {
+      if (k.startsWith("flashcardReviews:") && k.endsWith(`:${cardId}`)) {
+        return v as FlashcardReviewRecord;
+      }
+    }
+    return null;
   },
 
   getAll(): Record<string, FlashcardReviewRecord> {
-    return readFlashcardReviews();
+    const result: Record<string, FlashcardReviewRecord> = {};
+    for (const [k, v] of memoryCache) {
+      if (k.startsWith("flashcardReviews:")) {
+        const rawKey = k.replace("flashcardReviews:", "");
+        result[rawKey] = v as FlashcardReviewRecord;
+      }
+    }
+    return result;
   },
 
   getCardsDue(deckUid: string, cardIds: string[]): string[] {
-    const reviews = readFlashcardReviews();
+    const reviews = flashcardReview.getAll();
     const now = Date.now();
     return cardIds.filter((id) => {
-      const r = reviews[`${deckUid}:${id}`];
+      const key = flashcardKey(deckUid, id);
+      const r = reviews[key];
       return !r || r.dueDate <= now;
     });
   },
@@ -486,8 +641,8 @@ export const flashcardReview = {
     cardId: string,
     rating: "again" | "hard" | "good" | "easy",
   ) {
-    const key = `${deckUid}:${cardId}`;
-    const reviews = readFlashcardReviews();
+    const key = flashcardKey(deckUid, cardId);
+    const reviews = flashcardReview.getAll();
     const prev = reviews[key];
 
     const now = Date.now();
@@ -514,7 +669,7 @@ export const flashcardReview = {
         break;
     }
 
-    reviews[key] = {
+    const record: FlashcardReviewRecord = {
       ease: Math.round(ease * 100) / 100,
       interval,
       dueDate: now + interval * msPerDay,
@@ -525,19 +680,24 @@ export const flashcardReview = {
         : (prev?.correctCount ?? 0),
     };
 
-    writeFlashcardReviews(reviews);
+    setCached("flashcardReviews", key, record);
+    idbPut("flashcardReviews", key, record).catch(console.warn);
+    dispatchChange("osler-flashcard-changed");
   },
 
   clearDeck(deckUid: string, cardIds: string[]) {
-    const reviews = readFlashcardReviews();
     for (const id of cardIds) {
-      delete reviews[`${deckUid}:${id}`];
+      const key = flashcardKey(deckUid, id);
+      deleteCached("flashcardReviews", key);
+      idbDelete("flashcardReviews", key).catch(console.warn);
     }
-    writeFlashcardReviews(reviews);
+    dispatchChange("osler-flashcard-changed");
   },
 
-  clearAll() {
-    writeFlashcardReviews({});
+  async clearAll() {
+    clearCached("flashcardReviews");
+    await idbClear("flashcardReviews").catch(console.warn);
+    dispatchChange("osler-flashcard-changed");
   },
 
   subscribe(cb: () => void): () => void {
@@ -551,3 +711,83 @@ export const flashcardReview = {
     };
   },
 };
+
+/* ── Migration from localStorage ─────────────────────────────────────── */
+
+async function migrateFromLocalStorage() {
+  if (typeof window === "undefined") return;
+
+  const migrated = "osler-idb-migrated-v1";
+  if (localStorage.getItem(migrated)) return;
+
+  try {
+    // Progress
+    const progressRaw = localStorage.getItem("osler-progress-v1");
+    if (progressRaw) {
+      const db = JSON.parse(progressRaw) as { records: Record<string, QuestionRecord> };
+      const entries = Object.entries(db.records).map(([key, value]) => ({
+        key, value,
+      }));
+      if (entries.length > 0) {
+        await idbPutBatch("progress", entries);
+        for (const [key, value] of Object.entries(db.records)) {
+          setCached("progress", key, value);
+        }
+      }
+    }
+
+    // Sessions
+    const sessionsRaw = localStorage.getItem("osler-qbank-sessions-v1");
+    if (sessionsRaw) {
+      const list = JSON.parse(sessionsRaw) as SavedSession[];
+      const entries = list.map((s) => ({ key: sessionKey(s.id), value: s }));
+      if (entries.length > 0) {
+        await idbPutBatch("sessions", entries);
+        for (const entry of entries) {
+          setCached("sessions", entry.key, entry.value);
+        }
+      }
+    }
+
+    // Flashcard reviews
+    const flashRaw = localStorage.getItem("osler-flashcard-review-v1");
+    if (flashRaw) {
+      const reviews = JSON.parse(flashRaw) as Record<string, FlashcardReviewRecord>;
+      const entries = Object.entries(reviews).map(([key, value]) => ({
+        key, value,
+      }));
+      if (entries.length > 0) {
+        await idbPutBatch("flashcardReviews", entries);
+        for (const [key, value] of Object.entries(reviews)) {
+          setCached("flashcardReviews", key, value);
+        }
+      }
+    }
+
+    // Article highlights
+    const artHlRaw = localStorage.getItem("osler-article-highlights-v1");
+    if (artHlRaw) {
+      const data = JSON.parse(artHlRaw) as Record<string, HighlightItem[]>;
+      const entries = Object.entries(data).map(([articleId, items]) => ({
+        key: articleId, value: items,
+      }));
+      if (entries.length > 0) {
+        await idbPutBatch("articleHighlights", entries);
+        for (const entry of entries) {
+          setCached("articleHighlights", entry.key, entry.value);
+        }
+      }
+    }
+
+    localStorage.setItem(migrated, "true");
+  } catch (e) {
+    console.warn("Failed to migrate from localStorage:", e);
+  }
+}
+
+// Run migration on load
+if (typeof window !== "undefined") {
+  openDB().then(() => {
+    migrateFromLocalStorage().catch(console.warn);
+  }).catch(console.warn);
+}

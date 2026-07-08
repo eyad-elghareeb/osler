@@ -97,12 +97,24 @@ export interface FlashcardContent {
 }
 
 /* ── Written ─────────────────────────────────────────────────────────── */
+export interface WrittenPromptChild {
+  id: string;
+  label?: string;
+  question?: string;
+  modelAnswer?: string;
+  rubric?: string;
+  explanation?: string;
+}
+
 export interface WrittenPrompt {
   id: string;
   prompt: string;
+  modelAnswer?: string;
   rubric: string[];
   wordLimit?: number;
+  explanation?: string;
   tags?: string[];
+  children?: WrittenPromptChild[];
 }
 
 export interface WrittenContent {
