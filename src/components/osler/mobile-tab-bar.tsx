@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import type { OslerView } from "./app-shell";
 import { cn } from "@/lib/utils";
+import { useImmersiveMode } from "./immersive-mode";
 
 interface MobileTabBarProps {
   view: OslerView;
@@ -43,15 +44,15 @@ function ProfileIcon({ className }: { className?: string }) {
 }
 
 export function MobileTabBar({ view, onViewChange }: MobileTabBarProps) {
-  // Hide the global bar inside full-screen engine views that manage their
-  // own layout (and already reserve space / render their own chrome).
-  const hiddenViews: OslerView[] = ["qbank", "flashcards", "osce"];
-  const hidden = hiddenViews.includes(view);
+  // Hide only while an engine view is running an active session (a question,
+  // a studying flashcard, an OSCE scenario). The hub/landing screens of those
+  // views keep the bar. Desktop is unaffected (md:hidden).
+  const immersive = useImmersiveMode();
   return (
     <nav
       className={cn(
         "medos-tabbar medos-tap-none md:hidden fixed inset-x-0 bottom-0 z-50 flex",
-        hidden && "hidden"
+        immersive && "hidden"
       )}
       role="tablist"
       aria-label="Primary"

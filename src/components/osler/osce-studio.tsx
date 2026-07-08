@@ -44,6 +44,7 @@ import type {
 } from "@/lib/osler/types";
 import { cn } from "@/lib/utils";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { setImmersiveMode } from "./immersive-mode";
 
 /* ── Constants ─────────────────────────────────────────────────────── */
 
@@ -648,6 +649,14 @@ export function OsceStudio({ activeItem, activeContent, onExit, onOpenPack }: Os
   const [stations, setStations] = React.useState<OsceStation[]>([]);
   const [activeIdx, setActiveIdx] = React.useState(0);
   const [phase, setPhase] = React.useState<OscePhase>("select");
+
+  // Hide the global mobile tab bar during an active OSCE scenario
+  // (lobby/conversation/debrief), but keep it on the scenario picker.
+  React.useEffect(() => {
+    setImmersiveMode(phase !== "select");
+    return () => setImmersiveMode(false);
+  }, [phase]);
+
   const [transcript, setTranscript] = React.useState<TranscriptEntry[]>([]);
   const [timerRemaining, setTimerRemaining] = React.useState(EXAM_TIME);
   const [inputText, setInputText] = React.useState("");

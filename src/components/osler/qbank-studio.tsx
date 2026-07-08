@@ -90,6 +90,7 @@ import { HighlightedContent } from "./highlighted-content";
 import { useShortcutBindings, useShortcutListener } from "@/hooks/use-shortcuts";
 import { defaultBindings } from "@/lib/osler/shortcuts";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { setImmersiveMode } from "./immersive-mode";
 import { gradeWithAI, createManualEvaluation } from "@/lib/osler/grading";
 
 const LETTERS = ["A", "B", "C", "D", "E", "F", "G", "H"];
@@ -200,6 +201,8 @@ export function QBankStudio({
       const totalTime = questions.length * 60;
       const sessionId = `${item.uid}-${Date.now()}`;
 
+      setImmersiveMode(true);
+
       // Load existing written drafts
       const drafts = writtenDrafts.get(item.uid);
 
@@ -263,6 +266,7 @@ export function QBankStudio({
   const exitToHome = () => {
     setMode("home");
     setSession(null);
+    setImmersiveMode(false);
     onExit();
   };
 

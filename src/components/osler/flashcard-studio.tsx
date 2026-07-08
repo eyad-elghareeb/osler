@@ -32,6 +32,7 @@ import type {
 import { flashcardReview, storage } from "@/lib/osler/storage";
 import { useShortcutBindings } from "@/hooks/use-shortcuts";
 import { cn } from "@/lib/utils";
+import { setImmersiveMode } from "./immersive-mode";
 
 type ViewMode = "decks" | "subdecks" | "study" | "complete";
 
@@ -64,6 +65,14 @@ export function FlashcardStudio({
     items: Array<{ item: ManifestItem; content: AnyContent | null }>;
   } | null>(null);
   const [mode, setMode] = React.useState<ViewMode>("decks");
+
+  // Hide the global mobile tab bar while actively studying flashcards
+  // (study/complete screens); keep it on the decks/subdecks hub.
+  React.useEffect(() => {
+    setImmersiveMode(mode === "study" || mode === "complete");
+    return () => setImmersiveMode(false);
+  }, [mode]);
+
   const [deckIndex, setDeckIndex] = React.useState(0);
   const [activeSubdeckId, setActiveSubdeckId] = React.useState<string | null>(null);
   const [cardIndex, setCardIndex] = React.useState(0);
