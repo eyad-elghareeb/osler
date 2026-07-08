@@ -1,0 +1,88 @@
+{
+  "name": "Osler - Medical Study Platform",
+  "short_name": "Osler",
+  "description": "Quiz, Question Bank, Flashcards, Written Prompts, and OSCE clinical cases for medical students.",
+  "id": "/",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "display_override": ["standalone", "minimal-ui"],
+  "orientation": "portrait-primary",
+  "background_color": "#0a0a0a",
+  "theme_color": "#0a0a0a",
+  "categories": ["education", "medical", "productivity"],
+  "lang": "en",
+  "dir": "ltr",
+  "icons": [
+    {
+      "src": "/assets/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/assets/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/assets/icons/maskable-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "/assets/icons/maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "/assets/icons/icon-1024.png",
+      "sizes": "1024x1024",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/assets/icons/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Quiz",
+      "short_name": "Quiz",
+      "url": "/?view=quiz",
+      "description": "Start a quick quiz"
+    },
+    {
+      "name": "Question Bank",
+      "short_name": "Bank",
+      "url": "/?view=bank",
+      "description": "Practice the question bank"
+    },
+    {
+      "name": "Flashcards",
+      "short_name": "Cards",
+      "url": "/?view=flashcard",
+      "description": "Review flashcards"
+    },
+    {
+      "name": "OSCE",
+      "short_name": "OSCE",
+      "url": "/?view=osce",
+      "description": "Train with OSCE cases"
+    }
+  ],
+  "screenshots": [
+    {
+      "src": "/assets/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "form_factor": "wide"
+    }
+  ]
+}
