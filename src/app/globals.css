@@ -635,6 +635,16 @@ input, textarea, [contenteditable="true"], .medos-article, .uworld-prose, .ai-ch
    * overflow:hidden on mobile (URL-bar / dynamic viewport). */
   padding-bottom: env(safe-area-inset-bottom, 0px);
   padding-bottom: max(env(safe-area-inset-bottom, 0px), 0.5rem);
+  /* Single source of truth for the bar's reserved height — scroll areas
+   * that must clear the fixed bar use `.medos-tabbar-pad`. */
+  --tabbar-h: calc(3rem + max(env(safe-area-inset-bottom, 0px), 0.5rem));
+  min-height: var(--tabbar-h);
+}
+
+/* Bottom padding for scrollable content so the fixed mobile tab bar never
+ * overlaps the last items. Matches the bar height exactly. */
+.medos-tabbar-pad {
+  padding-bottom: var(--tabbar-h);
 }
 .medos-tabbar-item {
   position: relative;

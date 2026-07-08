@@ -387,7 +387,7 @@ export function Library({ initialArticleId }: LibraryProps) {
               onFontSizeChange={setFontSize}
               hlCtrl={hlCtrl}
             />
-            <div className="flex-1 overflow-y-auto medos-scroll pb-[calc(3.5rem+env(safe-area-inset-bottom))] md:pb-0">
+            <div className="flex-1 overflow-y-auto medos-scroll medos-tabbar-pad md:pb-0">
               {loading ? (
                 <div className="flex items-center justify-center py-20">
                   <Loader2 className="size-6 animate-spin text-muted-foreground" />
@@ -519,7 +519,7 @@ function SidebarContent({
           />
         </div>
       </div>
-      <div className="flex-1 overflow-y-auto medos-scroll p-2 space-y-0.5 pb-[calc(3.5rem+env(safe-area-inset-bottom))] md:pb-2">
+      <div className="flex-1 overflow-y-auto medos-scroll p-2 space-y-0.5 medos-tabbar-pad md:pb-2">
         {sidebarTab === "bookmarks" && bookmarkedArticles.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-10 text-center">
             <BookmarkX className="size-8 text-muted-foreground/40 mb-2" />
