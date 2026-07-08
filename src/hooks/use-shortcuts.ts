@@ -46,8 +46,10 @@ export function useShortcutListener(
     const unsub = subscribeShortcuts((b) => { currentBindings = b; });
 
     const onKeyDown = (e: KeyboardEvent) => {
+      if (e.defaultPrevented) return;
       const actionId = matchShortcut(e, currentBindings, { ignoreInputs, allowRepeat });
       if (actionId) {
+        e.preventDefault();
         const h = handlerRef.current;
         h(actionId, e);
       }

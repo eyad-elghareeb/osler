@@ -350,10 +350,11 @@ function ShortcutsSettingsSection() {
   const scopeMeta: Record<ShortcutScope, { label: string; description: string }> = {
     global: { label: "Global", description: "Available everywhere — search, navigation, theme." },
     qbank: { label: "QBank Studio", description: "Available inside a QBank session (next, prev, flag, submit, ...)." },
+    flashcard: { label: "Flashcards", description: "Available during a flashcard study session (flip, rate, navigate)." },
     reader: { label: "Article Reader", description: "Available when reading an article or in an overlay modal." },
   };
 
-  const scopes: ShortcutScope[] = ["global", "qbank", "reader"];
+  const scopes: ShortcutScope[] = ["global", "qbank", "flashcard", "reader"];
 
   return (
     <div className="space-y-6">

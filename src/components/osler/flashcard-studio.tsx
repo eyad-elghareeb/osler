@@ -15,6 +15,7 @@ import {
   BookOpen,
   ArrowLeft,
   ChevronRight,
+  ChevronLeft,
   Lightbulb,
   Folder,
   Download,
@@ -29,7 +30,7 @@ import type {
   AnyContent,
 } from "@/lib/osler/types";
 import { flashcardReview, storage } from "@/lib/osler/storage";
-import { useShortcutListener } from "@/hooks/use-shortcuts";
+import { useShortcutBindings } from "@/hooks/use-shortcuts";
 import { cn } from "@/lib/utils";
 
 type ViewMode = "decks" | "subdecks" | "study" | "complete";
@@ -67,6 +68,7 @@ export function FlashcardStudio({
   const [activeSubdeckId, setActiveSubdeckId] = React.useState<string | null>(null);
   const [cardIndex, setCardIndex] = React.useState(0);
   const [flipped, setFlipped] = React.useState(false);
+  const [isFlipping, setIsFlipping] = React.useState(false);
   const [sessionCards, setSessionCards] = React.useState<string[]>([]);
   const [sessionResults, setSessionResults] = React.useState<
     { cardId: string; rating: "again" | "hard" | "good" | "easy" }[]
@@ -145,12 +147,16 @@ export function FlashcardStudio({
     setSessionCards(cardsToStudy.map((c) => c.id));
     setCardIndex(0);
     setFlipped(false);
+    setIsFlipping(false);
     setSessionResults([]);
     setMode("study");
   }
 
   function flipCard() {
+    if (isFlipping) return;
+    setIsFlipping(true);
     setFlipped((f) => !f);
+    setTimeout(() => setIsFlipping(false), 350);
   }
 
   function rateCard(rating: "again" | "hard" | "good" | "easy") {
@@ -164,25 +170,49 @@ export function FlashcardStudio({
     if (cardIndex < sessionCards.length - 1) {
       setCardIndex((i) => i + 1);
       setFlipped(false);
+      setIsFlipping(false);
     } else {
       setMode("complete");
     }
   }
 
-  useShortcutListener(
-    React.useCallback(
-      (actionId: string) => {
-        if (mode !== "study") return;
-        if (actionId === "flashcard.flip") flipCard();
-        if (actionId === "flashcard.again") rateCard("again");
-        if (actionId === "flashcard.hard") rateCard("hard");
-        if (actionId === "flashcard.good") rateCard("good");
-        if (actionId === "flashcard.easy") rateCard("easy");
-      },
-      [mode, cardIndex, flipped, currentCard, currentDeckCards, sessionCards],
-    ),
-    { enabled: mode === "study" },
-  );
+  function nextCard() {
+    if (cardIndex < sessionCards.length - 1) {
+      setCardIndex((i) => i + 1);
+      setFlipped(false);
+      setIsFlipping(false);
+    }
+  }
+
+  function prevCard() {
+    if (cardIndex > 0) {
+      setCardIndex((i) => i - 1);
+      setFlipped(false);
+      setIsFlipping(false);
+    }
+  }
+
+  const bindings = useShortcutBindings();
+
+  React.useEffect(() => {
+    if (mode !== "study") return;
+    const handler = (e: KeyboardEvent) => {
+      if (e.defaultPrevented || e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+      const key = e.key.toLowerCase();
+      if (key === " ") { e.preventDefault(); flipCard(); return; }
+      if (key === "escape") { e.preventDefault(); closeStudy(); return; }
+      if (key === "arrowleft") { e.preventDefault(); prevCard(); return; }
+      if (key === "arrowright") { e.preventDefault(); nextCard(); return; }
+      if (key === "r" && !e.ctrlKey && !e.metaKey && !e.altKey) { e.preventDefault(); restartDeck(); return; }
+      if (!flipped) return;
+      if (key === "1") { e.preventDefault(); rateCard("again"); }
+      else if (key === "2") { e.preventDefault(); rateCard("hard"); }
+      else if (key === "3") { e.preventDefault(); rateCard("good"); }
+      else if (key === "4") { e.preventDefault(); rateCard("easy"); }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [mode, flipped, cardIndex, isFlipping, currentCard, sessionCards, currentDeck]);
 
   function restartDeck() {
     if (!currentDeck) return;
@@ -199,6 +229,7 @@ export function FlashcardStudio({
     setActiveSubdeckId(null);
     setCardIndex(0);
     setFlipped(false);
+    setIsFlipping(false);
     setSessionCards([]);
     setSessionResults([]);
   }
@@ -208,6 +239,7 @@ export function FlashcardStudio({
     setActiveSubdeckId(null);
     setCardIndex(0);
     setFlipped(false);
+    setIsFlipping(false);
     setSessionCards([]);
     setSessionResults([]);
   }
@@ -329,7 +361,7 @@ export function FlashcardStudio({
           <button
             onClick={closeStudy}
             className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors medos-touch-target"
-            title="Exit study session"
+            title="Exit study session (Esc)"
           >
             <XIcon className="size-4" />
             <span className="hidden sm:inline">Exit</span>
@@ -342,7 +374,7 @@ export function FlashcardStudio({
             <span className="font-medium text-foreground">{currentDeck.item.title}</span>
             {activeSubdeckId && subdecks.find((s) => s.id === activeSubdeckId) && (
               <>
-                <span className="opacity-50">·</span>
+                <span className="opacity-50">&middot;</span>
                 <span>{subdecks.find((s) => s.id === activeSubdeckId)!.title}</span>
               </>
             )}
@@ -350,9 +382,47 @@ export function FlashcardStudio({
 
           <div className="flex-1" />
 
-          <div className="text-xs text-muted-foreground tabular-nums">
-            {cardIndex + 1} / {totalCount}
+          {/* Navigation arrows + counter */}
+          <div className="flex items-center gap-1.5">
+            <button
+              onClick={prevCard}
+              disabled={cardIndex === 0}
+              className={cn(
+                "size-7 rounded-md flex items-center justify-center transition-colors",
+                cardIndex === 0
+                  ? "text-muted-foreground/30 cursor-not-allowed"
+                  : "text-muted-foreground hover:text-foreground hover:bg-muted/60",
+              )}
+              title="Previous card (←)"
+            >
+              <ChevronLeft className="size-4" />
+            </button>
+            <div className="text-xs text-muted-foreground tabular-nums min-w-[3.5rem] text-center">
+              {cardIndex + 1} / {totalCount}
+            </div>
+            <button
+              onClick={nextCard}
+              disabled={cardIndex >= sessionCards.length - 1}
+              className={cn(
+                "size-7 rounded-md flex items-center justify-center transition-colors",
+                cardIndex >= sessionCards.length - 1
+                  ? "text-muted-foreground/30 cursor-not-allowed"
+                  : "text-muted-foreground hover:text-foreground hover:bg-muted/60",
+              )}
+              title="Next card (→)"
+            >
+              <ChevronRight className="size-4" />
+            </button>
           </div>
+
+          <button
+            onClick={restartDeck}
+            className="hidden sm:flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors ml-1"
+            title="Restart deck (R)"
+          >
+            <RotateCcw className="size-3.5" />
+            <span>Restart</span>
+          </button>
         </header>
 
         {/* Progress bar */}
@@ -364,52 +434,51 @@ export function FlashcardStudio({
         </div>
 
         {/* Card area */}
-        <div className="flex-1 flex items-center justify-center p-4 sm:p-8 bg-muted/20">
+        <div className="flex-1 flex items-center justify-center p-4 sm:p-8 bg-card">
           <div
             onClick={flipCard}
             className="w-full max-w-2xl aspect-[16/10] cursor-pointer select-none"
           >
-            <div className="relative w-full h-full">
-              <AnimatePresence mode="wait">
-                {!flipped ? (
-                  <motion.div
-                    key="front"
-                    initial={{ opacity: 0, scale: 0.96 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    exit={{ opacity: 0, scale: 0.96 }}
-                    transition={{ duration: 0.15 }}
-                    className="absolute inset-0 bg-card border border-border rounded-xl p-6 sm:p-10 flex flex-col items-center justify-center text-center shadow-lg"
-                  >
-                    <div className="text-[11px] uppercase tracking-wider text-muted-foreground mb-4 flex items-center gap-1.5">
-                      <Lightbulb className="size-3" />
-                      Question
-                    </div>
-                    <div className="text-lg sm:text-xl leading-relaxed max-w-lg uworld-prose">
-                      {currentCard.front}
-                    </div>
-                    <div className="mt-auto pt-6 text-xs text-muted-foreground/60">
-                      Tap to reveal answer
-                    </div>
-                  </motion.div>
-                ) : (
-                  <motion.div
-                    key="back"
-                    initial={{ opacity: 0, scale: 0.96 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    exit={{ opacity: 0, scale: 0.96 }}
-                    transition={{ duration: 0.15 }}
-                    className="absolute inset-0 bg-[color-mix(in_oklch,var(--primary)_4%,var(--card))] border border-border rounded-xl p-6 sm:p-10 flex flex-col items-center justify-center text-center shadow-lg"
-                  >
-                    <div className="text-[11px] uppercase tracking-wider text-muted-foreground mb-4 flex items-center gap-1.5">
-                      <Sparkles className="size-3" />
-                      Answer
-                    </div>
-                    <div className="text-base sm:text-lg leading-relaxed max-w-lg uworld-prose">
-                      {currentCard.back}
-                    </div>
-                  </motion.div>
-                )}
-              </AnimatePresence>
+            <div className="relative w-full h-full overflow-hidden rounded-xl border border-border shadow-lg">
+              {/* Back layer — shows both Q and A when front slides away */}
+              <div className="absolute inset-0 flex flex-col bg-card rounded-xl">
+                <div className="h-1/2 flex flex-col items-center justify-center p-4 sm:p-6">
+                  <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-2 flex items-center gap-1.5">
+                    <Lightbulb className="size-3" />
+                    Question
+                  </div>
+                  <div className="text-sm sm:text-base leading-relaxed max-w-lg uworld-prose text-center">
+                    {currentCard.front}
+                  </div>
+                </div>
+                <div className="shrink-0 h-px bg-border/60 mx-4" />
+                <div className="h-1/2 flex flex-col items-center justify-center p-4 sm:p-6 bg-[color-mix(in_oklch,var(--primary)_4%,var(--card))] rounded-b-xl">
+                  <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-2 flex items-center gap-1.5">
+                    <Sparkles className="size-3" />
+                    Answer
+                  </div>
+                  <div className="text-sm sm:text-base leading-relaxed max-w-lg uworld-prose text-center">
+                    {currentCard.back}
+                  </div>
+                </div>
+              </div>
+              {/* Front cover — slides up to reveal both Q and A */}
+              <motion.div
+                className="absolute inset-0 flex flex-col items-center justify-center p-6 sm:p-10 bg-card rounded-xl"
+                animate={{ y: flipped ? "-100%" : "0%" }}
+                transition={{ duration: 0.2, ease: "easeOut" }}
+              >
+                <div className="text-[11px] uppercase tracking-wider text-muted-foreground mb-4 flex items-center gap-1.5">
+                  <Lightbulb className="size-3" />
+                  Question
+                </div>
+                <div className="text-lg sm:text-xl leading-relaxed max-w-lg uworld-prose text-center">
+                  {currentCard.front}
+                </div>
+                <div className="mt-auto pt-6 text-xs text-muted-foreground/60">
+                  Tap to reveal answer
+                </div>
+              </motion.div>
             </div>
           </div>
         </div>
@@ -418,20 +487,21 @@ export function FlashcardStudio({
         <AnimatePresence>
           {flipped && (
             <motion.div
-              initial={{ opacity: 0, y: 20 }}
+              initial={{ opacity: 0, y: 16 }}
               animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: 20 }}
-              transition={{ duration: 0.2 }}
-              className="shrink-0 border-t border-border bg-card px-4 py-4 sm:py-5"
+              exit={{ opacity: 0, y: 16 }}
+              transition={{ duration: 0.15, ease: "easeOut" }}
+              className="shrink-0 border-t border-border bg-card px-4 py-3 sm:py-3"
             >
               <div className="max-w-lg mx-auto">
-                <div className="text-[11px] uppercase tracking-wider text-muted-foreground text-center mb-3">
+                <div className="text-[10px] uppercase tracking-wider text-muted-foreground text-center mb-2">
                   How well did you know this?
                 </div>
-                <div className="grid grid-cols-4 gap-2">
+                <div className="grid grid-cols-4 gap-1.5">
                   <RateButton
                     label="Again"
                     description="1 min"
+                    shortcut="1"
                     rating="again"
                     color="red"
                     icon={X}
@@ -440,6 +510,7 @@ export function FlashcardStudio({
                   <RateButton
                     label="Hard"
                     description="6 min"
+                    shortcut="2"
                     rating="hard"
                     color="orange"
                     icon={RotateCcw}
@@ -448,6 +519,7 @@ export function FlashcardStudio({
                   <RateButton
                     label="Good"
                     description="10 min"
+                    shortcut="3"
                     rating="good"
                     color="emerald"
                     icon={Check}
@@ -456,17 +528,20 @@ export function FlashcardStudio({
                   <RateButton
                     label="Easy"
                     description="4 d"
+                    shortcut="4"
                     rating="easy"
                     color="blue"
                     icon={Zap}
                     onRate={rateCard}
                   />
                 </div>
-                <div className="flex items-center justify-center gap-4 mt-3 text-[10px] text-muted-foreground/60">
-                  <span>1 · Again</span>
-                  <span>2 · Hard</span>
-                  <span>3 · Good</span>
-                  <span>4 · Easy</span>
+                <div className="flex items-center justify-center gap-2 mt-2 text-[9px] text-muted-foreground/40">
+                  <span><kbd className="px-1 py-0.5 rounded border border-border/30 text-[8px]">1</kbd> Again</span>
+                  <span><kbd className="px-1 py-0.5 rounded border border-border/30 text-[8px]">2</kbd> Hard</span>
+                  <span><kbd className="px-1 py-0.5 rounded border border-border/30 text-[8px]">3</kbd> Good</span>
+                  <span><kbd className="px-1 py-0.5 rounded border border-border/30 text-[8px]">4</kbd> Easy</span>
+                  <span className="hidden sm:inline"><kbd className="px-1 py-0.5 rounded border border-border/30 text-[8px]">←</kbd><kbd className="px-1 py-0.5 rounded border border-border/30 text-[8px]">→</kbd> Nav</span>
+                  <span className="hidden sm:inline"><kbd className="px-1 py-0.5 rounded border border-border/30 text-[8px]">Esc</kbd> Exit</span>
                 </div>
               </div>
             </motion.div>
@@ -727,6 +802,7 @@ export function FlashcardStudio({
 function RateButton({
   label,
   description,
+  shortcut,
   rating,
   color,
   icon: Icon,
@@ -734,6 +810,7 @@ function RateButton({
 }: {
   label: string;
   description: string;
+  shortcut: string;
   rating: "again" | "hard" | "good" | "easy";
   color: "red" | "orange" | "emerald" | "blue";
   icon: React.ComponentType<{ className?: string }>;
@@ -752,13 +829,14 @@ function RateButton({
     <button
       onClick={() => onRate(rating)}
       className={cn(
-        "flex flex-col items-center gap-1 px-2 py-3 rounded-xl border-2 transition-all",
+        "flex flex-col items-center gap-0.5 px-1.5 py-2 rounded-xl border-2 transition-all",
         colorMap[color],
       )}
     >
-      <Icon className="size-5" />
-      <span className="text-sm font-semibold">{label}</span>
-      <span className="text-[10px] opacity-70">{description}</span>
+      <Icon className="size-4" />
+      <span className="text-xs font-semibold">{label}</span>
+      <span className="text-[9px] opacity-70">{description}</span>
+      <kbd className="text-[8px] px-1 py-0.5 rounded border border-current/20 opacity-50">{shortcut}</kbd>
     </button>
   );
 }
