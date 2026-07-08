@@ -25,9 +25,9 @@ interface TabItem {
 
 const TABS: TabItem[] = [
   { id: "dashboard", label: "Home", icon: LayoutDashboard },
+  { id: "qbank", label: "Q-Bank", icon: ListChecks },
   { id: "library", label: "Library", icon: BookOpen },
   { id: "flashcards", label: "Cards", icon: Layers },
-  { id: "qbank", label: "Q-Bank", icon: ListChecks },
   { id: "osce", label: "OSCE", icon: Stethoscope },
   { id: "profile", label: "Profile", icon: UserIcon },
 ];

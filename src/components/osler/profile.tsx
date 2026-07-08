@@ -71,13 +71,13 @@ export function Profile({ username, onViewChange }: ProfileProps) {
         <motion.div
           initial={{ opacity: 0, y: 8 }}
           animate={{ opacity: 1, y: 0 }}
-          className="bg-card border border-border rounded-xl p-6 mb-6 flex items-center gap-4"
+          className="bg-card border border-border rounded-lg p-4 sm:p-6 mb-6 flex items-center gap-4"
         >
           <div className="w-16 h-16 rounded-full bg-gradient-to-br from-primary/80 to-primary/40 flex items-center justify-center text-2xl font-bold text-primary-foreground">
             {username.slice(0, 2).toUpperCase()}
           </div>
-          <div className="flex-1">
-            <h1 className="text-xl font-semibold">{username}</h1>
+          <div className="flex-1 min-w-0">
+            <h1 className="text-xl font-semibold truncate">{username}</h1>
             <p className="text-xs text-muted-foreground">Local session · Osler v1</p>
           </div>
           <div className="hidden sm:flex flex-col items-end gap-1">
@@ -134,7 +134,7 @@ export function Profile({ username, onViewChange }: ProfileProps) {
           Performance by Engine
         </h2>
         {Object.keys(engineStats).length === 0 ? (
-          <div className="bg-card border border-border rounded-lg p-8 text-center text-sm text-muted-foreground">
+          <div className="bg-card border border-border rounded-lg p-8 text-center text-sm text-muted-foreground mb-6">
             No activity yet. Open a content pack from the Q-Bank Studio to start.
           </div>
         ) : (
@@ -178,7 +178,7 @@ export function Profile({ username, onViewChange }: ProfileProps) {
         <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground mb-3">
           Achievements
         </h2>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
           <Achievement
             icon={Target}
             title="First Steps"

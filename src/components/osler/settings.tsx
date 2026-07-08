@@ -83,7 +83,7 @@ export function Settings() {
         </div>
 
         {/* Section tabs */}
-        <div className="flex items-center gap-1 mb-6 border-b border-border/60 overflow-x-auto osler-scroll">
+        <div className="flex items-center gap-1 mb-6 border-b border-border/60">
           {SECTIONS.map((s) => {
             const I = s.icon;
             const active = section === s.id;
@@ -98,11 +98,7 @@ export function Settings() {
                 <I className="size-4" />
                 {s.label}
                 {active && (
-                  <motion.div
-                    layoutId="settings-section-underline"
-                    className="absolute inset-x-0 -bottom-px h-0.5 bg-primary"
-                    transition={{ type: "spring", stiffness: 380, damping: 30 }}
-                  />
+                  <div className="absolute inset-x-0 -bottom-px h-0.5 bg-primary" />
                 )}
               </button>
             );

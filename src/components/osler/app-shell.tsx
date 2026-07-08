@@ -186,18 +186,18 @@ export function AppShell({
             />
 
             <NavButton
-              active={isLibrary}
-              onClick={() => onViewChange("library")}
-              icon={BookOpen}
-              label="Library"
-              layoutId="nav-active"
-            />
-
-            <NavButton
               active={isQbank}
               onClick={() => onViewChange("qbank")}
               icon={ListChecks}
               label="Q-Bank Studio"
+              layoutId="nav-active"
+            />
+
+            <NavButton
+              active={isLibrary}
+              onClick={() => onViewChange("library")}
+              icon={BookOpen}
+              label="Library"
               layoutId="nav-active"
             />
 

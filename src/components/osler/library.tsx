@@ -19,6 +19,7 @@ import {
   Search,
   BookmarkX,
   List,
+  X,
 } from "lucide-react";
 import {
   loadArticleToc,
@@ -29,6 +30,7 @@ import {
   type Article,
 } from "@/lib/osler/articles";
 import { cn } from "@/lib/utils";
+import { useIsMobile } from "@/hooks/use-mobile";
 import { useArticleHighlighter } from "@/hooks/use-article-highlighter";
 import { HighlighterToolbar } from "./highlighter-toolbar";
 import { applyHighlightsToHtml } from "@/lib/osler/article-highlights";
@@ -88,6 +90,13 @@ export function Library({ initialArticleId }: LibraryProps) {
   const [zoom, setZoom] = React.useState(100);
   const [fontSize, setFontSize] = React.useState(15);
   const [sidebarOpen, setSidebarOpen] = React.useState(false);
+  const isMobile = useIsMobile();
+
+  // On mobile, when no article is selected, force the sidebar open full-screen
+  // so the user picks an article first.
+  React.useEffect(() => {
+    if (isMobile && !activeArticleId) setSidebarOpen(true);
+  }, [isMobile, activeArticleId]);
   const [loading, setLoading] = React.useState(false);
   const [sidebarTab, setSidebarTab] = React.useState<SidebarTab>("toc");
   const [searchQuery, setSearchQuery] = React.useState("");
@@ -279,30 +288,44 @@ export function Library({ initialArticleId }: LibraryProps) {
   return (
     <div className="flex h-[calc(100vh-3.5rem)] overflow-hidden bg-background">
       {/* Mobile sidebar toggle */}
-      <button
-        onClick={() => setSidebarOpen(true)}
-        className="md:hidden fixed bottom-20 right-4 z-30 size-12 rounded-full bg-primary text-primary-foreground shadow-lg flex items-center justify-center"
-        aria-label="Open contents"
-      >
-        <PanelLeft className="size-5" />
-      </button>
+      {activeArticleId && (
+        <button
+          onClick={() => setSidebarOpen(true)}
+          className="md:hidden fixed bottom-20 right-4 z-30 size-12 rounded-full bg-primary text-primary-foreground shadow-lg flex items-center justify-center"
+          aria-label="Open contents"
+        >
+          <PanelLeft className="size-5" />
+        </button>
+      )}
 
-      {/* Mobile sidebar overlay */}
+      {/* Mobile sidebar overlay — full screen when choosing an article, drawer otherwise */}
       <AnimatePresence>
         {sidebarOpen && (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="md:hidden fixed inset-0 z-40 bg-black/50"
-            onClick={() => setSidebarOpen(false)}
+            className={cn(
+              "md:hidden fixed z-40 bg-black/50",
+              activeArticleId
+                ? "inset-0"
+                : "top-14 inset-x-0 bottom-14"
+            )}
+            onClick={() => {
+              if (activeArticleId) setSidebarOpen(false);
+            }}
           >
             <motion.div
               initial={{ x: -300 }}
               animate={{ x: 0 }}
               exit={{ x: -300 }}
               transition={{ type: "spring", damping: 28, stiffness: 280 }}
-              className="absolute left-0 top-0 bottom-0 w-80 max-w-[85vw] bg-sidebar"
+              className={cn(
+                "absolute left-0 top-0 bottom-0 bg-sidebar flex flex-col",
+                activeArticleId
+                  ? "w-80 max-w-[85vw]"
+                  : "w-full"
+              )}
               onClick={(e) => e.stopPropagation()}
             >
               <SidebarContent
@@ -320,6 +343,8 @@ export function Library({ initialArticleId }: LibraryProps) {
                 sidebarTab={sidebarTab}
                 onTabChange={setSidebarTab}
                 bookmarkedArticles={bookmarkedArticles}
+                fullScreen={!activeArticleId}
+                onClose={activeArticleId ? () => setSidebarOpen(false) : undefined}
               />
             </motion.div>
           </motion.div>
@@ -410,6 +435,8 @@ function SidebarContent({
   sidebarTab,
   onTabChange,
   bookmarkedArticles,
+  fullScreen,
+  onClose,
 }: {
   toc: ArticleTocNode[];
   articleCount: number;
@@ -425,10 +452,26 @@ function SidebarContent({
   sidebarTab: SidebarTab;
   onTabChange: (t: SidebarTab) => void;
   bookmarkedArticles: { id: string; label: string; articleId: string }[];
+  fullScreen?: boolean;
+  onClose?: () => void;
 }) {
   return (
     <div className="flex flex-col h-full">
       <div className="px-3 pt-3 pb-2 border-b border-border space-y-2">
+        {fullScreen && (
+          <div className="flex items-center justify-between">
+            <span className="text-sm font-semibold">Choose an article</span>
+            {onClose && (
+              <button
+                onClick={onClose}
+                className="size-8 -mr-1 rounded-md flex items-center justify-center text-muted-foreground hover:bg-muted/60 transition-colors"
+                aria-label="Close"
+              >
+                <X className="size-4" />
+              </button>
+            )}
+          </div>
+        )}
         <div className="flex items-center justify-between">
           <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-2">
             <BookOpen className="size-3.5" />
