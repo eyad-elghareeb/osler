@@ -32,6 +32,7 @@ import {
 } from "@/components/ui/popover";
 import { useOslerTheme } from "./theme-provider";
 import { MobileTabBar } from "./mobile-tab-bar";
+import { PwaInstallButton } from "./pwa-install-button";
 import { searchArticles as searchArticlesAsync } from "@/lib/osler/articles";
 import type { Article } from "@/lib/osler/articles";
 import { cn } from "@/lib/utils";
@@ -249,6 +250,9 @@ export function AppShell({
               <span className="flex-1 text-left truncate">Search…</span>
             </button>
           </div>
+
+          {/* PWA install */}
+          <PwaInstallButton />
 
           {/* Theme toggle */}
           <button
