@@ -49,6 +49,14 @@ export function PwaInstallButton({ className }: { className?: string }) {
     return null;
   }
 
+  // PWA install requires a secure context (HTTPS or localhost). Over a plain
+  // LAN IP the browser will never offer install — tell the user clearly.
+  const isSecure =
+    typeof window === "undefined" ||
+    window.isSecureContext ||
+    window.location.hostname === "localhost" ||
+    window.location.hostname === "127.0.0.1";
+
   const canPrompt = Boolean(deferred);
   const showIos = isIos() && !canPrompt;
 
@@ -115,6 +123,13 @@ export function PwaInstallButton({ className }: { className?: string }) {
               <p className="text-muted-foreground leading-relaxed">
                 Tap <Share className="size-3.5 inline-block align-text-bottom" /> then{" "}
                 <span className="text-foreground">Add to Home Screen</span>.
+              </p>
+            ) : !isSecure ? (
+              <p className="text-muted-foreground leading-relaxed">
+                Install needs HTTPS. This address (
+                <span className="text-foreground">http://{typeof window !== "undefined" ? window.location.host : ""}</span>
+                ) isn&apos;t secure, so your browser blocks it. Serve Osler over
+                HTTPS or open it on <span className="text-foreground">localhost</span>.
               </p>
             ) : (
               <p className="text-muted-foreground leading-relaxed">
