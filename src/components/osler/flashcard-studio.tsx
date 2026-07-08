@@ -616,13 +616,10 @@ export function FlashcardStudio({
               const count = subdeckCardCount(subdeck.id);
               const dueCount = subdeckDueCount(subdeck.id);
               return (
-                <motion.button
+                <button
                   key={subdeck.id}
-                  initial={{ opacity: 0, y: 8 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.2 }}
                   onClick={() => startDeck(deckIndex, subdeck.id)}
-                  className="text-left bg-card border border-border rounded-xl p-5 hover:border-primary/40 hover:shadow-md hover:bg-primary/[0.02] transition-all group"
+                  className="medos-fade-in text-left bg-card border border-border rounded-xl p-5 hover:border-primary/40 hover:shadow-md hover:bg-primary/[0.02] transition-colors group"
                 >
                   <div className="flex items-center gap-3 mb-3">
                     <div
@@ -658,7 +655,7 @@ export function FlashcardStudio({
                   {dueCount === 0 && count > 0 && (
                     <span className="text-xs text-muted-foreground/50">All reviewed</span>
                   )}
-                </motion.button>
+                </button>
               );
             })}
           </div>
@@ -731,11 +728,8 @@ export function FlashcardStudio({
                 : 0;
               const subdecks = deck.deck.subdecks ?? [];
               return (
-                <motion.button
+                <button
                   key={deck.item.uid}
-                  initial={{ opacity: 0, y: 8 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: idx * 0.04, duration: 0.2 }}
                   onClick={() => {
                     if (subdecks.length > 0) {
                       openSubdecks(idx);
@@ -743,7 +737,8 @@ export function FlashcardStudio({
                       startDeck(idx, null);
                     }
                   }}
-                  className="text-left bg-card border border-border rounded-xl p-5 hover:border-primary/40 hover:shadow-md hover:bg-primary/[0.02] transition-all group"
+                  className="medos-fade-in text-left bg-card border border-border rounded-xl p-5 hover:border-primary/40 hover:shadow-md hover:bg-primary/[0.02] transition-colors group"
+                  style={{ animationDelay: `${idx * 0.04}s` }}
                 >
                   <div className="flex items-center gap-3 mb-3">
                     <div
@@ -789,7 +784,7 @@ export function FlashcardStudio({
                       }}
                     />
                   </div>
-                </motion.button>
+                </button>
               );
             })}
           </div>

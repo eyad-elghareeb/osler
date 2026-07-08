@@ -6,6 +6,7 @@ import {
   ChevronLeft,
   ChevronRight,
   ChevronDown,
+  ClipboardCheck,
   Flag,
   Check,
   X,
@@ -45,8 +46,10 @@ import {
   Keyboard,
   Folder,
   Grid3x3,
+  Layers,
   Search,
   SlidersHorizontal,
+  ArrowLeft,
   ArrowUpDown,
 } from "lucide-react";
 import { loadAllContent, ENGINE_META } from "@/lib/osler/content";
@@ -642,6 +645,80 @@ function HomeView({
 /* ─────────────────────────────────────────────────────────────────────────
  * CONTENT TAB — Grid of premade content packs grouped by engine type
  * ───────────────────────────────────────────────────────────────────────── */
+const ENGINE_ICONS: Record<
+  EngineType,
+  React.ComponentType<{ className?: string; style?: React.CSSProperties }>
+> = {
+  quiz: ClipboardCheck,
+  bank: BookOpen,
+  flashcard: Layers,
+  written: PenTool,
+  osce: Activity,
+};
+
+function PackCard({
+  item,
+  content,
+  index,
+  onOpenPack,
+}: {
+  item: ManifestItem;
+  content: AnyContent;
+  index: number;
+  onOpenPack?: (item: ManifestItem) => void;
+}) {
+  const meta = ENGINE_META[item.type as EngineType];
+  const Icon = ENGINE_ICONS[item.type as EngineType] ?? ListChecks;
+  const count = countQuestions(content);
+  const packProgress = storage.packProgress(item.uid);
+  const accuracy =
+    packProgress.attempted > 0
+      ? Math.round((packProgress.correct / packProgress.attempted) * 100)
+      : 0;
+  return (
+    <button
+      onClick={() => onOpenPack?.(item)}
+      className="medos-fade-in text-left bg-card border border-border rounded-xl p-5 hover:border-primary/40 hover:shadow-md hover:bg-primary/[0.02] transition-colors group flex flex-col gap-3"
+      style={{ animationDelay: `${index * 0.03}s` }}
+    >
+      <div className="flex items-center gap-3">
+        <div
+          className="size-11 rounded-xl flex items-center justify-center shrink-0"
+          style={{ backgroundColor: `${meta.color}/15`, color: meta.color }}
+        >
+          <Icon className="size-5" />
+        </div>
+        <div className="min-w-0 flex-1">
+          <h3 className="font-semibold truncate text-foreground">{item.title}</h3>
+          <p className="text-xs text-muted-foreground">
+            {count} question{count !== 1 ? "s" : ""}
+          </p>
+        </div>
+        <ChevronRight className="size-4 text-muted-foreground/40 group-hover:text-muted-foreground transition-colors shrink-0" />
+      </div>
+      <p className="text-xs text-muted-foreground/70 line-clamp-2">
+        {content.meta.description}
+      </p>
+      {packProgress.attempted > 0 ? (
+        <>
+          <div className="flex items-center gap-2 text-[11px]">
+            <span className="text-emerald-500 font-medium tabular-nums">{accuracy}%</span>
+            <span className="text-muted-foreground">accuracy</span>
+          </div>
+          <div className="h-1.5 rounded-full bg-muted/40 overflow-hidden">
+            <div
+              className="h-full rounded-full bg-emerald-500 transition-all duration-300"
+              style={{ width: `${accuracy}%` }}
+            />
+          </div>
+        </>
+      ) : (
+        <span className="text-[11px] text-muted-foreground/50">Not started</span>
+      )}
+    </button>
+  );
+}
+
 function ContentTab({
   data,
   onOpenPack,
@@ -651,21 +728,12 @@ function ContentTab({
 }) {
   const [searchQuery, setSearchQuery] = React.useState("");
   const [debouncedSearchQuery, setDebouncedSearchQuery] = React.useState("");
+  const [selectedEngine, setSelectedEngine] = React.useState<EngineType | null>(null);
 
   React.useEffect(() => {
     const t = setTimeout(() => setDebouncedSearchQuery(searchQuery), 200);
     return () => clearTimeout(t);
   }, [searchQuery]);
-
-  const [expandedFolders, setExpandedFolders] = React.useState<Record<string, boolean>>(() => {
-    const init: Record<string, boolean> = {};
-    Object.keys(ENGINE_META).forEach((k) => { init[k] = true; });
-    return init;
-  });
-
-  const toggleFolder = (type: string) => {
-    setExpandedFolders((prev) => ({ ...prev, [type]: !prev[type] }));
-  };
 
   // Group items by engine type (run unconditionally before any early return)
   const grouped = React.useMemo(() => {
@@ -696,6 +764,26 @@ function ContentTab({
     return result;
   }, [grouped, debouncedSearchQuery, data]);
 
+  // Per-engine aggregates for the stat bar / folder cards
+  const engineStats = React.useMemo(() => {
+    const map: Record<
+      string,
+      { packs: number; questions: number; attempted: number; correct: number }
+    > = {};
+    if (!data) return map;
+    for (const { item, content } of data.items) {
+      if (!content) continue;
+      const t = item.type;
+      if (!map[t]) map[t] = { packs: 0, questions: 0, attempted: 0, correct: 0 };
+      map[t].packs += 1;
+      map[t].questions += countQuestions(content);
+      const p = storage.packProgress(item.uid);
+      map[t].attempted += p.attempted;
+      map[t].correct += p.correct;
+    }
+    return map;
+  }, [data]);
+
   if (!data) {
     return (
       <div className="flex items-center justify-center py-16">
@@ -706,8 +794,10 @@ function ContentTab({
 
   if (data.items.length === 0) {
     return (
-      <div className="qbank-card text-center py-16">
-        <Grid3x3 className="size-10 text-muted-foreground mx-auto mb-3" />
+      <div className="text-center py-16">
+        <div className="size-14 rounded-full bg-muted/40 flex items-center justify-center mx-auto mb-4">
+          <Grid3x3 className="size-6 text-muted-foreground" />
+        </div>
         <h3 className="text-base font-semibold mb-1">No content packs</h3>
         <p className="text-sm text-muted-foreground">
           No content packs are available. Add packs to the manifest to get started.
@@ -716,111 +806,216 @@ function ContentTab({
     );
   }
 
-  return (
-    <div className="space-y-3">
-      {/* Search */}
-      <div className="relative">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
-        <input
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          placeholder="Search content packs by title, description, or tag…"
-          className="w-full h-10 pl-10 pr-4 rounded-xl border border-border bg-card text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
-        />
-      </div>
+  // ── PACKS VIEW (engine selected) ───────────────────────────────────────
+  if (selectedEngine) {
+    const meta = ENGINE_META[selectedEngine];
+    const Icon = ENGINE_ICONS[selectedEngine] ?? ListChecks;
+    const items = (filtered[selectedEngine] ?? []).filter((x) => x.content);
+    const stat = engineStats[selectedEngine] ?? {
+      packs: 0,
+      questions: 0,
+      attempted: 0,
+      correct: 0,
+    };
+    const accuracy =
+      stat.attempted > 0 ? Math.round((stat.correct / stat.attempted) * 100) : 0;
 
-      {/* Folder groups */}
-      {Object.entries(filtered).map(([type, items]) => {
-        const meta = ENGINE_META[type as EngineType];
-        const isOpen = expandedFolders[type] ?? true;
-        return (
-          <div key={type} className="qbank-card p-0 overflow-hidden">
-            {/* Folder header */}
+    return (
+      <div>
+        <div className="max-w-5xl mx-auto px-0 sm:px-0 py-2">
+          {/* Header */}
+          <div className="mb-5">
             <button
-              onClick={() => toggleFolder(type)}
-              className="w-full flex items-center gap-3 px-5 py-3.5 hover:bg-muted/40 transition-colors text-left"
+              onClick={() => setSelectedEngine(null)}
+              className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors mb-3"
             >
-              <Folder className="size-5 text-primary shrink-0" />
-              <div className="flex-1 min-w-0">
-                <span className="text-sm font-semibold text-foreground">{meta.label}</span>
-                <span className="text-xs text-muted-foreground ml-2">({items.length} pack{items.length > 1 ? "s" : ""})</span>
-              </div>
-              <ChevronDown
-                className={cn(
-                  "size-4 text-muted-foreground transition-transform shrink-0",
-                  isOpen && "rotate-180"
-                )}
-              />
+              <ArrowLeft className="size-3.5" />
+              All Engines
             </button>
-
-            {/* Grid content */}
-            <AnimatePresence initial={false}>
-              {isOpen && (
-                <motion.div
-                  initial={{ height: 0, opacity: 0 }}
-                  animate={{ height: "auto", opacity: 1 }}
-                  exit={{ height: 0, opacity: 0 }}
-                  transition={{ duration: 0.2 }}
-                  className="overflow-hidden"
-                >
-                  <div className="px-5 pb-4 pt-1 border-t border-border">
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 mt-3">
-                      {items.map(({ item, content }) => {
-                        if (!content) return null;
-                        const count = countQuestions(content);
-                        const packProgress = storage.packProgress(item.uid);
-                        const accuracy = packProgress.attempted > 0
-                          ? Math.round((packProgress.correct / packProgress.attempted) * 100)
-                          : 0;
-                        return (
-                          <button
-                            key={item.uid}
-                            onClick={() => onOpenPack?.(item)}
-                            className="text-left p-4 rounded-xl border border-border bg-card hover:border-primary/40 hover:bg-primary/5 transition-all flex flex-col gap-2 group"
-                          >
-                            <div className="flex items-start justify-between gap-2">
-                              <div className="size-9 rounded-lg flex items-center justify-center shrink-0 bg-primary/15 text-primary">
-                                <ListChecks className="size-4" />
-                              </div>
-                              <Badge variant="secondary" className="text-[10px] shrink-0">
-                                {meta.label}
-                              </Badge>
-                            </div>
-                            <div className="min-w-0">
-                              <span className="text-sm font-semibold text-foreground block truncate">
-                                {item.title}
-                              </span>
-                              <p className="text-xs text-muted-foreground line-clamp-2 mt-1 leading-relaxed">
-                                {content.meta.description}
-                              </p>
-                            </div>
-                            <div className="flex items-center gap-2 text-[11px] text-muted-foreground mt-auto">
-                              <span>{count} question{count !== 1 ? "s" : ""}</span>
-                              {packProgress.attempted > 0 && (
-                                <>
-                                  <span>·</span>
-                                  <span className="text-emerald-500">{accuracy}%</span>
-                                </>
-                              )}
-                            </div>
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-                </motion.div>
-              )}
-            </AnimatePresence>
+            <div className="flex items-center gap-2 text-xs text-muted-foreground mb-1">
+              <Icon className="size-3.5" style={{ color: meta.color }} />
+              <span style={{ color: meta.color }}>{meta.label}</span>
+            </div>
+            <h1 className="text-2xl md:text-3xl font-bold tracking-tight mb-1">
+              {meta.label} Packs
+            </h1>
+            <p className="text-sm text-muted-foreground">
+              {stat.packs} pack{stat.packs !== 1 ? "s" : ""} &middot; {stat.questions} question
+              {stat.questions !== 1 ? "s" : ""}
+            </p>
           </div>
-        );
-      })}
 
-      {Object.keys(filtered).length === 0 && (
-        <div className="qbank-card text-center py-12">
-          <Search className="size-8 text-muted-foreground mx-auto mb-2" />
-          <p className="text-sm text-muted-foreground">No packs match your search.</p>
+          {/* Search */}
+          <div className="relative mb-5">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
+            <input
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder={`Search ${meta.label.toLowerCase()} packs…`}
+              className="w-full h-10 pl-10 pr-4 rounded-xl border border-border bg-card text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+            />
+          </div>
+
+          {items.length === 0 ? (
+            <div className="text-center py-16">
+              <div className="size-14 rounded-full bg-muted/40 flex items-center justify-center mx-auto mb-4">
+                <Search className="size-6 text-muted-foreground" />
+              </div>
+              <h3 className="text-base font-semibold mb-1">No packs found</h3>
+              <p className="text-sm text-muted-foreground">Try a different search term.</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {items.map(({ item, content }, idx) => (
+                <PackCard
+                  key={item.uid}
+                  item={item}
+                  content={content as AnyContent}
+                  index={idx}
+                  onOpenPack={onOpenPack}
+                />
+              ))}
+            </div>
+          )}
         </div>
-      )}
+      </div>
+    );
+  }
+
+  // ── ENGINES VIEW (folder grid, mirrors the flashcard decks view) ───────
+  const engineEntries = Object.entries(filtered) as Array<
+    [EngineType, typeof data.items]
+  >;
+
+  return (
+    <div className="h-full overflow-y-auto medos-scroll">
+      <div className="max-w-5xl mx-auto px-0 sm:px-0 py-2">
+        {/* Stat bar */}
+        <div className="grid grid-cols-3 gap-3 mb-6">
+          <div className="bg-card border border-border rounded-xl p-3.5">
+            <div className="flex items-center gap-2 text-xs text-muted-foreground mb-1">
+              <Grid3x3 className="size-3.5" />
+              Packs
+            </div>
+            <div className="text-xl font-bold">{data.items.length}</div>
+          </div>
+          <div className="bg-card border border-border rounded-xl p-3.5">
+            <div className="flex items-center gap-2 text-xs text-muted-foreground mb-1">
+              <ListChecks className="size-3.5" />
+              Questions
+            </div>
+            <div className="text-xl font-bold">
+              {Object.values(engineStats).reduce((s, e) => s + e.questions, 0)}
+            </div>
+          </div>
+          <div className="bg-card border border-border rounded-xl p-3.5">
+            <div className="flex items-center gap-2 text-xs text-muted-foreground mb-1">
+              <Activity className="size-3.5" />
+              Avg Accuracy
+            </div>
+            <div className="text-xl font-bold">
+              {(() => {
+                const totalAttempted = Object.values(engineStats).reduce(
+                  (s, e) => s + e.attempted,
+                  0
+                );
+                const totalCorrect = Object.values(engineStats).reduce(
+                  (s, e) => s + e.correct,
+                  0
+                );
+                return totalAttempted > 0
+                  ? `${Math.round((totalCorrect / totalAttempted) * 100)}%`
+                  : "—";
+              })()}
+            </div>
+          </div>
+        </div>
+
+        {/* Search */}
+        <div className="relative mb-5">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
+          <input
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Search content packs by title, description, or tag…"
+            className="w-full h-10 pl-10 pr-4 rounded-xl border border-border bg-card text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+          />
+        </div>
+
+        {/* Engine folders */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          {engineEntries.map(([type, items], idx) => {
+            const meta = ENGINE_META[type];
+            const Icon = ENGINE_ICONS[type] ?? ListChecks;
+            const stat = engineStats[type] ?? {
+              packs: 0,
+              questions: 0,
+              attempted: 0,
+              correct: 0,
+            };
+            const accuracy =
+              stat.attempted > 0
+                ? Math.round((stat.correct / stat.attempted) * 100)
+                : 0;
+            return (
+              <button
+                key={type}
+                onClick={() => setSelectedEngine(type)}
+                className="medos-fade-in text-left bg-card border border-border rounded-xl p-5 hover:border-primary/40 hover:shadow-md hover:bg-primary/[0.02] transition-colors group flex flex-col gap-3"
+                style={{ animationDelay: `${idx * 0.04}s` }}
+              >
+                <div className="flex items-center gap-3">
+                  <div
+                    className="size-11 rounded-xl flex items-center justify-center shrink-0"
+                    style={{ backgroundColor: `${meta.color}/15`, color: meta.color }}
+                  >
+                    <Icon className="size-5" />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <h3 className="font-semibold truncate text-foreground">{meta.label}</h3>
+                    <p className="text-xs text-muted-foreground">
+                      {items.length} pack{items.length !== 1 ? "s" : ""}
+                    </p>
+                  </div>
+                  <ChevronRight className="size-4 text-muted-foreground/40 group-hover:text-muted-foreground transition-colors shrink-0" />
+                </div>
+                <p className="text-xs text-muted-foreground/70 line-clamp-2">
+                  {stat.questions} question{stat.questions !== 1 ? "s" : ""} across{" "}
+                  {items.length} pack{items.length !== 1 ? "s" : ""}
+                </p>
+                {stat.attempted > 0 ? (
+                  <>
+                    <div className="flex items-center gap-2 text-[11px]">
+                      <span className="text-emerald-500 font-medium tabular-nums">
+                        {accuracy}%
+                      </span>
+                      <span className="text-muted-foreground">avg accuracy</span>
+                    </div>
+                    <div className="h-1.5 rounded-full bg-muted/40 overflow-hidden">
+                      <div
+                        className="h-full rounded-full bg-emerald-500 transition-all duration-300"
+                        style={{ width: `${accuracy}%` }}
+                      />
+                    </div>
+                  </>
+                ) : (
+                  <span className="text-[11px] text-muted-foreground/50">Not started</span>
+                )}
+              </button>
+            );
+          })}
+        </div>
+
+        {engineEntries.length === 0 && (
+          <div className="text-center py-16">
+            <div className="size-14 rounded-full bg-muted/40 flex items-center justify-center mx-auto mb-4">
+              <Search className="size-6 text-muted-foreground" />
+            </div>
+            <h3 className="text-base font-semibold mb-1">No packs found</h3>
+            <p className="text-sm text-muted-foreground">Try a different search term.</p>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

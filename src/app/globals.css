@@ -191,6 +191,15 @@ html::-webkit-scrollbar-thumb:hover {
   animation: medos-pulse 2s ease-in-out infinite;
 }
 
+/* One-shot mount fade (re-render safe, no JS animation conflict) */
+@keyframes medos-fade-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.medos-fade-in {
+  animation: medos-fade-in 0.25s ease-out both;
+}
+
 /* Article content (rendered inside the article viewer) */
 .medos-article {
   color: oklch(0.93 0.005 240);
