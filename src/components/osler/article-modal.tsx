@@ -7,6 +7,7 @@ import { ARTICLES, searchArticles, type Article } from "@/lib/osler/articles";
 import { cn } from "@/lib/utils";
 import { useArticleHighlighter } from "@/hooks/use-article-highlighter";
 import { HighlighterToolbar } from "./highlighter-toolbar";
+import { usePlatform } from "@/hooks/use-platform";
 
 const BOOKMARKS_KEY = "osler-article-bookmarks";
 
@@ -99,6 +100,8 @@ export function FloatingArticleModal({
     }
   }, [articleId]);
 
+  const platform = usePlatform();
+
   return (
     <AnimatePresence>
       {articleId && (
@@ -106,19 +109,24 @@ export function FloatingArticleModal({
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
-          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4"
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 backdrop-blur-sm"
           onClick={() => {
             if (hlCtrl.highlightMode) { hlCtrl.setHighlightMode(false); }
             else { onClose(); }
           }}
         >
           <motion.div
-            initial={{ scale: 0.95, opacity: 0, y: 12 }}
-            animate={{ scale: 1, opacity: 1, y: 0 }}
-            exit={{ scale: 0.95, opacity: 0, y: 12 }}
-            transition={{ type: "spring", damping: 25, stiffness: 300 }}
+            initial={platform.isPhone ? { y: "100%", opacity: 0 } : { scale: 0.95, opacity: 0, y: 12 }}
+            animate={platform.isPhone ? { y: 0, opacity: 1 } : { scale: 1, opacity: 1, y: 0 }}
+            exit={platform.isPhone ? { y: "100%", opacity: 0 } : { scale: 0.95, opacity: 0, y: 12 }}
+            transition={platform.isPhone
+              ? { type: "spring", damping: 32, stiffness: 320 }
+              : { type: "spring", damping: 25, stiffness: 300 }}
             onClick={(e) => e.stopPropagation()}
-            className="bg-card border border-border rounded-2xl shadow-2xl w-full max-w-5xl h-[85vh] flex flex-col overflow-hidden"
+            className={platform.isPhone
+              ? "bg-card flex flex-col overflow-hidden h-full w-full"
+              : "bg-card border border-border rounded-2xl shadow-2xl w-full max-w-5xl h-[85vh] flex flex-col overflow-hidden"
+            }
           >
             {/* Header */}
             <header className="shrink-0 border-b border-border bg-card/40 backdrop-blur-sm px-4 py-2.5 flex items-center gap-3">

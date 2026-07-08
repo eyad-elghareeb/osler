@@ -85,6 +85,7 @@ import { AiAssistant } from "./ai-assistant";
 import { HighlightedContent } from "./highlighted-content";
 import { useShortcutBindings, useShortcutListener } from "@/hooks/use-shortcuts";
 import { defaultBindings } from "@/lib/osler/shortcuts";
+import { useIsMobile } from "@/hooks/use-mobile";
 import { gradeWithAI, createManualEvaluation } from "@/lib/osler/grading";
 
 const LETTERS = ["A", "B", "C", "D", "E", "F", "G", "H"];
@@ -468,15 +469,10 @@ export function QBankStudio({
         </AnimatePresence>
         <AnimatePresence>
           {labValuesOpen && (
-            <motion.div
-              initial={{ x: 320, opacity: 0 }}
-              animate={{ x: 0, opacity: 1 }}
-              exit={{ x: 320, opacity: 0 }}
-              transition={{ type: "spring", damping: 28, stiffness: 300 }}
-              className="fixed right-0 top-12 bottom-0 z-50 w-80 border-l border-border bg-card shadow-xl"
-            >
-              <LabValuesSidebar onClose={() => setLabValuesOpen(false)} />
-            </motion.div>
+            <LabValuesSidebar
+              open={labValuesOpen}
+              onClose={() => setLabValuesOpen(false)}
+            />
           )}
         </AnimatePresence>
         <FloatingArticleModal
@@ -1387,6 +1383,7 @@ function QuizView({
     lineHeight: 1.7,
   });
   const [articleSearchOpen, setArticleSearchOpen] = React.useState(false);
+  const isMobile = useIsMobile();
   const [mobileTutorTab, setMobileTutorTab] = React.useState<"question" | "answer">("question");
   const [showShortcuts, setShowShortcuts] = React.useState(false);
   const bindings = useShortcutBindings();
@@ -2359,31 +2356,33 @@ function QuizView({
               >
                 <Sparkles className="size-4" />
               </Button>
-              <Popover open={articleSearchOpen} onOpenChange={setArticleSearchOpen}>
-                <PopoverTrigger asChild>
-                  <Button variant="outline" size="sm" className="h-9 px-2.5 rounded-lg" title="Open Article">
-                    <BookOpen className="size-4" />
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent align="end" className="w-72 p-0 max-h-64 overflow-y-auto">
-                  <div className="py-1">
-                    <div className="px-4 py-2 text-xs font-bold uppercase tracking-wider text-primary border-b border-border">Open Article</div>
-                    {Object.values(ARTICLES).map((a) => (
-                      <button
-                        key={a.id}
-                        onClick={() => {
-                          onOpenArticle(a.id);
-                          setArticleSearchOpen(false);
-                        }}
-                        className="w-full text-left text-sm px-4 py-2.5 hover:bg-muted transition-colors flex items-center gap-2 border-b border-border/40 last:border-0"
-                      >
-                        <FileText className="size-3.5 shrink-0 text-muted-foreground" />
-                        <span className="truncate">{a.title}</span>
-                      </button>
-                    ))}
-                  </div>
-                </PopoverContent>
-              </Popover>
+              {!isMobile && (
+                <Popover open={articleSearchOpen} onOpenChange={setArticleSearchOpen}>
+                  <PopoverTrigger asChild>
+                    <Button variant="outline" size="sm" className="h-9 px-2.5 rounded-lg" title="Open Article">
+                      <BookOpen className="size-4" />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent align="end" className="w-72 p-0 max-h-64 overflow-y-auto">
+                    <div className="py-1">
+                      <div className="px-4 py-2 text-xs font-bold uppercase tracking-wider text-primary border-b border-border">Open Article</div>
+                      {Object.values(ARTICLES).map((a) => (
+                        <button
+                          key={a.id}
+                          onClick={() => {
+                            onOpenArticle(a.id);
+                            setArticleSearchOpen(false);
+                          }}
+                          className="w-full text-left text-sm px-4 py-2.5 hover:bg-muted transition-colors flex items-center gap-2 border-b border-border/40 last:border-0"
+                        >
+                          <FileText className="size-3.5 shrink-0 text-muted-foreground" />
+                          <span className="truncate">{a.title}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </PopoverContent>
+                </Popover>
+              )}
               <Button
                 variant="outline" size="sm"
                 onClick={() => setShowShortcuts((s) => !s)}
@@ -2459,13 +2458,13 @@ function QuizView({
             </Button>
 
             {/* Tools dropdown for mobile */}
-            <Popover>
-              <PopoverTrigger asChild>
-                <Button variant="outline" size="icon" className="size-10 rounded-lg shrink-0 medos-touch-target" title="Tools">
-                  <CalcIcon className="size-4" />
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent align="center" className="min-w-44">
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button variant="outline" size="icon" className="size-10 rounded-lg shrink-0 medos-touch-target" title="Tools">
+                    <CalcIcon className="size-4" />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent side="top" align="end" className="min-w-44">
                 <div className="py-1">
                   <button onClick={onToggleCalculator} className="w-full text-left text-sm px-3 py-2 hover:bg-muted flex items-center gap-2">
                     <CalcIcon className="size-4" /> Calculator
@@ -2487,6 +2486,36 @@ function QuizView({
                 </div>
               </PopoverContent>
             </Popover>
+
+            {/* Mobile article search dropdown — anchored above bottom bar */}
+            <AnimatePresence>
+              {articleSearchOpen && (
+                <motion.div
+                  initial={{ opacity: 0, y: 8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: 8 }}
+                  transition={{ duration: 0.15 }}
+                  className="sm:hidden fixed bottom-20 right-2 z-50 w-72 max-h-72 overflow-y-auto rounded-xl border border-border bg-card shadow-xl"
+                >
+                  <div className="py-1">
+                    <div className="px-4 py-2 text-xs font-bold uppercase tracking-wider text-primary border-b border-border">Open Article</div>
+                    {Object.values(ARTICLES).map((a) => (
+                      <button
+                        key={a.id}
+                        onClick={() => {
+                          onOpenArticle(a.id);
+                          setArticleSearchOpen(false);
+                        }}
+                        className="w-full text-left text-sm px-4 py-2.5 hover:bg-muted transition-colors flex items-center gap-2 border-b border-border/40 last:border-0"
+                      >
+                        <FileText className="size-3.5 shrink-0 text-muted-foreground" />
+                        <span className="truncate">{a.title}</span>
+                      </button>
+                    ))}
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
 
             {/* Primary action button — fills remaining space */}
             {!submitted && isMCQ ? (

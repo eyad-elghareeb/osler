@@ -1,8 +1,9 @@
 "use client";
 
 import * as React from "react";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import { FlaskConical, X } from "lucide-react";
+import { usePlatform } from "@/hooks/use-platform";
 
 type LabCategory = "chem" | "hem" | "abg" | "coag" | "other";
 
@@ -89,11 +90,12 @@ const LABS_BY_CAT: Record<LabCategory, LabItem[]> = {
   ],
 };
 
-export function LabValuesSidebar({ onClose }: { onClose: () => void }) {
+export function LabValuesSidebar({ open, onClose }: { open?: boolean; onClose: () => void }) {
+  const platform = usePlatform();
   const [tab, setTab] = React.useState<LabCategory>("chem");
   const labs = LABS_BY_CAT[tab];
 
-  return (
+  const content = (
     <div className="h-full flex flex-col">
       <div className="px-4 py-3 border-b border-border flex items-center justify-between shrink-0">
         <div className="flex items-center gap-2">
@@ -148,4 +150,29 @@ export function LabValuesSidebar({ onClose }: { onClose: () => void }) {
       </div>
     </div>
   );
+
+  if (open !== undefined) {
+    return (
+      <AnimatePresence>
+        {open && (
+          <motion.div
+            initial={platform.isPhone ? { y: "100%", opacity: 0 } : { x: 360, opacity: 0 }}
+            animate={platform.isPhone ? { y: 0, opacity: 1 } : { x: 0, opacity: 1 }}
+            exit={platform.isPhone ? { y: "100%", opacity: 0 } : { x: 360, opacity: 0 }}
+            transition={platform.isPhone
+              ? { type: "spring", damping: 32, stiffness: 320 }
+              : { type: "spring", damping: 28, stiffness: 300 }}
+            className={platform.isPhone
+              ? "fixed inset-0 z-50 bg-card flex flex-col"
+              : "fixed right-0 top-12 bottom-0 z-50 w-full sm:w-96 border-l border-border bg-card shadow-xl flex flex-col"
+            }
+          >
+            {content}
+          </motion.div>
+        )}
+      </AnimatePresence>
+    );
+  }
+
+  return content;
 }
