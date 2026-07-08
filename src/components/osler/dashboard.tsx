@@ -21,7 +21,8 @@ import {
 import { loadAllContent, ENGINE_META } from "@/lib/osler/content";
 import type { AnyContent, ManifestItem, EngineType } from "@/lib/osler/types";
 import { storage } from "@/lib/osler/storage";
-import { ARTICLES } from "@/lib/osler/articles";
+import { listAllArticles, loadArticleContent } from "@/lib/osler/articles";
+import type { Article } from "@/lib/osler/articles";
 import type { OslerView } from "./app-shell";
 import { cn } from "@/lib/utils";
 
@@ -89,9 +90,21 @@ export function Dashboard({
     ? Math.round((stats.correct / stats.attempted) * 100)
     : 0;
 
-  // Featured articles (3 random picks)
-  const featuredArticles = React.useMemo(() => {
-    return Object.values(ARTICLES).slice(0, 3);
+  const [featuredArticles, setFeaturedArticles] = React.useState<Article[]>([]);
+  const [articleCount, setArticleCount] = React.useState(0);
+
+  React.useEffect(() => {
+    (async () => {
+      try {
+        const all = await listAllArticles();
+        setArticleCount(all.length);
+        // Load full content for featured articles (need html for preview)
+        const previews = await Promise.all(
+          all.slice(0, 3).map((a) => loadArticleContent(a.id))
+        );
+        setFeaturedArticles(previews.filter(Boolean) as Article[]);
+      } catch {}
+    })();
   }, []);
 
   const greeting = (() => {
@@ -234,7 +247,7 @@ export function Dashboard({
           <QuickAction
             icon={BookOpen}
             title="Article Library"
-            subtitle={`${Object.keys(ARTICLES).length} medical articles`}
+            subtitle={`${articleCount || "..."} medical articles`}
             onClick={() => onViewChange("library")}
           />
           <QuickAction

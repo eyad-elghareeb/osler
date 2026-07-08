@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * useGestures — lightweight touch-gesture hooks for the MedOS mobile UX.
+ * useGestures — lightweight touch-gesture hooks for the Osler mobile UX.
  *
  * Three independent hooks are exported:
  *

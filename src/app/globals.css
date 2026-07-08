@@ -43,7 +43,7 @@
   --radius-xl: calc(var(--radius) + 4px);
 }
 
-/* MedOS Lite — Default = Dark (Navy + Light Blue) — UWorld mode */
+/* Osler — Default = Dark (Navy + Light Blue) */
 :root {
   --radius: 0.625rem;
   --background: oklch(0.14 0.018 260);
@@ -780,7 +780,7 @@ input, textarea, [contenteditable="true"], .medos-article, .uworld-prose, .ai-ch
 
 
 /* ═══════════════════════════════════════════════════════════════════════════
- * OSLER ENGINE STYLES — Restyled to match MedOS Lite UI/UX
+ * OSLER ENGINE STYLES
  * (navy/blue OKLCH tokens, shadcn-style cards, Geist typography)
  * ═══════════════════════════════════════════════════════════════════════════ */
 
@@ -1055,7 +1055,7 @@ input, textarea, [contenteditable="true"], .medos-article, .uworld-prose, .ai-ch
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
- * QBank Studio — Copied from MedOS Lite qbank-studio.tsx
+ * QBank Studio
  * Navy topbar with UWorld-style question layout
  * ═══════════════════════════════════════════════════════════════════════════ */
 

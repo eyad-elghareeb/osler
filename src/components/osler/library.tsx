@@ -21,9 +21,10 @@ import {
   List,
 } from "lucide-react";
 import {
-  ARTICLE_TOC,
-  ARTICLES,
-  searchArticles as searchAllArticles,
+  loadArticleToc,
+  loadArticleContent,
+  listAllArticles,
+  clearArticleCache,
   type ArticleTocNode,
   type Article,
 } from "@/lib/osler/articles";
@@ -56,25 +57,33 @@ function flattenToc(
   return result;
 }
 
-const FLAT_ARTICLES = flattenToc(ARTICLE_TOC);
-
-function searchArticles(query: string): Set<string> {
+function searchArticles(
+  query: string,
+  flatArticles: { id: string; label: string; articleId: string; path: string[] }[],
+  allArticles: Article[]
+): Set<string> {
   const q = query.toLowerCase().trim();
-  if (!q) return new Set(FLAT_ARTICLES.map((a) => a.articleId));
-  const byToc = FLAT_ARTICLES
+  if (!q) return new Set(flatArticles.map((a) => a.articleId));
+  const byToc = flatArticles
     .filter((a) => a.label.toLowerCase().includes(q) || a.path.some((p) => p.toLowerCase().includes(q)))
     .map((a) => a.articleId);
-  const byArticle = searchAllArticles(q).map((a) => a.id);
+  const byArticle = allArticles.filter((a) => {
+    const hay = (a.title + " " + a.specialty + " " + (a.tags ?? []).join(" ")).toLowerCase();
+    return hay.includes(q);
+  }).map((a) => a.id);
   return new Set([...byToc, ...byArticle]);
 }
 
 export function Library({ initialArticleId }: LibraryProps) {
+  const [toc, setToc] = React.useState<ArticleTocNode[]>([]);
+  const [articleList, setArticleList] = React.useState<Article[]>([]);
   const [expandedNodes, setExpandedNodes] = React.useState<Set<string>>(
     new Set(["cardiology", "pulmonology", "neurology"])
   );
   const [activeArticleId, setActiveArticleId] = React.useState<string | null>(
     initialArticleId ?? null
   );
+  const [activeArticle, setActiveArticle] = React.useState<Article | null>(null);
   const [bookmarks, setBookmarks] = React.useState<Set<string>>(new Set());
   const [zoom, setZoom] = React.useState(100);
   const [fontSize, setFontSize] = React.useState(15);
@@ -95,6 +104,42 @@ export function Library({ initialArticleId }: LibraryProps) {
     enabled: true,
   });
 
+  // Load TOC and article list
+  React.useEffect(() => {
+    (async () => {
+      try {
+        const [tocData, articleData] = await Promise.all([
+          loadArticleToc(),
+          listAllArticles(),
+        ]);
+        setToc(tocData);
+        setArticleList(articleData);
+      } catch (e) {
+        console.error("Failed to load article data:", e);
+      }
+    })();
+  }, []);
+
+  // Load article content when activeArticleId changes
+  React.useEffect(() => {
+    if (!activeArticleId) {
+      setActiveArticle(null);
+      return;
+    }
+    setLoading(true);
+    (async () => {
+      try {
+        const article = await loadArticleContent(activeArticleId);
+        setActiveArticle(article);
+      } catch (e) {
+        console.error(`Failed to load article ${activeArticleId}:`, e);
+        setActiveArticle(null);
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, [activeArticleId]);
+
   // Load bookmarks
   React.useEffect(() => {
     if (typeof window === "undefined") return;
@@ -112,32 +157,24 @@ export function Library({ initialArticleId }: LibraryProps) {
     }
   }, [initialArticleId]);
 
+  const flatArticles = React.useMemo(() => flattenToc(toc), [toc]);
+
   // Expand TOC nodes to show bookmarked articles
   React.useEffect(() => {
     if (bookmarks.size === 0) return;
-    const paths = FLAT_ARTICLES.filter((a) => bookmarks.has(a.articleId));
+    const paths = flatArticles.filter((a) => bookmarks.has(a.articleId));
     setExpandedNodes((prev) => {
       const next = new Set(prev);
       for (const p of paths) {
         const parts = p.path.slice(0, -1);
         for (const name of parts) {
-          const node = findNodeByLabel(name);
+          const node = findNodeByLabel(name, toc);
           if (node) next.add(node.id);
         }
       }
       return next;
     });
-  }, [bookmarks]);
-
-  const activeArticle = activeArticleId ? ARTICLES[activeArticleId] : null;
-
-  // Simulated article load
-  React.useEffect(() => {
-    if (!activeArticleId) return;
-    setLoading(true);
-    const t = setTimeout(() => setLoading(false), 200);
-    return () => clearTimeout(t);
-  }, [activeArticleId]);
+  }, [bookmarks, flatArticles, toc]);
 
   const toggleExpand = (id: string) =>
     setExpandedNodes((prev) => {
@@ -164,7 +201,7 @@ export function Library({ initialArticleId }: LibraryProps) {
     setSidebarOpen(false);
   };
 
-  const searchHits = debouncedSearchQuery.trim() ? searchArticles(debouncedSearchQuery) : null;
+  const searchHits = debouncedSearchQuery.trim() ? searchArticles(debouncedSearchQuery, flatArticles, articleList) : null;
 
   const matchedArticleIds = React.useMemo(() => {
     if (!searchHits) return null;
@@ -190,7 +227,6 @@ export function Library({ initialArticleId }: LibraryProps) {
       const text = sel.toString().trim();
       if (!text) return;
 
-      // Compute absolute offset within the article content
       const range = sel.getRangeAt(0).cloneRange();
       const headRange = document.createRange();
       headRange.selectNodeContents(el);
@@ -236,8 +272,8 @@ export function Library({ initialArticleId }: LibraryProps) {
   }, [hlCtrl.onRemove, hlCtrl.highlights, hlCtrl.highlightMode]);
 
   const bookmarkedArticles = React.useMemo(
-    () => FLAT_ARTICLES.filter((a) => bookmarks.has(a.articleId)),
-    [bookmarks]
+    () => flatArticles.filter((a) => bookmarks.has(a.articleId)),
+    [bookmarks, flatArticles]
   );
 
   return (
@@ -270,6 +306,8 @@ export function Library({ initialArticleId }: LibraryProps) {
               onClick={(e) => e.stopPropagation()}
             >
               <SidebarContent
+                toc={toc}
+                articleCount={articleList.length}
                 expanded={expandedNodes}
                 onToggle={toggleExpand}
                 activeId={activeArticleId}
@@ -291,6 +329,8 @@ export function Library({ initialArticleId }: LibraryProps) {
       {/* Desktop sidebar */}
       <aside className="hidden md:flex flex-col w-72 shrink-0 border-r border-border bg-sidebar">
         <SidebarContent
+          toc={toc}
+          articleCount={articleList.length}
           expanded={expandedNodes}
           onToggle={toggleExpand}
           activeId={activeArticleId}
@@ -348,7 +388,7 @@ export function Library({ initialArticleId }: LibraryProps) {
             </div>
           </>
         ) : (
-          <EmptyState onOpen={openArticle} />
+          <EmptyState onOpen={openArticle} articleList={articleList} />
         )}
       </main>
     </div>
@@ -356,6 +396,8 @@ export function Library({ initialArticleId }: LibraryProps) {
 }
 
 function SidebarContent({
+  toc,
+  articleCount,
   expanded,
   onToggle,
   activeId,
@@ -369,6 +411,8 @@ function SidebarContent({
   onTabChange,
   bookmarkedArticles,
 }: {
+  toc: ArticleTocNode[];
+  articleCount: number;
   expanded: Set<string>;
   onToggle: (id: string) => void;
   activeId: string | null;
@@ -459,10 +503,11 @@ function SidebarContent({
             ))}
           </div>
         ) : (
-          ARTICLE_TOC.map((node) => (
+          toc.map((node) => (
             <TocNode
               key={node.id}
               node={node}
+              toc={toc}
               depth={0}
               expanded={expanded}
               onToggle={onToggle}
@@ -477,14 +522,14 @@ function SidebarContent({
         )}
       </div>
       <div className="px-3 py-2 border-t border-border text-[10px] text-muted-foreground flex items-center justify-between">
-        <span>{Object.keys(ARTICLES).length} articles</span>
+        <span>{articleCount} articles</span>
         <span>{bookmarks.size} bookmarked</span>
       </div>
     </div>
   );
 }
 
-function findNodeByLabel(label: string): ArticleTocNode | null {
+function findNodeByLabel(label: string, nodes: ArticleTocNode[]): ArticleTocNode | null {
   const walk = (ns: ArticleTocNode[]): ArticleTocNode | null => {
     for (const n of ns) {
       if (n.label === label) return n;
@@ -495,11 +540,12 @@ function findNodeByLabel(label: string): ArticleTocNode | null {
     }
     return null;
   };
-  return walk(ARTICLE_TOC);
+  return walk(nodes);
 }
 
 function TocNode({
   node,
+  toc,
   depth,
   expanded,
   onToggle,
@@ -511,6 +557,7 @@ function TocNode({
   matchedArticleIds,
 }: {
   node: ArticleTocNode;
+  toc: ArticleTocNode[];
   depth: number;
   expanded: Set<string>;
   onToggle: (id: string) => void;
@@ -583,6 +630,7 @@ function TocNode({
             <TocNode
               key={c.id}
               node={c}
+              toc={toc}
               depth={depth + 1}
               expanded={expanded}
               onToggle={onToggle}
@@ -730,8 +778,8 @@ function ArticleHeader({
   );
 }
 
-function EmptyState({ onOpen }: { onOpen: (id: string) => void }) {
-  const popular = Object.values(ARTICLES).slice(0, 6);
+function EmptyState({ onOpen, articleList }: { onOpen: (id: string) => void; articleList: Article[] }) {
+  const popular = articleList.slice(0, 6);
   return (
     <div className="flex-1 flex flex-col items-center justify-center text-center px-4 py-12">
       <div className="w-16 h-16 rounded-full bg-primary/15 text-primary flex items-center justify-center mb-4">

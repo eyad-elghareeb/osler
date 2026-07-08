@@ -72,7 +72,8 @@ import {
   type WrittenDraft,
   type WrittenEvaluation,
 } from "@/lib/osler/storage";
-import { ARTICLES } from "@/lib/osler/articles";
+import { listAllArticles } from "@/lib/osler/articles";
+import type { Article } from "@/lib/osler/articles";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -175,6 +176,16 @@ export function QBankStudio({
   const [articleModalId, setArticleModalId] = React.useState<string | null>(null);
   const [aiAssistantOpen, setAiAssistantOpen] = React.useState(false);
   const [navOpenMobile, setNavOpenMobile] = React.useState(false);
+  const [articleList, setArticleList] = React.useState<Article[]>([]);
+
+  React.useEffect(() => {
+    (async () => {
+      try {
+        const all = await listAllArticles();
+        setArticleList(all);
+      } catch {}
+    })();
+  }, []);
 
   const startSession = React.useCallback(
     (item: ManifestItem, content: AnyContent, maxQuestions?: number) => {
@@ -307,6 +318,7 @@ export function QBankStudio({
           labValuesOpen={labValuesOpen}
           aiAssistantOpen={aiAssistantOpen}
           navOpenMobile={navOpenMobile}
+          articleList={articleList}
           onToggleCalculator={() => setCalculatorOpen((o) => !o)}
           onToggleLabValues={() => setLabValuesOpen((o) => !o)}
           onToggleAiAssistant={() => setAiAssistantOpen((o) => !o)}
@@ -1317,6 +1329,7 @@ function QuizView({
   labValuesOpen,
   aiAssistantOpen,
   navOpenMobile,
+  articleList,
   onToggleCalculator,
   onToggleLabValues,
   onToggleAiAssistant,
@@ -1343,6 +1356,7 @@ function QuizView({
   labValuesOpen: boolean;
   aiAssistantOpen: boolean;
   navOpenMobile: boolean;
+  articleList: Article[];
   onToggleCalculator: () => void;
   onToggleLabValues: () => void;
   onToggleAiAssistant: () => void;
@@ -2366,7 +2380,7 @@ function QuizView({
                   <PopoverContent align="end" className="w-72 p-0 max-h-64 overflow-y-auto">
                     <div className="py-1">
                       <div className="px-4 py-2 text-xs font-bold uppercase tracking-wider text-primary border-b border-border">Open Article</div>
-                      {Object.values(ARTICLES).map((a) => (
+                      {articleList.map((a) => (
                         <button
                           key={a.id}
                           onClick={() => {
@@ -2499,7 +2513,7 @@ function QuizView({
                 >
                   <div className="py-1">
                     <div className="px-4 py-2 text-xs font-bold uppercase tracking-wider text-primary border-b border-border">Open Article</div>
-                    {Object.values(ARTICLES).map((a) => (
+                    {articleList.map((a) => (
                       <button
                         key={a.id}
                         onClick={() => {

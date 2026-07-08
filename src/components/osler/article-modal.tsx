@@ -3,7 +3,7 @@
 import * as React from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { BookOpen, X, Clock, ChevronRight, Search, Bookmark, BookmarkCheck } from "lucide-react";
-import { ARTICLES, searchArticles, type Article } from "@/lib/osler/articles";
+import { loadArticleContent, listAllArticles, searchArticles as searchArticlesAsync, type Article } from "@/lib/osler/articles";
 import { cn } from "@/lib/utils";
 import { useArticleHighlighter } from "@/hooks/use-article-highlighter";
 import { HighlighterToolbar } from "./highlighter-toolbar";
@@ -27,6 +27,8 @@ export function FloatingArticleModal({
   const [debouncedQuery, setDebouncedQuery] = React.useState("");
   const [showSidebar, setShowSidebar] = React.useState(false);
   const [bookmarks, setBookmarks] = React.useState<Set<string>>(new Set());
+  const [article, setArticle] = React.useState<Article | null>(null);
+  const [searchResults, setSearchResults] = React.useState<Article[]>([]);
 
   const hlCtrl = useArticleHighlighter({
     source: "library",
@@ -39,6 +41,18 @@ export function FloatingArticleModal({
     if (articleId) setShowSidebar(false);
   }, [articleId]);
 
+  // Load article content when activeId changes
+  React.useEffect(() => {
+    if (!activeId) {
+      setArticle(null);
+      return;
+    }
+    (async () => {
+      const loaded = await loadArticleContent(activeId);
+      setArticle(loaded);
+    })();
+  }, [activeId]);
+
   // Load bookmarks
   React.useEffect(() => {
     if (typeof window === "undefined") return;
@@ -48,13 +62,26 @@ export function FloatingArticleModal({
     } catch {}
   }, []);
 
+  // Debounced search
+  React.useEffect(() => {
+    const t = setTimeout(async () => {
+      if (!debouncedQuery) {
+        const all = await listAllArticles();
+        setSearchResults(all);
+        return;
+      }
+      const results = await searchArticlesAsync(debouncedQuery);
+      setSearchResults(results);
+    }, 200);
+    return () => clearTimeout(t);
+  }, [debouncedQuery]);
+
   React.useEffect(() => {
     const t = setTimeout(() => setDebouncedQuery(query), 200);
     return () => clearTimeout(t);
   }, [query]);
 
-  const article: Article | null = activeId ? ARTICLES[activeId] : null;
-  const searchResults = debouncedQuery ? searchArticles(debouncedQuery) : Object.values(ARTICLES);
+  // Initial debouncedQuery is "", triggers search effect to load list on mount
 
   const handleOpen = (id: string) => {
     setActiveId(id);
@@ -228,31 +255,9 @@ export function FloatingArticleModal({
               {/* Article content */}
               <div className="flex-1 overflow-y-auto medos-scroll">
                 {article ? (
-                  <iframe
-                    ref={hlCtrl.iframeRef}
-                    title={article.title}
-                    srcDoc={`<html><head><style>
-                      body { font-family: system-ui, sans-serif; padding: 2rem; max-width: 800px; margin: 0 auto; color: #1a1a1a; line-height: 1.7; font-size: 15px; }
-                      h1 { font-size: 1.6rem; font-weight: 700; margin: 0 0 0.75rem; line-height: 1.3; }
-                      h2 { font-size: 1.25rem; font-weight: 600; margin: 1.5rem 0 0.5rem; line-height: 1.35; }
-                      h3 { font-size: 1.05rem; font-weight: 600; margin: 1.25rem 0 0.4rem; line-height: 1.4; }
-                      p { margin: 0 0 0.75rem; line-height: 1.7; }
-                      ul, ol { margin: 0 0 0.75rem; padding-left: 1.5rem; }
-                      li { margin-bottom: 0.25rem; line-height: 1.6; }
-                      strong { font-weight: 600; }
-                      em { font-style: italic; }
-                      a { color: #2563eb; text-decoration: underline; }
-                      code { font-size: 0.85em; padding: 0.15rem 0.35rem; border-radius: 4px; background: #e5e7eb; }
-                      blockquote { border-left: 3px solid #d1d5db; margin: 0.75rem 0; padding: 0.5rem 1rem; color: #6b7280; }
-                      table { width: 100%; border-collapse: collapse; margin: 0.75rem 0; }
-                      th, td { border: 1px solid #d1d5db; padding: 0.5rem 0.75rem; text-align: left; }
-                      th { font-weight: 600; background: #f3f4f6; }
-                      .callout { background: #f9fafb; border-left: 4px solid #2563eb; padding: 0.75rem 1rem; border-radius: 6px; margin: 0.75rem 0; }
-                      .warning { background: #fefce8; border-left: 4px solid #eab308; padding: 0.75rem 1rem; border-radius: 6px; margin: 0.75rem 0; }
-                    </style></head><body>${article.html}</body></html>`}
-                    className="w-full h-full border-0"
-                    sandbox="allow-same-origin"
-                  />
+                  <div className="library-article p-8 max-w-[920px] mx-auto">
+                    <div dangerouslySetInnerHTML={{ __html: article.html }} />
+                  </div>
                 ) : (
                   <div className="flex items-center justify-center h-full text-sm text-muted-foreground">
                     Article not found.

@@ -31,7 +31,8 @@ import {
 } from "@/components/ui/popover";
 import { useOslerTheme } from "./theme-provider";
 import { MobileTabBar } from "./mobile-tab-bar";
-import { searchArticles } from "@/lib/osler/articles";
+import { searchArticles as searchArticlesAsync } from "@/lib/osler/articles";
+import type { Article } from "@/lib/osler/articles";
 import { cn } from "@/lib/utils";
 
 export type OslerView =
@@ -62,17 +63,18 @@ export function AppShell({
   const { theme, toggleTheme } = useOslerTheme();
   const [searchOpen, setSearchOpen] = React.useState(false);
   const [query, setQuery] = React.useState("");
-  const [searchResults, setSearchResults] = React.useState<
-    ReturnType<typeof searchArticles>
-  >([]);
+  const [searchResults, setSearchResults] = React.useState<Article[]>([]);
 
   // Search debounce
   React.useEffect(() => {
-    if (!query) {
-      setSearchResults(searchArticles(""));
-      return;
-    }
-    const t = setTimeout(() => setSearchResults(searchArticles(query)), 200);
+    const t = setTimeout(async () => {
+      if (!query) {
+        setSearchResults([]);
+        return;
+      }
+      const results = await searchArticlesAsync(query);
+      setSearchResults(results);
+    }, 200);
     return () => clearTimeout(t);
   }, [query]);
 

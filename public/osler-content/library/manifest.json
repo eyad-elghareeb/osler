@@ -1,0 +1,74 @@
+[
+  {
+    "id": "art-stemi",
+    "title": "ST-Elevation Myocardial Infarction",
+    "specialty": "Cardiology",
+    "system": "Ischemic Syndrome",
+    "readTimeMin": 8,
+    "tags": ["emergency", "ischemia", "ECG"]
+  },
+  {
+    "id": "art-acs",
+    "title": "Acute Coronary Syndromes — Overview",
+    "specialty": "Cardiology",
+    "system": "Ischemic Syndrome",
+    "readTimeMin": 6,
+    "tags": ["ischemia", "overview"]
+  },
+  {
+    "id": "art-hf",
+    "title": "Heart Failure — Reduced Ejection Fraction",
+    "specialty": "Cardiology",
+    "system": "Heart Failure",
+    "readTimeMin": 9,
+    "tags": ["heart-failure", "chronic"]
+  },
+  {
+    "id": "art-copd",
+    "title": "Chronic Obstructive Pulmonary Disease",
+    "specialty": "Pulmonology",
+    "system": "Obstructive Disease",
+    "readTimeMin": 10,
+    "tags": ["obstructive", "chronic", "smoking"]
+  },
+  {
+    "id": "art-asthma",
+    "title": "Asthma — Diagnosis & Management",
+    "specialty": "Pulmonology",
+    "system": "Obstructive Disease",
+    "readTimeMin": 7,
+    "tags": ["obstructive", "eosinophilic"]
+  },
+  {
+    "id": "art-pe",
+    "title": "Pulmonary Embolism",
+    "specialty": "Pulmonology",
+    "system": "Vascular Disease",
+    "readTimeMin": 8,
+    "tags": ["vascular", "emergency"]
+  },
+  {
+    "id": "art-stroke",
+    "title": "Acute Ischemic Stroke",
+    "specialty": "Neurology",
+    "system": "Cerebrovascular",
+    "readTimeMin": 9,
+    "tags": ["emergency", "cerebrovascular"]
+  },
+  {
+    "id": "art-sah",
+    "title": "Subarachnoid Hemorrhage",
+    "specialty": "Neurology",
+    "system": "Cerebrovascular",
+    "readTimeMin": 7,
+    "tags": ["emergency", "vascular"]
+  },
+  {
+    "id": "art-cirrhosis",
+    "title": "Cirrhosis & Portal Hypertension",
+    "specialty": "Gastroenterology",
+    "system": "Hepatobiliary",
+    "readTimeMin": 9,
+    "tags": ["liver", "chronic"]
+  }
+]

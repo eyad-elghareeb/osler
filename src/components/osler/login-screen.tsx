@@ -94,7 +94,7 @@ export function LoginScreen({ onLogin }: LoginScreenProps) {
         </form>
 
         <p className="text-center text-[10px] text-muted-foreground mt-6">
-          Osler v1 — Rebased on MedOS Lite UI/UX
+          Osler v1
         </p>
       </motion.div>
     </div>

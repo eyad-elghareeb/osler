@@ -17,10 +17,9 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "Osler — Medical Study Platform",
   description:
-    "Osler — Quiz, Question Bank, Flashcards, Written Prompts, and OSCE clinical cases. Rebased on MedOS Lite UI/UX.",
+    "Osler — Quiz, Question Bank, Flashcards, Written Prompts, and OSCE clinical cases.",
   keywords: [
     "Osler",
-    "MedOS",
     "medical",
     "USMLE",
     "quiz",
