@@ -14,7 +14,7 @@
           "type": "library",
           "path": "cardiology/heart-failure/",
           "files": [
-            "hf.md"
+            "heart-failure-reduced-ef.md"
           ],
           "items": []
         },
@@ -24,8 +24,8 @@
           "type": "library",
           "path": "cardiology/ischemic-syndrome/",
           "files": [
-            "acs.md",
-            "stemi.md"
+            "acute-coronary-syndrome.md",
+            "st-elevation-mi.md"
           ],
           "items": []
         }
@@ -63,8 +63,8 @@
           "type": "library",
           "path": "neurology/cerebrovascular/",
           "files": [
-            "sah.md",
-            "stroke.md"
+            "ischemic-stroke.md",
+            "subarachnoid-hemorrhage.md"
           ],
           "items": []
         }
@@ -94,7 +94,7 @@
           "type": "library",
           "path": "pulmonology/vascular-disease/",
           "files": [
-            "pe.md"
+            "pulmonary-embolism.md"
           ],
           "items": []
         }

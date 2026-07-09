@@ -103,7 +103,7 @@ async function loadLeafMeta(node: ContentTreeNode): Promise<ArticleMeta[]> {
       const text = await res.text();
       const { meta } = parseFrontmatter(text);
       return {
-        file,
+        file: `${node.path}${file}`,
         title: (meta.title as string) ?? file.replace(/\.md$/, ""),
         specialty: meta.specialty as string | undefined,
         system: meta.system as string | undefined,
