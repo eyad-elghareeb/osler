@@ -274,34 +274,9 @@ export function QBankStudio({
     onExit();
   };
 
-  // Timer tick for timed mode
-  React.useEffect(() => {
-    if (mode !== "quiz" || !session || session.mode !== "timed" || session.examPaused)
-      return;
-    const t = setInterval(() => {
-      setSession((s) => {
-        if (!s) return s;
-        const next = s.examTimeRemaining - 1;
-        if (next <= 0) {
-          return { ...s, examTimeRemaining: 0, completedAt: Date.now() };
-        }
-        return { ...s, examTimeRemaining: next };
-      });
-    }, 1000);
-    return () => clearInterval(t);
-  }, [mode, session?.mode, session?.examPaused]);
-
-  // Auto-end when timer hits 0
-  React.useEffect(() => {
-    if (
-      session &&
-      session.mode === "timed" &&
-      session.examTimeRemaining === 0 &&
-      mode === "quiz"
-    ) {
-      endSession();
-    }
-  }, [session?.examTimeRemaining, endSession]);
+  // Live remaining time for timed mode is owned by the isolated <QBankTimer>
+  // component below, so per-second ticks re-render only that small subtree
+  // instead of the whole QuizView (which would disturb the highlighter).
 
   // Record answers to storage when revealed
   const recordAnswer = (idx: number, q: SessionQuestion) => {
@@ -448,6 +423,7 @@ export function QBankStudio({
           onTogglePause={() =>
             setSession((s) => (s ? { ...s, examPaused: !s.examPaused } : s))
           }
+          onTimeUp={endSession}
           onPrev={() =>
             setSession((s) =>
               s ? { ...s, current: Math.max(0, s.current - 1) } : s
@@ -1537,6 +1513,80 @@ function PreviousTestsTab({
 /* ─────────────────────────────────────────────────────────────────────────
  * QUIZ VIEW — Full QBank Studio with all tools
  * ───────────────────────────────────────────────────────────────────────── */
+// Isolated, self-ticking timer. Owns its own 1s interval so the rest of the
+// QuizView (notably the highlighter's DOM/selection) never re-renders per tick.
+// Render it with a `key` tied to the session start so a fresh session resets it.
+function QBankTimer({
+  mode,
+  startedAt,
+  initialRemaining,
+  paused,
+  onExpire,
+}: {
+  mode: TestMode;
+  startedAt: number;
+  initialRemaining: number;
+  paused: boolean;
+  onExpire: () => void;
+}) {
+  const [now, setNow] = React.useState(() => Date.now());
+  const [remaining, setRemaining] = React.useState(initialRemaining);
+
+  // 1s tick — drives the tutor-mode elapsed clock.
+  React.useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, []);
+
+  // Timed countdown — pause-aware, fully isolated from the parent view.
+  React.useEffect(() => {
+    if (mode !== "timed" || paused) return;
+    const id = setInterval(() => {
+      setRemaining((r) => {
+        const next = r - 1;
+        if (next <= 0) {
+          clearInterval(id);
+          onExpire();
+          return 0;
+        }
+        return next;
+      });
+    }, 1000);
+    return () => clearInterval(id);
+  }, [mode, paused, onExpire]);
+
+  const display =
+    mode === "timed" ? remaining : Math.floor((now - startedAt) / 1000);
+  const danger = mode === "timed" && remaining < 300;
+
+  return (
+    <div
+      className={cn(
+        "flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-sm font-mono tabular-nums",
+        danger ? "bg-red-500/100 text-white" : "bg-primary-foreground/15"
+      )}
+    >
+      <Clock className="size-3.5" />
+      <span className="font-mono tabular-nums">{formatTime(display)}</span>
+    </div>
+  );
+}
+
+// Self-ticking elapsed-time readout (tutor "time spent"). Isolated so the
+// surrounding view doesn't re-render every second.
+function ElapsedTime({ startedAt }: { startedAt: number }) {
+  const [now, setNow] = React.useState(() => Date.now());
+  React.useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, []);
+  return (
+    <span className="font-mono tabular-nums">
+      {formatTime(Math.floor((now - startedAt) / 1000))}
+    </span>
+  );
+}
+
 function QuizView({
   session,
   activeItem,
@@ -1564,6 +1614,7 @@ function QuizView({
   onRetry,
   onGoHome,
   onFinish,
+  onTimeUp,
 }: {
   session: SessionData;
   activeItem: ContentTreeNode;
@@ -1585,6 +1636,7 @@ function QuizView({
   onRate: (qid: string, rating: "easy" | "hard" | "unknown") => void;
   onToggleFlag: () => void;
   onTogglePause: () => void;
+  onTimeUp: () => void;
   onPrev: () => void;
   onNext: () => void;
   onJumpTo: (i: number) => void;
@@ -1856,7 +1908,6 @@ function QuizView({
     [activeItem.uid, session.current, hlVersion]
   );
   const strikethroughs = session.strikethroughs[session.current] ?? [];
-  const elapsedTime = Math.floor((Date.now() - session.startedAt) / 1000);
 
   // Written draft
   const writtenDraft = session.writtenDrafts[q.id] ?? {
@@ -2009,14 +2060,14 @@ function QuizView({
         </Popover>
 
         <div className="flex items-center gap-1">
-          <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-sm font-mono tabular-nums ${
-            session.mode === "timed"
-              ? session.examTimeRemaining < 300 ? "bg-red-500/100 text-white" : "bg-primary-foreground/15"
-              : "bg-primary-foreground/15"
-          }`}>
-            <Clock className="size-3.5" />
-            {session.mode === "timed" ? formatTime(session.examTimeRemaining) : formatTime(elapsedTime)}
-          </div>
+          <QBankTimer
+            key={session.startedAt}
+            mode={session.mode}
+            startedAt={session.startedAt}
+            initialRemaining={session.examTimeRemaining}
+            paused={session.examPaused}
+            onExpire={onTimeUp}
+          />
           <button
             onClick={onTogglePause}
             className="size-7 rounded-lg bg-primary-foreground/15 hover:bg-primary-foreground/25 flex items-center justify-center transition-colors"
@@ -2223,7 +2274,7 @@ function QuizView({
                             </div>
                             <div className="flex items-center gap-1.5">
                               <Timer className="size-3.5" />
-                              <span className="font-mono tabular-nums">{formatTime(elapsedTime)}</span>
+                              <ElapsedTime startedAt={session.startedAt} />
                               <span className="opacity-60">Time spent</span>
                             </div>
                           </div>
