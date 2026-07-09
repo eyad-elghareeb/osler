@@ -90,6 +90,8 @@ export function PwaInstallButton({ className }: { className?: string }) {
     </button>
   );
 
+  if (dismissed && !checkingDismiss) return null;
+
   if (canPrompt) {
     return (
       <button
@@ -105,8 +107,6 @@ export function PwaInstallButton({ className }: { className?: string }) {
       </button>
     );
   }
-
-  if (dismissed && !checkingDismiss) return null;
 
   // No native prompt captured (Android without active SW, or iOS). Show a
   // discoverable button that guides the user to install from the browser.
@@ -156,11 +156,13 @@ export function PwaInstallButton({ className }: { className?: string }) {
               <input
                 type="checkbox"
                 className="size-3.5 accent-foreground"
+                checked={dismissed}
                 onChange={(e) => {
-                  if (e.target.checked) {
-                    settings.set("dismiss-pwa-hint", "true");
-                    setDismissed(true);
-                  }
+                  const next = e.target.checked;
+                  setDismissed(next);
+                  setHint(false);
+                  if (next) settings.set("dismiss-pwa-hint", "true");
+                  else settings.set("dismiss-pwa-hint", "false");
                 }}
               />
               <span className="text-muted-foreground">Don&apos;t show again</span>
