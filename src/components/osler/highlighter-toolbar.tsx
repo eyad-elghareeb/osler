@@ -9,6 +9,17 @@ import {
   ERASER_TOOL,
   resolveHighlightColor,
 } from "@/lib/osler/highlight-palette";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { Button } from "@/components/ui/button";
 
 export interface HighlighterControl {
   /** null = off, "eraser" = erase tool, otherwise a color key */
@@ -36,16 +47,22 @@ export function HighlighterToolbar({
 }: HighlighterToolbarProps) {
   const { tool, color, count, onToolChange, onColorChange, onClearAll } = control;
 
+  const [confirmOpen, setConfirmOpen] = React.useState(false);
+
   const active = tool !== null;
   const isEraser = tool === ERASER_TOOL;
+  const toggleSize = tone === "header" ? "size-8" : "size-9";
 
-  const toggleButtonClass = cn(
-    "size-8 rounded-lg flex items-center justify-center transition-colors shrink-0 medos-touch-target",
+  const toggleClass = cn(
+    "flex items-center justify-center rounded-lg transition-colors medos-touch-target shrink-0",
+    toggleSize,
     active
-      ? "bg-amber-400 text-amber-950"
+      ? tone === "header"
+        ? "bg-primary-foreground/25 text-primary-foreground ring-1 ring-inset ring-primary-foreground/30"
+        : "bg-primary/15 text-primary ring-1 ring-inset ring-primary/25"
       : tone === "header"
-        ? "bg-primary-foreground/15 hover:bg-primary-foreground/25 text-primary-foreground"
-        : "bg-muted hover:bg-muted/70 text-foreground"
+        ? "bg-primary-foreground/15 text-primary-foreground hover:bg-primary-foreground/25"
+        : "text-muted-foreground hover:text-foreground hover:bg-muted"
   );
 
   const handleToggle = () => {
@@ -62,17 +79,31 @@ export function HighlighterToolbar({
     onToolChange(isEraser ? null : ERASER_TOOL);
   };
 
+  const eraserClass = cn(
+    "flex items-center justify-center rounded-lg transition-colors medos-touch-target size-7 shrink-0",
+    isEraser
+      ? "bg-destructive/15 text-destructive"
+      : tone === "header"
+        ? "bg-primary-foreground/15 text-primary-foreground hover:bg-primary-foreground/25"
+        : "text-muted-foreground hover:text-foreground hover:bg-muted"
+  );
+
   const swatchBase =
-    "size-6 rounded-full border-2 transition-all medos-touch-target";
+    "size-5 rounded-full ring-2 ring-transparent transition-all medos-touch-target shrink-0";
+
+  const clearClass = cn(
+    "flex items-center justify-center rounded-lg transition-colors medos-touch-target size-7 shrink-0",
+    "text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+  );
 
   return (
     <div className={cn("flex items-center gap-1", className)}>
       <button
         onClick={handleToggle}
-        className={toggleButtonClass}
+        className={toggleClass}
         title={
           active
-            ? "Highlighter on — pick a color or tap a color to highlight"
+            ? "Highlighter on — pick a color or the eraser"
             : "Highlight text"
         }
         aria-pressed={active}
@@ -83,8 +114,10 @@ export function HighlighterToolbar({
       {active && (
         <div
           className={cn(
-            "flex items-center gap-1 px-2 py-1 rounded-lg border border-border shadow-sm",
-            tone === "header" ? "bg-primary-foreground/10" : "bg-card"
+            "flex items-center gap-1 rounded-lg p-1 shadow-sm animate-in fade-in-0 duration-150",
+            tone === "header"
+              ? "border border-primary-foreground/15 bg-primary-foreground/10 backdrop-blur-sm"
+              : "border border-border/60 bg-card"
           )}
         >
           {HIGHLIGHT_COLOR_KEYS.map((key) => {
@@ -96,8 +129,8 @@ export function HighlighterToolbar({
                 className={cn(
                   swatchBase,
                   selected
-                    ? "border-foreground scale-110"
-                    : "border-transparent hover:scale-110"
+                    ? "ring-foreground/60 scale-110"
+                    : "hover:scale-110"
                 )}
                 style={{ backgroundColor: resolveHighlightColor(key) }}
                 title={`Highlight ${HIGHLIGHT_PALETTE[key].label}`}
@@ -109,14 +142,7 @@ export function HighlighterToolbar({
 
           <button
             onClick={handleEraser}
-            className={cn(
-              "size-6 rounded-lg flex items-center justify-center transition-all medos-touch-target",
-              isEraser
-                ? "bg-red-400 text-red-950 scale-110"
-                : tone === "header"
-                  ? "bg-primary-foreground/15 hover:bg-primary-foreground/25 text-primary-foreground"
-                  : "bg-muted hover:bg-muted/70 text-foreground"
-            )}
+            className={eraserClass}
             title="Erase highlights — tap a highlight to remove it"
             aria-label="Erase highlights"
             aria-pressed={isEraser}
@@ -126,31 +152,13 @@ export function HighlighterToolbar({
 
           {count > 0 && (
             <>
-              <div
-                className={cn(
-                  "w-px h-5 mx-0.5",
-                  tone === "header" ? "bg-primary-foreground/20" : "bg-border"
-                )}
-              />
-              <span className="text-[10px] text-muted-foreground tabular-nums px-0.5">
+              <div className="w-px h-5 bg-border/60 mx-0.5" />
+              <span className="px-1 text-[11px] tabular-nums text-muted-foreground">
                 {count}
               </span>
               <button
-                onClick={() => {
-                  if (
-                    window.confirm(
-                      `Clear all ${count} highlight${count === 1 ? "" : "s"}?`
-                    )
-                  ) {
-                    onClearAll();
-                  }
-                }}
-                className={cn(
-                  "size-6 rounded-full flex items-center justify-center transition-colors medos-touch-target",
-                  tone === "header"
-                    ? "hover:bg-primary-foreground/20 text-primary-foreground"
-                    : "hover:bg-muted text-foreground"
-                )}
+                onClick={() => setConfirmOpen(true)}
+                className={clearClass}
                 title="Clear all highlights"
                 aria-label="Clear all highlights"
               >
@@ -160,6 +168,32 @@ export function HighlighterToolbar({
           )}
         </div>
       )}
+
+      <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Clear all highlights?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This removes all {count} highlight{count === 1 ? "" : "s"} on this
+              item. This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction asChild>
+              <Button
+                variant="destructive"
+                onClick={() => {
+                  onClearAll();
+                  setConfirmOpen(false);
+                }}
+              >
+                Clear all
+              </Button>
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

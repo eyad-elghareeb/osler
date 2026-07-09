@@ -2271,7 +2271,7 @@ function QuizView({
                               <div className={`size-7 rounded-full border-2 flex items-center justify-center text-sm font-semibold shrink-0 ${letterBg}`}>
                                 {letterContent}
                               </div>
-                              <div className={`flex-1 min-w-0 uworld-prose text-[14px] leading-relaxed pt-0.5 ${hasStrikethrough ? "line-through text-muted-foreground" : ""}`}>
+                              <div className={`flex-1 min-w-0 uworld-prose text-[14px] leading-relaxed pt-0.5 select-text ${hasStrikethrough ? "line-through text-muted-foreground" : ""}`}>
                                 <HighlightedContent
                                   text={choice}
                                   highlights={currentHighlights}
