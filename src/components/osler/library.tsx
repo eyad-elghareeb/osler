@@ -10,7 +10,6 @@ import {
   BookmarkCheck,
   ZoomIn,
   ZoomOut,
-  PanelLeft,
   Loader2,
   Library as LibraryIcon,
   Type,
@@ -18,7 +17,8 @@ import {
   Plus as PlusIcon,
   Search,
   BookmarkX,
-  ArrowRight,
+  ArrowLeft,
+  FileText,
 } from "lucide-react";
 import {
   loadArticleTree,
@@ -35,6 +35,7 @@ import { useArticleHighlighter } from "@/hooks/use-article-highlighter";
 import { HighlighterToolbar } from "./highlighter-toolbar";
 import { FolderTreeNav } from "./folder-tree-nav";
 import { applyHighlightsToHtml } from "@/lib/osler/article-highlights";
+import { setImmersiveMode } from "./immersive-mode";
 
 interface LibraryProps {
   initialArticleId?: string;
@@ -59,6 +60,14 @@ export function Library({ initialArticleId }: LibraryProps) {
 
   React.useEffect(() => {
     if (isMobile && !activeFile) setSidebarOpen(true);
+  }, [isMobile, activeFile]);
+
+  // Immersive mode: hide mobile tab bar when reading an article
+  React.useEffect(() => {
+    if (isMobile) {
+      setImmersiveMode(!!activeFile);
+      return () => setImmersiveMode(false);
+    }
   }, [isMobile, activeFile]);
 
   const [loading, setLoading] = React.useState(false);
@@ -152,6 +161,11 @@ export function Library({ initialArticleId }: LibraryProps) {
     setSidebarOpen(false);
   }, []);
 
+  const closeArticle = React.useCallback(() => {
+    setActiveFile(null);
+    setActiveArticle(null);
+  }, []);
+
   const toggleBookmark = (filePath: string) => {
     setBookmarks((prev) => {
       const next = new Set(prev);
@@ -237,28 +251,55 @@ export function Library({ initialArticleId }: LibraryProps) {
     [bookmarks, allArticles]
   );
 
+  // Mobile: full-screen reader when article is active
+  if (isMobile && activeFile && activeArticle) {
+    return (
+      <MobileReader
+        article={activeArticle}
+        isBookmarked={bookmarks.has(activeFile)}
+        onToggleBookmark={() => toggleBookmark(activeFile)}
+        onBack={closeArticle}
+        zoom={zoom}
+        onZoomIn={() => setZoom((z) => Math.min(140, z + 10))}
+        onZoomOut={() => setZoom((z) => Math.max(80, z - 10))}
+        onResetZoom={() => setZoom(100)}
+        fontSize={fontSize}
+        onFontSizeChange={setFontSize}
+        loading={loading}
+        articleContentRef={articleContentRef}
+        processedHtml={processedArticleHtml}
+        hlCtrl={hlCtrl}
+      />
+    );
+  }
+
+  // Mobile: hub view (article list) when no article is selected
+  if (isMobile) {
+    return (
+      <MobileHub
+        allArticles={allArticles}
+        bookmarks={bookmarks}
+        bookmarkedArticles={bookmarkedArticles}
+        activeFile={activeFile}
+        onOpenArticle={openArticleByFile}
+        onToggleBookmark={toggleBookmark}
+        searchQuery={searchQuery}
+        onSearchChange={setSearchQuery}
+        matchedArticleFiles={matchedArticleFiles}
+      />
+    );
+  }
+
+  /* ── Desktop layout (unchanged) ─────────────────────────────────── */
   return (
     <div className="flex h-full overflow-hidden bg-background">
-      {activeFile && (
-        <button
-          onClick={() => setSidebarOpen(true)}
-          className="md:hidden fixed bottom-20 right-4 z-30 size-12 rounded-full bg-primary text-primary-foreground shadow-lg flex items-center justify-center"
-          aria-label="Open contents"
-        >
-          <PanelLeft className="size-5" />
-        </button>
-      )}
-
       <AnimatePresence>
         {sidebarOpen && (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className={cn(
-              "md:hidden fixed z-40 bg-black/50",
-              activeFile ? "inset-0" : "top-14 inset-x-0 bottom-14"
-            )}
+            className="md:hidden fixed z-40 bg-black/50 inset-0"
             onClick={() => { if (activeFile) setSidebarOpen(false); }}
           >
             <motion.div
@@ -363,6 +404,368 @@ export function Library({ initialArticleId }: LibraryProps) {
   );
 }
 
+/* ── Mobile Hub ──────────────────────────────────────────────────── */
+
+function MobileHub({
+  allArticles,
+  bookmarks,
+  bookmarkedArticles,
+  activeFile,
+  onOpenArticle,
+  onToggleBookmark,
+  searchQuery,
+  onSearchChange,
+  matchedArticleFiles,
+}: {
+  allArticles: ArticleMeta[];
+  bookmarks: Set<string>;
+  bookmarkedArticles: ArticleMeta[];
+  activeFile: string | null;
+  onOpenArticle: (file: string) => void;
+  onToggleBookmark: (file: string) => void;
+  searchQuery: string;
+  onSearchChange: (q: string) => void;
+  matchedArticleFiles: Set<string> | null;
+}) {
+  const [filter, setFilter] = React.useState<"all" | "bookmarked">("all");
+
+  const displayArticles = filter === "bookmarked" ? bookmarkedArticles : allArticles;
+
+  // Group by specialty
+  const grouped = React.useMemo(() => {
+    const map = new Map<string, ArticleMeta[]>();
+    for (const a of displayArticles) {
+      const key = a.specialty ?? "General";
+      if (!map.has(key)) map.set(key, []);
+      map.get(key)!.push(a);
+    }
+    return Array.from(map.entries()).sort(([a], [b]) => a.localeCompare(b));
+  }, [displayArticles]);
+
+  // Filter by search results
+  const filteredGrouped = React.useMemo(() => {
+    if (!matchedArticleFiles && !searchQuery.trim()) return grouped;
+    if (!matchedArticleFiles) return grouped;
+    return grouped
+      .map(([specialty, articles]) => {
+        const matched = articles.filter((a) => matchedArticleFiles.has(a.file));
+        return [specialty, matched] as [string, ArticleMeta[]];
+      })
+      .filter(([, articles]) => articles.length > 0);
+  }, [grouped, matchedArticleFiles, searchQuery]);
+
+  return (
+    <div className="h-full overflow-y-auto medos-scroll">
+      {/* Search bar */}
+      <div className="sticky top-0 z-10 bg-background border-b border-border px-4 py-3">
+        <div className="relative max-w-xl mx-auto">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground pointer-events-none" />
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => onSearchChange(e.target.value)}
+            placeholder="Search articles…"
+            className="w-full h-10 rounded-xl border border-border bg-card pl-10 pr-3 text-sm outline-none focus:border-primary transition-colors placeholder:text-muted-foreground/50"
+          />
+        </div>
+        {/* Filter pills */}
+        <div className="flex items-center gap-2 mt-3 max-w-xl mx-auto">
+          <button
+            onClick={() => setFilter("all")}
+            className={cn(
+              "px-3 py-1 rounded-full text-xs font-medium transition-colors",
+              filter === "all"
+                ? "bg-primary text-primary-foreground"
+                : "bg-muted/60 text-muted-foreground hover:text-foreground"
+            )}
+          >
+            All ({allArticles.length})
+          </button>
+          <button
+            onClick={() => setFilter("bookmarked")}
+            className={cn(
+              "px-3 py-1 rounded-full text-xs font-medium transition-colors",
+              filter === "bookmarked"
+                ? "bg-primary text-primary-foreground"
+                : "bg-muted/60 text-muted-foreground hover:text-foreground"
+            )}
+          >
+            <BookmarkCheck className="size-3 inline mr-1 -mt-0.5" />
+            Bookmarked ({bookmarkedArticles.length})
+          </button>
+        </div>
+      </div>
+
+      <div className="px-4 pb-4 medos-tabbar-pad">
+        {filteredGrouped.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-16 text-center">
+            <BookOpen className="size-10 text-muted-foreground/30 mb-3" />
+            <p className="text-sm text-muted-foreground">
+              {searchQuery.trim()
+                ? "No articles match your search"
+                : filter === "bookmarked"
+                  ? "No bookmarked articles yet"
+                  : "No articles found"}
+            </p>
+          </div>
+        ) : (
+          filteredGrouped.map(([specialty, articles]) => (
+            <div key={specialty} className="mt-5 first:mt-3">
+              <div className="flex items-center gap-2 mb-2.5 px-0.5">
+                <FileText className="size-3.5 text-muted-foreground" />
+                <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  {specialty}
+                </h3>
+                <span className="text-[10px] text-muted-foreground/40 ml-auto tabular-nums">
+                  {articles.length} article{articles.length !== 1 ? "s" : ""}
+                </span>
+              </div>
+              <div className="space-y-1.5">
+                {articles.map((a) => {
+                  const isBookmarked = bookmarks.has(a.file);
+                  return (
+                    <button
+                      key={a.file}
+                      onClick={() => onOpenArticle(a.file)}
+                      className={cn(
+                        "w-full flex items-center gap-3 px-4 py-3 rounded-xl text-left transition-colors",
+                        "bg-card border border-border hover:border-primary/30 hover:bg-primary/[0.02]",
+                        a.file === activeFile && "border-primary/40 bg-primary/5"
+                      )}
+                    >
+                      <div className="size-10 rounded-lg bg-primary/10 text-primary flex items-center justify-center shrink-0">
+                        <BookOpen className="size-5" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="font-medium text-sm truncate">{a.title}</div>
+                        <div className="flex items-center gap-2 text-[11px] text-muted-foreground mt-0.5">
+                          {a.readTimeMin && (
+                            <span className="flex items-center gap-1">
+                              <Clock className="size-3" />
+                              {a.readTimeMin} min
+                            </span>
+                          )}
+                          {a.system && (
+                            <span className="truncate">{a.system}</span>
+                          )}
+                        </div>
+                      </div>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onToggleBookmark(a.file);
+                        }}
+                        className={cn(
+                          "size-8 rounded-lg flex items-center justify-center shrink-0 transition-colors",
+                          isBookmarked
+                            ? "text-primary bg-primary/10"
+                            : "text-muted-foreground/40 hover:text-muted-foreground hover:bg-muted/60"
+                        )}
+                        aria-label={isBookmarked ? "Remove bookmark" : "Bookmark"}
+                      >
+                        {isBookmarked ? (
+                          <BookmarkCheck className="size-4" />
+                        ) : (
+                          <Bookmark className="size-4" />
+                        )}
+                      </button>
+                      <ChevronRight className="size-4 text-muted-foreground/30 shrink-0" />
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          ))
+        )}
+      </div>
+    </div>
+  );
+}
+
+/* ── Mobile Reader ────────────────────────────────────────────────── */
+
+function MobileReader({
+  article,
+  isBookmarked,
+  onToggleBookmark,
+  onBack,
+  zoom,
+  onZoomIn,
+  onZoomOut,
+  onResetZoom,
+  fontSize,
+  onFontSizeChange,
+  loading,
+  articleContentRef,
+  processedHtml,
+  hlCtrl,
+}: {
+  article: Article;
+  isBookmarked: boolean;
+  onToggleBookmark: () => void;
+  onBack: () => void;
+  zoom: number;
+  onZoomIn: () => void;
+  onZoomOut: () => void;
+  onResetZoom: () => void;
+  fontSize: number;
+  onFontSizeChange: (s: number) => void;
+  loading: boolean;
+  articleContentRef: React.RefObject<HTMLDivElement | null>;
+  processedHtml: string;
+  hlCtrl: ReturnType<typeof useArticleHighlighter>;
+}) {
+  const [fontPopoverOpen, setFontPopoverOpen] = React.useState(false);
+
+  return (
+    <div className="fixed inset-0 z-50 bg-background flex flex-col">
+      {/* Top bar */}
+      <header className="shrink-0 border-b border-border bg-card/40 backdrop-blur-sm safe-pt">
+        <div className="flex items-center gap-2 px-3 h-12">
+          <button
+            onClick={onBack}
+            className="size-9 rounded-lg flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors -ml-1"
+            aria-label="Back to library"
+          >
+            <ArrowLeft className="size-5" />
+          </button>
+
+          <div className="flex-1 min-w-0">
+            <h1 className="text-sm font-semibold truncate">{article.title}</h1>
+            <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
+              <span>{article.specialty}</span>
+              {article.readTimeMin && (
+                <>
+                  <span className="opacity-40">&middot;</span>
+                  <span className="flex items-center gap-0.5">
+                    <Clock className="size-2.5" />
+                    {article.readTimeMin} min
+                  </span>
+                </>
+              )}
+            </div>
+          </div>
+
+          <div className="flex items-center gap-0.5">
+            <div className="relative">
+              <button
+                onClick={() => setFontPopoverOpen(!fontPopoverOpen)}
+                className="size-9 rounded-lg flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors"
+                title="Font size"
+              >
+                <Type className="size-4" />
+              </button>
+              <AnimatePresence>
+                {fontPopoverOpen && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 4 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: 4 }}
+                    className="absolute right-0 top-full mt-1 z-30 bg-card border border-border rounded-lg shadow-lg p-3 w-auto"
+                  >
+                    <div className="flex items-center gap-2">
+                      <span className="text-[11px] text-muted-foreground w-16">Font size</span>
+                      <button
+                        onClick={() => onFontSizeChange(Math.max(12, fontSize - 1))}
+                        className="size-7 rounded bg-muted hover:bg-muted/70 flex items-center justify-center"
+                      >
+                        <Minus className="size-3" />
+                      </button>
+                      <span className="text-xs font-mono tabular-nums w-5 text-center">{fontSize}</span>
+                      <button
+                        onClick={() => onFontSizeChange(Math.min(22, fontSize + 1))}
+                        className="size-7 rounded bg-muted hover:bg-muted/70 flex items-center justify-center"
+                      >
+                        <PlusIcon className="size-3" />
+                      </button>
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
+
+            <HighlighterToolbar ctrl={hlCtrl} compact />
+
+            <button
+              onClick={onToggleBookmark}
+              className={cn(
+                "size-9 rounded-lg flex items-center justify-center transition-colors",
+                isBookmarked
+                  ? "text-primary bg-primary/10 hover:bg-primary/15"
+                  : "text-muted-foreground hover:bg-muted/60"
+              )}
+              title={isBookmarked ? "Remove bookmark" : "Bookmark article"}
+            >
+              {isBookmarked ? (
+                <BookmarkCheck className="size-4" />
+              ) : (
+                <Bookmark className="size-4" />
+              )}
+            </button>
+          </div>
+        </div>
+
+        {/* Zoom controls row */}
+        <div className="flex items-center justify-between px-3 pb-2 border-b border-border/40">
+          <div className="flex items-center gap-0.5">
+            <button
+              onClick={onZoomOut}
+              disabled={zoom <= 80}
+              className="size-7 rounded-md flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors disabled:opacity-30"
+              title="Zoom out"
+            >
+              <ZoomOut className="size-3.5" />
+            </button>
+            <button
+              onClick={onResetZoom}
+              className="text-[10px] font-mono tabular-nums px-1.5 h-7 rounded-md hover:bg-muted text-muted-foreground min-w-[2.5rem]"
+              title="Reset zoom"
+            >
+              {zoom}%
+            </button>
+            <button
+              onClick={onZoomIn}
+              disabled={zoom >= 140}
+              className="size-7 rounded-md flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors disabled:opacity-30"
+              title="Zoom in"
+            >
+              <ZoomIn className="size-3.5" />
+            </button>
+          </div>
+        </div>
+      </header>
+
+      {/* Content */}
+      <div className="flex-1 overflow-y-auto medos-scroll safe-pb">
+        {loading ? (
+          <div className="flex items-center justify-center py-20">
+            <Loader2 className="size-6 animate-spin text-muted-foreground" />
+          </div>
+        ) : (
+          <motion.div
+            key={article.file}
+            initial={{ opacity: 0, y: 6 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.25 }}
+            className="library-article px-4 py-5"
+            style={{
+              fontSize: `${(zoom / 100) * fontSize}px`,
+              lineHeight: 1.7,
+            }}
+          >
+            {/* Title at top of content */}
+            <h1 className="text-xl font-bold mb-1">{article.title}</h1>
+            <div
+              ref={articleContentRef}
+              dangerouslySetInnerHTML={{ __html: processedHtml }}
+            />
+          </motion.div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 /* ── Sidebar ─────────────────────────────────────────────────────── */
 
 function SidebarContent({
@@ -410,7 +813,7 @@ function SidebarContent({
                 className="size-8 -mr-1 rounded-md flex items-center justify-center text-muted-foreground hover:bg-muted/60 transition-colors"
                 aria-label="Close"
               >
-                <ArrowRight className="size-4" />
+                <ChevronRight className="size-4" />
               </button>
             )}
           </div>
