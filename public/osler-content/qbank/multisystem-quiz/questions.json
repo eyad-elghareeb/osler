@@ -1,15 +1,4 @@
 {
-  "meta": {
-    "uid": "sample-quiz-001",
-    "title": "Multisystem Medical Quiz",
-    "description": "15 board-style questions spanning cardiology, neurology, pulmonology, pharmacology, and gastroenterology",
-    "icon": "clipboard",
-    "tags": ["cardiology", "neurology", "pulmonology", "pharmacology", "gastroenterology", "sample"],
-    "schemaVersion": "1.0",
-    "createdAt": "2026-06-23T00:00:00Z",
-    "updatedAt": "2026-06-27T00:00:00Z"
-  },
-  "type": "quiz",
   "questions": [
     {
       "id": "q-001",

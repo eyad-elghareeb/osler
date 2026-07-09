@@ -32,7 +32,7 @@ import {
 import { loadAllContent } from "@/lib/osler/content";
 import type {
   AnyContent,
-  ManifestItem,
+  ContentTreeNode,
   OsceContent,
   OsceStation,
   OscePatient,
@@ -547,10 +547,10 @@ interface SpeechRecognitionAlternative {
 /* ── Component Props ───────────────────────────────────────────────── */
 
 interface OsceStudioProps {
-  activeItem: ManifestItem | null;
+  activeItem: ContentTreeNode | null;
   activeContent: OsceContent | null;
   onExit: () => void;
-  onOpenPack?: (item: ManifestItem) => void;
+  onOpenPack?: (item: ContentTreeNode) => void;
 }
 
 /* ── Achievements Builder ──────────────────────────────────────────── */
@@ -643,7 +643,7 @@ export function OsceStudio({ activeItem, activeContent, onExit, onOpenPack }: Os
   const isMobile = useIsMobile();
 
   /* ── State ── */
-  const [allPacks, setAllPacks] = React.useState<Array<{ item: ManifestItem; content: OsceContent }>>([]);
+  const [allPacks, setAllPacks] = React.useState<Array<{ node: ContentTreeNode; content: OsceContent }>>([]);
   const [packsLoading, setPacksLoading] = React.useState(true);
   const [packSearch, setPackSearch] = React.useState("");
   const [stations, setStations] = React.useState<OsceStation[]>([]);
@@ -696,10 +696,10 @@ export function OsceStudio({ activeItem, activeContent, onExit, onOpenPack }: Os
     setPacksLoading(true);
     loadAllContent()
       .then(({ items }) => {
-        const oscePacks: Array<{ item: ManifestItem; content: OsceContent }> = [];
-        for (const { item, content } of items) {
+        const oscePacks: Array<{ node: ContentTreeNode; content: OsceContent }> = [];
+        for (const { node, content } of items) {
           if (content?.type === "osce") {
-            oscePacks.push({ item, content: content as OsceContent });
+            oscePacks.push({ node, content: content as OsceContent });
           }
         }
         setAllPacks(oscePacks);
@@ -1191,13 +1191,13 @@ export function OsceStudio({ activeItem, activeContent, onExit, onOpenPack }: Os
 
   /* ── Phase: Select (Scenario Picker) ──────────────────────── */
 
-  function selectPack(pack: { item: ManifestItem; content: OsceContent }) {
+  function selectPack(pack: { node: ContentTreeNode; content: OsceContent }) {
     const normalized = pack.content.stations.map((s, i) =>
       normalizeStation(s as unknown as Record<string, unknown>, i)
     );
     setStations(normalized);
     setActiveIdx(0);
-    setSelectedPackUid(pack.item.uid);
+    setSelectedPackUid(pack.node.uid);
     setTranscript([]);
     setResult(null);
     setError(null);
@@ -1209,9 +1209,9 @@ export function OsceStudio({ activeItem, activeContent, onExit, onOpenPack }: Os
     if (!packSearch.trim()) return allPacks;
     const q = packSearch.toLowerCase();
     return allPacks.filter(
-      ({ item, content }) =>
-        item.title.toLowerCase().includes(q) ||
-        item.tags?.some((t) => t.toLowerCase().includes(q)) ||
+      ({ node, content }) =>
+        node.title.toLowerCase().includes(q) ||
+        content.meta.tags?.some((t) => t.toLowerCase().includes(q)) ||
         content.meta.description?.toLowerCase().includes(q)
     );
   }, [allPacks, packSearch]);
@@ -1275,18 +1275,18 @@ export function OsceStudio({ activeItem, activeContent, onExit, onOpenPack }: Os
               </div>
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {filteredPacks.map(({ item, content }, idx) => {
+                {filteredPacks.map(({ node, content }, idx) => {
                   const stationCount = content.stations?.length || 0;
-                  const tags = item.tags?.slice(0, 4) || [];
+                  const tags = content.meta.tags?.slice(0, 4) || [];
                   return (
                     <motion.div
-                      key={item.uid}
+                      key={node.uid}
                       initial={{ opacity: 0, y: 8 }}
                       animate={{ opacity: 1, y: 0 }}
                       transition={{ duration: 0.2, delay: idx * 0.04 }}
                     >
                       <button
-                        onClick={() => selectPack({ item, content })}
+                        onClick={() => selectPack({ node, content })}
                         className="w-full text-left group relative overflow-hidden bg-card border border-border/60 rounded-xl p-5 hover:border-primary/40 hover:shadow-md transition-all duration-200 active:scale-[0.99]"
                       >
                         {/* Top accent line */}
@@ -1305,7 +1305,7 @@ export function OsceStudio({ activeItem, activeContent, onExit, onOpenPack }: Os
                         </div>
 
                         <h3 className="font-semibold text-sm mb-1 group-hover:text-primary transition-colors leading-snug">
-                          {item.title}
+                          {node.title}
                         </h3>
                         {content.meta.description && (
                           <p className="text-xs text-muted-foreground line-clamp-2 mb-3 leading-relaxed">

@@ -1,0 +1,178 @@
+{
+  "stations": [
+    {
+      "id": "osce-001",
+      "title": "Chest Pain — STEMI",
+      "type": "history",
+      "specialty": "Cardiology",
+      "difficulty": "Medium",
+      "task": "Evaluate a patient with acute chest pain and manage ST-elevation MI",
+      "time": 10,
+      "examiner": { "name": "Dr. Chen", "title": "Cardiology Attending" },
+      "patient": {
+        "name": "John Miller",
+        "age": 55,
+        "gender": "male",
+        "avatarSeed": "john-m",
+        "opening": "Doctor, I have this crushing pain in my chest that started about an hour ago."
+      },
+      "hiddenProfile": {
+        "diagnosis": "ST-elevation myocardial infarction (STEMI)",
+        "keySymptoms": ["Acute central chest pain radiating to left arm", "Nausea and diaphoresis"],
+        "redFlags": ["Hypotension (BP 90/60) suggesting cardiogenic shock", "Tachycardia (HR 110)"],
+        "pastHistory": ["Hypertension", "Hyperlipidemia", "40 pack-year smoking"],
+        "vitalSigns": "BP 90/60, HR 110, RR 20, O2 sat 94%, Temp 37.0°C"
+      },
+      "rubric": { "mustAsk": ["When did the pain start?", "What does the pain feel like?"], "bonus": ["Ask about family history of heart disease"] },
+      "dataPresented": null,
+      "questions": [
+        { "question": "What is the most appropriate next step?", "answer": "Activate STEMI protocol and obtain stat ECG", "rubric": "Recognizes need for emergent reperfusion" }
+      ]
+    },
+    {
+      "id": "osce-002",
+      "title": "Acute Dyspnea — Pulmonary Embolism",
+      "type": "history",
+      "specialty": "Emergency Medicine",
+      "difficulty": "Medium",
+      "task": "Assess a patient with acute dyspnea and pleuritic chest pain after a long-haul flight",
+      "time": 10,
+      "examiner": { "name": "Dr. Patel", "title": "Emergency Medicine Attending" },
+      "patient": {
+        "name": "Sarah Johnson",
+        "age": 28,
+        "gender": "female",
+        "avatarSeed": "sarah-j",
+        "opening": "I suddenly feel very short of breath and my chest hurts when I breathe in."
+      },
+      "hiddenProfile": {
+        "diagnosis": "Pulmonary embolism",
+        "keySymptoms": ["Acute dyspnea", "Pleuritic chest pain", "Hemoptysis"],
+        "redFlags": ["Recent long-haul flight (10 days ago)", "Oral contraceptive use", "Hypoxia (O2 sat 89%)"],
+        "pastHistory": ["Migraines", "Oral contraceptive use"],
+        "vitalSigns": "BP 110/70, HR 105, RR 24, O2 sat 89%, Temp 37.2°C"
+      },
+      "rubric": { "mustAsk": ["When did symptoms start?", "Any recent travel?"], "bonus": ["Ask about leg pain or swelling"] },
+      "dataPresented": null,
+      "questions": [
+        { "question": "What is the next imaging study?", "answer": "CT pulmonary angiogram (CTPA)", "rubric": "Selects appropriate definitive imaging" }
+      ]
+    },
+    {
+      "id": "osce-003",
+      "title": "Stroke Assessment",
+      "type": "history",
+      "specialty": "Neurology",
+      "difficulty": "Hard",
+      "task": "Evaluate a patient with acute stroke symptoms for thrombolysis eligibility",
+      "time": 12,
+      "examiner": { "name": "Dr. Williams", "title": "Neurology Attending" },
+      "patient": {
+        "name": "Robert Davis",
+        "age": 72,
+        "gender": "male",
+        "avatarSeed": "robert-d",
+        "opening": "(Unable to speak clearly — facial droop on right side)"
+      },
+      "hiddenProfile": {
+        "diagnosis": "Acute ischemic stroke (left MCA territory)",
+        "keySymptoms": ["Sudden right-sided weakness", "Facial droop", "Aphasia"],
+        "redFlags": ["Symptom onset 90 minutes ago", "Hypertension (BP 185/100)"],
+        "pastHistory": ["Hypertension", "Type 2 diabetes", "Prior TIA 2 years ago"],
+        "vitalSigns": "BP 185/100, HR 88, RR 18, O2 sat 97%"
+      },
+      "rubric": { "mustAsk": ["When was the patient last seen normal?", "What medications does he take?"], "bonus": ["Assess NIH stroke scale"] },
+      "dataPresented": null,
+      "questions": [
+        { "question": "What is the time window for tPA?", "answer": "Within 3 hours (extended to 4.5 hours for eligible patients)", "rubric": "Knows acute stroke treatment window" }
+      ]
+    },
+    {
+      "id": "osce-004",
+      "title": "Acute Asthma Exacerbation",
+      "type": "history",
+      "specialty": "Pulmonology",
+      "difficulty": "Medium",
+      "task": "Manage a patient with severe acute asthma exacerbation",
+      "time": 10,
+      "examiner": { "name": "Dr. Kim", "title": "Pulmonology Attending" },
+      "patient": {
+        "name": "Emily Chen",
+        "age": 45,
+        "gender": "female",
+        "avatarSeed": "emily-c",
+        "opening": "(Wheezing audibly, speaking in short phrases) I can't breathe..."
+      },
+      "hiddenProfile": {
+        "diagnosis": "Acute severe asthma exacerbation",
+        "keySymptoms": ["Severe dyspnea", "Wheezing", "Difficulty speaking in full sentences"],
+        "redFlags": ["PEFR 30% of predicted", "Hypoxia (O2 sat 87%)", "Poor response to bronchodilator"],
+        "pastHistory": ["Asthma diagnosed at age 12", "Prior ICU admission for asthma", "Allergic rhinitis"],
+        "vitalSigns": "BP 120/80, HR 115, RR 32, O2 sat 87%"
+      },
+      "rubric": { "mustAsk": ["When did this exacerbation start?", "What medications have you taken?"], "bonus": ["Ask about recent steroid use"] },
+      "dataPresented": null,
+      "questions": [
+        { "question": "What is the first treatment?", "answer": "High-flow oxygen and continuous nebulized salbutamol with ipratropium", "rubric": "Initiates appropriate bronchodilator therapy" }
+      ]
+    },
+    {
+      "id": "osce-005",
+      "title": "Upper GI Bleed — Variceal Hemorrhage",
+      "type": "history",
+      "specialty": "Gastroenterology",
+      "difficulty": "Hard",
+      "task": "Manage a patient with acute variceal hemorrhage",
+      "time": 12,
+      "examiner": { "name": "Dr. Gupta", "title": "Gastroenterology Attending" },
+      "patient": {
+        "name": "James Wilson",
+        "age": 35,
+        "gender": "male",
+        "avatarSeed": "james-w",
+        "opening": "(Pale, diaphoretic) I'm vomiting blood..."
+      },
+      "hiddenProfile": {
+        "diagnosis": "Esophageal variceal hemorrhage due to portal hypertension from alcoholic liver disease",
+        "keySymptoms": ["Hematemesis (bright red blood)", "Melena", "Abdominal distension"],
+        "redFlags": ["Hemodynamic instability (HR 110, BP 85/60)", "Ascites on exam", "History of alcoholism"],
+        "pastHistory": ["Alcohol use disorder (1 L whiskey daily for 10 years)", "Hepatitis C (untreated)"],
+        "vitalSigns": "BP 85/60, HR 110, RR 20, O2 sat 96%"
+      },
+      "rubric": { "mustAsk": ["How much blood have you vomited?", "Any history of liver disease?"], "bonus": ["Ask about alcohol use and family history"] },
+      "dataPresented": null,
+      "questions": [
+        { "question": "What medication should be administered for suspected variceal bleeding?", "answer": "IV octreotide (somatostatin analog)", "rubric": "Administers vasoactive therapy" }
+      ]
+    },
+    {
+      "id": "osce-006",
+      "title": "ACE Inhibitor-Induced Angioedema",
+      "type": "history",
+      "specialty": "Emergency Medicine",
+      "difficulty": "Hard",
+      "task": "Manage a patient with ACE inhibitor-induced angioedema and airway compromise",
+      "time": 10,
+      "examiner": { "name": "Dr. Thompson", "title": "Emergency Medicine Attending" },
+      "patient": {
+        "name": "Maria Garcia",
+        "age": 60,
+        "gender": "female",
+        "avatarSeed": "maria-g",
+        "opening": "(Swollen lips and tongue, speaking with difficulty) My face is swelling up..."
+      },
+      "hiddenProfile": {
+        "diagnosis": "ACE inhibitor-induced angioedema",
+        "keySymptoms": ["Lip, tongue, and periorbital swelling", "Stridor", "Dysphagia"],
+        "redFlags": ["Airway compromise (stridor)", "O2 sat 91%", "Recent ACE inhibitor use"],
+        "pastHistory": ["Hypertension", "Lisinopril started 2 weeks ago"],
+        "vitalSigns": "BP 140/85, HR 95, RR 24, O2 sat 91%"
+      },
+      "rubric": { "mustAsk": ["When did the swelling start?", "Have you started any new medications?"], "bonus": ["Ask about prior episodes of angioedema"] },
+      "dataPresented": null,
+      "questions": [
+        { "question": "What is the first priority?", "answer": "Airway assessment and prepare for difficult intubation", "rubric": "Recognizes impending airway compromise" }
+      ]
+    }
+  ]
+}

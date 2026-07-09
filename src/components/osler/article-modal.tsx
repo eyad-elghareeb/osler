@@ -3,7 +3,7 @@
 import * as React from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { BookOpen, X, Clock, ChevronRight, Search, Bookmark, BookmarkCheck } from "lucide-react";
-import { loadArticleContent, listAllArticles, searchArticles as searchArticlesAsync, type Article } from "@/lib/osler/articles";
+import { loadArticleContent, listAllArticles, searchArticles as searchArticlesAsync, type Article, type ArticleMeta } from "@/lib/osler/articles";
 import { cn } from "@/lib/utils";
 import { useArticleHighlighter } from "@/hooks/use-article-highlighter";
 import { HighlighterToolbar } from "./highlighter-toolbar";
@@ -28,7 +28,7 @@ export function FloatingArticleModal({
   const [showSidebar, setShowSidebar] = React.useState(false);
   const [bookmarks, setBookmarks] = React.useState<Set<string>>(new Set());
   const [article, setArticle] = React.useState<Article | null>(null);
-  const [searchResults, setSearchResults] = React.useState<Article[]>([]);
+  const [searchResults, setSearchResults] = React.useState<ArticleMeta[]>([]);
 
   const hlCtrl = useArticleHighlighter({
     source: "library",
@@ -230,10 +230,10 @@ export function FloatingArticleModal({
                     <div className="flex-1 overflow-y-auto medos-scroll p-2 space-y-0.5">
                       {searchResults.map((a) => (
                         <button
-                          key={a.id}
-                          onClick={() => handleOpen(a.id)}
+                          key={a.file}
+                          onClick={() => handleOpen(a.file)}
                           className={`w-full text-left px-2 py-2 rounded-md text-xs transition-colors flex items-start gap-2 ${
-                            a.id === activeId
+                            a.file === activeId
                               ? "bg-primary/10 text-primary font-medium"
                               : "hover:bg-muted/60 text-foreground"
                           }`}

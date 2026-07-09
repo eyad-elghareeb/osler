@@ -1,0 +1,22 @@
+{
+  "cards": [
+    {
+      "id": "fc-014",
+      "front": "ACE inhibitors mechanism of action",
+      "back": "Inhibit angiotensin-converting enzyme → decreased angiotensin II → vasodilation, decreased aldosterone, decreased afterload",
+      "tags": ["pharmacology", "ace-inhibitors"]
+    },
+    {
+      "id": "fc-015",
+      "front": "Varenicline mechanism for smoking cessation",
+      "back": "Partial agonist at alpha-4 beta-2 nicotinic acetylcholine receptors — reduces cravings and blocks nicotine reward",
+      "tags": ["pharmacology", "smoking-cessation"]
+    },
+    {
+      "id": "fc-016",
+      "front": "Management of warfarin with INR >5 and minor bleeding",
+      "back": "Hold warfarin + give vitamin K 1-2.5 mg orally. High-dose vitamin K or FFP reserved for major bleeding.",
+      "tags": ["pharmacology", "anticoagulation"]
+    }
+  ]
+}

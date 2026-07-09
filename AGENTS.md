@@ -82,11 +82,23 @@ export function Component({ title, onAction }: ComponentProps) {
 - Handled via `useShortcutListener` from `@/hooks/use-shortcuts.ts`
 - User-customizable in Settings > Keyboard
 
+### Content system (folder-based)
+
+- All content lives under `public/osler-content/` in category folders: `flashcard/`, `qbank/`, `osce/`, `library/`
+- **Folder name = title** — no separate metadata file needed; name is title-cased for display
+- **Type inheritance**: content under `flashcard/` is auto-type "flashcard"; `qbank/` types auto-detected from file keys; `osce/` → "osce"
+- **Multiple `.json` files per leaf folder**: all files fetched and merged (arrays concatenated)
+- **Branch nodes** (folders with subfolders) → grouping decks; **Leaf nodes** (no subfolders) → content items
+- `ContentTreeNode` in `@/lib/osler/types.ts` replaces `ManifestItem` (now deleted)
+- Auto-generate manifests via `npm run generate-manifests` (script: `scripts/generate-content-manifests.js`) — re-run after adding/removing content
+
 ### Content loading
 
-- `loadManifest()` → `loadAllContent()` for bulk loading
-- `loadContentByUid(uid)` for single pack loading
-- `loadContent(item)` from a `ManifestItem`
+- `loadCategoryTree(category)` — loads the tree for a category (from `manifest.json`)
+- `loadNodeContent(node)` — fetches and merges all JSON files in a leaf node
+- `loadAllContent()` — loads all content across all categories, returns `{ items, trees }`
+- `loadContentByUid(uid)` — loads a single content pack by UID
+- `flattenTree(node)` — flattens a tree node into an array of leaf `{ node, content }` items
 - All content is JSON fetched from `/osler-content/`
 
 ### Mobile responsiveness
@@ -115,6 +127,8 @@ export function Component({ title, onAction }: ComponentProps) {
 3. Add a type guard in `@/lib/osler/content.ts`
 4. Add an entry in `ENGINE_META`
 5. Add rendering support in `QBankStudio.tsx`
+6. Add type detection key in `scripts/generate-content-manifests.js` (`fileKeyMap`)
+7. Add category folder under `public/osler-content/`
 
 ### Handling state
 

@@ -11,10 +11,10 @@ import { OsceStudio } from "@/components/osler/osce-studio";
 import { AiAssistant } from "@/components/osler/ai-assistant";
 import { Profile } from "@/components/osler/profile";
 import { Settings } from "@/components/osler/settings";
-import { loadContentByUid, loadAllContent } from "@/lib/osler/content";
+import { loadContentByUid, nodeToItem } from "@/lib/osler/content";
 import type {
   AnyContent,
-  ManifestItem,
+  ContentTreeNode,
 } from "@/lib/osler/types";
 
 const SESSION_KEY = "osler-session";
@@ -22,7 +22,7 @@ const SESSION_KEY = "osler-session";
 export default function Home() {
   const [username, setUsername] = React.useState<string | null>(null);
   const [view, setView] = React.useState<OslerView>("dashboard");
-  const [activeItem, setActiveItem] = React.useState<ManifestItem | null>(null);
+  const [activeItem, setActiveItem] = React.useState<ContentTreeNode | null>(null);
   const [activeContent, setActiveContent] = React.useState<AnyContent | null>(null);
   const [activeArticleId, setActiveArticleId] = React.useState<string | undefined>(undefined);
   const [aiOpen, setAiOpen] = React.useState(false);
@@ -56,7 +56,7 @@ export default function Home() {
     return activeContent;
   }, [activeContent]);
 
-  const openPack = async (item: ManifestItem) => {
+  const openPack = async (item: ContentTreeNode) => {
     try {
       const content = await loadContentByUid(item.uid);
       setActiveItem(item);
@@ -71,7 +71,7 @@ export default function Home() {
     }
   };
 
-  const openPackWithData = (item: ManifestItem, content: AnyContent) => {
+  const openPackWithData = (item: ContentTreeNode, content: AnyContent) => {
     setActiveItem(item);
     setActiveContent(content);
     if (content.type === "osce") {

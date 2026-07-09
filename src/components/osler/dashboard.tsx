@@ -19,7 +19,7 @@ import {
   Flame,
 } from "lucide-react";
 import { loadAllContent, ENGINE_META } from "@/lib/osler/content";
-import type { AnyContent, ManifestItem, EngineType } from "@/lib/osler/types";
+import type { AnyContent, ContentTreeNode, EngineType } from "@/lib/osler/types";
 import { storage } from "@/lib/osler/storage";
 import { listAllArticles, loadArticleContent } from "@/lib/osler/articles";
 import type { Article } from "@/lib/osler/articles";
@@ -29,7 +29,7 @@ import { cn } from "@/lib/utils";
 interface DashboardProps {
   username: string;
   onViewChange: (v: OslerView) => void;
-  onOpenPack?: (item: ManifestItem, content: AnyContent) => void;
+  onOpenPack?: (item: ContentTreeNode, content: AnyContent) => void;
   onOpenArticle?: (id: string) => void;
 }
 
@@ -39,6 +39,7 @@ const ENGINE_COLORS: Record<EngineType, string> = {
   flashcard: "oklch(0.7 0.18 145)",
   written: "oklch(0.78 0.16 80)",
   osce: "oklch(0.7 0.2 16)",
+  library: "oklch(0.65 0.15 280)",
 };
 
 export function Dashboard({
@@ -48,7 +49,7 @@ export function Dashboard({
   onOpenArticle,
 }: DashboardProps) {
   const [data, setData] = React.useState<{
-    items: Array<{ item: ManifestItem; content: AnyContent | null }>;
+    items: Array<{ node: ContentTreeNode; content: AnyContent | null }>;
   } | null>(null);
   const [stats, setStats] = React.useState({ attempted: 0, correct: 0, packs: 0 });
 
@@ -72,10 +73,10 @@ export function Dashboard({
   const recentPacks = React.useMemo(() => {
     if (!data) return [];
     return data.items
-      .map(({ item, content }) => ({
-        item,
+      .map(({ node, content }) => ({
+        node,
         content,
-        progress: storage.packProgress(item.uid),
+        progress: storage.packProgress(node.uid),
       }))
       .filter((x) => x.progress.attempted > 0)
       .sort(
@@ -100,7 +101,7 @@ export function Dashboard({
         setArticleCount(all.length);
         // Load full content for featured articles (need html for preview)
         const previews = await Promise.all(
-          all.slice(0, 3).map((a) => loadArticleContent(a.id))
+          all.slice(0, 3).map((a) => loadArticleContent(a.file))
         );
         setFeaturedArticles(previews.filter(Boolean) as Article[]);
       } catch {}
@@ -149,7 +150,7 @@ export function Dashboard({
             <div
               className="absolute top-0 left-0 right-0 h-1"
               style={{
-                background: `linear-gradient(90deg, ${ENGINE_COLORS[continuePack.item.type]}, transparent)`,
+                background: `linear-gradient(90deg, ${ENGINE_COLORS[continuePack.node.type]}, transparent)`,
               }}
             />
             <div className="flex items-start justify-between gap-4 flex-wrap">
@@ -159,7 +160,7 @@ export function Dashboard({
                   Continue learning
                 </span>
                 <h2 className="text-lg md:text-xl font-semibold mt-1 mb-1">
-                  {continuePack.item.title}
+                  {continuePack.node.title}
                 </h2>
                 <p className="text-xs text-muted-foreground mb-3 line-clamp-1">
                   {continuePack.content?.meta.description}
@@ -186,7 +187,7 @@ export function Dashboard({
                 type="button"
                 onClick={() =>
                   continuePack.content &&
-                  onOpenPack?.(continuePack.item, continuePack.content)
+                  onOpenPack?.(continuePack.node, continuePack.content)
                 }
                 className="inline-flex items-center gap-1.5 px-4 h-10 rounded-md bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors shrink-0"
               >
@@ -275,9 +276,9 @@ export function Dashboard({
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-8">
           {featuredArticles.map((a) => (
             <button
-              key={a.id}
+              key={a.file}
               type="button"
-              onClick={() => onOpenArticle?.(a.id)}
+              onClick={() => onOpenArticle?.(a.file)}
               className="text-left bg-card border border-border rounded-lg p-4 hover:border-primary/40 hover:bg-primary/5 transition-colors"
             >
               <div className="flex items-center gap-2 mb-2 text-xs text-muted-foreground">
@@ -308,29 +309,29 @@ export function Dashboard({
               Recent Activity
             </h2>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              {recentPacks.map(({ item, content, progress }) => (
+              {recentPacks.map(({ node, content, progress }) => (
                 <button
-                  key={item.uid}
+                  key={node.uid}
                   type="button"
-                  onClick={() => content && onOpenPack?.(item, content)}
+                  onClick={() => content && onOpenPack?.(node, content)}
                   className="text-left bg-card border border-border rounded-lg p-4 hover:border-primary/40 transition-colors"
                 >
                   <div className="flex items-start gap-3">
                     <div
                       className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0"
                       style={{
-                        background: `color-mix(in oklch, ${ENGINE_COLORS[item.type]} 15%, transparent)`,
-                        color: ENGINE_COLORS[item.type],
+                        background: `color-mix(in oklch, ${ENGINE_COLORS[node.type]} 15%, transparent)`,
+                        color: ENGINE_COLORS[node.type],
                       }}
                     >
                       <Activity className="size-4" />
                     </div>
                     <div className="flex-1 min-w-0">
                       <h3 className="text-sm font-semibold truncate">
-                        {item.title}
+                        {node.title}
                       </h3>
                       <p className="text-xs text-muted-foreground mb-1.5">
-                        {ENGINE_META[item.type].label}
+                        {ENGINE_META[node.type].label}
                       </p>
                       <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
                         <span>{progress.attempted} attempted</span>

@@ -34,7 +34,7 @@ import { useOslerTheme } from "./theme-provider";
 import { MobileTabBar } from "./mobile-tab-bar";
 import { PwaInstallButton } from "./pwa-install-button";
 import { searchArticles as searchArticlesAsync } from "@/lib/osler/articles";
-import type { Article } from "@/lib/osler/articles";
+import type { ArticleMeta } from "@/lib/osler/articles";
 import { cn } from "@/lib/utils";
 
 export type OslerView =
@@ -66,7 +66,7 @@ export function AppShell({
   const { theme, toggleTheme } = useOslerTheme();
   const [searchOpen, setSearchOpen] = React.useState(false);
   const [query, setQuery] = React.useState("");
-  const [searchResults, setSearchResults] = React.useState<Article[]>([]);
+  const [searchResults, setSearchResults] = React.useState<ArticleMeta[]>([]);
 
   // Search debounce
   React.useEffect(() => {
@@ -133,8 +133,8 @@ export function AppShell({
             </div>
             {searchResults.map((r) => (
               <button
-                key={r.id}
-                onClick={() => handleOpenArticle(r.id)}
+                key={r.file}
+                onClick={() => handleOpenArticle(r.file)}
                 className="w-full text-left px-2 py-2 rounded-md hover:bg-muted/60 transition-colors flex items-center gap-3"
               >
                 <BookOpen className="size-4 text-muted-foreground shrink-0" />

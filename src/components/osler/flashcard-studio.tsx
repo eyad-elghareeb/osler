@@ -22,14 +22,10 @@ import {
   X as XIcon,
   GraduationCap,
 } from "lucide-react";
-import { loadAllContent, ENGINE_META } from "@/lib/osler/content";
-import type {
-  FlashcardContent,
-  FlashcardSubdeck,
-  ManifestItem,
-  AnyContent,
-} from "@/lib/osler/types";
+import { ENGINE_META } from "@/lib/osler/content";
+import type { FlashcardContent, FlashcardSubdeck, ContentTreeNode, AnyContent } from "@/lib/osler/types";
 import { flashcardReview, storage } from "@/lib/osler/storage";
+import { useContentTree } from "@/hooks/use-content-tree";
 import { useShortcutBindings } from "@/hooks/use-shortcuts";
 import { cn } from "@/lib/utils";
 import { setImmersiveMode } from "./immersive-mode";
@@ -37,10 +33,10 @@ import { setImmersiveMode } from "./immersive-mode";
 type ViewMode = "decks" | "subdecks" | "study" | "complete";
 
 interface FlashcardStudioProps {
-  activeItem?: ManifestItem | null;
+  activeItem?: ContentTreeNode | null;
   activeContent?: AnyContent | null;
   onExit: () => void;
-  onOpenPack?: (item: ManifestItem) => void;
+  onOpenPack?: (item: ContentTreeNode) => void;
   onNavigateHome?: () => void;
 }
 
@@ -61,13 +57,20 @@ export function FlashcardStudio({
   onOpenPack,
   onNavigateHome,
 }: FlashcardStudioProps) {
-  const [data, setData] = React.useState<{
-    items: Array<{ item: ManifestItem; content: AnyContent | null }>;
-  } | null>(null);
+  const {
+    trees,
+    leafContent,
+    collectLeafUids,
+    mergeCards,
+    nodeCardCount,
+    nodeDueCount,
+  } = useContentTree({ types: ["flashcard"] });
+
+  const tree = trees.flashcard ?? [];
+
   const [mode, setMode] = React.useState<ViewMode>("decks");
 
   // Hide the global mobile tab bar while actively studying flashcards
-  // (study/complete screens); keep it on the decks/subdecks hub.
   React.useEffect(() => {
     setImmersiveMode(mode === "study" || mode === "complete");
     return () => setImmersiveMode(false);
@@ -84,81 +87,81 @@ export function FlashcardStudio({
   >([]);
   const [stats, setStats] = React.useState({ new: 0, due: 0, total: 0 });
 
+  // Compute stats from leafContent
   React.useEffect(() => {
-    loadAllContent().then(setData).catch(console.error);
-  }, []);
-
-  React.useEffect(() => {
-    const update = () => {
-      if (!data) return;
-      let newC = 0;
-      let dueC = 0;
-      let totalC = 0;
-      for (const { item, content } of data.items) {
-        if (content?.type !== "flashcard") continue;
-        const cards = (content as FlashcardContent).cards;
+    const compute = () => {
+      let newC = 0, dueC = 0, totalC = 0;
+      for (const [uid, content] of leafContent) {
+        if (content.type !== "flashcard") continue;
+        const fc = content as FlashcardContent;
+        const cards = fc.cards;
         totalC += cards.length;
         const cardIds = cards.map((c) => c.id);
-        const dueIds = flashcardReview.getCardsDue(item.uid, cardIds);
+        const dueIds = flashcardReview.getCardsDue(uid, cardIds);
         dueC += dueIds.length;
-        newC += cardIds.length - dueIds.length;
       }
+      newC = totalC - dueC;
       setStats({ new: newC, due: dueC, total: totalC });
     };
-    update();
-    return flashcardReview.subscribe(update);
-  }, [data]);
+    compute();
+    return flashcardReview.subscribe(compute);
+  }, [leafContent]);
 
-  const flashcardPacks = React.useMemo(() => {
-    if (!data) return [];
-    return data.items
-      .map(({ item, content }) => ({ item, content }))
-      .filter((x) => x.content?.type === "flashcard")
-      .map(({ item, content }) => {
-        const fc = content as FlashcardContent;
-        const cardIds = fc.cards.map((c) => c.id);
-        const dueIds = flashcardReview.getCardsDue(item.uid, cardIds);
-        const progress = storage.packProgress(item.uid);
-        return { item, deck: fc, dueIds, progress };
-      });
-  }, [data]);
+  const currentDeck = tree[deckIndex];
+  const currentSubdecks = React.useMemo(() => {
+    if (!currentDeck) return [];
+    return currentDeck.items ?? [];
+  }, [currentDeck]);
 
-  const currentDeck = flashcardPacks[deckIndex];
   const currentDeckCards = React.useMemo(() => {
     if (!currentDeck) return [];
-    if (!activeSubdeckId) return currentDeck.deck.cards;
-    return currentDeck.deck.cards.filter((c) => c.subdeckId === activeSubdeckId);
-  }, [currentDeck, activeSubdeckId]);
+    if (activeSubdeckId) {
+      const subdeck = currentDeck.items.find((c) => c.uid === activeSubdeckId);
+      if (subdeck) return mergeCards(collectLeafUids(subdeck));
+    }
+    return mergeCards(collectLeafUids(currentDeck));
+  }, [currentDeck, activeSubdeckId, leafContent]);
 
   const currentCard = currentDeckCards[cardIndex];
   const isSessionCard = currentCard
     ? sessionCards.includes(currentCard.id)
     : false;
 
-  const subdecks = currentDeck?.deck.subdecks ?? [];
-  const hasSubdecks = subdecks.length > 0;
-
-  function startDeck(deckIdx: number, subdeckId?: string | null) {
-    setDeckIndex(deckIdx);
-    setActiveSubdeckId(subdeckId ?? null);
-    const deck = flashcardPacks[deckIdx];
-    if (!deck) return;
-    let cardsForSession = deck.deck.cards;
-    if (subdeckId) {
-      cardsForSession = deck.deck.cards.filter((c) => c.subdeckId === subdeckId);
-    }
-    const cardIds = cardsForSession.map((c) => c.id);
-    const dueIds = flashcardReview.getCardsDue(deck.item.uid, cardIds);
+  function startSession(cards: FlashcardContent["cards"], uid: string) {
+    const cardIds = cards.map((c) => c.id);
+    const dueIds = flashcardReview.getCardsDue(uid, cardIds);
     const cardsToStudy =
       dueIds.length > 0
-        ? cardsForSession.filter((c) => dueIds.includes(c.id))
-        : cardsForSession.slice(0, 10);
+        ? cards.filter((c) => dueIds.includes(c.id))
+        : cards.slice(0, 10);
     setSessionCards(cardsToStudy.map((c) => c.id));
     setCardIndex(0);
     setFlipped(false);
     setIsFlipping(false);
     setSessionResults([]);
     setMode("study");
+  }
+
+  function startDeck(deckIdx: number) {
+    setDeckIndex(deckIdx);
+    setActiveSubdeckId(null);
+    const node = tree[deckIdx];
+    if (!node) return;
+    const cards = mergeCards(collectLeafUids(node));
+    if (cards.length === 0) return;
+    startSession(cards, node.uid);
+  }
+
+  function startSubdeck(deckIdx: number, subdeckUid: string) {
+    setDeckIndex(deckIdx);
+    setActiveSubdeckId(subdeckUid);
+    const node = tree[deckIdx];
+    if (!node) return;
+    const child = node.items.find((c) => c.uid === subdeckUid);
+    if (!child) return;
+    const cards = mergeCards(collectLeafUids(child));
+    if (cards.length === 0) return;
+    startSession(cards, child.uid);
   }
 
   function flipCard() {
@@ -170,7 +173,7 @@ export function FlashcardStudio({
 
   function rateCard(rating: "again" | "hard" | "good" | "easy") {
     if (!currentDeck || !currentCard) return;
-    flashcardReview.recordReview(currentDeck.item.uid, currentCard.id, rating);
+    flashcardReview.recordReview(currentDeck.uid, currentCard.id, rating);
     setSessionResults((prev) => [
       ...prev,
       { cardId: currentCard.id, rating },
@@ -225,7 +228,11 @@ export function FlashcardStudio({
 
   function restartDeck() {
     if (!currentDeck) return;
-    startDeck(deckIndex, activeSubdeckId);
+    if (activeSubdeckId) {
+      startSubdeck(deckIndex, activeSubdeckId);
+    } else {
+      startDeck(deckIndex);
+    }
   }
 
   function openSubdecks(deckIdx: number) {
@@ -255,31 +262,21 @@ export function FlashcardStudio({
 
   function exportToAnki() {
     if (!currentDeck) return;
-    const deck = currentDeck.deck;
-    const title = currentDeck.item.title;
-    const subdeckMap = new Map(deck.subdecks?.map((s) => [s.id, s.title]) ?? []);
+    const cards = mergeCards(collectLeafUids(currentDeck));
+    const title = currentDeck.title;
     const lines: string[] = [];
 
-    const cardGroups = new Map<string, typeof deck.cards>();
-    for (const card of deck.cards) {
+    for (const card of cards) {
       const sdId = card.subdeckId ?? "";
-      if (!cardGroups.has(sdId)) cardGroups.set(sdId, []);
-      cardGroups.get(sdId)!.push(card);
-    }
-
-    for (const [sdId, cards] of cardGroups) {
-      const subdeckTitle = subdeckMap.get(sdId) ?? "";
-      const tagPrefix = subdeckTitle
-        ? `${title.replace(/\s+/g, "::")}::${subdeckTitle.replace(/\s+/g, "::")}`
+      const tagPrefix = sdId
+        ? `${title.replace(/\s+/g, "::")}::${sdId.replace(/\s+/g, "::")}`
         : title.replace(/\s+/g, "::");
-      for (const card of cards) {
-        const tags = [tagPrefix, ...(card.tags ?? [])]
-          .map((t) => t.replace(/\s+/g, "-"))
-          .join(" ");
-        const front = card.front.replace(/\t/g, " ").replace(/\n/g, "<br>");
-        const back = card.back.replace(/\t/g, " ").replace(/\n/g, "<br>");
-        lines.push(`${front}\t${back}\t${tags}`);
-      }
+      const tags = [tagPrefix, ...(card.tags ?? [])]
+        .map((t) => t.replace(/\s+/g, "-"))
+        .join(" ");
+      const front = card.front.replace(/\t/g, " ").replace(/\n/g, "<br>");
+      const back = card.back.replace(/\t/g, " ").replace(/\n/g, "<br>");
+      lines.push(`${front}\t${back}\t${tags}`);
     }
 
     const blob = new Blob([lines.join("\n")], { type: "text/tab-separated-values" });
@@ -317,9 +314,9 @@ export function FlashcardStudio({
           <h2 className="text-2xl font-bold mb-2">Session Complete!</h2>
           <p className="text-sm text-muted-foreground mb-8">
             You reviewed {doneCount} card{doneCount !== 1 ? "s" : ""} in{" "}
-            {currentDeck.item.title}
-            {activeSubdeckId && subdecks.find((s) => s.id === activeSubdeckId)
-              ? ` :: ${subdecks.find((s) => s.id === activeSubdeckId)!.title}`
+            {currentDeck.title}
+            {activeSubdeckId && currentDeck.items.find((c) => c.uid === activeSubdeckId)
+              ? ` :: ${currentDeck.items.find((c) => c.uid === activeSubdeckId)!.title}`
               : ""}
           </p>
 
@@ -380,11 +377,11 @@ export function FlashcardStudio({
 
           <div className="hidden sm:flex items-center gap-2 text-xs text-muted-foreground">
             <BookOpen className="size-3.5" />
-            <span className="font-medium text-foreground">{currentDeck.item.title}</span>
-            {activeSubdeckId && subdecks.find((s) => s.id === activeSubdeckId) && (
+            <span className="font-medium text-foreground">{currentDeck.title}</span>
+            {activeSubdeckId && currentDeck.items.find((c) => c.uid === activeSubdeckId) && (
               <>
                 <span className="opacity-50">&middot;</span>
-                <span>{subdecks.find((s) => s.id === activeSubdeckId)!.title}</span>
+                <span>{currentDeck.items.find((c) => c.uid === activeSubdeckId)!.title}</span>
               </>
             )}
           </div>
@@ -562,20 +559,10 @@ export function FlashcardStudio({
 
   /* ── Subdecks view ───────────────────────────────────────────────── */
   if (mode === "subdecks" && currentDeck) {
-    const subdecksList = currentDeck.deck.subdecks ?? [];
-    const totalCards = currentDeck.deck.cards.length;
-    const totalDue = currentDeck.dueIds.length;
-
-    function subdeckCardCount(subdeckId: string) {
-      return currentDeck.deck.cards.filter((c) => c.subdeckId === subdeckId).length;
-    }
-
-    function subdeckDueCount(subdeckId: string) {
-      const cardIds = currentDeck.deck.cards
-        .filter((c) => c.subdeckId === subdeckId)
-        .map((c) => c.id);
-      return flashcardReview.getCardsDue(currentDeck.item.uid, cardIds).length;
-    }
+    const childNodes = currentDeck.items ?? [];
+    const allCards = mergeCards(collectLeafUids(currentDeck));
+    const totalCards = allCards.length;
+    const totalDue = nodeDueCount(currentDeck);
 
     return (
       <div className="h-full overflow-y-auto medos-scroll">
@@ -594,7 +581,7 @@ export function FlashcardStudio({
               <span>{ENGINE_META.flashcard.label}</span>
             </div>
             <h1 className="text-2xl md:text-3xl font-bold tracking-tight mb-1">
-              {currentDeck.item.title}
+              {currentDeck.title}
             </h1>
             <p className="text-sm text-muted-foreground">
               {totalDue} cards due today &middot; {totalCards} total
@@ -604,7 +591,7 @@ export function FlashcardStudio({
           {/* Study All + Export buttons */}
           <div className="flex items-center gap-2 mb-6">
             <button
-              onClick={() => startDeck(deckIndex, null)}
+              onClick={() => startDeck(deckIndex)}
               className="h-10 px-4 rounded-xl bg-primary text-primary-foreground font-medium text-sm hover:bg-primary/90 transition-colors flex items-center gap-2"
             >
               <GraduationCap className="size-4" />
@@ -619,15 +606,24 @@ export function FlashcardStudio({
             </button>
           </div>
 
-          {/* Subdeck grid */}
+          {/* Child deck grid */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {subdecksList.map((subdeck) => {
-              const count = subdeckCardCount(subdeck.id);
-              const dueCount = subdeckDueCount(subdeck.id);
+            {childNodes.map((child) => {
+              const isBranch = child.items.length > 0;
+              const count = nodeCardCount(child);
+              const dueCount = nodeDueCount(child);
               return (
                 <button
-                  key={subdeck.id}
-                  onClick={() => startDeck(deckIndex, subdeck.id)}
+                  key={child.uid}
+                  onClick={() => {
+                    if (isBranch) {
+                      /* drill deeper — open this branch in subdecks view */
+                      const idx = tree.indexOf(currentDeck); // won't work for nested
+                      startDeck(deckIndex); // start session with merged cards for now
+                    } else {
+                      startSubdeck(deckIndex, child.uid);
+                    }
+                  }}
                   className="medos-fade-in text-left bg-card border border-border rounded-xl p-5 hover:border-primary/40 hover:shadow-md hover:bg-primary/[0.02] transition-colors group"
                 >
                   <div className="flex items-center gap-3 mb-3">
@@ -638,19 +634,21 @@ export function FlashcardStudio({
                         color: FLASHCARD_COLOR,
                       }}
                     >
-                      <Folder className="size-5" />
+                      {isBranch ? <Folder className="size-5" /> : <Layers className="size-5" />}
                     </div>
                     <div className="min-w-0">
-                      <h3 className="font-semibold truncate">{subdeck.title}</h3>
+                      <h3 className="font-semibold truncate">{child.title}</h3>
                       <p className="text-xs text-muted-foreground">
-                        {count} card{count !== 1 ? "s" : ""}
+                        {isBranch
+                          ? `${child.items.length} subdeck${child.items.length !== 1 ? "s" : ""}`
+                          : `${count} card${count !== 1 ? "s" : ""}`}
                       </p>
                     </div>
                     <ChevronRight className="size-4 text-muted-foreground/40 group-hover:text-muted-foreground transition-colors ml-auto shrink-0" />
                   </div>
-                  {subdeck.description && (
+                  {child.description && (
                     <p className="text-xs text-muted-foreground/70 line-clamp-2 mb-3">
-                      {subdeck.description}
+                      {child.description}
                     </p>
                   )}
                   {dueCount > 0 && (
@@ -717,7 +715,7 @@ export function FlashcardStudio({
         </div>
 
         {/* Deck grid */}
-        {flashcardPacks.length === 0 ? (
+        {tree.length === 0 ? (
           <div className="text-center py-16">
             <div className="size-14 rounded-full bg-muted/40 flex items-center justify-center mx-auto mb-4">
               <Layers className="size-6 text-muted-foreground" />
@@ -729,21 +727,21 @@ export function FlashcardStudio({
           </div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {flashcardPacks.map((deck, idx) => {
-              const totalCards = deck.deck.cards.length;
-              const dueCount = deck.dueIds.length;
+            {tree.map((node, idx) => {
+              const isBranch = node.items.length > 0;
+              const totalCards = mergeCards(collectLeafUids(node)).length;
+              const dueCount = nodeDueCount(node);
               const pct = totalCards > 0
                 ? Math.round(((totalCards - dueCount) / totalCards) * 100)
                 : 0;
-              const subdecks = deck.deck.subdecks ?? [];
               return (
                 <button
-                  key={deck.item.uid}
+                  key={node.uid}
                   onClick={() => {
-                    if (subdecks.length > 0) {
+                    if (isBranch) {
                       openSubdecks(idx);
                     } else {
-                      startDeck(idx, null);
+                      startDeck(idx);
                     }
                   }}
                   className="medos-fade-in text-left bg-card border border-border rounded-xl p-5 hover:border-primary/40 hover:shadow-md hover:bg-primary/[0.02] transition-colors group"
@@ -757,25 +755,27 @@ export function FlashcardStudio({
                         color: FLASHCARD_COLOR,
                       }}
                     >
-                      {subdecks.length > 0 ? (
+                      {isBranch ? (
                         <Folder className="size-5" />
                       ) : (
                         <Layers className="size-5" />
                       )}
                     </div>
                     <div className="min-w-0">
-                      <h3 className="font-semibold truncate">{deck.item.title}</h3>
+                      <h3 className="font-semibold truncate">{node.title}</h3>
                       <p className="text-xs text-muted-foreground">
-                        {subdecks.length > 0
-                          ? `${subdecks.length} subdeck${subdecks.length !== 1 ? "s" : ""}`
+                        {isBranch
+                          ? `${node.items.length} subdeck${node.items.length !== 1 ? "s" : ""}`
                           : `${totalCards} cards`}
                       </p>
                     </div>
                     <ChevronRight className="size-4 text-muted-foreground/40 group-hover:text-muted-foreground transition-colors ml-auto shrink-0" />
                   </div>
-                  <p className="text-xs text-muted-foreground/70 line-clamp-2 mb-3">
-                    {deck.deck.meta.description}
-                  </p>
+                  {node.description && (
+                    <p className="text-xs text-muted-foreground/70 line-clamp-2 mb-3">
+                      {node.description}
+                    </p>
+                  )}
                   <div className="flex items-center gap-3 text-xs">
                     <span className="text-emerald-500 font-medium tabular-nums">
                       {dueCount} due

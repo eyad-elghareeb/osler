@@ -1,0 +1,15 @@
+{
+  "type": "osce",
+  "items": [
+    {
+      "uid": "osce-clinical-skills",
+      "title": "Clinical Skills",
+      "type": "osce",
+      "path": "clinical-skills/",
+      "files": [
+        "stations.json"
+      ],
+      "items": []
+    }
+  ]
+}

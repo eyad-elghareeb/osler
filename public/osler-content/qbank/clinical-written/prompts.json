@@ -1,0 +1,110 @@
+{
+  "prompts": [
+    {
+      "id": "w-001",
+      "prompt": "Describe the pathophysiology of heart failure with reduced ejection fraction (HFrEF). Include the role of the renin-angiotensin-aldosterone system, compensatory mechanisms, and how these lead to disease progression over time.",
+      "modelAnswer": "HFrEF begins with an initial insult (e.g., MI, hypertension, valvular disease) that reduces myocardial contractility and cardiac output. The body activates compensatory mechanisms: (1) the sympathetic nervous system increases heart rate and contractility via catecholamines, and (2) the RAAS is activated — decreased renal perfusion stimulates renin release, leading to angiotensin II production (vasoconstriction, aldosterone secretion). Aldosterone causes sodium and water retention, increasing preload. Initially these maintain cardiac output, but chronically they become maladaptive: sustained catecholamine exposure causes ß-receptor downregulation and myocyte toxicity, angiotensin II promotes fibrosis and ventricular remodeling, and aldosterone leads to myocardial fibrosis and worsening diastolic dysfunction. Over time, the LV dilates and becomes more spherical (eccentric remodeling), increasing wall stress and oxygen demand, which further depresses contractility in a vicious cycle. This neurohormonal model is the basis for guideline-directed therapy with ß-blockers, ACEi/ARBs, MRAs, and SGLT2i.",
+      "rubric": [
+        "Explains reduced myocardial contractility",
+        "Describes RAAS activation in response to decreased cardiac output",
+        "Mentions sympathetic nervous system activation and its effects",
+        "Discusses ventricular remodeling as a compensatory mechanism that becomes maladaptive",
+        "Explains how compensatory mechanisms accelerate disease progression over time"
+      ],
+      "explanation": "HFrEF pathophysiology centers on the neurohormonal model. The key insight is that compensatory mechanisms (SNS activation, RAAS) are initially helpful but become harmful over time. Modern treatment targets these pathways: ß-blockers for SNS, ACEi/ARBs for angiotensin II, MRAs for aldosterone, and SGLT2i for additional cardiovascular benefit.",
+      "wordLimit": 500,
+      "tags": ["heart-failure", "cardiology"]
+    },
+    {
+      "id": "w-002",
+      "prompt": "Outline the diagnostic approach and initial management of a patient presenting with acute ischemic stroke within the first 4.5 hours. Include appropriate imaging, treatment decisions, and contraindications to thrombolysis.",
+      "modelAnswer": "On arrival, perform an NIH Stroke Scale assessment and obtain stat non-contrast CT head to exclude intracranial hemorrhage (the absolute contraindication to thrombolysis). Check blood glucose (hypoglycemia mimics stroke), CBC, INR/aPTT, and electrolyte panel. If symptom onset is within 3 hours and no contraindications, administer IV alteplase (0.9 mg/kg, 10% bolus, remainder over 60 min). The window extends to 4.5 hours for patients under 80, not on anticoagulants, without both diabetes and prior stroke, and NIHSS < 25. Contraindications include: intracranial hemorrhage on CT, recent major surgery/trauma within 14 days, GI/GU bleeding within 21 days, INR > 1.7 or elevated aPTT, platelets < 100,000, systolic BP > 185 or diastolic > 110 refractory to treatment, rapid symptom improvement, and seizure at onset.",
+      "rubric": [
+        "Describes immediate assessment including NIH stroke scale and vitals",
+        "Identifies need for non-contrast CT head to exclude hemorrhage",
+        "Lists indications for IV alteplase (tPA) within 3-4.5 hour window",
+        "Lists contraindications to thrombolysis (recent surgery, bleeding, INR >1.7, etc.)",
+        "Discusses blood pressure management before and after thrombolysis",
+        "Mentions mechanical thrombectomy for large vessel occlusion"
+      ],
+      "explanation": "Acute stroke management is time-critical. The CT head is the first and most important step — alteplase is absolutely contraindicated if hemorrhage is present.",
+      "wordLimit": 400,
+      "tags": ["stroke", "neurology"]
+    },
+    {
+      "id": "w-003",
+      "prompt": "Compare and contrast the pathophysiology, clinical presentation, and management of asthma versus COPD.",
+      "rubric": [
+        "Distinguishes eosinophilic inflammation (asthma) from neutrophilic (COPD)",
+        "Describes reversible vs largely fixed airway obstruction",
+        "Compares typical age of onset and triggers",
+        "Outlines stepwise asthma management (SABA → ICS → LABA → biologics)",
+        "Outlines COPD management (bronchodilators → ICS for exacerbations → LTOT)",
+        "Mentions key diagnostic differences (methacholine challenge for asthma, PFTs for COPD)"
+      ],
+      "explanation": "The most important clinical distinction is reversibility: asthma is reversible, while COPD airflow limitation is largely fixed.",
+      "wordLimit": 500,
+      "tags": ["pulmonology", "asthma", "copd"]
+    },
+    {
+      "id": "w-004",
+      "prompt": "A 65-year-old man on warfarin for mechanical mitral valve presents with an INR of 7.2 and melena. Detail the management.",
+      "rubric": [
+        "Explains warfarin's mechanism (inhibition of vitamin K-dependent factors II, VII, IX, X)",
+        "Recognizes need for immediate reversal due to major bleeding",
+        "Describes appropriate use of vitamin K, FFP, and PCC",
+        "Discusses holding warfarin and assessing bleeding source",
+        "Explains bridging options if long-term anticoagulation is required"
+      ],
+      "explanation": "This case tests management of warfarin-related major bleeding. PCC is preferred over FFP.",
+      "wordLimit": 400,
+      "tags": ["pharmacology", "anticoagulation"]
+    },
+    {
+      "id": "w-005",
+      "prompt": "A 35-year-old female presents with intermittent epigastric pain, bloating, and diarrhea. She has a family history of celiac disease. Describe the diagnostic workup and management.",
+      "rubric": [
+        "Lists appropriate serologic tests (tTG-IgA, total IgA, EMA)",
+        "Explains need for gluten-containing diet before testing",
+        "Describes endoscopic findings and Marsh staging",
+        "Discusses lifelong gluten-free diet as cornerstone of treatment",
+        "Mentions monitoring for complications and nutritional deficiencies",
+        "Addresses family screening recommendations"
+      ],
+      "explanation": "The key diagnostic principle is that testing requires ongoing gluten exposure.",
+      "wordLimit": 450,
+      "tags": ["gastroenterology", "celiac"]
+    },
+    {
+      "id": "w-006",
+      "prompt": "A 55-year-old man with a 30-pack-year smoking history presents with progressive dyspnea, chronic cough, and recent hemoptysis. Chest X-ray shows a right hilar mass. Describe the diagnostic approach, staging workup, and management options.",
+      "rubric": [
+        "Describes appropriate initial imaging (CT chest, PET-CT)",
+        "Discusses tissue diagnosis methods (bronchoscopy, EBUS, CT-guided biopsy)",
+        "Outlines TNM staging and role of brain MRI",
+        "Differentiates management by stage (surgery, SBRT, chemoradiation, systemic therapy)",
+        "Mentions molecular testing and targeted therapy/immunotherapy options"
+      ],
+      "explanation": "Lung cancer staging drives treatment — early stage is surgical, locally advanced is multimodality, and metastatic is systemic.",
+      "wordLimit": 500,
+      "tags": ["pulmonology", "oncology", "lung-cancer"],
+      "children": [
+        {
+          "id": "w-006-a",
+          "label": "Part A — Diagnosis",
+          "question": "What imaging and tissue sampling would you obtain, and what key findings would you look for?"
+        },
+        {
+          "id": "w-006-b",
+          "label": "Part B — Staging",
+          "question": "Using the TNM 8th edition, stage a T2aN2M0 tumor. What does this imply for management?"
+        },
+        {
+          "id": "w-006-c",
+          "label": "Part C — Targeted Therapy",
+          "question": "When would you order molecular testing, and which actionable mutations would change your management?"
+        }
+      ]
+    }
+  ]
+}

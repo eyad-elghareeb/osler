@@ -1,0 +1,34 @@
+{
+  "cards": [
+    {
+      "id": "fc-001",
+      "front": "What is the most common cause of heart failure?",
+      "back": "Coronary artery disease (accounts for 50-60% of cases)",
+      "tags": ["cardiology", "heart-failure"]
+    },
+    {
+      "id": "fc-002",
+      "front": "First-line medication for stable angina",
+      "back": "Beta-blockers — they reduce myocardial oxygen demand by decreasing heart rate and contractility",
+      "tags": ["cardiology", "ischemia"]
+    },
+    {
+      "id": "fc-003",
+      "front": "Normal PR interval on ECG",
+      "back": "0.12-0.20 seconds (3-5 small squares)",
+      "tags": ["cardiology", "ecg"]
+    },
+    {
+      "id": "fc-004",
+      "front": "Most common cause of secondary hypertension in young adults",
+      "back": "Primary aldosteronism (Conn syndrome) — suspect in resistant hypertension with hypokalemia",
+      "tags": ["cardiology", "hypertension"]
+    },
+    {
+      "id": "fc-018",
+      "front": "Triple therapy for HFrEF with strongest mortality benefit",
+      "back": "ACE inhibitor (or ARB) + Beta-blocker + Aldosterone antagonist",
+      "tags": ["cardiology", "heart-failure"]
+    }
+  ]
+}

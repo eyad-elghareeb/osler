@@ -1,0 +1,28 @@
+{
+  "cards": [
+    {
+      "id": "fc-008",
+      "front": "Time window for IV alteplase (tPA) in ischemic stroke",
+      "back": "Within 3 hours of symptom onset (extended to 4.5 hours for eligible patients)",
+      "tags": ["neurology", "stroke"]
+    },
+    {
+      "id": "fc-009",
+      "front": "Classic triad of bacterial meningitis in CSF",
+      "back": "1) Elevated WBC (polymorphonuclear predominance) | 2) Low glucose | 3) High protein",
+      "tags": ["neurology", "infectious-disease"]
+    },
+    {
+      "id": "fc-010",
+      "front": "Most common bacterial cause of meningitis in adults",
+      "back": "Streptococcus pneumoniae",
+      "tags": ["neurology", "infectious-disease"]
+    },
+    {
+      "id": "fc-017",
+      "front": "Hallmark symptom of Parkinson's disease",
+      "back": "Resting tremor (pill-rolling), bradykinesia, cogwheel rigidity, postural instability — asymmetric onset",
+      "tags": ["neurology", "parkinsons"]
+    }
+  ]
+}

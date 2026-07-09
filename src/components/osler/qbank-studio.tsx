@@ -52,13 +52,13 @@ import {
   ArrowLeft,
   ArrowUpDown,
 } from "lucide-react";
-import { loadAllContent, ENGINE_META } from "@/lib/osler/content";
+import { loadAllContent, ENGINE_META, flattenTree } from "@/lib/osler/content";
 import type {
   AnyContent,
   BankContent,
   EngineType,
   FlashcardContent,
-  ManifestItem,
+  ContentTreeNode,
   OsceContent,
   QuizContent,
   WrittenContent,
@@ -76,7 +76,7 @@ import {
   type WrittenEvaluation,
 } from "@/lib/osler/storage";
 import { listAllArticles } from "@/lib/osler/articles";
-import type { Article } from "@/lib/osler/articles";
+import type { Article, ArticleMeta } from "@/lib/osler/articles";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -97,10 +97,10 @@ const LETTERS = ["A", "B", "C", "D", "E", "F", "G", "H"];
 const HIGHLIGHT_COLORS = ["#fef08a", "#86efac", "#93c5fd", "#fbcfe8", "#c4b5fd", "#fdba74"];
 
 interface QBankStudioProps {
-  activeItem?: ManifestItem | null;
+  activeItem?: ContentTreeNode | null;
   activeContent?: AnyContent | null;
   onExit: () => void;
-  onOpenPack?: (item: ManifestItem) => void;
+  onOpenPack?: (item: ContentTreeNode) => void;
 }
 
 type QuizMode = "home" | "quiz" | "results";
@@ -180,7 +180,7 @@ export function QBankStudio({
   const [articleModalId, setArticleModalId] = React.useState<string | null>(null);
   const [aiAssistantOpen, setAiAssistantOpen] = React.useState(false);
   const [navOpenMobile, setNavOpenMobile] = React.useState(false);
-  const [articleList, setArticleList] = React.useState<Article[]>([]);
+  const [articleList, setArticleList] = React.useState<ArticleMeta[]>([]);
 
   React.useEffect(() => {
     (async () => {
@@ -192,7 +192,7 @@ export function QBankStudio({
   }, []);
 
   const startSession = React.useCallback(
-    (item: ManifestItem, content: AnyContent, maxQuestions?: number) => {
+    (item: ContentTreeNode, content: AnyContent, maxQuestions?: number) => {
       let questions = contentToQuestions(content);
       if (questions.length === 0) return;
       if (maxQuestions && maxQuestions > 0 && maxQuestions < questions.length) {
@@ -543,6 +543,9 @@ export function QBankStudio({
 /* ─────────────────────────────────────────────────────────────────────────
  * HOME VIEW
  * ───────────────────────────────────────────────────────────────────────── */
+/* ── Replace old ManifestItem usage with ContentTreeNode ─────── */
+type PackEntry = { node: ContentTreeNode; content: AnyContent | null };
+
 function HomeView({
   testMode,
   onTestModeChange,
@@ -553,19 +556,27 @@ function HomeView({
 }: {
   testMode: TestMode;
   onTestModeChange: (m: TestMode) => void;
-  onOpenPack?: (item: ManifestItem) => void;
+  onOpenPack?: (item: ContentTreeNode) => void;
   homeTab: HomeTab;
   onHomeTabChange: (t: HomeTab) => void;
   onSetQuestionLimit?: (n: number) => void;
 }) {
   const [data, setData] = React.useState<{
-    items: Array<{ item: ManifestItem; content: AnyContent | null }>;
+    items: PackEntry[];
   } | null>(null);
   const [, force] = React.useReducer((x) => x + 1, 0);
   const [savedSessions, setSavedSessions] = React.useState<SavedSession[]>([]);
 
   React.useEffect(() => {
-    loadAllContent().then(setData).catch(console.error);
+    loadAllContent()
+      .then((result) => {
+        setData({
+          items: result.items.filter(
+            (entry) => entry.node.type !== "flashcard" && entry.node.type !== "osce"
+          ),
+        });
+      })
+      .catch(console.error);
   }, []);
 
   React.useEffect(() => {
@@ -658,30 +669,31 @@ const ENGINE_ICONS: Record<
   flashcard: Layers,
   written: PenTool,
   osce: Activity,
+  library: BookOpen,
 };
 
 function PackCard({
-  item,
+  node,
   content,
   index,
   onOpenPack,
 }: {
-  item: ManifestItem;
+  node: ContentTreeNode;
   content: AnyContent;
   index: number;
-  onOpenPack?: (item: ManifestItem) => void;
+  onOpenPack?: (item: ContentTreeNode) => void;
 }) {
-  const meta = ENGINE_META[item.type as EngineType];
-  const Icon = ENGINE_ICONS[item.type as EngineType] ?? ListChecks;
+  const meta = ENGINE_META[node.type as EngineType];
+  const Icon = ENGINE_ICONS[node.type as EngineType] ?? ListChecks;
   const count = countQuestions(content);
-  const packProgress = storage.packProgress(item.uid);
+  const packProgress = storage.packProgress(node.uid);
   const accuracy =
     packProgress.attempted > 0
       ? Math.round((packProgress.correct / packProgress.attempted) * 100)
       : 0;
   return (
     <button
-      onClick={() => onOpenPack?.(item)}
+      onClick={() => onOpenPack?.(node)}
       className="medos-fade-in text-left bg-card border border-border rounded-xl p-5 hover:border-primary/40 hover:shadow-md hover:bg-primary/[0.02] transition-colors group flex flex-col gap-3"
       style={{ animationDelay: `${index * 0.03}s` }}
     >
@@ -693,7 +705,7 @@ function PackCard({
           <Icon className="size-5" />
         </div>
         <div className="min-w-0 flex-1">
-          <h3 className="font-semibold truncate text-foreground">{item.title}</h3>
+          <h3 className="font-semibold truncate text-foreground">{node.title}</h3>
           <p className="text-xs text-muted-foreground">
             {count} question{count !== 1 ? "s" : ""}
           </p>
@@ -727,8 +739,8 @@ function ContentTab({
   data,
   onOpenPack,
 }: {
-  data: { items: Array<{ item: ManifestItem; content: AnyContent | null }> } | null;
-  onOpenPack?: (item: ManifestItem) => void;
+  data: { items: PackEntry[] } | null;
+  onOpenPack?: (item: ContentTreeNode) => void;
 }) {
   const [searchQuery, setSearchQuery] = React.useState("");
   const [debouncedSearchQuery, setDebouncedSearchQuery] = React.useState("");
@@ -744,8 +756,8 @@ function ContentTab({
     if (!data) return {};
     const map: Record<string, typeof data.items> = {};
     for (const entry of data.items) {
-      if (!map[entry.item.type]) map[entry.item.type] = [];
-      map[entry.item.type].push(entry);
+      if (!map[entry.node.type]) map[entry.node.type] = [];
+      map[entry.node.type].push(entry);
     }
     return map;
   }, [data]);
@@ -759,9 +771,9 @@ function ContentTab({
     for (const [type, items] of Object.entries(grouped)) {
       const matched = items.filter(
         (entry) =>
-          entry.item.title.toLowerCase().includes(q) ||
+          entry.node.title.toLowerCase().includes(q) ||
           entry.content?.meta.description?.toLowerCase().includes(q) ||
-          entry.item.tags?.some((t) => t.toLowerCase().includes(q))
+          entry.content?.meta.tags?.some((t) => t.toLowerCase().includes(q))
       );
       if (matched.length > 0) result[type] = matched;
     }
@@ -775,13 +787,13 @@ function ContentTab({
       { packs: number; questions: number; attempted: number; correct: number }
     > = {};
     if (!data) return map;
-    for (const { item, content } of data.items) {
+    for (const { node, content } of data.items) {
       if (!content) continue;
-      const t = item.type;
+      const t = node.type;
       if (!map[t]) map[t] = { packs: 0, questions: 0, attempted: 0, correct: 0 };
       map[t].packs += 1;
       map[t].questions += countQuestions(content);
-      const p = storage.packProgress(item.uid);
+      const p = storage.packProgress(node.uid);
       map[t].attempted += p.attempted;
       map[t].correct += p.correct;
     }
@@ -870,10 +882,10 @@ function ContentTab({
             </div>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              {items.map(({ item, content }, idx) => (
+              {items.map(({ node, content }, idx) => (
                 <PackCard
-                  key={item.uid}
-                  item={item}
+                  key={node.uid}
+                  node={node}
                   content={content as AnyContent}
                   index={idx}
                   onOpenPack={onOpenPack}
@@ -1034,10 +1046,10 @@ function CreateTestTab({
   onOpenPack,
   onSetQuestionLimit,
 }: {
-  data: { items: Array<{ item: ManifestItem; content: AnyContent | null }> } | null;
+  data: { items: PackEntry[] } | null;
   testMode: TestMode;
   onTestModeChange: (m: TestMode) => void;
-  onOpenPack?: (item: ManifestItem) => void;
+  onOpenPack?: (item: ContentTreeNode) => void;
   onSetQuestionLimit?: (n: number) => void;
 }) {
   const [batchSize, setBatchSize] = React.useState(20);
@@ -1062,7 +1074,7 @@ function CreateTestTab({
     if (!data) return [];
     let packs = [...data.items];
     if (selectedEngineTypes.length > 0) {
-      packs = packs.filter((p) => selectedEngineTypes.includes(p.item.type));
+      packs = packs.filter((p) => selectedEngineTypes.includes(p.node.type));
     }
     if (selectedTags.length > 0) {
       packs = packs.filter((p) =>
@@ -1073,7 +1085,7 @@ function CreateTestTab({
       const q = query.toLowerCase();
       packs = packs.filter(
         (p) =>
-          p.item.title.toLowerCase().includes(q) ||
+          p.node.title.toLowerCase().includes(q) ||
           p.content?.meta.description?.toLowerCase().includes(q)
       );
     }
@@ -1183,7 +1195,7 @@ function CreateTestTab({
               items={engineOptions.map((e) => ({
                 id: e.id,
                 label: e.label,
-                count: data?.items.filter((p) => p.item.type === e.id && (selectedTags.length === 0 || p.content?.meta.tags?.some((t) => selectedTags.includes(t)))).length ?? 0,
+                count: data?.items.filter((p) => p.node.type === e.id && (selectedTags.length === 0 || p.content?.meta.tags?.some((t) => selectedTags.includes(t)))).length ?? 0,
               }))}
               selected={selectedEngineTypes}
               onChange={setSelectedEngineTypes}
@@ -1200,7 +1212,7 @@ function CreateTestTab({
                   count: data?.items.filter(
                     (p) =>
                       p.content?.meta.tags?.includes(t) &&
-                      (selectedEngineTypes.length === 0 || selectedEngineTypes.includes(p.item.type))
+                      (selectedEngineTypes.length === 0 || selectedEngineTypes.includes(p.node.type))
                   ).length ?? 0,
                 }))}
                 selected={selectedTags}
@@ -1258,7 +1270,7 @@ function CreateTestTab({
                 onClick={() => {
                   onSetQuestionLimit?.(actualBatchSize);
                   if (filteredPacks.length > 0 && filteredPacks[0].content) {
-                    onOpenPack?.(filteredPacks[0].item);
+                    onOpenPack?.(filteredPacks[0].node);
                   }
                 }}
                 disabled={filteredPacks.length === 0 || actualBatchSize === 0}
@@ -1269,7 +1281,7 @@ function CreateTestTab({
               </Button>
               <p className="text-[11px] text-muted-foreground text-center mt-2">
                 {filteredPacks.length > 0
-                  ? `Create a test with ${actualBatchSize} question${actualBatchSize !== 1 ? "s" : ""} from ${filteredPacks[0].item.title}.`
+                  ? `Create a test with ${actualBatchSize} question${actualBatchSize !== 1 ? "s" : ""} from ${filteredPacks[0].node.title}.`
                   : "Adjust filters to find available content."}
               </p>
             </div>
@@ -1283,18 +1295,18 @@ function CreateTestTab({
                 Matching Packs
               </h3>
               <div className="space-y-2 max-h-64 overflow-y-auto medos-scroll">
-                {filteredPacks.slice(0, 20).map(({ item, content }) => (
+                {filteredPacks.slice(0, 20).map(({ node, content }) => (
                   <div
-                    key={item.uid}
+                    key={node.uid}
                     className="flex items-center gap-2 px-2 py-1.5 rounded-lg bg-muted/30"
                   >
                     <div className="size-6 rounded flex items-center justify-center bg-primary/15 text-primary shrink-0">
                       <ListChecks className="size-3" />
                     </div>
                     <div className="flex-1 min-w-0">
-                      <span className="text-xs font-medium truncate block">{item.title}</span>
+                      <span className="text-xs font-medium truncate block">{node.title}</span>
                       <span className="text-[10px] text-muted-foreground">
-                        {ENGINE_META[item.type].label}
+                        {ENGINE_META[node.type].label}
                         {content && ` · ${countQuestions(content)} questions`}
                       </span>
                     </div>
@@ -1550,12 +1562,12 @@ function QuizView({
   onFinish,
 }: {
   session: SessionData;
-  activeItem: ManifestItem;
+  activeItem: ContentTreeNode;
   calculatorOpen: boolean;
   labValuesOpen: boolean;
   aiAssistantOpen: boolean;
   navOpenMobile: boolean;
-  articleList: Article[];
+  articleList: ArticleMeta[];
   onToggleCalculator: () => void;
   onToggleLabValues: () => void;
   onToggleAiAssistant: () => void;
@@ -2581,9 +2593,9 @@ function QuizView({
                       <div className="px-4 py-2 text-xs font-bold uppercase tracking-wider text-primary border-b border-border">Open Article</div>
                       {articleList.map((a) => (
                         <button
-                          key={a.id}
+                          key={a.file}
                           onClick={() => {
-                            onOpenArticle(a.id);
+                            onOpenArticle(a.file);
                             setArticleSearchOpen(false);
                           }}
                           className="w-full text-left text-sm px-4 py-2.5 hover:bg-muted transition-colors flex items-center gap-2 border-b border-border/40 last:border-0"
@@ -2714,9 +2726,9 @@ function QuizView({
                     <div className="px-4 py-2 text-xs font-bold uppercase tracking-wider text-primary border-b border-border">Open Article</div>
                     {articleList.map((a) => (
                       <button
-                        key={a.id}
+                        key={a.file}
                         onClick={() => {
-                          onOpenArticle(a.id);
+                          onOpenArticle(a.file);
                           setArticleSearchOpen(false);
                         }}
                         className="w-full text-left text-sm px-4 py-2.5 hover:bg-muted transition-colors flex items-center gap-2 border-b border-border/40 last:border-0"
@@ -3684,7 +3696,7 @@ function ResultsView({
   onRestart,
 }: {
   session: SessionData;
-  item: ManifestItem;
+  item: ContentTreeNode;
   onGoHome: () => void;
   onRestart: () => void;
 }) {

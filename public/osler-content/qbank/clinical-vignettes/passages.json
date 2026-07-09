@@ -1,15 +1,4 @@
 {
-  "meta": {
-    "uid": "sample-bank-001",
-    "title": "Clinical Vignette Bank",
-    "description": "5 clinical vignettes with attached questions spanning cardiology, neurology, pulmonology, and gastroenterology",
-    "icon": "book",
-    "tags": ["cardiology", "neurology", "pulmonology", "gastroenterology", "clinical-vignettes"],
-    "schemaVersion": "1.0",
-    "createdAt": "2026-06-23T00:00:00Z",
-    "updatedAt": "2026-06-27T00:00:00Z"
-  },
-  "type": "bank",
   "passages": [
     {
       "id": "p-001",

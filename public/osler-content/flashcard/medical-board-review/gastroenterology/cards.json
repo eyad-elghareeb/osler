@@ -1,0 +1,22 @@
+{
+  "cards": [
+    {
+      "id": "fc-011",
+      "front": "First-line triple therapy for H. pylori eradication",
+      "back": "PPI + Amoxicillin + Clarithromycin for 7-14 days",
+      "tags": ["gastroenterology", "h-pylori"]
+    },
+    {
+      "id": "fc-012",
+      "front": "Most common source of upper GI bleeding in patients with portal hypertension",
+      "back": "Esophageal varices (caput medusae and splenomegaly are physical exam clues)",
+      "tags": ["gastroenterology", "cirrhosis"]
+    },
+    {
+      "id": "fc-013",
+      "front": "Most common cause of acute bacterial gastroenteritis",
+      "back": "Campylobacter jejuni (from undercooked poultry, incubation 12-72 hours)",
+      "tags": ["gastroenterology", "infectious-disease"]
+    }
+  ]
+}

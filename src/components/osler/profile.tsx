@@ -16,7 +16,7 @@ import {
 } from "lucide-react";
 import { storage } from "@/lib/osler/storage";
 import { loadAllContent, ENGINE_META } from "@/lib/osler/content";
-import type { AnyContent, ManifestItem } from "@/lib/osler/types";
+import type { AnyContent, ContentTreeNode } from "@/lib/osler/types";
 import type { OslerView } from "./app-shell";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
@@ -28,7 +28,7 @@ interface ProfileProps {
 
 export function Profile({ username, onViewChange }: ProfileProps) {
   const [data, setData] = React.useState<{
-    items: Array<{ item: ManifestItem; content: AnyContent | null }>;
+    items: Array<{ node: ContentTreeNode; content: AnyContent | null }>;
   } | null>(null);
   const [progress, setProgress] = React.useState(storage.allProgress());
   const [, force] = React.useReducer((x) => x + 1, 0);
@@ -54,9 +54,9 @@ export function Profile({ username, onViewChange }: ProfileProps) {
   const engineStats = React.useMemo(() => {
     const stats: Record<string, { attempted: number; correct: number }> = {};
     progress.forEach((p) => {
-      const item = data?.items.find((x) => x.item.uid === p.uid);
+      const item = data?.items.find((x) => x.node.uid === p.uid);
       if (!item) return;
-      const eng = item.item.type;
+      const eng = item.node.type;
       if (!stats[eng]) stats[eng] = { attempted: 0, correct: 0 };
       stats[eng].attempted += p.attempted;
       stats[eng].correct += p.correct;

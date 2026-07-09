@@ -1,0 +1,22 @@
+{
+  "cards": [
+    {
+      "id": "fc-005",
+      "front": "Gold standard for diagnosing pulmonary embolism",
+      "back": "CT pulmonary angiography (CTPA)",
+      "tags": ["pulmonology", "pe"]
+    },
+    {
+      "id": "fc-006",
+      "front": "GOLD stage classification for COPD severity based on FEV1",
+      "back": "GOLD 1: ≥80% — Mild | GOLD 2: 50-79% — Moderate | GOLD 3: 30-49% — Severe | GOLD 4: <30% — Very Severe",
+      "tags": ["pulmonology", "copd"]
+    },
+    {
+      "id": "fc-007",
+      "front": "Which COPD intervention reduces mortality?",
+      "back": "Smoking cessation slows disease progression. Long-term oxygen therapy (PaO2 <55 or SpO2 <88%) also reduces mortality.",
+      "tags": ["pulmonology", "copd"]
+    }
+  ]
+}

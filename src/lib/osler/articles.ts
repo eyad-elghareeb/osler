@@ -4,39 +4,29 @@ import remarkGfm from "remark-gfm";
 import remarkRehype from "remark-rehype";
 import rehypeRaw from "rehype-raw";
 import rehypeStringify from "rehype-stringify";
+import { loadCategoryTree } from "./content";
+import type { ContentTreeNode } from "./types";
 
 const BASE = "/osler-content/library";
 
-export interface ArticleTocNode {
-  id: string;
-  label: string;
-  children?: ArticleTocNode[];
-  articleId?: string;
+export interface ArticleMeta {
+  /** File name (e.g. "stemi.md") */
+  file: string;
+  /** Extracted from frontmatter */
+  title: string;
+  specialty?: string;
+  system?: string;
+  readTimeMin?: number;
+  tags?: string[];
 }
 
-export interface Article {
-  id: string;
-  title: string;
-  specialty: string;
-  system: string;
-  readTimeMin: number;
+export interface Article extends ArticleMeta {
   content: string;
   html: string;
-  tags?: string[];
 }
 
-interface ArticleMeta {
-  id: string;
-  title: string;
-  specialty: string;
-  system: string;
-  readTimeMin: number;
-  tags?: string[];
-}
-
-let markdownCache: Record<string, string> | null = null;
-let manifestCache: ArticleMeta[] | null = null;
-let tocCache: ArticleTocNode[] | null = null;
+let treeCache: ContentTreeNode[] | null = null;
+let leafArticleCache: Map<string, ArticleMeta[]> | null = null;
 
 function parseFrontmatter(md: string): { meta: Record<string, unknown>; body: string } {
   const lines = md.split("\n");
@@ -46,7 +36,6 @@ function parseFrontmatter(md: string): { meta: Record<string, unknown>; body: st
   while (end < lines.length && lines[end]?.trim() !== "---") end++;
 
   const fm: Record<string, unknown> = {};
-  const currentTags: string[] = [];
   let lastKey = "";
 
   for (let i = 1; i < end; i++) {
@@ -58,11 +47,9 @@ function parseFrontmatter(md: string): { meta: Record<string, unknown>; body: st
       if (val) {
         fm[lastKey] = val;
       } else {
-        // Start of a list (tags:)
         fm[lastKey] = [];
       }
     } else if (lastKey && line.match(/^\s+-\s+/)) {
-      // Array item
       const item = line.replace(/^\s+-\s+/, "").trim();
       if (Array.isArray(fm[lastKey])) {
         (fm[lastKey] as string[]).push(item);
@@ -85,115 +72,106 @@ async function mdToHtml(md: string): Promise<string> {
   return String(result);
 }
 
-async function loadAllMarkdown(): Promise<Record<string, string>> {
-  if (markdownCache) return markdownCache;
-  const manifest = await loadArticleManifest();
-  const entries = await Promise.all(
-    manifest.map(async (m) => {
-      const res = await fetch(`${BASE}/${m.id}.md`, { cache: "no-store" });
-      if (!res.ok) {
-        console.warn(`Failed to load article ${m.id}: ${res.status}`);
-        return [m.id, ""] as const;
-      }
+/** Load the library content tree. Cached after first call. */
+export async function loadArticleTree(): Promise<ContentTreeNode[]> {
+  if (treeCache) return treeCache;
+  treeCache = await loadCategoryTree("library");
+  return treeCache;
+}
+
+/** List all leaf nodes in the library tree (flattened). */
+export async function listLeafNodes(): Promise<ContentTreeNode[]> {
+  const tree = await loadArticleTree();
+  const result: ContentTreeNode[] = [];
+  function walk(nodes: ContentTreeNode[]) {
+    for (const n of nodes) {
+      if (n.items.length === 0) result.push(n);
+      else walk(n.items);
+    }
+  }
+  walk(tree);
+  return result;
+}
+
+/** Fetch and parse metadata from .md files in a leaf node. */
+async function loadLeafMeta(node: ContentTreeNode): Promise<ArticleMeta[]> {
+  const files = node.files ?? [];
+  const results = await Promise.all(
+    files.map(async (file) => {
+      const res = await fetch(`${BASE}/${node.path}${file}`, { cache: "no-store" });
+      if (!res.ok) return null;
       const text = await res.text();
-      return [m.id, text] as const;
+      const { meta } = parseFrontmatter(text);
+      return {
+        file,
+        title: (meta.title as string) ?? file.replace(/\.md$/, ""),
+        specialty: meta.specialty as string | undefined,
+        system: meta.system as string | undefined,
+        readTimeMin: meta.readTimeMin ? Number(meta.readTimeMin) : undefined,
+        tags: meta.tags as string[] | undefined,
+      } as ArticleMeta;
     })
   );
-  markdownCache = Object.fromEntries(entries);
-  return markdownCache;
+  return results.filter((r): r is ArticleMeta => r !== null);
 }
 
-export async function loadArticleToc(): Promise<ArticleTocNode[]> {
-  if (tocCache) return tocCache;
-  const res = await fetch(`${BASE}/toc.json`, { cache: "no-store" });
-  if (!res.ok) throw new Error(`Failed to load TOC: ${res.status}`);
-  tocCache = (await res.json()) as ArticleTocNode[];
-  return tocCache;
-}
-
-async function loadArticleManifest(): Promise<ArticleMeta[]> {
-  if (manifestCache) return manifestCache;
-  const res = await fetch(`${BASE}/manifest.json`, { cache: "no-store" });
-  if (!res.ok) throw new Error(`Failed to load article manifest: ${res.status}`);
-  manifestCache = (await res.json()) as ArticleMeta[];
-  return manifestCache;
-}
-
-export async function loadArticleContent(id: string): Promise<Article | null> {
-  const manifests = await loadArticleManifest();
-  const meta = manifests.find((m) => m.id === id);
-  if (!meta) {
-    console.warn(`Article not found in manifest: ${id}`);
-    return null;
+/** Return all articles across all library leaf nodes, with metadata only (no html). */
+export async function listAllArticles(): Promise<ArticleMeta[]> {
+  if (leafArticleCache) {
+    return Array.from(leafArticleCache.values()).flat();
   }
+  leafArticleCache = new Map();
+  const leaves = await listLeafNodes();
+  const all: ArticleMeta[] = [];
+  for (const leaf of leaves) {
+    const metas = await loadLeafMeta(leaf);
+    leafArticleCache.set(leaf.uid, metas);
+    all.push(...metas);
+  }
+  return all;
+}
 
-  const mds = await loadAllMarkdown();
-  const md = mds[id];
-  if (!md) return null;
-
-  const { body } = parseFrontmatter(md);
+/** Fetch and parse a single .md file into an Article (with html). */
+export async function loadArticleContent(filePath: string): Promise<Article | null> {
+  const res = await fetch(`${BASE}/${filePath}`, { cache: "no-store" });
+  if (!res.ok) return null;
+  const text = await res.text();
+  const { meta, body } = parseFrontmatter(text);
   const html = await mdToHtml(body);
-
   return {
-    id: meta.id,
-    title: meta.title,
-    specialty: meta.specialty,
-    system: meta.system,
-    readTimeMin: meta.readTimeMin,
-    tags: meta.tags,
+    file: filePath.split("/").pop() ?? "",
+    title: (meta.title as string) ?? "Untitled",
+    specialty: meta.specialty as string | undefined,
+    system: meta.system as string | undefined,
+    readTimeMin: meta.readTimeMin ? Number(meta.readTimeMin) : undefined,
+    tags: meta.tags as string[] | undefined,
     content: body,
     html,
   };
 }
 
-export async function listAllArticles(): Promise<Article[]> {
-  const manifest = await loadArticleManifest();
-  return manifest.map((m) => ({
-    id: m.id,
-    title: m.title,
-    specialty: m.specialty,
-    system: m.system,
-    readTimeMin: m.readTimeMin,
-    tags: m.tags,
-    content: "",
-    html: "",
-  }));
+/** Load articles in a leaf node (metadata only). */
+export async function loadNodeArticles(node: ContentTreeNode): Promise<ArticleMeta[]> {
+  if (leafArticleCache?.has(node.uid)) {
+    return leafArticleCache.get(node.uid)!;
+  }
+  const metas = await loadLeafMeta(node);
+  if (leafArticleCache) leafArticleCache.set(node.uid, metas);
+  return metas;
 }
 
-export async function searchArticles(query: string): Promise<Article[]> {
+/** Search articles by title, specialty, or tags. */
+export async function searchArticles(query: string): Promise<ArticleMeta[]> {
   const q = query.trim().toLowerCase();
-  const manifest = await loadArticleManifest();
-
-  if (!q) return manifest.slice(0, 8).map((m) => ({
-    id: m.id,
-    title: m.title,
-    specialty: m.specialty,
-    system: m.system,
-    readTimeMin: m.readTimeMin,
-    tags: m.tags,
-    content: "",
-    html: "",
-  }));
-
-  return manifest
-    .filter((a) => {
-      const hay = `${a.title} ${a.specialty} ${(a.tags ?? []).join(" ")}`.toLowerCase();
-      return hay.includes(q);
-    })
-    .map((m) => ({
-      id: m.id,
-      title: m.title,
-      specialty: m.specialty,
-      system: m.system,
-      readTimeMin: m.readTimeMin,
-      tags: m.tags,
-      content: "",
-      html: "",
-    }));
+  const all = await listAllArticles();
+  if (!q) return all;
+  return all.filter((a) => {
+    const hay = `${a.title} ${a.specialty ?? ""} ${(a.tags ?? []).join(" ")}`.toLowerCase();
+    return hay.includes(q);
+  });
 }
 
 export function clearArticleCache(): void {
-  markdownCache = null;
-  manifestCache = null;
-  tocCache = null;
+  treeCache = null;
+  leafArticleCache = null;
 }

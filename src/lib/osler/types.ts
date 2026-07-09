@@ -3,7 +3,7 @@
  * Each engine (quiz, bank, flashcard, written, osce) has its own content shape.
  */
 
-export type EngineType = "quiz" | "bank" | "flashcard" | "written" | "osce";
+export type EngineType = "quiz" | "bank" | "flashcard" | "written" | "osce" | "library";
 
 export interface ContentMeta {
   uid: string;
@@ -16,18 +16,26 @@ export interface ContentMeta {
   updatedAt?: string;
 }
 
-export interface ManifestItem {
+/* ── Content Tree (folder-based discovery) ─────────────────────────── */
+
+/** A node in the content tree derived from folder structure. */
+export interface ContentTreeNode {
   uid: string;
-  type: EngineType;
   title: string;
+  type: EngineType;
+  description?: string;
+  /** Relative path from the category root (with trailing /). */
   path: string;
-  tags?: string[];
+  /** Data JSON files in this folder (present only on leaf nodes). */
+  files?: string[];
+  /** Child nodes — empty array for leaf (content-having) nodes. */
+  items: ContentTreeNode[];
 }
 
-export interface Manifest {
-  type: "hub";
-  meta: ContentMeta;
-  items: ManifestItem[];
+/** Per-category manifest listing the full tree. */
+export interface CategoryManifest {
+  type: EngineType;
+  items: ContentTreeNode[];
 }
 
 /* ── Quiz ────────────────────────────────────────────────────────────── */
