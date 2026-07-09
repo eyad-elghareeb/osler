@@ -33,6 +33,7 @@ import {
 import { useOslerTheme } from "./theme-provider";
 import { MobileTabBar } from "./mobile-tab-bar";
 import { PwaInstallButton } from "./pwa-install-button";
+import { LightboxProvider } from "./lightbox-provider";
 import { searchArticles as searchArticlesAsync } from "@/lib/osler/articles";
 import type { ArticleMeta } from "@/lib/osler/articles";
 import { cn } from "@/lib/utils";
@@ -314,18 +315,20 @@ export function AppShell({
 
       {/* Main content — scrolls independently so scrollbar doesn't touch the topbar */}
       <main className="flex-1 min-h-0 overflow-y-auto medos-scroll-y">
-        <AnimatePresence mode="sync" initial={false}>
-          <motion.div
-            key={view}
-            initial={{ opacity: 0, y: 4 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -4 }}
-            transition={{ duration: 0.18 }}
-            className="h-full"
-          >
-            {children}
-          </motion.div>
-        </AnimatePresence>
+        <LightboxProvider>
+          <AnimatePresence mode="sync" initial={false}>
+            <motion.div
+              key={view}
+              initial={{ opacity: 0, y: 4 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -4 }}
+              transition={{ duration: 0.18 }}
+              className="h-full"
+            >
+              {children}
+            </motion.div>
+          </AnimatePresence>
+        </LightboxProvider>
       </main>
 
       {/* Mobile tab bar */}

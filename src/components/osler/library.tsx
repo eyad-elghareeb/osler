@@ -32,6 +32,7 @@ import type { ContentTreeNode } from "@/lib/osler/types";
 import { cn } from "@/lib/utils";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useArticleHighlighter } from "@/hooks/use-article-highlighter";
+import { useLightbox } from "./lightbox-provider";
 import { HighlighterToolbar } from "./highlighter-toolbar";
 import { FolderTreeNav } from "./folder-tree-nav";
 import { applyHighlightsToHtml } from "@/lib/osler/article-highlights";
@@ -227,11 +228,22 @@ export function Library({ initialArticleId }: LibraryProps) {
     return () => window.removeEventListener("keydown", handler);
   }, [hlCtrl.highlightMode, hlCtrl.setHighlightMode]);
 
+  const { openLightbox } = useLightbox();
+
   React.useEffect(() => {
     const el = articleContentRef.current;
     if (!el || hlCtrl.highlightMode) return;
     const handler = (e: MouseEvent) => {
       const target = e.target as HTMLElement;
+      if (target.tagName === "IMG") {
+        e.preventDefault();
+        e.stopPropagation();
+        const src = target.getAttribute("src");
+        if (src) {
+          openLightbox(src, target.getAttribute("alt") || "");
+          return;
+        }
+      }
       const span = target.closest("[data-osler-hl-id]") as HTMLElement | null;
       if (span) {
         const id = span.getAttribute("data-osler-hl-id");
@@ -244,7 +256,7 @@ export function Library({ initialArticleId }: LibraryProps) {
     };
     el.addEventListener("click", handler);
     return () => el.removeEventListener("click", handler);
-  }, [hlCtrl.onRemove, hlCtrl.highlights, hlCtrl.highlightMode]);
+  }, [hlCtrl.onRemove, hlCtrl.highlights, hlCtrl.highlightMode, openLightbox]);
 
   const bookmarkedArticles = React.useMemo(
     () => allArticles.filter((a) => bookmarks.has(a.file)),

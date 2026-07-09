@@ -44,6 +44,7 @@ import type {
 } from "@/lib/osler/types";
 import { cn } from "@/lib/utils";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { useLightbox } from "./lightbox-provider";
 import { setImmersiveMode } from "./immersive-mode";
 
 /* ── Constants ─────────────────────────────────────────────────────── */
@@ -2368,6 +2369,7 @@ function DataTablesRenderer({ tables }: { tables?: OsceDataTable[] }) {
 
 function DataImagesRenderer({ images }: { images?: OsceDataImage[] }) {
   const [open, setOpen] = React.useState(false);
+  const { openLightbox } = useLightbox();
   if (!images || !images.length) return null;
   return (
     <div>
@@ -2388,7 +2390,12 @@ function DataImagesRenderer({ images }: { images?: OsceDataImage[] }) {
                 {im.title && (
                   <div className="text-[10px] font-bold text-primary uppercase tracking-wider px-3 pt-3">{im.title}</div>
                 )}
-                <img src={src} alt={im.alt || im.caption || ""} className="w-full max-h-80 object-contain" loading="lazy" />
+                <button
+                  className="w-full cursor-pointer text-left"
+                  onClick={(e) => { e.stopPropagation(); openLightbox(src, im.alt || im.caption || ""); }}
+                >
+                  <img src={src} alt={im.alt || im.caption || ""} className="w-full max-h-80 object-contain" loading="lazy" />
+                </button>
                 {im.caption && (
                   <div className="text-[10px] text-muted-foreground px-3 pb-3 pt-1">{im.caption}</div>
                 )}

@@ -473,6 +473,11 @@ html::-webkit-scrollbar-thumb:hover {
   height: auto;
   border-radius: 6px;
   margin: 0.5rem 0;
+  cursor: zoom-in;
+  transition: opacity 0.15s;
+}
+.uworld-prose img:hover {
+  opacity: 0.85;
 }
 
 /* ── Borderless window drag region ──────────────────────────────────────
@@ -1406,6 +1411,17 @@ input, textarea, [contenteditable="true"], .medos-article, .uworld-prose, .ai-ch
   color: var(--foreground);
   font-size: 0.95rem;
   line-height: 1.7;
+}
+.library-article img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 6px;
+  margin: 0.75rem 0;
+  cursor: zoom-in;
+  transition: opacity 0.15s;
+}
+.library-article img:hover {
+  opacity: 0.85;
 }
 .library-article h1 {
   font-size: 1.85rem;
