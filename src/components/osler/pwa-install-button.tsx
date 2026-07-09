@@ -4,6 +4,7 @@ import * as React from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Download, Share, X, MoreVertical } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { settings } from "@/lib/osler/storage";
 
 type BeforeInstallPromptEvent = Event & {
   prompt: () => Promise<void>;
@@ -39,6 +40,16 @@ export function PwaInstallButton({ className }: { className?: string }) {
       window.removeEventListener("beforeinstallprompt", onPrompt);
       window.removeEventListener("appinstalled", onInstalled);
     };
+  }, []);
+
+  const [dismissed, setDismissed] = React.useState(false);
+  const [checkingDismiss, setCheckingDismiss] = React.useState(true);
+
+  React.useEffect(() => {
+    settings.getBool("dismiss-pwa-hint").then((val) => {
+      setDismissed(val);
+      setCheckingDismiss(false);
+    });
   }, []);
 
   if (installed) return null;
@@ -95,6 +106,8 @@ export function PwaInstallButton({ className }: { className?: string }) {
     );
   }
 
+  if (dismissed && !checkingDismiss) return null;
+
   // No native prompt captured (Android without active SW, or iOS). Show a
   // discoverable button that guides the user to install from the browser.
   return (
@@ -139,6 +152,19 @@ export function PwaInstallButton({ className }: { className?: string }) {
                 <span className="text-foreground">Add to Home Screen</span>.
               </p>
             )}
+            <label className="mt-3 flex items-center gap-1.5 cursor-pointer border-t border-border/40 pt-2">
+              <input
+                type="checkbox"
+                className="size-3.5 accent-foreground"
+                onChange={(e) => {
+                  if (e.target.checked) {
+                    settings.set("dismiss-pwa-hint", "true");
+                    setDismissed(true);
+                  }
+                }}
+              />
+              <span className="text-muted-foreground">Don&apos;t show again</span>
+            </label>
           </motion.div>
         )}
       </AnimatePresence>

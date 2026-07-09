@@ -3,8 +3,11 @@
   "version": "0.2.0",
   "private": true,
   "scripts": {
-    "dev": "next dev -p 3000 --webpack",
-    "build": "next build --webpack && shx cp -r .next/static .next/standalone/.next/ && shx cp -r public .next/standalone/",
+    "dev": "next dev -p 3000",
+    "build": "next build && shx cp -r .next/static .next/standalone/.next/ && shx cp -r public .next/standalone/",
+    "dev:turbo": "next dev -p 3000 --turbopack",
+    "dev:webpack": "next dev -p 3000 --webpack",
+    "build:webpack": "next build --webpack && shx cp -r .next/static .next/standalone/.next/ && shx cp -r public .next/standalone/",
     "start": "cross-env NODE_ENV=production node .next/standalone/server.js > server.log 2>&1",
     "lint": "eslint .",
     "generate-manifests": "node scripts/generate-content-manifests.js"

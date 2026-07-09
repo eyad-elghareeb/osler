@@ -47,6 +47,9 @@ function openDB(): Promise<IDBDatabase> {
       if (!db.objectStoreNames.contains("flashcardReviews")) {
         db.createObjectStore("flashcardReviews", { keyPath: "key" });
       }
+      if (!db.objectStoreNames.contains("settings")) {
+        db.createObjectStore("settings", { keyPath: "key" });
+      }
     };
 
     req.onsuccess = () => {
@@ -784,6 +787,24 @@ async function migrateFromLocalStorage() {
     console.warn("Failed to migrate from localStorage:", e);
   }
 }
+
+/* ── Settings (simple key/value, e.g. "dismiss-pwa-hint") ────────────── */
+
+export const settings = {
+  async get(key: string): Promise<string | null> {
+    return idbGet<string>("settings", key);
+  },
+
+  async set(key: string, value: string): Promise<void> {
+    setCached("settings", key, value);
+    await idbPut("settings", key, value);
+  },
+
+  async getBool(key: string): Promise<boolean> {
+    const val = await settings.get(key);
+    return val === "true";
+  },
+};
 
 // Run migration on load
 if (typeof window !== "undefined") {
