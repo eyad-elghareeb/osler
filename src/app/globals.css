@@ -311,22 +311,19 @@ html::-webkit-scrollbar-thumb:hover {
 /* ── Highlight spans (QBank + Library) ──────────────────────────────── */
 [data-osler-hl-id] {
   cursor: pointer;
-  transition: opacity 0.15s;
-  border-radius: 2px;
+  border-radius: 3px;
   padding: 0 1px;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+  transition: filter 0.15s, box-shadow 0.15s;
 }
 [data-osler-hl-id]:hover {
-  opacity: 0.7;
+  filter: brightness(0.92);
 }
-
-.osler-article-highlight {
-  border-radius: 2px;
-  padding: 0 1px;
+/* When the eraser tool is active, highlights signal they are removable. */
+.osler-hl-eraser [data-osler-hl-id] {
   cursor: pointer;
-  transition: opacity 0.15s;
-}
-.osler-article-highlight:hover {
-  opacity: 0.7;
+  box-shadow: 0 0 0 1.5px color-mix(in oklch, currentColor 35%, transparent);
 }
 
 /* ───────────────────────────────────────────────────────────────────────

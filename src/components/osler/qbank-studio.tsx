@@ -26,8 +26,6 @@ import {
   Calculator as CalcIcon,
   FlaskConical,
   BookOpen,
-  Highlighter,
-  Eraser,
   StickyNote,
   Type,
   Minus,
@@ -77,6 +75,11 @@ import {
 } from "@/lib/osler/storage";
 import { listAllArticles } from "@/lib/osler/articles";
 import type { Article, ArticleMeta } from "@/lib/osler/articles";
+import {
+  HIGHLIGHT_COLOR_KEYS,
+  HIGHLIGHT_PALETTE,
+  ERASER_TOOL,
+} from "@/lib/osler/highlight-palette";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -87,6 +90,7 @@ import { StickyNoteCard, STICKY_COLORS } from "./sticky-note";
 import { FloatingArticleModal } from "./article-modal";
 import { AiAssistant } from "./ai-assistant";
 import { HighlightedContent } from "./highlighted-content";
+import { HighlighterToolbar } from "./highlighter-toolbar";
 import { useShortcutBindings, useShortcutListener } from "@/hooks/use-shortcuts";
 import { defaultBindings } from "@/lib/osler/shortcuts";
 import { useIsMobile } from "@/hooks/use-mobile";
@@ -94,7 +98,7 @@ import { setImmersiveMode } from "./immersive-mode";
 import { gradeWithAI, createManualEvaluation } from "@/lib/osler/grading";
 
 const LETTERS = ["A", "B", "C", "D", "E", "F", "G", "H"];
-const HIGHLIGHT_COLORS = ["#fef08a", "#86efac", "#93c5fd", "#fbcfe8", "#c4b5fd", "#fdba74"];
+const HIGHLIGHT_COLORS = HIGHLIGHT_COLOR_KEYS;
 
 interface QBankStudioProps {
   activeItem?: ContentTreeNode | null;
@@ -1596,12 +1600,13 @@ function QuizView({
   const isPausedOrLocked = session.examPaused;
   const engineLabel = ENGINE_META[session.engine].label;
 
-  // Highlighter state
-  const [highlightMode, setHighlightMode] = React.useState(false);
-  const [highlightColor, setHighlightColor] = React.useState(HIGHLIGHT_COLORS[0]);
-  const [eraserMode, setEraserMode] = React.useState(false);
+  // Highlighter state — a single "tool": null = off, "eraser" = erase, or a color key
+  const [tool, setTool] = React.useState<string | null>(null);
+  const [color, setColor] = React.useState<string>(HIGHLIGHT_COLOR_KEYS[0]);
+  const highlightMode = tool !== null && tool !== ERASER_TOOL;
+  const eraserMode = tool === ERASER_TOOL;
+  const highlightColor = tool !== null && tool !== ERASER_TOOL ? tool : color;
   const [hlVersion, setHlVersion] = React.useState(0);
-  const [colorPickerOpen, setColorPickerOpen] = React.useState(false);
   const [textSettingsOpen, setTextSettingsOpen] = React.useState(false);
   const [textControls, setTextControls] = React.useState<TextControls>({
     fontSize: 15,
@@ -1704,7 +1709,7 @@ function QuizView({
     setMobileTutorTab("question");
   }, [activeItem.uid, session.current]);
 
-  // Highlight mode: auto-apply on text selection
+  // Highlight mode: auto-apply on text selection (mouse or touch)
   React.useEffect(() => {
     if (!highlightMode) return;
     const handler = () => {
@@ -1752,10 +1757,14 @@ function QuizView({
       window.getSelection()?.removeAllRanges();
     };
     document.addEventListener("mouseup", handler);
-    return () => document.removeEventListener("mouseup", handler);
+    document.addEventListener("touchend", handler);
+    return () => {
+      document.removeEventListener("mouseup", handler);
+      document.removeEventListener("touchend", handler);
+    };
   }, [highlightMode, highlightColor, activeItem.uid, session.current, q]);
 
-  // Eraser mode: click a highlight span to remove it
+  // Eraser mode: click/tap a highlight span to remove it
   React.useEffect(() => {
     if (!eraserMode) return;
     const handler = (e: MouseEvent) => {
@@ -1771,9 +1780,15 @@ function QuizView({
         }
       }
     };
-    document.addEventListener("click", handler);
-    return () => document.removeEventListener("click", handler);
+    document.addEventListener("click", handler, true);
+    return () => document.removeEventListener("click", handler, true);
   }, [eraserMode, activeItem.uid, session.current]);
+
+  // Eraser affordance: ring highlights while the eraser tool is active
+  React.useEffect(() => {
+    document.body.classList.toggle("osler-hl-eraser", eraserMode);
+    return () => document.body.classList.remove("osler-hl-eraser");
+  }, [eraserMode]);
 
   const addStickyNote = React.useCallback(() => {
     const note: StickyNoteData = {
@@ -1797,8 +1812,8 @@ function QuizView({
       if (e.key === "ArrowRight") { e.preventDefault(); onNext(); }
       if (e.key === "?" && !e.shiftKey) { e.preventDefault(); setShowShortcuts((s) => !s); }
       if (e.key === "a" && !e.shiftKey && !e.ctrlKey && !e.metaKey) { e.preventDefault(); onToggleAiAssistant(); }
-      if (e.key === "h" || e.key === "H") { e.preventDefault(); setHighlightMode((m) => !m); }
-      if (e.key === "e" || e.key === "E") { e.preventDefault(); setEraserMode((m) => !m); }
+      if (e.key === "h" || e.key === "H") { e.preventDefault(); setTool((t) => (t && t !== ERASER_TOOL ? null : color)); }
+      if (e.key === "e" || e.key === "E") { e.preventDefault(); setTool((t) => (t === ERASER_TOOL ? null : ERASER_TOOL)); }
       if (e.key === "n" || e.key === "N") { e.preventDefault(); addStickyNote(); }
       if (isMCQ && !submitted) {
         const num = parseInt(e.key);
@@ -1816,7 +1831,7 @@ function QuizView({
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [q, isMCQ, submitted, selected, onToggleFlag, onPrev, onNext, onSelect, onSubmit, onToggleAiAssistant, setHighlightMode, setEraserMode, addStickyNote]);
+  }, [q, isMCQ, submitted, selected, onToggleFlag, onPrev, onNext, onSelect, onSubmit, onToggleAiAssistant, setTool, addStickyNote]);
 
   const updateNote = (id: string, text: string) => {
     stickyNotes.update(activeItem.uid, session.current, id, text);
@@ -2011,71 +2026,21 @@ function QuizView({
           </button>
         </div>
 
-        {/* Highlight mode toggle + color picker popover */}
-        <Popover open={colorPickerOpen} onOpenChange={(open) => {
-          setColorPickerOpen(open);
-          if (open) { setHighlightMode(true); setEraserMode(false); }
-        }}>
-          <PopoverTrigger asChild>
-            <button
-              className={`size-7 rounded-lg flex items-center justify-center transition-colors ${
-                highlightMode ? "bg-amber-400 text-amber-950" : "bg-primary-foreground/15 hover:bg-primary-foreground/25"
-              }`}
-              title="Highlight text"
-            >
-              <Highlighter className="size-3.5" />
-            </button>
-          </PopoverTrigger>
-          <PopoverContent align="end" className="w-auto p-3">
-            <div className="flex flex-col gap-2">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-1.5">
-                  <Highlighter className="size-3 text-amber-500" />
-                  <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
-                    Highlight color
-                  </span>
-                </div>
-                <button
-                  onClick={() => { setColorPickerOpen(false); setHighlightMode(false); }}
-                  className="size-5 rounded flex items-center justify-center hover:bg-muted transition-colors"
-                  title="Disable highlighter"
-                >
-                  <X className="size-3" />
-                </button>
-              </div>
-              <div className="flex items-center gap-1.5">
-                {HIGHLIGHT_COLORS.map((c) => (
-                  <button
-                    key={c}
-                    onClick={() => setHighlightColor(c)}
-                    className={`size-6 rounded-full border-2 transition-all ${
-                      highlightColor === c ? "border-foreground scale-110" : "border-transparent hover:scale-110"
-                    }`}
-                    style={{ backgroundColor: c }}
-                    title={`Highlight ${c}`}
-                  />
-                ))}
-              </div>
-              <div className="text-[10px] text-muted-foreground">
-                Select text to highlight. {currentHighlights.length} highlights on this question.
-              </div>
-            </div>
-          </PopoverContent>
-        </Popover>
-
-        {/* Eraser mode button */}
-        <button
-          onClick={() => {
-            if (!eraserMode) { setEraserMode(true); setHighlightMode(false); setColorPickerOpen(false); }
-            else { setEraserMode(false); }
+        {/* Unified highlighter: colors + eraser tool */}
+        <HighlighterToolbar
+          tone="header"
+          control={{
+            tool,
+            color,
+            count: currentHighlights.length,
+            onToolChange: setTool,
+            onColorChange: setColor,
+            onClearAll: () => {
+              highlights.clearAll(activeItem.uid);
+              setHlVersion((v) => v + 1);
+            },
           }}
-          className={`size-7 rounded-lg flex items-center justify-center transition-colors ${
-            eraserMode ? "bg-red-400 text-red-950" : "bg-primary-foreground/15 hover:bg-primary-foreground/25"
-          }`}
-          title="Erase highlights"
-        >
-          <Eraser className="size-3.5" />
-        </button>
+        />
 
         {/* Sticky note button */}
         <button
@@ -2491,7 +2456,7 @@ function QuizView({
                           }}
                         />
                       ) : (
-                        <ExplanationCard q={q} selected={selected} nonMcq={!isMCQ} highlights={currentHighlights} packUid={activeItem.uid} questionIdx={session.current} eraserMode={eraserMode} />
+                        <ExplanationCard q={q} selected={selected} nonMcq={!isMCQ} highlights={currentHighlights} packUid={activeItem.uid} questionIdx={session.current} />
                       )}
                     </div>
                   </div>
@@ -2542,7 +2507,7 @@ function QuizView({
                           }}
                         />
                       ) : (
-                        <ExplanationCard q={q} selected={undefined} nonMcq highlights={currentHighlights} packUid={activeItem.uid} questionIdx={session.current} eraserMode={eraserMode} />
+                        <ExplanationCard q={q} selected={undefined} nonMcq highlights={currentHighlights} packUid={activeItem.uid} questionIdx={session.current} />
                       )}
                     </div>
                   </div>
@@ -3580,7 +3545,6 @@ function ExplanationCard({
   highlights: questionHighlights,
   packUid,
   questionIdx,
-  eraserMode,
   onRemoveHighlight,
 }: {
   q: SessionQuestion;
@@ -3589,7 +3553,6 @@ function ExplanationCard({
   highlights?: HighlightItem[];
   packUid?: string;
   questionIdx?: number;
-  eraserMode?: boolean;
   onRemoveHighlight?: (id: string) => void;
 }) {
   const hl = questionHighlights ?? [];

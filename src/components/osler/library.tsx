@@ -32,6 +32,7 @@ import type { ContentTreeNode } from "@/lib/osler/types";
 import { cn } from "@/lib/utils";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useArticleHighlighter } from "@/hooks/use-article-highlighter";
+import { useOslerTheme } from "./theme-provider";
 import { useLightbox } from "./lightbox-provider";
 import { HighlighterToolbar } from "./highlighter-toolbar";
 import { FolderTreeNav } from "./folder-tree-nav";
@@ -190,10 +191,12 @@ export function Library({ initialArticleId }: LibraryProps) {
 
   const articleContentRef = React.useRef<HTMLDivElement>(null);
 
+  const { theme } = useOslerTheme();
+
   const processedArticleHtml = React.useMemo(() => {
     if (!activeArticle) return "";
     return applyHighlightsToHtml(activeArticle.html, hlCtrl.highlights as any);
-  }, [activeArticle?.html, hlCtrl.highlights]);
+  }, [activeArticle?.html, hlCtrl.highlights, theme]);
 
   React.useEffect(() => {
     if (!hlCtrl.highlightMode || !activeFile) return;
@@ -216,7 +219,11 @@ export function Library({ initialArticleId }: LibraryProps) {
       sel.removeAllRanges();
     };
     el.addEventListener("mouseup", handler);
-    return () => el.removeEventListener("mouseup", handler);
+    el.addEventListener("touchend", handler);
+    return () => {
+      el.removeEventListener("mouseup", handler);
+      el.removeEventListener("touchend", handler);
+    };
   }, [hlCtrl.highlightMode, hlCtrl.highlightColor, activeFile, hlCtrl.onAdd]);
 
   React.useEffect(() => {
@@ -232,7 +239,10 @@ export function Library({ initialArticleId }: LibraryProps) {
 
   React.useEffect(() => {
     const el = articleContentRef.current;
-    if (!el || hlCtrl.highlightMode) return;
+    if (!el) return;
+    const isEraser = hlCtrl.tool === "eraser";
+    el.classList.toggle("osler-hl-eraser", isEraser && !hlCtrl.highlightMode);
+    if (hlCtrl.highlightMode) return;
     const handler = (e: MouseEvent) => {
       const target = e.target as HTMLElement;
       if (target.tagName === "IMG") {
@@ -244,6 +254,7 @@ export function Library({ initialArticleId }: LibraryProps) {
           return;
         }
       }
+      if (!isEraser) return;
       const span = target.closest("[data-osler-hl-id]") as HTMLElement | null;
       if (span) {
         const id = span.getAttribute("data-osler-hl-id");
@@ -255,8 +266,11 @@ export function Library({ initialArticleId }: LibraryProps) {
       }
     };
     el.addEventListener("click", handler);
-    return () => el.removeEventListener("click", handler);
-  }, [hlCtrl.onRemove, hlCtrl.highlights, hlCtrl.highlightMode, openLightbox]);
+    return () => {
+      el.removeEventListener("click", handler);
+      el.classList.remove("osler-hl-eraser");
+    };
+  }, [hlCtrl.onRemove, hlCtrl.highlights, hlCtrl.highlightMode, hlCtrl.tool, openLightbox]);
 
   const bookmarkedArticles = React.useMemo(
     () => allArticles.filter((a) => bookmarks.has(a.file)),
@@ -696,7 +710,16 @@ function MobileReader({
               </AnimatePresence>
             </div>
 
-            <HighlighterToolbar ctrl={hlCtrl} compact />
+            <HighlighterToolbar
+              control={{
+                tool: hlCtrl.tool,
+                color: hlCtrl.color,
+                count: hlCtrl.highlights.length,
+                onToolChange: hlCtrl.setTool,
+                onColorChange: hlCtrl.setColor,
+                onClearAll: hlCtrl.clearAll,
+              }}
+            />
 
             <button
               onClick={onToggleBookmark}
@@ -1058,7 +1081,16 @@ function ArticleHeader({
           </button>
         </div>
 
-        <HighlighterToolbar ctrl={hlCtrl} compact />
+        <HighlighterToolbar
+          control={{
+            tool: hlCtrl.tool,
+            color: hlCtrl.color,
+            count: hlCtrl.highlights.length,
+            onToolChange: hlCtrl.setTool,
+            onColorChange: hlCtrl.setColor,
+            onClearAll: hlCtrl.clearAll,
+          }}
+        />
 
         <button
           onClick={onToggleBookmark}

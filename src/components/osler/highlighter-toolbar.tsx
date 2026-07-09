@@ -1,139 +1,156 @@
 "use client";
 
 import * as React from "react";
-import { Highlighter, X, Trash2 } from "lucide-react";
-import { ARTICLE_HIGHLIGHT_COLORS } from "@/lib/osler/article-highlights";
-import type { UseArticleHighlighterReturn } from "@/hooks/use-article-highlighter";
+import { Highlighter, Eraser, Trash2 } from "lucide-react";
+import { cn } from "@/lib/utils";
+import {
+  HIGHLIGHT_COLOR_KEYS,
+  HIGHLIGHT_PALETTE,
+  ERASER_TOOL,
+  resolveHighlightColor,
+} from "@/lib/osler/highlight-palette";
+
+export interface HighlighterControl {
+  /** null = off, "eraser" = erase tool, otherwise a color key */
+  tool: string | null;
+  /** currently selected color key (last picked) */
+  color: string;
+  /** number of highlights present */
+  count: number;
+  onToolChange: (t: string | null) => void;
+  onColorChange: (c: string) => void;
+  onClearAll: () => void;
+}
 
 interface HighlighterToolbarProps {
-  ctrl: UseArticleHighlighterReturn;
-  compact?: boolean;
+  control: HighlighterControl;
+  /** "surface" for light card areas (Library), "header" for the QBank navy bar */
+  tone?: "surface" | "header";
   className?: string;
 }
 
 export function HighlighterToolbar({
-  ctrl,
-  compact = false,
+  control,
+  tone = "surface",
   className = "",
 }: HighlighterToolbarProps) {
-  const {
-    highlightMode,
-    setHighlightMode,
-    highlightColor,
-    setHighlightColor,
-    highlights,
-    onColorPick,
-    clearAll,
-  } = ctrl;
+  const { tool, color, count, onToolChange, onColorChange, onClearAll } = control;
 
-  if (compact) {
-    return (
-      <div className="flex items-center gap-0.5">
-        <button
-          onClick={() => setHighlightMode(!highlightMode)}
-          className={`size-8 rounded-lg flex items-center justify-center transition-colors ${
-            highlightMode
-              ? "bg-amber-400 text-amber-950"
-              : "hover:bg-muted text-foreground"
-          }`}
-          title={highlightMode ? "Highlight mode ON — select text to auto-apply" : "Toggle highlight mode"}
-          aria-pressed={highlightMode}
-        >
-          <Highlighter className="size-4" />
-        </button>
-        {highlightMode && ARTICLE_HIGHLIGHT_COLORS.map((c) => (
-          <button
-            key={c}
-            onClick={() => {
-              setHighlightColor(c);
-              onColorPick(c);
-            }}
-            className={`size-5 rounded-full border-2 transition-all ${
-              highlightColor === c
-                ? "border-foreground scale-110"
-                : "border-transparent hover:scale-110"
-            }`}
-            style={{ backgroundColor: c }}
-            title={`Highlight ${c}`}
-            aria-label={`Highlight color ${c}`}
-          />
-        ))}
-        {highlightMode && highlights.length > 0 && (
-          <button
-            onClick={() => {
-              if (
-                window.confirm(
-                  `Clear all ${highlights.length} highlight${highlights.length === 1 ? "" : "s"}?`
-                )
-              ) {
-                clearAll();
-              }
-            }}
-            className="size-5 rounded-full hover:bg-muted flex items-center justify-center"
-            title="Clear all highlights"
-            aria-label="Clear all highlights"
-          >
-            <Trash2 className="size-3" />
-          </button>
-        )}
-      </div>
-    );
-  }
+  const active = tool !== null;
+  const isEraser = tool === ERASER_TOOL;
+
+  const toggleButtonClass = cn(
+    "size-8 rounded-lg flex items-center justify-center transition-colors shrink-0 medos-touch-target",
+    active
+      ? "bg-amber-400 text-amber-950"
+      : tone === "header"
+        ? "bg-primary-foreground/15 hover:bg-primary-foreground/25 text-primary-foreground"
+        : "bg-muted hover:bg-muted/70 text-foreground"
+  );
+
+  const handleToggle = () => {
+    if (active) onToolChange(null);
+    else onToolChange(color || HIGHLIGHT_COLOR_KEYS[0]);
+  };
+
+  const handleColor = (key: string) => {
+    onColorChange(key);
+    onToolChange(key);
+  };
+
+  const handleEraser = () => {
+    onToolChange(isEraser ? null : ERASER_TOOL);
+  };
+
+  const swatchBase =
+    "size-6 rounded-full border-2 transition-all medos-touch-target";
 
   return (
-    <div className={`flex items-center gap-1.5 ${className}`}>
+    <div className={cn("flex items-center gap-1", className)}>
       <button
-        onClick={() => setHighlightMode(!highlightMode)}
-        className={`size-8 rounded-lg flex items-center justify-center transition-colors ${
-          highlightMode
-            ? "bg-amber-400 text-amber-950"
-            : "hover:bg-muted text-foreground"
-        }`}
-        title={highlightMode ? "Highlight mode ON — select text to auto-apply" : "Toggle highlight mode"}
-        aria-pressed={highlightMode}
+        onClick={handleToggle}
+        className={toggleButtonClass}
+        title={
+          active
+            ? "Highlighter on — pick a color or tap a color to highlight"
+            : "Highlight text"
+        }
+        aria-pressed={active}
       >
         <Highlighter className="size-4" />
       </button>
-      {highlightMode && (
-        <div className="flex items-center gap-1 px-2 py-1 rounded-lg bg-card border border-border shadow-sm">
-          <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mr-1 flex items-center gap-1">
-            <Highlighter className="size-3" />
-            Select text:
-          </span>
-          {ARTICLE_HIGHLIGHT_COLORS.map((c) => (
-            <button
-              key={c}
-              onClick={() => {
-                setHighlightColor(c);
-                onColorPick(c);
-              }}
-              className={`size-6 rounded-full border-2 transition-all ${
-                highlightColor === c
-                  ? "border-foreground scale-110"
-                  : "border-transparent hover:scale-110"
-              }`}
-              style={{ backgroundColor: c }}
-              title={`Highlight color ${c}`}
-              aria-label={`Highlight color ${c}`}
-            />
-          ))}
-          {highlights.length > 0 && (
+
+      {active && (
+        <div
+          className={cn(
+            "flex items-center gap-1 px-2 py-1 rounded-lg border border-border shadow-sm",
+            tone === "header" ? "bg-primary-foreground/10" : "bg-card"
+          )}
+        >
+          {HIGHLIGHT_COLOR_KEYS.map((key) => {
+            const selected = tool === key;
+            return (
+              <button
+                key={key}
+                onClick={() => handleColor(key)}
+                className={cn(
+                  swatchBase,
+                  selected
+                    ? "border-foreground scale-110"
+                    : "border-transparent hover:scale-110"
+                )}
+                style={{ backgroundColor: resolveHighlightColor(key) }}
+                title={`Highlight ${HIGHLIGHT_PALETTE[key].label}`}
+                aria-label={`Highlight ${HIGHLIGHT_PALETTE[key].label}`}
+                aria-pressed={selected}
+              />
+            );
+          })}
+
+          <button
+            onClick={handleEraser}
+            className={cn(
+              "size-6 rounded-lg flex items-center justify-center transition-all medos-touch-target",
+              isEraser
+                ? "bg-red-400 text-red-950 scale-110"
+                : tone === "header"
+                  ? "bg-primary-foreground/15 hover:bg-primary-foreground/25 text-primary-foreground"
+                  : "bg-muted hover:bg-muted/70 text-foreground"
+            )}
+            title="Erase highlights — tap a highlight to remove it"
+            aria-label="Erase highlights"
+            aria-pressed={isEraser}
+          >
+            <Eraser className="size-3.5" />
+          </button>
+
+          {count > 0 && (
             <>
-              <div className="w-px h-5 bg-border mx-1" />
-              <span className="text-[10px] text-muted-foreground tabular-nums">
-                {highlights.length}
+              <div
+                className={cn(
+                  "w-px h-5 mx-0.5",
+                  tone === "header" ? "bg-primary-foreground/20" : "bg-border"
+                )}
+              />
+              <span className="text-[10px] text-muted-foreground tabular-nums px-0.5">
+                {count}
               </span>
               <button
                 onClick={() => {
                   if (
                     window.confirm(
-                      `Clear all ${highlights.length} highlight${highlights.length === 1 ? "" : "s"}?`
+                      `Clear all ${count} highlight${count === 1 ? "" : "s"}?`
                     )
                   ) {
-                    clearAll();
+                    onClearAll();
                   }
                 }}
-                className="size-6 rounded-full hover:bg-muted flex items-center justify-center"
+                className={cn(
+                  "size-6 rounded-full flex items-center justify-center transition-colors medos-touch-target",
+                  tone === "header"
+                    ? "hover:bg-primary-foreground/20 text-primary-foreground"
+                    : "hover:bg-muted text-foreground"
+                )}
                 title="Clear all highlights"
                 aria-label="Clear all highlights"
               >
@@ -141,14 +158,6 @@ export function HighlighterToolbar({
               </button>
             </>
           )}
-          <button
-            onClick={() => setHighlightMode(false)}
-            className="size-6 rounded-lg hover:bg-muted flex items-center justify-center ml-1"
-            title="Exit highlight mode"
-            aria-label="Exit highlight mode"
-          >
-            <X className="size-3.5" />
-          </button>
         </div>
       )}
     </div>

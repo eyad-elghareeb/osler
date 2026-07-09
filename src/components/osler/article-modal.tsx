@@ -177,7 +177,16 @@ export function FloatingArticleModal({
                 </div>
               )}
               <div className="flex items-center gap-1 shrink-0">
-                <HighlighterToolbar ctrl={hlCtrl} compact />
+                <HighlighterToolbar
+                  control={{
+                    tool: hlCtrl.tool,
+                    color: hlCtrl.color,
+                    count: hlCtrl.highlights.length,
+                    onToolChange: hlCtrl.setTool,
+                    onColorChange: hlCtrl.setColor,
+                    onClearAll: hlCtrl.clearAll,
+                  }}
+                />
                 <button
                   onClick={toggleBookmark}
                   className={cn(

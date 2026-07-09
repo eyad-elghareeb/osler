@@ -3,6 +3,7 @@
 import * as React from "react";
 import { applyHighlightsToHtml, applyHighlightsToText } from "@/lib/osler/article-highlights";
 import type { HighlightItem } from "@/lib/osler/storage";
+import { useOslerTheme } from "@/components/osler/theme-provider";
 
 interface HighlightedContentProps {
   html?: string;
@@ -23,6 +24,8 @@ export const HighlightedContent = React.memo(function HighlightedContent({
   className = "",
   style,
 }: HighlightedContentProps) {
+  const { theme } = useOslerTheme();
+
   const processedHtml = React.useMemo(() => {
     if (typeof document === "undefined") return html ?? escapeHtmlSimple(text ?? "");
     if (html) {
@@ -32,7 +35,7 @@ export const HighlightedContent = React.memo(function HighlightedContent({
       return applyHighlightsToText(text, highlights as any);
     }
     return "";
-  }, [html, text, highlights]);
+  }, [html, text, highlights, theme]);
 
   const ref = React.useRef<HTMLDivElement>(null);
 

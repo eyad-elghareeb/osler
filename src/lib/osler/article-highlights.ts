@@ -1,3 +1,7 @@
+import { resolveHighlightColor } from "@/lib/osler/highlight-palette";
+
+export const HL_CLASS = "osler-hl";
+
 export type ArticleSource = "amboss" | "uworld-library" | "uptodate" | "library";
 
 export interface ArticleHighlightRange {
@@ -81,9 +85,8 @@ export function applyHighlightsToHtml(
       rng.setStart(n.node, oStart - n.start);
       rng.setEnd(n.node, oEnd - n.start);
       const span = doc.createElement("span");
-      span.style.backgroundColor = hl.color;
-      span.style.borderRadius = "2px";
-      span.style.padding = "0 1px";
+      span.className = HL_CLASS;
+      span.style.backgroundColor = resolveHighlightColor(hl.color);
       span.setAttribute("data-osler-hl-id", hl.id);
       try { rng.surroundContents(span); } catch {
         const frag = rng.extractContents();

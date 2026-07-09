@@ -4,8 +4,14 @@ import * as React from "react";
 import {
   type ArticleSource,
   type ArticleHighlightItem,
-  ARTICLE_HIGHLIGHT_COLORS,
+  HL_CLASS,
 } from "@/lib/osler/article-highlights";
+import {
+  HIGHLIGHT_COLOR_KEYS,
+  ERASER_TOOL,
+  resolveHighlightColor,
+} from "@/lib/osler/highlight-palette";
+import { useOslerTheme } from "@/components/osler/theme-provider";
 import { articleHighlights } from "@/lib/osler/storage";
 
 interface UseArticleHighlighterOptions {
@@ -15,6 +21,12 @@ interface UseArticleHighlighterOptions {
 }
 
 export interface UseArticleHighlighterReturn {
+  /** null = off, "eraser" = erase tool, otherwise a color key */
+  tool: string | null;
+  setTool: (t: string | null) => void;
+  /** currently selected color key */
+  color: string;
+  setColor: (c: string) => void;
   highlightMode: boolean;
   setHighlightMode: (v: boolean) => void;
   highlightColor: string;
@@ -28,28 +40,26 @@ export interface UseArticleHighlighterReturn {
   clearAll: () => void;
 }
 
-const HL_CLASS = "osler-article-highlight";
 const HL_DATA_ATTR = "data-osler-hl-id";
 
 export function useArticleHighlighter(
   opts: UseArticleHighlighterOptions
 ): UseArticleHighlighterReturn {
   const { source: _source, articleId, enabled = true } = opts;
+  const { theme } = useOslerTheme();
 
-  const [highlightMode, setHighlightMode] = React.useState(false);
-  const [highlightColor, setHighlightColor] = React.useState(
-    ARTICLE_HIGHLIGHT_COLORS[0]
-  );
+  const [tool, setTool] = React.useState<string | null>(null);
+  const [color, setColor] = React.useState<string>(HIGHLIGHT_COLOR_KEYS[0]);
   const [highlights, setHighlights] = React.useState<ArticleHighlightItem[]>([]);
 
   const iframeRef = React.useRef<HTMLIFrameElement | null>(null);
   const attachedRef = React.useRef<HTMLDocument | null>(null);
   const loadIdRef = React.useRef(0);
 
-  const highlightModeRef = React.useRef(highlightMode);
-  highlightModeRef.current = highlightMode;
-  const highlightColorRef = React.useRef(highlightColor);
-  highlightColorRef.current = highlightColor;
+  const toolRef = React.useRef(tool);
+  toolRef.current = tool;
+  const colorRef = React.useRef(color);
+  colorRef.current = color;
   const articleIdRef = React.useRef(articleId);
   articleIdRef.current = articleId;
 
@@ -75,12 +85,17 @@ export function useArticleHighlighter(
       style.id = cssId;
       style.textContent = `
         .${HL_CLASS} {
-          border-radius: 2px;
+          border-radius: 3px;
           padding: 0 1px;
           cursor: pointer;
-          transition: opacity 0.15s;
+          box-decoration-break: clone;
+          -webkit-box-decoration-break: clone;
+          transition: filter 0.15s, box-shadow 0.15s;
         }
-        .${HL_CLASS}:hover { opacity: 0.7; }
+        .${HL_CLASS}:hover { filter: brightness(0.92); }
+        .osler-hl-eraser .${HL_CLASS} {
+          box-shadow: 0 0 0 1.5px color-mix(in oklch, currentColor 35%, transparent);
+        }
       `;
       doc.head.appendChild(style);
     }
@@ -152,7 +167,7 @@ export function useArticleHighlighter(
         rng.setEnd(n.node, oEnd - n.start);
         const span = doc.createElement("span");
         span.className = HL_CLASS;
-        span.style.backgroundColor = hl.color;
+        span.style.backgroundColor = resolveHighlightColor(hl.color);
         span.setAttribute(HL_DATA_ATTR, hl.id);
         try { rng.surroundContents(span); } catch {
           const frag = rng.extractContents();
@@ -162,15 +177,18 @@ export function useArticleHighlighter(
       }
     }
 
+    doc.body.classList.toggle("osler-hl-eraser", toolRef.current === ERASER_TOOL);
+
     doc.querySelectorAll(`.${HL_CLASS}`).forEach((span) => {
       (span as HTMLElement).addEventListener("click", (e) => {
+        if (toolRef.current !== ERASER_TOOL) return;
         e.preventDefault();
         e.stopPropagation();
         const id = (span as HTMLElement).getAttribute(HL_DATA_ATTR);
         if (id) onRemoveRef.current?.(id);
       });
     });
-  }, [highlights]);
+  }, [highlights, theme]);
 
   const onRemoveRef = React.useRef<(id: string) => void>(() => {});
   const onRemove = React.useCallback((id: string) => {
@@ -209,8 +227,9 @@ export function useArticleHighlighter(
     if (attachedRef.current === doc) return;
     attachedRef.current = doc;
 
-    const onMouseUp = () => {
-      if (!highlightModeRef.current) return;
+    const applySelection = () => {
+      const t = toolRef.current;
+      if (!t || t === ERASER_TOOL) return;
       const aid = articleIdRef.current;
       if (aid == null) return;
 
@@ -231,7 +250,7 @@ export function useArticleHighlighter(
         absEnd = absStart + text.length;
       } catch {}
 
-      const c = highlightColorRef.current;
+      const c = t;
       const ranges = absStart >= 0 ? [{ start: absStart, end: absEnd }] : [];
 
       const tempId = `tmp-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -252,17 +271,22 @@ export function useArticleHighlighter(
       doc.getSelection()?.removeAllRanges();
     };
 
+    const onMouseUp = () => applySelection();
+    const onTouchEnd = () => applySelection();
+
     const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape" && highlightModeRef.current) {
-        setHighlightMode(false);
+      if (e.key === "Escape" && toolRef.current !== null) {
+        setTool(null);
       }
     };
 
     doc.addEventListener("mouseup", onMouseUp);
+    doc.addEventListener("touchend", onTouchEnd);
     doc.addEventListener("keydown", onKeyDown);
 
     (doc as any).__oslerHlCleanup = () => {
       doc.removeEventListener("mouseup", onMouseUp);
+      doc.removeEventListener("touchend", onTouchEnd);
       doc.removeEventListener("keydown", onKeyDown);
     };
   }, []);
@@ -294,8 +318,22 @@ export function useArticleHighlighter(
     applyHighlightsToIframe();
   }, [applyHighlightsToIframe]);
 
-  const onColorPick = React.useCallback((color?: string) => {
-    if (color) setHighlightColor(color);
+  const onColorPick = React.useCallback((c?: string) => {
+    if (c) {
+      setColor(c);
+      setTool(c);
+    }
+  }, []);
+
+  // Derived legacy-compatible API (used by article-modal / library)
+  const highlightMode = tool !== null && tool !== ERASER_TOOL;
+  const setHighlightMode = React.useCallback((v: boolean) => {
+    setTool(v ? colorRef.current || HIGHLIGHT_COLOR_KEYS[0] : null);
+  }, []);
+  const highlightColor = tool !== null && tool !== ERASER_TOOL ? tool : color;
+  const setHighlightColor = React.useCallback((c: string) => {
+    setColor(c);
+    setTool(c);
   }, []);
 
   const clearAll = React.useCallback(() => {
@@ -310,10 +348,14 @@ export function useArticleHighlighter(
   }, [applyHighlightsToIframe]);
 
   React.useEffect(() => {
-    if (!enabled && highlightMode) setHighlightMode(false);
-  }, [enabled, highlightMode]);
+    if (!enabled && tool !== null) setTool(null);
+  }, [enabled, tool]);
 
   return {
+    tool,
+    setTool,
+    color,
+    setColor,
     highlightMode,
     setHighlightMode,
     highlightColor,
