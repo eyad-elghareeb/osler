@@ -81,6 +81,13 @@ fn root_or_err(state: &State<ProjectRoot>) -> Result<PathBuf, String> {
         .ok_or_else(|| "No project root selected. Pick a folder first.".to_string())
 }
 
+/// Public re-export so `deploy.rs` can resolve the project root in its own
+/// command handlers (Tauri injects `State<ProjectRoot>` per command, but
+/// not all internal helpers take it).
+pub fn root_or_err_pub(state: &State<ProjectRoot>) -> Result<PathBuf, String> {
+    root_or_err(state)
+}
+
 /// Resolve a relative path against the project root. Verifies the result is
 /// still inside the root to prevent path traversal.
 fn resolve(root: &Path, rel: &str) -> Result<PathBuf, String> {
@@ -609,7 +616,7 @@ fn git_remote_string(root: &Path) -> Result<String, String> {
     Ok(s.trim().to_string())
 }
 
-fn git_branch_string(root: &Path) -> Result<String, String> {
+pub fn git_branch_string(root: &Path) -> Result<String, String> {
     let s = git(root, &["rev-parse", "--abbrev-ref", "HEAD"])?;
     Ok(s.trim().to_string())
 }

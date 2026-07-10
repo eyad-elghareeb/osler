@@ -42,12 +42,17 @@
     const wasAtBottom = console.scrollTop + console.clientHeight >= console.scrollHeight - 8;
     console.innerHTML = "";
     if (!status.logs || status.logs.length === 0) {
-      console.appendChild(el("div", { class: "console-empty" }, t("build.empty")));
+      console.appendChild(el("div", { class: "empty-state", style: { padding: "2rem 1rem" } },
+        el("div", { class: "empty-state-text" }, t("build.empty"))
+      ));
       return;
     }
     for (const line of status.logs) {
-      const div = el("div", { class: "console-line " + line.stream }, line.text);
-      console.appendChild(div);
+      const row = el("div", { class: "log-line" });
+      const ts = new Date(line.ts).toLocaleTimeString();
+      row.appendChild(el("span", { class: "ts" }, ts));
+      row.appendChild(el("span", { class: "stream-" + line.stream }, line.text));
+      console.appendChild(row);
     }
     if (wasAtBottom) console.scrollTop = console.scrollHeight;
   }
@@ -78,13 +83,13 @@
       return;
     }
 
-    const wrap = el("div", { class: "view" });
+    const wrap = el("div", { class: "view medos-fade-in" });
     const header = el("div", { class: "view-header" });
     header.appendChild(el("div", {},
-      el("h1", { class: "view-title" }, t("build.title")),
-      el("p", { class: "view-subtitle" }, t("build.subtitle"))
+      el("h1", {}, t("build.title")),
+      el("p", { class: "subtitle" }, t("build.subtitle"))
     ));
-    const headerActions = el("div", { style: { display: "flex", gap: "0.5rem", alignItems: "center" } });
+    const headerActions = el("div", { class: "view-header-actions" });
     const statusBadge = el("div", { id: "build-status" });
     headerActions.appendChild(statusBadge);
     header.appendChild(headerActions);
@@ -102,7 +107,7 @@
         toast(t("toast.error", { msg: String(e) }), "error");
       }
     });
-    const startBtn = el("button", { class: "btn btn-outline", id: "run-start-btn" }, t("build.runStart"));
+    const startBtn = el("button", { class: "btn", id: "run-start-btn" }, t("build.runStart"));
     startBtn.addEventListener("click", async () => {
       try {
         await invoke("run_start");
@@ -138,7 +143,7 @@
     wrap.appendChild(el("p", { style: { fontSize: "0.75rem", color: "var(--text-muted)", margin: "0 0 1rem" } }, t("build.note")));
 
     // Console
-    const console = el("div", { class: "console", id: "build-console" });
+    const console = el("div", { class: "log-view", id: "build-console" });
     wrap.appendChild(console);
 
     view.appendChild(wrap);

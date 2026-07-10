@@ -106,13 +106,14 @@
       return;
     }
 
-    const wrap = el("div", { class: "view" });
+    const wrap = el("div", { class: "view medos-fade-in" });
     const header = el("div", { class: "view-header" });
     header.appendChild(el("div", {},
-      el("h1", { class: "view-title" }, t("manifest.title")),
-      el("p", { class: "view-subtitle" }, t("manifest.subtitle"))
+      el("h1", {}, t("manifest.title")),
+      el("p", { class: "subtitle" }, t("manifest.subtitle"))
     ));
-    const regenBtn = el("button", { class: "btn btn-primary", id: "regen-btn" }, t("manifest.regenerate"));
+    const headerActions = el("div", { class: "view-header-actions" });
+    const regenBtn = el("button", { class: "btn btn-primary", id: "regen-btn" }, svgIcon("M21 12a9 9 0 1 1-9-9c2.39 0 4.68.94 6.36 2.64L21 9", 14), t("manifest.regenerate"));
     regenBtn.addEventListener("click", async () => {
       regenBtn.disabled = true;
       regenBtn.textContent = t("common.loading");
@@ -128,9 +129,11 @@
         regenBtn.textContent = t("manifest.regenerate");
       }
     });
-    header.appendChild(regenBtn);
+    headerActions.appendChild(regenBtn);
+    header.appendChild(headerActions);
     wrap.appendChild(header);
 
+    const tableCard = el("div", { class: "card", style: { padding: "0", overflow: "hidden" } });
     const table = el("table", { class: "table" });
     const thead = el("thead", {}, el("tr", {},
       el("th", {}, t("manifest.category")),
@@ -141,7 +144,8 @@
     table.appendChild(thead);
     const tbody = el("tbody", { id: "manifest-table-body" });
     table.appendChild(tbody);
-    wrap.appendChild(table);
+    tableCard.appendChild(table);
+    wrap.appendChild(tableCard);
 
     view.appendChild(wrap);
     await refresh();

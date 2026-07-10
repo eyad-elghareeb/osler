@@ -228,7 +228,7 @@
     optsWrap.appendChild(optsList);
     body.appendChild(optsWrap);
 
-    body.appendChild(fieldGroup("Explanation", textArea(q.explanation, "Explanation", (v) => { q.explanation = v; onChange(); })));
+    body.appendChild(fieldGroup("Explanation (Markdown)", textArea(q.explanation, "Explanation", (v) => { q.explanation = v; onChange(); })));
     body.appendChild(fieldGroup("Tags", tagList(q.tags, (v) => { q.tags = v; onChange(); })));
     if (q.difficulty !== undefined) {
       body.appendChild(fieldGroup("Difficulty (1-5)", numberInput(q.difficulty, (v) => { q.difficulty = v; onChange(); })));
@@ -473,16 +473,23 @@
         const body = el("div", { class: "fe-item-body" });
         body.appendChild(fieldGroup("ID", textInput(p.id, "e.g. w-001", (v) => { p.id = v; onChange(); })));
         body.appendChild(fieldGroup("Prompt", textArea(p.prompt, "Essay prompt", (v) => { p.prompt = v; onChange(); })));
-        body.appendChild(fieldGroup("Model Answer", textArea(p.modelAnswer, "Reference answer", (v) => { p.modelAnswer = v; onChange(); })));
+        body.appendChild(fieldGroup("Model Answer (Markdown)", textArea(p.modelAnswer, "Reference answer", (v) => { p.modelAnswer = v; onChange(); })));
         body.appendChild(rowGroup([
-          fieldGroup("Word Limit", numberInput(p.wordLimit, (v) => { p.wordLimit = v; onChange(); })),
-          fieldGroup("Explanation", textArea(p.explanation, "Teaching notes", (v) => { p.explanation = v; onChange(); })),
+          fieldGroup("Explanation (Markdown)", textArea(p.explanation, "Teaching notes", (v) => { p.explanation = v; onChange(); })),
         ]));
 
-        // Rubric
-        const rubric = Array.isArray(p.rubric) ? p.rubric : [];
-        body.appendChild(fieldGroup("Rubric", tagList(rubric, (v) => { p.rubric = v; onChange(); })));
+        // Rubric — text field, one item per line
+        body.appendChild(fieldGroup("Rubric", textArea(Array.isArray(p.rubric) ? p.rubric.join("\n") : "", "One rubric item per line", (v) => { p.rubric = v.split("\n").filter(Boolean); onChange(); })));
         body.appendChild(fieldGroup("Tags", tagList(p.tags, (v) => { p.tags = v; onChange(); })));
+
+        // Word limit — small box appended to the card footer
+        const footerRow = el("div", { style: { display: "flex", alignItems: "center", justifyContent: "flex-end", gap: "0.5rem", padding: "0.5rem 0.75rem", borderTop: "1px solid var(--border)", background: "var(--surface-2)", fontSize: "0.75rem" } });
+        footerRow.appendChild(el("span", { style: { color: "var(--text-muted)" } }, "Word limit:"));
+        const wl = el("input", { type: "number", value: p.wordLimit != null ? p.wordLimit : 500, style: { width: "64px", padding: "0.1875rem 0.375rem", borderRadius: "var(--radius-sm)", border: "1px solid var(--border)", background: "var(--surface)", color: "var(--text)", fontSize: "0.75rem", textAlign: "center" } });
+        wl.addEventListener("input", () => { p.wordLimit = wl.value === "" ? null : Number(wl.value); onChange(); });
+        footerRow.appendChild(wl);
+        footerRow.appendChild(el("span", { style: { color: "var(--text-dim)" } }, "words"));
+        card.appendChild(footerRow);
 
         // Children (sub-questions)
         const children = Array.isArray(p.children) ? p.children : [];

@@ -1,4 +1,9 @@
 // views/content.js — File tree + JSON/markdown editor.
+//
+// For `.md` files, opens a Milkdown Crepe WYSIWYG markdown editor (loaded
+// on demand from the CDN by views/markdown-editor.js). For `.json` files
+// with a known shape, falls back to the structured form editor in
+// views/content-editor.js. Everything else uses a plain textarea.
 
 (function () {
   "use strict";
@@ -9,8 +14,9 @@
   let currentPath = null;
   let currentContent = "";
   let dirty = false;
+  let activeMarkdownEditor = null;
 
-  function treeRow(item, depth) {
+  function treeRow(item) {
     const row = el("div", { class: "tree-row", "data-path": item.path });
     if (item.type === "folder") {
       row.appendChild(svgIcon("M9 18l6-6-6-6", 12));
@@ -18,16 +24,19 @@
       const icon = svgIcon("M3 7v13a1 1 0 0 0 1 1h16a1 1 0 0 0 1-1V9a1 1 0 0 0-1-1h-9l-2-3H4a1 1 0 0 0-1 1z", 14);
       icon.classList.add("icon");
       row.appendChild(icon);
-      const name = el("span", { class: "name" }, item.name);
-      row.appendChild(name);
+      row.appendChild(el("span", { class: "name" }, item.name));
       if (item.items && item.items.length) {
         row.appendChild(el("span", { class: "meta" }, String(item.items.length)));
       }
     } else {
       // Spacer for alignment
       row.appendChild(el("span", { style: { width: "12px", flexShrink: "0" } }));
-      const icon = svgIcon("M14 3v5h5M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z", 14);
+      const iconPath = item.ext === "md"
+        ? "M14 3v5h5M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"
+        : "M4 4h16v16H4z";
+      const icon = svgIcon(iconPath, 14);
       icon.classList.add("icon");
+      if (item.ext === "md") icon.style.color = "var(--accent)";
       row.appendChild(icon);
       row.appendChild(el("span", { class: "name" }, item.name));
       if (item.size) {
@@ -43,10 +52,10 @@
     return (bytes / (1024 * 1024)).toFixed(1) + " MB";
   }
 
-  function renderTree(items, container, depth) {
+  function renderTree(items, container) {
     if (!Array.isArray(items)) return;
     for (const item of items) {
-      const row = treeRow(item, depth);
+      const row = treeRow(item);
       container.appendChild(row);
       if (item.type === "folder") {
         const childWrap = el("div", { class: "tree-children", style: { display: "none" } });
@@ -57,15 +66,14 @@
           childWrap.style.display = expanded ? "none" : "";
           row.classList.toggle("expanded", !expanded);
         });
-        renderTree(item.items, childWrap, depth + 1);
+        renderTree(item.items, childWrap);
       } else {
-        row.addEventListener("click", (e) => {
+        row.addEventListener("click", async (e) => {
           e.stopPropagation();
           if (dirty && !confirm(t("content.file.dirty") + " — " + t("common.save") + "?")) {
-            // user canceled — keep editing current file
             return;
           }
-          openFile(item.path);
+          await openFile(item.path);
           document.querySelectorAll(".tree-row.active").forEach((r) => r.classList.remove("active"));
           row.classList.add("active");
         });
@@ -74,6 +82,11 @@
   }
 
   async function openFile(path) {
+    // Tear down any active markdown editor before swapping the DOM.
+    if (activeMarkdownEditor) {
+      try { activeMarkdownEditor.destroy(); } catch {}
+      activeMarkdownEditor = null;
+    }
     try {
       const res = await invoke("load_file", { path });
       currentPath = res.path;
@@ -109,92 +122,168 @@
     editorPane.innerHTML = "";
 
     if (!currentPath) {
-      editorPane.appendChild(el("div", { class: "empty-state" },
+      editorPane.appendChild(el("div", { class: "empty-state", style: { height: "100%" } },
         el("div", { class: "empty-state-icon" }, svgIcon("M14 3v5h5M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z", 24)),
-        el("div", { class: "empty-state-title" }, t("content.file.empty"))
+        el("div", { class: "empty-state-title" }, t("content.file.empty")),
+        el("div", { class: "empty-state-text" }, t("content.subtitle"))
       ));
       return;
     }
 
-    const toolbar = el("div", { class: "editor-toolbar" });
-    toolbar.appendChild(el("div", { class: "editor-path" }, currentPath));
-    const isJson = currentPath.endsWith(".json");
-    if (isJson) {
-      const detectBtn = el("button", { class: "btn btn-ghost btn-sm" }, t("content.file.validate"));
-      detectBtn.addEventListener("click", validateCurrent);
-      toolbar.appendChild(detectBtn);
-    }
-    const saveBtn = el("button", { class: "btn btn-primary btn-sm", id: "save-btn" }, t("common.save"));
-    saveBtn.addEventListener("click", saveCurrent);
-    toolbar.appendChild(saveBtn);
-    const delBtn = el("button", { class: "btn btn-danger btn-sm" }, t("common.delete"));
-    delBtn.addEventListener("click", deleteCurrent);
-    toolbar.appendChild(delBtn);
-    editorPane.appendChild(toolbar);
+    // Header
+    const header = el("div", { class: "editor-header" });
+    header.appendChild(el("div", { class: "editor-title" }, currentPath));
+    const actions = el("div", { style: { display: "flex", gap: "0.375rem" } });
 
-    // Try form editor for known JSON types
-    let useFormEditor = false;
+    const isMd = currentPath.endsWith(".md");
+    const isJson = currentPath.endsWith(".json");
+
     if (isJson) {
+      const detectBtn = el("button", { class: "btn btn-ghost btn-sm" }, svgIcon("M9 12l2 2 4-4", 14), t("content.file.validate"));
+      detectBtn.addEventListener("click", validateCurrent);
+      actions.appendChild(detectBtn);
+    }
+    if (isMd) {
+      actions.appendChild(el("span", { class: "badge badge-accent" }, "Markdown"));
+    }
+    const saveBtn = el("button", { class: "btn btn-primary btn-sm", id: "save-btn" }, svgIcon("M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2zM17 21v-8H7v8M7 3v5h8", 14), t("common.save"));
+    saveBtn.addEventListener("click", saveCurrent);
+    actions.appendChild(saveBtn);
+    const delBtn = el("button", { class: "btn btn-danger btn-sm" }, svgIcon("M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2", 14));
+    delBtn.title = t("common.delete");
+    delBtn.addEventListener("click", deleteCurrent);
+    actions.appendChild(delBtn);
+    header.appendChild(actions);
+    editorPane.appendChild(header);
+
+    // Body
+    const body = el("div", { class: "editor-body", id: "editor-body" });
+    editorPane.appendChild(body);
+
+    // Markdown → EasyMDE editor
+    if (isMd) {
+      body.classList.add("editor-body-flex");
+      const host = el("div", { id: "markdown-host" });
+      body.appendChild(host);
+      try {
+        activeMarkdownEditor = await window.OslerMarkdownEditor.create(host, currentContent, {
+          onChange(md) {
+            currentContent = md;
+            dirty = true;
+            updateStatus();
+          },
+        });
+      } catch (e) {
+        // Fallback: plain textarea if the CDN editor fails to load
+        body.innerHTML = "";
+        body.classList.add("auto");
+        const ta = el("textarea", { class: "code-editor", id: "editor-textarea", spellcheck: "false" });
+        ta.value = currentContent;
+        ta.addEventListener("input", () => { dirty = true; updateStatus(); });
+        ta.addEventListener("keydown", (e) => {
+          if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "s") {
+            e.preventDefault();
+            saveCurrent();
+          }
+        });
+        body.appendChild(ta);
+        toast("Markdown editor unavailable — showing raw textarea.", "warn");
+      }
+    } else if (isJson) {
+      // Try the structured form editor first
+      let useFormEditor = false;
       try {
         const parsed = JSON.parse(currentContent);
         const type = window.OslerAdminContentEditor && window.OslerAdminContentEditor.detectType(parsed);
         if (type) {
           useFormEditor = true;
-          const formContainer = el("div", { class: "form-editor-scroll", id: "form-editor" });
-          editorPane.appendChild(formContainer);
-          window.OslerAdminContentEditor.render(formContainer, currentPath, parsed, () => {
+          body.classList.add("auto");
+          window.OslerAdminContentEditor.render(body, currentPath, parsed, () => {
             currentContent = JSON.stringify(parsed, null, 2);
             dirty = true;
             updateStatus();
           });
         }
       } catch {}
-    }
-
-    if (!useFormEditor) {
-      // Fallback: raw textarea for .md files or unknown JSON
-      const ta = el("textarea", { class: "editor-textarea", id: "editor-textarea", spellcheck: "false" });
+      if (!useFormEditor) {
+        const ta = el("textarea", { class: "code-editor", id: "editor-textarea", spellcheck: "false" });
+        ta.value = currentContent;
+        ta.addEventListener("input", () => { dirty = true; updateStatus(); });
+        ta.addEventListener("keydown", (e) => {
+          if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "s") {
+            e.preventDefault();
+            saveCurrent();
+          }
+        });
+        body.appendChild(ta);
+      }
+    } else {
+      // Anything else → plain textarea
+      const ta = el("textarea", { class: "code-editor", id: "editor-textarea", spellcheck: "false" });
       ta.value = currentContent;
-      ta.addEventListener("input", () => {
-        dirty = true;
-        updateStatus();
-      });
+      ta.addEventListener("input", () => { dirty = true; updateStatus(); });
       ta.addEventListener("keydown", (e) => {
         if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "s") {
           e.preventDefault();
           saveCurrent();
         }
       });
-      editorPane.appendChild(ta);
+      body.appendChild(ta);
     }
 
-    const status = el("div", { class: "editor-status", id: "editor-status" });
-    editorPane.appendChild(status);
+    // Footer
+    const footer = el("div", { class: "editor-footer", id: "editor-footer" });
+    editorPane.appendChild(footer);
     updateStatus();
   }
 
   function updateStatus() {
-    const status = document.getElementById("editor-status");
-    if (!status) return;
-    status.innerHTML = "";
+    const footer = document.getElementById("editor-footer");
+    if (!footer) return;
+    footer.innerHTML = "";
+    const left = el("div", { style: { display: "flex", alignItems: "center", gap: "0.5rem" } });
     if (dirty) {
-      status.appendChild(el("span", { class: "badge accent" }, t("content.file.dirty")));
+      left.appendChild(el("span", {}, el("span", { class: "dirty-dot" }), t("content.file.dirty")));
     } else if (currentPath) {
-      status.appendChild(el("span", { class: "badge success" }, t("content.file.saved")));
+      left.appendChild(el("span", { class: "badge badge-success" }, t("content.file.saved")));
     }
+    footer.appendChild(left);
+
     const ta = document.getElementById("editor-textarea");
     if (ta) {
       const lines = ta.value.split("\n").length;
       const chars = ta.value.length;
-      status.appendChild(el("span", { style: { marginInlineStart: "auto", color: "var(--text-dim)" } }, lines + " lines · " + chars + " chars"));
+      footer.appendChild(el("span", { style: { color: "var(--text-dim)" } }, lines + " lines · " + chars + " chars"));
+    } else if (activeMarkdownEditor) {
+      const md = currentContent || "";
+      const chars = md.length;
+      const words = md.trim() ? md.trim().split(/\s+/).length : 0;
+      footer.appendChild(el("span", { style: { color: "var(--text-dim)" } }, words + " words · " + chars + " chars"));
     }
   }
 
   async function saveCurrent() {
     if (!currentPath) return;
-    const ta = document.getElementById("editor-textarea");
-    const content = ta ? ta.value : currentContent;
-    if (!content && !ta) return;
+
+    // If the markdown editor is active, pull the latest markdown out of it
+    // before saving — the onChange handler keeps `currentContent` in sync,
+    // but call getMarkdown() once more to be safe.
+    let content = currentContent;
+    if (activeMarkdownEditor) {
+      try {
+        const md = await activeMarkdownEditor.getMarkdownAsync();
+        if (typeof md === "string") {
+          content = md;
+          currentContent = md;
+        }
+      } catch (e) {
+        console.warn("getMarkdownAsync failed:", e);
+      }
+    } else {
+      const ta = document.getElementById("editor-textarea");
+      if (ta) content = ta.value;
+    }
+
     const btn = document.getElementById("save-btn");
     if (btn) {
       btn.disabled = true;
@@ -225,11 +314,14 @@
     try {
       await invoke("delete_path", { path: currentPath });
       toast(t("toast.deleted"), "success");
+      if (activeMarkdownEditor) {
+        try { activeMarkdownEditor.destroy(); } catch {}
+        activeMarkdownEditor = null;
+      }
       currentPath = null;
       currentContent = "";
       dirty = false;
       renderEditor();
-      // Refresh tree
       await refreshTree();
     } catch (e) {
       toast(t("toast.error", { msg: String(e) }), "error");
@@ -276,7 +368,7 @@
         ));
         return;
       }
-      renderTree(res.items, treeEl, 0);
+      renderTree(res.items, treeEl);
     } catch (e) {
       treeEl.appendChild(el("div", { class: "empty-state", style: { padding: "2rem 1rem" } },
         el("div", { class: "empty-state-text" }, t("toast.error", { msg: String(e) }))
@@ -291,51 +383,55 @@
       return;
     }
 
-    const wrap = el("div", { class: "view", style: { padding: "0", height: "100%", display: "flex", flexDirection: "column" } });
+    const wrap = el("div", { class: "view medos-fade-in", style: { height: "calc(100vh - var(--topbar-h))", display: "flex", flexDirection: "column", maxWidth: "none" } });
 
     // Header
-    const header = el("div", { class: "view-header", style: { padding: "1.5rem 1.5rem 0.75rem", margin: "0" } });
+    const header = el("div", { class: "view-header" });
     header.appendChild(el("div", {},
-      el("h1", { class: "view-title" }, t("content.title")),
-      el("p", { class: "view-subtitle" }, t("content.subtitle"))
+      el("h1", {}, t("content.title")),
+      el("p", { class: "subtitle" }, t("content.subtitle"))
     ));
-    const headerActions = el("div", { style: { display: "flex", gap: "0.5rem" } });
-    const newFileBtn = el("button", { class: "btn btn-outline btn-sm" }, t("common.newFile"));
+    const headerActions = el("div", { class: "view-header-actions" });
+    const newFileBtn = el("button", { class: "btn btn-sm" }, svgIcon("M12 5v14M5 12h14", 14), t("common.newFile"));
     newFileBtn.addEventListener("click", () => {
-      const path = prompt("New file path (under public/osler-content/):", "public/osler-content/quiz/new-pack/questions.json");
+      const path = prompt("New file path (under public/osler-content/):", "public/osler-content/library/new-article.md");
       if (!path) return;
       invoke("create_file", { path, content: null })
         .then(() => { toast(t("toast.created"), "success"); refreshTree(); })
         .catch((e) => toast(t("toast.error", { msg: String(e) }), "error"));
     });
     headerActions.appendChild(newFileBtn);
-    const newFolderBtn = el("button", { class: "btn btn-outline btn-sm" }, t("common.newFolder"));
+    const newFolderBtn = el("button", { class: "btn btn-sm" }, svgIcon("M3 7v13a1 1 0 0 0 1 1h16a1 1 0 0 0 1-1V9a1 1 0 0 0-1-1h-9l-2-3H4a1 1 0 0 0-1 1z", 14), t("common.newFolder"));
     newFolderBtn.addEventListener("click", () => {
-      const path = prompt("New folder path (under public/osler-content/):", "public/osler-content/quiz/new-pack");
+      const path = prompt("New folder path (under public/osler-content/):", "public/osler-content/library/new-section");
       if (!path) return;
       invoke("create_folder", { path })
         .then(() => { toast(t("toast.created"), "success"); refreshTree(); })
         .catch((e) => toast(t("toast.error", { msg: String(e) }), "error"));
     });
     headerActions.appendChild(newFolderBtn);
-    const refreshBtn = el("button", { class: "btn btn-ghost btn-sm" }, t("common.refresh"));
+    const refreshBtn = el("button", { class: "btn btn-ghost btn-sm" }, svgIcon("M21 12a9 9 0 1 1-9-9c2.39 0 4.68.94 6.36 2.64L21 9", 14), t("common.refresh"));
     refreshBtn.addEventListener("click", refreshTree);
     headerActions.appendChild(refreshBtn);
     header.appendChild(headerActions);
     wrap.appendChild(header);
 
-    // Two-column body
-    const body = el("div", { style: { flex: "1", display: "flex", gap: "0.75rem", padding: "0 1.5rem 1.5rem", minHeight: "0" } });
+    // Two-column body — tree left, editor right
+    const layout = el("div", { class: "content-layout", style: { flex: "1", minHeight: "0" } });
 
-    const treeCol = el("div", { class: "card", style: { flex: "0 0 280px", padding: "0.75rem", overflowY: "auto" } });
-    const tree = el("div", { class: "tree", id: "tree" });
+    const treeCol = el("div", { class: "tree" });
+    const treeHeader = el("div", { class: "tree-header" },
+      el("span", { class: "tree-header-title" }, t("content.tree.title"))
+    );
+    treeCol.appendChild(treeHeader);
+    const tree = el("div", { id: "tree", style: { flex: "1", overflowY: "auto" } });
     treeCol.appendChild(tree);
-    body.appendChild(treeCol);
+    layout.appendChild(treeCol);
 
-    const editorCol = el("div", { class: "card editor-pane", id: "editor-pane", style: { flex: "1", padding: "0", overflow: "hidden" } });
-    body.appendChild(editorCol);
+    const editorCol = el("div", { class: "editor-pane", id: "editor-pane" });
+    layout.appendChild(editorCol);
 
-    wrap.appendChild(body);
+    wrap.appendChild(layout);
     view.appendChild(wrap);
 
     await refreshTree();

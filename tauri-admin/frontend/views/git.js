@@ -91,25 +91,27 @@
       return;
     }
 
-    const wrap = el("div", { class: "view" });
+    const wrap = el("div", { class: "view medos-fade-in" });
     const header = el("div", { class: "view-header" });
     header.appendChild(el("div", {},
-      el("h1", { class: "view-title" }, t("git.title")),
-      el("p", { class: "view-subtitle" }, t("git.subtitle"))
+      el("h1", {}, t("git.title")),
+      el("p", { class: "subtitle" }, t("git.subtitle"))
     ));
-    const refreshBtn = el("button", { class: "btn btn-ghost btn-sm" }, t("git.refresh"));
+    const headerActions = el("div", { class: "view-header-actions" });
+    const refreshBtn = el("button", { class: "btn btn-ghost btn-sm" }, svgIcon("M21 12a9 9 0 1 1-9-9c2.39 0 4.68.94 6.36 2.64L21 9", 14), t("git.refresh"));
     refreshBtn.addEventListener("click", refresh);
-    header.appendChild(refreshBtn);
+    headerActions.appendChild(refreshBtn);
+    header.appendChild(headerActions);
     wrap.appendChild(header);
 
     // Remote + branch info
     const infoGrid = el("div", { class: "grid grid-2", style: { marginBottom: "1rem" } });
     infoGrid.appendChild(el("div", { class: "card" },
-      el("div", { class: "card-title" }, t("git.remote")),
+      el("div", { class: "label", style: { marginBottom: "0.375rem" } }, t("git.remote")),
       el("div", { id: "git-remote", style: { fontFamily: "var(--font-mono)", fontSize: "0.8125rem", wordBreak: "break-all" } }, "…")
     ));
     infoGrid.appendChild(el("div", { class: "card" },
-      el("div", { class: "card-title" }, t("git.branch")),
+      el("div", { class: "label", style: { marginBottom: "0.375rem" } }, t("git.branch")),
       el("div", { id: "git-branch", style: { fontFamily: "var(--font-mono)", fontSize: "0.8125rem" } }, "…")
     ));
     wrap.appendChild(infoGrid);
@@ -124,7 +126,7 @@
     });
     msgInput.value = t("git.commitDefault");
     commitBar.appendChild(msgInput);
-    const stageAllBtn = el("button", { class: "btn btn-outline btn-sm" }, t("git.stageAll"));
+    const stageAllBtn = el("button", { class: "btn btn-sm" }, t("git.stageAll"));
     stageAllBtn.addEventListener("click", async () => {
       try {
         await invoke("git_add", { paths: ["public/osler-content"] });
@@ -146,7 +148,7 @@
       }
     });
     commitBar.appendChild(commitBtn);
-    const pushBtn = el("button", { class: "btn btn-success btn-sm" }, t("git.push"));
+    const pushBtn = el("button", { class: "btn btn-accent btn-sm" }, t("git.push"));
     pushBtn.addEventListener("click", async () => {
       try {
         await invoke("git_push");
@@ -156,7 +158,7 @@
       }
     });
     commitBar.appendChild(pushBtn);
-    const pullBtn = el("button", { class: "btn btn-outline btn-sm" }, t("git.pull"));
+    const pullBtn = el("button", { class: "btn btn-sm" }, t("git.pull"));
     pullBtn.addEventListener("click", async () => {
       try {
         await invoke("git_pull");
@@ -170,13 +172,13 @@
     wrap.appendChild(commitBar);
 
     // Status table
-    wrap.appendChild(el("div", { class: "card-title" }, t("git.status")));
+    wrap.appendChild(el("div", { class: "label", style: { marginTop: "0.5rem" } }, t("git.status")));
     const summary = el("div", { id: "git-status-summary", style: { fontSize: "0.8125rem", color: "var(--text-muted)", marginBottom: "0.5rem" } }, "…");
     wrap.appendChild(summary);
 
     const table = el("table", { class: "table" });
     const thead = el("thead", {}, el("tr", {},
-      el("th", { style: { width: "80px" } }, "XY"),
+      el("th", {}, "XY"),
       el("th", {}, "Path"),
       el("th", { style: { textAlign: "end" } }, "")
     ));

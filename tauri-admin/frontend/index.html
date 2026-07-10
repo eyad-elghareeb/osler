@@ -11,6 +11,9 @@
     rel="stylesheet"
   />
   <link rel="stylesheet" href="styles.css" />
+  <!-- EasyMDE CSS — loaded once, used on demand by the markdown editor -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/easymde@2.18.0/dist/easymde.min.css" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.7.2/css/all.min.css" />
   <!-- Pre-hydration script: apply <html lang/dir> from localStorage BEFORE
        the page paints, so users who picked Arabic don't see an LTR flash. -->
   <script>
@@ -31,8 +34,9 @@
   </script>
 </head>
 <body>
-  <div id="app">
-    <!-- Top bar -->
+  <div id="app" class="medos-grid-bg">
+    <!-- Top bar — matches the Osler web app shell: glassy backdrop, brand left,
+         project pill center, language + theme toggles right. -->
     <header class="topbar">
       <div class="topbar-left">
         <button id="brand" class="brand" type="button" data-route="dashboard">
@@ -99,13 +103,17 @@
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="6" r="3" /><circle cx="6" cy="18" r="3" /><circle cx="18" cy="12" r="3" /><path d="M6 9v6" /><path d="M9 18h3a3 3 0 0 0 3-3V9" /></svg>
             <span data-i18n="nav.git">Git</span>
           </button>
+          <button class="nav-item" data-route="deploy" type="button">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 13.5 12 5l8.5 8.5" /><path d="M5 12v8h14v-8" /><path d="M12 5v15" /><circle cx="12" cy="3" r="1.5" /></svg>
+            <span data-i18n="nav.deploy">Deploy</span>
+          </button>
           <button class="nav-item" data-route="settings" type="button">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" /></svg>
             <span data-i18n="nav.settings">Settings</span>
           </button>
         </nav>
         <div class="sidebar-footer">
-          <div class="version">v0.1.0</div>
+          <div class="version">v0.2.0</div>
         </div>
       </aside>
 
@@ -122,12 +130,14 @@
        can be opened directly in a browser for development. -->
   <script src="main.js"></script>
   <script src="i18n.js"></script>
+  <script src="views/markdown-editor.js"></script>
   <script src="views/dashboard.js"></script>
   <script src="views/content-editor.js"></script>
   <script src="views/content.js"></script>
   <script src="views/manifest.js"></script>
   <script src="views/build.js"></script>
   <script src="views/git.js"></script>
+  <script src="views/deploy.js"></script>
   <script src="views/settings.js"></script>
   <script>
     document.addEventListener("DOMContentLoaded", function () {
