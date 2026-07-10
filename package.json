@@ -19,7 +19,6 @@
     "@dnd-kit/utilities": "^3.2.2",
     "@hookform/resolvers": "^5.1.1",
     "@mdxeditor/editor": "^3.39.1",
-    "@next/swc-win32-x64-msvc": "^16.2.10",
     "@radix-ui/react-accordion": "^1.2.11",
     "@radix-ui/react-alert-dialog": "^1.1.14",
     "@radix-ui/react-aspect-ratio": "^1.1.7",
@@ -84,6 +83,9 @@
     "z-ai-web-dev-sdk": "^0.0.18",
     "zod": "^4.0.2",
     "zustand": "^5.0.6"
+  },
+  "optionalDependencies": {
+    "@next/swc-win32-x64-msvc": "^16.2.10"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
