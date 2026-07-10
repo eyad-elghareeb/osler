@@ -10,7 +10,7 @@
 
 4. **Use `cn()` for className merging.** Import from `@/lib/utils`. Never write raw template literal class strings.
 
-5. **All content schemas live in `@/lib/osler/types.ts`.** Never define content types elsewhere. The 5 engine types are `quiz | bank | flashcard | written | osce`.
+5. **All content schemas live in `@/lib/osler/types.ts`.** Never define content types elsewhere. The 6 engine types are `quiz | bank | flashcard | written | osce | library`.
 
 6. **Engine metadata comes from `ENGINE_META` in `@/lib/osler/content.ts`.** Never hardcode engine labels, colors, or icons.
 
@@ -35,7 +35,7 @@
 - `src/components/osler/` — app-specific components (not generic UI)
 - `src/components/ui/` — shadcn/ui primitives (48 files, do not add custom logic here)
 - `src/lib/osler/` — business logic, types, data loading, storage
-- `src/hooks/` — shared React hooks
+- `src/hooks/` — shared React hooks (including `useContentTree`, `useArticleHighlighter`, `useGestures`)
 
 ### Code style
 
@@ -86,7 +86,7 @@ export function Component({ title, onAction }: ComponentProps) {
 
 - All content lives under `public/osler-content/` in category folders: `flashcard/`, `qbank/`, `osce/`, `library/`
 - **Folder name = title** — no separate metadata file needed; name is title-cased for display
-- **Type inheritance**: content under `flashcard/` is auto-type "flashcard"; `qbank/` types auto-detected from file keys; `osce/` → "osce"
+- **Type inheritance**: content under `flashcard/` is auto-type "flashcard"; `qbank/` types auto-detected from file keys (`questions` → `quiz`, `passages` → `bank`, `prompts` → `written`); `osce/` → "osce"
 - **Multiple `.json` files per leaf folder**: all files fetched and merged (arrays concatenated)
 - **Branch nodes** (folders with subfolders) → grouping decks; **Leaf nodes** (no subfolders) → content items
 - `ContentTreeNode` in `@/lib/osler/types.ts` replaces `ManifestItem` (now deleted)
@@ -94,12 +94,14 @@ export function Component({ title, onAction }: ComponentProps) {
 
 ### Content loading
 
-- `loadCategoryTree(category)` — loads the tree for a category (from `manifest.json`)
+- `loadCategoryTree(type)` — loads the tree for a category (from `manifest.json`); `type` is `EngineType`
 - `loadNodeContent(node)` — fetches and merges all JSON files in a leaf node
 - `loadAllContent()` — loads all content across all categories, returns `{ items, trees }`
 - `loadContentByUid(uid)` — loads a single content pack by UID
-- `flattenTree(node)` — flattens a tree node into an array of leaf `{ node, content }` items
+- `flattenTree(node)` — flattens a tree node into an array of leaf nodes
+- `useContentTree(options?)` — React hook wrapping `loadAllContent` with helpers: `collectLeafUids`, `mergeCards`, `nodeCardCount`, `nodeDueCount`
 - All content is JSON fetched from `/osler-content/`
+- Library articles are Markdown (.md) files rendered to HTML via `unified`/`remark`/`rehype` pipeline at runtime
 
 ### Mobile responsiveness
 
@@ -126,7 +128,7 @@ export function Component({ title, onAction }: ComponentProps) {
 2. Add it to the `AnyContent` union type
 3. Add a type guard in `@/lib/osler/content.ts`
 4. Add an entry in `ENGINE_META`
-5. Add rendering support in `QBankStudio.tsx`
+5. Add rendering support — use `QBankStudio.tsx` for quiz/bank/written types, `FlashcardStudio.tsx` for flashcards, `OsceStudio.tsx` for OSCE, or create a dedicated studio component
 6. Add type detection key in `scripts/generate-content-manifests.js` (`fileKeyMap`)
 7. Add category folder under `public/osler-content/`
 
