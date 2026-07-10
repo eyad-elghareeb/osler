@@ -4,6 +4,7 @@
 // tests can `use osler_admin_lib::*` and so cargo test has a lib target.
 
 pub mod commands;
+pub mod deploy;
 pub mod manifest;
 pub mod runner;
 pub mod validate;

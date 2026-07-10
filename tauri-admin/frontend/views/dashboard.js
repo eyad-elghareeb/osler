@@ -3,8 +3,12 @@
 (function () {
   "use strict";
 
-  const { invoke, toast, helpers, requireProject, projectState } = window.OslerAdmin;
+  const { invoke, toast, helpers, requireProject } = window.OslerAdmin;
   const { el, svgIcon, escapeHtml, t } = helpers;
+
+  // NOTE: projectState is read live from window.OslerAdmin.projectState inside
+  // the view handler rather than destructured at module load, so it stays
+  // fresh after refreshProjectState() updates.
 
   async function loadFileCount() {
     try {
@@ -75,11 +79,12 @@
 
   window.OslerAdminViews = window.OslerAdminViews || {};
   window.OslerAdminViews.dashboard = async function (view) {
-    const wrap = el("div", { class: "view" });
+    const projectState = window.OslerAdmin.projectState;
+    const wrap = el("div", { class: "view medos-fade-in" });
     wrap.appendChild(el("div", { class: "view-header" },
       el("div", {},
-        el("h1", { class: "view-title" }, t("dashboard.title")),
-        el("p", { class: "view-subtitle" }, t("dashboard.subtitle"))
+        el("h1", {}, t("dashboard.title")),
+        el("p", { class: "subtitle" }, t("dashboard.subtitle"))
       )
     ));
 
@@ -108,7 +113,7 @@
     grid.appendChild(remoteTile);
 
     // Quick actions
-    wrap.appendChild(el("h2", { class: "card-title", style: { marginTop: "2rem" } }, t("dashboard.quickActions")));
+    wrap.appendChild(el("h2", { style: { marginTop: "2rem", marginBottom: "0.75rem", fontSize: "1rem", fontWeight: "600" } }, t("dashboard.quickActions")));
     const qaGrid = el("div", { class: "grid grid-3" });
     qaGrid.appendChild(quickAction(
       "M14 3v5h5M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8zM9 13h6M9 17h6",
@@ -134,6 +139,12 @@
       t("dashboard.qa.gitPush"),
       t("dashboard.qa.gitPushDesc"),
       () => window.OslerAdmin.navigate("git")
+    ));
+    qaGrid.appendChild(quickAction(
+      "M3.5 13.5 12 5l8.5 8.5M5 12v8h14v-8M12 5v15",
+      t("dashboard.qa.deploy"),
+      t("dashboard.qa.deployDesc"),
+      () => window.OslerAdmin.navigate("deploy")
     ));
     wrap.appendChild(qaGrid);
 

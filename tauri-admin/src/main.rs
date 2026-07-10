@@ -49,6 +49,14 @@ fn main() {
             commands::git_push,
             commands::git_pull,
             commands::git_remote,
+            // Deploy (Vercel / GitHub Pages / Cloudflare Pages / Netlify)
+            deploy::get_deploy_config,
+            deploy::set_deploy_config,
+            deploy::clear_deploy_provider,
+            deploy::test_deploy_connection,
+            deploy::deploy,
+            deploy::deploy_status,
+            deploy::clear_deploy_logs,
             // Shell / open
             commands::open_external,
             // Misc
@@ -66,4 +74,4 @@ fn main() {
         .expect("error while running tauri application");
 }
 
-use osler_admin_lib::commands;
+use osler_admin_lib::{commands, deploy};

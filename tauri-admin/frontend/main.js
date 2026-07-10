@@ -27,15 +27,90 @@
 
   /** Browser-only mock so the UI can be opened without Tauri for preview. */
   async function mockInvoke(cmd, args) {
+    // Preview mode — `?preview=1` or localStorage["osler-admin-preview"] = "1"
+    // makes the mock pretend a project root is bound, so all views render.
+    let preview = false;
+    try {
+      preview =
+        new URLSearchParams(window.location.search).get("preview") === "1" ||
+        localStorage.getItem("osler-admin-preview") === "1";
+    } catch {}
+
+    /** Redact token-shaped fields in a config object before returning. */
+    function redactMockConfig(cfg) {
+      if (!cfg || typeof cfg !== "object") return {};
+      const out = {};
+      for (const [provider, fields] of Object.entries(cfg)) {
+        out[provider] = {};
+        if (fields && typeof fields === "object") {
+          for (const [k, v] of Object.entries(fields)) {
+            if (typeof v === "string" && (k.includes("token") || k === "password" || k === "api_key") && v && v !== "••••••••") {
+              out[provider][k] = "••••••••";
+            } else {
+              out[provider][k] = v;
+            }
+          }
+        }
+      }
+      return out;
+    }
+
+    const fakeRoot = "/tmp/osler-preview-project";
     switch (cmd) {
       case "ping":
         return "osler-admin-mock";
       case "project_state":
-        return { root: null };
+        return preview
+          ? {
+              root: fakeRoot,
+              hasPackageJson: true,
+              hasContentDir: true,
+              gitRemote: "https://github.com/example/osler.git",
+              gitBranch: "main",
+            }
+          : { root: null };
       case "pick_project_root":
         return { picked: false };
+      case "set_project_root":
+        return { root: args && args.root, hasPackageJson: true, hasContentDir: true };
       case "list_files":
-        return { items: [] };
+        return preview
+          ? {
+              items: [
+                {
+                  type: "folder",
+                  name: "library",
+                  path: "library/",
+                  items: [
+                    {
+                      type: "folder",
+                      name: "cardiology",
+                      path: "library/cardiology/",
+                      items: [
+                        { type: "file", name: "ischemic-stroke.md", path: "library/cardiology/ischemic-stroke.md", ext: "md", size: 4200 },
+                      ],
+                    },
+                  ],
+                },
+                { type: "folder", name: "qbank", path: "qbank/", items: [] },
+              ],
+            }
+          : { items: [] };
+      case "load_file":
+        return preview
+          ? {
+              path: args && args.path,
+              content: "# Ischemic Stroke\n\nA **stroke** is a neurological deficit caused by an interruption of blood supply to the brain.\n\n## Pathophysiology\n\n- *Ischemic* strokes account for ~85% of all strokes.\n- Caused by **thrombotic** or **embolic** occlusion of cerebral arteries.\n\n## Risk Factors\n\n1. Hypertension\n2. Atrial fibrillation\n3. Diabetes mellitus\n4. Smoking\n5. Dyslipidemia\n\n> Time is brain — every minute of delay loses ~1.9 million neurons.\n\n## Clinical Presentation\n\n| Territory | Symptom |\n|---|---|\n| MCA | Contralateral hemiparesis, facial droop |\n| ACA | Leg weakness |\n| PCA | Visual field deficits |\n\n```code\nFAST = Face, Arms, Speech, Time\n```\n",
+            }
+          : { path: args && args.path, content: "" };
+      case "save_file":
+        return { saved: true, path: args && args.path };
+      case "create_file":
+        return { created: true, path: args && args.path };
+      case "create_folder":
+        return { created: true, path: args && args.path };
+      case "delete_path":
+        return { deleted: true, path: args && args.path };
       case "runner_status":
         return {
           kind: "",
@@ -56,6 +131,112 @@
         return { generated: [] };
       case "validate_content":
         return { valid: true, errors: [] };
+      case "get_deploy_config":
+        return preview
+          ? (window.__oslerMockDeployConfig || {})
+          : (window.__oslerMockDeployConfig || {});
+      case "set_deploy_config":
+        // Merge incoming config into the in-memory mock store so the
+        // "Connected" badge updates immediately. Token fields sent as
+        // empty strings preserve the existing value (matching the Rust
+        // backend's merge_provider behavior).
+        if (!window.__oslerMockDeployConfig) window.__oslerMockDeployConfig = {};
+        if (args && args.config && typeof args.config === "object") {
+          for (const provider of Object.keys(args.config)) {
+            const incoming = args.config[provider];
+            const existing = window.__oslerMockDeployConfig[provider] || {};
+            const merged = { ...existing };
+            for (const [k, v] of Object.entries(incoming)) {
+              if (typeof v === "string" && v === "" && (k.includes("token") || k === "password" || k === "api_key")) {
+                // preserve existing token
+              } else {
+                merged[k] = v;
+              }
+            }
+            window.__oslerMockDeployConfig[provider] = merged;
+          }
+        }
+        // Redact tokens before returning
+        return redactMockConfig(window.__oslerMockDeployConfig);
+      case "clear_deploy_provider":
+        if (window.__oslerMockDeployConfig && args && args.provider) {
+          delete window.__oslerMockDeployConfig[args.provider];
+        }
+        return redactMockConfig(window.__oslerMockDeployConfig || {});
+      case "test_deploy_connection":
+        return preview
+          ? { ok: true, details: { user: "mock-user", repo: "mock-repo", project: "mock-project" } }
+          : { ok: false, error: "Mock mode — connect to Tauri to test live." };
+      case "deploy":
+        // Mock simulates a deploy that runs for ~3 seconds and streams
+        // a few log lines, then succeeds with a fake URL. Polling
+        // deploy_status will see the running state and logs.
+        if (preview) {
+          (function () {
+            const provider = args && args.provider || "vercel";
+            window.__oslerMockDeployState = {
+              provider,
+              running: true,
+              success: false,
+              startedAt: Date.now(),
+              endedAt: 0,
+              logs: [
+                { stream: "info", text: "Starting " + provider + " deploy", ts: Date.now() },
+              ],
+              resultUrl: "",
+              error: "",
+            };
+            const lines = [
+              { stream: "info", text: "Pushing current branch to remote…" },
+              { stream: "success", text: "Git push complete." },
+              { stream: "info", text: "Triggering " + provider + " production deploy…" },
+              { stream: "info", text: "Build queued on provider infrastructure." },
+              { stream: "success", text: "Deployment created." },
+            ];
+            let i = 0;
+            const interval = setInterval(() => {
+              if (!window.__oslerMockDeployState) {
+                clearInterval(interval);
+                return;
+              }
+              if (i < lines.length) {
+                window.__oslerMockDeployState.logs.push({
+                  stream: lines[i].stream,
+                  text: lines[i].text,
+                  ts: Date.now(),
+                });
+                i++;
+              } else {
+                clearInterval(interval);
+                window.__oslerMockDeployState.running = false;
+                window.__oslerMockDeployState.success = true;
+                window.__oslerMockDeployState.endedAt = Date.now();
+                window.__oslerMockDeployState.resultUrl =
+                  "https://" + provider + "-example.osler.preview.app";
+              }
+            }, 700);
+          })();
+        }
+        return { started: true, provider: args && args.provider || "vercel" };
+      case "deploy_status":
+        if (preview && window.__oslerMockDeployState) {
+          return JSON.parse(JSON.stringify(window.__oslerMockDeployState));
+        }
+        return {
+          provider: "",
+          running: false,
+          success: false,
+          startedAt: 0,
+          endedAt: 0,
+          logs: [],
+          resultUrl: "",
+          error: "",
+        };
+      case "clear_deploy_logs":
+        if (window.__oslerMockDeployState) {
+          window.__oslerMockDeployState.logs = [];
+        }
+        return { cleared: true };
       default:
         return null;
     }
@@ -289,6 +470,7 @@
     register("manifest", window.OslerAdminViews.manifest);
     register("build", window.OslerAdminViews.build);
     register("git", window.OslerAdminViews.git);
+    register("deploy", window.OslerAdminViews.deploy);
     register("settings", window.OslerAdminViews.settings);
 
     // Initial state fetch + first render

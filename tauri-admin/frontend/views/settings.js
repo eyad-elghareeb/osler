@@ -3,22 +3,23 @@
 (function () {
   "use strict";
 
-  const { invoke, toast, helpers, pickProjectRoot, projectState, refreshProjectState } = window.OslerAdmin;
+  const { invoke, toast, helpers, pickProjectRoot, refreshProjectState } = window.OslerAdmin;
   const { el, svgIcon, escapeHtml, t } = helpers;
 
   window.OslerAdminViews = window.OslerAdminViews || {};
   window.OslerAdminViews.settings = async function (view) {
-    const wrap = el("div", { class: "view" });
+    const projectState = window.OslerAdmin.projectState;
+    const wrap = el("div", { class: "view medos-fade-in" });
     wrap.appendChild(el("div", { class: "view-header" },
       el("div", {},
-        el("h1", { class: "view-title" }, t("settings.title")),
-        el("p", { class: "view-subtitle" }, t("settings.subtitle"))
+        el("h1", {}, t("settings.title")),
+        el("p", { class: "subtitle" }, t("settings.subtitle"))
       )
     ));
 
     // Language card
     const langCard = el("div", { class: "card", style: { marginBottom: "1rem" } });
-    langCard.appendChild(el("div", { class: "card-title" }, t("settings.section.language")));
+    langCard.appendChild(el("div", { class: "label", style: { marginBottom: "0.5rem" } }, t("settings.section.language")));
     langCard.appendChild(el("div", { style: { fontSize: "0.875rem", marginBottom: "0.75rem" } }, t("settings.language.uiLangDesc")));
 
     const langGrid = el("div", { class: "grid grid-2", style: { maxWidth: "480px" } });
@@ -62,7 +63,7 @@
 
     // Theme card
     const themeCard = el("div", { class: "card", style: { marginBottom: "1rem" } });
-    themeCard.appendChild(el("div", { class: "card-title" }, t("settings.section.theme")));
+    themeCard.appendChild(el("div", { class: "label", style: { marginBottom: "0.5rem" } }, t("settings.section.theme")));
     const currentTheme = document.documentElement.getAttribute("data-theme") || "dark";
     const themeGrid = el("div", { style: { display: "flex", gap: "0.5rem" } });
     for (const opt of [
@@ -71,7 +72,7 @@
     ]) {
       const active = currentTheme === opt.id;
       const btn = el("button", {
-        class: "btn " + (active ? "btn-primary" : "btn-outline"),
+        class: "btn " + (active ? "btn-primary" : ""),
         onClick: () => {
           document.documentElement.setAttribute("data-theme", opt.id);
           try { localStorage.setItem("osler-admin-theme", opt.id); } catch {}
@@ -85,13 +86,13 @@
 
     // Project card
     const projCard = el("div", { class: "card" });
-    projCard.appendChild(el("div", { class: "card-title" }, t("settings.section.project")));
+    projCard.appendChild(el("div", { class: "label", style: { marginBottom: "0.5rem" } }, t("settings.section.project")));
     const rootRow = el("div", { style: { display: "flex", gap: "0.5rem", alignItems: "center", marginBottom: "0.75rem", flexWrap: "wrap" } });
     rootRow.appendChild(el("div", { style: { flex: "1", minWidth: "200px" } },
       el("div", { style: { fontSize: "0.6875rem", textTransform: "uppercase", letterSpacing: "0.09em", color: "var(--text-muted)" }, }, t("settings.project.root")),
       el("div", { style: { fontFamily: "var(--font-mono)", fontSize: "0.8125rem", wordBreak: "break-all" } }, projectState && projectState.root ? projectState.root : "—")
     ));
-    const changeBtn = el("button", { class: "btn btn-outline btn-sm" }, t("settings.project.change"));
+    const changeBtn = el("button", { class: "btn btn-sm" }, t("settings.project.change"));
     changeBtn.addEventListener("click", async () => {
       await pickProjectRoot();
       window.OslerAdmin.navigate("settings");
