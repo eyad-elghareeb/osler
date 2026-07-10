@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="en" dir="ltr" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Osler Admin — Project Dashboard</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700&family=Geist+Mono:wght@400;500&family=Cairo:wght@300;400;500;600;700&display=swap"
+    rel="stylesheet"
+  />
+  <link rel="stylesheet" href="styles.css" />
+  <!-- Pre-hydration script: apply <html lang/dir> from localStorage BEFORE
+       the page paints, so users who picked Arabic don't see an LTR flash. -->
+  <script>
+    (function () {
+      try {
+        var v = localStorage.getItem("osler-admin-lang");
+        var lang = v === "ar" || v === "en" ? v : "en";
+        var dir = lang === "ar" ? "rtl" : "ltr";
+        var html = document.documentElement;
+        html.setAttribute("lang", lang);
+        html.setAttribute("dir", dir);
+        if (lang === "ar") html.classList.add("osler-ar");
+        else html.classList.remove("osler-ar");
+        var t = localStorage.getItem("osler-admin-theme");
+        if (t === "light" || t === "dark") html.setAttribute("data-theme", t);
+      } catch (e) {}
+    })();
+  </script>
+</head>
+<body>
+  <div id="app">
+    <!-- Top bar -->
+    <header class="topbar">
+      <div class="topbar-left">
+        <button id="brand" class="brand" type="button" data-route="dashboard">
+          <span class="brand-mark">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M22 12h-4l-3 9L9 3l-3 9H2" />
+            </svg>
+          </span>
+          <span class="brand-text">
+            <span class="brand-name" data-i18n="app.name">Osler Admin</span>
+            <span class="brand-tagline" data-i18n="app.tagline">Project Dashboard</span>
+          </span>
+        </button>
+      </div>
+      <div class="topbar-center">
+        <button id="project-pill" class="project-pill" type="button" title="Pick project root">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M3 7v13a1 1 0 0 0 1 1h16a1 1 0 0 0 1-1V9a1 1 0 0 0-1-1h-9l-2-3H4a1 1 0 0 0-1 1z" />
+          </svg>
+          <span id="project-pill-text" data-i18n="project.notPicked">Pick project root…</span>
+        </button>
+      </div>
+      <div class="topbar-right">
+        <button id="lang-toggle" class="icon-btn" type="button" title="Toggle language" aria-label="Toggle language">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="10" />
+            <path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
+          </svg>
+          <span id="lang-toggle-label">ع</span>
+        </button>
+        <button id="theme-toggle" class="icon-btn" type="button" title="Toggle theme" aria-label="Toggle theme">
+          <svg id="theme-icon-sun" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="4" />
+            <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41" />
+          </svg>
+          <svg id="theme-icon-moon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:none">
+            <path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z" />
+          </svg>
+        </button>
+      </div>
+    </header>
+
+    <!-- Body: sidebar + main -->
+    <div class="body">
+      <aside class="sidebar">
+        <nav class="nav">
+          <button class="nav-item active" data-route="dashboard" type="button">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1" /><rect x="14" y="3" width="7" height="7" rx="1" /><rect x="14" y="14" width="7" height="7" rx="1" /><rect x="3" y="14" width="7" height="7" rx="1" /></svg>
+            <span data-i18n="nav.dashboard">Dashboard</span>
+          </button>
+          <button class="nav-item" data-route="content" type="button">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16v16H4z" /><path d="M4 9h16M9 4v16" /></svg>
+            <span data-i18n="nav.content">Content</span>
+          </button>
+          <button class="nav-item" data-route="manifest" type="button">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3v5h5" /><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><path d="M9 13h6M9 17h6" /></svg>
+            <span data-i18n="nav.manifest">Manifest</span>
+          </button>
+          <button class="nav-item" data-route="build" type="button">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21 12-7.5 7.5a4.95 4.95 0 0 1-7-7L14 5" /><path d="M16 7l-4-4-4 4" /><path d="M8 17l4 4 4-4" /></svg>
+            <span data-i18n="nav.build">Build &amp; Run</span>
+          </button>
+          <button class="nav-item" data-route="git" type="button">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="6" r="3" /><circle cx="6" cy="18" r="3" /><circle cx="18" cy="12" r="3" /><path d="M6 9v6" /><path d="M9 18h3a3 3 0 0 0 3-3V9" /></svg>
+            <span data-i18n="nav.git">Git</span>
+          </button>
+          <button class="nav-item" data-route="settings" type="button">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" /></svg>
+            <span data-i18n="nav.settings">Settings</span>
+          </button>
+        </nav>
+        <div class="sidebar-footer">
+          <div class="version">v0.1.0</div>
+        </div>
+      </aside>
+
+      <main class="main">
+        <div id="view"></div>
+      </main>
+    </div>
+
+    <!-- Toast container -->
+    <div id="toasts" class="toasts"></div>
+  </div>
+
+  <!-- Tauri bridge: falls back to a no-op mock when not in Tauri so the UI
+       can be opened directly in a browser for development. -->
+  <script src="main.js"></script>
+  <script src="i18n.js"></script>
+  <script src="views/dashboard.js"></script>
+  <script src="views/content.js"></script>
+  <script src="views/manifest.js"></script>
+  <script src="views/build.js"></script>
+  <script src="views/git.js"></script>
+  <script src="views/settings.js"></script>
+  <script>
+    document.addEventListener("DOMContentLoaded", function () {
+      OslerAdminI18n.init();
+      OslerAdmin.boot();
+    });
+  </script>
+</body>
+</html>
