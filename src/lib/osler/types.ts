@@ -5,6 +5,9 @@
 
 export type EngineType = "quiz" | "bank" | "flashcard" | "written" | "osce" | "library";
 
+/** Content language. `en` is the default when omitted. */
+export type ContentLang = "en" | "ar";
+
 export interface ContentMeta {
   uid: string;
   title: string;
@@ -14,6 +17,8 @@ export interface ContentMeta {
   schemaVersion?: string;
   createdAt?: string;
   updatedAt?: string;
+  /** Language this content was authored in. Drives `dir` on the rendered body. */
+  lang?: ContentLang;
 }
 
 /* ── Content Tree (folder-based discovery) ─────────────────────────── */
@@ -30,6 +35,12 @@ export interface ContentTreeNode {
   files?: string[];
   /** Child nodes — empty array for leaf (content-having) nodes. */
   items: ContentTreeNode[];
+  /**
+   * Language this pack's content is authored in (BCP-47 subset: `en` | `ar`).
+   * When set on a parent folder, children inherit unless they override.
+   * Defaults to `en` if absent.
+   */
+  lang?: ContentLang;
 }
 
 /** Per-category manifest listing the full tree. */

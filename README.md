@@ -8,6 +8,15 @@
 
 ## Features
 
+### i18n & RTL
+- Full Arabic (RTL) UI — flips shell, nav, settings
+- English ↔ Arabic toggle in Settings > Language
+- Per-content language filter: All / English / Arabic pills across QBank, Flashcards, Library, OSCE
+- Content-language decoupled from UI-language — Arabic packs render RTL even in English UI
+- Cairo variable font loaded for Arabic glyph support
+- Logical CSS properties (`ms-`/`me-`/`start`/`end`) for direction-agnostic layout
+- Flash-free hydration via inline `<head>` script that sets `lang`/`dir` from localStorage
+
 ### Topbar-only AppShell
 - Logo + horizontal nav with animated active indicator
 - Center search pill (Ctrl+K) with article autocomplete
@@ -68,7 +77,8 @@ Features:
 | Components | shadcn/ui (48 components) |
 | Icons | lucide-react |
 | Motion | framer-motion |
-| Fonts | Geist Sans + Geist Mono (via `next/font/google`) |
+| Fonts | Geist Sans + Geist Mono + Cairo (via `next/font/google`) |
+| i18n | Custom flat-dictionary system with en/ar + RTL support |
 | Content | JSON-based content packs in `/public/osler-content/` |
 | Storage | localStorage (IndexedDB-ready schema) |
 | AI | Gemini API (configurable model + key) |
@@ -96,6 +106,7 @@ src/
 │   │   ├── settings.tsx        # AI config + shortcuts + data
 │   │   ├── login-screen.tsx    # Demo login
 │   │   ├── mobile-tab-bar.tsx  # Bottom nav (mobile)
+│   │   ├── i18n-provider.tsx   # UI language + RTL context provider
 │   │   ├── theme-provider.tsx  # Dark/light context
 │   │   ├── calculator.tsx      # Floating calculator
 │   │   ├── lab-values.tsx      # Lab reference sidebar
@@ -111,7 +122,8 @@ src/
 │   └── use-shortcuts.ts            # Keyboard shortcut bindings
 └── lib/
     ├── osler/
-    │   ├── types.ts             # TypeScript schemas (5 content types)
+    │   ├── types.ts             # TypeScript schemas (5 content types + ContentLang)
+    │   ├── i18n.ts              # UI dictionary (en/ar), translation helpers, RTL utils
     │   ├── content.ts           # Manifest + content pack loader
     │   ├── articles.ts          # 9 sample articles + TOC + search
     │   ├── storage.ts           # localStorage progress + highlights

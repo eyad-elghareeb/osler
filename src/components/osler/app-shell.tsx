@@ -31,6 +31,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { useOslerTheme } from "./theme-provider";
+import { useI18n } from "./i18n-provider";
 import { MobileTabBar } from "./mobile-tab-bar";
 import { PwaInstallButton } from "./pwa-install-button";
 import { LightboxProvider } from "./lightbox-provider";
@@ -65,6 +66,7 @@ export function AppShell({
   children,
 }: AppShellProps) {
   const { theme, toggleTheme } = useOslerTheme();
+  const { t, rtl } = useI18n();
   const [searchOpen, setSearchOpen] = React.useState(false);
   const [query, setQuery] = React.useState("");
   const [searchResults, setSearchResults] = React.useState<ArticleMeta[]>([]);
@@ -102,7 +104,7 @@ export function AppShell({
     if (view !== "library") onViewChange("library");
   };
 
-  const searchPlaceholder = "Search articles, conditions, drugs…";
+  const searchPlaceholder = t("common.searchPlaceholder");
 
   const isDashboard = view === "dashboard";
   const isLibrary = view === "library";
@@ -136,7 +138,7 @@ export function AppShell({
               <button
                 key={r.file}
                 onClick={() => handleOpenArticle(r.file)}
-                className="w-full text-left px-2 py-2 rounded-md hover:bg-muted/60 transition-colors flex items-center gap-3"
+                className="w-full text-start px-2 py-2 rounded-md hover:bg-muted/60 transition-colors flex items-center gap-3"
               >
                 <BookOpen className="size-4 text-muted-foreground shrink-0" />
                 <div className="flex-1 min-w-0">
@@ -150,7 +152,7 @@ export function AppShell({
           </div>
         ) : query ? (
           <div className="px-3 py-6 text-center text-sm text-muted-foreground">
-            No articles match &ldquo;{query}&rdquo;
+            {t("common.none")} — "{query}"
           </div>
         ) : null}
       </div>
@@ -164,26 +166,26 @@ export function AppShell({
           {/* Logo */}
           <button
             onClick={() => onViewChange("dashboard")}
-            className="flex items-center gap-2.5 mr-1 sm:mr-3 shrink-0"
+            className="flex items-center gap-2.5 me-1 sm:me-3 shrink-0"
           >
             <div className="size-8 rounded-lg bg-primary/15 border border-primary/30 flex items-center justify-center">
               <Activity className="size-4 text-primary" />
             </div>
-            <div className="hidden sm:block leading-tight text-left">
-              <div className="text-sm font-semibold">Osler</div>
+            <div className="hidden sm:block leading-tight text-start">
+              <div className="text-sm font-semibold">{t("app.name")}</div>
               <div className="text-[10px] text-muted-foreground">
-                Medical Study Platform
+                {t("app.tagline")}
               </div>
             </div>
           </button>
 
           {/* Desktop nav items — hidden on mobile (replaced by bottom tab bar) */}
-          <nav className="hidden md:flex items-center gap-1 ml-1">
+          <nav className="hidden md:flex items-center gap-1 ms-1">
             <NavButton
               active={isDashboard}
               onClick={() => onViewChange("dashboard")}
               icon={LayoutDashboard}
-              label="Dashboard"
+              label={t("nav.dashboard")}
               layoutId="nav-active"
             />
 
@@ -191,7 +193,7 @@ export function AppShell({
               active={isQbank}
               onClick={() => onViewChange("qbank")}
               icon={ListChecks}
-              label="Q-Bank Studio"
+              label={t("nav.qbank")}
               layoutId="nav-active"
             />
 
@@ -199,7 +201,7 @@ export function AppShell({
               active={isLibrary}
               onClick={() => onViewChange("library")}
               icon={BookOpen}
-              label="Library"
+              label={t("nav.library")}
               layoutId="nav-active"
             />
 
@@ -207,7 +209,7 @@ export function AppShell({
               active={view === "flashcards"}
               onClick={() => onViewChange("flashcards")}
               icon={Layers}
-              label="Flashcards"
+              label={t("nav.flashcards")}
               layoutId="nav-active"
             />
 
@@ -215,7 +217,7 @@ export function AppShell({
               active={view === "osce"}
               onClick={() => onViewChange("osce")}
               icon={Stethoscope}
-              label="OSCE Studio"
+              label={t("nav.osce")}
               layoutId="nav-active"
             />
           </nav>
@@ -226,7 +228,7 @@ export function AppShell({
               <PopoverTrigger asChild>
                 <button className="hidden lg:flex items-center gap-2 h-9 px-3 w-full max-w-md rounded-md border border-border/60 bg-muted/40 hover:bg-muted/60 transition-colors text-sm text-muted-foreground">
                   <Search className="size-3.5" />
-                  <span className="flex-1 text-left truncate">
+                  <span className="flex-1 text-start truncate">
                     {searchPlaceholder}
                   </span>
                   <kbd className="hidden lg:inline-flex items-center gap-0.5 text-[10px] px-1.5 py-0.5 rounded border border-border/60 bg-background/60 font-mono">
@@ -248,7 +250,7 @@ export function AppShell({
               className="lg:hidden flex items-center gap-2 h-9 px-3 rounded-md border border-border/60 bg-muted/40 hover:bg-muted/60 transition-colors text-sm text-muted-foreground flex-1 max-w-md"
             >
               <Search className="size-3.5" />
-              <span className="flex-1 text-left truncate">Search…</span>
+              <span className="flex-1 text-start truncate">{t("common.search")}…</span>
             </button>
           </div>
 
@@ -259,7 +261,7 @@ export function AppShell({
           <button
             onClick={toggleTheme}
             aria-label="Toggle theme"
-            title={theme === "dark" ? "Switch to light" : "Switch to dark"}
+            title={theme === "dark" ? t("theme.toggleToLight") : t("theme.toggleToDark")}
             className="size-9 rounded-md hover:bg-muted/60 transition-colors flex items-center justify-center shrink-0"
           >
             {theme === "dark" ? (
@@ -283,7 +285,7 @@ export function AppShell({
               <DropdownMenuLabel className="flex flex-col gap-0.5">
                 <span className="text-sm font-medium">{username}</span>
                 <span className="text-xs text-muted-foreground font-normal">
-                  Local session
+                  {t("nav.localSession")}
                 </span>
               </DropdownMenuLabel>
               <DropdownMenuSeparator />
@@ -291,22 +293,22 @@ export function AppShell({
                 className="cursor-pointer"
                 onClick={() => onViewChange("profile")}
               >
-                <UserIcon className="size-4 mr-2" />
-                Profile
+                <UserIcon className="size-4 me-2" />
+                {t("nav.profile")}
               </DropdownMenuItem>
               <DropdownMenuItem
                 className="cursor-pointer"
                 onClick={() => onViewChange("settings")}
               >
-                <SettingsIcon className="size-4 mr-2" />
-                Settings
+                <SettingsIcon className="size-4 me-2" />
+                {t("nav.settings")}
               </DropdownMenuItem>
               <DropdownMenuItem
                 className="cursor-pointer text-destructive focus:text-destructive"
                 onClick={onLogout}
               >
-                <LogOut className="size-4 mr-2" />
-                Sign out
+                <LogOut className="size-4 me-2" />
+                {t("nav.signOut")}
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>

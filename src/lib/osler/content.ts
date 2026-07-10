@@ -119,6 +119,7 @@ function buildContent(node: ContentTreeNode, data: Record<string, unknown[]>): A
     uid: node.uid,
     title: node.title,
     description: `Content pack: ${node.title}`,
+    lang: node.lang ?? "en",
   };
 
   switch (node.type) {

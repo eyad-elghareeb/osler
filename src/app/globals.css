@@ -1497,3 +1497,103 @@ input, textarea, [contenteditable="true"], .medos-article, .uworld-prose, .ai-ch
   border-radius: 6px;
   margin: 1rem 0;
 }
+
+/* ═══════════════════════════════════════════════════════════════════════
+   RTL & Arabic UI support
+   ────────────────────────────────────────────────────────────────────────
+   Two layers:
+   1. Global (html[dir="rtl"]) — mirrors asymmetric padding/margins, swaps
+      `left`/`right` declarations, mirrors a few transform/rotate effects.
+   2. Per-content (`.osler-content-ar`) — applied to a *content body* that is
+      Arabic regardless of UI direction, so an English-UI user reading an
+      Arabic article gets the right rendering and vice versa.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+/* Use Cairo for Arabic UI; Geist stays as the Latin default. */
+html.osler-ar,
+html.osler-ar body {
+  font-family: var(--font-cairo), var(--font-geist-sans), system-ui, sans-serif;
+}
+html.osler-ar .font-mono,
+html.osler-ar code,
+html.osler-ar pre,
+html.osler-ar kbd {
+  font-family: var(--font-geist-mono), ui-monospace, monospace;
+}
+
+/* Article body that itself is Arabic — applies regardless of UI direction. */
+.osler-content-ar {
+  font-family: var(--font-cairo), var(--font-geist-sans), system-ui, sans-serif;
+  direction: rtl;
+  text-align: right;
+}
+.osler-content-ar .callout,
+.osler-content-ar .warning {
+  border-left: none;
+  border-right: 4px solid currentColor;
+}
+
+/* When UI is RTL, mirror common asymmetric patterns.
+   We rely on Tailwind logical properties (ms-, me-, ps-, pe-, start-, end-)
+   in component code wherever possible. This block catches stragglers. */
+html[dir="rtl"] .library-article {
+  text-align: right;
+}
+html[dir="rtl"] .library-article .callout,
+html[dir="rtl"] .library-article .warning {
+  border-left: none;
+  border-right: 4px solid currentColor;
+}
+html[dir="rtl"] .library-article pre,
+html[dir="rtl"] .library-article code {
+  direction: ltr;
+  text-align: left;
+  unicode-bidi: embed;
+}
+
+/* LTR English content inside an Arabic UI must stay LTR (e.g. drug names,
+   lab values, code snippets, numbers). */
+html[dir="rtl"] .osler-content-en {
+  direction: ltr;
+  text-align: left;
+}
+
+/* Numbers in Arabic UI should still render as Western Arabic numerals
+   (0-9) — they're more readable for medical dosages. */
+html.osler-ar {
+  font-feature-settings: "lnum" 1, "tnum" 0;
+}
+
+/* Mirror framer-motion slide offsets applied via inline styles in components.
+   Components that pass `x: -8` on enter should add an RTL counterpart using
+   the `.rtl-flip-x` utility below. */
+html[dir="rtl"] .rtl-flip-x {
+  transform: scaleX(-1);
+}
+
+/* Search input — keep caret on the correct side */
+html[dir="rtl"] input::placeholder {
+  text-align: right;
+}
+
+/* Tooltip & popover arrows flip naturally with `dir` since floating-ui
+   respects the `dir` attribute on the body. */
+
+/* Tab underline indicator uses `inset-x-0` so no manual flip needed. */
+
+/* Letter-spacing tracking-wider is awkward in Arabic; relax it. */
+html.osler-ar .tracking-wider,
+html.osler-ar .tracking-widest {
+  letter-spacing: 0;
+}
+html.osler-ar .uppercase {
+  text-transform: none;
+}
+
+/* Better line-height for Arabic (Arabic glyphs need more vertical room) */
+html.osler-ar body,
+.osler-content-ar {
+  line-height: 1.85;
+}
+
+/* Mobile tab bar safe-area already symmetric, no changes needed. */

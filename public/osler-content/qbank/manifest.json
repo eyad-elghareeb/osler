@@ -1,6 +1,16 @@
 {
-  "type": "bank",
+  "type": "quiz",
   "items": [
+    {
+      "uid": "quiz-arabic-clinical-quiz",
+      "title": "Arabic Clinical Quiz",
+      "type": "quiz",
+      "path": "arabic-clinical-quiz/",
+      "files": [
+        "questions.json"
+      ],
+      "items": []
+    },
     {
       "uid": "bank-clinical-vignettes",
       "title": "Clinical Vignettes",

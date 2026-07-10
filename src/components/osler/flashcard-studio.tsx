@@ -29,6 +29,8 @@ import { useContentTree } from "@/hooks/use-content-tree";
 import { useShortcutBindings } from "@/hooks/use-shortcuts";
 import { cn } from "@/lib/utils";
 import { setImmersiveMode } from "./immersive-mode";
+import { useI18n } from "./i18n-provider";
+import { ContentLangFilter } from "./qbank-studio";
 
 type ViewMode = "decks" | "subdecks" | "study" | "complete";
 
@@ -57,6 +59,7 @@ export function FlashcardStudio({
   onOpenPack,
   onNavigateHome,
 }: FlashcardStudioProps) {
+  const { t } = useI18n();
   const {
     trees,
     leafContent,
@@ -679,13 +682,13 @@ export function FlashcardStudio({
         <div className="mb-6">
           <div className="flex items-center gap-2 text-xs text-muted-foreground mb-1">
             <Layers className="size-3.5" />
-            <span>{ENGINE_META.flashcard.label}</span>
+            <span>{t("engine.flashcard")}</span>
           </div>
           <h1 className="text-2xl md:text-3xl font-bold tracking-tight mb-1">
-            Decks
+            {t("flash.home.title")}
           </h1>
           <p className="text-sm text-muted-foreground">
-            {stats.due} cards due today &middot; {stats.total} total
+            {t("flash.home.subtitle")}
           </p>
         </div>
 
@@ -694,25 +697,27 @@ export function FlashcardStudio({
           <div className="bg-card border border-border rounded-xl p-3.5">
             <div className="flex items-center gap-2 text-xs text-muted-foreground mb-1">
               <Clock className="size-3.5" />
-              Due
+              {t("flash.home.due")}
             </div>
             <div className="text-xl font-bold">{stats.due}</div>
           </div>
           <div className="bg-card border border-border rounded-xl p-3.5">
             <div className="flex items-center gap-2 text-xs text-muted-foreground mb-1">
               <BarChart3 className="size-3.5" />
-              New
+              {t("flash.home.new")}
             </div>
             <div className="text-xl font-bold">{stats.new}</div>
           </div>
           <div className="bg-card border border-border rounded-xl p-3.5">
             <div className="flex items-center gap-2 text-xs text-muted-foreground mb-1">
               <Brain className="size-3.5" />
-              Total
+              {t("flash.home.total")}
             </div>
             <div className="text-xl font-bold">{stats.total}</div>
           </div>
         </div>
+
+        <ContentLangFilter />
 
         {/* Deck grid */}
         {tree.length === 0 ? (
@@ -720,9 +725,9 @@ export function FlashcardStudio({
             <div className="size-14 rounded-full bg-muted/40 flex items-center justify-center mx-auto mb-4">
               <Layers className="size-6 text-muted-foreground" />
             </div>
-            <h3 className="text-base font-semibold mb-1">No decks found</h3>
+            <h3 className="text-base font-semibold mb-1">{t("flash.home.empty")}</h3>
             <p className="text-sm text-muted-foreground">
-              Flashcard content packs will appear here.
+              {t("flash.home.empty")}
             </p>
           </div>
         ) : (
@@ -744,7 +749,12 @@ export function FlashcardStudio({
                       startDeck(idx);
                     }
                   }}
-                  className="medos-fade-in text-left bg-card border border-border rounded-xl p-5 hover:border-primary/40 hover:shadow-md hover:bg-primary/[0.02] transition-colors group"
+                  className={cn(
+                    "medos-fade-in text-start bg-card border border-border rounded-xl p-5 hover:border-primary/40 hover:shadow-md hover:bg-primary/[0.02] transition-colors group",
+                    node.lang === "ar" && "osler-content-ar",
+                  )}
+                  dir={node.lang === "ar" ? "rtl" : undefined}
+                  lang={node.lang ?? undefined}
                   style={{ animationDelay: `${idx * 0.04}s` }}
                 >
                   <div className="flex items-center gap-3 mb-3">
@@ -765,8 +775,8 @@ export function FlashcardStudio({
                       <h3 className="font-semibold truncate">{node.title}</h3>
                       <p className="text-xs text-muted-foreground">
                         {isBranch
-                          ? `${node.items.length} subdeck${node.items.length !== 1 ? "s" : ""}`
-                          : `${totalCards} cards`}
+                          ? t("flash.home.subdecks", { n: node.items.length })
+                          : t("flash.home.cards", { n: totalCards })}
                       </p>
                     </div>
                     <ChevronRight className="size-4 text-muted-foreground/40 group-hover:text-muted-foreground transition-colors ml-auto shrink-0" />

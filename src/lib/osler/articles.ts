@@ -5,7 +5,7 @@ import remarkRehype from "remark-rehype";
 import rehypeRaw from "rehype-raw";
 import rehypeStringify from "rehype-stringify";
 import { loadCategoryTree } from "./content";
-import type { ContentTreeNode } from "./types";
+import type { ContentTreeNode, ContentLang } from "./types";
 
 const BASE = "/osler-content/library";
 
@@ -18,6 +18,8 @@ export interface ArticleMeta {
   system?: string;
   readTimeMin?: number;
   tags?: string[];
+  /** Language the article body is authored in. `en` if not specified. */
+  lang?: ContentLang;
 }
 
 export interface Article extends ArticleMeta {
@@ -109,6 +111,7 @@ async function loadLeafMeta(node: ContentTreeNode): Promise<ArticleMeta[]> {
         system: meta.system as string | undefined,
         readTimeMin: meta.readTimeMin ? Number(meta.readTimeMin) : undefined,
         tags: meta.tags as string[] | undefined,
+        lang: (meta.lang === "ar" || meta.lang === "en") ? meta.lang : (node.lang ?? "en"),
       } as ArticleMeta;
     })
   );
@@ -138,6 +141,8 @@ export async function loadArticleContent(filePath: string): Promise<Article | nu
   const text = await res.text();
   const { meta, body } = parseFrontmatter(text);
   const html = await mdToHtml(body);
+  // Look up lang from the leaf cache if available; fall back to frontmatter.
+  const nodeLang = await lookupNodeLangForFile(filePath);
   return {
     file: filePath.split("/").pop() ?? "",
     title: (meta.title as string) ?? "Untitled",
@@ -145,9 +150,23 @@ export async function loadArticleContent(filePath: string): Promise<Article | nu
     system: meta.system as string | undefined,
     readTimeMin: meta.readTimeMin ? Number(meta.readTimeMin) : undefined,
     tags: meta.tags as string[] | undefined,
+    lang: (meta.lang === "ar" || meta.lang === "en")
+      ? meta.lang
+      : (nodeLang ?? "en"),
     content: body,
     html,
   };
+}
+
+/** Best-effort lookup of a content node's `lang` for a given article path. */
+async function lookupNodeLangForFile(filePath: string): Promise<ContentLang | undefined> {
+  try {
+    const leaves = await listLeafNodes();
+    const leaf = leaves.find((n) => (n.files ?? []).some((f) => `${n.path}${f}` === filePath));
+    return leaf?.lang;
+  } catch {
+    return undefined;
+  }
 }
 
 /** Load articles in a leaf node (metadata only). */

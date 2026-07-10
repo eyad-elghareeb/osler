@@ -24,6 +24,7 @@ import { storage } from "@/lib/osler/storage";
 import { listAllArticles, loadArticleContent } from "@/lib/osler/articles";
 import type { Article } from "@/lib/osler/articles";
 import type { OslerView } from "./app-shell";
+import { useI18n } from "./i18n-provider";
 import { cn } from "@/lib/utils";
 
 interface DashboardProps {
@@ -48,6 +49,7 @@ export function Dashboard({
   onOpenPack,
   onOpenArticle,
 }: DashboardProps) {
+  const { t, rtl } = useI18n();
   const [data, setData] = React.useState<{
     items: Array<{ node: ContentTreeNode; content: AnyContent | null }>;
   } | null>(null);
@@ -110,9 +112,9 @@ export function Dashboard({
 
   const greeting = (() => {
     const h = new Date().getHours();
-    if (h < 12) return "Good morning";
-    if (h < 18) return "Good afternoon";
-    return "Good evening";
+    if (h < 12) return t("dash.greetingMorning");
+    if (h < 18) return t("dash.greetingAfternoon");
+    return t("dash.greetingEvening");
   })();
 
   return (
@@ -130,12 +132,10 @@ export function Dashboard({
             {greeting}
           </p>
           <h1 className="text-2xl md:text-3xl font-bold tracking-tight mb-1">
-            Welcome back, {username}
+            {t("dash.welcomeBack", { name: username })}
           </h1>
           <p className="text-sm text-muted-foreground max-w-2xl">
-            Continue where you left off, browse the article library, or build a
-            new test in Q-Bank Studio across quizzes, banks, flashcards, written
-            prompts, and OSCE stations.
+            {t("dash.intro")}
           </p>
         </motion.div>
 
@@ -157,7 +157,7 @@ export function Dashboard({
               <div className="flex-1 min-w-0">
                 <span className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium flex items-center gap-1.5">
                   <Activity className="size-3" />
-                  Continue learning
+                  {t("dash.continueLearning")}
                 </span>
                 <h2 className="text-lg md:text-xl font-semibold mt-1 mb-1">
                   {continuePack.node.title}
@@ -167,10 +167,10 @@ export function Dashboard({
                 </p>
                 <div className="flex items-center gap-3 text-xs flex-wrap">
                   <span className="text-muted-foreground">
-                    {continuePack.progress.attempted} attempted
+                    {t("dash.attempted", { n: continuePack.progress.attempted })}
                   </span>
                   <span className="text-emerald-500">
-                    {continuePack.progress.correct} correct
+                    {t("dash.correct", { n: continuePack.progress.correct })}
                   </span>
                   <span className="text-muted-foreground">·</span>
                   <span className="flex items-center gap-1 text-muted-foreground">
@@ -191,8 +191,8 @@ export function Dashboard({
                 }
                 className="inline-flex items-center gap-1.5 px-4 h-10 rounded-md bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors shrink-0"
               >
-                Resume
-                <ArrowRight className="size-4" />
+                {t("common.resume")}
+                <ArrowRight className={cn("size-4", rtl && "rtl-flip-x")} />
               </button>
             </div>
           </motion.div>
@@ -201,26 +201,26 @@ export function Dashboard({
         {/* Stat cards */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-8">
           <StatTile
-            label="Packs Started"
+            label={t("dash.packsStarted")}
             value={stats.packs}
             icon={LibraryIcon}
             onClick={() => onViewChange("qbank")}
           />
           <StatTile
-            label="Attempted"
+            label={t("dash.attemptedLabel")}
             value={stats.attempted}
             icon={Activity}
             onClick={() => onViewChange("profile")}
           />
           <StatTile
-            label="Correct"
+            label={t("dash.correctLabel")}
             value={stats.correct}
             icon={CheckCircle2}
             color="text-emerald-500"
             onClick={() => onViewChange("profile")}
           />
           <StatTile
-            label="Accuracy"
+            label={t("dash.accuracy")}
             value={`${accuracy}%`}
             icon={Sparkles}
             color="text-amber-500"
@@ -230,31 +230,31 @@ export function Dashboard({
 
         {/* Quick actions */}
         <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground mb-3">
-          Quick Actions
+          {t("dash.quickActions")}
         </h2>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-8">
           <QuickAction
             icon={ListChecks}
-            title="Q-Bank Studio"
-            subtitle="Build a test from any pack"
+            title={t("dash.qa.qbank.title")}
+            subtitle={t("dash.qa.qbank.sub")}
             onClick={() => onViewChange("qbank")}
           />
           <QuickAction
             icon={Layers}
-            title="Flashcard Decks"
-            subtitle="Spaced-repetition study decks"
+            title={t("dash.qa.flashcards.title")}
+            subtitle={t("dash.qa.flashcards.sub")}
             onClick={() => onViewChange("flashcards")}
           />
           <QuickAction
             icon={BookOpen}
-            title="Article Library"
-            subtitle={`${articleCount || "..."} medical articles`}
+            title={t("dash.qa.library.title")}
+            subtitle={t("dash.qa.library.sub", { n: articleCount || "…" })}
             onClick={() => onViewChange("library")}
           />
           <QuickAction
             icon={BarChart3}
-            title="View Profile"
-            subtitle="See stats and achievements"
+            title={t("dash.qa.profile.title")}
+            subtitle={t("dash.qa.profile.sub")}
             onClick={() => onViewChange("profile")}
           />
         </div>
@@ -262,15 +262,15 @@ export function Dashboard({
         {/* Featured articles */}
         <div className="flex items-center justify-between mb-3">
           <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
-            Featured Articles
+            {t("dash.featuredArticles")}
           </h2>
           <button
             type="button"
             onClick={() => onViewChange("library")}
             className="text-xs text-primary hover:underline flex items-center gap-1"
           >
-            View all
-            <ArrowRight className="size-3" />
+            {t("common.viewAll")}
+            <ArrowRight className={cn("size-3", rtl && "rtl-flip-x")} />
           </button>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-8">
@@ -279,7 +279,7 @@ export function Dashboard({
               key={a.file}
               type="button"
               onClick={() => onOpenArticle?.(a.file)}
-              className="text-left bg-card border border-border rounded-lg p-4 hover:border-primary/40 hover:bg-primary/5 transition-colors"
+              className="text-start bg-card border border-border rounded-lg p-4 hover:border-primary/40 hover:bg-primary/5 transition-colors"
             >
               <div className="flex items-center gap-2 mb-2 text-xs text-muted-foreground">
                 <BookOpen className="size-3.5" />
@@ -306,7 +306,7 @@ export function Dashboard({
         {recentPacks.length > 0 ? (
           <>
             <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground mb-3">
-              Recent Activity
+              {t("dash.recentActivity")}
             </h2>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               {recentPacks.map(({ node, content, progress }) => (
@@ -314,7 +314,7 @@ export function Dashboard({
                   key={node.uid}
                   type="button"
                   onClick={() => content && onOpenPack?.(node, content)}
-                  className="text-left bg-card border border-border rounded-lg p-4 hover:border-primary/40 transition-colors"
+                  className="text-start bg-card border border-border rounded-lg p-4 hover:border-primary/40 transition-colors"
                 >
                   <div className="flex items-start gap-3">
                     <div
@@ -331,17 +331,17 @@ export function Dashboard({
                         {node.title}
                       </h3>
                       <p className="text-xs text-muted-foreground mb-1.5">
-                        {ENGINE_META[node.type].label}
+                        {t(`engine.${node.type}` as any)}
                       </p>
                       <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
-                        <span>{progress.attempted} attempted</span>
+                        <span>{t("dash.attempted", { n: progress.attempted })}</span>
                         <span className="text-emerald-500">
-                          {progress.correct} correct
+                          {t("dash.correct", { n: progress.correct })}
                         </span>
                         {progress.lastAttempt ? (
                           <span className="flex items-center gap-1">
                             <Clock className="size-2.5" />
-                            {timeAgo(progress.lastAttempt)}
+                            {timeAgo(progress.lastAttempt, t)}
                           </span>
                         ) : null}
                       </div>
@@ -399,12 +399,13 @@ function QuickAction({
   subtitle: string;
   onClick: () => void;
 }) {
+  const { rtl } = useI18n();
   return (
     <motion.button
       type="button"
       onClick={onClick}
       whileHover={{ y: -2 }}
-      className="text-left bg-card border border-border rounded-lg p-4 flex items-center gap-3 transition-colors hover:border-primary/40"
+      className="text-start bg-card border border-border rounded-lg p-4 flex items-center gap-3 transition-colors hover:border-primary/40"
     >
       <div className="w-10 h-10 rounded-lg bg-primary/15 text-primary flex items-center justify-center shrink-0">
         <Icon className="size-5" />
@@ -413,18 +414,18 @@ function QuickAction({
         <div className="text-sm font-semibold">{title}</div>
         <div className="text-xs text-muted-foreground">{subtitle}</div>
       </div>
-      <ArrowRight className="size-4 text-muted-foreground shrink-0" />
+      <ArrowRight className={cn("size-4 text-muted-foreground shrink-0", rtl && "rtl-flip-x")} />
     </motion.button>
   );
 }
 
-function timeAgo(ts: number): string {
+function timeAgo(ts: number, t: (k: any, p?: any) => string): string {
   const diff = Date.now() - ts;
   const m = Math.floor(diff / 60000);
-  if (m < 1) return "just now";
-  if (m < 60) return `${m}m ago`;
+  if (m < 1) return t("dash.timeAgo.justNow");
+  if (m < 60) return t("dash.timeAgo.minutes", { n: m });
   const h = Math.floor(m / 60);
-  if (h < 24) return `${h}h ago`;
+  if (h < 24) return t("dash.timeAgo.hours", { n: h });
   const d = Math.floor(h / 24);
-  return `${d}d ago`;
+  return t("dash.timeAgo.days", { n: d });
 }

@@ -2,6 +2,25 @@
   "type": "library",
   "items": [
     {
+      "uid": "library-arabic",
+      "title": "Arabic",
+      "type": "library",
+      "path": "arabic/",
+      "files": [],
+      "items": [
+        {
+          "uid": "library-arabic-cardiology",
+          "title": "Cardiology",
+          "type": "library",
+          "path": "arabic/cardiology/",
+          "files": [
+            "stemi-arabic.md"
+          ],
+          "items": []
+        }
+      ]
+    },
+    {
       "uid": "library-cardiology",
       "title": "Cardiology",
       "type": "library",

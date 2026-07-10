@@ -11,6 +11,7 @@ import {
   Stethoscope,
 } from "lucide-react";
 import type { OslerView } from "./app-shell";
+import { useI18n } from "./i18n-provider";
 import { cn } from "@/lib/utils";
 import { useImmersiveMode } from "./immersive-mode";
 
@@ -21,24 +22,25 @@ interface MobileTabBarProps {
 
 interface TabItem {
   id: OslerView;
-  label: string;
+  labelKey: "nav.dashboard" | "nav.qbank" | "nav.library" | "nav.flashcards" | "nav.profile" | "nav.osce";
   icon: React.ComponentType<{ className?: string }>;
 }
 
 const TABS: TabItem[] = [
-  { id: "dashboard", label: "Home", icon: LayoutDashboard },
-  { id: "qbank", label: "Q-Bank", icon: ListChecks },
-  { id: "library", label: "Library", icon: BookOpen },
-  { id: "flashcards", label: "Cards", icon: Layers },
-  { id: "osce", label: "OSCE", icon: Stethoscope },
-  { id: "profile", label: "Profile", icon: UserIcon },
+  { id: "dashboard", labelKey: "nav.dashboard", icon: LayoutDashboard },
+  { id: "qbank", labelKey: "nav.qbank", icon: ListChecks },
+  { id: "library", labelKey: "nav.library", icon: BookOpen },
+  { id: "flashcards", labelKey: "nav.flashcards", icon: Layers },
+  { id: "osce", labelKey: "nav.osce", icon: Stethoscope },
+  { id: "profile", labelKey: "nav.profile", icon: UserIcon },
 ];
 
 function ProfileIcon({ className }: { className?: string }) {
+  const { rtl } = useI18n();
   return (
     <span className="relative inline-flex items-center justify-center">
       <UserIcon className={className} />
-      <Cog className="absolute -bottom-0.5 -right-0.5 size-2.5 text-muted-foreground" />
+      <Cog className={cn("absolute -bottom-0.5 size-2.5 text-muted-foreground", rtl ? "-left-0.5" : "-right-0.5")} />
     </span>
   );
 }
@@ -48,6 +50,7 @@ export function MobileTabBar({ view, onViewChange }: MobileTabBarProps) {
   // a studying flashcard, an OSCE scenario). The hub/landing screens of those
   // views keep the bar. Desktop is unaffected (md:hidden).
   const immersive = useImmersiveMode();
+  const { t } = useI18n();
   return (
     <nav
       className={cn(
@@ -66,12 +69,12 @@ export function MobileTabBar({ view, onViewChange }: MobileTabBarProps) {
             type="button"
             role="tab"
             aria-selected={active}
-            aria-label={tab.label}
+            aria-label={t(tab.labelKey)}
             onClick={() => active || onViewChange(tab.id)}
             className={`medos-tabbar-item medos-no-select ${active ? "active" : ""}`}
           >
             <Icon className="size-5" />
-            <span>{tab.label}</span>
+            <span>{t(tab.labelKey)}</span>
           </button>
         );
       })}

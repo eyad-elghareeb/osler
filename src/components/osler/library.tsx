@@ -33,6 +33,7 @@ import { cn } from "@/lib/utils";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useArticleHighlighter } from "@/hooks/use-article-highlighter";
 import { useOslerTheme } from "./theme-provider";
+import { useI18n } from "./i18n-provider";
 import { useLightbox } from "./lightbox-provider";
 import { HighlighterToolbar } from "./highlighter-toolbar";
 import { FolderTreeNav } from "./folder-tree-nav";
@@ -405,7 +406,12 @@ export function Library({ initialArticleId }: LibraryProps) {
                   initial={{ opacity: 0, y: 6 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ duration: 0.25 }}
-                  className="library-article relative"
+                  className={cn(
+                    "library-article relative",
+                    activeArticle?.lang === "ar" ? "osler-content-ar" : "osler-content-en",
+                  )}
+                  dir={activeArticle?.lang === "ar" ? "rtl" : "ltr"}
+                  lang={activeArticle?.lang ?? "en"}
                   style={{
                     fontSize: `${(zoom / 100) * fontSize}px`,
                     lineHeight: 1.7,
@@ -453,6 +459,7 @@ function MobileHub({
   onSearchChange: (q: string) => void;
   matchedArticleFiles: Set<string> | null;
 }) {
+  const { t } = useI18n();
   const [filter, setFilter] = React.useState<"all" | "bookmarked">("all");
 
   const displayArticles = filter === "bookmarked" ? bookmarkedArticles : allArticles;
@@ -490,7 +497,7 @@ function MobileHub({
             type="text"
             value={searchQuery}
             onChange={(e) => onSearchChange(e.target.value)}
-            placeholder="Search articles…"
+            placeholder={t("library.search")}
             className="w-full h-10 rounded-xl border border-border bg-card pl-10 pr-3 text-sm outline-none focus:border-primary transition-colors placeholder:text-muted-foreground/50"
           />
         </div>
@@ -505,7 +512,7 @@ function MobileHub({
                 : "bg-muted/60 text-muted-foreground hover:text-foreground"
             )}
           >
-            All ({allArticles.length})
+            {t("library.all")} ({allArticles.length})
           </button>
           <button
             onClick={() => setFilter("bookmarked")}
@@ -516,8 +523,8 @@ function MobileHub({
                 : "bg-muted/60 text-muted-foreground hover:text-foreground"
             )}
           >
-            <BookmarkCheck className="size-3 inline mr-1 -mt-0.5" />
-            Bookmarked ({bookmarkedArticles.length})
+            <BookmarkCheck className="size-3 inline me-1 -mt-0.5" />
+            {t("library.bookmarked")} ({bookmarkedArticles.length})
           </button>
         </div>
       </div>
@@ -528,10 +535,10 @@ function MobileHub({
             <BookOpen className="size-10 text-muted-foreground/30 mb-3" />
             <p className="text-sm text-muted-foreground">
               {searchQuery.trim()
-                ? "No articles match your search"
+                ? t("library.noResults")
                 : filter === "bookmarked"
-                  ? "No bookmarked articles yet"
-                  : "No articles found"}
+                  ? t("library.noBookmarks")
+                  : t("library.empty")}
             </p>
           </div>
         ) : (
@@ -542,8 +549,8 @@ function MobileHub({
                 <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                   {specialty}
                 </h3>
-                <span className="text-[10px] text-muted-foreground/40 ml-auto tabular-nums">
-                  {articles.length} article{articles.length !== 1 ? "s" : ""}
+                <span className="text-[10px] text-muted-foreground/40 ms-auto tabular-nums">
+                  {articles.length === 1 ? t("library.oneArticle") : t("library.articlesCount", { n: articles.length })}
                 </span>
               </div>
               <div className="space-y-1.5">
@@ -554,10 +561,13 @@ function MobileHub({
                       key={a.file}
                       onClick={() => onOpenArticle(a.file)}
                       className={cn(
-                        "w-full flex items-center gap-3 px-4 py-3 rounded-xl text-left transition-colors",
+                        "w-full flex items-center gap-3 px-4 py-3 rounded-xl text-start transition-colors",
                         "bg-card border border-border hover:border-primary/30 hover:bg-primary/[0.02]",
-                        a.file === activeFile && "border-primary/40 bg-primary/5"
+                        a.file === activeFile && "border-primary/40 bg-primary/5",
+                        a.lang === "ar" && "osler-content-ar",
                       )}
+                      dir={a.lang === "ar" ? "rtl" : undefined}
+                      lang={a.lang ?? undefined}
                     >
                       <div className="size-10 rounded-lg bg-primary/10 text-primary flex items-center justify-center shrink-0">
                         <BookOpen className="size-5" />
@@ -782,7 +792,12 @@ function MobileReader({
             initial={{ opacity: 0, y: 6 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.25 }}
-            className="library-article px-4 py-5"
+            className={cn(
+              "library-article px-4 py-5",
+              article.lang === "ar" ? "osler-content-ar" : "osler-content-en",
+            )}
+            dir={article.lang === "ar" ? "rtl" : "ltr"}
+            lang={article.lang ?? "en"}
             style={{
               fontSize: `${(zoom / 100) * fontSize}px`,
               lineHeight: 1.7,

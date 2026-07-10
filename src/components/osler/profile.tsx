@@ -18,6 +18,7 @@ import { storage } from "@/lib/osler/storage";
 import { loadAllContent, ENGINE_META } from "@/lib/osler/content";
 import type { AnyContent, ContentTreeNode } from "@/lib/osler/types";
 import type { OslerView } from "./app-shell";
+import { useI18n } from "./i18n-provider";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 
@@ -27,6 +28,7 @@ interface ProfileProps {
 }
 
 export function Profile({ username, onViewChange }: ProfileProps) {
+  const { t } = useI18n();
   const [data, setData] = React.useState<{
     items: Array<{ node: ContentTreeNode; content: AnyContent | null }>;
   } | null>(null);
@@ -78,11 +80,11 @@ export function Profile({ username, onViewChange }: ProfileProps) {
           </div>
           <div className="flex-1 min-w-0">
             <h1 className="text-xl font-semibold truncate">{username}</h1>
-            <p className="text-xs text-muted-foreground">Local session · Osler v1</p>
+            <p className="text-xs text-muted-foreground">{t("nav.localSession")} · {t("login.footer")}</p>
           </div>
           <div className="hidden sm:flex flex-col items-end gap-1">
             <Badge variant="secondary" className="text-[10px]">
-              <Flame className="size-3 mr-1" />
+              <Flame className="size-3 me-1" />
               {progress.length > 0 ? "Active learner" : "New here"}
             </Badge>
             <span className="text-[10px] text-muted-foreground">
@@ -93,8 +95,8 @@ export function Profile({ username, onViewChange }: ProfileProps) {
             <button
               onClick={() => onViewChange("settings")}
               className="size-9 rounded-lg hover:bg-muted/60 transition-colors flex items-center justify-center shrink-0"
-              aria-label="Settings"
-              title="Settings"
+              aria-label={t("nav.settings")}
+              title={t("nav.settings")}
             >
               <Cog className="size-4 text-muted-foreground hover:text-foreground transition-colors" />
             </button>
@@ -104,13 +106,13 @@ export function Profile({ username, onViewChange }: ProfileProps) {
         {/* Stats grid */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
           <StatTile
-            label="Attempted"
+            label={t("dash.attemptedLabel")}
             value={attemptedTotal}
             icon={Target}
             color="text-primary"
           />
           <StatTile
-            label="Correct"
+            label={t("dash.correctLabel")}
             value={correctTotal}
             icon={Award}
             color="text-emerald-500"
@@ -122,7 +124,7 @@ export function Profile({ username, onViewChange }: ProfileProps) {
             color="text-red-500"
           />
           <StatTile
-            label="Accuracy"
+            label={t("dash.accuracy")}
             value={`${accuracy}%`}
             icon={Zap}
             color="text-amber-500"
@@ -135,7 +137,7 @@ export function Profile({ username, onViewChange }: ProfileProps) {
         </h2>
         {Object.keys(engineStats).length === 0 ? (
           <div className="bg-card border border-border rounded-lg p-8 text-center text-sm text-muted-foreground mb-6">
-            No activity yet. Open a content pack from the Q-Bank Studio to start.
+            {t("profile.noSessions")}
           </div>
         ) : (
           <div className="space-y-3 mb-6">
@@ -152,12 +154,12 @@ export function Profile({ username, onViewChange }: ProfileProps) {
                     <div className="flex items-center gap-2">
                       <Activity className="size-4 text-primary" />
                       <span className="text-sm font-medium capitalize">
-                        {ENGINE_META[eng as keyof typeof ENGINE_META].label}
+                        {t(`engine.${eng}` as any)}
                       </span>
                     </div>
                     <span className="text-sm tabular-nums">
                       <span className="font-semibold">{pct}%</span>
-                      <span className="text-xs text-muted-foreground ml-2">
+                      <span className="text-xs text-muted-foreground ms-2">
                         {stat.correct}/{stat.attempted}
                       </span>
                     </span>

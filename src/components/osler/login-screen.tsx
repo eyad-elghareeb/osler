@@ -3,12 +3,15 @@
 import * as React from "react";
 import { motion } from "framer-motion";
 import { Activity, ArrowRight } from "lucide-react";
+import { useI18n } from "./i18n-provider";
+import { cn } from "@/lib/utils";
 
 interface LoginScreenProps {
   onLogin: (username: string) => void;
 }
 
 export function LoginScreen({ onLogin }: LoginScreenProps) {
+  const { t, rtl } = useI18n();
   const [username, setUsername] = React.useState("");
   const [password, setPassword] = React.useState("");
 
@@ -35,9 +38,9 @@ export function LoginScreen({ onLogin }: LoginScreenProps) {
           >
             <Activity className="size-8" />
           </motion.div>
-          <h1 className="text-2xl font-bold tracking-tight">Welcome to Osler</h1>
+          <h1 className="text-2xl font-bold tracking-tight">{t("login.title")}</h1>
           <p className="text-sm text-muted-foreground mt-1">
-            Medical study platform — quizzes, banks, flashcards, OSCE
+            {t("login.subtitle")}
           </p>
         </div>
 
@@ -47,13 +50,13 @@ export function LoginScreen({ onLogin }: LoginScreenProps) {
         >
           <div>
             <label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-              Username
+              {t("login.username")}
             </label>
             <input
               type="text"
               value={username}
               onChange={(e) => setUsername(e.target.value)}
-              placeholder="Your name"
+              placeholder={t("login.usernamePlaceholder")}
               autoFocus
               className="mt-1.5 w-full h-10 px-3 bg-background border border-border rounded-md text-sm outline-none focus:border-primary transition-colors"
             />
@@ -61,18 +64,17 @@ export function LoginScreen({ onLogin }: LoginScreenProps) {
 
           <div>
             <label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-              Password
+              {t("login.password")}
             </label>
             <input
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              placeholder="Any value (demo mode)"
+              placeholder={t("login.passwordPlaceholder")}
               className="mt-1.5 w-full h-10 px-3 bg-background border border-border rounded-md text-sm outline-none focus:border-primary transition-colors"
             />
             <p className="text-[10px] text-muted-foreground mt-1">
-              Demo mode — no real authentication. All progress is stored
-              locally.
+              {t("login.demoNote")}
             </p>
           </div>
 
@@ -80,8 +82,8 @@ export function LoginScreen({ onLogin }: LoginScreenProps) {
             type="submit"
             className="w-full h-10 rounded-md bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors flex items-center justify-center gap-2"
           >
-            Sign In
-            <ArrowRight className="size-4" />
+            {t("login.signIn")}
+            <ArrowRight className={cn("size-4", rtl && "rtl-flip-x")} />
           </button>
 
           <button
@@ -89,12 +91,12 @@ export function LoginScreen({ onLogin }: LoginScreenProps) {
             onClick={() => onLogin("Guest")}
             className="w-full text-xs text-muted-foreground hover:text-foreground transition-colors"
           >
-            Continue as Guest
+            {t("login.guest")}
           </button>
         </form>
 
         <p className="text-center text-[10px] text-muted-foreground mt-6">
-          Osler v1
+          {t("login.footer")}
         </p>
       </motion.div>
     </div>

@@ -96,6 +96,7 @@ import { defaultBindings } from "@/lib/osler/shortcuts";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { setImmersiveMode } from "./immersive-mode";
 import { gradeWithAI, createManualEvaluation } from "@/lib/osler/grading";
+import { useI18n } from "./i18n-provider";
 
 const LETTERS = ["A", "B", "C", "D", "E", "F", "G", "H"];
 const HIGHLIGHT_COLORS = HIGHLIGHT_COLOR_KEYS;
@@ -663,6 +664,7 @@ function PackCard({
   index: number;
   onOpenPack?: (item: ContentTreeNode) => void;
 }) {
+  const { t, rtl } = useI18n();
   const meta = ENGINE_META[node.type as EngineType];
   const Icon = ENGINE_ICONS[node.type as EngineType] ?? ListChecks;
   const count = countQuestions(content);
@@ -671,10 +673,16 @@ function PackCard({
     packProgress.attempted > 0
       ? Math.round((packProgress.correct / packProgress.attempted) * 100)
       : 0;
+  const isAr = (content.meta.lang ?? node.lang) === "ar";
   return (
     <button
       onClick={() => onOpenPack?.(node)}
-      className="medos-fade-in text-left bg-card border border-border rounded-xl p-5 hover:border-primary/40 hover:shadow-md hover:bg-primary/[0.02] transition-colors group flex flex-col gap-3"
+      className={cn(
+        "medos-fade-in text-start bg-card border border-border rounded-xl p-5 hover:border-primary/40 hover:shadow-md hover:bg-primary/[0.02] transition-colors group flex flex-col gap-3",
+        isAr && "osler-content-ar",
+      )}
+      dir={isAr ? "rtl" : undefined}
+      lang={isAr ? "ar" : undefined}
       style={{ animationDelay: `${index * 0.03}s` }}
     >
       <div className="flex items-center gap-3">
@@ -687,10 +695,15 @@ function PackCard({
         <div className="min-w-0 flex-1">
           <h3 className="font-semibold truncate text-foreground">{node.title}</h3>
           <p className="text-xs text-muted-foreground">
-            {count} question{count !== 1 ? "s" : ""}
+            {t("qbank.home.questions", { n: count })}
           </p>
         </div>
-        <ChevronRight className="size-4 text-muted-foreground/40 group-hover:text-muted-foreground transition-colors shrink-0" />
+        {isAr && (
+          <span className="text-[10px] px-1.5 py-0.5 rounded bg-primary/15 text-primary font-semibold shrink-0">
+            {t("lang.badge.ar")}
+          </span>
+        )}
+        <ChevronRight className={cn("size-4 text-muted-foreground/40 group-hover:text-muted-foreground transition-colors shrink-0", rtl && "rtl-flip-x")} />
       </div>
       <p className="text-xs text-muted-foreground/70 line-clamp-2">
         {content.meta.description}
@@ -699,7 +712,7 @@ function PackCard({
         <>
           <div className="flex items-center gap-2 text-[11px]">
             <span className="text-emerald-500 font-medium tabular-nums">{accuracy}%</span>
-            <span className="text-muted-foreground">accuracy</span>
+            <span className="text-muted-foreground">{t("dash.accuracy")}</span>
           </div>
           <div className="h-1.5 rounded-full bg-muted/40 overflow-hidden">
             <div
@@ -709,9 +722,47 @@ function PackCard({
           </div>
         </>
       ) : (
-        <span className="text-[11px] text-muted-foreground/50">Not started</span>
+        <span className="text-[11px] text-muted-foreground/50">{t("qbank.home.start")}</span>
       )}
     </button>
+  );
+}
+
+/**
+ * Inline content-language filter — mirrors the global setting from the i18n
+ * provider, with three pills: All / English / Arabic. Clicking a pill
+ * immediately updates the persisted preference so the filter is consistent
+ * across Library, QBank, Flashcards, and OSCE.
+ */
+export function ContentLangFilter() {
+  const { t, contentFilter, setContentFilter } = useI18n();
+  const pills: Array<{ id: "all" | "en" | "ar"; label: string }> = [
+    { id: "all", label: t("settings.language.contentLangAll") },
+    { id: "en", label: t("settings.language.enName") },
+    { id: "ar", label: t("settings.language.arName") },
+  ];
+  return (
+    <div className="flex items-center gap-2 mb-5 flex-wrap">
+      <span className="text-[11px] uppercase tracking-wider text-muted-foreground me-1">
+        {t("qbank.home.filterLang")}:
+      </span>
+      {pills.map((p) => (
+        <button
+          key={p.id}
+          onClick={() => setContentFilter(p.id)}
+          className={cn(
+            "px-3 py-1 rounded-full text-xs font-medium transition-colors",
+            contentFilter === p.id
+              ? "bg-primary text-primary-foreground"
+              : "bg-muted/60 text-muted-foreground hover:text-foreground",
+            p.id === "ar" && contentFilter !== p.id && "osler-content-ar",
+          )}
+          dir={p.id === "ar" ? "rtl" : undefined}
+        >
+          {p.label}
+        </button>
+      ))}
+    </div>
   );
 }
 
@@ -722,13 +773,14 @@ function ContentTab({
   data: { items: PackEntry[] } | null;
   onOpenPack?: (item: ContentTreeNode) => void;
 }) {
+  const { t, contentFilter } = useI18n();
   const [searchQuery, setSearchQuery] = React.useState("");
   const [debouncedSearchQuery, setDebouncedSearchQuery] = React.useState("");
   const [selectedEngine, setSelectedEngine] = React.useState<EngineType | null>(null);
 
   React.useEffect(() => {
-    const t = setTimeout(() => setDebouncedSearchQuery(searchQuery), 200);
-    return () => clearTimeout(t);
+    const tid = setTimeout(() => setDebouncedSearchQuery(searchQuery), 200);
+    return () => clearTimeout(tid);
   }, [searchQuery]);
 
   // Group items by engine type (run unconditionally before any early return)
@@ -736,11 +788,14 @@ function ContentTab({
     if (!data) return {};
     const map: Record<string, typeof data.items> = {};
     for (const entry of data.items) {
+      // Apply content-language filter from settings
+      const lang = entry.node.lang ?? entry.content?.meta.lang ?? "en";
+      if (contentFilter !== "all" && lang !== contentFilter) continue;
       if (!map[entry.node.type]) map[entry.node.type] = [];
       map[entry.node.type].push(entry);
     }
     return map;
-  }, [data]);
+  }, [data, contentFilter]);
 
   // Filter by search (run unconditionally)
   const filtered = React.useMemo(() => {
@@ -794,9 +849,9 @@ function ContentTab({
         <div className="size-14 rounded-full bg-muted/40 flex items-center justify-center mx-auto mb-4">
           <Grid3x3 className="size-6 text-muted-foreground" />
         </div>
-        <h3 className="text-base font-semibold mb-1">No content packs</h3>
+        <h3 className="text-base font-semibold mb-1">{t("qbank.home.empty")}</h3>
         <p className="text-sm text-muted-foreground">
-          No content packs are available. Add packs to the manifest to get started.
+          {t("qbank.home.empty")}
         </p>
       </div>
     );
@@ -826,39 +881,40 @@ function ContentTab({
               className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors mb-3"
             >
               <ArrowLeft className="size-3.5" />
-              All Engines
+              {t("common.all")}
             </button>
             <div className="flex items-center gap-2 text-xs text-muted-foreground mb-1">
               <Icon className="size-3.5" style={{ color: meta.color }} />
-              <span style={{ color: meta.color }}>{meta.label}</span>
+              <span style={{ color: meta.color }}>{t(`engine.${selectedEngine}` as any)}</span>
             </div>
             <h1 className="text-2xl md:text-3xl font-bold tracking-tight mb-1">
-              {meta.label} Packs
+              {t(`engine.${selectedEngine}` as any)}
             </h1>
             <p className="text-sm text-muted-foreground">
-              {stat.packs} pack{stat.packs !== 1 ? "s" : ""} &middot; {stat.questions} question
-              {stat.questions !== 1 ? "s" : ""}
+              {stat.packs} · {t("qbank.home.questions", { n: stat.questions })}
             </p>
           </div>
 
           {/* Search */}
-          <div className="relative mb-5">
+          <div className="relative mb-3">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
             <input
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder={`Search ${meta.label.toLowerCase()} packs…`}
+              placeholder={t("qbank.home.search")}
               className="w-full h-10 pl-10 pr-4 rounded-xl border border-border bg-card text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
             />
           </div>
+
+          <ContentLangFilter />
 
           {items.length === 0 ? (
             <div className="text-center py-16">
               <div className="size-14 rounded-full bg-muted/40 flex items-center justify-center mx-auto mb-4">
                 <Search className="size-6 text-muted-foreground" />
               </div>
-              <h3 className="text-base font-semibold mb-1">No packs found</h3>
-              <p className="text-sm text-muted-foreground">Try a different search term.</p>
+              <h3 className="text-base font-semibold mb-1">{t("qbank.home.empty")}</h3>
+              <p className="text-sm text-muted-foreground">{t("qbank.home.search")}</p>
             </div>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -891,14 +947,14 @@ function ContentTab({
           <div className="bg-card border border-border rounded-xl p-3.5">
             <div className="flex items-center gap-2 text-xs text-muted-foreground mb-1">
               <Grid3x3 className="size-3.5" />
-              Packs
+              {t("dash.packsStarted")}
             </div>
             <div className="text-xl font-bold">{data.items.length}</div>
           </div>
           <div className="bg-card border border-border rounded-xl p-3.5">
             <div className="flex items-center gap-2 text-xs text-muted-foreground mb-1">
               <ListChecks className="size-3.5" />
-              Questions
+              {t("dash.attemptedLabel")}
             </div>
             <div className="text-xl font-bold">
               {Object.values(engineStats).reduce((s, e) => s + e.questions, 0)}
@@ -907,7 +963,7 @@ function ContentTab({
           <div className="bg-card border border-border rounded-xl p-3.5">
             <div className="flex items-center gap-2 text-xs text-muted-foreground mb-1">
               <Activity className="size-3.5" />
-              Avg Accuracy
+              {t("dash.accuracy")}
             </div>
             <div className="text-xl font-bold">
               {(() => {
@@ -928,15 +984,19 @@ function ContentTab({
         </div>
 
         {/* Search */}
-        <div className="relative mb-5">
+        <div className="relative mb-3">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
           <input
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search content packs by title, description, or tag…"
+            placeholder={t("qbank.home.search")}
             className="w-full h-10 pl-10 pr-4 rounded-xl border border-border bg-card text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
           />
         </div>
+
+        {/* Content-language filter pills — drives the `contentFilter` state
+            from the i18n provider. Reflects the user's choice from Settings. */}
+        <ContentLangFilter />
 
         {/* Engine folders */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -957,7 +1017,7 @@ function ContentTab({
               <button
                 key={type}
                 onClick={() => setSelectedEngine(type)}
-                className="medos-fade-in text-left bg-card border border-border rounded-xl p-5 hover:border-primary/40 hover:shadow-md hover:bg-primary/[0.02] transition-colors group flex flex-col gap-3"
+                className="medos-fade-in text-start bg-card border border-border rounded-xl p-5 hover:border-primary/40 hover:shadow-md hover:bg-primary/[0.02] transition-colors group flex flex-col gap-3"
                 style={{ animationDelay: `${idx * 0.04}s` }}
               >
                 <div className="flex items-center gap-3">
@@ -968,16 +1028,15 @@ function ContentTab({
                     <Icon className="size-5" />
                   </div>
                   <div className="min-w-0 flex-1">
-                    <h3 className="font-semibold truncate text-foreground">{meta.label}</h3>
+                    <h3 className="font-semibold truncate text-foreground">{t(`engine.${type}` as any)}</h3>
                     <p className="text-xs text-muted-foreground">
-                      {items.length} pack{items.length !== 1 ? "s" : ""}
+                      {items.length} {t("dash.packsStarted").toLowerCase()}
                     </p>
                   </div>
                   <ChevronRight className="size-4 text-muted-foreground/40 group-hover:text-muted-foreground transition-colors shrink-0" />
                 </div>
                 <p className="text-xs text-muted-foreground/70 line-clamp-2">
-                  {stat.questions} question{stat.questions !== 1 ? "s" : ""} across{" "}
-                  {items.length} pack{items.length !== 1 ? "s" : ""}
+                  {t("qbank.home.questions", { n: stat.questions })}
                 </p>
                 {stat.attempted > 0 ? (
                   <>
@@ -985,7 +1044,7 @@ function ContentTab({
                       <span className="text-emerald-500 font-medium tabular-nums">
                         {accuracy}%
                       </span>
-                      <span className="text-muted-foreground">avg accuracy</span>
+                      <span className="text-muted-foreground">{t("dash.accuracy")}</span>
                     </div>
                     <div className="h-1.5 rounded-full bg-muted/40 overflow-hidden">
                       <div
@@ -995,7 +1054,7 @@ function ContentTab({
                     </div>
                   </>
                 ) : (
-                  <span className="text-[11px] text-muted-foreground/50">Not started</span>
+                  <span className="text-[11px] text-muted-foreground/50">{t("qbank.home.start")}</span>
                 )}
               </button>
             );
@@ -1007,8 +1066,8 @@ function ContentTab({
             <div className="size-14 rounded-full bg-muted/40 flex items-center justify-center mx-auto mb-4">
               <Search className="size-6 text-muted-foreground" />
             </div>
-            <h3 className="text-base font-semibold mb-1">No packs found</h3>
-            <p className="text-sm text-muted-foreground">Try a different search term.</p>
+            <h3 className="text-base font-semibold mb-1">{t("qbank.home.empty")}</h3>
+            <p className="text-sm text-muted-foreground">{t("qbank.home.search")}</p>
           </div>
         )}
       </div>
@@ -1651,6 +1710,7 @@ function QuizView({
   const isMCQ = q ? q.correct >= 0 : false;
   const isPausedOrLocked = session.examPaused;
   const engineLabel = ENGINE_META[session.engine].label;
+  const { t } = useI18n();
 
   // Highlighter state — a single "tool": null = off, "eraser" = erase, or a color key
   const [tool, setTool] = React.useState<string | null>(null);
@@ -1948,11 +2008,11 @@ function QuizView({
         className="h-12 flex items-center pl-2 sm:pl-4 pr-0 gap-2 shrink-0 border-b border-primary-foreground/10 safe-pt"
         style={{ backgroundColor: "var(--primary)", color: "var(--primary-foreground)" }}
       >
-        <button onClick={onGoHome} className="flex items-center gap-2 hover:opacity-80 transition-opacity shrink-0 medos-touch-target" title="Back to QBank">
+        <button onClick={onGoHome} className="flex items-center gap-2 hover:opacity-80 transition-opacity shrink-0 medos-touch-target" title={t("qbank.session.backToHub")}>
           <div className="size-7 rounded-lg bg-primary-foreground/15 flex items-center justify-center">
             <GraduationCap className="size-4" />
           </div>
-          <span className="hidden sm:inline text-sm font-semibold tracking-tight">QBank Studio</span>
+          <span className="hidden sm:inline text-sm font-semibold tracking-tight">{t("nav.qbank")}</span>
         </button>
 
         <div className="h-5 w-px bg-primary-foreground/20 hidden sm:block" />
@@ -1973,8 +2033,7 @@ function QuizView({
 
         <div className="flex-1 flex items-center justify-center min-w-0">
           <div className="text-sm font-semibold tracking-wide truncate">
-            Question {session.current + 1}
-            <span className="opacity-70 font-normal"> of {session.questions.length}</span>
+            {t("qbank.session.question", { n: session.current + 1, total: session.questions.length })}
           </div>
         </div>
 
@@ -2224,12 +2283,14 @@ function QuizView({
 
           <div
             className={`flex-1 min-h-0 medos-qbank-split ${submitted && session.mode === "tutor" ? "flex flex-row" : "overflow-y-auto medos-scroll"}`}
+            dir={(activeItem.lang ?? "en") === "ar" ? "rtl" : "ltr"}
+            lang={activeItem.lang ?? "en"}
           >
             {q ? (
               <>
                 {/* Left column: question + choices */}
                 <div
-                  className={`medos-qbank-qcol ${submitted && session.mode === "tutor" ? "w-[55%] overflow-y-auto medos-scroll border-r border-border" : ""} ${mobileTutorTab === "answer" ? "hidden md:block" : ""}`}
+                  className={`medos-qbank-qcol ${(activeItem.lang ?? "en") === "ar" ? "osler-content-ar" : ""} ${submitted && session.mode === "tutor" ? "w-[55%] overflow-y-auto medos-scroll border-r border-border" : ""} ${mobileTutorTab === "answer" ? "hidden md:block" : ""}`}
                 >
                   <div className={`${submitted && session.mode === "tutor" ? "px-4 sm:px-6 py-4" : "px-4 sm:px-6 lg:px-8 py-6 max-w-5xl"}`}>
                     {/* Question header */}
@@ -2315,7 +2376,7 @@ function QuizView({
                                 e.preventDefault();
                                 onToggleStrikethrough(idx);
                               }}
-                              className={`w-full text-left p-3 sm:p-3.5 rounded-xl border-2 transition-all flex items-start gap-3 ${stateClass} ${
+                              className={`w-full text-start p-3 sm:p-3.5 rounded-xl border-2 transition-all flex items-start gap-3 ${stateClass} ${
                                 submitted ? "cursor-default" : "cursor-pointer"
                               } ${hasStrikethrough ? "opacity-60" : ""} medos-touch-target`}
                             >

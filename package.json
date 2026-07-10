@@ -10,7 +10,8 @@
     "build:webpack": "next build --webpack && shx cp -r .next/static .next/standalone/.next/ && shx cp -r public .next/standalone/",
     "start": "cross-env NODE_ENV=production node .next/standalone/server.js > server.log 2>&1",
     "lint": "eslint .",
-    "generate-manifests": "node scripts/generate-content-manifests.js"
+    "generate-manifests": "node scripts/generate-content-manifests.js",
+    "db:push": "echo 'Osler does not use Prisma — skipping db:push'"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
@@ -18,6 +19,7 @@
     "@dnd-kit/utilities": "^3.2.2",
     "@hookform/resolvers": "^5.1.1",
     "@mdxeditor/editor": "^3.39.1",
+    "@next/swc-win32-x64-msvc": "^16.2.10",
     "@radix-ui/react-accordion": "^1.2.11",
     "@radix-ui/react-alert-dialog": "^1.1.14",
     "@radix-ui/react-aspect-ratio": "^1.1.7",

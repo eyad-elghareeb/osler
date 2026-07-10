@@ -13,6 +13,8 @@ import {
   Undo2,
   RotateCcw,
   CornerDownLeft,
+  Globe,
+  Languages,
 } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -27,6 +29,9 @@ import {
   describeBinding,
   type ShortcutScope,
 } from "@/lib/osler/shortcuts";
+import { useI18n } from "./i18n-provider";
+import { LANGUAGES, UI_LANGS, type UiLang, type ContentLangFilter } from "@/lib/osler/i18n";
+import { cn } from "@/lib/utils";
 
 /* ─── Models & storage keys (shared with ai-assistant.tsx) ──────────── */
 
@@ -60,16 +65,18 @@ const OSCE_STORAGE_KEYS = {
 
 /* ─── Section tabs ──────────────────────────────────────────────────── */
 
-type SettingsSection = "ai" | "shortcuts" | "danger";
-
-const SECTIONS: { id: SettingsSection; label: string; icon: React.ComponentType<{ className?: string }> }[] = [
-  { id: "ai", label: "AI Assistant", icon: Sparkles },
-  { id: "shortcuts", label: "Keyboard", icon: Keyboard },
-  { id: "danger", label: "Data & Reset", icon: AlertTriangle },
-];
+type SettingsSection = "language" | "ai" | "shortcuts" | "danger";
 
 export function Settings() {
-  const [section, setSection] = React.useState<SettingsSection>("ai");
+  const { t } = useI18n();
+  const [section, setSection] = React.useState<SettingsSection>("language");
+
+  const SECTIONS: { id: SettingsSection; label: string; icon: React.ComponentType<{ className?: string }> }[] = [
+    { id: "language", label: t("settings.section.language"), icon: Languages },
+    { id: "ai", label: t("settings.section.ai"), icon: Sparkles },
+    { id: "shortcuts", label: t("settings.section.shortcuts"), icon: Keyboard },
+    { id: "danger", label: t("settings.section.danger"), icon: AlertTriangle },
+  ];
 
   return (
     <div className="p-4 sm:p-6 lg:p-8 max-w-4xl mx-auto">
@@ -77,13 +84,13 @@ export function Settings() {
         <div className="flex items-center gap-3 mb-6">
           <SettingsIcon className="size-6 text-primary" />
           <div>
-            <h1 className="text-xl font-bold">Settings</h1>
-            <p className="text-sm text-muted-foreground">Configure AI assistant, keyboard shortcuts, and manage data</p>
+            <h1 className="text-xl font-bold">{t("settings.title")}</h1>
+            <p className="text-sm text-muted-foreground">{t("settings.subtitle")}</p>
           </div>
         </div>
 
         {/* Section tabs */}
-        <div className="flex items-center gap-1 mb-6 border-b border-border/60">
+        <div className="flex items-center gap-1 mb-6 border-b border-border/60 overflow-x-auto medos-scroll">
           {SECTIONS.map((s) => {
             const I = s.icon;
             const active = section === s.id;
@@ -91,7 +98,7 @@ export function Settings() {
               <button
                 key={s.id}
                 onClick={() => setSection(s.id)}
-                className={`relative h-10 px-3 sm:px-4 text-sm font-medium flex items-center gap-2 transition-colors ${
+                className={`relative h-10 px-3 sm:px-4 text-sm font-medium flex items-center gap-2 transition-colors shrink-0 ${
                   active ? "text-primary" : "text-muted-foreground hover:text-foreground"
                 }`}
               >
@@ -105,10 +112,158 @@ export function Settings() {
           })}
         </div>
 
+        {section === "language" && <LanguageSettingsSection />}
         {section === "ai" && <AiSettingsSection />}
         {section === "shortcuts" && <ShortcutsSettingsSection />}
         {section === "danger" && <DangerZoneSection />}
       </motion.div>
+    </div>
+  );
+}
+
+/* ─── Language section ─────────────────────────────────────────────── */
+
+function LanguageSettingsSection() {
+  const { t, lang, setLang, contentFilter, setContentFilter, rtl } = useI18n();
+
+  const uiLangOptions: Array<{ id: UiLang; label: string; native: string; dir: "ltr" | "rtl" }> = UI_LANGS.map(
+    (code) => ({
+      id: code,
+      label: LANGUAGES[code].name,
+      native: LANGUAGES[code].nativeName,
+      dir: LANGUAGES[code].dir,
+    }),
+  );
+
+  const contentFilterOptions: Array<{ id: ContentLangFilter; label: string }> = [
+    { id: "all", label: t("settings.language.contentLangAll") },
+    { id: "en", label: t("settings.language.contentLangEn") },
+    { id: "ar", label: t("settings.language.contentLangAr") },
+  ];
+
+  return (
+    <div className="space-y-6">
+      <Card className="p-5">
+        <h2 className="text-base font-semibold flex items-center gap-2 mb-1">
+          <Languages className="size-4 text-primary" />
+          {t("settings.section.language")}
+        </h2>
+        <p className="text-xs text-muted-foreground mb-5">
+          {t("settings.language.uiLangDesc")}
+        </p>
+
+        {/* UI language selector — large radio-card style */}
+        <div className="space-y-2">
+          <label className="text-xs font-semibold text-muted-foreground">
+            {t("settings.language.uiLang")}
+          </label>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            {uiLangOptions.map((opt) => {
+              const active = lang === opt.id;
+              return (
+                <button
+                  key={opt.id}
+                  onClick={() => setLang(opt.id)}
+                  className={cn(
+                    "text-start p-3 rounded-lg border-2 transition-all flex items-center gap-3",
+                    active
+                      ? "border-primary bg-primary/5"
+                      : "border-border bg-card hover:border-primary/40",
+                  )}
+                >
+                  <div
+                    className={cn(
+                      "size-9 rounded-full flex items-center justify-center shrink-0",
+                      active ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground",
+                    )}
+                  >
+                    {opt.id === "ar" ? <span className="text-sm font-bold">ع</span> : <Globe className="size-4" />}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="text-sm font-semibold">{opt.label}</div>
+                    <div className="text-xs text-muted-foreground" dir={opt.dir} lang={opt.id}>
+                      {opt.native} · {opt.dir.toUpperCase()}
+                    </div>
+                  </div>
+                  {active && <Check className="size-4 text-primary shrink-0" />}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Content-language filter */}
+        <div className="space-y-2 mt-6">
+          <label className="text-xs font-semibold text-muted-foreground">
+            {t("settings.language.contentLang")}
+          </label>
+          <p className="text-xs text-muted-foreground mb-2">
+            {t("settings.language.contentLangDesc")}
+          </p>
+          <div className="flex flex-wrap gap-2">
+            {contentFilterOptions.map((opt) => {
+              const active = contentFilter === opt.id;
+              return (
+                <button
+                  key={opt.id}
+                  onClick={() => setContentFilter(opt.id)}
+                  className={cn(
+                    "px-3 py-1.5 rounded-full text-xs font-medium transition-colors border",
+                    active
+                      ? "bg-primary text-primary-foreground border-primary"
+                      : "bg-card text-muted-foreground border-border hover:text-foreground hover:border-primary/40",
+                    opt.id === "ar" && !active && "osler-content-ar",
+                  )}
+                  dir={opt.id === "ar" ? "rtl" : undefined}
+                >
+                  {opt.label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* RTL note */}
+        <div className="mt-6 p-3 rounded-lg bg-muted/30 border border-border/60 flex items-start gap-2 text-xs text-muted-foreground">
+          <Sparkles className="size-3.5 mt-0.5 shrink-0 text-primary" />
+          <span>{t("settings.language.rtlNote")}</span>
+        </div>
+      </Card>
+
+      {/* Quick preview block — shows the current UI direction live */}
+      <Card className="p-5">
+        <h3 className="text-sm font-semibold mb-2">{t("settings.section.language")}</h3>
+        <div
+          className={cn(
+            "rounded-lg border border-border p-4 bg-card text-sm",
+            rtl && "osler-content-ar",
+          )}
+          dir={rtl ? "rtl" : "ltr"}
+          lang={lang}
+        >
+          <div className="font-semibold mb-1">
+            {lang === "ar" ? "معاينة الواجهة" : "UI preview"}
+          </div>
+          <p className="text-muted-foreground">
+            {lang === "ar"
+              ? "هذه معاينة مباشرة لكيفية ظهور النص العربي ضمن الواجهة. لاحظ كيف تنعكس اتجاهات المحاذاة والأيقونات تلقائيًا."
+              : "This is a live preview of how your UI language renders. Notice how text alignment and icon directions flip automatically when you switch to Arabic."}
+          </p>
+          <div className="mt-3 flex items-center gap-2">
+            <div className="size-8 rounded-full bg-primary/15 text-primary flex items-center justify-center text-xs font-semibold">
+              {lang === "ar" ? "ع" : "EN"}
+            </div>
+            <div className="flex-1">
+              <div className="text-xs font-medium">
+                {lang === "ar" ? "العربية" : "English"}
+              </div>
+              <div className="text-[10px] text-muted-foreground">
+                {rtl ? "RTL" : "LTR"} · {lang}
+              </div>
+            </div>
+          </div>
+        </div>
+      </Card>
     </div>
   );
 }
@@ -148,6 +303,7 @@ function validateAiForm(state: AiFormState): Record<string, string> {
 }
 
 function AiSettingsSection() {
+  const { t } = useI18n();
   const [saved, setSaved] = React.useState<AiFormState>(() => loadAiForm());
   const [draft, setDraft] = React.useState<AiFormState>(() => saved);
   const [errors, setErrors] = React.useState<Record<string, string>>({});
@@ -218,26 +374,26 @@ function AiSettingsSection() {
     <Card className="p-5">
       <h2 className="text-base font-semibold flex items-center gap-2 mb-1">
         <Sparkles className="size-4 text-primary" />
-        AI Assistant
+        {t("settings.ai.title")}
       </h2>
       <p className="text-xs text-muted-foreground mb-5">
-        Configure the AI study assistant that helps explain questions and concepts during QBank sessions. Changes are saved when you click <kbd className="px-1 py-0.5 rounded border border-border text-[10px]">Save</kbd>.
+        {t("settings.ai.subtitle")}
       </p>
 
       <div className="space-y-4">
         {/* API Key */}
         <div className="space-y-1.5">
           <label className="text-xs font-semibold text-muted-foreground flex items-center justify-between">
-            <span>Gemini API Key</span>
+            <span>{t("settings.ai.apiKey")}</span>
             {draft.apiKey !== saved.apiKey && (
-              <span className="text-[10px] text-amber-500 font-normal">Unsaved changes</span>
+              <span className="text-[10px] text-amber-500 font-normal">{t("settings.ai.unsaved")}</span>
             )}
           </label>
           <input
             type="password"
             value={draft.apiKey}
             onChange={(e) => setField("apiKey", e.target.value)}
-            placeholder="Enter your Gemini API key"
+            placeholder={t("settings.ai.apiKeyPlaceholder")}
             className={`flex-1 w-full h-9 rounded-lg border bg-card px-3 text-sm outline-none transition-colors ${
               errors.apiKey ? "border-destructive focus:border-destructive" : "border-border focus:border-primary"
             }`}
@@ -245,11 +401,7 @@ function AiSettingsSection() {
           {errors.apiKey && <p className="text-[11px] text-destructive">{errors.apiKey}</p>}
           {!errors.apiKey && (
             <p className="text-[11px] text-muted-foreground">
-              Get a free key at{" "}
-              <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener" className="text-primary underline">
-                AI Studio
-              </a>
-              . The AI assistant requires a key to work.
+              {t("settings.ai.getKey")}
             </p>
           )}
         </div>
@@ -257,7 +409,7 @@ function AiSettingsSection() {
         {/* Model + Max wait */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div className="space-y-1.5">
-            <label className="text-xs font-semibold text-muted-foreground">Model</label>
+            <label className="text-xs font-semibold text-muted-foreground">{t("settings.ai.model")}</label>
             <select
               value={draft.model}
               onChange={(e) => setField("model", e.target.value)}
@@ -270,7 +422,7 @@ function AiSettingsSection() {
           </div>
 
           <div className="space-y-1.5">
-            <label className="text-xs font-semibold text-muted-foreground">Max Wait Time</label>
+            <label className="text-xs font-semibold text-muted-foreground">{t("settings.ai.maxWait")}</label>
             <select
               value={draft.maxWait}
               onChange={(e) => setField("maxWait", e.target.value)}
@@ -278,10 +430,10 @@ function AiSettingsSection() {
                 errors.maxWait ? "border-destructive" : "border-border focus:border-primary"
               }`}
             >
-              <option value="15">15 seconds</option>
-              <option value="30">30 seconds</option>
-              <option value="60">60 seconds</option>
-              <option value="120">2 minutes</option>
+              <option value="15">{t("settings.ai.maxWait.15")}</option>
+              <option value="30">{t("settings.ai.maxWait.30")}</option>
+              <option value="60">{t("settings.ai.maxWait.60")}</option>
+              <option value="120">{t("settings.ai.maxWait.120")}</option>
             </select>
             {errors.maxWait && <p className="text-[11px] text-destructive">{errors.maxWait}</p>}
           </div>
@@ -298,15 +450,15 @@ function AiSettingsSection() {
         <div className="pt-4 border-t border-border/60">
           <h3 className="text-sm font-semibold flex items-center gap-2 mb-1">
             <Sparkles className="size-4 text-primary" />
-            OSCE Voice & Live Model
+            {t("settings.ai.osceVoice")}
           </h3>
           <p className="text-xs text-muted-foreground mb-4">
-            Configure voice settings for the OSCE Virtual Patient Simulator.
+            {t("settings.ai.osceVoiceDesc")}
           </p>
           <div className="space-y-4">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-muted-foreground">Live Voice Model</label>
+                <label className="text-xs font-semibold text-muted-foreground">{t("settings.ai.liveModel")}</label>
                 <select
                   value={typeof window !== "undefined" ? localStorage.getItem(OSCE_STORAGE_KEYS.liveModel) || OSCE_VOICE_MODELS[0][0] : OSCE_VOICE_MODELS[0][0]}
                   onChange={(e) => { localStorage.setItem(OSCE_STORAGE_KEYS.liveModel, e.target.value); }}
@@ -317,11 +469,11 @@ function AiSettingsSection() {
                   ))}
                 </select>
                 <p className="text-[11px] text-muted-foreground">
-                  Used for real-time voice conversation in OSCE (Gemini Live API).
+                  {t("settings.ai.liveModelDesc")}
                 </p>
               </div>
               <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-muted-foreground">TTS Rate</label>
+                <label className="text-xs font-semibold text-muted-foreground">{t("settings.ai.ttsRate")}</label>
                 <select
                   value={typeof window !== "undefined" ? localStorage.getItem(OSCE_STORAGE_KEYS.ttsRate) || "0.95" : "0.95"}
                   onChange={(e) => { localStorage.setItem(OSCE_STORAGE_KEYS.ttsRate, e.target.value); }}
@@ -334,7 +486,7 @@ function AiSettingsSection() {
                   <option value="1.5">Very Fast (1.5x)</option>
                 </select>
                 <p className="text-[11px] text-muted-foreground">
-                  Speech synthesis rate for patient responses.
+                  {t("settings.ai.ttsRateDesc")}
                 </p>
               </div>
             </div>
@@ -345,19 +497,19 @@ function AiSettingsSection() {
         <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-border/60">
           <Button size="sm" variant="default" onClick={handleSave} disabled={!isDirty} className="h-8 text-xs">
             {justSaved ? (
-              <><Check className="size-3 mr-1" /> Saved</>
+              <><Check className="size-3 me-1" /> {t("common.saved")}</>
             ) : (
-              <><Save className="size-3 mr-1" /> Save changes</>
+              <><Save className="size-3 me-1" /> {t("common.saveChanges")}</>
             )}
           </Button>
           <Button size="sm" variant="outline" onClick={handleDiscard} disabled={!isDirty} className="h-8 text-xs">
-            <Undo2 className="size-3 mr-1" /> Discard
+            <Undo2 className="size-3 me-1" /> {t("common.discard")}
           </Button>
           <Button size="sm" variant="secondary" onClick={handleTestKey} disabled={testing} className="h-8 text-xs">
-            {testing ? "Testing…" : "Test Connection"}
+            {testing ? t("settings.ai.testing") : t("settings.ai.testConnection")}
           </Button>
-          <Button size="sm" variant="ghost" onClick={handleClearKey} className="h-8 text-xs ml-auto">
-            <Trash2 className="size-3 mr-1" /> Clear Key
+          <Button size="sm" variant="ghost" onClick={handleClearKey} className="h-8 text-xs ms-auto">
+            <Trash2 className="size-3 me-1" /> {t("settings.ai.clearKey")}
           </Button>
         </div>
       </div>
@@ -368,6 +520,7 @@ function AiSettingsSection() {
 /* ─── Keyboard shortcuts section ────────────────────────────────────── */
 
 function ShortcutsSettingsSection() {
+  const { t } = useI18n();
   const [saved, setSaved] = React.useState<Record<string, string>>(() => loadBindings());
   const [draft, setDraft] = React.useState<Record<string, string>>(() => saved);
   const [justSaved, setJustSaved] = React.useState(false);
@@ -404,10 +557,10 @@ function ShortcutsSettingsSection() {
   };
 
   const scopeMeta: Record<ShortcutScope, { label: string; description: string }> = {
-    global: { label: "Global", description: "Available everywhere — search, navigation, theme." },
-    qbank: { label: "QBank Studio", description: "Available inside a QBank session (next, prev, flag, submit, ...)." },
-    flashcard: { label: "Flashcards", description: "Available during a flashcard study session (flip, rate, navigate)." },
-    reader: { label: "Article Reader", description: "Available when reading an article or in an overlay modal." },
+    global: { label: t("settings.shortcuts.scope.global"), description: t("settings.shortcuts.scope.globalDesc") },
+    qbank: { label: t("settings.shortcuts.scope.qbank"), description: t("settings.shortcuts.scope.qbankDesc") },
+    flashcard: { label: t("settings.shortcuts.scope.flashcard"), description: t("settings.shortcuts.scope.flashcardDesc") },
+    reader: { label: t("settings.shortcuts.scope.reader"), description: t("settings.shortcuts.scope.readerDesc") },
   };
 
   const scopes: ShortcutScope[] = ["global", "qbank", "flashcard", "reader"];
@@ -418,13 +571,11 @@ function ShortcutsSettingsSection() {
         <div className="flex items-start justify-between gap-3 mb-1">
           <h2 className="text-base font-semibold flex items-center gap-2">
             <Keyboard className="size-4 text-primary" />
-            Keyboard Shortcuts
+            {t("settings.shortcuts.title")}
           </h2>
         </div>
         <p className="text-xs text-muted-foreground mb-5">
-          Click any binding to record a new key combination. Press <kbd className="px-1 py-0.5 rounded border border-border text-[10px]">Esc</kbd> to cancel recording,
-          <kbd className="px-1 py-0.5 rounded border border-border text-[10px] ml-1">Backspace</kbd> to disable.
-          Changes apply once you click <strong>Save changes</strong>.
+          {t("settings.shortcuts.subtitle")}
         </p>
 
         <div className="space-y-6">
@@ -485,16 +636,16 @@ function ShortcutsSettingsSection() {
         <div className="flex flex-wrap items-center gap-2 pt-4 mt-5 border-t border-border/60">
           <Button size="sm" variant="default" onClick={handleSave} disabled={!isDirty} className="h-8 text-xs">
             {justSaved ? (
-              <><Check className="size-3 mr-1" /> Saved</>
+              <><Check className="size-3 me-1" /> {t("common.saved")}</>
             ) : (
-              <><Save className="size-3 mr-1" /> Save changes</>
+              <><Save className="size-3 me-1" /> {t("common.saveChanges")}</>
             )}
           </Button>
           <Button size="sm" variant="outline" onClick={handleDiscard} disabled={!isDirty} className="h-8 text-xs">
-            <Undo2 className="size-3 mr-1" /> Discard
+            <Undo2 className="size-3 me-1" /> {t("common.discard")}
           </Button>
-          <Button size="sm" variant="ghost" onClick={handleResetAll} className="h-8 text-xs ml-auto">
-            <RotateCcw className="size-3 mr-1" /> Reset all to defaults
+          <Button size="sm" variant="ghost" onClick={handleResetAll} className="h-8 text-xs ms-auto">
+            <RotateCcw className="size-3 me-1" /> {t("settings.shortcuts.resetAll")}
           </Button>
         </div>
       </Card>
@@ -503,12 +654,11 @@ function ShortcutsSettingsSection() {
         <div className="flex items-start gap-2 text-xs text-muted-foreground">
           <CornerDownLeft className="size-3.5 mt-0.5 shrink-0" />
           <div>
-            <p className="font-medium text-foreground mb-1">Tips</p>
+            <p className="font-medium text-foreground mb-1">{t("settings.shortcuts.tipsTitle")}</p>
             <ul className="space-y-1 list-disc list-inside">
-              <li>Multi-key sequences (e.g. <span className="font-mono">G then D</span> for Dashboard) are supported — record both chords back-to-back.</li>
-              <li>On macOS, <span className="font-mono">⌘</span> is the modifier; on Windows/Linux it's <span className="font-mono">Ctrl</span>.</li>
-              <li>Shortcuts are ignored while typing in text fields, except those with the <span className="font-mono">Ctrl/⌘</span> modifier.</li>
-              <li>Conflicts are detected automatically — two actions can't share the same binding.</li>
+              {tList("settings.shortcuts.tips").map((tip, i) => (
+                <li key={i}>{tip}</li>
+              ))}
             </ul>
           </div>
         </div>
@@ -595,6 +745,7 @@ function KeyCaptureInput({
 /* ─── Danger Zone section ───────────────────────────────────────────── */
 
 function DangerZoneSection() {
+  const { t } = useI18n();
   const [progressCount, setProgressCount] = React.useState(0);
   const [confirmClear, setConfirmClear] = React.useState(false);
 
@@ -616,34 +767,34 @@ function DangerZoneSection() {
     <Card className="p-5 border-destructive/30">
       <h2 className="text-base font-semibold flex items-center gap-2 mb-3 text-destructive">
         <AlertTriangle className="size-4" />
-        Data & Reset
+        {t("settings.danger.title")}
       </h2>
       <p className="text-xs text-muted-foreground mb-4">
-        Your study data is stored locally in this browser. Clearing your browser cache may also clear this data.
+        {t("settings.danger.subtitle")}
         <br />
-        <strong className="text-destructive">This action cannot be undone.</strong>
+        <strong className="text-destructive">{t("settings.danger.warning")}</strong>
       </p>
 
       <div className="bg-card border border-border rounded-lg p-4 flex items-center justify-between gap-3 mb-4">
         <div>
-          <div className="text-sm font-medium">{progressCount} pack{progressCount !== 1 ? "s" : ""} with progress</div>
-          <div className="text-xs text-muted-foreground">Includes quiz, bank, flashcard, written, and OSCE answers.</div>
+          <div className="text-sm font-medium">{t("settings.danger.packsWithProgress", { n: progressCount })}</div>
+          <div className="text-xs text-muted-foreground">{t("settings.danger.packsWithProgressSub")}</div>
         </div>
       </div>
 
       {!confirmClear ? (
         <Button variant="destructive" size="sm" onClick={() => setConfirmClear(true)} disabled={progressCount === 0}>
-          <Trash2 className="size-3.5 mr-1.5" />
-          Clear All Progress
+          <Trash2 className="size-3.5 me-1.5" />
+          {t("settings.danger.clearAll")}
         </Button>
       ) : (
         <div className="flex items-center gap-2">
-          <span className="text-xs text-destructive font-medium">Are you sure?</span>
+          <span className="text-xs text-destructive font-medium">{t("settings.danger.confirm")}</span>
           <Button size="sm" variant="destructive" className="h-7 text-xs" onClick={handleClearProgress}>
-            Yes, clear everything
+            {t("settings.danger.confirmYes")}
           </Button>
           <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => setConfirmClear(false)}>
-            Cancel
+            {t("common.cancel")}
           </Button>
         </div>
       )}

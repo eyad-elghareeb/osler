@@ -59,6 +59,25 @@
           "items": []
         }
       ]
+    },
+    {
+      "uid": "flashcard-medical-board-review-ar",
+      "title": "Medical Board Review Ar",
+      "type": "flashcard",
+      "path": "medical-board-review-ar/",
+      "files": [],
+      "items": [
+        {
+          "uid": "flashcard-medical-board-review-ar-cardiology",
+          "title": "Cardiology",
+          "type": "flashcard",
+          "path": "medical-board-review-ar/cardiology/",
+          "files": [
+            "cards.json"
+          ],
+          "items": []
+        }
+      ]
     }
   ]
 }

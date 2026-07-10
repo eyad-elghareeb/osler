@@ -130,6 +130,19 @@ export function Component({ title, onAction }: ComponentProps) {
 6. Add type detection key in `scripts/generate-content-manifests.js` (`fileKeyMap`)
 7. Add category folder under `public/osler-content/`
 
+### i18n & RTL support
+
+- UI translation lives in `@/lib/osler/i18n.ts` — flat key→record dictionary with `en` and `ar`.
+- `useI18n()` from `@/components/osler/i18n-provider.tsx` provides `t(key)`, `tList(key)`, `rtl`, `lang`, `dir`, `contentFilter`, `setLang`, `setContentFilter`.
+- UI language is decoupled from content language. Arabic UI flips the shell; Arabic content packs render RTL regardless of UI language.
+- Content packs declare `lang?: ContentLang` (`"en" | "ar"`) on `ContentTreeNode` and `ContentMeta` in `@/lib/osler/types.ts`.
+- Content body containers use `dir`/`lang` attributes + `.osler-content-ar`/`.osler-content-en` CSS classes.
+- `ContentLangFilter` (exported from `@/components/osler/qbank-studio.tsx`) provides All/English/Arabic pills — shared across QBank, Flashcards, and OSCE.
+- `LANG_INIT_SCRIPT` in `i18n.ts` runs inline in `<head>` to prevent flash of LTR layout.
+- Use Tailwind logical properties (`ms-`/`me-`/`text-start`/`text-end`) instead of `ml-`/`mr-`/`text-left`/`text-right`.
+- Use `.rtl-flip-x` utility (defined in `globals.css`) to mirror animated arrow/chevron icons.
+- The Cairo font is loaded as a CSS variable (`--font-cairo`) in `layout.tsx` for Arabic glyphs.
+
 ### Handling state
 
 - Component-local state with `React.useState` for UI state

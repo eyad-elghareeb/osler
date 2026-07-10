@@ -46,6 +46,8 @@ import { cn } from "@/lib/utils";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useLightbox } from "./lightbox-provider";
 import { setImmersiveMode } from "./immersive-mode";
+import { useI18n } from "./i18n-provider";
+import { ContentLangFilter } from "./qbank-studio";
 
 /* ── Constants ─────────────────────────────────────────────────────── */
 
@@ -642,6 +644,7 @@ function getSpeakerGender(c: OsceStation): string {
 
 export function OsceStudio({ activeItem, activeContent, onExit, onOpenPack }: OsceStudioProps) {
   const isMobile = useIsMobile();
+  const { t, contentFilter } = useI18n();
 
   /* ── State ── */
   const [allPacks, setAllPacks] = React.useState<Array<{ node: ContentTreeNode; content: OsceContent }>>([]);
@@ -1207,15 +1210,20 @@ export function OsceStudio({ activeItem, activeContent, onExit, onOpenPack }: Os
   }
 
   const filteredPacks = React.useMemo(() => {
-    if (!packSearch.trim()) return allPacks;
+    const langFiltered = contentFilter === "all"
+      ? allPacks
+      : allPacks.filter(({ node, content }) =>
+          (node.lang ?? content.meta.lang ?? "en") === contentFilter
+        );
+    if (!packSearch.trim()) return langFiltered;
     const q = packSearch.toLowerCase();
-    return allPacks.filter(
+    return langFiltered.filter(
       ({ node, content }) =>
         node.title.toLowerCase().includes(q) ||
         content.meta.tags?.some((t) => t.toLowerCase().includes(q)) ||
         content.meta.description?.toLowerCase().includes(q)
     );
-  }, [allPacks, packSearch]);
+  }, [allPacks, packSearch, contentFilter]);
 
   if (phase === "select") {
     return (
@@ -1232,23 +1240,25 @@ export function OsceStudio({ activeItem, activeContent, onExit, onOpenPack }: Os
                 <Stethoscope className="size-5 text-primary" />
               </div>
               <div>
-                <h1 className="text-xl font-bold tracking-tight">OSCE Studio</h1>
+                <h1 className="text-xl font-bold tracking-tight">{t("osce.home.title")}</h1>
                 <p className="text-xs text-muted-foreground">
-                  Virtual patient simulator · Choose a scenario to begin
+                  {t("osce.home.subtitle")}
                 </p>
               </div>
             </div>
 
             {/* Search */}
-            <div className="relative mt-5 mb-6">
+            <div className="relative mt-5 mb-3">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground pointer-events-none" />
               <input
                 value={packSearch}
                 onChange={(e) => setPackSearch(e.target.value)}
-                placeholder="Search scenarios by title, specialty, or tag…"
+                placeholder={t("qbank.home.search")}
                 className="w-full h-10 pl-9 pr-4 rounded-lg border border-border/60 bg-card text-sm outline-none focus:border-primary/60 focus:ring-2 focus:ring-primary/10 transition-all placeholder:text-muted-foreground"
               />
             </div>
+
+            <ContentLangFilter />
 
             {/* Pack grid */}
             {packsLoading ? (
@@ -1260,18 +1270,18 @@ export function OsceStudio({ activeItem, activeContent, onExit, onOpenPack }: Os
               <div className="flex flex-col items-center justify-center py-20 gap-4 text-center">
                 <Stethoscope className="size-12 text-muted-foreground/40" />
                 <div>
-                  <p className="font-semibold text-sm mb-1">No OSCE scenarios found</p>
+                  <p className="font-semibold text-sm mb-1">{t("osce.home.empty")}</p>
                   <p className="text-xs text-muted-foreground max-w-xs">
                     {packSearch
-                      ? `No results for "${packSearch}". Try a different search.`
-                      : "Add OSCE content packs to the library to get started."}
+                      ? t("qbank.home.search")
+                      : t("osce.home.empty")}
                   </p>
                 </div>
                 <button
                   onClick={onExit}
                   className="h-9 px-4 rounded-md border border-border/60 text-sm font-medium hover:bg-muted/60 transition-colors"
                 >
-                  Back to Dashboard
+                  {t("nav.dashboard")}
                 </button>
               </div>
             ) : (
@@ -1288,7 +1298,12 @@ export function OsceStudio({ activeItem, activeContent, onExit, onOpenPack }: Os
                     >
                       <button
                         onClick={() => selectPack({ node, content })}
-                        className="w-full text-left group relative overflow-hidden bg-card border border-border/60 rounded-xl p-5 hover:border-primary/40 hover:shadow-md transition-all duration-200 active:scale-[0.99]"
+                        className={cn(
+                          "w-full text-start group relative overflow-hidden bg-card border border-border/60 rounded-xl p-5 hover:border-primary/40 hover:shadow-md transition-all duration-200 active:scale-[0.99]",
+                          (node.lang ?? content.meta.lang) === "ar" && "osler-content-ar",
+                        )}
+                        dir={(node.lang ?? content.meta.lang) === "ar" ? "rtl" : undefined}
+                        lang={node.lang ?? content.meta.lang ?? undefined}
                       >
                         {/* Top accent line */}
                         <div className="absolute top-0 left-0 right-0 h-0.5 bg-gradient-to-r from-primary/60 to-primary/20 opacity-0 group-hover:opacity-100 transition-opacity" />
