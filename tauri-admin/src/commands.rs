@@ -490,16 +490,19 @@ fn spawn_runner(kind: &str, root: &Path) -> Result<(), String> {
     use std::process::Stdio;
 
     // Pick the package manager: prefer `bun` if available, fall back to `npm`.
-    let pm = which::which("bun")
-        .map(|_| "bun")
-        .or_else(|_| which::which("npm").map(|_| "npm"))
+    // Keep the resolved absolute path from `which` so Command::new can find it
+    // reliably on Windows (where PATH resolution differs between interactive
+    // and non-interactive processes, e.g. nvm-windows).
+    let (pm_path, pm_name) = which::which("bun")
+        .map(|p| (p, "bun"))
+        .or_else(|_| which::which("npm").map(|p| (p, "npm")))
         .map_err(|_| "Neither bun nor npm found on PATH".to_string())?;
 
-    let (program, args): (&str, Vec<&str>) = match (pm, kind) {
-        ("bun", "build") => ("bun", vec!["run", "build"]),
-        ("bun", "start") => ("bun", vec!["run", "start"]),
-        ("npm", "build") => ("npm", vec!["run", "build"]),
-        ("npm", "start") => ("npm", vec!["run", "start"]),
+    let args: Vec<&str> = match (pm_name, kind) {
+        ("bun", "build") => vec!["run", "build"],
+        ("bun", "start") => vec!["run", "start"],
+        ("npm", "build") => vec!["run", "build"],
+        ("npm", "start") => vec!["run", "start"],
         _ => return Err(format!("Unknown runner kind: {}", kind)),
     };
 
@@ -509,7 +512,7 @@ fn spawn_runner(kind: &str, root: &Path) -> Result<(), String> {
         g.reset(kind);
     }
 
-    let mut cmd = std::process::Command::new(program);
+    let mut cmd = std::process::Command::new(pm_path);
     cmd.args(&args)
         .current_dir(root)
         .stdout(Stdio::piped())
