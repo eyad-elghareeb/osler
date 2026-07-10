@@ -199,6 +199,16 @@
     }
   }
 
+  const STORAGE_ROOT_KEY = "osler-admin-project-root";
+
+  function saveProjectRoot(root) {
+    try { localStorage.setItem(STORAGE_ROOT_KEY, root); } catch {}
+  }
+
+  function loadSavedProjectRoot() {
+    try { return localStorage.getItem(STORAGE_ROOT_KEY); } catch { return null; }
+  }
+
   async function pickProjectRoot() {
     try {
       const folder = await invoke("plugin:dialog|open", {
@@ -212,6 +222,7 @@
       const root = typeof folder === "string" ? folder : null;
       if (!root) return;
       const res = await invoke("set_project_root", { root });
+      saveProjectRoot(root);
       await refreshProjectState();
       toast(t("project.state.connected"), "success");
       if (currentRoute) navigate(currentRoute);
@@ -281,7 +292,21 @@
     register("settings", window.OslerAdminViews.settings);
 
     // Initial state fetch + first render
-    refreshProjectState().then(() => {
+    refreshProjectState().then(async () => {
+      // Auto-restore saved project root
+      if (!projectState || !projectState.root) {
+        const saved = loadSavedProjectRoot();
+        if (saved) {
+          try {
+            const res = await invoke("set_project_root", { root: saved });
+            saveProjectRoot(saved);
+            await refreshProjectState();
+          } catch (e) {
+            console.warn("Saved project root no longer valid:", e);
+            try { localStorage.removeItem(STORAGE_ROOT_KEY); } catch {}
+          }
+        }
+      }
       navigate("dashboard");
       // If no root picked, show the picker overlay
       if (!projectState || !projectState.root) {

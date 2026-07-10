@@ -100,6 +100,24 @@ fn resolve(root: &Path, rel: &str) -> Result<PathBuf, String> {
     Ok(p)
 }
 
+/// Resolve a content-relative path (relative to `public/osler-content/`).
+/// Verifies the result stays inside the content root (path traversal check).
+fn resolve_content(root: &Path, rel: &str) -> Result<PathBuf, String> {
+    let base = content_root(root);
+    let rel = rel.trim().replace('\\', "/");
+    let rel = rel.trim_matches('/');
+    if rel.is_empty() {
+        return Err("Empty content path".to_string());
+    }
+    let p = base.join(&rel);
+    let p_str = p.to_string_lossy().replace('\\', "/");
+    let base_str = base.to_string_lossy().replace('\\', "/");
+    if !p_str.starts_with(&base_str) {
+        return Err(format!("Path escapes content root: {}", rel));
+    }
+    Ok(p)
+}
+
 /* ═══════════════════════════════════════════════════════════════════════
    Project picker + state
    ═══════════════════════════════════════════════════════════════════════ */
@@ -220,7 +238,7 @@ fn walk_dir(dir: &Path, base: &Path) -> Result<Vec<Value>, String> {
 #[tauri::command]
 pub fn load_file(path: String, state: State<'_, ProjectRoot>) -> Result<Value, String> {
     let root = root_or_err(&state)?;
-    let p = resolve(&root, &path)?;
+    let p = resolve_content(&root, &path)?;
     if !p.is_file() {
         return Err(format!("Not a file: {}", path));
     }
@@ -235,7 +253,7 @@ pub fn save_file(
     state: State<'_, ProjectRoot>,
 ) -> Result<Value, String> {
     let root = root_or_err(&state)?;
-    let p = resolve(&root, &path)?;
+    let p = resolve_content(&root, &path)?;
     if let Some(parent) = p.parent() {
         std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
     }
@@ -300,7 +318,7 @@ pub fn create_folder(path: String, state: State<'_, ProjectRoot>) -> Result<Valu
 #[tauri::command]
 pub fn delete_path(path: String, state: State<'_, ProjectRoot>) -> Result<Value, String> {
     let root = root_or_err(&state)?;
-    let p = resolve(&root, &path)?;
+    let p = resolve_content(&root, &path)?;
     if !p.exists() {
         return Err(format!("Not found: {}", path));
     }

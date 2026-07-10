@@ -88,6 +88,9 @@
   function detectContentType(content) {
     try {
       const parsed = JSON.parse(content);
+      if (window.OslerAdminContentEditor && window.OslerAdminContentEditor.detectType) {
+        return window.OslerAdminContentEditor.detectType(parsed);
+      }
       if (parsed.questions && Array.isArray(parsed.questions)) {
         if (parsed.questions[0] && parsed.questions[0].front) return "flashcard";
         return "quiz";
@@ -129,20 +132,41 @@
     toolbar.appendChild(delBtn);
     editorPane.appendChild(toolbar);
 
-    const ta = el("textarea", { class: "editor-textarea", id: "editor-textarea", spellcheck: "false" });
-    ta.value = currentContent;
-    ta.addEventListener("input", () => {
-      dirty = true;
-      updateStatus();
-    });
-    // Ctrl/Cmd+S to save
-    ta.addEventListener("keydown", (e) => {
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "s") {
-        e.preventDefault();
-        saveCurrent();
-      }
-    });
-    editorPane.appendChild(ta);
+    // Try form editor for known JSON types
+    let useFormEditor = false;
+    if (isJson) {
+      try {
+        const parsed = JSON.parse(currentContent);
+        const type = window.OslerAdminContentEditor && window.OslerAdminContentEditor.detectType(parsed);
+        if (type) {
+          useFormEditor = true;
+          const formContainer = el("div", { class: "form-editor-scroll", id: "form-editor" });
+          editorPane.appendChild(formContainer);
+          window.OslerAdminContentEditor.render(formContainer, currentPath, parsed, () => {
+            currentContent = JSON.stringify(parsed, null, 2);
+            dirty = true;
+            updateStatus();
+          });
+        }
+      } catch {}
+    }
+
+    if (!useFormEditor) {
+      // Fallback: raw textarea for .md files or unknown JSON
+      const ta = el("textarea", { class: "editor-textarea", id: "editor-textarea", spellcheck: "false" });
+      ta.value = currentContent;
+      ta.addEventListener("input", () => {
+        dirty = true;
+        updateStatus();
+      });
+      ta.addEventListener("keydown", (e) => {
+        if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "s") {
+          e.preventDefault();
+          saveCurrent();
+        }
+      });
+      editorPane.appendChild(ta);
+    }
 
     const status = el("div", { class: "editor-status", id: "editor-status" });
     editorPane.appendChild(status);
@@ -169,15 +193,16 @@
   async function saveCurrent() {
     if (!currentPath) return;
     const ta = document.getElementById("editor-textarea");
-    if (!ta) return;
+    const content = ta ? ta.value : currentContent;
+    if (!content && !ta) return;
     const btn = document.getElementById("save-btn");
     if (btn) {
       btn.disabled = true;
       btn.textContent = t("content.file.saving");
     }
     try {
-      await invoke("save_file", { path: currentPath, content: ta.value });
-      currentContent = ta.value;
+      await invoke("save_file", { path: currentPath, content });
+      currentContent = content;
       dirty = false;
       if (btn) {
         btn.disabled = false;
@@ -213,15 +238,16 @@
 
   async function validateCurrent() {
     const ta = document.getElementById("editor-textarea");
-    if (!ta) return;
-    const contentType = detectContentType(ta.value);
+    const src = ta ? ta.value : currentContent;
+    if (!src) return;
+    const contentType = detectContentType(src);
     if (!contentType) {
       toast("Could not detect content type", "error");
       return;
     }
     let parsed;
     try {
-      parsed = JSON.parse(ta.value);
+      parsed = JSON.parse(src);
     } catch (e) {
       toast("Invalid JSON: " + e.message, "error");
       return;
