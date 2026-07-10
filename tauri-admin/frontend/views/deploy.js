@@ -368,7 +368,7 @@
 
     // Skip-build checkbox
     const skipRow = el("label", { style: { display: "flex", alignItems: "center", gap: "0.5rem", fontSize: "0.75rem", color: "var(--text-muted)", marginTop: "0.75rem", cursor: "pointer" } });
-    const cb = el("input", { type: "checkbox", id: "skip-build-checkbox" });
+    const cb = el("input", { type: "checkbox", id: "skip-build-checkbox", checked: true });
     skipRow.appendChild(cb);
     skipRow.appendChild(el("span", {}, t("deploy.panel.skipBuild")));
     panel.appendChild(skipRow);

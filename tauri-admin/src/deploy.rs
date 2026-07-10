@@ -206,7 +206,7 @@ pub async fn test_deploy_connection(
 }
 
 #[tauri::command]
-pub async fn deploy(
+pub fn deploy(
     provider: String,
     skip_build: Option<bool>,
     state: State<'_, ProjectRoot>,
@@ -231,7 +231,7 @@ pub async fn deploy(
     // `deploy_status` for streaming logs.
     let root_clone = root.clone();
     let provider_clone = provider.clone();
-    let skip = skip_build.unwrap_or(false);
+    let skip = skip_build.unwrap_or(true);
     std::thread::spawn(move || {
         let rt = match tokio::runtime::Builder::new_current_thread()
             .enable_all()
@@ -454,7 +454,7 @@ async fn run_local_build(root: &Path) -> Result<(), String> {
         cmd.creation_flags(CREATE_NO_WINDOW);
     }
 
-    let output = cmd.output().map_err(|e| e.to_string())?;
+    let output = run_cmd_timeout(cmd, 300).map_err(|e| format!("Build timed out or failed: {}", e))?;
     if !output.status.success() {
         return Err(String::from_utf8_lossy(&output.stderr).to_string());
     }
@@ -470,11 +470,32 @@ fn git_push_quiet(root: &Path) -> Result<(), String> {
         const CREATE_NO_WINDOW: u32 = 0x08000000;
         cmd.creation_flags(CREATE_NO_WINDOW);
     }
-    let out = cmd.output().map_err(|e| e.to_string())?;
+    let out = run_cmd_timeout(cmd, 120).map_err(|e| format!("Git push timed out or failed: {}", e))?;
     if !out.status.success() {
         return Err(String::from_utf8_lossy(&out.stderr).to_string());
     }
     Ok(())
+}
+
+/// Run a command with a timeout (in seconds). If the process does not complete
+/// within the limit, the deploy continues — the process is orphaned rather than
+/// blocking the deploy indefinitely.
+pub(crate) fn run_cmd_timeout(mut cmd: std::process::Command, secs: u64) -> Result<std::process::Output, String> {
+    use std::sync::mpsc;
+    use std::time::Duration;
+
+    let (tx, rx) = mpsc::channel();
+
+    std::thread::spawn(move || {
+        let result = cmd.output();
+        let _ = tx.send(result);
+    });
+
+    match rx.recv_timeout(Duration::from_secs(secs)) {
+        Ok(Ok(output)) => Ok(output),
+        Ok(Err(e)) => Err(e.to_string()),
+        Err(_) => Err(format!("Command timed out after {}s", secs)),
+    }
 }
 
 /* ═══════════════════════════════════════════════════════════════════════

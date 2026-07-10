@@ -672,14 +672,34 @@ pub fn git_commit(message: String, state: State<'_, ProjectRoot>) -> Result<Valu
 #[tauri::command]
 pub fn git_push(state: State<'_, ProjectRoot>) -> Result<Value, String> {
     let root = root_or_err(&state)?;
-    let s = git(&root, &["push"])?;
+    let mut cmd = std::process::Command::new("git");
+    cmd.args(["push"]).current_dir(&root);
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x08000000;
+        cmd.creation_flags(CREATE_NO_WINDOW);
+    }
+    let out = crate::deploy::run_cmd_timeout(cmd, 60)
+        .map_err(|e| format!("Git push timed out or failed: {}", e))?;
+    let s = String::from_utf8_lossy(&out.stdout).to_string();
     Ok(json!({ "pushed": true, "output": s }))
 }
 
 #[tauri::command]
 pub fn git_pull(state: State<'_, ProjectRoot>) -> Result<Value, String> {
     let root = root_or_err(&state)?;
-    let s = git(&root, &["pull"])?;
+    let mut cmd = std::process::Command::new("git");
+    cmd.args(["pull"]).current_dir(&root);
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x08000000;
+        cmd.creation_flags(CREATE_NO_WINDOW);
+    }
+    let out = crate::deploy::run_cmd_timeout(cmd, 60)
+        .map_err(|e| format!("Git pull timed out or failed: {}", e))?;
+    let s = String::from_utf8_lossy(&out.stdout).to_string();
     Ok(json!({ "pulled": true, "output": s }))
 }
 
