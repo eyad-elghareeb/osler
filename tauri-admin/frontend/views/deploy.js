@@ -298,7 +298,7 @@
       progressEl.appendChild(meta);
       const stopBtn = el("button", { class: "btn btn-danger btn-sm" }, t("common.close"));
       stopBtn.addEventListener("click", async () => {
-        // No backend stop command — just stop polling; the deploy keeps running.
+        await invoke("deploy_stop");
         stopPolling();
         renderProgress();
       });

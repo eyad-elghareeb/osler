@@ -56,6 +56,7 @@ fn main() {
             deploy::test_deploy_connection,
             deploy::deploy,
             deploy::deploy_status,
+            deploy::deploy_stop,
             deploy::clear_deploy_logs,
             // Shell / open
             commands::open_external,

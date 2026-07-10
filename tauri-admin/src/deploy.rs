@@ -48,6 +48,7 @@ pub struct DeployInner {
     pub logs: Vec<DeployLogLine>,
     pub result_url: String,      // deployment URL when available
     pub error: String,
+    pub stop_requested: bool,
 }
 
 fn shared_deploy() -> &'static Arc<std::sync::Mutex<DeployInner>> {
@@ -225,6 +226,7 @@ pub fn deploy(
         g.logs.clear();
         g.result_url = String::new();
         g.error = String::new();
+        g.stop_requested = false;
     }
 
     // The actual deploy runs on a background thread so the frontend can poll
@@ -285,7 +287,19 @@ pub fn deploy_status() -> Value {
         "logs": g.logs.clone(),
         "resultUrl": g.result_url,
         "error": g.error,
+        "stopRequested": g.stop_requested,
     })
+}
+
+#[tauri::command]
+pub fn deploy_stop() -> Value {
+    let mut g = shared_deploy().lock().unwrap();
+    g.stop_requested = true;
+    g.running = false;
+    g.ended_at = now_millis();
+    g.success = false;
+    g.error = "Cancelled by user".to_string();
+    json!({ "stopped": true })
 }
 
 #[tauri::command]
@@ -293,6 +307,16 @@ pub fn clear_deploy_logs() -> Value {
     let mut g = shared_deploy().lock().unwrap();
     g.logs.clear();
     json!({ "cleared": true })
+}
+
+/// Check if the deploy has been requested to stop. Call between steps so the
+/// user's cancellation takes effect promptly.
+fn stop_if_requested() -> Result<(), String> {
+    let g = shared_deploy().lock().unwrap();
+    if g.stop_requested {
+        return Err("Deploy cancelled by user".to_string());
+    }
+    Ok(())
 }
 
 /* ═══════════════════════════════════════════════════════════════════════
@@ -398,12 +422,14 @@ async fn run_deploy(
     skip_build: bool,
 ) -> Result<String, String> {
     log_info(format!("Starting {} deploy", provider));
+    stop_if_requested()?;
 
     // Step 1 — build (unless skipped). For Vercel / Cloudflare / Netlify, the
     // provider's own build infra handles the actual Next.js build from the
     // pushed Git source, so we only need a local build for GitHub Pages.
     if !skip_build && provider == "github_pages" {
         log_info("Building the project locally for GitHub Pages…");
+        stop_if_requested()?;
         match run_local_build(root).await {
             Ok(()) => log_ok("Local build complete."),
             Err(e) => return Err(format!("Local build failed: {}", e)),
@@ -411,6 +437,7 @@ async fn run_deploy(
     } else if !skip_build && (provider == "cloudflare_pages_direct" || provider == "netlify_direct") {
         // Reserved for future direct-upload modes — not currently triggered.
         log_info("Building the project locally…");
+        stop_if_requested()?;
         match run_local_build(root).await {
             Ok(()) => log_ok("Local build complete."),
             Err(e) => return Err(format!("Local build failed: {}", e)),
@@ -420,6 +447,7 @@ async fn run_deploy(
     // Step 2 — push to Git first (so the provider's rebuild picks up changes).
     if provider != "github_pages" {
         log_info("Pushing current branch to remote…");
+        stop_if_requested()?;
         match git_push_quiet(root) {
             Ok(()) => log_ok("Git push complete."),
             Err(e) => log_warn(format!("Git push failed (continuing anyway): {}", e)),
@@ -427,6 +455,7 @@ async fn run_deploy(
     }
 
     // Step 3 — dispatch to provider.
+    stop_if_requested()?;
     let url = match provider {
         "vercel" => deploy_vercel(root, cfg).await?,
         "github_pages" => deploy_github_pages(root, cfg).await?,
@@ -464,37 +493,62 @@ async fn run_local_build(root: &Path) -> Result<(), String> {
 fn git_push_quiet(root: &Path) -> Result<(), String> {
     let mut cmd = std::process::Command::new("git");
     cmd.args(["push"]).current_dir(root);
+    // Suppress credential prompts so git push fails fast instead of hanging
+    // on GCM or SSH passphrase dialogs.
+    cmd.env("GIT_TERMINAL_PROMPT", "0");
     #[cfg(windows)]
     {
         use std::os::windows::process::CommandExt;
         const CREATE_NO_WINDOW: u32 = 0x08000000;
         cmd.creation_flags(CREATE_NO_WINDOW);
     }
-    let out = run_cmd_timeout(cmd, 120).map_err(|e| format!("Git push timed out or failed: {}", e))?;
+    let out = run_cmd_timeout(cmd, 30).map_err(|e| format!("Git push failed: {}", e))?;
     if !out.status.success() {
         return Err(String::from_utf8_lossy(&out.stderr).to_string());
     }
     Ok(())
 }
 
-/// Run a command with a timeout (in seconds). If the process does not complete
-/// within the limit, the deploy continues — the process is orphaned rather than
-/// blocking the deploy indefinitely.
+/// Run a command with a timeout (in seconds). Kills the process if it does not
+/// complete within the limit, preventing orphaned processes that would otherwise
+/// accumulate when `git push` hangs on credential prompts.
 pub(crate) fn run_cmd_timeout(mut cmd: std::process::Command, secs: u64) -> Result<std::process::Output, String> {
-    use std::sync::mpsc;
-    use std::time::Duration;
+    use std::io::Read;
+    use std::process::Stdio;
+    use std::time::{Duration, Instant};
 
-    let (tx, rx) = mpsc::channel();
+    let mut child = cmd
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .map_err(|e| format!("Failed to spawn: {}", e))?;
 
-    std::thread::spawn(move || {
-        let result = cmd.output();
-        let _ = tx.send(result);
-    });
+    let start = Instant::now();
+    let timeout = Duration::from_secs(secs);
 
-    match rx.recv_timeout(Duration::from_secs(secs)) {
-        Ok(Ok(output)) => Ok(output),
-        Ok(Err(e)) => Err(e.to_string()),
-        Err(_) => Err(format!("Command timed out after {}s", secs)),
+    loop {
+        match child.try_wait() {
+            Ok(Some(status)) => {
+                let mut stdout = Vec::new();
+                let mut stderr = Vec::new();
+                let _ = child.stdout.as_mut().map(|s| s.read_to_end(&mut stdout));
+                let _ = child.stderr.as_mut().map(|s| s.read_to_end(&mut stderr));
+                return Ok(std::process::Output { status, stdout, stderr });
+            }
+            Ok(None) => {
+                if start.elapsed() >= timeout {
+                    let _ = child.kill();
+                    let _ = child.wait();
+                    return Err(format!("Command timed out after {}s", secs));
+                }
+                std::thread::sleep(Duration::from_millis(100));
+            }
+            Err(e) => {
+                let _ = child.kill();
+                let _ = child.wait();
+                return Err(format!("Process error: {}", e));
+            }
+        }
     }
 }
 
@@ -512,13 +566,18 @@ fn build_vercel_client() -> reqwest::Client {
 
 async fn test_vercel(cfg: &Value) -> Result<Value, String> {
     let token = read_field_or_err(cfg, "vercel", "token", "Personal Access Token")?;
-    let client = build_vercel_client();
+    let client = reqwest::Client::builder()
+        .user_agent("osler-admin/0.2 (tauri)")
+        .timeout(std::time::Duration::from_secs(15))
+        .connect_timeout(std::time::Duration::from_secs(10))
+        .build()
+        .expect("reqwest client");
     let resp = client
         .get("https://api.vercel.com/v2/user")
         .bearer_auth(&token)
         .send()
         .await
-        .map_err(|e| e.to_string())?;
+        .map_err(|e| format!("Vercel connection test failed: {}", e))?;
     let status = resp.status();
     if !status.is_success() {
         let body = resp.text().await.unwrap_or_default();
@@ -603,10 +662,31 @@ async fn test_github_pages(cfg: &Value) -> Result<Value, String> {
     let token = read_field_or_err(cfg, "github_pages", "token", "Personal Access Token")?;
     let owner = read_field_or_err(cfg, "github_pages", "owner", "Owner")?;
     let repo  = read_field_or_err(cfg, "github_pages", "repo", "Repository")?;
-    let client = build_github_client(&token);
+    let mut headers = reqwest::header::HeaderMap::new();
+    if let Ok(h) = reqwest::header::HeaderValue::from_str(&format!("token {}", token)) {
+        headers.insert(reqwest::header::AUTHORIZATION, h);
+    }
+    headers.insert(
+        reqwest::header::ACCEPT,
+        reqwest::header::HeaderValue::from_static("application/vnd.github+json"),
+    );
+    headers.insert(
+        "X-GitHub-Api-Version",
+        reqwest::header::HeaderValue::from_static("2022-11-28"),
+    );
+    headers.insert(
+        reqwest::header::USER_AGENT,
+        reqwest::header::HeaderValue::from_static("osler-admin-tauri"),
+    );
+    let client = reqwest::Client::builder()
+        .default_headers(headers)
+        .timeout(std::time::Duration::from_secs(15))
+        .connect_timeout(std::time::Duration::from_secs(10))
+        .build()
+        .expect("github test client");
 
     let url = format!("https://api.github.com/repos/{}/{}", owner, repo);
-    let resp = client.get(&url).send().await.map_err(|e| e.to_string())?;
+    let resp = client.get(&url).send().await.map_err(|e| format!("GitHub connection test failed: {}", e))?;
     let status = resp.status();
     if !status.is_success() {
         let body = resp.text().await.unwrap_or_default();
@@ -798,10 +878,19 @@ async fn test_cloudflare_pages(cfg: &Value) -> Result<Value, String> {
     let token = read_field_or_err(cfg, "cloudflare_pages", "api_token", "API token")?;
     let account_id = read_field_or_err(cfg, "cloudflare_pages", "account_id", "Account ID")?;
     let project = read_field_or_err(cfg, "cloudflare_pages", "project_name", "Project name")?;
-    let client = build_cloudflare_client(&token);
+    let mut headers = reqwest::header::HeaderMap::new();
+    if let Ok(h) = reqwest::header::HeaderValue::from_str(&format!("Bearer {}", token)) {
+        headers.insert(reqwest::header::AUTHORIZATION, h);
+    }
+    let client = reqwest::Client::builder()
+        .default_headers(headers)
+        .timeout(std::time::Duration::from_secs(15))
+        .connect_timeout(std::time::Duration::from_secs(10))
+        .build()
+        .expect("cf test client");
 
     let url = format!("https://api.cloudflare.com/client/v4/accounts/{}/pages/projects/{}", account_id, project);
-    let resp = client.get(&url).send().await.map_err(|e| e.to_string())?;
+    let resp = client.get(&url).send().await.map_err(|e| format!("Cloudflare connection test failed: {}", e))?;
     let status = resp.status();
     if !status.is_success() {
         let body = resp.text().await.unwrap_or_default();
@@ -870,10 +959,19 @@ fn build_netlify_client(token: &str) -> reqwest::Client {
 async fn test_netlify(cfg: &Value) -> Result<Value, String> {
     let token = read_field_or_err(cfg, "netlify", "token", "Personal Access Token")?;
     let site_id = read_field_or_err(cfg, "netlify", "site_id", "Site ID")?;
-    let client = build_netlify_client(&token);
+    let mut headers = reqwest::header::HeaderMap::new();
+    if let Ok(h) = reqwest::header::HeaderValue::from_str(&format!("Bearer {}", token)) {
+        headers.insert(reqwest::header::AUTHORIZATION, h);
+    }
+    let client = reqwest::Client::builder()
+        .default_headers(headers)
+        .timeout(std::time::Duration::from_secs(15))
+        .connect_timeout(std::time::Duration::from_secs(10))
+        .build()
+        .expect("netlify test client");
 
     let url = format!("https://api.netlify.com/api/v1/sites/{}", site_id);
-    let resp = client.get(&url).send().await.map_err(|e| e.to_string())?;
+    let resp = client.get(&url).send().await.map_err(|e| format!("Netlify connection test failed: {}", e))?;
     let status = resp.status();
     if !status.is_success() {
         let body = resp.text().await.unwrap_or_default();
