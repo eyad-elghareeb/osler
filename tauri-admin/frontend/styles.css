@@ -186,13 +186,28 @@ button { cursor: pointer; }
   overflow: hidden;
 }
 
+/* ── Drag region for borderless Tauri window ────────────────────────────
+ * The topbar has `data-tauri-drag-region` so the user can drag the window
+ * by clicking empty areas. Interactive elements inside automatically
+ * exclude themselves from the drag region (Tauri 2 built-in behavior),
+ * but we add an explicit CSS rule as a safeguard.
+ */
+[data-tauri-drag-region] button,
+[data-tauri-drag-region] input,
+[data-tauri-drag-region] a,
+[data-tauri-drag-region] [role="button"],
+[data-tauri-drag-region] [data-no-drag] {
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
+}
+
 .topbar {
   height: var(--topbar-h);
   flex-shrink: 0;
   display: flex;
   align-items: center;
   gap: 0.75rem;
-  padding: 0 0.875rem;
+  padding: 0 0 0 0.875rem;
   border-bottom: 1px solid var(--border);
   background: color-mix(in oklch, var(--bg) 80%, transparent);
   backdrop-filter: blur(12px);
@@ -270,6 +285,49 @@ button { cursor: pointer; }
   color: var(--text);
 }
 .icon-btn span { font-size: 0.75rem; font-weight: 600; }
+
+/* ── Integrated window controls (custom titlebar buttons) ───────────────
+ * Mirrors the Windows 11 visual language. The parent `.topbar` has
+ * `data-tauri-drag-region`; these buttons use `app-region: no-drag`
+ * via the safeguard rule above so they remain clickable.
+ * Layout: flex row, self-stretch, right-aligned in the topbar.
+ */
+.window-controls {
+  display: flex;
+  align-items: stretch;
+  align-self: stretch;
+  flex-shrink: 0;
+  margin-inline-end: 0;
+}
+
+.wc-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 46px;
+  min-width: 46px;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+  position: relative;
+}
+.wc-btn:hover {
+  background: var(--surface-2);
+  color: var(--text);
+}
+.wc-btn:active {
+  background: var(--surface-3);
+}
+.wc-close:hover {
+  background: oklch(0.68 0.21 22);
+  color: white;
+}
+.wc-close:active {
+  background: oklch(0.58 0.18 22);
+  color: white;
+}
 
 /* Body layout */
 .body {

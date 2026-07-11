@@ -449,6 +449,47 @@
     moon.style.display = current === "dark" ? "none" : "";
   }
 
+  /* ────────────────────── Window controls ────────────────────── */
+
+  let wcMaximized = false;
+
+  function wcInvoke(cmd) {
+    if (!TAURI_AVAILABLE) return;
+    window.__TAURI__.core.invoke(cmd).catch(() => {});
+  }
+
+  function wcUpdateMaximizeIcon() {
+    const icon = document.getElementById("wc-max-icon");
+    const restore = document.getElementById("wc-restore-icon");
+    const btn = document.getElementById("wc-maximize");
+    if (!icon || !restore || !btn) return;
+    icon.style.display = wcMaximized ? "none" : "";
+    restore.style.display = wcMaximized ? "" : "none";
+    btn.setAttribute("aria-label", wcMaximized ? "Restore" : "Maximize");
+    btn.setAttribute("title", wcMaximized ? "Restore" : "Maximize");
+  }
+
+  async function wcInit() {
+    if (!TAURI_AVAILABLE) return;
+    document.getElementById("wc-minimize")?.addEventListener("click", () => wcInvoke("plugin:window|minimize"));
+    document.getElementById("wc-maximize")?.addEventListener("click", () => wcInvoke("plugin:window|toggle_maximize"));
+    document.getElementById("wc-close")?.addEventListener("click", () => wcInvoke("plugin:window|close"));
+    try {
+      wcMaximized = await window.__TAURI__.core.invoke("plugin:window|is_maximized");
+      wcUpdateMaximizeIcon();
+    } catch {}
+    try {
+      const { listen } = await import("@tauri-apps/api/event");
+      const unlisten = await listen("tauri://resize", async () => {
+        try {
+          wcMaximized = await window.__TAURI__.core.invoke("plugin:window|is_maximized");
+          wcUpdateMaximizeIcon();
+        } catch {}
+      });
+      window.__oslerWcUnlisten = unlisten;
+    } catch {}
+  }
+
   /* ────────────────────── Boot ────────────────────── */
 
   function boot() {
@@ -472,6 +513,9 @@
     register("git", window.OslerAdminViews.git);
     register("deploy", window.OslerAdminViews.deploy);
     register("settings", window.OslerAdminViews.settings);
+
+    // Initialise custom window controls (borderless window titlebar buttons)
+    wcInit();
 
     // Initial state fetch + first render
     refreshProjectState().then(async () => {
