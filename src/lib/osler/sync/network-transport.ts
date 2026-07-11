@@ -169,7 +169,7 @@ export class NetworkTransport {
 
     try {
       const ip = await this.getPublicIP();
-      const hash = await this.hashString(`osler-sync-v2-${ip}`);
+      const hash = this.hashString(`osler-sync-v2-${ip}`);
       this.roomHash = hash.substring(0, 8).toUpperCase();
       this.callbacks.onRoomId(this.roomHash);
 
@@ -340,13 +340,13 @@ export class NetworkTransport {
     });
   }
 
-  private async hashString(str: string): Promise<string> {
-    const encoder = new TextEncoder();
-    const data = encoder.encode(str);
-    const hash = await crypto.subtle.digest("SHA-256", data);
-    return Array.from(new Uint8Array(hash))
-      .map((b) => b.toString(16).padStart(2, "0"))
-      .join("");
+  private hashString(str: string): string {
+    let h = 0;
+    for (let i = 0; i < str.length; i++) {
+      h = ((h << 5) - h) + str.charCodeAt(i);
+      h |= 0;
+    }
+    return Math.abs(h).toString(16).toUpperCase();
   }
 
   private async connectMQTT(): Promise<void> {
