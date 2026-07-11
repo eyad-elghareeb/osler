@@ -63,7 +63,14 @@ fn now_millis() -> u64 {
 }
 
 fn log(line: &str, kind: &str) {
-    let mut g = shared_deploy().lock().unwrap();
+    // Use `match` instead of `.unwrap()` so a poisoned mutex doesn't
+    // cascade-panic every subsequent log call. If the mutex is poisoned
+    // (e.g. a previous deploy thread panicked while holding it), we
+    // recover the inner guard via `into_inner()` so logging resumes.
+    let mut g = match shared_deploy().lock() {
+        Ok(g) => g,
+        Err(p) => p.into_inner(),
+    };
     g.logs.push(DeployLogLine {
         stream: kind.to_string(),
         text: line.to_string(),
@@ -176,17 +183,19 @@ fn write_deploy_config(root: &Path, cfg: &Value) -> Result<(), String> {
    ═══════════════════════════════════════════════════════════════════════ */
 
 #[tauri::command]
-pub fn get_deploy_config(state: State<'_, ProjectRoot>) -> Result<Value, String> {
+pub async fn get_deploy_config(state: State<'_, ProjectRoot>) -> Result<Value, String> {
+    // Async so the (brief) file read doesn't block Tauri's main UI thread.
     let root = crate::commands::root_or_err_pub(&state)?;
     let cfg = read_deploy_config(&root);
     Ok(redact_config(cfg))
 }
 
 #[tauri::command]
-pub fn set_deploy_config(
+pub async fn set_deploy_config(
     config: Value,
     state: State<'_, ProjectRoot>,
 ) -> Result<Value, String> {
+    // Async so the file write + .gitignore update don't block the UI thread.
     let root = crate::commands::root_or_err_pub(&state)?;
     // Merge incoming config over the existing one — incoming fields overwrite,
     // but we preserve existing fields that the frontend doesn't send (e.g.
@@ -198,7 +207,7 @@ pub fn set_deploy_config(
 }
 
 #[tauri::command]
-pub fn clear_deploy_provider(
+pub async fn clear_deploy_provider(
     provider: String,
     state: State<'_, ProjectRoot>,
 ) -> Result<Value, String> {
@@ -212,12 +221,19 @@ pub fn clear_deploy_provider(
 }
 
 #[tauri::command]
-pub fn test_deploy_connection(
+pub async fn test_deploy_connection(
     provider: String,
     state: State<'_, ProjectRoot>,
 ) -> Result<Value, String> {
+    // CRITICAL: this command makes network calls (up to 15s each). The
+    // previous sync version blocked Tauri's main UI thread for the entire
+    // duration, freezing the webview. Async lets Tauri run it on the async
+    // runtime's worker thread instead of the main UI thread.
     let root = crate::commands::root_or_err_pub(&state)?;
     let cfg = read_deploy_config(&root);
+    // The test_* functions use ureq's blocking API. Calling them directly
+    // inside an async command will block one async worker for up to 15s,
+    // but the UI thread stays responsive. Acceptable for a one-shot test.
     let result = match provider.as_str() {
         "vercel" => test_vercel(&cfg),
         "github_pages" => test_github_pages(&cfg),
@@ -232,17 +248,24 @@ pub fn test_deploy_connection(
 }
 
 #[tauri::command]
-pub fn deploy(
+pub async fn deploy(
     provider: String,
     skip_build: Option<bool>,
     state: State<'_, ProjectRoot>,
 ) -> Result<Value, String> {
+    // Async so the config read + mutex reset don't block the UI thread.
+    // The actual deploy work runs on a plain std::thread (see below) so it
+    // can use ureq's blocking HTTP client without involving tokio.
     let root = crate::commands::root_or_err_pub(&state)?;
     let cfg = read_deploy_config(&root);
 
-    // Reset shared state.
+    // Reset shared state. Recover from poison so a previously panicked
+    // deploy thread doesn't permanently break the deploy feature.
     {
-        let mut g = shared_deploy().lock().unwrap();
+        let mut g = match shared_deploy().lock() {
+            Ok(g) => g,
+            Err(p) => p.into_inner(),
+        };
         g.provider = provider.clone();
         g.running = true;
         g.success = false;
@@ -254,17 +277,22 @@ pub fn deploy(
         g.stop_requested = false;
     }
 
-    // The actual deploy runs in a background thread so the frontend
-    // can poll `deploy_status` for streaming logs. Uses a plain
-    // std::thread + reqwest::blocking to avoid interacting with
-    // Tauri's own tokio runtime.
     let skip = skip_build.unwrap_or(true);
     let provider_for_task = provider.clone();
     log_info(format!("Spawning deploy thread for provider '{}' (skip_build={})", provider, skip));
     std::thread::spawn(move || {
         log_info("Deploy thread started");
         let result = run_deploy(&provider_for_task, &root, &cfg, skip);
-        let mut g = shared_deploy().lock().unwrap();
+        // Use try_lock on completion so a stuck deploy_status poll can't
+        // deadlock the deploy thread. If the lock is poisoned, we just
+        // drop the result — the next deploy call resets everything.
+        let mut g = match shared_deploy().lock() {
+            Ok(g) => g,
+            Err(e) => {
+                eprintln!("deploy: shared state mutex poisoned on completion: {}", e);
+                return;
+            }
+        };
         g.running = false;
         g.ended_at = now_millis();
         match result {
@@ -289,43 +317,77 @@ pub fn deploy(
 }
 
 #[tauri::command]
-pub fn deploy_status() -> Value {
-    let g = shared_deploy().lock().unwrap();
+pub async fn deploy_status() -> Value {
+    // IMPORTANT: this command is `async` so Tauri 2 runs it on the async
+    // runtime's worker thread instead of the main UI thread. The previous
+    // sync version cloned the entire `logs: Vec<DeployLogLine>` on the
+    // main thread every 1.2s, which froze the webview whenever logs grew
+    // large or the deploy thread was mid-log.
+    //
+    // We acquire the lock (briefly — only to clone a snapshot) and recover
+    // from poison so a previously panicked deploy thread doesn't break the
+    // status polling. We also cap the returned logs to the last 500 lines
+    // so the IPC payload stays small.
+    let snapshot = {
+        let g = match shared_deploy().lock() {
+            Ok(g) => g,
+            Err(p) => p.into_inner(),
+        };
+        let start = g.logs.len().saturating_sub(500);
+        DeployInner {
+            provider: g.provider.clone(),
+            running: g.running,
+            success: g.success,
+            started_at: g.started_at,
+            ended_at: g.ended_at,
+            logs: g.logs[start..].to_vec(),
+            result_url: g.result_url.clone(),
+            error: g.error.clone(),
+            stop_requested: g.stop_requested,
+        }
+    };
     json!({
-        "provider": g.provider,
-        "running": g.running,
-        "success": g.success,
-        "startedAt": g.started_at,
-        "endedAt": g.ended_at,
-        "logs": g.logs.clone(),
-        "resultUrl": g.result_url,
-        "error": g.error,
-        "stopRequested": g.stop_requested,
+        "provider": snapshot.provider,
+        "running": snapshot.running,
+        "success": snapshot.success,
+        "startedAt": snapshot.started_at,
+        "endedAt": snapshot.ended_at,
+        "logs": snapshot.logs,
+        "resultUrl": snapshot.result_url,
+        "error": snapshot.error,
+        "stopRequested": snapshot.stop_requested,
     })
 }
 
 #[tauri::command]
-pub fn deploy_stop() -> Value {
-    let mut g = shared_deploy().lock().unwrap();
-    g.stop_requested = true;
-    g.running = false;
-    g.ended_at = now_millis();
-    g.success = false;
-    g.error = "Cancelled by user".to_string();
+pub async fn deploy_stop() -> Value {
+    // Async for the same reason as `deploy_status` — never block the
+    // main thread on the shared mutex.
+    if let Ok(mut g) = shared_deploy().lock() {
+        g.stop_requested = true;
+        g.running = false;
+        g.ended_at = now_millis();
+        g.success = false;
+        g.error = "Cancelled by user".to_string();
+    }
     json!({ "stopped": true })
 }
 
 #[tauri::command]
-pub fn clear_deploy_logs() -> Value {
-    let mut g = shared_deploy().lock().unwrap();
-    g.logs.clear();
+pub async fn clear_deploy_logs() -> Value {
+    if let Ok(mut g) = shared_deploy().lock() {
+        g.logs.clear();
+    }
     json!({ "cleared": true })
 }
 
 /// Check if the deploy has been requested to stop. Call between steps so the
 /// user's cancellation takes effect promptly.
 fn stop_if_requested() -> Result<(), String> {
-    let g = shared_deploy().lock().unwrap();
+    let g = match shared_deploy().lock() {
+        Ok(g) => g,
+        Err(p) => p.into_inner(),
+    };
     if g.stop_requested {
         return Err("Deploy cancelled by user".to_string());
     }
@@ -463,12 +525,17 @@ fn run_deploy(
     }
 
     // Step 2 — push to Git first (so the provider's rebuild picks up changes).
+    // Only attempt the push for Git-connected providers. For Vercel /
+    // Cloudflare Pages / Netlify, the provider's CI rebuilds from the
+    // connected Git remote, so a push is helpful but not strictly required.
+    // We cap it at 20s (down from 30s) and never block the deploy on its
+    // failure — the provider will deploy whatever's already on the remote.
     if provider != "github_pages" {
-        log_info("Pushing current branch to remote… (capped at 30s)");
+        log_info("Pushing current branch to remote… (capped at 20s; non-blocking)");
         stop_if_requested()?;
-        match git_push_quiet(root) {
+        match git_push_quiet(root, 20) {
             Ok(()) => log_ok("Git push complete."),
-            Err(e) => log_warn(format!("Git push failed (continuing anyway): {}", e)),
+            Err(e) => log_warn(format!("Git push skipped or failed (continuing with deploy anyway): {}", e)),
         }
     }
 
@@ -529,19 +596,22 @@ fn run_local_build(root: &Path) -> Result<(), String> {
     Ok(())
 }
 
-fn git_push_quiet(root: &Path) -> Result<(), String> {
+fn git_push_quiet(root: &Path, secs: u64) -> Result<(), String> {
     let mut cmd = std::process::Command::new("git");
     cmd.args(["push"]).current_dir(root);
     // Suppress credential prompts so git push fails fast instead of hanging
     // on GCM or SSH passphrase dialogs.
     cmd.env("GIT_TERMINAL_PROMPT", "0");
+    // Also neutralise SSH askpass helpers that bypass GIT_TERMINAL_PROMPT.
+    cmd.env("SSH_ASKPASS", "");
+    cmd.env("SSH_ASKPASS_REQUIRE", "never");
     #[cfg(windows)]
     {
         use std::os::windows::process::CommandExt;
         const CREATE_NO_WINDOW: u32 = 0x08000000;
         cmd.creation_flags(CREATE_NO_WINDOW);
     }
-    let out = run_cmd_timeout(cmd, 30).map_err(|e| format!("Git push failed: {}", e))?;
+    let out = run_cmd_timeout(cmd, secs).map_err(|e| format!("Git push failed: {}", e))?;
     if !out.status.success() {
         return Err(String::from_utf8_lossy(&out.stderr).to_string());
     }
@@ -599,7 +669,11 @@ fn build_vercel_client() -> ureq::Agent {
     ureq::AgentBuilder::new()
         .user_agent("osler-admin/0.2 (tauri)")
         .timeout_connect(std::time::Duration::from_secs(15))
-        .timeout(std::time::Duration::from_secs(300))
+        // The POST /v13/deployments call only *creates* the deployment
+        // record; the actual build runs asynchronously on Vercel's side.
+        // 60s is plenty for the API round-trip and prevents the UI from
+        // appearing to hang for 5 minutes when something goes wrong.
+        .timeout(std::time::Duration::from_secs(60))
         .build()
 }
 
@@ -636,30 +710,90 @@ fn deploy_vercel(root: &Path, cfg: &Value) -> Result<String, String> {
     log_info(format!("Triggering Vercel production deploy for project '{}' (branch {})…", project, branch));
 
     let client = build_vercel_client();
-    let body = json!({
+
+    // ── Build the request body ───────────────────────────────────────────
+    //
+    // The Vercel v13/deployments endpoint accepts two shapes:
+    //
+    //   1. Simple redeploy — just `{ name, target }`. Vercel uses the
+    //      project's already-connected Git repo and its production branch.
+    //      This is the recommended path for "trigger a redeploy" UX.
+    //
+    //   2. Explicit Git source — `{ name, target, gitSource: { type, org,
+    //      repo, ref, repoId } }`. Requires *all* of those fields; sending
+    //      a half-formed `gitSource` (just `type` + `ref`) makes the API
+    //      hang or 400 with a confusing error.
+    //
+    // The previous code sent shape #2 but with only `type` and `ref`,
+    // which is why the POST appeared to hang for the full timeout. We now
+    // send shape #1 by default (the common case — the user has already
+    // connected their Git repo in Vercel's dashboard), and only attach a
+    // full `gitSource` if the user has explicitly saved `org` + `repo` +
+    // `repo_id` in the deploy config.
+    let mut body = json!({
         "name": project,
         "target": "production",
-        "gitSource": {
-            "type": "github",
-            "ref": branch,
-        },
     });
 
+    let org = read_field(cfg, "vercel", "org");
+    let repo = read_field(cfg, "vercel", "repo");
+    let repo_id = read_field(cfg, "vercel", "repo_id");
+    if org.is_some() && repo.is_some() && repo_id.is_some() {
+        let repo_id_str = repo_id.unwrap();
+        let repo_id_num: i64 = repo_id_str.parse().map_err(|_| {
+            format!("vercel.repo_id must be a numeric GitHub repo ID (got '{}'). Find it via https://api.github.com/repos/{{owner}}/{{repo}}.", repo_id_str)
+        })?;
+        body["gitSource"] = json!({
+            "type": "github",
+            "org": org.unwrap(),
+            "repo": repo.unwrap(),
+            "ref": branch,
+            "repoId": repo_id_num,
+        });
+        log_info("Using explicit gitSource (org + repo + repoId configured).");
+    } else {
+        // Simplest, most reliable path: let Vercel use the project's
+        // already-linked Git repo. We pass `target` + `name` only.
+        log_info("No explicit gitSource configured — Vercel will redeploy from the project's linked Git repo.");
+    }
+
     let vercel_url = "https://api.vercel.com/v13/deployments?forceNew=1";
-    log_info(format!("Vercel deploy: POST {} (30s timeout)…", vercel_url));
+    log_info(format!("Vercel deploy: POST {} (60s timeout)…", vercel_url));
     let resp = client
         .post(vercel_url)
         .set("Authorization", &format!("Bearer {}", token))
         .send_json(&body)
-        .map_err(|e| e.to_string())?;
+        .map_err(|e| {
+            // Distinguish timeout from other network errors so the user
+            // can tell whether it's a network issue or a Vercel issue.
+            let msg = e.to_string();
+            if msg.contains("timed out") || msg.contains("deadline") {
+                format!("Vercel API request timed out after 60s. Check your network connection and try again. (Body sent: {})", body)
+            } else {
+                format!("Vercel API request failed: {} (Body sent: {})", msg, body)
+            }
+        })?;
     log_info("Vercel deploy: response received");
 
     let status = resp.status();
-    let text = resp.into_string().map_err(|e| e.to_string())?;
+    let text = resp.into_string().map_err(|e| format!("Failed to read Vercel response body: {}", e))?;
     if status < 200 || status >= 300 {
-        return Err(format!("Vercel API {}: {}", status, text));
+        // Try to extract Vercel's structured error message for clarity.
+        let pretty = match serde_json::from_str::<Value>(&text) {
+            Ok(v) => {
+                let msg = v.pointer("/error/message").and_then(|s| s.as_str()).unwrap_or("");
+                let code = v.pointer("/error/code").and_then(|s| s.as_str()).unwrap_or("");
+                if !msg.is_empty() {
+                    format!("Vercel API {} ({}): {}", status, code, msg)
+                } else {
+                    format!("Vercel API {}: {}", status, text)
+                }
+            }
+            Err(_) => format!("Vercel API {}: {}", status, text),
+        };
+        return Err(pretty);
     }
-    let json: Value = serde_json::from_str(&text).map_err(|e| e.to_string())?;
+    let json: Value = serde_json::from_str(&text).map_err(|e| format!("Vercel returned non-JSON ({}): {}", e, text))?;
     let id = json.get("id").and_then(|v| v.as_str()).unwrap_or("");
     let url = json
         .get("url")

@@ -27,6 +27,9 @@
         { id: "token", label: t("deploy.field.token"), type: "password", placeholder: "vercel_xxxxxxxxxxxxxxxxxxxx", hint: t("deploy.vercel.tokenHint") },
         { id: "project_name", label: t("deploy.field.projectName"), type: "text", placeholder: "osler-web" },
         { id: "branch", label: t("deploy.field.branch"), type: "text", placeholder: "main", hint: t("deploy.field.branchHint") },
+        { id: "org", label: "GitHub org / user (optional)", type: "text", placeholder: "your-username", hint: "Only needed if the Vercel project is NOT already linked to a Git repo. Leave blank for simple redeploy." },
+        { id: "repo", label: "GitHub repo (optional)", type: "text", placeholder: "osler-web", hint: "Only needed together with org + repoId for explicit gitSource deploy." },
+        { id: "repo_id", label: "GitHub repoId (optional)", type: "text", placeholder: "12345678", hint: "Numeric GitHub repo ID. Find via https://api.github.com/repos/{owner}/{repo}." },
       ],
       docsUrl: "https://vercel.com/account/tokens",
     },
@@ -263,58 +266,74 @@
 
   /* ─── Deploy console (live log + status) ─────────────────────────── */
 
+  // Cache the latest status so renderProgress / renderConsole don't each
+  // issue a separate invoke() call. The polling loop fetches once per tick
+  // and stores the result here; the render functions just read the cache.
+  let lastStatus = null;
+
   function renderConsole() {
     const consoleEl = document.getElementById("deploy-console");
     if (!consoleEl) return;
-    invoke("deploy_status").then((status) => {
-      consoleEl.innerHTML = "";
-      if (!status || (!status.logs && !status.running && !status.error)) {
-        consoleEl.appendChild(el("div", { class: "empty-state", style: { padding: "2rem 1rem" } },
-          el("div", { class: "empty-state-text" }, t("deploy.console.empty"))
-        ));
-        return;
+    const status = lastStatus;
+    consoleEl.innerHTML = "";
+    if (!status || (!status.logs && !status.running && !status.error)) {
+      consoleEl.appendChild(el("div", { class: "empty-state", style: { padding: "2rem 1rem" } },
+        el("div", { class: "empty-state-text" }, t("deploy.console.empty"))
+      ));
+      return;
+    }
+    if (status.logs && status.logs.length) {
+      for (const line of status.logs) {
+        const row = el("div", { class: "log-line" });
+        const ts = new Date(line.ts).toLocaleTimeString();
+        row.appendChild(el("span", { class: "ts" }, ts));
+        row.appendChild(el("span", { class: "stream-" + line.stream }, line.text));
+        consoleEl.appendChild(row);
       }
-      if (status.logs && status.logs.length) {
-        for (const line of status.logs) {
-          const row = el("div", { class: "log-line" });
-          const ts = new Date(line.ts).toLocaleTimeString();
-          row.appendChild(el("span", { class: "ts" }, ts));
-          row.appendChild(el("span", { class: "stream-" + line.stream }, line.text));
-          consoleEl.appendChild(row);
-        }
-        consoleEl.scrollTop = consoleEl.scrollHeight;
-      }
-    });
+      consoleEl.scrollTop = consoleEl.scrollHeight;
+    }
   }
 
   function renderProgress() {
     const progressEl = document.getElementById("deploy-progress");
     if (!progressEl) return;
-    invoke("deploy_status").then((status) => {
-      progressEl.innerHTML = "";
-      if (!status || !status.running) return;
-      const meta = el("div", { style: { display: "flex", alignItems: "center", gap: "0.625rem", flex: "1", minWidth: "0" } });
-      meta.appendChild(el("span", { class: "spinner" }));
-      meta.appendChild(el("span", { style: { fontWeight: "500" } }, t("deploy.inProgress", { provider: status.provider })));
-      progressEl.appendChild(meta);
-      const stopBtn = el("button", { class: "btn btn-danger btn-sm" }, t("common.close"));
-      stopBtn.addEventListener("click", async () => {
-        await invoke("deploy_stop");
-        stopPolling();
-        renderProgress();
-      });
-      progressEl.appendChild(stopBtn);
+    const status = lastStatus;
+    progressEl.innerHTML = "";
+    if (!status || !status.running) return;
+    const meta = el("div", { style: { display: "flex", alignItems: "center", gap: "0.625rem", flex: "1", minWidth: "0" } });
+    meta.appendChild(el("span", { class: "spinner" }));
+    meta.appendChild(el("span", { style: { fontWeight: "500" } }, t("deploy.inProgress", { provider: status.provider })));
+    progressEl.appendChild(meta);
+    const stopBtn = el("button", { class: "btn btn-danger btn-sm" }, t("common.close"));
+    stopBtn.addEventListener("click", async () => {
+      await invoke("deploy_stop");
+      stopPolling();
+      // Refresh status once so the UI reflects the cancelled state.
+      try { lastStatus = await invoke("deploy_status"); } catch (e) { /* ignore */ }
+      renderProgress();
     });
+    progressEl.appendChild(stopBtn);
   }
 
   function startPolling() {
     if (pollTimer) return;
-    renderProgress();
-    renderConsole();
-    pollTimer = setInterval(() => {
+    // One immediate fetch so the UI shows the "in progress" state without
+    // waiting for the first interval tick.
+    invoke("deploy_status").then((s) => {
+      lastStatus = s;
       renderProgress();
       renderConsole();
+    });
+    // Poll every 1.5s. Previous code polled every 1.2s AND issued 3
+    // separate invoke() calls per tick (renderProgress + renderConsole +
+    // the interval callback), which tripled mutex contention on the Rust
+    // side and amplified the main-thread blocking bug. Now we issue a
+    // single invoke() per tick and cache the result.
+    pollTimer = setInterval(() => {
       invoke("deploy_status").then((status) => {
+        lastStatus = status;
+        renderProgress();
+        renderConsole();
         if (!status || !status.running) {
           stopPolling();
           if (status && status.success) {
@@ -324,8 +343,12 @@
           }
           updateDeployPanel();
         }
+      }).catch((e) => {
+        // Don't let a single failed poll kill the whole polling loop;
+        // just log it so the user can see something went wrong.
+        console.error("deploy_status poll failed:", e);
       });
-    }, 1200);
+    }, 1500);
   }
 
   function stopPolling() {
@@ -333,9 +356,12 @@
       clearInterval(pollTimer);
       pollTimer = null;
     }
-    // One last render so the final state shows.
-    renderProgress();
-    renderConsole();
+    // One last fetch so the final state shows.
+    invoke("deploy_status").then((s) => {
+      lastStatus = s;
+      renderProgress();
+      renderConsole();
+    });
   }
 
   /* ─── Quick-deploy panel ─────────────────────────────────────────── */
@@ -374,8 +400,9 @@
     skipRow.appendChild(el("span", {}, t("deploy.panel.skipBuild")));
     panel.appendChild(skipRow);
 
-    // Result URL display
-    invoke("deploy_status").then((status) => {
+    // Result URL display — use cached status if available to avoid an
+    // extra invoke() round-trip on every panel re-render.
+    const showResult = (status) => {
       if (status && status.resultUrl) {
         const result = el("div", { class: "card", style: { marginTop: "0.75rem", background: "var(--success-dim)", borderColor: "color-mix(in oklch, var(--success) 30%, transparent)" } });
         result.appendChild(el("div", { class: "label", style: { color: "var(--success)", marginBottom: "0.25rem" } }, t("deploy.panel.resultUrl")));
@@ -383,7 +410,12 @@
         result.appendChild(link);
         panel.appendChild(result);
       }
-    });
+    };
+    if (lastStatus) {
+      showResult(lastStatus);
+    } else {
+      invoke("deploy_status").then(showResult).catch(() => {});
+    }
   }
 
   /* ─── Card rerender without losing scroll ────────────────────────── */
@@ -460,12 +492,17 @@
 
     view.appendChild(wrap);
 
-    // Initial render of progress + console (in case a deploy is already running)
+    // Initial render: fetch status once, populate the cache, then render.
+    // (Previous code called renderProgress() + renderConsole() before any
+    // status was fetched, which each triggered their own invoke() call.)
+    try {
+      lastStatus = await invoke("deploy_status");
+    } catch (e) {
+      lastStatus = null;
+    }
     renderProgress();
     renderConsole();
     // If a deploy is in-flight, resume polling.
-    invoke("deploy_status").then((status) => {
-      if (status && status.running) startPolling();
-    });
+    if (lastStatus && lastStatus.running) startPolling();
   };
 })();
