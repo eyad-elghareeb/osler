@@ -1,4 +1,4 @@
-export type ShortcutScope = "global" | "qbank" | "flashcard" | "reader";
+export type ShortcutScope = "global" | "qbank" | "flashcard" | "reader" | "videos";
 
 export interface ShortcutAction {
   id: string;
@@ -52,6 +52,11 @@ export const SHORTCUT_ACTIONS: readonly ShortcutAction[] = [
   { id: "reader.zoomIn", label: "Zoom in", description: "Increase article text zoom.", scope: "reader", defaultBinding: "mod+=" },
   { id: "reader.zoomOut", label: "Zoom out", description: "Decrease article text zoom.", scope: "reader", defaultBinding: "mod+-" },
   { id: "reader.zoomReset", label: "Reset zoom", description: "Reset article text zoom to 100%.", scope: "reader", defaultBinding: "mod+0" },
+  { id: "videos.next", label: "Next video", description: "Skip to the next video in the playlist.", scope: "videos", defaultBinding: "n" },
+  { id: "videos.prev", label: "Previous video", description: "Go back to the previous video in the playlist.", scope: "videos", defaultBinding: "p" },
+  { id: "videos.fullscreen", label: "Toggle fullscreen", description: "Enter or exit fullscreen mode.", scope: "videos", defaultBinding: "f" },
+  { id: "videos.mute", label: "Toggle mute", description: "Mute or unmute the video.", scope: "videos", defaultBinding: "m" },
+  { id: "videos.exit", label: "Exit player", description: "Close the video player and return to the hub.", scope: "videos", defaultBinding: "escape" },
 ] as const;
 
 const STORAGE_KEY = "osler_shortcuts_v1";

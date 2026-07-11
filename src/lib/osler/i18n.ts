@@ -493,6 +493,9 @@ export const STRINGS = {
     "settings.shortcuts.scope.reader": "Article Reader",
     "settings.shortcuts.scope.readerDesc":
       "Available when reading an article or in an overlay modal.",
+    "settings.shortcuts.scope.videos": "Video Player",
+    "settings.shortcuts.scope.videosDesc":
+      "Available when watching a video (next, prev, fullscreen, mute).",
     "settings.shortcuts.tipsTitle": "Tips",
     "settings.shortcuts.tips": [
       "Multi-key sequences (e.g. G then D for Dashboard) are supported — record both chords back-to-back.",
@@ -983,6 +986,8 @@ export const STRINGS = {
       "متاحة خلال جلسة دراسة البطاقات (قلب، تقييم، تنقّل).",
     "settings.shortcuts.scope.reader": "قارئ المقالات",
     "settings.shortcuts.scope.readerDesc": "متاحة عند قراءة مقال أو في نافذة منبثقة.",
+    "settings.shortcuts.scope.videos": "مشغل الفيديو",
+    "settings.shortcuts.scope.videosDesc": "متاحة أثناء مشاهدة فيديو (التالي، السابق، ملء الشاشة، كتم الصوت).",
     "settings.shortcuts.tipsTitle": "نصائح",
     "settings.shortcuts.tips": [
       "تُدعم المتتاليات متعددة المفاتيح (مثل G ثم D للوحة الرئيسية) — سجّل كلا المفتاحين متتاليين.",

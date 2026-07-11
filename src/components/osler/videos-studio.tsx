@@ -33,6 +33,7 @@ import type { VideoResource, ContentTreeNode } from "@/lib/osler/types";
 import { cn } from "@/lib/utils";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { setImmersiveMode } from "./immersive-mode";
+import { useShortcutListener } from "@/hooks/use-shortcuts";
 import { useI18n } from "./i18n-provider";
 import { ContentLangFilter } from "./qbank-studio";
 import { FolderTreeNav } from "./folder-tree-nav";
@@ -542,35 +543,29 @@ function VideoPlayerView({
     return () => document.removeEventListener("fullscreenchange", handler);
   }, []);
 
-  // ── Keyboard shortcuts ──
-  React.useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
-      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
-      const key = e.key.toLowerCase();
-      if (key === "escape" && !document.fullscreenElement) {
-        e.preventDefault();
-        onExit();
-      } else if (key === "n" && onNext) {
-        e.preventDefault();
-        onNext();
-      } else if (key === "p" && onPrev) {
-        e.preventDefault();
-        onPrev();
-      } else if (key === "f") {
-        e.preventDefault();
-        void plyrRef.current?.fullscreen.toggle();
-      } else if (key === "m") {
-        e.preventDefault();
-        if (plyrRef.current) plyrRef.current.muted = !plyrRef.current.muted;
-      } else if (key === " " || key === "spacebar") {
-        if (document.fullscreenElement || plyrRef.current?.hasFocus) {
-          e.preventDefault();
-        }
+  // ── Keyboard shortcuts (customizable via settings) ──
+  useShortcutListener(
+    (actionId, _e) => {
+      switch (actionId) {
+        case "videos.exit":
+          if (!document.fullscreenElement) onExit();
+          break;
+        case "videos.next":
+          onNext?.();
+          break;
+        case "videos.prev":
+          onPrev?.();
+          break;
+        case "videos.fullscreen":
+          void plyrRef.current?.fullscreen.toggle();
+          break;
+        case "videos.mute":
+          if (plyrRef.current) plyrRef.current.muted = !plyrRef.current.muted;
+          break;
       }
-    };
-    window.addEventListener("keydown", handler);
-    return () => window.removeEventListener("keydown", handler);
-  }, [onExit, onNext, onPrev]);
+    },
+    { ignoreInputs: true },
+  );
 
   return (
     <div className="fixed inset-0 z-50 bg-background flex flex-col safe-screen">
@@ -631,12 +626,9 @@ function VideoPlayerView({
 
       {/* Body: player + sidebar */}
       <div className="flex-1 min-h-0 flex">
-        {/* Player area */}
-        <div className="relative flex-1 min-w-0 bg-black flex items-center justify-center p-2 sm:p-4">
-          <div
-            ref={containerRef}
-            className="w-full max-w-5xl aspect-video max-h-[calc(100vh-4rem)]"
-          />
+        {/* Player area — fills available space, Plyr handles aspect ratio internally */}
+        <div className="relative flex-1 min-w-0 bg-black">
+          <div ref={containerRef} className="absolute inset-0" />
         </div>
 
         {/* Sidebar: playlist + details */}

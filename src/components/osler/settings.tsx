@@ -567,9 +567,10 @@ function ShortcutsSettingsSection() {
     qbank: { label: t("settings.shortcuts.scope.qbank"), description: t("settings.shortcuts.scope.qbankDesc") },
     flashcard: { label: t("settings.shortcuts.scope.flashcard"), description: t("settings.shortcuts.scope.flashcardDesc") },
     reader: { label: t("settings.shortcuts.scope.reader"), description: t("settings.shortcuts.scope.readerDesc") },
+    videos: { label: t("settings.shortcuts.scope.videos"), description: t("settings.shortcuts.scope.videosDesc") },
   };
 
-  const scopes: ShortcutScope[] = ["global", "qbank", "flashcard", "reader"];
+  const scopes: ShortcutScope[] = ["global", "qbank", "flashcard", "reader", "videos"];
 
   return (
     <div className="space-y-6">
