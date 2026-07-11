@@ -203,6 +203,7 @@
       savedConfig = res || savedConfig;
       toast(t("deploy.toast.saved", { name: provider.name }), "success");
       rerenderProviderCard(provider.id);
+      updateDeployPanel();
     } catch (e) {
       toast(t("toast.error", { msg: String(e) }), "error");
     }

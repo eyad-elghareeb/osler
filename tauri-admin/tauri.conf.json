@@ -4,10 +4,7 @@
   "version": "0.2.0",
   "identifier": "com.osler.admin",
   "build": {
-    "frontendDist": "frontend",
-    "devUrl": "http://localhost:1420",
-    "beforeDevCommand": "",
-    "beforeBuildCommand": ""
+    "frontendDist": "frontend"
   },
   "app": {
     "withGlobalTauri": true,

@@ -14,15 +14,13 @@
 //   • Netlify          — trigger a manual deploy of the connected site via
 //                        the Netlify API.
 //
-// All network requests are issued from Rust (reqwest + rustls) so the webview
+// All network requests are issued from Rust (ureq + native-tls) so the webview
 // CSP does not need to allow provider endpoints. PATs are persisted under
 // `<project_root>/.osler-admin/deploy.json` with mode 0600 on Unix.
 
 use crate::commands::ProjectRoot;
 use base64::{engine::general_purpose::STANDARD as B64, Engine};
 use serde_json::{json, Value};
-use sha1::{Digest, Sha1};
-use sha2::Sha256;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, OnceLock};
 use tauri::State;
@@ -77,6 +75,33 @@ fn log_info(line: impl Into<String>)  { log(&line.into(), "info"); }
 fn log_warn(line: impl Into<String>)  { log(&line.into(), "warn"); }
 fn log_err(line: impl Into<String>)   { log(&line.into(), "error"); }
 fn log_ok(line: impl Into<String>)    { log(&line.into(), "success"); }
+
+/* ─── Header-shorthand macros (ureq v2 hides RequestBuilder type) ──── */
+
+macro_rules! gh_get { ($a:expr, $u:expr, $t:expr) => { $a.get($u)
+    .set("Authorization", &format!("token {}", $t))
+    .set("Accept", "application/vnd.github+json")
+    .set("X-GitHub-Api-Version", "2022-11-28")
+    .set("User-Agent", "osler-admin-tauri")
+    .call() } }
+
+macro_rules! gh_post { ($a:expr, $u:expr, $t:expr) => { $a.post($u)
+    .set("Authorization", &format!("token {}", $t))
+    .set("Accept", "application/vnd.github+json")
+    .set("X-GitHub-Api-Version", "2022-11-28")
+    .set("User-Agent", "osler-admin-tauri") } }
+
+macro_rules! gh_patch { ($a:expr, $u:expr, $t:expr) => { $a.patch($u)
+    .set("Authorization", &format!("token {}", $t))
+    .set("Accept", "application/vnd.github+json")
+    .set("X-GitHub-Api-Version", "2022-11-28")
+    .set("User-Agent", "osler-admin-tauri") } }
+
+macro_rules! bearer_get { ($a:expr, $u:expr, $t:expr) => { $a.get($u)
+    .set("Authorization", &format!("Bearer {}", $t)) } }
+
+macro_rules! bearer_post { ($a:expr, $u:expr, $t:expr) => { $a.post($u)
+    .set("Authorization", &format!("Bearer {}", $t)) } }
 
 /* ═══════════════════════════════════════════════════════════════════════
    Config storage — `.osler-admin/deploy.json` under the project root
@@ -187,17 +212,17 @@ pub fn clear_deploy_provider(
 }
 
 #[tauri::command]
-pub async fn test_deploy_connection(
+pub fn test_deploy_connection(
     provider: String,
     state: State<'_, ProjectRoot>,
 ) -> Result<Value, String> {
     let root = crate::commands::root_or_err_pub(&state)?;
     let cfg = read_deploy_config(&root);
     let result = match provider.as_str() {
-        "vercel" => test_vercel(&cfg).await,
-        "github_pages" => test_github_pages(&cfg).await,
-        "cloudflare_pages" => test_cloudflare_pages(&cfg).await,
-        "netlify" => test_netlify(&cfg).await,
+        "vercel" => test_vercel(&cfg),
+        "github_pages" => test_github_pages(&cfg),
+        "cloudflare_pages" => test_cloudflare_pages(&cfg),
+        "netlify" => test_netlify(&cfg),
         other => Err(format!("Unknown provider: {}", other)),
     };
     match result {
@@ -229,28 +254,16 @@ pub fn deploy(
         g.stop_requested = false;
     }
 
-    // The actual deploy runs on a background thread so the frontend can poll
-    // `deploy_status` for streaming logs.
-    let root_clone = root.clone();
-    let provider_clone = provider.clone();
+    // The actual deploy runs in a background thread so the frontend
+    // can poll `deploy_status` for streaming logs. Uses a plain
+    // std::thread + reqwest::blocking to avoid interacting with
+    // Tauri's own tokio runtime.
     let skip = skip_build.unwrap_or(true);
+    let provider_for_task = provider.clone();
+    log_info(format!("Spawning deploy thread for provider '{}' (skip_build={})", provider, skip));
     std::thread::spawn(move || {
-        let rt = match tokio::runtime::Builder::new_current_thread()
-            .enable_all()
-            .build()
-        {
-            Ok(rt) => rt,
-            Err(e) => {
-                let mut g = shared_deploy().lock().unwrap();
-                g.running = false;
-                g.ended_at = now_millis();
-                g.error = format!("Runtime error: {}", e);
-                return;
-            }
-        };
-        let result = rt.block_on(async move {
-            run_deploy(&provider_clone, &root_clone, &cfg, skip).await
-        });
+        log_info("Deploy thread started");
+        let result = run_deploy(&provider_for_task, &root, &cfg, skip);
         let mut g = shared_deploy().lock().unwrap();
         g.running = false;
         g.ended_at = now_millis();
@@ -354,10 +367,15 @@ fn merge_provider(into: &mut Value, from: &Value) {
     }
     let into_obj = into.as_object_mut().unwrap();
     for (k, v) in from.as_object().unwrap() {
-        // Treat empty string as "don't overwrite" for token-shaped fields.
-        if v.is_string() && v.as_str().unwrap_or("").is_empty() {
-            // Only preserve if the field name looks like a secret.
-            if k.contains("token") || k.contains("pat") || k == "password" {
+        // Treat empty string or redacted sentinel as "don't overwrite"
+        // for token-shaped fields. The frontend reads back redacted
+        // values ("••••••••") and re-sends them on every save, so if we
+        // don't skip them here the real token gets overwritten with the
+        // sentinel whenever the user clicks Deploy or Test.
+        let is_secret = k.contains("token") || k.contains("pat") || k == "password" || k == "api_key";
+        if is_secret && v.is_string() {
+            let s = v.as_str().unwrap_or("");
+            if s.is_empty() || s == "••••••••" {
                 continue;
             }
         }
@@ -415,7 +433,7 @@ fn read_field_or_err(cfg: &Value, provider: &str, field: &str, label: &str) -> R
    Top-level orchestrator — builds first (unless skipped), then dispatches
    ═══════════════════════════════════════════════════════════════════════ */
 
-async fn run_deploy(
+fn run_deploy(
     provider: &str,
     root: &Path,
     cfg: &Value,
@@ -430,7 +448,7 @@ async fn run_deploy(
     if !skip_build && provider == "github_pages" {
         log_info("Building the project locally for GitHub Pages…");
         stop_if_requested()?;
-        match run_local_build(root).await {
+        match run_local_build(root) {
             Ok(()) => log_ok("Local build complete."),
             Err(e) => return Err(format!("Local build failed: {}", e)),
         }
@@ -438,7 +456,7 @@ async fn run_deploy(
         // Reserved for future direct-upload modes — not currently triggered.
         log_info("Building the project locally…");
         stop_if_requested()?;
-        match run_local_build(root).await {
+        match run_local_build(root) {
             Ok(()) => log_ok("Local build complete."),
             Err(e) => return Err(format!("Local build failed: {}", e)),
         }
@@ -446,7 +464,7 @@ async fn run_deploy(
 
     // Step 2 — push to Git first (so the provider's rebuild picks up changes).
     if provider != "github_pages" {
-        log_info("Pushing current branch to remote…");
+        log_info("Pushing current branch to remote… (capped at 30s)");
         stop_if_requested()?;
         match git_push_quiet(root) {
             Ok(()) => log_ok("Git push complete."),
@@ -455,19 +473,40 @@ async fn run_deploy(
     }
 
     // Step 3 — dispatch to provider.
+    log_info(format!("Phase: dispatching to provider '{}'", provider));
     stop_if_requested()?;
     let url = match provider {
-        "vercel" => deploy_vercel(root, cfg).await?,
-        "github_pages" => deploy_github_pages(root, cfg).await?,
-        "cloudflare_pages" => deploy_cloudflare_pages(root, cfg).await?,
-        "netlify" => deploy_netlify(cfg).await?,
+        "vercel" => {
+            log_info("Checkpoint: calling deploy_vercel…");
+            let r = deploy_vercel(root, cfg)?;
+            log_info("Checkpoint: deploy_vercel returned");
+            r
+        }
+        "github_pages" => {
+            log_info("Checkpoint: calling deploy_github_pages…");
+            let r = deploy_github_pages(root, cfg)?;
+            log_info("Checkpoint: deploy_github_pages returned");
+            r
+        }
+        "cloudflare_pages" => {
+            log_info("Checkpoint: calling deploy_cloudflare_pages…");
+            let r = deploy_cloudflare_pages(root, cfg)?;
+            log_info("Checkpoint: deploy_cloudflare_pages returned");
+            r
+        }
+        "netlify" => {
+            log_info("Checkpoint: calling deploy_netlify…");
+            let r = deploy_netlify(cfg)?;
+            log_info("Checkpoint: deploy_netlify returned");
+            r
+        }
         other => return Err(format!("Unknown provider: {}", other)),
     };
 
     Ok(url)
 }
 
-async fn run_local_build(root: &Path) -> Result<(), String> {
+fn run_local_build(root: &Path) -> Result<(), String> {
     let pm = which::which("bun")
         .map(|_| "bun")
         .or_else(|_| which::which("npm").map(|_| "npm"))
@@ -556,39 +595,41 @@ pub(crate) fn run_cmd_timeout(mut cmd: std::process::Command, secs: u64) -> Resu
    Vercel — POST /v13/deployments to trigger a production redeploy
    ═══════════════════════════════════════════════════════════════════════ */
 
-fn build_vercel_client() -> reqwest::Client {
-    reqwest::Client::builder()
+fn build_vercel_client() -> ureq::Agent {
+    ureq::AgentBuilder::new()
         .user_agent("osler-admin/0.2 (tauri)")
-        .timeout(std::time::Duration::from_secs(60))
+        .timeout_connect(std::time::Duration::from_secs(15))
+        .timeout(std::time::Duration::from_secs(300))
+        .proxy(ureq::Proxy::new("").unwrap())
         .build()
-        .expect("reqwest client")
 }
 
-async fn test_vercel(cfg: &Value) -> Result<Value, String> {
+fn test_vercel(cfg: &Value) -> Result<Value, String> {
     let token = read_field_or_err(cfg, "vercel", "token", "Personal Access Token")?;
-    let client = reqwest::Client::builder()
+    let client = ureq::AgentBuilder::new()
         .user_agent("osler-admin/0.2 (tauri)")
         .timeout(std::time::Duration::from_secs(15))
-        .connect_timeout(std::time::Duration::from_secs(10))
-        .build()
-        .expect("reqwest client");
+        .timeout_connect(std::time::Duration::from_secs(10))
+        .build();
+    log_info("Vercel test: GET https://api.vercel.com/v2/user …");
     let resp = client
         .get("https://api.vercel.com/v2/user")
-        .bearer_auth(&token)
-        .send()
-        .await
+        .set("Authorization", &format!("Bearer {}", token))
+        .call()
+        
         .map_err(|e| format!("Vercel connection test failed: {}", e))?;
+    log_info("Vercel test: response received");
     let status = resp.status();
-    if !status.is_success() {
-        let body = resp.text().await.unwrap_or_default();
+    if status < 200 || status >= 300 {
+        let body = resp.into_string().unwrap_or_default();
         return Err(format!("Vercel rejected the token ({}): {}", status, body));
     }
-    let json: Value = resp.json().await.map_err(|e| e.to_string())?;
+    let json: Value = resp.into_json().map_err(|e| e.to_string())?;
     let user = json.get("user").and_then(|u| u.get("username")).and_then(|s| s.as_str()).unwrap_or("(unknown)");
     Ok(json!({ "user": user }))
 }
 
-async fn deploy_vercel(root: &Path, cfg: &Value) -> Result<String, String> {
+fn deploy_vercel(root: &Path, cfg: &Value) -> Result<String, String> {
     let token = read_field_or_err(cfg, "vercel", "token", "Personal Access Token")?;
     let project = read_field_or_err(cfg, "vercel", "project_name", "Project name")?;
     let branch = read_field(cfg, "vercel", "branch").unwrap_or_else(|| crate::commands::git_branch_string(root).unwrap_or_else(|_| "main".to_string()));
@@ -605,18 +646,18 @@ async fn deploy_vercel(root: &Path, cfg: &Value) -> Result<String, String> {
         },
     });
 
+    let vercel_url = "https://api.vercel.com/v13/deployments?forceNew=1";
+    log_info(format!("Vercel deploy: POST {} (30s timeout)…", vercel_url));
     let resp = client
-        .post("https://api.vercel.com/v13/deployments")
-        .bearer_auth(&token)
-        .header("Content-Type", "application/json")
-        .json(&body)
-        .send()
-        .await
+        .post(vercel_url)
+        .set("Authorization", &format!("Bearer {}", token))
+        .send_json(&body)
         .map_err(|e| e.to_string())?;
+    log_info("Vercel deploy: response received");
 
     let status = resp.status();
-    let text = resp.text().await.map_err(|e| e.to_string())?;
-    if !status.is_success() {
+    let text = resp.into_string().map_err(|e| e.to_string())?;
+    if status < 200 || status >= 300 {
         return Err(format!("Vercel API {}: {}", status, text));
     }
     let json: Value = serde_json::from_str(&text).map_err(|e| e.to_string())?;
@@ -634,71 +675,38 @@ async fn deploy_vercel(root: &Path, cfg: &Value) -> Result<String, String> {
    GitHub Pages — push build output to the configured branch via the Git Data API
    ═══════════════════════════════════════════════════════════════════════ */
 
-fn build_github_client(token: &str) -> reqwest::Client {
-    let mut headers = reqwest::header::HeaderMap::new();
-    if let Ok(h) = reqwest::header::HeaderValue::from_str(&format!("token {}", token)) {
-        headers.insert(reqwest::header::AUTHORIZATION, h);
-    }
-    headers.insert(
-        reqwest::header::ACCEPT,
-        reqwest::header::HeaderValue::from_static("application/vnd.github+json"),
-    );
-    headers.insert(
-        "X-GitHub-Api-Version",
-        reqwest::header::HeaderValue::from_static("2022-11-28"),
-    );
-    headers.insert(
-        reqwest::header::USER_AGENT,
-        reqwest::header::HeaderValue::from_static("osler-admin-tauri"),
-    );
-    reqwest::Client::builder()
-        .default_headers(headers)
-        .timeout(std::time::Duration::from_secs(60))
+fn build_github_client() -> ureq::Agent {
+    ureq::AgentBuilder::new()
+        .timeout_connect(std::time::Duration::from_secs(15))
+        .timeout(std::time::Duration::from_secs(120))
         .build()
-        .expect("github client")
 }
 
-async fn test_github_pages(cfg: &Value) -> Result<Value, String> {
+fn test_github_pages(cfg: &Value) -> Result<Value, String> {
     let token = read_field_or_err(cfg, "github_pages", "token", "Personal Access Token")?;
     let owner = read_field_or_err(cfg, "github_pages", "owner", "Owner")?;
     let repo  = read_field_or_err(cfg, "github_pages", "repo", "Repository")?;
-    let mut headers = reqwest::header::HeaderMap::new();
-    if let Ok(h) = reqwest::header::HeaderValue::from_str(&format!("token {}", token)) {
-        headers.insert(reqwest::header::AUTHORIZATION, h);
-    }
-    headers.insert(
-        reqwest::header::ACCEPT,
-        reqwest::header::HeaderValue::from_static("application/vnd.github+json"),
-    );
-    headers.insert(
-        "X-GitHub-Api-Version",
-        reqwest::header::HeaderValue::from_static("2022-11-28"),
-    );
-    headers.insert(
-        reqwest::header::USER_AGENT,
-        reqwest::header::HeaderValue::from_static("osler-admin-tauri"),
-    );
-    let client = reqwest::Client::builder()
-        .default_headers(headers)
+    let client = ureq::AgentBuilder::new()
         .timeout(std::time::Duration::from_secs(15))
-        .connect_timeout(std::time::Duration::from_secs(10))
-        .build()
-        .expect("github test client");
+        .timeout_connect(std::time::Duration::from_secs(10))
+        .build();
 
     let url = format!("https://api.github.com/repos/{}/{}", owner, repo);
-    let resp = client.get(&url).send().await.map_err(|e| format!("GitHub connection test failed: {}", e))?;
+    log_info(format!("GitHub test: GET {}", &url[..url.len().min(80)]));
+    let resp = gh_get!(client, &url, token).map_err(|e| format!("GitHub connection test failed: {}", e))?;
+    log_info("GitHub test: response received");
     let status = resp.status();
-    if !status.is_success() {
-        let body = resp.text().await.unwrap_or_default();
+    if status < 200 || status >= 300 {
+        let body = resp.into_string().unwrap_or_default();
         return Err(format!("GitHub API {}: {}", status, body));
     }
-    let json: Value = resp.json().await.map_err(|e| e.to_string())?;
+    let json: Value = resp.into_json().map_err(|e| e.to_string())?;
     let full = json.get("full_name").and_then(|s| s.as_str()).unwrap_or("");
     let default_branch = json.get("default_branch").and_then(|s| s.as_str()).unwrap_or("");
     Ok(json!({ "repo": full, "default_branch": default_branch }))
 }
 
-async fn deploy_github_pages(root: &Path, cfg: &Value) -> Result<String, String> {
+fn deploy_github_pages(root: &Path, cfg: &Value) -> Result<String, String> {
     let token = read_field_or_err(cfg, "github_pages", "token", "Personal Access Token")?;
     let owner = read_field_or_err(cfg, "github_pages", "owner", "Owner")?;
     let repo  = read_field_or_err(cfg, "github_pages", "repo", "Repository")?;
@@ -724,7 +732,7 @@ async fn deploy_github_pages(root: &Path, cfg: &Value) -> Result<String, String>
 
     log_info(format!("Pushing contents of {} to {}/{} (branch {})…", source_dir.display(), owner, repo, branch));
 
-    let client = build_github_client(&token);
+    let client = build_github_client();
     let api = format!("https://api.github.com/repos/{}/{}", owner, repo);
 
     // 1. Collect files (relative path → bytes).
@@ -734,41 +742,47 @@ async fn deploy_github_pages(root: &Path, cfg: &Value) -> Result<String, String>
 
     // 2. Get the current SHA of the target branch (or create the branch).
     let ref_url = format!("{}/git/refs/heads/{}", api, branch);
-    let head_sha: Option<String> = match client.get(&ref_url).send().await {
-        Ok(resp) if resp.status().is_success() => {
-            let json: Value = resp.json().await.map_err(|e| e.to_string())?;
+    log_info(format!("GH: GET refs/heads/{} …", branch));
+    let head_sha: Option<String> = match gh_get!(client, &ref_url, token) {
+        Ok(resp) if resp.status() >= 200 && resp.status() < 300 => {
+            let json: Value = resp.into_json().map_err(|e| e.to_string())?;
             json.get("object").and_then(|o| o.get("sha")).and_then(|s| s.as_str()).map(|s| s.to_string())
         }
         _ => None,
     };
+    log_info(format!("GH: head_sha = {:?}", head_sha.as_ref().map(|s| &s[..7.min(s.len())])));
 
     // 3. Get the tree SHA of the current head (if any).
     let mut base_tree: Option<String> = None;
     if let Some(sha) = &head_sha {
         let commit_url = format!("{}/git/commits/{}", api, sha);
-        if let Ok(resp) = client.get(&commit_url).send().await {
-            if resp.status().is_success() {
-                if let Ok(json) = resp.json::<Value>().await {
+        log_info(format!("GH: GET commit {} …", &sha[..7]));
+        if let Ok(resp) = gh_get!(client, &commit_url, token) {
+            if resp.status() >= 200 && resp.status() < 300 {
+                if let Ok(json) = resp.into_json::<Value>() {
                     base_tree = json.get("tree").and_then(|t| t.get("sha")).and_then(|s| s.as_str()).map(|s| s.to_string());
                 }
             }
         }
+        log_info(format!("GH: base_tree = {:?}", base_tree.as_ref().map(|s| &s[..7.min(s.len())])));
     }
 
     // 4. Create a blob for each file.
     let mut tree_entries: Vec<Value> = Vec::new();
-    for (path, bytes) in &files {
+    let total = files.len();
+    for (i, (path, bytes)) in files.iter().enumerate() {
         let blob_url = format!("{}/git/blobs", api);
         let body = json!({
             "content": B64.encode(bytes),
             "encoding": "base64",
         });
-        let resp = client.post(&blob_url).json(&body).send().await.map_err(|e| e.to_string())?;
-        if !resp.status().is_success() {
-            let text = resp.text().await.unwrap_or_default();
+        log_info(format!("GH: blob {}/{} — {}", i + 1, total, path));
+        let resp = gh_post!(client, &blob_url, token).send_json(&body).map_err(|e| e.to_string())?;
+        if resp.status() < 200 || resp.status() >= 300 {
+            let text = resp.into_string().unwrap_or_default();
             return Err(format!("Failed to create blob for {}: {}", path, text));
         }
-        let blob_json: Value = resp.json().await.map_err(|e| e.to_string())?;
+        let blob_json: Value = resp.into_json().map_err(|e| e.to_string())?;
         let blob_sha = blob_json.get("sha").and_then(|s| s.as_str()).ok_or("Missing blob sha")?;
         tree_entries.push(json!({
             "path": path,
@@ -785,12 +799,14 @@ async fn deploy_github_pages(root: &Path, cfg: &Value) -> Result<String, String>
         "tree": tree_entries,
     });
     let tree_url = format!("{}/git/trees", api);
-    let resp = client.post(&tree_url).json(&tree_body).send().await.map_err(|e| e.to_string())?;
-    if !resp.status().is_success() {
-        let text = resp.text().await.unwrap_or_default();
+    log_info("GH: POST tree …");
+    let resp = gh_post!(client, &tree_url, token).send_json(&tree_body).map_err(|e| e.to_string())?;
+    log_info("GH: tree response received");
+    if resp.status() < 200 || resp.status() >= 300 {
+        let text = resp.into_string().unwrap_or_default();
         return Err(format!("Failed to create tree: {}", text));
     }
-    let tree_json: Value = resp.json().await.map_err(|e| e.to_string())?;
+    let tree_json: Value = resp.into_json().map_err(|e| e.to_string())?;
     let tree_sha = tree_json.get("sha").and_then(|s| s.as_str()).ok_or("Missing tree sha")?;
     log_info(format!("Created tree {}", &tree_sha[..7]));
 
@@ -805,27 +821,32 @@ async fn deploy_github_pages(root: &Path, cfg: &Value) -> Result<String, String>
         commit_body["parents"] = json!([]);
     }
     let commit_url = format!("{}/git/commits", api);
-    let resp = client.post(&commit_url).json(&commit_body).send().await.map_err(|e| e.to_string())?;
-    if !resp.status().is_success() {
-        let text = resp.text().await.unwrap_or_default();
+    log_info("GH: POST commit …");
+    let resp = gh_post!(client, &commit_url, token).send_json(&commit_body).map_err(|e| e.to_string())?;
+    log_info("GH: commit response received");
+    if resp.status() < 200 || resp.status() >= 300 {
+        let text = resp.into_string().unwrap_or_default();
         return Err(format!("Failed to create commit: {}", text));
     }
-    let commit_json: Value = resp.json().await.map_err(|e| e.to_string())?;
+    let commit_json: Value = resp.into_json().map_err(|e| e.to_string())?;
     let commit_sha = commit_json.get("sha").and_then(|s| s.as_str()).ok_or("Missing commit sha")?;
     log_ok(format!("Created commit {}", &commit_sha[..7]));
 
     // 7. Update the ref (create the branch if it doesn't exist).
     let ref_body = json!({ "sha": commit_sha, "force": true });
     let ref_resp = if head_sha.is_some() {
-        client.patch(&ref_url).json(&ref_body).send().await
+        log_info("GH: PATCH ref …");
+        gh_patch!(client, &ref_url, token).send_json(&ref_body)
     } else {
+        log_info("GH: POST ref (create branch) …");
         let create_url = format!("{}/git/refs", api);
         let create_body = json!({ "sha": commit_sha, "ref": format!("refs/heads/{}", branch) });
-        client.post(&create_url).json(&create_body).send().await
+        gh_post!(client, &create_url, token).send_json(&create_body)
     };
     let resp = ref_resp.map_err(|e| e.to_string())?;
-    if !resp.status().is_success() {
-        let text = resp.text().await.unwrap_or_default();
+    log_info("GH: ref update response received");
+    if resp.status() < 200 || resp.status() >= 300 {
+        let text = resp.into_string().unwrap_or_default();
         return Err(format!("Failed to update ref: {}", text));
     }
     log_ok(format!("Updated {}/{} → {}", branch, repo, &commit_sha[..7]));
@@ -862,47 +883,38 @@ fn collect_files(base: &Path, current: &Path, out: &mut Vec<(String, Vec<u8>)>) 
    a redeploy from the connected Git branch.
    ═══════════════════════════════════════════════════════════════════════ */
 
-fn build_cloudflare_client(token: &str) -> reqwest::Client {
-    let mut headers = reqwest::header::HeaderMap::new();
-    if let Ok(h) = reqwest::header::HeaderValue::from_str(&format!("Bearer {}", token)) {
-        headers.insert(reqwest::header::AUTHORIZATION, h);
-    }
-    reqwest::Client::builder()
-        .default_headers(headers)
-        .timeout(std::time::Duration::from_secs(60))
+fn build_cloudflare_client() -> ureq::Agent {
+    ureq::AgentBuilder::new()
+        .timeout_connect(std::time::Duration::from_secs(15))
+        .timeout(std::time::Duration::from_secs(300))
         .build()
-        .expect("cf client")
 }
 
-async fn test_cloudflare_pages(cfg: &Value) -> Result<Value, String> {
+fn test_cloudflare_pages(cfg: &Value) -> Result<Value, String> {
     let token = read_field_or_err(cfg, "cloudflare_pages", "api_token", "API token")?;
     let account_id = read_field_or_err(cfg, "cloudflare_pages", "account_id", "Account ID")?;
     let project = read_field_or_err(cfg, "cloudflare_pages", "project_name", "Project name")?;
-    let mut headers = reqwest::header::HeaderMap::new();
-    if let Ok(h) = reqwest::header::HeaderValue::from_str(&format!("Bearer {}", token)) {
-        headers.insert(reqwest::header::AUTHORIZATION, h);
-    }
-    let client = reqwest::Client::builder()
-        .default_headers(headers)
+    let client = ureq::AgentBuilder::new()
         .timeout(std::time::Duration::from_secs(15))
-        .connect_timeout(std::time::Duration::from_secs(10))
-        .build()
-        .expect("cf test client");
+        .timeout_connect(std::time::Duration::from_secs(10))
+        .build();
 
     let url = format!("https://api.cloudflare.com/client/v4/accounts/{}/pages/projects/{}", account_id, project);
-    let resp = client.get(&url).send().await.map_err(|e| format!("Cloudflare connection test failed: {}", e))?;
+    log_info("Cloudflare test: GET project …");
+    let resp = bearer_get!(client, &url, token).call().map_err(|e| format!("Cloudflare connection test failed: {}", e))?;
+    log_info("Cloudflare test: response received");
     let status = resp.status();
-    if !status.is_success() {
-        let body = resp.text().await.unwrap_or_default();
+    if status < 200 || status >= 300 {
+        let body = resp.into_string().unwrap_or_default();
         return Err(format!("Cloudflare API {}: {}", status, body));
     }
-    let json: Value = resp.json().await.map_err(|e| e.to_string())?;
+    let json: Value = resp.into_json().map_err(|e| e.to_string())?;
     let name = json.pointer("/result/name").and_then(|s| s.as_str()).unwrap_or("");
     let subdomain = json.pointer("/result/subdomain").and_then(|s| s.as_str()).unwrap_or("");
     Ok(json!({ "project": name, "subdomain": subdomain }))
 }
 
-async fn deploy_cloudflare_pages(root: &Path, cfg: &Value) -> Result<String, String> {
+fn deploy_cloudflare_pages(root: &Path, cfg: &Value) -> Result<String, String> {
     let token = read_field_or_err(cfg, "cloudflare_pages", "api_token", "API token")?;
     let account_id = read_field_or_err(cfg, "cloudflare_pages", "account_id", "Account ID")?;
     let project = read_field_or_err(cfg, "cloudflare_pages", "project_name", "Project name")?;
@@ -910,23 +922,21 @@ async fn deploy_cloudflare_pages(root: &Path, cfg: &Value) -> Result<String, Str
 
     log_info(format!("Triggering Cloudflare Pages deploy for '{}' (branch {})…", project, branch));
 
-    let client = build_cloudflare_client(&token);
+    let client = build_cloudflare_client();
     let url = format!(
         "https://api.cloudflare.com/client/v4/accounts/{}/pages/projects/{}/deployments",
         account_id, project
     );
     let body = json!({ "branch": branch });
-    let resp = client
-        .post(&url)
-        .header("Content-Type", "application/json")
-        .json(&body)
-        .send()
-        .await
+    log_info("Cloudflare deploy: POST deployment (300s timeout)…");
+    let resp = bearer_post!(client, &url, token)
+        .send_json(&body)
         .map_err(|e| e.to_string())?;
+    log_info("Cloudflare deploy: response received");
 
     let status = resp.status();
-    let text = resp.text().await.map_err(|e| e.to_string())?;
-    if !status.is_success() {
+    let text = resp.into_string().map_err(|e| e.to_string())?;
+    if status < 200 || status >= 300 {
         return Err(format!("Cloudflare API {}: {}", status, text));
     }
     let json: Value = serde_json::from_str(&text).map_err(|e| e.to_string())?;
@@ -944,69 +954,58 @@ async fn deploy_cloudflare_pages(root: &Path, cfg: &Value) -> Result<String, Str
    Netlify — POST /sites/{site_id}/deploys to trigger a manual build from Git
    ═══════════════════════════════════════════════════════════════════════ */
 
-fn build_netlify_client(token: &str) -> reqwest::Client {
-    let mut headers = reqwest::header::HeaderMap::new();
-    if let Ok(h) = reqwest::header::HeaderValue::from_str(&format!("Bearer {}", token)) {
-        headers.insert(reqwest::header::AUTHORIZATION, h);
-    }
-    reqwest::Client::builder()
-        .default_headers(headers)
-        .timeout(std::time::Duration::from_secs(60))
+fn build_netlify_client() -> ureq::Agent {
+    ureq::AgentBuilder::new()
+        .timeout_connect(std::time::Duration::from_secs(15))
+        .timeout(std::time::Duration::from_secs(300))
         .build()
-        .expect("netlify client")
 }
 
-async fn test_netlify(cfg: &Value) -> Result<Value, String> {
+fn test_netlify(cfg: &Value) -> Result<Value, String> {
     let token = read_field_or_err(cfg, "netlify", "token", "Personal Access Token")?;
     let site_id = read_field_or_err(cfg, "netlify", "site_id", "Site ID")?;
-    let mut headers = reqwest::header::HeaderMap::new();
-    if let Ok(h) = reqwest::header::HeaderValue::from_str(&format!("Bearer {}", token)) {
-        headers.insert(reqwest::header::AUTHORIZATION, h);
-    }
-    let client = reqwest::Client::builder()
-        .default_headers(headers)
+    let client = ureq::AgentBuilder::new()
         .timeout(std::time::Duration::from_secs(15))
-        .connect_timeout(std::time::Duration::from_secs(10))
-        .build()
-        .expect("netlify test client");
+        .timeout_connect(std::time::Duration::from_secs(10))
+        .build();
 
     let url = format!("https://api.netlify.com/api/v1/sites/{}", site_id);
-    let resp = client.get(&url).send().await.map_err(|e| format!("Netlify connection test failed: {}", e))?;
+    log_info("Netlify test: GET site …");
+    let resp = bearer_get!(client, &url, token).call().map_err(|e| format!("Netlify connection test failed: {}", e))?;
+    log_info("Netlify test: response received");
     let status = resp.status();
-    if !status.is_success() {
-        let body = resp.text().await.unwrap_or_default();
+    if status < 200 || status >= 300 {
+        let body = resp.into_string().unwrap_or_default();
         return Err(format!("Netlify API {}: {}", status, body));
     }
-    let json: Value = resp.json().await.map_err(|e| e.to_string())?;
+    let json: Value = resp.into_json().map_err(|e| e.to_string())?;
     let name = json.get("name").and_then(|s| s.as_str()).unwrap_or("");
     let ssl_url = json.get("ssl_url").and_then(|s| s.as_str()).unwrap_or("");
     Ok(json!({ "name": name, "url": ssl_url }))
 }
 
-async fn deploy_netlify(cfg: &Value) -> Result<String, String> {
+fn deploy_netlify(cfg: &Value) -> Result<String, String> {
     let token = read_field_or_err(cfg, "netlify", "token", "Personal Access Token")?;
     let site_id = read_field_or_err(cfg, "netlify", "site_id", "Site ID")?;
     let title = read_field(cfg, "netlify", "deploy_title").unwrap_or_else(|| "Osler Admin deploy".to_string());
 
     log_info(format!("Triggering Netlify deploy for site '{}'…", site_id));
 
-    let client = build_netlify_client(&token);
+    let client = build_netlify_client();
     let url = format!("https://api.netlify.com/api/v1/sites/{}/deploys", site_id);
     let body = json!({
         "trigger": "manual-deploy",
         "title": title,
     });
-    let resp = client
-        .post(&url)
-        .header("Content-Type", "application/json")
-        .json(&body)
-        .send()
-        .await
+    log_info("Netlify deploy: POST deploy (300s timeout)…");
+    let resp = bearer_post!(client, &url, token)
+        .send_json(&body)
         .map_err(|e| e.to_string())?;
+    log_info("Netlify deploy: response received");
 
     let status = resp.status();
-    let text = resp.text().await.map_err(|e| e.to_string())?;
-    if !status.is_success() {
+    let text = resp.into_string().map_err(|e| e.to_string())?;
+    if status < 200 || status >= 300 {
         return Err(format!("Netlify API {}: {}", status, text));
     }
     let json: Value = serde_json::from_str(&text).map_err(|e| e.to_string())?;
@@ -1016,26 +1015,4 @@ async fn deploy_netlify(cfg: &Value) -> Result<String, String> {
     Ok(ssl_url.unwrap_or_else(|| format!("https://app.netlify.com/sites/{}/deploys/{}", site_id, id)))
 }
 
-/* ═══════════════════════════════════════════════════════════════════════
-   Hash helpers — kept for future direct-upload modes (currently unused,
-   but referenced in reserved branches so the imports stay valid).
-   ═══════════════════════════════════════════════════════════════════════ */
-
-#[allow(dead_code)]
-fn sha1_hex(bytes: &[u8]) -> String {
-    let mut h = Sha1::new();
-    h.update(bytes);
-    hex::encode(h.finalize())
-}
-
-#[allow(dead_code)]
-fn sha256_hex(bytes: &[u8]) -> String {
-    let mut h = Sha256::new();
-    h.update(bytes);
-    hex::encode(h.finalize())
-}
-
-#[allow(dead_code)]
-fn percent_encode_path(s: &str) -> String {
-    percent_encoding::utf8_percent_encode(s, percent_encoding::NON_ALPHANUMERIC).to_string()
-}
+// (hash helpers removed — no longer needed without Git Data API uploads)
