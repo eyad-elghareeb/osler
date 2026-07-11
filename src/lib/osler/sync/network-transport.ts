@@ -199,9 +199,7 @@ export class NetworkTransport {
     this.peer?.destroy();
     this.peer = null;
     if (this.mqttClient) {
-      try {
-        (this.mqttClient as { disconnect: () => void }).disconnect();
-      } catch { }
+      try { (this.mqttClient as { disconnect: () => void }).disconnect(); } catch { }
       this.mqttClient = null;
     }
     this.started = false;
@@ -347,20 +345,13 @@ export class NetworkTransport {
 
   private async connectMQTT(): Promise<void> {
     const mqtt = await import("paho-mqtt");
-    const client = new mqtt.Client("broker.emqx.io", 8084, `osler-${this.localPeerId}-${Date.now()}`) as {
-      connect: (opts: Record<string, unknown>) => void;
-      subscribe: (topic: string) => void;
-      send: (topic: string, payload: string) => void;
-      disconnect: () => void;
-      onMessageArrived: (cb: (msg: { destinationName: string; payloadString: string }) => void) => void;
-      onConnectionLost: (cb: (err: unknown) => void) => void;
-    };
+    // WebSocket constructor: new Client(host, port, path, clientId)
+    const client = new mqtt.Client("broker.emqx.io", 8084, "/mqtt", `osler-${this.localPeerId}-${Date.now()}`) as Record<string, unknown>;
 
     return new Promise<void>((resolve, reject) => {
-      const c = client as unknown as Record<string, unknown>;
-      c.onConnectionLost = () => { this.discovering = false; };
+      client.onConnectionLost = () => { this.discovering = false; };
 
-      c.onMessageArrived = (msg: { destinationName: string; payloadString: string }) => {
+      client.onMessageArrived = (msg: { destinationName: string; payloadString: string }) => {
         if (msg.destinationName === `osler/sync/v2/${this.roomHash}/presence`) {
           try {
             const data = JSON.parse(msg.payloadString);
@@ -377,11 +368,11 @@ export class NetworkTransport {
         }
       };
 
-      client.connect({
+      (client as { connect: (opts: Record<string, unknown>) => void }).connect({
         useSSL: true,
         onSuccess: () => {
           this.mqttClient = client;
-          client.subscribe(`osler/sync/v2/${this.roomHash}/presence`);
+          (client as { subscribe: (topic: string) => void }).subscribe(`osler/sync/v2/${this.roomHash}/presence`);
           resolve();
         },
         onFailure: (err: unknown) => reject(new Error(`MQTT: ${(err as { errorMessage: string }).errorMessage}`)),
