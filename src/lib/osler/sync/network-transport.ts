@@ -1,6 +1,7 @@
 import { Peer } from "peerjs";
 import * as SyncProtocol from "./sync-protocol";
 import { buildExportPayload, mergePayloadIntoStorage } from "./sync-helpers";
+import * as Paho from "paho-mqtt";
 
 /* ── Types ──────────────────────────────────────────────────────────── */
 
@@ -182,8 +183,9 @@ export class NetworkTransport {
 
       this.callbacks.onStatusChanged("connected", "Ready — devices will appear automatically");
     } catch (e) {
+      console.error("Network discovery failed:", e);
       this.discovering = false;
-      this.callbacks.onStatusChanged("connected", "PeerJS ready (no network discovery)");
+      this.callbacks.onStatusChanged("connected", `Your ID: ${this.localPeerId} (share with other device)`);
     }
   }
 
@@ -210,7 +212,15 @@ export class NetworkTransport {
     this.callbacks.onStatusChanged("idle", "Disconnected");
   }
 
-  /* ── Connect to discovered device ──────────────────────────────────── */
+  /* ── Connect to peer (by ID or discovered device) ──────────────────── */
+
+  async connectTo(peerJsId: string, label?: string): Promise<void> {
+    if (!this.peer) {
+      this.callbacks.onStatusChanged("error", "PeerJS not started");
+      return;
+    }
+    await this.initiateConnection(peerJsId, label ?? peerJsId);
+  }
 
   async connectToDevice(deviceId: string): Promise<void> {
     const device = this.devices[deviceId];
@@ -218,14 +228,10 @@ export class NetworkTransport {
       this.callbacks.onStatusChanged("error", "Device not found");
       return;
     }
+    await this.initiateConnection(device.peerJsId, device.name);
+  }
 
-    if (!this.peer) {
-      this.callbacks.onStatusChanged("error", "PeerJS not started");
-      return;
-    }
-
-    const remotePeerId = device.peerJsId;
-
+  private async initiateConnection(remotePeerId: string, label: string): Promise<void> {
     if (this.connections.has(remotePeerId)) {
       const entry = this.connections.get(remotePeerId)!;
       if (entry.info.status === "connected") {
@@ -235,13 +241,13 @@ export class NetworkTransport {
       return;
     }
 
-    this.callbacks.onStatusChanged("connecting", `Connecting to ${device.name}...`);
+    this.callbacks.onStatusChanged("connecting", `Connecting to ${label}...`);
 
-    const conn = this.peer.connect(remotePeerId, { reliable: true });
+    const conn = this.peer!.connect(remotePeerId, { reliable: true });
     this.trackConnection(conn, remotePeerId);
 
     conn.on("open", () => {
-      this.callbacks.onStatusChanged("connected", `Syncing with ${device.name}...`);
+      this.callbacks.onStatusChanged("connected", `Syncing with ${label}...`);
       this.sendExport(conn);
     });
 
@@ -344,9 +350,7 @@ export class NetworkTransport {
   }
 
   private async connectMQTT(): Promise<void> {
-    const mqtt = await import("paho-mqtt");
-    // WebSocket constructor: new Client(host, port, path, clientId)
-    const client = new mqtt.Client("broker.emqx.io", 8084, "/mqtt", `osler-${this.localPeerId}-${Date.now()}`) as Record<string, unknown>;
+    const client = new Paho.Client("broker.emqx.io", 8084, "/mqtt", `osler-${this.localPeerId}-${Date.now()}`) as unknown as Record<string, unknown>;
 
     return new Promise<void>((resolve, reject) => {
       client.onConnectionLost = () => { this.discovering = false; };

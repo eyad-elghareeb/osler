@@ -2,9 +2,10 @@
 
 import * as React from "react";
 import { motion } from "framer-motion";
-import { Wifi, Smartphone, Loader2, Check, AlertTriangle, Radio, RefreshCw } from "lucide-react";
+import { Wifi, Smartphone, Loader2, Check, AlertTriangle, Radio, RefreshCw, ArrowRight } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { NetworkTransport, type ConnectionInfo, type ConnectionStatus, type DiscoveredDevice } from "@/lib/osler/sync";
 import { cn } from "@/lib/utils";
 
@@ -15,6 +16,7 @@ export function NetworkSyncPanel() {
   const [statusMsg, setStatusMsg] = React.useState("");
   const [roomId, setRoomId] = React.useState("");
   const [connections, setConnections] = React.useState<ConnectionInfo[]>([]);
+  const [peerId, setPeerId] = React.useState("");
   const [initialized, setInitialized] = React.useState(false);
 
   React.useEffect(() => {
@@ -28,7 +30,7 @@ export function NetworkSyncPanel() {
         setStatus("connected");
       },
       onTransferProgress: () => {},
-      onPeerId: () => {},
+      onPeerId: (id) => setPeerId(id),
       onConnectionsChanged: (c) => setConnections([...c]),
       onDevicesChanged: (d) => setDevices([...d]),
       onRoomId: (id) => setRoomId(id),
@@ -48,8 +50,18 @@ export function NetworkSyncPanel() {
     if (transport) transport.stop();
   };
 
+  const [manualId, setManualId] = React.useState("");
+
   const handleConnect = (deviceId: string) => {
     if (transport) transport.connectToDevice(deviceId);
+  };
+
+  const handleManualConnect = () => {
+    const id = manualId.trim();
+    if (transport && id) {
+      transport.connectTo(id);
+      setManualId("");
+    }
   };
 
   const statusColor = {
@@ -87,9 +99,11 @@ export function NetworkSyncPanel() {
               <span>{statusMsg || (status === "idle" ? "Not connected" : "Connected")}</span>
             </div>
 
-            {roomId && (
+            {(roomId || peerId) && (
               <div className="text-[10px] text-muted-foreground mb-3 font-mono">
-                Room: {roomId} · Device: {transport?.deviceName ?? "..."}
+                {peerId && <>Peer ID: <span className="text-foreground/80 font-bold">{peerId}</span></>}
+                {roomId && <> · Room: {roomId}</>}
+                {transport?.deviceName && <> · Device: {transport.deviceName}</>}
               </div>
             )}
 
@@ -147,13 +161,37 @@ export function NetworkSyncPanel() {
         </Card>
       )}
 
-      {devices.length === 0 && (status === "discovering" || status === "connected") && (
+      {status !== "idle" && devices.length === 0 && (
         <Card className="p-5 border-dashed">
           <div className="text-center text-sm text-muted-foreground">
             <Radio className="size-8 mx-auto mb-2 opacity-40" />
-            <p>Waiting for devices...</p>
-            <p className="text-xs mt-1">Make sure the other device has the Sync panel open too.</p>
+            <p>No devices discovered on network</p>
+            <p className="text-xs mt-1">
+              {status === "discovering" ? "Scanning..." : "Enter the other device's Peer ID below or check they're on the same network."}
+            </p>
           </div>
+
+          {/* Manual connect */}
+          {status !== "discovering" && (
+            <div className="flex gap-2 mt-4 max-w-sm mx-auto">
+              <Input
+                placeholder="Enter Peer ID..."
+                value={manualId}
+                onChange={(e) => setManualId(e.target.value)}
+                className="h-8 text-xs"
+                onKeyDown={(e) => { if (e.key === "Enter") handleManualConnect(); }}
+              />
+              <Button
+                size="sm"
+                variant="default"
+                className="h-8 text-xs shrink-0"
+                onClick={handleManualConnect}
+                disabled={!manualId.trim() || status === "connecting"}
+              >
+                <ArrowRight className="size-3 me-1.5" /> Connect
+              </Button>
+            </div>
+          )}
         </Card>
       )}
     </div>
