@@ -32,7 +32,6 @@ import {
 import type { VideoResource, ContentTreeNode } from "@/lib/osler/types";
 import { cn } from "@/lib/utils";
 import { useIsMobile } from "@/hooks/use-mobile";
-import { getVideoStreamUrl } from "@/lib/osler/invidious";
 import { setImmersiveMode } from "./immersive-mode";
 import { useI18n } from "./i18n-provider";
 import { ContentLangFilter } from "./qbank-studio";
@@ -485,86 +484,43 @@ function VideoPlayerView({
   const containerRef = React.useRef<HTMLDivElement>(null);
   const plyrRef = React.useRef<Plyr | null>(null);
 
-  const [mode, setMode] = React.useState<"loading" | "html5" | "youtube">("loading");
-  const [streamUrl, setStreamUrl] = React.useState<string | null>(null);
   const [isFullscreen, setIsFullscreen] = React.useState(false);
   const [showPlaylist, setShowPlaylist] = React.useState(false);
 
   const videoId = video.source.type === "youtube" ? video.source.id : undefined;
   const thumbnail = resolveThumbnail(video);
 
-  // ── Fetch Invidious stream URL ──
+  // ── Initialise Plyr with YouTube IFrame provider ──
   React.useEffect(() => {
-    if (!videoId) return;
-    setMode("loading");
-    setStreamUrl(null);
-    getVideoStreamUrl(videoId)
-      .then((url) => {
-        setStreamUrl(url);
-        setMode(url ? "html5" : "youtube");
-      })
-      .catch(() => setMode("youtube"));
-  }, [videoId]);
-
-  // ── Initialise Plyr once mode is resolved ──
-  React.useEffect(() => {
-    if (!containerRef.current || !videoId || mode === "loading") return;
+    if (!containerRef.current || !videoId) return;
 
     containerRef.current.innerHTML = "";
-    let plyr: Plyr;
 
-    if (mode === "html5" && streamUrl) {
-      const video = document.createElement("video");
-      video.className = "plyr";
-      video.playsInline = true;
-      const source = document.createElement("source");
-      source.src = streamUrl;
-      source.type = "video/mp4";
-      video.appendChild(source);
-      containerRef.current.appendChild(video);
+    const div = document.createElement("div");
+    div.dataset.plyrProvider = "youtube";
+    div.dataset.plyrEmbedId = videoId;
+    containerRef.current.appendChild(div);
 
-      plyr = new Plyr(video, {
-        controls: [
-          "play-large", "play", "progress", "current-time",
-          "duration", "mute", "volume", "settings", "pip", "fullscreen",
-        ],
-        settings: ["speed"],
-        speed: { selected: 1, options: PLAYBACK_RATES },
-        keyboard: { focused: true, global: false },
-        tooltips: { controls: true, seek: true },
-        seekTime: 10,
-        disableContextMenu: true,
-        resetOnEnd: true,
-        autoplay: true,
-        poster: thumbnail ?? undefined,
-      } as any);
-    } else {
-      const div = document.createElement("div");
-      div.dataset.plyrProvider = "youtube";
-      div.dataset.plyrEmbedId = videoId;
-      containerRef.current.appendChild(div);
-
-      plyr = new Plyr(div, {
-        controls: [
-          "play-large", "play", "progress", "current-time",
-          "duration", "mute", "volume", "settings", "pip", "fullscreen",
-        ],
-        settings: ["speed"],
-        speed: { selected: 1, options: PLAYBACK_RATES },
-        youtube: {
-          rel: 0,
-          modestbranding: 1,
-          iv_load_policy: 3,
-          cc_load_policy: 0,
-        },
-        keyboard: { focused: true, global: false },
-        tooltips: { controls: true, seek: true },
-        seekTime: 10,
-        disableContextMenu: true,
-        resetOnEnd: true,
-        autoplay: true,
-      } as any);
-    }
+    const plyr = new Plyr(div, {
+      controls: [
+        "play-large", "play", "progress", "current-time",
+        "duration", "mute", "volume", "settings", "pip", "fullscreen",
+      ],
+      settings: ["speed"],
+      speed: { selected: 1, options: PLAYBACK_RATES },
+      youtube: {
+        rel: 0,
+        modestbranding: 1,
+        iv_load_policy: 3,
+        cc_load_policy: 0,
+      },
+      keyboard: { focused: true, global: false },
+      tooltips: { controls: true, seek: true },
+      seekTime: 10,
+      disableContextMenu: true,
+      resetOnEnd: true,
+      autoplay: true,
+    } as any);
 
     plyrRef.current = plyr;
 
@@ -572,7 +528,7 @@ function VideoPlayerView({
       plyr.destroy();
       plyrRef.current = null;
     };
-  }, [mode, streamUrl, videoId, thumbnail]);
+  }, [videoId, thumbnail]);
 
   // ── Fullscreen tracking ──
   React.useEffect(() => {
@@ -600,16 +556,6 @@ function VideoPlayerView({
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
   }, [onExit, onNext, onPrev]);
-
-  if (mode === "loading") {
-    return (
-      <div className="fixed inset-0 z-50 bg-background flex flex-col safe-screen">
-        <div className="flex-1 flex items-center justify-center">
-          <Loader2 className="size-8 text-primary animate-spin" />
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div className="fixed inset-0 z-50 bg-background flex flex-col safe-screen">
