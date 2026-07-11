@@ -1,45 +1,45 @@
 {
-  "type": "quiz",
   "items": [
     {
-      "uid": "quiz-arabic-clinical-quiz",
-      "title": "Arabic Clinical Quiz",
-      "type": "quiz",
-      "path": "arabic-clinical-quiz/",
       "files": [
         "questions.json"
       ],
-      "items": []
+      "items": [],
+      "path": "arabic-clinical-quiz/",
+      "title": "Arabic Clinical Quiz",
+      "type": "quiz",
+      "uid": "quiz-arabic-clinical-quiz"
     },
     {
-      "uid": "bank-clinical-vignettes",
-      "title": "Clinical Vignettes",
-      "type": "bank",
-      "path": "clinical-vignettes/",
       "files": [
         "passages.json"
       ],
-      "items": []
+      "items": [],
+      "path": "clinical-vignettes/",
+      "title": "Clinical Vignettes",
+      "type": "bank",
+      "uid": "bank-clinical-vignettes"
     },
     {
-      "uid": "written-clinical-written",
-      "title": "Clinical Written",
-      "type": "written",
-      "path": "clinical-written/",
       "files": [
         "prompts.json"
       ],
-      "items": []
+      "items": [],
+      "path": "clinical-written/",
+      "title": "Clinical Written",
+      "type": "written",
+      "uid": "written-clinical-written"
     },
     {
-      "uid": "quiz-multisystem-quiz",
-      "title": "Multisystem Quiz",
-      "type": "quiz",
-      "path": "multisystem-quiz/",
       "files": [
         "questions.json"
       ],
-      "items": []
+      "items": [],
+      "path": "multisystem-quiz/",
+      "title": "Multisystem Quiz",
+      "type": "quiz",
+      "uid": "quiz-multisystem-quiz"
     }
-  ]
+  ],
+  "type": "quiz"
 }

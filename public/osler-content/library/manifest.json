@@ -1,123 +1,123 @@
 {
-  "type": "library",
   "items": [
     {
-      "uid": "library-arabic",
-      "title": "Arabic",
-      "type": "library",
-      "path": "arabic/",
       "files": [],
       "items": [
         {
-          "uid": "library-arabic-cardiology",
-          "title": "Cardiology",
-          "type": "library",
-          "path": "arabic/cardiology/",
           "files": [
             "stemi-arabic.md"
           ],
-          "items": []
+          "items": [],
+          "path": "arabic/cardiology/",
+          "title": "Cardiology",
+          "type": "library",
+          "uid": "library-arabic-cardiology"
         }
-      ]
+      ],
+      "path": "arabic/",
+      "title": "Arabic",
+      "type": "library",
+      "uid": "library-arabic"
     },
     {
-      "uid": "library-cardiology",
-      "title": "Cardiology",
-      "type": "library",
-      "path": "cardiology/",
       "files": [],
       "items": [
         {
-          "uid": "library-cardiology-heart-failure",
-          "title": "Heart Failure",
-          "type": "library",
-          "path": "cardiology/heart-failure/",
           "files": [
             "heart-failure-reduced-ef.md"
           ],
-          "items": []
+          "items": [],
+          "path": "cardiology/heart-failure/",
+          "title": "Heart Failure",
+          "type": "library",
+          "uid": "library-cardiology-heart-failure"
         },
         {
-          "uid": "library-cardiology-ischemic-syndrome",
-          "title": "Ischemic Syndrome",
-          "type": "library",
-          "path": "cardiology/ischemic-syndrome/",
           "files": [
             "acute-coronary-syndrome.md",
             "st-elevation-mi.md"
           ],
-          "items": []
+          "items": [],
+          "path": "cardiology/ischemic-syndrome/",
+          "title": "Ischemic Syndrome",
+          "type": "library",
+          "uid": "library-cardiology-ischemic-syndrome"
         }
-      ]
+      ],
+      "path": "cardiology/",
+      "title": "Cardiology",
+      "type": "library",
+      "uid": "library-cardiology"
     },
     {
-      "uid": "library-gastroenterology",
-      "title": "Gastroenterology",
-      "type": "library",
-      "path": "gastroenterology/",
       "files": [],
       "items": [
         {
-          "uid": "library-gastroenterology-hepatobiliary",
-          "title": "Hepatobiliary",
-          "type": "library",
-          "path": "gastroenterology/hepatobiliary/",
           "files": [
             "cirrhosis.md"
           ],
-          "items": []
+          "items": [],
+          "path": "gastroenterology/hepatobiliary/",
+          "title": "Hepatobiliary",
+          "type": "library",
+          "uid": "library-gastroenterology-hepatobiliary"
         }
-      ]
+      ],
+      "path": "gastroenterology/",
+      "title": "Gastroenterology",
+      "type": "library",
+      "uid": "library-gastroenterology"
     },
     {
-      "uid": "library-neurology",
-      "title": "Neurology",
-      "type": "library",
-      "path": "neurology/",
       "files": [],
       "items": [
         {
-          "uid": "library-neurology-cerebrovascular",
-          "title": "Cerebrovascular",
-          "type": "library",
-          "path": "neurology/cerebrovascular/",
           "files": [
             "ischemic-stroke.md",
             "subarachnoid-hemorrhage.md"
           ],
-          "items": []
+          "items": [],
+          "path": "neurology/cerebrovascular/",
+          "title": "Cerebrovascular",
+          "type": "library",
+          "uid": "library-neurology-cerebrovascular"
         }
-      ]
+      ],
+      "path": "neurology/",
+      "title": "Neurology",
+      "type": "library",
+      "uid": "library-neurology"
     },
     {
-      "uid": "library-pulmonology",
-      "title": "Pulmonology",
-      "type": "library",
-      "path": "pulmonology/",
       "files": [],
       "items": [
         {
-          "uid": "library-pulmonology-obstructive-disease",
-          "title": "Obstructive Disease",
-          "type": "library",
-          "path": "pulmonology/obstructive-disease/",
           "files": [
             "asthma.md",
             "copd.md"
           ],
-          "items": []
+          "items": [],
+          "path": "pulmonology/obstructive-disease/",
+          "title": "Obstructive Disease",
+          "type": "library",
+          "uid": "library-pulmonology-obstructive-disease"
         },
         {
-          "uid": "library-pulmonology-vascular-disease",
-          "title": "Vascular Disease",
-          "type": "library",
-          "path": "pulmonology/vascular-disease/",
           "files": [
             "pulmonary-embolism.md"
           ],
-          "items": []
+          "items": [],
+          "path": "pulmonology/vascular-disease/",
+          "title": "Vascular Disease",
+          "type": "library",
+          "uid": "library-pulmonology-vascular-disease"
         }
-      ]
+      ],
+      "path": "pulmonology/",
+      "title": "Pulmonology",
+      "type": "library",
+      "uid": "library-pulmonology"
     }
-  ]
+  ],
+  "type": "library"
 }
