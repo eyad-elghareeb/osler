@@ -2209,7 +2209,7 @@ function QuizView({
         className="h-12 flex items-center pl-3 sm:pl-4 pr-1 sm:pr-2 gap-1.5 sm:gap-2 shrink-0 border-b border-primary-foreground/10 safe-pt"
         style={{ backgroundColor: "var(--primary)", color: "var(--primary-foreground)" }}
       >
-        <button onClick={onExitRequest} className="flex items-center gap-2 hover:opacity-80 transition-opacity shrink-0 medos-touch-target" title={t("qbank.session.backToHub")}>
+        <button onClick={onExitRequest} className="flex items-center gap-2 hover:opacity-80 transition-opacity shrink-0" title={t("qbank.session.backToHub")}>
           <div className="size-7 rounded-lg bg-primary-foreground/15 flex items-center justify-center">
             <GraduationCap className="size-4" />
           </div>
@@ -2226,7 +2226,7 @@ function QuizView({
 
         <button
           onClick={onToggleNavMobile}
-          className="md:hidden size-8 rounded-lg bg-primary-foreground/15 hover:bg-primary-foreground/25 flex items-center justify-center me-1 medos-touch-target shrink-0"
+          className="md:hidden size-8 rounded-lg bg-primary-foreground/15 hover:bg-primary-foreground/25 flex items-center justify-center me-1 shrink-0"
           title="Question navigator"
           aria-label="Question navigator"
         >
@@ -2242,7 +2242,7 @@ function QuizView({
         {/* Quiz settings button — opens full settings panel */}
         <button
           onClick={onToggleQuizSettings}
-          className={`size-7 rounded-lg flex items-center justify-center transition-colors medos-touch-target shrink-0 ${
+          className={`size-7 rounded-lg flex items-center justify-center transition-colors shrink-0 ${
             quizSettingsOpen
               ? "bg-primary-foreground/30 ring-1 ring-inset ring-primary-foreground/40"
               : "bg-primary-foreground/15 hover:bg-primary-foreground/25"
@@ -2265,7 +2265,7 @@ function QuizView({
           />
           <button
             onClick={onTogglePause}
-            className="size-7 rounded-lg bg-primary-foreground/15 hover:bg-primary-foreground/25 flex items-center justify-center transition-colors medos-touch-target shrink-0"
+            className="size-7 rounded-lg bg-primary-foreground/15 hover:bg-primary-foreground/25 flex items-center justify-center transition-colors shrink-0"
             title={isPausedOrLocked ? "Resume" : "Pause"}
             aria-label={isPausedOrLocked ? "Resume" : "Pause"}
           >
@@ -2292,7 +2292,7 @@ function QuizView({
         {/* Notes button — opens notes sidebar (replaces sticky notes) */}
         <button
           onClick={onToggleNotes}
-          className={`size-7 rounded-lg flex items-center justify-center transition-colors medos-touch-target shrink-0 ${
+          className={`size-7 rounded-lg flex items-center justify-center transition-colors shrink-0 ${
             notesOpen
               ? "bg-primary-foreground/30 ring-1 ring-inset ring-primary-foreground/40"
               : "bg-primary-foreground/15 hover:bg-primary-foreground/25"

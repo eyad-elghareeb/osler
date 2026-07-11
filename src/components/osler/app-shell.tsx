@@ -162,7 +162,7 @@ export function AppShell({
   return (
     <div className="h-screen md:h-screen h-[100dvh] flex flex-col bg-background overflow-hidden">
       <header className="z-40 shrink-0 h-14 border-b border-border/60 bg-background/80 backdrop-blur-md supports-[backdrop-filter]:bg-background/60 safe-pt">
-        <div className="h-full pl-3 sm:pl-4 pr-0 flex items-center gap-2 sm:gap-3">
+        <div className="h-full px-3 sm:px-4 flex items-center gap-2 sm:gap-3">
           {/* Logo */}
           <button
             onClick={() => onViewChange("dashboard")}

@@ -57,7 +57,7 @@ export function HighlighterToolbar({
   const toggleSize = "size-7";
 
   const toggleClass = cn(
-    "flex items-center justify-center rounded-lg transition-colors medos-touch-target shrink-0",
+    "flex items-center justify-center rounded-lg transition-colors shrink-0",
     toggleSize,
     active
       ? tone === "header"
@@ -85,7 +85,7 @@ export function HighlighterToolbar({
   // Eraser + clear buttons are slightly smaller (size-6) so the palette stays
   // compact. On touch devices the medos-touch-target class bumps them to 40px.
   const eraserClass = cn(
-    "flex items-center justify-center rounded-md transition-colors medos-touch-target size-6 shrink-0",
+    "flex items-center justify-center rounded-md transition-colors size-6 shrink-0",
     isEraser
       ? "bg-destructive/15 text-destructive"
       : tone === "header"
@@ -95,10 +95,10 @@ export function HighlighterToolbar({
 
   // Swatches are size-4 (16px) — smaller than before (size-5) for a compact bar.
   const swatchBase =
-    "size-4 rounded-full ring-2 ring-transparent transition-all medos-touch-target shrink-0";
+    "size-4 rounded-full ring-2 ring-transparent transition-all shrink-0";
 
   const clearClass = cn(
-    "flex items-center justify-center rounded-md transition-colors medos-touch-target size-6 shrink-0",
+    "flex items-center justify-center rounded-md transition-colors size-6 shrink-0",
     "text-muted-foreground hover:text-destructive hover:bg-destructive/10"
   );
 
