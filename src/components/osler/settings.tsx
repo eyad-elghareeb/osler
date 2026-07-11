@@ -17,10 +17,12 @@ import {
   Languages,
   Download,
   HardDrive,
+  Smartphone,
 } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { storage } from "@/lib/osler/storage";
+import { SyncSettingsSection } from "./sync/sync-settings-section";
 import {
   SHORTCUT_ACTIONS,
   loadBindings,
@@ -67,7 +69,7 @@ const OSCE_STORAGE_KEYS = {
 
 /* ─── Section tabs ──────────────────────────────────────────────────── */
 
-type SettingsSection = "language" | "ai" | "shortcuts" | "downloads" | "danger";
+type SettingsSection = "language" | "ai" | "shortcuts" | "downloads" | "sync" | "danger";
 
 export function Settings() {
   const { t } = useI18n();
@@ -78,6 +80,7 @@ export function Settings() {
     { id: "ai", label: t("settings.section.ai"), icon: Sparkles },
     { id: "shortcuts", label: t("settings.section.shortcuts"), icon: Keyboard },
     { id: "downloads", label: "Downloads", icon: Download },
+    { id: "sync", label: "Sync", icon: Smartphone },
     { id: "danger", label: t("settings.section.danger"), icon: AlertTriangle },
   ];
 
@@ -121,6 +124,7 @@ export function Settings() {
         {section === "ai" && <AiSettingsSection />}
         {section === "shortcuts" && <ShortcutsSettingsSection />}
         {section === "downloads" && <DownloadsSettingsSection />}
+        {section === "sync" && <SyncSettingsSection />}
         {section === "danger" && <DangerZoneSection />}
       </motion.div>
     </div>

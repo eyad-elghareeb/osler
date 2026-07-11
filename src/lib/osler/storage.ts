@@ -378,6 +378,76 @@ export const storage = {
       window.removeEventListener("storage", handler);
     };
   },
+
+  /* ── Bulk export/import (for sync/backup) ─────────────────────────── */
+
+  exportProgressRecords(): Record<string, QuestionRecord> {
+    const result: Record<string, QuestionRecord> = {};
+    for (const [k, v] of memoryCache) {
+      if (k.startsWith("progress:")) {
+        const record = v as QuestionRecord;
+        result[`${record.uid}:${record.qid}`] = record;
+      }
+    }
+    return result;
+  },
+
+  async importData(data: Record<string, unknown>): Promise<void> {
+    // 1. Progress — individual question records
+    const rawProgress = data["osler_raw_progress"] as Record<string, QuestionRecord> | undefined;
+    if (rawProgress && typeof rawProgress === "object") {
+      const entries = Object.entries(rawProgress)
+        .filter(([, v]) => v && typeof v === "object" && "uid" in v)
+        .map(([key, value]) => ({ key, value }));
+      if (entries.length > 0) {
+        await idbPutBatch("progress", entries).catch(console.warn);
+        for (const e of entries) {
+          setCached("progress", e.key, e.value);
+        }
+        dispatchChange("osler-progress-changed");
+      }
+    }
+
+    // 2. Sessions
+    const sessionEntries = Object.entries(data)
+      .filter(([key]) => key.startsWith("osler_sessions_"))
+      .map(([, value]) => value as SavedSession);
+    for (const session of sessionEntries) {
+      const key = `session:${session.id}`;
+      setCached("sessions", key, session);
+      await idbPut("sessions", key, session).catch(console.warn);
+    }
+    if (sessionEntries.length > 0) {
+      dispatchChange("osler-sessions-changed");
+    }
+
+    // 3. Flashcard reviews
+    const flashcards = data["osler_flashcard_reviews"] as Record<string, FlashcardReviewRecord> | undefined;
+    if (flashcards && typeof flashcards === "object") {
+      const entries = Object.entries(flashcards)
+        .filter(([, v]) => v && typeof v === "object" && "dueDate" in v)
+        .map(([key, value]) => ({ key, value }));
+      if (entries.length > 0) {
+        await idbPutBatch("flashcardReviews", entries).catch(console.warn);
+        for (const e of entries) {
+          setCached("flashcardReviews", e.key, e.value);
+        }
+        dispatchChange("osler-flashcard-changed");
+      }
+    }
+
+    // 4. Notes
+    const notesArr = data["osler_notes"] as NoteRecord[] | undefined;
+    if (Array.isArray(notesArr) && notesArr.length > 0) {
+      for (const note of notesArr) {
+        if (note && typeof note === "object" && note.id) {
+          await idbPutNote(note).catch(console.warn);
+        }
+      }
+      notesCache = await idbGetAllNotes();
+      notifyNotesChanged();
+    }
+  },
 };
 
 /* ── Saved Sessions ─────────────────────────────────────────────────── */
