@@ -1597,3 +1597,33 @@ html.osler-ar body,
 }
 
 /* Mobile tab bar safe-area already symmetric, no changes needed. */
+
+/* ── Blur toggle (performance on old devices) ────────────────────────────
+ * When `data-disable-blur` is set on <html>, all backdrop-filter and filter
+ * blur effects are removed and semi-transparent backgrounds are made fully
+ * opaque so they don't look wrong without the blur.
+ */
+html[data-disable-blur] *,
+html[data-disable-blur] *::before,
+html[data-disable-blur] *::after {
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  filter: none !important;
+}
+
+html[data-disable-blur] .medos-tabbar {
+  background: hsl(var(--background)) !important;
+}
+
+html[data-disable-blur] [class*="bg-background/80"],
+html[data-disable-blur] [class*="bg-background/60"],
+html[data-disable-blur] [class*="bg-background/40"] {
+  background-color: hsl(var(--background)) !important;
+}
+
+html[data-disable-blur] [class*="bg-card/80"],
+html[data-disable-blur] [class*="bg-card/60"],
+html[data-disable-blur] [class*="bg-card/40"],
+html[data-disable-blur] [class*="bg-card/20"] {
+  background-color: hsl(var(--card)) !important;
+}

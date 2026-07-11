@@ -17,6 +17,7 @@ import {
   Languages,
   Download,
   HardDrive,
+  Monitor,
 } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -32,6 +33,7 @@ import {
   type ShortcutScope,
 } from "@/lib/osler/shortcuts";
 import { useI18n } from "./i18n-provider";
+import { useDisableBlur } from "@/hooks/use-disable-blur";
 import { LANGUAGES, UI_LANGS, type UiLang, type ContentLangFilter } from "@/lib/osler/i18n";
 import { cn } from "@/lib/utils";
 
@@ -67,7 +69,7 @@ const OSCE_STORAGE_KEYS = {
 
 /* ─── Section tabs ──────────────────────────────────────────────────── */
 
-type SettingsSection = "language" | "ai" | "shortcuts" | "downloads" | "danger";
+type SettingsSection = "language" | "performance" | "ai" | "shortcuts" | "downloads" | "danger";
 
 export function Settings() {
   const { t } = useI18n();
@@ -75,6 +77,7 @@ export function Settings() {
 
   const SECTIONS: { id: SettingsSection; label: string; icon: React.ComponentType<{ className?: string }> }[] = [
     { id: "language", label: t("settings.section.language"), icon: Languages },
+    { id: "performance", label: "Performance", icon: Monitor },
     { id: "ai", label: t("settings.section.ai"), icon: Sparkles },
     { id: "shortcuts", label: t("settings.section.shortcuts"), icon: Keyboard },
     { id: "downloads", label: "Downloads", icon: Download },
@@ -118,6 +121,7 @@ export function Settings() {
         </div>
 
         {section === "language" && <LanguageSettingsSection />}
+        {section === "performance" && <PerformanceSettingsSection />}
         {section === "ai" && <AiSettingsSection />}
         {section === "shortcuts" && <ShortcutsSettingsSection />}
         {section === "downloads" && <DownloadsSettingsSection />}
@@ -271,6 +275,51 @@ function LanguageSettingsSection() {
         </div>
       </Card>
     </div>
+  );
+}
+
+/* ─── Performance section ──────────────────────────────────────────── */
+
+function PerformanceSettingsSection() {
+  const { disabled, toggle } = useDisableBlur();
+
+  return (
+    <Card className="p-5">
+      <h2 className="text-base font-semibold flex items-center gap-2 mb-1">
+        <Monitor className="size-4 text-primary" />
+        Performance
+      </h2>
+      <p className="text-xs text-muted-foreground mb-5">
+        Improve performance on older or lower-end devices by reducing visual effects.
+      </p>
+
+      <div className="space-y-4">
+        <div className="flex items-center justify-between gap-4 py-3 px-4 rounded-lg border border-border bg-card">
+          <div className="space-y-0.5">
+            <div className="text-sm font-medium">Disable blur effects</div>
+            <div className="text-xs text-muted-foreground">
+              Removes backdrop blur and glassmorphism. Headers, modals, and overlays will use solid backgrounds instead.
+            </div>
+          </div>
+          <button
+            role="switch"
+            aria-checked={disabled}
+            onClick={() => toggle(!disabled)}
+            className={cn(
+              "relative inline-flex h-6 w-11 shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary",
+              disabled ? "bg-primary" : "bg-muted",
+            )}
+          >
+            <span
+              className={cn(
+                "size-5 rounded-full bg-white transition-transform",
+                disabled ? "translate-x-5" : "translate-x-0",
+              )}
+            />
+          </button>
+        </div>
+      </div>
+    </Card>
   );
 }
 
