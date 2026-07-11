@@ -108,6 +108,7 @@ import { useQuizSettings } from "@/hooks/use-quiz-settings";
 import { setImmersiveMode } from "./immersive-mode";
 import { gradeWithAI, createManualEvaluation } from "@/lib/osler/grading";
 import { useI18n } from "./i18n-provider";
+import type { StringKey } from "@/lib/osler/i18n";
 
 const LETTERS = ["A", "B", "C", "D", "E", "F", "G", "H"];
 const HIGHLIGHT_COLORS = HIGHLIGHT_COLOR_KEYS;
@@ -2410,7 +2411,7 @@ function QuizView({
                   mobileTutorTab === "question" ? "text-primary border-b-2 border-primary" : "text-muted-foreground"
                 }`}
               >
-                Question
+                {t("qbank.session.questionTab")}
               </button>
               <button
                 onClick={() => setMobileTutorTab("answer")}
@@ -2418,7 +2419,7 @@ function QuizView({
                   mobileTutorTab === "answer" ? "text-primary border-b-2 border-primary" : "text-muted-foreground"
                 }`}
               >
-                Explanation
+                {t("qbank.session.explanation")}
               </button>
             </div>
           )}
@@ -2429,7 +2430,7 @@ function QuizView({
                 ? "flex flex-row"
                 : "overflow-y-auto medos-scroll"
             }`}
-            dir={(activeItem.lang ?? "en") === "ar" ? "rtl" : "ltr"}
+            dir={rtl ? "rtl" : "ltr"}
             lang={activeItem.lang ?? "en"}
           >
             {q ? (
@@ -2454,10 +2455,10 @@ function QuizView({
                       <div className="flex items-center gap-2 text-xs text-muted-foreground">
                         <Badge variant="outline" className="text-[10px] font-medium rounded-md">{engineLabel}</Badge>
                         <span className="opacity-50">·</span>
-                        <span className="capitalize">{q.difficulty ?? "standard"}</span>
+                        <span className="capitalize">{q.difficulty ?? t("qbank.session.standard")}</span>
                       </div>
                       <div className="text-xs text-muted-foreground">
-                        Question ID: <span className="tabular-nums">#{q.id}</span>
+                        {t("qbank.session.questionId", { id: q.id })}
                       </div>
                     </div>
 
@@ -2478,21 +2479,21 @@ function QuizView({
                     {isMCQ ? (
                       <div className="mt-6 space-y-2.5">
                         <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">
-                          {submitted ? "Read-only review" : "Select one answer"}
+                          {submitted ? t("qbank.session.readOnly") : t("qbank.session.selectOne")}
                         </div>
                         {submitted && (
                           <div className="mb-3 flex items-center gap-4 text-xs text-muted-foreground bg-muted/30 rounded-lg px-3 py-2 border border-border">
                             <div className="flex items-center gap-1.5">
                               {selected === q.correct ? (
-                                <><Check className="size-3.5 text-blue-500" /><span className="text-blue-500 font-semibold">Correct</span></>
+                                <><Check className="size-3.5 text-blue-500" /><span className="text-blue-500 font-semibold">{t("qbank.session.correct")}</span></>
                               ) : (
-                                <><X className="size-3.5 text-red-500" /><span className="text-red-500 font-semibold">Incorrect</span></>
+                                <><X className="size-3.5 text-red-500" /><span className="text-red-500 font-semibold">{t("qbank.session.incorrect")}</span></>
                               )}
                             </div>
                             <div className="flex items-center gap-1.5">
                               <Timer className="size-3.5" />
                               <ElapsedTime startedAt={session.startedAt} />
-                              <span className="opacity-60">Time spent</span>
+                              <span className="opacity-60">{t("qbank.session.timeSpent")}</span>
                             </div>
                           </div>
                         )}
@@ -2638,7 +2639,7 @@ function QuizView({
                     {session.engine === "flashcard" && submitted && (
                       <div className="mt-6">
                         <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">
-                          Rate this card
+                          {t("qbank.written.rateCard")}
                         </h4>
                         <div className="grid grid-cols-3 gap-2">
                           <button
@@ -2650,7 +2651,7 @@ function QuizView({
                             }`}
                           >
                             <X className="size-4 mx-auto mb-1" />
-                            Hard
+                            {t("flash.session.rateHard")}
                           </button>
                           <button
                             onClick={() => onRate(q.id, "unknown")}
@@ -2661,7 +2662,7 @@ function QuizView({
                             }`}
                           >
                             <Eye className="size-4 mx-auto mb-1" />
-                            Review
+                            {t("qbank.session.review")}
                           </button>
                           <button
                             onClick={() => onRate(q.id, "easy")}
@@ -2672,7 +2673,7 @@ function QuizView({
                             }`}
                           >
                             <Check className="size-4 mx-auto mb-1" />
-                            Easy
+                            {t("flash.session.rateEasy")}
                           </button>
                         </div>
                       </div>
@@ -2841,7 +2842,7 @@ function QuizView({
               <div className="flex-1 flex items-center justify-center py-20">
                 <div className="text-center">
                   <div className="size-10 border-2 border-primary/30 border-t-primary rounded-full animate-spin mx-auto" />
-                  <p className="text-sm text-muted-foreground mt-3">Loading question…</p>
+                  <p className="text-sm text-muted-foreground mt-3">{t("qbank.session.loading")}</p>
                 </div>
               </div>
             )}
@@ -2850,36 +2851,36 @@ function QuizView({
           {/* Bottom action bar — desktop */}
           <footer className="hidden sm:flex border-t border-border bg-card px-4 sm:px-6 py-2.5 items-center gap-2 shrink-0">
             <Button variant="outline" size="sm" onClick={onPrev} disabled={session.current === 0} className="h-9 rounded-lg">
-              <ChevronLeft className="size-4 mr-1" /> Previous
+              <ChevronLeft className="size-4 mr-1" /> {t("common.previous")}
             </Button>
 
             <div className="flex-1" />
 
             <div className="flex items-center gap-1">
-              <Button variant="outline" size="sm" onClick={onToggleCalculator} className={`h-9 px-2.5 rounded-lg ${calculatorOpen ? "border-primary bg-primary/10 text-primary" : ""}`} title="Calculator">
+              <Button variant="outline" size="sm" onClick={onToggleCalculator} className={`h-9 px-2.5 rounded-lg ${calculatorOpen ? "border-primary bg-primary/10 text-primary" : ""}`} title={t("qbank.session.calculator")}>
                 <CalcIcon className="size-4" />
               </Button>
-              <Button variant="outline" size="sm" onClick={onToggleLabValues} className={`h-9 px-2.5 rounded-lg ${labValuesOpen ? "border-primary bg-primary/10 text-primary" : ""}`} title="Lab Values">
+              <Button variant="outline" size="sm" onClick={onToggleLabValues} className={`h-9 px-2.5 rounded-lg ${labValuesOpen ? "border-primary bg-primary/10 text-primary" : ""}`} title={t("qbank.session.labValues")}>
                 <FlaskConical className="size-4" />
               </Button>
               <Button
                 variant="outline" size="sm"
                 onClick={onToggleAiAssistant}
                 className={`h-9 px-2.5 rounded-lg ${aiAssistantOpen ? "border-primary bg-primary/10 text-primary" : ""}`}
-                title="AI Assistant"
+                title={t("qbank.session.aiAssistant")}
               >
                 <Sparkles className="size-4" />
               </Button>
               {!isMobile && (
                 <Popover open={articleSearchOpen} onOpenChange={setArticleSearchOpen}>
                   <PopoverTrigger asChild>
-                    <Button variant="outline" size="sm" className="h-9 px-2.5 rounded-lg" title="Open Article">
+                    <Button variant="outline" size="sm" className="h-9 px-2.5 rounded-lg" title={t("qbank.session.openArticle")}>
                       <BookOpen className="size-4" />
                     </Button>
                   </PopoverTrigger>
                   <PopoverContent align="end" className="w-72 p-0 max-h-64 overflow-y-auto">
                     <div className="py-1">
-                      <div className="px-4 py-2 text-xs font-bold uppercase tracking-wider text-primary border-b border-border">Open Article</div>
+                      <div className="px-4 py-2 text-xs font-bold uppercase tracking-wider text-primary border-b border-border">{t("qbank.session.openArticle")}</div>
                       {articleList.map((a) => (
                         <button
                           key={a.file}
@@ -2901,7 +2902,7 @@ function QuizView({
                 variant="outline" size="sm"
                 onClick={() => setShowShortcuts((s) => !s)}
                 className={`h-9 px-2.5 rounded-lg ${showShortcuts ? "border-primary bg-primary/10 text-primary" : ""}`}
-                title="Keyboard shortcuts"
+                title={t("qbank.session.keyboardShortcuts")}
               >
                 <Keyboard className="size-4" />
               </Button>
@@ -2912,28 +2913,28 @@ function QuizView({
             <Button
               variant="outline" size="sm" onClick={onToggleFlag}
               className={`h-9 rounded-lg ${session.flagged[session.current] ? "border-amber-400 bg-amber-500/10 text-amber-300 hover:bg-amber-500/15" : ""}`}
-              title={session.flagged[session.current] ? "Unflag this question" : "Flag for review"}
+              title={session.flagged[session.current] ? t("qbank.session.unflagQuestion") : t("qbank.session.flagForReview")}
             >
               <Flag className={`size-4 ${session.flagged[session.current] ? "fill-amber-500 text-amber-500" : ""}`} />
-              <span className="hidden sm:inline ml-1">{session.flagged[session.current] ? "Flagged" : "Flag"}</span>
+              <span className="hidden sm:inline ml-1">{session.flagged[session.current] ? t("qbank.session.flagged") : t("qbank.session.flag")}</span>
             </Button>
 
             <div className="h-5 w-px bg-border mx-1 hidden sm:block" />
 
             {!submitted && isMCQ && (
               <Button size="sm" onClick={onSubmit} disabled={selected === undefined} className="h-9 rounded-lg">
-                Submit Answer
+                {t("qbank.session.submitAnswer")}
               </Button>
             )}
             {!submitted && !isMCQ && session.engine !== "written" && (
               <Button size="sm" onClick={onSubmit} className="h-9 rounded-lg">
-                {session.engine === "flashcard" ? "Reveal Answer" : "Submit & Self-Grade"}
+                {session.engine === "flashcard" ? t("qbank.session.revealAnswer") : t("qbank.session.submitSelfGrade")}
               </Button>
             )}
             {submitted && session.mode === "tutor" && (
-              <Button variant="outline" size="sm" onClick={onRetry} className="h-9 rounded-lg" title="Retry this question">
+              <Button variant="outline" size="sm" onClick={onRetry} className="h-9 rounded-lg" title={t("qbank.session.retryQuestion")}>
                 <RotateCcw className="size-4 mr-1" />
-                <span className="hidden sm:inline">Retry</span>
+                <span className="hidden sm:inline">{t("qbank.session.retry")}</span>
               </Button>
             )}
 
@@ -2942,11 +2943,11 @@ function QuizView({
               variant={isLast ? "destructive" : "default"}
             >
               {isLast ? (
-                <>End Test <ChevronRight className="size-4 ml-1" /></>
+                <>{t("qbank.session.endTest")} <ChevronRight className="size-4 ml-1" /></>
               ) : submitted && session.mode === "tutor" ? (
-                <>Next Question <ChevronRight className="size-4 ml-1" /></>
+                <>{t("qbank.session.nextQuestion")} <ChevronRight className="size-4 ml-1" /></>
               ) : (
-                <>Next <ChevronRight className="size-4 ml-1" /></>
+                <>{t("common.next")} <ChevronRight className="size-4 ml-1" /></>
               )}
             </Button>
           </footer>
@@ -2959,7 +2960,7 @@ function QuizView({
               variant="outline" size="icon"
               onClick={onPrev} disabled={session.current === 0}
               className="size-10 rounded-lg shrink-0 medos-touch-target"
-              title="Previous"
+              title={t("common.previous")}
             >
               <ChevronLeft className="size-4" />
             </Button>
@@ -2968,7 +2969,7 @@ function QuizView({
               variant="outline" size="icon"
               onClick={onToggleFlag}
               className={`size-10 rounded-lg shrink-0 medos-touch-target ${session.flagged[session.current] ? "border-amber-400 bg-amber-500/10 text-amber-300" : ""}`}
-              title={session.flagged[session.current] ? "Unflag" : "Flag"}
+              title={session.flagged[session.current] ? t("qbank.session.unflagShort") : t("qbank.session.flag")}
             >
               <Flag className={`size-4 ${session.flagged[session.current] ? "fill-amber-500 text-amber-500" : ""}`} />
             </Button>
@@ -2976,27 +2977,27 @@ function QuizView({
             {/* Tools dropdown for mobile */}
               <Popover>
                 <PopoverTrigger asChild>
-                  <Button variant="outline" size="icon" className="size-10 rounded-lg shrink-0 medos-touch-target" title="Tools">
+                  <Button variant="outline" size="icon" className="size-10 rounded-lg shrink-0 medos-touch-target" title={t("qbank.session.tools")}>
                     <CalcIcon className="size-4" />
                   </Button>
                 </PopoverTrigger>
                 <PopoverContent side="top" align="end" className="min-w-44">
                 <div className="py-1">
                   <button onClick={onToggleCalculator} className="w-full text-left text-sm px-3 py-2 hover:bg-muted flex items-center gap-2">
-                    <CalcIcon className="size-4" /> Calculator
+                    <CalcIcon className="size-4" /> {t("qbank.session.calculator")}
                   </button>
                   <button onClick={onToggleLabValues} className="w-full text-left text-sm px-3 py-2 hover:bg-muted flex items-center gap-2">
-                    <FlaskConical className="size-4" /> Lab Values
+                    <FlaskConical className="size-4" /> {t("qbank.session.labValues")}
                   </button>
                   <button onClick={onToggleAiAssistant} className="w-full text-left text-sm px-3 py-2 hover:bg-muted flex items-center gap-2">
-                    <Sparkles className="size-4" /> AI Assistant
+                    <Sparkles className="size-4" /> {t("qbank.session.aiAssistant")}
                   </button>
                   <button onClick={() => setArticleSearchOpen(true)} className="w-full text-left text-sm px-3 py-2 hover:bg-muted flex items-center gap-2">
-                    <BookOpen className="size-4" /> Articles
+                    <BookOpen className="size-4" /> {t("qbank.session.articles")}
                   </button>
                   {submitted && session.mode === "tutor" && (
                     <button onClick={onRetry} className="w-full text-left text-sm px-3 py-2 hover:bg-muted flex items-center gap-2">
-                      <RotateCcw className="size-4" /> Retry
+                      <RotateCcw className="size-4" /> {t("qbank.session.retry")}
                     </button>
                   )}
                 </div>
@@ -3014,7 +3015,7 @@ function QuizView({
                   className="sm:hidden fixed bottom-20 right-2 z-50 w-72 max-h-72 overflow-y-auto rounded-xl border border-border bg-card shadow-xl"
                 >
                   <div className="py-1">
-                    <div className="px-4 py-2 text-xs font-bold uppercase tracking-wider text-primary border-b border-border">Open Article</div>
+                    <div className="px-4 py-2 text-xs font-bold uppercase tracking-wider text-primary border-b border-border">{t("qbank.session.openArticle")}</div>
                     {articleList.map((a) => (
                       <button
                         key={a.file}
@@ -3039,14 +3040,14 @@ function QuizView({
                 size="sm" onClick={onSubmit} disabled={selected === undefined}
                 className="flex-1 h-10 rounded-lg medos-touch-target"
               >
-                Submit Answer
+                {t("qbank.session.submitAnswer")}
               </Button>
             ) : !submitted && !isMCQ && session.engine !== "written" ? (
               <Button
                 size="sm" onClick={onSubmit}
                 className="flex-1 h-10 rounded-lg medos-touch-target"
               >
-                {session.engine === "flashcard" ? "Reveal Answer" : "Submit"}
+                {session.engine === "flashcard" ? t("qbank.session.revealAnswer") : t("qbank.session.submit")}
               </Button>
             ) : (
               <Button
@@ -3055,10 +3056,10 @@ function QuizView({
                 className="flex-1 h-10 rounded-lg medos-touch-target"
               >
                 {isLast
-                  ? "End Test"
+                  ? t("qbank.session.endTest")
                   : submitted && session.mode === "tutor"
-                  ? "Next Question"
-                  : "Next"}
+                  ? t("qbank.session.nextQuestion")
+                  : t("common.next")}
                 <ChevronRight className="size-4 ml-1" />
               </Button>
             )}
@@ -3086,7 +3087,7 @@ function QuizView({
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-sm font-semibold flex items-center gap-2">
                   <Keyboard className="size-4" />
-                  Keyboard Shortcuts
+                  {t("qbank.session.keyboardShortcuts")}
                 </h3>
                 <button
                   onClick={() => setShowShortcuts(false)}
@@ -3096,20 +3097,20 @@ function QuizView({
                 </button>
               </div>
               <div className="space-y-2.5">
-                {[
-                  ["← / →", "Previous / Next question"],
-                  ["1–8", "Select answer choice"],
-                  ["Enter", "Submit answer"],
-                  ["F", "Flag / Unflag question"],
-                  ["A", "Toggle AI Assistant"],
-                  ["H", "Toggle highlight mode"],
-                  ["E", "Toggle eraser mode"],
-                  ["N", "Toggle Notes panel"],
-                  [",", "Toggle Quiz Settings"],
-                  ["?", "Toggle this help panel"],
-                ].map(([keys, desc]) => (
+                {([
+                  ["← / →", "qbank.session.shortcut.prev"],
+                  ["1–8", "qbank.session.shortcut.select"],
+                  ["Enter", "qbank.session.shortcut.submit"],
+                  ["F", "qbank.session.shortcut.flag"],
+                  ["A", "qbank.session.shortcut.ai"],
+                  ["H", "qbank.session.shortcut.highlight"],
+                  ["E", "qbank.session.shortcut.eraser"],
+                  ["N", "qbank.session.shortcut.notes"],
+                  [",", "qbank.session.shortcut.settings"],
+                  ["?", "qbank.session.shortcut.help"],
+                ] as [string, StringKey][]).map(([keys, descKey]) => (
                   <div key={keys} className="flex items-center justify-between text-sm">
-                    <span className="text-muted-foreground">{desc}</span>
+                    <span className="text-muted-foreground">{t(descKey)}</span>
                     <kbd className="px-2 py-0.5 rounded border border-border bg-muted/50 text-xs font-mono tabular-nums">
                       {keys}
                     </kbd>
@@ -3134,6 +3135,7 @@ function WrittenEvaluationCard({
   verdict: "pass" | "fail" | null;
   onPassFail?: (v: "pass" | "fail") => void;
 }) {
+  const { t } = useI18n();
   const passed = verdict === "pass" || (verdict === null && evaluation.passed);
   const isManual = evaluation.score === null;
   return (
@@ -3151,7 +3153,7 @@ function WrittenEvaluationCard({
           {evaluation.score !== null ? evaluation.score : "—"}
         </div>
         <div>
-          <div className="text-base font-bold">{passed ? "Passed" : "Needs revision"}</div>
+          <div className="text-base font-bold">{passed ? t("qbank.written.passed") : t("qbank.written.needsRevision")}</div>
           <div className="text-xs text-muted-foreground">{evaluation.source}</div>
         </div>
       </div>
@@ -3201,7 +3203,7 @@ function WrittenEvaluationCard({
             )}
           >
             <Check className="size-4" />
-            Pass
+            {t("qbank.written.pass")}
           </button>
           <button
             type="button"
@@ -3214,7 +3216,7 @@ function WrittenEvaluationCard({
             )}
           >
             <X className="size-4" />
-            Fail
+            {t("qbank.written.fail")}
           </button>
         </div>
       )}
@@ -3223,7 +3225,7 @@ function WrittenEvaluationCard({
       {isManual && (
         <div className="pt-3 border-t border-border">
           <p className="text-xs text-muted-foreground mb-2">
-            AI grading was unavailable — use this rubric to self-grade each criterion:
+            {t("qbank.written.aiUnavailable")}
           </p>
         </div>
       )}
@@ -3278,22 +3280,24 @@ function WrittenEngineView({
   const children = question.children ?? [];
 
   // ── Input mode (before submit) ───────────────────────────────────────
+  const { t } = useI18n();
+
   if (!submitted && !hasEvaluation) {
     return (
       <div className="mt-6 space-y-4">
         <div>
           <div className="flex items-center justify-between mb-2">
             <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-              Your Response
+              {t("qbank.written.yourResponse")}
             </label>
             <span className="text-xs text-muted-foreground tabular-nums">
-              {wordCount} words
+              {t("qbank.written.words", { n: wordCount })}
             </span>
           </div>
           <textarea
             value={draft.text}
             onChange={(e) => onTextChange(e.target.value)}
-            placeholder="Type your answer here…"
+            placeholder={t("qbank.written.placeholder")}
             className="osler-written-area"
             style={{ minHeight: 220 }}
           />
@@ -3307,7 +3311,7 @@ function WrittenEngineView({
             disabled={!draft.text.trim()}
             className="px-4 py-2 rounded-lg text-sm font-medium border border-border hover:border-primary/40 transition-colors disabled:opacity-50"
           >
-            Manual Grade
+            {t("qbank.written.manualGrade")}
           </button>
           <button
             type="button"
@@ -3318,10 +3322,10 @@ function WrittenEngineView({
             {grading ? (
               <span className="flex items-center gap-2">
                 <Loader2 className="size-4 animate-spin" />
-                Grading…
+                {t("qbank.written.grading")}
               </span>
             ) : (
-              "Grade with AI"
+              t("qbank.written.gradeWithAI")
             )}
           </button>
         </div>
@@ -3329,7 +3333,7 @@ function WrittenEngineView({
         {grading && (
           <div className="flex items-center gap-2 text-xs text-muted-foreground bg-muted/30 rounded-lg px-3 py-2">
             <Loader2 className="size-3.5 animate-spin" />
-            Analyzing your answer…
+            {t("qbank.written.analyzing")}
           </div>
         )}
 
@@ -3337,14 +3341,14 @@ function WrittenEngineView({
         {children.length > 0 && (
           <div className="space-y-5 pt-4 border-t border-border">
             <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-              Part Questions
+              {t("qbank.written.partQuestions")}
             </h4>
             {children.map((child, ci) => {
               const childAns = draft.childAnswers?.[ci] ?? "";
               return (
                 <div key={child.id} className="space-y-2 pl-4 border-l-2 border-muted">
                   <div className="text-xs font-semibold text-muted-foreground">
-                    {child.label || `Part ${ci + 1}`}
+                    {child.label || t("qbank.written.partLabel", { n: ci + 1 })}
                   </div>
                   {child.question && (
                     <div className="text-sm text-foreground mb-1.5">{child.question}</div>
@@ -3352,7 +3356,7 @@ function WrittenEngineView({
                   <textarea
                     value={childAns}
                     onChange={(e) => onChildTextChange?.(ci, e.target.value)}
-                    placeholder={`Answer for ${child.label || `part ${ci + 1}`}…`}
+                    placeholder={t("qbank.written.answerFor", { label: child.label || `part ${ci + 1}` })}
                     className="osler-written-area"
                     style={{ minHeight: 120 }}
                   />
@@ -3363,7 +3367,7 @@ function WrittenEngineView({
                       disabled={!childAns.trim()}
                       className="px-3 py-1.5 rounded-md text-xs font-medium border border-border hover:border-primary/40 transition-colors disabled:opacity-50"
                     >
-                      Manual Grade
+                      {t("qbank.written.manualGrade")}
                     </button>
                     <button
                       type="button"
@@ -3374,10 +3378,10 @@ function WrittenEngineView({
                       {childGrading === ci ? (
                         <span className="flex items-center gap-1.5">
                           <Loader2 className="size-3 animate-spin" />
-                          Grading…
+                          {t("qbank.written.grading")}
                         </span>
                       ) : (
-                        "Grade with AI"
+                        t("qbank.written.gradeWithAI")
                       )}
                     </button>
                   </div>
@@ -3406,22 +3410,22 @@ function WrittenEngineView({
         <div>
           <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2 flex items-center gap-1.5">
             <span className="size-2 rounded-full bg-amber-500" />
-            Your Answer
+            {t("qbank.written.yourResponse")}
           </h4>
           <div className="text-sm whitespace-pre-wrap leading-relaxed text-foreground bg-muted/30 rounded-lg p-4 min-h-[80px] max-h-[400px] overflow-y-auto">
             {draft.text.trim() || (
-              <span className="text-muted-foreground italic">(No answer written)</span>
+              <span className="text-muted-foreground italic">{t("qbank.written.noAnswer")}</span>
             )}
           </div>
         </div>
         <div>
           <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2 flex items-center gap-1.5">
             <span className="size-2 rounded-full bg-primary" />
-            Model Answer
+            {t("qbank.written.modelAnswer")}
           </h4>
           <div className="text-sm whitespace-pre-wrap leading-relaxed text-foreground bg-primary/5 rounded-lg p-4 min-h-[80px] max-h-[400px] overflow-y-auto">
             {question.modelAnswer || (
-              <span className="text-muted-foreground italic">(No model answer supplied)</span>
+              <span className="text-muted-foreground italic">{t("qbank.written.noModelAnswer")}</span>
             )}
           </div>
         </div>
@@ -3433,10 +3437,10 @@ function WrittenEngineView({
           <div className="bg-card px-5 py-4">
             <div className="flex items-center gap-2 mb-3">
               <Sparkles className="size-4 text-primary" />
-              <h3 className="text-sm font-semibold text-foreground">Evaluation</h3>
+              <h3 className="text-sm font-semibold text-foreground">{t("qbank.written.evaluation")}</h3>
             </div>
             <p className="text-sm text-muted-foreground mb-4">
-              Compare your response with the model answer above, then grade it.
+              {t("qbank.written.comparePrompt")}
             </p>
             <div className="flex justify-center gap-3">
               <button
@@ -3444,7 +3448,7 @@ function WrittenEngineView({
                 onClick={onGradeManual}
                 className="px-5 py-2.5 rounded-lg text-sm font-medium border border-border hover:border-primary/40 transition-colors"
               >
-                Manual Grade
+                {t("qbank.written.manualGrade")}
               </button>
               <button
                 type="button"
@@ -3455,10 +3459,10 @@ function WrittenEngineView({
                 {grading ? (
                   <span className="flex items-center gap-2">
                     <Loader2 className="size-4 animate-spin" />
-                    Grading…
+                    {t("qbank.written.grading")}
                   </span>
                 ) : (
-                  "Grade with AI"
+                  t("qbank.written.gradeWithAI")
                 )}
               </button>
             </div>
@@ -3487,6 +3491,7 @@ function WrittenEvaluationPanel({
   onPassFail?: (v: "pass" | "fail") => void;
   onChildPassFail?: (childIdx: number, v: "pass" | "fail") => void;
 }) {
+  const { t } = useI18n();
   const children = question.children ?? [];
   if (!draft.evaluation) return null;
   return (
@@ -3497,7 +3502,7 @@ function WrittenEvaluationPanel({
           {draft.evaluation.score !== null ? draft.evaluation.score : "—"}
         </div>
         <div className="flex-1 min-w-0">
-          <div className="text-base font-bold">{passed ? "Passed" : "Needs revision"}</div>
+          <div className="text-base font-bold">{passed ? t("qbank.written.passed") : t("qbank.written.needsRevision")}</div>
           <div className="text-xs mt-0.5 opacity-80">{draft.evaluation.source}</div>
         </div>
       </div>
@@ -3536,7 +3541,7 @@ function WrittenEvaluationPanel({
         <div className="bg-card px-5 py-3 space-y-2 border-b border-border/60">
           <h4 className="text-xs font-semibold flex items-center gap-2">
             <ListChecks className="size-3.5 text-primary" />
-            Self-Grading Rubric
+            {t("qbank.written.selfGradingRubric")}
           </h4>
           {question.rubric.map((item, i) => {
             const checked = draft.rubricChecked[i] ?? false;
@@ -3562,7 +3567,7 @@ function WrittenEvaluationPanel({
             );
           })}
           <div className="pt-2 border-t border-border text-xs text-muted-foreground">
-            Self score:{" "}
+            {t("qbank.written.selfScore")}:{" "}
             <span className="font-semibold text-foreground">
               {draft.rubricChecked.filter(Boolean).length}
             </span>{" "}
@@ -3576,7 +3581,7 @@ function WrittenEvaluationPanel({
         <div className="bg-card px-5 py-4" data-explanation>
           <div className="flex items-center gap-2 mb-3">
             <Sparkles className="size-4 text-primary" />
-            <h3 className="text-sm font-semibold text-foreground">Explanation</h3>
+            <h3 className="text-sm font-semibold text-foreground">{t("qbank.explanation.title")}</h3>
           </div>
           <div className="uworld-prose text-[14px] whitespace-pre-wrap leading-relaxed text-foreground">
             {question.explanation}
@@ -3598,7 +3603,7 @@ function WrittenEvaluationPanel({
             )}
           >
             <Check className="size-4" />
-            Pass
+            {t("qbank.written.pass")}
           </button>
           <button
             type="button"
@@ -3611,7 +3616,7 @@ function WrittenEvaluationPanel({
             )}
           >
             <X className="size-4" />
-            Fail
+            {t("qbank.written.fail")}
           </button>
         </div>
       )}
@@ -3620,7 +3625,7 @@ function WrittenEvaluationPanel({
       {children.length > 0 && (
         <div className="bg-card px-5 py-3 border-t border-border/60 space-y-4">
           <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-            Part Evaluations
+            {t("qbank.written.partEvaluations")}
           </h4>
           {children.map((child, ci) => {
             const childEval = draft.childEvaluations?.[ci];
@@ -3628,7 +3633,7 @@ function WrittenEvaluationPanel({
             return (
               <div key={child.id} className="space-y-1.5">
                 <div className="text-xs font-medium text-muted-foreground">
-                  {child.label || `Part ${ci + 1}`}
+                  {child.label || t("qbank.written.partLabel", { n: ci + 1 })}
                 </div>
                 <WrittenEvaluationCard
                   evaluation={childEval}
@@ -3873,6 +3878,8 @@ function ExplanationCard({
 }) {
   const hl = questionHighlights ?? [];
 
+  const { t } = useI18n();
+
   if (nonMcq) {
     return (
       <div className="rounded-xl border-2 border-blue-600 overflow-hidden">
@@ -3881,20 +3888,20 @@ function ExplanationCard({
             <Sparkles className="size-5" />
           </div>
           <div className="flex-1 min-w-0">
-            <div className="text-base font-bold">Answer Revealed</div>
+            <div className="text-base font-bold">{t("qbank.explanation.answerRevealed")}</div>
             <div className="text-xs mt-0.5">
-              Review the explanation and reference material below.
+              {t("qbank.explanation.reviewPrompt")}
             </div>
           </div>
         </div>
         <div className="bg-card px-5 py-4" data-explanation>
           <div className="flex items-center gap-2 mb-3">
             <Lightbulb className="size-4 text-primary" />
-            <h3 className="text-sm font-semibold text-foreground">Explanation</h3>
+            <h3 className="text-sm font-semibold text-foreground">{t("qbank.explanation.title")}</h3>
           </div>
           <div className="uworld-prose text-[14px]" style={{ whiteSpace: "pre-wrap" }}>
             <HighlightedContent
-              text={q.explanation || "No explanation provided."}
+              text={q.explanation || t("qbank.explanation.noExplanation")}
               highlights={hl}
             />
           </div>
@@ -3923,12 +3930,12 @@ function ExplanationCard({
           {isCorrect ? <Check className="size-5" /> : <X className="size-5" />}
         </div>
         <div className="flex-1 min-w-0">
-          <div className="text-base font-bold">{isCorrect ? "Correct!" : "Incorrect"}</div>
+          <div className="text-base font-bold">{isCorrect ? t("qbank.explanation.correct") : t("qbank.explanation.incorrect")}</div>
           <div className="text-xs mt-0.5">
-            Your answer: <strong>{selectedLetter}</strong>
+            {t("qbank.explanation.yourAnswer", { letter: selectedLetter })}
             {!isCorrect && (
               <>
-                {"  ·  "}Correct answer: <strong>{correctLetter}</strong>
+                {"  ·  "}{t("qbank.explanation.correctAnswer", { letter: correctLetter })}
               </>
             )}
           </div>
@@ -3937,11 +3944,11 @@ function ExplanationCard({
       <div className="bg-card px-5 py-4" data-explanation>
         <div className="flex items-center gap-2 mb-3">
           <Lightbulb className="size-4 text-primary" />
-          <h3 className="text-sm font-semibold text-foreground">Explanation</h3>
+          <h3 className="text-sm font-semibold text-foreground">{t("qbank.explanation.title")}</h3>
         </div>
         <div className="uworld-prose text-[14px]" style={{ whiteSpace: "pre-wrap" }}>
           <HighlightedContent
-            text={q.explanation || "No explanation provided."}
+            text={q.explanation || t("qbank.explanation.noExplanation")}
             highlights={hl}
           />
         </div>

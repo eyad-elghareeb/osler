@@ -986,6 +986,16 @@ export const DEFAULT_QUIZ_SETTINGS: QuizSettings = {
   questionAlign: "left",
 };
 
+function getDefaultQuestionAlign(): QuestionAlign {
+  if (typeof window !== "undefined") {
+    try {
+      const uiLang = localStorage.getItem("osler-ui-lang");
+      if (uiLang === "ar") return "right";
+    } catch {}
+  }
+  return "left";
+}
+
 const QUIZ_SETTINGS_KEY = "quiz-settings-v1";
 const QUIZ_SETTINGS_EVENT = "osler-quiz-settings-changed";
 const quizSettingsSubscribers = new Set<() => void>();
@@ -1000,7 +1010,7 @@ async function hydrateQuizSettings(): Promise<void> {
     const raw = await idbGet<QuizSettings>("settings", QUIZ_SETTINGS_KEY);
     cachedQuizSettings = raw
       ? { ...DEFAULT_QUIZ_SETTINGS, ...raw }
-      : { ...DEFAULT_QUIZ_SETTINGS };
+      : { ...DEFAULT_QUIZ_SETTINGS, questionAlign: getDefaultQuestionAlign() };
     // Fix any invalid weight values from older saves
     const validWeights = [400, 500, 600, 700];
     if (!validWeights.includes(cachedQuizSettings.fontWeight)) {
@@ -1008,7 +1018,7 @@ async function hydrateQuizSettings(): Promise<void> {
     }
   } catch (e) {
     console.warn("Failed to hydrate quiz settings:", e);
-    cachedQuizSettings = { ...DEFAULT_QUIZ_SETTINGS };
+    cachedQuizSettings = { ...DEFAULT_QUIZ_SETTINGS, questionAlign: getDefaultQuestionAlign() };
   }
 }
 
@@ -1018,7 +1028,7 @@ if (typeof window !== "undefined") {
 
 export const quizSettings = {
   getSync(): QuizSettings {
-    if (!cachedQuizSettings) return { ...DEFAULT_QUIZ_SETTINGS };
+    if (!cachedQuizSettings) return { ...DEFAULT_QUIZ_SETTINGS, questionAlign: getDefaultQuestionAlign() };
     return { ...cachedQuizSettings };
   },
 
@@ -1030,7 +1040,7 @@ export const quizSettings = {
   async save(patch: Partial<QuizSettings>): Promise<QuizSettings> {
     await hydrateQuizSettings();
     const next: QuizSettings = {
-      ...(cachedQuizSettings ?? DEFAULT_QUIZ_SETTINGS),
+      ...(cachedQuizSettings ?? { ...DEFAULT_QUIZ_SETTINGS, questionAlign: getDefaultQuestionAlign() }),
       ...patch,
     };
     cachedQuizSettings = next;
@@ -1046,7 +1056,7 @@ export const quizSettings = {
   },
 
   async reset(): Promise<QuizSettings> {
-    return quizSettings.save(DEFAULT_QUIZ_SETTINGS);
+    return quizSettings.save({ ...DEFAULT_QUIZ_SETTINGS, questionAlign: getDefaultQuestionAlign() });
   },
 
   subscribe(cb: () => void): () => void {
