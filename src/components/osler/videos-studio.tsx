@@ -18,7 +18,6 @@ import {
   X,
   BookOpen,
 } from "lucide-react";
-// @ts-expect-error - Plyr types use dual export= / export default; turbopack resolves correctly
 import Plyr from "plyr";
 import "plyr/dist/plyr.css";
 import {

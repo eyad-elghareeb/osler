@@ -24,6 +24,7 @@ import { usePlatform } from "@/hooks/use-platform";
 import { useQuizSettings } from "@/hooks/use-quiz-settings";
 import { useOslerTheme } from "./theme-provider";
 import { useI18n } from "./i18n-provider";
+import type { StringKey } from "@/lib/osler/i18n";
 import {
   useResizableSidebar,
   SidebarResizeHandle,
@@ -255,7 +256,7 @@ export function QuizSettingsPanel({
                       : "border-border hover:border-primary/40"
                   )}
                 >
-                  {t(w.key)}
+                  {t(w.key as StringKey)}
                 </button>
               ))}
             </div>
@@ -351,7 +352,7 @@ export function QuizSettingsPanel({
                     )}
                   >
                     <Icon className="size-4" />
-                    <span className="text-[11px] font-medium">{t(opt.key)}</span>
+                    <span className="text-[11px] font-medium">{t(opt.key as StringKey)}</span>
                   </button>
                 );
               })}

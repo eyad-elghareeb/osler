@@ -1059,8 +1059,8 @@ export function translate(
   key: StringKey,
   params?: Record<string, string | number>,
 ): string {
-  const table = STRINGS[lang] as Record<string, string | string[]>;
-  const fallback = STRINGS.en as Record<string, string | string[]>;
+  const table = STRINGS[lang] as unknown as Record<string, string | string[]>;
+  const fallback = STRINGS.en as unknown as Record<string, string | string[]>;
   let value = (table[key] ?? fallback[key] ?? key) as string;
   if (params) {
     for (const [k, v] of Object.entries(params)) {
@@ -1072,8 +1072,8 @@ export function translate(
 
 /** Get a list value (used for the keyboard-shortcut tips list). */
 export function translateList(lang: UiLang, key: StringKey): string[] {
-  const table = STRINGS[lang] as Record<string, string | string[]>;
-  const fallback = STRINGS.en as Record<string, string | string[]>;
+  const table = STRINGS[lang] as unknown as Record<string, string | string[]>;
+  const fallback = STRINGS.en as unknown as Record<string, string | string[]>;
   const value = table[key] ?? fallback[key];
   return Array.isArray(value) ? value : [];
 }

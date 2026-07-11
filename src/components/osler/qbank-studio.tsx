@@ -43,6 +43,7 @@ import {
   Folder,
   Grid3x3,
   Layers,
+  Video as VideoIcon,
   Search,
   SlidersHorizontal,
   ArrowLeft,
@@ -731,6 +732,7 @@ const ENGINE_ICONS: Record<
   written: PenTool,
   osce: Activity,
   library: BookOpen,
+  video: VideoIcon,
 };
 
 function PackCard({
