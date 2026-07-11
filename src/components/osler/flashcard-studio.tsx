@@ -30,6 +30,7 @@ import { useShortcutBindings } from "@/hooks/use-shortcuts";
 import { cn } from "@/lib/utils";
 import { setImmersiveMode } from "./immersive-mode";
 import { useI18n } from "./i18n-provider";
+import { ContentCacheButton } from "./content-cache-button";
 import { ContentLangFilter } from "./qbank-studio";
 
 type ViewMode = "decks" | "subdecks" | "study" | "complete";
@@ -676,7 +677,7 @@ export function FlashcardStudio({
 
   /* ── Decks view (grid) ───────────────────────────────────────────── */
   return (
-    <div className="h-full overflow-y-auto medos-scroll">
+    <div className="h-full overflow-y-auto medos-scroll medos-tabbar-pad">
       <div className="max-w-5xl mx-auto px-4 md:px-8 py-8">
         {/* Header */}
         <div className="mb-6">
@@ -739,9 +740,25 @@ export function FlashcardStudio({
               const pct = totalCards > 0
                 ? Math.round(((totalCards - dueCount) / totalCards) * 100)
                 : 0;
+              // Per-pack content URLs (for the offline download button).
+              // For branch nodes (folders), include all leaf descendant files.
+              // Computed inline (cheap) to avoid hook-in-loop violations.
+              const collectPackUrls = (n: ContentTreeNode): string[] => {
+                const ownBase = `/osler-content/flashcard/${n.path}`;
+                const own = (n.files ?? []).map((f) => `${ownBase}${f}`);
+                if (n.items.length === 0) return own;
+                const childUrls: string[] = [];
+                for (const child of n.items) {
+                  childUrls.push(...collectPackUrls(child));
+                }
+                return [...own, ...childUrls];
+              };
+              const packUrls = collectPackUrls(node);
               return (
-                <button
+                <div
                   key={node.uid}
+                  role="button"
+                  tabIndex={0}
                   onClick={() => {
                     if (isBranch) {
                       openSubdecks(idx);
@@ -749,8 +766,15 @@ export function FlashcardStudio({
                       startDeck(idx);
                     }
                   }}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      if (isBranch) openSubdecks(idx);
+                      else startDeck(idx);
+                    }
+                  }}
                   className={cn(
-                    "medos-fade-in text-start bg-card border border-border rounded-xl p-5 hover:border-primary/40 hover:shadow-md hover:bg-primary/[0.02] transition-colors group",
+                    "medos-fade-in text-start bg-card border border-border rounded-xl p-5 hover:border-primary/40 hover:shadow-md hover:bg-primary/[0.02] transition-colors group cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
                     node.lang === "ar" && "osler-content-ar",
                   )}
                   dir={node.lang === "ar" ? "rtl" : undefined}
@@ -771,7 +795,7 @@ export function FlashcardStudio({
                         <Layers className="size-5" />
                       )}
                     </div>
-                    <div className="min-w-0">
+                    <div className="min-w-0 flex-1">
                       <h3 className="font-semibold truncate">{node.title}</h3>
                       <p className="text-xs text-muted-foreground">
                         {isBranch
@@ -779,6 +803,7 @@ export function FlashcardStudio({
                           : t("flash.home.cards", { n: totalCards })}
                       </p>
                     </div>
+                    <ContentCacheButton packId={node.uid} urls={packUrls} />
                     <ChevronRight className="size-4 text-muted-foreground/40 group-hover:text-muted-foreground transition-colors ml-auto shrink-0" />
                   </div>
                   {node.description && (
@@ -803,7 +828,7 @@ export function FlashcardStudio({
                       }}
                     />
                   </div>
-                </button>
+                </div>
               );
             })}
           </div>

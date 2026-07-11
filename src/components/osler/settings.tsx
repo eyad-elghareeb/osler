@@ -15,6 +15,8 @@ import {
   CornerDownLeft,
   Globe,
   Languages,
+  Download,
+  HardDrive,
 } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -65,7 +67,7 @@ const OSCE_STORAGE_KEYS = {
 
 /* ─── Section tabs ──────────────────────────────────────────────────── */
 
-type SettingsSection = "language" | "ai" | "shortcuts" | "danger";
+type SettingsSection = "language" | "ai" | "shortcuts" | "downloads" | "danger";
 
 export function Settings() {
   const { t } = useI18n();
@@ -75,6 +77,7 @@ export function Settings() {
     { id: "language", label: t("settings.section.language"), icon: Languages },
     { id: "ai", label: t("settings.section.ai"), icon: Sparkles },
     { id: "shortcuts", label: t("settings.section.shortcuts"), icon: Keyboard },
+    { id: "downloads", label: "Downloads", icon: Download },
     { id: "danger", label: t("settings.section.danger"), icon: AlertTriangle },
   ];
 
@@ -89,8 +92,10 @@ export function Settings() {
           </div>
         </div>
 
-        {/* Section tabs */}
-        <div className="flex items-center gap-1 mb-6 border-b border-border/60 overflow-x-auto medos-scroll">
+        {/* Section tabs — horizontal scroll only (overflow-y is locked so the
+            bar never becomes vertically scrollable even when labels wrap on
+            narrow viewports). */}
+        <div className="flex items-center gap-1 mb-6 border-b border-border/60 overflow-x-auto overflow-y-hidden medos-scroll">
           {SECTIONS.map((s) => {
             const I = s.icon;
             const active = section === s.id;
@@ -98,7 +103,7 @@ export function Settings() {
               <button
                 key={s.id}
                 onClick={() => setSection(s.id)}
-                className={`relative h-10 px-3 sm:px-4 text-sm font-medium flex items-center gap-2 transition-colors shrink-0 ${
+                className={`relative h-10 px-3 sm:px-4 text-sm font-medium flex items-center gap-2 transition-colors shrink-0 whitespace-nowrap ${
                   active ? "text-primary" : "text-muted-foreground hover:text-foreground"
                 }`}
               >
@@ -115,6 +120,7 @@ export function Settings() {
         {section === "language" && <LanguageSettingsSection />}
         {section === "ai" && <AiSettingsSection />}
         {section === "shortcuts" && <ShortcutsSettingsSection />}
+        {section === "downloads" && <DownloadsSettingsSection />}
         {section === "danger" && <DangerZoneSection />}
       </motion.div>
     </div>
@@ -596,6 +602,9 @@ function ShortcutsSettingsSection() {
                         const currentBinding = draft[a.id] ?? "";
                         const conflicts = findConflicts(draft, a.id, currentBinding);
                         const isDefault = currentBinding === a.defaultBinding;
+                        const conflictNames = conflicts
+                          .map((c) => SHORTCUT_ACTIONS.find((x) => x.id === c)?.label ?? c)
+                          .join(", ");
                         return (
                           <tr key={a.id} className={idx > 0 ? "border-t border-border/60" : ""}>
                             <td className="py-2.5 px-3 align-middle w-1/2">
@@ -603,7 +612,7 @@ function ShortcutsSettingsSection() {
                               <div className="text-[11px] text-muted-foreground">{a.description}</div>
                               {conflicts.length > 0 && (
                                 <div className="text-[11px] text-amber-500 mt-1">
-                                  ⚠ Conflicts with: {conflicts.map((c) => SHORTCUT_ACTIONS.find((x) => x.id === c)?.label ?? c).join(", ")}
+                                  ⚠ {t("settings.shortcuts.conflictsWith", { names: conflictNames })}
                                 </div>
                               )}
                             </td>
@@ -660,6 +669,7 @@ function ShortcutsSettingsSection() {
                 <li key={i}>{tip}</li>
               ))}
             </ul>
+            <p className="mt-2 text-foreground/80">{t("settings.shortcuts.scopeConflictNote")}</p>
           </div>
         </div>
       </Card>
@@ -678,6 +688,7 @@ function KeyCaptureInput({
   onChange: (binding: string) => void;
   onReset: () => void;
 }) {
+  const { t } = useI18n();
   const [capturing, setCapturing] = React.useState(false);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -707,7 +718,7 @@ function KeyCaptureInput({
           onKeyDown={handleKeyDown}
           onBlur={() => setCapturing(false)}
           className="w-full h-8 px-2 rounded border-2 border-primary bg-card text-xs font-mono outline-none"
-          placeholder="Press keys…"
+          placeholder={t("settings.shortcuts.pressKeys")}
           value=""
           readOnly
         />
@@ -715,7 +726,7 @@ function KeyCaptureInput({
           onClick={() => setCapturing(false)}
           className="text-[10px] text-muted-foreground hover:text-foreground shrink-0"
         >
-          Cancel
+          {t("settings.shortcuts.cancel")}
         </button>
       </div>
     );
@@ -727,18 +738,152 @@ function KeyCaptureInput({
         onClick={() => setCapturing(true)}
         className="w-full h-8 px-2 rounded border border-border bg-card text-xs font-mono text-left hover:border-primary/60 transition-colors"
       >
-        {value ? describeBinding(value) : <span className="text-muted-foreground italic">Click to set</span>}
+        {value ? describeBinding(value) : <span className="text-muted-foreground italic">{t("settings.shortcuts.clickToSet")}</span>}
       </button>
       {value && (
         <button
           onClick={onReset}
           className="size-6 rounded flex items-center justify-center hover:bg-muted shrink-0"
-          title="Reset to default"
+          title={t("settings.shortcuts.resetOne")}
+          aria-label={t("settings.shortcuts.resetOne")}
         >
           <RotateCcw className="size-3" />
         </button>
       )}
     </div>
+  );
+}
+
+/* ─── Downloads section (offline content cache management) ──────────── */
+
+function formatBytes(bytes: number): string {
+  if (bytes === 0) return "0 B";
+  const units = ["B", "KB", "MB", "GB"];
+  const i = Math.floor(Math.log(bytes) / Math.log(1024));
+  return `${(bytes / Math.pow(1024, i)).toFixed(i === 0 ? 0 : 1)} ${units[i]}`;
+}
+
+function DownloadsSettingsSection() {
+  const { t } = useI18n();
+  const [stats, setStats] = React.useState<{ count: number; size: number } | null>(null);
+  const [confirmClear, setConfirmClear] = React.useState(false);
+  const [clearing, setClearing] = React.useState(false);
+
+  const refreshStats = React.useCallback(() => {
+    if (typeof window === "undefined" || !("serviceWorker" in navigator)) return;
+    if (!navigator.serviceWorker.controller) return;
+    // Set up a one-time listener for the response
+    const handler = (event: MessageEvent) => {
+      if (event.data?.type === "CONTENT_CACHE_STATS") {
+        setStats({ count: event.data.count, size: event.data.size });
+        navigator.serviceWorker.removeEventListener("message", handler);
+      }
+    };
+    navigator.serviceWorker.addEventListener("message", handler);
+    navigator.serviceWorker.controller.postMessage({ type: "GET_CONTENT_CACHE_STATS" });
+    // Timeout to clean up listener if no response
+    setTimeout(() => {
+      navigator.serviceWorker.removeEventListener("message", handler);
+    }, 3000);
+  }, []);
+
+  React.useEffect(() => {
+    refreshStats();
+    // Re-check after a delay in case the SW wasn't ready yet
+    const t = setTimeout(refreshStats, 2000);
+    return () => clearTimeout(t);
+  }, [refreshStats]);
+
+  const handleClear = async () => {
+    if (typeof window === "undefined" || !("serviceWorker" in navigator)) return;
+    if (!navigator.serviceWorker.controller) return;
+    setClearing(true);
+    navigator.serviceWorker.controller.postMessage({ type: "CLEAR_CONTENT_CACHE" });
+    // Wait a moment for the SW to process, then refresh stats
+    setTimeout(() => {
+      setClearing(false);
+      setConfirmClear(false);
+      refreshStats();
+    }, 800);
+  };
+
+  const swAvailable =
+    typeof window !== "undefined" &&
+    "serviceWorker" in navigator &&
+    !!navigator.serviceWorker.controller;
+
+  return (
+    <Card className="p-5">
+      <h2 className="text-base font-semibold flex items-center gap-2 mb-3">
+        <Download className="size-4 text-primary" />
+        {t("settings.downloads.title")}
+      </h2>
+      <p className="text-xs text-muted-foreground mb-4 leading-relaxed">
+        {t("settings.downloads.subtitle")}
+      </p>
+
+      {!swAvailable ? (
+        <div className="bg-muted/40 border border-border rounded-lg p-4 text-sm text-muted-foreground">
+          {t("settings.downloads.swUnavailable")}
+        </div>
+      ) : (
+        <>
+          <div className="bg-card border border-border rounded-lg p-4 flex items-center justify-between gap-3 mb-4">
+            <div className="flex items-center gap-3">
+              <div className="size-10 rounded-lg bg-primary/10 text-primary flex items-center justify-center shrink-0">
+                <HardDrive className="size-5" />
+              </div>
+              <div>
+                <div className="text-sm font-medium">
+                  {stats
+                    ? stats.count === 1
+                      ? t("settings.downloads.oneFileCached")
+                      : t("settings.downloads.filesCached", { n: stats.count })
+                    : t("settings.downloads.loading")}
+                </div>
+                <div className="text-xs text-muted-foreground">
+                  {stats ? formatBytes(stats.size) : ""}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {!confirmClear ? (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setConfirmClear(true)}
+              disabled={!stats || stats.count === 0 || clearing}
+            >
+              <Trash2 className="size-3.5 me-1.5" />
+              {t("settings.downloads.clearAll")}
+            </Button>
+          ) : (
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-medium">{t("settings.downloads.confirm")}</span>
+              <Button
+                size="sm"
+                variant="destructive"
+                className="h-7 text-xs"
+                onClick={handleClear}
+                disabled={clearing}
+              >
+                {clearing ? t("settings.downloads.clearing") : t("settings.downloads.confirmYes")}
+              </Button>
+              <Button
+                size="sm"
+                variant="ghost"
+                className="h-7 text-xs"
+                onClick={() => setConfirmClear(false)}
+                disabled={clearing}
+              >
+                {t("settings.downloads.cancel")}
+              </Button>
+            </div>
+          )}
+        </>
+      )}
+    </Card>
   );
 }
 

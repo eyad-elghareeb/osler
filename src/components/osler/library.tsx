@@ -36,6 +36,7 @@ import { useOslerTheme } from "./theme-provider";
 import { useI18n } from "./i18n-provider";
 import { useLightbox } from "./lightbox-provider";
 import { HighlighterToolbar } from "./highlighter-toolbar";
+import { ContentCacheButton } from "./content-cache-button";
 import { FolderTreeNav } from "./folder-tree-nav";
 import { applyHighlightsToHtml } from "@/lib/osler/article-highlights";
 import { setImmersiveMode } from "./immersive-mode";
@@ -203,7 +204,7 @@ export function Library({ initialArticleId }: LibraryProps) {
     if (!hlCtrl.highlightMode || !activeFile) return;
     const el = articleContentRef.current;
     if (!el) return;
-    const handler = () => {
+    const applySelection = () => {
       const sel = window.getSelection();
       if (!sel || sel.isCollapsed || sel.rangeCount === 0) return;
       const text = sel.toString().trim();
@@ -219,11 +220,18 @@ export function Library({ initialArticleId }: LibraryProps) {
       hlCtrl.onAdd(text, hlCtrl.highlightColor, absStart >= 0 ? [{ start: absStart, end: absEnd }] : []);
       sel.removeAllRanges();
     };
-    el.addEventListener("mouseup", handler);
-    el.addEventListener("touchend", handler);
+    // Desktop: mouseup fires after the selection is final.
+    const onMouseUp = () => applySelection();
+    // Touch: defer 150ms so iOS Safari has time to settle the selection
+    // (the selection handles appear after touchend).
+    const onTouchEnd = () => {
+      setTimeout(applySelection, 150);
+    };
+    el.addEventListener("mouseup", onMouseUp);
+    el.addEventListener("touchend", onTouchEnd);
     return () => {
-      el.removeEventListener("mouseup", handler);
-      el.removeEventListener("touchend", handler);
+      el.removeEventListener("mouseup", onMouseUp);
+      el.removeEventListener("touchend", onTouchEnd);
     };
   }, [hlCtrl.highlightMode, hlCtrl.highlightColor, activeFile, hlCtrl.onAdd]);
 
@@ -244,31 +252,47 @@ export function Library({ initialArticleId }: LibraryProps) {
     const isEraser = hlCtrl.tool === "eraser";
     el.classList.toggle("osler-hl-eraser", isEraser && !hlCtrl.highlightMode);
     if (hlCtrl.highlightMode) return;
-    const handler = (e: MouseEvent) => {
-      const target = e.target as HTMLElement;
-      if (target.tagName === "IMG") {
-        e.preventDefault();
-        e.stopPropagation();
-        const src = target.getAttribute("src");
+
+    const handleTarget = (target: EventTarget | null, prevent: (e: Event) => void, e: Event) => {
+      const t = target as HTMLElement;
+      if (!t) return;
+      if (t.tagName === "IMG") {
+        prevent(e);
+        const src = t.getAttribute("src");
         if (src) {
-          openLightbox(src, target.getAttribute("alt") || "");
+          openLightbox(src, t.getAttribute("alt") || "");
           return;
         }
       }
       if (!isEraser) return;
-      const span = target.closest("[data-osler-hl-id]") as HTMLElement | null;
+      const span = t.closest("[data-osler-hl-id]") as HTMLElement | null;
       if (span) {
         const id = span.getAttribute("data-osler-hl-id");
         if (id) {
-          e.preventDefault();
-          e.stopPropagation();
+          prevent(e);
           hlCtrl.onRemove(id);
         }
       }
     };
-    el.addEventListener("click", handler);
+    const onClick = (e: MouseEvent) => handleTarget(e.target, (ev) => { ev.preventDefault(); ev.stopPropagation(); }, e);
+    // Touch: handle eraser taps and image taps on touch devices. We use
+    // elementFromPoint at the touch end coordinates so we get the right
+    // element even if the finger moved slightly. preventDefault stops the
+    // subsequent synthetic click from double-firing.
+    const onTouchEnd = (e: TouchEvent) => {
+      const touch = e.changedTouches[0];
+      if (!touch) return;
+      const t = document.elementFromPoint(touch.clientX, touch.clientY);
+      if (t && (t.tagName === "IMG" || t.closest("[data-osler-hl-id]"))) {
+        e.preventDefault();
+        handleTarget(t, () => {}, e);
+      }
+    };
+    el.addEventListener("click", onClick);
+    el.addEventListener("touchend", onTouchEnd);
     return () => {
-      el.removeEventListener("click", handler);
+      el.removeEventListener("click", onClick);
+      el.removeEventListener("touchend", onTouchEnd);
       el.classList.remove("osler-hl-eraser");
     };
   }, [hlCtrl.onRemove, hlCtrl.highlights, hlCtrl.highlightMode, hlCtrl.tool, openLightbox]);
@@ -488,7 +512,7 @@ function MobileHub({
   }, [grouped, matchedArticleFiles, searchQuery]);
 
   return (
-    <div className="h-full overflow-y-auto medos-scroll">
+    <div className="h-full overflow-y-auto medos-scroll medos-tabbar-pad">
       {/* Search bar */}
       <div className="sticky top-0 z-10 bg-background border-b border-border px-4 py-3">
         <div className="relative max-w-xl mx-auto">
@@ -557,11 +581,19 @@ function MobileHub({
                 {articles.map((a) => {
                   const isBookmarked = bookmarks.has(a.file);
                   return (
-                    <button
+                    <div
                       key={a.file}
+                      role="button"
+                      tabIndex={0}
                       onClick={() => onOpenArticle(a.file)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault();
+                          onOpenArticle(a.file);
+                        }
+                      }}
                       className={cn(
-                        "w-full flex items-center gap-3 px-4 py-3 rounded-xl text-start transition-colors",
+                        "w-full flex items-center gap-3 px-4 py-3 rounded-xl text-start transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
                         "bg-card border border-border hover:border-primary/30 hover:bg-primary/[0.02]",
                         a.file === activeFile && "border-primary/40 bg-primary/5",
                         a.lang === "ar" && "osler-content-ar",
@@ -586,6 +618,7 @@ function MobileHub({
                           )}
                         </div>
                       </div>
+                      <ContentCacheButton packId={`library:${a.file}`} urls={[`/osler-content/library/${a.file}`]} />
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
@@ -606,7 +639,7 @@ function MobileHub({
                         )}
                       </button>
                       <ChevronRight className="size-4 text-muted-foreground/30 shrink-0" />
-                    </button>
+                    </div>
                   );
                 })}
               </div>

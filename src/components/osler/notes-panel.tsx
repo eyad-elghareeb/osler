@@ -494,9 +494,11 @@ export function NotesPanel({
           onTagInputChange={setTagInput}
           onDelete={() => activeNote && handleDelete(activeNote.id)}
           saving={saving}
-          // Pass maximized flag so the editor can use a wider max-width when
-          // the panel takes the full viewport.
+          // `wide` = the panel takes the full viewport (maximized / phone / embedded).
+          // `maximized` = specifically the desktop "maximize" toggle — used to give
+          // the editor a wider max-width on PC where the viewport is large.
           wide={maximized || isPhone || variant === "embedded"}
+          maximized={maximized}
         />
       )}
     </div>
@@ -838,6 +840,7 @@ function EditorView({
   onDelete,
   saving,
   wide,
+  maximized,
 }: {
   note: NoteRecord | null;
   editorMode: EditorMode;
@@ -850,6 +853,7 @@ function EditorView({
   onDelete: () => void;
   saving: boolean;
   wide?: boolean;
+  maximized?: boolean;
 }) {
   const { t } = useI18n();
   if (!note) return null;
@@ -944,9 +948,15 @@ function EditorView({
       </div>
 
       {/* Body — when `wide` (fullscreen / embedded), constrain to a comfortable
-          max-width and center so long-form writing stays readable. */}
+          max-width and center so long-form writing stays readable.
+          When `maximized` (desktop maximize toggle), use a wider max-width so
+          the editor fills more of the large viewport — useful on wide monitors. */}
       <div className={`flex-1 min-h-0 p-3 ${wide ? "flex justify-center" : ""}`}>
-        <div className={`h-full w-full ${wide ? "max-w-3xl" : ""}`}>
+        <div
+          className={`h-full w-full ${
+            wide ? (maximized ? "max-w-6xl" : "max-w-3xl") : ""
+          }`}
+        >
           {editorMode === "edit" ? (
             <MarkdownEditor
               value={note.body}

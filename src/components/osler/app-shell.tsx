@@ -315,8 +315,10 @@ export function AppShell({
         </div>
       </header>
 
-      {/* Main content — scrolls independently so scrollbar doesn't touch the topbar */}
-      <main className="flex-1 min-h-0 overflow-y-auto medos-scroll-y">
+      {/* Main content — scrolls independently so scrollbar doesn't touch the topbar.
+          `medos-tabbar-pad` adds a bottom spacer on mobile so content never
+          scrolls under the fixed bottom tab bar (the spacer is hidden on md+). */}
+      <main className="flex-1 min-h-0 overflow-y-auto medos-scroll-y medos-tabbar-pad">
         <LightboxProvider>
           <AnimatePresence mode="sync" initial={false}>
             <motion.div

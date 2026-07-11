@@ -324,6 +324,19 @@ export function matchShortcut(
   return null;
 }
 
+/**
+ * Find conflicts for a shortcut binding — but ONLY within the same scope.
+ *
+ * Shortcuts are scoped (global / qbank / flashcard / reader). The same key
+ * combination can be used in different scopes without conflict — for example,
+ * ArrowRight can be "next question" in qbank AND "next flashcard" in
+ * flashcards, because only one scope is active at a time (the user is either
+ * in a quiz OR studying flashcards, never both at once).
+ *
+ * The "global" scope is special: global shortcuts are available everywhere,
+ * so a global binding conflicts with bindings in ALL scopes. Conversely, a
+ * scoped binding conflicts with global bindings AND bindings in the same scope.
+ */
 export function findConflicts(
   bindings: Record<string, string>,
   actionId: string,
@@ -333,10 +346,26 @@ export function findConflicts(
   const norm = (b: string) => parseBinding(b).map((c) => `${c.mod ? "mod+" : ""}${c.shift ? "shift+" : ""}${c.alt ? "alt+" : ""}${c.key}`).join(" ");
   const target = norm(newBinding);
   if (!target) return [];
+
+  // Look up the scope of the action being changed
+  const action = SHORTCUT_ACTIONS.find((a) => a.id === actionId);
+  const actionScope = action?.scope;
+
   const conflicts: string[] = [];
   for (const id of Object.keys(bindings)) {
     if (id === actionId) continue;
-    if (norm(bindings[id]) === target) conflicts.push(id);
+    if (norm(bindings[id]) !== target) continue;
+
+    const other = SHORTCUT_ACTIONS.find((a) => a.id === id);
+    const otherScope = other?.scope;
+    if (!otherScope) continue;
+
+    // Conflict if:
+    //   - same scope (e.g. two qbank actions with the same key)
+    //   - either is global (global shortcuts are active in all scopes)
+    if (actionScope === otherScope || actionScope === "global" || otherScope === "global") {
+      conflicts.push(id);
+    }
   }
   return conflicts;
 }

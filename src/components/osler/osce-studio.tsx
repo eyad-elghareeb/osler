@@ -47,6 +47,7 @@ import { useIsMobile } from "@/hooks/use-mobile";
 import { useLightbox } from "./lightbox-provider";
 import { setImmersiveMode } from "./immersive-mode";
 import { useI18n } from "./i18n-provider";
+import { ContentCacheButton } from "./content-cache-button";
 import { ContentLangFilter } from "./qbank-studio";
 
 /* ── Constants ─────────────────────────────────────────────────────── */
@@ -1227,7 +1228,7 @@ export function OsceStudio({ activeItem, activeContent, onExit, onOpenPack }: Os
 
   if (phase === "select") {
     return (
-      <div className="h-full overflow-y-auto medos-scroll">
+      <div className="h-full overflow-y-auto medos-scroll medos-tabbar-pad">
         <div className="max-w-5xl mx-auto px-4 md:px-8 py-8">
           <motion.div
             initial={{ opacity: 0, y: 8 }}
@@ -1289,6 +1290,9 @@ export function OsceStudio({ activeItem, activeContent, onExit, onOpenPack }: Os
                 {filteredPacks.map(({ node, content }, idx) => {
                   const stationCount = content.stations?.length || 0;
                   const tags = content.meta.tags?.slice(0, 4) || [];
+                  // Per-pack content URLs for the offline download button.
+                  const packBase = `/osler-content/osce/${node.path}`;
+                  const packUrls = (node.files ?? []).map((f) => `${packBase}${f}`);
                   return (
                     <motion.div
                       key={node.uid}
@@ -1296,10 +1300,18 @@ export function OsceStudio({ activeItem, activeContent, onExit, onOpenPack }: Os
                       animate={{ opacity: 1, y: 0 }}
                       transition={{ duration: 0.2, delay: idx * 0.04 }}
                     >
-                      <button
+                      <div
+                        role="button"
+                        tabIndex={0}
                         onClick={() => selectPack({ node, content })}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" || e.key === " ") {
+                            e.preventDefault();
+                            selectPack({ node, content });
+                          }
+                        }}
                         className={cn(
-                          "w-full text-start group relative overflow-hidden bg-card border border-border/60 rounded-xl p-5 hover:border-primary/40 hover:shadow-md transition-all duration-200 active:scale-[0.99]",
+                          "w-full text-start group relative overflow-hidden bg-card border border-border/60 rounded-xl p-5 hover:border-primary/40 hover:shadow-md transition-all duration-200 active:scale-[0.99] cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
                           (node.lang ?? content.meta.lang) === "ar" && "osler-content-ar",
                         )}
                         dir={(node.lang ?? content.meta.lang) === "ar" ? "rtl" : undefined}
@@ -1313,6 +1325,7 @@ export function OsceStudio({ activeItem, activeContent, onExit, onOpenPack }: Os
                             <Stethoscope className="size-4 text-primary" />
                           </div>
                           <div className="flex items-center gap-1.5 shrink-0">
+                            <ContentCacheButton packId={node.uid} urls={packUrls} />
                             <span className="text-[11px] font-medium text-muted-foreground tabular-nums">
                               {stationCount} {stationCount === 1 ? "station" : "stations"}
                             </span>
@@ -1342,7 +1355,7 @@ export function OsceStudio({ activeItem, activeContent, onExit, onOpenPack }: Os
                             ))}
                           </div>
                         )}
-                      </button>
+                      </div>
                     </motion.div>
                   );
                 })}

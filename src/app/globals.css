@@ -751,7 +751,7 @@ input, textarea, [contenteditable="true"], .medos-article, .uworld-prose, .ai-ch
   .medos-qbank-split > .medos-qbank-qcol,
   .medos-qbank-split > .medos-qbank-acol {
     width: 100% !important;
-    border-right: none !important;
+    border-inline-end: none !important;
     border-bottom: 1px solid var(--border);
   }
 }

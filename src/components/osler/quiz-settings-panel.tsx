@@ -12,13 +12,17 @@ import {
   BookOpenText,
   ScrollText,
   Zap,
-  Check,
+  Sun,
+  Moon,
+  Plus,
+  Minus,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { usePlatform } from "@/hooks/use-platform";
 import { useQuizSettings } from "@/hooks/use-quiz-settings";
+import { useOslerTheme } from "./theme-provider";
 import { useI18n } from "./i18n-provider";
 import {
   useResizableSidebar,
@@ -42,7 +46,13 @@ const FONT_FAMILY_OPTIONS: FontFamilyOption[] = [
   { id: "mono", sample: "Aa", cssFamily: "ui-monospace, SFMono-Regular, Menlo, monospace" },
 ];
 
-const FONT_SIZE_OPTIONS = [13, 14, 15, 16, 17, 18, 19, 20, 21];
+const FONT_SIZE_MIN = 12;
+const FONT_SIZE_MAX = 24;
+const FONT_SIZE_STEP = 1;
+
+const LINE_HEIGHT_MIN = 1.2;
+const LINE_HEIGHT_MAX = 2.5;
+const LINE_HEIGHT_STEP = 0.1;
 
 const FONT_WEIGHT_OPTIONS: Array<{ id: number; key: string }> = [
   { id: 400, key: "qbank.settings.weight.400" },
@@ -50,8 +60,6 @@ const FONT_WEIGHT_OPTIONS: Array<{ id: number; key: string }> = [
   { id: 600, key: "qbank.settings.weight.600" },
   { id: 700, key: "qbank.settings.weight.700" },
 ];
-
-const LINE_HEIGHT_OPTIONS = [1.3, 1.5, 1.7, 1.9, 2.1, 2.3];
 
 const ALIGN_OPTIONS: Array<{
   id: QuestionAlign;
@@ -66,10 +74,6 @@ const ALIGN_OPTIONS: Array<{
 interface QuizSettingsPanelProps {
   open: boolean;
   onClose: () => void;
-  /** Optional sample stem text shown in the live preview block. */
-  previewStem?: string;
-  /** Optional sample choice text shown in the live preview block. */
-  previewChoice?: string;
   /** Tone: "header" when invoked from the navy QBank header bar, "surface" otherwise */
   tone?: "header" | "surface";
 }
@@ -77,12 +81,11 @@ interface QuizSettingsPanelProps {
 export function QuizSettingsPanel({
   open,
   onClose,
-  previewStem = "A 67-year-old man with a history of hypertension presents with crushing substernal chest pain radiating to the left arm. ECG shows ST elevations in leads II, III, and aVF. What is the most likely diagnosis?",
-  previewChoice = "Acute inferior wall myocardial infarction",
   tone = "header",
 }: QuizSettingsPanelProps) {
   const platform = usePlatform();
   const { t, rtl } = useI18n();
+  const { theme, setTheme } = useOslerTheme();
   const { settings, update, reset } = useQuizSettings();
   const isPhone = platform.isPhone;
 
@@ -99,24 +102,19 @@ export function QuizSettingsPanel({
       ? "bg-primary text-primary-foreground border-primary-foreground/10"
       : "bg-card text-foreground border-border";
 
-  // Resolve CSS family for the preview
-  const previewFontFamily = React.useMemo(
-    () => FONT_FAMILY_OPTIONS.find((o) => o.id === settings.fontFamily)?.cssFamily ?? "inherit",
-    [settings.fontFamily],
-  );
+  const isSplitMode = settings.explanationMode === "split";
 
-  // Alignment helper for the live preview — block-level alignment using
-  // max-width + margin-auto. Same approach as in qbank-studio.
-  const previewAlignClass = React.useMemo(() => {
-    switch (settings.questionAlign) {
-      case "center": return "mx-auto";
-      case "right": return rtl ? "me-auto" : "ms-auto";
-      case "left":
-      default: return "";
-    }
-  }, [settings.questionAlign, rtl]);
+  // Font size +/- handlers
+  const decFontSize = () =>
+    update({ fontSize: Math.max(FONT_SIZE_MIN, settings.fontSize - FONT_SIZE_STEP) });
+  const incFontSize = () =>
+    update({ fontSize: Math.min(FONT_SIZE_MAX, settings.fontSize + FONT_SIZE_STEP) });
 
-  const previewMaxWidthClass = settings.questionAlign !== "left" ? "max-w-md" : "";
+  // Line height +/- handlers (rounded to 1 decimal)
+  const decLineHeight = () =>
+    update({ lineHeight: Math.round(Math.max(LINE_HEIGHT_MIN, settings.lineHeight - LINE_HEIGHT_STEP) * 10) / 10 });
+  const incLineHeight = () =>
+    update({ lineHeight: Math.round(Math.min(LINE_HEIGHT_MAX, settings.lineHeight + LINE_HEIGHT_STEP) * 10) / 10 });
 
   const content = (
     <div className="flex flex-col h-full bg-card text-foreground">
@@ -164,6 +162,39 @@ export function QuizSettingsPanel({
 
       {/* Scrollable settings body */}
       <div className="flex-1 overflow-y-auto medos-scroll px-4 md:px-6 py-5 space-y-7">
+        {/* Theme switcher — quick dark/light toggle at the top */}
+        <Section
+          icon={theme === "dark" ? Moon : Sun}
+          title={t("settings.theme.title")}
+        >
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              onClick={() => setTheme("light")}
+              className={cn(
+                "flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg border-2 transition-all",
+                theme === "light"
+                  ? "border-primary bg-primary/5 text-primary"
+                  : "border-border hover:border-primary/40 text-muted-foreground"
+              )}
+            >
+              <Sun className="size-4" />
+              <span className="text-xs font-medium">{t("settings.theme.light")}</span>
+            </button>
+            <button
+              onClick={() => setTheme("dark")}
+              className={cn(
+                "flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg border-2 transition-all",
+                theme === "dark"
+                  ? "border-primary bg-primary/5 text-primary"
+                  : "border-border hover:border-primary/40 text-muted-foreground"
+              )}
+            >
+              <Moon className="size-4" />
+              <span className="text-xs font-medium">{t("settings.theme.dark")}</span>
+            </button>
+          </div>
+        </Section>
+
         {/* Typography */}
         <Section
           icon={Zap}
@@ -198,24 +229,15 @@ export function QuizSettingsPanel({
             </div>
           </Field>
 
-          {/* Font size */}
+          {/* Font size — compact +/- stepper */}
           <Field label={t("qbank.settings.fontSize")} hint={`${settings.fontSize}px`}>
-            <div className="flex flex-wrap items-center gap-1">
-              {FONT_SIZE_OPTIONS.map((s) => (
-                <button
-                  key={s}
-                  onClick={() => update({ fontSize: s })}
-                  className={cn(
-                    "size-8 rounded-md text-[11px] font-mono tabular-nums transition-colors",
-                    settings.fontSize === s
-                      ? "bg-primary text-primary-foreground"
-                      : "bg-muted/40 hover:bg-muted text-muted-foreground"
-                  )}
-                >
-                  {s}
-                </button>
-              ))}
-            </div>
+            <Stepper
+              value={settings.fontSize}
+              min={FONT_SIZE_MIN}
+              max={FONT_SIZE_MAX}
+              onDec={decFontSize}
+              onInc={incFontSize}
+            />
           </Field>
 
           {/* Font weight */}
@@ -239,24 +261,17 @@ export function QuizSettingsPanel({
             </div>
           </Field>
 
-          {/* Line height */}
+          {/* Line height — compact +/- stepper */}
           <Field label={t("qbank.settings.lineHeight")} hint={settings.lineHeight.toFixed(1)}>
-            <div className="flex flex-wrap items-center gap-1">
-              {LINE_HEIGHT_OPTIONS.map((lh) => (
-                <button
-                  key={lh}
-                  onClick={() => update({ lineHeight: lh })}
-                  className={cn(
-                    "size-8 rounded-md text-[11px] font-mono tabular-nums transition-colors",
-                    settings.lineHeight === lh
-                      ? "bg-primary text-primary-foreground"
-                      : "bg-muted/40 hover:bg-muted text-muted-foreground"
-                  )}
-                >
-                  {lh.toFixed(1)}
-                </button>
-              ))}
-            </div>
+            <Stepper
+              value={settings.lineHeight}
+              min={LINE_HEIGHT_MIN}
+              max={LINE_HEIGHT_MAX}
+              step={LINE_HEIGHT_STEP}
+              format={(v) => v.toFixed(1)}
+              onDec={decLineHeight}
+              onInc={incLineHeight}
+            />
           </Field>
 
           {/* Apply to choices */}
@@ -312,83 +327,37 @@ export function QuizSettingsPanel({
           </Field>
         </Section>
 
-        {/* Alignment */}
-        <Section
-          icon={AlignLeft}
-          title={t("qbank.settings.section.alignment")}
-          description={t("qbank.settings.section.alignment.desc")}
-        >
-          <div className="grid grid-cols-3 gap-2">
-            {ALIGN_OPTIONS.map((opt) => {
-              const Icon = opt.icon;
-              const active = settings.questionAlign === opt.id;
-              return (
-                <button
-                  key={opt.id}
-                  onClick={() => update({ questionAlign: opt.id })}
-                  className={cn(
-                    "flex flex-col items-center gap-1.5 px-2 py-3 rounded-lg border-2 transition-all",
-                    active
-                      ? "border-primary bg-primary/5 text-primary"
-                      : "border-border hover:border-primary/40 text-muted-foreground"
-                  )}
-                >
-                  <Icon className="size-4" />
-                  <span className="text-[11px] font-medium">{t(opt.key)}</span>
-                </button>
-              );
-            })}
-          </div>
-        </Section>
-
-        {/* Live preview */}
-        <Section
-          icon={Check}
-          title={t("qbank.settings.section.preview")}
-          description={t("qbank.settings.section.preview.desc")}
-        >
-          <div className="rounded-lg border border-border bg-background p-4">
-            {/* Stem block — alignment applies to the BLOCK, not inline text */}
-            <div className={cn(previewMaxWidthClass, previewAlignClass)}>
-              <div
-                className="uworld-prose"
-                style={{
-                  fontFamily: previewFontFamily,
-                  fontSize: `${settings.fontSize}px`,
-                  fontWeight: settings.fontWeight,
-                  lineHeight: settings.lineHeight,
-                }}
-              >
-                {previewStem}
-              </div>
+        {/* Alignment — hidden in 2-page (split) mode since alignment is forced to left there.
+            Only shown in continuous mode where the alignment choice actually takes effect. */}
+        {!isSplitMode && (
+          <Section
+            icon={AlignLeft}
+            title={t("qbank.settings.section.alignment")}
+            description={t("qbank.settings.section.alignment.desc")}
+          >
+            <div className="grid grid-cols-3 gap-2">
+              {ALIGN_OPTIONS.map((opt) => {
+                const Icon = opt.icon;
+                const active = settings.questionAlign === opt.id;
+                return (
+                  <button
+                    key={opt.id}
+                    onClick={() => update({ questionAlign: opt.id })}
+                    className={cn(
+                      "flex flex-col items-center gap-1.5 px-2 py-3 rounded-lg border-2 transition-all",
+                      active
+                        ? "border-primary bg-primary/5 text-primary"
+                        : "border-border hover:border-primary/40 text-muted-foreground"
+                    )}
+                  >
+                    <Icon className="size-4" />
+                    <span className="text-[11px] font-medium">{t(opt.key)}</span>
+                  </button>
+                );
+              })}
             </div>
-
-            {/* Choice block — alignment applies to the BLOCK */}
-            <div className={cn("mt-3 flex items-center gap-2", previewMaxWidthClass, previewAlignClass)}>
-              <div className="size-6 rounded-full border-2 border-border flex items-center justify-center text-[11px] font-semibold text-muted-foreground shrink-0">
-                A
-              </div>
-              <div
-                className={cn(
-                  "flex-1 text-[14px] leading-relaxed pt-0.5",
-                  !settings.textAffectsChoices && "font-normal"
-                )}
-                style={
-                  settings.textAffectsChoices
-                    ? {
-                        fontFamily: previewFontFamily,
-                        fontSize: `${settings.fontSize}px`,
-                        fontWeight: settings.fontWeight,
-                        lineHeight: settings.lineHeight,
-                      }
-                    : undefined
-                }
-              >
-                {previewChoice}
-              </div>
-            </div>
-          </div>
-        </Section>
+          </Section>
+        )}
 
         {/* Reset */}
         <div className="pt-2 border-t border-border">
@@ -431,9 +400,6 @@ export function QuizSettingsPanel({
               ? undefined
               : {
                   width: resizable.width ? `${resizable.width}px` : "24rem",
-                  // On RTL, the resize handle sits on the visual right edge
-                  // (which is the inline-start). On LTR it sits on the left
-                  // edge of the right-docked sidebar.
                 }
           }
           role="dialog"
@@ -532,6 +498,50 @@ function Field({
         </p>
       )}
       <div>{children}</div>
+    </div>
+  );
+}
+
+/** Compact +/- stepper for numeric values (font size, line height, etc.). */
+function Stepper({
+  value,
+  min,
+  max,
+  step = 1,
+  format,
+  onDec,
+  onInc,
+}: {
+  value: number;
+  min: number;
+  max: number;
+  step?: number;
+  format?: (v: number) => string;
+  onDec: () => void;
+  onInc: () => void;
+}) {
+  const display = format ? format(value) : String(value);
+  return (
+    <div className="flex items-center gap-2">
+      <button
+        onClick={onDec}
+        disabled={value <= min}
+        className="size-8 rounded-md border border-border bg-card flex items-center justify-center text-muted-foreground hover:text-foreground hover:border-primary/40 transition-colors disabled:opacity-40 disabled:cursor-not-allowed shrink-0"
+        aria-label="Decrease"
+      >
+        <Minus className="size-3.5" />
+      </button>
+      <div className="flex-1 h-8 rounded-md border border-border bg-card flex items-center justify-center text-sm font-mono tabular-nums text-foreground">
+        {display}
+      </div>
+      <button
+        onClick={onInc}
+        disabled={value >= max}
+        className="size-8 rounded-md border border-border bg-card flex items-center justify-center text-muted-foreground hover:text-foreground hover:border-primary/40 transition-colors disabled:opacity-40 disabled:cursor-not-allowed shrink-0"
+        aria-label="Increase"
+      >
+        <Plus className="size-3.5" />
+      </button>
     </div>
   );
 }

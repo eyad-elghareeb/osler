@@ -100,6 +100,7 @@ import { HighlightedContent } from "./highlighted-content";
 import { HighlighterToolbar } from "./highlighter-toolbar";
 import { QuizSettingsPanel } from "./quiz-settings-panel";
 import { NotesPanel } from "./notes-panel";
+import { ContentCacheButton } from "./content-cache-button";
 import { useShortcutBindings, useShortcutListener } from "@/hooks/use-shortcuts";
 import { defaultBindings } from "@/lib/osler/shortcuts";
 import { useIsMobile } from "@/hooks/use-mobile";
@@ -546,8 +547,6 @@ export function QBankStudio({
           open={quizSettingsOpen}
           onClose={() => setQuizSettingsOpen(false)}
           tone="header"
-          previewStem={session.questions[session.current]?.stem?.slice(0, 220)}
-          previewChoice={session.questions[session.current]?.choices?.[0]}
         />
         <NotesPanel
           open={notesOpen}
@@ -650,7 +649,7 @@ function HomeView({
 
   return (
     <div className="flex h-[calc(100vh-3.5rem)] overflow-hidden bg-background">
-      <div className="flex-1 min-w-0 overflow-y-auto medos-scroll-y safe-pb">
+      <div className="flex-1 min-w-0 overflow-y-auto medos-scroll-y medos-tabbar-pad">
         <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-6 min-w-0">
           {/* Page header */}
           <div className="mb-6">
@@ -754,11 +753,35 @@ function PackCard({
       ? Math.round((packProgress.correct / packProgress.attempted) * 100)
       : 0;
   const isAr = (content.meta.lang ?? node.lang) === "ar";
+
+  // Build the list of content URLs for this pack (used by the download button).
+  // Mirrors the URL pattern in lib/osler/content.ts → loadNodeContent().
+  const categoryFolder =
+    node.type === "flashcard"
+      ? "flashcard"
+      : node.type === "osce"
+        ? "osce"
+        : node.type === "library"
+          ? "library"
+          : "qbank";
+  const packUrls = React.useMemo(() => {
+    const base = `/osler-content/${categoryFolder}/${node.path}`;
+    return (node.files ?? []).map((f) => `${base}${f}`);
+  }, [categoryFolder, node.path, node.files]);
+
   return (
-    <button
+    <div
+      role="button"
+      tabIndex={0}
       onClick={() => onOpenPack?.(node)}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onOpenPack?.(node);
+        }
+      }}
       className={cn(
-        "medos-fade-in text-start bg-card border border-border rounded-xl p-5 hover:border-primary/40 hover:shadow-md hover:bg-primary/[0.02] transition-colors group flex flex-col gap-3",
+        "medos-fade-in text-start bg-card border border-border rounded-xl p-5 hover:border-primary/40 hover:shadow-md hover:bg-primary/[0.02] transition-colors group flex flex-col gap-3 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
         isAr && "osler-content-ar",
       )}
       dir={isAr ? "rtl" : undefined}
@@ -783,6 +806,8 @@ function PackCard({
             {t("lang.badge.ar")}
           </span>
         )}
+        {/* Per-pack download button — precache this pack's content for offline use. */}
+        <ContentCacheButton packId={node.uid} urls={packUrls} />
         <ChevronRight className={cn("size-4 text-muted-foreground/40 group-hover:text-muted-foreground transition-colors shrink-0", rtl && "rtl-flip-x")} />
       </div>
       <p className="text-xs text-muted-foreground/70 line-clamp-2">
@@ -804,7 +829,7 @@ function PackCard({
       ) : (
         <span className="text-[11px] text-muted-foreground/50">{t("qbank.home.start")}</span>
       )}
-    </button>
+    </div>
   );
 }
 
@@ -1854,6 +1879,17 @@ function QuizView({
     [fontFamilyCss, quizSettingsState.fontSize, quizSettingsState.fontWeight, quizSettingsState.lineHeight, quizSettingsState.textAffectsChoices]
   );
 
+  // Resolve effective explanation layout. Split mode shows the explanation
+  // in a separate column (side-by-side on desktop, stacked with tabs on mobile).
+  // Continuous mode renders the explanation below the question in a single scroll.
+  const useSplitExplanation = quizSettingsState.explanationMode === "split";
+
+  // Whether we're currently rendering in 2-page (split) mode.
+  // Split mode is only active when: explanationMode is "split" AND the user
+  // has submitted the answer AND we're in tutor mode (the only mode that
+  // reveals explanations inline).
+  const isSplitMode = useSplitExplanation && session.mode === "tutor";
+
   // Block-level alignment for the ENTIRE content area (question + choices).
   // Applied to the outer content wrapper so the block positions relative to
   // the full viewport / column, not a nested max-width sub-container.
@@ -1861,23 +1897,32 @@ function QuizView({
   // - left:   content fills available width (with a generous max for readability)
   // - center: content block capped at max-w-3xl, centered with mx-auto
   // - right:  content block capped at max-w-3xl, pushed to the inline-end
+  //
+  // IMPORTANT: In 2-page (split) mode, alignment is ALWAYS "left" (fill width).
+  //   The question column is only ~55% wide; centering or right-aligning within
+  //   that narrow column looks broken. The center/right options are honored
+  //   only in continuous mode (single full-width scroll).
+  //
+  // For Arabic (RTL) content the wrapper already has dir="rtl", so logical
+  // properties (ms-auto / me-auto) flip correctly: "right" pushes the block
+  // to the physical right in both LTR and RTL.
   const contentAlignClass = React.useMemo(() => {
+    // Split (2-page) mode: always fill width — ignore user alignment choice
+    if (isSplitMode) return "max-w-5xl";
     switch (quizSettingsState.questionAlign) {
       case "center":
         return "mx-auto max-w-3xl";
       case "right":
+        // ms-auto in LTR pushes block to the right (inline-end).
+        // me-auto in RTL pushes block to the right (inline-start = right in RTL).
+        // Both result in the block being physically on the right side.
         return rtl ? "me-auto max-w-3xl" : "ms-auto max-w-3xl";
       case "left":
       default:
         // Left = fill width but cap at a generous max for readability
         return "max-w-5xl";
     }
-  }, [quizSettingsState.questionAlign, rtl]);
-
-  // Resolve effective explanation layout. Split mode shows the explanation
-  // in a separate column (side-by-side on desktop, stacked with tabs on mobile).
-  // Continuous mode renders the explanation below the question in a single scroll.
-  const useSplitExplanation = quizSettingsState.explanationMode === "split";
+  }, [quizSettingsState.questionAlign, rtl, isSplitMode]);
 
   // Written AI grading state
   const [writtenAIGrading, setWrittenAIGrading] = React.useState<string | null>(null);
@@ -1962,10 +2007,14 @@ function QuizView({
     setMobileTutorTab("question");
   }, [activeItem.uid, session.current]);
 
-  // Highlight mode: auto-apply on text selection (mouse or touch)
+  // Highlight mode: auto-apply on text selection (mouse or touch).
+  // On touch devices, `touchend` fires *before* the browser finalizes the
+  // selection on iOS Safari. We use a small delay (150ms) on touchend so the
+  // selection has time to settle before we read it. On desktop, `mouseup`
+  // fires after the selection is final so no delay is needed.
   React.useEffect(() => {
     if (!highlightMode) return;
-    const handler = () => {
+    const applySelection = () => {
       const sel = window.getSelection();
       if (!sel || sel.isCollapsed || sel.rangeCount === 0) return;
       const text = sel.toString().trim();
@@ -2009,32 +2058,63 @@ function QuizView({
       setHlVersion((v) => v + 1);
       window.getSelection()?.removeAllRanges();
     };
-    document.addEventListener("mouseup", handler);
-    document.addEventListener("touchend", handler);
+
+    // Desktop: mouseup fires after the selection is final.
+    const onMouseUp = () => applySelection();
+    // Touch: defer 150ms so iOS Safari has time to settle the selection
+    // (the selection handles appear after touchend).
+    const onTouchEnd = () => {
+      setTimeout(applySelection, 150);
+    };
+
+    document.addEventListener("mouseup", onMouseUp);
+    document.addEventListener("touchend", onTouchEnd);
     return () => {
-      document.removeEventListener("mouseup", handler);
-      document.removeEventListener("touchend", handler);
+      document.removeEventListener("mouseup", onMouseUp);
+      document.removeEventListener("touchend", onTouchEnd);
     };
   }, [highlightMode, highlightColor, activeItem.uid, session.current, q]);
 
-  // Eraser mode: click/tap a highlight span to remove it
+  // Eraser mode: click/tap a highlight span to remove it.
+  // We listen to both `click` (mouse) and `touchend` (touch devices) so
+  // erasing works on phones/tablets. A small delay on touchend prevents the
+  // subsequent synthetic click event from double-firing.
   React.useEffect(() => {
     if (!eraserMode) return;
-    const handler = (e: MouseEvent) => {
-      const target = e.target as HTMLElement;
-      const span = target.closest("[data-osler-hl-id]") as HTMLElement | null;
+    const removeHighlight = (target: EventTarget | null) => {
+      const el = target as HTMLElement;
+      if (!el) return;
+      const span = el.closest("[data-osler-hl-id]") as HTMLElement | null;
       if (span) {
         const id = span.getAttribute("data-osler-hl-id");
         if (id) {
-          e.preventDefault();
-          e.stopPropagation();
           highlights.remove(activeItem.uid, session.current, id);
           setHlVersion((v) => v + 1);
         }
       }
     };
-    document.addEventListener("click", handler, true);
-    return () => document.removeEventListener("click", handler, true);
+    const onClick = (e: MouseEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      removeHighlight(e.target);
+    };
+    const onTouchEnd = (e: TouchEvent) => {
+      // Prevent the synthetic click that follows touchend
+      e.preventDefault();
+      const touch = e.changedTouches[0];
+      if (!touch) return;
+      const el = document.elementFromPoint(touch.clientX, touch.clientY);
+      if (el) {
+        e.stopPropagation();
+        removeHighlight(el);
+      }
+    };
+    document.addEventListener("click", onClick, true);
+    document.addEventListener("touchend", onTouchEnd, true);
+    return () => {
+      document.removeEventListener("click", onClick, true);
+      document.removeEventListener("touchend", onTouchEnd, true);
+    };
   }, [eraserMode, activeItem.uid, session.current]);
 
   // Eraser affordance: ring highlights while the eraser tool is active
@@ -2119,7 +2199,11 @@ function QuizView({
 
   return (
     <div className="fixed inset-0 z-50 bg-background flex flex-col safe-screen">
-      {/* ── Top bar (UWorld navy) ─────────────────────────────────────────── */}
+      {/* ── Top bar (UWorld navy) ───────────────────────────────────────────
+          All icon buttons in this bar use size-7 (matching the graduation cap
+          button) for visual consistency. The mobile-only navigator button uses
+          size-8 to give a slightly larger touch target on phones (it's the
+          only way to access the navigator on mobile). */}
       <header
         className="h-12 flex items-center pl-3 sm:pl-4 pr-1 sm:pr-2 gap-1.5 sm:gap-2 shrink-0 border-b border-primary-foreground/10 safe-pt"
         style={{ backgroundColor: "var(--primary)", color: "var(--primary-foreground)" }}
@@ -2141,8 +2225,9 @@ function QuizView({
 
         <button
           onClick={onToggleNavMobile}
-          className="lg:hidden size-8 rounded-lg bg-primary-foreground/15 hover:bg-primary-foreground/25 flex items-center justify-center mr-1 medos-touch-target"
+          className="md:hidden size-8 rounded-lg bg-primary-foreground/15 hover:bg-primary-foreground/25 flex items-center justify-center me-1 medos-touch-target shrink-0"
           title="Question navigator"
+          aria-label="Question navigator"
         >
           <ListChecks className="size-4" />
         </button>
@@ -2156,7 +2241,7 @@ function QuizView({
         {/* Quiz settings button — opens full settings panel */}
         <button
           onClick={onToggleQuizSettings}
-          className={`size-8 sm:size-7 rounded-lg flex items-center justify-center transition-colors medos-touch-target shrink-0 ${
+          className={`size-7 rounded-lg flex items-center justify-center transition-colors medos-touch-target shrink-0 ${
             quizSettingsOpen
               ? "bg-primary-foreground/30 ring-1 ring-inset ring-primary-foreground/40"
               : "bg-primary-foreground/15 hover:bg-primary-foreground/25"
@@ -2179,8 +2264,9 @@ function QuizView({
           />
           <button
             onClick={onTogglePause}
-            className="size-7 rounded-lg bg-primary-foreground/15 hover:bg-primary-foreground/25 flex items-center justify-center transition-colors"
+            className="size-7 rounded-lg bg-primary-foreground/15 hover:bg-primary-foreground/25 flex items-center justify-center transition-colors medos-touch-target shrink-0"
             title={isPausedOrLocked ? "Resume" : "Pause"}
+            aria-label={isPausedOrLocked ? "Resume" : "Pause"}
           >
             {isPausedOrLocked ? <Play className="size-3.5" /> : <Pause className="size-3.5" />}
           </button>
@@ -2205,7 +2291,7 @@ function QuizView({
         {/* Notes button — opens notes sidebar (replaces sticky notes) */}
         <button
           onClick={onToggleNotes}
-          className={`size-8 sm:size-7 rounded-lg flex items-center justify-center transition-colors medos-touch-target shrink-0 ${
+          className={`size-7 rounded-lg flex items-center justify-center transition-colors medos-touch-target shrink-0 ${
             notesOpen
               ? "bg-primary-foreground/30 ring-1 ring-inset ring-primary-foreground/40"
               : "bg-primary-foreground/15 hover:bg-primary-foreground/25"
@@ -2348,16 +2434,18 @@ function QuizView({
           >
             {q ? (
               <>
-                {/* Left column: question + choices.
-                    In split mode the column is w-[55%]; alignment classes still
-                    work inside it (center/right position within the 55% column).
-                    In continuous mode the column is full-width; the contentAlignClass
-                    caps + positions the content block within the full viewport. */}
+                {/* Question column.
+                    In 2-page (split) mode the column is w-[55%] and the explanation
+                    sits beside it. `border-e` (inline-end) is used so the divider
+                    flips correctly for RTL Arabic content (border on the left in RTL).
+                    Alignment is forced to "left" (fill width) in split mode — see
+                    contentAlignClass. In continuous mode the column is full-width
+                    and the contentAlignClass caps + positions the content block. */}
                 <div
                   className={`medos-qbank-qcol ${(activeItem.lang ?? "en") === "ar" ? "osler-content-ar" : ""} ${
                     submitted && session.mode === "tutor" && useSplitExplanation
-                      ? "w-[55%] overflow-y-auto medos-scroll border-r border-border"
-                      : "flex-1 overflow-y-auto medos-scroll"
+                      ? "w-[55%] overflow-y-auto medos-scroll border-e border-border"
+                      : "flex-1 overflow-y-auto medos-scroll pb-20 sm:pb-6"
                   } ${mobileTutorTab === "answer" ? "hidden md:block" : ""}`}
                 >
                   <div className={`px-4 sm:px-6 ${submitted && session.mode === "tutor" && useSplitExplanation ? "py-4" : "lg:px-8 py-6"} ${contentAlignClass}`}>
@@ -2645,10 +2733,12 @@ function QuizView({
                   </div>
                 )}
 
-                {/* Continuous-mode explanation — flows below the question in a single scroll. */}
+                {/* Continuous-mode explanation — flows below the question in a single scroll.
+                    Alignment follows the user's questionAlign setting (same as the question
+                    block) so the explanation stays visually aligned with the question. */}
                 {submitted && session.mode === "tutor" && !useSplitExplanation && (
                   <div className="border-t border-border bg-muted/20 px-4 sm:px-6 py-4 mt-6">
-                    <div className="max-w-3xl mx-auto">
+                    <div className={contentAlignClass}>
                       {session.engine === "written" ? (
                         <WrittenEvaluationPanel
                           draft={writtenDraft}
@@ -2861,8 +2951,10 @@ function QuizView({
             </Button>
           </footer>
 
-          {/* Bottom action bar — mobile (compact) */}
-          <footer className="sm:hidden border-t border-border bg-card px-3 py-2 flex items-center gap-1.5 shrink-0 safe-pb medos-tap-none">
+          {/* Bottom action bar — mobile (compact).
+              Extra bottom padding (pb-[env+0.5rem]) ensures the action buttons
+              clear the iOS home indicator with breathing room. */}
+          <footer className="sm:hidden border-t border-border bg-card px-3 pt-2 pb-[max(env(safe-area-inset-bottom,0px),0.75rem)] flex items-center gap-1.5 shrink-0 medos-tap-none">
             <Button
               variant="outline" size="icon"
               onClick={onPrev} disabled={session.current === 0}

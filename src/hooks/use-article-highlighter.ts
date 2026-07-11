@@ -272,7 +272,13 @@ export function useArticleHighlighter(
     };
 
     const onMouseUp = () => applySelection();
-    const onTouchEnd = () => applySelection();
+    // Touch: defer 150ms so iOS Safari has time to settle the selection
+    // (the selection handles appear after touchend). On touch devices the
+    // touchend event fires before the selection is finalized, so reading
+    // window.getSelection() synchronously returns the previous selection.
+    const onTouchEnd = () => {
+      setTimeout(applySelection, 150);
+    };
 
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Escape" && toolRef.current !== null) {
