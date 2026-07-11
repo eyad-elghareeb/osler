@@ -227,6 +227,14 @@ export function useArticleHighlighter(
     if (attachedRef.current === doc) return;
     attachedRef.current = doc;
 
+    // Use `selectionchange` (debounced) instead of mouseup/touchend.
+    // `touchend` fires before iOS Safari finalises the selection, which
+    // made the old 150ms-delay approach unreliable on mobile.
+    // `selectionchange` fires on every selection change (mouse or touch),
+    // and the 350ms debounce ensures we only act when the user has stopped
+    // adjusting — by which point the selection is final.
+    let debounceTimer: ReturnType<typeof setTimeout> | null = null;
+
     const applySelection = () => {
       const t = toolRef.current;
       if (!t || t === ERASER_TOOL) return;
@@ -271,13 +279,9 @@ export function useArticleHighlighter(
       doc.getSelection()?.removeAllRanges();
     };
 
-    const onMouseUp = () => applySelection();
-    // Touch: defer 150ms so iOS Safari has time to settle the selection
-    // (the selection handles appear after touchend). On touch devices the
-    // touchend event fires before the selection is finalized, so reading
-    // window.getSelection() synchronously returns the previous selection.
-    const onTouchEnd = () => {
-      setTimeout(applySelection, 150);
+    const onSelectionChange = () => {
+      if (debounceTimer) clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(applySelection, 350);
     };
 
     const onKeyDown = (e: KeyboardEvent) => {
@@ -286,13 +290,12 @@ export function useArticleHighlighter(
       }
     };
 
-    doc.addEventListener("mouseup", onMouseUp);
-    doc.addEventListener("touchend", onTouchEnd);
+    doc.addEventListener("selectionchange", onSelectionChange);
     doc.addEventListener("keydown", onKeyDown);
 
     (doc as any).__oslerHlCleanup = () => {
-      doc.removeEventListener("mouseup", onMouseUp);
-      doc.removeEventListener("touchend", onTouchEnd);
+      if (debounceTimer) clearTimeout(debounceTimer);
+      doc.removeEventListener("selectionchange", onSelectionChange);
       doc.removeEventListener("keydown", onKeyDown);
     };
   }, []);

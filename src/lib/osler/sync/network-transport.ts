@@ -168,8 +168,20 @@ export class NetworkTransport {
     this.callbacks.onStatusChanged("discovering", "Discovering devices...");
 
     try {
-      const ip = await this.getPublicIP();
-      const hash = this.hashString(`osler-sync-v2-${ip}`);
+      // Room is derived from the current hostname (origin) so that every
+      // device opening the same domain lands in the same room — even if
+      // they sit behind different NATs or report different WebRTC ICE
+      // candidates. The previous implementation used the public IP from
+      // STUN, which is unreliable: two devices on the same network can
+      // resolve different ICE candidates (different NAT paths, IPv4 vs
+      // IPv6, mDNS hostnames on Chrome, etc.) and end up in different
+      // rooms. Domain-based room assignment is deterministic and matches
+      // the user mental model: "same site = same room".
+      const host =
+        typeof window !== "undefined" && window.location
+          ? (window.location.hostname || window.location.host || "default")
+          : "default";
+      const hash = this.hashString(`osler-sync-v3-${host}`);
       this.roomHash = hash.substring(0, 8).toUpperCase();
       this.callbacks.onRoomId(this.roomHash);
 
@@ -322,34 +334,6 @@ export class NetworkTransport {
   }
 
   /* ── MQTT discovery ────────────────────────────────────────────────── */
-
-  private async getPublicIP(): Promise<string> {
-    return new Promise((resolve) => {
-      const pc = new RTCPeerConnection({ iceServers: [{ urls: "stun:stun.l.google.com:19302" }] });
-      pc.createDataChannel("x");
-      pc.createOffer().then((offer) => pc.setLocalDescription(offer));
-      const ips = new Set<string>();
-      pc.onicecandidate = (e) => {
-        if (!e.candidate) {
-          // All candidates delivered — resolve with first IPv4 or fallback
-          const ipv4 = Array.from(ips).find((ip) => ip.includes("."));
-          resolve(ipv4 ?? ips.values().next().value ?? "0.0.0.0");
-          pc.close();
-          return;
-        }
-        const addr = (e.candidate as RTCIceCandidate & { address?: string }).address ?? e.candidate.candidate.split(" ")[4];
-        if (addr && addr !== "0.0.0.0" && !addr.startsWith("127.") && !addr.includes(":")) {
-          ips.add(addr);
-        }
-      };
-      // Timeout — fall back to whatever we have
-      setTimeout(() => {
-        const ipv4 = Array.from(ips).find((ip) => ip.includes("."));
-        resolve(ipv4 ?? ips.values().next().value ?? "0.0.0.0");
-        pc.close();
-      }, 5000);
-    });
-  }
 
   private hashString(str: string): string {
     let h = 0;

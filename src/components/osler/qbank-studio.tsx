@@ -2014,13 +2014,18 @@ function QuizView({
     setMobileTutorTab("question");
   }, [activeItem.uid, session.current]);
 
-  // Highlight mode: auto-apply on text selection (mouse or touch).
-  // On touch devices, `touchend` fires *before* the browser finalizes the
-  // selection on iOS Safari. We use a small delay (150ms) on touchend so the
-  // selection has time to settle before we read it. On desktop, `mouseup`
-  // fires after the selection is final so no delay is needed.
+  // Highlight mode: auto-apply on stable text selection (mouse + touch).
+  //
+  // We listen to `selectionchange` (debounced 350ms) instead of
+  // mouseup/touchend because `touchend` fires before iOS Safari finalises
+  // the selection (the handles appear after the finger lifts), which made
+  // the old 150ms-delay approach unreliable on mobile. The debounce
+  // ensures we only act when the user has *stopped* adjusting the
+  // selection, so we read the final range every time.
   React.useEffect(() => {
     if (!highlightMode) return;
+    let debounceTimer: ReturnType<typeof setTimeout> | null = null;
+
     const applySelection = () => {
       const sel = window.getSelection();
       if (!sel || sel.isCollapsed || sel.rangeCount === 0) return;
@@ -2033,7 +2038,7 @@ function QuizView({
 
       let el: HTMLElement | null = range.startContainer instanceof Text
         ? range.startContainer.parentElement
-        : range.startContainer as HTMLElement;
+        : (range.startContainer as HTMLElement);
       while (el) {
         const ci = el.getAttribute("data-choice-idx");
         if (ci !== null) {
@@ -2066,19 +2071,15 @@ function QuizView({
       window.getSelection()?.removeAllRanges();
     };
 
-    // Desktop: mouseup fires after the selection is final.
-    const onMouseUp = () => applySelection();
-    // Touch: defer 150ms so iOS Safari has time to settle the selection
-    // (the selection handles appear after touchend).
-    const onTouchEnd = () => {
-      setTimeout(applySelection, 150);
+    const onSelectionChange = () => {
+      if (debounceTimer) clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(applySelection, 350);
     };
 
-    document.addEventListener("mouseup", onMouseUp);
-    document.addEventListener("touchend", onTouchEnd);
+    document.addEventListener("selectionchange", onSelectionChange);
     return () => {
-      document.removeEventListener("mouseup", onMouseUp);
-      document.removeEventListener("touchend", onTouchEnd);
+      if (debounceTimer) clearTimeout(debounceTimer);
+      document.removeEventListener("selectionchange", onSelectionChange);
     };
   }, [highlightMode, highlightColor, activeItem.uid, session.current, q]);
 

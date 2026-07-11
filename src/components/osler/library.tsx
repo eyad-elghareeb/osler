@@ -200,38 +200,54 @@ export function Library({ initialArticleId }: LibraryProps) {
     return applyHighlightsToHtml(activeArticle.html, hlCtrl.highlights as any);
   }, [activeArticle?.html, hlCtrl.highlights, theme]);
 
+  // Reliable cross-platform (mouse + touch) auto-highlighting.
+  //
+  // We listen to `selectionchange` (debounced 350ms) instead of mouseup/
+  // touchend, because `touchend` fires before iOS Safari finalises the
+  // selection (the handles appear after the finger lifts), which made the
+  // old 150ms-delay approach unreliable on mobile. `selectionchange` fires
+  // on every selection change (mouse or touch), and the debounce ensures
+  // we only act when the user has stopped adjusting — by which point the
+  // selection is final.
   React.useEffect(() => {
     if (!hlCtrl.highlightMode || !activeFile) return;
     const el = articleContentRef.current;
     if (!el) return;
+    let debounceTimer: ReturnType<typeof setTimeout> | null = null;
+
     const applySelection = () => {
       const sel = window.getSelection();
       if (!sel || sel.isCollapsed || sel.rangeCount === 0) return;
+      const range = sel.getRangeAt(0);
+      if (!el.contains(range.commonAncestorContainer)) return;
+
       const text = sel.toString().trim();
       if (!text) return;
 
-      const range = sel.getRangeAt(0).cloneRange();
+      const clonedRange = range.cloneRange();
       const headRange = document.createRange();
       headRange.selectNodeContents(el);
-      headRange.setEnd(range.startContainer, range.startOffset);
+      headRange.setEnd(clonedRange.startContainer, clonedRange.startOffset);
       const absStart = headRange.toString().length;
       const absEnd = absStart + text.length;
 
-      hlCtrl.onAdd(text, hlCtrl.highlightColor, absStart >= 0 ? [{ start: absStart, end: absEnd }] : []);
+      hlCtrl.onAdd(
+        text,
+        hlCtrl.highlightColor,
+        absStart >= 0 ? [{ start: absStart, end: absEnd }] : [],
+      );
       sel.removeAllRanges();
     };
-    // Desktop: mouseup fires after the selection is final.
-    const onMouseUp = () => applySelection();
-    // Touch: defer 150ms so iOS Safari has time to settle the selection
-    // (the selection handles appear after touchend).
-    const onTouchEnd = () => {
-      setTimeout(applySelection, 150);
+
+    const onSelectionChange = () => {
+      if (debounceTimer) clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(applySelection, 350);
     };
-    el.addEventListener("mouseup", onMouseUp);
-    el.addEventListener("touchend", onTouchEnd);
+
+    document.addEventListener("selectionchange", onSelectionChange);
     return () => {
-      el.removeEventListener("mouseup", onMouseUp);
-      el.removeEventListener("touchend", onTouchEnd);
+      if (debounceTimer) clearTimeout(debounceTimer);
+      document.removeEventListener("selectionchange", onSelectionChange);
     };
   }, [hlCtrl.highlightMode, hlCtrl.highlightColor, activeFile, hlCtrl.onAdd]);
 

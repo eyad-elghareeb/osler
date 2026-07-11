@@ -749,6 +749,19 @@ export const STRINGS = {
     "sync.qr.cameraError": "Camera error: {error}",
     "sync.qr.generationFailed": "QR generation failed: {error}",
 
+    /* Peer-link QR (inline on the network sync page) */
+    "sync.qr.peerLinkTitle": "Link via QR",
+    "sync.qr.peerLinkDesc":
+      "This QR encodes only your PeerJS ID \u2014 scan it from another device to start a direct peer-to-peer connection. Data syncs over the PeerJS channel, not the QR itself.",
+    "sync.qr.scanButton": "Scan to Connect",
+    "sync.qr.scanningHint": "Point at the other device\u2019s QR",
+    "sync.qr.notPeerCode": "Not an Osler peer QR \u2014 scan the QR shown on the other device\u2019s sync page.",
+    "sync.qr.connectingTo": "Connecting to {name}\u2026",
+    "sync.qr.startTransportHint":
+      "Start discovery above to generate your peer QR code.",
+
+    "sync.network.activeConnections": "Active Connections ({n})",
+
     "qbank.home.questionOrder": "Question Order",
     "qbank.home.defaultOrder": "Default Order",
     "qbank.home.randomized": "Randomized",
@@ -1474,6 +1487,19 @@ export const STRINGS = {
     "sync.qr.importFailed": "فشل الاستيراد: {error}",
     "sync.qr.cameraError": "خطأ في الكاميرا: {error}",
     "sync.qr.generationFailed": "فشل توليد رمز QR: {error}",
+
+    /* Peer-link QR (inline on the network sync page) */
+    "sync.qr.peerLinkTitle": "ربط عبر رمز QR",
+    "sync.qr.peerLinkDesc":
+      "يحتوي هذا الرمز على معرف PeerJS الخاص بك فقط — امسحه من جهاز آخر لبدء اتصال مباشر بين الجهازين. تتم مزامنة البيانات عبر قناة PeerJS وليس عبر الرمز نفسه.",
+    "sync.qr.scanButton": "امسح للاتصال",
+    "sync.qr.scanningHint": "وجّه نحو رمز الجهاز الآخر",
+    "sync.qr.notPeerCode": "هذا ليس رمز نظير Osler — امسح الرمز الظاهر في صفحة المزامنة على الجهاز الآخر.",
+    "sync.qr.connectingTo": "جارٍ الاتصال بـ {name}…",
+    "sync.qr.startTransportHint":
+      "ابدأ الاكتشاف بالأعلى لإنشاء رمز QR الخاص بنظيرك.",
+
+    "sync.network.activeConnections": "الاتصالات النشطة ({n})",
 
     "qbank.home.questionOrder": "ترتيب الأسئلة",
     "qbank.home.defaultOrder": "الترتيب الافتراضي",

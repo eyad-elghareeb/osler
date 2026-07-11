@@ -1,89 +1,129 @@
 "use client";
 
 import * as React from "react";
-import { motion } from "framer-motion";
-import { Camera, QrCode, Smartphone, Check, AlertTriangle, Loader2, SwitchCamera, ChevronLeft, ChevronRight, RefreshCw } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
+import {
+  Camera,
+  QrCode,
+  ScanLine,
+  Check,
+  AlertTriangle,
+  Loader2,
+  SwitchCamera,
+  X,
+  RefreshCw,
+  Link2,
+} from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { SyncProtocol, QRSync } from "@/lib/osler/sync";
-import { storage } from "@/lib/osler/storage";
+import { QRSync, type NetworkTransport } from "@/lib/osler/sync";
 import { cn } from "@/lib/utils";
 import { useI18n } from "@/components/osler/i18n-provider";
 
-export function QrSyncPanel() {
+/**
+ * PeerLinkQrPanel — small, embeddable panel that:
+ *  - renders a single QR encoding the local device's PeerJS link
+ *    (osler-peer:<peerId>:<deviceName>)
+ *  - exposes a compact "Scan" button that opens the camera and connects
+ *    to a remote device whose QR is scanned.
+ *
+ * This panel is meant to live inline on the network sync page (no separate
+ * tab). The QR is only used to *link* two PeerJS peers; the actual data
+ * transfer happens over the PeerJS data channel after the connection is
+ * established.
+ */
+export function PeerLinkQrPanel({
+  transport,
+  peerId,
+  deviceName,
+  onConnected,
+}: {
+  transport: NetworkTransport | null;
+  peerId: string;
+  deviceName: string;
+  onConnected?: (peerId: string, label: string) => void;
+}) {
   const { t } = useI18n();
-  const [tab, setTab] = React.useState<"export" | "scan">("export");
-  const [qrChunks, setQrChunks] = React.useState<QRSync.QrChunkData[]>([]);
-  const [qrPage, setQrPage] = React.useState(0);
-  const [qrDataUrls, setQrDataUrls] = React.useState<string[]>([]);
-  const [loading, setLoading] = React.useState(true);
+  const [qrUrl, setQrUrl] = React.useState<string>("");
   const [scanning, setScanning] = React.useState(false);
   const [scanResult, setScanResult] = React.useState<{ success: boolean; message: string } | null>(null);
+  const [facingMode, setFacingMode] = React.useState<"user" | "environment">("environment");
+
   const videoRef = React.useRef<HTMLVideoElement>(null);
   const scannerRef = React.useRef<QRSync.CameraScanner | null>(null);
 
-  // Generate QR codes on mount and when tab switches to export
+  // (Re)generate the QR whenever peerId or deviceName changes.
   React.useEffect(() => {
-    if (tab === "export") {
-      generateQrCodes();
+    let cancelled = false;
+    if (!peerId) {
+      setQrUrl("");
+      return;
     }
+    const link = QRSync.buildPeerLink(peerId, deviceName || "Osler Device");
+    QRSync.generateQrDataUrl(link, { width: 240, margin: 1 })
+      .then((url) => {
+        if (!cancelled) setQrUrl(url);
+      })
+      .catch(() => {
+        if (!cancelled) setQrUrl("");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [peerId, deviceName]);
+
+  // Cleanup scanner on unmount.
+  React.useEffect(() => {
     return () => {
       if (scannerRef.current) {
         scannerRef.current.stop().catch(() => {});
         scannerRef.current = null;
       }
     };
-  }, [tab]);
-
-  const generateQrCodes = async () => {
-    setLoading(true);
-    try {
-      const payload = await buildExportPayload();
-      const wire = SyncProtocol.encode(payload);
-      const chunks = QRSync.getQrChunks(wire);
-      setQrChunks(chunks);
-
-      const urls = await Promise.all(
-        chunks.map((chunk) => QRSync.generateQrDataUrl(chunk.text)),
-      );
-      setQrDataUrls(urls);
-      setQrPage(0);
-    } catch (e) {
-      setScanResult({ success: false, message: t("sync.qr.generationFailed", { error: (e as Error).message }) });
-    } finally {
-      setLoading(false);
-    }
-  };
+  }, []);
 
   const handleStartScan = async () => {
-    if (!videoRef.current) return;
+    if (!videoRef.current || !transport) return;
     setScanning(true);
     setScanResult(null);
 
     const scanner = new QRSync.CameraScanner(
-      async (result) => {
-        try {
-          const payload = SyncProtocol.decode(result.fullData);
-          await mergePayloadIntoStorage(payload);
-          setScanResult({ success: true, message: t("sync.qr.complete") });
-          scanner.stop().catch(() => {});
-          setScanning(false);
-        } catch (e) {
-          setScanResult({ success: false, message: t("sync.qr.importFailed", { error: (e as Error).message }) });
+      (text) => {
+        const link = QRSync.parsePeerLink(text);
+        if (!link) {
+          setScanResult({
+            success: false,
+            message: t("sync.qr.notPeerCode"),
+          });
+          return;
         }
+        setScanResult({
+          success: true,
+          message: t("sync.qr.connectingTo", { name: link.deviceName }),
+        });
+        transport.connectTo(link.peerId, link.deviceName);
+        onConnected?.(link.peerId, link.deviceName);
+        // Stop the scanner after a successful scan — connection is now in
+        // the hands of the NetworkTransport.
+        scannerRef.current?.stop().catch(() => {});
+        scannerRef.current = null;
+        setScanning(false);
       },
       (error) => {
         setScanResult({ success: false, message: error });
       },
     );
 
-      scannerRef.current = scanner;
-      try {
-        await scanner.start(videoRef.current);
-      } catch (e) {
-        setScanResult({ success: false, message: t("sync.qr.cameraError", { error: (e as Error).message }) });
-        setScanning(false);
-      }
+    scannerRef.current = scanner;
+    try {
+      await scanner.start(videoRef.current, { facingMode });
+    } catch (e) {
+      setScanResult({
+        success: false,
+        message: t("sync.qr.cameraError", { error: (e as Error).message }),
+      });
+      setScanning(false);
+    }
   };
 
   const handleStopScan = async () => {
@@ -95,201 +135,160 @@ export function QrSyncPanel() {
   };
 
   const handleSwitchCamera = async () => {
-    if (scannerRef.current && videoRef.current) {
-      const currentFacing = scannerRef.current["active"] ? "environment" : "user";
-      const nextFacing = currentFacing === "environment" ? "user" : "environment";
+    const next = facingMode === "environment" ? "user" : "environment";
+    setFacingMode(next);
+    if (scanning && scannerRef.current && videoRef.current) {
       await scannerRef.current.stop();
       scannerRef.current = new QRSync.CameraScanner(
-        (result) => {
-          try {
-            const payload = SyncProtocol.decode(result.fullData);
-            mergePayloadIntoStorage(payload);
-            setScanResult({ success: true, message: t("sync.qr.complete") });
-            scannerRef.current?.stop().catch(() => {});
-            setScanning(false);
-          } catch (e) {
-            setScanResult({ success: false, message: t("sync.qr.importFailed", { error: (e as Error).message }) });
+        (text) => {
+          const link = QRSync.parsePeerLink(text);
+          if (!link) {
+            setScanResult({ success: false, message: t("sync.qr.notPeerCode") });
+            return;
           }
+          setScanResult({
+            success: true,
+            message: t("sync.qr.connectingTo", { name: link.deviceName }),
+          });
+          transport?.connectTo(link.peerId, link.deviceName);
+          onConnected?.(link.peerId, link.deviceName);
+          scannerRef.current?.stop().catch(() => {});
+          scannerRef.current = null;
+          setScanning(false);
         },
         (error) => setScanResult({ success: false, message: error }),
       );
-      scannerRef.current.start(videoRef.current, { facingMode: nextFacing as "user" | "environment" }).catch(() => {});
+      scannerRef.current.start(videoRef.current, { facingMode: next }).catch(() => {});
     }
   };
 
   return (
-    <div className="space-y-4">
-      {/* Tab toggle */}
-      <div className="flex gap-2">
-        <Button
-          size="sm"
-          variant={tab === "export" ? "default" : "outline"}
-          className="h-8 text-xs"
-          onClick={() => setTab("export")}
-        >
-          <QrCode className="size-3 me-1.5" /> {t("sync.qr.exportTab")}
-        </Button>
-        <Button
-          size="sm"
-          variant={tab === "scan" ? "default" : "outline"}
-          className="h-8 text-xs"
-          onClick={() => setTab("scan")}
-        >
-          <Camera className="size-3 me-1.5" /> {t("sync.qr.scanTab")}
-        </Button>
-      </div>
-
-      {tab === "export" && (
-        <Card className="p-5">
-          <div className="text-center">
-            <p className="text-xs text-muted-foreground mb-4">
-              {t("sync.qr.exportDesc")}
-              {qrChunks.length > 1 && t("sync.qr.multiPart")}
-            </p>
-
-            {loading ? (
-              <div className="flex items-center justify-center py-12">
-                <Loader2 className="size-8 animate-spin text-primary" />
-              </div>
-            ) : qrDataUrls.length > 0 ? (
-              <>
-                <div className="inline-block p-3 bg-white rounded-xl mb-3">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={qrDataUrls[qrPage] || "/placeholder.svg"}
-                    alt={`QR code ${qrPage + 1} of ${qrDataUrls.length}`}
-                    className="size-48 mx-auto"
-                  />
-                </div>
-
-                {qrChunks.length > 1 && (
-                  <div className="flex items-center justify-center gap-3 mb-3">
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      className="h-7 w-7 p-0"
-                      onClick={() => setQrPage((p) => Math.max(0, p - 1))}
-                      disabled={qrPage === 0}
-                    >
-                      <ChevronLeft className="size-3" />
-                    </Button>
-                    <span className="text-xs font-medium text-muted-foreground">
-                      {qrPage + 1} / {qrChunks.length}
-                    </span>
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      className="h-7 w-7 p-0"
-                      onClick={() => setQrPage((p) => Math.min(qrChunks.length - 1, p + 1))}
-                      disabled={qrPage >= qrChunks.length - 1}
-                    >
-                      <ChevronRight className="size-3" />
-                    </Button>
-                  </div>
-                )}
-
-                <Button size="sm" variant="outline" className="h-7 text-xs" onClick={generateQrCodes}>
-                  <RefreshCw className="size-3 me-1.5" /> {t("sync.qr.regenerate")}
-                </Button>
-              </>
+    <Card className="p-4">
+      <div className="flex items-start gap-4">
+        {/* QR — own peer link */}
+        <div className="shrink-0">
+          <div className="size-[140px] sm:size-[160px] rounded-xl bg-white p-2 shadow-sm flex items-center justify-center">
+            {qrUrl ? (
+              <img src={qrUrl} alt="My Peer QR" className="size-full" />
             ) : (
-              <p className="text-sm text-muted-foreground py-8">{t("sync.qr.noData")}</p>
+              <div className="size-full flex items-center justify-center">
+                <Loader2 className="size-6 animate-spin text-muted-foreground" />
+              </div>
             )}
           </div>
-        </Card>
-      )}
+          <div className="mt-2 text-[10px] text-muted-foreground text-center font-mono break-all px-1">
+            {peerId || "—"}
+          </div>
+        </div>
 
-      {tab === "scan" && (
-        <Card className="p-5">
-          <div className="text-center">
-            <p className="text-xs text-muted-foreground mb-4">
-              {t("sync.qr.scanDesc")}
-            </p>
+        {/* Right side: explainer + scan button */}
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 mb-1.5">
+            <QrCode className="size-4 text-primary" />
+            <h4 className="text-sm font-semibold">{t("sync.qr.peerLinkTitle")}</h4>
+          </div>
+          <p className="text-xs text-muted-foreground mb-3 leading-relaxed">
+            {t("sync.qr.peerLinkDesc")}
+          </p>
 
-            {/* Camera viewport */}
-            <div className="relative mx-auto max-w-xs rounded-xl overflow-hidden border border-border bg-black/5 mb-4">
-              <video
-                ref={videoRef}
-                className="w-full aspect-[4/3] object-cover"
-                playsInline
-                muted
-              />
-              {!scanning && (
-                <div className="absolute inset-0 flex items-center justify-center bg-muted/50">
-                  <Camera className="size-8 text-muted-foreground/50" />
-                </div>
-              )}
-            </div>
-
-            <div className="flex justify-center gap-2">
-              {!scanning ? (
-                <Button size="sm" variant="default" className="h-8 text-xs" onClick={handleStartScan}>
-                  <Camera className="size-3 me-1.5" /> {t("sync.qr.startScanning")}
+          {/* Scan button — opens camera inline below */}
+          <div className="flex items-center gap-2">
+            {!scanning ? (
+              <Button
+                size="sm"
+                variant="default"
+                className="h-9 text-xs"
+                onClick={handleStartScan}
+                disabled={!transport || !peerId}
+              >
+                <ScanLine className="size-3.5 me-1.5" />
+                {t("sync.qr.scanButton")}
+              </Button>
+            ) : (
+              <>
+                <Button size="sm" variant="outline" className="h-9 text-xs" onClick={handleStopScan}>
+                  <X className="size-3.5 me-1.5" />
+                  {t("sync.qr.stop")}
                 </Button>
-              ) : (
-                <>
-                  <Button size="sm" variant="outline" className="h-8 text-xs" onClick={handleStopScan}>
-                    <Loader2 className="size-3 me-1.5 animate-spin" /> {t("sync.qr.stop")}
-                  </Button>
-                  <Button size="sm" variant="ghost" className="h-8 text-xs" onClick={handleSwitchCamera}>
-                    <SwitchCamera className="size-3 me-1.5" /> {t("sync.qr.switch")}
-                  </Button>
-                </>
-              )}
-            </div>
+                <Button size="sm" variant="ghost" className="h-9 text-xs" onClick={handleSwitchCamera}>
+                  <SwitchCamera className="size-3.5 me-1.5" />
+                  {t("sync.qr.switch")}
+                </Button>
+              </>
+            )}
           </div>
 
-          {/* Result */}
-          {scanResult && (
-            <motion.div
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              className={cn(
-                "flex items-center gap-2 text-xs p-3 rounded-lg border mt-4",
-                scanResult.success
-                  ? "bg-green-500/10 border-green-500/30 text-green-600 dark:text-green-400"
-                  : "bg-destructive/10 border-destructive/30 text-destructive",
-              )}
-            >
-              {scanResult.success ? <Check className="size-3.5 shrink-0" /> : <AlertTriangle className="size-3.5 shrink-0" />}
-              <span>{scanResult.message}</span>
-              <button onClick={() => setScanResult(null)} className="ms-auto text-muted-foreground hover:text-foreground">
-                ✕
-              </button>
-            </motion.div>
-          )}
-        </Card>
+          {/* Result inline */}
+          <AnimatePresence>
+            {scanResult && (
+              <motion.div
+                initial={{ opacity: 0, y: 4 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: 4 }}
+                className={cn(
+                  "flex items-center gap-2 text-xs p-2 rounded-lg border mt-3",
+                  scanResult.success
+                    ? "bg-green-500/10 border-green-500/30 text-green-600 dark:text-green-400"
+                    : "bg-destructive/10 border-destructive/30 text-destructive",
+                )}
+              >
+                {scanResult.success ? (
+                  <Check className="size-3.5 shrink-0" />
+                ) : (
+                  <AlertTriangle className="size-3.5 shrink-0" />
+                )}
+                <span className="flex-1 min-w-0 truncate">{scanResult.message}</span>
+                <button
+                  onClick={() => setScanResult(null)}
+                  className="text-muted-foreground hover:text-foreground shrink-0"
+                  aria-label="Dismiss"
+                >
+                  <X className="size-3" />
+                </button>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
+      </div>
+
+      {/* Camera viewport — shows inline when scanning */}
+      <AnimatePresence>
+        {scanning && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: "auto" }}
+            exit={{ opacity: 0, height: 0 }}
+            className="overflow-hidden"
+          >
+            <div className="mt-3 pt-3 border-t border-border/60">
+              <div className="relative mx-auto max-w-[280px] rounded-xl overflow-hidden border border-border bg-black">
+                <video
+                  ref={videoRef}
+                  className="w-full aspect-[4/3] object-cover"
+                  playsInline
+                  muted
+                />
+                {/* Reticle overlay */}
+                <div className="absolute inset-0 pointer-events-none flex items-center justify-center">
+                  <div className="size-40 border-2 border-white/70 rounded-lg shadow-[0_0_0_9999px_rgba(0,0,0,0.35)]" />
+                </div>
+                <div className="absolute top-2 start-2 flex items-center gap-1 text-[10px] text-white/90 bg-black/50 rounded px-2 py-1">
+                  <Camera className="size-3" />
+                  {t("sync.qr.scanningHint")}
+                </div>
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Helper hint */}
+      {!peerId && (
+        <div className="mt-3 flex items-center gap-2 text-[11px] text-muted-foreground">
+          <Link2 className="size-3" />
+          <span>{t("sync.qr.startTransportHint")}</span>
+        </div>
       )}
-    </div>
+    </Card>
   );
-}
-
-/* ── Data helpers ───────────────────────────────────────────────────── */
-
-async function buildExportPayload(): Promise<SyncProtocol.SyncPayload> {
-  const allProgress = storage.allProgress();
-  const data: Record<string, unknown> = {};
-  for (const p of allProgress) {
-    data[`osler_progress_${p.uid}`] = p;
-  }
-  return {
-    timestamp: Date.now(),
-    senderName: typeof window !== "undefined" ? localStorage.getItem("osler_sync_device_name") ?? "Osler User" : "Osler User",
-    data,
-  };
-}
-
-async function mergePayloadIntoStorage(payload: SyncProtocol.SyncPayload): Promise<void> {
-  for (const [key, value] of Object.entries(payload.data)) {
-    if (key.startsWith("osler_progress_")) {
-      const entry = value as { uid: string; attempted: number; correct: number };
-      const stats = storage.packProgress(entry.uid);
-      if (entry.attempted > stats.attempted) {
-        const diff = entry.attempted - stats.attempted;
-        for (let i = 0; i < diff; i++) {
-          storage.recordAnswer(entry.uid, `qr-sync-${i}-${Date.now()}`, "quiz", undefined, false, false);
-        }
-      }
-    }
-  }
 }
