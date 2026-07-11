@@ -524,6 +524,11 @@ function VideoPlayerView({
 
     plyrRef.current = plyr;
 
+    requestAnimationFrame(() => {
+      const el = containerRef.current?.querySelector<HTMLElement>(".plyr");
+      el?.focus();
+    });
+
     return () => {
       plyr.destroy();
       plyrRef.current = null;
@@ -551,6 +556,16 @@ function VideoPlayerView({
       } else if (key === "p" && onPrev) {
         e.preventDefault();
         onPrev();
+      } else if (key === "f") {
+        e.preventDefault();
+        void plyrRef.current?.fullscreen.toggle();
+      } else if (key === "m") {
+        e.preventDefault();
+        if (plyrRef.current) plyrRef.current.muted = !plyrRef.current.muted;
+      } else if (key === " " || key === "spacebar") {
+        if (document.fullscreenElement || plyrRef.current?.hasFocus) {
+          e.preventDefault();
+        }
       }
     };
     window.addEventListener("keydown", handler);
@@ -617,8 +632,11 @@ function VideoPlayerView({
       {/* Body: player + sidebar */}
       <div className="flex-1 min-h-0 flex">
         {/* Player area */}
-        <div className="relative flex-1 min-w-0 bg-black flex items-center justify-center">
-          <div ref={containerRef} className="w-full h-full" />
+        <div className="relative flex-1 min-w-0 bg-black flex items-center justify-center p-2 sm:p-4">
+          <div
+            ref={containerRef}
+            className="w-full max-w-5xl aspect-video max-h-[calc(100vh-4rem)]"
+          />
         </div>
 
         {/* Sidebar: playlist + details */}
