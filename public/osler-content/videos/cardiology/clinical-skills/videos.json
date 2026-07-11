@@ -2,24 +2,25 @@
   "videos": [
     {
       "id": "ecg-basic-interpretation",
-      "title": "ECG Interpretation: Basics for Clinical Practice",
-      "description": "A practical walk-through of the 12-lead ECG — rhythm, rate, axis, intervals, and the common patterns every clinician should recognise on call. Includes worked examples of normal sinus rhythm, atrial fibrillation, and ST-elevation myocardial infarction.",
+      "title": "ECG Interpretation Made Easy (Learn How to Interpret an ECG in 13 Minutes)",
+      "description": "A systematic approach to reading an Electrocardiogram (ECG/EKG) in 5 clear steps that will increase confidence in ECG interpretation. Covers axis, rate, rhythm, and morphology — with a focus on the patterns every clinician should recognise.",
       "specialty": "Cardiology",
       "topic": "ECG Interpretation",
-      "duration": 1080,
+      "duration": 780,
       "source": {
         "type": "youtube",
-        "id": "xIZQiWcazb0"
+        "id": "u1m3HKW1VqU"
       },
-      "instructor": "Dr. Sarah Chen, MD",
+      "instructor": "Rhesus Medicine",
       "tags": ["ECG", "cardiology", "clinical skills", "emergency"],
       "chapters": [
-        { "time": 0, "title": "Introduction" },
-        { "time": 45, "title": "Lead placement & axes" },
-        { "time": 180, "title": "Rate & rhythm" },
-        { "time": 360, "title": "Intervals (PR, QRS, QT)" },
-        { "time": 600, "title": "ST-segment changes" },
-        { "time": 840, "title": "Worked examples" }
+        { "time": 0, "title": "ECG basics" },
+        { "time": 73, "title": "Details & settings" },
+        { "time": 104, "title": "Axis" },
+        { "time": 182, "title": "Rate" },
+        { "time": 249, "title": "Rhythm" },
+        { "time": 399, "title": "Morphology — QRS" },
+        { "time": 521, "title": "Morphology — ST/T" }
       ],
       "relatedArticles": [
         "cardiology/ischemic-syndrome/acute-coronary-syndrome.md",
@@ -29,23 +30,23 @@
     },
     {
       "id": "heart-failure-pathophysiology",
-      "title": "Heart Failure: Pathophysiology and Management",
-      "description": "Detailed review of systolic vs. diastolic heart failure, the renin-angiotensin-aldosterone system, and guideline-directed medical therapy (GDMT). Covers the four evidence-based drug classes and how to titrate them in clinic.",
+      "title": "Heart Failure Explained - HFrEF vs HFpEF (Systolic vs Diastolic Heart Failure)",
+      "description": "A concise breakdown of heart failure — acute vs chronic, HFrEF vs HFpEF, left vs right heart failure. Covers clinical features, diagnosis, and management with mnemonics to aid recall.",
       "specialty": "Cardiology",
       "topic": "Heart Failure",
-      "duration": 1620,
+      "duration": 540,
       "source": {
         "type": "youtube",
-        "id": "D_QxIP6Nbic"
+        "id": "U8cfl9nSsF8"
       },
-      "instructor": "Prof. James Okafor, MD, FRCP",
-      "tags": ["heart failure", "cardiology", "pharmacology", "GDMT"],
+      "instructor": "Rhesus Medicine",
+      "tags": ["heart failure", "cardiology", "HFrEF", "HFpEF"],
       "chapters": [
-        { "time": 0, "title": "Definitions & epidemiology" },
-        { "time": 120, "title": "Pathophysiology" },
-        { "time": 360, "title": "Diagnosis & workup" },
-        { "time": 720, "title": "GDMT — the four pillars" },
-        { "time": 1200, "title": "Titrating therapy in clinic" }
+        { "time": 0, "title": "Acute vs chronic heart failure" },
+        { "time": 90, "title": "HFrEF vs HFpEF" },
+        { "time": 210, "title": "Left vs right heart failure" },
+        { "time": 330, "title": "Clinical features" },
+        { "time": 420, "title": "Management overview" }
       ],
       "relatedArticles": [
         "cardiology/heart-failure/heart-failure-reduced-ef.md"
@@ -54,23 +55,23 @@
     },
     {
       "id": "acute-coronary-syndrome-management",
-      "title": "Acute Coronary Syndrome: ED Approach",
-      "description": "A step-by-step ED approach to the patient presenting with chest pain. Covers risk stratification (GRACE, HEART), the role of high-sensitivity troponin, and the STEMI vs. NSTEMI pathway. Includes a worked simulation of a cath-lab activation.",
+      "title": "Acute Coronary Syndrome (Heart Attack) - Unstable Angina vs NSTEMI vs STEMI | With ECGs",
+      "description": "A clear walk-through of acute coronary syndrome covering unstable angina, NSTEMI, and STEMI. Includes ECG changes for each, diagnostic approach (troponin, imaging), and management strategies with mnemonics.",
       "specialty": "Cardiology",
       "topic": "Acute Coronary Syndrome",
-      "duration": 1350,
+      "duration": 600,
       "source": {
         "type": "youtube",
-        "id": "Rf8OQdujWfM"
+        "id": "ond98UVBvyE"
       },
-      "instructor": "Dr. Mei Lin, MD",
-      "tags": ["ACS", "STEMI", "NSTEMI", "emergency", "cardiology"],
+      "instructor": "Rhesus Medicine",
+      "tags": ["ACS", "STEMI", "NSTEMI", "unstable angina", "cardiology"],
       "chapters": [
-        { "time": 0, "title": "Initial assessment" },
-        { "time": 90, "title": "12-lead ECG interpretation" },
-        { "time": 300, "title": "High-sensitivity troponin" },
-        { "time": 600, "title": "STEMI vs NSTEMI pathway" },
-        { "time": 960, "title": "Cath-lab activation" }
+        { "time": 0, "title": "ACS overview" },
+        { "time": 90, "title": "Unstable angina" },
+        { "time": 210, "title": "NSTEMI" },
+        { "time": 330, "title": "STEMI" },
+        { "time": 480, "title": "Treatment approach" }
       ],
       "relatedArticles": [
         "cardiology/ischemic-syndrome/acute-coronary-syndrome.md",

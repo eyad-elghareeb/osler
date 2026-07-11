@@ -2,23 +2,25 @@
   "videos": [
     {
       "id": "ischemic-stroke-acute-management",
-      "title": "Ischemic Stroke: Acute Management",
-      "description": "Walk-through of the acute stroke pathway — recognition (FAST, NIHSS), imaging selection (non-contrast CT vs. CTA vs. perfusion), thrombolysis eligibility, and mechanical thrombectomy windows. Includes a case simulation with a 68-year-old patient.",
+      "title": "Acute Ischemic Stroke: Etiology, Pathophysiology, Clinical Features, Diagnostics, Treatment",
+      "description": "A comprehensive lecture on acute ischemic stroke covering embolic, thrombotic, and global hypo-perfusion causes, stroke syndromes and clinical features, diagnostic approach (CT, MRI, CTA, labs), and acute management including tPA eligibility and contraindications.",
       "specialty": "Neurology",
       "topic": "Stroke",
-      "duration": 1530,
+      "duration": 4440,
       "source": {
         "type": "youtube",
-        "id": "EFgh2AyrXCo"
+        "id": "abxcrAvw-O0"
       },
-      "instructor": "Dr. Laila Hassan, MD, PhD",
-      "tags": ["stroke", "neurology", "thrombolysis", "thrombectomy", "emergency"],
+      "instructor": "Prof. Zach Murphy | Ninja Nerd",
+      "tags": ["stroke", "neurology", "ischemic stroke", "thrombolysis", "tPA"],
       "chapters": [
-        { "time": 0, "title": "Recognition & FAST" },
-        { "time": 120, "title": "NIHSS scoring" },
-        { "time": 360, "title": "Imaging selection" },
-        { "time": 720, "title": "Thrombolysis — eligibility & contraindications" },
-        { "time": 1080, "title": "Mechanical thrombectomy windows" }
+        { "time": 0, "title": "Introduction" },
+        { "time": 40, "title": "Etiology & pathophysiology" },
+        { "time": 1620, "title": "Clinical features" },
+        { "time": 1740, "title": "Diagnostics — imaging & labs" },
+        { "time": 2760, "title": "Treatment & management" },
+        { "time": 3840, "title": "Preventive measures" },
+        { "time": 3960, "title": "Complications" }
       ],
       "relatedArticles": [
         "neurology/cerebrovascular/ischemic-stroke.md"
@@ -27,22 +29,24 @@
     },
     {
       "id": "subarachnoid-hemorrhage-approach",
-      "title": "Subarachnoid Hemorrhage: ED Approach",
-      "description": "Practical approach to the patient with a sudden-onset severe headache. Covers clinical decision rules (Ottawa SAH), the role of non-contrast CT and CT angiography, and the acute management of aneurysmal SAH.",
+      "title": "Subarachnoid Hemorrhage | Etiology, Pathophysiology, Clinical Features, Treatment, Complications",
+      "description": "A detailed and systematic approach to subarachnoid hemorrhage covering etiology (saccular aneurysms, AVMs), pathophysiology of bleeding in the subarachnoid space, clinical presentation (thunderclap headache, meningismus), diagnostic approach (non-contrast CT, CTA, LP), acute management (blood pressure control, nimodipine, aneurysm securing), and complications (vasospasm, rebleeding, hydrocephalus).",
       "specialty": "Neurology",
       "topic": "Subarachnoid Hemorrhage",
-      "duration": 990,
+      "duration": 4860,
       "source": {
         "type": "youtube",
-        "id": "5MEkAyrqjoU"
+        "id": "7giq9aD79Ew"
       },
-      "instructor": "Dr. Karim Youssef, MD",
-      "tags": ["SAH", "neurology", "emergency", "headache"],
+      "instructor": "Prof. Zach Murphy | Ninja Nerd",
+      "tags": ["SAH", "subarachnoid hemorrhage", "neurology", "aneurysm", "emergency"],
       "chapters": [
-        { "time": 0, "title": "Thunderclap headache — initial approach" },
-        { "time": 120, "title": "Ottawa SAH rule" },
-        { "time": 300, "title": "Imaging: CT vs CTA vs LP" },
-        { "time": 600, "title": "Acute management of aneurysmal SAH" }
+        { "time": 0, "title": "Introduction" },
+        { "time": 27, "title": "Etiology & pathophysiology" },
+        { "time": 1542, "title": "Clinical features" },
+        { "time": 1961, "title": "Diagnosis" },
+        { "time": 2501, "title": "Treatment" },
+        { "time": 3777, "title": "Complications" }
       ],
       "relatedArticles": [
         "neurology/cerebrovascular/subarachnoid-hemorrhage.md"

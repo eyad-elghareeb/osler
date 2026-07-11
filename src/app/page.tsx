@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import dynamic from "next/dynamic";
 import { AppShell, type OslerView } from "@/components/osler/app-shell";
 import { LoginScreen } from "@/components/osler/login-screen";
 import { Dashboard } from "@/components/osler/dashboard";
@@ -8,8 +9,12 @@ import { Library } from "@/components/osler/library";
 import { QBankStudio } from "@/components/osler/qbank-studio";
 import { FlashcardStudio } from "@/components/osler/flashcard-studio";
 import { OsceStudio } from "@/components/osler/osce-studio";
-import { VideosStudio } from "@/components/osler/videos-studio";
 import { AiAssistant } from "@/components/osler/ai-assistant";
+
+const VideosStudio = dynamic(
+  () => import("@/components/osler/videos-studio").then((m) => ({ default: m.VideosStudio })),
+  { ssr: false },
+);
 import { Profile } from "@/components/osler/profile";
 import { Settings } from "@/components/osler/settings";
 import { loadContentByUid, nodeToItem } from "@/lib/osler/content";

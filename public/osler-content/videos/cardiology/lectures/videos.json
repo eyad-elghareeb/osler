@@ -2,23 +2,26 @@
   "videos": [
     {
       "id": "cardiac-auscultation-masterclass",
-      "title": "Cardiac Auscultation: A Masterclass",
-      "description": "An immersive cardiac auscultation tutorial covering normal heart sounds, S1/S2 splitting, S3/S4 gallops, and the four classical murmurs. Each segment is followed by a short self-assessment.",
+      "title": "Heart Sounds",
+      "description": "A comprehensive tutorial on cardiac auscultation covering S1 and S2 heart sounds, physiological and pathological splitting, S3/S4 gallops, and heart murmurs. Includes murmur classification by location, radiation, shape, pitch, intensity, and quality.",
       "specialty": "Cardiology",
       "topic": "Clinical Examination",
-      "duration": 1440,
+      "duration": 1740,
       "source": {
         "type": "youtube",
-        "id": "pmXmsD5O_qM"
+        "id": "cE8X1nwZWC4"
       },
-      "instructor": "Dr. Hannah Davies, MD",
-      "tags": ["auscultation", "murmurs", "clinical skills", "cardiology"],
+      "instructor": "Strong Medicine",
+      "tags": ["heart sounds", "auscultation", "murmurs", "clinical skills", "cardiology"],
       "chapters": [
-        { "time": 0, "title": "Introduction to heart sounds" },
-        { "time": 90, "title": "S1 and S2 — normal splitting" },
-        { "time": 360, "title": "S3 and S4 gallops" },
-        { "time": 720, "title": "Systolic murmurs" },
-        { "time": 1080, "title": "Diastolic murmurs" }
+        { "time": 0, "title": "Introduction" },
+        { "time": 120, "title": "S1 heart sound" },
+        { "time": 300, "title": "S2 — normal & abnormal splitting" },
+        { "time": 600, "title": "Pulmonary hypertension" },
+        { "time": 720, "title": "S3 and S4 gallops" },
+        { "time": 960, "title": "Heart murmurs — location & radiation" },
+        { "time": 1200, "title": "Murmur shape, pitch & intensity" },
+        { "time": 1500, "title": "Dynamic manoeuvres" }
       ],
       "relatedArticles": [
         "cardiology/heart-failure/heart-failure-reduced-ef.md"
@@ -27,22 +30,26 @@
     },
     {
       "id": "hypertension-guidelines-explained",
-      "title": "Hypertension Guidelines Explained (2024)",
-      "description": "A clear walk-through of the latest hypertension guidelines — ACC/AHA vs. ESC thresholds, workup for secondary causes, and a practical approach to choosing first-line agents in primary care.",
+      "title": "Hypertension - An Introduction to High Blood Pressure",
+      "description": "A thorough introduction to hypertension covering definition, classification, risk factors, pathogenesis (RAAS & sympathetic nervous system), and etiologies of secondary hypertension with a screening approach.",
       "specialty": "Cardiology",
       "topic": "Hypertension",
-      "duration": 1170,
+      "duration": 1320,
       "source": {
         "type": "youtube",
-        "id": "YQHsXMglC9A"
+        "id": "IwpZRljLyZ0"
       },
-      "instructor": "Dr. Omar El-Sayed, MD",
-      "tags": ["hypertension", "guidelines", "primary care", "pharmacology"],
+      "instructor": "Strong Medicine",
+      "tags": ["hypertension", "blood pressure", "cardiology", "RAAS"],
       "chapters": [
-        { "time": 0, "title": "Why guidelines differ" },
-        { "time": 90, "title": "Thresholds & staging" },
-        { "time": 360, "title": "Workup — when to suspect secondary HTN" },
-        { "time": 720, "title": "First-line drug selection" }
+        { "time": 0, "title": "What is blood pressure" },
+        { "time": 120, "title": "Why hypertension matters" },
+        { "time": 240, "title": "Definition & classification" },
+        { "time": 420, "title": "Risk factors for primary HTN" },
+        { "time": 600, "title": "Pathogenesis — RAAS" },
+        { "time": 780, "title": "Role of sympathetic nervous system" },
+        { "time": 960, "title": "Etiologies of secondary HTN" },
+        { "time": 1140, "title": "Screening for secondary causes" }
       ],
       "lang": "en"
     }
