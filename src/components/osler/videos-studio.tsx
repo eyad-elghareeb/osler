@@ -19,6 +19,7 @@ import {
   BookOpen,
   ExternalLink,
 } from "lucide-react";
+// @ts-expect-error — plyr ships its own types with export default
 import Plyr from "plyr";
 import "plyr/dist/plyr.css";
 import {
@@ -45,17 +46,8 @@ const VIDEO_COLOR = "oklch(0.68 0.18 195)";
 
 const PLAYBACK_RATES = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2];
 
-/** Public Invidious instances shown in the alternative-host dropdown. */
-const INVIDIOUS_HOSTS: { host: string; label: string }[] = [
-  { host: "inv.nadeko.net", label: "inv.nadeko.net" },
-  { host: "yewtu.be", label: "yewtu.be" },
-  { host: "invidious.snopyta.org", label: "invidious.snopyta.org" },
-  { host: "inv.vern.cc", label: "inv.vern.cc" },
-  { host: "iv.ggtyler.dev", label: "iv.ggtyler.dev" },
-  { host: "yt.artemislena.eu", label: "yt.artemislena.eu" },
-  { host: "invidious.private.coffee", label: "invidious.private.coffee" },
-  { host: "invidious.no-logs.com", label: "invidious.no-logs.com" },
-];
+/** Alternative YouTube frontend host (set via NEXT_PUBLIC_INVIDIOUS_HOST in .env.local). */
+const INVIDIOUS_HOST = process.env.NEXT_PUBLIC_INVIDIOUS_HOST;
 
 /* ── Helpers ───────────────────────────────────────────────────────── */
 
@@ -500,9 +492,7 @@ function VideoPlayerView({
 
   const [isFullscreen, setIsFullscreen] = React.useState(false);
   const [showPlaylist, setShowPlaylist] = React.useState(false);
-  const [invidiousHost, setInvidiousHost] = React.useState<string | null>(null);
-  const [invidiousMenuOpen, setInvidiousMenuOpen] = React.useState(false);
-  const invidiousMenuRef = React.useRef<HTMLDivElement>(null);
+  const [invidiousMode, setInvidiousMode] = React.useState(false);
 
   const isYouTube = video.source.type === "youtube";
   const videoId = isYouTube ? video.source.id : undefined;
@@ -616,18 +606,6 @@ function VideoPlayerView({
     }
   }, [isYouTube, videoId, video.source.url]);
 
-  // ── Close invidious menu on outside click ──
-  React.useEffect(() => {
-    if (!invidiousMenuOpen) return;
-    const handler = (e: MouseEvent) => {
-      if (invidiousMenuRef.current && !invidiousMenuRef.current.contains(e.target as Node)) {
-        setInvidiousMenuOpen(false);
-      }
-    };
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
-  }, [invidiousMenuOpen]);
-
   // ── Fullscreen tracking ──
   React.useEffect(() => {
     const handler = () => setIsFullscreen(!!document.fullscreenElement);
@@ -668,9 +646,9 @@ function VideoPlayerView({
     { ignoreInputs: true },
   );
 
-  function selectInvidiousHost(host: string) {
-    setInvidiousHost(host);
-    setInvidiousMenuOpen(false);
+  function handleInvidious() {
+    if (!videoId || invidiousMode) return;
+    setInvidiousMode(true);
   }
 
   return (
@@ -718,38 +696,14 @@ function VideoPlayerView({
             <ChevronRight className={cn("size-4", rtl && "rtl-flip-x")} />
           </button>
         )}
-        {isYouTube && !invidiousHost && (
-          <div ref={invidiousMenuRef} className="relative">
-            <button
-              onClick={() => setInvidiousMenuOpen((s) => !s)}
-              className={cn(
-                "size-7 rounded-md flex items-center justify-center transition-colors",
-                invidiousMenuOpen ? "text-primary bg-primary/10" : "text-muted-foreground hover:text-foreground hover:bg-muted/60"
-              )}
-              title="Play via alternative host"
-            >
-              <ExternalLink className="size-3.5" />
-            </button>
-            {invidiousMenuOpen && (
-              <div
-                className="absolute top-full end-0 mt-1 w-56 bg-card border border-border/60 rounded-xl shadow-xl py-1 z-50"
-                style={{ maxHeight: "320px", overflowY: "auto" }}
-              >
-                <div className="px-3 py-1.5 text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">
-                  Invidious instance
-                </div>
-                {INVIDIOUS_HOSTS.map(({ host, label }) => (
-                  <button
-                    key={host}
-                    onClick={() => selectInvidiousHost(host)}
-                    className="w-full text-start px-3 py-1.5 text-xs text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors"
-                  >
-                    {label}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
+        {isYouTube && !invidiousMode && (
+          <button
+            onClick={handleInvidious}
+            className="size-7 rounded-md flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors"
+            title="Play via alternative host"
+          >
+            <ExternalLink className="size-3.5" />
+          </button>
         )}
         <button
           onClick={() => setShowPlaylist((s) => !s)}
@@ -767,9 +721,9 @@ function VideoPlayerView({
       <div className="flex-1 min-h-0 flex">
         {/* Player area */}
         <div className="relative flex-1 min-w-0 bg-black">
-          {invidiousHost && videoId ? (
+          {invidiousMode && videoId ? (
             <iframe
-              src={`https://${invidiousHost}/embed/${videoId}`}
+              src={`https://${INVIDIOUS_HOST}/embed/${videoId}`}
               className="absolute inset-0 w-full h-full"
               style={{ border: "none" }}
               allow="autoplay; encrypted-media; fullscreen"
