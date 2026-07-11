@@ -10,11 +10,11 @@
 
 4. **Use `cn()` for className merging.** Import from `@/lib/utils`. Never write raw template literal class strings.
 
-5. **All content schemas live in `@/lib/osler/types.ts`.** Never define content types elsewhere. The 6 engine types are `quiz | bank | flashcard | written | osce | library`.
+5. **All content schemas live in `@/lib/osler/types.ts`.** Never define content types elsewhere. The 7 engine types are `quiz | bank | flashcard | written | osce | library | video`.
 
 6. **Engine metadata comes from `ENGINE_META` in `@/lib/osler/content.ts`.** Never hardcode engine labels, colors, or icons.
 
-7. **Progress and user data uses `@/lib/osler/storage`.** This is a localStorage-backed reactive store. Import the `storage` singleton — never access `localStorage` directly.
+7. **Progress and user data uses `@/lib/osler/storage`.** This is an IndexedDB-backed reactive store with in-memory cache. Import the `storage` singleton — never access `localStorage` or IndexedDB directly.
 
 8. **Use `framer-motion` for animations.** Import `motion` from `framer-motion`. Use `AnimatePresence` for mount/unmount transitions. Keep durations under 0.3s for UI elements.
 
@@ -30,71 +30,48 @@
 
 ## Conventions
 
-### Project structure principles
+### Project structure
 
-- `src/components/osler/` — app-specific components (not generic UI)
+- `src/components/osler/` — app-specific components
 - `src/components/ui/` — shadcn/ui primitives (48 files, do not add custom logic here)
 - `src/lib/osler/` — business logic, types, data loading, storage
-- `src/hooks/` — shared React hooks (including `useContentTree`, `useArticleHighlighter`, `useGestures`)
+- `src/hooks/` — shared React hooks (`useContentTree`, `useArticleHighlighter`, `useGestures`, `useContentCache`, `useQuizSettings`, `useResizableSidebar`, `useDisableBlur`, `useShortcutBindings`, `useShortcutListener`)
+- `public/osler-content/` — folder-based content (see Content system)
+- `scripts/` — manifest generator and build helpers
+- `tauri-admin/` — separate Tauri desktop admin panel (Rust)
 
 ### Code style
 
 - TypeScript strict mode with `noImplicitAny: false`
-- ESLint is intentionally permissive (most rules off) — use judgment, not linter configuration, for code quality
-- `prefer-const` is not enforced by linter — use `const` by convention, only use `let` when reassignment is required
-- Comments should be minimal and explain *why*, not *what*
-
-### Component patterns
-
-```tsx
-"use client";
-
-import * as React from "react";
-import { motion } from "framer-motion";
-import { SomeIcon } from "lucide-react";
-import { cn } from "@/lib/utils";
-
-interface ComponentProps {
-  title: string;
-  onAction?: () => void;
-}
-
-export function Component({ title, onAction }: ComponentProps) {
-  return (
-    <motion.div className={cn("flex items-center gap-2", "text-foreground")}>
-      <SomeIcon className="size-4" />
-      <span>{title}</span>
-    </motion.div>
-  );
-}
-```
+- ESLint is intentionally permissive (most rules off) — use judgment, not linter configuration
+- `prefer-const` is not enforced — use `const` by convention, only `let` when reassignment is required
+- Comments are minimal and explain *why*, not *what*
 
 ### CSS
 
+- Tailwind CSS v4 with `@tailwindcss/postcss` plugin (not v3 `tailwindcss` PostCSS plugin)
 - Use Tailwind utility classes and semantic design tokens (`bg-background`, `text-primary`, `border-border/60`)
-- Avoid custom CSS in `globals.css` for one-off styles — use Tailwind
 - Use `oklch()` for color values in `globals.css`
 - Border opacity uses `/60` suffix convention: `border-border/60`
 
 ### Keyboard shortcuts
 
-- Defined in `@/lib/osler/shortcuts.ts` with scopes: `global`, `qbank`, `reader`
-- Handled via `useShortcutListener` from `@/hooks/use-shortcuts.ts`
+- Defined in `@/lib/osler/shortcuts.ts` with scopes: `global`, `qbank`, `reader`, `videos`
+- Handled via `useShortcutListener` / `useShortcutBindings` from `@/hooks/use-shortcuts.ts`
 - User-customizable in Settings > Keyboard
 
 ### Content system (folder-based)
 
-- All content lives under `public/osler-content/` in category folders: `flashcard/`, `qbank/`, `osce/`, `library/`
+- All content lives under `public/osler-content/` in category folders: `flashcard/`, `qbank/`, `osce/`, `library/`, `videos/`
 - **Folder name = title** — no separate metadata file needed; name is title-cased for display
-- **Type inheritance**: content under `flashcard/` is auto-type "flashcard"; `qbank/` types auto-detected from file keys (`questions` → `quiz`, `passages` → `bank`, `prompts` → `written`); `osce/` → "osce"
+- **Type inheritance**: content under `flashcard/` is auto-type "flashcard"; `qbank/` types auto-detected from file keys (`questions` → `quiz`, `passages` → `bank`, `prompts` → `written`); `osce/` → "osce"; `videos/` → "video"
 - **Multiple `.json` files per leaf folder**: all files fetched and merged (arrays concatenated)
 - **Branch nodes** (folders with subfolders) → grouping decks; **Leaf nodes** (no subfolders) → content items
-- `ContentTreeNode` in `@/lib/osler/types.ts` replaces `ManifestItem` (now deleted)
 - Auto-generate manifests via `npm run generate-manifests` (script: `scripts/generate-content-manifests.js`) — re-run after adding/removing content
 
 ### Content loading
 
-- `loadCategoryTree(type)` — loads the tree for a category (from `manifest.json`); `type` is `EngineType`
+- `loadCategoryTree(type)` — loads the tree for a category (from `manifest.json`)
 - `loadNodeContent(node)` — fetches and merges all JSON files in a leaf node
 - `loadAllContent()` — loads all content across all categories, returns `{ items, trees }`
 - `loadContentByUid(uid)` — loads a single content pack by UID
@@ -103,51 +80,99 @@ export function Component({ title, onAction }: ComponentProps) {
 - All content is JSON fetched from `/osler-content/`
 - Library articles are Markdown (.md) files rendered to HTML via `unified`/`remark`/`rehype` pipeline at runtime
 
-### Mobile responsiveness
+### State management
 
-- Desktop nav hidden at `<768px`, replaced by `MobileTabBar`
-- Use `useIsMobile()` from `@/hooks/use-mobile.ts` for responsive logic
-- Use `usePlatform()` from `@/hooks/use-platform.ts` for OS detection
-- Touch targets must meet 44px minimum
+- Component-local state with `React.useState` for UI state
+- `storage` singleton (IndexedDB-backed reactive store with in-memory cache) for progress and user data
+- `React.useReducer` only for complex state machines within a component
+- Avoid global state libraries — zustand is available in deps but not used
+
+### i18n & RTL
+
+- UI translation lives in `@/lib/osler/i18n.ts` — flat key→record dictionary with `en` and `ar`
+- `useI18n()` from `@/components/osler/i18n-provider.tsx` provides `t(key)`, `tList(key)`, `rtl`, `lang`, `dir`, `contentFilter`, `setLang`, `setContentFilter`
+- UI language decoupled from content language
+- Content packs declare `lang?: ContentLang` (`"en" | "ar"`) on `ContentTreeNode` and `ContentMeta`
+- Use Tailwind logical properties (`ms-`/`me-`/`text-start`/`text-end`) instead of `ml-`/`mr-`/`text-left`/`text-right`
+- Use `.rtl-flip-x` utility (defined in `globals.css`) to mirror animated arrow/chevron icons
+- Cairo font loaded as `--font-cairo` CSS variable in `layout.tsx`
+
+### Testing
+
+- **No test framework is configured.** There are no test files, no test runner config, and no test scripts.
+- There are no CI workflows in this repo.
 
 ---
 
-## Workflow
+## Developer Commands
+
+| Command | Purpose |
+|---|---|
+| `npm run dev` | Start dev server on port 3000 |
+| `npm run dev:turbo` | Dev with Turbopack |
+| `npm run build` | Production build + standalone output |
+| `npm run start` | Run standalone server (after build) |
+| `npm run lint` | ESLint check |
+| `npm run generate-manifests` | Regenerate content manifests after adding/removing content |
+
+## Build Quirks
+
+- `next.config.ts`: `output: "standalone"`, `typescript: { ignoreBuildErrors: true }`, `reactStrictMode: false`
+- Build produces `.next/standalone/` — the `start` script runs `server.js` from that directory
+- Deployment via Caddy (port 81, reverse-proxy to localhost:3000)
+- Windows deploy: `scripts/build-deliverable.ps1`
+- Linux deploy: `scripts/build-deliverable.sh`
+- `.env.local` supplies `NEXT_PUBLIC_INVIDIOUS_HOST` (YouTube alt frontend for video player)
+- No `.env` file required for basic dev — AI assistant Gemini key is configured in-app (Settings > AI Assistant)
+
+## Architecture
+
+### Single-page view routing
+
+The app uses a client-side view state (`OslerView` type in `app-shell.tsx`) rather than Next.js pages. All views live under a single route (`/`) and are toggled via the `AppShell` component.
+
+Available views: `dashboard`, `library`, `qbank`, `flashcards`, `osce`, `videos`, `profile`, `settings`.
+
+### Studio components
+
+| View | Component | Handles |
+|---|---|---|
+| Quiz/Bank/Written | `QBankStudio.tsx` (~4300 lines) | Unified quiz engine, adaptive UI per type |
+| Flashcards | `FlashcardStudio.tsx` (~880 lines) | Deck browser + spaced repetition |
+| OSCE | `OsceStudio.tsx` (~2400 lines) | Clinical OSCE simulator + AI voice interaction |
+| Videos | `VideosStudio.tsx` | Video player with YouTube/Plyr/Invidious |
+
+### Viewport quirks
+
+- `html, body { overflow: hidden; height: 100%; }` in globals.css
+- `userScalable: false`, `maximumScale: 1`, `viewportFit: "cover"` in layout metadata
+- Desktop nav hidden at `<768px`, replaced by `MobileTabBar`
+- Touch targets must meet 44px minimum
+
+### Sync system
+
+- Sync library: `@/lib/osler/sync/` (6 modules: protocol, helpers, file, QR, network transport, index)
+- Three methods: WebRTC (PeerJS + MQTT relay), QR code (LZ-string + CRC32), file backup (`.osler-backup`)
+- Sync settings UI in `@/components/osler/sync/` (4 panel components)
+
+---
+
+## Workflows
 
 ### Adding a new view
 
-1. Add the view name to `OslerView` type in `app-shell.tsx`
-2. Create the component in `src/components/osler/`
-3. Add a nav entry in `AppShell` and/or `MobileTabBar`
+1. Add view name to `OslerView` type in `app-shell.tsx`
+2. Create component in `src/components/osler/`
+3. Add nav entry in `AppShell` and/or `MobileTabBar`
 4. Wire the view in `src/app/page.tsx` with conditional rendering
-5. Add a keyboard shortcut in `shortcuts.ts`
+5. Add keyboard shortcut in `shortcuts.ts`
 
 ### Adding a new content type
 
-1. Define the TypeScript interface in `@/lib/osler/types.ts`
+1. Define TypeScript interface in `@/lib/osler/types.ts`
 2. Add it to the `AnyContent` union type
-3. Add a type guard in `@/lib/osler/content.ts`
-4. Add an entry in `ENGINE_META`
-5. Add rendering support — use `QBankStudio.tsx` for quiz/bank/written types, `FlashcardStudio.tsx` for flashcards, `OsceStudio.tsx` for OSCE, or create a dedicated studio component
+3. Add type guard in `@/lib/osler/content.ts`
+4. Add entry in `ENGINE_META`
+5. Add rendering support (QBankStudio / FlashcardStudio / OsceStudio / new studio)
 6. Add type detection key in `scripts/generate-content-manifests.js` (`fileKeyMap`)
 7. Add category folder under `public/osler-content/`
-
-### i18n & RTL support
-
-- UI translation lives in `@/lib/osler/i18n.ts` — flat key→record dictionary with `en` and `ar`.
-- `useI18n()` from `@/components/osler/i18n-provider.tsx` provides `t(key)`, `tList(key)`, `rtl`, `lang`, `dir`, `contentFilter`, `setLang`, `setContentFilter`.
-- UI language is decoupled from content language. Arabic UI flips the shell; Arabic content packs render RTL regardless of UI language.
-- Content packs declare `lang?: ContentLang` (`"en" | "ar"`) on `ContentTreeNode` and `ContentMeta` in `@/lib/osler/types.ts`.
-- Content body containers use `dir`/`lang` attributes + `.osler-content-ar`/`.osler-content-en` CSS classes.
-- `ContentLangFilter` (exported from `@/components/osler/qbank-studio.tsx`) provides All/English/Arabic pills — shared across QBank, Flashcards, and OSCE.
-- `LANG_INIT_SCRIPT` in `i18n.ts` runs inline in `<head>` to prevent flash of LTR layout.
-- Use Tailwind logical properties (`ms-`/`me-`/`text-start`/`text-end`) instead of `ml-`/`mr-`/`text-left`/`text-right`.
-- Use `.rtl-flip-x` utility (defined in `globals.css`) to mirror animated arrow/chevron icons.
-- The Cairo font is loaded as a CSS variable (`--font-cairo`) in `layout.tsx` for Arabic glyphs.
-
-### Handling state
-
-- Component-local state with `React.useState` for UI state
-- `storage` singleton (reactive localStorage) for progress and user data
-- `React.useReducer` only for complex state machines within a component
-- Avoid global state libraries — zustand is available in deps but not currently used
