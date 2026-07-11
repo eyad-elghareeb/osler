@@ -17,6 +17,7 @@ import {
   ListVideo,
   X,
   BookOpen,
+  ExternalLink,
 } from "lucide-react";
 import Plyr from "plyr";
 import "plyr/dist/plyr.css";
@@ -43,6 +44,18 @@ import { ContentCacheButton } from "./content-cache-button";
 const VIDEO_COLOR = "oklch(0.68 0.18 195)";
 
 const PLAYBACK_RATES = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2];
+
+/** Public Invidious instances shown in the alternative-host dropdown. */
+const INVIDIOUS_HOSTS: { host: string; label: string }[] = [
+  { host: "inv.nadeko.net", label: "inv.nadeko.net" },
+  { host: "yewtu.be", label: "yewtu.be" },
+  { host: "invidious.snopyta.org", label: "invidious.snopyta.org" },
+  { host: "inv.vern.cc", label: "inv.vern.cc" },
+  { host: "iv.ggtyler.dev", label: "iv.ggtyler.dev" },
+  { host: "yt.artemislena.eu", label: "yt.artemislena.eu" },
+  { host: "invidious.private.coffee", label: "invidious.private.coffee" },
+  { host: "invidious.no-logs.com", label: "invidious.no-logs.com" },
+];
 
 /* ── Helpers ───────────────────────────────────────────────────────── */
 
@@ -483,57 +496,137 @@ function VideoPlayerView({
   const { t, rtl } = useI18n();
   const containerRef = React.useRef<HTMLDivElement>(null);
   const plyrRef = React.useRef<Plyr | null>(null);
+  const youtubeRef = React.useRef<any>(null);
 
   const [isFullscreen, setIsFullscreen] = React.useState(false);
   const [showPlaylist, setShowPlaylist] = React.useState(false);
+  const [invidiousHost, setInvidiousHost] = React.useState<string | null>(null);
+  const [invidiousMenuOpen, setInvidiousMenuOpen] = React.useState(false);
+  const invidiousMenuRef = React.useRef<HTMLDivElement>(null);
 
-  const videoId = video.source.type === "youtube" ? video.source.id : undefined;
-  const thumbnail = resolveThumbnail(video);
+  const isYouTube = video.source.type === "youtube";
+  const videoId = isYouTube ? video.source.id : undefined;
 
-  // ── Initialise Plyr with YouTube IFrame provider ──
+  // ── Initialise player: YouTube IFrame API or Plyr ──
   React.useEffect(() => {
-    if (!containerRef.current || !videoId) return;
+    if (!containerRef.current) return;
 
     containerRef.current.innerHTML = "";
 
-    const div = document.createElement("div");
-    div.dataset.plyrProvider = "youtube";
-    div.dataset.plyrEmbedId = videoId;
-    containerRef.current.appendChild(div);
+    let destroyed = false;
 
-    const plyr = new Plyr(div, {
-      controls: [
-        "play-large", "play", "progress", "current-time",
-        "duration", "mute", "volume", "settings", "pip", "fullscreen",
-      ],
-      settings: ["speed"],
-      speed: { selected: 1, options: PLAYBACK_RATES },
-      youtube: {
-        rel: 0,
-        modestbranding: 1,
-        iv_load_policy: 3,
-        cc_load_policy: 0,
-      },
-      keyboard: { focused: true, global: false },
-      tooltips: { controls: true, seek: true },
-      seekTime: 10,
-      disableContextMenu: true,
-      resetOnEnd: true,
-      autoplay: true,
-    } as any);
+    // Helper to init Plyr with a given video element
+    function initPlyr(el: HTMLVideoElement) {
+      const p = new Plyr(el, {
+        controls: [
+          "play-large", "play", "progress", "current-time",
+          "duration", "mute", "volume", "settings", "pip", "fullscreen",
+        ],
+        settings: ["speed"],
+        speed: { selected: 1, options: PLAYBACK_RATES },
+        keyboard: { focused: true, global: false },
+        tooltips: { controls: true, seek: true },
+        seekTime: 10,
+        disableContextMenu: true,
+        resetOnEnd: true,
+        autoplay: true,
+      });
+      plyrRef.current = p;
+      requestAnimationFrame(() => {
+        const el = containerRef.current?.querySelector<HTMLElement>(".plyr");
+        el?.focus();
+      });
+      return p;
+    }
 
-    plyrRef.current = plyr;
+    if (isYouTube && videoId) {
+      const rootId = `yt-${videoId}`;
+      const root = document.createElement("div");
+      root.id = rootId;
+      root.style.width = "100%";
+      root.style.height = "100%";
+      containerRef.current.appendChild(root);
 
-    requestAnimationFrame(() => {
-      const el = containerRef.current?.querySelector<HTMLElement>(".plyr");
-      el?.focus();
-    });
+      let player: any = null;
 
-    return () => {
-      plyr.destroy();
-      plyrRef.current = null;
+      function boot() {
+        if (destroyed) return;
+        const YT = (window as any).YT;
+        if (!YT?.Player) {
+          const prev = (window as any).onYouTubeIframeAPIReady;
+          (window as any).onYouTubeIframeAPIReady = () => {
+            if (prev) prev();
+            (window as any).onYouTubeIframeAPIReady = null;
+            boot();
+          };
+          if (!prev) {
+            const s = document.createElement("script");
+            s.src = "https://www.youtube.com/iframe_api";
+            document.head.appendChild(s);
+          }
+          return;
+        }
+
+        player = new YT.Player(rootId, {
+          height: "100%",
+          width: "100%",
+          videoId,
+          playerVars: {
+            autoplay: 1,
+            controls: 1,
+            disablekb: 0,
+            enablejsapi: 1,
+            iv_load_policy: 3,
+            modestbranding: 1,
+            playsinline: 1,
+            rel: 0,
+            origin: window.location.origin,
+          },
+          events: {
+            onReady: () => {
+              if (!destroyed) player.playVideo();
+            },
+          },
+        });
+
+        youtubeRef.current = player;
+      }
+
+      boot();
+
+      return () => {
+        destroyed = true;
+        if (player && typeof player.destroy === "function") {
+          try { player.destroy(); } catch { /* noop */ }
+        }
+        youtubeRef.current = null;
+      };
+    }
+
+    if (!isYouTube && video.source.url) {
+      const videoEl = document.createElement("video");
+      videoEl.src = video.source.url;
+      videoEl.playsInline = true;
+      containerRef.current.appendChild(videoEl);
+      const p = initPlyr(videoEl);
+      return () => {
+        p.destroy();
+        plyrRef.current = null;
+      };
+    }
+  }, [isYouTube, videoId, video.source.url]);
+
+  // ── Close invidious menu on outside click ──
+  React.useEffect(() => {
+    if (!invidiousMenuOpen) return;
+    const handler = (e: MouseEvent) => {
+      if (invidiousMenuRef.current && !invidiousMenuRef.current.contains(e.target as Node)) {
+        setInvidiousMenuOpen(false);
+      }
     };
-  }, [videoId, thumbnail]);
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [invidiousMenuOpen]);
 
   // ── Fullscreen tracking ──
   React.useEffect(() => {
@@ -556,15 +649,29 @@ function VideoPlayerView({
           onPrev?.();
           break;
         case "videos.fullscreen":
-          void plyrRef.current?.fullscreen.toggle();
+          if (isYouTube && youtubeRef.current) {
+            const iframe = youtubeRef.current.getIframe();
+            if (iframe?.requestFullscreen) void iframe.requestFullscreen();
+          } else {
+            void plyrRef.current?.fullscreen.toggle();
+          }
           break;
         case "videos.mute":
-          if (plyrRef.current) plyrRef.current.muted = !plyrRef.current.muted;
+          if (isYouTube && youtubeRef.current) {
+            youtubeRef.current[youtubeRef.current.isMuted() ? "unMute" : "mute"]();
+          } else if (plyrRef.current) {
+            plyrRef.current.muted = !plyrRef.current.muted;
+          }
           break;
       }
     },
     { ignoreInputs: true },
   );
+
+  function selectInvidiousHost(host: string) {
+    setInvidiousHost(host);
+    setInvidiousMenuOpen(false);
+  }
 
   return (
     <div className="fixed inset-0 z-50 bg-background flex flex-col safe-screen">
@@ -611,6 +718,39 @@ function VideoPlayerView({
             <ChevronRight className={cn("size-4", rtl && "rtl-flip-x")} />
           </button>
         )}
+        {isYouTube && !invidiousHost && (
+          <div ref={invidiousMenuRef} className="relative">
+            <button
+              onClick={() => setInvidiousMenuOpen((s) => !s)}
+              className={cn(
+                "size-7 rounded-md flex items-center justify-center transition-colors",
+                invidiousMenuOpen ? "text-primary bg-primary/10" : "text-muted-foreground hover:text-foreground hover:bg-muted/60"
+              )}
+              title="Play via alternative host"
+            >
+              <ExternalLink className="size-3.5" />
+            </button>
+            {invidiousMenuOpen && (
+              <div
+                className="absolute top-full end-0 mt-1 w-56 bg-card border border-border/60 rounded-xl shadow-xl py-1 z-50"
+                style={{ maxHeight: "320px", overflowY: "auto" }}
+              >
+                <div className="px-3 py-1.5 text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">
+                  Invidious instance
+                </div>
+                {INVIDIOUS_HOSTS.map(({ host, label }) => (
+                  <button
+                    key={host}
+                    onClick={() => selectInvidiousHost(host)}
+                    className="w-full text-start px-3 py-1.5 text-xs text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors"
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
         <button
           onClick={() => setShowPlaylist((s) => !s)}
           className={cn(
@@ -625,9 +765,19 @@ function VideoPlayerView({
 
       {/* Body: player + sidebar */}
       <div className="flex-1 min-h-0 flex">
-        {/* Player area — fills available space, Plyr handles aspect ratio internally */}
+        {/* Player area */}
         <div className="relative flex-1 min-w-0 bg-black">
-          <div ref={containerRef} className="absolute inset-0" />
+          {invidiousHost && videoId ? (
+            <iframe
+              src={`https://${invidiousHost}/embed/${videoId}`}
+              className="absolute inset-0 w-full h-full"
+              style={{ border: "none" }}
+              allow="autoplay; encrypted-media; fullscreen"
+              allowFullScreen
+            />
+          ) : (
+            <div ref={containerRef} className="absolute inset-0" />
+          )}
         </div>
 
         {/* Sidebar: playlist + details */}
