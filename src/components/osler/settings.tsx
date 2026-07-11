@@ -526,7 +526,7 @@ function AiSettingsSection() {
 /* ─── Keyboard shortcuts section ────────────────────────────────────── */
 
 function ShortcutsSettingsSection() {
-  const { t } = useI18n();
+  const { t, tList } = useI18n();
   const [saved, setSaved] = React.useState<Record<string, string>>(() => loadBindings());
   const [draft, setDraft] = React.useState<Record<string, string>>(() => saved);
   const [justSaved, setJustSaved] = React.useState(false);
