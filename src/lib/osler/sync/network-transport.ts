@@ -328,15 +328,26 @@ export class NetworkTransport {
       const pc = new RTCPeerConnection({ iceServers: [{ urls: "stun:stun.l.google.com:19302" }] });
       pc.createDataChannel("x");
       pc.createOffer().then((offer) => pc.setLocalDescription(offer));
+      const ips = new Set<string>();
       pc.onicecandidate = (e) => {
-        if (!e.candidate) return;
-        const parts = e.candidate.candidate.split(" ");
-        if (parts[7] && parts[7] !== "0.0.0.0" && !parts[7].startsWith("127.")) {
-          resolve(parts[7]);
+        if (!e.candidate) {
+          // All candidates delivered — resolve with first IPv4 or fallback
+          const ipv4 = Array.from(ips).find((ip) => ip.includes("."));
+          resolve(ipv4 ?? ips.values().next().value ?? "0.0.0.0");
           pc.close();
+          return;
+        }
+        const addr = (e.candidate as RTCIceCandidate & { address?: string }).address ?? e.candidate.candidate.split(" ")[4];
+        if (addr && addr !== "0.0.0.0" && !addr.startsWith("127.") && !addr.includes(":")) {
+          ips.add(addr);
         }
       };
-      setTimeout(() => { pc.close(); resolve("0.0.0.0"); }, 3000);
+      // Timeout — fall back to whatever we have
+      setTimeout(() => {
+        const ipv4 = Array.from(ips).find((ip) => ip.includes("."));
+        resolve(ipv4 ?? ips.values().next().value ?? "0.0.0.0");
+        pc.close();
+      }, 5000);
     });
   }
 
