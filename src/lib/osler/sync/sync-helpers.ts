@@ -2,6 +2,7 @@ import { storage } from "@/lib/osler/storage";
 import type { SyncPayload } from "./sync-protocol";
 
 export async function buildExportPayload(): Promise<SyncPayload> {
+  await storage.ensureCacheHydrated();
   const allProgress = storage.allProgress();
   const sessions = await import("@/lib/osler/storage").then((m) => m.sessions.list());
   const flashcards = (await import("@/lib/osler/storage")).flashcardReview.getAll();

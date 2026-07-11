@@ -381,6 +381,10 @@ export const storage = {
 
   /* ── Bulk export/import (for sync/backup) ─────────────────────────── */
 
+  async ensureCacheHydrated(): Promise<void> {
+    await hydrateCache();
+  },
+
   exportProgressRecords(): Record<string, QuestionRecord> {
     const result: Record<string, QuestionRecord> = {};
     for (const [k, v] of memoryCache) {
@@ -397,10 +401,10 @@ export const storage = {
     const rawProgress = data["osler_raw_progress"] as Record<string, QuestionRecord> | undefined;
     if (rawProgress && typeof rawProgress === "object") {
       const entries = Object.entries(rawProgress)
-        .filter(([, v]) => v && typeof v === "object" && "uid" in v)
+        .filter(([, v]) => v && typeof v === "object" && "uid" in v && "qid" in v)
         .map(([key, value]) => ({ key, value }));
       if (entries.length > 0) {
-        await idbPutBatch("progress", entries).catch(console.warn);
+        await idbPutBatch("progress", entries);
         for (const e of entries) {
           setCached("progress", e.key, e.value);
         }
@@ -411,13 +415,17 @@ export const storage = {
     // 2. Sessions
     const sessionEntries = Object.entries(data)
       .filter(([key]) => key.startsWith("osler_sessions_"))
-      .map(([, value]) => value as SavedSession);
-    for (const session of sessionEntries) {
-      const key = `session:${session.id}`;
-      setCached("sessions", key, session);
-      await idbPut("sessions", key, session).catch(console.warn);
-    }
+      .map(([, value]) => value as SavedSession)
+      .filter((s): s is SavedSession => !!s && typeof s === "object" && "id" in s);
     if (sessionEntries.length > 0) {
+      for (const session of sessionEntries) {
+        const key = `session:${session.id}`;
+        setCached("sessions", key, session);
+      }
+      await idbPutBatch(
+        "sessions",
+        sessionEntries.map((s) => ({ key: `session:${s.id}`, value: s })),
+      );
       dispatchChange("osler-sessions-changed");
     }
 
@@ -428,7 +436,7 @@ export const storage = {
         .filter(([, v]) => v && typeof v === "object" && "dueDate" in v)
         .map(([key, value]) => ({ key, value }));
       if (entries.length > 0) {
-        await idbPutBatch("flashcardReviews", entries).catch(console.warn);
+        await idbPutBatch("flashcardReviews", entries);
         for (const e of entries) {
           setCached("flashcardReviews", e.key, e.value);
         }
@@ -441,7 +449,7 @@ export const storage = {
     if (Array.isArray(notesArr) && notesArr.length > 0) {
       for (const note of notesArr) {
         if (note && typeof note === "object" && note.id) {
-          await idbPutNote(note).catch(console.warn);
+          await idbPutNote(note);
         }
       }
       notesCache = await idbGetAllNotes();
