@@ -3,7 +3,14 @@
  * Each engine (quiz, bank, flashcard, written, osce) has its own content shape.
  */
 
-export type EngineType = "quiz" | "bank" | "flashcard" | "written" | "osce" | "library";
+export type EngineType =
+  | "quiz"
+  | "bank"
+  | "flashcard"
+  | "written"
+  | "osce"
+  | "library"
+  | "video";
 
 /** Content language. `en` is the default when omitted. */
 export type ContentLang = "en" | "ar";
@@ -218,9 +225,71 @@ export interface OsceContent {
   stations: OsceStation[];
 }
 
+/* ── Video ─────────────────────────────────────────────────────────── */
+
+/**
+ * A single video resource.
+ *
+ * The platform supports a "facade" player that hides the upstream provider
+ * completely — the user never sees YouTube branding, controls, or links.
+ * The `source` field is intentionally provider-agnostic so future CDN-hosted
+ * videos can be added without breaking existing manifests.
+ */
+export interface VideoSource {
+  /**
+   * Upstream provider. Currently supported:
+   *  - "youtube"   — uses YouTube IFrame Player API under a custom UI
+   *  - "mp4"       — direct video file (CDN or same-origin)
+   *  - "hls"       — HLS stream (.m3u8)
+   */
+  type: "youtube" | "mp4" | "hls";
+  /** YouTube video ID (when type === "youtube") */
+  id?: string;
+  /** Direct URL for mp4/hls streams */
+  url?: string;
+}
+
+export interface VideoChapter {
+  /** Chapter start time in seconds. */
+  time: number;
+  title: string;
+}
+
+export interface VideoResource {
+  id: string;
+  title: string;
+  description?: string;
+  /** Medical specialty (e.g., "Cardiology"). */
+  specialty?: string;
+  /** Sub-topic for grouping within a folder (e.g., "ECG Interpretation"). */
+  topic?: string;
+  /** Duration in seconds (used for display; the actual duration comes from the player). */
+  duration?: number;
+  /** Optional custom poster/thumbnail URL. Falls back to a provider thumbnail when omitted. */
+  thumbnail?: string;
+  source: VideoSource;
+  /** Optional instructor / presenter. */
+  instructor?: string;
+  /** Optional list of tags for search & filtering. */
+  tags?: string[];
+  /** Optional chapter markers for the timeline. */
+  chapters?: VideoChapter[];
+  /** Optional list of related article file paths in the library. */
+  relatedArticles?: string[];
+  /** Language the video audio/title is in. Defaults to "en". */
+  lang?: ContentLang;
+}
+
+export interface VideoContent {
+  meta: ContentMeta;
+  type: "video";
+  videos: VideoResource[];
+}
+
 export type AnyContent =
   | QuizContent
   | BankContent
   | FlashcardContent
   | WrittenContent
-  | OsceContent;
+  | OsceContent
+  | VideoContent;

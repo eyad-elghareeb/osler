@@ -1,0 +1,53 @@
+{
+  "videos": [
+    {
+      "id": "ischemic-stroke-acute-management",
+      "title": "Ischemic Stroke: Acute Management",
+      "description": "Walk-through of the acute stroke pathway — recognition (FAST, NIHSS), imaging selection (non-contrast CT vs. CTA vs. perfusion), thrombolysis eligibility, and mechanical thrombectomy windows. Includes a case simulation with a 68-year-old patient.",
+      "specialty": "Neurology",
+      "topic": "Stroke",
+      "duration": 1530,
+      "source": {
+        "type": "youtube",
+        "id": "EFgh2AyrXCo"
+      },
+      "instructor": "Dr. Laila Hassan, MD, PhD",
+      "tags": ["stroke", "neurology", "thrombolysis", "thrombectomy", "emergency"],
+      "chapters": [
+        { "time": 0, "title": "Recognition & FAST" },
+        { "time": 120, "title": "NIHSS scoring" },
+        { "time": 360, "title": "Imaging selection" },
+        { "time": 720, "title": "Thrombolysis — eligibility & contraindications" },
+        { "time": 1080, "title": "Mechanical thrombectomy windows" }
+      ],
+      "relatedArticles": [
+        "neurology/cerebrovascular/ischemic-stroke.md"
+      ],
+      "lang": "en"
+    },
+    {
+      "id": "subarachnoid-hemorrhage-approach",
+      "title": "Subarachnoid Hemorrhage: ED Approach",
+      "description": "Practical approach to the patient with a sudden-onset severe headache. Covers clinical decision rules (Ottawa SAH), the role of non-contrast CT and CT angiography, and the acute management of aneurysmal SAH.",
+      "specialty": "Neurology",
+      "topic": "Subarachnoid Hemorrhage",
+      "duration": 990,
+      "source": {
+        "type": "youtube",
+        "id": "5MEkAyrqjoU"
+      },
+      "instructor": "Dr. Karim Youssef, MD",
+      "tags": ["SAH", "neurology", "emergency", "headache"],
+      "chapters": [
+        { "time": 0, "title": "Thunderclap headache — initial approach" },
+        { "time": 120, "title": "Ottawa SAH rule" },
+        { "time": 300, "title": "Imaging: CT vs CTA vs LP" },
+        { "time": 600, "title": "Acute management of aneurysmal SAH" }
+      ],
+      "relatedArticles": [
+        "neurology/cerebrovascular/subarachnoid-hemorrhage.md"
+      ],
+      "lang": "en"
+    }
+  ]
+}

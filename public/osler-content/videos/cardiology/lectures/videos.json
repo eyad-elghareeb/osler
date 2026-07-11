@@ -1,0 +1,50 @@
+{
+  "videos": [
+    {
+      "id": "cardiac-auscultation-masterclass",
+      "title": "Cardiac Auscultation: A Masterclass",
+      "description": "An immersive cardiac auscultation tutorial covering normal heart sounds, S1/S2 splitting, S3/S4 gallops, and the four classical murmurs. Each segment is followed by a short self-assessment.",
+      "specialty": "Cardiology",
+      "topic": "Clinical Examination",
+      "duration": 1440,
+      "source": {
+        "type": "youtube",
+        "id": "pmXmsD5O_qM"
+      },
+      "instructor": "Dr. Hannah Davies, MD",
+      "tags": ["auscultation", "murmurs", "clinical skills", "cardiology"],
+      "chapters": [
+        { "time": 0, "title": "Introduction to heart sounds" },
+        { "time": 90, "title": "S1 and S2 — normal splitting" },
+        { "time": 360, "title": "S3 and S4 gallops" },
+        { "time": 720, "title": "Systolic murmurs" },
+        { "time": 1080, "title": "Diastolic murmurs" }
+      ],
+      "relatedArticles": [
+        "cardiology/heart-failure/heart-failure-reduced-ef.md"
+      ],
+      "lang": "en"
+    },
+    {
+      "id": "hypertension-guidelines-explained",
+      "title": "Hypertension Guidelines Explained (2024)",
+      "description": "A clear walk-through of the latest hypertension guidelines — ACC/AHA vs. ESC thresholds, workup for secondary causes, and a practical approach to choosing first-line agents in primary care.",
+      "specialty": "Cardiology",
+      "topic": "Hypertension",
+      "duration": 1170,
+      "source": {
+        "type": "youtube",
+        "id": "YQHsXMglC9A"
+      },
+      "instructor": "Dr. Omar El-Sayed, MD",
+      "tags": ["hypertension", "guidelines", "primary care", "pharmacology"],
+      "chapters": [
+        { "time": 0, "title": "Why guidelines differ" },
+        { "time": 90, "title": "Thresholds & staging" },
+        { "time": 360, "title": "Workup — when to suspect secondary HTN" },
+        { "time": 720, "title": "First-line drug selection" }
+      ],
+      "lang": "en"
+    }
+  ]
+}

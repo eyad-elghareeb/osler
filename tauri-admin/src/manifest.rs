@@ -1,12 +1,14 @@
 // manifest.rs — Rust port of scripts/generate-content-manifests.js.
 //
-// Walks `public/osler-content/` category folders (flashcard, qbank, osce, library)
-// and writes a `manifest.json` in each category root describing the folder tree.
+// Walks `public/osler-content/` category folders (flashcard, qbank, osce,
+// library, videos) and writes a `manifest.json` in each category root
+// describing the folder tree.
 //
 // Folder → EngineType mapping:
 //   flashcard/ → "flashcard"
 //   osce/      → "osce"
 //   library/   → "library"
+//   videos/    → "video"
 //   qbank/     → auto-detected from data file keys
 
 use serde_json::{json, Value};
@@ -18,6 +20,7 @@ const FOLDER_TYPE_MAP: &[(&str, &str)] = &[
     ("flashcard", "flashcard"),
     ("osce", "osce"),
     ("library", "library"),
+    ("videos", "video"),
 ];
 
 /// Infer engine type from a data JSON file's top-level keys.
@@ -30,6 +33,7 @@ fn infer_type_from_data(file_path: &Path) -> Option<&'static str> {
         ("prompts", "written"),
         ("questions", "quiz"),
         ("cards", "flashcard"),
+        ("videos", "video"),
     ] {
         if data.get(key).and_then(|v| v.as_array()).map(|a| !a.is_empty()).unwrap_or(false) {
             return Some(ty);
@@ -247,6 +251,7 @@ fn dominant_type(items: &[Value]) -> &'static str {
             "flashcard" => "flashcard",
             "written" => "written",
             "osce" => "osce",
+            "video" => "video",
             _ => "quiz",
         },
         None => "quiz",

@@ -1,6 +1,6 @@
 // validate.rs — Lightweight content-JSON schema validation.
 //
-// Each content pack has a different shape (quiz/bank/written/flashcard/osce).
+// Each content pack has a different shape (quiz/bank/written/flashcard/osce/video).
 // This module returns a list of human-readable error strings; an empty list
 // means the content is valid.
 
@@ -14,6 +14,7 @@ pub fn validate(content_type: &str, content: &Value) -> Vec<String> {
         "written" => validate_written(content),
         "flashcard" => validate_flashcard(content),
         "osce" => validate_osce(content),
+        "video" => validate_video(content),
         _ => vec![format!("Unknown content type: {}", content_type)],
     }
 }
@@ -171,6 +172,72 @@ fn validate_osce(content: &Value) -> Vec<String> {
             if s.get("rubric").is_none() {
                 errors.push(format!("{}: missing `rubric`", ctx));
             }
+        }
+    }
+    errors
+}
+
+fn validate_video(content: &Value) -> Vec<String> {
+    let mut errors = Vec::new();
+    if let Some(arr) = require_array(content, "videos", &mut errors) {
+        for (i, v) in arr.iter().enumerate() {
+            let ctx = format!("videos[{}]", i);
+            require_string(v, "id", &mut errors, &ctx);
+            require_string(v, "title", &mut errors, &ctx);
+
+            // source — must be an object with a valid `type` discriminator
+            match v.get("source") {
+                Some(src) if src.is_object() => {
+                    require_string(src, "type", &mut errors, &ctx);
+                    match src.get("type").and_then(|t| t.as_str()) {
+                        Some("youtube") => {
+                            require_string(src, "id", &mut errors, &ctx);
+                            // YouTube IDs are 11 chars, but allow some slack for legacy IDs
+                            if let Some(id) = src.get("id").and_then(|i| i.as_str()) {
+                                if id.is_empty() {
+                                    errors.push(format!("{}: `source.id` cannot be empty", ctx));
+                                } else if id.len() > 32 {
+                                    errors.push(format!("{}: `source.id` looks too long for a YouTube video id ({})", ctx, id.len()));
+                                }
+                            }
+                        }
+                        Some("mp4") | Some("hls") => {
+                            require_string(src, "url", &mut errors, &ctx);
+                        }
+                        Some(other) => {
+                            errors.push(format!("{}: `source.type` \"{}\" is not one of youtube/mp4/hls", ctx, other));
+                        }
+                        None => {}
+                    }
+                }
+                Some(_) => errors.push(format!("{}: `source` must be an object", ctx)),
+                None => errors.push(format!("{}: missing `source`", ctx)),
+            }
+
+            // Optional numeric duration
+            if let Some(d) = v.get("duration") {
+                if !d.is_u64() && !d.is_f64() {
+                    errors.push(format!("{}: `duration` must be a number (seconds)", ctx));
+                }
+            }
+
+            // Optional chapters — array of { time: number, title: string }
+            if let Some(ch) = v.get("chapters") {
+                if let Some(arr) = ch.as_array() {
+                    for (j, c) in arr.iter().enumerate() {
+                        let cctx = format!("{}.chapters[{}]", ctx, j);
+                        require_usize(c, "time", &mut errors, &cctx);
+                        require_string(c, "title", &mut errors, &cctx);
+                    }
+                } else {
+                    errors.push(format!("{}: `chapters` must be an array", ctx));
+                }
+            }
+
+            // Optional relatedArticles — array of strings
+            require_array_of_strings(v, "relatedArticles", &mut errors, &ctx);
+            // Optional tags — array of strings
+            require_array_of_strings(v, "tags", &mut errors, &ctx);
         }
     }
     errors

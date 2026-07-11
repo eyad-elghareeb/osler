@@ -296,6 +296,7 @@ pub fn create_file(
             Some("passages.json") => r#"{"passages":[]}"#.to_string(),
             Some("prompts.json") => r#"{"prompts":[]}"#.to_string(),
             Some("stations.json") => r#"{"stations":[]}"#.to_string(),
+            Some("videos.json") => r#"{"videos":[]}"#.to_string(),
             _ => "{}".to_string(),
         }
     } else {

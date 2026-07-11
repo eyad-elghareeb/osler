@@ -1,83 +1,83 @@
 {
+  "type": "flashcard",
   "items": [
     {
-      "files": [],
-      "items": [
-        {
-          "files": [
-            "cards.json"
-          ],
-          "items": [],
-          "path": "medical-board-review/cardiology/",
-          "title": "Cardiology",
-          "type": "flashcard",
-          "uid": "flashcard-medical-board-review-cardiology"
-        },
-        {
-          "files": [
-            "cards.json"
-          ],
-          "items": [],
-          "path": "medical-board-review/gastroenterology/",
-          "title": "Gastroenterology",
-          "type": "flashcard",
-          "uid": "flashcard-medical-board-review-gastroenterology"
-        },
-        {
-          "files": [
-            "cards.json"
-          ],
-          "items": [],
-          "path": "medical-board-review/neurology/",
-          "title": "Neurology",
-          "type": "flashcard",
-          "uid": "flashcard-medical-board-review-neurology"
-        },
-        {
-          "files": [
-            "cards.json"
-          ],
-          "items": [],
-          "path": "medical-board-review/pharmacology/",
-          "title": "Pharmacology",
-          "type": "flashcard",
-          "uid": "flashcard-medical-board-review-pharmacology"
-        },
-        {
-          "files": [
-            "cards.json"
-          ],
-          "items": [],
-          "path": "medical-board-review/pulmonology/",
-          "title": "Pulmonology",
-          "type": "flashcard",
-          "uid": "flashcard-medical-board-review-pulmonology"
-        }
-      ],
-      "path": "medical-board-review/",
+      "uid": "flashcard-medical-board-review",
       "title": "Medical Board Review",
       "type": "flashcard",
-      "uid": "flashcard-medical-board-review"
-    },
-    {
+      "path": "medical-board-review/",
       "files": [],
       "items": [
         {
+          "uid": "flashcard-medical-board-review-cardiology",
+          "title": "Cardiology",
+          "type": "flashcard",
+          "path": "medical-board-review/cardiology/",
           "files": [
             "cards.json"
           ],
-          "items": [],
-          "path": "medical-board-review-ar/cardiology/",
-          "title": "Cardiology",
+          "items": []
+        },
+        {
+          "uid": "flashcard-medical-board-review-gastroenterology",
+          "title": "Gastroenterology",
           "type": "flashcard",
-          "uid": "flashcard-medical-board-review-ar-cardiology"
+          "path": "medical-board-review/gastroenterology/",
+          "files": [
+            "cards.json"
+          ],
+          "items": []
+        },
+        {
+          "uid": "flashcard-medical-board-review-neurology",
+          "title": "Neurology",
+          "type": "flashcard",
+          "path": "medical-board-review/neurology/",
+          "files": [
+            "cards.json"
+          ],
+          "items": []
+        },
+        {
+          "uid": "flashcard-medical-board-review-pharmacology",
+          "title": "Pharmacology",
+          "type": "flashcard",
+          "path": "medical-board-review/pharmacology/",
+          "files": [
+            "cards.json"
+          ],
+          "items": []
+        },
+        {
+          "uid": "flashcard-medical-board-review-pulmonology",
+          "title": "Pulmonology",
+          "type": "flashcard",
+          "path": "medical-board-review/pulmonology/",
+          "files": [
+            "cards.json"
+          ],
+          "items": []
         }
-      ],
-      "path": "medical-board-review-ar/",
+      ]
+    },
+    {
+      "uid": "flashcard-medical-board-review-ar",
       "title": "Medical Board Review Ar",
       "type": "flashcard",
-      "uid": "flashcard-medical-board-review-ar"
+      "path": "medical-board-review-ar/",
+      "files": [],
+      "items": [
+        {
+          "uid": "flashcard-medical-board-review-ar-cardiology",
+          "title": "Cardiology",
+          "type": "flashcard",
+          "path": "medical-board-review-ar/cardiology/",
+          "files": [
+            "cards.json"
+          ],
+          "items": []
+        }
+      ]
     }
-  ],
-  "type": "flashcard"
+  ]
 }

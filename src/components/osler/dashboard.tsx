@@ -17,11 +17,13 @@ import {
   Award,
   Library as LibraryIcon,
   Flame,
+  PlayCircle,
 } from "lucide-react";
 import { loadAllContent, ENGINE_META } from "@/lib/osler/content";
 import type { AnyContent, ContentTreeNode, EngineType } from "@/lib/osler/types";
 import { storage } from "@/lib/osler/storage";
 import { listAllArticles, loadArticleContent } from "@/lib/osler/articles";
+import { listAllVideos } from "@/lib/osler/videos";
 import type { Article } from "@/lib/osler/articles";
 import type { OslerView } from "./app-shell";
 import { useI18n } from "./i18n-provider";
@@ -41,6 +43,7 @@ const ENGINE_COLORS: Record<EngineType, string> = {
   written: "oklch(0.78 0.16 80)",
   osce: "oklch(0.7 0.2 16)",
   library: "oklch(0.65 0.15 280)",
+  video: "oklch(0.68 0.18 195)",
 };
 
 export function Dashboard({
@@ -95,6 +98,7 @@ export function Dashboard({
 
   const [featuredArticles, setFeaturedArticles] = React.useState<Article[]>([]);
   const [articleCount, setArticleCount] = React.useState(0);
+  const [videoCount, setVideoCount] = React.useState(0);
 
   React.useEffect(() => {
     (async () => {
@@ -106,6 +110,16 @@ export function Dashboard({
           all.slice(0, 3).map((a) => loadArticleContent(a.file))
         );
         setFeaturedArticles(previews.filter(Boolean) as Article[]);
+      } catch {}
+    })();
+  }, []);
+
+  // Load video count (separate effect — independent of articles)
+  React.useEffect(() => {
+    (async () => {
+      try {
+        const videos = await listAllVideos();
+        setVideoCount(videos.length);
       } catch {}
     })();
   }, []);
@@ -250,6 +264,12 @@ export function Dashboard({
             title={t("dash.qa.library.title")}
             subtitle={t("dash.qa.library.sub", { n: articleCount || "…" })}
             onClick={() => onViewChange("library")}
+          />
+          <QuickAction
+            icon={PlayCircle}
+            title={t("dash.qa.videos.title")}
+            subtitle={t("dash.qa.videos.sub", { n: videoCount || "…" })}
+            onClick={() => onViewChange("videos")}
           />
           <QuickAction
             icon={BarChart3}

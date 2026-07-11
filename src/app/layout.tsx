@@ -94,14 +94,6 @@ export default function RootLayout({
             user's preferred UI language (incl. RTL Arabic) is applied without
             a flash of the default LTR English layout. */}
         <script dangerouslySetInnerHTML={{ __html: LANG_INIT_SCRIPT }} />
-        {/* Set data-disable-blur from localStorage BEFORE React hydrates so
-            blur effects are suppressed from first paint on old devices. */}
-        <script
-          dangerouslySetInnerHTML={{
-            __html:
-              "(function(){try{var v=localStorage.getItem('osler_disable_blur');if(v==='true'){document.documentElement.setAttribute('data-disable-blur','');}}catch(e){}})()",
-          }}
-        />
         {process.env.NODE_ENV !== "production" && (
           <script
             dangerouslySetInnerHTML={{

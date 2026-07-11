@@ -1,0 +1,82 @@
+{
+  "videos": [
+    {
+      "id": "ecg-basic-interpretation",
+      "title": "ECG Interpretation: Basics for Clinical Practice",
+      "description": "A practical walk-through of the 12-lead ECG — rhythm, rate, axis, intervals, and the common patterns every clinician should recognise on call. Includes worked examples of normal sinus rhythm, atrial fibrillation, and ST-elevation myocardial infarction.",
+      "specialty": "Cardiology",
+      "topic": "ECG Interpretation",
+      "duration": 1080,
+      "source": {
+        "type": "youtube",
+        "id": "xIZQiWcazb0"
+      },
+      "instructor": "Dr. Sarah Chen, MD",
+      "tags": ["ECG", "cardiology", "clinical skills", "emergency"],
+      "chapters": [
+        { "time": 0, "title": "Introduction" },
+        { "time": 45, "title": "Lead placement & axes" },
+        { "time": 180, "title": "Rate & rhythm" },
+        { "time": 360, "title": "Intervals (PR, QRS, QT)" },
+        { "time": 600, "title": "ST-segment changes" },
+        { "time": 840, "title": "Worked examples" }
+      ],
+      "relatedArticles": [
+        "cardiology/ischemic-syndrome/acute-coronary-syndrome.md",
+        "cardiology/ischemic-syndrome/st-elevation-mi.md"
+      ],
+      "lang": "en"
+    },
+    {
+      "id": "heart-failure-pathophysiology",
+      "title": "Heart Failure: Pathophysiology and Management",
+      "description": "Detailed review of systolic vs. diastolic heart failure, the renin-angiotensin-aldosterone system, and guideline-directed medical therapy (GDMT). Covers the four evidence-based drug classes and how to titrate them in clinic.",
+      "specialty": "Cardiology",
+      "topic": "Heart Failure",
+      "duration": 1620,
+      "source": {
+        "type": "youtube",
+        "id": "D_QxIP6Nbic"
+      },
+      "instructor": "Prof. James Okafor, MD, FRCP",
+      "tags": ["heart failure", "cardiology", "pharmacology", "GDMT"],
+      "chapters": [
+        { "time": 0, "title": "Definitions & epidemiology" },
+        { "time": 120, "title": "Pathophysiology" },
+        { "time": 360, "title": "Diagnosis & workup" },
+        { "time": 720, "title": "GDMT — the four pillars" },
+        { "time": 1200, "title": "Titrating therapy in clinic" }
+      ],
+      "relatedArticles": [
+        "cardiology/heart-failure/heart-failure-reduced-ef.md"
+      ],
+      "lang": "en"
+    },
+    {
+      "id": "acute-coronary-syndrome-management",
+      "title": "Acute Coronary Syndrome: ED Approach",
+      "description": "A step-by-step ED approach to the patient presenting with chest pain. Covers risk stratification (GRACE, HEART), the role of high-sensitivity troponin, and the STEMI vs. NSTEMI pathway. Includes a worked simulation of a cath-lab activation.",
+      "specialty": "Cardiology",
+      "topic": "Acute Coronary Syndrome",
+      "duration": 1350,
+      "source": {
+        "type": "youtube",
+        "id": "Rf8OQdujWfM"
+      },
+      "instructor": "Dr. Mei Lin, MD",
+      "tags": ["ACS", "STEMI", "NSTEMI", "emergency", "cardiology"],
+      "chapters": [
+        { "time": 0, "title": "Initial assessment" },
+        { "time": 90, "title": "12-lead ECG interpretation" },
+        { "time": 300, "title": "High-sensitivity troponin" },
+        { "time": 600, "title": "STEMI vs NSTEMI pathway" },
+        { "time": 960, "title": "Cath-lab activation" }
+      ],
+      "relatedArticles": [
+        "cardiology/ischemic-syndrome/acute-coronary-syndrome.md",
+        "cardiology/ischemic-syndrome/st-elevation-mi.md"
+      ],
+      "lang": "en"
+    }
+  ]
+}

@@ -707,7 +707,251 @@
     renderAll();
   }
 
-  /* ── Detect content type from parsed object ───────────── */
+  /* ── Video Editor ─────────────────────────────────────── */
+  /*
+   * The standout feature here is the YouTube URL/ID input: the admin can paste
+   * any of the following and we silently extract the 11-char video id:
+   *
+   *   https://www.youtube.com/watch?v=dQw4w9WgXcQ
+   *   https://youtu.be/dQw4w9WgXcQ
+   *   https://www.youtube.com/embed/dQw4w9WgXcQ
+   *   https://www.youtube.com/shorts/dQw4w9WgXcQ
+   *   https://m.youtube.com/watch?v=dQw4w9WgXcQ
+   *   dQw4w9WgXcQ                                  (raw 11-char id)
+   *
+   * The extracted id is written to `video.source.id`; the original pasted URL
+   * is never stored. The admin can also pick mp4 / hls and provide a direct
+   * URL instead.
+   */
+
+  function extractYouTubeId(input) {
+    if (!input) return "";
+    const s = String(input).trim();
+    if (!s) return "";
+    // Raw 11-char id (allow 8-32 for legacy / future-proofing)
+    if (/^[a-zA-Z0-9_-]{8,32}$/.test(s)) return s;
+    // youtu.be/<id>
+    const short = s.match(/youtu\.be\/([a-zA-Z0-9_-]{8,32})/);
+    if (short) return short[1];
+    // watch?v=<id>
+    const watch = s.match(/[?&]v=([a-zA-Z0-9_-]{8,32})/);
+    if (watch) return watch[1];
+    // /embed/<id> or /shorts/<id> or /v/<id>
+    const embed = s.match(/(?:embed|shorts|v)\/([a-zA-Z0-9_-]{8,32})/);
+    if (embed) return embed[1];
+    // Last resort: pull the longest base64-url-safe run
+    const fallback = s.match(/([a-zA-Z0-9_-]{11})/);
+    return fallback ? fallback[1] : "";
+  }
+
+  function youTubeThumbUrl(id) {
+    if (!id) return "";
+    return "https://i.ytimg.com/vi/" + id + "/hqdefault.jpg";
+  }
+
+  function renderVideoEditor(container, data, onChange) {
+    const videos = Array.isArray(data.videos) ? data.videos : [];
+    const wrap = el("div", { class: "fe-editor" });
+
+    function renderAll() {
+      wrap.innerHTML = "";
+      const listWrap = el("div", { class: "fe-list" });
+      listWrap.appendChild(el("div", { class: "fe-list-title" }, "Videos (" + videos.length + ")"));
+
+      videos.forEach((v, i) => {
+        const card = el("div", { class: "fe-item-card" });
+        const header = el("div", { class: "fe-item-header" });
+        header.appendChild(el("span", { class: "fe-item-title" }, "Video " + (i + 1) + ": " + (v.title || "")));
+        const hRight = el("div", { class: "fe-item-actions" });
+        hRight.appendChild(el("button", { class: "fe-icon-btn danger", type: "button", title: "Remove", onClick: () => {
+          videos.splice(i, 1);
+          onChange();
+          renderAll();
+        }}, ic(ICONS.remove)));
+        header.appendChild(hRight);
+        card.appendChild(header);
+
+        const body = el("div", { class: "fe-item-body" });
+
+        // Core fields
+        body.appendChild(fieldGroup("ID", textInput(v.id, "e.g. ecg-interpretation", (val) => { v.id = val; onChange(); })));
+        body.appendChild(fieldGroup("Title", textInput(v.title, "Video title", (val) => { v.title = val; onChange(); renderAll(); })));
+        body.appendChild(fieldGroup("Description", textArea(v.description, "Short summary of the video", (val) => { v.description = val; onChange(); })));
+        body.appendChild(rowGroup([
+          fieldGroup("Specialty", textInput(v.specialty, "e.g. Cardiology", (val) => { v.specialty = val; onChange(); })),
+          fieldGroup("Topic", textInput(v.topic, "e.g. ECG Interpretation", (val) => { v.topic = val; onChange(); })),
+        ]));
+        body.appendChild(rowGroup([
+          fieldGroup("Instructor", textInput(v.instructor, "e.g. Dr. Sarah Chen, MD", (val) => { v.instructor = val; onChange(); })),
+          fieldGroup("Duration (seconds)", numberInput(v.duration, (val) => { v.duration = val; onChange(); })),
+        ]));
+        body.appendChild(rowGroup([
+          fieldGroup("Language", selectInput(v.lang || "en", [
+            { value: "en", label: "English" },
+            { value: "ar", label: "العربية" },
+          ], (val) => { v.lang = val; onChange(); })),
+          fieldGroup("Custom thumbnail URL (optional)", textInput(v.thumbnail, "https://… — defaults to YouTube thumbnail", (val) => { v.thumbnail = val; onChange(); renderAll(); })),
+        ]));
+
+        // ── Source section ──────────────────────────────────
+        body.appendChild(el("div", { class: "fe-section-label" }, "Source"));
+
+        // Source type selector
+        if (!v.source) v.source = { type: "youtube", id: "" };
+        const source = v.source;
+
+        body.appendChild(fieldGroup("Source type", selectInput(source.type || "youtube", [
+          { value: "youtube", label: "YouTube (paste any video URL or ID)" },
+          { value: "mp4", label: "Direct MP4 (CDN or same-origin URL)" },
+          { value: "hls", label: "HLS stream (.m3u8 URL)" },
+        ], (val) => {
+          source.type = val;
+          // Clear irrelevant fields when switching
+          if (val === "youtube") { delete source.url; if (!source.id) source.id = ""; }
+          else { delete source.id; if (!source.url) source.url = ""; }
+          onChange();
+          renderAll();
+        })));
+
+        // YouTube URL/ID input — the magic field
+        if (source.type === "youtube") {
+          const ytWrap = el("div", { class: "fe-group" });
+          ytWrap.appendChild(makeLabel("YouTube URL or video ID"));
+          const inputRow = el("div", { class: "fe-row", style: { alignItems: "flex-end" } });
+          const inp = el("input", {
+            class: "fe-input",
+            type: "text",
+            value: source.id || "",
+            placeholder: "Paste https://www.youtube.com/watch?v=…  OR  https://youtu.be/…  OR  dQw4w9WgXcQ",
+            spellcheck: "false",
+          });
+          inp.style.flex = "1";
+
+          // Live extraction on every input event
+          const statusLine = el("div", { class: "fe-hint", style: { marginTop: "0.375rem" } });
+
+          function updateYtStatus() {
+            statusLine.innerHTML = "";
+            const id = source.id || "";
+            if (!id) {
+              statusLine.appendChild(el("span", { style: { color: "var(--text-dim)" } }, "Paste a YouTube link above — the video ID is extracted automatically."));
+              return;
+            }
+            // Show extracted id + thumbnail preview
+            statusLine.appendChild(el("span", { style: { color: "var(--success)", marginRight: "0.5rem" } }, "✓ ID: " + id));
+            // Thumbnail preview
+            const thumb = el("img", {
+              src: youTubeThumbUrl(id),
+              alt: "Thumbnail preview",
+              style: { height: "60px", borderRadius: "0.25rem", verticalAlign: "middle", border: "1px solid var(--border)", marginTop: "0.25rem", display: "block" },
+            });
+            thumb.addEventListener("error", () => { thumb.style.display = "none"; });
+            statusLine.appendChild(thumb);
+          }
+
+          inp.addEventListener("input", () => {
+            const extracted = extractYouTubeId(inp.value);
+            // If the admin pasted a URL, replace the input with the extracted id
+            // (so the field always shows just the id — never the URL).
+            if (extracted && extracted !== inp.value) {
+              inp.value = extracted;
+            }
+            source.id = extracted || inp.value.trim();
+            onChange();
+            updateYtStatus();
+          });
+          inp.addEventListener("paste", (e) => {
+            // Defer to let the paste land, then extract
+            setTimeout(() => {
+              const extracted = extractYouTubeId(inp.value);
+              if (extracted && extracted !== inp.value) {
+                inp.value = extracted;
+                source.id = extracted;
+                onChange();
+                updateYtStatus();
+              }
+            }, 0);
+          });
+
+          inputRow.appendChild(inp);
+          ytWrap.appendChild(inputRow);
+          ytWrap.appendChild(statusLine);
+          updateYtStatus();
+          body.appendChild(ytWrap);
+        } else {
+          // mp4 / hls — direct URL field
+          body.appendChild(fieldGroup("Stream URL", textInput(source.url || "", "https://cdn.example.com/video.mp4", (val) => {
+            source.url = val;
+            onChange();
+          })));
+        }
+
+        // ── Chapters ────────────────────────────────────────
+        body.appendChild(el("div", { class: "fe-section-label" }, "Chapters (optional)"));
+        const chapters = Array.isArray(v.chapters) ? v.chapters : [];
+        const chWrap = el("div", { class: "fe-nested-list" });
+        chapters.forEach((c, ci) => {
+          const chCard = el("div", { class: "fe-item-card fe-item-card-sm" });
+          const chBody = el("div", { class: "fe-item-body" });
+          chBody.appendChild(rowGroup([
+            fieldGroup("Time (seconds)", numberInput(c.time, (val) => { c.time = val; onChange(); })),
+            fieldGroup("Title", textInput(c.title, "Chapter title", (val) => { c.title = val; onChange(); })),
+          ]));
+          const chRight = el("div", { class: "fe-item-actions" });
+          chRight.appendChild(el("button", { class: "fe-icon-btn danger", type: "button", onClick: () => {
+            chapters.splice(ci, 1);
+            v.chapters = [...chapters];
+            onChange();
+            renderAll();
+          }}, ic(ICONS.remove)));
+          chCard.appendChild(chRight);
+          chCard.appendChild(chBody);
+          chWrap.appendChild(chCard);
+        });
+        const addCh = el("button", { class: "fe-btn-add", type: "button", onClick: () => {
+          const lastTime = chapters.length ? chapters[chapters.length - 1].time : 0;
+          chapters.push({ time: (lastTime || 0) + 60, title: "" });
+          v.chapters = [...chapters];
+          onChange();
+          renderAll();
+        }}, ic(ICONS.add, 12), " Add Chapter");
+        chWrap.appendChild(addCh);
+        body.appendChild(chWrap);
+
+        // ── Tags & Related articles ─────────────────────────
+        body.appendChild(el("div", { class: "fe-section-label" }, "Tags & Related articles"));
+        body.appendChild(fieldGroup("Tags", tagList(v.tags, (val) => { v.tags = val; onChange(); })));
+        body.appendChild(fieldGroup("Related articles (paths under public/osler-content/library/)", tagList(v.relatedArticles, (val) => { v.relatedArticles = val; onChange(); })));
+
+        card.appendChild(body);
+        listWrap.appendChild(card);
+      });
+
+      const addBtn = el("button", { class: "fe-btn-add fe-btn-add-wide", type: "button", onClick: () => {
+        videos.push({
+          id: "video-" + String(Date.now()).slice(-6),
+          title: "",
+          description: "",
+          specialty: "",
+          topic: "",
+          duration: null,
+          source: { type: "youtube", id: "" },
+          instructor: "",
+          tags: [],
+          chapters: [],
+          relatedArticles: [],
+          lang: "en",
+        });
+        onChange();
+        renderAll();
+      }}, ic(ICONS.add, 14), " Add Video");
+      listWrap.appendChild(addBtn);
+      wrap.appendChild(listWrap);
+    }
+
+    container.appendChild(wrap);
+    renderAll();
+  }
 
   function detectType(parsed) {
     if (!parsed || typeof parsed !== "object") return null;
@@ -718,8 +962,9 @@
     if (parsed.passages) return "bank";
     if (parsed.prompts) return "written";
     if (parsed.stations) return "osce";
+    if (parsed.videos) return "video";
     if (parsed.cards) return "flashcard";
-    if (parsed.type && ["quiz", "bank", "flashcard", "written", "osce"].includes(parsed.type)) return parsed.type;
+    if (parsed.type && ["quiz", "bank", "flashcard", "written", "osce", "video"].includes(parsed.type)) return parsed.type;
     return null;
   }
 
@@ -752,6 +997,9 @@
         break;
       case "osce":
         renderOsceEditor(container, content, onChange);
+        break;
+      case "video":
+        renderVideoEditor(container, content, onChange);
         break;
     }
 

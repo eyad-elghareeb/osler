@@ -9,8 +9,8 @@
   let pollTimer = null;
 
   async function loadCategories() {
-    // Try reading each of the four known categories. If missing, list as "not generated".
-    const known = ["qbank", "library", "flashcard", "osce"];
+    // Try reading each of the five known categories. If missing, list as "not generated".
+    const known = ["qbank", "library", "flashcard", "osce", "videos"];
     const out = [];
     for (const c of known) {
       try {

@@ -25,6 +25,7 @@ const FOLDER_TYPE_MAP = {
   flashcard: "flashcard",
   osce: "osce",
   library: "library",
+  videos: "video",
 };
 
 // Data key → EngineType inference for qbank
@@ -34,6 +35,7 @@ const DATA_TYPE_KEYS = [
   { key: "prompts", type: "written" },
   { key: "questions", type: "quiz" },
   { key: "cards", type: "flashcard" },
+  { key: "videos", type: "video" },
 ];
 
 /**

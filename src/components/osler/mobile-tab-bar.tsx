@@ -9,6 +9,7 @@ import {
   User as UserIcon,
   Cog,
   Stethoscope,
+  PlayCircle,
 } from "lucide-react";
 import type { OslerView } from "./app-shell";
 import { useI18n } from "./i18n-provider";
@@ -22,7 +23,7 @@ interface MobileTabBarProps {
 
 interface TabItem {
   id: OslerView;
-  labelKey: "nav.dashboard" | "nav.qbank" | "nav.library" | "nav.flashcards" | "nav.profile" | "nav.osce";
+  labelKey: "nav.dashboard" | "nav.qbank" | "nav.library" | "nav.flashcards" | "nav.profile" | "nav.osce" | "nav.videos";
   icon: React.ComponentType<{ className?: string }>;
 }
 
@@ -32,6 +33,7 @@ const TABS: TabItem[] = [
   { id: "library", labelKey: "nav.library", icon: BookOpen },
   { id: "flashcards", labelKey: "nav.flashcards", icon: Layers },
   { id: "osce", labelKey: "nav.osce", icon: Stethoscope },
+  { id: "videos", labelKey: "nav.videos", icon: PlayCircle },
   { id: "profile", labelKey: "nav.profile", icon: UserIcon },
 ];
 

@@ -1,0 +1,53 @@
+{
+  "type": "video",
+  "items": [
+    {
+      "uid": "video-cardiology",
+      "title": "Cardiology",
+      "type": "video",
+      "path": "cardiology/",
+      "files": [],
+      "items": [
+        {
+          "uid": "video-cardiology-clinical-skills",
+          "title": "Clinical Skills",
+          "type": "video",
+          "path": "cardiology/clinical-skills/",
+          "files": [
+            "videos.json"
+          ],
+          "items": []
+        },
+        {
+          "uid": "video-cardiology-lectures",
+          "title": "Lectures",
+          "type": "video",
+          "path": "cardiology/lectures/",
+          "files": [
+            "videos.json"
+          ],
+          "items": []
+        }
+      ]
+    },
+    {
+      "uid": "video-neurology",
+      "title": "Neurology",
+      "type": "video",
+      "path": "neurology/",
+      "files": [],
+      "items": [
+        {
+          "uid": "video-neurology-stroke",
+          "title": "Stroke",
+          "type": "video",
+          "path": "neurology/stroke/",
+          "files": [
+            "videos.json"
+          ],
+          "items": []
+        }
+      ]
+    }
+  ]
+}

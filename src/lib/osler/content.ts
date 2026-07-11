@@ -21,6 +21,7 @@ import type {
   CategoryManifest,
   Flashcard,
   FlashcardSubdeck,
+  VideoContent,
 } from "./types";
 
 const BASE = "/osler-content";
@@ -34,6 +35,7 @@ const CATEGORY_PATHS: Record<string, string> = {
   flashcard: "flashcard",
   osce: "osce",
   library: "library",
+  video: "videos",
 };
 
 function categoryFolder(type: EngineType): string {
@@ -143,6 +145,8 @@ function buildContent(node: ContentTreeNode, data: Record<string, unknown[]>): A
       return { meta, type: "written", prompts: data.prompts ?? [] } as WrittenContent;
     case "osce":
       return { meta, type: "osce", stations: data.stations ?? [] } as OsceContent;
+    case "video":
+      return { meta, type: "video", videos: data.videos ?? [] } as VideoContent;
     default:
       throw new Error(`Unknown content type: ${node.type}`);
   }
@@ -158,7 +162,7 @@ export async function loadAllContent(): Promise<{
   items: Array<{ node: ContentTreeNode; content: AnyContent | null }>;
   trees: Record<string, ContentTreeNode[]>;
 }> {
-  const types: EngineType[] = ["quiz", "bank", "written", "flashcard", "osce"];
+  const types: EngineType[] = ["quiz", "bank", "written", "flashcard", "osce", "video"];
   const folders = new Set(types.map(categoryFolder));
   const allLeaves: ContentTreeNode[] = [];
   const trees: Record<string, ContentTreeNode[]> = {};
@@ -168,6 +172,7 @@ export async function loadAllContent(): Promise<{
       let engineType: EngineType;
       if (folder === "flashcard") engineType = "flashcard";
       else if (folder === "osce") engineType = "osce";
+      else if (folder === "videos") engineType = "video";
       else engineType = "quiz";
 
       const res = await fetch(`${BASE}/${folder}/manifest.json`, { cache: "no-store" });
@@ -199,7 +204,7 @@ export async function loadAllContent(): Promise<{
  * Load a single content pack by its node uid.
  */
 export async function loadContentByUid(uid: string): Promise<AnyContent> {
-  const types: EngineType[] = ["quiz", "bank", "written", "flashcard", "osce"];
+  const types: EngineType[] = ["quiz", "bank", "written", "flashcard", "osce", "video"];
   const folders = new Set(types.map(categoryFolder));
 
   for (const folder of folders) {
@@ -266,6 +271,9 @@ export function isWritten(c: AnyContent): c is WrittenContent {
 export function isOsce(c: AnyContent): c is OsceContent {
   return c.type === "osce";
 }
+export function isVideo(c: AnyContent): c is VideoContent {
+  return c.type === "video";
+}
 
 /* ── Engine metadata helpers ────────────────────────────────────────── */
 export const ENGINE_META: Record<
@@ -293,4 +301,10 @@ export const ENGINE_META: Record<
   },
   osce: { label: "OSCE", singular: "OSCE", color: "oklch(0.7 0.2 16)", icon: "activity" },
   library: { label: "Library", singular: "Article", color: "oklch(0.65 0.15 280)", icon: "book-open" },
+  video: {
+    label: "Videos",
+    singular: "Video",
+    color: "oklch(0.68 0.18 195)",
+    icon: "video",
+  },
 };

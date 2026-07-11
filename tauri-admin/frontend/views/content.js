@@ -111,6 +111,7 @@
       if (parsed.passages) return "bank";
       if (parsed.prompts) return "written";
       if (parsed.stations) return "osce";
+      if (parsed.videos) return "video";
       if (parsed.cards) return "flashcard";
     } catch {}
     return null;

@@ -8,6 +8,7 @@ import { Library } from "@/components/osler/library";
 import { QBankStudio } from "@/components/osler/qbank-studio";
 import { FlashcardStudio } from "@/components/osler/flashcard-studio";
 import { OsceStudio } from "@/components/osler/osce-studio";
+import { VideosStudio } from "@/components/osler/videos-studio";
 import { AiAssistant } from "@/components/osler/ai-assistant";
 import { Profile } from "@/components/osler/profile";
 import { Settings } from "@/components/osler/settings";
@@ -148,6 +149,10 @@ export default function Home() {
           onExit={() => { handleExit(); setView("dashboard"); }}
           onOpenPack={openPack}
         />
+      ) : null}
+
+      {view === "videos" ? (
+        <VideosStudio onOpenArticle={openArticle} />
       ) : null}
 
       {view === "profile" ? <Profile username={username} onViewChange={setView} /> : null}

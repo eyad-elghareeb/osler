@@ -16,6 +16,7 @@ import {
   Search,
   Settings as SettingsIcon,
   Stethoscope,
+  PlayCircle,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -45,6 +46,7 @@ export type OslerView =
   | "qbank"
   | "flashcards"
   | "osce"
+  | "videos"
   | "profile"
   | "settings";
 
@@ -218,6 +220,14 @@ export function AppShell({
               onClick={() => onViewChange("osce")}
               icon={Stethoscope}
               label={t("nav.osce")}
+              layoutId="nav-active"
+            />
+
+            <NavButton
+              active={view === "videos"}
+              onClick={() => onViewChange("videos")}
+              icon={PlayCircle}
+              label={t("nav.videos")}
               layoutId="nav-active"
             />
           </nav>
