@@ -26,10 +26,8 @@ import {
   Calculator as CalcIcon,
   FlaskConical,
   BookOpen,
-  StickyNote,
-  Type,
-  Minus,
-  Plus as PlusIcon,
+  NotebookPen,
+  Sliders,
   Trash2,
   Eye,
   CheckCircle2,
@@ -65,13 +63,13 @@ import {
   storage,
   sessions,
   highlights,
-  stickyNotes,
   writtenDrafts,
+  quizSettings as quizSettingsStore,
   type SavedSession,
   type HighlightItem,
-  type StickyNoteData,
   type WrittenDraft,
   type WrittenEvaluation,
+  type QuizSettings,
 } from "@/lib/osler/storage";
 import { listAllArticles } from "@/lib/osler/articles";
 import type { Article, ArticleMeta } from "@/lib/osler/articles";
@@ -84,16 +82,28 @@ import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { LabValuesSidebar } from "./lab-values";
 import { CalculatorModal } from "./calculator";
-import { StickyNoteCard, STICKY_COLORS } from "./sticky-note";
 import { FloatingArticleModal } from "./article-modal";
 import { AiAssistant } from "./ai-assistant";
 import { HighlightedContent } from "./highlighted-content";
 import { HighlighterToolbar } from "./highlighter-toolbar";
+import { QuizSettingsPanel } from "./quiz-settings-panel";
+import { NotesPanel } from "./notes-panel";
 import { useShortcutBindings, useShortcutListener } from "@/hooks/use-shortcuts";
 import { defaultBindings } from "@/lib/osler/shortcuts";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { useQuizSettings } from "@/hooks/use-quiz-settings";
 import { setImmersiveMode } from "./immersive-mode";
 import { gradeWithAI, createManualEvaluation } from "@/lib/osler/grading";
 import { useI18n } from "./i18n-provider";
@@ -161,11 +171,6 @@ interface SessionQuestion {
   children?: SessionQuestionChild[];
 }
 
-interface TextControls {
-  fontSize: number;
-  lineHeight: number;
-}
-
 export function QBankStudio({
   activeItem,
   activeContent,
@@ -178,12 +183,16 @@ export function QBankStudio({
   const [homeTab, setHomeTab] = React.useState<HomeTab>("content");
   const [, force] = React.useReducer((x) => x + 1, 0);
   const pendingQuestionLimitRef = React.useRef(0);
+  const { t } = useI18n();
 
-  // Tools state (calculator, lab values, article modal, AI)
+  // Tools state (calculator, lab values, article modal, AI, quiz settings, notes)
   const [calculatorOpen, setCalculatorOpen] = React.useState(false);
   const [labValuesOpen, setLabValuesOpen] = React.useState(false);
   const [articleModalId, setArticleModalId] = React.useState<string | null>(null);
   const [aiAssistantOpen, setAiAssistantOpen] = React.useState(false);
+  const [quizSettingsOpen, setQuizSettingsOpen] = React.useState(false);
+  const [notesOpen, setNotesOpen] = React.useState(false);
+  const [exitConfirmOpen, setExitConfirmOpen] = React.useState(false);
   const [navOpenMobile, setNavOpenMobile] = React.useState(false);
   const [articleList, setArticleList] = React.useState<ArticleMeta[]>([]);
 
@@ -262,7 +271,6 @@ export function QBankStudio({
     if (activeItem && activeContent) {
       storage.clearPack(activeItem.uid);
       highlights.clearAll(activeItem.uid);
-      stickyNotes.clearAll(activeItem.uid);
       writtenDrafts.clear(activeItem.uid);
       startSession(activeItem, activeContent);
     }
@@ -273,6 +281,16 @@ export function QBankStudio({
     setSession(null);
     setImmersiveMode(false);
     onExit();
+  };
+
+  // Request exit confirmation — opens a modal when there is an in-progress
+  // session; otherwise just exits immediately.
+  const requestExit = () => {
+    if (mode === "quiz" && session) {
+      setExitConfirmOpen(true);
+    } else {
+      exitToHome();
+    }
   };
 
   // Live remaining time for timed mode is owned by the isolated <QBankTimer>
@@ -304,18 +322,48 @@ export function QBankStudio({
           calculatorOpen={calculatorOpen}
           labValuesOpen={labValuesOpen}
           aiAssistantOpen={aiAssistantOpen}
+          quizSettingsOpen={quizSettingsOpen}
+          notesOpen={notesOpen}
           navOpenMobile={navOpenMobile}
           articleList={articleList}
           onToggleCalculator={() => setCalculatorOpen((o) => !o)}
           onToggleLabValues={() => setLabValuesOpen((o) => !o)}
           onToggleAiAssistant={() => setAiAssistantOpen((o) => !o)}
+          onToggleQuizSettings={() => setQuizSettingsOpen((o) => !o)}
+          onToggleNotes={() => setNotesOpen((o) => !o)}
           onToggleNavMobile={() => setNavOpenMobile((o) => !o)}
           onOpenArticle={(id) => setArticleModalId(id)}
+          onExitRequest={requestExit}
           onSelect={(idx) => {
             if (session.revealed[session.current]) return;
-            setSession((s) =>
-              s ? { ...s, answers: { ...s.answers, [s.current]: idx } } : s
-            );
+            const q = session.questions[session.current];
+            const isMCQ = !!q && q.correct >= 0;
+            const settings = quizSettingsStore.getSync();
+            const willAutoSubmit =
+              settings.autoSubmit && session.mode === "tutor" && isMCQ;
+
+            setSession((s) => {
+              if (!s) return s;
+              const next = { ...s, answers: { ...s.answers, [s.current]: idx } };
+              if (willAutoSubmit && !next.revealed[s.current]) {
+                next.revealed = { ...next.revealed, [s.current]: true };
+              }
+              return next;
+            });
+
+            if (willAutoSubmit && q && isMCQ) {
+              // Record progress for the auto-submitted answer.
+              const correct = idx === q.correct;
+              storage.recordAnswer(
+                activeItem!.uid,
+                q.id,
+                session.engine,
+                idx,
+                correct,
+                !!session.flagged[session.current]
+              );
+              force();
+            }
           }}
           onToggleStrikethrough={(idx) => {
             setSession((s) => {
@@ -458,7 +506,7 @@ export function QBankStudio({
               };
             });
           }}
-          onGoHome={exitToHome}
+          onGoHome={requestExit}
           onFinish={endSession}
         />
         {/* Floating tools */}
@@ -494,6 +542,38 @@ export function QBankStudio({
               : undefined
           }
         />
+        <QuizSettingsPanel
+          open={quizSettingsOpen}
+          onClose={() => setQuizSettingsOpen(false)}
+          tone="header"
+          previewStem={session.questions[session.current]?.stem?.slice(0, 220)}
+          previewChoice={session.questions[session.current]?.choices?.[0]}
+        />
+        <NotesPanel
+          open={notesOpen}
+          onClose={() => setNotesOpen(false)}
+          packUid={activeItem?.uid}
+          packTitle={activeItem?.title}
+          currentQuestionIdx={session.current}
+        />
+        <AlertDialog open={exitConfirmOpen} onOpenChange={setExitConfirmOpen}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>{t("qbank.exit.title")}</AlertDialogTitle>
+              <AlertDialogDescription>
+                {t("qbank.exit.body")}
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>{t("qbank.exit.stay")}</AlertDialogCancel>
+              <AlertDialogAction asChild>
+                <Button variant="destructive" onClick={exitToHome}>
+                  {t("qbank.exit.confirm")}
+                </Button>
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </>
     );
   }
@@ -1652,11 +1732,15 @@ function QuizView({
   calculatorOpen,
   labValuesOpen,
   aiAssistantOpen,
+  quizSettingsOpen,
+  notesOpen,
   navOpenMobile,
   articleList,
   onToggleCalculator,
   onToggleLabValues,
   onToggleAiAssistant,
+  onToggleQuizSettings,
+  onToggleNotes,
   onToggleNavMobile,
   onOpenArticle,
   onSelect,
@@ -1674,17 +1758,22 @@ function QuizView({
   onGoHome,
   onFinish,
   onTimeUp,
+  onExitRequest,
 }: {
   session: SessionData;
   activeItem: ContentTreeNode;
   calculatorOpen: boolean;
   labValuesOpen: boolean;
   aiAssistantOpen: boolean;
+  quizSettingsOpen: boolean;
+  notesOpen: boolean;
   navOpenMobile: boolean;
   articleList: ArticleMeta[];
   onToggleCalculator: () => void;
   onToggleLabValues: () => void;
   onToggleAiAssistant: () => void;
+  onToggleQuizSettings: () => void;
+  onToggleNotes: () => void;
   onToggleNavMobile: () => void;
   onOpenArticle: (id: string) => void;
   onSelect: (idx: number) => void;
@@ -1702,6 +1791,7 @@ function QuizView({
   onRetry: () => void;
   onGoHome: () => void;
   onFinish: () => void;
+  onExitRequest: () => void;
 }) {
   const q = session.questions[session.current];
   const isLast = session.current >= session.questions.length - 1;
@@ -1710,7 +1800,7 @@ function QuizView({
   const isMCQ = q ? q.correct >= 0 : false;
   const isPausedOrLocked = session.examPaused;
   const engineLabel = ENGINE_META[session.engine].label;
-  const { t } = useI18n();
+  const { t, rtl } = useI18n();
 
   // Highlighter state — a single "tool": null = off, "eraser" = erase, or a color key
   const [tool, setTool] = React.useState<string | null>(null);
@@ -1719,16 +1809,75 @@ function QuizView({
   const eraserMode = tool === ERASER_TOOL;
   const highlightColor = tool !== null && tool !== ERASER_TOOL ? tool : color;
   const [hlVersion, setHlVersion] = React.useState(0);
-  const [textSettingsOpen, setTextSettingsOpen] = React.useState(false);
-  const [textControls, setTextControls] = React.useState<TextControls>({
-    fontSize: 15,
-    lineHeight: 1.7,
-  });
+  // Live quiz settings (font, weight, line height, auto-submit, layout, alignment)
+  const { settings: quizSettingsState } = useQuizSettings();
   const [articleSearchOpen, setArticleSearchOpen] = React.useState(false);
   const isMobile = useIsMobile();
   const [mobileTutorTab, setMobileTutorTab] = React.useState<"question" | "answer">("question");
   const [showShortcuts, setShowShortcuts] = React.useState(false);
   const bindings = useShortcutBindings();
+
+  // Map settings → CSS
+  const fontFamilyCss = React.useMemo(() => {
+    switch (quizSettingsState.fontFamily) {
+      case "serif": return "Lora, Georgia, serif";
+      case "sans": return "Inter, system-ui, -apple-system, sans-serif";
+      case "mono": return "ui-monospace, SFMono-Regular, Menlo, monospace";
+      case "system":
+      default: return "inherit";
+    }
+  }, [quizSettingsState.fontFamily]);
+
+  // Stem typography. NOTE: `textAlign` is intentionally NOT set here —
+  // alignment applies to the question BLOCK (the stem container and the
+  // choices container), not to the inline text. The block alignment is
+  // applied via `alignClass` below (margin-auto + max-width trick).
+  const stemStyle = React.useMemo<React.CSSProperties>(
+    () => ({
+      fontFamily: fontFamilyCss,
+      fontSize: `${quizSettingsState.fontSize}px`,
+      fontWeight: quizSettingsState.fontWeight,
+      lineHeight: quizSettingsState.lineHeight,
+    }),
+    [fontFamilyCss, quizSettingsState.fontSize, quizSettingsState.fontWeight, quizSettingsState.lineHeight]
+  );
+
+  const choiceStyle = React.useMemo<React.CSSProperties | undefined>(
+    () => quizSettingsState.textAffectsChoices
+      ? {
+          fontFamily: fontFamilyCss,
+          fontSize: `${quizSettingsState.fontSize}px`,
+          fontWeight: quizSettingsState.fontWeight,
+          lineHeight: quizSettingsState.lineHeight,
+        }
+      : undefined,
+    [fontFamilyCss, quizSettingsState.fontSize, quizSettingsState.fontWeight, quizSettingsState.lineHeight, quizSettingsState.textAffectsChoices]
+  );
+
+  // Block-level alignment for the ENTIRE content area (question + choices).
+  // Applied to the outer content wrapper so the block positions relative to
+  // the full viewport / column, not a nested max-width sub-container.
+  //
+  // - left:   content fills available width (with a generous max for readability)
+  // - center: content block capped at max-w-3xl, centered with mx-auto
+  // - right:  content block capped at max-w-3xl, pushed to the inline-end
+  const contentAlignClass = React.useMemo(() => {
+    switch (quizSettingsState.questionAlign) {
+      case "center":
+        return "mx-auto max-w-3xl";
+      case "right":
+        return rtl ? "me-auto max-w-3xl" : "ms-auto max-w-3xl";
+      case "left":
+      default:
+        // Left = fill width but cap at a generous max for readability
+        return "max-w-5xl";
+    }
+  }, [quizSettingsState.questionAlign, rtl]);
+
+  // Resolve effective explanation layout. Split mode shows the explanation
+  // in a separate column (side-by-side on desktop, stacked with tabs on mobile).
+  // Continuous mode renders the explanation below the question in a single scroll.
+  const useSplitExplanation = quizSettingsState.explanationMode === "split";
 
   // Written AI grading state
   const [writtenAIGrading, setWrittenAIGrading] = React.useState<string | null>(null);
@@ -1804,20 +1953,12 @@ function QuizView({
     [onWrittenDraftChange],
   );
 
-  // Sticky notes
-  const [notes, setNotes] = React.useState<StickyNoteData[]>([]);
-  const noteColorIdx = React.useRef(0);
+  // Notes panel state — replaced sticky-note floating cards. Notes are
+  // persisted in IndexedDB and shared across the profile page.
   const questionBodyRef = React.useRef<HTMLElement>(null);
 
-  const tc = textControls;
-  const stemStyle = React.useMemo(
-    () => ({ fontSize: `${tc.fontSize}px`, lineHeight: tc.lineHeight }),
-    [tc.fontSize, tc.lineHeight]
-  );
-
-  // Load highlights + sticky notes for current question
+  // Reset mobile tutor tab when changing questions
   React.useEffect(() => {
-    setNotes(stickyNotes.get(activeItem.uid, session.current));
     setMobileTutorTab("question");
   }, [activeItem.uid, session.current]);
 
@@ -1903,17 +2044,10 @@ function QuizView({
   }, [eraserMode]);
 
   const addStickyNote = React.useCallback(() => {
-    const note: StickyNoteData = {
-      id: crypto.randomUUID(),
-      x: 100 + Math.random() * 200,
-      y: 100 + Math.random() * 100,
-      text: "",
-      color: STICKY_COLORS[noteColorIdx.current % STICKY_COLORS.length],
-    };
-    noteColorIdx.current++;
-    stickyNotes.add(activeItem.uid, session.current, note);
-    setNotes(stickyNotes.get(activeItem.uid, session.current));
-  }, [activeItem.uid, session.current]);
+    // Legacy sticky-note hotkey is repurposed: it now toggles the notes
+    // panel so the user can write a markdown note for the current question.
+    onToggleNotes();
+  }, [onToggleNotes]);
 
   // Keyboard shortcuts
   React.useEffect(() => {
@@ -1926,7 +2060,8 @@ function QuizView({
       if (e.key === "a" && !e.shiftKey && !e.ctrlKey && !e.metaKey) { e.preventDefault(); onToggleAiAssistant(); }
       if (e.key === "h" || e.key === "H") { e.preventDefault(); setTool((t) => (t && t !== ERASER_TOOL ? null : color)); }
       if (e.key === "e" || e.key === "E") { e.preventDefault(); setTool((t) => (t === ERASER_TOOL ? null : ERASER_TOOL)); }
-      if (e.key === "n" || e.key === "N") { e.preventDefault(); addStickyNote(); }
+      if (e.key === "n" || e.key === "N") { e.preventDefault(); onToggleNotes(); }
+      if (e.key === "," && !e.shiftKey && !e.ctrlKey && !e.metaKey) { e.preventDefault(); onToggleQuizSettings(); }
       if (isMCQ && !submitted) {
         const num = parseInt(e.key);
         if (num >= 1 && num <= q.choices.length) {
@@ -1943,22 +2078,7 @@ function QuizView({
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [q, isMCQ, submitted, selected, onToggleFlag, onPrev, onNext, onSelect, onSubmit, onToggleAiAssistant, setTool, addStickyNote]);
-
-  const updateNote = (id: string, text: string) => {
-    stickyNotes.update(activeItem.uid, session.current, id, text);
-    setNotes(stickyNotes.get(activeItem.uid, session.current));
-  };
-
-  const moveNote = (id: string, x: number, y: number) => {
-    stickyNotes.move(activeItem.uid, session.current, id, x, y);
-    setNotes(stickyNotes.get(activeItem.uid, session.current));
-  };
-
-  const deleteNote = (id: string) => {
-    stickyNotes.delete(activeItem.uid, session.current, id);
-    setNotes(stickyNotes.get(activeItem.uid, session.current));
-  };
+  }, [q, isMCQ, submitted, selected, onToggleFlag, onPrev, onNext, onSelect, onSubmit, onToggleAiAssistant, onToggleNotes, onToggleQuizSettings, setTool]);
 
   if (!q) return null;
 
@@ -1997,18 +2117,14 @@ function QuizView({
     ? Math.round((answeredCount / session.questions.length) * 100)
     : 0;
 
-  const onTextControlChange = (key: keyof TextControls, value: number) => {
-    setTextControls((c) => ({ ...c, [key]: value }));
-  };
-
   return (
     <div className="fixed inset-0 z-50 bg-background flex flex-col safe-screen">
       {/* ── Top bar (UWorld navy) ─────────────────────────────────────────── */}
       <header
-        className="h-12 flex items-center pl-2 sm:pl-4 pr-0 gap-2 shrink-0 border-b border-primary-foreground/10 safe-pt"
+        className="h-12 flex items-center pl-3 sm:pl-4 pr-1 sm:pr-2 gap-1.5 sm:gap-2 shrink-0 border-b border-primary-foreground/10 safe-pt"
         style={{ backgroundColor: "var(--primary)", color: "var(--primary-foreground)" }}
       >
-        <button onClick={onGoHome} className="flex items-center gap-2 hover:opacity-80 transition-opacity shrink-0 medos-touch-target" title={t("qbank.session.backToHub")}>
+        <button onClick={onExitRequest} className="flex items-center gap-2 hover:opacity-80 transition-opacity shrink-0 medos-touch-target" title={t("qbank.session.backToHub")}>
           <div className="size-7 rounded-lg bg-primary-foreground/15 flex items-center justify-center">
             <GraduationCap className="size-4" />
           </div>
@@ -2037,86 +2153,20 @@ function QuizView({
           </div>
         </div>
 
-        {/* Text settings popover */}
-        <Popover open={textSettingsOpen} onOpenChange={setTextSettingsOpen}>
-          <PopoverTrigger asChild>
-            <button
-              className="size-7 rounded-lg bg-primary-foreground/15 hover:bg-primary-foreground/25 flex items-center justify-center transition-colors"
-              title="Text settings"
-            >
-              <Type className="size-3.5" />
-            </button>
-          </PopoverTrigger>
-          <PopoverContent align="end" className="w-auto p-3">
-            <div className="flex flex-col gap-3">
-              <div className="flex items-center justify-between">
-                <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
-                  Text settings
-                </span>
-              </div>
-              <div className="flex flex-col gap-2.5">
-                <div className="flex items-center gap-2">
-                  <span className="text-[11px] text-muted-foreground w-16">Font size</span>
-                  <button
-                    onClick={() => onTextControlChange("fontSize", Math.max(12, tc.fontSize - 1))}
-                    className="size-6 rounded bg-primary-foreground/15 hover:bg-primary-foreground/25 flex items-center justify-center transition-colors"
-                  >
-                    <Minus className="size-3" />
-                  </button>
-                  <span className="text-xs font-mono tabular-nums w-5 text-center">{tc.fontSize}</span>
-                  <button
-                    onClick={() => onTextControlChange("fontSize", Math.min(22, tc.fontSize + 1))}
-                    className="size-6 rounded bg-primary-foreground/15 hover:bg-primary-foreground/25 flex items-center justify-center transition-colors"
-                  >
-                    <PlusIcon className="size-3" />
-                  </button>
-                  <div className="flex items-center gap-1 ml-1">
-                    {[13, 15, 17, 19, 21].map((s) => (
-                      <button
-                        key={s}
-                        onClick={() => onTextControlChange("fontSize", s)}
-                        className={`size-5 rounded text-[10px] font-mono transition-colors ${
-                          tc.fontSize === s ? "bg-primary text-primary-foreground" : "bg-primary-foreground/10 hover:bg-primary-foreground/20"
-                        }`}
-                      >
-                        {s}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="text-[11px] text-muted-foreground w-16">Line height</span>
-                  <button
-                    onClick={() => onTextControlChange("lineHeight", Math.max(1.3, +(tc.lineHeight - 0.2).toFixed(1)))}
-                    className="size-6 rounded bg-primary-foreground/15 hover:bg-primary-foreground/25 flex items-center justify-center transition-colors"
-                  >
-                    <Minus className="size-3" />
-                  </button>
-                  <span className="text-xs font-mono tabular-nums w-5 text-center">{tc.lineHeight}</span>
-                  <button
-                    onClick={() => onTextControlChange("lineHeight", Math.min(2.5, +(tc.lineHeight + 0.2).toFixed(1)))}
-                    className="size-6 rounded bg-primary-foreground/15 hover:bg-primary-foreground/25 flex items-center justify-center transition-colors"
-                  >
-                    <PlusIcon className="size-3" />
-                  </button>
-                  <div className="flex items-center gap-1 ml-1">
-                    {[1.3, 1.5, 1.7, 2.0, 2.3].map((lh) => (
-                      <button
-                        key={lh}
-                        onClick={() => onTextControlChange("lineHeight", lh)}
-                        className={`size-5 rounded text-[10px] font-mono transition-colors ${
-                          tc.lineHeight === lh ? "bg-primary text-primary-foreground" : "bg-primary-foreground/10 hover:bg-primary-foreground/20"
-                        }`}
-                      >
-                        {lh}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            </div>
-          </PopoverContent>
-        </Popover>
+        {/* Quiz settings button — opens full settings panel */}
+        <button
+          onClick={onToggleQuizSettings}
+          className={`size-8 sm:size-7 rounded-lg flex items-center justify-center transition-colors medos-touch-target shrink-0 ${
+            quizSettingsOpen
+              ? "bg-primary-foreground/30 ring-1 ring-inset ring-primary-foreground/40"
+              : "bg-primary-foreground/15 hover:bg-primary-foreground/25"
+          }`}
+          title="Quiz settings"
+          aria-label="Quiz settings"
+          aria-pressed={quizSettingsOpen}
+        >
+          <Sliders className="size-3.5" />
+        </button>
 
         <div className="flex items-center gap-1">
           <QBankTimer
@@ -2152,13 +2202,19 @@ function QuizView({
           }}
         />
 
-        {/* Sticky note button */}
+        {/* Notes button — opens notes sidebar (replaces sticky notes) */}
         <button
-          onClick={addStickyNote}
-          className="size-7 rounded-lg bg-primary-foreground/15 hover:bg-primary-foreground/25 flex items-center justify-center transition-colors"
-          title="Add sticky note"
+          onClick={onToggleNotes}
+          className={`size-8 sm:size-7 rounded-lg flex items-center justify-center transition-colors medos-touch-target shrink-0 ${
+            notesOpen
+              ? "bg-primary-foreground/30 ring-1 ring-inset ring-primary-foreground/40"
+              : "bg-primary-foreground/15 hover:bg-primary-foreground/25"
+          }`}
+          title="Notes"
+          aria-label="Notes"
+          aria-pressed={notesOpen}
         >
-          <StickyNote className="size-3.5" />
+          <NotebookPen className="size-3.5" />
         </button>
       </header>
 
@@ -2259,8 +2315,8 @@ function QuizView({
             )}
           </AnimatePresence>
 
-          {/* Mobile tutor-mode tab switcher — shown only on phones after submit */}
-          {submitted && session.mode === "tutor" && (
+          {/* Mobile tutor-mode tab switcher — shown only on phones in split mode after submit */}
+          {submitted && session.mode === "tutor" && useSplitExplanation && (
             <div className="md:hidden flex border-b border-border bg-muted/30 safe-pt">
               <button
                 onClick={() => setMobileTutorTab("question")}
@@ -2282,17 +2338,29 @@ function QuizView({
           )}
 
           <div
-            className={`flex-1 min-h-0 medos-qbank-split ${submitted && session.mode === "tutor" ? "flex flex-row" : "overflow-y-auto medos-scroll"}`}
+            className={`flex-1 min-h-0 medos-qbank-split ${
+              submitted && session.mode === "tutor" && useSplitExplanation
+                ? "flex flex-row"
+                : "overflow-y-auto medos-scroll"
+            }`}
             dir={(activeItem.lang ?? "en") === "ar" ? "rtl" : "ltr"}
             lang={activeItem.lang ?? "en"}
           >
             {q ? (
               <>
-                {/* Left column: question + choices */}
+                {/* Left column: question + choices.
+                    In split mode the column is w-[55%]; alignment classes still
+                    work inside it (center/right position within the 55% column).
+                    In continuous mode the column is full-width; the contentAlignClass
+                    caps + positions the content block within the full viewport. */}
                 <div
-                  className={`medos-qbank-qcol ${(activeItem.lang ?? "en") === "ar" ? "osler-content-ar" : ""} ${submitted && session.mode === "tutor" ? "w-[55%] overflow-y-auto medos-scroll border-r border-border" : ""} ${mobileTutorTab === "answer" ? "hidden md:block" : ""}`}
+                  className={`medos-qbank-qcol ${(activeItem.lang ?? "en") === "ar" ? "osler-content-ar" : ""} ${
+                    submitted && session.mode === "tutor" && useSplitExplanation
+                      ? "w-[55%] overflow-y-auto medos-scroll border-r border-border"
+                      : "flex-1 overflow-y-auto medos-scroll"
+                  } ${mobileTutorTab === "answer" ? "hidden md:block" : ""}`}
                 >
-                  <div className={`${submitted && session.mode === "tutor" ? "px-4 sm:px-6 py-4" : "px-4 sm:px-6 lg:px-8 py-6 max-w-5xl"}`}>
+                  <div className={`px-4 sm:px-6 ${submitted && session.mode === "tutor" && useSplitExplanation ? "py-4" : "lg:px-8 py-6"} ${contentAlignClass}`}>
                     {/* Question header */}
                     <div className="flex flex-wrap items-center justify-between gap-2 pb-3 mb-4 border-b border-border">
                       <div className="flex items-center gap-2 text-xs text-muted-foreground">
@@ -2305,7 +2373,7 @@ function QuizView({
                       </div>
                     </div>
 
-                    {/* Stem */}
+                    {/* Stem — inherits alignment from the outer contentAlignClass wrapper */}
                     <div className="relative">
                       <div
                         className="uworld-prose"
@@ -2318,7 +2386,7 @@ function QuizView({
                       </div>
                     </div>
 
-                    {/* Choices (MCQ only) */}
+                    {/* Choices (MCQ only) — inherits alignment from the outer contentAlignClass wrapper */}
                     {isMCQ ? (
                       <div className="mt-6 space-y-2.5">
                         <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">
@@ -2383,7 +2451,10 @@ function QuizView({
                               <div className={`size-7 rounded-full border-2 flex items-center justify-center text-sm font-semibold shrink-0 ${letterBg}`}>
                                 {letterContent}
                               </div>
-                              <div className={`flex-1 min-w-0 uworld-prose text-[14px] leading-relaxed pt-0.5 select-text ${hasStrikethrough ? "line-through text-muted-foreground" : ""}`}>
+                              <div
+                                className={`flex-1 min-w-0 uworld-prose ${quizSettingsState.textAffectsChoices ? "" : "text-[14px] leading-relaxed"} pt-0.5 select-text ${hasStrikethrough ? "line-through text-muted-foreground" : ""}`}
+                                style={choiceStyle}
+                              >
                                 <HighlightedContent
                                   text={choice}
                                   highlights={currentHighlights}
@@ -2522,11 +2593,62 @@ function QuizView({
                 </div>
 
                 {/* Right column: explanation / evaluation (split-screen in tutor mode) */}
-                {submitted && session.mode === "tutor" && (
+                {submitted && session.mode === "tutor" && useSplitExplanation && (
                   <div
                     className={`medos-qbank-acol w-[45%] overflow-y-auto medos-scroll bg-muted/20 ${mobileTutorTab === "question" ? "hidden md:block" : ""}`}
                   >
                     <div className="px-4 sm:px-6 py-4">
+                      {session.engine === "written" ? (
+                        <WrittenEvaluationPanel
+                          draft={writtenDraft}
+                          question={q}
+                          passed={writtenPassed}
+                          isManual={writtenDraft.evaluation?.score === null}
+                          onRubricToggle={(idx) => {
+                            const cur = writtenDraft.rubricChecked;
+                            const next = [...cur];
+                            while (next.length < (q.rubric?.length ?? 0)) next.push(false);
+                            next[idx] = !next[idx];
+                            onWrittenDraftChange(q.id, { ...writtenDraft, rubricChecked: next });
+                          }}
+                          onPassFail={(v) => {
+                            const ev = writtenDraft.evaluation;
+                            if (!ev) {
+                              const manual = createManualEvaluation(writtenDraft.text);
+                              manual.manualVerdict = v;
+                              manual.passed = v === "pass";
+                              onWrittenDraftChange(q.id, {
+                                ...writtenDraft,
+                                submitted: true,
+                                evaluation: manual,
+                              });
+                            } else {
+                              onWrittenDraftChange(q.id, {
+                                ...writtenDraft,
+                                evaluation: { ...ev, manualVerdict: v, passed: v === "pass" },
+                              });
+                            }
+                          }}
+                          onChildPassFail={(childIdx, v) => {
+                            const childEvals = [...(writtenDraft.childEvaluations ?? [])];
+                            const ev = childEvals[childIdx];
+                            if (ev) {
+                              childEvals[childIdx] = { ...ev, manualVerdict: v, passed: v === "pass" };
+                              onWrittenDraftChange(q.id, { ...writtenDraft, childEvaluations: childEvals });
+                            }
+                          }}
+                        />
+                      ) : (
+                        <ExplanationCard q={q} selected={selected} nonMcq={!isMCQ} highlights={currentHighlights} packUid={activeItem.uid} questionIdx={session.current} />
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* Continuous-mode explanation — flows below the question in a single scroll. */}
+                {submitted && session.mode === "tutor" && !useSplitExplanation && (
+                  <div className="border-t border-border bg-muted/20 px-4 sm:px-6 py-4 mt-6">
+                    <div className="max-w-3xl mx-auto">
                       {session.engine === "written" ? (
                         <WrittenEvaluationPanel
                           draft={writtenDraft}
@@ -2636,7 +2758,7 @@ function QuizView({
           </div>
 
           {/* Bottom action bar — desktop */}
-          <footer className="hidden sm:flex border-t border-border bg-card px-3 sm:px-6 py-2.5 items-center gap-2 shrink-0">
+          <footer className="hidden sm:flex border-t border-border bg-card px-4 sm:px-6 py-2.5 items-center gap-2 shrink-0">
             <Button variant="outline" size="sm" onClick={onPrev} disabled={session.current === 0} className="h-9 rounded-lg">
               <ChevronLeft className="size-4 mr-1" /> Previous
             </Button>
@@ -2740,7 +2862,7 @@ function QuizView({
           </footer>
 
           {/* Bottom action bar — mobile (compact) */}
-          <footer className="sm:hidden border-t border-border bg-card px-3 py-2 flex items-center gap-2 shrink-0 safe-pb medos-tap-none">
+          <footer className="sm:hidden border-t border-border bg-card px-3 py-2 flex items-center gap-1.5 shrink-0 safe-pb medos-tap-none">
             <Button
               variant="outline" size="icon"
               onClick={onPrev} disabled={session.current === 0}
@@ -2852,17 +2974,6 @@ function QuizView({
         </main>
       </div>
 
-      {/* Floating sticky notes */}
-      {notes.map((note) => (
-        <StickyNoteCard
-          key={note.id}
-          note={note}
-          onUpdate={(text) => updateNote(note.id, text)}
-          onDelete={() => deleteNote(note.id)}
-          onMove={(x, y) => moveNote(note.id, x, y)}
-        />
-      ))}
-
       {/* Keyboard shortcuts help */}
       <AnimatePresence>
         {showShortcuts && (
@@ -2901,7 +3012,8 @@ function QuizView({
                   ["A", "Toggle AI Assistant"],
                   ["H", "Toggle highlight mode"],
                   ["E", "Toggle eraser mode"],
-                  ["N", "Add sticky note"],
+                  ["N", "Toggle Notes panel"],
+                  [",", "Toggle Quiz Settings"],
                   ["?", "Toggle this help panel"],
                 ].map(([keys, desc]) => (
                   <div key={keys} className="flex items-center justify-between text-sm">

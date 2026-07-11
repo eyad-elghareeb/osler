@@ -1,12 +1,12 @@
 /**
- * Osler storage — progress tracking + sessions + highlights + sticky notes.
+ * Osler storage — progress tracking + sessions + highlights + notes + quiz settings.
  * Powered by IndexedDB for robust, large-capacity local persistence.
  */
 
 import type { EngineType } from "./types";
 
 const DB_NAME = "osler-db-v1";
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 
 /* ── IndexedDB helpers ──────────────────────────────────────────────── */
 
@@ -49,6 +49,12 @@ function openDB(): Promise<IDBDatabase> {
       }
       if (!db.objectStoreNames.contains("settings")) {
         db.createObjectStore("settings", { keyPath: "key" });
+      }
+      // v2: notes store — markdown notes with optional pack/question context.
+      if (!db.objectStoreNames.contains("notes")) {
+        const notesStore = db.createObjectStore("notes", { keyPath: "id" });
+        notesStore.createIndex("byUpdatedAt", "updatedAt");
+        notesStore.createIndex("byPack", "packUid");
       }
     };
 
@@ -803,6 +809,255 @@ export const settings = {
   async getBool(key: string): Promise<boolean> {
     const val = await settings.get(key);
     return val === "true";
+  },
+};
+
+/* ── Notes (markdown, IndexedDB-backed) ─────────────────────────────── */
+
+export interface NoteRecord {
+  id: string;
+  title: string;
+  body: string; // markdown source
+  tags: string[];
+  packUid?: string;     // optional: which content pack this note belongs to
+  packTitle?: string;
+  questionIdx?: number; // optional: which question in the pack
+  createdAt: number;
+  updatedAt: number;
+}
+
+async function idbGetAllNotes(): Promise<NoteRecord[]> {
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction("notes", "readonly");
+    const store = tx.objectStore("notes");
+    const req = store.getAll();
+    req.onsuccess = () => resolve((req.result ?? []) as NoteRecord[]);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+async function idbPutNote(note: NoteRecord): Promise<void> {
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction("notes", "readwrite");
+    const store = tx.objectStore("notes");
+    store.put(note);
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
+async function idbDeleteNote(id: string): Promise<void> {
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction("notes", "readwrite");
+    const store = tx.objectStore("notes");
+    store.delete(id);
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
+// In-memory cache for synchronous reads
+let notesCache: NoteRecord[] | null = null;
+const notesSubscribers = new Set<() => void>();
+
+function notifyNotesChanged() {
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(new CustomEvent("osler-notes-changed"));
+  notesSubscribers.forEach((cb) => {
+    try { cb(); } catch (e) { console.warn(e); }
+  });
+}
+
+async function ensureNotesCache(): Promise<NoteRecord[]> {
+  if (notesCache) return notesCache;
+  notesCache = await idbGetAllNotes();
+  return notesCache;
+}
+
+// Start hydrating immediately
+if (typeof window !== "undefined") {
+  ensureNotesCache().catch(console.warn);
+}
+
+export const notes = {
+  async list(): Promise<NoteRecord[]> {
+    const cached = await ensureNotesCache();
+    return [...cached].sort((a, b) => b.updatedAt - a.updatedAt);
+  },
+
+  listSync(): NoteRecord[] {
+    return notesCache ? [...notesCache].sort((a, b) => b.updatedAt - a.updatedAt) : [];
+  },
+
+  async get(id: string): Promise<NoteRecord | null> {
+    const cached = await ensureNotesCache();
+    return cached.find((n) => n.id === id) ?? null;
+  },
+
+  async listByPack(packUid: string): Promise<NoteRecord[]> {
+    const cached = await ensureNotesCache();
+    return cached
+      .filter((n) => n.packUid === packUid)
+      .sort((a, b) => b.updatedAt - a.updatedAt);
+  },
+
+  async save(note: NoteRecord): Promise<NoteRecord> {
+    const existing = notesCache?.find((n) => n.id === note.id);
+    const next: NoteRecord = {
+      ...note,
+      createdAt: existing?.createdAt ?? note.createdAt ?? Date.now(),
+      updatedAt: Date.now(),
+    };
+    await idbPutNote(next);
+    if (notesCache) {
+      const idx = notesCache.findIndex((n) => n.id === next.id);
+      if (idx >= 0) notesCache[idx] = next;
+      else notesCache.push(next);
+    } else {
+      notesCache = [next];
+    }
+    notifyNotesChanged();
+    return next;
+  },
+
+  async delete(id: string): Promise<void> {
+    await idbDeleteNote(id);
+    if (notesCache) {
+      notesCache = notesCache.filter((n) => n.id !== id);
+    }
+    notifyNotesChanged();
+  },
+
+  async create(partial: Partial<NoteRecord> = {}): Promise<NoteRecord> {
+    const now = Date.now();
+    const note: NoteRecord = {
+      id: partial.id ?? crypto.randomUUID(),
+      title: partial.title ?? "Untitled note",
+      body: partial.body ?? "",
+      tags: partial.tags ?? [],
+      packUid: partial.packUid,
+      packTitle: partial.packTitle,
+      questionIdx: partial.questionIdx,
+      createdAt: now,
+      updatedAt: now,
+    };
+    return notes.save(note);
+  },
+
+  subscribe(cb: () => void): () => void {
+    if (typeof window === "undefined") return () => {};
+    notesSubscribers.add(cb);
+    const handler = () => cb();
+    window.addEventListener("osler-notes-changed", handler);
+    return () => {
+      notesSubscribers.delete(cb);
+      window.removeEventListener("osler-notes-changed", handler);
+    };
+  },
+};
+
+/* ── Quiz Settings (persisted user prefs for QBank view) ─────────────── */
+
+export type QuestionAlign = "left" | "center" | "right";
+export type ExplanationMode = "split" | "continuous"; // split = 2-page, continuous = single scroll
+
+export interface QuizSettings {
+  fontFamily: "system" | "serif" | "sans" | "mono";
+  fontSize: number;
+  fontWeight: number; // 400 | 500 | 600 | 700
+  lineHeight: number;
+  textAffectsChoices: boolean;
+  autoSubmit: boolean;       // tutor mode: auto-reveal on choice select
+  explanationMode: ExplanationMode;
+  questionAlign: QuestionAlign;
+}
+
+export const DEFAULT_QUIZ_SETTINGS: QuizSettings = {
+  fontFamily: "system",
+  fontSize: 15,
+  fontWeight: 400,
+  lineHeight: 1.7,
+  textAffectsChoices: true,
+  autoSubmit: false,
+  explanationMode: "split",
+  questionAlign: "left",
+};
+
+const QUIZ_SETTINGS_KEY = "quiz-settings-v1";
+const QUIZ_SETTINGS_EVENT = "osler-quiz-settings-changed";
+const quizSettingsSubscribers = new Set<() => void>();
+
+let cachedQuizSettings: QuizSettings | null = null;
+let quizSettingsHydrated = false;
+
+async function hydrateQuizSettings(): Promise<void> {
+  if (quizSettingsHydrated) return;
+  quizSettingsHydrated = true;
+  try {
+    const raw = await idbGet<QuizSettings>("settings", QUIZ_SETTINGS_KEY);
+    cachedQuizSettings = raw
+      ? { ...DEFAULT_QUIZ_SETTINGS, ...raw }
+      : { ...DEFAULT_QUIZ_SETTINGS };
+    // Fix any invalid weight values from older saves
+    const validWeights = [400, 500, 600, 700];
+    if (!validWeights.includes(cachedQuizSettings.fontWeight)) {
+      cachedQuizSettings.fontWeight = 400;
+    }
+  } catch (e) {
+    console.warn("Failed to hydrate quiz settings:", e);
+    cachedQuizSettings = { ...DEFAULT_QUIZ_SETTINGS };
+  }
+}
+
+if (typeof window !== "undefined") {
+  hydrateQuizSettings().catch(console.warn);
+}
+
+export const quizSettings = {
+  getSync(): QuizSettings {
+    if (!cachedQuizSettings) return { ...DEFAULT_QUIZ_SETTINGS };
+    return { ...cachedQuizSettings };
+  },
+
+  async get(): Promise<QuizSettings> {
+    await hydrateQuizSettings();
+    return quizSettings.getSync();
+  },
+
+  async save(patch: Partial<QuizSettings>): Promise<QuizSettings> {
+    await hydrateQuizSettings();
+    const next: QuizSettings = {
+      ...(cachedQuizSettings ?? DEFAULT_QUIZ_SETTINGS),
+      ...patch,
+    };
+    cachedQuizSettings = next;
+    setCached("settings", QUIZ_SETTINGS_KEY, next);
+    await idbPut("settings", QUIZ_SETTINGS_KEY, next);
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent(QUIZ_SETTINGS_EVENT));
+      quizSettingsSubscribers.forEach((cb) => {
+        try { cb(); } catch (e) { console.warn(e); }
+      });
+    }
+    return next;
+  },
+
+  async reset(): Promise<QuizSettings> {
+    return quizSettings.save(DEFAULT_QUIZ_SETTINGS);
+  },
+
+  subscribe(cb: () => void): () => void {
+    if (typeof window === "undefined") return () => {};
+    quizSettingsSubscribers.add(cb);
+    const handler = () => cb();
+    window.addEventListener(QUIZ_SETTINGS_EVENT, handler);
+    return () => {
+      quizSettingsSubscribers.delete(cb);
+      window.removeEventListener(QUIZ_SETTINGS_EVENT, handler);
+    };
   },
 };
 

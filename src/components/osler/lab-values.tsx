@@ -4,6 +4,10 @@ import * as React from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { FlaskConical, X } from "lucide-react";
 import { usePlatform } from "@/hooks/use-platform";
+import {
+  useResizableSidebar,
+  SidebarResizeHandle,
+} from "@/hooks/use-resizable-sidebar";
 
 type LabCategory = "chem" | "hem" | "abg" | "coag" | "other";
 
@@ -92,6 +96,13 @@ const LABS_BY_CAT: Record<LabCategory, LabItem[]> = {
 
 export function LabValuesSidebar({ open, onClose }: { open?: boolean; onClose: () => void }) {
   const platform = usePlatform();
+  const resizable = useResizableSidebar({
+    storageKey: "osler-lab-values-width",
+    defaultWidth: 384,
+    minWidth: 320,
+    maxWidth: 600,
+    disabled: platform.isPhone,
+  });
   const [tab, setTab] = React.useState<LabCategory>("chem");
   const labs = LABS_BY_CAT[tab];
 
@@ -152,21 +163,35 @@ export function LabValuesSidebar({ open, onClose }: { open?: boolean; onClose: (
   );
 
   if (open !== undefined) {
+    const isPhone = platform.isPhone;
     return (
       <AnimatePresence>
         {open && (
           <motion.div
-            initial={platform.isPhone ? { y: "100%", opacity: 0 } : { x: 360, opacity: 0 }}
-            animate={platform.isPhone ? { y: 0, opacity: 1 } : { x: 0, opacity: 1 }}
-            exit={platform.isPhone ? { y: "100%", opacity: 0 } : { x: 360, opacity: 0 }}
-            transition={platform.isPhone
+            initial={isPhone ? { y: "100%", opacity: 0 } : { x: 360, opacity: 0 }}
+            animate={isPhone ? { y: 0, opacity: 1 } : { x: 0, opacity: 1 }}
+            exit={isPhone ? { y: "100%", opacity: 0 } : { x: 360, opacity: 0 }}
+            transition={isPhone
               ? { type: "spring", damping: 32, stiffness: 320 }
               : { type: "spring", damping: 28, stiffness: 300 }}
-            className={platform.isPhone
+            className={isPhone
               ? "fixed inset-0 z-50 bg-card flex flex-col"
-              : "fixed right-0 top-12 bottom-0 z-50 w-full sm:w-96 border-l border-border bg-card shadow-xl flex flex-col"
+              : "fixed right-0 top-12 bottom-0 z-50 border-l border-border bg-card shadow-xl flex flex-col"
+            }
+            style={
+              isPhone
+                ? undefined
+                : { width: resizable.width ? `${resizable.width}px` : "24rem" }
             }
           >
+            {!isPhone && (
+              <SidebarResizeHandle
+                onMouseDown={resizable.onDragHandleMouseDown}
+                onTouchStart={resizable.onDragHandleTouchStart}
+                active={resizable.isResizing}
+                ariaLabel="Drag to resize"
+              />
+            )}
             {content}
           </motion.div>
         )}
