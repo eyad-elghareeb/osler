@@ -2,20 +2,19 @@
 
 import * as React from "react";
 import { motion } from "framer-motion";
-import { Wifi, Smartphone, Loader2, Check, AlertTriangle, Plug, PlugZap, ScanLine, ArrowRight } from "lucide-react";
+import { Wifi, Smartphone, Loader2, Check, AlertTriangle, Radio, RefreshCw } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { NetworkTransport, type ConnectionInfo, type ConnectionStatus } from "@/lib/osler/sync";
+import { NetworkTransport, type ConnectionInfo, type ConnectionStatus, type DiscoveredDevice } from "@/lib/osler/sync";
 import { cn } from "@/lib/utils";
 
 export function NetworkSyncPanel() {
   const [transport, setTransport] = React.useState<NetworkTransport | null>(null);
+  const [devices, setDevices] = React.useState<DiscoveredDevice[]>([]);
   const [status, setStatus] = React.useState<ConnectionStatus>("idle");
   const [statusMsg, setStatusMsg] = React.useState("");
-  const [peerId, setPeerId] = React.useState("");
+  const [roomId, setRoomId] = React.useState("");
   const [connections, setConnections] = React.useState<ConnectionInfo[]>([]);
-  const [remoteId, setRemoteId] = React.useState("");
   const [initialized, setInitialized] = React.useState(false);
 
   React.useEffect(() => {
@@ -29,8 +28,10 @@ export function NetworkSyncPanel() {
         setStatus("connected");
       },
       onTransferProgress: () => {},
-      onPeerId: (id) => setPeerId(id),
+      onPeerId: () => {},
       onConnectionsChanged: (c) => setConnections([...c]),
+      onDevicesChanged: (d) => setDevices([...d]),
+      onRoomId: (id) => setRoomId(id),
     });
     setTransport(t);
     setInitialized(true);
@@ -47,13 +48,13 @@ export function NetworkSyncPanel() {
     if (transport) transport.stop();
   };
 
-  const handleConnect = () => {
-    const id = remoteId.trim();
-    if (transport && id) transport.connectTo(id);
+  const handleConnect = (deviceId: string) => {
+    if (transport) transport.connectToDevice(deviceId);
   };
 
   const statusColor = {
     idle: "text-muted-foreground",
+    discovering: "text-primary",
     connecting: "text-amber-500",
     connected: "text-green-500",
     error: "text-destructive",
@@ -61,7 +62,8 @@ export function NetworkSyncPanel() {
 
   const statusIcon = {
     idle: <Wifi className="size-4" />,
-    connecting: <Loader2 className="size-4 animate-spin" />,
+    discovering: <Loader2 className="size-4 animate-spin" />,
+    connecting: <Radio className="size-4 animate-pulse" />,
     connected: <Check className="size-4" />,
     error: <AlertTriangle className="size-4" />,
   }[status];
@@ -75,30 +77,30 @@ export function NetworkSyncPanel() {
             {statusIcon}
           </div>
           <div className="flex-1 min-w-0">
-            <h3 className="text-sm font-semibold mb-1">Peer-to-Peer Sync</h3>
+            <h3 className="text-sm font-semibold mb-1">Network Sync</h3>
             <p className="text-xs text-muted-foreground mb-3">
-              Connect directly to another device and sync your progress.
+              Discover devices on the same network and sync your progress peer-to-peer.
             </p>
 
             <div className={cn("text-xs font-medium mb-2 flex items-center gap-2", statusColor)}>
               {statusIcon}
-              <span>{statusMsg || "Not connected"}</span>
+              <span>{statusMsg || (status === "idle" ? "Not connected" : "Connected")}</span>
             </div>
 
-            {peerId && (
+            {roomId && (
               <div className="text-[10px] text-muted-foreground mb-3 font-mono">
-                Your Peer ID: {peerId}
+                Room: {roomId} · Device: {transport?.deviceName ?? "..."}
               </div>
             )}
 
             <div className="flex gap-2">
               {status === "idle" || status === "error" ? (
                 <Button size="sm" variant="default" className="h-8 text-xs" onClick={handleStart}>
-                  <Plug className="size-3 me-1.5" /> Start PeerJS
+                  <Radio className="size-3 me-1.5" /> Start Discovery
                 </Button>
               ) : (
                 <Button size="sm" variant="outline" className="h-8 text-xs" onClick={handleStop}>
-                  <PlugZap className="size-3 me-1.5" /> Stop
+                  <RefreshCw className="size-3 me-1.5" /> Stop
                 </Button>
               )}
             </div>
@@ -106,62 +108,51 @@ export function NetworkSyncPanel() {
         </div>
       </Card>
 
-      {/* Connect to remote */}
-      {peerId && (
+      {/* Device list */}
+      {devices.length > 0 && (
         <Card className="p-4">
-          <h4 className="text-xs font-semibold text-muted-foreground mb-3">Connect to Device</h4>
-          <div className="flex gap-2">
-            <Input
-              placeholder="Enter remote Peer ID..."
-              value={remoteId}
-              onChange={(e) => setRemoteId(e.target.value)}
-              className="h-8 text-xs"
-              onKeyDown={(e) => { if (e.key === "Enter") handleConnect(); }}
-            />
-            <Button
-              size="sm"
-              variant="default"
-              className="h-8 text-xs shrink-0"
-              onClick={handleConnect}
-              disabled={!remoteId.trim() || status === "connecting"}
-            >
-              <ArrowRight className="size-3 me-1.5" /> Connect
-            </Button>
+          <h4 className="text-xs font-semibold text-muted-foreground mb-3 flex items-center gap-2">
+            <Smartphone className="size-3.5" />
+            Devices on Network ({devices.length})
+          </h4>
+          <div className="space-y-2">
+            {devices.map((device) => (
+              <div
+                key={device.id}
+                className="flex items-center justify-between p-3 rounded-lg border border-border/60 bg-card hover:border-primary/40 transition-colors"
+              >
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className="size-8 rounded-full bg-primary/10 text-primary flex items-center justify-center shrink-0 text-xs font-bold">
+                    {device.name.charAt(0)}
+                  </div>
+                  <div className="min-w-0">
+                    <div className="text-sm font-medium truncate">{device.name}</div>
+                    <div className="text-[10px] text-muted-foreground">
+                      {Math.round((Date.now() - device.lastSeen) / 1000)}s ago
+                    </div>
+                  </div>
+                </div>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-7 text-xs shrink-0"
+                  onClick={() => handleConnect(device.id)}
+                  disabled={status === "connecting"}
+                >
+                  Sync
+                </Button>
+              </div>
+            ))}
           </div>
         </Card>
       )}
 
-      {/* Connections list */}
-      {connections.length > 0 && (
-        <Card className="p-4">
-          <h4 className="text-xs font-semibold text-muted-foreground mb-3 flex items-center gap-2">
-            <Smartphone className="size-3.5" />
-            Connections ({connections.length})
-          </h4>
-          <div className="space-y-2">
-            {connections.map((conn) => (
-              <div
-                key={conn.peerId}
-                className="flex items-center justify-between p-3 rounded-lg border border-border/60 bg-card"
-              >
-                <div className="flex items-center gap-3 min-w-0">
-                  <div className={cn(
-                    "size-8 rounded-full flex items-center justify-center shrink-0 text-xs font-bold",
-                    conn.status === "connected" ? "bg-green-500/10 text-green-500" : "bg-amber-500/10 text-amber-500",
-                  )}>
-                    {conn.label.charAt(0)}
-                  </div>
-                  <div className="min-w-0">
-                    <div className="text-sm font-medium truncate">{conn.label}</div>
-                    <div className="text-[10px] text-muted-foreground">{conn.status}</div>
-                  </div>
-                </div>
-                <div className={cn(
-                  "size-2 rounded-full shrink-0",
-                  conn.status === "connected" ? "bg-green-500" : conn.status === "connecting" ? "bg-amber-500 animate-pulse" : "bg-muted-foreground/40",
-                )} />
-              </div>
-            ))}
+      {devices.length === 0 && (status === "discovering" || status === "connected") && (
+        <Card className="p-5 border-dashed">
+          <div className="text-center text-sm text-muted-foreground">
+            <Radio className="size-8 mx-auto mb-2 opacity-40" />
+            <p>Waiting for devices...</p>
+            <p className="text-xs mt-1">Make sure the other device has the Sync panel open too.</p>
           </div>
         </Card>
       )}

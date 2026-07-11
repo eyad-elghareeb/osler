@@ -1,4 +1,4 @@
 export * as SyncProtocol from "./sync-protocol";
 export * as FileSync from "./file-sync";
 export * as QRSync from "./qr-sync";
-export { NetworkTransport, type ConnectionInfo, type ConnectionStatus, type TransportCallbacks } from "./network-transport";
+export { NetworkTransport, type ConnectionInfo, type ConnectionStatus, type TransportCallbacks, type DiscoveredDevice } from "./network-transport";

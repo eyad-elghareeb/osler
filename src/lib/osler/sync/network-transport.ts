@@ -2,14 +2,24 @@ import { Peer } from "peerjs";
 import * as SyncProtocol from "./sync-protocol";
 import { buildExportPayload, mergePayloadIntoStorage } from "./sync-helpers";
 
+/* ── Types ──────────────────────────────────────────────────────────── */
+
 export interface ConnectionInfo {
   peerId: string;
   label: string;
   status: "connecting" | "connected" | "disconnected";
 }
 
+export interface DiscoveredDevice {
+  id: string;
+  name: string;
+  peerJsId: string;
+  lastSeen: number;
+}
+
 export type ConnectionStatus =
   | "idle"
+  | "discovering"
   | "connecting"
   | "connected"
   | "error";
@@ -20,7 +30,11 @@ export interface TransportCallbacks {
   onTransferProgress: (bytesTransferred: number, totalBytes: number) => void;
   onPeerId: (peerId: string) => void;
   onConnectionsChanged: (connections: ConnectionInfo[]) => void;
+  onDevicesChanged: (devices: DiscoveredDevice[]) => void;
+  onRoomId: (roomId: string) => void;
 }
+
+/* ── Device identity ─────────────────────────────────────────────────── */
 
 function generateDeviceId(): string {
   if (typeof window === "undefined") return "unknown";
@@ -36,113 +50,200 @@ function generateDeviceId(): string {
   }
 }
 
+function generateDeviceName(): string {
+  if (typeof window === "undefined") return "Device";
+  try {
+    let name = localStorage.getItem("osler_sync_device_name");
+    if (!name) {
+      const adjs = ["Red", "Blue", "Gold", "Swift", "Calm", "Bold", "Wise", "Keen"];
+      const nouns = ["Owl", "Fox", "Bear", "Wolf", "Hawk", "Lion", "Stag", "Lynx"];
+      name = `${adjs[Math.floor(Math.random() * adjs.length)]} ${nouns[Math.floor(Math.random() * nouns.length)]}`;
+      localStorage.setItem("osler_sync_device_name", name);
+    }
+    return name;
+  } catch {
+    return "Device";
+  }
+}
+
+/* ── Transport ───────────────────────────────────────────────────────── */
+
 export class NetworkTransport {
   readonly localPeerId: string;
+  readonly deviceName: string;
   callbacks: TransportCallbacks;
 
   private peer: Peer | null = null;
   private connections: Map<string, { conn: import("peerjs").DataConnection; info: ConnectionInfo }> = new Map();
   private started = false;
+  private discovering = false;
+
+  /* MQTT discovery */
+  private mqttClient: unknown = null;
+  private roomHash: string | null = null;
+  private devices: Record<string, DiscoveredDevice> = {};
+  private heartbeatTimer: ReturnType<typeof setInterval> | null = null;
 
   constructor(callbacks: TransportCallbacks) {
     this.callbacks = callbacks;
     this.localPeerId = generateDeviceId();
+    this.deviceName = generateDeviceName();
   }
 
   get isConnected(): boolean {
     return this.started && this.peer !== null && !this.peer.disconnected;
   }
 
+  get discoveredDevices(): DiscoveredDevice[] {
+    return Object.values(this.devices);
+  }
+
   get activeConnections(): ConnectionInfo[] {
     return Array.from(this.connections.values()).map((c) => c.info);
   }
+
+  /* ── PeerJS + MQTT discovery ──────────────────────────────────────── */
 
   async start(): Promise<void> {
     if (this.started) return;
     this.started = true;
 
-    this.callbacks.onStatusChanged("connecting", "Initializing PeerJS...");
+    this.callbacks.onStatusChanged("connecting", "Initializing...");
 
     try {
+      await this.startPeerJS();
+      await this.startDiscovery();
+    } catch (err) {
+      this.started = false;
+      this.callbacks.onStatusChanged("error", `Start failed: ${(err as Error).message}`);
+    }
+  }
+
+  private async startPeerJS(): Promise<void> {
+    return new Promise<void>((resolve, reject) => {
+      this.callbacks.onStatusChanged("connecting", "Connecting to PeerJS...");
+
       this.peer = new Peer(this.localPeerId, {
         host: "0.peerjs.com",
         port: 443,
         secure: true,
       });
 
-      await new Promise<void>((resolve, reject) => {
-        const peer = this.peer!;
+      const peer = this.peer;
 
-        peer.on("open", () => {
-          this.callbacks.onPeerId(this.localPeerId);
-          this.callbacks.onStatusChanged("connected", "Ready to sync");
-          resolve();
-        });
-
-        peer.on("connection", (conn) => {
-          this.setupIncomingConnection(conn);
-        });
-
-        peer.on("error", (err) => {
-          if ((err as { type: string }).type === "unavailable-id") {
-            // ID collision — re-register with a random suffix
-            const suffix = Math.random().toString(36).substring(2, 6).toUpperCase();
-            const newId = `${this.localPeerId}-${suffix}`;
-            try { localStorage.setItem("osler_sync_device_id", newId); } catch { }
-            this.callbacks.onStatusChanged("error", "Device ID taken, re-registering...");
-            this.peer?.destroy();
-            this.started = false;
-            this.start();
-            return;
-          }
-          reject(err);
-        });
-
-        // Timeout if PeerJS doesn't connect within 10s
-        setTimeout(() => {
-          if (!peer.open) reject(new Error("PeerJS connection timed out"));
-        }, 10000);
+      peer.on("open", () => {
+        this.callbacks.onPeerId(this.localPeerId);
+        resolve();
       });
-    } catch (err) {
-      this.started = false;
-      this.callbacks.onStatusChanged("error", `PeerJS failed: ${(err as Error).message}`);
+
+      peer.on("connection", (conn) => {
+        this.setupIncomingConnection(conn);
+      });
+
+      peer.on("error", (err) => {
+        if ((err as { type: string }).type === "unavailable-id") {
+          const suffix = Math.random().toString(36).substring(2, 6).toUpperCase();
+          const newId = `${this.localPeerId}-${suffix}`;
+          try { localStorage.setItem("osler_sync_device_id", newId); } catch { }
+          this.callbacks.onStatusChanged("error", "ID taken, re-registering...");
+          this.peer?.destroy();
+          this.started = false;
+          this.start();
+          return;
+        }
+        reject(err);
+      });
+
+      setTimeout(() => {
+        if (!peer.open) reject(new Error("PeerJS connection timed out"));
+      }, 10000);
+    });
+  }
+
+  private async startDiscovery(): Promise<void> {
+    if (this.discovering) return;
+    this.discovering = true;
+
+    this.callbacks.onStatusChanged("discovering", "Discovering devices...");
+
+    try {
+      const ip = await this.getPublicIP();
+      const hash = await this.hashString(`osler-sync-v2-${ip}`);
+      this.roomHash = hash.substring(0, 8).toUpperCase();
+      this.callbacks.onRoomId(this.roomHash);
+
+      await this.connectMQTT();
+      this.broadcastPresence();
+
+      this.heartbeatTimer = setInterval(() => {
+        this.broadcastPresence();
+        this.pruneStaleDevices();
+      }, 5000);
+
+      this.callbacks.onStatusChanged("connected", "Ready — devices will appear automatically");
+    } catch (e) {
+      this.discovering = false;
+      this.callbacks.onStatusChanged("connected", "PeerJS ready (no network discovery)");
     }
   }
 
   stop(): void {
+    if (this.heartbeatTimer) {
+      clearInterval(this.heartbeatTimer);
+      this.heartbeatTimer = null;
+    }
     for (const { conn } of this.connections.values()) {
       try { conn.close(); } catch { }
     }
     this.connections.clear();
     this.peer?.destroy();
     this.peer = null;
+    if (this.mqttClient) {
+      try {
+        (this.mqttClient as { disconnect: () => void }).disconnect();
+      } catch { }
+      this.mqttClient = null;
+    }
     this.started = false;
-    this.callbacks.onStatusChanged("idle", "Disconnected");
+    this.discovering = false;
+    this.devices = {};
+    this.callbacks.onDevicesChanged([]);
     this.callbacks.onConnectionsChanged([]);
+    this.callbacks.onStatusChanged("idle", "Disconnected");
   }
 
-  async connectTo(remotePeerId: string): Promise<void> {
-    if (!this.peer) {
-      this.callbacks.onStatusChanged("error", "Start PeerJS first");
+  /* ── Connect to discovered device ──────────────────────────────────── */
+
+  async connectToDevice(deviceId: string): Promise<void> {
+    const device = this.devices[deviceId];
+    if (!device) {
+      this.callbacks.onStatusChanged("error", "Device not found");
       return;
     }
+
+    if (!this.peer) {
+      this.callbacks.onStatusChanged("error", "PeerJS not started");
+      return;
+    }
+
+    const remotePeerId = device.peerJsId;
 
     if (this.connections.has(remotePeerId)) {
       const entry = this.connections.get(remotePeerId)!;
       if (entry.info.status === "connected") {
-        this.callbacks.onStatusChanged("connected", "Already connected — re-sending data...");
+        this.callbacks.onStatusChanged("connected", "Re-sending data...");
         await this.sendExport(entry.conn);
       }
       return;
     }
 
-    this.callbacks.onStatusChanged("connecting", `Connecting to ${remotePeerId}...`);
+    this.callbacks.onStatusChanged("connecting", `Connecting to ${device.name}...`);
 
     const conn = this.peer.connect(remotePeerId, { reliable: true });
     this.trackConnection(conn, remotePeerId);
 
     conn.on("open", () => {
-      this.callbacks.onStatusChanged("connected", "Connected! Sending data...");
+      this.callbacks.onStatusChanged("connected", `Syncing with ${device.name}...`);
       this.sendExport(conn);
     });
 
@@ -155,6 +256,8 @@ export class NetworkTransport {
       }
     }, 15000);
   }
+
+  /* ── Connection tracking ──────────────────────────────────────────── */
 
   private trackConnection(conn: import("peerjs").DataConnection, peerId: string): void {
     const info: ConnectionInfo = { peerId, label: peerId, status: "connecting" };
@@ -172,10 +275,9 @@ export class NetworkTransport {
       this.connections.delete(peerId);
     });
 
-    conn.on("error", (err) => {
+    conn.on("error", () => {
       info.status = "disconnected";
       this.callbacks.onConnectionsChanged(this.activeConnections);
-      this.callbacks.onStatusChanged("error", `Connection error: ${(err as Error).message}`);
       this.connections.delete(peerId);
     });
   }
@@ -190,6 +292,8 @@ export class NetworkTransport {
     });
   }
 
+  /* ── Data transfer ─────────────────────────────────────────────────── */
+
   private async sendExport(conn: import("peerjs").DataConnection): Promise<void> {
     try {
       const payload = await buildExportPayload();
@@ -202,7 +306,7 @@ export class NetworkTransport {
     }
   }
 
-  private async handleIncomingData(conn: import("peerjs").DataConnection, raw: string): Promise<void> {
+  private async handleIncomingData(_conn: import("peerjs").DataConnection, raw: string): Promise<void> {
     this.callbacks.onStatusChanged("connected", "Received data — importing...");
     try {
       const payload = SyncProtocol.decode(raw);
@@ -213,12 +317,107 @@ export class NetworkTransport {
     }
   }
 
-  disconnect(peerId: string): void {
-    const entry = this.connections.get(peerId);
-    if (entry) {
-      try { entry.conn.close(); } catch { }
-      this.connections.delete(peerId);
-      this.callbacks.onConnectionsChanged(this.activeConnections);
+  /* ── MQTT discovery ────────────────────────────────────────────────── */
+
+  private async getPublicIP(): Promise<string> {
+    return new Promise((resolve) => {
+      const pc = new RTCPeerConnection({ iceServers: [{ urls: "stun:stun.l.google.com:19302" }] });
+      pc.createDataChannel("x");
+      pc.createOffer().then((offer) => pc.setLocalDescription(offer));
+      pc.onicecandidate = (e) => {
+        if (!e.candidate) return;
+        const parts = e.candidate.candidate.split(" ");
+        if (parts[7] && parts[7] !== "0.0.0.0" && !parts[7].startsWith("127.")) {
+          resolve(parts[7]);
+          pc.close();
+        }
+      };
+      setTimeout(() => { pc.close(); resolve("0.0.0.0"); }, 3000);
+    });
+  }
+
+  private async hashString(str: string): Promise<string> {
+    const encoder = new TextEncoder();
+    const data = encoder.encode(str);
+    const hash = await crypto.subtle.digest("SHA-256", data);
+    return Array.from(new Uint8Array(hash))
+      .map((b) => b.toString(16).padStart(2, "0"))
+      .join("");
+  }
+
+  private async connectMQTT(): Promise<void> {
+    const mqtt = await import("paho-mqtt");
+    const client = new mqtt.Client("broker.emqx.io", 8084, `osler-${this.localPeerId}-${Date.now()}`) as {
+      connect: (opts: Record<string, unknown>) => void;
+      subscribe: (topic: string) => void;
+      send: (topic: string, payload: string) => void;
+      disconnect: () => void;
+      onMessageArrived: (cb: (msg: { destinationName: string; payloadString: string }) => void) => void;
+      onConnectionLost: (cb: (err: unknown) => void) => void;
+    };
+
+    return new Promise<void>((resolve, reject) => {
+      const c = client as unknown as Record<string, unknown>;
+      c.onConnectionLost = () => { this.discovering = false; };
+
+      c.onMessageArrived = (msg: { destinationName: string; payloadString: string }) => {
+        if (msg.destinationName === `osler/sync/v2/${this.roomHash}/presence`) {
+          try {
+            const data = JSON.parse(msg.payloadString);
+            if (data.id !== this.localPeerId) {
+              this.devices[data.id] = {
+                id: data.id,
+                name: data.name || "Unknown",
+                peerJsId: data.peerJsId || data.id,
+                lastSeen: Date.now(),
+              };
+              this.callbacks.onDevicesChanged(this.discoveredDevices);
+            }
+          } catch { }
+        }
+      };
+
+      client.connect({
+        useSSL: true,
+        onSuccess: () => {
+          this.mqttClient = client;
+          client.subscribe(`osler/sync/v2/${this.roomHash}/presence`);
+          resolve();
+        },
+        onFailure: (err: unknown) => reject(new Error(`MQTT: ${(err as { errorMessage: string }).errorMessage}`)),
+        timeout: 5,
+        keepAliveInterval: 20,
+      });
+    });
+  }
+
+  private broadcastPresence(): void {
+    if (!this.mqttClient || !this.roomHash) return;
+    const payload = JSON.stringify({
+      id: this.localPeerId,
+      name: this.deviceName,
+      peerJsId: this.localPeerId,
+      timestamp: Date.now(),
+    });
+    try {
+      (this.mqttClient as { send: (topic: string, payload: string) => void }).send(
+        `osler/sync/v2/${this.roomHash}/presence`,
+        payload,
+      );
+    } catch { }
+  }
+
+  private pruneStaleDevices(): void {
+    const now = Date.now();
+    let changed = false;
+    for (const [id, device] of Object.entries(this.devices)) {
+      if (now - device.lastSeen > 15000) {
+        delete this.devices[id];
+        changed = true;
+      }
+    }
+    if (changed) {
+      this.callbacks.onDevicesChanged(this.discoveredDevices);
     }
   }
 }
