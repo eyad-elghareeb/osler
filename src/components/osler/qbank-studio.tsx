@@ -627,6 +627,7 @@ function HomeView({
     items: PackEntry[];
   } | null>(null);
   const [, force] = React.useReducer((x) => x + 1, 0);
+  const { t } = useI18n();
   const [savedSessions, setSavedSessions] = React.useState<SavedSession[]>([]);
 
   React.useEffect(() => {
@@ -667,9 +668,9 @@ function HomeView({
           <div className="border-b border-border mb-6">
             <nav className="-mb-px flex gap-0">
               {[
-                { id: "content" as const, label: "Content", icon: Grid3x3 },
-                { id: "create" as const, label: "Create Test", icon: Plus },
-                { id: "previous" as const, label: "Previous Tests", icon: History },
+                { id: "content" as const, label: t("qbank.home.tabContent"), icon: Grid3x3 },
+                { id: "create" as const, label: t("qbank.home.createTest"), icon: Plus },
+                { id: "previous" as const, label: t("qbank.home.tabPrevious"), icon: History },
               ].map((t) => {
                 const Icon = t.icon;
                 const active = homeTab === t.id;
@@ -1199,6 +1200,7 @@ function CreateTestTab({
   onOpenPack?: (item: ContentTreeNode) => void;
   onSetQuestionLimit?: (n: number) => void;
 }) {
+  const { t } = useI18n();
   const [batchSize, setBatchSize] = React.useState(20);
   const [customBatchInput, setCustomBatchInput] = React.useState("");
   const [selectedEngineTypes, setSelectedEngineTypes] = React.useState<string[]>([]);
@@ -1352,7 +1354,7 @@ function CreateTestTab({
             {/* Tags */}
             {allTags.length > 0 && (
               <CheckboxColumn
-                title="Tags (Topics)"
+                title={t("qbank.home.tagsTopics")}
                 items={allTags.map((t) => ({
                   id: t,
                   label: t,
@@ -1372,15 +1374,15 @@ function CreateTestTab({
 
         {/* Section 4: Ordering */}
         <div className="qbank-card">
-          <SectionHeader number={4} title="Question Order" subtitle="Choose how questions are ordered in your test." />
+          <SectionHeader number={4} title={t("qbank.home.questionOrder")} subtitle="Choose how questions are ordered in your test." />
           <div className="mt-4">
             <select
               value={sort}
               onChange={(e) => setSort(e.target.value as "default" | "random")}
               className="w-full sm:w-64 h-9 rounded-xl border border-border bg-card text-sm px-3 focus:outline-none focus:ring-2 focus:ring-primary/30"
             >
-              <option value="default">Default Order</option>
-              <option value="random">Randomized</option>
+              <option value="default">{t("qbank.home.defaultOrder")}</option>
+              <option value="random">{t("qbank.home.randomized")}</option>
             </select>
           </div>
         </div>
@@ -1392,24 +1394,24 @@ function CreateTestTab({
           <div className="qbank-card">
             <h3 className="text-base font-semibold text-foreground flex items-center gap-2">
               <FileText className="size-4 text-primary" />
-              Test Summary
+              {t("qbank.home.testSummary")}
             </h3>
             <div className="mt-4 space-y-2.5 text-sm">
-              <SummaryRow label="Test Mode" value={testMode === "timed" ? "Timed" : "Tutor"} />
+              <SummaryRow label={t("qbank.home.testMode")} value={testMode === "timed" ? t("qbank.home.timed") : t("qbank.home.tutor")} />
               <SummaryRow
-                label="Questions"
+                label={t("qbank.home.questionsLabel")}
                 value={actualBatchSize > 0 ? String(actualBatchSize) : "—"}
               />
               <SummaryRow
-                label="Engines"
-                value={selectedEngineTypes.length > 0 ? selectedEngineTypes.length + " selected" : "All"}
+                label={t("qbank.home.engines")}
+                value={selectedEngineTypes.length > 0 ? selectedEngineTypes.length + t("qbank.home.selected") : t("qbank.home.all")}
               />
               <SummaryRow
-                label="Tags"
-                value={selectedTags.length > 0 ? selectedTags.length + " selected" : "All"}
+                label={t("qbank.home.tags")}
+                value={selectedTags.length > 0 ? selectedTags.length + t("qbank.home.selected") : t("qbank.home.all")}
               />
-              <SummaryRow label="Packs" value={String(filteredPacks.length)} />
-              <SummaryRow label="Total Available" value={String(totalAvailable)} />
+              <SummaryRow label={t("qbank.home.packs")} value={String(filteredPacks.length)} />
+              <SummaryRow label={t("qbank.home.totalAvailable")} value={String(totalAvailable)} />
             </div>
 
             <div className="mt-5 pt-4 border-t border-border">
@@ -1424,7 +1426,7 @@ function CreateTestTab({
                 className="w-full h-11 text-sm font-semibold rounded-xl"
               >
                 <Plus className="size-4 mr-2" />
-                Create Test
+                {t("qbank.home.createTest")}
               </Button>
               <p className="text-[11px] text-muted-foreground text-center mt-2">
                 {filteredPacks.length > 0
@@ -1471,12 +1473,12 @@ function CreateTestTab({
           <div className="qbank-card">
             <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
               <Lightbulb className="size-4 text-amber-500" />
-              Tip
+              {t("qbank.home.tip")}
             </h3>
-            <p className="text-xs text-muted-foreground mt-2 leading-relaxed">
-              Use <strong>Tutor mode</strong> for first-pass learning — you see the explanation immediately after submitting. Use{" "}
-              <strong>Timed mode</strong> to practice pacing under real exam conditions.
-            </p>
+            <p
+              className="text-xs text-muted-foreground mt-2 leading-relaxed"
+              dangerouslySetInnerHTML={{ __html: t("qbank.home.tipContent") }}
+            />
           </div>
         </div>
       </div>
@@ -1500,6 +1502,7 @@ function CheckboxColumn({
   onChange: (ids: string[]) => void;
   onClear: () => void;
 }) {
+  const { t } = useI18n();
   const allSelected = items.length > 0 && selected.length === items.length;
   const someSelected = selected.length > 0 && !allSelected;
   const allCheckboxRef = React.useRef<HTMLInputElement>(null);
@@ -1529,7 +1532,7 @@ function CheckboxColumn({
           checked={allSelected}
           onChange={toggleAll}
           className="size-3.5 rounded accent-primary"
-          title="Select all"
+          title={t("qbank.home.selectAll")}
         />
         <span className="text-xs font-semibold uppercase tracking-wider text-foreground flex-1">{title}</span>
         <span className="text-[10px] text-muted-foreground tabular-nums">
@@ -1538,7 +1541,7 @@ function CheckboxColumn({
       </div>
       <div className="max-h-48 overflow-y-auto medos-scroll p-1.5">
         {items.length === 0 ? (
-          <p className="text-xs text-muted-foreground text-center py-4">No items available.</p>
+          <p className="text-xs text-muted-foreground text-center py-4">{t("qbank.home.noItems")}</p>
         ) : (
           items.map((item) => {
             const isSel = selected.includes(item.id);
@@ -1607,13 +1610,14 @@ function PreviousTestsTab({
   sessions: SavedSession[];
   onDelete: (id: string) => void;
 }) {
+  const { t } = useI18n();
   if (sessionList.length === 0) {
     return (
       <div className="qbank-card text-center py-12">
         <History className="size-10 text-muted-foreground mx-auto mb-3" />
-        <h3 className="text-base font-semibold mb-1">No previous tests</h3>
+        <h3 className="text-base font-semibold mb-1">{t("qbank.home.noPreviousTests")}</h3>
         <p className="text-sm text-muted-foreground">
-          Complete a test to see it here. All tests are saved automatically.
+          {t("qbank.home.noPreviousTestsDesc")}
         </p>
       </div>
     );

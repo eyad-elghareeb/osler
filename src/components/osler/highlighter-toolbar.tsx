@@ -3,6 +3,7 @@
 import * as React from "react";
 import { Highlighter, Eraser, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useI18n } from "@/components/osler/i18n-provider";
 import {
   HIGHLIGHT_COLOR_KEYS,
   HIGHLIGHT_PALETTE,
@@ -45,6 +46,7 @@ export function HighlighterToolbar({
   tone = "surface",
   className = "",
 }: HighlighterToolbarProps) {
+  const { t } = useI18n();
   const { tool, color, count, onToolChange, onColorChange, onClearAll } = control;
 
   const [confirmOpen, setConfirmOpen] = React.useState(false);
@@ -128,8 +130,8 @@ export function HighlighterToolbar({
                 : "hover:scale-110"
             )}
             style={{ backgroundColor: resolveHighlightColor(key) }}
-            title={`Highlight ${HIGHLIGHT_PALETTE[key].label}`}
-            aria-label={`Highlight ${HIGHLIGHT_PALETTE[key].label}`}
+            title={t("highlighter.color", { label: HIGHLIGHT_PALETTE[key].label })}
+            aria-label={t("highlighter.color", { label: HIGHLIGHT_PALETTE[key].label })}
             aria-pressed={selected}
           />
         );
@@ -138,8 +140,8 @@ export function HighlighterToolbar({
       <button
         onClick={handleEraser}
         className={eraserClass}
-        title="Erase highlights — tap a highlight to remove it"
-        aria-label="Erase highlights"
+        title={t("highlighter.eraser")}
+        aria-label={t("highlighter.eraserLabel")}
         aria-pressed={isEraser}
       >
         <Eraser className="size-3" />
@@ -154,8 +156,8 @@ export function HighlighterToolbar({
           <button
             onClick={() => setConfirmOpen(true)}
             className={clearClass}
-            title="Clear all highlights"
-            aria-label="Clear all highlights"
+            title={t("highlighter.clearAllLabel")}
+            aria-label={t("highlighter.clearAllLabel")}
           >
             <Trash2 className="size-3" />
           </button>
@@ -169,11 +171,7 @@ export function HighlighterToolbar({
       <button
         onClick={handleToggle}
         className={toggleClass}
-        title={
-          active
-            ? "Highlighter on — pick a color or the eraser"
-            : "Highlight text"
-        }
+        title={active ? t("highlighter.toggleOn") : t("highlighter.toggleOff")}
         aria-pressed={active}
       >
         <Highlighter className="size-3.5" />
@@ -198,14 +196,13 @@ export function HighlighterToolbar({
       <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Clear all highlights?</AlertDialogTitle>
+            <AlertDialogTitle>{t("highlighter.clearConfirmTitle")}</AlertDialogTitle>
             <AlertDialogDescription>
-              This removes all {count} highlight{count === 1 ? "" : "s"} on this
-              item. This action cannot be undone.
+              {t("highlighter.clearConfirmDesc", { count })}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogCancel>{t("common.cancel")}</AlertDialogCancel>
             <AlertDialogAction asChild>
               <Button
                 variant="destructive"
@@ -214,7 +211,7 @@ export function HighlighterToolbar({
                   setConfirmOpen(false);
                 }}
               >
-                Clear all
+                {t("highlighter.clearConfirm")}
               </Button>
             </AlertDialogAction>
           </AlertDialogFooter>

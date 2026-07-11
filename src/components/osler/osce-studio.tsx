@@ -1447,14 +1447,14 @@ export function OsceStudio({ activeItem, activeContent, onExit, onOpenPack }: Os
 
             {/* Task */}
             <div className="bg-card border border-border/60 rounded-xl p-4 mb-4">
-              <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium mb-2">Your Task</p>
+              <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium mb-2">{t("osce.session.yourTask")}</p>
               <p className="text-sm leading-relaxed">{activeCase.task}</p>
             </div>
 
             {/* Data (if data-interp) */}
             {isDataInterp && activeCase.dataPresented?.scenario && (
               <div className="bg-card border border-border/60 rounded-xl p-4 mb-4">
-                <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium mb-2">Clinical Scenario</p>
+                <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium mb-2">{t("osce.session.clinicalScenario")}</p>
                 <p className="text-sm leading-relaxed">{activeCase.dataPresented.scenario}</p>
               </div>
             )}
@@ -1467,9 +1467,9 @@ export function OsceStudio({ activeItem, activeContent, onExit, onOpenPack }: Os
             {/* Stats row */}
             <div className="grid grid-cols-3 gap-3 mb-6">
               {[
-                { icon: Clock, val: dur + " min", label: "Time limit" },
-                { icon: Activity, val: String(MAX_TURNS), label: "Max turns" },
-                { icon: BarChart3, val: "AI", label: "Examiner" },
+                { icon: Clock, val: dur + " min", label: t("osce.session.timeLimit") },
+                { icon: Activity, val: String(MAX_TURNS), label: t("osce.session.maxTurns") },
+                { icon: BarChart3, val: "AI", label: t("osce.session.examiner") },
               ].map(({ icon: Icon, val, label }) => (
                 <div key={label} className="bg-card border border-border/60 rounded-xl p-3 text-center">
                   <Icon className="size-4 text-primary mx-auto mb-1" />
@@ -1483,7 +1483,7 @@ export function OsceStudio({ activeItem, activeContent, onExit, onOpenPack }: Os
             {stations.length > 1 && (
               <div className="bg-card border border-border/60 rounded-xl p-4 mb-4">
                 <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium mb-3">
-                  Stations ({stations.length})
+                  {t("osce.session.stations", { n: stations.length })}
                 </p>
                 <div className="flex flex-wrap gap-2">
                   {stations.map((s, i) => (
@@ -1516,7 +1516,7 @@ export function OsceStudio({ activeItem, activeContent, onExit, onOpenPack }: Os
                 className="inline-flex items-center gap-2 h-11 px-6 rounded-lg bg-primary text-primary-foreground font-semibold text-sm hover:bg-primary/90 transition-colors active:scale-[0.98]"
               >
                 <Play className="size-4" />
-                {isDataInterp ? "Begin Exam" : "Enter Consultation Room"}
+                {isDataInterp ? t("osce.session.beginExam") : t("osce.session.enterRoom")}
               </button>
             </div>
           </motion.div>
@@ -1635,7 +1635,7 @@ export function OsceStudio({ activeItem, activeContent, onExit, onOpenPack }: Os
           <button
             onClick={() => { stopTimer(); setPhase("lobby"); }}
             className="size-8 rounded-md hover:bg-muted/60 flex items-center justify-center shrink-0 transition-colors"
-            title="Back to lobby"
+            title={t("osce.session.backToLobby")}
           >
             <ChevronLeft className="size-4" />
           </button>
@@ -1719,7 +1719,7 @@ export function OsceStudio({ activeItem, activeContent, onExit, onOpenPack }: Os
 
               {/* Progress */}
               <div className="bg-card border border-border/60 rounded-lg p-3 space-y-2">
-                <div className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground">Progress</div>
+                  <div className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground">{t("osce.home.progress")}</div>
                 <div className="flex justify-between text-[11px]">
                   <span className="text-muted-foreground">Questions</span>
                   <span className="font-semibold tabular-nums">{turnCount} / {MAX_TURNS}</span>
@@ -1731,7 +1731,7 @@ export function OsceStudio({ activeItem, activeContent, onExit, onOpenPack }: Os
                   />
                 </div>
                 <div className="flex justify-between text-[11px]">
-                  <span className="text-muted-foreground">Time used</span>
+                  <span className="text-muted-foreground">{t("osce.session.timeUsed")}</span>
                   <span className="font-semibold tabular-nums">{timeUsedPct}%</span>
                 </div>
               </div>
@@ -1739,7 +1739,7 @@ export function OsceStudio({ activeItem, activeContent, onExit, onOpenPack }: Os
               {/* Consultation map */}
               {!isDataInterp && (
                 <div className="bg-card border border-border/60 rounded-lg p-3">
-                  <div className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground mb-2">Consultation Map</div>
+                  <div className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground mb-2">{t("osce.session.consultationMap")}</div>
                   <div className="flex flex-col gap-0.5">
                     {MAP_STEPS.map(([label, desc], i) => (
                       <div
@@ -1767,15 +1767,15 @@ export function OsceStudio({ activeItem, activeContent, onExit, onOpenPack }: Os
               {/* Quick prompts */}
               {!isDataInterp && (
                 <div className="bg-card border border-border/60 rounded-lg p-3">
-                  <div className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground mb-2">Quick Prompts</div>
+                  <div className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground mb-2">{t("osce.session.quickPrompts")}</div>
                   <div className="flex flex-col gap-1">
                     {[
-                      ["Open", "Can you tell me more about what brought you in today?"],
-                      ["Timing", "When did this start, and what were you doing?"],
-                      ["Severity", "On a scale of 1-10, how bad is it?"],
-                      ["Triggers", "Does anything make it better or worse?"],
-                      ["PMH", "Do you have any medical conditions or take regular medicines?"],
-                      ["ICE", "Is there anything you are particularly worried this might be?"],
+                      [t("osce.session.prompt.open"), "Can you tell me more about what brought you in today?"],
+                      [t("osce.session.prompt.timing"), "When did this start, and what were you doing?"],
+                      [t("osce.session.prompt.severity"), "On a scale of 1-10, how bad is it?"],
+                      [t("osce.session.prompt.triggers"), "Does anything make it better or worse?"],
+                      [t("osce.session.prompt.pmh"), "Do you have any medical conditions or take regular medicines?"],
+                      [t("osce.session.prompt.ice"), "Is there anything you are particularly worried this might be?"],
                     ].map(([label, prompt]) => (
                       <button
                         key={label}
@@ -1795,7 +1795,7 @@ export function OsceStudio({ activeItem, activeContent, onExit, onOpenPack }: Os
                 disabled={sending || thinking || !transcript.length}
                 className="w-full h-9 rounded-lg bg-primary/10 border border-primary/30 text-primary text-xs font-semibold hover:bg-primary/20 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
               >
-                Submit for Feedback
+                {t("osce.session.submitFeedback")}
               </button>
             </aside>
           )}
@@ -1812,15 +1812,15 @@ export function OsceStudio({ activeItem, activeContent, onExit, onOpenPack }: Os
                       ? "The examiner will present the case when you speak."
                       : `Say hello to ${p.name} to begin.`}
                   </p>
-                  <p className="text-xs opacity-70">Type a message below or use the microphone.</p>
+                  <p className="text-xs opacity-70">{t("osce.session.emptyState")}</p>
                 </div>
               )}
 
               {transcript.map((m, i) => {
                 const isModel = m.role === "model";
                 const label = isDataInterp
-                  ? isModel ? activeCase.examiner?.name || "Examiner" : "You"
-                  : isModel ? speakerName : "You";
+                  ? isModel ? activeCase.examiner?.name || t("osce.session.examiner") : t("osce.session.you")
+                  : isModel ? speakerName : t("osce.session.you");
                 return (
                   <motion.div
                     key={i}
@@ -1888,7 +1888,7 @@ export function OsceStudio({ activeItem, activeContent, onExit, onOpenPack }: Os
                   animate={{ opacity: 1 }}
                   className="self-end flex flex-col gap-1 items-end max-w-[80%]"
                 >
-                  <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">You</div>
+                  <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">{t("osce.session.you")}</div>
                   <div className="px-3.5 py-2.5 rounded-2xl rounded-tr-sm bg-primary/5 border border-primary/10 text-sm text-muted-foreground italic">
                     {interimText}
                   </div>
@@ -2000,7 +2000,7 @@ export function OsceStudio({ activeItem, activeContent, onExit, onOpenPack }: Os
                     disabled={sending || thinking || !transcript.length}
                     className="flex-1 h-7 px-3 rounded-md border border-border/60 text-[11px] font-medium text-muted-foreground hover:border-primary/40 hover:text-primary transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
                   >
-                    Submit for Feedback
+                    {t("osce.session.submitFeedback")}
                   </button>
                 )}
 
@@ -2011,7 +2011,7 @@ export function OsceStudio({ activeItem, activeContent, onExit, onOpenPack }: Os
                       disabled={sending || thinking || !transcript.length}
                       className="h-7 px-3 rounded-md border border-border/60 text-[11px] font-medium text-muted-foreground hover:border-primary/40 hover:text-primary transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
                     >
-                      Submit for Feedback
+                      {t("osce.session.submitFeedback")}
                     </button>
                   )}
                   <button

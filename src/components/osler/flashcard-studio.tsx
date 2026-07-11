@@ -315,10 +315,9 @@ export function FlashcardStudio({
             <Brain className="size-9 text-emerald-500" />
           </motion.div>
 
-          <h2 className="text-2xl font-bold mb-2">Session Complete!</h2>
+          <h2 className="text-2xl font-bold mb-2">{t("flash.session.completeTitle")}</h2>
           <p className="text-sm text-muted-foreground mb-8">
-            You reviewed {doneCount} card{doneCount !== 1 ? "s" : ""} in{" "}
-            {currentDeck.title}
+            {t("flash.session.reviewedIn", { count: doneCount, deck: currentDeck.title })}
             {activeSubdeckId && currentDeck.items.find((c) => c.uid === activeSubdeckId)
               ? ` :: ${currentDeck.items.find((c) => c.uid === activeSubdeckId)!.title}`
               : ""}
@@ -327,17 +326,17 @@ export function FlashcardStudio({
           <div className="grid grid-cols-3 gap-3 mb-8">
             <div className="bg-card border border-border rounded-xl p-4">
               <div className="text-2xl font-bold text-foreground">{doneCount}</div>
-              <div className="text-[11px] text-muted-foreground mt-1">Reviewed</div>
+              <div className="text-[11px] text-muted-foreground mt-1">{t("flash.session.reviewed")}</div>
             </div>
             <div className="bg-card border border-border rounded-xl p-4">
               <div className="text-2xl font-bold text-emerald-500">{accuracy}%</div>
-              <div className="text-[11px] text-muted-foreground mt-1">Accuracy</div>
+              <div className="text-[11px] text-muted-foreground mt-1">{t("flash.session.accuracy")}</div>
             </div>
             <div className="bg-card border border-border rounded-xl p-4">
               <div className="text-2xl font-bold text-amber-500">
                 {sessionResults.filter((r) => r.rating === "again").length}
               </div>
-              <div className="text-[11px] text-muted-foreground mt-1">Again</div>
+              <div className="text-[11px] text-muted-foreground mt-1">{t("flash.session.rateAgain")}</div>
             </div>
           </div>
 
@@ -347,14 +346,14 @@ export function FlashcardStudio({
               className="w-full h-11 rounded-xl bg-primary text-primary-foreground font-medium hover:bg-primary/90 transition-colors flex items-center justify-center gap-2"
             >
               <RotateCcw className="size-4" />
-              Study Again
+              {t("flash.home.studyAgain")}
             </button>
             <button
               onClick={backToDecks}
               className="w-full h-11 rounded-xl border border-border text-foreground font-medium hover:bg-muted/60 transition-colors flex items-center justify-center gap-2"
             >
               <Layers className="size-4" />
-              All Decks
+              {t("flash.home.allDecks")}
             </button>
           </div>
         </div>
@@ -371,10 +370,10 @@ export function FlashcardStudio({
           <button
             onClick={closeStudy}
             className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors medos-touch-target"
-            title="Exit study session (Esc)"
+            title={t("flash.exitTooltip")}
           >
             <XIcon className="size-4" />
-            <span className="hidden sm:inline">Exit</span>
+            <span className="hidden sm:inline">{t("flash.exit")}</span>
           </button>
 
           <div className="h-5 w-px bg-border/60 hidden sm:block" />
@@ -403,7 +402,7 @@ export function FlashcardStudio({
                   ? "text-muted-foreground/30 cursor-not-allowed"
                   : "text-muted-foreground hover:text-foreground hover:bg-muted/60",
               )}
-              title="Previous card (←)"
+              title={t("flash.prevCardTooltip")}
             >
               <ChevronLeft className="size-4" />
             </button>
@@ -419,7 +418,7 @@ export function FlashcardStudio({
                   ? "text-muted-foreground/30 cursor-not-allowed"
                   : "text-muted-foreground hover:text-foreground hover:bg-muted/60",
               )}
-              title="Next card (→)"
+              title={t("flash.nextCardTooltip")}
             >
               <ChevronRight className="size-4" />
             </button>
@@ -428,10 +427,10 @@ export function FlashcardStudio({
           <button
             onClick={restartDeck}
             className="hidden sm:flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors ml-1"
-            title="Restart deck (R)"
+            title={t("flash.restartTooltip")}
           >
             <RotateCcw className="size-3.5" />
-            <span>Restart</span>
+            <span>{t("flash.restart")}</span>
           </button>
         </header>
 
@@ -455,7 +454,7 @@ export function FlashcardStudio({
                 <div className="h-1/2 flex flex-col items-center justify-center p-4 sm:p-6">
                   <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-2 flex items-center gap-1.5">
                     <Lightbulb className="size-3" />
-                    Question
+                    {t("flash.question")}
                   </div>
                   <div className="text-sm sm:text-base leading-relaxed max-w-lg uworld-prose text-center">
                     {currentCard.front}
@@ -465,7 +464,7 @@ export function FlashcardStudio({
                 <div className="h-1/2 flex flex-col items-center justify-center p-4 sm:p-6 bg-[color-mix(in_oklch,var(--primary)_4%,var(--card))] rounded-b-xl">
                   <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-2 flex items-center gap-1.5">
                     <Sparkles className="size-3" />
-                    Answer
+                    {t("flash.answer")}
                   </div>
                   <div className="text-sm sm:text-base leading-relaxed max-w-lg uworld-prose text-center">
                     {currentCard.back}
@@ -480,13 +479,13 @@ export function FlashcardStudio({
               >
                 <div className="text-[11px] uppercase tracking-wider text-muted-foreground mb-4 flex items-center gap-1.5">
                   <Lightbulb className="size-3" />
-                  Question
+                  {t("flash.question")}
                 </div>
                 <div className="text-lg sm:text-xl leading-relaxed max-w-lg uworld-prose text-center">
                   {currentCard.front}
                 </div>
                 <div className="mt-auto pt-6 text-xs text-muted-foreground/60">
-                  Tap to reveal answer
+                  {t("flash.tapToReveal")}
                 </div>
               </motion.div>
             </div>
@@ -505,12 +504,12 @@ export function FlashcardStudio({
             >
               <div className="max-w-lg mx-auto">
                 <div className="text-[10px] uppercase tracking-wider text-muted-foreground text-center mb-2">
-                  How well did you know this?
+                  {t("flash.ratePrompt")}
                 </div>
                 <div className="grid grid-cols-4 gap-1.5">
                   <RateButton
-                    label="Again"
-                    description="1 min"
+                    label={t("flash.session.rateAgain")}
+                    description={t("flash.session.timeAgain")}
                     shortcut="1"
                     rating="again"
                     color="red"
@@ -518,8 +517,8 @@ export function FlashcardStudio({
                     onRate={rateCard}
                   />
                   <RateButton
-                    label="Hard"
-                    description="6 min"
+                    label={t("flash.session.rateHard")}
+                    description={t("flash.session.timeHard")}
                     shortcut="2"
                     rating="hard"
                     color="orange"
@@ -527,8 +526,8 @@ export function FlashcardStudio({
                     onRate={rateCard}
                   />
                   <RateButton
-                    label="Good"
-                    description="10 min"
+                    label={t("flash.session.rateGood")}
+                    description={t("flash.session.timeGood")}
                     shortcut="3"
                     rating="good"
                     color="emerald"
@@ -536,8 +535,8 @@ export function FlashcardStudio({
                     onRate={rateCard}
                   />
                   <RateButton
-                    label="Easy"
-                    description="4 d"
+                    label={t("flash.session.rateEasy")}
+                    description={t("flash.session.timeEasy")}
                     shortcut="4"
                     rating="easy"
                     color="blue"
@@ -546,12 +545,12 @@ export function FlashcardStudio({
                   />
                 </div>
                 <div className="flex items-center justify-center gap-2 mt-2 text-[9px] text-muted-foreground/40">
-                  <span><kbd className="px-1 py-0.5 rounded border border-border/30 text-[8px]">1</kbd> Again</span>
-                  <span><kbd className="px-1 py-0.5 rounded border border-border/30 text-[8px]">2</kbd> Hard</span>
-                  <span><kbd className="px-1 py-0.5 rounded border border-border/30 text-[8px]">3</kbd> Good</span>
-                  <span><kbd className="px-1 py-0.5 rounded border border-border/30 text-[8px]">4</kbd> Easy</span>
-                  <span className="hidden sm:inline"><kbd className="px-1 py-0.5 rounded border border-border/30 text-[8px]">←</kbd><kbd className="px-1 py-0.5 rounded border border-border/30 text-[8px]">→</kbd> Nav</span>
-                  <span className="hidden sm:inline"><kbd className="px-1 py-0.5 rounded border border-border/30 text-[8px]">Esc</kbd> Exit</span>
+                  <span><kbd className="px-1 py-0.5 rounded border border-border/30 text-[8px]">1</kbd> {t("flash.session.rateAgain")}</span>
+                  <span><kbd className="px-1 py-0.5 rounded border border-border/30 text-[8px]">2</kbd> {t("flash.session.rateHard")}</span>
+                  <span><kbd className="px-1 py-0.5 rounded border border-border/30 text-[8px]">3</kbd> {t("flash.session.rateGood")}</span>
+                  <span><kbd className="px-1 py-0.5 rounded border border-border/30 text-[8px]">4</kbd> {t("flash.session.rateEasy")}</span>
+                  <span className="hidden sm:inline"><kbd className="px-1 py-0.5 rounded border border-border/30 text-[8px]">←</kbd><kbd className="px-1 py-0.5 rounded border border-border/30 text-[8px]">→</kbd> {t("flash.keyboardNav")}</span>
+                  <span className="hidden sm:inline"><kbd className="px-1 py-0.5 rounded border border-border/30 text-[8px]">Esc</kbd> {t("flash.exit")}</span>
                 </div>
               </div>
             </motion.div>
@@ -578,7 +577,7 @@ export function FlashcardStudio({
               className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors mb-3"
             >
               <ArrowLeft className="size-3.5" />
-              All Decks
+              {t("flash.home.allDecks")}
             </button>
             <div className="flex items-center gap-2 text-xs text-muted-foreground mb-1">
               <Layers className="size-3.5" />
@@ -588,7 +587,7 @@ export function FlashcardStudio({
               {currentDeck.title}
             </h1>
             <p className="text-sm text-muted-foreground">
-              {totalDue} cards due today &middot; {totalCards} total
+              {t("flash.dueToday", { due: totalDue, total: totalCards })}
             </p>
           </div>
 
@@ -599,14 +598,14 @@ export function FlashcardStudio({
               className="h-10 px-4 rounded-xl bg-primary text-primary-foreground font-medium text-sm hover:bg-primary/90 transition-colors flex items-center gap-2"
             >
               <GraduationCap className="size-4" />
-              Study All
+              {t("flash.home.studyAll")}
             </button>
             <button
               onClick={exportToAnki}
               className="h-10 px-4 rounded-xl border border-border text-foreground font-medium text-sm hover:bg-muted/60 transition-colors flex items-center gap-2"
             >
               <Download className="size-4" />
-              Export to Anki
+              {t("flash.exportAnki")}
             </button>
           </div>
 
@@ -644,8 +643,8 @@ export function FlashcardStudio({
                       <h3 className="font-semibold truncate">{child.title}</h3>
                       <p className="text-xs text-muted-foreground">
                         {isBranch
-                          ? `${child.items.length} subdeck${child.items.length !== 1 ? "s" : ""}`
-                          : `${count} card${count !== 1 ? "s" : ""}`}
+                          ? t("flash.home.subdecks", { n: child.items.length })
+                          : t("flash.home.cards", { n: count })}
                       </p>
                     </div>
                     <ChevronRight className="size-4 text-muted-foreground/40 group-hover:text-muted-foreground transition-colors ml-auto shrink-0" />
@@ -659,12 +658,12 @@ export function FlashcardStudio({
                     <div className="flex items-center gap-1.5">
                       <span className="inline-flex items-center gap-1 text-xs font-medium text-emerald-500 bg-emerald-500/10 px-2 py-0.5 rounded-full">
                         <Clock className="size-3" />
-                        {dueCount} due
+                        {t("flash.dueCount", { count: dueCount })}
                       </span>
                     </div>
                   )}
                   {dueCount === 0 && count > 0 && (
-                    <span className="text-xs text-muted-foreground/50">All reviewed</span>
+                    <span className="text-xs text-muted-foreground/50">{t("flash.allReviewed")}</span>
                   )}
                 </button>
               );
@@ -813,10 +812,10 @@ export function FlashcardStudio({
                   )}
                   <div className="flex items-center gap-3 text-xs">
                     <span className="text-emerald-500 font-medium tabular-nums">
-                      {dueCount} due
+                      {t("flash.dueCount", { count: dueCount })}
                     </span>
                     <span className="text-muted-foreground">
-                      {totalCards} total
+                      {t("flash.totalCount", { count: totalCards })}
                     </span>
                   </div>
                   <div className="mt-2 h-1.5 rounded-full bg-muted/40 overflow-hidden">

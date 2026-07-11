@@ -3,6 +3,7 @@
 import * as React from "react";
 import { motion } from "framer-motion";
 import { Calculator, X } from "lucide-react";
+import { useI18n } from "@/components/osler/i18n-provider";
 
 function useDrag(initialPos?: { x: number; y: number }) {
   const [pos, setPos] = React.useState(initialPos ?? null);
@@ -38,6 +39,7 @@ function useDrag(initialPos?: { x: number; y: number }) {
 }
 
 export function CalculatorModal({ onClose }: { onClose: () => void }) {
+  const { t } = useI18n();
   const [display, setDisplay] = React.useState("0");
   const [equation, setEquation] = React.useState("");
   const ref = React.useRef<HTMLDivElement>(null);
@@ -147,7 +149,7 @@ export function CalculatorModal({ onClose }: { onClose: () => void }) {
       >
         <div className="flex items-center gap-1.5">
           <Calculator className="size-3.5" />
-          <span className="text-xs font-semibold">Calculator</span>
+          <span className="text-xs font-semibold">{t("calculator.title")}</span>
         </div>
         <button
           onClick={onClose}

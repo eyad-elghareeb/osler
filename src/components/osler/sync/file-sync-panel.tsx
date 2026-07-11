@@ -8,8 +8,10 @@ import { Button } from "@/components/ui/button";
 import { FileSync, SyncProtocol } from "@/lib/osler/sync";
 import { buildExportPayload, mergePayloadIntoStorage } from "@/lib/osler/sync/sync-helpers";
 import { cn } from "@/lib/utils";
+import { useI18n } from "@/components/osler/i18n-provider";
 
 export function FileSyncPanel() {
+  const { t } = useI18n();
   const [importing, setImporting] = React.useState(false);
   const [exporting, setExporting] = React.useState(false);
   const [fileResult, setFileResult] = React.useState<{ success: boolean; message: string } | null>(null);
@@ -21,9 +23,9 @@ export function FileSyncPanel() {
       const payload = await buildExportPayload();
       const wire = SyncProtocol.encode(payload);
       FileSync.downloadBackup(wire);
-      setFileResult({ success: true, message: "Backup downloaded successfully" });
+      setFileResult({ success: true, message: t("sync.file.success") });
     } catch (e) {
-      setFileResult({ success: false, message: `Export failed: ${(e as Error).message}` });
+      setFileResult({ success: false, message: t("sync.file.exportFailed", { error: (e as Error).message }) });
     } finally {
       setExporting(false);
     }
@@ -40,16 +42,16 @@ export function FileSyncPanel() {
       }
       const importResult = await FileSync.readBackupFile(result);
       if (!importResult.success) {
-        setFileResult({ success: false, message: importResult.error ?? "Unknown error" });
+        setFileResult({ success: false, message: importResult.error ?? t("sync.file.unknownError") });
         setImporting(false);
         return;
       }
       if (importResult.payload) {
         await mergePayloadIntoStorage(importResult.payload);
-        setFileResult({ success: true, message: `Restored from backup: ${importResult.payload.senderName}` });
+        setFileResult({ success: true, message: t("sync.file.imported", { name: importResult.payload.senderName }) });
       }
     } catch (e) {
-      setFileResult({ success: false, message: `Import failed: ${(e as Error).message}` });
+      setFileResult({ success: false, message: t("sync.file.importFailed", { error: (e as Error).message }) });
     } finally {
       setImporting(false);
     }
@@ -64,15 +66,15 @@ export function FileSyncPanel() {
             <Download className="size-5" />
           </div>
           <div className="flex-1 min-w-0">
-            <h3 className="text-sm font-semibold mb-1">Backup Progress</h3>
+            <h3 className="text-sm font-semibold mb-1">{t("sync.file.exportTitle")}</h3>
             <p className="text-xs text-muted-foreground mb-3">
-              Download all your progress data to a secure file. Use this file to restore your data on another device or after a reset.
+              {t("sync.file.exportDesc")}
             </p>
             <Button size="sm" variant="default" className="h-8 text-xs" onClick={handleExport} disabled={exporting}>
               {exporting ? (
-                <><Loader2 className="size-3 me-1.5 animate-spin" /> Exporting...</>
+                <><Loader2 className="size-3 me-1.5 animate-spin" /> {t("sync.file.exporting")}</>
               ) : (
-                <><Download className="size-3 me-1.5" /> Download Backup</>
+                <><Download className="size-3 me-1.5" /> {t("sync.file.exportButton")}</>
               )}
             </Button>
           </div>
@@ -86,15 +88,15 @@ export function FileSyncPanel() {
             <Upload className="size-5" />
           </div>
           <div className="flex-1 min-w-0">
-            <h3 className="text-sm font-semibold mb-1">Restore Progress</h3>
+            <h3 className="text-sm font-semibold mb-1">{t("sync.file.importTitle")}</h3>
             <p className="text-xs text-muted-foreground mb-3">
-              Select a backup file to restore your progress. Data will be merged with existing records.
+              {t("sync.file.importDesc")}
             </p>
             <Button size="sm" variant="outline" className="h-8 text-xs" onClick={handleImport} disabled={importing}>
               {importing ? (
-                <><Loader2 className="size-3 me-1.5 animate-spin" /> Reading file...</>
+                <><Loader2 className="size-3 me-1.5 animate-spin" /> {t("sync.file.reading")}</>
               ) : (
-                <><Upload className="size-3 me-1.5" /> Select Backup File</>
+                <><Upload className="size-3 me-1.5" /> {t("sync.file.importButton")}</>
               )}
             </Button>
           </div>

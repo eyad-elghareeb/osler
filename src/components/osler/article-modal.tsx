@@ -6,6 +6,7 @@ import { BookOpen, X, Clock, ChevronRight, Search, Bookmark, BookmarkCheck } fro
 import { loadArticleContent, listAllArticles, searchArticles as searchArticlesAsync, type Article, type ArticleMeta } from "@/lib/osler/articles";
 import { cn } from "@/lib/utils";
 import { useArticleHighlighter } from "@/hooks/use-article-highlighter";
+import { useI18n } from "@/components/osler/i18n-provider";
 import { HighlighterToolbar } from "./highlighter-toolbar";
 import { usePlatform } from "@/hooks/use-platform";
 
@@ -127,6 +128,7 @@ export function FloatingArticleModal({
     }
   }, [articleId]);
 
+  const { t } = useI18n();
   const platform = usePlatform();
 
   return (
@@ -160,7 +162,7 @@ export function FloatingArticleModal({
               <button
                 onClick={() => setShowSidebar((s) => !s)}
                 className="size-8 rounded-md hover:bg-muted flex items-center justify-center shrink-0"
-                title="Toggle article list"
+                title={t("article.toggleList")}
               >
                 <BookOpen className="size-4" />
               </button>
@@ -195,7 +197,7 @@ export function FloatingArticleModal({
                       ? "text-primary bg-primary/10 hover:bg-primary/15"
                       : "text-muted-foreground hover:bg-muted"
                   )}
-                  title={activeId && bookmarks.has(activeId) ? "Remove bookmark" : "Bookmark article"}
+                  title={activeId && bookmarks.has(activeId) ? t("article.bookmarkRemove") : t("article.bookmarkAdd")}
                 >
                   {activeId && bookmarks.has(activeId) ? (
                     <BookmarkCheck className="size-4" />
@@ -206,7 +208,7 @@ export function FloatingArticleModal({
                 <button
                   onClick={onClose}
                   className="size-8 rounded-md hover:bg-muted flex items-center justify-center shrink-0"
-                  title="Close"
+                  title={t("common.close")}
                 >
                   <X className="size-4" />
                 </button>
@@ -231,7 +233,7 @@ export function FloatingArticleModal({
                           autoFocus
                           value={query}
                           onChange={(e) => setQuery(e.target.value)}
-                          placeholder="Search articles…"
+                          placeholder={t("article.searchPlaceholder")}
                           className="flex-1 bg-transparent outline-none text-xs min-w-0"
                         />
                       </div>
@@ -269,7 +271,7 @@ export function FloatingArticleModal({
                   </div>
                 ) : (
                   <div className="flex items-center justify-center h-full text-sm text-muted-foreground">
-                    Article not found.
+                    {t("article.notFound")}
                   </div>
                 )}
               </div>

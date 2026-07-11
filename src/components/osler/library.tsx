@@ -685,6 +685,7 @@ function MobileReader({
   hlCtrl: ReturnType<typeof useArticleHighlighter>;
 }) {
   const [fontPopoverOpen, setFontPopoverOpen] = React.useState(false);
+  const { t } = useI18n();
 
   return (
     <div className="fixed inset-0 z-50 bg-background flex flex-col">
@@ -694,7 +695,7 @@ function MobileReader({
           <button
             onClick={onBack}
             className="size-9 rounded-lg flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors -ml-1"
-            aria-label="Back to library"
+            aria-label={t("library.backToLibrary")}
           >
             <ArrowLeft className="size-5" />
           </button>
@@ -720,7 +721,7 @@ function MobileReader({
               <button
                 onClick={() => setFontPopoverOpen(!fontPopoverOpen)}
                 className="size-9 rounded-lg flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors"
-                title="Font size"
+                title={t("library.fontSize")}
               >
                 <Type className="size-4" />
               </button>
@@ -733,7 +734,7 @@ function MobileReader({
                     className="absolute right-0 top-full mt-1 z-30 bg-card border border-border rounded-lg shadow-lg p-3 w-auto"
                   >
                     <div className="flex items-center gap-2">
-                      <span className="text-[11px] text-muted-foreground w-16">Font size</span>
+                      <span className="text-[11px] text-muted-foreground w-16">{t("library.fontSize")}</span>
                       <button
                         onClick={() => onFontSizeChange(Math.max(12, fontSize - 1))}
                         className="size-7 rounded bg-muted hover:bg-muted/70 flex items-center justify-center"
@@ -881,10 +882,11 @@ function SidebarContent({
   sidebarTab: SidebarTab;
   onTabChange: (t: SidebarTab) => void;
   bookmarkedArticles: ArticleMeta[];
-  fullScreen?: boolean;
-  onClose?: () => void;
-}) {
-  return (
+    fullScreen?: boolean;
+    onClose?: () => void;
+  }) {
+    const { t } = useI18n();
+    return (
     <div className="flex flex-col h-full">
       <div className="px-3 pt-3 pb-2 border-b border-border space-y-2">
         {fullScreen && (
@@ -904,7 +906,7 @@ function SidebarContent({
         <div className="flex items-center justify-between">
           <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-2">
             <BookOpen className="size-3.5" />
-            Article Library
+            {t("library.title")}
           </h3>
           <div className="flex items-center gap-0.5">
             <button
@@ -915,7 +917,7 @@ function SidebarContent({
                   ? "bg-primary/15 text-primary"
                   : "text-muted-foreground hover:bg-muted/60"
               )}
-              title="Table of contents"
+              title={t("library.tableOfContents")}
             >
               <svg className="size-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
             </button>
@@ -927,7 +929,7 @@ function SidebarContent({
                   ? "bg-primary/15 text-primary"
                   : "text-muted-foreground hover:bg-muted/60"
               )}
-              title="Bookmarks"
+              title={t("library.bookmarks")}
             >
               <Bookmark className="size-3.5" />
             </button>
@@ -942,7 +944,7 @@ function SidebarContent({
               onSearchChange(e.target.value);
               if (e.target.value) onTabChange("toc");
             }}
-            placeholder="Search articles…"
+            placeholder={t("library.search")}
             className="w-full h-8 rounded-md border border-border bg-card pl-8 pr-3 text-xs outline-none focus:border-primary transition-colors placeholder:text-muted-foreground/50"
           />
         </div>
@@ -952,9 +954,9 @@ function SidebarContent({
         {sidebarTab === "bookmarks" && bookmarkedArticles.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-10 text-center">
             <BookmarkX className="size-8 text-muted-foreground/40 mb-2" />
-            <p className="text-xs text-muted-foreground">No bookmarks yet</p>
+            <p className="text-xs text-muted-foreground">{t("library.noBookmarksYet")}</p>
             <p className="text-[10px] text-muted-foreground/60 mt-1">
-              Bookmark articles by clicking the bookmark icon
+              {t("library.bookmarkHint")}
             </p>
           </div>
         ) : sidebarTab === "bookmarks" ? (
@@ -1046,6 +1048,7 @@ function ArticleHeader({
   hlCtrl: ReturnType<typeof useArticleHighlighter>;
 }) {
   const [fontPopoverOpen, setFontPopoverOpen] = React.useState(false);
+  const { t } = useI18n();
 
   return (
     <header className="shrink-0 border-b border-border bg-card/40 backdrop-blur-sm px-4 sm:px-6 py-2.5 flex items-center gap-3 flex-wrap">
@@ -1070,7 +1073,7 @@ function ArticleHeader({
           <button
             onClick={() => setFontPopoverOpen(!fontPopoverOpen)}
             className="osler-icon-btn size-8"
-            title="Font size"
+            title={t("library.fontSize")}
           >
             <Type className="size-4" />
           </button>
@@ -1083,7 +1086,7 @@ function ArticleHeader({
                 className="absolute right-0 top-full mt-1 z-30 bg-card border border-border rounded-lg shadow-lg p-3 w-auto"
               >
                 <div className="flex items-center gap-2">
-                  <span className="text-[11px] text-muted-foreground w-16">Font size</span>
+                  <span className="text-[11px] text-muted-foreground w-16">{t("library.fontSize")}</span>
                   <button
                     onClick={() => onFontSizeChange(Math.max(12, fontSize - 1))}
                     className="size-6 rounded bg-muted hover:bg-muted/70 flex items-center justify-center"

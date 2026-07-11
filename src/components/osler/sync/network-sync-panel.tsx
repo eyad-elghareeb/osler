@@ -8,8 +8,10 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { NetworkTransport, type ConnectionInfo, type ConnectionStatus, type DiscoveredDevice } from "@/lib/osler/sync";
 import { cn } from "@/lib/utils";
+import { useI18n } from "@/components/osler/i18n-provider";
 
 export function NetworkSyncPanel() {
+  const { t } = useI18n();
   const [transport, setTransport] = React.useState<NetworkTransport | null>(null);
   const [devices, setDevices] = React.useState<DiscoveredDevice[]>([]);
   const [status, setStatus] = React.useState<ConnectionStatus>("idle");
@@ -26,7 +28,7 @@ export function NetworkSyncPanel() {
         setStatusMsg(m);
       },
       onSyncComplete: () => {
-        setStatusMsg("Sync complete!");
+        setStatusMsg(t("sync.network.complete"));
         setStatus("connected");
       },
       onTransferProgress: () => {},
@@ -89,32 +91,32 @@ export function NetworkSyncPanel() {
             {statusIcon}
           </div>
           <div className="flex-1 min-w-0">
-            <h3 className="text-sm font-semibold mb-1">Network Sync</h3>
+            <h3 className="text-sm font-semibold mb-1">{t("sync.network.title")}</h3>
             <p className="text-xs text-muted-foreground mb-3">
-              Discover devices on the same network and sync your progress peer-to-peer.
+              {t("sync.network.desc")}
             </p>
 
             <div className={cn("text-xs font-medium mb-2 flex items-center gap-2", statusColor)}>
               {statusIcon}
-              <span>{statusMsg || (status === "idle" ? "Not connected" : "Connected")}</span>
+              <span>{statusMsg || (status === "idle" ? t("sync.network.idle") : t("sync.network.connected"))}</span>
             </div>
 
             {(roomId || peerId) && (
               <div className="text-[10px] text-muted-foreground mb-3 font-mono">
-                {peerId && <>Peer ID: <span className="text-foreground/80 font-bold">{peerId}</span></>}
-                {roomId && <> · Room: {roomId}</>}
-                {transport?.deviceName && <> · Device: {transport.deviceName}</>}
+                {peerId && <>{t("sync.network.peerId", { id: peerId })}</>}
+                {roomId && <> · {t("sync.network.room", { id: roomId })}</>}
+                {transport?.deviceName && <> · {t("sync.network.device", { name: transport.deviceName })}</>}
               </div>
             )}
 
             <div className="flex gap-2">
               {status === "idle" || status === "error" ? (
                 <Button size="sm" variant="default" className="h-8 text-xs" onClick={handleStart}>
-                  <Radio className="size-3 me-1.5" /> Start Discovery
+                  <Radio className="size-3 me-1.5" /> {t("sync.network.startDiscovery")}
                 </Button>
               ) : (
                 <Button size="sm" variant="outline" className="h-8 text-xs" onClick={handleStop}>
-                  <RefreshCw className="size-3 me-1.5" /> Stop
+                  <RefreshCw className="size-3 me-1.5" /> {t("sync.network.stop")}
                 </Button>
               )}
             </div>
@@ -127,7 +129,7 @@ export function NetworkSyncPanel() {
         <Card className="p-4">
           <h4 className="text-xs font-semibold text-muted-foreground mb-3 flex items-center gap-2">
             <Smartphone className="size-3.5" />
-            Devices on Network ({devices.length})
+            {t("sync.network.devices", { n: devices.length })}
           </h4>
           <div className="space-y-2">
             {devices.map((device) => (
@@ -153,7 +155,7 @@ export function NetworkSyncPanel() {
                   onClick={() => handleConnect(device.id)}
                   disabled={status === "connecting"}
                 >
-                  Sync
+                  {t("sync.network.sync")}
                 </Button>
               </div>
             ))}
@@ -165,9 +167,9 @@ export function NetworkSyncPanel() {
         <Card className="p-5 border-dashed">
           <div className="text-center text-sm text-muted-foreground">
             <Radio className="size-8 mx-auto mb-2 opacity-40" />
-            <p>No devices discovered on network</p>
+            <p>{t("sync.network.noDevices")}</p>
             <p className="text-xs mt-1">
-              {status === "discovering" ? "Scanning..." : "Enter the other device's Peer ID below or check they're on the same network."}
+              {status === "discovering" ? t("sync.network.scanning") : t("sync.network.manualHint")}
             </p>
           </div>
 
@@ -175,7 +177,7 @@ export function NetworkSyncPanel() {
           {status !== "discovering" && (
             <div className="flex gap-2 mt-4 max-w-sm mx-auto">
               <Input
-                placeholder="Enter Peer ID..."
+                placeholder={t("sync.network.manualPlaceholder")}
                 value={manualId}
                 onChange={(e) => setManualId(e.target.value)}
                 className="h-8 text-xs"
@@ -188,7 +190,7 @@ export function NetworkSyncPanel() {
                 onClick={handleManualConnect}
                 disabled={!manualId.trim() || status === "connecting"}
               >
-                <ArrowRight className="size-3 me-1.5" /> Connect
+                <ArrowRight className="size-3 me-1.5" /> {t("sync.network.connect")}
               </Button>
             </div>
           )}

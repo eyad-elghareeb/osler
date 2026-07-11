@@ -7,16 +7,17 @@ import { cn } from "@/lib/utils";
 import { FileSyncPanel } from "./file-sync-panel";
 import { NetworkSyncPanel } from "./network-sync-panel";
 import { QrSyncPanel } from "./qr-sync-panel";
+import { useI18n } from "@/components/osler/i18n-provider";
 
 type SyncTab = "network" | "qr" | "file";
 
-const TABS: Array<{ id: SyncTab; label: string; icon: React.ComponentType<{ className?: string }>; description: string }> = [
-  { id: "network", label: "Network", icon: Wifi, description: "Sync over local network via WebRTC" },
-  { id: "qr", label: "QR Code", icon: QrCode, description: "Scan QR codes to transfer data" },
-  { id: "file", label: "File", icon: FileText, description: "Export/import via backup files" },
-];
-
 export function SyncSettingsSection() {
+  const { t } = useI18n();
+  const TABS: Array<{ id: SyncTab; label: string; icon: React.ComponentType<{ className?: string }>; description: string }> = [
+    { id: "network", label: t("sync.tab.network"), icon: Wifi, description: t("sync.tab.networkDesc") },
+    { id: "qr", label: t("sync.tab.qr"), icon: QrCode, description: t("sync.tab.qrDesc") },
+    { id: "file", label: t("sync.tab.file"), icon: FileText, description: t("sync.tab.fileDesc") },
+  ];
   const [tab, setTab] = React.useState<SyncTab>("network");
 
   return (
@@ -25,9 +26,9 @@ export function SyncSettingsSection() {
       <div className="flex items-center gap-3 mb-2">
         <Smartphone className="size-5 text-primary" />
         <div>
-          <h2 className="text-base font-semibold">Progress Sync</h2>
+          <h2 className="text-base font-semibold">{t("sync.title")}</h2>
           <p className="text-xs text-muted-foreground">
-            Export, import, and sync your progress across devices.
+            {t("sync.subtitle")}
           </p>
         </div>
       </div>

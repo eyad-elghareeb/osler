@@ -4,6 +4,7 @@ import * as React from "react";
 import { Download, Check, Loader2, Trash2, CloudOff, AlertCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useContentCache } from "@/hooks/use-content-cache";
+import { useI18n } from "@/components/osler/i18n-provider";
 
 /**
  * ContentCacheButton — small per-pack download/remove button.
@@ -61,9 +62,10 @@ export function ContentCacheButton({
   const sizeClass = size === "sm" ? "size-7" : "size-8";
   const iconSize = size === "sm" ? "size-3.5" : "size-4";
 
+  const { t } = useI18n();
   // Choose icon + color based on state
   let icon: React.ReactNode;
-  let label = "Download for offline";
+  let label = t("cache.download");
   let colorClass: string;
 
   if (!swReady) {
@@ -75,23 +77,23 @@ export function ContentCacheButton({
     case "downloading":
       icon = <Loader2 className={cn(iconSize, "animate-spin")} />;
       label = progress
-        ? `Downloading ${progress.done}/${progress.total}…`
-        : "Downloading…";
+        ? t("cache.downloading", { done: progress.done, total: progress.total })
+        : t("cache.downloadingSimple");
       colorClass = "text-primary";
       break;
     case "cached":
       icon = <Check className={iconSize} />;
-      label = "Downloaded — tap to remove";
+      label = t("cache.cached");
       colorClass = "text-emerald-500 dark:text-emerald-400";
       break;
     case "partial":
       icon = <Check className={iconSize} />;
-      label = "Partially downloaded — tap to re-download";
+      label = t("cache.partial");
       colorClass = "text-amber-500";
       break;
     case "error":
       icon = <AlertCircle className={iconSize} />;
-      label = "Download failed — tap to retry";
+      label = t("cache.error");
       colorClass = "text-destructive";
       break;
     case "not-cached":

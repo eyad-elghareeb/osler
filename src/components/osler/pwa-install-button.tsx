@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Download, Share, X, MoreVertical } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { settings } from "@/lib/osler/storage";
+import { useI18n } from "@/components/osler/i18n-provider";
 
 type BeforeInstallPromptEvent = Event & {
   prompt: () => Promise<void>;
@@ -42,6 +43,7 @@ export function PwaInstallButton({ className }: { className?: string }) {
     };
   }, []);
 
+  const { t } = useI18n();
   const [dismissed, setDismissed] = React.useState(false);
   const [checkingDismiss, setCheckingDismiss] = React.useState(true);
 
@@ -83,7 +85,7 @@ export function PwaInstallButton({ className }: { className?: string }) {
     <button
       onClick={onClick}
       aria-label={label}
-      title="Install Osler"
+      title={t("pwa.installOsler")}
       className="size-9 rounded-md hover:bg-muted/60 transition-colors flex items-center justify-center shrink-0"
     >
       {icon ?? <Download className="size-4" />}
@@ -96,8 +98,8 @@ export function PwaInstallButton({ className }: { className?: string }) {
     return (
       <button
         onClick={handleInstall}
-        aria-label="Install app"
-        title="Install Osler"
+        aria-label={t("pwa.installApp")}
+        title={t("pwa.installOsler")}
         className={cn(
           "size-9 rounded-md hover:bg-muted/60 transition-colors flex items-center justify-center shrink-0",
           className
@@ -112,7 +114,7 @@ export function PwaInstallButton({ className }: { className?: string }) {
   // discoverable button that guides the user to install from the browser.
   return (
     <div className={cn("relative shrink-0", className)}>
-      {iconBtn("Install app", () => setHint((s) => !s), <Download className="size-4" />)}
+      {iconBtn(t("pwa.installApp"), () => setHint((s) => !s), <Download className="size-4" />)}
       <AnimatePresence>
         {hint && (
           <motion.div
@@ -123,33 +125,33 @@ export function PwaInstallButton({ className }: { className?: string }) {
             className="absolute right-0 top-11 z-50 w-64 rounded-lg border border-border/60 bg-popover p-3 text-xs shadow-lg"
           >
             <div className="mb-2 flex items-center justify-between">
-              <span className="font-medium">Install Osler</span>
+              <span className="font-medium">{t("pwa.installOsler")}</span>
               <button
                 onClick={() => setHint(false)}
                 className="text-muted-foreground hover:text-foreground"
-                aria-label="Close"
+                aria-label={t("common.close")}
               >
                 <X className="size-3.5" />
               </button>
             </div>
             {showIos ? (
               <p className="text-muted-foreground leading-relaxed">
-                Tap <Share className="size-3.5 inline-block align-text-bottom" /> then{" "}
-                <span className="text-foreground">Add to Home Screen</span>.
+                {t("pwa.iosHint").replace("{icon}", "")}
+                <Share className="size-3.5 inline-block align-text-bottom mx-0.5" />
+                <span className="text-foreground">{t("pwa.addToHomeScreen")}</span>.
               </p>
             ) : !isSecure ? (
               <p className="text-muted-foreground leading-relaxed">
-                Install needs HTTPS. This address (
-                <span className="text-foreground">http://{typeof window !== "undefined" ? window.location.host : ""}</span>
-                ) isn&apos;t secure, so your browser blocks it. Serve Osler over
-                HTTPS or open it on <span className="text-foreground">localhost</span>.
+                {t("pwa.notSecure", {
+                  url: typeof window !== "undefined" ? `http://${window.location.host}` : "",
+                })}
               </p>
             ) : (
               <p className="text-muted-foreground leading-relaxed">
-                Open your browser menu{" "}
-                <MoreVertical className="size-3.5 inline-block align-text-bottom" /> and
-                choose <span className="text-foreground">Install app</span> /{" "}
-                <span className="text-foreground">Add to Home Screen</span>.
+                {t("pwa.browserHint").replace("{icon}", "")}
+                <MoreVertical className="size-3.5 inline-block align-text-bottom mx-0.5" />
+                 <span className="text-foreground">{t("pwa.installApp")}</span> /{" "}
+                 <span className="text-foreground">{t("pwa.addToHomeScreen")}</span>.
               </p>
             )}
             <label className="mt-3 flex items-center gap-1.5 cursor-pointer border-t border-border/40 pt-2">
@@ -165,7 +167,7 @@ export function PwaInstallButton({ className }: { className?: string }) {
                   else settings.set("dismiss-pwa-hint", "false");
                 }}
               />
-              <span className="text-muted-foreground">Don&apos;t show again</span>
+              <span className="text-muted-foreground">{t("pwa.dontShowAgain")}</span>
             </label>
           </motion.div>
         )}

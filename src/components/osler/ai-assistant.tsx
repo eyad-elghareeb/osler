@@ -18,6 +18,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { usePlatform } from "@/hooks/use-platform";
+import { useI18n } from "@/components/osler/i18n-provider";
 import {
   useResizableSidebar,
   SidebarResizeHandle,
@@ -134,6 +135,7 @@ export function AiAssistant({
   onClose,
   questionContext,
 }: AiAssistantProps) {
+  const { t } = useI18n();
   const platform = usePlatform();
   const resizable = useResizableSidebar({
     storageKey: "osler-ai-assistant-width",
@@ -184,7 +186,7 @@ export function AiAssistant({
         {
           id: crypto.randomUUID(),
           role: "assistant",
-          content: `Hi! Ask me anything about this question — I can explain concepts, clarify why an answer is right or wrong, or dive deeper into any topic.`,
+          content: t("ai.chatCleared"),
           timestamp: Date.now(),
         },
       ]);
@@ -210,7 +212,7 @@ export function AiAssistant({
     const trimmed = text.trim();
     if (!trimmed || loading) return;
     if (!apiKey) {
-      setError("Configure your Gemini API key in settings first.");
+      setError(t("ai.error.noKey"));
       setShowSettings(true);
       return;
     }
@@ -269,7 +271,7 @@ export function AiAssistant({
 
       const data = await res.json();
       const reply =
-        data?.candidates?.[0]?.content?.parts?.[0]?.text || "No response from AI.";
+        data?.candidates?.[0]?.content?.parts?.[0]?.text || t("ai.error.noResponse");
       setMessages((prev) => [...prev, {
         id: crypto.randomUUID(),
         role: "assistant",
@@ -278,12 +280,12 @@ export function AiAssistant({
       }]);
     } catch (err: any) {
       if (err.name === "AbortError") {
-        setError("Request timed out. Try a shorter question or increase the max wait time.");
+        setError(t("ai.error.timeout"));
       } else {
         setError(
           err.message?.includes("API_KEY")
-            ? "Invalid API key. Check your settings."
-            : err.message || "Request failed."
+            ? t("ai.error.invalidKey")
+            : err.message || t("ai.error.requestFailed")
         );
       }
     } finally {
@@ -296,7 +298,7 @@ export function AiAssistant({
       {
         id: crypto.randomUUID(),
         role: "assistant",
-        content: "Chat cleared. Ask me anything about this question!",
+        content: t("ai.chatCleared"),
         timestamp: Date.now(),
       },
     ]);
@@ -311,11 +313,11 @@ export function AiAssistant({
           <Bot className="size-5" />
         </div>
         <div className="flex-1 min-w-0">
-          <h3 className="text-sm font-semibold">AI Assistant</h3>
+          <h3 className="text-sm font-semibold">{t("ai.title")}</h3>
           <p className="text-[11px] text-muted-foreground">
             {questionContext
-              ? `Context: ${questionContext.engine} question`
-              : "Ask about any medical topic"}
+              ? t("ai.subtitle.context", { engine: questionContext.engine })
+              : t("ai.subtitle.general")}
           </p>
         </div>
         <div className="flex items-center gap-1">
@@ -324,7 +326,7 @@ export function AiAssistant({
             className={`size-7 rounded-lg flex items-center justify-center transition-colors ${
               showSettings ? "bg-primary/15 text-primary" : "hover:bg-muted text-muted-foreground"
             }`}
-            title="Settings"
+            title={t("ai.settings")}
           >
             <Settings className="size-3.5" />
           </button>
@@ -340,7 +342,7 @@ export function AiAssistant({
         {messages.length > 0 && !onClose && (
           <Button variant="ghost" size="sm" onClick={clear}>
             <Trash2 className="size-3.5" />
-            <span className="hidden sm:inline">Clear</span>
+            <span className="hidden sm:inline">{t("ai.clear")}</span>
           </Button>
         )}
       </div>
@@ -356,25 +358,25 @@ export function AiAssistant({
           >
             <div className="p-4 space-y-3 bg-muted/30">
               <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-muted-foreground">Gemini API Key</label>
+                <label className="text-xs font-semibold text-muted-foreground">{t("ai.apiKey")}</label>
                 <div className="flex gap-2">
                   <input
                     type="password"
                     value={apiKey}
                     onChange={(e) => saveApiKey(e.target.value)}
-                    placeholder="Enter your Gemini API key"
+                    placeholder={t("ai.apiKeyPlaceholder")}
                     className="flex-1 h-8 rounded-lg border border-border bg-card px-3 text-xs outline-none focus:border-primary"
                   />
                 </div>
                 <p className="text-[10px] text-muted-foreground">
-                  Get a free key at{" "}
+                  {t("ai.apiKeyHint")}{" "}
                   <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener" className="text-primary underline">
                     AI Studio
                   </a>
                 </p>
               </div>
               <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-muted-foreground">Model</label>
+                <label className="text-xs font-semibold text-muted-foreground">{t("ai.model")}</label>
                 <select
                   value={model}
                   onChange={(e) => saveModel(e.target.value)}
@@ -386,7 +388,7 @@ export function AiAssistant({
                 </select>
               </div>
               <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-muted-foreground">Max Wait</label>
+                <label className="text-xs font-semibold text-muted-foreground">{t("ai.maxWait")}</label>
                 <select
                   value={maxWait}
                   onChange={(e) => saveMaxWait(e.target.value)}
@@ -410,7 +412,7 @@ export function AiAssistant({
             onClick={() => setShowContext(!showContext)}
             className="w-full flex items-center justify-between px-4 py-2 text-xs text-muted-foreground hover:bg-muted/40 transition-colors"
           >
-            <span className="font-medium">Question context</span>
+            <span className="font-medium">{t("ai.questionContext")}</span>
             {showContext ? <ChevronUp className="size-3" /> : <ChevronDown className="size-3" />}
           </button>
           <AnimatePresence>
@@ -456,7 +458,7 @@ export function AiAssistant({
             </div>
             <div className="flex items-center gap-1.5">
               <Loader2 className="size-3.5 animate-spin" />
-              <span>Thinking…</span>
+              <span>{t("ai.thinking")}</span>
             </div>
           </div>
         )}
@@ -487,7 +489,7 @@ export function AiAssistant({
                 send(input);
               }
             }}
-            placeholder="Ask a medical question…"
+            placeholder={t("ai.inputPlaceholder")}
             rows={1}
             className="flex-1 resize-none max-h-32 bg-card border border-border rounded-lg px-3 py-2 text-sm outline-none focus:border-primary transition-colors"
             style={{ minHeight: "40px" }}
@@ -503,14 +505,14 @@ export function AiAssistant({
         </div>
         <div className="flex items-center justify-between mt-1.5">
           <p className="text-[10px] text-muted-foreground hidden sm:block">
-            Press Enter to send · Shift+Enter for newline
+            {t("ai.enterHint")}
           </p>
           <button
             type="button"
             onClick={clear}
             className="text-[10px] text-muted-foreground hover:text-foreground transition-colors"
           >
-            Clear chat
+            {t("ai.clearChat")}
           </button>
         </div>
       </form>
@@ -544,7 +546,7 @@ export function AiAssistant({
                 onMouseDown={resizable.onDragHandleMouseDown}
                 onTouchStart={resizable.onDragHandleTouchStart}
                 active={resizable.isResizing}
-                ariaLabel="Drag to resize"
+                ariaLabel={t("sidebar.resize")}
               />
             )}
             {content}
@@ -558,6 +560,7 @@ export function AiAssistant({
 }
 
 function EmptyState({ onSuggestion }: { onSuggestion: (s: string) => void }) {
+  const { t } = useI18n();
   return (
     <motion.div
       initial={{ opacity: 0, y: 8 }}
@@ -567,10 +570,9 @@ function EmptyState({ onSuggestion }: { onSuggestion: (s: string) => void }) {
       <div className="w-14 h-14 rounded-full bg-primary/15 text-primary flex items-center justify-center mb-3">
         <Sparkles className="size-7" />
       </div>
-      <h3 className="text-base font-semibold mb-1">Medical AI Tutor</h3>
+      <h3 className="text-base font-semibold mb-1">{t("ai.emptyTitle")}</h3>
       <p className="text-xs text-muted-foreground max-w-xs mb-5">
-        Ask about pathophysiology, pharmacology, diagnostic workup, or any
-        board topic. Get detailed, structured explanations.
+        {t("ai.emptyDesc")}
       </p>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 w-full max-w-lg">
         {SUGGESTIONS.map((s) => (

@@ -2,14 +2,16 @@
 
 import * as React from "react";
 import { motion } from "framer-motion";
-import { Camera, QrCode, Smartphone, Check, AlertTriangle, Loader2, SwitchCamera, ChevronLeft, ChevronRight } from "lucide-react";
+import { Camera, QrCode, Smartphone, Check, AlertTriangle, Loader2, SwitchCamera, ChevronLeft, ChevronRight, RefreshCw } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { SyncProtocol, QRSync } from "@/lib/osler/sync";
 import { storage } from "@/lib/osler/storage";
 import { cn } from "@/lib/utils";
+import { useI18n } from "@/components/osler/i18n-provider";
 
 export function QrSyncPanel() {
+  const { t } = useI18n();
   const [tab, setTab] = React.useState<"export" | "scan">("export");
   const [qrChunks, setQrChunks] = React.useState<QRSync.QrChunkData[]>([]);
   const [qrPage, setQrPage] = React.useState(0);
@@ -47,7 +49,7 @@ export function QrSyncPanel() {
       setQrDataUrls(urls);
       setQrPage(0);
     } catch (e) {
-      setScanResult({ success: false, message: `QR generation failed: ${(e as Error).message}` });
+      setScanResult({ success: false, message: t("sync.qr.generationFailed", { error: (e as Error).message }) });
     } finally {
       setLoading(false);
     }
@@ -63,11 +65,11 @@ export function QrSyncPanel() {
         try {
           const payload = SyncProtocol.decode(result.fullData);
           await mergePayloadIntoStorage(payload);
-          setScanResult({ success: true, message: "Sync complete! Data merged." });
+          setScanResult({ success: true, message: t("sync.qr.complete") });
           scanner.stop().catch(() => {});
           setScanning(false);
         } catch (e) {
-          setScanResult({ success: false, message: `Import failed: ${(e as Error).message}` });
+          setScanResult({ success: false, message: t("sync.qr.importFailed", { error: (e as Error).message }) });
         }
       },
       (error) => {
@@ -75,13 +77,13 @@ export function QrSyncPanel() {
       },
     );
 
-    scannerRef.current = scanner;
-    try {
-      await scanner.start(videoRef.current);
-    } catch (e) {
-      setScanResult({ success: false, message: `Camera error: ${(e as Error).message}` });
-      setScanning(false);
-    }
+      scannerRef.current = scanner;
+      try {
+        await scanner.start(videoRef.current);
+      } catch (e) {
+        setScanResult({ success: false, message: t("sync.qr.cameraError", { error: (e as Error).message }) });
+        setScanning(false);
+      }
   };
 
   const handleStopScan = async () => {
@@ -102,11 +104,11 @@ export function QrSyncPanel() {
           try {
             const payload = SyncProtocol.decode(result.fullData);
             mergePayloadIntoStorage(payload);
-            setScanResult({ success: true, message: "Sync complete! Data merged." });
+            setScanResult({ success: true, message: t("sync.qr.complete") });
             scannerRef.current?.stop().catch(() => {});
             setScanning(false);
           } catch (e) {
-            setScanResult({ success: false, message: `Import failed: ${(e as Error).message}` });
+            setScanResult({ success: false, message: t("sync.qr.importFailed", { error: (e as Error).message }) });
           }
         },
         (error) => setScanResult({ success: false, message: error }),
@@ -125,7 +127,7 @@ export function QrSyncPanel() {
           className="h-8 text-xs"
           onClick={() => setTab("export")}
         >
-          <QrCode className="size-3 me-1.5" /> Show My Code
+          <QrCode className="size-3 me-1.5" /> {t("sync.qr.exportTab")}
         </Button>
         <Button
           size="sm"
@@ -133,7 +135,7 @@ export function QrSyncPanel() {
           className="h-8 text-xs"
           onClick={() => setTab("scan")}
         >
-          <Camera className="size-3 me-1.5" /> Scan Code
+          <Camera className="size-3 me-1.5" /> {t("sync.qr.scanTab")}
         </Button>
       </div>
 
@@ -141,8 +143,8 @@ export function QrSyncPanel() {
         <Card className="p-5">
           <div className="text-center">
             <p className="text-xs text-muted-foreground mb-4">
-              Scan this QR code from another device to sync your progress.
-              {qrChunks.length > 1 && " This is a multi-part code — scan all parts."}
+              {t("sync.qr.exportDesc")}
+              {qrChunks.length > 1 && t("sync.qr.multiPart")}
             </p>
 
             {loading ? (
@@ -187,11 +189,11 @@ export function QrSyncPanel() {
                 )}
 
                 <Button size="sm" variant="outline" className="h-7 text-xs" onClick={generateQrCodes}>
-                  <RefreshCwIcon className="size-3 me-1.5" /> Regenerate
+                  <RefreshCw className="size-3 me-1.5" /> {t("sync.qr.regenerate")}
                 </Button>
               </>
             ) : (
-              <p className="text-sm text-muted-foreground py-8">No data to share.</p>
+              <p className="text-sm text-muted-foreground py-8">{t("sync.qr.noData")}</p>
             )}
           </div>
         </Card>
@@ -201,7 +203,7 @@ export function QrSyncPanel() {
         <Card className="p-5">
           <div className="text-center">
             <p className="text-xs text-muted-foreground mb-4">
-              Point your camera at the QR code on the other device.
+              {t("sync.qr.scanDesc")}
             </p>
 
             {/* Camera viewport */}
@@ -222,15 +224,15 @@ export function QrSyncPanel() {
             <div className="flex justify-center gap-2">
               {!scanning ? (
                 <Button size="sm" variant="default" className="h-8 text-xs" onClick={handleStartScan}>
-                  <Camera className="size-3 me-1.5" /> Start Scanning
+                  <Camera className="size-3 me-1.5" /> {t("sync.qr.startScanning")}
                 </Button>
               ) : (
                 <>
                   <Button size="sm" variant="outline" className="h-8 text-xs" onClick={handleStopScan}>
-                    <Loader2 className="size-3 me-1.5 animate-spin" /> Stop
+                    <Loader2 className="size-3 me-1.5 animate-spin" /> {t("sync.qr.stop")}
                   </Button>
                   <Button size="sm" variant="ghost" className="h-8 text-xs" onClick={handleSwitchCamera}>
-                    <SwitchCamera className="size-3 me-1.5" /> Switch
+                    <SwitchCamera className="size-3 me-1.5" /> {t("sync.qr.switch")}
                   </Button>
                 </>
               )}
@@ -259,24 +261,6 @@ export function QrSyncPanel() {
         </Card>
       )}
     </div>
-  );
-}
-
-function RefreshCwIcon({ className }: { className?: string }) {
-  return (
-    <svg
-      xmlns="http://www.w3.org/2000/svg"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      className={className}
-    >
-      <path d="M21 12a9 9 0 1 1-9-9" />
-      <path d="M21 3v5h-5" />
-    </svg>
   );
 }
 
