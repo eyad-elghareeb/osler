@@ -600,7 +600,6 @@ fn build_vercel_client() -> ureq::Agent {
         .user_agent("osler-admin/0.2 (tauri)")
         .timeout_connect(std::time::Duration::from_secs(15))
         .timeout(std::time::Duration::from_secs(300))
-        .proxy(ureq::Proxy::new("").unwrap())
         .build()
 }
 
