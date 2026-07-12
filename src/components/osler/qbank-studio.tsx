@@ -2018,8 +2018,9 @@ function QuizView({
   //
   // On mouse/pointer devices we wait for `mouseup` so the highlight is not
   // applied mid-drag (while the button is still held). On touch devices we
-  // wait for `touchend` (debounced 250ms to let iOS Safari finalise the
-  // selection) so it only applies once the finger is lifted.
+  // use `selectionchange` with a slightly longer debounce (500ms) so the
+  // highlight only applies once the user has finished adjusting the
+  // selection — `touchend` fires before iOS Safari finalises the range.
   React.useEffect(() => {
     if (!highlightMode) return;
     let debounceTimer: ReturnType<typeof setTimeout> | null = null;
@@ -2079,17 +2080,18 @@ function QuizView({
       debounceTimer = setTimeout(applySelection, 0);
     };
 
-    const onTouchEnd = () => {
+    const onSelectionChange = () => {
+      if (!isTouch()) return;
       if (debounceTimer) clearTimeout(debounceTimer);
-      debounceTimer = setTimeout(applySelection, 250);
+      debounceTimer = setTimeout(applySelection, 500);
     };
 
     document.addEventListener("mouseup", onMouseUp);
-    document.addEventListener("touchend", onTouchEnd, true);
+    document.addEventListener("selectionchange", onSelectionChange);
     return () => {
       if (debounceTimer) clearTimeout(debounceTimer);
       document.removeEventListener("mouseup", onMouseUp);
-      document.removeEventListener("touchend", onTouchEnd, true);
+      document.removeEventListener("selectionchange", onSelectionChange);
     };
   }, [highlightMode, highlightColor, activeItem.uid, session.current, q]);
 

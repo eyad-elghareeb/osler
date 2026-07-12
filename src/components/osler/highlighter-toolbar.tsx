@@ -68,7 +68,7 @@ export function HighlighterToolbar({
   const isEraser = tool === ERASER_TOOL;
 
   /* ── Toggle button ────────────────────────────────────────────────── */
-  const toggleSize = isMobile ? "size-9" : "size-7";
+  const toggleSize = "size-7";
 
   const toggleClass = cn(
     "flex items-center justify-center rounded-lg transition-colors shrink-0",
@@ -97,7 +97,7 @@ export function HighlighterToolbar({
   };
 
   /* ── Action buttons (eraser, clear) ───────────────────────────────── */
-  const actionBtnSize = isMobile ? "size-9" : "size-6";
+  const actionBtnSize = "size-6";
 
   const eraserClass = cn(
     "flex items-center justify-center rounded-md transition-colors shrink-0",
@@ -115,8 +115,8 @@ export function HighlighterToolbar({
     "text-muted-foreground hover:text-destructive hover:bg-destructive/10",
   );
 
-  /* ── Color swatches — bigger on mobile for proper touch targets ──── */
-  const swatchSize = isMobile ? "size-7" : "size-4";
+  /* ── Color swatches ──────────────────────────────────────────────── */
+  const swatchSize = "size-4";
   const swatchBase = cn(
     "rounded-full ring-2 ring-transparent transition-all shrink-0",
     swatchSize,

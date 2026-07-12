@@ -228,9 +228,11 @@ export function useArticleHighlighter(
     attachedRef.current = doc;
 
     // On mouse/pointer devices we wait for `mouseup` so the highlight is not
-    // applied mid-drag (e.g. while the button is still held). On touch
-    // devices we wait for `touchend` (debounced 250ms to let iOS Safari
-    // finalise the selection) so it only applies once the finger is lifted.
+    // applied mid-drag (while the button is still held). On touch devices we
+    // use `selectionchange` with a slightly longer debounce (500ms) so the
+    // highlight only applies once the user has finished adjusting the
+    // selection — `touchend` fires before iOS Safari finalises the range,
+    // which made an immediate apply unreliable.
     const isTouch = () =>
       typeof window !== "undefined" &&
       window.matchMedia("(pointer: coarse)").matches;
@@ -287,9 +289,10 @@ export function useArticleHighlighter(
       debounceTimer = setTimeout(applySelection, 0);
     };
 
-    const onTouchEnd = () => {
+    const onSelectionChange = () => {
+      if (!isTouch()) return;
       if (debounceTimer) clearTimeout(debounceTimer);
-      debounceTimer = setTimeout(applySelection, 250);
+      debounceTimer = setTimeout(applySelection, 500);
     };
 
     const onKeyDown = (e: KeyboardEvent) => {
@@ -299,13 +302,13 @@ export function useArticleHighlighter(
     };
 
     doc.addEventListener("mouseup", onMouseUp);
-    doc.addEventListener("touchend", onTouchEnd, true);
+    doc.addEventListener("selectionchange", onSelectionChange);
     doc.addEventListener("keydown", onKeyDown);
 
     (doc as any).__oslerHlCleanup = () => {
       if (debounceTimer) clearTimeout(debounceTimer);
       doc.removeEventListener("mouseup", onMouseUp);
-      doc.removeEventListener("touchend", onTouchEnd, true);
+      doc.removeEventListener("selectionchange", onSelectionChange);
       doc.removeEventListener("keydown", onKeyDown);
     };
   }, []);
