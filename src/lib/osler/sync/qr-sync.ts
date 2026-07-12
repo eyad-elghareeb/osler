@@ -182,7 +182,7 @@ export class CameraScanner {
       document.body.appendChild(wrapper);
     }
     // The Html5Qrcode constructor is the named export on the module.
-    const Html5QrcodeCtor = (mod.Html5Qrcode ?? (mod as { default?: unknown }).default) as
+    const Html5QrcodeCtor = ((mod.Html5Qrcode ?? (mod as { default?: unknown }).default) as unknown) as
       | (new (id: string) => IHtml5Scanner)
       | undefined;
     if (!Html5QrcodeCtor) {

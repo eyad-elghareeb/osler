@@ -19,7 +19,6 @@ import {
   BookOpen,
   ExternalLink,
 } from "lucide-react";
-// @ts-expect-error — plyr ships its own types with export default
 import Plyr from "plyr";
 import "plyr/dist/plyr.css";
 import {

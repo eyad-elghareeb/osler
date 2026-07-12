@@ -82,48 +82,9 @@ export function PeerLinkQrPanel({
     };
   }, []);
 
-  const handleStartScan = async () => {
-    if (!videoRef.current || !transport) return;
-    setScanning(true);
+  const handleStartScan = () => {
     setScanResult(null);
-
-    const scanner = new QRSync.CameraScanner(
-      (text) => {
-        const link = QRSync.parsePeerLink(text);
-        if (!link) {
-          setScanResult({
-            success: false,
-            message: t("sync.qr.notPeerCode"),
-          });
-          return;
-        }
-        setScanResult({
-          success: true,
-          message: t("sync.qr.connectingTo", { name: link.deviceName }),
-        });
-        transport.connectTo(link.peerId, link.deviceName);
-        onConnected?.(link.peerId, link.deviceName);
-        // Stop the scanner after a successful scan — connection is now in
-        // the hands of the NetworkTransport.
-        scannerRef.current?.stop().catch(() => {});
-        scannerRef.current = null;
-        setScanning(false);
-      },
-      (error) => {
-        setScanResult({ success: false, message: error });
-      },
-    );
-
-    scannerRef.current = scanner;
-    try {
-      await scanner.start(videoRef.current, { facingMode });
-    } catch (e) {
-      setScanResult({
-        success: false,
-        message: t("sync.qr.cameraError", { error: (e as Error).message }),
-      });
-      setScanning(false);
-    }
+    setScanning(true);
   };
 
   const handleStopScan = async () => {
@@ -134,33 +95,59 @@ export function PeerLinkQrPanel({
     setScanning(false);
   };
 
-  const handleSwitchCamera = async () => {
+  const handleSwitchCamera = () => {
     const next = facingMode === "environment" ? "user" : "environment";
     setFacingMode(next);
-    if (scanning && scannerRef.current && videoRef.current) {
-      await scannerRef.current.stop();
-      scannerRef.current = new QRSync.CameraScanner(
-        (text) => {
-          const link = QRSync.parsePeerLink(text);
-          if (!link) {
-            setScanResult({ success: false, message: t("sync.qr.notPeerCode") });
-            return;
-          }
-          setScanResult({
-            success: true,
-            message: t("sync.qr.connectingTo", { name: link.deviceName }),
-          });
-          transport?.connectTo(link.peerId, link.deviceName);
-          onConnected?.(link.peerId, link.deviceName);
-          scannerRef.current?.stop().catch(() => {});
-          scannerRef.current = null;
-          setScanning(false);
-        },
-        (error) => setScanResult({ success: false, message: error }),
-      );
-      scannerRef.current.start(videoRef.current, { facingMode: next }).catch(() => {});
-    }
   };
+
+  // Start (or restart on camera switch) the scanner once the video element is
+  // actually mounted. The <video> only renders when `scanning` is true, so we
+  // must wait until after that render to grab the ref and start the camera.
+  React.useEffect(() => {
+    if (!scanning || !videoRef.current || !transport) return;
+    let cancelled = false;
+
+    const onScan = (text: string) => {
+      const link = QRSync.parsePeerLink(text);
+      if (!link) {
+        setScanResult({ success: false, message: t("sync.qr.notPeerCode") });
+        return;
+      }
+      setScanResult({
+        success: true,
+        message: t("sync.qr.connectingTo", { name: link.deviceName }),
+      });
+      transport.connectTo(link.peerId, link.deviceName);
+      onConnected?.(link.peerId, link.deviceName);
+      // Stop the scanner after a successful scan — connection is now in
+      // the hands of the NetworkTransport.
+      scannerRef.current?.stop().catch(() => {});
+      scannerRef.current = null;
+      setScanning(false);
+    };
+
+    const scanner = new QRSync.CameraScanner(onScan, (error) =>
+      setScanResult({ success: false, message: error }),
+    );
+    scannerRef.current = scanner;
+
+    scanner
+      .start(videoRef.current, { facingMode })
+      .catch((e) => {
+        if (cancelled) return;
+        setScanResult({
+          success: false,
+          message: t("sync.qr.cameraError", { error: (e as Error).message }),
+        });
+        setScanning(false);
+      });
+
+    return () => {
+      cancelled = true;
+      scanner.stop().catch(() => {});
+      scannerRef.current = null;
+    };
+  }, [scanning, facingMode, transport, onConnected, t]);
 
   return (
     <Card className="p-4">
