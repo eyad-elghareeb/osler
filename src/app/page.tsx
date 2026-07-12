@@ -5,6 +5,7 @@ import dynamic from "next/dynamic";
 import { AppShell, type OslerView } from "@/components/osler/app-shell";
 import { LoginScreen } from "@/components/osler/login-screen";
 import { Dashboard } from "@/components/osler/dashboard";
+import { Learn } from "@/components/osler/learn";
 import { Library } from "@/components/osler/library";
 import { QBankStudio } from "@/components/osler/qbank-studio";
 import { FlashcardStudio } from "@/components/osler/flashcard-studio";
@@ -131,6 +132,8 @@ export default function Home() {
           onOpenArticle={openArticle}
         />
       ) : null}
+
+      {view === "learn" ? <Learn onNavigate={setView} /> : null}
 
       {view === "library" ? (
         <Library initialArticleId={activeArticleId} />

@@ -90,6 +90,7 @@ export const STRINGS = {
 
     "nav.dashboard": "Dashboard",
     "nav.qbank": "Q-Bank",
+    "nav.learn": "Learn",
     "nav.library": "Library",
     "nav.flashcards": "Flashcards",
     "nav.osce": "OSCE",
@@ -98,6 +99,20 @@ export const STRINGS = {
     "nav.settings": "Settings",
     "nav.signOut": "Sign out",
     "nav.localSession": "Local session",
+
+    "learn.title": "Learn",
+    "learn.subtitle":
+      "All your study resources in one place — pick a module to continue.",
+    "learn.continue": "Continue",
+    "learn.open": "Open",
+    "learn.library.title": "Library",
+    "learn.library.desc": "Medical articles & reference notes",
+    "learn.flashcards.title": "Flashcards",
+    "learn.flashcards.desc": "Spaced-repetition study decks",
+    "learn.osce.title": "OSCE",
+    "learn.osce.desc": "Clinical skills & exam stations",
+    "learn.videos.title": "Videos",
+    "learn.videos.desc": "Clinical video lectures & skills",
 
     "theme.toggleToLight": "Switch to light",
     "theme.toggleToDark": "Switch to dark",
@@ -835,6 +850,7 @@ export const STRINGS = {
 
     "nav.dashboard": "اللوحة الرئيسية",
     "nav.qbank": "بنك الأسئلة",
+    "nav.learn": "تعلّم",
     "nav.library": "المكتبة",
     "nav.flashcards": "البطاقات التعليمية",
     "nav.osce": "OSCE",
@@ -843,6 +859,20 @@ export const STRINGS = {
     "nav.settings": "الإعدادات",
     "nav.signOut": "تسجيل الخروج",
     "nav.localSession": "جلسة محلية",
+
+    "learn.title": "تعلّم",
+    "learn.subtitle":
+      "كل مصادر المذاكرة في مكان واحد — اختر وحدة للمتابعة.",
+    "learn.continue": "استئناف",
+    "learn.open": "فتح",
+    "learn.library.title": "المكتبة",
+    "learn.library.desc": "المقالات الطبية والملاحظات المرجعية",
+    "learn.flashcards.title": "البطاقات التعليمية",
+    "learn.flashcards.desc": "مجموعات المذاكرة بالتكرار المتباعد",
+    "learn.osce.title": "OSCE",
+    "learn.osce.desc": "المحطات السريرية ومهارات الامتحان",
+    "learn.videos.title": "الفيديوهات",
+    "learn.videos.desc": "محاضرات ومهارات سريرية بالفيديو",
 
     "theme.toggleToLight": "التبديل إلى الوضع الفاتح",
     "theme.toggleToDark": "التبديل إلى الوضع الداكن",

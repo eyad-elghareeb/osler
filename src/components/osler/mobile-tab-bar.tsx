@@ -3,15 +3,12 @@
 import * as React from "react";
 import {
   LayoutDashboard,
-  BookOpen,
   ListChecks,
-  Layers,
+  GraduationCap,
   User as UserIcon,
   Cog,
-  Stethoscope,
-  PlayCircle,
 } from "lucide-react";
-import type { OslerView } from "./app-shell";
+import { type OslerView, LEARN_SUBVIEWS } from "./app-shell";
 import { useI18n } from "./i18n-provider";
 import { cn } from "@/lib/utils";
 import { useImmersiveMode } from "./immersive-mode";
@@ -23,17 +20,30 @@ interface MobileTabBarProps {
 
 interface TabItem {
   id: OslerView;
-  labelKey: "nav.dashboard" | "nav.qbank" | "nav.library" | "nav.flashcards" | "nav.profile" | "nav.osce" | "nav.videos";
+  labelKey:
+    | "nav.dashboard"
+    | "nav.qbank"
+    | "nav.learn"
+    | "nav.profile";
   icon: React.ComponentType<{ className?: string }>;
+  /**
+   * Returns true if this tab should be rendered as "active" for the given
+   * view. The Learn tab covers all Learn-hub sub-views (library, flashcards,
+   * osce, videos) so it stays highlighted while the user is inside any of
+   * them.
+   */
+  isActive?: (view: OslerView) => boolean;
 }
 
 const TABS: TabItem[] = [
   { id: "dashboard", labelKey: "nav.dashboard", icon: LayoutDashboard },
   { id: "qbank", labelKey: "nav.qbank", icon: ListChecks },
-  { id: "library", labelKey: "nav.library", icon: BookOpen },
-  { id: "flashcards", labelKey: "nav.flashcards", icon: Layers },
-  { id: "osce", labelKey: "nav.osce", icon: Stethoscope },
-  { id: "videos", labelKey: "nav.videos", icon: PlayCircle },
+  {
+    id: "learn",
+    labelKey: "nav.learn",
+    icon: GraduationCap,
+    isActive: (v) => LEARN_SUBVIEWS.has(v),
+  },
   { id: "profile", labelKey: "nav.profile", icon: UserIcon },
 ];
 
@@ -64,7 +74,7 @@ export function MobileTabBar({ view, onViewChange }: MobileTabBarProps) {
     >
       {TABS.map((tab) => {
         const Icon = tab.id === "profile" ? ProfileIcon : tab.icon;
-        const active = tab.id === view;
+        const active = tab.isActive ? tab.isActive(view) : tab.id === view;
         return (
           <button
             key={tab.id}

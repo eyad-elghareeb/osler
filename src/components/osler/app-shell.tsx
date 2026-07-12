@@ -7,7 +7,6 @@ import {
   LayoutDashboard,
   BookOpen,
   ListChecks,
-  Layers,
   Sun,
   Moon,
   LogOut,
@@ -15,8 +14,7 @@ import {
   ChevronDown,
   Search,
   Settings as SettingsIcon,
-  Stethoscope,
-  PlayCircle,
+  GraduationCap,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -42,6 +40,7 @@ import { cn } from "@/lib/utils";
 
 export type OslerView =
   | "dashboard"
+  | "learn"
   | "library"
   | "qbank"
   | "flashcards"
@@ -49,6 +48,19 @@ export type OslerView =
   | "videos"
   | "profile"
   | "settings";
+
+/**
+ * Views that live under the "Learn" hub. The Learn tab in both the desktop
+ * nav and the mobile bottom bar stays highlighted while the user is inside
+ * any of these sub-views.
+ */
+export const LEARN_SUBVIEWS: ReadonlySet<OslerView> = new Set([
+  "learn",
+  "library",
+  "flashcards",
+  "osce",
+  "videos",
+]);
 
 interface AppShellProps {
   view: OslerView;
@@ -109,8 +121,10 @@ export function AppShell({
   const searchPlaceholder = t("common.searchPlaceholder");
 
   const isDashboard = view === "dashboard";
-  const isLibrary = view === "library";
   const isQbank = view === "qbank";
+  // The Learn tab is highlighted while inside any Learn-hub sub-view
+  // (learn hub itself, library, flashcards, osce, videos).
+  const isLearnActive = LEARN_SUBVIEWS.has(view);
 
   // Search panel content (used by both desktop popover and mobile sheet)
   const searchPanel = (
@@ -200,34 +214,10 @@ export function AppShell({
             />
 
             <NavButton
-              active={isLibrary}
-              onClick={() => onViewChange("library")}
-              icon={BookOpen}
-              label={t("nav.library")}
-              layoutId="nav-active"
-            />
-
-            <NavButton
-              active={view === "flashcards"}
-              onClick={() => onViewChange("flashcards")}
-              icon={Layers}
-              label={t("nav.flashcards")}
-              layoutId="nav-active"
-            />
-
-            <NavButton
-              active={view === "osce"}
-              onClick={() => onViewChange("osce")}
-              icon={Stethoscope}
-              label={t("nav.osce")}
-              layoutId="nav-active"
-            />
-
-            <NavButton
-              active={view === "videos"}
-              onClick={() => onViewChange("videos")}
-              icon={PlayCircle}
-              label={t("nav.videos")}
+              active={isLearnActive}
+              onClick={() => onViewChange("learn")}
+              icon={GraduationCap}
+              label={t("nav.learn")}
               layoutId="nav-active"
             />
           </nav>
