@@ -112,6 +112,11 @@ import { useI18n } from "./i18n-provider";
 import type { StringKey } from "@/lib/osler/i18n";
 
 const LETTERS = ["A", "B", "C", "D", "E", "F", "G", "H"];
+const ARABIC_LETTERS = ["أ", "ب", "ج", "د", "ه", "و", "ز", "ح", "ط", "ي"];
+// Choice indicators localised to the content language — Arabic content uses
+// the Abjad-style sequence أ,ب,ت,… instead of Latin A,B,C,…
+const choiceLetter = (idx: number, lang?: string): string =>
+  (lang && lang.startsWith("ar") ? ARABIC_LETTERS : LETTERS)[idx] ?? "?";
 const HIGHLIGHT_COLORS = HIGHLIGHT_COLOR_KEYS;
 
 interface QBankStudioProps {
@@ -635,7 +640,10 @@ function HomeView({
       .then((result) => {
         setData({
           items: result.items.filter(
-            (entry) => entry.node.type !== "flashcard" && entry.node.type !== "osce"
+            (entry) =>
+              entry.node.type !== "flashcard" &&
+              entry.node.type !== "osce" &&
+              entry.node.type !== "video"
           ),
         });
       })
@@ -2189,6 +2197,32 @@ function QuizView({
   );
   const strikethroughs = session.strikethroughs[session.current] ?? [];
 
+  // Long-press (touch) to strike through an option — mirrors the desktop
+  // right-click context-menu behaviour. A ref flag prevents the synthetic
+  // click that follows a long-press from also selecting the option.
+  const longPressTimer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+  const longPressFired = React.useRef(false);
+  const startLongPress = React.useCallback(
+    (idx: number) => {
+      if (submitted) return;
+      longPressFired.current = false;
+      longPressTimer.current = setTimeout(() => {
+        longPressFired.current = true;
+        onToggleStrikethrough(idx);
+      }, 500);
+    },
+    [submitted, onToggleStrikethrough]
+  );
+  const cancelLongPress = React.useCallback(() => {
+    if (longPressTimer.current) {
+      clearTimeout(longPressTimer.current);
+      longPressTimer.current = null;
+    }
+  }, []);
+  React.useEffect(() => cancelLongPress, [cancelLongPress]);
+
+
+
   // Written draft
   const writtenDraft = session.writtenDrafts[q.id] ?? {
     text: "",
@@ -2523,7 +2557,7 @@ function QuizView({
                           const hasStrikethrough = strikethroughs.includes(idx);
                           let stateClass = "border-border bg-card hover:border-primary/50 hover:bg-primary/5";
                           let letterBg = "border-border bg-background text-muted-foreground";
-                          let letterContent: React.ReactNode = LETTERS[idx];
+                          let letterContent: React.ReactNode = choiceLetter(idx, activeItem.lang ?? "en");
 
                           if (showResult) {
                             if (isCorrect) {
@@ -2547,11 +2581,20 @@ function QuizView({
                               key={idx}
                               data-choice-idx={idx}
                               disabled={submitted}
-                              onClick={() => onSelect(idx)}
+                              onClick={() => {
+                                if (longPressFired.current) {
+                                  longPressFired.current = false;
+                                  return;
+                                }
+                                onSelect(idx);
+                              }}
                               onContextMenu={(e) => {
                                 e.preventDefault();
                                 onToggleStrikethrough(idx);
                               }}
+                              onTouchStart={() => startLongPress(idx)}
+                              onTouchEnd={cancelLongPress}
+                              onTouchMove={cancelLongPress}
                               className={`w-full text-start p-3 sm:p-3.5 rounded-xl border-2 transition-all flex items-start gap-3 ${stateClass} ${
                                 submitted ? "cursor-default" : "cursor-pointer"
                               } ${hasStrikethrough ? "opacity-60" : ""} medos-touch-target`}
@@ -2747,7 +2790,7 @@ function QuizView({
                           }}
                         />
                       ) : (
-                        <ExplanationCard q={q} selected={selected} nonMcq={!isMCQ} highlights={currentHighlights} packUid={activeItem.uid} questionIdx={session.current} />
+                        <ExplanationCard q={q} selected={selected} nonMcq={!isMCQ} highlights={currentHighlights} packUid={activeItem.uid} questionIdx={session.current} lang={activeItem.lang ?? "en"} />
                       )}
                     </div>
                   </div>
@@ -2800,7 +2843,7 @@ function QuizView({
                           }}
                         />
                       ) : (
-                        <ExplanationCard q={q} selected={selected} nonMcq={!isMCQ} highlights={currentHighlights} packUid={activeItem.uid} questionIdx={session.current} />
+                        <ExplanationCard q={q} selected={selected} nonMcq={!isMCQ} highlights={currentHighlights} packUid={activeItem.uid} questionIdx={session.current} lang={activeItem.lang ?? "en"} />
                       )}
                     </div>
                   </div>
@@ -2851,7 +2894,7 @@ function QuizView({
                           }}
                         />
                       ) : (
-                        <ExplanationCard q={q} selected={undefined} nonMcq highlights={currentHighlights} packUid={activeItem.uid} questionIdx={session.current} />
+                        <ExplanationCard q={q} selected={undefined} nonMcq highlights={currentHighlights} packUid={activeItem.uid} questionIdx={session.current} lang={activeItem.lang ?? "en"} />
                       )}
                     </div>
                   </div>
@@ -3885,6 +3928,7 @@ function ExplanationCard({
   highlights: questionHighlights,
   packUid,
   questionIdx,
+  lang,
   onRemoveHighlight,
 }: {
   q: SessionQuestion;
@@ -3893,12 +3937,12 @@ function ExplanationCard({
   highlights?: HighlightItem[];
   packUid?: string;
   questionIdx?: number;
+  lang?: string;
   onRemoveHighlight?: (id: string) => void;
 }) {
   const hl = questionHighlights ?? [];
 
   const { t } = useI18n();
-
   if (nonMcq) {
     return (
       <div className="rounded-xl border-2 border-blue-600 overflow-hidden">
@@ -3939,8 +3983,8 @@ function ExplanationCard({
   }
 
   const isCorrect = selected === q.correct;
-  const correctLetter = LETTERS[q.correct] ?? "?";
-  const selectedLetter = selected !== undefined ? LETTERS[selected] : "—";
+  const correctLetter = choiceLetter(q.correct, lang);
+  const selectedLetter = selected !== undefined ? choiceLetter(selected, lang) : "—";
 
   return (
     <div className={`rounded-xl border-2 overflow-hidden ${isCorrect ? "border-blue-600" : "border-red-500"}`}>
@@ -4380,3 +4424,4 @@ function saveSession(s: SessionData) {
   };
   sessions.save(saved);
 }
+
