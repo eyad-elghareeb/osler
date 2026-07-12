@@ -231,15 +231,6 @@ function ModuleCard({
       whileHover={{ y: -2 }}
       className="group relative text-start bg-card border border-border rounded-xl p-5 md:p-6 overflow-hidden transition-colors hover:border-primary/40"
     >
-      {/* Top accent stripe in the module's engine color */}
-      <div
-        className="absolute top-0 left-0 right-0 h-1"
-        style={{
-          background: `linear-gradient(90deg, ${def.accent}, transparent)`,
-        }}
-        aria-hidden
-      />
-
       <div className="flex items-start gap-4">
         {/* Icon chip */}
         <div

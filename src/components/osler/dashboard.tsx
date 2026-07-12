@@ -161,12 +161,6 @@ export function Dashboard({
             transition={{ duration: 0.3, delay: 0.05 }}
             className="relative overflow-hidden bg-card border border-border rounded-xl p-5 md:p-6 mb-6"
           >
-            <div
-              className="absolute top-0 left-0 right-0 h-1"
-              style={{
-                background: `linear-gradient(90deg, ${ENGINE_COLORS[continuePack.node.type]}, transparent)`,
-              }}
-            />
             <div className="flex items-start justify-between gap-4 flex-wrap">
               <div className="flex-1 min-w-0">
                 <span className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium flex items-center gap-1.5">
