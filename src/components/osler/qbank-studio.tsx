@@ -2016,15 +2016,17 @@ function QuizView({
 
   // Highlight mode: auto-apply on stable text selection (mouse + touch).
   //
-  // We listen to `selectionchange` (debounced 350ms) instead of
-  // mouseup/touchend because `touchend` fires before iOS Safari finalises
-  // the selection (the handles appear after the finger lifts), which made
-  // the old 150ms-delay approach unreliable on mobile. The debounce
-  // ensures we only act when the user has *stopped* adjusting the
-  // selection, so we read the final range every time.
+  // On mouse/pointer devices we wait for `mouseup` so the highlight is not
+  // applied mid-drag (while the button is still held). On touch devices we
+  // wait for `touchend` (debounced 250ms to let iOS Safari finalise the
+  // selection) so it only applies once the finger is lifted.
   React.useEffect(() => {
     if (!highlightMode) return;
     let debounceTimer: ReturnType<typeof setTimeout> | null = null;
+
+    const isTouch = () =>
+      typeof window !== "undefined" &&
+      window.matchMedia("(pointer: coarse)").matches;
 
     const applySelection = () => {
       const sel = window.getSelection();
@@ -2071,15 +2073,23 @@ function QuizView({
       window.getSelection()?.removeAllRanges();
     };
 
-    const onSelectionChange = () => {
+    const onMouseUp = () => {
+      if (isTouch()) return;
       if (debounceTimer) clearTimeout(debounceTimer);
-      debounceTimer = setTimeout(applySelection, 350);
+      debounceTimer = setTimeout(applySelection, 0);
     };
 
-    document.addEventListener("selectionchange", onSelectionChange);
+    const onTouchEnd = () => {
+      if (debounceTimer) clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(applySelection, 250);
+    };
+
+    document.addEventListener("mouseup", onMouseUp);
+    document.addEventListener("touchend", onTouchEnd, true);
     return () => {
       if (debounceTimer) clearTimeout(debounceTimer);
-      document.removeEventListener("selectionchange", onSelectionChange);
+      document.removeEventListener("mouseup", onMouseUp);
+      document.removeEventListener("touchend", onTouchEnd, true);
     };
   }, [highlightMode, highlightColor, activeItem.uid, session.current, q]);
 

@@ -227,12 +227,14 @@ export function useArticleHighlighter(
     if (attachedRef.current === doc) return;
     attachedRef.current = doc;
 
-    // Use `selectionchange` (debounced) instead of mouseup/touchend.
-    // `touchend` fires before iOS Safari finalises the selection, which
-    // made the old 150ms-delay approach unreliable on mobile.
-    // `selectionchange` fires on every selection change (mouse or touch),
-    // and the 350ms debounce ensures we only act when the user has stopped
-    // adjusting — by which point the selection is final.
+    // On mouse/pointer devices we wait for `mouseup` so the highlight is not
+    // applied mid-drag (e.g. while the button is still held). On touch
+    // devices we wait for `touchend` (debounced 250ms to let iOS Safari
+    // finalise the selection) so it only applies once the finger is lifted.
+    const isTouch = () =>
+      typeof window !== "undefined" &&
+      window.matchMedia("(pointer: coarse)").matches;
+
     let debounceTimer: ReturnType<typeof setTimeout> | null = null;
 
     const applySelection = () => {
@@ -279,9 +281,15 @@ export function useArticleHighlighter(
       doc.getSelection()?.removeAllRanges();
     };
 
-    const onSelectionChange = () => {
+    const onMouseUp = () => {
+      if (isTouch()) return;
       if (debounceTimer) clearTimeout(debounceTimer);
-      debounceTimer = setTimeout(applySelection, 350);
+      debounceTimer = setTimeout(applySelection, 0);
+    };
+
+    const onTouchEnd = () => {
+      if (debounceTimer) clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(applySelection, 250);
     };
 
     const onKeyDown = (e: KeyboardEvent) => {
@@ -290,12 +298,14 @@ export function useArticleHighlighter(
       }
     };
 
-    doc.addEventListener("selectionchange", onSelectionChange);
+    doc.addEventListener("mouseup", onMouseUp);
+    doc.addEventListener("touchend", onTouchEnd, true);
     doc.addEventListener("keydown", onKeyDown);
 
     (doc as any).__oslerHlCleanup = () => {
       if (debounceTimer) clearTimeout(debounceTimer);
-      doc.removeEventListener("selectionchange", onSelectionChange);
+      doc.removeEventListener("mouseup", onMouseUp);
+      doc.removeEventListener("touchend", onTouchEnd, true);
       doc.removeEventListener("keydown", onKeyDown);
     };
   }, []);

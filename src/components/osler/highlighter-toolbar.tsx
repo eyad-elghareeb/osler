@@ -71,7 +71,7 @@ export function HighlighterToolbar({
   const toggleSize = isMobile ? "size-9" : "size-7";
 
   const toggleClass = cn(
-    "flex items-center justify-center rounded-lg transition-colors shrink-0 medos-touch-target",
+    "flex items-center justify-center rounded-lg transition-colors shrink-0",
     toggleSize,
     active
       ? tone === "header"
@@ -100,17 +100,17 @@ export function HighlighterToolbar({
   const actionBtnSize = isMobile ? "size-9" : "size-6";
 
   const eraserClass = cn(
-    "flex items-center justify-center rounded-md transition-colors shrink-0 medos-touch-target",
+    "flex items-center justify-center rounded-md transition-colors shrink-0",
     actionBtnSize,
     isEraser
       ? "bg-destructive/15 text-destructive ring-1 ring-inset ring-destructive/25"
       : tone === "header"
-        ? "bg-primary-foreground/10 text-primary-foreground hover:bg-primary-foreground/20"
-        : "text-muted-foreground hover:text-foreground hover:bg-muted",
+        ? "bg-primary-foreground/10 text-destructive/80 hover:bg-primary-foreground/20"
+        : "text-destructive/80 hover:text-destructive hover:bg-muted",
   );
 
   const clearClass = cn(
-    "flex items-center justify-center rounded-md transition-colors shrink-0 medos-touch-target",
+    "flex items-center justify-center rounded-md transition-colors shrink-0",
     actionBtnSize,
     "text-muted-foreground hover:text-destructive hover:bg-destructive/10",
   );
@@ -118,7 +118,7 @@ export function HighlighterToolbar({
   /* ── Color swatches — bigger on mobile for proper touch targets ──── */
   const swatchSize = isMobile ? "size-7" : "size-4";
   const swatchBase = cn(
-    "rounded-full ring-2 ring-transparent transition-all shrink-0 medos-touch-target",
+    "rounded-full ring-2 ring-transparent transition-all shrink-0",
     swatchSize,
   );
 
