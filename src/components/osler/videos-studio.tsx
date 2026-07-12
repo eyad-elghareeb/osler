@@ -156,7 +156,6 @@ export function VideosStudio({ initialVideoId, onOpenArticle }: VideosStudioProp
     if (found) {
       openVideo(found);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialVideoId, allVideos]);
 
   // Hide the global mobile tab bar while a video is playing.
@@ -391,7 +390,6 @@ export function VideosStudio({ initialVideoId, onOpenArticle }: VideosStudioProp
                       {/* Thumbnail */}
                       <div className="relative aspect-video bg-muted overflow-hidden">
                         {thumbnail ? (
-                          // eslint-disable-next-line @next/next/no-img-element
                           <img
                             src={thumbnail}
                             alt={video.title}
@@ -890,7 +888,6 @@ function VideoSidebar({ video, playlist, onSelect, onOpenArticle, t }: SidebarPr
                 >
                   <div className="relative size-16 shrink-0 rounded overflow-hidden bg-muted">
                     {thumb && (
-                      // eslint-disable-next-line @next/next/no-img-element
                       <img src={thumb} alt="" className="absolute inset-0 w-full h-full object-cover" loading="lazy" />
                     )}
                     {isActive && (

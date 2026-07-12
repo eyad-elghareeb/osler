@@ -498,6 +498,8 @@ export const STRINGS = {
     "settings.section.ai": "AI Assistant",
     "settings.section.shortcuts": "Keyboard",
     "settings.section.danger": "Data & Reset",
+    "settings.section.backup": "Backup & Restore",
+    "settings.section.sync.open": "Open Sync Page",
     "settings.language.uiLang": "Interface language",
     "settings.language.uiLangDesc":
       "Choose the language used for navigation, buttons, and headings across Osler.",
@@ -1242,6 +1244,8 @@ export const STRINGS = {
     "settings.section.ai": "مساعد الذكاء الاصطناعي",
     "settings.section.shortcuts": "لوحة المفاتيح",
     "settings.section.danger": "البيانات وإعادة التعيين",
+    "settings.section.backup": "النسخ والاستعادة",
+    "settings.section.sync.open": "فتح صفحة المزامنة",
     "settings.language.uiLang": "لغة الواجهة",
     "settings.language.uiLangDesc":
       "اختر اللغة المستخدمة في التنقل والأزرار والعناوين عبر أوسلر.",

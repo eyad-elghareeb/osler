@@ -25,6 +25,7 @@ import {
   Tag,
   Check,
   ArrowLeft,
+  Wifi,
 } from "lucide-react";
 import { storage, notes as notesStore, type NoteRecord } from "@/lib/osler/storage";
 import { loadAllContent, ENGINE_META } from "@/lib/osler/content";
@@ -35,14 +36,17 @@ import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { NotesPanel } from "./notes-panel";
+import { SyncModal } from "./sync/sync-modal";
 
 interface ProfileProps {
   username: string;
   onViewChange?: (v: OslerView) => void;
+  onOpenSettingsSection?: (section: "language" | "ai" | "shortcuts" | "downloads" | "sync" | "backup" | "danger") => void;
 }
 
-export function Profile({ username, onViewChange }: ProfileProps) {
+export function Profile({ username, onViewChange, onOpenSettingsSection }: ProfileProps) {
   const { t } = useI18n();
+  const [syncOpen, setSyncOpen] = React.useState(false);
   const [data, setData] = React.useState<{
     items: Array<{ node: ContentTreeNode; content: AnyContent | null }>;
   } | null>(null);
@@ -106,14 +110,24 @@ export function Profile({ username, onViewChange }: ProfileProps) {
             </span>
           </div>
           {onViewChange && (
-            <button
-              onClick={() => onViewChange("settings")}
-              className="size-9 rounded-lg hover:bg-muted/60 transition-colors flex items-center justify-center shrink-0"
-              aria-label={t("nav.settings")}
-              title={t("nav.settings")}
-            >
-              <Cog className="size-4 text-muted-foreground hover:text-foreground transition-colors" />
-            </button>
+            <>
+              <button
+                onClick={() => setSyncOpen(true)}
+                className="size-9 rounded-lg hover:bg-muted/60 transition-colors flex items-center justify-center shrink-0"
+                aria-label={t("sync.title")}
+                title={t("sync.title")}
+              >
+                <Wifi className="size-4 text-muted-foreground hover:text-foreground transition-colors" />
+              </button>
+              <button
+                onClick={() => onViewChange("settings")}
+                className="size-9 rounded-lg hover:bg-muted/60 transition-colors flex items-center justify-center shrink-0"
+                aria-label={t("nav.settings")}
+                title={t("nav.settings")}
+              >
+                <Cog className="size-4 text-muted-foreground hover:text-foreground transition-colors" />
+              </button>
+            </>
           )}
         </motion.div>
 
@@ -236,6 +250,15 @@ export function Profile({ username, onViewChange }: ProfileProps) {
           />
         </div>
       </div>
+
+      <SyncModal
+        open={syncOpen}
+        onClose={() => setSyncOpen(false)}
+        onOpenSettings={() => {
+          setSyncOpen(false);
+          onOpenSettingsSection?.("sync");
+        }}
+      />
     </div>
   );
 }

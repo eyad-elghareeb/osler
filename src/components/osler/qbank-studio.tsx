@@ -2188,11 +2188,8 @@ function QuizView({
     return () => window.removeEventListener("keydown", handler);
   }, [q, isMCQ, submitted, selected, onToggleFlag, onPrev, onNext, onSelect, onSubmit, onToggleAiAssistant, onToggleNotes, onToggleQuizSettings, setTool]);
 
-  if (!q) return null;
-
   const currentHighlights = React.useMemo(
     () => highlights.get(activeItem.uid, session.current),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
     [activeItem.uid, session.current, hlVersion]
   );
   const strikethroughs = session.strikethroughs[session.current] ?? [];
@@ -2220,6 +2217,8 @@ function QuizView({
     }
   }, []);
   React.useEffect(() => cancelLongPress, [cancelLongPress]);
+
+  if (!q) return null;
 
 
 

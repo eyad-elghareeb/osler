@@ -32,6 +32,14 @@ export default function Home() {
   const [activeContent, setActiveContent] = React.useState<AnyContent | null>(null);
   const [activeArticleId, setActiveArticleId] = React.useState<string | undefined>(undefined);
   const [aiOpen, setAiOpen] = React.useState(false);
+  const [settingsSection, setSettingsSection] = React.useState<
+    "language" | "ai" | "shortcuts" | "downloads" | "sync" | "backup" | "danger"
+  >("language");
+
+  const openSettingsSection = (section: typeof settingsSection) => {
+    setSettingsSection(section);
+    setView("settings");
+  };
 
   // Restore session
   React.useEffect(() => {
@@ -160,9 +168,15 @@ export default function Home() {
         <VideosStudio onOpenArticle={openArticle} />
       ) : null}
 
-      {view === "profile" ? <Profile username={username} onViewChange={setView} /> : null}
+      {view === "profile" ? (
+        <Profile
+          username={username}
+          onViewChange={setView}
+          onOpenSettingsSection={openSettingsSection}
+        />
+      ) : null}
 
-      {view === "settings" ? <Settings /> : null}
+      {view === "settings" ? <Settings initialSection={settingsSection} /> : null}
     </AppShell>
   );
 }

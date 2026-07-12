@@ -18,11 +18,13 @@ import {
   Download,
   HardDrive,
   Smartphone,
+  FileArchive,
 } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { storage } from "@/lib/osler/storage";
 import { SyncSettingsSection } from "./sync/sync-settings-section";
+import { FileSyncPanel } from "./sync/file-sync-panel";
 import {
   SHORTCUT_ACTIONS,
   loadBindings,
@@ -69,11 +71,15 @@ const OSCE_STORAGE_KEYS = {
 
 /* ─── Section tabs ──────────────────────────────────────────────────── */
 
-type SettingsSection = "language" | "ai" | "shortcuts" | "downloads" | "sync" | "danger";
+type SettingsSection = "language" | "ai" | "shortcuts" | "downloads" | "sync" | "backup" | "danger";
 
-export function Settings() {
+export function Settings({
+  initialSection = "language",
+}: {
+  initialSection?: SettingsSection;
+}) {
   const { t } = useI18n();
-  const [section, setSection] = React.useState<SettingsSection>("language");
+  const [section, setSection] = React.useState<SettingsSection>(initialSection);
 
   const SECTIONS: { id: SettingsSection; label: string; icon: React.ComponentType<{ className?: string }> }[] = [
     { id: "language", label: t("settings.section.language"), icon: Languages },
@@ -81,6 +87,7 @@ export function Settings() {
     { id: "shortcuts", label: t("settings.section.shortcuts"), icon: Keyboard },
     { id: "downloads", label: "Downloads", icon: Download },
     { id: "sync", label: "Sync", icon: Smartphone },
+    { id: "backup", label: t("settings.section.backup"), icon: FileArchive },
     { id: "danger", label: t("settings.section.danger"), icon: AlertTriangle },
   ];
 
@@ -125,6 +132,7 @@ export function Settings() {
         {section === "shortcuts" && <ShortcutsSettingsSection />}
         {section === "downloads" && <DownloadsSettingsSection />}
         {section === "sync" && <SyncSettingsSection />}
+        {section === "backup" && <BackupSettingsSection />}
         {section === "danger" && <DangerZoneSection />}
       </motion.div>
     </div>
@@ -889,6 +897,24 @@ function DownloadsSettingsSection() {
         </>
       )}
     </Card>
+  );
+}
+
+/* ─── Backup & Restore section (file export/import) ──────────────────── */
+
+function BackupSettingsSection() {
+  const { t } = useI18n();
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center gap-3 mb-2">
+        <FileArchive className="size-5 text-primary" />
+        <div>
+          <h2 className="text-base font-semibold">{t("settings.section.backup")}</h2>
+          <p className="text-xs text-muted-foreground">{t("sync.tab.fileDesc")}</p>
+        </div>
+      </div>
+      <FileSyncPanel />
+    </div>
   );
 }
 
