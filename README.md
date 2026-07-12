@@ -137,13 +137,12 @@ Syncs progress, sessions, flashcard reviews, and notes.
 | View | Component | Description |
 |------|-----------|-------------|
 | 🏠 **Dashboard** | `dashboard.tsx` | Greeting, continue-learning, stat tiles, quick actions, featured articles, activity |
-| 📖 **Library** | `library.tsx` | Article reader with TOC sidebar, bookmarks, highlighting, sticky notes |
+| 🎓 **Learn** | `learn.tsx` | Hub grouping Library, Flashcards, OSCE, and Videos — module grid with counts & continue badge |
 | 📝 **Q-Bank** | `qbank-studio.tsx` | Unified engine — Create Test, quiz player, results dashboard |
-| 🃏 **Flashcards** | `flashcard-studio.tsx` | Deck browser with spaced repetition, flip-to-reveal |
-| 🏥 **OSCE** | `osce-studio.tsx` | Full-screen clinical OSCE simulator |
-| 🎬 **Videos** | `videos-studio.tsx` | Video browser + player with playlists, chapters |
 | 👤 **Profile** | `profile.tsx` | Stats, engine breakdown, achievements, notes |
 | ⚙️ **Settings** | `settings.tsx` | Theme, AI, language, shortcuts, sync, downloads |
+
+*Sub-views under Learn:* `library.tsx` · `flashcard-studio.tsx` · `osce-studio.tsx` · `videos-studio.tsx`
 
 ---
 
@@ -191,6 +190,7 @@ src/
 │   │   ├── theme-provider.tsx # Dark/light context
 │   │   ├── i18n-provider.tsx  # UI language + RTL context
 │   │   ├── dashboard.tsx      # Home view
+│   │   ├── learn.tsx          # Learn hub (Library/Flashcards/OSCE/Videos)
 │   │   ├── library.tsx        # Article reader
 │   │   ├── qbank-studio.tsx   # Unified quiz engine (~3100 lines)
 │   │   ├── flashcard-studio.tsx
@@ -297,7 +297,9 @@ Content organized into category folders under `public/osler-content/`:
 ### View Routing
 Client-side view state (`OslerView` in `app-shell.tsx`) rather than Next.js pages. All views under a single route (`/`), toggled via `AppShell`.
 
-**Available views:** `dashboard`, `library`, `qbank`, `flashcards`, `osce`, `videos`, `profile`, `settings`.
+**Available views:** `dashboard`, `learn`, `library`, `qbank`, `flashcards`, `osce`, `videos`, `profile`, `settings`.
+
+Library, Flashcards, OSCE, and Videos are sub-views under the **Learn** hub — they retain their own `OslerView` values but are no longer top-level nav items. The Learn tab stays highlighted while inside any sub-view (`LEARN_SUBVIEWS` set in `app-shell.tsx`).
 
 ### Unified QBank Studio
 Quiz, Bank, Written → `QBankStudio.tsx` adapts UI per content type. Flashcards and OSCE have dedicated studios.

@@ -131,7 +131,9 @@
 
 The app uses a client-side view state (`OslerView` type in `app-shell.tsx`) rather than Next.js pages. All views live under a single route (`/`) and are toggled via the `AppShell` component.
 
-Available views: `dashboard`, `library`, `qbank`, `flashcards`, `osce`, `videos`, `profile`, `settings`.
+Available views: `dashboard`, `learn`, `library`, `qbank`, `flashcards`, `osce`, `videos`, `profile`, `settings`.
+
+Library, Flashcards, OSCE, and Videos are sub-views under the **Learn** hub. They keep their own `OslerView` values but no longer appear in the nav bars. The Learn tab stays highlighted while inside any sub-view via `LEARN_SUBVIEWS` in `app-shell.tsx`.
 
 ### Studio components
 
@@ -163,7 +165,7 @@ Available views: `dashboard`, `library`, `qbank`, `flashcards`, `osce`, `videos`
 
 1. Add view name to `OslerView` type in `app-shell.tsx`
 2. Create component in `src/components/osler/`
-3. Add nav entry in `AppShell` and/or `MobileTabBar`
+3. Add nav entry in `AppShell` and/or `MobileTabBar` (or add to `LEARN_SUBVIEWS` if it belongs under the Learn hub)
 4. Wire the view in `src/app/page.tsx` with conditional rendering
 5. Add keyboard shortcut in `shortcuts.ts`
 
