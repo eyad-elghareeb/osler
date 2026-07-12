@@ -89,10 +89,10 @@ export const STRINGS = {
     "common.viewAll": "View all",
 
     "nav.dashboard": "Dashboard",
-    "nav.qbank": "Q-Bank Studio",
+    "nav.qbank": "Q-Bank",
     "nav.library": "Library",
     "nav.flashcards": "Flashcards",
-    "nav.osce": "OSCE Studio",
+    "nav.osce": "OSCE",
     "nav.videos": "Videos",
     "nav.profile": "Profile",
     "nav.settings": "Settings",
@@ -395,7 +395,7 @@ export const STRINGS = {
     "flash.dueToday": "{due} cards due today · {total} total",
     "flash.keyboardNav": "Nav",
 
-    "osce.home.title": "OSCE Studio",
+    "osce.home.title": "OSCE",
     "osce.home.subtitle": "Clinical skills stations with virtual patients.",
     "osce.home.empty": "No OSCE stations available.",
     "osce.home.start": "Start station",
@@ -545,7 +545,7 @@ export const STRINGS = {
     "settings.shortcuts.scope.global": "Global",
     "settings.shortcuts.scope.globalDesc":
       "Available everywhere — search, navigation, theme.",
-    "settings.shortcuts.scope.qbank": "QBank Studio",
+    "settings.shortcuts.scope.qbank": "QBank",
     "settings.shortcuts.scope.qbankDesc":
       "Available inside a QBank session (next, prev, flag, submit, ...).",
     "settings.shortcuts.scope.flashcard": "Flashcards",
@@ -834,10 +834,10 @@ export const STRINGS = {
     "common.viewAll": "عرض الكل",
 
     "nav.dashboard": "اللوحة الرئيسية",
-    "nav.qbank": "استوديو بنك الأسئلة",
+    "nav.qbank": "بنك الأسئلة",
     "nav.library": "المكتبة",
     "nav.flashcards": "البطاقات التعليمية",
-    "nav.osce": "استوديو OSCE",
+    "nav.osce": "OSCE",
     "nav.videos": "الفيديوهات",
     "nav.profile": "الملف الشخصي",
     "nav.settings": "الإعدادات",
@@ -1141,7 +1141,7 @@ export const STRINGS = {
     "flash.dueToday": "{due} بطاقات مستحقة اليوم · {total} إجمالي",
     "flash.keyboardNav": "التنقل",
 
-    "osce.home.title": "استوديو OSCE",
+    "osce.home.title": "OSCE",
     "osce.home.subtitle": "محطات المهارات السريرية مع مرضى افتراضيين.",
     "osce.home.empty": "لا توجد محطات OSCE متاحة.",
     "osce.home.start": "ابدأ المحطة",
@@ -1289,7 +1289,7 @@ export const STRINGS = {
       "انقر على أي اختصار لتسجيل تركيبة مفاتيح جديدة. اضغط Esc لإلغاء التسجيل، أو Backspace لتعطيله. تسري التغييرات عند النقر على حفظ التغييرات.",
     "settings.shortcuts.scope.global": "عام",
     "settings.shortcuts.scope.globalDesc": "متاحة في كل مكان — بحث، تنقّل، سمات.",
-    "settings.shortcuts.scope.qbank": "استوديو بنك الأسئلة",
+    "settings.shortcuts.scope.qbank": "بنك الأسئلة",
     "settings.shortcuts.scope.qbankDesc":
       "متاحة داخل جلسة بنك الأسئلة (التالي، السابق، تعليم، إرسال، ...).",
     "settings.shortcuts.scope.flashcard": "البطاقات التعليمية",
