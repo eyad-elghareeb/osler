@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { motion, AnimatePresence, useMotionValue, useTransform, animate } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import {
   Layers,
   RotateCcw,
@@ -27,7 +27,7 @@ import type { FlashcardContent, FlashcardSubdeck, ContentTreeNode, AnyContent } 
 import { flashcardReview, storage } from "@/lib/osler/storage";
 import { useContentTree } from "@/hooks/use-content-tree";
 import { useShortcutBindings } from "@/hooks/use-shortcuts";
-import { useSwipe } from "@/hooks/use-gestures";
+import { SwipeGallery } from "./swipe-gallery";
 
 import { useIsMobile } from "@/hooks/use-mobile";
 import { cn } from "@/lib/utils";
@@ -237,76 +237,12 @@ export function FlashcardStudio({
     return () => window.removeEventListener("keydown", handler);
   }, [mode, flipped, cardIndex, isFlipping, currentCard, sessionCards, currentDeck]);
 
-  // Mobile swipe — iOS photo gallery pattern.
-  // Three cards are rendered side-by-side (prev / current / next); the
-  // swipeX motion value drives all three simultaneously so they appear
-  // "connected" — as the current card slides off-screen, the next card
-  // slides in from the other side with a fixed offset, exactly like
-  // swiping through photos in the iOS Photos app.
+  // Mobile swipe — handled by the reusable SwipeGallery component.
+  // The gallery renders prev/current/next cards and drives them with a
+  // single motion value for the iOS Photos "connected cards" feel.
+  // Tap-to-flip is preserved via the onTap callback (suppressed after a swipe).
   const isMobile = useIsMobile();
   const canSwipe = mode === "study" && isMobile;
-  const swipeX = useMotionValue(0);
-
-  // Measure the card container width so we can position prev/next cards
-  // exactly one card-width to the left/right of the current card.
-  const cardContainerRef = React.useRef<HTMLDivElement>(null);
-  const [cardWidth, setCardWidth] = React.useState(0);
-  React.useEffect(() => {
-    if (!cardContainerRef.current) return;
-    const el = cardContainerRef.current;
-    const update = () => setCardWidth(el.offsetWidth);
-    update();
-    const ro = new ResizeObserver(update);
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, [mode]);
-
-  // Prev card sits one card-width to the left; next card one to the right.
-  // Both move together with swipeX — the iOS "fixed distance" connection.
-  const prevCardX = useTransform(swipeX, (v) => v - cardWidth);
-  const nextCardX = useTransform(swipeX, (v) => v + cardWidth);
-
-  const swipeRef = useSwipe<HTMLDivElement>({
-    threshold: 50,
-    maxDuration: 600,
-    disabled: !canSwipe,
-    onSwipeProgress: (dx) => {
-      // Rubber-band resistance at the edges — first card resists swiping
-      // right (no previous), last card resists swiping left (no next).
-      let clampedDx = dx;
-      if (cardIndex === 0 && dx > 0) clampedDx = dx * 0.3;
-      if (cardIndex === sessionCards.length - 1 && dx < 0) clampedDx = dx * 0.3;
-      swipeX.set(clampedDx);
-    },
-    onSwipeCancel: () => {
-      animate(swipeX, 0, { type: "spring", stiffness: 500, damping: 40, mass: 0.8 });
-    },
-    onSwipeLeft: () => {
-      if (cardIndex < sessionCards.length - 1) {
-        haptic("selection");
-        const w = cardWidth || (typeof window !== "undefined" ? window.innerWidth : 400);
-        // One continuous motion: animate swipeX to -w. The current card
-        // slides off-screen left while the next card slides in from the
-        // right. When the animation completes, swap cardIndex and reset
-        // swipeX to 0 — visually seamless because the new "current" card
-        // is already at x=0 and the new "prev" card is at x=-w.
-        animate(swipeX, -w, { type: "spring", stiffness: 400, damping: 35, mass: 0.8 })
-          .then(() => { nextCard(); swipeX.set(0); });
-      } else {
-        animate(swipeX, 0, { type: "spring", stiffness: 500, damping: 40, mass: 0.8 });
-      }
-    },
-    onSwipeRight: () => {
-      if (cardIndex > 0) {
-        haptic("selection");
-        const w = cardWidth || (typeof window !== "undefined" ? window.innerWidth : 400);
-        animate(swipeX, w, { type: "spring", stiffness: 400, damping: 35, mass: 0.8 })
-          .then(() => { prevCard(); swipeX.set(0); });
-      } else {
-        animate(swipeX, 0, { type: "spring", stiffness: 500, damping: 40, mass: 0.8 });
-      }
-    },
-  });
 
   function restartDeck() {
     if (!currentDeck) return;
@@ -574,50 +510,25 @@ export function FlashcardStudio({
           />
         </div>
 
-        {/* Card area — iOS photo gallery layout.
-            Three cards (prev / current / next) are positioned absolutely and
-            translated together by swipeX. As the current card slides off-screen
-            left, the next card slides in from the right with a fixed offset —
-            they appear connected like photos in the iOS Photos app. */}
+        {/* Card area — iOS photo gallery swipe.
+            The SwipeGallery component handles the three-card layout, rubber-
+            band edges, tap-to-flip (via onTap, suppressed after a swipe),
+            and visibility-hidden preview cards at rest. */}
         <div className="flex-1 flex items-center justify-center p-4 sm:p-8 bg-card">
-          <div
-            ref={cardContainerRef}
-            className="w-full max-w-2xl aspect-[16/10] relative overflow-hidden"
-          >
-            <div
-              ref={swipeRef}
-              className="absolute inset-0"
-              style={{ touchAction: canSwipe ? "pan-y" : undefined }}
-            >
-              {/* Previous card (off-screen left, only if not at first card) */}
-              {cardIndex > 0 && currentDeckCards[cardIndex - 1] && (
-                <motion.div
-                  style={{ x: prevCardX }}
-                  className="absolute inset-0"
-                  aria-hidden
-                >
-                  {renderFlashcardFace(currentDeckCards[cardIndex - 1], false)}
-                </motion.div>
-              )}
-              {/* Current card (centered, drives the swipe) */}
-              <motion.div
-                style={{ x: swipeX }}
-                onClick={canSwipe ? undefined : flipCard}
-                className="absolute inset-0 cursor-pointer select-none"
-              >
-                {renderFlashcardFace(currentCard, flipped)}
-              </motion.div>
-              {/* Next card (off-screen right, only if not at last card) */}
-              {cardIndex < sessionCards.length - 1 && currentDeckCards[cardIndex + 1] && (
-                <motion.div
-                  style={{ x: nextCardX }}
-                  className="absolute inset-0"
-                  aria-hidden
-                >
-                  {renderFlashcardFace(currentDeckCards[cardIndex + 1], false)}
-                </motion.div>
-              )}
-            </div>
+          <div className="w-full max-w-2xl aspect-[16/10]">
+            <SwipeGallery
+              items={currentDeckCards}
+              currentIndex={cardIndex}
+              onNavigateNext={nextCard}
+              onNavigatePrev={prevCard}
+              onTap={flipCard}
+              disabled={!canSwipe}
+              className="w-full h-full"
+              cardClassName="w-full h-full"
+              renderItem={(card, idx, _interactive) =>
+                renderFlashcardFace(card, idx === cardIndex ? flipped : false)
+              }
+            />
           </div>
         </div>
 

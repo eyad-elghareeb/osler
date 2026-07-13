@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { motion, AnimatePresence, useMotionValue, useTransform, animate } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import {
   Settings as SettingsIcon,
   Sparkles,
@@ -47,6 +47,7 @@ import { useI18n } from "./i18n-provider";
 import { LANGUAGES, UI_LANGS, type UiLang, type ContentLangFilter, type StringKey } from "@/lib/osler/i18n";
 import { cn } from "@/lib/utils";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { NavigationStack } from "./navigation-stack";
 import {
   isHapticsEnabled,
   setHapticsEnabled,
@@ -152,16 +153,43 @@ export function Settings({
   const [section, setSection] = React.useState<SettingsSection>(initialSection);
   // On mobile, the home list is the landing page (the "main settings page").
   // We always start there unless the caller explicitly requests a non-default
-  // section via initialSection. The previous logic (`isMobile && initialSection === "language"`)
-  // broke because `useIsMobile()` returns false on the very first render (SSR / hydration),
-  // so mobileHome initialized as false and the language subpage showed first.
-  const [mobileHome, setMobileHome] = React.useState<boolean>(initialSection === "language");
+  // section via initialSection.
+  //
+  // BUG FIX: The previous logic used `useIsMobile()` in the initializer, but
+  // `useIsMobile()` returns false on the very first render (its internal
+  // useState starts as undefined → !!undefined = false). This caused
+  // mobileHome to initialize as false, so the language subpage showed first
+  // on mobile. The effect `if (!isMobile) setMobileHome(false)` then ran on
+  // mount with the stale isMobile=false, cementing the wrong value.
+  //
+  // FIX: Use a lazy initializer that reads window.innerWidth synchronously.
+  // Since Settings only mounts when the user navigates to it (view === "settings"),
+  // window is always available — no SSR concern. The prevIsMobileRef effect
+  // handles form-factor changes (desktop ↔ mobile resize) without touching
+  // mobileHome on the initial mount.
+  const [mobileHome, setMobileHome] = React.useState<boolean>(() => {
+    if (typeof window === "undefined") return false;
+    return window.innerWidth < 768 && initialSection === "language";
+  });
   const [query, setQuery] = React.useState("");
 
-  // Re-evaluate the mobile home flag when the form factor changes.
+  // Handle form-factor transitions (desktop ↔ mobile resize). We skip the
+  // initial mount to avoid clobbering the lazy initializer's value — the
+  // stale isMobile=false on the first render would otherwise set
+  // mobileHome=false before the real isMobile value arrives.
+  const prevIsMobileRef = React.useRef(isMobile);
   React.useEffect(() => {
-    if (!isMobile) setMobileHome(false);
-  }, [isMobile]);
+    if (prevIsMobileRef.current === isMobile) return;
+    prevIsMobileRef.current = isMobile;
+    if (isMobile) {
+      // Transitioned to mobile — show home list unless a specific section
+      // was explicitly requested.
+      setMobileHome(initialSection === "language");
+    } else {
+      // Transitioned to desktop — reset (desktop doesn't use mobileHome).
+      setMobileHome(false);
+    }
+  }, [isMobile, initialSection]);
 
   // Sync external `initialSection` changes (e.g. user picked a section from
   // the global search). On mobile this also pushes onto the page stack.
@@ -200,38 +228,23 @@ export function Settings({
     setQuery("");
   };
 
-  // iOS NavigationController-style back swipe.
-  // The subpage is draggable from the leading edge; dragging past the
-  // threshold commits the back navigation. The home list lives underneath
-  // and parallaxes during the drag for a native iOS feel.
-  //
-  // We track the live drag offset (`backDragX`) so the home list can
-  // parallax in real time. On release the drag either commits (goHome)
-  // or snaps back to 0 — framer-motion's drag handles the snap-back
-  // automatically via dragSnapToOrigin.
-  const backDragX = useMotionValue(0);
-  // Parallax: home list moves at 30% of the drag offset, capped to 30% of viewport.
-  const homeParallaxX = useTransform(backDragX, (v) => {
-    // For LTR, dragging the subpage right reveals the home list on the left.
-    // Home list parallaxes from -30% (when subpage is fully covering) to 0 (when subpage is fully off).
-    if (rtl) return -v * 0.3;
-    return v * 0.3;
-  });
+  // The iOS NavigationController-style back swipe, parallax, and stacked
+  // page animations are handled by the reusable NavigationStack component.
 
   // ── Mobile: iOS NavigationController-style stacked pages ──────────
   // The home list is always rendered underneath. Subpages slide in from
   // the inline-end side and can be dragged back to reveal the home list
   // with a parallax effect — exactly like iOS Settings / Mail / Messages.
+  // The animation logic lives in the reusable NavigationStack component.
   if (isMobile) {
     const activeMeta = SECTIONS.find((s) => s.id === section);
-    // Direction the subpage enters from. For LTR, subpages enter from the
-    // right (positive x). For RTL, they enter from the left (negative x).
-    const enterX = rtl ? "-100%" : "100%";
     return (
-      <div className="h-full overflow-hidden medos-tabbar-pad relative">
+      <div className="h-full flex flex-col medos-tabbar-pad">
         {/* Search bar — fixed at the top, outside the page stack so it
-            doesn't slide with the subpages. */}
-        <div className="sticky top-0 z-20 px-4 pt-4 pb-2 bg-background/95 backdrop-blur-md safe-pt">
+            doesn't slide with the subpages. Using shrink-0 + flex-col
+            instead of the old sticky/h-[calc()] approach which had
+            spacing issues when the safe-area inset varied. */}
+        <div className="shrink-0 px-4 pt-4 pb-3 bg-background/95 backdrop-blur-md safe-pt z-10">
           <div className="max-w-2xl mx-auto flex items-center gap-2 h-10 px-3 rounded-lg border border-border/60 bg-muted/40">
             <Search className="size-4 text-muted-foreground shrink-0" />
             <input
@@ -253,36 +266,58 @@ export function Settings({
           </div>
         </div>
 
-        {/* Page stack — relative container holding the home list (always
-            rendered underneath) and the subpage overlay (conditionally
-            rendered on top, draggable to dismiss). */}
-        <div className="relative max-w-2xl mx-auto px-4 pt-2 pb-6 h-[calc(100%-4.5rem)] overflow-hidden">
-          {/* Home list — always rendered underneath. Parallaxes during
-              back-drag and slides out of the way when a subpage is on top. */}
-          <motion.div
-            initial={false}
-            animate={{
-              x: mobileHome ? 0 : (rtl ? "30%" : "-30%"),
-              opacity: mobileHome ? 1 : 0.6,
-              scale: mobileHome ? 1 : 0.96,
-            }}
-            style={mobileHome ? undefined : { x: homeParallaxX }}
-            transition={{ type: "spring", stiffness: 380, damping: 36, mass: 0.8 }}
-            className="absolute inset-x-0 inset-y-0 overflow-y-auto medos-scroll"
-          >
-            {query ? (
-              // Search-results mode — show filtered section list inline.
-              <>
-                <div className="text-[10px] uppercase tracking-wider text-muted-foreground px-1 mb-2">
-                  {t("settings.sidebarTitle")}
-                </div>
-                <div className="rounded-lg border border-border/60 overflow-hidden bg-card">
-                  {filteredSections.length === 0 ? (
-                    <div className="px-4 py-6 text-center text-sm text-muted-foreground">
-                      {t("settings.searchEmpty")}
-                    </div>
-                  ) : (
-                    filteredSections.map((s, idx) => {
+        {/* Page stack — NavigationStack handles the home-underneath +
+            subpage-overlay layout, drag-to-go-back, and parallax. */}
+        <NavigationStack
+          className="flex-1 min-h-0"
+          homeClassName="medos-scroll"
+          subpageClassName="medos-scroll"
+          rtl={rtl}
+          home={
+            <div className="max-w-2xl mx-auto px-4 py-3">
+              {query ? (
+                <>
+                  <div className="text-[10px] uppercase tracking-wider text-muted-foreground px-1 mb-2">
+                    {t("settings.sidebarTitle")}
+                  </div>
+                  <div className="rounded-lg border border-border/60 overflow-hidden bg-card">
+                    {filteredSections.length === 0 ? (
+                      <div className="px-4 py-6 text-center text-sm text-muted-foreground">
+                        {t("settings.searchEmpty")}
+                      </div>
+                    ) : (
+                      filteredSections.map((s, idx) => {
+                        const I = s.icon;
+                        return (
+                          <button
+                            key={s.id}
+                            onClick={() => pickSection(s.id)}
+                            className={cn(
+                              "w-full text-start px-4 py-3 flex items-center gap-3 hover:bg-muted/60 transition-colors",
+                              idx > 0 && "border-t border-border/60",
+                            )}
+                          >
+                            <span className="size-8 rounded-md bg-primary/10 text-primary flex items-center justify-center shrink-0">
+                              <I className="size-4" />
+                            </span>
+                            <span className="flex-1 min-w-0">
+                              <span className="block text-sm font-medium truncate">{t(s.labelKey)}</span>
+                              <span className="block text-[11px] text-muted-foreground truncate">{s.keywords}</span>
+                            </span>
+                            <ChevronRight className={cn("size-4 text-muted-foreground shrink-0", rtl && "rtl-flip-x")} />
+                          </button>
+                        );
+                      })
+                    )}
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="text-[10px] uppercase tracking-wider text-muted-foreground px-1 mb-2">
+                    {t("settings.mobileHomeSubtitle")}
+                  </div>
+                  <div className="rounded-lg border border-border/60 overflow-hidden bg-card">
+                    {SECTIONS.map((s, idx) => {
                       const I = s.icon;
                       return (
                         <button
@@ -303,102 +338,39 @@ export function Settings({
                           <ChevronRight className={cn("size-4 text-muted-foreground shrink-0", rtl && "rtl-flip-x")} />
                         </button>
                       );
-                    })
-                  )}
-                </div>
-              </>
-            ) : (
-              // Default home list — section catalog.
-              <>
-                <div className="text-[10px] uppercase tracking-wider text-muted-foreground px-1 mb-2">
-                  {t("settings.mobileHomeSubtitle")}
-                </div>
-                <div className="rounded-lg border border-border/60 overflow-hidden bg-card">
-                  {SECTIONS.map((s, idx) => {
-                    const I = s.icon;
-                    return (
-                      <button
-                        key={s.id}
-                        onClick={() => pickSection(s.id)}
-                        className={cn(
-                          "w-full text-start px-4 py-3 flex items-center gap-3 hover:bg-muted/60 transition-colors",
-                          idx > 0 && "border-t border-border/60",
-                        )}
-                      >
-                        <span className="size-8 rounded-md bg-primary/10 text-primary flex items-center justify-center shrink-0">
-                          <I className="size-4" />
-                        </span>
-                        <span className="flex-1 min-w-0">
-                          <span className="block text-sm font-medium truncate">{t(s.labelKey)}</span>
-                          <span className="block text-[11px] text-muted-foreground truncate">{s.keywords}</span>
-                        </span>
-                        <ChevronRight className={cn("size-4 text-muted-foreground shrink-0", rtl && "rtl-flip-x")} />
-                      </button>
-                    );
-                  })}
-                </div>
-              </>
-            )}
-          </motion.div>
-
-          {/* Subpage overlay — slides in from the inline-end side, can be
-              dragged back to dismiss (iOS NavigationController pattern). */}
-          <AnimatePresence initial={false}>
-            {!mobileHome && (
-              <motion.div
-                key={section}
-                initial={{ x: enterX }}
-                animate={{ x: 0 }}
-                exit={{ x: enterX }}
-                transition={{ type: "spring", stiffness: 380, damping: 36, mass: 0.8 }}
-                style={{ x: backDragX }}
-                drag={query ? false : "x"}
-                dragDirectionLock
-                dragConstraints={{ left: 0, right: 0 }}
-                dragElastic={{ left: rtl ? 0.7 : 0, right: rtl ? 0 : 0.7 }}
-                dragSnapToOrigin
-                onDragStart={() => haptic("selection")}
-                onDragEnd={(_e, info) => {
-                  // For LTR: back swipe is dragging right (positive offset).
-                  // For RTL: back swipe is dragging left (negative offset).
-                  const threshold = 90;
-                  const velocityThreshold = 350;
-                  const isBack = rtl
-                    ? info.offset.x < -threshold || info.velocity.x < -velocityThreshold
-                    : info.offset.x > threshold || info.velocity.x > velocityThreshold;
-                  if (isBack) {
-                    haptic("selection");
-                    goHome();
-                  }
-                  // Otherwise dragSnapToOrigin snaps the subpage back to 0.
-                }}
-                className="absolute inset-x-0 inset-y-0 bg-background shadow-2xl rounded-l-2xl overflow-y-auto medos-scroll"
-              >
-                <div className="px-4 py-4">
-                  {/* Section header with back button */}
-                  <div className="flex items-center gap-2 mb-4">
-                    <button
-                      onClick={goHome}
-                      className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors medos-touch-target -ms-1 ps-1"
-                      aria-label={t("settings.backToList")}
-                    >
-                      <ArrowLeft className={cn("size-4", rtl && "rtl-flip-x")} />
-                      <span>{t("settings.backToList")}</span>
-                    </button>
+                    })}
                   </div>
-                  <h1 className="text-lg font-bold flex items-center gap-2 mb-4">
-                    {(() => {
-                      const I = activeMeta?.icon ?? SettingsIcon;
-                      return <I className="size-5 text-primary" />;
-                    })()}
-                    {activeMeta ? t(activeMeta.labelKey) : t("settings.title")}
-                  </h1>
-                  {renderSection(section)}
+                </>
+              )}
+            </div>
+          }
+          subpage={
+            mobileHome ? null : (
+              <div className="px-4 py-4">
+                {/* Section header with back button */}
+                <div className="flex items-center gap-2 mb-4">
+                  <button
+                    onClick={goHome}
+                    className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors medos-touch-target -ms-1 ps-1"
+                    aria-label={t("settings.backToList")}
+                  >
+                    <ArrowLeft className={cn("size-4", rtl && "rtl-flip-x")} />
+                    <span>{t("settings.backToList")}</span>
+                  </button>
                 </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
-        </div>
+                <h1 className="text-lg font-bold flex items-center gap-2 mb-4">
+                  {(() => {
+                    const I = activeMeta?.icon ?? SettingsIcon;
+                    return <I className="size-5 text-primary" />;
+                  })()}
+                  {activeMeta ? t(activeMeta.labelKey) : t("settings.title")}
+                </h1>
+                {renderSection(section)}
+              </div>
+            )
+          }
+          onBack={goHome}
+        />
       </div>
     );
   }

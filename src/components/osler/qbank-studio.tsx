@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { motion, AnimatePresence, useMotionValue, useTransform, animate } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import {
   ChevronLeft,
   ChevronRight,
@@ -105,7 +105,7 @@ import { ContentCacheButton } from "./content-cache-button";
 import { useShortcutBindings, useShortcutListener } from "@/hooks/use-shortcuts";
 import { defaultBindings } from "@/lib/osler/shortcuts";
 import { useIsMobile } from "@/hooks/use-mobile";
-import { useSwipe } from "@/hooks/use-gestures";
+import { SwipeGallery } from "./swipe-gallery";
 import { useQuizSettings } from "@/hooks/use-quiz-settings";
 import { setImmersiveMode } from "./immersive-mode";
 import { haptic } from "@/lib/osler/native";
@@ -2019,82 +2019,14 @@ function QuizView({
   // persisted in IndexedDB and shared across the profile page.
   const questionBodyRef = React.useRef<HTMLElement>(null);
 
-  // Mobile swipe — iOS photo gallery pattern.
-  // Three question cards are rendered side-by-side (prev / current / next);
-  // the swipeX motion value drives all three simultaneously so they appear
-  // "connected" — as the current question slides off-screen, the next one
-  // slides in from the other side with a fixed offset, exactly like
-  // swiping through photos in the iOS Photos app.
-  const swipeX = useMotionValue(0);
-  const [navDir, setNavDir] = React.useState<"next" | "prev">("next");
-
-  // Measure the question column width so prev/next cards can be positioned
-  // exactly one card-width to the left/right of the current card.
-  const questionColRef = React.useRef<HTMLDivElement>(null);
-  const [questionColWidth, setQuestionColWidth] = React.useState(0);
-  React.useEffect(() => {
-    if (!questionColRef.current) return;
-    const el = questionColRef.current;
-    const update = () => setQuestionColWidth(el.offsetWidth);
-    update();
-    const ro = new ResizeObserver(update);
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, []);
-
-  // Prev card sits one card-width to the left; next card one to the right.
-  // Both move together with swipeX — the iOS "fixed distance" connection.
-  const prevQuestionX = useTransform(swipeX, (v) => v - questionColWidth);
-  const nextQuestionX = useTransform(swipeX, (v) => v + questionColWidth);
-
+  // Mobile swipe — handled by the reusable SwipeGallery component.
+  // Navigation is free: the user can swipe to any question whether or not
+  // it has been answered/submitted. The gallery shows prev/current/next
+  // cards driven by a single motion value for the iOS Photos feel.
   const canSwipeQuestion = isMobile && !isPausedOrLocked;
 
-  const swipeRef = useSwipe<HTMLElement>({
-    threshold: 50,
-    maxDuration: 600,
-    disabled: !canSwipeQuestion,
-    onSwipeProgress: (dx) => {
-      // Rubber-band resistance at the edges.
-      let clampedDx = dx;
-      if (session.current === 0 && dx > 0) clampedDx = dx * 0.3;
-      if (session.current === session.questions.length - 1 && dx < 0) clampedDx = dx * 0.3;
-      swipeX.set(clampedDx);
-    },
-    onSwipeCancel: () => {
-      animate(swipeX, 0, { type: "spring", stiffness: 500, damping: 40, mass: 0.8 });
-    },
-    onSwipeLeft: () => {
-      if (session.current < session.questions.length - 1) {
-        haptic("selection");
-        const w = questionColWidth || (typeof window !== "undefined" ? window.innerWidth : 400);
-        // One continuous motion: current card slides off-screen left while
-        // next card slides in from the right. After the animation, swap the
-        // index and reset swipeX to 0 — visually seamless.
-        animate(swipeX, -w, { type: "spring", stiffness: 400, damping: 35, mass: 0.8 })
-          .then(() => { setNavDir("next"); onNext(); swipeX.set(0); });
-      } else {
-        animate(swipeX, 0, { type: "spring", stiffness: 500, damping: 40, mass: 0.8 });
-      }
-    },
-    onSwipeRight: () => {
-      if (session.current > 0) {
-        haptic("selection");
-        const w = questionColWidth || (typeof window !== "undefined" ? window.innerWidth : 400);
-        animate(swipeX, w, { type: "spring", stiffness: 400, damping: 35, mass: 0.8 })
-          .then(() => { setNavDir("prev"); onPrev(); swipeX.set(0); });
-      } else {
-        animate(swipeX, 0, { type: "spring", stiffness: 500, damping: 40, mass: 0.8 });
-      }
-    },
-  });
-  const mergedQuestionRef = React.useCallback((node: HTMLElement | null) => {
-    questionBodyRef.current = node;
-    swipeRef.current = node;
-  }, [swipeRef]);
-
-  // Wrapped nav handlers — set direction so AnimatePresence slide matches.
-  const goNext = React.useCallback(() => { setNavDir("next"); onNext(); }, [onNext]);
-  const goPrev = React.useCallback(() => { setNavDir("prev"); onPrev(); }, [onPrev]);
+  const goNext = React.useCallback(() => { onNext(); }, [onNext]);
+  const goPrev = React.useCallback(() => { onPrev(); }, [onPrev]);
 
   // ── Question content renderer ────────────────────────────────────────
   // Renders the full question card (header + stem + choices + engine view)
@@ -2771,7 +2703,7 @@ function QuizView({
         </div>
 
         {/* Center — Question panel */}
-        <main ref={mergedQuestionRef} data-swipe="horizontal" className="flex-1 min-w-0 flex flex-col bg-background">
+        <main ref={questionBodyRef} data-swipe="horizontal" className="flex-1 min-w-0 flex flex-col bg-background">
           <AnimatePresence>
             {isPausedOrLocked && (
               <motion.div
@@ -2842,37 +2774,24 @@ function QuizView({
                   } ${mobileTutorTab === "answer" ? "hidden md:block" : ""}`}
                 >
                   <div className={`px-4 sm:px-6 ${submitted && session.mode === "tutor" && useSplitExplanation ? "py-4" : "lg:px-8 py-6"} ${contentAlignClass}`}>
-                    {/* iOS photo gallery layout — three question cards
-                        (prev / current / next) positioned absolutely and
-                        translated together by swipeX. As the current card
-                        slides off-screen, the next card slides in from the
-                        other side with a fixed offset, like photos in iOS. */}
-                    <div ref={questionColRef} className="relative">
-                      {/* Previous question (off-screen left) */}
-                      {session.current > 0 && (
-                        <motion.div
-                          style={{ x: prevQuestionX, pointerEvents: "none" as const }}
-                          className="absolute inset-0 overflow-hidden"
-                          aria-hidden
-                        >
-                          {renderQuestionContent(session.current - 1, false)}
-                        </motion.div>
-                      )}
-                      {/* Current question (centered, interactive) */}
-                      <motion.div style={{ x: swipeX }}>
-                        {renderQuestionContent(session.current, true)}
-                      </motion.div>
-                      {/* Next question (off-screen right) */}
-                      {session.current < session.questions.length - 1 && (
-                        <motion.div
-                          style={{ x: nextQuestionX, pointerEvents: "none" as const }}
-                          className="absolute inset-0 overflow-hidden"
-                          aria-hidden
-                        >
-                          {renderQuestionContent(session.current + 1, false)}
-                        </motion.div>
-                      )}
-                    </div>
+                    {/* iOS photo gallery swipe — the SwipeGallery component
+                        handles the three-card layout, rubber-band edges,
+                        visibility-hidden preview cards at rest (no overlap),
+                        and a configurable gap between cards. Navigation is
+                        free: swipe works whether or not the question is
+                        answered/submitted. */}
+                    <SwipeGallery
+                      items={session.questions}
+                      currentIndex={session.current}
+                      onNavigateNext={goNext}
+                      onNavigatePrev={goPrev}
+                      disabled={!canSwipeQuestion}
+                      gap={16}
+                      className="w-full"
+                      renderItem={(_item, idx, interactive) =>
+                        renderQuestionContent(idx, interactive)
+                      }
+                    />
                   </div>
                 </div>
 
