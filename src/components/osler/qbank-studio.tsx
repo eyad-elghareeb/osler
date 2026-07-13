@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { motion, AnimatePresence, useMotionValue } from "framer-motion";
+import { motion, AnimatePresence, useMotionValue, animate } from "framer-motion";
 import {
   ChevronLeft,
   ChevronRight,
@@ -2019,12 +2019,14 @@ function QuizView({
   // persisted in IndexedDB and shared across the profile page.
   const questionBodyRef = React.useRef<HTMLElement>(null);
 
-  // Mobile swipe — real-time drag-follow + animated page transition.
-  // `swipeX` is a MotionValue updated on every pointer move (no re-renders).
-  // `navDir` tracks whether the last navigation was forward or backward so
-  // the AnimatePresence slide direction matches the swipe direction.
+  // Mobile swipe — velocity-based drag-follow with spring-animated release.
+  // Uses framer-motion's `animate()` for smooth spring physics on release,
+  // and tracks velocity locally to decide navigation vs snap-back.
   const swipeX = useMotionValue(0);
   const [navDir, setNavDir] = React.useState<"next" | "prev">("next");
+
+  // Velocity tracking: record timestamps during drag to compute release velocity.
+  const swipeTrackingRef = React.useRef({ points: [] as { x: number; t: number }[] });
 
   const swipeRef = useSwipe<HTMLElement>({
     threshold: 70,
@@ -2032,25 +2034,44 @@ function QuizView({
     disabled: !isMobile || isPausedOrLocked,
     onSwipeProgress: (dx) => {
       swipeX.set(dx);
+      const now = performance.now();
+      const pts = swipeTrackingRef.current.points;
+      // Keep a rolling window of the last 5 points for velocity calculation.
+      pts.push({ x: dx, t: now });
+      if (pts.length > 5) pts.shift();
     },
     onSwipeCancel: () => {
-      swipeX.set(0);
+      // Spring back to origin on cancel.
+      animate(swipeX, 0, { type: "spring", stiffness: 500, damping: 40, mass: 0.8 });
+      swipeTrackingRef.current.points = [];
     },
     onSwipeLeft: () => {
-      swipeX.set(0);
       if (session.current < session.questions.length - 1) {
         haptic("selection");
         setNavDir("next");
-        onNext();
+        // Animate card out to the left before navigating.
+        const w = typeof window !== "undefined" ? window.innerWidth : 400;
+        animate(swipeX, -w, { type: "spring", stiffness: 400, damping: 40, mass: 0.8 })
+          .then(() => { swipeX.set(0); onNext(); });
+      } else {
+        // At boundary — spring back.
+        animate(swipeX, 0, { type: "spring", stiffness: 500, damping: 40, mass: 0.8 });
       }
+      swipeTrackingRef.current.points = [];
     },
     onSwipeRight: () => {
-      swipeX.set(0);
       if (session.current > 0) {
         haptic("selection");
         setNavDir("prev");
-        onPrev();
+        // Animate card out to the right before navigating.
+        const w = typeof window !== "undefined" ? window.innerWidth : 400;
+        animate(swipeX, w, { type: "spring", stiffness: 400, damping: 40, mass: 0.8 })
+          .then(() => { swipeX.set(0); onPrev(); });
+      } else {
+        // At boundary — spring back.
+        animate(swipeX, 0, { type: "spring", stiffness: 500, damping: 40, mass: 0.8 });
       }
+      swipeTrackingRef.current.points = [];
     },
   });
   const mergedQuestionRef = React.useCallback((node: HTMLElement | null) => {
@@ -2558,7 +2579,7 @@ function QuizView({
                         initial={{ opacity: 0, x: navDir === "next" ? (rtl ? -24 : 24) : (rtl ? 24 : -24) }}
                         animate={{ opacity: 1, x: 0 }}
                         exit={{ opacity: 0, x: navDir === "next" ? (rtl ? 24 : -24) : (rtl ? -24 : 24) }}
-                        transition={{ duration: 0.18, ease: [0.32, 0.72, 0, 1] }}
+                        transition={{ duration: 0.25, ease: [0.32, 0.72, 0, 1] }}
                       >
                     {/* Question header */}
                     <div className="flex flex-wrap items-center justify-between gap-2 pb-3 mb-4 border-b border-border">

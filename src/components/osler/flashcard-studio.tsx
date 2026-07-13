@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { motion, AnimatePresence, useMotionValue } from "framer-motion";
+import { motion, AnimatePresence, type PanInfo } from "framer-motion";
 import {
   Layers,
   RotateCcw,
@@ -27,7 +27,7 @@ import type { FlashcardContent, FlashcardSubdeck, ContentTreeNode, AnyContent } 
 import { flashcardReview, storage } from "@/lib/osler/storage";
 import { useContentTree } from "@/hooks/use-content-tree";
 import { useShortcutBindings } from "@/hooks/use-shortcuts";
-import { useSwipe } from "@/hooks/use-gestures";
+
 import { useIsMobile } from "@/hooks/use-mobile";
 import { cn } from "@/lib/utils";
 import { haptic } from "@/lib/osler/native";
@@ -233,34 +233,27 @@ export function FlashcardStudio({
     return () => window.removeEventListener("keydown", handler);
   }, [mode, flipped, cardIndex, isFlipping, currentCard, sessionCards, currentDeck]);
 
-  // Mobile swipe-left/right to move between cards with real-time drag-follow.
+  // Mobile swipe-left/right to move between cards with velocity-based release
+  // and rubber-band physics at boundaries. Uses framer-motion's built-in drag
+  // system for native iOS feel (elastic resistance, momentum, velocity decisions).
   const isMobile = useIsMobile();
-  const swipeX = useMotionValue(0);
-  const swipeRef = useSwipe<HTMLDivElement>({
-    threshold: 60,
-    maxDuration: 500,
-    disabled: mode !== "study" || !isMobile,
-    onSwipeProgress: (dx) => {
-      swipeX.set(dx);
-    },
-    onSwipeCancel: () => {
-      swipeX.set(0);
-    },
-    onSwipeLeft: () => {
-      swipeX.set(0);
-      if (cardIndex < sessionCards.length - 1) {
-        haptic("selection");
-        nextCard();
-      }
-    },
-    onSwipeRight: () => {
-      swipeX.set(0);
-      if (cardIndex > 0) {
-        haptic("selection");
-        prevCard();
-      }
-    },
-  });
+  const canSwipe = mode === "study" && isMobile;
+  const SWIPE_VELOCITY_THRESHOLD = 300;
+  const SWIPE_DISTANCE_THRESHOLD = 60;
+
+  function handleDragEnd(_e: unknown, info: PanInfo) {
+    const { offset: { x }, velocity: { x: vx } } = info;
+    const swipeLeft = x < -SWIPE_DISTANCE_THRESHOLD || vx < -SWIPE_VELOCITY_THRESHOLD;
+    const swipeRight = x > SWIPE_DISTANCE_THRESHOLD || vx > SWIPE_VELOCITY_THRESHOLD;
+
+    if (swipeLeft && cardIndex < sessionCards.length - 1) {
+      haptic("selection");
+      nextCard();
+    } else if (swipeRight && cardIndex > 0) {
+      haptic("selection");
+      prevCard();
+    }
+  }
 
   function restartDeck() {
     if (!currentDeck) return;
@@ -476,12 +469,17 @@ export function FlashcardStudio({
 
         {/* Card area */}
         <div className="flex-1 flex items-center justify-center p-4 sm:p-8 bg-card">
-          <div
-            ref={swipeRef}
-            onClick={flipCard}
+          <motion.div
+            onClick={canSwipe ? undefined : flipCard}
             className="w-full max-w-2xl aspect-[16/10] cursor-pointer select-none"
+            drag={canSwipe ? "x" : false}
+            dragConstraints={{ left: 0, right: 0 }}
+            dragElastic={0.7}
+            dragMomentum={false}
+            onDragEnd={handleDragEnd}
+            style={{ touchAction: canSwipe ? "pan-y" : undefined }}
           >
-            <motion.div className="relative w-full h-full overflow-hidden rounded-xl border border-border shadow-lg" style={{ x: swipeX }}>
+            <motion.div className="relative w-full h-full overflow-hidden rounded-xl border border-border shadow-lg">
               {/* Back layer — shows both Q and A when front slides away */}
               <div className="absolute inset-0 flex flex-col bg-card rounded-xl">
                 <div className="h-1/2 flex flex-col items-center justify-center p-4 sm:p-6">
@@ -508,7 +506,7 @@ export function FlashcardStudio({
               <motion.div
                 className="absolute inset-0 flex flex-col items-center justify-center p-6 sm:p-10 bg-card rounded-xl"
                 animate={{ y: flipped ? "-100%" : "0%" }}
-                transition={{ duration: 0.2, ease: "easeOut" }}
+                transition={{ duration: 0.25, ease: "easeOut" }}
               >
                 <div className="text-[11px] uppercase tracking-wider text-muted-foreground mb-4 flex items-center gap-1.5">
                   <Lightbulb className="size-3" />
@@ -522,7 +520,7 @@ export function FlashcardStudio({
                 </div>
               </motion.div>
             </motion.div>
-          </div>
+          </motion.div>
         </div>
 
         {/* Rating buttons */}

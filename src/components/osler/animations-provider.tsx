@@ -32,7 +32,7 @@ export function AnimationsProvider({ children }: { children: React.ReactNode }) 
   }, []);
 
   return (
-    <MotionConfig reducedMotion={enabled ? "user" : "always"} transition={{ duration: 0.18 }}>
+    <MotionConfig reducedMotion={enabled ? "user" : "always"} transition={{ duration: 0.25 }}>
       {children}
     </MotionConfig>
   );

@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion, AnimatePresence, useMotionValue, animate } from "framer-motion";
 import {
   Activity,
   LayoutDashboard,
@@ -216,18 +216,41 @@ export function AppShell({
     onSearchSelect?.(r);
   };
 
-  // Mobile edge-swipe → back navigation. The "start" edge in LTR is the
-  // left edge (swipe rightward = back); in RTL it's the right edge (swipe
-  // leftward = back). We only attach the listener on mobile to avoid
-  // hijacking desktop trackpad gestures.
+  // Mobile edge-swipe → back navigation with live visual feedback.
+  // The "start" edge in LTR is the left edge (swipe rightward = back);
+  // in RTL it's the right edge (swipe leftward = back). We only attach the
+  // listener on mobile to avoid hijacking desktop trackpad gestures.
+  const edgeSwipeX = useMotionValue(0);
+  const EDGE_SWIPE_MAX = 280;
+
   const edgeSwipeRef = useEdgeSwipe<HTMLDivElement>({
     edge: rtl ? "right" : "left",
     edgeZone: 28,
     threshold: 90,
     disabled: !isMobile || !onSwipeBack,
+    onSwipeProgress: (progress) => {
+      // Rubber-band resistance: ease progress so the further you pull,
+      // the harder it gets — like iOS back-swipe.
+      const resistance = 1 - Math.pow(1 - Math.min(progress, 1), 2.5);
+      const sign = rtl ? -1 : 1;
+      edgeSwipeX.set(resistance * EDGE_SWIPE_MAX * sign);
+    },
     onSwipe: () => {
       haptic("selection");
-      onSwipeBack?.();
+      // Animate fully off-screen, then navigate back.
+      const sign = rtl ? -1 : 1;
+      animate(edgeSwipeX, window.innerWidth * sign, {
+        type: "spring", stiffness: 400, damping: 40, mass: 0.8,
+      }).then(() => {
+        edgeSwipeX.set(0);
+        onSwipeBack?.();
+      });
+    },
+    onSwipeCancel: () => {
+      // Spring back to origin — iOS-like elastic return.
+      animate(edgeSwipeX, 0, {
+        type: "spring", stiffness: 500, damping: 40, mass: 0.8,
+      });
     },
   });
 
@@ -417,7 +440,12 @@ export function AppShell({
           framer-motion enter/exit animation entirely — the VT snapshot already
           crossfades the old and new views, and layering framer-motion on top
           would double-animate. When VT is unavailable we fall back to the
-          framer-motion fade. */}
+          framer-motion fade.
+
+          On mobile, the entire content area is wrapped in a motion.div that
+          carries the edge-swipe offset so the view slides with the finger
+          during back-swipe gestures. */}
+      <motion.div style={{ x: edgeSwipeX }} className="flex-1 min-h-0 flex flex-col">
       <main className="flex-1 min-h-0 overflow-y-auto medos-scroll-y medos-tabbar-pad">
         <LightboxProvider>
           {vtActive ? (
@@ -431,7 +459,7 @@ export function AppShell({
                 initial={{ opacity: 0, y: 4 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -4 }}
-                transition={{ duration: 0.18 }}
+                transition={{ duration: 0.25 }}
                 className="h-full"
               >
                 {children}
@@ -440,6 +468,7 @@ export function AppShell({
           )}
         </LightboxProvider>
       </main>
+      </motion.div>
 
       {/* Mobile tab bar */}
       <MobileTabBar view={view} onViewChange={handleViewChange} />

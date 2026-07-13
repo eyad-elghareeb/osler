@@ -72,8 +72,8 @@ export const springSoft: Transition = {
 };
 
 /** Standard ease for fades and slides. */
-export const easeOut: Transition = { duration: 0.18, ease: [0.32, 0.72, 0, 1] };
-export const easeOutSlow: Transition = { duration: 0.28, ease: [0.32, 0.72, 0, 1] };
+export const easeOut: Transition = { duration: 0.25, ease: [0.32, 0.72, 0, 1] };
+export const easeOutSlow: Transition = { duration: 0.32, ease: [0.32, 0.72, 0, 1] };
 
 /** Fade + lift up. Use for cards / list items entering the viewport. */
 export const fadeUp: Variants = {
@@ -138,7 +138,7 @@ export const staggerContainerSlow: Variants = {
  * Transitions API is unavailable. Keeps the feel of a native push nav.
  */
 export const pageEnter: Variants = {
-  initial: { opacity: 0, y: 4 },
+  initial: { opacity: 0, y: 6 },
   animate: { opacity: 1, y: 0 },
-  exit: { opacity: 0, y: -4 },
+  exit: { opacity: 0, y: -6 },
 };
