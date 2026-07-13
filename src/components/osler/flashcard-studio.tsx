@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { motion, AnimatePresence, useMotionValue, animate } from "framer-motion";
+import { motion, AnimatePresence, useMotionValue, useTransform, animate } from "framer-motion";
 import {
   Layers,
   RotateCcw,
@@ -237,18 +237,46 @@ export function FlashcardStudio({
     return () => window.removeEventListener("keydown", handler);
   }, [mode, flipped, cardIndex, isFlipping, currentCard, sessionCards, currentDeck]);
 
-  // Mobile swipe — single-layer gallery: card slides off-screen, content swaps
-  // while hidden, card enters from opposite side. One seamless motion.
+  // Mobile swipe — iOS photo gallery pattern.
+  // Three cards are rendered side-by-side (prev / current / next); the
+  // swipeX motion value drives all three simultaneously so they appear
+  // "connected" — as the current card slides off-screen, the next card
+  // slides in from the other side with a fixed offset, exactly like
+  // swiping through photos in the iOS Photos app.
   const isMobile = useIsMobile();
   const canSwipe = mode === "study" && isMobile;
   const swipeX = useMotionValue(0);
+
+  // Measure the card container width so we can position prev/next cards
+  // exactly one card-width to the left/right of the current card.
+  const cardContainerRef = React.useRef<HTMLDivElement>(null);
+  const [cardWidth, setCardWidth] = React.useState(0);
+  React.useEffect(() => {
+    if (!cardContainerRef.current) return;
+    const el = cardContainerRef.current;
+    const update = () => setCardWidth(el.offsetWidth);
+    update();
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [mode]);
+
+  // Prev card sits one card-width to the left; next card one to the right.
+  // Both move together with swipeX — the iOS "fixed distance" connection.
+  const prevCardX = useTransform(swipeX, (v) => v - cardWidth);
+  const nextCardX = useTransform(swipeX, (v) => v + cardWidth);
 
   const swipeRef = useSwipe<HTMLDivElement>({
     threshold: 50,
     maxDuration: 600,
     disabled: !canSwipe,
     onSwipeProgress: (dx) => {
-      swipeX.set(dx);
+      // Rubber-band resistance at the edges — first card resists swiping
+      // right (no previous), last card resists swiping left (no next).
+      let clampedDx = dx;
+      if (cardIndex === 0 && dx > 0) clampedDx = dx * 0.3;
+      if (cardIndex === sessionCards.length - 1 && dx < 0) clampedDx = dx * 0.3;
+      swipeX.set(clampedDx);
     },
     onSwipeCancel: () => {
       animate(swipeX, 0, { type: "spring", stiffness: 500, damping: 40, mass: 0.8 });
@@ -256,10 +284,14 @@ export function FlashcardStudio({
     onSwipeLeft: () => {
       if (cardIndex < sessionCards.length - 1) {
         haptic("selection");
-        const w = typeof window !== "undefined" ? window.innerWidth : 400;
+        const w = cardWidth || (typeof window !== "undefined" ? window.innerWidth : 400);
+        // One continuous motion: animate swipeX to -w. The current card
+        // slides off-screen left while the next card slides in from the
+        // right. When the animation completes, swap cardIndex and reset
+        // swipeX to 0 — visually seamless because the new "current" card
+        // is already at x=0 and the new "prev" card is at x=-w.
         animate(swipeX, -w, { type: "spring", stiffness: 400, damping: 35, mass: 0.8 })
-          .then(() => { nextCard(); swipeX.set(w); })
-          .then(() => animate(swipeX, 0, { type: "spring", stiffness: 380, damping: 30, mass: 0.8 }));
+          .then(() => { nextCard(); swipeX.set(0); });
       } else {
         animate(swipeX, 0, { type: "spring", stiffness: 500, damping: 40, mass: 0.8 });
       }
@@ -267,10 +299,9 @@ export function FlashcardStudio({
     onSwipeRight: () => {
       if (cardIndex > 0) {
         haptic("selection");
-        const w = typeof window !== "undefined" ? window.innerWidth : 400;
+        const w = cardWidth || (typeof window !== "undefined" ? window.innerWidth : 400);
         animate(swipeX, w, { type: "spring", stiffness: 400, damping: 35, mass: 0.8 })
-          .then(() => { prevCard(); swipeX.set(-w); })
-          .then(() => animate(swipeX, 0, { type: "spring", stiffness: 380, damping: 30, mass: 0.8 }));
+          .then(() => { prevCard(); swipeX.set(0); });
       } else {
         animate(swipeX, 0, { type: "spring", stiffness: 500, damping: 40, mass: 0.8 });
       }
@@ -285,6 +316,60 @@ export function FlashcardStudio({
       startDeck(deckIndex);
     }
   }
+
+  // Render a single flashcard face (back layer with Q&A + sliding front cover).
+  // Used for the current card AND the prev/next preview cards in the swipe
+  // gallery. The `isFlipped` parameter only affects the front cover position —
+  // preview cards are always shown unflipped (front cover down).
+  const renderFlashcardFace = (
+    card: { front: string; back: string } | undefined,
+    isFlipped: boolean,
+  ) => {
+    if (!card) return null;
+    return (
+      <div className="relative w-full h-full overflow-hidden rounded-xl border border-border shadow-lg">
+        {/* Back layer — shows both Q and A when front slides away */}
+        <div className="absolute inset-0 flex flex-col bg-card rounded-xl">
+          <div className="h-1/2 flex flex-col items-center justify-center p-4 sm:p-6">
+            <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-2 flex items-center gap-1.5">
+              <Lightbulb className="size-3" />
+              {t("flash.question")}
+            </div>
+            <div className="text-sm sm:text-base leading-relaxed max-w-lg uworld-prose text-center">
+              {card.front}
+            </div>
+          </div>
+          <div className="shrink-0 h-px bg-border/60 mx-4" />
+          <div className="h-1/2 flex flex-col items-center justify-center p-4 sm:p-6 bg-[color-mix(in_oklch,var(--primary)_4%,var(--card))] rounded-b-xl">
+            <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-2 flex items-center gap-1.5">
+              <Sparkles className="size-3" />
+              {t("flash.answer")}
+            </div>
+            <div className="text-sm sm:text-base leading-relaxed max-w-lg uworld-prose text-center">
+              {card.back}
+            </div>
+          </div>
+        </div>
+        {/* Front cover — slides up to reveal both Q and A */}
+        <motion.div
+          className="absolute inset-0 flex flex-col items-center justify-center p-6 sm:p-10 bg-card rounded-xl"
+          animate={{ y: isFlipped ? "-100%" : "0%" }}
+          transition={{ duration: 0.25, ease: "easeOut" }}
+        >
+          <div className="text-[11px] uppercase tracking-wider text-muted-foreground mb-4 flex items-center gap-1.5">
+            <Lightbulb className="size-3" />
+            {t("flash.question")}
+          </div>
+          <div className="text-lg sm:text-xl leading-relaxed max-w-lg uworld-prose text-center">
+            {card.front}
+          </div>
+          <div className="mt-auto pt-6 text-xs text-muted-foreground/60">
+            {t("flash.tapToReveal")}
+          </div>
+        </motion.div>
+      </div>
+    );
+  };
 
   function openSubdecks(deckIdx: number) {
     setDeckIndex(deckIdx);
@@ -489,56 +574,51 @@ export function FlashcardStudio({
           />
         </div>
 
-        {/* Card area */}
+        {/* Card area — iOS photo gallery layout.
+            Three cards (prev / current / next) are positioned absolutely and
+            translated together by swipeX. As the current card slides off-screen
+            left, the next card slides in from the right with a fixed offset —
+            they appear connected like photos in the iOS Photos app. */}
         <div className="flex-1 flex items-center justify-center p-4 sm:p-8 bg-card">
-          <motion.div
-            ref={swipeRef}
-            onClick={canSwipe ? undefined : flipCard}
-            className="w-full max-w-2xl aspect-[16/10] cursor-pointer select-none"
-            style={{ x: swipeX, touchAction: canSwipe ? "pan-y" : undefined }}
+          <div
+            ref={cardContainerRef}
+            className="w-full max-w-2xl aspect-[16/10] relative overflow-hidden"
           >
-            <div className="relative w-full h-full overflow-hidden rounded-xl border border-border shadow-lg">
-              {/* Back layer — shows both Q and A when front slides away */}
-              <div className="absolute inset-0 flex flex-col bg-card rounded-xl">
-                <div className="h-1/2 flex flex-col items-center justify-center p-4 sm:p-6">
-                  <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-2 flex items-center gap-1.5">
-                    <Lightbulb className="size-3" />
-                    {t("flash.question")}
-                  </div>
-                  <div className="text-sm sm:text-base leading-relaxed max-w-lg uworld-prose text-center">
-                    {currentCard.front}
-                  </div>
-                </div>
-                <div className="shrink-0 h-px bg-border/60 mx-4" />
-                <div className="h-1/2 flex flex-col items-center justify-center p-4 sm:p-6 bg-[color-mix(in_oklch,var(--primary)_4%,var(--card))] rounded-b-xl">
-                  <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-2 flex items-center gap-1.5">
-                    <Sparkles className="size-3" />
-                    {t("flash.answer")}
-                  </div>
-                  <div className="text-sm sm:text-base leading-relaxed max-w-lg uworld-prose text-center">
-                    {currentCard.back}
-                  </div>
-                </div>
-              </div>
-              {/* Front cover — slides up to reveal both Q and A */}
+            <div
+              ref={swipeRef}
+              className="absolute inset-0"
+              style={{ touchAction: canSwipe ? "pan-y" : undefined }}
+            >
+              {/* Previous card (off-screen left, only if not at first card) */}
+              {cardIndex > 0 && currentDeckCards[cardIndex - 1] && (
+                <motion.div
+                  style={{ x: prevCardX }}
+                  className="absolute inset-0"
+                  aria-hidden
+                >
+                  {renderFlashcardFace(currentDeckCards[cardIndex - 1], false)}
+                </motion.div>
+              )}
+              {/* Current card (centered, drives the swipe) */}
               <motion.div
-                className="absolute inset-0 flex flex-col items-center justify-center p-6 sm:p-10 bg-card rounded-xl"
-                animate={{ y: flipped ? "-100%" : "0%" }}
-                transition={{ duration: 0.25, ease: "easeOut" }}
+                style={{ x: swipeX }}
+                onClick={canSwipe ? undefined : flipCard}
+                className="absolute inset-0 cursor-pointer select-none"
               >
-                <div className="text-[11px] uppercase tracking-wider text-muted-foreground mb-4 flex items-center gap-1.5">
-                  <Lightbulb className="size-3" />
-                  {t("flash.question")}
-                </div>
-                <div className="text-lg sm:text-xl leading-relaxed max-w-lg uworld-prose text-center">
-                  {currentCard.front}
-                </div>
-                <div className="mt-auto pt-6 text-xs text-muted-foreground/60">
-                  {t("flash.tapToReveal")}
-                </div>
+                {renderFlashcardFace(currentCard, flipped)}
               </motion.div>
+              {/* Next card (off-screen right, only if not at last card) */}
+              {cardIndex < sessionCards.length - 1 && currentDeckCards[cardIndex + 1] && (
+                <motion.div
+                  style={{ x: nextCardX }}
+                  className="absolute inset-0"
+                  aria-hidden
+                >
+                  {renderFlashcardFace(currentDeckCards[cardIndex + 1], false)}
+                </motion.div>
+              )}
             </div>
-          </motion.div>
+          </div>
         </div>
 
         {/* Rating buttons */}

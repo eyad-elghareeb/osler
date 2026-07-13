@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { motion, AnimatePresence, useMotionValue, animate } from "framer-motion";
+import { motion, AnimatePresence, useMotionValue, useTransform, animate } from "framer-motion";
 import {
   ChevronLeft,
   ChevronRight,
@@ -2019,18 +2019,46 @@ function QuizView({
   // persisted in IndexedDB and shared across the profile page.
   const questionBodyRef = React.useRef<HTMLElement>(null);
 
-  // Mobile swipe — velocity-based drag-follow with spring-animated release.
-  // Uses framer-motion's `animate()` for smooth spring physics on release,
-  // and tracks velocity locally to decide navigation vs snap-back.
+  // Mobile swipe — iOS photo gallery pattern.
+  // Three question cards are rendered side-by-side (prev / current / next);
+  // the swipeX motion value drives all three simultaneously so they appear
+  // "connected" — as the current question slides off-screen, the next one
+  // slides in from the other side with a fixed offset, exactly like
+  // swiping through photos in the iOS Photos app.
   const swipeX = useMotionValue(0);
   const [navDir, setNavDir] = React.useState<"next" | "prev">("next");
+
+  // Measure the question column width so prev/next cards can be positioned
+  // exactly one card-width to the left/right of the current card.
+  const questionColRef = React.useRef<HTMLDivElement>(null);
+  const [questionColWidth, setQuestionColWidth] = React.useState(0);
+  React.useEffect(() => {
+    if (!questionColRef.current) return;
+    const el = questionColRef.current;
+    const update = () => setQuestionColWidth(el.offsetWidth);
+    update();
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
+  // Prev card sits one card-width to the left; next card one to the right.
+  // Both move together with swipeX — the iOS "fixed distance" connection.
+  const prevQuestionX = useTransform(swipeX, (v) => v - questionColWidth);
+  const nextQuestionX = useTransform(swipeX, (v) => v + questionColWidth);
+
+  const canSwipeQuestion = isMobile && !isPausedOrLocked;
 
   const swipeRef = useSwipe<HTMLElement>({
     threshold: 50,
     maxDuration: 600,
-    disabled: !isMobile || isPausedOrLocked,
+    disabled: !canSwipeQuestion,
     onSwipeProgress: (dx) => {
-      swipeX.set(dx);
+      // Rubber-band resistance at the edges.
+      let clampedDx = dx;
+      if (session.current === 0 && dx > 0) clampedDx = dx * 0.3;
+      if (session.current === session.questions.length - 1 && dx < 0) clampedDx = dx * 0.3;
+      swipeX.set(clampedDx);
     },
     onSwipeCancel: () => {
       animate(swipeX, 0, { type: "spring", stiffness: 500, damping: 40, mass: 0.8 });
@@ -2038,12 +2066,12 @@ function QuizView({
     onSwipeLeft: () => {
       if (session.current < session.questions.length - 1) {
         haptic("selection");
-        const w = typeof window !== "undefined" ? window.innerWidth : 400;
-        // Single-layer gallery: slide card off-screen left, swap content while hidden,
-        // then slide in from right — one seamless motion.
+        const w = questionColWidth || (typeof window !== "undefined" ? window.innerWidth : 400);
+        // One continuous motion: current card slides off-screen left while
+        // next card slides in from the right. After the animation, swap the
+        // index and reset swipeX to 0 — visually seamless.
         animate(swipeX, -w, { type: "spring", stiffness: 400, damping: 35, mass: 0.8 })
-          .then(() => { setNavDir("next"); onNext(); swipeX.set(w); })
-          .then(() => animate(swipeX, 0, { type: "spring", stiffness: 380, damping: 30, mass: 0.8 }));
+          .then(() => { setNavDir("next"); onNext(); swipeX.set(0); });
       } else {
         animate(swipeX, 0, { type: "spring", stiffness: 500, damping: 40, mass: 0.8 });
       }
@@ -2051,10 +2079,9 @@ function QuizView({
     onSwipeRight: () => {
       if (session.current > 0) {
         haptic("selection");
-        const w = typeof window !== "undefined" ? window.innerWidth : 400;
+        const w = questionColWidth || (typeof window !== "undefined" ? window.innerWidth : 400);
         animate(swipeX, w, { type: "spring", stiffness: 400, damping: 35, mass: 0.8 })
-          .then(() => { setNavDir("prev"); onPrev(); swipeX.set(-w); })
-          .then(() => animate(swipeX, 0, { type: "spring", stiffness: 380, damping: 30, mass: 0.8 }));
+          .then(() => { setNavDir("prev"); onPrev(); swipeX.set(0); });
       } else {
         animate(swipeX, 0, { type: "spring", stiffness: 500, damping: 40, mass: 0.8 });
       }
@@ -2068,6 +2095,267 @@ function QuizView({
   // Wrapped nav handlers — set direction so AnimatePresence slide matches.
   const goNext = React.useCallback(() => { setNavDir("next"); onNext(); }, [onNext]);
   const goPrev = React.useCallback(() => { setNavDir("prev"); onPrev(); }, [onPrev]);
+
+  // ── Question content renderer ────────────────────────────────────────
+  // Renders the full question card (header + stem + choices + engine view)
+  // for the question at the given index. Used for the current card AND the
+  // prev/next preview cards in the iOS-style swipe gallery.
+  //
+  // When `interactive` is false (preview cards), all interactive elements
+  // are rendered with pointer-events disabled so the user can't accidentally
+  // tap a choice on a non-current card.
+  const renderQuestionContent = (qIdx: number, interactive: boolean) => {
+    const question = session.questions[qIdx];
+    if (!question) return null;
+    const qSubmitted = session.revealed[qIdx] || false;
+    const qSelected = session.answers[qIdx];
+    const qIsMCQ = question.correct >= 0;
+    const qStrikethroughs = session.strikethroughs[qIdx] ?? [];
+    const qHighlights = highlights.get(activeItem.uid, qIdx);
+    const qWrittenDraft = session.writtenDrafts[question.id] ?? {
+      text: "",
+      rubricChecked: question.rubric ? question.rubric.map(() => false) : [],
+      submitted: false,
+    };
+    const qRating = session.ratings[question.id];
+    const qRubricState = session.rubricState[question.id] ?? (question.rubric ? question.rubric.map(() => false) : []);
+
+    return (
+      <>
+        {/* Question header */}
+        <div className="flex flex-wrap items-center justify-between gap-2 pb-3 mb-4 border-b border-border">
+          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+            <Badge variant="outline" className="text-[10px] font-medium rounded-md">{engineLabel}</Badge>
+            <span className="opacity-50">·</span>
+            <span className="capitalize">{question.difficulty ?? t("qbank.session.standard")}</span>
+          </div>
+          <div className="text-xs text-muted-foreground">
+            {t("qbank.session.questionId", { id: question.id })}
+          </div>
+        </div>
+
+        {/* Stem */}
+        <div className="relative">
+          <div className="uworld-prose" style={stemStyle}>
+            <HighlightedContent text={question.stem} highlights={qHighlights} />
+          </div>
+        </div>
+
+        {/* Choices (MCQ only) */}
+        {qIsMCQ ? (
+          <div className="mt-6 space-y-2.5">
+            <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">
+              {qSubmitted ? t("qbank.session.readOnly") : t("qbank.session.selectOne")}
+            </div>
+            {qSubmitted && (
+              <div className="mb-3 flex items-center gap-4 text-xs text-muted-foreground bg-muted/30 rounded-lg px-3 py-2 border border-border">
+                <div className="flex items-center gap-1.5">
+                  {qSelected === question.correct ? (
+                    <><Check className="size-3.5 text-blue-500" /><span className="text-blue-500 font-semibold">{t("qbank.session.correct")}</span></>
+                  ) : (
+                    <><X className="size-3.5 text-red-500" /><span className="text-red-500 font-semibold">{t("qbank.session.incorrect")}</span></>
+                  )}
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <Timer className="size-3.5" />
+                  <ElapsedTime startedAt={session.startedAt} />
+                  <span className="opacity-60">{t("qbank.session.timeSpent")}</span>
+                </div>
+              </div>
+            )}
+            {question.choices.map((choice, idx) => {
+              const isSelected = qSelected === idx;
+              const isCorrect = idx === question.correct;
+              const showResult = qSubmitted;
+              const hasStrikethrough = qStrikethroughs.includes(idx);
+              let stateClass = "border-border bg-card hover:border-primary/50 hover:bg-primary/5";
+              let letterBg = "border-border bg-background text-muted-foreground";
+              let letterContent: React.ReactNode = choiceLetter(idx, activeItem.lang ?? "en");
+
+              if (showResult) {
+                if (isCorrect) {
+                  stateClass = "border-blue-600 bg-blue-500/10";
+                  letterBg = "bg-blue-500/100 text-white border-blue-600";
+                  letterContent = <Check className="size-4" />;
+                } else if (isSelected && !isCorrect) {
+                  stateClass = "border-red-500 bg-red-500/10";
+                  letterBg = "bg-red-500/100 text-white border-red-500";
+                  letterContent = <X className="size-4" />;
+                } else {
+                  stateClass = "border-border bg-card opacity-60";
+                }
+              } else if (isSelected) {
+                stateClass = "border-primary bg-primary/5";
+                letterBg = "bg-primary text-primary-foreground border-primary";
+              }
+
+              return (
+                <button
+                  key={idx}
+                  data-choice-idx={idx}
+                  disabled={qSubmitted || !interactive}
+                  onClick={() => {
+                    if (!interactive) return;
+                    if (longPressFired.current) {
+                      longPressFired.current = false;
+                      return;
+                    }
+                    onSelect(idx);
+                  }}
+                  onContextMenu={(e) => {
+                    if (!interactive) return;
+                    e.preventDefault();
+                    onToggleStrikethrough(idx);
+                  }}
+                  onTouchStart={() => interactive && startLongPress(idx)}
+                  onTouchEnd={cancelLongPress}
+                  onTouchMove={cancelLongPress}
+                  className={`w-full text-start p-3 sm:p-3.5 rounded-xl border-2 transition-all flex items-start gap-3 ${stateClass} ${
+                    qSubmitted ? "cursor-default" : "cursor-pointer"
+                  } ${hasStrikethrough ? "opacity-60" : ""} medos-touch-target`}
+                >
+                  <div className={`size-7 rounded-full border-2 flex items-center justify-center text-sm font-semibold shrink-0 ${letterBg}`}>
+                    {letterContent}
+                  </div>
+                  <div
+                    className={`flex-1 min-w-0 uworld-prose ${quizSettingsState.textAffectsChoices ? "" : "text-[14px] leading-relaxed"} pt-0.5 select-text ${hasStrikethrough ? "line-through text-muted-foreground" : ""}`}
+                    style={choiceStyle}
+                  >
+                    <HighlightedContent text={choice} highlights={qHighlights} />
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        ) : null}
+
+        {/* Written engine: textarea + grading (interactive only — too complex for previews) */}
+        {interactive && session.engine === "written" && (
+          <WrittenEngineView
+            question={question}
+            draft={qWrittenDraft}
+            submitted={qSubmitted}
+            grading={writtenAIGrading === question.id}
+            onTextChange={(text) =>
+              onWrittenDraftChange(question.id, { ...qWrittenDraft, text })
+            }
+            onRubricToggle={(idx) => {
+              const cur = qWrittenDraft.rubricChecked;
+              const next = [...cur];
+              while (next.length < (question.rubric?.length ?? 0)) next.push(false);
+              next[idx] = !next[idx];
+              onWrittenDraftChange(question.id, { ...qWrittenDraft, rubricChecked: next });
+            }}
+            onGradeAI={() => handleWrittenAIGrade(question, qWrittenDraft)}
+            onGradeManual={() => {
+              const eval_ = createManualEvaluation(qWrittenDraft.text);
+              onWrittenDraftChange(question.id, {
+                ...qWrittenDraft,
+                submitted: true,
+                evaluation: eval_,
+              });
+            }}
+            onPassFail={(v) => {
+              const ev = qWrittenDraft.evaluation;
+              if (!ev) {
+                const manual = createManualEvaluation(qWrittenDraft.text);
+                manual.manualVerdict = v;
+                manual.passed = v === "pass";
+                onWrittenDraftChange(question.id, {
+                  ...qWrittenDraft,
+                  submitted: true,
+                  evaluation: manual,
+                });
+              } else {
+                onWrittenDraftChange(question.id, {
+                  ...qWrittenDraft,
+                  evaluation: { ...ev, manualVerdict: v, passed: v === "pass" },
+                });
+              }
+            }}
+            onChildTextChange={(childIdx, text) => {
+              const childAnswers = [...(qWrittenDraft.childAnswers ?? [])];
+              while (childAnswers.length <= childIdx) childAnswers.push("");
+              childAnswers[childIdx] = text;
+              onWrittenDraftChange(question.id, { ...qWrittenDraft, childAnswers });
+            }}
+            onChildGradeAI={(childIdx) => handleWrittenChildAIGrade(question, qWrittenDraft, childIdx)}
+            onChildGradeManual={(childIdx) => {
+              const childAns = qWrittenDraft.childAnswers?.[childIdx] ?? "";
+              const eval_ = createManualEvaluation(childAns);
+              const childEvals = [...(qWrittenDraft.childEvaluations ?? [])];
+              childEvals[childIdx] = eval_;
+              onWrittenDraftChange(question.id, { ...qWrittenDraft, childEvaluations: childEvals });
+            }}
+            onChildPassFail={(childIdx, v) => {
+              const childEvals = [...(qWrittenDraft.childEvaluations ?? [])];
+              const ev = childEvals[childIdx];
+              if (ev) {
+                childEvals[childIdx] = { ...ev, manualVerdict: v, passed: v === "pass" };
+                onWrittenDraftChange(question.id, { ...qWrittenDraft, childEvaluations: childEvals });
+              }
+            }}
+            childGrading={writtenChildGrading?.qId === question.id ? writtenChildGrading.childIdx : null}
+          />
+        )}
+
+        {/* OSCE engine: red flags + differential + rubric (interactive only) */}
+        {interactive && session.engine === "osce" && (
+          <OsceEngineView
+            question={question}
+            rubricState={qRubricState}
+            submitted={qSubmitted}
+            onRubricToggle={(idx) => onRubricToggle(question.id, idx)}
+          />
+        )}
+
+        {/* Flashcard: rating buttons (after reveal, interactive only) */}
+        {interactive && session.engine === "flashcard" && qSubmitted && (
+          <div className="mt-6">
+            <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">
+              {t("qbank.written.rateCard")}
+            </h4>
+            <div className="grid grid-cols-3 gap-2">
+              <button
+                onClick={() => onRate(question.id, "hard")}
+                className={`px-3 py-2 rounded-lg text-sm font-medium border-2 transition-all ${
+                  qRating === "hard"
+                    ? "border-red-500 bg-red-500/10 text-red-500"
+                    : "border-border hover:border-red-500/40"
+                }`}
+              >
+                <X className="size-4 mx-auto mb-1" />
+                {t("flash.session.rateHard")}
+              </button>
+              <button
+                onClick={() => onRate(question.id, "unknown")}
+                className={`px-3 py-2 rounded-lg text-sm font-medium border-2 transition-all ${
+                  qRating === "unknown"
+                    ? "border-amber-500 bg-amber-500/10 text-amber-500"
+                    : "border-border hover:border-amber-500/40"
+                }`}
+              >
+                <Eye className="size-4 mx-auto mb-1" />
+                {t("qbank.session.review")}
+              </button>
+              <button
+                onClick={() => onRate(question.id, "easy")}
+                className={`px-3 py-2 rounded-lg text-sm font-medium border-2 transition-all ${
+                  qRating === "easy"
+                    ? "border-emerald-500 bg-emerald-500/10 text-emerald-500"
+                    : "border-border hover:border-emerald-500/40"
+                }`}
+              >
+                <Check className="size-4 mx-auto mb-1" />
+                {t("flash.session.rateEasy")}
+              </button>
+            </div>
+          </div>
+        )}
+      </>
+    );
+  };
+
 
   // Reset mobile tutor tab when changing questions
   React.useEffect(() => {
@@ -2554,248 +2842,37 @@ function QuizView({
                   } ${mobileTutorTab === "answer" ? "hidden md:block" : ""}`}
                 >
                   <div className={`px-4 sm:px-6 ${submitted && session.mode === "tutor" && useSplitExplanation ? "py-4" : "lg:px-8 py-6"} ${contentAlignClass}`}>
-                    {/* Single-layer gallery: swipeX drives the card off-screen,
-                        content swaps while hidden, card enters from opposite side.
-                        One continuous motion — no AnimatePresence needed. */}
-                    <motion.div style={{ x: swipeX }}>
-                    {/* Question header */}
-                    <div className="flex flex-wrap items-center justify-between gap-2 pb-3 mb-4 border-b border-border">
-                      <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                        <Badge variant="outline" className="text-[10px] font-medium rounded-md">{engineLabel}</Badge>
-                        <span className="opacity-50">·</span>
-                        <span className="capitalize">{q.difficulty ?? t("qbank.session.standard")}</span>
-                      </div>
-                      <div className="text-xs text-muted-foreground">
-                        {t("qbank.session.questionId", { id: q.id })}
-                      </div>
+                    {/* iOS photo gallery layout — three question cards
+                        (prev / current / next) positioned absolutely and
+                        translated together by swipeX. As the current card
+                        slides off-screen, the next card slides in from the
+                        other side with a fixed offset, like photos in iOS. */}
+                    <div ref={questionColRef} className="relative">
+                      {/* Previous question (off-screen left) */}
+                      {session.current > 0 && (
+                        <motion.div
+                          style={{ x: prevQuestionX, pointerEvents: "none" as const }}
+                          className="absolute inset-0 overflow-hidden"
+                          aria-hidden
+                        >
+                          {renderQuestionContent(session.current - 1, false)}
+                        </motion.div>
+                      )}
+                      {/* Current question (centered, interactive) */}
+                      <motion.div style={{ x: swipeX }}>
+                        {renderQuestionContent(session.current, true)}
+                      </motion.div>
+                      {/* Next question (off-screen right) */}
+                      {session.current < session.questions.length - 1 && (
+                        <motion.div
+                          style={{ x: nextQuestionX, pointerEvents: "none" as const }}
+                          className="absolute inset-0 overflow-hidden"
+                          aria-hidden
+                        >
+                          {renderQuestionContent(session.current + 1, false)}
+                        </motion.div>
+                      )}
                     </div>
-
-                    {/* Stem — inherits alignment from the outer contentAlignClass wrapper */}
-                    <div className="relative">
-                      <div
-                        className="uworld-prose"
-                        style={stemStyle}
-                      >
-                        <HighlightedContent
-                          text={q.stem}
-                          highlights={currentHighlights}
-                        />
-                      </div>
-                    </div>
-
-                    {/* Choices (MCQ only) — inherits alignment from the outer contentAlignClass wrapper */}
-                    {isMCQ ? (
-                      <div className="mt-6 space-y-2.5">
-                        <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">
-                          {submitted ? t("qbank.session.readOnly") : t("qbank.session.selectOne")}
-                        </div>
-                        {submitted && (
-                          <div className="mb-3 flex items-center gap-4 text-xs text-muted-foreground bg-muted/30 rounded-lg px-3 py-2 border border-border">
-                            <div className="flex items-center gap-1.5">
-                              {selected === q.correct ? (
-                                <><Check className="size-3.5 text-blue-500" /><span className="text-blue-500 font-semibold">{t("qbank.session.correct")}</span></>
-                              ) : (
-                                <><X className="size-3.5 text-red-500" /><span className="text-red-500 font-semibold">{t("qbank.session.incorrect")}</span></>
-                              )}
-                            </div>
-                            <div className="flex items-center gap-1.5">
-                              <Timer className="size-3.5" />
-                              <ElapsedTime startedAt={session.startedAt} />
-                              <span className="opacity-60">{t("qbank.session.timeSpent")}</span>
-                            </div>
-                          </div>
-                        )}
-                        {q.choices.map((choice, idx) => {
-                          const isSelected = selected === idx;
-                          const isCorrect = idx === q.correct;
-                          const showResult = submitted;
-                          const hasStrikethrough = strikethroughs.includes(idx);
-                          let stateClass = "border-border bg-card hover:border-primary/50 hover:bg-primary/5";
-                          let letterBg = "border-border bg-background text-muted-foreground";
-                          let letterContent: React.ReactNode = choiceLetter(idx, activeItem.lang ?? "en");
-
-                          if (showResult) {
-                            if (isCorrect) {
-                              stateClass = "border-blue-600 bg-blue-500/10";
-                              letterBg = "bg-blue-500/100 text-white border-blue-600";
-                              letterContent = <Check className="size-4" />;
-                            } else if (isSelected && !isCorrect) {
-                              stateClass = "border-red-500 bg-red-500/10";
-                              letterBg = "bg-red-500/100 text-white border-red-500";
-                              letterContent = <X className="size-4" />;
-                            } else {
-                              stateClass = "border-border bg-card opacity-60";
-                            }
-                          } else if (isSelected) {
-                            stateClass = "border-primary bg-primary/5";
-                            letterBg = "bg-primary text-primary-foreground border-primary";
-                          }
-
-                          return (
-                            <button
-                              key={idx}
-                              data-choice-idx={idx}
-                              disabled={submitted}
-                              onClick={() => {
-                                if (longPressFired.current) {
-                                  longPressFired.current = false;
-                                  return;
-                                }
-                                onSelect(idx);
-                              }}
-                              onContextMenu={(e) => {
-                                e.preventDefault();
-                                onToggleStrikethrough(idx);
-                              }}
-                              onTouchStart={() => startLongPress(idx)}
-                              onTouchEnd={cancelLongPress}
-                              onTouchMove={cancelLongPress}
-                              className={`w-full text-start p-3 sm:p-3.5 rounded-xl border-2 transition-all flex items-start gap-3 ${stateClass} ${
-                                submitted ? "cursor-default" : "cursor-pointer"
-                              } ${hasStrikethrough ? "opacity-60" : ""} medos-touch-target`}
-                            >
-                              <div className={`size-7 rounded-full border-2 flex items-center justify-center text-sm font-semibold shrink-0 ${letterBg}`}>
-                                {letterContent}
-                              </div>
-                              <div
-                                className={`flex-1 min-w-0 uworld-prose ${quizSettingsState.textAffectsChoices ? "" : "text-[14px] leading-relaxed"} pt-0.5 select-text ${hasStrikethrough ? "line-through text-muted-foreground" : ""}`}
-                                style={choiceStyle}
-                              >
-                                <HighlightedContent
-                                  text={choice}
-                                  highlights={currentHighlights}
-                                />
-                              </div>
-                            </button>
-                          );
-                        })}
-                      </div>
-                    ) : null}
-
-                    {/* Written engine: textarea + grading */}
-                    {session.engine === "written" && (
-                      <WrittenEngineView
-                        question={q}
-                        draft={writtenDraft}
-                        submitted={submitted}
-                        grading={writtenAIGrading === q.id}
-                        onTextChange={(text) =>
-                          onWrittenDraftChange(q.id, { ...writtenDraft, text })
-                        }
-                        onRubricToggle={(idx) => {
-                          const cur = writtenDraft.rubricChecked;
-                          const next = [...cur];
-                          while (next.length < (q.rubric?.length ?? 0)) next.push(false);
-                          next[idx] = !next[idx];
-                          onWrittenDraftChange(q.id, { ...writtenDraft, rubricChecked: next });
-                        }}
-                        onGradeAI={() => handleWrittenAIGrade(q, writtenDraft)}
-                        onGradeManual={() => {
-                          const eval_ = createManualEvaluation(writtenDraft.text);
-                          onWrittenDraftChange(q.id, {
-                            ...writtenDraft,
-                            submitted: true,
-                            evaluation: eval_,
-                          });
-                        }}
-                        onPassFail={(v) => {
-                          const ev = writtenDraft.evaluation;
-                          if (!ev) {
-                            const manual = createManualEvaluation(writtenDraft.text);
-                            manual.manualVerdict = v;
-                            manual.passed = v === "pass";
-                            onWrittenDraftChange(q.id, {
-                              ...writtenDraft,
-                              submitted: true,
-                              evaluation: manual,
-                            });
-                          } else {
-                            onWrittenDraftChange(q.id, {
-                              ...writtenDraft,
-                              evaluation: { ...ev, manualVerdict: v, passed: v === "pass" },
-                            });
-                          }
-                        }}
-                        onChildTextChange={(childIdx, text) => {
-                          const childAnswers = [...(writtenDraft.childAnswers ?? [])];
-                          while (childAnswers.length <= childIdx) childAnswers.push("");
-                          childAnswers[childIdx] = text;
-                          onWrittenDraftChange(q.id, { ...writtenDraft, childAnswers });
-                        }}
-                        onChildGradeAI={(childIdx) => handleWrittenChildAIGrade(q, writtenDraft, childIdx)}
-                        onChildGradeManual={(childIdx) => {
-                          const childAns = writtenDraft.childAnswers?.[childIdx] ?? "";
-                          const eval_ = createManualEvaluation(childAns);
-                          const childEvals = [...(writtenDraft.childEvaluations ?? [])];
-                          childEvals[childIdx] = eval_;
-                          onWrittenDraftChange(q.id, { ...writtenDraft, childEvaluations: childEvals });
-                        }}
-                        onChildPassFail={(childIdx, v) => {
-                          const childEvals = [...(writtenDraft.childEvaluations ?? [])];
-                          const ev = childEvals[childIdx];
-                          if (ev) {
-                            childEvals[childIdx] = { ...ev, manualVerdict: v, passed: v === "pass" };
-                            onWrittenDraftChange(q.id, { ...writtenDraft, childEvaluations: childEvals });
-                          }
-                        }}
-                        childGrading={writtenChildGrading?.qId === q.id ? writtenChildGrading.childIdx : null}
-                      />
-                    )}
-
-                    {/* OSCE engine: red flags + differential + rubric */}
-                    {session.engine === "osce" && (
-                      <OsceEngineView
-                        question={q}
-                        rubricState={rubricState}
-                        submitted={submitted}
-                        onRubricToggle={(idx) => onRubricToggle(q.id, idx)}
-                      />
-                    )}
-
-                    {/* Flashcard: rating buttons (after reveal) */}
-                    {session.engine === "flashcard" && submitted && (
-                      <div className="mt-6">
-                        <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">
-                          {t("qbank.written.rateCard")}
-                        </h4>
-                        <div className="grid grid-cols-3 gap-2">
-                          <button
-                            onClick={() => onRate(q.id, "hard")}
-                            className={`px-3 py-2 rounded-lg text-sm font-medium border-2 transition-all ${
-                              rating === "hard"
-                                ? "border-red-500 bg-red-500/10 text-red-500"
-                                : "border-border hover:border-red-500/40"
-                            }`}
-                          >
-                            <X className="size-4 mx-auto mb-1" />
-                            {t("flash.session.rateHard")}
-                          </button>
-                          <button
-                            onClick={() => onRate(q.id, "unknown")}
-                            className={`px-3 py-2 rounded-lg text-sm font-medium border-2 transition-all ${
-                              rating === "unknown"
-                                ? "border-amber-500 bg-amber-500/10 text-amber-500"
-                                : "border-border hover:border-amber-500/40"
-                            }`}
-                          >
-                            <Eye className="size-4 mx-auto mb-1" />
-                            {t("qbank.session.review")}
-                          </button>
-                          <button
-                            onClick={() => onRate(q.id, "easy")}
-                            className={`px-3 py-2 rounded-lg text-sm font-medium border-2 transition-all ${
-                              rating === "easy"
-                                ? "border-emerald-500 bg-emerald-500/10 text-emerald-500"
-                                : "border-border hover:border-emerald-500/40"
-                            }`}
-                          >
-                            <Check className="size-4 mx-auto mb-1" />
-                            {t("flash.session.rateEasy")}
-                          </button>
-                        </div>
-                      </div>
-                    )}
-                    </motion.div>
                   </div>
                 </div>
 
