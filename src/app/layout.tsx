@@ -4,7 +4,7 @@ import "./globals.css";
 import { Toaster } from "@/components/ui/toaster";
 import { OslerThemeProvider } from "@/components/osler/theme-provider";
 import { OslerI18nProvider } from "@/components/osler/i18n-provider";
-import { ServiceWorkerRegistrar } from "@/components/osler/service-worker-registrar";
+import { SerwistProvider } from "@/components/osler/serwist-provider";
 import { LANG_INIT_SCRIPT } from "@/lib/osler/i18n";
 
 const geistSans = Geist({
@@ -94,23 +94,16 @@ export default function RootLayout({
             user's preferred UI language (incl. RTL Arabic) is applied without
             a flash of the default LTR English layout. */}
         <script dangerouslySetInnerHTML={{ __html: LANG_INIT_SCRIPT }} />
-        {process.env.NODE_ENV !== "production" && (
-          <script
-            dangerouslySetInnerHTML={{
-              __html:
-                "if('serviceWorker' in navigator){navigator.serviceWorker.getRegistrations().then(function(r){r.forEach(function(x){x.unregister();});});}",
-            }}
-          />
-        )}
       </head>
       <body
         className={`${geistSans.variable} ${geistMono.variable} ${cairo.variable} antialiased bg-background text-foreground`}
       >
-        <OslerThemeProvider>
-          <OslerI18nProvider>{children}</OslerI18nProvider>
-        </OslerThemeProvider>
+        <SerwistProvider>
+          <OslerThemeProvider>
+            <OslerI18nProvider>{children}</OslerI18nProvider>
+          </OslerThemeProvider>
+        </SerwistProvider>
         <Toaster />
-        <ServiceWorkerRegistrar />
       </body>
     </html>
   );

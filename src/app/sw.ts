@@ -1,0 +1,180 @@
+/// <reference lib="webworker" />
+
+import { defaultCache } from "@serwist/turbopack/worker";
+import type { PrecacheEntry, RuntimeCaching, SerwistGlobalConfig } from "serwist";
+import { CacheFirst, NetworkFirst, NetworkOnly, Serwist, StaleWhileRevalidate } from "serwist";
+
+declare global {
+  interface WorkerGlobalScope extends SerwistGlobalConfig {
+    __SW_MANIFEST: (PrecacheEntry | string)[] | undefined;
+  }
+}
+
+declare const self: ServiceWorkerGlobalScope;
+
+const CONTENT_CACHE = "osler-content-v1";
+
+const runtimeCaching: RuntimeCaching[] = [
+  // Content packs: network-first, offline fallback to cache
+  {
+    matcher: ({ sameOrigin, url }) => sameOrigin && url.pathname.startsWith("/osler-content/"),
+    handler: new NetworkFirst({
+      cacheName: "osler-content",
+      plugins: [
+        {
+          cacheWillUpdate: async ({ response }) => {
+            if (response && response.status === 200) return response;
+            return null;
+          },
+        },
+      ],
+    }),
+  },
+  ...defaultCache,
+];
+
+const serwist = new Serwist({
+  precacheEntries: self.__SW_MANIFEST,
+  precacheOptions: { cleanupOutdatedCaches: true },
+  skipWaiting: true,
+  clientsClaim: true,
+  navigationPreload: true,
+  disableDevLogs: process.env.NODE_ENV !== "production",
+  runtimeCaching,
+});
+
+serwist.addEventListeners();
+
+/* ── Custom message API (content cache) ──────────────────────────────────
+ *
+ * Preserved from the original hand-rolled sw.js so the offline content
+ * download feature continues to work via useContentCache hook.
+ *
+ * Messages from the page: { type, ...payload }
+ *   PRECACHE_CONTENT       { packId, urls }
+ *   CHECK_CONTENT_CACHED   { packId, urls }
+ *   REMOVE_CONTENT         { packId, urls }
+ *   CLEAR_CONTENT_CACHE
+ *   GET_CONTENT_CACHE_STATS
+ * ─────────────────────────────────────────────────────────────────────── */
+
+self.addEventListener("message", (event: ExtendableMessageEvent) => {
+  const { data } = event;
+  if (!data || !data.type) return;
+
+  const source = event.source as Client | null;
+
+  switch (data.type) {
+    case "PRECACHE_CONTENT":
+      event.waitUntil(precacheContent(source, data.packId, data.urls));
+      break;
+    case "CHECK_CONTENT_CACHED":
+      event.waitUntil(checkContentCached(source, data.packId, data.urls));
+      break;
+    case "REMOVE_CONTENT":
+      event.waitUntil(removeContent(source, data.packId, data.urls));
+      break;
+    case "CLEAR_CONTENT_CACHE":
+      event.waitUntil(
+        caches.delete(CONTENT_CACHE).then(() => caches.open(CONTENT_CACHE))
+      );
+      break;
+    case "GET_CONTENT_CACHE_STATS":
+      event.waitUntil(reportCacheStats(source));
+      break;
+  }
+});
+
+async function precacheContent(
+  client: Client | null,
+  packId: string,
+  urls: string[]
+) {
+  const cache = await caches.open(CONTENT_CACHE);
+  let done = 0;
+  const total = urls.length;
+  const results: { url: string; ok: boolean; status?: number; error?: string }[] = [];
+
+  for (const url of urls) {
+    try {
+      const existing = await cache.match(url);
+      if (existing) await cache.delete(url);
+      const res = await fetch(url);
+      if (!res.ok) {
+        results.push({ url, ok: false, status: res.status });
+      } else {
+        await cache.put(url, res.clone());
+        results.push({ url, ok: true });
+      }
+    } catch (e) {
+      results.push({ url, ok: false, error: String(e) });
+    }
+    done++;
+    if (client) {
+      client.postMessage({ type: "PRECACHE_PROGRESS", packId, done, total });
+    }
+  }
+
+  const allClients = await self.clients.matchAll();
+  for (const c of allClients) {
+    c.postMessage({
+      type: "PRECACHE_RESULT",
+      packId,
+      results,
+      allOk: results.every((r) => r.ok),
+    });
+  }
+}
+
+async function checkContentCached(
+  client: Client | null,
+  packId: string,
+  urls: string[]
+) {
+  const cache = await caches.open(CONTENT_CACHE);
+  const results = await Promise.all(
+    urls.map(async (url) => {
+      const match = await cache.match(url);
+      return { url, cached: !!match };
+    })
+  );
+  const allCached = results.length > 0 && results.every((r) => r.cached);
+  if (client) {
+    client.postMessage({
+      type: "CONTENT_CACHE_STATUS",
+      packId,
+      urls: results,
+      allCached,
+    });
+  }
+}
+
+async function removeContent(
+  client: Client | null,
+  packId: string,
+  urls: string[]
+) {
+  const cache = await caches.open(CONTENT_CACHE);
+  await Promise.all(urls.map((url) => cache.delete(url)));
+  const allClients = await self.clients.matchAll();
+  for (const c of allClients) {
+    c.postMessage({ type: "CONTENT_REMOVED", packId });
+  }
+}
+
+async function reportCacheStats(client: Client | null) {
+  if (!client) return;
+  const cache = await caches.open(CONTENT_CACHE);
+  const keys = await cache.keys();
+  let size = 0;
+  for (const req of keys) {
+    try {
+      const res = await cache.match(req);
+      const blob = await res!.blob();
+      size += blob.size;
+    } catch {
+      // ignore
+    }
+  }
+  client.postMessage({ type: "CONTENT_CACHE_STATS", count: keys.length, size });
+}
