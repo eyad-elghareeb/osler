@@ -2547,6 +2547,11 @@ function QuizView({
                   } ${mobileTutorTab === "answer" ? "hidden md:block" : ""}`}
                 >
                   <div className={`px-4 sm:px-6 ${submitted && session.mode === "tutor" && useSplitExplanation ? "py-4" : "lg:px-8 py-6"} ${contentAlignClass}`}>
+                    {/* Outer wrapper carries the live swipe offset (MotionValue).
+                        Inner AnimatePresence handles page-enter/exit slides.
+                        They must be separate elements — a MotionValue on the
+                        same node as initial/animate/exit would block those. */}
+                    <motion.div style={{ x: swipeX }}>
                     <AnimatePresence mode="wait" initial={false}>
                       <motion.div
                         key={session.current}
@@ -2554,7 +2559,6 @@ function QuizView({
                         animate={{ opacity: 1, x: 0 }}
                         exit={{ opacity: 0, x: navDir === "next" ? (rtl ? 24 : -24) : (rtl ? -24 : 24) }}
                         transition={{ duration: 0.18, ease: [0.32, 0.72, 0, 1] }}
-                        style={{ x: swipeX }}
                       >
                     {/* Question header */}
                     <div className="flex flex-wrap items-center justify-between gap-2 pb-3 mb-4 border-b border-border">
@@ -2795,6 +2799,7 @@ function QuizView({
                     )}
                       </motion.div>
                     </AnimatePresence>
+                    </motion.div>
                   </div>
                 </div>
 
