@@ -3,34 +3,52 @@
 /**
  * useSwipeGallery — iOS Photos-style swipe gallery hook.
  *
- * Manages the motion state for a three-card gallery (prev / current / next):
- *   • A single `swipeX` motion value drives all three cards simultaneously.
- *   • Prev/next cards are positioned one `step` (cardWidth + gap) to the
- *     left/right of the current card. As `swipeX` changes, all three move
- *     together — they appear "connected" by a fixed distance, exactly like
- *     swiping through photos in the iOS Photos app.
- *   • Rubber-band resistance at the first/last card prevents over-scrolling.
- *   • Preview cards are hidden (visibility: hidden) when at rest, and become
- *     visible the moment a swipe begins — no overlapping content at rest.
- *   • A `movedRef` tracks whether the current gesture was a swipe (>8px move)
- *     vs a tap, so the consumer can suppress tap actions after a swipe.
+ * Uses framer-motion's pan gesture (onPan) instead of raw pointer events.
+ * This means the swipe can be initiated from ANY empty space within the
+ * container — not just on the card itself. The pan recognizer is also
+ * more robust than manual pointer tracking: it handles multi-touch,
+ * gesture cancellation, and direction locking automatically.
+ *
+ * Features:
+ *   • A single `swipeX` motion value drives prev/current/next cards.
+ *   • Rubber-band resistance at the first/last card.
+ *   • Preview cards are hidden (visibility: hidden) at rest.
+ *   • `movedRef` tracks swipe-vs-tap for tap suppression.
+ *   • RTL aware: in RTL, prev is to the right, next is to the left,
+ *     and swipe directions are inverted.
+ *   • Input guard: panning is suppressed when starting from INPUT,
+ *     TEXTAREA, or contentEditable elements (so the user can interact
+ *     with form fields without triggering a swipe).
  *
  * Usage:
- *   const { swipeRef, swipeX, prevCardX, nextCardX, prevVisible, nextVisible, movedRef } =
- *     useSwipeGallery({ currentIndex, itemCount, onNavigateNext, onNavigatePrev });
+ *   const { containerRef, swipeX, prevCardX, nextCardX, prevVisible, nextVisible,
+ *           movedRef, onPointerDown, onPanStart, onPan, onPanEnd } =
+ *     useSwipeGallery({ currentIndex, itemCount, onNavigateNext, onNavigatePrev, rtl });
  *
- *   <div ref={swipeRef} onPointerDown={() => (movedRef.current = false)}>
+ *   <motion.div
+ *     ref={containerRef}
+ *     onPointerDown={onPointerDown}
+ *     onPanStart={onPanStart}
+ *     onPan={onPan}
+ *     onPanEnd={onPanEnd}
+ *     style={{ touchAction: "pan-y" }}
+ *   >
  *     {hasPrev && <motion.div style={{ x: prevCardX, visibility: prevVisible }}>...</motion.div>}
  *     <motion.div style={{ x: swipeX }} onClick={() => { if (movedRef.current) return; onTap(); }}>
  *       current card
  *     </motion.div>
  *     {hasNext && <motion.div style={{ x: nextCardX, visibility: nextVisible }}>...</motion.div>}
- *   </div>
+ *   </motion.div>
  */
 
 import * as React from "react";
-import { useMotionValue, useTransform, animate, type MotionValue } from "framer-motion";
-import { useSwipe } from "./use-gestures";
+import {
+  useMotionValue,
+  useTransform,
+  animate,
+  type MotionValue,
+  type PanInfo,
+} from "framer-motion";
 import { haptic } from "@/lib/osler/native";
 
 export interface SwipeGalleryOptions {
@@ -38,26 +56,26 @@ export interface SwipeGalleryOptions {
   currentIndex: number;
   /** Total number of cards in the gallery. */
   itemCount: number;
-  /** Called when the user swipes to the next card (swipe left in LTR). */
+  /** Called when the user swipes to the next card. */
   onNavigateNext: () => void;
-  /** Called when the user swipes to the previous card (swipe right in LTR). */
+  /** Called when the user swipes to the previous card. */
   onNavigatePrev: () => void;
   /** Disable all swipe gestures. */
   disabled?: boolean;
-  /** Gap between adjacent cards in px. Default 0 (cards are adjacent). */
+  /** Gap between adjacent cards in px. Default 0. */
   gap?: number;
-  /** Minimum displacement in px to commit a swipe. Default 50. */
-  threshold?: number;
+  /** Right-to-left layout. Inverts swipe directions and card positions. */
+  rtl?: boolean;
 }
 
 export interface SwipeGalleryState {
-  /** Ref to attach to the swipe target element (also used for width measurement). */
-  swipeRef: React.RefObject<HTMLDivElement | null>;
-  /** Motion value driving the current card's x position. Set to ±step to animate. */
+  /** Ref to attach to the container element (used for width measurement). */
+  containerRef: React.RefObject<HTMLDivElement | null>;
+  /** Motion value driving the current card's x position. */
   swipeX: MotionValue<number>;
-  /** Transform for the prev card's x position: `swipeX - step`. */
+  /** Transform for the prev card's x position. */
   prevCardX: MotionValue<number>;
-  /** Transform for the next card's x position: `swipeX + step`. */
+  /** Transform for the next card's x position. */
   nextCardX: MotionValue<number>;
   /** Visibility transform for the prev card — "hidden" at rest, "visible" during swipe. */
   prevVisible: MotionValue<"visible" | "hidden">;
@@ -65,8 +83,16 @@ export interface SwipeGalleryState {
   nextVisible: MotionValue<"visible" | "hidden">;
   /** True if the current gesture moved >8px (was a swipe, not a tap). */
   movedRef: React.MutableRefObject<boolean>;
-  /** Measured card width in px (0 until measured). */
+  /** Measured container width in px (0 until measured). */
   cardWidth: number;
+  /** Attach to the container's onPointerDown — sets the input-guard flag. */
+  onPointerDown: (e: React.PointerEvent<HTMLDivElement>) => void;
+  /** Attach to the container's onPanStart. */
+  onPanStart: () => void;
+  /** Attach to the container's onPan. */
+  onPan: (e: MouseEvent | TouchEvent | PointerEvent, info: PanInfo) => void;
+  /** Attach to the container's onPanEnd. */
+  onPanEnd: (e: MouseEvent | TouchEvent | PointerEvent, info: PanInfo) => void;
 }
 
 export function useSwipeGallery(options: SwipeGalleryOptions): SwipeGalleryState {
@@ -77,92 +103,60 @@ export function useSwipeGallery(options: SwipeGalleryOptions): SwipeGalleryState
     onNavigatePrev,
     disabled = false,
     gap = 0,
-    threshold = 50,
+    rtl = false,
   } = options;
 
   const swipeX = useMotionValue(0);
   const [cardWidth, setCardWidth] = React.useState(0);
   const movedRef = React.useRef(false);
+  const containerRef = React.useRef<HTMLDivElement>(null);
+  // Input guard: suppresses panning when the gesture starts on an input,
+  // textarea, or contentEditable element.
+  const panDisabledRef = React.useRef(false);
 
-  // Keep latest values in a ref so swipe callbacks don't go stale.
-  const stateRef = React.useRef({ currentIndex, itemCount, onNavigateNext, onNavigatePrev });
-  stateRef.current = { currentIndex, itemCount, onNavigateNext, onNavigatePrev };
-
-  // Create the swipe hook first — we'll reuse its ref for width measurement.
-  const swipeRef = useSwipe<HTMLDivElement>({
-    threshold,
-    maxDuration: 600,
+  // Keep latest values in a ref so pan callbacks don't go stale.
+  const stateRef = React.useRef({
+    currentIndex,
+    itemCount,
+    onNavigateNext,
+    onNavigatePrev,
+    cardWidth,
+    rtl,
+    gap,
     disabled,
-    onSwipeProgress: (dx, _dy) => {
-      if (Math.abs(dx) > 8) movedRef.current = true;
-      const { currentIndex: ci, itemCount: ic } = stateRef.current;
-      // Rubber-band resistance at the edges.
-      let clamped = dx;
-      if (ci === 0 && dx > 0) clamped = dx * 0.3;
-      if (ci === ic - 1 && dx < 0) clamped = dx * 0.3;
-      swipeX.set(clamped);
-    },
-    onSwipeCancel: () => {
-      movedRef.current = false;
-      animate(swipeX, 0, { type: "spring", stiffness: 500, damping: 40, mass: 0.8 });
-    },
-    onSwipeLeft: () => {
-      const { currentIndex: ci, itemCount: ic, onNavigateNext: goNext } = stateRef.current;
-      if (ci < ic - 1) {
-        haptic("selection");
-        const w = cardWidth || (typeof window !== "undefined" ? window.innerWidth : 400);
-        const target = w + gap;
-        animate(swipeX, -target, { type: "spring", stiffness: 400, damping: 35, mass: 0.8 })
-          .then(() => {
-            goNext();
-            swipeX.set(0);
-            movedRef.current = false;
-          });
-      } else {
-        movedRef.current = false;
-        animate(swipeX, 0, { type: "spring", stiffness: 500, damping: 40, mass: 0.8 });
-      }
-    },
-    onSwipeRight: () => {
-      const { currentIndex: ci, onNavigatePrev: goPrev } = stateRef.current;
-      if (ci > 0) {
-        haptic("selection");
-        const w = cardWidth || (typeof window !== "undefined" ? window.innerWidth : 400);
-        const target = w + gap;
-        animate(swipeX, target, { type: "spring", stiffness: 400, damping: 35, mass: 0.8 })
-          .then(() => {
-            goPrev();
-            swipeX.set(0);
-            movedRef.current = false;
-          });
-      } else {
-        movedRef.current = false;
-        animate(swipeX, 0, { type: "spring", stiffness: 500, damping: 40, mass: 0.8 });
-      }
-    },
   });
+  stateRef.current = {
+    currentIndex,
+    itemCount,
+    onNavigateNext,
+    onNavigatePrev,
+    cardWidth,
+    rtl,
+    gap,
+    disabled,
+  };
 
-  // Measure the swipe element's width so prev/next cards can be positioned
+  // Measure the container's width so prev/next cards can be positioned
   // exactly one card-width (+ gap) to the left/right.
   React.useEffect(() => {
-    if (!swipeRef.current) return;
-    const el = swipeRef.current;
+    if (!containerRef.current) return;
+    const el = containerRef.current;
     const update = () => setCardWidth(el.offsetWidth);
     update();
     const ro = new ResizeObserver(update);
     ro.observe(el);
     return () => ro.disconnect();
-  }, [swipeRef]);
+  }, []);
 
-  // Step = cardWidth + gap. Prev card sits one step to the left, next card
-  // one step to the right. All three move together with swipeX.
+  // Step = cardWidth + gap.
+  // LTR: prev is to the left (-step), next is to the right (+step).
+  // RTL: prev is to the right (+step), next is to the left (-step).
   const step = cardWidth + gap;
-  const prevCardX = useTransform(swipeX, (v) => v - step);
-  const nextCardX = useTransform(swipeX, (v) => v + step);
+  const prevCardX = useTransform(swipeX, (v) => v + (rtl ? step : -step));
+  const nextCardX = useTransform(swipeX, (v) => v + (rtl ? -step : step));
 
-  // Hide prev/next cards when at rest (swipeX ≈ 0). They become visible the
-  // moment a swipe begins, and stay visible during the commit animation.
-  // This prevents overlapping content from prev/next cards when at rest.
+  // Hide prev/next cards when at rest (swipeX ≈ 0). They become visible
+  // the moment a swipe begins, and stay visible during the commit animation.
   const prevVisible = useTransform(swipeX, (v) =>
     Math.abs(v) > 3 ? "visible" : "hidden"
   );
@@ -170,8 +164,104 @@ export function useSwipeGallery(options: SwipeGalleryOptions): SwipeGalleryState
     Math.abs(v) > 3 ? "visible" : "hidden"
   );
 
+  // ── Input guard ──────────────────────────────────────────────────
+  // Called on pointerdown. If the target is an input/textarea/contentEditable,
+  // set a flag so the pan handlers know to ignore this gesture. This lets
+  // the user interact with form fields (type, select text, scroll) without
+  // the swipe gallery hijacking the gesture.
+  const onPointerDown = React.useCallback((e: React.PointerEvent<HTMLDivElement>) => {
+    const t = e.target as HTMLElement | null;
+    panDisabledRef.current = !!(
+      t &&
+      (t.tagName === "INPUT" ||
+        t.tagName === "TEXTAREA" ||
+        t.isContentEditable)
+    );
+  }, []);
+
+  // ── Pan handlers ─────────────────────────────────────────────────
+  const onPanStart = React.useCallback(() => {
+    movedRef.current = false;
+  }, []);
+
+  const onPan = React.useCallback(
+    (_e: MouseEvent | TouchEvent | PointerEvent, info: PanInfo) => {
+      const s = stateRef.current;
+      if (s.disabled || panDisabledRef.current) return;
+      if (Math.abs(info.offset.x) > 8) movedRef.current = true;
+
+      let clamped = info.offset.x;
+      // Rubber-band resistance at the edges.
+      // LTR: first card resists swiping right (positive), last resists left (negative).
+      // RTL: first card resists swiping left (negative), last resists right (positive).
+      if (s.currentIndex === 0) {
+        if ((!s.rtl && clamped > 0) || (s.rtl && clamped < 0)) clamped *= 0.3;
+      }
+      if (s.currentIndex === s.itemCount - 1) {
+        if ((!s.rtl && clamped < 0) || (s.rtl && clamped > 0)) clamped *= 0.3;
+      }
+      swipeX.set(clamped);
+    },
+    [swipeX]
+  );
+
+  const onPanEnd = React.useCallback(
+    (_e: MouseEvent | TouchEvent | PointerEvent, info: PanInfo) => {
+      const s = stateRef.current;
+      const wasDisabled = panDisabledRef.current;
+      panDisabledRef.current = false; // Reset for next gesture.
+      if (s.disabled || wasDisabled) {
+        movedRef.current = false;
+        return;
+      }
+
+      const w = s.cardWidth || (typeof window !== "undefined" ? window.innerWidth : 400);
+      const stepVal = w + s.gap;
+      // Distance threshold: 25% of card width.
+      const distThreshold = w * 0.25;
+      // Velocity threshold: a fast flick commits even below the distance threshold.
+      const velocityThreshold = 300;
+
+      // Determine direction based on RTL.
+      // LTR: offset < -threshold → next (swipe left), offset > threshold → prev (swipe right).
+      // RTL: offset > threshold → next (swipe right), offset < -threshold → prev (swipe left).
+      const isNext = s.rtl
+        ? info.offset.x > distThreshold || info.velocity.x > velocityThreshold
+        : info.offset.x < -distThreshold || info.velocity.x < -velocityThreshold;
+      const isPrev = s.rtl
+        ? info.offset.x < -distThreshold || info.velocity.x < -velocityThreshold
+        : info.offset.x > distThreshold || info.velocity.x > velocityThreshold;
+
+      if (isNext && s.currentIndex < s.itemCount - 1) {
+        haptic("selection");
+        // LTR: animate swipeX to -step (current slides left, next enters from right).
+        // RTL: animate swipeX to +step (current slides right, next enters from left).
+        const target = s.rtl ? stepVal : -stepVal;
+        animate(swipeX, target, { type: "spring", stiffness: 400, damping: 35, mass: 0.8 })
+          .then(() => {
+            s.onNavigateNext();
+            swipeX.set(0);
+            movedRef.current = false;
+          });
+      } else if (isPrev && s.currentIndex > 0) {
+        haptic("selection");
+        const target = s.rtl ? -stepVal : stepVal;
+        animate(swipeX, target, { type: "spring", stiffness: 400, damping: 35, mass: 0.8 })
+          .then(() => {
+            s.onNavigatePrev();
+            swipeX.set(0);
+            movedRef.current = false;
+          });
+      } else {
+        movedRef.current = false;
+        animate(swipeX, 0, { type: "spring", stiffness: 500, damping: 40, mass: 0.8 });
+      }
+    },
+    [swipeX]
+  );
+
   return {
-    swipeRef,
+    containerRef,
     swipeX,
     prevCardX,
     nextCardX,
@@ -179,5 +269,9 @@ export function useSwipeGallery(options: SwipeGalleryOptions): SwipeGalleryState
     nextVisible,
     movedRef,
     cardWidth,
+    onPointerDown,
+    onPanStart,
+    onPan,
+    onPanEnd,
   };
 }

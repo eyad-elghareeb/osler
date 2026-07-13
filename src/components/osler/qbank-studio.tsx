@@ -2786,6 +2786,7 @@ function QuizView({
                       onNavigateNext={goNext}
                       onNavigatePrev={goPrev}
                       disabled={!canSwipeQuestion}
+                      rtl={rtl}
                       gap={16}
                       className="w-full"
                       renderItem={(_item, idx, interactive) =>

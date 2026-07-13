@@ -5,17 +5,20 @@
  *
  * Renders a home layer that is always present underneath, with an optional
  * subpage overlay that slides in from the inline-end side. The subpage can
- * be dragged back to dismiss — the home layer parallaxes during the drag
- * for a native iOS feel (exactly like iOS Settings / Mail / Messages).
+ * be dragged back to dismiss.
+ *
+ * The home layer is FIXED — it does not move or parallax during the drag.
+ * It only dims (opacity fade) when a subpage is open, and brightens back
+ * to full opacity when the subpage is dismissed. This gives the "fixed and
+ * fading in from behind" effect the user expects from iOS Settings.
  *
  * Features:
- *   • Home layer is always rendered, slides + dims when a subpage is open.
+ *   • Home layer is fixed at x:0 — no horizontal movement, no parallax.
+ *   • Home layer dims to 65% opacity when a subpage is open.
  *   • Subpage slides in from the right (LTR) or left (RTL) with a spring.
- *   • Drag the subpage from the leading edge to go back. dragSnapToOrigin
- *     handles the snap-back if the threshold isn't met.
+ *   • Drag the subpage to go back. dragSnapToOrigin handles snap-back.
  *   • Velocity-aware commit: a fast flick triggers back even below the
  *     distance threshold.
- *   • Parallax: the home layer moves at 30% of the drag offset.
  *
  * Usage:
  *   <NavigationStack
@@ -28,7 +31,7 @@
  */
 
 import * as React from "react";
-import { motion, AnimatePresence, useMotionValue, useTransform } from "framer-motion";
+import { motion, AnimatePresence, useMotionValue } from "framer-motion";
 import { haptic } from "@/lib/osler/native";
 import { cn } from "@/lib/utils";
 
@@ -58,11 +61,9 @@ export function NavigationStack({
   homeClassName,
   subpageClassName,
 }: NavigationStackProps) {
+  // backDragX drives the subpage's horizontal position during the drag.
+  // The home layer does NOT use this — it stays fixed at x:0.
   const backDragX = useMotionValue(0);
-  // Parallax: home layer moves at 30% of the drag offset.
-  const homeParallaxX = useTransform(backDragX, (v) =>
-    rtl ? -v * 0.3 : v * 0.3
-  );
 
   const hasSubpage = subpage !== null;
   // Subpages enter from the right (LTR) or left (RTL).
@@ -70,16 +71,13 @@ export function NavigationStack({
 
   return (
     <div className={cn("relative overflow-hidden", className)}>
-      {/* Home layer — always rendered underneath. Slides + dims when a
-          subpage is open, and parallaxes during the back drag. */}
+      {/* Home layer — FIXED at x:0. Only opacity changes (dims when a
+          subpage is open, brightens when dismissed). No parallax, no
+          horizontal movement, no scaling. This gives the "fixed and
+          fading in from behind" effect. */}
       <motion.div
         initial={false}
-        animate={{
-          x: hasSubpage ? (rtl ? "30%" : "-30%") : 0,
-          opacity: hasSubpage ? 0.6 : 1,
-          scale: hasSubpage ? 0.96 : 1,
-        }}
-        style={hasSubpage ? { x: homeParallaxX } : undefined}
+        animate={{ opacity: hasSubpage ? 0.65 : 1 }}
         transition={{ type: "spring", stiffness: 380, damping: 36, mass: 0.8 }}
         className={cn("absolute inset-0 overflow-y-auto", homeClassName)}
       >
@@ -87,7 +85,8 @@ export function NavigationStack({
       </motion.div>
 
       {/* Subpage overlay — slides in from the inline-end side, draggable
-          to dismiss. */}
+          to dismiss. The home layer is revealed underneath as the subpage
+          slides away. */}
       <AnimatePresence initial={false}>
         {hasSubpage && (
           <motion.div

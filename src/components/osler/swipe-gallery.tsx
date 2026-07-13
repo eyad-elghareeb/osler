@@ -3,21 +3,19 @@
 /**
  * SwipeGallery — iOS Photos-style swipeable card gallery.
  *
- * Renders three cards (prev / current / next) positioned side-by-side. A
- * single `swipeX` motion value drives all three simultaneously, so as the
- * current card slides off-screen, the next card slides in from the other
- * side with a fixed offset — exactly like swiping through photos in the
- * iOS Photos app.
+ * Uses framer-motion's pan gesture (onPan) on the container element, so
+ * the swipe can be initiated from ANY empty space within the container —
+ * not just on the card itself. This includes margins, padding, and any
+ * non-interactive area in the question/flashcard content.
  *
  * Features:
+ *   • Draggable from any empty space in the page (onPan on container).
  *   • Rubber-band resistance at the first/last card.
- *   • Preview cards (prev/next) are hidden (visibility: hidden) at rest and
- *     become visible the moment a swipe begins — no overlapping content.
- *   • Tap detection: `onTap` is only called if the gesture was a tap (not a
- *     swipe). This allows tap-to-flip on flashcards while preserving swipe.
+ *   • Preview cards (prev/next) are hidden at rest — no overlapping.
+ *   • Tap detection: `onTap` is only called if the gesture was a tap.
+ *   • RTL aware: in RTL, swipe directions and card positions are inverted.
+ *   • Input guard: panning is suppressed on INPUT/TEXTAREA/contentEditable.
  *   • Configurable gap between cards for visual breathing room.
- *   • Preview cards have pointer-events disabled so only the current card
- *     is interactive.
  *
  * Usage:
  *   <SwipeGallery
@@ -25,11 +23,12 @@
  *     currentIndex={index}
  *     onNavigateNext={nextCard}
  *     onNavigatePrev={prevCard}
- *     renderItem={(card, idx, interactive) => <CardFace card={card} flipped={interactive && idx === index ? flipped : false} />}
+ *     renderItem={(card, idx, interactive) => <CardFace card={card} />}
  *     onTap={flipCard}
  *     disabled={!isMobile}
+ *     rtl={rtl}
  *     gap={16}
- *     className="aspect-[16/10]"
+ *     className="w-full"
  *   />
  */
 
@@ -58,6 +57,8 @@ export interface SwipeGalleryProps<T> {
   disabled?: boolean;
   /** Gap between adjacent cards in px. Default 0. */
   gap?: number;
+  /** Right-to-left layout. Inverts swipe directions and card positions. */
+  rtl?: boolean;
   /** Additional className for the outer container. */
   className?: string;
   /** Additional className for each card wrapper. */
@@ -73,17 +74,22 @@ export function SwipeGallery<T>({
   onTap,
   disabled = false,
   gap = 0,
+  rtl = false,
   className,
   cardClassName,
 }: SwipeGalleryProps<T>) {
   const {
-    swipeRef,
+    containerRef,
     swipeX,
     prevCardX,
     nextCardX,
     prevVisible,
     nextVisible,
     movedRef,
+    onPointerDown,
+    onPanStart,
+    onPan,
+    onPanEnd,
   } = useSwipeGallery({
     currentIndex,
     itemCount: items.length,
@@ -91,21 +97,23 @@ export function SwipeGallery<T>({
     onNavigatePrev,
     disabled,
     gap,
+    rtl,
   });
 
   const hasPrev = currentIndex > 0;
   const hasNext = currentIndex < items.length - 1;
 
   return (
-    <div
-      ref={swipeRef}
-      onPointerDown={() => {
-        movedRef.current = false;
-      }}
+    <motion.div
+      ref={containerRef}
+      onPointerDown={onPointerDown}
+      onPanStart={disabled ? undefined : onPanStart}
+      onPan={disabled ? undefined : onPan}
+      onPanEnd={disabled ? undefined : onPanEnd}
       className={cn("relative overflow-hidden", className)}
       style={{ touchAction: disabled ? undefined : "pan-y" }}
     >
-      {/* Previous card (off-screen left, hidden at rest) */}
+      {/* Previous card (off-screen, hidden at rest) */}
       {hasPrev && (
         <motion.div
           style={{
@@ -134,7 +142,7 @@ export function SwipeGallery<T>({
         {renderItem(items[currentIndex], currentIndex, true)}
       </motion.div>
 
-      {/* Next card (off-screen right, hidden at rest) */}
+      {/* Next card (off-screen, hidden at rest) */}
       {hasNext && (
         <motion.div
           style={{
@@ -148,6 +156,6 @@ export function SwipeGallery<T>({
           {renderItem(items[currentIndex + 1], currentIndex + 1, false)}
         </motion.div>
       )}
-    </div>
+    </motion.div>
   );
 }

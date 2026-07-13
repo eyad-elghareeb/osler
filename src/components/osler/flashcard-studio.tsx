@@ -511,25 +511,25 @@ export function FlashcardStudio({
         </div>
 
         {/* Card area — iOS photo gallery swipe.
-            The SwipeGallery component handles the three-card layout, rubber-
-            band edges, tap-to-flip (via onTap, suppressed after a swipe),
-            and visibility-hidden preview cards at rest. */}
-        <div className="flex-1 flex items-center justify-center p-4 sm:p-8 bg-card">
-          <div className="w-full max-w-2xl aspect-[16/10]">
-            <SwipeGallery
-              items={currentDeckCards}
-              currentIndex={cardIndex}
-              onNavigateNext={nextCard}
-              onNavigatePrev={prevCard}
-              onTap={flipCard}
-              disabled={!canSwipe}
-              className="w-full h-full"
-              cardClassName="w-full h-full"
-              renderItem={(card, idx, _interactive) =>
-                renderFlashcardFace(card, idx === cardIndex ? flipped : false)
-              }
-            />
-          </div>
+            The SwipeGallery's onPan handler is on the container, so the
+            swipe can be initiated from any empty space in the card area
+            (including the padding around the card), not just on the card
+            itself. The card is centered within the SwipeGallery. */}
+        <div className="flex-1 p-4 sm:p-8 bg-card">
+          <SwipeGallery
+            items={currentDeckCards}
+            currentIndex={cardIndex}
+            onNavigateNext={nextCard}
+            onNavigatePrev={prevCard}
+            onTap={flipCard}
+            disabled={!canSwipe}
+            rtl={rtl}
+            className="w-full h-full flex items-center justify-center"
+            cardClassName="w-full max-w-2xl aspect-[16/10]"
+            renderItem={(card, idx, _interactive) =>
+              renderFlashcardFace(card, idx === cardIndex ? flipped : false)
+            }
+          />
         </div>
 
         {/* Rating buttons */}
