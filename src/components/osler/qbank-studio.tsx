@@ -2,7 +2,6 @@
 
 import * as React from "react";
 import { motion, AnimatePresence, useMotionValue, animate } from "framer-motion";
-import { carouselSlide } from "@/lib/osler/motion";
 import {
   ChevronLeft,
   ChevronRight,
@@ -2026,53 +2025,39 @@ function QuizView({
   const swipeX = useMotionValue(0);
   const [navDir, setNavDir] = React.useState<"next" | "prev">("next");
 
-  // Velocity tracking: record timestamps during drag to compute release velocity.
-  const swipeTrackingRef = React.useRef({ points: [] as { x: number; t: number }[] });
-
   const swipeRef = useSwipe<HTMLElement>({
-    threshold: 70,
-    maxDuration: 500,
+    threshold: 50,
+    maxDuration: 600,
     disabled: !isMobile || isPausedOrLocked,
     onSwipeProgress: (dx) => {
       swipeX.set(dx);
-      const now = performance.now();
-      const pts = swipeTrackingRef.current.points;
-      // Keep a rolling window of the last 5 points for velocity calculation.
-      pts.push({ x: dx, t: now });
-      if (pts.length > 5) pts.shift();
     },
     onSwipeCancel: () => {
-      // Spring back to origin on cancel.
       animate(swipeX, 0, { type: "spring", stiffness: 500, damping: 40, mass: 0.8 });
-      swipeTrackingRef.current.points = [];
     },
     onSwipeLeft: () => {
       if (session.current < session.questions.length - 1) {
         haptic("selection");
-        setNavDir("next");
-        // Animate card out to the left before navigating.
         const w = typeof window !== "undefined" ? window.innerWidth : 400;
-        animate(swipeX, -w, { type: "spring", stiffness: 400, damping: 40, mass: 0.8 })
-          .then(() => { swipeX.set(0); onNext(); });
+        // Single-layer gallery: slide card off-screen left, swap content while hidden,
+        // then slide in from right — one seamless motion.
+        animate(swipeX, -w, { type: "spring", stiffness: 400, damping: 35, mass: 0.8 })
+          .then(() => { setNavDir("next"); onNext(); swipeX.set(w); })
+          .then(() => animate(swipeX, 0, { type: "spring", stiffness: 380, damping: 30, mass: 0.8 }));
       } else {
-        // At boundary — spring back.
         animate(swipeX, 0, { type: "spring", stiffness: 500, damping: 40, mass: 0.8 });
       }
-      swipeTrackingRef.current.points = [];
     },
     onSwipeRight: () => {
       if (session.current > 0) {
         haptic("selection");
-        setNavDir("prev");
-        // Animate card out to the right before navigating.
         const w = typeof window !== "undefined" ? window.innerWidth : 400;
-        animate(swipeX, w, { type: "spring", stiffness: 400, damping: 40, mass: 0.8 })
-          .then(() => { swipeX.set(0); onPrev(); });
+        animate(swipeX, w, { type: "spring", stiffness: 400, damping: 35, mass: 0.8 })
+          .then(() => { setNavDir("prev"); onPrev(); swipeX.set(-w); })
+          .then(() => animate(swipeX, 0, { type: "spring", stiffness: 380, damping: 30, mass: 0.8 }));
       } else {
-        // At boundary — spring back.
         animate(swipeX, 0, { type: "spring", stiffness: 500, damping: 40, mass: 0.8 });
       }
-      swipeTrackingRef.current.points = [];
     },
   });
   const mergedQuestionRef = React.useCallback((node: HTMLElement | null) => {
@@ -2569,16 +2554,10 @@ function QuizView({
                   } ${mobileTutorTab === "answer" ? "hidden md:block" : ""}`}
                 >
                   <div className={`px-4 sm:px-6 ${submitted && session.mode === "tutor" && useSplitExplanation ? "py-4" : "lg:px-8 py-6"} ${contentAlignClass}`}>
-                    {/* Outer wrapper carries the live swipe offset (MotionValue).
-                        Inner AnimatePresence handles page-enter/exit slides.
-                        They must be separate elements — a MotionValue on the
-                        same node as initial/animate/exit would block those. */}
+                    {/* Single-layer gallery: swipeX drives the card off-screen,
+                        content swaps while hidden, card enters from opposite side.
+                        One continuous motion — no AnimatePresence needed. */}
                     <motion.div style={{ x: swipeX }}>
-                    <AnimatePresence mode="wait" initial={false}>
-                      <motion.div
-                        key={session.current}
-                        {...carouselSlide(navDir, rtl)}
-                      >
                     {/* Question header */}
                     <div className="flex flex-wrap items-center justify-between gap-2 pb-3 mb-4 border-b border-border">
                       <div className="flex items-center gap-2 text-xs text-muted-foreground">
@@ -2816,8 +2795,6 @@ function QuizView({
                         </div>
                       </div>
                     )}
-                      </motion.div>
-                    </AnimatePresence>
                     </motion.div>
                   </div>
                 </div>

@@ -1,8 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { motion, AnimatePresence, type PanInfo } from "framer-motion";
-import { carouselSlide } from "@/lib/osler/motion";
+import { motion, AnimatePresence, useMotionValue, animate } from "framer-motion";
 import {
   Layers,
   RotateCcw,
@@ -28,6 +27,7 @@ import type { FlashcardContent, FlashcardSubdeck, ContentTreeNode, AnyContent } 
 import { flashcardReview, storage } from "@/lib/osler/storage";
 import { useContentTree } from "@/hooks/use-content-tree";
 import { useShortcutBindings } from "@/hooks/use-shortcuts";
+import { useSwipe } from "@/hooks/use-gestures";
 
 import { useIsMobile } from "@/hooks/use-mobile";
 import { cn } from "@/lib/utils";
@@ -237,27 +237,45 @@ export function FlashcardStudio({
     return () => window.removeEventListener("keydown", handler);
   }, [mode, flipped, cardIndex, isFlipping, currentCard, sessionCards, currentDeck]);
 
-  // Mobile swipe-left/right to move between cards with velocity-based release
-  // and rubber-band physics at boundaries. Uses framer-motion's built-in drag
-  // system for native iOS feel (elastic resistance, momentum, velocity decisions).
+  // Mobile swipe — single-layer gallery: card slides off-screen, content swaps
+  // while hidden, card enters from opposite side. One seamless motion.
   const isMobile = useIsMobile();
   const canSwipe = mode === "study" && isMobile;
-  const SWIPE_VELOCITY_THRESHOLD = 300;
-  const SWIPE_DISTANCE_THRESHOLD = 60;
+  const swipeX = useMotionValue(0);
 
-  function handleDragEnd(_e: unknown, info: PanInfo) {
-    const { offset: { x }, velocity: { x: vx } } = info;
-    const swipeLeft = x < -SWIPE_DISTANCE_THRESHOLD || vx < -SWIPE_VELOCITY_THRESHOLD;
-    const swipeRight = x > SWIPE_DISTANCE_THRESHOLD || vx > SWIPE_VELOCITY_THRESHOLD;
-
-    if (swipeLeft && cardIndex < sessionCards.length - 1) {
-      haptic("selection");
-      nextCard();
-    } else if (swipeRight && cardIndex > 0) {
-      haptic("selection");
-      prevCard();
-    }
-  }
+  const swipeRef = useSwipe<HTMLDivElement>({
+    threshold: 50,
+    maxDuration: 600,
+    disabled: !canSwipe,
+    onSwipeProgress: (dx) => {
+      swipeX.set(dx);
+    },
+    onSwipeCancel: () => {
+      animate(swipeX, 0, { type: "spring", stiffness: 500, damping: 40, mass: 0.8 });
+    },
+    onSwipeLeft: () => {
+      if (cardIndex < sessionCards.length - 1) {
+        haptic("selection");
+        const w = typeof window !== "undefined" ? window.innerWidth : 400;
+        animate(swipeX, -w, { type: "spring", stiffness: 400, damping: 35, mass: 0.8 })
+          .then(() => { nextCard(); swipeX.set(w); })
+          .then(() => animate(swipeX, 0, { type: "spring", stiffness: 380, damping: 30, mass: 0.8 }));
+      } else {
+        animate(swipeX, 0, { type: "spring", stiffness: 500, damping: 40, mass: 0.8 });
+      }
+    },
+    onSwipeRight: () => {
+      if (cardIndex > 0) {
+        haptic("selection");
+        const w = typeof window !== "undefined" ? window.innerWidth : 400;
+        animate(swipeX, w, { type: "spring", stiffness: 400, damping: 35, mass: 0.8 })
+          .then(() => { prevCard(); swipeX.set(-w); })
+          .then(() => animate(swipeX, 0, { type: "spring", stiffness: 380, damping: 30, mass: 0.8 }));
+      } else {
+        animate(swipeX, 0, { type: "spring", stiffness: 500, damping: 40, mass: 0.8 });
+      }
+    },
+  });
 
   function restartDeck() {
     if (!currentDeck) return;
@@ -474,21 +492,12 @@ export function FlashcardStudio({
         {/* Card area */}
         <div className="flex-1 flex items-center justify-center p-4 sm:p-8 bg-card">
           <motion.div
+            ref={swipeRef}
             onClick={canSwipe ? undefined : flipCard}
             className="w-full max-w-2xl aspect-[16/10] cursor-pointer select-none"
-            drag={canSwipe ? "x" : false}
-            dragConstraints={{ left: 0, right: 0 }}
-            dragElastic={0.7}
-            dragMomentum={false}
-            onDragEnd={handleDragEnd}
-            style={{ touchAction: canSwipe ? "pan-y" : undefined }}
+            style={{ x: swipeX, touchAction: canSwipe ? "pan-y" : undefined }}
           >
-            <AnimatePresence mode="wait" initial={false}>
-            <motion.div
-              key={cardIndex}
-              {...carouselSlide(navDir, rtl)}
-              className="relative w-full h-full overflow-hidden rounded-xl border border-border shadow-lg"
-            >
+            <div className="relative w-full h-full overflow-hidden rounded-xl border border-border shadow-lg">
               {/* Back layer — shows both Q and A when front slides away */}
               <div className="absolute inset-0 flex flex-col bg-card rounded-xl">
                 <div className="h-1/2 flex flex-col items-center justify-center p-4 sm:p-6">
@@ -528,8 +537,7 @@ export function FlashcardStudio({
                   {t("flash.tapToReveal")}
                 </div>
               </motion.div>
-            </motion.div>
-            </AnimatePresence>
+            </div>
           </motion.div>
         </div>
 
