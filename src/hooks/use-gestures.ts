@@ -452,8 +452,10 @@ export function useHaptics() {
     const w = window as any;
     if (!w.__TAURI_INTERNALS__ && !w.__TAURI__) return;
     try {
-      // @ts-expect-error — Tauri module only available in Tauri builds
-      const m: { invoke: (cmd: string, args?: Record<string, unknown>) => Promise<unknown> } = await import("@tauri-apps/api/core");
+      // The import path is built from parts so the bundler doesn't resolve
+      // it at build time — @tauri-apps/api is only present in Tauri builds.
+      const pkg = ["@tauri-apps", "api", "core"].join("/");
+      const m: { invoke: (cmd: string, args?: Record<string, unknown>) => Promise<unknown> } = await import(/* webpackIgnore: true */ pkg);
       // The haptics plugin exposes `impact` with a `style` arg.
       // Wrapped in try/catch because the plugin may not be installed.
       await m.invoke("plugin:haptics|impact", { style }).catch(() => {});
