@@ -34,7 +34,7 @@ export default function Home() {
   const [activeArticleId, setActiveArticleId] = React.useState<string | undefined>(undefined);
   const [aiOpen, setAiOpen] = React.useState(false);
   const [settingsSection, setSettingsSection] = React.useState<
-    "language" | "ai" | "shortcuts" | "downloads" | "sync" | "backup" | "danger"
+    "language" | "ai" | "shortcuts" | "downloads" | "sync" | "backup" | "native" | "danger"
   >("language");
 
   const openSettingsSection = (section: typeof settingsSection) => {

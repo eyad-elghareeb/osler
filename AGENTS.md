@@ -26,6 +26,46 @@
 
 12. **Do not rewrite.** Patch, harden, and consolidate in place. No restructuring, no new frameworks, no green-field rebuilds. The IIFE engine pattern is kept; add test shims if needed.
 
+13. **Always i18n-nize every new change.** Every user-facing string — labels, tooltips, toasts, aria-labels, placeholders, errors, button text — must go through `t()` from `useI18n()`. Never hardcode English in JSX. Add the key to BOTH `en` and `ar` blocks in `@/lib/osler/i18n.ts` in the same commit. If you add a key, both languages must ship together — a missing AR translation is a blocker, not a "TODO".
+
+14. **Always wire native-feel features into new UI.** New screens, modals, and interactive surfaces must:
+    - Fire `haptic()` from `@/lib/osler/native` on the primary action (button press, form submit, tab switch). Pick the right pattern: `selection` for nav, `light` for taps, `success`/`error`/`warning` for outcomes.
+    - Wrap view-level navigation in `withViewTransition()` so the slide transition kicks in. The `app-shell.tsx` `handleViewChange` wrapper already does this — extend the pattern, don't bypass it.
+    - Honor `prefers-reduced-motion` — the haptics + VT libs already do this; do not add motion that ignores the OS preference.
+    - Use safe-area utilities (`.safe-pt`, `.safe-pb`, `.safe-screen`) for any full-screen overlay so content never sits under the notch.
+
+15. **Prefer already-made and tested solutions over handrolling.** Before writing new code, check:
+    - **shadcn/ui** (`@/components/ui/*`) — 48 primitives already vendored. Use them for dialogs, dropdowns, popovers, tabs, etc. Never re-implement a shadcn component.
+    - **framer-motion** — for any animation. Never raw `requestAnimationFrame` transitions.
+    - **lucide-react** — for icons. Never inline SVGs.
+    - **`@/lib/osler/native`** — for Vibration, View Transitions, WebAuthn, Network Information, Wake Lock. Never call `navigator.vibrate()` / `navigator.credentials.*` / `navigator.wakeLock.*` directly — go through the wrappers.
+    - **`@/lib/osler/storage`** — for any persistent state. Never touch `localStorage` or IndexedDB directly (biometric credential ID is the documented exception, see `biometric.ts`).
+    - **`@/lib/osler/sync`** — for cross-device sync. Never open a new PeerJS / MQTT channel outside the existing `NetworkTransport`.
+    - **`@tanstack/react-query`** + **`zustand`** are in deps but largely unused. Prefer the existing `storage` singleton + React local state unless a feature genuinely needs query caching or cross-component stores.
+    - If a third-party library in `package.json` already solves the problem, use it. Do not add a new dependency when an existing one covers the case.
+
+16. **Plan before executing.** Before writing any code:
+    - Read the relevant existing files completely — do not skim. Edge cases live in the details.
+    - Decide where each piece lives (lib vs hook vs component vs UI primitive) before touching the keyboard.
+    - Identify which existing utilities you'll reuse and which i18n keys you'll need to add.
+    - For multi-file changes, sequence the edits so the project stays buildable between each step.
+    - If a change touches more than 3 files, write a one-paragraph plan as a comment at the top of the first file you edit, then delete it before committing.
+
+17. **Write the best, straight-forward code. One line that does the job is better than three.**
+    - Prefer the language's built-in: `Array.find` over a `for` loop, `Object.fromEntries` over a reduce, optional chaining over `&&` chains.
+    - Avoid fragile code that breaks in edge cases: nullish coalesce (`??`) for defaults, optional chaining (`?.`) for nested access, `Array.isArray()` before `.map()` on untrusted input, `try/catch` around any `JSON.parse` / `atob` / network call.
+    - Never invent a new pattern when the codebase already has one (e.g. use `cn()` for classes, `motion.div` for animated containers, `haptic()` for vibration).
+    - No dead code, no commented-out code, no `// TODO` — if it's not done, it doesn't ship.
+    - If a function has more than 3 parameters, accept an options object. If a component has more than 5 props, consider splitting it.
+    - Every `useEffect` must have an exhaustive dependency array OR an `eslint-disable-next-line react-hooks/exhaustive-deps` with a comment explaining why.
+
+18. **Stage and commit after each new change.** One logical change = one commit.
+    - `git add <specific files>` — never `git add -A` or `git add .`. Be explicit so unrelated files don't sneak in.
+    - Commit message format: `<short imperative summary>` on the first line (≤72 chars), blank line, then a body explaining *what changed and why*.
+    - Commit message must NOT reference the agent or include "Generated with" / "Co-Authored-By" lines.
+    - Build + lint must pass before committing. If `npx tsc --noEmit` or `npx eslint <files>` fails, fix it first — never commit broken code.
+    - After committing, run `git status` to confirm the tree is clean before moving to the next task.
+
 ---
 
 ## Conventions
@@ -96,6 +136,26 @@
 - Use Tailwind logical properties (`ms-`/`me-`/`text-start`/`text-end`) instead of `ml-`/`mr-`/`text-left`/`text-right`
 - Use `.rtl-flip-x` utility (defined in `globals.css`) to mirror animated arrow/chevron icons
 - Cairo font loaded as `--font-cairo` CSS variable in `layout.tsx`
+- **Every new key must land in BOTH `en` and `ar` in the same commit.** A missing AR translation is a blocker.
+
+### Native app feel (PWA features)
+
+Osler is a PWA that should feel like a native app. The native-feature library lives at `@/lib/osler/native/` with framework-agnostic implementations + React hooks at `@/hooks/use-native.ts`. Always go through these wrappers — never call the underlying browser APIs directly.
+
+| Module | Browser API | Use it for |
+|---|---|---|
+| `haptics.ts` | Vibration API | `haptic("selection")` on tab taps, `haptic("success")` on form submit, `haptic("error")` on validation failure. iOS Safari silently no-ops — that's expected. |
+| `view-transitions.ts` | View Transitions API | `withViewTransition(() => setState(...), "forward")` for any view-level navigation. Direction is `forward` / `backward` / `none`. The `app-shell.tsx` `handleViewChange` wrapper is the canonical example. |
+| `biometric.ts` | WebAuthn | `enrollBiometric(username)` for first-time setup, `authenticateWithBiometric()` for quick unlock, `disableBiometric()` to revoke. Used in `login-screen.tsx` and Settings. |
+| `network-info.ts` | Network Information API | `useNetworkInfo()` hook exposes `{ type, effectiveType, downlink, rtt, saveData, online }`. iOS Safari reports `available: false` — handle it. |
+| `wake-lock.ts` | Screen Wake Lock API | `acquireWakeLock(predicate)` / `releaseWakeLock()`. Auto re-acquires on visibility regained. Used in `videos-studio.tsx` player view. |
+
+Rules:
+- Every interactive surface should fire at least one haptic on user action. Pick the right pattern from `HAPTIC_PATTERNS`.
+- Every view-level navigation should go through `withViewTransition()`. Don't bypass it with raw `setState`.
+- All native features must degrade gracefully — feature-detect before use, fall back to a no-op or the legacy behavior when the API is unavailable.
+- Honor `prefers-reduced-motion` — the libs do this automatically, but don't add raw CSS animations that ignore it.
+- For full-screen overlays (video player, OSCE simulator, sync modal), use `.safe-screen` / `.safe-pt` / `.safe-pb` so content doesn't sit under the notch.
 
 ### Testing
 
@@ -168,6 +228,11 @@ Library, Flashcards, OSCE, and Videos are sub-views under the **Learn** hub. The
 3. Add nav entry in `AppShell` and/or `MobileTabBar` (or add to `LEARN_SUBVIEWS` if it belongs under the Learn hub)
 4. Wire the view in `src/app/page.tsx` with conditional rendering
 5. Add keyboard shortcut in `shortcuts.ts`
+6. Add the new view to `VIEW_ORDER` in `app-shell.tsx` so the slide-transition direction heuristic works correctly
+7. Add i18n keys for every label/string in the new view — both `en` and `ar` in the same commit
+8. Wire `haptic()` calls into the view's primary interactions (button taps, form submits)
+9. If the view has full-screen overlays, use `.safe-screen` / `.safe-pt` / `.safe-pb`
+10. Stage and commit after the view is buildable and lint-clean
 
 ### Adding a new content type
 
@@ -178,3 +243,14 @@ Library, Flashcards, OSCE, and Videos are sub-views under the **Learn** hub. The
 5. Add rendering support (QBankStudio / FlashcardStudio / OsceStudio / new studio)
 6. Add type detection key in `scripts/generate-content-manifests.js` (`fileKeyMap`)
 7. Add category folder under `public/osler-content/`
+
+### Adding a new native-feature integration
+
+If you need to use a new browser API (e.g. Contacts, File System Access, Web Share):
+1. Add a new module under `src/lib/osler/native/<feature>.ts` — framework-agnostic, feature-detected, gracefully degrading.
+2. Export it through `src/lib/osler/native/index.ts`.
+3. If it needs React state, add a hook to `src/hooks/use-native.ts`.
+4. Add i18n keys for any UI strings it surfaces (both `en` and `ar`).
+5. Wire it into the consuming component via the wrapper — never call the browser API directly from a component.
+6. Update the table in this file's "Native app feel" section.
+7. Stage + commit.

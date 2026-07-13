@@ -18,6 +18,7 @@ import {
   X,
   BookOpen,
   ExternalLink,
+  Sun,
 } from "lucide-react";
 import Plyr from "plyr";
 import "plyr/dist/plyr.css";
@@ -38,6 +39,12 @@ import { useI18n } from "./i18n-provider";
 import { ContentLangFilter } from "./qbank-studio";
 import { FolderTreeNav } from "./folder-tree-nav";
 import { ContentCacheButton } from "./content-cache-button";
+import {
+  acquireWakeLock,
+  releaseWakeLock,
+  isWakeLockSupported,
+  haptic,
+} from "@/lib/osler/native";
 
 /* ── Constants ─────────────────────────────────────────────────────── */
 
@@ -376,7 +383,7 @@ export function VideosStudio({ initialVideoId, onOpenArticle }: VideosStudioProp
                     <motion.button
                       key={video.id}
                       type="button"
-                      onClick={() => openVideo(video)}
+                      onClick={() => { haptic("light"); openVideo(video); }}
                       initial={{ opacity: 0, y: 8 }}
                       animate={{ opacity: 1, y: 0 }}
                       transition={{ duration: 0.2, delay: Math.min(idx * 0.04, 0.4) }}
@@ -490,9 +497,43 @@ function VideoPlayerView({
   const [isFullscreen, setIsFullscreen] = React.useState(false);
   const [showPlaylist, setShowPlaylist] = React.useState(false);
   const [invidiousMode, setInvidiousMode] = React.useState(false);
+  const [wakeLockActive, setWakeLockActive] = React.useState(false);
+  const [wakeLockUserEnabled, setWakeLockUserEnabled] = React.useState(true);
 
   const isYouTube = video.source.type === "youtube";
   const videoId = isYouTube ? video.source.id : undefined;
+
+  // ── Screen Wake Lock — keep the screen awake while a video is playing.
+  //    This prevents the OS from auto-locking the screen during long
+  //    lectures. The lock is auto-released when the tab is backgrounded
+  //    and re-acquired on visibility regained (see wake-lock.ts). We
+  //    also release it when the user exits the player view.
+  //    Docs: https://whatpwacando.today/wake-lock/
+  React.useEffect(() => {
+    if (!wakeLockUserEnabled) return;
+    if (!isWakeLockSupported()) return;
+    let cancelled = false;
+    acquireWakeLock(() => wakeLockUserEnabled && !cancelled).then((handle) => {
+      if (cancelled) {
+        handle?.release();
+        return;
+      }
+      if (handle) setWakeLockActive(true);
+    });
+    return () => {
+      cancelled = true;
+      releaseWakeLock().then(() => setWakeLockActive(false));
+    };
+  }, [wakeLockUserEnabled, videoId, isYouTube, video.source.url]);
+
+  const toggleWakeLock = () => {
+    setWakeLockUserEnabled((v) => {
+      const next = !v;
+      if (next) haptic("success");
+      else haptic("warning");
+      return next;
+    });
+  };
 
   // ── Initialise player: YouTube IFrame API or Plyr ──
   React.useEffect(() => {
@@ -653,7 +694,7 @@ function VideoPlayerView({
       {/* Top bar */}
       <header className="h-12 flex items-center px-2 sm:px-4 gap-2 shrink-0 border-b border-border/60 bg-card safe-pt">
         <button
-          onClick={onExit}
+          onClick={() => { haptic('light'); onExit(); }}
           className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors medos-touch-target"
           title={t("videos.backToVideos")}
         >
@@ -677,7 +718,7 @@ function VideoPlayerView({
 
         {onPrev && (
           <button
-            onClick={onPrev}
+            onClick={() => { haptic('selection'); onPrev(); }}
             className="size-7 rounded-md flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors"
             title="Previous (P)"
           >
@@ -686,7 +727,7 @@ function VideoPlayerView({
         )}
         {onNext && (
           <button
-            onClick={onNext}
+            onClick={() => { haptic('selection'); onNext(); }}
             className="size-7 rounded-md flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors"
             title="Next (N)"
           >
@@ -712,6 +753,28 @@ function VideoPlayerView({
         >
           <ListVideo className="size-4" />
         </button>
+        {/* Wake lock toggle — keeps the screen awake while the video plays.
+            Hidden on browsers that don't support the Wake Lock API. */}
+        {isWakeLockSupported() && (
+          <button
+            onClick={toggleWakeLock}
+            className={cn(
+              "size-7 rounded-md flex items-center justify-center transition-colors",
+              wakeLockActive && wakeLockUserEnabled
+                ? "text-amber-500 bg-amber-500/10"
+                : "text-muted-foreground hover:text-foreground hover:bg-muted/60"
+            )}
+            title={
+              wakeLockActive && wakeLockUserEnabled
+                ? `${t("native.wakeLock.title")}: ${t("native.wakeLock.active")}`
+                : `${t("native.wakeLock.title")}: ${t("native.wakeLock.inactive")}`
+            }
+            aria-pressed={wakeLockActive && wakeLockUserEnabled}
+            aria-label={t("native.wakeLock.title")}
+          >
+            <Sun className="size-4" />
+          </button>
+        )}
       </header>
 
       {/* Body: player + sidebar */}

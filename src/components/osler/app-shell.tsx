@@ -37,6 +37,15 @@ import { LightboxProvider } from "./lightbox-provider";
 import { searchArticles as searchArticlesAsync } from "@/lib/osler/articles";
 import type { ArticleMeta } from "@/lib/osler/articles";
 import { cn } from "@/lib/utils";
+import {
+  withViewTransition,
+  isViewTransitionsSupported,
+  pushNavHistory,
+  popNavHistory,
+  resetNavHistory,
+  haptic,
+  type ViewTransitionDirection,
+} from "@/lib/osler/native";
 
 export type OslerView =
   | "dashboard"
@@ -62,6 +71,46 @@ export const LEARN_SUBVIEWS: ReadonlySet<OslerView> = new Set([
   "videos",
 ]);
 
+/**
+ * Stable order for top-level Osler views. We use this to decide whether a
+ * nav change is a "forward" push (current index increases) or a "backward"
+ * pop (current index decreases). This is what powers the slide transition
+ * direction so the user feels native push/pop navigation.
+ */
+const VIEW_ORDER: OslerView[] = [
+  "dashboard",
+  "qbank",
+  "learn",
+  "library",
+  "flashcards",
+  "osce",
+  "videos",
+  "profile",
+  "settings",
+];
+
+function viewIndex(v: OslerView): number {
+  const i = VIEW_ORDER.indexOf(v);
+  return i === -1 ? 99 : i;
+}
+
+/**
+ * Decide the slide direction for a view transition. We compare the
+ * "distance" between the two views in the canonical VIEW_ORDER list. A
+ * jump of more than one step (e.g. dashboard → settings) still uses
+ * "forward" because the user is moving deeper into the app. The only
+ * "backward" case is when the new view has a strictly smaller index
+ * AND the gap is at most 2 (so profile → dashboard reads as "back home"
+ * but settings → dashboard also reads as "back home").
+ */
+function directionFor(from: OslerView, to: OslerView): ViewTransitionDirection {
+  if (from === to) return "none";
+  const fromIdx = viewIndex(from);
+  const toIdx = viewIndex(to);
+  if (toIdx < fromIdx) return "backward";
+  return "forward";
+}
+
 interface AppShellProps {
   view: OslerView;
   onViewChange: (v: OslerView) => void;
@@ -84,6 +133,48 @@ export function AppShell({
   const [searchOpen, setSearchOpen] = React.useState(false);
   const [query, setQuery] = React.useState("");
   const [searchResults, setSearchResults] = React.useState<ArticleMeta[]>([]);
+  const lastViewRef = React.useRef<OslerView>(view);
+
+  // Detect View Transitions API support once on mount. The state also
+  // responds to runtime changes (e.g. user toggles reduced-motion).
+  const [vtActive, setVtActive] = React.useState(false);
+  React.useEffect(() => {
+    setVtActive(isViewTransitionsSupported());
+  }, []);
+
+  // Initialize nav history on first mount.
+  React.useEffect(() => {
+    resetNavHistory(view);
+    lastViewRef.current = view;
+  }, []);
+
+  /**
+   * Wrapper around `onViewChange` that:
+   *   1. Triggers a haptic tick (the user perceives the tap immediately).
+   *   2. Wraps the state update in `document.startViewTransition()` so the
+   *      browser crossfades/slides between the old and new view snapshots.
+   *   3. Falls back to a plain state update when the VT API is unavailable
+   *      or the user prefers reduced motion.
+   */
+  const handleViewChange = React.useCallback(
+    (next: OslerView) => {
+      if (next === view) return;
+      const direction = directionFor(view, next);
+      haptic("selection");
+
+      // We must call onViewChange synchronously inside the VT callback —
+      // React batches the state update and flushes it before the snapshot.
+      withViewTransition(() => {
+        onViewChange(next);
+      }, direction);
+
+      // Track nav history for direction heuristic on the next change.
+      if (direction === "backward") popNavHistory();
+      else pushNavHistory(next);
+      lastViewRef.current = next;
+    },
+    [view, onViewChange],
+  );
 
   // Search debounce
   React.useEffect(() => {
@@ -115,7 +206,7 @@ export function AppShell({
     setSearchOpen(false);
     setQuery("");
     onArticleOpen?.(id);
-    if (view !== "library") onViewChange("library");
+    if (view !== "library") handleViewChange("library");
   };
 
   const searchPlaceholder = t("common.searchPlaceholder");
@@ -181,7 +272,7 @@ export function AppShell({
         <div className="h-full px-3 sm:px-4 flex items-center gap-2 sm:gap-3">
           {/* Logo */}
           <button
-            onClick={() => onViewChange("dashboard")}
+            onClick={() => handleViewChange("dashboard")}
             className="flex items-center gap-2.5 me-1 sm:me-3 shrink-0"
           >
             <div className="size-8 rounded-lg bg-primary/15 border border-primary/30 flex items-center justify-center">
@@ -199,7 +290,7 @@ export function AppShell({
           <nav className="hidden md:flex items-center gap-1 ms-1">
             <NavButton
               active={isDashboard}
-              onClick={() => onViewChange("dashboard")}
+              onClick={() => handleViewChange("dashboard")}
               icon={LayoutDashboard}
               label={t("nav.dashboard")}
               layoutId="nav-active"
@@ -207,7 +298,7 @@ export function AppShell({
 
             <NavButton
               active={isQbank}
-              onClick={() => onViewChange("qbank")}
+              onClick={() => handleViewChange("qbank")}
               icon={ListChecks}
               label={t("nav.qbank")}
               layoutId="nav-active"
@@ -215,7 +306,7 @@ export function AppShell({
 
             <NavButton
               active={isLearnActive}
-              onClick={() => onViewChange("learn")}
+              onClick={() => handleViewChange("learn")}
               icon={GraduationCap}
               label={t("nav.learn")}
               layoutId="nav-active"
@@ -291,14 +382,14 @@ export function AppShell({
               <DropdownMenuSeparator />
               <DropdownMenuItem
                 className="cursor-pointer"
-                onClick={() => onViewChange("profile")}
+                onClick={() => handleViewChange("profile")}
               >
                 <UserIcon className="size-4 me-2" />
                 {t("nav.profile")}
               </DropdownMenuItem>
               <DropdownMenuItem
                 className="cursor-pointer"
-                onClick={() => onViewChange("settings")}
+                onClick={() => handleViewChange("settings")}
               >
                 <SettingsIcon className="size-4 me-2" />
                 {t("nav.settings")}
@@ -317,26 +408,38 @@ export function AppShell({
 
       {/* Main content — scrolls independently so scrollbar doesn't touch the topbar.
           `medos-tabbar-pad` adds a bottom spacer on mobile so content never
-          scrolls under the fixed bottom tab bar (the spacer is hidden on md+). */}
+          scrolls under the fixed bottom tab bar (the spacer is hidden on md+).
+
+          When the browser supports the View Transitions API, we skip the
+          framer-motion enter/exit animation entirely — the VT snapshot already
+          crossfades the old and new views, and layering framer-motion on top
+          would double-animate. When VT is unavailable we fall back to the
+          framer-motion fade. */}
       <main className="flex-1 min-h-0 overflow-y-auto medos-scroll-y medos-tabbar-pad">
         <LightboxProvider>
-          <AnimatePresence mode="sync" initial={false}>
-            <motion.div
-              key={view}
-              initial={{ opacity: 0, y: 4 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -4 }}
-              transition={{ duration: 0.18 }}
-              className="h-full"
-            >
+          {vtActive ? (
+            <div key={view} className="h-full">
               {children}
-            </motion.div>
-          </AnimatePresence>
+            </div>
+          ) : (
+            <AnimatePresence mode="sync" initial={false}>
+              <motion.div
+                key={view}
+                initial={{ opacity: 0, y: 4 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -4 }}
+                transition={{ duration: 0.18 }}
+                className="h-full"
+              >
+                {children}
+              </motion.div>
+            </AnimatePresence>
+          )}
         </LightboxProvider>
       </main>
 
       {/* Mobile tab bar */}
-      <MobileTabBar view={view} onViewChange={onViewChange} />
+      <MobileTabBar view={view} onViewChange={handleViewChange} />
     </div>
   );
 }

@@ -25,6 +25,8 @@ import {
 import { cn } from "@/lib/utils";
 import { useI18n } from "@/components/osler/i18n-provider";
 import { PeerLinkQrPanel } from "./qr-sync-panel";
+import { NetworkInfoBadge } from "./network-info-badge";
+import { haptic } from "@/lib/osler/native";
 
 export function NetworkSyncPanel() {
   const { t } = useI18n();
@@ -60,20 +62,30 @@ export function NetworkSyncPanel() {
   }, []);
 
   const handleStart = () => {
-    if (transport) transport.start();
+    if (transport) {
+      haptic("medium");
+      transport.start();
+    }
   };
 
   const handleStop = () => {
-    if (transport) transport.stop();
+    if (transport) {
+      haptic("warning");
+      transport.stop();
+    }
   };
 
   const handleConnect = (deviceId: string) => {
-    if (transport) transport.connectToDevice(deviceId);
+    if (transport) {
+      haptic("light");
+      transport.connectToDevice(deviceId);
+    }
   };
 
   const handleManualConnect = () => {
     const id = manualId.trim();
     if (transport && id) {
+      haptic("light");
       transport.connectTo(id);
       setManualId("");
     }
@@ -121,6 +133,16 @@ export function NetworkSyncPanel() {
                 {statusMsg ||
                   (status === "idle" ? t("sync.network.idle") : t("sync.network.connected"))}
               </span>
+            </div>
+
+            {/* Live network info from the Network Information API.
+                This replaces the bare "Room: X" line with a richer view
+                showing Wi-Fi / cellular, effective type (2g/3g/4g),
+                downlink speed, RTT, and Data Saver state. The peer ID
+                and room ID are still shown below as a secondary line so
+                the manual-connect flow keeps working. */}
+            <div className="mb-3">
+              <NetworkInfoBadge />
             </div>
 
             {(roomId || peerId) && (

@@ -12,6 +12,7 @@ import { type OslerView, LEARN_SUBVIEWS } from "./app-shell";
 import { useI18n } from "./i18n-provider";
 import { cn } from "@/lib/utils";
 import { useImmersiveMode } from "./immersive-mode";
+import { haptic } from "@/lib/osler/native";
 
 interface MobileTabBarProps {
   view: OslerView;
@@ -82,7 +83,12 @@ export function MobileTabBar({ view, onViewChange }: MobileTabBarProps) {
             role="tab"
             aria-selected={active}
             aria-label={t(tab.labelKey)}
-            onClick={() => active || onViewChange(tab.id)}
+            onClick={() => {
+              if (active) return;
+              // Selection tick — feels like a native iOS tab-bar tap.
+              haptic("selection");
+              onViewChange(tab.id);
+            }}
             className={`medos-tabbar-item medos-no-select ${active ? "active" : ""}`}
           >
             <Icon className="size-5" />

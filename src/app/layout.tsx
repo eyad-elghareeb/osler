@@ -72,11 +72,26 @@ export const metadata: Metadata = {
 };
 
 export const viewport = {
+  // Standard mobile viewport.
   width: "device-width",
   initialScale: 1,
+  // Disable user zoom — this matches native app behaviour (you can't pinch
+  // to zoom a native app's UI). Combined with `user-scalable=no` it
+  // prevents the accidental double-tap zoom that breaks the immersive feel.
   maximumScale: 1,
   userScalable: false,
+  // `cover` extends the layout under the iOS notch / Dynamic Island and
+  // the Android status bar / navigation bar. The .safe-pt / .safe-pb /
+  // .safe-screen utilities in globals.css then add the correct env()
+  // padding so content never sits underneath the system chrome.
   viewportFit: "cover",
+  // Tell iOS Safari this is a standalone-capable PWA — the OS will hide
+  // the URL bar and add the native app-switcher snapshot when launched
+  // from the home screen.
+  themeColor: [
+    { media: "(prefers-color-scheme: dark)", color: "#0a0a0a" },
+    { media: "(prefers-color-scheme: light)", color: "#ffffff" },
+  ],
 } as const;
 
 export default function RootLayout({
@@ -90,6 +105,28 @@ export default function RootLayout({
         <meta name="theme-color" content="#0a0a0a" media="(prefers-color-scheme: dark)" />
         <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
         <link rel="apple-touch-icon" href="/assets/icons/apple-touch-icon.png" />
+        {/* PWA native-feel meta tags.
+            - `apple-mobile-web-app-capable` + `mobile-web-app-capable` make
+              iOS Safari and Android Chrome launch the PWA in standalone
+              mode (no URL bar, no browser chrome) when added to the home
+              screen.
+            - `apple-mobile-web-app-status-bar-style: black-translucent`
+              lets our background extend under the iOS status bar; the
+              .safe-pt utility compensates for the inset.
+            - `apple-mobile-web-app-title` is the name shown under the
+              home-screen icon on iOS (shorter than the page title).
+            - `mobile-web-app-capable` is the standard equivalent for
+              Android Chrome.
+            Docs: https://whatpwacando.today/viewport */}
+        <meta name="apple-mobile-web-app-capable" content="yes" />
+        <meta name="mobile-web-app-capable" content="yes" />
+        <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+        <meta name="apple-mobile-web-app-title" content="Osler" />
+        <meta name="mobile-web-app-title" content="Osler" />
+        {/* Disable iOS Safari's telephone link detection — otherwise a
+            sequence of digits in a medical record could get auto-linked
+            as a phone number. */}
+        <meta name="format-detection" content="telephone=no" />
         {/* Set <html lang/dir> from localStorage BEFORE React hydrates so the
             user's preferred UI language (incl. RTL Arabic) is applied without
             a flash of the default LTR English layout. */}
