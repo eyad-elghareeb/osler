@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import { motion, AnimatePresence, useMotionValue, animate } from "framer-motion";
+import { carouselSlide } from "@/lib/osler/motion";
 import {
   ChevronLeft,
   ChevronRight,
@@ -2497,7 +2498,7 @@ function QuizView({
         </div>
 
         {/* Center — Question panel */}
-        <main ref={mergedQuestionRef} className="flex-1 min-w-0 flex flex-col bg-background">
+        <main ref={mergedQuestionRef} data-swipe="horizontal" className="flex-1 min-w-0 flex flex-col bg-background">
           <AnimatePresence>
             {isPausedOrLocked && (
               <motion.div
@@ -2576,10 +2577,7 @@ function QuizView({
                     <AnimatePresence mode="wait" initial={false}>
                       <motion.div
                         key={session.current}
-                        initial={{ opacity: 0, x: navDir === "next" ? (rtl ? -24 : 24) : (rtl ? 24 : -24) }}
-                        animate={{ opacity: 1, x: 0 }}
-                        exit={{ opacity: 0, x: navDir === "next" ? (rtl ? 24 : -24) : (rtl ? -24 : 24) }}
-                        transition={{ duration: 0.25, ease: [0.32, 0.72, 0, 1] }}
+                        {...carouselSlide(navDir, rtl)}
                       >
                     {/* Question header */}
                     <div className="flex flex-wrap items-center justify-between gap-2 pb-3 mb-4 border-b border-border">

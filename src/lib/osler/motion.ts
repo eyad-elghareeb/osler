@@ -142,3 +142,22 @@ export const pageEnter: Variants = {
   animate: { opacity: 1, y: 0 },
   exit: { opacity: 0, y: -6 },
 };
+
+/**
+ * Instagram-carousel-style slide transition for card-based views.
+ * Returns `initial`/`animate`/`exit`/`transition` props for a `motion.div`
+ * inside `<AnimatePresence mode="wait">`.
+ *
+ * @param dir  - navigation direction ("next" or "prev")
+ * @param rtl  - right-to-left layout flag
+ */
+export function carouselSlide(dir: "next" | "prev", rtl: boolean) {
+  const sign = rtl ? -1 : 1;
+  const enterX = dir === "next" ? sign * 80 : -sign * 80;
+  return {
+    initial: { opacity: 0, scale: 0.92, x: enterX },
+    animate: { opacity: 1, scale: 1, x: 0 },
+    exit: { opacity: 0, scale: 0.92, x: -enterX },
+    transition: { type: "spring" as const, stiffness: 380, damping: 32, mass: 0.8 },
+  };
+}

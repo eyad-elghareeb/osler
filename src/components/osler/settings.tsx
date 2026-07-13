@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion, AnimatePresence, useMotionValue, animate } from "framer-motion";
 import {
   Settings as SettingsIcon,
   Sparkles,
@@ -198,19 +198,38 @@ export function Settings({
   };
 
   // Edge-swipe to go back from a section detail → home list (mobile only).
+  // Live drag-follow: the page slides with the finger during the gesture.
+  const edgeSwipeX = useMotionValue(0);
+
   const edgeSwipeRef = useEdgeSwipe<HTMLDivElement>({
     edge: rtl ? "right" : "left",
     edgeZone: 28,
     threshold: 90,
     disabled: !isMobile || mobileHome,
-    onSwipe: goHome,
+    onSwipeProgress: (progress) => {
+      // Rubber-band resistance: progress 0→1 maps to 0→screen width,
+      // but we dampen past 1 so the page resists before committing.
+      const w = typeof window !== "undefined" ? window.innerWidth : 400;
+      const dampened = progress <= 1
+        ? progress * w * 0.7
+        : (w * 0.7) + (progress - 1) * w * 0.15;
+      edgeSwipeX.set(dampened);
+    },
+    onSwipe: () => {
+      const w = typeof window !== "undefined" ? window.innerWidth : 400;
+      animate(edgeSwipeX, w, { type: "spring", stiffness: 400, damping: 35, mass: 0.8 })
+        .then(() => { edgeSwipeX.set(0); goHome(); });
+    },
+    onSwipeCancel: () => {
+      animate(edgeSwipeX, 0, { type: "spring", stiffness: 380, damping: 30, mass: 0.8 });
+    },
   });
 
   // ── Mobile: stacked pages ───────────────────────────────────────────
   if (isMobile) {
     const activeMeta = SECTIONS.find((s) => s.id === section);
     return (
-      <div ref={edgeSwipeRef} className="h-full overflow-y-auto medos-scroll medos-tabbar-pad">
+      <div ref={edgeSwipeRef} data-edge-swipe className="h-full overflow-y-auto medos-scroll medos-tabbar-pad">
         <div className="max-w-2xl mx-auto px-4 py-6">
           {/* Search bar — always visible at the top on mobile */}
           <div className="sticky top-0 z-10 -mx-4 px-4 py-2 bg-background/90 backdrop-blur-md mb-3">
@@ -318,11 +337,12 @@ export function Settings({
               ) : (
                 <motion.div
                   key={section}
-                  initial={{ opacity: 0, x: rtl ? -12 : 12 }}
+                  initial={{ opacity: 0, x: rtl ? -20 : 20 }}
                   animate={{ opacity: 1, x: 0 }}
-                  exit={{ opacity: 0, x: rtl ? 12 : -12 }}
-                  transition={{ duration: 0.18, ease: [0.32, 0.72, 0, 1] }}
+                  exit={{ opacity: 0, x: rtl ? 20 : -20 }}
+                  transition={{ type: "spring", stiffness: 380, damping: 32, mass: 0.8 }}
                 >
+                <motion.div style={{ x: edgeSwipeX }}>
                   {/* Section header with back button */}
                   <div className="flex items-center gap-2 mb-4">
                     <button
@@ -342,6 +362,7 @@ export function Settings({
                     {activeMeta ? t(activeMeta.labelKey) : t("settings.title")}
                   </h1>
                   {renderSection(section)}
+                </motion.div>
                 </motion.div>
               )}
             </AnimatePresence>

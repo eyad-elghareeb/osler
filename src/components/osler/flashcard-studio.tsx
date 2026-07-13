@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import { motion, AnimatePresence, type PanInfo } from "framer-motion";
+import { carouselSlide } from "@/lib/osler/motion";
 import {
   Layers,
   RotateCcw,
@@ -63,7 +64,7 @@ export function FlashcardStudio({
   onOpenPack,
   onNavigateHome,
 }: FlashcardStudioProps) {
-  const { t } = useI18n();
+  const { t, rtl } = useI18n();
   const {
     trees,
     leafContent,
@@ -88,6 +89,7 @@ export function FlashcardStudio({
   const [cardIndex, setCardIndex] = React.useState(0);
   const [flipped, setFlipped] = React.useState(false);
   const [isFlipping, setIsFlipping] = React.useState(false);
+  const [navDir, setNavDir] = React.useState<"next" | "prev">("next");
   const [sessionCards, setSessionCards] = React.useState<string[]>([]);
   const [sessionResults, setSessionResults] = React.useState<
     { cardId: string; rating: "again" | "hard" | "good" | "easy" }[]
@@ -197,6 +199,7 @@ export function FlashcardStudio({
 
   function nextCard() {
     if (cardIndex < sessionCards.length - 1) {
+      setNavDir("next");
       setCardIndex((i) => i + 1);
       setFlipped(false);
       setIsFlipping(false);
@@ -205,6 +208,7 @@ export function FlashcardStudio({
 
   function prevCard() {
     if (cardIndex > 0) {
+      setNavDir("prev");
       setCardIndex((i) => i - 1);
       setFlipped(false);
       setIsFlipping(false);
@@ -479,7 +483,12 @@ export function FlashcardStudio({
             onDragEnd={handleDragEnd}
             style={{ touchAction: canSwipe ? "pan-y" : undefined }}
           >
-            <motion.div className="relative w-full h-full overflow-hidden rounded-xl border border-border shadow-lg">
+            <AnimatePresence mode="wait" initial={false}>
+            <motion.div
+              key={cardIndex}
+              {...carouselSlide(navDir, rtl)}
+              className="relative w-full h-full overflow-hidden rounded-xl border border-border shadow-lg"
+            >
               {/* Back layer — shows both Q and A when front slides away */}
               <div className="absolute inset-0 flex flex-col bg-card rounded-xl">
                 <div className="h-1/2 flex flex-col items-center justify-center p-4 sm:p-6">
@@ -520,6 +529,7 @@ export function FlashcardStudio({
                 </div>
               </motion.div>
             </motion.div>
+            </AnimatePresence>
           </motion.div>
         </div>
 
