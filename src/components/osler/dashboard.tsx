@@ -28,6 +28,7 @@ import type { Article } from "@/lib/osler/articles";
 import type { OslerView } from "./app-shell";
 import { useI18n } from "./i18n-provider";
 import { cn } from "@/lib/utils";
+import { fadeUp, staggerContainer, staggerContainerSlow } from "@/lib/osler/motion";
 
 interface DashboardProps {
   username: string;
@@ -240,7 +241,12 @@ export function Dashboard({
         <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground mb-3">
           {t("dash.quickActions")}
         </h2>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-8">
+        <motion.div
+          variants={staggerContainer}
+          initial="hidden"
+          animate="visible"
+          className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-8"
+        >
           <QuickAction
             icon={ListChecks}
             title={t("dash.qa.qbank.title")}
@@ -271,7 +277,7 @@ export function Dashboard({
             subtitle={t("dash.qa.profile.sub")}
             onClick={() => onViewChange("profile")}
           />
-        </div>
+        </motion.div>
 
         {/* Featured articles */}
         <div className="flex items-center justify-between mb-3">
@@ -287,11 +293,18 @@ export function Dashboard({
             <ArrowRight className={cn("size-3", rtl && "rtl-flip-x")} />
           </button>
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-8">
+        <motion.div
+          variants={staggerContainer}
+          initial="hidden"
+          animate="visible"
+          className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-8"
+        >
           {featuredArticles.map((a) => (
-            <button
+            <motion.button
               key={a.file}
               type="button"
+              variants={fadeUp}
+              whileHover={{ y: -2 }}
               onClick={() => onOpenArticle?.(a.file)}
               className="text-start bg-card border border-border rounded-lg p-4 hover:border-primary/40 hover:bg-primary/5 transition-colors"
             >
@@ -312,9 +325,9 @@ export function Dashboard({
                 {a.html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim().slice(0, 120)}
                 …
               </p>
-            </button>
+            </motion.button>
           ))}
-        </div>
+        </motion.div>
 
         {/* Recent packs */}
         {recentPacks.length > 0 ? (
@@ -322,11 +335,18 @@ export function Dashboard({
             <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground mb-3">
               {t("dash.recentActivity")}
             </h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <motion.div
+              variants={staggerContainerSlow}
+              initial="hidden"
+              animate="visible"
+              className="grid grid-cols-1 md:grid-cols-2 gap-3"
+            >
               {recentPacks.map(({ node, content, progress }) => (
-                <button
+                <motion.button
                   key={node.uid}
                   type="button"
+                  variants={fadeUp}
+                  whileHover={{ y: -2 }}
                   onClick={() => content && onOpenPack?.(node, content)}
                   className="text-start bg-card border border-border rounded-lg p-4 hover:border-primary/40 transition-colors"
                 >
@@ -361,9 +381,9 @@ export function Dashboard({
                       </div>
                     </div>
                   </div>
-                </button>
+                </motion.button>
               ))}
-            </div>
+            </motion.div>
           </>
         ) : null}
       </div>
@@ -418,6 +438,7 @@ function QuickAction({
     <motion.button
       type="button"
       onClick={onClick}
+      variants={fadeUp}
       whileHover={{ y: -2 }}
       className="text-start bg-card border border-border rounded-lg p-4 flex items-center gap-3 transition-colors hover:border-primary/40"
     >

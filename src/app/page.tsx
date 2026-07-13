@@ -10,7 +10,6 @@ import { Library } from "@/components/osler/library";
 import { QBankStudio } from "@/components/osler/qbank-studio";
 import { FlashcardStudio } from "@/components/osler/flashcard-studio";
 import { OsceStudio } from "@/components/osler/osce-studio";
-import { AiAssistant } from "@/components/osler/ai-assistant";
 
 const VideosStudio = dynamic(
   () => import("@/components/osler/videos-studio").then((m) => ({ default: m.VideosStudio })),
@@ -18,11 +17,12 @@ const VideosStudio = dynamic(
 );
 import { Profile } from "@/components/osler/profile";
 import { Settings } from "@/components/osler/settings";
-import { loadContentByUid, nodeToItem } from "@/lib/osler/content";
+import { loadContentByUid } from "@/lib/osler/content";
 import type {
   AnyContent,
   ContentTreeNode,
 } from "@/lib/osler/types";
+import type { SearchResult } from "@/lib/osler/search";
 
 const SESSION_KEY = "osler-session";
 
@@ -32,10 +32,13 @@ export default function Home() {
   const [activeItem, setActiveItem] = React.useState<ContentTreeNode | null>(null);
   const [activeContent, setActiveContent] = React.useState<AnyContent | null>(null);
   const [activeArticleId, setActiveArticleId] = React.useState<string | undefined>(undefined);
-  const [aiOpen, setAiOpen] = React.useState(false);
+  const [activeVideoId, setActiveVideoId] = React.useState<string | undefined>(undefined);
   const [settingsSection, setSettingsSection] = React.useState<
     "language" | "ai" | "shortcuts" | "downloads" | "sync" | "backup" | "native" | "danger"
   >("language");
+  // Navigation stack for the mobile back-swipe gesture. Each push records
+  // the previous view so a swipe-back pops to it.
+  const navStackRef = React.useRef<OslerView[]>([]);
 
   const openSettingsSection = (section: typeof settingsSection) => {
     setSettingsSection(section);
@@ -112,6 +115,72 @@ export default function Home() {
     setView("qbank");
   };
 
+  /**
+   * Track the view stack so the mobile edge-swipe gesture can pop back to
+   * the previous view. We don't track every state change — only meaningful
+   * top-level view changes (not sub-mode switches inside a studio).
+   */
+  React.useEffect(() => {
+    const stack = navStackRef.current;
+    const top = stack[stack.length - 1];
+    if (top === view) return;
+    // If the new view is "dashboard", treat it as a reset (home).
+    if (view === "dashboard") {
+      navStackRef.current = [];
+      return;
+    }
+    stack.push(view);
+    // Cap the stack so it doesn't grow unbounded.
+    if (stack.length > 20) stack.shift();
+  }, [view]);
+
+  const handleSwipeBack = React.useCallback(() => {
+    const stack = navStackRef.current;
+    if (stack.length <= 1) {
+      setView("dashboard");
+      return;
+    }
+    stack.pop(); // remove current
+    const prev = stack[stack.length - 1] ?? "dashboard";
+    setView(prev);
+  }, []);
+
+  /**
+   * Dispatch a global-search result to the right navigation action.
+   * The result kinds map cleanly to the existing handlers.
+   */
+  const handleSearchSelect = React.useCallback(async (r: SearchResult) => {
+    switch (r.payload.type) {
+      case "article":
+        openArticle(r.payload.file);
+        return;
+      case "pack": {
+        try {
+          const content = await loadContentByUid(r.payload.uid);
+          setActiveItem(null);
+          setActiveContent(content);
+          if (content.type === "osce") setView("osce");
+          else if (content.type === "flashcard") setView("flashcards");
+          else setView("qbank");
+        } catch (e) {
+          console.error("Search: failed to open pack", e);
+        }
+        return;
+      }
+      case "video":
+        setActiveVideoId(r.payload.id);
+        setView("videos");
+        return;
+      case "setting":
+        setSettingsSection(r.payload.section as typeof settingsSection);
+        setView("settings");
+        return;
+      case "nav":
+        setView(r.payload.view as OslerView);
+        return;
+    }
+  }, [settingsSection]);
+
   if (!username) {
     return <LoginScreen onLogin={handleLogin} />;
   }
@@ -122,7 +191,8 @@ export default function Home() {
       onViewChange={setView}
       username={username}
       onLogout={handleLogout}
-      onArticleOpen={openArticle}
+      onSearchSelect={handleSearchSelect}
+      onSwipeBack={handleSwipeBack}
     >
       {view === "dashboard" ? (
         <Dashboard
@@ -168,7 +238,7 @@ export default function Home() {
       ) : null}
 
       {view === "videos" ? (
-        <VideosStudio onOpenArticle={openArticle} />
+        <VideosStudio initialVideoId={activeVideoId} onOpenArticle={openArticle} />
       ) : null}
 
       {view === "profile" ? (

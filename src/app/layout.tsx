@@ -4,6 +4,7 @@ import "./globals.css";
 import { Toaster } from "@/components/ui/toaster";
 import { OslerThemeProvider } from "@/components/osler/theme-provider";
 import { OslerI18nProvider } from "@/components/osler/i18n-provider";
+import { AnimationsProvider } from "@/components/osler/animations-provider";
 import { SerwistProvider } from "@/components/osler/serwist-provider";
 import { LANG_INIT_SCRIPT } from "@/lib/osler/i18n";
 
@@ -137,7 +138,9 @@ export default function RootLayout({
       >
         <SerwistProvider>
           <OslerThemeProvider>
-            <OslerI18nProvider>{children}</OslerI18nProvider>
+            <OslerI18nProvider>
+              <AnimationsProvider>{children}</AnimationsProvider>
+            </OslerI18nProvider>
           </OslerThemeProvider>
         </SerwistProvider>
         <Toaster />

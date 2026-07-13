@@ -5,7 +5,6 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   Activity,
   LayoutDashboard,
-  BookOpen,
   ListChecks,
   Sun,
   Moon,
@@ -29,14 +28,23 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetDescription,
+} from "@/components/ui/sheet";
 import { useOslerTheme } from "./theme-provider";
 import { useI18n } from "./i18n-provider";
 import { MobileTabBar } from "./mobile-tab-bar";
 import { PwaInstallButton } from "./pwa-install-button";
 import { LightboxProvider } from "./lightbox-provider";
-import { searchArticles as searchArticlesAsync } from "@/lib/osler/articles";
-import type { ArticleMeta } from "@/lib/osler/articles";
+import { GlobalSearchPanel } from "./global-search-panel";
+import type { SearchResult } from "@/lib/osler/search";
 import { cn } from "@/lib/utils";
+import { useIsMobile } from "@/hooks/use-mobile";
+import { useEdgeSwipe } from "@/hooks/use-gestures";
 import {
   withViewTransition,
   isViewTransitionsSupported,
@@ -116,7 +124,12 @@ interface AppShellProps {
   onViewChange: (v: OslerView) => void;
   username: string;
   onLogout: () => void;
-  onArticleOpen?: (id: string) => void;
+  /** Called when the user picks a result from the global search. */
+  onSearchSelect?: (r: SearchResult) => void;
+  /** Optional: a back-navigation target for the mobile edge-swipe gesture.
+   *  When provided and the user swipes in from the start edge on mobile,
+   *  this is called instead of doing nothing. */
+  onSwipeBack?: () => void;
   children: React.ReactNode;
 }
 
@@ -125,14 +138,15 @@ export function AppShell({
   onViewChange,
   username,
   onLogout,
-  onArticleOpen,
+  onSearchSelect,
+  onSwipeBack,
   children,
 }: AppShellProps) {
   const { theme, toggleTheme } = useOslerTheme();
   const { t, rtl } = useI18n();
+  const isMobile = useIsMobile();
   const [searchOpen, setSearchOpen] = React.useState(false);
   const [query, setQuery] = React.useState("");
-  const [searchResults, setSearchResults] = React.useState<ArticleMeta[]>([]);
   const lastViewRef = React.useRef<OslerView>(view);
 
   // Detect View Transitions API support once on mount. The state also
@@ -176,18 +190,12 @@ export function AppShell({
     [view, onViewChange],
   );
 
-  // Search debounce
+  // Search debounce — keeps the query state in sync with the panel.
+  // (The actual search runs inside GlobalSearchPanel against the cached
+  // index, so there's no async work to do here.)
   React.useEffect(() => {
-    const t = setTimeout(async () => {
-      if (!query) {
-        setSearchResults([]);
-        return;
-      }
-      const results = await searchArticlesAsync(query);
-      setSearchResults(results);
-    }, 200);
-    return () => clearTimeout(t);
-  }, [query]);
+    if (!searchOpen) setQuery("");
+  }, [searchOpen]);
 
   // Keyboard: Ctrl/Cmd+K opens search
   React.useEffect(() => {
@@ -202,14 +210,28 @@ export function AppShell({
     return () => window.removeEventListener("keydown", handler);
   }, []);
 
-  const handleOpenArticle = (id: string) => {
+  const handleSearchSelect = (r: SearchResult) => {
     setSearchOpen(false);
     setQuery("");
-    onArticleOpen?.(id);
-    if (view !== "library") handleViewChange("library");
+    onSearchSelect?.(r);
   };
 
-  const searchPlaceholder = t("common.searchPlaceholder");
+  // Mobile edge-swipe → back navigation. The "start" edge in LTR is the
+  // left edge (swipe rightward = back); in RTL it's the right edge (swipe
+  // leftward = back). We only attach the listener on mobile to avoid
+  // hijacking desktop trackpad gestures.
+  const edgeSwipeRef = useEdgeSwipe<HTMLDivElement>({
+    edge: rtl ? "right" : "left",
+    edgeZone: 28,
+    threshold: 90,
+    disabled: !isMobile || !onSwipeBack,
+    onSwipe: () => {
+      haptic("selection");
+      onSwipeBack?.();
+    },
+  });
+
+  const searchPlaceholder = t("search.globalPlaceholder");
 
   const isDashboard = view === "dashboard";
   const isQbank = view === "qbank";
@@ -217,57 +239,15 @@ export function AppShell({
   // (learn hub itself, library, flashcards, osce, videos).
   const isLearnActive = LEARN_SUBVIEWS.has(view);
 
-  // Search panel content (used by both desktop popover and mobile sheet)
-  const searchPanel = (
-    <>
-      <div className="p-3 border-b border-border/60">
-        <div className="flex items-center gap-2">
-          <Search className="size-4 text-muted-foreground shrink-0" />
-          <input
-            autoFocus
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder={searchPlaceholder}
-            className="flex-1 bg-transparent outline-none text-sm placeholder:text-muted-foreground min-w-0"
-          />
-          <kbd className="text-[10px] px-1.5 py-0.5 rounded border border-border/60 text-muted-foreground shrink-0">
-            ESC
-          </kbd>
-        </div>
-      </div>
-      <div className="max-h-80 overflow-y-auto medos-scroll p-2">
-        {searchResults.length > 0 ? (
-          <div className="space-y-0.5">
-            <div className="text-[10px] uppercase tracking-wider text-muted-foreground px-2 py-1.5">
-              Articles
-            </div>
-            {searchResults.map((r) => (
-              <button
-                key={r.file}
-                onClick={() => handleOpenArticle(r.file)}
-                className="w-full text-start px-2 py-2 rounded-md hover:bg-muted/60 transition-colors flex items-center gap-3"
-              >
-                <BookOpen className="size-4 text-muted-foreground shrink-0" />
-                <div className="flex-1 min-w-0">
-                  <div className="text-sm font-medium truncate">{r.title}</div>
-                  <div className="text-xs text-muted-foreground truncate">
-                    {r.specialty} · {r.readTimeMin} min read
-                  </div>
-                </div>
-              </button>
-            ))}
-          </div>
-        ) : query ? (
-          <div className="px-3 py-6 text-center text-sm text-muted-foreground">
-            {t("common.none")} — "{query}"
-          </div>
-        ) : null}
-      </div>
-    </>
-  );
+  // The search panel is rendered by GlobalSearchPanel — we just hand it
+  // the controlled query + a select callback. Both desktop popover and
+  // mobile sheet share the same component instance structure.
 
   return (
-    <div className="h-screen md:h-screen h-[100dvh] flex flex-col bg-background overflow-hidden">
+    <div
+      ref={edgeSwipeRef}
+      className="h-screen md:h-screen h-[100dvh] flex flex-col bg-background overflow-hidden"
+    >
       <header className="z-40 shrink-0 h-14 border-b border-border/60 bg-background/80 backdrop-blur-md supports-[backdrop-filter]:bg-background/60 safe-pt">
         <div className="h-full px-3 sm:px-4 flex items-center gap-2 sm:gap-3">
           {/* Logo */}
@@ -313,9 +293,10 @@ export function AppShell({
             />
           </nav>
 
-          {/* Search trigger — desktop (top-center pill) */}
+          {/* Search trigger — desktop (top-center pill). Mobile uses a
+              bottom sheet (below) so the keyboard doesn't crowd the bar. */}
           <div className="flex-1 flex justify-center px-2">
-            <Popover open={searchOpen} onOpenChange={setSearchOpen}>
+            <Popover open={searchOpen && !isMobile} onOpenChange={(o) => setSearchOpen(o)}>
               <PopoverTrigger asChild>
                 <button className="hidden lg:flex items-center gap-2 h-9 px-3 w-full max-w-md rounded-md border border-border/60 bg-muted/40 hover:bg-muted/60 transition-colors text-sm text-muted-foreground">
                   <Search className="size-3.5" />
@@ -332,7 +313,11 @@ export function AppShell({
                 align="center"
                 sideOffset={8}
               >
-                {searchPanel}
+                <GlobalSearchPanel
+                  query={query}
+                  onQueryChange={setQuery}
+                  onSelect={handleSearchSelect}
+                />
               </PopoverContent>
             </Popover>
 
@@ -344,6 +329,24 @@ export function AppShell({
               <span className="flex-1 text-start truncate">{t("common.search")}…</span>
             </button>
           </div>
+
+          {/* Mobile search sheet — slides up from the bottom so the
+              keyboard has room and the result list is comfortably
+              reachable with one thumb. */}
+          <Sheet open={searchOpen && isMobile} onOpenChange={setSearchOpen}>
+            <SheetContent side="bottom" className="h-[85vh] p-0">
+              <SheetHeader className="sr-only">
+                <SheetTitle>{t("common.search")}</SheetTitle>
+                <SheetDescription>{t("search.globalPlaceholder")}</SheetDescription>
+              </SheetHeader>
+              <GlobalSearchPanel
+                query={query}
+                onQueryChange={setQuery}
+                onSelect={handleSearchSelect}
+                variant="sheet"
+              />
+            </SheetContent>
+          </Sheet>
 
           {/* PWA install */}
           <PwaInstallButton />

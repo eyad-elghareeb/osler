@@ -105,8 +105,10 @@ import { ContentCacheButton } from "./content-cache-button";
 import { useShortcutBindings, useShortcutListener } from "@/hooks/use-shortcuts";
 import { defaultBindings } from "@/lib/osler/shortcuts";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { useSwipe } from "@/hooks/use-gestures";
 import { useQuizSettings } from "@/hooks/use-quiz-settings";
 import { setImmersiveMode } from "./immersive-mode";
+import { haptic } from "@/lib/osler/native";
 import { gradeWithAI, createManualEvaluation } from "@/lib/osler/grading";
 import { useI18n } from "./i18n-provider";
 import type { StringKey } from "@/lib/osler/i18n";
@@ -2017,6 +2019,34 @@ function QuizView({
   // persisted in IndexedDB and shared across the profile page.
   const questionBodyRef = React.useRef<HTMLElement>(null);
 
+  // Mobile swipe-left/right to move between questions. We attach the
+  // listener to the question body via a merged ref (questionBodyRef is
+  // also used for scroll restoration). Swipe only fires when not paused
+  // and when there's somewhere to go (boundary guard).
+  const swipeRef = useSwipe<HTMLElement>({
+    threshold: 70,
+    maxDuration: 500,
+    disabled: !isMobile || isPausedOrLocked,
+    onSwipeLeft: () => {
+      // Swipe left = next (mirrors → keyboard shortcut).
+      if (session.current < session.questions.length - 1) {
+        haptic("selection");
+        onNext();
+      }
+    },
+    onSwipeRight: () => {
+      // Swipe right = previous (mirrors ← keyboard shortcut).
+      if (session.current > 0) {
+        haptic("selection");
+        onPrev();
+      }
+    },
+  });
+  const mergedQuestionRef = React.useCallback((node: HTMLElement | null) => {
+    questionBodyRef.current = node;
+    swipeRef.current = node;
+  }, [swipeRef]);
+
   // Reset mobile tutor tab when changing questions
   React.useEffect(() => {
     setMobileTutorTab("question");
@@ -2431,7 +2461,7 @@ function QuizView({
         </div>
 
         {/* Center — Question panel */}
-        <main ref={questionBodyRef} className="flex-1 min-w-0 flex flex-col bg-background">
+        <main ref={mergedQuestionRef} className="flex-1 min-w-0 flex flex-col bg-background">
           <AnimatePresence>
             {isPausedOrLocked && (
               <motion.div

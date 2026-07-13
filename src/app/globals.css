@@ -798,6 +798,50 @@ input, textarea, [contenteditable="true"], .medos-article, .uworld-prose, .ai-ch
   }
 }
 
+/* ── User-controlled animations toggle ────────────────────────────────────
+ * When the user disables UI animations from Settings → Native Features,
+ * we mirror the flag onto <html data-animations="off">. This kills all
+ * CSS transitions/animations globally. framer-motion animations are
+ * handled separately via <MotionConfig reducedMotion="always"> in the
+ * AnimationsProvider.
+ */
+html[data-animations="off"] *,
+html[data-animations="off"] *::before,
+html[data-animations="off"] *::after {
+  animation-duration: 0.01ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.01ms !important;
+  scroll-behavior: auto !important;
+}
+
+/* ── Subtle shared keyframes ──────────────────────────────────────────────
+ * Reusable keyframes for non-framer animations (e.g. CSS-only hover
+ * effects, loading shimmer). Keep them short and gentle.
+ */
+@keyframes osler-fade-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes osler-scale-in {
+  from { opacity: 0; transform: scale(0.96); }
+  to   { opacity: 1; transform: scale(1); }
+}
+@keyframes osler-slide-in-end {
+  from { opacity: 0; transform: translateX(8px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+.osler-anim-fade-in   { animation: osler-fade-in 0.18s ease-out both; }
+.osler-anim-scale-in  { animation: osler-scale-in 0.16s ease-out both; }
+.osler-anim-slide-end { animation: osler-slide-in-end 0.2s ease-out both; }
+
+/* RTL flips the slide direction so it always feels "forward" relative to
+   the reading direction. */
+html[dir="rtl"] .osler-anim-slide-end { animation-name: osler-slide-in-end-rtl; }
+@keyframes osler-slide-in-end-rtl {
+  from { opacity: 0; transform: translateX(-8px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+
 /* ── View Transitions API (slide transitions between Osler views) ────────
  * When the user navigates between Dashboard / Q-Bank / Learn / Videos etc,
  * we wrap the React state update in `document.startViewTransition()`. The

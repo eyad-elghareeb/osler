@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import {
   Settings as SettingsIcon,
   Sparkles,
@@ -24,6 +24,9 @@ import {
   SwitchCamera,
   Sun,
   Wifi,
+  Search,
+  ArrowLeft,
+  ChevronRight,
 } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -41,8 +44,9 @@ import {
   type ShortcutScope,
 } from "@/lib/osler/shortcuts";
 import { useI18n } from "./i18n-provider";
-import { LANGUAGES, UI_LANGS, type UiLang, type ContentLangFilter } from "@/lib/osler/i18n";
+import { LANGUAGES, UI_LANGS, type UiLang, type ContentLangFilter, type StringKey } from "@/lib/osler/i18n";
 import { cn } from "@/lib/utils";
+import { useIsMobile } from "@/hooks/use-mobile";
 import {
   isHapticsEnabled,
   setHapticsEnabled,
@@ -53,6 +57,10 @@ import {
   enrollBiometric,
   disableBiometric,
 } from "@/lib/osler/native";
+import {
+  isAnimationsEnabled,
+  setAnimationsEnabled,
+} from "@/lib/osler/motion";
 
 /* ─── Models & storage keys (shared with ai-assistant.tsx) ──────────── */
 
@@ -84,74 +92,332 @@ const OSCE_STORAGE_KEYS = {
   ttsRate: "osler_osce_tts_rate",
 } as const;
 
-/* ─── Section tabs ──────────────────────────────────────────────────── */
+/* ─── Section catalog ─────────────────────────────────────────────── */
 
 type SettingsSection = "language" | "ai" | "shortcuts" | "downloads" | "sync" | "backup" | "native" | "danger";
 
+interface SectionMeta {
+  id: SettingsSection;
+  labelKey: StringKey;
+  icon: React.ComponentType<{ className?: string }>;
+  /** English keywords for settings search. */
+  keywords: string;
+}
+
+const SECTIONS: SectionMeta[] = [
+  { id: "language",  labelKey: "settings.section.language",  icon: Languages,    keywords: "language arabic english rtl ui direction locale" },
+  { id: "ai",        labelKey: "settings.section.ai",        icon: Sparkles,     keywords: "ai assistant gemini api key model osce voice" },
+  { id: "shortcuts", labelKey: "settings.section.shortcuts", icon: Keyboard,     keywords: "keyboard shortcuts hotkeys bindings" },
+  { id: "downloads", labelKey: "settings.section.downloads", icon: Download,     keywords: "downloads offline cache storage service worker" },
+  { id: "sync",      labelKey: "settings.section.sync",      icon: Smartphone,   keywords: "sync peer webrtc qr sync devices" },
+  { id: "native",    labelKey: "settings.section.native",    icon: Fingerprint,  keywords: "native haptics biometric fingerprint view transitions wake lock network animations" },
+  { id: "backup",    labelKey: "settings.section.backup",    icon: FileArchive,  keywords: "backup restore export import file" },
+  { id: "danger",    labelKey: "settings.section.danger",    icon: AlertTriangle, keywords: "danger reset clear data delete wipe progress" },
+];
+
+function renderSection(id: SettingsSection) {
+  switch (id) {
+    case "language":  return <LanguageSettingsSection />;
+    case "ai":        return <AiSettingsSection />;
+    case "shortcuts": return <ShortcutsSettingsSection />;
+    case "downloads": return <DownloadsSettingsSection />;
+    case "sync":      return <SyncSettingsSection />;
+    case "native":    return <NativeSettingsSection />;
+    case "backup":    return <BackupSettingsSection />;
+    case "danger":    return <DangerZoneSection />;
+  }
+}
+
+/**
+ * Settings — sidebar layout on desktop (md+), stacked pages on mobile.
+ *
+ * Desktop: a sticky left sidebar lists every section; the right pane shows
+ * the active section. A search input at the top filters the sidebar list
+ * by label/keywords and jumps to the first match on Enter.
+ *
+ * Mobile: the home page lists every section as a tappable row (iOS-style).
+ * Tapping a row pushes a sub-page with a back button. AnimatePresence
+ * slides the sub-page in from the inline-end side for a native push feel.
+ */
 export function Settings({
   initialSection = "language",
 }: {
   initialSection?: SettingsSection;
 }) {
-  const { t } = useI18n();
+  const { t, rtl } = useI18n();
+  const isMobile = useIsMobile();
+  // On desktop `section` always holds the visible section. On mobile we
+  // also track whether we're on the home list (`mobileHome`) — when true
+  // the home list is shown and `section` is the *next* section to open.
   const [section, setSection] = React.useState<SettingsSection>(initialSection);
+  // On mobile, start at the home list unless an explicit section was requested.
+  const [mobileHome, setMobileHome] = React.useState<boolean>(isMobile && initialSection === "language");
+  const [query, setQuery] = React.useState("");
 
-  const SECTIONS: { id: SettingsSection; label: string; icon: React.ComponentType<{ className?: string }> }[] = [
-    { id: "language", label: t("settings.section.language"), icon: Languages },
-    { id: "ai", label: t("settings.section.ai"), icon: Sparkles },
-    { id: "shortcuts", label: t("settings.section.shortcuts"), icon: Keyboard },
-    { id: "downloads", label: "Downloads", icon: Download },
-    { id: "sync", label: "Sync", icon: Smartphone },
-    { id: "native", label: t("native.sectionTitle"), icon: Fingerprint },
-    { id: "backup", label: t("settings.section.backup"), icon: FileArchive },
-    { id: "danger", label: t("settings.section.danger"), icon: AlertTriangle },
-  ];
+  // Re-evaluate the mobile home flag when the form factor changes.
+  React.useEffect(() => {
+    if (!isMobile) setMobileHome(false);
+  }, [isMobile]);
 
-  return (
-    <div className="p-4 sm:p-6 lg:p-8 max-w-4xl mx-auto">
-      <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }}>
-        <div className="flex items-center gap-3 mb-6">
-          <SettingsIcon className="size-6 text-primary" />
-          <div>
-            <h1 className="text-xl font-bold">{t("settings.title")}</h1>
-            <p className="text-sm text-muted-foreground">{t("settings.subtitle")}</p>
+  // Sync external `initialSection` changes (e.g. user picked a section from
+  // the global search). On mobile this also pushes onto the page stack.
+  React.useEffect(() => {
+    setSection(initialSection);
+    setMobileHome(false);
+  }, [initialSection]);
+
+  // Settings search — filter the catalog by label + keywords. The match
+  // is generous (substring on the lowercased combined hay) so partial
+  // queries like "key" match both "Keyboard" and "API Key".
+  const filteredSections = React.useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return SECTIONS;
+    return SECTIONS.filter((s) => {
+      const label = t(s.labelKey).toLowerCase();
+      const hay = `${label} ${s.keywords}`;
+      return q.split(/\s+/).every((tok) => hay.includes(tok));
+    });
+  }, [query, t]);
+
+  const pickSection = (id: SettingsSection) => {
+    haptic("selection");
+    setSection(id);
+    setMobileHome(false);
+    setQuery("");
+  };
+
+  const goHome = () => {
+    haptic("selection");
+    setMobileHome(true);
+    setQuery("");
+  };
+
+  // ── Mobile: stacked pages ───────────────────────────────────────────
+  if (isMobile) {
+    const activeMeta = SECTIONS.find((s) => s.id === section);
+    return (
+      <div className="h-full overflow-y-auto medos-scroll medos-tabbar-pad">
+        <div className="max-w-2xl mx-auto px-4 py-6">
+          {/* Search bar — always visible at the top on mobile */}
+          <div className="sticky top-0 z-10 -mx-4 px-4 py-2 bg-background/90 backdrop-blur-md mb-3">
+            <div className="flex items-center gap-2 h-10 px-3 rounded-lg border border-border/60 bg-muted/40">
+              <Search className="size-4 text-muted-foreground shrink-0" />
+              <input
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder={t("settings.searchPlaceholder")}
+                aria-label={t("settings.searchPlaceholder")}
+                className="flex-1 bg-transparent outline-none text-sm placeholder:text-muted-foreground min-w-0"
+              />
+              {query && (
+                <button
+                  onClick={() => setQuery("")}
+                  className="text-[10px] text-muted-foreground hover:text-foreground shrink-0"
+                  aria-label={t("common.cancel")}
+                >
+                  {t("common.cancel")}
+                </button>
+              )}
+            </div>
           </div>
-        </div>
 
-        {/* Section tabs — horizontal scroll only (overflow-y is locked so the
-            bar never becomes vertically scrollable even when labels wrap on
-            narrow viewports). */}
-        <div className="flex items-center gap-1 mb-6 border-b border-border/60 overflow-x-auto overflow-y-hidden medos-scroll">
-          {SECTIONS.map((s) => {
-            const I = s.icon;
-            const active = section === s.id;
-            return (
-              <button
-                key={s.id}
-                onClick={() => setSection(s.id)}
-                className={`relative h-10 px-3 sm:px-4 text-sm font-medium flex items-center gap-2 transition-colors shrink-0 whitespace-nowrap ${
-                  active ? "text-primary" : "text-muted-foreground hover:text-foreground"
-                }`}
-              >
-                <I className="size-4" />
-                {s.label}
-                {active && (
-                  <div className="absolute inset-x-0 -bottom-px h-0.5 bg-primary" />
+          {query ? (
+            // Search-results mode — show filtered section list inline.
+            <motion.div
+              initial={{ opacity: 0, y: 4 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.18 }}
+            >
+              <div className="text-[10px] uppercase tracking-wider text-muted-foreground px-1 mb-2">
+                {t("settings.sidebarTitle")}
+              </div>
+              <div className="rounded-lg border border-border/60 overflow-hidden bg-card">
+                {filteredSections.length === 0 ? (
+                  <div className="px-4 py-6 text-center text-sm text-muted-foreground">
+                    {t("settings.searchEmpty")}
+                  </div>
+                ) : (
+                  filteredSections.map((s, idx) => {
+                    const I = s.icon;
+                    return (
+                      <button
+                        key={s.id}
+                        onClick={() => pickSection(s.id)}
+                        className={cn(
+                          "w-full text-start px-4 py-3 flex items-center gap-3 hover:bg-muted/60 transition-colors",
+                          idx > 0 && "border-t border-border/60",
+                        )}
+                      >
+                        <span className="size-8 rounded-md bg-primary/10 text-primary flex items-center justify-center shrink-0">
+                          <I className="size-4" />
+                        </span>
+                        <span className="flex-1 min-w-0">
+                          <span className="block text-sm font-medium truncate">{t(s.labelKey)}</span>
+                          <span className="block text-[11px] text-muted-foreground truncate">{s.keywords}</span>
+                        </span>
+                        <ChevronRight className={cn("size-4 text-muted-foreground shrink-0", rtl && "rtl-flip-x")} />
+                      </button>
+                    );
+                  })
                 )}
-              </button>
-            );
-          })}
+              </div>
+            </motion.div>
+          ) : (
+            // Stacked page navigation: home (section list) ↔ section detail.
+            <AnimatePresence mode="popLayout" initial={false}>
+              {mobileHome ? (
+                <motion.div
+                  key="home"
+                  initial={{ opacity: 0, x: rtl ? -12 : 12 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: rtl ? 12 : -12 }}
+                  transition={{ duration: 0.18, ease: [0.32, 0.72, 0, 1] }}
+                >
+                  <div className="text-[10px] uppercase tracking-wider text-muted-foreground px-1 mb-2">
+                    {t("settings.mobileHomeSubtitle")}
+                  </div>
+                  <div className="rounded-lg border border-border/60 overflow-hidden bg-card">
+                    {SECTIONS.map((s, idx) => {
+                      const I = s.icon;
+                      return (
+                        <button
+                          key={s.id}
+                          onClick={() => pickSection(s.id)}
+                          className={cn(
+                            "w-full text-start px-4 py-3 flex items-center gap-3 hover:bg-muted/60 transition-colors",
+                            idx > 0 && "border-t border-border/60",
+                          )}
+                        >
+                          <span className="size-8 rounded-md bg-primary/10 text-primary flex items-center justify-center shrink-0">
+                            <I className="size-4" />
+                          </span>
+                          <span className="flex-1 min-w-0">
+                            <span className="block text-sm font-medium truncate">{t(s.labelKey)}</span>
+                            <span className="block text-[11px] text-muted-foreground truncate">{s.keywords}</span>
+                          </span>
+                          <ChevronRight className={cn("size-4 text-muted-foreground shrink-0", rtl && "rtl-flip-x")} />
+                        </button>
+                      );
+                    })}
+                  </div>
+                </motion.div>
+              ) : (
+                <motion.div
+                  key={section}
+                  initial={{ opacity: 0, x: rtl ? -12 : 12 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: rtl ? 12 : -12 }}
+                  transition={{ duration: 0.18, ease: [0.32, 0.72, 0, 1] }}
+                >
+                  {/* Section header with back button */}
+                  <div className="flex items-center gap-2 mb-4">
+                    <button
+                      onClick={goHome}
+                      className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors medos-touch-target -ms-1 ps-1"
+                      aria-label={t("settings.backToList")}
+                    >
+                      <ArrowLeft className={cn("size-4", rtl && "rtl-flip-x")} />
+                      <span>{t("settings.backToList")}</span>
+                    </button>
+                  </div>
+                  <h1 className="text-lg font-bold flex items-center gap-2 mb-4">
+                    {(() => {
+                      const I = activeMeta?.icon ?? SettingsIcon;
+                      return <I className="size-5 text-primary" />;
+                    })()}
+                    {activeMeta ? t(activeMeta.labelKey) : t("settings.title")}
+                  </h1>
+                  {renderSection(section)}
+                </motion.div>
+              )}
+            </AnimatePresence>
+          )}
         </div>
+      </div>
+    );
+  }
 
-        {section === "language" && <LanguageSettingsSection />}
-        {section === "ai" && <AiSettingsSection />}
-        {section === "shortcuts" && <ShortcutsSettingsSection />}
-        {section === "downloads" && <DownloadsSettingsSection />}
-        {section === "sync" && <SyncSettingsSection />}
-        {section === "native" && <NativeSettingsSection />}
-        {section === "backup" && <BackupSettingsSection />}
-        {section === "danger" && <DangerZoneSection />}
-      </motion.div>
+  // ── Desktop: sidebar + content pane ────────────────────────────────
+  return (
+    <div className="h-full overflow-y-auto medos-scroll">
+      <div className="max-w-5xl mx-auto px-4 md:px-8 py-6 md:py-8">
+        <motion.div
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.28 }}
+        >
+          <div className="flex items-center gap-3 mb-6">
+            <SettingsIcon className="size-6 text-primary" />
+            <div>
+              <h1 className="text-xl font-bold">{t("settings.title")}</h1>
+              <p className="text-sm text-muted-foreground">{t("settings.subtitle")}</p>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-[220px_1fr] lg:grid-cols-[260px_1fr] gap-6">
+            {/* Sidebar */}
+            <aside className="md:sticky md:top-6 md:self-start">
+              {/* Settings search */}
+              <div className="flex items-center gap-2 h-9 px-3 rounded-md border border-border/60 bg-muted/40 mb-3">
+                <Search className="size-3.5 text-muted-foreground shrink-0" />
+                <input
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  placeholder={t("settings.searchPlaceholder")}
+                  aria-label={t("settings.searchPlaceholder")}
+                  className="flex-1 bg-transparent outline-none text-sm placeholder:text-muted-foreground min-w-0"
+                />
+              </div>
+
+              <div className="text-[10px] uppercase tracking-wider text-muted-foreground px-2 mb-1.5">
+                {t("settings.sidebarTitle")}
+              </div>
+              <nav className="space-y-0.5">
+                {filteredSections.length === 0 ? (
+                  <div className="px-3 py-4 text-xs text-muted-foreground">
+                    {t("settings.searchEmpty")}
+                  </div>
+                ) : (
+                  filteredSections.map((s) => {
+                    const I = s.icon;
+                    const active = section === s.id;
+                    return (
+                      <button
+                        key={s.id}
+                        onClick={() => pickSection(s.id)}
+                        className={cn(
+                          "relative w-full text-start h-9 px-3 rounded-md text-sm font-medium flex items-center gap-2 transition-colors",
+                          active
+                            ? "text-primary bg-primary/10"
+                            : "text-muted-foreground hover:text-foreground hover:bg-muted/60",
+                        )}
+                      >
+                        <I className="size-4 shrink-0" />
+                        <span className="truncate">{t(s.labelKey)}</span>
+                      </button>
+                    );
+                  })
+                )}
+              </nav>
+            </aside>
+
+            {/* Content pane */}
+            <div className="min-w-0">
+              <AnimatePresence mode="wait">
+                <motion.div
+                  key={section}
+                  initial={{ opacity: 0, y: 6 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -6 }}
+                  transition={{ duration: 0.18, ease: [0.32, 0.72, 0, 1] }}
+                >
+                  {renderSection(section)}
+                </motion.div>
+              </AnimatePresence>
+            </div>
+          </div>
+        </motion.div>
+      </div>
     </div>
   );
 }
@@ -941,6 +1207,7 @@ function NativeSettingsSection() {
   const { t } = useI18n();
   const [hapticsOn, setHapticsOn] = React.useState(false);
   const [vtOn, setVtOn] = React.useState(false);
+  const [animationsOn, setAnimationsOn] = React.useState(true);
   const [biometricSupported, setBiometricSupported] = React.useState(false);
   const [biometricPlatform, setBiometricPlatform] = React.useState(false);
   const [biometricEnrolled, setBiometricEnrolled] = React.useState(false);
@@ -952,6 +1219,7 @@ function NativeSettingsSection() {
   React.useEffect(() => {
     setHapticsOn(isHapticsEnabled());
     setVtOn(isViewTransitionsSupported());
+    setAnimationsOn(isAnimationsEnabled());
     let cancelled = false;
     checkBiometricAvailability().then((a) => {
       if (cancelled) return;
@@ -969,6 +1237,13 @@ function NativeSettingsSection() {
     setHapticsEnabled(next);
     // Fire a test vibration so the user can feel the effect immediately.
     if (next) haptic("success");
+  };
+
+  const toggleAnimations = () => {
+    const next = !animationsOn;
+    setAnimationsOn(next);
+    setAnimationsEnabled(next);
+    haptic(next ? "success" : "light");
   };
 
   const testHaptics = () => {
@@ -1073,6 +1348,32 @@ function NativeSettingsSection() {
             {!vtOn && (
               <p className="text-[10px] text-muted-foreground/70 mt-2">
                 {t("native.viewTransitions.desc")}
+              </p>
+            )}
+          </div>
+        </div>
+      </Card>
+
+      {/* UI Animations — user-controlled master switch for framer-motion +
+          CSS transitions across the whole app. See @/lib/osler/motion.ts. */}
+      <Card className="p-5">
+        <div className="flex items-start gap-3">
+          <div className="size-9 rounded-lg bg-primary/10 text-primary flex items-center justify-center shrink-0">
+            <Sparkles className="size-4" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <h3 className="text-sm font-semibold">{t("animations.title")}</h3>
+            <p className="text-xs text-muted-foreground mt-1 mb-3 leading-relaxed">
+              {t("animations.desc")}
+            </p>
+            <ToggleSwitch
+              checked={animationsOn}
+              onChange={toggleAnimations}
+              label={t("animations.enable")}
+            />
+            {!animationsOn && (
+              <p className="text-[10px] text-muted-foreground/70 mt-2">
+                {t("animations.reduceHint")}
               </p>
             )}
           </div>

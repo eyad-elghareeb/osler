@@ -27,7 +27,10 @@ import type { FlashcardContent, FlashcardSubdeck, ContentTreeNode, AnyContent } 
 import { flashcardReview, storage } from "@/lib/osler/storage";
 import { useContentTree } from "@/hooks/use-content-tree";
 import { useShortcutBindings } from "@/hooks/use-shortcuts";
+import { useSwipe } from "@/hooks/use-gestures";
+import { useIsMobile } from "@/hooks/use-mobile";
 import { cn } from "@/lib/utils";
+import { haptic } from "@/lib/osler/native";
 import { setImmersiveMode } from "./immersive-mode";
 import { useI18n } from "./i18n-provider";
 import { ContentCacheButton } from "./content-cache-button";
@@ -229,6 +232,32 @@ export function FlashcardStudio({
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
   }, [mode, flipped, cardIndex, isFlipping, currentCard, sessionCards, currentDeck]);
+
+  // Mobile swipe-left/right to move between cards. Disabled outside study
+  // mode and disabled when the user is at the boundary (so a stray swipe
+  // doesn't feel like it "should have done something"). The hook respects
+  // RTL automatically because it uses physical swipe directions — we just
+  // map "swipe right" → previous and "swipe left" → next, mirroring the
+  // ← / → keyboard shortcuts. In RTL the visual arrow icons flip via
+  // `rtl-flip-x` so the mental model stays consistent.
+  const isMobile = useIsMobile();
+  const swipeRef = useSwipe<HTMLDivElement>({
+    threshold: 60,
+    maxDuration: 500,
+    disabled: mode !== "study" || !isMobile,
+    onSwipeLeft: () => {
+      if (cardIndex < sessionCards.length - 1) {
+        haptic("selection");
+        nextCard();
+      }
+    },
+    onSwipeRight: () => {
+      if (cardIndex > 0) {
+        haptic("selection");
+        prevCard();
+      }
+    },
+  });
 
   function restartDeck() {
     if (!currentDeck) return;
@@ -445,6 +474,7 @@ export function FlashcardStudio({
         {/* Card area */}
         <div className="flex-1 flex items-center justify-center p-4 sm:p-8 bg-card">
           <div
+            ref={swipeRef}
             onClick={flipCard}
             className="w-full max-w-2xl aspect-[16/10] cursor-pointer select-none"
           >

@@ -18,6 +18,7 @@ import { loadAllContent } from "@/lib/osler/content";
 import { listAllArticles } from "@/lib/osler/articles";
 import { listAllVideos } from "@/lib/osler/videos";
 import { storage } from "@/lib/osler/storage";
+import { fadeUp, staggerContainer } from "@/lib/osler/motion";
 
 /**
  * Learn — a single hub that groups the four "study" modules that used to live
@@ -184,20 +185,24 @@ export function Learn({ onNavigate }: LearnProps) {
         </motion.div>
 
         {/* Simple 2×2 grid (1 col on mobile, 2 cols on md+) */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          {MODULES.map((m, idx) => (
+        <motion.div
+          variants={staggerContainer}
+          initial="hidden"
+          animate="visible"
+          className="grid grid-cols-1 sm:grid-cols-2 gap-4"
+        >
+          {MODULES.map((m) => (
             <ModuleCard
               key={m.id}
               def={m}
               count={counts[m.id]}
               isRecent={recentModule === m.id}
               onOpen={() => onNavigate(m.id)}
-              delay={0.05 * idx}
               rtl={rtl}
               t={t}
             />
           ))}
-        </div>
+        </motion.div>
       </div>
     </div>
   );
@@ -208,7 +213,6 @@ function ModuleCard({
   count,
   isRecent,
   onOpen,
-  delay,
   rtl,
   t,
 }: {
@@ -216,7 +220,6 @@ function ModuleCard({
   count: number | null;
   isRecent: boolean;
   onOpen: () => void;
-  delay: number;
   rtl: boolean;
   t: (k: any, p?: any) => string;
 }) {
@@ -225,9 +228,7 @@ function ModuleCard({
     <motion.button
       type="button"
       onClick={onOpen}
-      initial={{ opacity: 0, y: 6 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.3, delay }}
+      variants={fadeUp}
       whileHover={{ y: -2 }}
       className="group relative text-start bg-card border border-border rounded-xl p-5 md:p-6 overflow-hidden transition-colors hover:border-primary/40"
     >
