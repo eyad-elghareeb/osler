@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion, AnimatePresence, useMotionValue } from "framer-motion";
 import {
   ChevronLeft,
   ChevronRight,
@@ -2019,25 +2019,36 @@ function QuizView({
   // persisted in IndexedDB and shared across the profile page.
   const questionBodyRef = React.useRef<HTMLElement>(null);
 
-  // Mobile swipe-left/right to move between questions. We attach the
-  // listener to the question body via a merged ref (questionBodyRef is
-  // also used for scroll restoration). Swipe only fires when not paused
-  // and when there's somewhere to go (boundary guard).
+  // Mobile swipe — real-time drag-follow + animated page transition.
+  // `swipeX` is a MotionValue updated on every pointer move (no re-renders).
+  // `navDir` tracks whether the last navigation was forward or backward so
+  // the AnimatePresence slide direction matches the swipe direction.
+  const swipeX = useMotionValue(0);
+  const [navDir, setNavDir] = React.useState<"next" | "prev">("next");
+
   const swipeRef = useSwipe<HTMLElement>({
     threshold: 70,
     maxDuration: 500,
     disabled: !isMobile || isPausedOrLocked,
+    onSwipeProgress: (dx) => {
+      swipeX.set(dx);
+    },
+    onSwipeCancel: () => {
+      swipeX.set(0);
+    },
     onSwipeLeft: () => {
-      // Swipe left = next (mirrors → keyboard shortcut).
+      swipeX.set(0);
       if (session.current < session.questions.length - 1) {
         haptic("selection");
+        setNavDir("next");
         onNext();
       }
     },
     onSwipeRight: () => {
-      // Swipe right = previous (mirrors ← keyboard shortcut).
+      swipeX.set(0);
       if (session.current > 0) {
         haptic("selection");
+        setNavDir("prev");
         onPrev();
       }
     },
@@ -2046,6 +2057,10 @@ function QuizView({
     questionBodyRef.current = node;
     swipeRef.current = node;
   }, [swipeRef]);
+
+  // Wrapped nav handlers — set direction so AnimatePresence slide matches.
+  const goNext = React.useCallback(() => { setNavDir("next"); onNext(); }, [onNext]);
+  const goPrev = React.useCallback(() => { setNavDir("prev"); onPrev(); }, [onPrev]);
 
   // Reset mobile tutor tab when changing questions
   React.useEffect(() => {
@@ -2192,8 +2207,8 @@ function QuizView({
     const handler = (e: KeyboardEvent) => {
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
       if (e.key === "f" || e.key === "F") { e.preventDefault(); onToggleFlag(); }
-      if (e.key === "ArrowLeft") { e.preventDefault(); onPrev(); }
-      if (e.key === "ArrowRight") { e.preventDefault(); onNext(); }
+      if (e.key === "ArrowLeft") { e.preventDefault(); goPrev(); }
+      if (e.key === "ArrowRight") { e.preventDefault(); goNext(); }
       if (e.key === "?" && !e.shiftKey) { e.preventDefault(); setShowShortcuts((s) => !s); }
       if (e.key === "a" && !e.shiftKey && !e.ctrlKey && !e.metaKey) { e.preventDefault(); onToggleAiAssistant(); }
       if (e.key === "h" || e.key === "H") { e.preventDefault(); setTool((t) => (t && t !== ERASER_TOOL ? null : color)); }
@@ -2216,7 +2231,7 @@ function QuizView({
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [q, isMCQ, submitted, selected, onToggleFlag, onPrev, onNext, onSelect, onSubmit, onToggleAiAssistant, onToggleNotes, onToggleQuizSettings, setTool]);
+  }, [q, isMCQ, submitted, selected, onToggleFlag, goPrev, goNext, onSelect, onSubmit, onToggleAiAssistant, onToggleNotes, onToggleQuizSettings, setTool]);
 
   const currentHighlights = React.useMemo(
     () => highlights.get(activeItem.uid, session.current),
@@ -2532,6 +2547,15 @@ function QuizView({
                   } ${mobileTutorTab === "answer" ? "hidden md:block" : ""}`}
                 >
                   <div className={`px-4 sm:px-6 ${submitted && session.mode === "tutor" && useSplitExplanation ? "py-4" : "lg:px-8 py-6"} ${contentAlignClass}`}>
+                    <AnimatePresence mode="wait" initial={false}>
+                      <motion.div
+                        key={session.current}
+                        initial={{ opacity: 0, x: navDir === "next" ? (rtl ? -24 : 24) : (rtl ? 24 : -24) }}
+                        animate={{ opacity: 1, x: 0 }}
+                        exit={{ opacity: 0, x: navDir === "next" ? (rtl ? 24 : -24) : (rtl ? -24 : 24) }}
+                        transition={{ duration: 0.18, ease: [0.32, 0.72, 0, 1] }}
+                        style={{ x: swipeX }}
+                      >
                     {/* Question header */}
                     <div className="flex flex-wrap items-center justify-between gap-2 pb-3 mb-4 border-b border-border">
                       <div className="flex items-center gap-2 text-xs text-muted-foreground">
@@ -2769,6 +2793,8 @@ function QuizView({
                         </div>
                       </div>
                     )}
+                      </motion.div>
+                    </AnimatePresence>
                   </div>
                 </div>
 
@@ -2941,7 +2967,7 @@ function QuizView({
 
           {/* Bottom action bar — desktop */}
           <footer className="hidden sm:flex border-t border-border bg-card px-4 sm:px-6 py-2.5 items-center gap-2 shrink-0">
-            <Button variant="outline" size="sm" onClick={onPrev} disabled={session.current === 0} className="h-9 rounded-lg">
+            <Button variant="outline" size="sm" onClick={goPrev} disabled={session.current === 0} className="h-9 rounded-lg">
               <ChevronLeft className="size-4 mr-1" /> {t("common.previous")}
             </Button>
 
@@ -3030,7 +3056,7 @@ function QuizView({
             )}
 
             <Button
-              size="sm" onClick={onNext} className="h-9 rounded-lg"
+              size="sm" onClick={goNext} className="h-9 rounded-lg"
               variant={isLast ? "destructive" : "default"}
             >
               {isLast ? (
@@ -3049,7 +3075,7 @@ function QuizView({
           <footer className="sm:hidden border-t border-border bg-card px-3 pt-2 pb-[max(env(safe-area-inset-bottom,0px),0.75rem)] flex items-center gap-1.5 shrink-0 medos-tap-none">
             <Button
               variant="outline" size="icon"
-              onClick={onPrev} disabled={session.current === 0}
+              onClick={goPrev} disabled={session.current === 0}
               className="size-10 rounded-lg shrink-0 medos-touch-target"
               title={t("common.previous")}
             >
@@ -3142,7 +3168,7 @@ function QuizView({
               </Button>
             ) : (
               <Button
-                size="sm" onClick={onNext}
+                size="sm" onClick={goNext}
                 variant={isLast ? "destructive" : "default"}
                 className="flex-1 h-10 rounded-lg medos-touch-target"
               >

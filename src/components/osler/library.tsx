@@ -31,6 +31,7 @@ import {
 import type { ContentTreeNode } from "@/lib/osler/types";
 import { cn } from "@/lib/utils";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { useEdgeSwipe } from "@/hooks/use-gestures";
 import { useArticleHighlighter } from "@/hooks/use-article-highlighter";
 import { useOslerTheme } from "./theme-provider";
 import { useI18n } from "./i18n-provider";
@@ -701,10 +702,16 @@ function MobileReader({
   hlCtrl: ReturnType<typeof useArticleHighlighter>;
 }) {
   const [fontPopoverOpen, setFontPopoverOpen] = React.useState(false);
-  const { t } = useI18n();
+  const { t, rtl } = useI18n();
+  const edgeSwipeRef = useEdgeSwipe<HTMLDivElement>({
+    edge: rtl ? "right" : "left",
+    edgeZone: 28,
+    threshold: 90,
+    onSwipe: onBack,
+  });
 
   return (
-    <div className="fixed inset-0 z-50 bg-background flex flex-col">
+    <div ref={edgeSwipeRef} className="fixed inset-0 z-50 bg-background flex flex-col">
       {/* Top bar */}
       <header className="shrink-0 border-b border-border bg-card/40 backdrop-blur-sm safe-pt">
         <div className="flex items-center gap-2 px-3 h-12">

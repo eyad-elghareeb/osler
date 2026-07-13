@@ -47,6 +47,7 @@ import { useI18n } from "./i18n-provider";
 import { LANGUAGES, UI_LANGS, type UiLang, type ContentLangFilter, type StringKey } from "@/lib/osler/i18n";
 import { cn } from "@/lib/utils";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { useEdgeSwipe } from "@/hooks/use-gestures";
 import {
   isHapticsEnabled,
   setHapticsEnabled,
@@ -161,7 +162,11 @@ export function Settings({
 
   // Sync external `initialSection` changes (e.g. user picked a section from
   // the global search). On mobile this also pushes onto the page stack.
+  // Skip the initial mount — useState already handles the correct initial state.
+  const prevInitialRef = React.useRef(initialSection);
   React.useEffect(() => {
+    if (prevInitialRef.current === initialSection) return;
+    prevInitialRef.current = initialSection;
     setSection(initialSection);
     setMobileHome(false);
   }, [initialSection]);
@@ -192,11 +197,20 @@ export function Settings({
     setQuery("");
   };
 
+  // Edge-swipe to go back from a section detail → home list (mobile only).
+  const edgeSwipeRef = useEdgeSwipe<HTMLDivElement>({
+    edge: rtl ? "right" : "left",
+    edgeZone: 28,
+    threshold: 90,
+    disabled: !isMobile || mobileHome,
+    onSwipe: goHome,
+  });
+
   // ── Mobile: stacked pages ───────────────────────────────────────────
   if (isMobile) {
     const activeMeta = SECTIONS.find((s) => s.id === section);
     return (
-      <div className="h-full overflow-y-auto medos-scroll medos-tabbar-pad">
+      <div ref={edgeSwipeRef} className="h-full overflow-y-auto medos-scroll medos-tabbar-pad">
         <div className="max-w-2xl mx-auto px-4 py-6">
           {/* Search bar — always visible at the top on mobile */}
           <div className="sticky top-0 z-10 -mx-4 px-4 py-2 bg-background/90 backdrop-blur-md mb-3">

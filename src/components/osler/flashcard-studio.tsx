@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion, AnimatePresence, useMotionValue } from "framer-motion";
 import {
   Layers,
   RotateCcw,
@@ -233,25 +233,28 @@ export function FlashcardStudio({
     return () => window.removeEventListener("keydown", handler);
   }, [mode, flipped, cardIndex, isFlipping, currentCard, sessionCards, currentDeck]);
 
-  // Mobile swipe-left/right to move between cards. Disabled outside study
-  // mode and disabled when the user is at the boundary (so a stray swipe
-  // doesn't feel like it "should have done something"). The hook respects
-  // RTL automatically because it uses physical swipe directions — we just
-  // map "swipe right" → previous and "swipe left" → next, mirroring the
-  // ← / → keyboard shortcuts. In RTL the visual arrow icons flip via
-  // `rtl-flip-x` so the mental model stays consistent.
+  // Mobile swipe-left/right to move between cards with real-time drag-follow.
   const isMobile = useIsMobile();
+  const swipeX = useMotionValue(0);
   const swipeRef = useSwipe<HTMLDivElement>({
     threshold: 60,
     maxDuration: 500,
     disabled: mode !== "study" || !isMobile,
+    onSwipeProgress: (dx) => {
+      swipeX.set(dx);
+    },
+    onSwipeCancel: () => {
+      swipeX.set(0);
+    },
     onSwipeLeft: () => {
+      swipeX.set(0);
       if (cardIndex < sessionCards.length - 1) {
         haptic("selection");
         nextCard();
       }
     },
     onSwipeRight: () => {
+      swipeX.set(0);
       if (cardIndex > 0) {
         haptic("selection");
         prevCard();
@@ -478,7 +481,7 @@ export function FlashcardStudio({
             onClick={flipCard}
             className="w-full max-w-2xl aspect-[16/10] cursor-pointer select-none"
           >
-            <div className="relative w-full h-full overflow-hidden rounded-xl border border-border shadow-lg">
+            <motion.div className="relative w-full h-full overflow-hidden rounded-xl border border-border shadow-lg" style={{ x: swipeX }}>
               {/* Back layer — shows both Q and A when front slides away */}
               <div className="absolute inset-0 flex flex-col bg-card rounded-xl">
                 <div className="h-1/2 flex flex-col items-center justify-center p-4 sm:p-6">
@@ -518,7 +521,7 @@ export function FlashcardStudio({
                   {t("flash.tapToReveal")}
                 </div>
               </motion.div>
-            </div>
+            </motion.div>
           </div>
         </div>
 
