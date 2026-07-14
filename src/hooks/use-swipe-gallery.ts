@@ -86,6 +86,7 @@ export function useSwipeGallery(options: SwipeGalleryOptions): SwipeGalleryState
   const swipeX = useMotionValue(0);
   const [cardWidth, setCardWidth] = React.useState(0);
   const movedRef = React.useRef(false);
+  const pendingNavRef = React.useRef(false);
 
   // Keep latest values in a ref so swipe callbacks don't go stale.
   const stateRef = React.useRef({ currentIndex, itemCount, onNavigateNext, onNavigatePrev, rtl });
@@ -126,9 +127,9 @@ export function useSwipeGallery(options: SwipeGalleryOptions): SwipeGalleryState
         const animTarget = isRtl ? target : -target;
         animate(swipeX, animTarget, { type: "spring", stiffness: 400, damping: 35, mass: 0.8 })
           .then(() => {
+            pendingNavRef.current = true;
             if (isRtl) goPrev();
             else goNext();
-            swipeX.set(0);
             movedRef.current = false;
           });
       } else {
@@ -148,9 +149,9 @@ export function useSwipeGallery(options: SwipeGalleryOptions): SwipeGalleryState
         const animTarget = isRtl ? -target : target;
         animate(swipeX, animTarget, { type: "spring", stiffness: 400, damping: 35, mass: 0.8 })
           .then(() => {
+            pendingNavRef.current = true;
             if (isRtl) goNext();
             else goPrev();
-            swipeX.set(0);
             movedRef.current = false;
           });
       } else {
@@ -159,6 +160,18 @@ export function useSwipeGallery(options: SwipeGalleryOptions): SwipeGalleryState
       }
     },
   });
+
+  // After a navigation completes, the .then() callback triggers a React state
+  // update (goNext/goPrev) and sets pendingNavRef. We reset swipeX to 0 here
+  // in a useLayoutEffect so it happens AFTER React commits the new currentIndex
+  // but BEFORE the browser paints — eliminating the 1-frame flash where the old
+  // question content (with its selected answer) would briefly appear at center.
+  React.useLayoutEffect(() => {
+    if (pendingNavRef.current) {
+      pendingNavRef.current = false;
+      swipeX.set(0);
+    }
+  }, [currentIndex, swipeX]);
 
   // Measure the swipe element's width so prev/next cards can be positioned
   // exactly one card-width (+ gap) to the left/right.
