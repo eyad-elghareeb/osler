@@ -2018,7 +2018,6 @@ function QuizView({
   // Notes panel state — replaced sticky-note floating cards. Notes are
   // persisted in IndexedDB and shared across the profile page.
   const questionBodyRef = React.useRef<HTMLElement>(null);
-  const questionScrollRef = React.useRef<HTMLDivElement>(null);
 
   // Mobile swipe — handled by the reusable SwipeGallery component.
   // Navigation is free: the user can swipe to any question whether or not
@@ -2294,14 +2293,6 @@ function QuizView({
   React.useEffect(() => {
     setMobileTutorTab("question");
   }, [activeItem.uid, session.current]);
-
-  // Scroll question column to top when switching questions so the new
-  // question is always visible from the start (not offset by the old
-  // question's scroll position).
-  React.useEffect(() => {
-    const el = questionScrollRef.current;
-    if (el) el.scrollTop = 0;
-  }, [session.current]);
 
   // Highlight mode: auto-apply on stable text selection (mouse + touch).
   //
@@ -2776,7 +2767,6 @@ function QuizView({
                     contentAlignClass. In continuous mode the column is full-width
                     and the contentAlignClass caps + positions the content block. */}
                 <div
-                  ref={questionScrollRef}
                   className={`medos-qbank-qcol ${(activeItem.lang ?? "en") === "ar" ? "osler-content-ar" : ""} ${
                     submitted && session.mode === "tutor" && useSplitExplanation
                       ? "w-[55%] overflow-y-auto medos-scroll border-e border-border"

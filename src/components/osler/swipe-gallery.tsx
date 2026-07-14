@@ -109,7 +109,7 @@ export function SwipeGallery<T>({
       onPointerDown={() => {
         movedRef.current = false;
       }}
-      className={cn("relative overflow-hidden", className)}
+      className={cn("relative overflow-x-clip overflow-y-visible", className)}
       style={{ touchAction: disabled ? undefined : "pan-y" }}
     >
       {/* Previous card (off-screen left, hidden at rest) */}
