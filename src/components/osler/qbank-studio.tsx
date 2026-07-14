@@ -105,7 +105,7 @@ import { ContentCacheButton } from "./content-cache-button";
 import { useShortcutBindings, useShortcutListener } from "@/hooks/use-shortcuts";
 import { defaultBindings } from "@/lib/osler/shortcuts";
 import { useIsMobile } from "@/hooks/use-mobile";
-import { SwipeGallery } from "./swipe-gallery";
+import { VerticalSnapGallery } from "./vertical-snap-gallery";
 import { useQuizSettings } from "@/hooks/use-quiz-settings";
 import { setImmersiveMode } from "./immersive-mode";
 import { haptic } from "@/lib/osler/native";
@@ -2019,11 +2019,13 @@ function QuizView({
   // persisted in IndexedDB and shared across the profile page.
   const questionBodyRef = React.useRef<HTMLElement>(null);
 
-  // Mobile swipe — handled by the reusable SwipeGallery component.
-  // Navigation is free: the user can swipe to any question whether or not
-  // it has been answered/submitted. The gallery shows prev/current/next
-  // cards driven by a single motion value for the iOS Photos feel.
-  const canSwipeQuestion = isMobile && !isPausedOrLocked;
+  // Vertical snap navigation — handled by the reusable VerticalSnapGallery.
+  // Works on touch (drag up/down) and desktop (wheel / trackpad), in both
+  // single-page (continuous) and 2-page (split) tutor mode. The gallery
+  // shows prev/current/next pages driven by a single motion value for the
+  // Instagram-Reels / TikTok feel. Drag works from anywhere on the screen
+  // that isn't an interactive control or a scrollable region mid-scroll.
+  const canSwipeQuestion = !isPausedOrLocked;
 
   const goNext = React.useCallback(() => { onNext(); }, [onNext]);
   const goPrev = React.useCallback(() => { onPrev(); }, [onPrev]);
@@ -2053,7 +2055,7 @@ function QuizView({
     const qRubricState = session.rubricState[question.id] ?? (question.rubric ? question.rubric.map(() => false) : []);
 
     return (
-      <>
+      <div className="h-full overflow-y-auto medos-scroll pr-1 -mr-1">
         {/* Question header */}
         <div className="flex flex-wrap items-center justify-between gap-2 pb-3 mb-4 border-b border-border">
           <div className="flex items-center gap-2 text-xs text-muted-foreground">
@@ -2284,7 +2286,7 @@ function QuizView({
             </div>
           </div>
         )}
-      </>
+      </div>
     );
   };
 
@@ -2769,26 +2771,44 @@ function QuizView({
                 <div
                   className={`medos-qbank-qcol ${(activeItem.lang ?? "en") === "ar" ? "osler-content-ar" : ""} ${
                     submitted && session.mode === "tutor" && useSplitExplanation
-                      ? "w-[55%] overflow-y-auto medos-scroll border-e border-border"
+                      ? "w-[55%] border-e border-border flex flex-col min-h-0"
                       : "flex-1 overflow-y-auto medos-scroll pb-20 sm:pb-6"
                   } ${mobileTutorTab === "answer" ? "hidden md:block" : ""}`}
                 >
-                  <div className={`px-4 sm:px-6 ${submitted && session.mode === "tutor" && useSplitExplanation ? "py-4" : "lg:px-8 py-6"} ${contentAlignClass}`}>
-                    {/* iOS photo gallery swipe — the SwipeGallery component
-                        handles the three-card layout, rubber-band edges,
-                        visibility-hidden preview cards at rest (no overlap),
-                        and a configurable gap between cards. Navigation is
-                        free: swipe works whether or not the question is
-                        answered/submitted. */}
-                    <SwipeGallery
+                  <div className={`px-4 sm:px-6 ${submitted && session.mode === "tutor" && useSplitExplanation ? "py-4 flex-1 min-h-0 flex flex-col" : "lg:px-8 py-6"} ${contentAlignClass}`}>
+                    {/* Vertical Reels/TikTok-style snap gallery.
+                        Replaces the previous horizontal iOS-Photos-style
+                        SwipeGallery. Works in both single-page (continuous)
+                        and 2-page (split) modes — the gallery measures its
+                        own height to compute the snap step, so it adapts to
+                        the narrow 55% split column or the full-width
+                        continuous column equally well.
+                        Drag works from any part of the screen that isn't an
+                        interactive control or a scrollable region mid-scroll.
+                        Tap-to-select is preserved via the axis-lock +
+                        movedRef guard.
+                        In split mode the column is fixed-height (flex child
+                        of the body row), so the gallery fills it via
+                        `flex-1 min-h-0`. In continuous mode the column is a
+                        scrollable block; the gallery gets a viewport-based
+                        height (100dvh minus the header + progress bar + bottom
+                        action bar) so the snap step is consistent across
+                        questions of differing length. Each rendered page
+                        scrolls its own content if it overflows. */}
+                    <VerticalSnapGallery
                       items={session.questions}
                       currentIndex={session.current}
                       onNavigateNext={goNext}
                       onNavigatePrev={goPrev}
                       disabled={!canSwipeQuestion}
                       rtl={rtl}
-                      gap={16}
-                      className="w-full"
+                      threshold={90}
+                      className={
+                        submitted && session.mode === "tutor" && useSplitExplanation
+                          ? "flex-1 min-h-0 w-full"
+                          : "w-full h-[calc(100dvh-12rem)] sm:h-[calc(100dvh-9rem)]"
+                      }
+                      cardClassName="w-full h-full"
                       renderItem={(_item, idx, interactive) =>
                         renderQuestionContent(idx, interactive)
                       }

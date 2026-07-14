@@ -27,9 +27,8 @@ import type { FlashcardContent, FlashcardSubdeck, ContentTreeNode, AnyContent } 
 import { flashcardReview, storage } from "@/lib/osler/storage";
 import { useContentTree } from "@/hooks/use-content-tree";
 import { useShortcutBindings } from "@/hooks/use-shortcuts";
-import { SwipeGallery } from "./swipe-gallery";
+import { VerticalSnapGallery } from "./vertical-snap-gallery";
 
-import { useIsMobile } from "@/hooks/use-mobile";
 import { cn } from "@/lib/utils";
 import { haptic } from "@/lib/osler/native";
 import { setImmersiveMode } from "./immersive-mode";
@@ -237,12 +236,14 @@ export function FlashcardStudio({
     return () => window.removeEventListener("keydown", handler);
   }, [mode, flipped, cardIndex, isFlipping, currentCard, sessionCards, currentDeck]);
 
-  // Mobile swipe — handled by the reusable SwipeGallery component.
-  // The gallery renders prev/current/next cards and drives them with a
-  // single motion value for the iOS Photos "connected cards" feel.
+  // Vertical snap navigation — handled by the reusable VerticalSnapGallery
+  // component. The gallery renders prev/current/next cards driven by a
+  // single motion value for the Instagram-Reels / TikTok feel. Drag works
+  // from anywhere on the screen that isn't an interactive control.
   // Tap-to-flip is preserved via the onTap callback (suppressed after a swipe).
-  const isMobile = useIsMobile();
-  const canSwipe = mode === "study" && isMobile;
+  // Available on both touch and desktop — touch users drag up/down, desktop
+  // users use wheel/trackpad.
+  const canSwipe = mode === "study";
 
   function restartDeck() {
     if (!currentDeck) return;
@@ -253,10 +254,18 @@ export function FlashcardStudio({
     }
   }
 
-  // Render a single flashcard face (back layer with Q&A + sliding front cover).
-  // Used for the current card AND the prev/next preview cards in the swipe
-  // gallery. The `isFlipped` parameter only affects the front cover position —
-  // preview cards are always shown unflipped (front cover down).
+  // Render a single flashcard face.
+  //
+  // Flip animation: the front cover shrinks vertically (scaleY 1 → 0) to
+  // reveal the back layer underneath. This replaces the previous
+  // "slide-up + split Q/A" approach — now the back is a single, full-card
+  // surface (answer prominent, question echoed as a small label) so the
+  // reveal feels like the card itself transforming rather than two panels
+  // splitting apart. The origin is set to the top edge so the front
+  // appears to collapse upward into the answer.
+  //
+  // `isFlipped` only affects the current card — preview cards in the
+  // gallery (prev/next) are always rendered unflipped.
   const renderFlashcardFace = (
     card: { front: string; back: string } | undefined,
     isFlipped: boolean,
@@ -264,33 +273,40 @@ export function FlashcardStudio({
     if (!card) return null;
     return (
       <div className="relative w-full h-full overflow-hidden rounded-xl border border-border shadow-lg">
-        {/* Back layer — shows both Q and A when front slides away */}
+        {/* Back layer — full-card answer with a small question echo at top.
+            Sits underneath the front cover; revealed when the front shrinks. */}
         <div className="absolute inset-0 flex flex-col bg-card rounded-xl">
-          <div className="h-1/2 flex flex-col items-center justify-center p-4 sm:p-6">
-            <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-2 flex items-center gap-1.5">
+          <div className="shrink-0 px-4 sm:px-6 pt-4 sm:pt-5 pb-2 border-b border-border/40">
+            <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1 flex items-center gap-1.5">
               <Lightbulb className="size-3" />
               {t("flash.question")}
             </div>
-            <div className="text-sm sm:text-base leading-relaxed max-w-lg uworld-prose text-center">
+            <div className="text-xs sm:text-sm leading-snug max-w-lg uworld-prose text-muted-foreground line-clamp-3">
               {card.front}
             </div>
           </div>
-          <div className="shrink-0 h-px bg-border/60 mx-4" />
-          <div className="h-1/2 flex flex-col items-center justify-center p-4 sm:p-6 bg-[color-mix(in_oklch,var(--primary)_4%,var(--card))] rounded-b-xl">
+          <div className="flex-1 min-h-0 flex flex-col items-center justify-center p-4 sm:p-6 bg-[color-mix(in_oklch,var(--primary)_4%,var(--card))] rounded-b-xl">
             <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-2 flex items-center gap-1.5">
               <Sparkles className="size-3" />
               {t("flash.answer")}
             </div>
-            <div className="text-sm sm:text-base leading-relaxed max-w-lg uworld-prose text-center">
+            <div className="text-sm sm:text-base leading-relaxed max-w-lg uworld-prose text-center overflow-y-auto medos-scroll">
               {card.back}
             </div>
           </div>
         </div>
-        {/* Front cover — slides up to reveal both Q and A */}
+        {/* Front cover — shrinks vertically to reveal the back.
+            originY: 0 keeps the top edge fixed; the bottom edge rises
+            toward the top as scaleY → 0. A subtle opacity fade softens
+            the collapse so it reads as a transformation, not a wipe. */}
         <motion.div
           className="absolute inset-0 flex flex-col items-center justify-center p-6 sm:p-10 bg-card rounded-xl"
-          animate={{ y: isFlipped ? "-100%" : "0%" }}
-          transition={{ duration: 0.25, ease: "easeOut" }}
+          style={{ originY: 0 }}
+          animate={{
+            scaleY: isFlipped ? 0 : 1,
+            opacity: isFlipped ? 0 : 1,
+          }}
+          transition={{ duration: 0.28, ease: [0.32, 0.72, 0, 1] }}
         >
           <div className="text-[11px] uppercase tracking-wider text-muted-foreground mb-4 flex items-center gap-1.5">
             <Lightbulb className="size-3" />
@@ -510,13 +526,14 @@ export function FlashcardStudio({
           />
         </div>
 
-        {/* Card area — iOS photo gallery swipe.
-            The SwipeGallery handles the three-card layout, rubber-
+        {/* Card area — vertical Reels/TikTok-style snap gallery.
+            The VerticalSnapGallery handles the three-card layout, rubber-
             band edges, tap-to-flip (via onTap, suppressed after a swipe),
-            and visibility-hidden preview cards at rest. */}
+            and visibility-hidden preview cards at rest. Drag works from
+            any part of the screen that isn't an interactive control. */}
         <div className="flex-1 flex items-center justify-center p-4 sm:p-8 bg-card">
           <div className="w-full max-w-2xl aspect-[16/10]">
-            <SwipeGallery
+            <VerticalSnapGallery
               items={currentDeckCards}
               currentIndex={cardIndex}
               onNavigateNext={nextCard}
@@ -524,6 +541,7 @@ export function FlashcardStudio({
               onTap={flipCard}
               disabled={!canSwipe}
               rtl={rtl}
+              threshold={70}
               className="w-full h-full"
               cardClassName="w-full h-full"
               renderItem={(card, idx, _interactive) =>
