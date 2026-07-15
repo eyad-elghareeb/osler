@@ -295,6 +295,10 @@ function useVerticalSnap(options: UseVerticalSnapOptions): UseVerticalSnapState 
     // e.target === container — so findScrollableAncestor would walk
     // from container to container (loop never runs) and return null.
     let downTarget: EventTarget | null = null;
+    // True when the touch started on an interactive element (button, etc.)
+    // inside a scrollable area. The gesture proceeds so the user can drag
+    // to scroll; on tap we dispatch click() on the original target.
+    let isButtonTouch = false;
 
     // Scroll-mode state
     let scrollMode = false;
@@ -306,7 +310,15 @@ function useVerticalSnap(options: UseVerticalSnapOptions): UseVerticalSnapState 
 
     const onDown = (e: PointerEvent) => {
       if (e.pointerType === "mouse" && e.button !== 0) return;
-      if (isInteractiveTarget(e.target, container)) return;
+      isButtonTouch = false;
+      if (isInteractiveTarget(e.target, container)) {
+        // Interactive element (button, link, etc.) — normally we suppress
+        // the gesture so clicks/long-presses work. But if it's inside a
+        // scrollable area, allow the gesture so the user can drag to scroll.
+        // On tap (no movement), we dispatch click() on pointerup.
+        if (!scrollModeProp || !findScrollableAncestor(e.target, container)) return;
+        isButtonTouch = true;
+      }
       // Capture the pointer so ALL subsequent pointermove/pointerup events
       // go to THIS element — the browser won't send pointercancel even if
       // the finger moves over a scrollable child. This is what makes touch
@@ -472,6 +484,17 @@ function useVerticalSnap(options: UseVerticalSnapOptions): UseVerticalSnapState 
     const onUp = (e: PointerEvent) => {
       if (!tracking || e.pointerId !== startPointerId) return;
       try { container.releasePointerCapture(e.pointerId); } catch { /* ignore */ }
+      // Tap on a button inside a scrollable area — dispatch click on the
+      // original target so the consumer's onClick fires (select, etc.).
+      // Touch events (onTouchStart for long-press) already fired on the
+      // original target regardless of pointer capture, so long-press works.
+      if (isButtonTouch && !movedRef.current) {
+        isButtonTouch = false;
+        tracking = false;
+        if (downTarget instanceof HTMLElement) downTarget.click();
+        return;
+      }
+      isButtonTouch = false;
       finishGesture(e.clientY, Date.now());
     };
 
@@ -479,6 +502,7 @@ function useVerticalSnap(options: UseVerticalSnapOptions): UseVerticalSnapState 
       if (!tracking) return;
       try { container.releasePointerCapture(e.pointerId); } catch { /* ignore */ }
       tracking = false;
+      isButtonTouch = false;
       scrollMode = false;
       scrollTarget = null;
       movedRef.current = false;
