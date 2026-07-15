@@ -2054,10 +2054,17 @@ function QuizView({
     const qRating = session.ratings[question.id];
     const qRubricState = session.rubricState[question.id] ?? (question.rubric ? question.rubric.map(() => false) : []);
 
+    // Per-question written verdict (for the inline explanation in continuous mode).
+    const qWrittenVerdict: "pass" | "fail" | null =
+      qWrittenDraft.evaluation?.manualVerdict === "pass" ? "pass"
+      : qWrittenDraft.evaluation?.manualVerdict === "fail" ? "fail"
+      : null;
+    const qWrittenPassed = qWrittenVerdict === "pass" || (qWrittenVerdict === null && qWrittenDraft.evaluation?.passed === true);
+
     return (
-      <div className="h-full overflow-y-auto medos-scroll pr-1 -mr-1">
+      <div className="h-full overflow-y-auto medos-scroll pr-1 -mr-1 pb-6">
         {/* Question header */}
-        <div className="flex flex-wrap items-center justify-between gap-2 pb-3 mb-4 border-b border-border">
+        <div className="flex flex-wrap items-center justify-between gap-2 pb-3 mb-4 border-b border-border/40">
           <div className="flex items-center gap-2 text-xs text-muted-foreground">
             <Badge variant="outline" className="text-[10px] font-medium rounded-md">{engineLabel}</Badge>
             <span className="opacity-50">·</span>
@@ -2283,6 +2290,110 @@ function QuizView({
                 <Check className="size-4 mx-auto mb-1" />
                 {t("flash.session.rateEasy")}
               </button>
+            </div>
+          </div>
+        )}
+
+        {/* ── Inline explanation (continuous mode only) ──────────────
+            In continuous mode the explanation lives INSIDE the page so
+            the user can drag from it to scroll/snap. In split mode it
+            lives in the right column (handled separately below).
+            Only rendered for the current (interactive) card to avoid
+            spoiling the next question's answer. Uses per-question state
+            (qSubmitted, qSelected, qHighlights, qWrittenDraft) so it's
+            accurate for any question index.
+            Spacing: mt-3 (tight, not mt-6), border-t border-border/40
+            (soft separator), py-3 sm:py-4 (compact on mobile). */}
+        {interactive && qSubmitted && !useSplitExplanation && (
+          <div className="mt-3 border-t border-border/40 bg-muted/20 py-3 sm:py-4 px-4 sm:px-6 lg:px-8 -mr-1 rounded-lg">
+            <div className={contentAlignClass}>
+              {session.engine === "written" ? (
+                <WrittenEvaluationPanel
+                  draft={qWrittenDraft}
+                  question={question}
+                  passed={qWrittenPassed}
+                  isManual={qWrittenDraft.evaluation?.score === null}
+                  onRubricToggle={(idx) => {
+                    const cur = qWrittenDraft.rubricChecked;
+                    const next = [...cur];
+                    while (next.length < (question.rubric?.length ?? 0)) next.push(false);
+                    next[idx] = !next[idx];
+                    onWrittenDraftChange(question.id, { ...qWrittenDraft, rubricChecked: next });
+                  }}
+                  onPassFail={(v) => {
+                    const ev = qWrittenDraft.evaluation;
+                    if (!ev) {
+                      const manual = createManualEvaluation(qWrittenDraft.text);
+                      manual.manualVerdict = v;
+                      manual.passed = v === "pass";
+                      onWrittenDraftChange(question.id, {
+                        ...qWrittenDraft,
+                        submitted: true,
+                        evaluation: manual,
+                      });
+                    } else {
+                      onWrittenDraftChange(question.id, {
+                        ...qWrittenDraft,
+                        evaluation: { ...ev, manualVerdict: v, passed: v === "pass" },
+                      });
+                    }
+                  }}
+                  onChildPassFail={(childIdx, v) => {
+                    const childEvals = [...(qWrittenDraft.childEvaluations ?? [])];
+                    const ev = childEvals[childIdx];
+                    if (ev) {
+                      childEvals[childIdx] = { ...ev, manualVerdict: v, passed: v === "pass" };
+                      onWrittenDraftChange(question.id, { ...qWrittenDraft, childEvaluations: childEvals });
+                    }
+                  }}
+                />
+              ) : (
+                <ExplanationCard q={question} selected={qSelected} nonMcq={!qIsMCQ} highlights={qHighlights} packUid={activeItem.uid} questionIdx={qIdx} lang={activeItem.lang ?? "en"} />
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Non-MCQ explanation panel — exam mode (not tutor).
+            Shown inline in continuous mode for non-MCQ questions. */}
+        {interactive && qSubmitted && !qIsMCQ && session.mode !== "tutor" && !useSplitExplanation && (
+          <div className="mt-3 border-t border-border/40 bg-muted/20 py-3 sm:py-4 px-4 sm:px-6 lg:px-8 -mr-1 rounded-lg">
+            <div className={contentAlignClass}>
+              {session.engine === "written" ? (
+                <WrittenEvaluationPanel
+                  draft={qWrittenDraft}
+                  question={question}
+                  passed={qWrittenPassed}
+                  isManual={qWrittenDraft.evaluation?.score === null}
+                  onRubricToggle={(idx) => {
+                    const cur = qWrittenDraft.rubricChecked;
+                    const next = [...cur];
+                    while (next.length < (question.rubric?.length ?? 0)) next.push(false);
+                    next[idx] = !next[idx];
+                    onWrittenDraftChange(question.id, { ...qWrittenDraft, rubricChecked: next });
+                  }}
+                  onPassFail={(v) => {
+                    const ev = qWrittenDraft.evaluation;
+                    if (!ev) {
+                      const manual = createManualEvaluation(qWrittenDraft.text);
+                      manual.manualVerdict = v;
+                      manual.passed = v === "pass";
+                      onWrittenDraftChange(question.id, {
+                        ...qWrittenDraft,
+                        submitted: true,
+                        evaluation: manual,
+                      });
+                    } else {
+                      onWrittenDraftChange(question.id, {
+                        ...qWrittenDraft,
+                        evaluation: { ...ev, manualVerdict: v, passed: v === "pass" },
+                      });
+                    }
+                  }}
+                />
+              ) : (
+                <ExplanationCard q={question} selected={undefined} nonMcq highlights={qHighlights} packUid={activeItem.uid} questionIdx={qIdx} lang={activeItem.lang ?? "en"} />
+              )}
             </div>
           </div>
         )}
@@ -2754,7 +2865,7 @@ function QuizView({
             className={`flex-1 min-h-0 medos-qbank-split ${
               submitted && session.mode === "tutor" && useSplitExplanation
                 ? "flex flex-row"
-                : "overflow-y-auto medos-scroll"
+                : "flex flex-col"
             }`}
             dir={rtl ? "rtl" : "ltr"}
             lang={activeItem.lang ?? "en"}
@@ -2762,39 +2873,26 @@ function QuizView({
             {q ? (
               <>
                 {/* Question column.
-                    In 2-page (split) mode the column is w-[55%] and the explanation
-                    sits beside it. `border-e` (inline-end) is used so the divider
-                    flips correctly for RTL Arabic content (border on the left in RTL).
-                    Alignment is forced to "left" (fill width) in split mode — see
-                    contentAlignClass. In continuous mode the column is full-width
-                    and the contentAlignClass caps + positions the content block. */}
+                    In BOTH modes the column is a flex column that fills the
+                    available height. The gallery fills the column (`flex-1
+                    min-h-0`), and each page scrolls its own content
+                    internally — the hook's scroll-then-snap logic handles
+                    the transition from scrolling within a page to snapping
+                    to the next/prev page.
+
+                    In split mode the column is w-[55%] and the explanation
+                    sits in the right column (below). In continuous mode the
+                    column is full-width and the explanation is rendered
+                    INSIDE each page (in renderQuestionContent) so the user
+                    can drag from it to scroll/snap. */}
                 <div
                   className={`medos-qbank-qcol ${(activeItem.lang ?? "en") === "ar" ? "osler-content-ar" : ""} ${
                     submitted && session.mode === "tutor" && useSplitExplanation
-                      ? "w-[55%] border-e border-border flex flex-col min-h-0"
-                      : "flex-1 overflow-y-auto medos-scroll pb-20 sm:pb-6"
-                  } ${mobileTutorTab === "answer" ? "hidden md:block" : ""}`}
+                      ? "w-[55%] border-e border-border"
+                      : "flex-1"
+                  } flex flex-col min-h-0 ${mobileTutorTab === "answer" ? "hidden md:flex" : ""}`}
                 >
-                  <div className={`px-4 sm:px-6 ${submitted && session.mode === "tutor" && useSplitExplanation ? "py-4 flex-1 min-h-0 flex flex-col" : "lg:px-8 py-6"} ${contentAlignClass}`}>
-                    {/* Vertical Reels/TikTok-style snap gallery.
-                        Replaces the previous horizontal iOS-Photos-style
-                        SwipeGallery. Works in both single-page (continuous)
-                        and 2-page (split) modes — the gallery measures its
-                        own height to compute the snap step, so it adapts to
-                        the narrow 55% split column or the full-width
-                        continuous column equally well.
-                        Drag works from any part of the screen that isn't an
-                        interactive control or a scrollable region mid-scroll.
-                        Tap-to-select is preserved via the axis-lock +
-                        movedRef guard.
-                        In split mode the column is fixed-height (flex child
-                        of the body row), so the gallery fills it via
-                        `flex-1 min-h-0`. In continuous mode the column is a
-                        scrollable block; the gallery gets a viewport-based
-                        height (100dvh minus the header + progress bar + bottom
-                        action bar) so the snap step is consistent across
-                        questions of differing length. Each rendered page
-                        scrolls its own content if it overflows. */}
+                  <div className={`flex-1 min-h-0 flex flex-col px-4 sm:px-6 ${submitted && session.mode === "tutor" && useSplitExplanation ? "py-4" : "lg:px-8 py-6"} ${contentAlignClass}`}>
                     <VerticalSnapGallery
                       items={session.questions}
                       currentIndex={session.current}
@@ -2803,11 +2901,7 @@ function QuizView({
                       disabled={!canSwipeQuestion}
                       rtl={rtl}
                       threshold={90}
-                      className={
-                        submitted && session.mode === "tutor" && useSplitExplanation
-                          ? "flex-1 min-h-0 w-full"
-                          : "w-full h-[calc(100dvh-12rem)] sm:h-[calc(100dvh-9rem)]"
-                      }
+                      className="flex-1 min-h-0 w-full"
                       cardClassName="w-full h-full"
                       renderItem={(_item, idx, interactive) =>
                         renderQuestionContent(idx, interactive)
@@ -2816,7 +2910,9 @@ function QuizView({
                   </div>
                 </div>
 
-                {/* Right column: explanation / evaluation (split-screen in tutor mode) */}
+                {/* Right column: explanation / evaluation (split-screen in tutor mode only).
+                    In continuous mode the explanation is rendered inside each
+                    page by renderQuestionContent — not here. */}
                 {submitted && session.mode === "tutor" && useSplitExplanation && (
                   <div
                     className={`medos-qbank-acol w-[45%] overflow-y-auto medos-scroll bg-muted/20 ${mobileTutorTab === "question" ? "hidden md:block" : ""}`}
@@ -2864,110 +2960,6 @@ function QuizView({
                         />
                       ) : (
                         <ExplanationCard q={q} selected={selected} nonMcq={!isMCQ} highlights={currentHighlights} packUid={activeItem.uid} questionIdx={session.current} lang={activeItem.lang ?? "en"} />
-                      )}
-                    </div>
-                  </div>
-                )}
-
-                {/* Continuous-mode explanation — flows below the question in a single scroll.
-                    Alignment follows the user's questionAlign setting (same as the question
-                    block) so the explanation stays visually aligned with the question. */}
-                {submitted && session.mode === "tutor" && !useSplitExplanation && (
-                  <div className="border-t border-border bg-muted/20 px-4 sm:px-6 py-4 mt-6">
-                    <div className={contentAlignClass}>
-                      {session.engine === "written" ? (
-                        <WrittenEvaluationPanel
-                          draft={writtenDraft}
-                          question={q}
-                          passed={writtenPassed}
-                          isManual={writtenDraft.evaluation?.score === null}
-                          onRubricToggle={(idx) => {
-                            const cur = writtenDraft.rubricChecked;
-                            const next = [...cur];
-                            while (next.length < (q.rubric?.length ?? 0)) next.push(false);
-                            next[idx] = !next[idx];
-                            onWrittenDraftChange(q.id, { ...writtenDraft, rubricChecked: next });
-                          }}
-                          onPassFail={(v) => {
-                            const ev = writtenDraft.evaluation;
-                            if (!ev) {
-                              const manual = createManualEvaluation(writtenDraft.text);
-                              manual.manualVerdict = v;
-                              manual.passed = v === "pass";
-                              onWrittenDraftChange(q.id, {
-                                ...writtenDraft,
-                                submitted: true,
-                                evaluation: manual,
-                              });
-                            } else {
-                              onWrittenDraftChange(q.id, {
-                                ...writtenDraft,
-                                evaluation: { ...ev, manualVerdict: v, passed: v === "pass" },
-                              });
-                            }
-                          }}
-                          onChildPassFail={(childIdx, v) => {
-                            const childEvals = [...(writtenDraft.childEvaluations ?? [])];
-                            const ev = childEvals[childIdx];
-                            if (ev) {
-                              childEvals[childIdx] = { ...ev, manualVerdict: v, passed: v === "pass" };
-                              onWrittenDraftChange(q.id, { ...writtenDraft, childEvaluations: childEvals });
-                            }
-                          }}
-                        />
-                      ) : (
-                        <ExplanationCard q={q} selected={selected} nonMcq={!isMCQ} highlights={currentHighlights} packUid={activeItem.uid} questionIdx={session.current} lang={activeItem.lang ?? "en"} />
-                      )}
-                    </div>
-                  </div>
-                )}
-
-                {/* Non-MCQ explanation panel — bottom panel when not in tutor mode */}
-                {submitted && !isMCQ && session.mode !== "tutor" && (
-                  <div className="border-t border-border bg-muted/20 px-4 sm:px-6 py-4">
-                    <div className="max-w-3xl mx-auto">
-                      {session.engine === "written" ? (
-                        <WrittenEvaluationPanel
-                          draft={writtenDraft}
-                          question={q}
-                          passed={writtenPassed}
-                          isManual={writtenDraft.evaluation?.score === null}
-                          onRubricToggle={(idx) => {
-                            const cur = writtenDraft.rubricChecked;
-                            const next = [...cur];
-                            while (next.length < (q.rubric?.length ?? 0)) next.push(false);
-                            next[idx] = !next[idx];
-                            onWrittenDraftChange(q.id, { ...writtenDraft, rubricChecked: next });
-                          }}
-                          onPassFail={(v) => {
-                            const ev = writtenDraft.evaluation;
-                            if (!ev) {
-                              const manual = createManualEvaluation(writtenDraft.text);
-                              manual.manualVerdict = v;
-                              manual.passed = v === "pass";
-                              onWrittenDraftChange(q.id, {
-                                ...writtenDraft,
-                                submitted: true,
-                                evaluation: manual,
-                              });
-                            } else {
-                              onWrittenDraftChange(q.id, {
-                                ...writtenDraft,
-                                evaluation: { ...ev, manualVerdict: v, passed: v === "pass" },
-                              });
-                            }
-                          }}
-                          onChildPassFail={(childIdx, v) => {
-                            const childEvals = [...(writtenDraft.childEvaluations ?? [])];
-                            const ev = childEvals[childIdx];
-                            if (ev) {
-                              childEvals[childIdx] = { ...ev, manualVerdict: v, passed: v === "pass" };
-                              onWrittenDraftChange(q.id, { ...writtenDraft, childEvaluations: childEvals });
-                            }
-                          }}
-                        />
-                      ) : (
-                        <ExplanationCard q={q} selected={undefined} nonMcq highlights={currentHighlights} packUid={activeItem.uid} questionIdx={session.current} lang={activeItem.lang ?? "en"} />
                       )}
                     </div>
                   </div>

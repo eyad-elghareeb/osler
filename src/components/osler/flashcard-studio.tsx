@@ -527,28 +527,30 @@ export function FlashcardStudio({
         </div>
 
         {/* Card area — vertical Reels/TikTok-style snap gallery.
-            The VerticalSnapGallery handles the three-card layout, rubber-
-            band edges, tap-to-flip (via onTap, suppressed after a swipe),
-            and visibility-hidden preview cards at rest. Drag works from
-            any part of the screen that isn't an interactive control. */}
-        <div className="flex-1 flex items-center justify-center p-4 sm:p-8 bg-card">
-          <div className="w-full max-w-2xl aspect-[16/10]">
-            <VerticalSnapGallery
-              items={currentDeckCards}
-              currentIndex={cardIndex}
-              onNavigateNext={nextCard}
-              onNavigatePrev={prevCard}
-              onTap={flipCard}
-              disabled={!canSwipe}
-              rtl={rtl}
-              threshold={70}
-              className="w-full h-full"
-              cardClassName="w-full h-full"
-              renderItem={(card, idx, _interactive) =>
-                renderFlashcardFace(card, idx === cardIndex ? flipped : false)
-              }
-            />
-          </div>
+            The gallery fills the ENTIRE flex-1 area so the user can start
+            a drag from anywhere — including the empty space above/below
+            the card. Each page centers its card visually; the surrounding
+            empty space is part of the snap interaction zone. */}
+        <div className="flex-1 min-h-0 bg-card">
+          <VerticalSnapGallery
+            items={currentDeckCards}
+            currentIndex={cardIndex}
+            onNavigateNext={nextCard}
+            onNavigatePrev={prevCard}
+            onTap={flipCard}
+            disabled={!canSwipe}
+            rtl={rtl}
+            threshold={70}
+            className="w-full h-full"
+            cardClassName="w-full h-full"
+            renderItem={(card, idx, _interactive) => (
+              <div className="w-full h-full flex items-center justify-center p-4 sm:p-8">
+                <div className="w-full max-w-2xl aspect-[16/10]">
+                  {renderFlashcardFace(card, idx === cardIndex ? flipped : false)}
+                </div>
+              </div>
+            )}
+          />
         </div>
 
         {/* Rating buttons */}

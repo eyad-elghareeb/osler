@@ -21,9 +21,16 @@
  *    <select>, [contenteditable], [data-no-swipe], [role="button"], or any
  *    element with an `onClick` that the consumer has flagged as primary
  *    (via [data-swipe-interactive]). If any ancestor matches, the gesture
- *    is suppressed so the underlying click target keeps working. The
- *    threshold check (axis lock + min distance) ensures a horizontal drag
- *    on a choice button doesn't accidentally trigger a page snap.
+ *    is suppressed so the underlying click target keeps working.
+ *
+ *  • **Scroll-then-snap (dual-mode).** Because `touch-action: none`
+ *    prevents the browser from scrolling at all, the hook owns ALL
+ *    pointer movement. When the user drags inside a scrollable
+ *    child (e.g. a long question stem), the hook manually scrolls that
+ *    child via `scrollTop -= delta`. When the child reaches its edge
+ *    mid-drag, the hook seamlessly transitions to snap mode — driving
+ *    `swipeY` to animate the page transition. This gives a continuous,
+ *    fluid gesture: scroll → hit edge → snap to next page, all in one drag.
  *
  *  • **Axis-lock.** A swipe only commits when the dominant axis is Y. A
  *    horizontal drag inside a scrollable choice row, or a diagonal tap-
@@ -145,15 +152,7 @@ const INTERACTIVE_TAGS = new Set([
 
 /**
  * Walk the DOM from `target` up to (but not including) `root`, returning
- * true if any ancestor is an "interactive" element. Interactive means:
- *   - A known interactive tag (BUTTON, A, INPUT, …).
- *   - `contenteditable` is true.
- *   - Has `role="button"` / `"link"` / `"checkbox"` / `"radio"` / `"tab"`.
- *   - Has the `data-swipe-interactive` attribute (consumer opt-in).
- *
- * The `data-no-swipe` attribute is the inverse: if found anywhere in the
- * chain, the swipe is suppressed (the consumer is explicitly opting this
- * region out of swipe handling, e.g. a custom scrollable child).
+ * true if any ancestor is an "interactive" element.
  */
 function isInteractiveTarget(target: EventTarget | null, root: HTMLElement): boolean {
   let node = target as HTMLElement | null;
@@ -169,14 +168,9 @@ function isInteractiveTarget(target: EventTarget | null, root: HTMLElement): boo
     if (el.hasAttribute("data-swipe-interactive")) return true;
     const role = el.getAttribute("role");
     if (
-      role === "button" ||
-      role === "link" ||
-      role === "checkbox" ||
-      role === "radio" ||
-      role === "tab" ||
-      role === "menuitem" ||
-      role === "option" ||
-      role === "combobox"
+      role === "button" || role === "link" || role === "checkbox" ||
+      role === "radio" || role === "tab" || role === "menuitem" ||
+      role === "option" || role === "combobox"
     ) {
       return true;
     }
@@ -186,44 +180,45 @@ function isInteractiveTarget(target: EventTarget | null, root: HTMLElement): boo
 }
 
 /**
- * Scroll-snap policy for the gesture. Decides whether a vertical drag that
- * starts on `target` should:
- *   - "snap": be captured by the gallery (the user is in a non-scrollable
- *     region, or at the edge of a scrollable region).
- *   - "scroll": be left to the browser (the user is inside a scrollable
- *     element that still has room to scroll in the gesture direction).
+ * Find the nearest scrollable ancestor of `target` that actually has
+ * overflow content (scrollHeight > clientHeight). Stops at `root`.
  *
- * We walk up to the nearest scrollable ancestor of `target`. If we find
- * one and it's NOT at the edge in the gesture direction, we let the
- * browser handle the scroll. Otherwise (no scrollable ancestor, or at
- * the edge), the gallery takes over.
- *
- * `dir` is the sign of the vertical drag: +1 = dragging down (prev),
- * -1 = dragging up (next).
+ * Because the gallery container uses `touch-action: none`, the browser
+ * won't scroll at all — so the hook must manually scroll the element
+ * returned by this function when the user drags inside it.
  */
-function shouldSnapInsteadOfScroll(
+function findScrollableAncestor(
   target: EventTarget | null,
   root: HTMLElement,
-  dir: 1 | -1 | 0,
-): boolean {
-  let node = (target as HTMLElement | null)?.parentElement ?? null;
+): HTMLElement | null {
+  let node = target as HTMLElement | null;
   while (node && node !== root) {
-    const style = getComputedStyle(node);
-    const overflowY = style.overflowY;
-    if (overflowY === "auto" || overflowY === "scroll" || overflowY === "overlay") {
-      const atTop = node.scrollTop <= 0;
-      const atBottom = node.scrollTop + node.clientHeight >= node.scrollHeight - 1;
-      // Dragging down (dir=+1) → wants "prev" → only snap if at top.
-      // Dragging up (dir=-1) → wants "next" → only snap if at bottom.
-      if (dir === 1 && !atTop) return false;
-      if (dir === -1 && !atBottom) return false;
-      // dir === 0 (not yet determined): snap only if at both edges
-      // (effectively a non-scrollable element), otherwise let scroll happen.
-      if (dir === 0 && !(atTop && atBottom)) return false;
+    if (node.nodeType !== Node.ELEMENT_NODE) {
+      node = node.parentElement;
+      continue;
     }
-    node = node.parentElement;
+    const el = node as HTMLElement;
+    const style = getComputedStyle(el);
+    const overflowY = style.overflowY;
+    if (
+      (overflowY === "auto" || overflowY === "scroll" || overflowY === "overlay") &&
+      el.scrollHeight > el.clientHeight + 1
+    ) {
+      return el;
+    }
+    node = el.parentElement;
   }
-  return true;
+  return null;
+}
+
+/**
+ * Check whether a scrollable element is at its edge in the given direction.
+ * `dir = 1` = scrolling up (toward scrollTop = 0).
+ * `dir = -1` = scrolling down (toward scrollTop = scrollHeight).
+ */
+function isScrollAtEdge(el: HTMLElement, dir: 1 | -1): boolean {
+  if (dir === 1) return el.scrollTop <= 0;
+  return el.scrollTop + el.clientHeight >= el.scrollHeight - 1;
 }
 
 /* ────────────────── The hook (gesture + state) ────────────────── */
@@ -241,96 +236,73 @@ interface UseVerticalSnapOptions {
 }
 
 interface UseVerticalSnapState {
-  /** Attach to the outer container — this is where pointer events are captured. */
   containerRef: React.RefObject<HTMLDivElement | null>;
-  /** Attach to the inner "stage" — this is the element whose height defines the snap step. */
   stageRef: React.RefObject<HTMLDivElement | null>;
-  /** Motion value driving the current page's Y offset. */
   swipeY: MotionValue<number>;
-  /** Y offset for the prev page (one step above). */
   prevCardY: MotionValue<number>;
-  /** Y offset for the next page (one step below). */
   nextCardY: MotionValue<number>;
-  /** Visibility for prev page — hidden at rest, visible during swipe. */
   prevVisible: MotionValue<"visible" | "hidden">;
-  /** Visibility for next page — hidden at rest, visible during swipe. */
   nextVisible: MotionValue<"visible" | "hidden">;
-  /** True if the current gesture moved >8px (was a swipe, not a tap). */
   movedRef: React.MutableRefObject<boolean>;
-  /** Measured stage height in px. */
   stageHeight: number;
 }
 
 function useVerticalSnap(options: UseVerticalSnapOptions): UseVerticalSnapState {
   const {
-    currentIndex,
-    itemCount,
-    onNavigateNext,
-    onNavigatePrev,
-    disabled = false,
-    threshold = 80,
-    velocityThreshold = 0.5,
-    maxDuration = 800,
-    maxDriftRatio = 0.6,
+    currentIndex, itemCount, onNavigateNext, onNavigatePrev,
+    disabled = false, threshold = 80, velocityThreshold = 0.5,
+    maxDuration = 800, maxDriftRatio = 0.6,
   } = options;
 
   const swipeY = useMotionValue(0);
   const [stageHeight, setStageHeight] = React.useState(0);
   const movedRef = React.useRef(false);
-
   const containerRef = React.useRef<HTMLDivElement | null>(null);
   const stageRef = React.useRef<HTMLDivElement | null>(null);
 
-  // Keep latest values in a ref so pointer callbacks don't go stale.
   const stateRef = React.useRef({
-    currentIndex,
-    itemCount,
-    onNavigateNext,
-    onNavigatePrev,
-    threshold,
-    velocityThreshold,
-    maxDuration,
-    maxDriftRatio,
-    stageHeight,
+    currentIndex, itemCount, onNavigateNext, onNavigatePrev,
+    threshold, velocityThreshold, maxDuration, maxDriftRatio, stageHeight,
   });
   stateRef.current = {
-    currentIndex,
-    itemCount,
-    onNavigateNext,
-    onNavigatePrev,
-    threshold,
-    velocityThreshold,
-    maxDuration,
-    maxDriftRatio,
-    stageHeight,
+    currentIndex, itemCount, onNavigateNext, onNavigatePrev,
+    threshold, velocityThreshold, maxDuration, maxDriftRatio, stageHeight,
   };
 
   // ── Pointer-driven gesture handling ────────────────────────────
-  // We attach pointer listeners on the outer container, NOT on the cards.
-  // This is what enables "drag from anywhere": the user can press anywhere
-  // inside the container (gutter, padding, even over text) and start a swipe.
-  // The hit-test on pointerdown decides whether to start tracking.
+  // Dual-mode: scroll mode (manually scroll a child) → snap mode (drive swipeY).
+  // The transition happens mid-gesture when the child hits its edge.
   React.useEffect(() => {
     const container = containerRef.current;
-    if (!container) return;
-    if (disabled) return;
+    if (!container || disabled) return;
 
-    let startX = 0;
-    let startY = 0;
-    let startT = 0;
+    let startX = 0, startY = 0, startT = 0;
     let tracking = false;
     let axisLocked: "x" | "y" | null = null;
     let startPointerId = -1;
-    // Track recent pointer positions for instantaneous-velocity calc on release.
-    let lastY = 0;
-    let lastT = 0;
+    let lastY = 0, lastT = 0;
+
+    // Scroll-mode state
+    let scrollMode = false;
+    let scrollTarget: HTMLElement | null = null;
+    // Y position at the moment we transitioned from scroll → snap mode.
+    // swipeY is measured from this point so the snap animation starts
+    // smoothly from where scrolling left off.
+    let snapStartY = 0;
 
     const onDown = (e: PointerEvent) => {
       if (e.pointerType === "mouse" && e.button !== 0) return;
-      // Don't hijack inputs / contenteditable / buttons.
       if (isInteractiveTarget(e.target, container)) return;
       tracking = true;
       axisLocked = null;
+      scrollMode = false;
+      scrollTarget = null;
+      // CRITICAL: snapStartY must start at startY (= e.clientY) so that
+      // snapDy = e.clientY - snapStartY measures the DELTA from gesture
+      // start, not the absolute screen Y coordinate. If this is 0,
+      // snapDy becomes the absolute Y (always hundreds of px, always
+      // positive) → every nudge triggers a "previous" snap.
+      snapStartY = e.clientY;
       startX = e.clientX;
       startY = e.clientY;
       lastY = e.clientY;
@@ -345,15 +317,18 @@ function useVerticalSnap(options: UseVerticalSnapOptions): UseVerticalSnapState 
       const dx = e.clientX - startX;
       const dy = e.clientY - startY;
 
-      // Axis lock — decide whether this is a vertical or horizontal gesture
-      // once the movement exceeds 8px. Horizontal gestures are abandoned
-      // (treated as a tap-or-scroll, not a swipe).
+      // Axis lock
       if (axisLocked === null) {
         const absX = Math.abs(dx);
         const absY = Math.abs(dy);
         if (absX > 8 || absY > 8) {
           if (absY >= absX * (1 / maxDriftRatio)) {
             axisLocked = "y";
+            // Reset lastY at the moment of axis lock so the first delta
+            // in scroll/snap mode is small (just the incremental move),
+            // not the full distance from pointerdown.
+            lastY = e.clientY;
+            lastT = Date.now();
           } else {
             axisLocked = "x";
             tracking = false;
@@ -363,35 +338,59 @@ function useVerticalSnap(options: UseVerticalSnapOptions): UseVerticalSnapState 
           }
         }
       }
-
-      if (axisLocked !== "y") return;
-
-      // First time we cross the 8px threshold on the Y axis: check whether
-      // the gesture should be captured by the gallery or handed off to the
-      // nearest scrollable ancestor. If a scrollable ancestor has room to
-      // scroll in this direction, abandon tracking and let native scroll
-      // happen — the user is reading long content, not navigating.
-      if (!movedRef.current && Math.abs(dy) > 8) {
-        const dir: 1 | -1 = dy > 0 ? 1 : -1;
-        if (!shouldSnapInsteadOfScroll(e.target, container, dir)) {
-          tracking = false;
-          movedRef.current = false;
-          // Don't reset swipeY — it should still be at 0 (we never moved it).
-          return;
-        }
-        movedRef.current = true;
+      if (axisLocked !== "y") {
+        // Keep lastY fresh even during axis-unlock phase so there's no
+        // stale jump when we finally lock.
+        lastY = e.clientY;
+        lastT = Date.now();
+        return;
       }
 
-      const { currentIndex: ci, itemCount: ic } = stateRef.current;
-      // Rubber-band resistance at the edges.
-      let clamped = dy;
-      if (ci === 0 && clamped > 0) clamped *= 0.3;
-      if (ci === ic - 1 && clamped < 0) clamped *= 0.3;
-      swipeY.set(clamped);
+      // First time crossing 8px: decide scroll vs snap
+      if (!movedRef.current && Math.abs(dy) > 8) {
+        movedRef.current = true;
+        const scrollable = findScrollableAncestor(e.target, container);
+        if (scrollable) {
+          const dir: 1 | -1 = dy > 0 ? 1 : -1;
+          if (!isScrollAtEdge(scrollable, dir)) {
+            scrollMode = true;
+            scrollTarget = scrollable;
+          }
+        }
+      }
+      if (!movedRef.current) return;
 
-      // Update velocity tracker (recent samples only).
+      const delta = e.clientY - lastY;
       lastY = e.clientY;
       lastT = Date.now();
+      const { currentIndex: ci, itemCount: ic } = stateRef.current;
+
+      if (scrollMode && scrollTarget) {
+        // ── Scroll mode: manually scroll the child ──────────────
+        const before = scrollTarget.scrollTop;
+        scrollTarget.scrollTop -= delta;
+        const consumed = before - scrollTarget.scrollTop;
+        const remainder = delta - consumed;
+
+        if (Math.abs(remainder) > 0.5) {
+          // Hit edge — transition to snap mode.
+          scrollMode = false;
+          // Set snapStartY so that snapDy starts at `remainder` (the
+          // unconsumed pixels). This makes the transition continuous:
+          // swipeY goes from 0 → remainder → remainder + next_delta.
+          snapStartY = e.clientY - remainder;
+        }
+        // swipeY stays at 0 during scroll mode — the page doesn't move.
+      } else {
+        // ── Snap mode: drive swipeY ─────────────────────────────
+        // snapStartY is either startY (pure snap mode from the start)
+        // or (transitionY - remainder) (came from scroll mode).
+        const snapDy = e.clientY - snapStartY;
+        let clamped = snapDy;
+        if (ci === 0 && clamped > 0) clamped *= 0.3;
+        if (ci === ic - 1 && clamped < 0) clamped *= 0.3;
+        swipeY.set(clamped);
+      }
     };
 
     const finishGesture = (endY: number, endT: number) => {
@@ -402,16 +401,48 @@ function useVerticalSnap(options: UseVerticalSnapOptions): UseVerticalSnapState 
       const o = stateRef.current;
       const { currentIndex: ci, itemCount: ic } = o;
 
-      // Instantaneous velocity from the most recent sample (px/ms).
-      // Falls back to overall average if no recent movement.
       const recentDt = Math.max(1, endT - lastT);
       const recentDy = endY - lastY;
       const velocity = Math.abs(recentDy) > 4 && recentDt < 150
         ? recentDy / recentDt
         : dt > 0 ? dy / dt : 0;
 
-      const passedThreshold = Math.abs(dy) >= o.threshold;
-      const passedVelocity = Math.abs(velocity) >= o.velocityThreshold && Math.abs(dy) > 24;
+      // ── Ended in scroll mode ───────────────────────────────────
+      if (scrollMode && scrollTarget) {
+        scrollMode = false;
+        const target = scrollTarget;
+        scrollTarget = null;
+        const dir: 1 | -1 = dy > 0 ? 1 : -1;
+        const atEdge = isScrollAtEdge(target, dir);
+        const passedVel = Math.abs(velocity) >= o.velocityThreshold && Math.abs(dy) > 24;
+
+        if (atEdge && passedVel) {
+          if (dir === 1 && ci > 0) {
+            haptic("selection");
+            const h = o.stageHeight || window.innerHeight;
+            animate(swipeY, h, { type: "spring", stiffness: 380, damping: 34, mass: 0.8 })
+              .then(() => { o.onNavigatePrev(); swipeY.set(0); movedRef.current = false; });
+          } else if (dir === -1 && ci < ic - 1) {
+            haptic("selection");
+            const h = o.stageHeight || window.innerHeight;
+            animate(swipeY, -h, { type: "spring", stiffness: 380, damping: 34, mass: 0.8 })
+              .then(() => { o.onNavigateNext(); swipeY.set(0); movedRef.current = false; });
+          } else {
+            movedRef.current = false;
+          }
+        } else {
+          movedRef.current = false;
+          if (swipeY.get() !== 0) {
+            animate(swipeY, 0, { type: "spring", stiffness: 500, damping: 40, mass: 0.8 });
+          }
+        }
+        return;
+      }
+
+      // ── Ended in snap mode ─────────────────────────────────────
+      const snapDy = endY - snapStartY;
+      const passedThreshold = Math.abs(snapDy) >= o.threshold;
+      const passedVel = Math.abs(velocity) >= o.velocityThreshold && Math.abs(snapDy) > 24;
 
       if (dt > o.maxDuration) {
         movedRef.current = false;
@@ -419,28 +450,19 @@ function useVerticalSnap(options: UseVerticalSnapOptions): UseVerticalSnapState 
         return;
       }
 
-      // Vertical: swipe up (negative dy) → next; swipe down (positive dy) → prev.
-      const wantsNext = dy < 0 && (passedThreshold || passedVelocity);
-      const wantsPrev = dy > 0 && (passedThreshold || passedVelocity);
+      const wantsNext = snapDy < 0 && (passedThreshold || passedVel);
+      const wantsPrev = snapDy > 0 && (passedThreshold || passedVel);
 
       if (wantsNext && ci < ic - 1) {
         haptic("selection");
-        const h = o.stageHeight || (typeof window !== "undefined" ? window.innerHeight : 600);
+        const h = o.stageHeight || window.innerHeight;
         animate(swipeY, -h, { type: "spring", stiffness: 380, damping: 34, mass: 0.8 })
-          .then(() => {
-            o.onNavigateNext();
-            swipeY.set(0);
-            movedRef.current = false;
-          });
+          .then(() => { o.onNavigateNext(); swipeY.set(0); movedRef.current = false; });
       } else if (wantsPrev && ci > 0) {
         haptic("selection");
-        const h = o.stageHeight || (typeof window !== "undefined" ? window.innerHeight : 600);
+        const h = o.stageHeight || window.innerHeight;
         animate(swipeY, h, { type: "spring", stiffness: 380, damping: 34, mass: 0.8 })
-          .then(() => {
-            o.onNavigatePrev();
-            swipeY.set(0);
-            movedRef.current = false;
-          });
+          .then(() => { o.onNavigatePrev(); swipeY.set(0); movedRef.current = false; });
       } else {
         movedRef.current = false;
         animate(swipeY, 0, { type: "spring", stiffness: 500, damping: 40, mass: 0.8 });
@@ -455,6 +477,8 @@ function useVerticalSnap(options: UseVerticalSnapOptions): UseVerticalSnapState 
     const onCancel = () => {
       if (!tracking) return;
       tracking = false;
+      scrollMode = false;
+      scrollTarget = null;
       movedRef.current = false;
       animate(swipeY, 0, { type: "spring", stiffness: 500, damping: 40, mass: 0.8 });
     };
@@ -472,41 +496,23 @@ function useVerticalSnap(options: UseVerticalSnapOptions): UseVerticalSnapState 
     };
   }, [disabled, swipeY, maxDriftRatio]);
 
-  // ── Wheel support (desktop): vertical wheel = snap ─────────────
-  // Trackpad pinch / horizontal wheel is ignored. Only continuous
-  // vertical wheel deltas trigger navigation, with a cooldown to prevent
-  // one gesture from skipping multiple pages.
+  // ── Wheel support (desktop) ────────────────────────────────────
+  // Walks ancestors up to <body>. If ANY scrollable ancestor can still
+  // scroll in the wheel direction, lets native scroll happen. Only snaps
+  // when nothing else can scroll.
   React.useEffect(() => {
     const container = containerRef.current;
-    if (!container) return;
-    if (disabled) return;
+    if (!container || disabled) return;
 
     let cooldown = false;
     let acc = 0;
     let resetTimer: ReturnType<typeof setTimeout> | null = null;
 
     const onWheel = (e: WheelEvent) => {
-      // Honor elements that explicitly don't want wheel-swipe.
-      if (isInteractiveTarget(e.target, container)) {
-        // Still allow normal scroll inside scrollable children —
-        // we just don't hijack the wheel for snapping.
-        return;
-      }
-      // Only vertical wheel.
+      if (isInteractiveTarget(e.target, container)) return;
       if (Math.abs(e.deltaY) < 12) return;
       if (Math.abs(e.deltaX) > Math.abs(e.deltaY)) return;
 
-      // Walk from the wheel target all the way up to <body>. If ANY
-      // scrollable ancestor (inside OR outside the gallery container)
-      // can still scroll in the wheel direction, let the native scroll
-      // happen — we only snap when nothing else can scroll.
-      //
-      // This is what makes continuous-mode-after-submit work: the
-      // question column (parent of the gallery) has overflow-y-auto and
-      // contains an explanation card below the gallery. When the user
-      // wheels down inside the gallery, the parent can scroll to reveal
-      // the explanation — so we let it. Only once the parent is at its
-      // bottom (no more content to reveal) do we snap to the next page.
       const target = e.target as HTMLElement | null;
       let n: HTMLElement | null = target;
       while (n && n !== document.body) {
@@ -515,10 +521,8 @@ function useVerticalSnap(options: UseVerticalSnapOptions): UseVerticalSnapState 
         if (overflowY === "auto" || overflowY === "scroll" || overflowY === "overlay") {
           const atTop = n.scrollTop <= 0;
           const atBottom = n.scrollTop + n.clientHeight >= n.scrollHeight - 1;
-          // deltaY < 0 = wheel up = wants to scroll up = wants prev snap
-          // deltaY > 0 = wheel down = wants to scroll down = wants next snap
-          if (e.deltaY < 0 && !atTop) return; // ancestor can scroll up
-          if (e.deltaY > 0 && !atBottom) return; // ancestor can scroll down
+          if (e.deltaY < 0 && !atTop) return;
+          if (e.deltaY > 0 && !atBottom) return;
         }
         n = n.parentElement;
       }
@@ -560,75 +564,37 @@ function useVerticalSnap(options: UseVerticalSnapOptions): UseVerticalSnapState 
     return () => ro.disconnect();
   }, [stageRef]);
 
-  // Step = stage height. Prev page sits one step up (-step), next page
-  // one step down (+step). All three move together with swipeY.
   const step = stageHeight;
   const prevCardY = useTransform(swipeY, (v) => v - step);
   const nextCardY = useTransform(swipeY, (v) => v + step);
-
-  const prevVisible = useTransform(swipeY, (v) =>
-    Math.abs(v) > 3 ? "visible" : "hidden"
-  );
-  const nextVisible = useTransform(swipeY, (v) =>
-    Math.abs(v) > 3 ? "visible" : "hidden"
-  );
+  const prevVisible = useTransform(swipeY, (v) => Math.abs(v) > 3 ? "visible" : "hidden");
+  const nextVisible = useTransform(swipeY, (v) => Math.abs(v) > 3 ? "visible" : "hidden");
 
   return {
-    containerRef,
-    stageRef,
-    swipeY,
-    prevCardY,
-    nextCardY,
-    prevVisible,
-    nextVisible,
-    movedRef,
-    stageHeight,
+    containerRef, stageRef, swipeY, prevCardY, nextCardY,
+    prevVisible, nextVisible, movedRef, stageHeight,
   };
 }
 
 /* ────────────────────── The component ────────────────────────── */
 
 export function VerticalSnapGallery<T>({
-  items,
-  currentIndex,
-  onNavigateNext,
-  onNavigatePrev,
-  renderItem,
-  onTap,
-  disabled = false,
-  rtl = false,
-  className,
-  cardClassName,
-  threshold = 80,
-  velocityThreshold = 0.5,
-  maxDuration = 800,
-  maxDriftRatio = 0.6,
+  items, currentIndex, onNavigateNext, onNavigatePrev, renderItem, onTap,
+  disabled = false, rtl = false, className, cardClassName,
+  threshold = 80, velocityThreshold = 0.5, maxDuration = 800, maxDriftRatio = 0.6,
 }: VerticalSnapGalleryProps<T>) {
   const {
-    containerRef,
-    stageRef,
-    swipeY,
-    prevCardY,
-    nextCardY,
-    prevVisible,
-    nextVisible,
-    movedRef,
+    containerRef, stageRef, swipeY, prevCardY, nextCardY,
+    prevVisible, nextVisible, movedRef,
   } = useVerticalSnap({
-    currentIndex,
-    itemCount: items.length,
-    onNavigateNext,
-    onNavigatePrev,
-    disabled,
-    threshold,
-    velocityThreshold,
-    maxDuration,
-    maxDriftRatio,
+    currentIndex, itemCount: items.length,
+    onNavigateNext, onNavigatePrev, disabled,
+    threshold, velocityThreshold, maxDuration, maxDriftRatio,
   });
 
   const hasPrev = currentIndex > 0;
   const hasNext = currentIndex < items.length - 1;
 
-  // Reset movedRef on pointer down so each gesture starts clean.
   const handlePointerDown = React.useCallback(() => {
     movedRef.current = false;
   }, [movedRef]);
@@ -639,32 +605,24 @@ export function VerticalSnapGallery<T>({
       onPointerDown={handlePointerDown}
       className={cn(
         "relative overflow-y-clip overflow-x-visible",
-        // Block native vertical scroll ONLY when not disabled —
-        // we're handling snapping ourselves. When disabled, allow
-        // normal scroll (e.g. desktop non-touch users).
         disabled ? "" : "overscroll-none",
         className,
       )}
       style={{
-        // When enabled, we own the Y axis. touch-action: pan-x lets
-        // horizontal drags (e.g. scrolling a horizontal list inside
-        // a card) still work; the browser won't try to scroll the
-        // page vertically.
-        touchAction: disabled ? "auto" : "pan-x",
+        // `touch-action: none` gives us FULL control over all touch gestures.
+        // With `pan-x`, the browser could sometimes fight our manual
+        // scrollTop manipulation on scrollable children (causing flicker).
+        // `none` ensures the browser never tries to scroll — our hook owns
+        // everything: manual scroll in scroll mode, swipeY in snap mode.
+        touchAction: disabled ? "auto" : "none",
       }}
       data-vertical-snap={disabled ? "off" : "on"}
       aria-roledescription={disabled ? undefined : "carousel"}
     >
-      {/* The stage — defines the snap step (one screen height). */}
       <div ref={stageRef} className="relative w-full h-full">
-        {/* Previous page (off-screen above, hidden at rest) */}
         {hasPrev && (
           <motion.div
-            style={{
-              y: prevCardY,
-              visibility: prevVisible,
-              pointerEvents: "none" as const,
-            }}
+            style={{ y: prevCardY, visibility: prevVisible, pointerEvents: "none" as const }}
             className={cn("absolute inset-0", cardClassName)}
             aria-hidden
           >
@@ -672,11 +630,10 @@ export function VerticalSnapGallery<T>({
           </motion.div>
         )}
 
-        {/* Current page (centered, interactive) */}
         <motion.div
           style={{ y: swipeY }}
           onClick={() => {
-            if (movedRef.current) return; // was a swipe, not a tap
+            if (movedRef.current) return;
             onTap?.();
           }}
           className={cn("relative w-full h-full", cardClassName)}
@@ -684,14 +641,9 @@ export function VerticalSnapGallery<T>({
           {renderItem(items[currentIndex], currentIndex, true)}
         </motion.div>
 
-        {/* Next page (off-screen below, hidden at rest) */}
         {hasNext && (
           <motion.div
-            style={{
-              y: nextCardY,
-              visibility: nextVisible,
-              pointerEvents: "none" as const,
-            }}
+            style={{ y: nextCardY, visibility: nextVisible, pointerEvents: "none" as const }}
             className={cn("absolute inset-0", cardClassName)}
             aria-hidden
           >
