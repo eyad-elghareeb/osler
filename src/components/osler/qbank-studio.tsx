@@ -2972,22 +2972,26 @@ function QuizView({
                         : "flex-1"
                     } flex flex-col min-h-0`}
                   >
-                    <div className={`flex-1 min-h-0 flex flex-col px-4 sm:px-6 ${submitted && session.mode === "tutor" && useSplitExplanation ? "py-4" : "lg:px-8 py-6"} ${contentAlignClass}`}>
-                      <VerticalSnapGallery
-                        items={session.questions}
-                        currentIndex={session.current}
-                        onNavigateNext={goNext}
-                        onNavigatePrev={goPrev}
-                        disabled={!canSwipeQuestion}
-                        rtl={rtl}
-                        threshold={90}
-                        className="flex-1 min-h-0 w-full"
-                        cardClassName="w-full h-full"
-                        renderItem={(_item, idx, interactive) =>
-                          renderQuestionContent(idx, interactive)
-                        }
-                      />
-                    </div>
+                    {mobileTabsActive && mobileTutorTab === "answer" ? (
+                      <div className="flex-1 min-h-0" />
+                    ) : (
+                      <div className={`flex-1 min-h-0 flex flex-col px-4 sm:px-6 ${submitted && session.mode === "tutor" && useSplitExplanation ? "py-4" : "lg:px-8 py-6"} ${contentAlignClass}`}>
+                        <VerticalSnapGallery
+                          items={session.questions}
+                          currentIndex={session.current}
+                          onNavigateNext={goNext}
+                          onNavigatePrev={goPrev}
+                          disabled={!canSwipeQuestion}
+                          rtl={rtl}
+                          threshold={90}
+                          className="flex-1 min-h-0 w-full"
+                          cardClassName="w-full h-full"
+                          renderItem={(_item, idx, interactive) =>
+                            renderQuestionContent(idx, interactive)
+                          }
+                        />
+                      </div>
+                    )}
                   </div>
 
                   {/* Right column: explanation / evaluation (split-screen in tutor mode only).
@@ -3004,7 +3008,9 @@ function QuizView({
                         mobileTabsActive ? "w-full flex-none" : "w-[45%]"
                       } flex flex-col min-h-0 bg-muted/20`}
                     >
-                      {mobileTabsActive ? (
+                      {mobileTabsActive && mobileTutorTab === "question" ? (
+                        <div className="flex-1 min-h-0" />
+                      ) : mobileTabsActive ? (
                         <div className="flex-1 min-h-0 flex flex-col px-4 sm:px-6 py-4">
                           <VerticalSnapGallery
                             items={session.questions}

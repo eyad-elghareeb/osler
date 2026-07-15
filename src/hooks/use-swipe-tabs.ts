@@ -108,17 +108,16 @@ export function useSwipeTabs<TabId extends string>(
   const cbRef = React.useRef({ onSwipeProgress, onSwipeEnd });
   cbRef.current = { onSwipeProgress, onSwipeEnd };
 
-  const goByOffset = React.useCallback((offset: 1 | -1) => {
+  const goByOffset = React.useCallback((offset: 1 | -1): boolean => {
     const { tabs: t, activeTab: cur, onTabChange: change } = stateRef.current;
     const idx = t.indexOf(cur);
-    if (idx === -1) return;
+    if (idx === -1) return false;
     const nextIdx = idx + offset;
-    // Past the first/last tab — nothing to swipe to. No-op (no rubber-band
-    // animation here; the gesture simply doesn't do anything, same as
-    // swiping past the edge of the question list with nowhere to go).
-    if (nextIdx < 0 || nextIdx >= t.length) return;
+    // Past the first/last tab — nothing to swipe to.
+    if (nextIdx < 0 || nextIdx >= t.length) return false;
     haptic("selection");
     change(t[nextIdx]);
+    return true;
   }, []);
 
   const tabSwipeRef = useSwipe<HTMLDivElement>({
@@ -127,12 +126,13 @@ export function useSwipeTabs<TabId extends string>(
     disabled,
     onSwipeProgress: (dx, dy) => cbRef.current.onSwipeProgress?.(dx, dy),
     onSwipeLeft: () => {
-      // LTR: swipe left → advance to the next tab (question → answer).
-      // RTL: swipe left → go back a tab (mirrors reading direction).
-      goByOffset(stateRef.current.rtl ? -1 : 1);
+      const moved = goByOffset(stateRef.current.rtl ? -1 : 1);
+      // At the edge: gesture committed but no tab to go to — spring back.
+      if (!moved) cbRef.current.onSwipeEnd?.();
     },
     onSwipeRight: () => {
-      goByOffset(stateRef.current.rtl ? 1 : -1);
+      const moved = goByOffset(stateRef.current.rtl ? 1 : -1);
+      if (!moved) cbRef.current.onSwipeEnd?.();
     },
     onSwipeCancel: () => cbRef.current.onSwipeEnd?.(),
   });
