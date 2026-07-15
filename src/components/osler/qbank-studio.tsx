@@ -2062,7 +2062,7 @@ function QuizView({
     const qWrittenPassed = qWrittenVerdict === "pass" || (qWrittenVerdict === null && qWrittenDraft.evaluation?.passed === true);
 
     return (
-      <div className="h-full overflow-y-auto medos-scroll pr-1 -mr-1 pb-6">
+      <div className="h-full overflow-y-auto medos-scroll pr-1 -mr-1 pb-6" style={{ touchAction: "none" }}>
         {/* Question header */}
         <div className="flex flex-wrap items-center justify-between gap-2 pb-3 mb-4 border-b border-border/40">
           <div className="flex items-center gap-2 text-xs text-muted-foreground">
@@ -2146,11 +2146,15 @@ function QuizView({
                   onContextMenu={(e) => {
                     if (!interactive) return;
                     e.preventDefault();
+                    if (longPressFired.current) {
+                      longPressFired.current = false;
+                      return;
+                    }
                     onToggleStrikethrough(idx);
                   }}
-                  onTouchStart={() => interactive && startLongPress(idx)}
+                  onTouchStart={(e) => interactive && startLongPress(idx, e)}
                   onTouchEnd={cancelLongPress}
-                  onTouchMove={cancelLongPress}
+                  onTouchMove={onChoiceTouchMove}
                   className={`w-full text-start p-3 sm:p-3.5 rounded-xl border-2 transition-all flex items-start gap-3 ${stateClass} ${
                     qSubmitted ? "cursor-default" : "cursor-pointer"
                   } ${hasStrikethrough ? "opacity-60" : ""} medos-touch-target`}
@@ -2584,9 +2588,12 @@ function QuizView({
   // click that follows a long-press from also selecting the option.
   const longPressTimer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
   const longPressFired = React.useRef(false);
+  const longPressStart = React.useRef({ x: 0, y: 0 });
   const startLongPress = React.useCallback(
-    (idx: number) => {
+    (idx: number, e: React.TouchEvent) => {
       if (submitted) return;
+      const touch = e.touches[0];
+      longPressStart.current = { x: touch.clientX, y: touch.clientY };
       longPressFired.current = false;
       longPressTimer.current = setTimeout(() => {
         longPressFired.current = true;
@@ -2601,6 +2608,12 @@ function QuizView({
       longPressTimer.current = null;
     }
   }, []);
+  const onChoiceTouchMove = (e: React.TouchEvent) => {
+    const touch = e.touches[0];
+    const dx = touch.clientX - longPressStart.current.x;
+    const dy = touch.clientY - longPressStart.current.y;
+    if (dx * dx + dy * dy > 100) cancelLongPress();
+  };
   React.useEffect(() => cancelLongPress, [cancelLongPress]);
 
   if (!q) return null;
@@ -2816,7 +2829,7 @@ function QuizView({
         </div>
 
         {/* Center — Question panel */}
-        <main ref={questionBodyRef} data-swipe="horizontal" className="flex-1 min-w-0 flex flex-col bg-background">
+        <main ref={questionBodyRef} className="flex-1 min-w-0 flex flex-col bg-background">
           <AnimatePresence>
             {isPausedOrLocked && (
               <motion.div
@@ -2901,6 +2914,7 @@ function QuizView({
                       disabled={!canSwipeQuestion}
                       rtl={rtl}
                       threshold={90}
+                      scrollMode={false}
                       className="flex-1 min-h-0 w-full"
                       cardClassName="w-full h-full"
                       renderItem={(_item, idx, interactive) =>
