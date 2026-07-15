@@ -133,6 +133,14 @@ export interface VerticalSnapGalleryProps<T> {
   maxDuration?: number;
   /** Axis-lock drift ratio. Default 0.6 (primary axis must be ≥1.66× the secondary). */
   maxDriftRatio?: number;
+  /**
+   * Enable scroll-then-snap dual mode. When true (default), a drag inside
+   * a scrollable child first scrolls that child, then snaps to the next
+   * page once the child reaches its edge. When false, every drag goes
+   * directly to snap mode — useful when the consumer's pages are
+   * scrollable but navigation should take priority (e.g. QBank on touch).
+   */
+  scrollMode?: boolean;
 }
 
 /* ─────────────── Interactive-element hit-testing ──────────────── */
@@ -233,6 +241,7 @@ interface UseVerticalSnapOptions {
   velocityThreshold?: number;
   maxDuration?: number;
   maxDriftRatio?: number;
+  scrollMode?: boolean;
 }
 
 interface UseVerticalSnapState {
@@ -251,7 +260,7 @@ function useVerticalSnap(options: UseVerticalSnapOptions): UseVerticalSnapState 
   const {
     currentIndex, itemCount, onNavigateNext, onNavigatePrev,
     disabled = false, threshold = 80, velocityThreshold = 0.5,
-    maxDuration = 800, maxDriftRatio = 0.6,
+    maxDuration = 800, maxDriftRatio = 0.6, scrollMode: scrollModeProp = true,
   } = options;
 
   const swipeY = useMotionValue(0);
@@ -262,11 +271,11 @@ function useVerticalSnap(options: UseVerticalSnapOptions): UseVerticalSnapState 
 
   const stateRef = React.useRef({
     currentIndex, itemCount, onNavigateNext, onNavigatePrev,
-    threshold, velocityThreshold, maxDuration, maxDriftRatio, stageHeight,
+    threshold, velocityThreshold, maxDuration, maxDriftRatio, stageHeight, scrollModeProp,
   });
   stateRef.current = {
     currentIndex, itemCount, onNavigateNext, onNavigatePrev,
-    threshold, velocityThreshold, maxDuration, maxDriftRatio, stageHeight,
+    threshold, velocityThreshold, maxDuration, maxDriftRatio, stageHeight, scrollModeProp,
   };
 
   // ── Pointer-driven gesture handling ────────────────────────────
@@ -293,15 +302,15 @@ function useVerticalSnap(options: UseVerticalSnapOptions): UseVerticalSnapState 
     const onDown = (e: PointerEvent) => {
       if (e.pointerType === "mouse" && e.button !== 0) return;
       if (isInteractiveTarget(e.target, container)) return;
+      // Capture the pointer so ALL subsequent pointermove/pointerup events
+      // go to THIS element — the browser won't send pointercancel even if
+      // the finger moves over a scrollable child. This is what makes touch
+      // behave identically to mouse: the gesture can't be hijacked mid-flight.
+      try { container.setPointerCapture(e.pointerId); } catch { /* ignore */ }
       tracking = true;
       axisLocked = null;
       scrollMode = false;
       scrollTarget = null;
-      // CRITICAL: snapStartY must start at startY (= e.clientY) so that
-      // snapDy = e.clientY - snapStartY measures the DELTA from gesture
-      // start, not the absolute screen Y coordinate. If this is 0,
-      // snapDy becomes the absolute Y (always hundreds of px, always
-      // positive) → every nudge triggers a "previous" snap.
       snapStartY = e.clientY;
       startX = e.clientX;
       startY = e.clientY;
@@ -349,12 +358,14 @@ function useVerticalSnap(options: UseVerticalSnapOptions): UseVerticalSnapState 
       // First time crossing 8px: decide scroll vs snap
       if (!movedRef.current && Math.abs(dy) > 8) {
         movedRef.current = true;
-        const scrollable = findScrollableAncestor(e.target, container);
-        if (scrollable) {
-          const dir: 1 | -1 = dy > 0 ? 1 : -1;
-          if (!isScrollAtEdge(scrollable, dir)) {
-            scrollMode = true;
-            scrollTarget = scrollable;
+        if (scrollModeProp) {
+          const scrollable = findScrollableAncestor(e.target, container);
+          if (scrollable) {
+            const dir: 1 | -1 = dy > 0 ? 1 : -1;
+            if (!isScrollAtEdge(scrollable, dir)) {
+              scrollMode = true;
+              scrollTarget = scrollable;
+            }
           }
         }
       }
@@ -401,48 +412,31 @@ function useVerticalSnap(options: UseVerticalSnapOptions): UseVerticalSnapState 
       const o = stateRef.current;
       const { currentIndex: ci, itemCount: ic } = o;
 
-      const recentDt = Math.max(1, endT - lastT);
-      const recentDy = endY - lastY;
-      const velocity = Math.abs(recentDy) > 4 && recentDt < 150
-        ? recentDy / recentDt
-        : dt > 0 ? dy / dt : 0;
-
       // ── Ended in scroll mode ───────────────────────────────────
+      // If we're still in scroll mode at gesture end, it means the user
+      // was scrolling content and NEVER hit the edge (no transition to
+      // snap mode occurred). In this case, NEVER snap — the user was
+      // reading, not navigating. Just settle in place.
       if (scrollMode && scrollTarget) {
         scrollMode = false;
-        const target = scrollTarget;
         scrollTarget = null;
-        const dir: 1 | -1 = dy > 0 ? 1 : -1;
-        const atEdge = isScrollAtEdge(target, dir);
-        const passedVel = Math.abs(velocity) >= o.velocityThreshold && Math.abs(dy) > 24;
-
-        if (atEdge && passedVel) {
-          if (dir === 1 && ci > 0) {
-            haptic("selection");
-            const h = o.stageHeight || window.innerHeight;
-            animate(swipeY, h, { type: "spring", stiffness: 380, damping: 34, mass: 0.8 })
-              .then(() => { o.onNavigatePrev(); swipeY.set(0); movedRef.current = false; });
-          } else if (dir === -1 && ci < ic - 1) {
-            haptic("selection");
-            const h = o.stageHeight || window.innerHeight;
-            animate(swipeY, -h, { type: "spring", stiffness: 380, damping: 34, mass: 0.8 })
-              .then(() => { o.onNavigateNext(); swipeY.set(0); movedRef.current = false; });
-          } else {
-            movedRef.current = false;
-          }
-        } else {
-          movedRef.current = false;
-          if (swipeY.get() !== 0) {
-            animate(swipeY, 0, { type: "spring", stiffness: 500, damping: 40, mass: 0.8 });
-          }
+        movedRef.current = false;
+        // swipeY should be 0 (we never drove it in scroll mode).
+        if (swipeY.get() !== 0) {
+          animate(swipeY, 0, { type: "spring", stiffness: 500, damping: 40, mass: 0.8 });
         }
         return;
       }
 
       // ── Ended in snap mode ─────────────────────────────────────
+      // Distance-based snap only. No velocity-based snapping — on touch,
+      // pointer event timing makes velocity unreliable (a 60px nudge in
+      // 100ms reads as 0.6 px/ms, easily exceeding a velocity threshold).
+      // This caused false snaps on qbank questions where the page is
+      // scrollable and the user is at the top edge. Distance-only is
+      // predictable: drag ≥ threshold → snap, otherwise spring back.
       const snapDy = endY - snapStartY;
       const passedThreshold = Math.abs(snapDy) >= o.threshold;
-      const passedVel = Math.abs(velocity) >= o.velocityThreshold && Math.abs(snapDy) > 24;
 
       if (dt > o.maxDuration) {
         movedRef.current = false;
@@ -450,8 +444,8 @@ function useVerticalSnap(options: UseVerticalSnapOptions): UseVerticalSnapState 
         return;
       }
 
-      const wantsNext = snapDy < 0 && (passedThreshold || passedVel);
-      const wantsPrev = snapDy > 0 && (passedThreshold || passedVel);
+      const wantsNext = snapDy < 0 && passedThreshold;
+      const wantsPrev = snapDy > 0 && passedThreshold;
 
       if (wantsNext && ci < ic - 1) {
         haptic("selection");
@@ -471,11 +465,13 @@ function useVerticalSnap(options: UseVerticalSnapOptions): UseVerticalSnapState 
 
     const onUp = (e: PointerEvent) => {
       if (!tracking || e.pointerId !== startPointerId) return;
+      try { container.releasePointerCapture(e.pointerId); } catch { /* ignore */ }
       finishGesture(e.clientY, Date.now());
     };
 
-    const onCancel = () => {
+    const onCancel = (e: PointerEvent) => {
       if (!tracking) return;
+      try { container.releasePointerCapture(e.pointerId); } catch { /* ignore */ }
       tracking = false;
       scrollMode = false;
       scrollTarget = null;
@@ -494,7 +490,7 @@ function useVerticalSnap(options: UseVerticalSnapOptions): UseVerticalSnapState 
       container.removeEventListener("pointerup", onUp);
       container.removeEventListener("pointercancel", onCancel);
     };
-  }, [disabled, swipeY, maxDriftRatio]);
+  }, [disabled, swipeY, maxDriftRatio, scrollModeProp]);
 
   // ── Wheel support (desktop) ────────────────────────────────────
   // Walks ancestors up to <body>. If ANY scrollable ancestor can still
@@ -582,6 +578,7 @@ export function VerticalSnapGallery<T>({
   items, currentIndex, onNavigateNext, onNavigatePrev, renderItem, onTap,
   disabled = false, rtl = false, className, cardClassName,
   threshold = 80, velocityThreshold = 0.5, maxDuration = 800, maxDriftRatio = 0.6,
+  scrollMode: scrollModeProp = true,
 }: VerticalSnapGalleryProps<T>) {
   const {
     containerRef, stageRef, swipeY, prevCardY, nextCardY,
@@ -589,7 +586,7 @@ export function VerticalSnapGallery<T>({
   } = useVerticalSnap({
     currentIndex, itemCount: items.length,
     onNavigateNext, onNavigatePrev, disabled,
-    threshold, velocityThreshold, maxDuration, maxDriftRatio,
+    threshold, velocityThreshold, maxDuration, maxDriftRatio, scrollMode: scrollModeProp,
   });
 
   const hasPrev = currentIndex > 0;
@@ -609,11 +606,10 @@ export function VerticalSnapGallery<T>({
         className,
       )}
       style={{
-        // `touch-action: none` gives us FULL control over all touch gestures.
-        // With `pan-x`, the browser could sometimes fight our manual
-        // scrollTop manipulation on scrollable children (causing flicker).
-        // `none` ensures the browser never tries to scroll — our hook owns
-        // everything: manual scroll in scroll mode, swipeY in snap mode.
+        // `none` ensures the browser never intercepts touch events —
+        // pointerdown/move/up fire identically for touch and mouse.
+        // The hook owns ALL gestures: manual scroll in scroll mode,
+        // swipeY in snap mode.
         touchAction: disabled ? "auto" : "none",
       }}
       data-vertical-snap={disabled ? "off" : "on"}
