@@ -312,11 +312,11 @@ function useVerticalSnap(options: UseVerticalSnapOptions): UseVerticalSnapState 
       if (e.pointerType === "mouse" && e.button !== 0) return;
       isButtonTouch = false;
       if (isInteractiveTarget(e.target, container)) {
-        // Interactive element (button, link, etc.) — normally we suppress
-        // the gesture so clicks/long-presses work. But if it's inside a
-        // scrollable area, allow the gesture so the user can drag to scroll.
-        // On tap (no movement), we dispatch click() on pointerup.
-        if (!scrollModeProp || !findScrollableAncestor(e.target, container)) return;
+        // Interactive element (button, link, etc.) — mark as button-touch
+        // so a tap (no movement) dispatches click() on pointerup. The
+        // gesture itself always proceeds: the scroll-vs-snap decision at
+        // 8px crossing handles scrollable content, and non-scrollable
+        // content goes straight to snap mode.
         isButtonTouch = true;
       }
       // Capture the pointer so ALL subsequent pointermove/pointerup events
