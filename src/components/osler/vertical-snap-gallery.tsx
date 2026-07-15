@@ -360,6 +360,7 @@ function useVerticalSnap(options: UseVerticalSnapOptions): UseVerticalSnapState 
             axisLocked = "x";
             tracking = false;
             movedRef.current = false;
+            try { container.releasePointerCapture(e.pointerId); } catch { /* ignore */ }
             animate(swipeY, 0, { type: "spring", stiffness: 500, damping: 40, mass: 0.8 });
             return;
           }

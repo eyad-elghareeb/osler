@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion, AnimatePresence, useMotionValue, animate } from "framer-motion";
 import {
   ChevronLeft,
   ChevronRight,
@@ -106,6 +106,7 @@ import { useShortcutBindings, useShortcutListener } from "@/hooks/use-shortcuts"
 import { defaultBindings } from "@/lib/osler/shortcuts";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { VerticalSnapGallery } from "./vertical-snap-gallery";
+import { useSwipeTabs } from "@/hooks/use-swipe-tabs";
 import { useQuizSettings } from "@/hooks/use-quiz-settings";
 import { setImmersiveMode } from "./immersive-mode";
 import { haptic } from "@/lib/osler/native";
@@ -2030,6 +2031,73 @@ function QuizView({
   const goNext = React.useCallback(() => { onNext(); }, [onNext]);
   const goPrev = React.useCallback(() => { onPrev(); }, [onPrev]);
 
+  // Horizontal swipe-to-tab — mobile 2-page (split) mode only. Lets the
+  // user swipe sideways between the "Question" and "Explanation" tabs
+  // instead of tapping the tab bar. See use-swipe-tabs.ts for why this
+  // can't interfere with the vertical swipe-to-next-question gesture above
+  // (or with continuous mode, where it's simply disabled — no tabs exist
+  // there since the explanation is already inline in the page).
+  //
+  // On mobile the two panels are rendered as a horizontal carousel: both
+  // are full-width, side-by-side, and a framer-motion `swipeX` value
+  // translates the wrapper to reveal the active panel. The gesture
+  // handler drives `swipeX` during drag for live follow, then springs
+  // to the target on release / tab change.
+  const mobileTabsActive = isMobile && submitted && isSplitMode;
+  const swipeX = useMotionValue(0);
+  const [carouselWidth, setCarouselWidth] = React.useState(0);
+
+  // Measure viewport width for the carousel translation target.
+  // Using window.innerWidth directly — reliable on mobile and avoids
+  // ref timing issues with measuring a parent element.
+  React.useEffect(() => {
+    if (!mobileTabsActive) { setCarouselWidth(0); return; }
+    const measure = () => setCarouselWidth(window.innerWidth);
+    measure();
+    window.addEventListener("resize", measure);
+    return () => window.removeEventListener("resize", measure);
+  }, [mobileTabsActive]);
+
+  // Animate to the active tab position when tab changes (button tap or swipe commit).
+  React.useEffect(() => {
+    if (!mobileTabsActive || carouselWidth === 0) return;
+    const target = mobileTutorTab === "question" ? 0 : -carouselWidth;
+    animate(swipeX, target, { type: "spring", stiffness: 350, damping: 35, mass: 0.8 });
+  }, [mobileTutorTab, mobileTabsActive, carouselWidth, swipeX]);
+
+  // Live drag-follow during horizontal swipe gesture.
+  const handleSwipeProgress = React.useCallback((dx: number, dy: number) => {
+    if (!mobileTabsActive || carouselWidth === 0) return;
+    // Only drive the carousel for clearly horizontal gestures.
+    if (Math.abs(dx) <= Math.abs(dy) * 1.2) return;
+    const base = mobileTutorTab === "question" ? 0 : -carouselWidth;
+    let x = base + dx;
+    // Rubber-band at edges.
+    if (mobileTutorTab === "question" && x > 0) x *= 0.25;
+    if (mobileTutorTab === "answer" && x < -carouselWidth) {
+      const over = x + carouselWidth;
+      x = -carouselWidth + over * 0.25;
+    }
+    swipeX.set(x);
+  }, [mobileTabsActive, mobileTutorTab, carouselWidth, swipeX]);
+
+  // Spring back when the gesture ends without committing.
+  const handleSwipeEnd = React.useCallback(() => {
+    if (!mobileTabsActive || carouselWidth === 0) return;
+    const base = mobileTutorTab === "question" ? 0 : -carouselWidth;
+    animate(swipeX, base, { type: "spring", stiffness: 350, damping: 35, mass: 0.8 });
+  }, [mobileTabsActive, mobileTutorTab, carouselWidth, swipeX]);
+
+  const { tabSwipeRef } = useSwipeTabs<"question" | "answer">({
+    tabs: ["question", "answer"],
+    activeTab: mobileTutorTab,
+    onTabChange: setMobileTutorTab,
+    rtl,
+    disabled: !mobileTabsActive || !canSwipeQuestion,
+    onSwipeProgress: handleSwipeProgress,
+    onSwipeEnd: handleSwipeEnd,
+  });
+
   // ── Question content renderer ────────────────────────────────────────
   // Renders the full question card (header + stem + choices + engine view)
   // for the question at the given index. Used for the current card AND the
@@ -2875,9 +2943,10 @@ function QuizView({
           )}
 
           <div
+            ref={tabSwipeRef}
             className={`flex-1 min-h-0 medos-qbank-split ${
               submitted && session.mode === "tutor" && useSplitExplanation
-                ? "flex flex-row"
+                ? isMobile ? "overflow-hidden" : "flex flex-row"
                 : "flex flex-col"
             }`}
             dir={rtl ? "rtl" : "ltr"}
@@ -2885,98 +2954,153 @@ function QuizView({
           >
             {q ? (
               <>
-                {/* Question column.
-                    In BOTH modes the column is a flex column that fills the
-                    available height. The gallery fills the column (`flex-1
-                    min-h-0`), and each page scrolls its own content
-                    internally — the hook's scroll-then-snap logic handles
-                    the transition from scrolling within a page to snapping
-                    to the next/prev page.
-
-                    In split mode the column is w-[55%] and the explanation
-                    sits in the right column (below). In continuous mode the
-                    column is full-width and the explanation is rendered
-                    INSIDE each page (in renderQuestionContent) so the user
-                    can drag from it to scroll/snap. */}
-                <div
-                  className={`medos-qbank-qcol ${(activeItem.lang ?? "en") === "ar" ? "osler-content-ar" : ""} ${
-                    submitted && session.mode === "tutor" && useSplitExplanation
-                      ? "w-[55%] border-e border-border"
-                      : "flex-1"
-                  } flex flex-col min-h-0 ${mobileTutorTab === "answer" ? "hidden md:flex" : ""}`}
+                {/* Carousel wrapper — on mobile in split mode this is a
+                    horizontal motion.div driven by swipeX; on desktop it's
+                    contents (transparent to layout). */}
+                <motion.div
+                  style={mobileTabsActive ? { x: swipeX } : undefined}
+                  className={mobileTabsActive ? "flex h-full" : "contents"}
                 >
-                  <div className={`flex-1 min-h-0 flex flex-col px-4 sm:px-6 ${submitted && session.mode === "tutor" && useSplitExplanation ? "py-4" : "lg:px-8 py-6"} ${contentAlignClass}`}>
-                    <VerticalSnapGallery
-                      items={session.questions}
-                      currentIndex={session.current}
-                      onNavigateNext={goNext}
-                      onNavigatePrev={goPrev}
-                      disabled={!canSwipeQuestion}
-                      rtl={rtl}
-                      threshold={90}
-                      className="flex-1 min-h-0 w-full"
-                      cardClassName="w-full h-full"
-                      renderItem={(_item, idx, interactive) =>
-                        renderQuestionContent(idx, interactive)
-                      }
-                    />
-                  </div>
-                </div>
-
-                {/* Right column: explanation / evaluation (split-screen in tutor mode only).
-                    In continuous mode the explanation is rendered inside each
-                    page by renderQuestionContent — not here. */}
-                {submitted && session.mode === "tutor" && useSplitExplanation && (
+                  {/* Question column.
+                      On mobile in split mode: full-width inside the carousel.
+                      On desktop in split mode: 55% side-by-side.
+                      In continuous mode: full-width, single column. */}
                   <div
-                    className={`medos-qbank-acol w-[45%] overflow-y-auto medos-scroll bg-muted/20 ${mobileTutorTab === "question" ? "hidden md:block" : ""}`}
+                    className={`medos-qbank-qcol ${(activeItem.lang ?? "en") === "ar" ? "osler-content-ar" : ""} ${
+                      submitted && session.mode === "tutor" && useSplitExplanation
+                        ? mobileTabsActive ? "w-full flex-none" : "w-[55%] border-e border-border"
+                        : "flex-1"
+                    } flex flex-col min-h-0`}
                   >
-                    <div className="px-4 sm:px-6 py-4">
-                      {session.engine === "written" ? (
-                        <WrittenEvaluationPanel
-                          draft={writtenDraft}
-                          question={q}
-                          passed={writtenPassed}
-                          isManual={writtenDraft.evaluation?.score === null}
-                          onRubricToggle={(idx) => {
-                            const cur = writtenDraft.rubricChecked;
-                            const next = [...cur];
-                            while (next.length < (q.rubric?.length ?? 0)) next.push(false);
-                            next[idx] = !next[idx];
-                            onWrittenDraftChange(q.id, { ...writtenDraft, rubricChecked: next });
-                          }}
-                          onPassFail={(v) => {
-                            const ev = writtenDraft.evaluation;
-                            if (!ev) {
-                              const manual = createManualEvaluation(writtenDraft.text);
-                              manual.manualVerdict = v;
-                              manual.passed = v === "pass";
-                              onWrittenDraftChange(q.id, {
-                                ...writtenDraft,
-                                submitted: true,
-                                evaluation: manual,
-                              });
-                            } else {
-                              onWrittenDraftChange(q.id, {
-                                ...writtenDraft,
-                                evaluation: { ...ev, manualVerdict: v, passed: v === "pass" },
-                              });
-                            }
-                          }}
-                          onChildPassFail={(childIdx, v) => {
-                            const childEvals = [...(writtenDraft.childEvaluations ?? [])];
-                            const ev = childEvals[childIdx];
-                            if (ev) {
-                              childEvals[childIdx] = { ...ev, manualVerdict: v, passed: v === "pass" };
-                              onWrittenDraftChange(q.id, { ...writtenDraft, childEvaluations: childEvals });
-                            }
-                          }}
-                        />
-                      ) : (
-                        <ExplanationCard q={q} selected={selected} nonMcq={!isMCQ} highlights={currentHighlights} packUid={activeItem.uid} questionIdx={session.current} lang={activeItem.lang ?? "en"} />
-                      )}
+                    <div className={`flex-1 min-h-0 flex flex-col px-4 sm:px-6 ${submitted && session.mode === "tutor" && useSplitExplanation ? "py-4" : "lg:px-8 py-6"} ${contentAlignClass}`}>
+                      <VerticalSnapGallery
+                        items={session.questions}
+                        currentIndex={session.current}
+                        onNavigateNext={goNext}
+                        onNavigatePrev={goPrev}
+                        disabled={!canSwipeQuestion}
+                        rtl={rtl}
+                        threshold={90}
+                        className="flex-1 min-h-0 w-full"
+                        cardClassName="w-full h-full"
+                        renderItem={(_item, idx, interactive) =>
+                          renderQuestionContent(idx, interactive)
+                        }
+                      />
                     </div>
                   </div>
-                )}
+
+                  {/* Right column: explanation / evaluation (split-screen in tutor mode only).
+                      In continuous mode the explanation is rendered inside each
+                      page by renderQuestionContent — not here.
+
+                      On mobile in split mode this column is full-width and
+                      contains a VerticalSnapGallery so the user can swipe
+                      vertically to see the next/prev question's explanation.
+                      On desktop it's a plain scrollable 45%-wide column. */}
+                  {submitted && session.mode === "tutor" && useSplitExplanation && (
+                    <div
+                      className={`medos-qbank-acol ${
+                        mobileTabsActive ? "w-full flex-none" : "w-[45%]"
+                      } flex flex-col min-h-0 bg-muted/20`}
+                    >
+                      {mobileTabsActive ? (
+                        <div className="flex-1 min-h-0 flex flex-col px-4 sm:px-6 py-4">
+                          <VerticalSnapGallery
+                            items={session.questions}
+                            currentIndex={session.current}
+                            onNavigateNext={goNext}
+                            onNavigatePrev={goPrev}
+                            disabled={!canSwipeQuestion}
+                            rtl={rtl}
+                            threshold={90}
+                            className="flex-1 min-h-0 w-full"
+                            cardClassName="w-full h-full"
+                            renderItem={(_item, idx) => {
+                              const eq = session.questions[idx];
+                              if (!eq) return null;
+                              const eqSubmitted = session.revealed[idx] || false;
+                              const eqSelected = session.answers[idx];
+                              const eqIsMCQ = eq.correct >= 0;
+                              const eqHighlights = highlights.get(activeItem.uid, idx);
+                              return (
+                                <div className="h-full overflow-y-auto medos-scroll pr-1 -mr-1 pb-6" style={{ touchAction: "none" }}>
+                                  <div className="px-4 sm:px-6 py-4">
+                                    {session.engine === "written" ? (
+                                      <WrittenEvaluationPanel
+                                        draft={session.writtenDrafts[eq.id] ?? { text: "", rubricChecked: eq.rubric ? eq.rubric.map(() => false) : [], submitted: false }}
+                                        question={eq}
+                                        passed={false}
+                                        isManual
+                                        onRubricToggle={() => {}}
+                                        onPassFail={() => {}}
+                                        onChildPassFail={() => {}}
+                                      />
+                                    ) : eqSubmitted ? (
+                                      <ExplanationCard q={eq} selected={eqSelected} nonMcq={!eqIsMCQ} highlights={eqHighlights} packUid={activeItem.uid} questionIdx={idx} lang={activeItem.lang ?? "en"} />
+                                    ) : (
+                                      <div className="flex items-center justify-center h-full text-sm text-muted-foreground">
+                                        {t("qbank.session.selectOne")}
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+                              );
+                            }}
+                          />
+                        </div>
+                      ) : (
+                        <div className="flex-1 overflow-y-auto medos-scroll">
+                          <div className="px-4 sm:px-6 py-4">
+                            {session.engine === "written" ? (
+                              <WrittenEvaluationPanel
+                                draft={writtenDraft}
+                                question={q}
+                                passed={writtenPassed}
+                                isManual={writtenDraft.evaluation?.score === null}
+                                onRubricToggle={(idx) => {
+                                  const cur = writtenDraft.rubricChecked;
+                                  const next = [...cur];
+                                  while (next.length < (q.rubric?.length ?? 0)) next.push(false);
+                                  next[idx] = !next[idx];
+                                  onWrittenDraftChange(q.id, { ...writtenDraft, rubricChecked: next });
+                                }}
+                                onPassFail={(v) => {
+                                  const ev = writtenDraft.evaluation;
+                                  if (!ev) {
+                                    const manual = createManualEvaluation(writtenDraft.text);
+                                    manual.manualVerdict = v;
+                                    manual.passed = v === "pass";
+                                    onWrittenDraftChange(q.id, {
+                                      ...writtenDraft,
+                                      submitted: true,
+                                      evaluation: manual,
+                                    });
+                                  } else {
+                                    onWrittenDraftChange(q.id, {
+                                      ...writtenDraft,
+                                      evaluation: { ...ev, manualVerdict: v, passed: v === "pass" },
+                                    });
+                                  }
+                                }}
+                                onChildPassFail={(childIdx, v) => {
+                                  const childEvals = [...(writtenDraft.childEvaluations ?? [])];
+                                  const ev = childEvals[childIdx];
+                                  if (ev) {
+                                    childEvals[childIdx] = { ...ev, manualVerdict: v, passed: v === "pass" };
+                                    onWrittenDraftChange(q.id, { ...writtenDraft, childEvaluations: childEvals });
+                                  }
+                                }}
+                              />
+                            ) : (
+                              <ExplanationCard q={q} selected={selected} nonMcq={!isMCQ} highlights={currentHighlights} packUid={activeItem.uid} questionIdx={session.current} lang={activeItem.lang ?? "en"} />
+                            )}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </motion.div>
               </>
             ) : (
               <div className="flex-1 flex items-center justify-center py-20">
