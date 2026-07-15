@@ -2914,7 +2914,6 @@ function QuizView({
                       disabled={!canSwipeQuestion}
                       rtl={rtl}
                       threshold={90}
-                      scrollMode={false}
                       className="flex-1 min-h-0 w-full"
                       cardClassName="w-full h-full"
                       renderItem={(_item, idx, interactive) =>

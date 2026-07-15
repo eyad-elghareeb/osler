@@ -290,6 +290,11 @@ function useVerticalSnap(options: UseVerticalSnapOptions): UseVerticalSnapState 
     let axisLocked: "x" | "y" | null = null;
     let startPointerId = -1;
     let lastY = 0, lastT = 0;
+    // Remember the original touch target from pointerdown. After
+    // setPointerCapture, all subsequent pointermove events have
+    // e.target === container — so findScrollableAncestor would walk
+    // from container to container (loop never runs) and return null.
+    let downTarget: EventTarget | null = null;
 
     // Scroll-mode state
     let scrollMode = false;
@@ -311,6 +316,7 @@ function useVerticalSnap(options: UseVerticalSnapOptions): UseVerticalSnapState 
       axisLocked = null;
       scrollMode = false;
       scrollTarget = null;
+      downTarget = e.target;
       snapStartY = e.clientY;
       startX = e.clientX;
       startY = e.clientY;
@@ -359,7 +365,7 @@ function useVerticalSnap(options: UseVerticalSnapOptions): UseVerticalSnapState 
       if (!movedRef.current && Math.abs(dy) > 8) {
         movedRef.current = true;
         if (scrollModeProp) {
-          const scrollable = findScrollableAncestor(e.target, container);
+          const scrollable = findScrollableAncestor(downTarget, container);
           if (scrollable) {
             const dir: 1 | -1 = dy > 0 ? 1 : -1;
             if (!isScrollAtEdge(scrollable, dir)) {
