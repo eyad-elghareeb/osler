@@ -60,18 +60,54 @@ export interface CustomThemeConfig {
   variant: "dark" | "light";
   /** Primary accent color (oklch). */
   primary?: string;
+  /** Primary foreground color (oklch). */
+  primaryForeground?: string;
   /** Secondary accent color (oklch). */
   accent?: string;
   /** Background color (oklch). */
   background?: string;
   /** Foreground (text) color (oklch). */
   foreground?: string;
-  /** Optional muted-foreground override. */
+  /** Card background color (oklch). */
+  card?: string;
+  /** Card foreground color (oklch). */
+  cardForeground?: string;
+  /** Popover background color (oklch). */
+  popover?: string;
+  /** Popover foreground color (oklch). */
+  popoverForeground?: string;
+  /** Secondary background color (oklch). */
+  secondary?: string;
+  /** Secondary foreground color (oklch). */
+  secondaryForeground?: string;
+  /** Muted background color (oklch). */
+  muted?: string;
+  /** Muted foreground color (oklch). */
   mutedForeground?: string;
-  /** Optional destructive color override. */
+  /** Destructive color (oklch). */
   destructive?: string;
-  /** Optional border color override. */
+  /** Border color (oklch). */
   border?: string;
+  /** Input border color (oklch). */
+  input?: string;
+  /** Ring/focus color (oklch). */
+  ring?: string;
+  /** Sidebar background color (oklch). */
+  sidebar?: string;
+  /** Sidebar foreground color (oklch). */
+  sidebarForeground?: string;
+  /** Sidebar primary color (oklch). */
+  sidebarPrimary?: string;
+  /** Sidebar primary foreground color (oklch). */
+  sidebarPrimaryForeground?: string;
+  /** Sidebar accent color (oklch). */
+  sidebarAccent?: string;
+  /** Sidebar accent foreground color (oklch). */
+  sidebarAccentForeground?: string;
+  /** Sidebar border color (oklch). */
+  sidebarBorder?: string;
+  /** Sidebar ring color (oklch). */
+  sidebarRing?: string;
 }
 
 /** Site identity — drives `<title>`, brand mark, PWA manifest name, etc. */
@@ -198,7 +234,248 @@ export const DEFAULT_CONFIG: OslerConfig = {
   },
   themes: {
     default: "dark",
-    custom: [],
+    custom: [
+      {
+        id: "navy-clinic",
+        name: "Navy Clinic",
+        variant: "dark",
+        primary: "oklch(0.58 0.14 245)",
+        accent: "oklch(0.45 0.12 250)",
+        background: "oklch(0.14 0.018 260)",
+        foreground: "oklch(0.96 0.005 240)",
+        card: "oklch(0.19 0.022 260)",
+        cardForeground: "oklch(0.96 0.005 240)",
+        popover: "oklch(0.19 0.022 260)",
+        popoverForeground: "oklch(0.96 0.005 240)",
+        primaryForeground: "oklch(0.99 0 0)",
+        secondary: "oklch(0.26 0.025 260)",
+        secondaryForeground: "oklch(0.96 0.005 240)",
+        muted: "oklch(0.24 0.02 260)",
+        mutedForeground: "oklch(0.7 0.015 240)",
+        destructive: "oklch(0.68 0.21 22)",
+        border: "oklch(1 0 0 / 8%)",
+        input: "oklch(1 0 0 / 10%)",
+        ring: "oklch(0.58 0.14 245)",
+        sidebar: "oklch(0.17 0.02 260)",
+        sidebarForeground: "oklch(0.96 0.005 240)",
+        sidebarPrimary: "oklch(0.58 0.14 245)",
+        sidebarPrimaryForeground: "oklch(0.99 0 0)",
+        sidebarAccent: "oklch(0.26 0.025 260)",
+        sidebarAccentForeground: "oklch(0.96 0.005 240)",
+        sidebarBorder: "oklch(1 0 0 / 6%)",
+        sidebarRing: "oklch(0.58 0.14 245)",
+      },
+      {
+        id: "navy-clinic-light",
+        name: "Navy Clinic Light",
+        variant: "light",
+        primary: "oklch(0.38 0.09 255)",
+        accent: "oklch(0.7 0.12 240)",
+        background: "oklch(0.99 0.005 240)",
+        foreground: "oklch(0.18 0.02 250)",
+        card: "oklch(1 0 0)",
+        cardForeground: "oklch(0.18 0.02 250)",
+        popover: "oklch(1 0 0)",
+        popoverForeground: "oklch(0.18 0.02 250)",
+        primaryForeground: "oklch(0.99 0 0)",
+        secondary: "oklch(0.95 0.01 240)",
+        secondaryForeground: "oklch(0.2 0.02 250)",
+        muted: "oklch(0.95 0.01 240)",
+        mutedForeground: "oklch(0.5 0.015 240)",
+        destructive: "oklch(0.58 0.24 27)",
+        border: "oklch(0.9 0.01 240)",
+        input: "oklch(0.9 0.01 240)",
+        ring: "oklch(0.38 0.09 255)",
+        sidebar: "oklch(0.97 0.005 240)",
+        sidebarForeground: "oklch(0.18 0.02 250)",
+        sidebarPrimary: "oklch(0.38 0.09 255)",
+        sidebarPrimaryForeground: "oklch(0.99 0 0)",
+        sidebarAccent: "oklch(0.92 0.025 240)",
+        sidebarAccentForeground: "oklch(0.2 0.02 250)",
+        sidebarBorder: "oklch(0.9 0.01 240)",
+        sidebarRing: "oklch(0.38 0.09 255)",
+      },
+      {
+        id: "forest-rounds",
+        name: "Forest Rounds",
+        variant: "dark",
+        primary: "oklch(0.7 0.18 145)",
+        accent: "oklch(0.55 0.15 150)",
+        background: "oklch(0.16 0.02 160)",
+        foreground: "oklch(0.96 0.01 150)",
+        card: "oklch(0.21 0.025 160)",
+        cardForeground: "oklch(0.96 0.01 150)",
+        popover: "oklch(0.21 0.025 160)",
+        popoverForeground: "oklch(0.96 0.01 150)",
+        primaryForeground: "oklch(0.16 0.02 160)",
+        secondary: "oklch(0.28 0.03 160)",
+        secondaryForeground: "oklch(0.96 0.01 150)",
+        muted: "oklch(0.25 0.025 160)",
+        mutedForeground: "oklch(0.72 0.02 150)",
+        destructive: "oklch(0.68 0.21 22)",
+        border: "oklch(1 0 0 / 8%)",
+        input: "oklch(1 0 0 / 10%)",
+        ring: "oklch(0.7 0.18 145)",
+        sidebar: "oklch(0.19 0.022 160)",
+        sidebarForeground: "oklch(0.96 0.01 150)",
+        sidebarPrimary: "oklch(0.7 0.18 145)",
+        sidebarPrimaryForeground: "oklch(0.16 0.02 160)",
+        sidebarAccent: "oklch(0.28 0.03 160)",
+        sidebarAccentForeground: "oklch(0.96 0.01 150)",
+        sidebarBorder: "oklch(1 0 0 / 6%)",
+        sidebarRing: "oklch(0.7 0.18 145)",
+      },
+      {
+        id: "forest-rounds-light",
+        name: "Forest Rounds Light",
+        variant: "light",
+        primary: "oklch(0.45 0.14 150)",
+        accent: "oklch(0.6 0.14 145)",
+        background: "oklch(0.98 0.008 155)",
+        foreground: "oklch(0.2 0.025 155)",
+        card: "oklch(1 0 0)",
+        cardForeground: "oklch(0.2 0.025 155)",
+        popover: "oklch(1 0 0)",
+        popoverForeground: "oklch(0.2 0.025 155)",
+        primaryForeground: "oklch(0.99 0 0)",
+        secondary: "oklch(0.95 0.01 155)",
+        secondaryForeground: "oklch(0.22 0.02 155)",
+        muted: "oklch(0.95 0.01 155)",
+        mutedForeground: "oklch(0.48 0.02 155)",
+        destructive: "oklch(0.58 0.24 27)",
+        border: "oklch(0.92 0.01 155)",
+        input: "oklch(0.92 0.01 155)",
+        ring: "oklch(0.45 0.14 150)",
+        sidebar: "oklch(0.96 0.008 155)",
+        sidebarForeground: "oklch(0.2 0.025 155)",
+        sidebarPrimary: "oklch(0.45 0.14 150)",
+        sidebarPrimaryForeground: "oklch(0.99 0 0)",
+        sidebarAccent: "oklch(0.93 0.02 155)",
+        sidebarAccentForeground: "oklch(0.22 0.02 155)",
+        sidebarBorder: "oklch(0.92 0.01 155)",
+        sidebarRing: "oklch(0.45 0.14 150)",
+      },
+      {
+        id: "cream-journal",
+        name: "Cream Journal",
+        variant: "light",
+        primary: "oklch(0.38 0.09 255)",
+        accent: "oklch(0.7 0.12 240)",
+        background: "oklch(0.99 0.005 240)",
+        foreground: "oklch(0.18 0.02 250)",
+        card: "oklch(1 0 0)",
+        cardForeground: "oklch(0.18 0.02 250)",
+        popover: "oklch(1 0 0)",
+        popoverForeground: "oklch(0.18 0.02 250)",
+        primaryForeground: "oklch(0.99 0 0)",
+        secondary: "oklch(0.95 0.01 240)",
+        secondaryForeground: "oklch(0.2 0.02 250)",
+        muted: "oklch(0.95 0.01 240)",
+        mutedForeground: "oklch(0.5 0.015 240)",
+        destructive: "oklch(0.58 0.24 27)",
+        border: "oklch(0.9 0.01 240)",
+        input: "oklch(0.9 0.01 240)",
+        ring: "oklch(0.38 0.09 255)",
+        sidebar: "oklch(0.97 0.005 240)",
+        sidebarForeground: "oklch(0.18 0.02 250)",
+        sidebarPrimary: "oklch(0.38 0.09 255)",
+        sidebarPrimaryForeground: "oklch(0.99 0 0)",
+        sidebarAccent: "oklch(0.92 0.025 240)",
+        sidebarAccentForeground: "oklch(0.2 0.02 250)",
+        sidebarBorder: "oklch(0.9 0.01 240)",
+        sidebarRing: "oklch(0.38 0.09 255)",
+      },
+      {
+        id: "cream-journal-dark",
+        name: "Cream Journal Dark",
+        variant: "dark",
+        primary: "oklch(0.55 0.12 255)",
+        accent: "oklch(0.5 0.1 240)",
+        background: "oklch(0.15 0.015 60)",
+        foreground: "oklch(0.93 0.008 60)",
+        card: "oklch(0.2 0.018 60)",
+        cardForeground: "oklch(0.93 0.008 60)",
+        popover: "oklch(0.2 0.018 60)",
+        popoverForeground: "oklch(0.93 0.008 60)",
+        primaryForeground: "oklch(0.99 0 0)",
+        secondary: "oklch(0.27 0.02 60)",
+        secondaryForeground: "oklch(0.93 0.008 60)",
+        muted: "oklch(0.25 0.015 60)",
+        mutedForeground: "oklch(0.68 0.012 60)",
+        destructive: "oklch(0.68 0.21 22)",
+        border: "oklch(1 0 0 / 8%)",
+        input: "oklch(1 0 0 / 10%)",
+        ring: "oklch(0.55 0.12 255)",
+        sidebar: "oklch(0.18 0.017 60)",
+        sidebarForeground: "oklch(0.93 0.008 60)",
+        sidebarPrimary: "oklch(0.55 0.12 255)",
+        sidebarPrimaryForeground: "oklch(0.99 0 0)",
+        sidebarAccent: "oklch(0.27 0.02 60)",
+        sidebarAccentForeground: "oklch(0.93 0.008 60)",
+        sidebarBorder: "oklch(1 0 0 / 6%)",
+        sidebarRing: "oklch(0.55 0.12 255)",
+      },
+      {
+        id: "crimson-ed",
+        name: "Crimson ED",
+        variant: "dark",
+        primary: "oklch(0.65 0.22 16)",
+        accent: "oklch(0.5 0.2 20)",
+        background: "oklch(0.15 0.025 20)",
+        foreground: "oklch(0.96 0.01 20)",
+        card: "oklch(0.2 0.03 20)",
+        cardForeground: "oklch(0.96 0.01 20)",
+        popover: "oklch(0.2 0.03 20)",
+        popoverForeground: "oklch(0.96 0.01 20)",
+        primaryForeground: "oklch(0.99 0 0)",
+        secondary: "oklch(0.28 0.03 20)",
+        secondaryForeground: "oklch(0.96 0.01 20)",
+        muted: "oklch(0.26 0.025 20)",
+        mutedForeground: "oklch(0.7 0.02 20)",
+        destructive: "oklch(0.68 0.21 22)",
+        border: "oklch(1 0 0 / 8%)",
+        input: "oklch(1 0 0 / 10%)",
+        ring: "oklch(0.65 0.22 16)",
+        sidebar: "oklch(0.18 0.027 20)",
+        sidebarForeground: "oklch(0.96 0.01 20)",
+        sidebarPrimary: "oklch(0.65 0.22 16)",
+        sidebarPrimaryForeground: "oklch(0.99 0 0)",
+        sidebarAccent: "oklch(0.28 0.03 20)",
+        sidebarAccentForeground: "oklch(0.96 0.01 20)",
+        sidebarBorder: "oklch(1 0 0 / 6%)",
+        sidebarRing: "oklch(0.65 0.22 16)",
+      },
+      {
+        id: "crimson-ed-light",
+        name: "Crimson ED Light",
+        variant: "light",
+        primary: "oklch(0.5 0.18 16)",
+        accent: "oklch(0.65 0.15 20)",
+        background: "oklch(0.99 0.005 20)",
+        foreground: "oklch(0.18 0.02 20)",
+        card: "oklch(1 0 0)",
+        cardForeground: "oklch(0.18 0.02 20)",
+        popover: "oklch(1 0 0)",
+        popoverForeground: "oklch(0.18 0.02 20)",
+        primaryForeground: "oklch(0.99 0 0)",
+        secondary: "oklch(0.96 0.008 20)",
+        secondaryForeground: "oklch(0.2 0.02 20)",
+        muted: "oklch(0.96 0.008 20)",
+        mutedForeground: "oklch(0.48 0.015 20)",
+        destructive: "oklch(0.58 0.24 27)",
+        border: "oklch(0.92 0.008 20)",
+        input: "oklch(0.92 0.008 20)",
+        ring: "oklch(0.5 0.18 16)",
+        sidebar: "oklch(0.97 0.005 20)",
+        sidebarForeground: "oklch(0.18 0.02 20)",
+        sidebarPrimary: "oklch(0.5 0.18 16)",
+        sidebarPrimaryForeground: "oklch(0.99 0 0)",
+        sidebarAccent: "oklch(0.93 0.02 20)",
+        sidebarAccentForeground: "oklch(0.2 0.02 20)",
+        sidebarBorder: "oklch(0.92 0.008 20)",
+        sidebarRing: "oklch(0.5 0.18 16)",
+      },
+    ],
   },
   defaults: {
     view: "dashboard",

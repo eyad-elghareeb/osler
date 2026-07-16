@@ -565,6 +565,15 @@ export const ar = {
     "settings.theme.light": "فاتح",
     "settings.theme.toggleToLight": "التبديل إلى الوضع الفاتح",
     "settings.theme.toggleToDark": "التبديل إلى الوضع الداكن",
+    "settings.theme.currentTheme": "السمة الحالية",
+    "settings.theme.builtinTitle": "السمات الأساسية",
+    "settings.theme.builtinDesc": "السمات الداكنة والفاتحة الأساسية.",
+    "settings.theme.customTitle": "السمات المخصصة",
+    "settings.theme.customDesc": "سمات إضافية يحددها المشرف في osler.config.json.",
+    "settings.theme.selectTheme": "اختيار",
+    "settings.theme.active": "الحالية",
+    "settings.theme.darkVariant": "داكن",
+    "settings.theme.lightVariant": "فاتح",
 
     "qbank.settings.alignmentHint": "تنطبق المحاذاة فقط في الوضع المتصل. في الوضع المقسوم (صفحتان) يكون عمود السؤال دائمًا محاذيًا لليسار.",
 

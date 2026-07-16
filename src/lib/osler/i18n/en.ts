@@ -568,6 +568,15 @@ export const en = {
     "settings.theme.light": "Light",
     "settings.theme.toggleToLight": "Switch to light mode",
     "settings.theme.toggleToDark": "Switch to dark mode",
+    "settings.theme.currentTheme": "Current theme",
+    "settings.theme.builtinTitle": "Built-in themes",
+    "settings.theme.builtinDesc": "Standard dark and light themes.",
+    "settings.theme.customTitle": "Custom themes",
+    "settings.theme.customDesc": "Additional themes defined by the admin in osler.config.json.",
+    "settings.theme.selectTheme": "Select",
+    "settings.theme.active": "Active",
+    "settings.theme.darkVariant": "Dark",
+    "settings.theme.lightVariant": "Light",
 
     "qbank.settings.alignmentHint": "Alignment applies only in Continuous mode. In 2-page (split) mode the question column is always left-aligned.",
 
