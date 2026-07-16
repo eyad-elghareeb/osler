@@ -3057,7 +3057,7 @@ function QuizView({
                               const eqIsMCQ = eq.correct >= 0;
                               const eqHighlights = highlights.get(activeItem.uid, idx);
                               return (
-                                <div className="h-full overflow-y-auto medos-scroll p-2 pb-6" style={{ touchAction: "pan-y" }}>
+                                <div className="h-full overflow-y-auto medos-scroll p-2 pb-6" style={{ touchAction: "none" }}>
                                   {session.engine === "written" ? (
                                       <WrittenEvaluationPanel
                                         draft={session.writtenDrafts[eq.id] ?? { text: "", rubricChecked: eq.rubric ? eq.rubric.map(() => false) : [], submitted: false }}
