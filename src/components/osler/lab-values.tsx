@@ -8,6 +8,8 @@ import {
   useResizableSidebar,
   SidebarResizeHandle,
 } from "@/hooks/use-resizable-sidebar";
+import { useSwipeBackDismiss } from "@/hooks/use-swipe-back-dismiss";
+import { useI18n } from "./i18n-provider";
 
 type LabCategory = "chem" | "hem" | "abg" | "coag" | "other";
 
@@ -96,6 +98,7 @@ const LABS_BY_CAT: Record<LabCategory, LabItem[]> = {
 
 export function LabValuesSidebar({ open, onClose }: { open?: boolean; onClose: () => void }) {
   const platform = usePlatform();
+  const { rtl } = useI18n();
   const resizable = useResizableSidebar({
     storageKey: "osler-lab-values-width",
     defaultWidth: 384,
@@ -105,6 +108,19 @@ export function LabValuesSidebar({ open, onClose }: { open?: boolean; onClose: (
   });
   const [tab, setTab] = React.useState<LabCategory>("chem");
   const labs = LABS_BY_CAT[tab];
+
+  // ── Swipe-to-dismiss (mirrors Settings NavigationStack pattern) ──────
+  // Only meaningful in overlay mode (when `open` is provided). The hook
+  // returns {} when disabled, so the embedded-mode render path is
+  // unaffected.
+  const isOverlay = open !== undefined;
+  const isPhone = platform.isPhone;
+  const dismissProps = useSwipeBackDismiss({
+    onDismiss: () => onClose(),
+    direction: isPhone ? "vertical" : "horizontal",
+    rtl,
+    disabled: !isOverlay,
+  });
 
   const content = (
     <div className="h-full flex flex-col">
@@ -168,12 +184,13 @@ export function LabValuesSidebar({ open, onClose }: { open?: boolean; onClose: (
       <AnimatePresence>
         {open && (
           <motion.div
-            initial={isPhone ? { y: "100%", opacity: 0 } : { x: 360, opacity: 0 }}
+            initial={isPhone ? { y: "100%", opacity: 0 } : { x: rtl ? -360 : 360, opacity: 0 }}
             animate={isPhone ? { y: 0, opacity: 1 } : { x: 0, opacity: 1 }}
-            exit={isPhone ? { y: "100%", opacity: 0 } : { x: 360, opacity: 0 }}
+            exit={isPhone ? { y: "100%", opacity: 0 } : { x: rtl ? -360 : 360, opacity: 0 }}
             transition={isPhone
               ? { type: "spring", damping: 32, stiffness: 320 }
               : { type: "spring", damping: 28, stiffness: 300 }}
+            {...dismissProps}
             className={isPhone
               ? "fixed inset-0 z-50 bg-card flex flex-col"
               : "fixed right-0 top-12 bottom-0 z-50 border-l border-border bg-card shadow-xl flex flex-col"

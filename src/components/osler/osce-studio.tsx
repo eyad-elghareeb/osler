@@ -49,6 +49,7 @@ import { setImmersiveMode } from "./immersive-mode";
 import { useI18n } from "./i18n-provider";
 import { ContentCacheButton } from "./content-cache-button";
 import { ContentLangFilter } from "./qbank-studio";
+import { useSwipeBackDismiss } from "@/hooks/use-swipe-back-dismiss";
 
 /* ── Constants ─────────────────────────────────────────────────────── */
 
@@ -645,7 +646,7 @@ function getSpeakerGender(c: OsceStation): string {
 
 export function OsceStudio({ activeItem, activeContent, onExit, onOpenPack }: OsceStudioProps) {
   const isMobile = useIsMobile();
-  const { t, contentFilter } = useI18n();
+  const { t, rtl, contentFilter } = useI18n();
 
   /* ── State ── */
   const [allPacks, setAllPacks] = React.useState<Array<{ node: ContentTreeNode; content: OsceContent }>>([]);
@@ -675,6 +676,35 @@ export function OsceStudio({ activeItem, activeContent, onExit, onOpenPack }: Os
   const [resetModalOpen, setResetModalOpen] = React.useState(false);
   const [renderedCount, setRenderedCount] = React.useState(0);
   const [selectedPackUid, setSelectedPackUid] = React.useState<string | null>(null);
+
+  // ── Swipe-back dismiss for the OSCE lobby/conversation/debrief overlays ─
+  // Mirrors the Settings NavigationStack pattern: a horizontal drag past
+  // the threshold (or a fast flick) triggers `onDismiss`. The hook returns
+  // {} when disabled, so spreading it is safe.
+  const lobbyDismiss = useSwipeBackDismiss({
+    onDismiss: () => setPhase("select"),
+    direction: "horizontal",
+    rtl,
+    disabled: phase !== "lobby",
+  });
+  const conversationDismiss = useSwipeBackDismiss({
+    onDismiss: () => {
+      stopTimer();
+      setPhase("lobby");
+    },
+    direction: "horizontal",
+    rtl,
+    disabled: phase !== "conversation",
+  });
+  const debriefDismiss = useSwipeBackDismiss({
+    onDismiss: () => {
+      setResult(null);
+      setPhase("conversation");
+    },
+    direction: "horizontal",
+    rtl,
+    disabled: phase !== "debrief",
+  });
 
   const abortRef = React.useRef<AbortController | null>(null);
   const transcriptRef = React.useRef<TranscriptEntry[]>([]);
@@ -1391,7 +1421,10 @@ export function OsceStudio({ activeItem, activeContent, onExit, onOpenPack }: Os
     }
 
      return (
-      <div className="fixed inset-0 z-50 bg-background overflow-y-auto medos-scroll">
+      <motion.div
+        className="fixed inset-0 z-50 bg-background overflow-y-auto medos-scroll"
+        {...lobbyDismiss}
+      >
         <div className="max-w-3xl mx-auto px-4 md:px-8 py-8">
           <motion.div
             initial={{ opacity: 0, y: 8 }}
@@ -1521,7 +1554,7 @@ export function OsceStudio({ activeItem, activeContent, onExit, onOpenPack }: Os
             </div>
           </motion.div>
         </div>
-      </div>
+      </motion.div>
     );
   }
 
@@ -1629,7 +1662,7 @@ export function OsceStudio({ activeItem, activeContent, onExit, onOpenPack }: Os
     }
 
     return (
-      <div className="fixed inset-0 z-50 bg-background flex flex-col overflow-hidden">
+      <motion.div className="fixed inset-0 z-50 bg-background flex flex-col overflow-hidden" {...conversationDismiss}>
         {/* Header */}
         <header className="flex items-center gap-2 px-3 py-2 bg-card/80 border-b border-border/60 shrink-0 backdrop-blur-sm">
           <button
@@ -2078,7 +2111,7 @@ export function OsceStudio({ activeItem, activeContent, onExit, onOpenPack }: Os
             </motion.div>
           )}
         </AnimatePresence>
-      </div>
+      </motion.div>
     );
   }
 
@@ -2114,7 +2147,10 @@ export function OsceStudio({ activeItem, activeContent, onExit, onOpenPack }: Os
     const badges = buildAchievements(result, timeUsedPct, turnCount);
 
     return (
-      <div className="fixed inset-0 z-50 bg-background overflow-y-auto medos-scroll">
+      <motion.div
+        className="fixed inset-0 z-50 bg-background overflow-y-auto medos-scroll"
+        {...debriefDismiss}
+      >
         <div className="max-w-3xl mx-auto px-4 md:px-8 py-8">
           <motion.div
             initial={{ opacity: 0, y: 8 }}
@@ -2329,7 +2365,7 @@ export function OsceStudio({ activeItem, activeContent, onExit, onOpenPack }: Os
             </div>
           </motion.div>
         </div>
-      </div>
+      </motion.div>
     );
   }
 

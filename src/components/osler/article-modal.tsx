@@ -9,6 +9,7 @@ import { useArticleHighlighter } from "@/hooks/use-article-highlighter";
 import { useI18n } from "@/components/osler/i18n-provider";
 import { HighlighterToolbar } from "./highlighter-toolbar";
 import { usePlatform } from "@/hooks/use-platform";
+import { useSwipeBackDismiss } from "@/hooks/use-swipe-back-dismiss";
 
 const BOOKMARKS_KEY = "osler-article-bookmarks";
 
@@ -128,8 +129,22 @@ export function FloatingArticleModal({
     }
   }, [articleId]);
 
-  const { t } = useI18n();
+  const { t, rtl } = useI18n();
   const platform = usePlatform();
+  const isPhone = platform.isPhone;
+
+  // ── Swipe-to-dismiss (mirrors Settings NavigationStack pattern) ──────
+  // On phones the article modal slides up from the bottom → vertical
+  // drag-down dismisses. On desktop the modal is a centered scale-in
+  // overlay, so a horizontal swipe doesn't map cleanly to a "back"
+  // direction — we disable swipe on desktop and rely on the X button /
+  // Escape / backdrop-click instead.
+  const dismissProps = useSwipeBackDismiss({
+    onDismiss: () => onClose(),
+    direction: "vertical",
+    rtl,
+    disabled: !isPhone || showSidebar,
+  });
 
   return (
     <AnimatePresence>
@@ -145,14 +160,15 @@ export function FloatingArticleModal({
           }}
         >
           <motion.div
-            initial={platform.isPhone ? { y: "100%", opacity: 0 } : { scale: 0.95, opacity: 0, y: 12 }}
-            animate={platform.isPhone ? { y: 0, opacity: 1 } : { scale: 1, opacity: 1, y: 0 }}
-            exit={platform.isPhone ? { y: "100%", opacity: 0 } : { scale: 0.95, opacity: 0, y: 12 }}
-            transition={platform.isPhone
+            initial={isPhone ? { y: "100%", opacity: 0 } : { scale: 0.95, opacity: 0, y: 12 }}
+            animate={isPhone ? { y: 0, opacity: 1 } : { scale: 1, opacity: 1, y: 0 }}
+            exit={isPhone ? { y: "100%", opacity: 0 } : { scale: 0.95, opacity: 0, y: 12 }}
+            transition={isPhone
               ? { type: "spring", damping: 32, stiffness: 320 }
               : { type: "spring", damping: 25, stiffness: 300 }}
             onClick={(e) => e.stopPropagation()}
-            className={platform.isPhone
+            {...dismissProps}
+            className={isPhone
               ? "bg-card flex flex-col overflow-hidden h-full w-full"
               : "bg-card border border-border rounded-2xl shadow-2xl w-full max-w-5xl h-[85vh] flex flex-col overflow-hidden"
             }

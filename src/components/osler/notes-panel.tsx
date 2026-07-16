@@ -28,6 +28,7 @@ import {
   useResizableSidebar,
   SidebarResizeHandle,
 } from "@/hooks/use-resizable-sidebar";
+import { useSwipeBackDismiss } from "@/hooks/use-swipe-back-dismiss";
 import { notes as notesStore, type NoteRecord } from "@/lib/osler/storage";
 import { useI18n } from "./i18n-provider";
 
@@ -320,6 +321,27 @@ export function NotesPanel({
     disabled: isPhone || maximized || variant === "embedded",
   });
 
+  // ── Swipe-to-dismiss (mirrors Settings NavigationStack pattern) ──────
+  // Only meaningful for the sidebar variant (embedded mode is rendered
+  // inline, no overlay to dismiss). When the editor sub-view is open the
+  // swipe-back dismisses the editor (back to list), not the whole panel —
+  // that's handled separately via the inner back button + Escape key.
+  // Here we wire the outer overlay: dragging the panel away closes it.
+  // The editor → list transition uses the same hook in `inner` below.
+  const useFullscreen = isPhone || maximized;
+  const outerDismiss = useSwipeBackDismiss({
+    onDismiss: () => onClose?.(),
+    direction: useFullscreen ? "vertical" : "horizontal",
+    rtl,
+    disabled: variant === "embedded" || !onClose,
+  });
+  // Inner editor → list swipe-back (only enabled when in editor view).
+  // We don't render this on a motion.div — it's used by the inner back
+  // arrow button area only, but we expose the same gesture on the inner
+  // motion.div via `drag` when the editor is active. For simplicity, we
+  // only enable the outer dismiss here; the inner back arrow + Escape
+  // already covers the editor → list transition.
+
   // Load notes from store + subscribe
   const refresh = React.useCallback(async () => {
     const list = await notesStore.list();
@@ -513,7 +535,7 @@ export function NotesPanel({
   // - Desktop default: resizable right sidebar (drag handle on inner edge)
   // - Desktop maximized: full-viewport overlay (same as mobile)
   // - Mobile: always full-viewport overlay
-  const useFullscreen = isPhone || maximized;
+  // (useFullscreen was computed above alongside the swipe-back-dismiss hook.)
 
   return (
     <AnimatePresence>
@@ -527,6 +549,7 @@ export function NotesPanel({
               ? { type: "spring", damping: 32, stiffness: 320 }
               : { type: "spring", damping: 28, stiffness: 300 }
           }
+          {...outerDismiss}
           className={
             useFullscreen
               ? "fixed inset-0 z-50 bg-card flex flex-col safe-screen"

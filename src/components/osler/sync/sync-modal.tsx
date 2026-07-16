@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { NetworkSyncPanel } from "./network-sync-panel";
 import { useI18n } from "@/components/osler/i18n-provider";
 import { haptic } from "@/lib/osler/native";
+import { useSwipeBackDismiss } from "@/hooks/use-swipe-back-dismiss";
 
 export function SyncModal({
   open,
@@ -18,6 +19,12 @@ export function SyncModal({
   onOpenSettings: () => void;
 }) {
   const { t } = useI18n();
+
+  const dismissProps = useSwipeBackDismiss({
+    onDismiss: onClose,
+    direction: "vertical",
+    disabled: !open,
+  });
 
   const handleClose = () => {
     haptic("light");
@@ -46,6 +53,7 @@ export function SyncModal({
             exit={{ opacity: 0, scale: 0.96, y: 12 }}
             transition={{ duration: 0.18 }}
             onClick={(e) => e.stopPropagation()}
+            {...dismissProps}
           >
             {/* Header */}
             <div className="flex items-center gap-3 px-4 py-3 border-b border-border/60 shrink-0">

@@ -112,6 +112,7 @@ import { setImmersiveMode } from "./immersive-mode";
 import { haptic } from "@/lib/osler/native";
 import { gradeWithAI, createManualEvaluation } from "@/lib/osler/grading";
 import { useI18n } from "./i18n-provider";
+import { NavigationStack } from "./navigation-stack";
 import type { StringKey } from "@/lib/osler/i18n";
 
 const LETTERS = ["A", "B", "C", "D", "E", "F", "G", "H"];
@@ -663,47 +664,50 @@ function HomeView({
 
   return (
     <div className="flex h-[calc(100vh-3.5rem)] overflow-hidden bg-background">
-      <div className="flex-1 min-w-0 overflow-y-auto medos-scroll-y medos-tabbar-pad">
-        <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-6 min-w-0">
-          {/* Page header */}
-          <div className="mb-6">
-            <h1 className="text-2xl font-semibold tracking-tight text-foreground">
-              QBank Studio
-            </h1>
-            <p className="text-sm text-muted-foreground mt-1">
-              Browse premade content packs or build a custom test with UWorld-style tools.
-            </p>
-          </div>
+      <div className="flex-1 min-w-0 flex flex-col overflow-hidden">
+        {/* Page header — fixed at top */}
+        <div className="shrink-0 max-w-7xl mx-auto w-full px-3 sm:px-6 lg:px-8 pt-4 sm:pt-6">
+          <h1 className="text-2xl font-semibold tracking-tight text-foreground">
+            QBank Studio
+          </h1>
+          <p className="text-sm text-muted-foreground mt-1">
+            Browse premade content packs or build a custom test with UWorld-style tools.
+          </p>
+        </div>
 
-          {/* Tab bar */}
-          <div className="border-b border-border mb-6">
-            <nav className="-mb-px flex gap-0">
-              {[
-                { id: "content" as const, label: t("qbank.home.tabContent"), icon: Grid3x3 },
-                { id: "create" as const, label: t("qbank.home.createTest"), icon: Plus },
-                { id: "previous" as const, label: t("qbank.home.tabPrevious"), icon: History },
-              ].map((t) => {
-                const Icon = t.icon;
-                const active = homeTab === t.id;
-                return (
-                  <button
-                    key={t.id}
-                    onClick={() => onHomeTabChange(t.id)}
-                    className={cn(
-                      "relative flex items-center gap-2 px-5 py-3 text-sm font-medium transition-colors",
-                      active
-                        ? "border-b-2 border-primary text-primary"
-                        : "border-b-2 border-transparent text-muted-foreground hover:text-foreground"
-                    )}
-                  >
-                    <Icon className="size-4" />
-                    {t.label}
-                  </button>
-                );
-              })}
-            </nav>
-          </div>
+        {/* Tab bar — fixed below header */}
+        <div className="shrink-0 border-b border-border px-3 sm:px-6 lg:px-8">
+          <nav className="-mb-px flex gap-0">
+            {[
+              { id: "content" as const, label: t("qbank.home.tabContent"), icon: Grid3x3 },
+              { id: "create" as const, label: t("qbank.home.createTest"), icon: Plus },
+              { id: "previous" as const, label: t("qbank.home.tabPrevious"), icon: History },
+            ].map((t) => {
+              const Icon = t.icon;
+              const active = homeTab === t.id;
+              return (
+                <button
+                  key={t.id}
+                  onClick={() => onHomeTabChange(t.id)}
+                  className={cn(
+                    "relative flex items-center gap-2 px-5 py-3 text-sm font-medium transition-colors",
+                    active
+                      ? "border-b-2 border-primary text-primary"
+                      : "border-b-2 border-transparent text-muted-foreground hover:text-foreground"
+                  )}
+                >
+                  <Icon className="size-4" />
+                  {t.label}
+                </button>
+              );
+            })}
+          </nav>
+        </div>
 
+        {/* Content zone — flex-1 min-h-0. Scrolling happens inside each
+            tab's own content (NavigationStack home/subpage layers for the
+            Content tab; overflow-y-auto wrappers for Create/Previous). */}
+        <div className="flex-1 min-h-0 max-w-7xl mx-auto w-full px-3 sm:px-6 lg:px-8 py-4 sm:py-6">
           {homeTab === "content" && (
             <ContentTab
               data={data}
@@ -711,19 +715,23 @@ function HomeView({
             />
           )}
           {homeTab === "create" && (
-            <CreateTestTab
-              data={data}
-              testMode={testMode}
-              onTestModeChange={onTestModeChange}
-              onOpenPack={onOpenPack}
-              onSetQuestionLimit={onSetQuestionLimit}
-            />
+            <div className="h-full overflow-y-auto medos-scroll medos-tabbar-pad">
+              <CreateTestTab
+                data={data}
+                testMode={testMode}
+                onTestModeChange={onTestModeChange}
+                onOpenPack={onOpenPack}
+                onSetQuestionLimit={onSetQuestionLimit}
+              />
+            </div>
           )}
           {homeTab === "previous" && (
-            <PreviousTestsTab
-              sessions={savedSessions}
-              onDelete={(id) => sessions.delete(id)}
-            />
+            <div className="h-full overflow-y-auto medos-scroll medos-tabbar-pad">
+              <PreviousTestsTab
+                sessions={savedSessions}
+                onDelete={(id) => sessions.delete(id)}
+              />
+            </div>
           )}
         </div>
       </div>
@@ -893,7 +901,7 @@ function ContentTab({
   data: { items: PackEntry[] } | null;
   onOpenPack?: (item: ContentTreeNode) => void;
 }) {
-  const { t, contentFilter } = useI18n();
+  const { t, rtl, contentFilter } = useI18n();
   const [searchQuery, setSearchQuery] = React.useState("");
   const [debouncedSearchQuery, setDebouncedSearchQuery] = React.useState("");
   const [selectedEngine, setSelectedEngine] = React.useState<EngineType | null>(null);
@@ -977,89 +985,15 @@ function ContentTab({
     );
   }
 
-  // ── PACKS VIEW (engine selected) ───────────────────────────────────────
-  if (selectedEngine) {
-    const meta = ENGINE_META[selectedEngine];
-    const Icon = ENGINE_ICONS[selectedEngine] ?? ListChecks;
-    const items = (filtered[selectedEngine] ?? []).filter((x) => x.content);
-    const stat = engineStats[selectedEngine] ?? {
-      packs: 0,
-      questions: 0,
-      attempted: 0,
-      correct: 0,
-    };
-    const accuracy =
-      stat.attempted > 0 ? Math.round((stat.correct / stat.attempted) * 100) : 0;
-
-    return (
-      <div>
-        <div className="max-w-5xl mx-auto px-0 sm:px-0 py-2">
-          {/* Header */}
-          <div className="mb-5">
-            <button
-              onClick={() => setSelectedEngine(null)}
-              className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors mb-3"
-            >
-              <ArrowLeft className="size-3.5" />
-              {t("common.all")}
-            </button>
-            <div className="flex items-center gap-2 text-xs text-muted-foreground mb-1">
-              <Icon className="size-3.5" style={{ color: meta.color }} />
-              <span style={{ color: meta.color }}>{t(`engine.${selectedEngine}` as any)}</span>
-            </div>
-            <h1 className="text-2xl md:text-3xl font-bold tracking-tight mb-1">
-              {t(`engine.${selectedEngine}` as any)}
-            </h1>
-            <p className="text-sm text-muted-foreground">
-              {stat.packs} · {t("qbank.home.questions", { n: stat.questions })}
-            </p>
-          </div>
-
-          {/* Search */}
-          <div className="relative mb-3">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
-            <input
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder={t("qbank.home.search")}
-              className="w-full h-10 pl-10 pr-4 rounded-xl border border-border bg-card text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
-            />
-          </div>
-
-          <ContentLangFilter />
-
-          {items.length === 0 ? (
-            <div className="text-center py-16">
-              <div className="size-14 rounded-full bg-muted/40 flex items-center justify-center mx-auto mb-4">
-                <Search className="size-6 text-muted-foreground" />
-              </div>
-              <h3 className="text-base font-semibold mb-1">{t("qbank.home.empty")}</h3>
-              <p className="text-sm text-muted-foreground">{t("qbank.home.search")}</p>
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              {items.map(({ node, content }, idx) => (
-                <PackCard
-                  key={node.uid}
-                  node={node}
-                  content={content as AnyContent}
-                  index={idx}
-                  onOpenPack={onOpenPack}
-                />
-              ))}
-            </div>
-          )}
-        </div>
-      </div>
-    );
-  }
-
   // ── ENGINES VIEW (folder grid, mirrors the flashcard decks view) ───────
+  // This is the "home" layer of the NavigationStack. The PACKS VIEW below
+  // becomes the subpage that slides in when the user picks an engine.
+  // Swiping the subpage back (iOS-style) returns to this engines grid.
   const engineEntries = Object.entries(filtered) as Array<
     [EngineType, typeof data.items]
   >;
 
-  return (
+  const enginesView = (
     <div className="h-full overflow-y-auto medos-scroll">
       <div className="max-w-5xl mx-auto px-0 sm:px-0 py-2">
         {/* Stat bar */}
@@ -1192,6 +1126,99 @@ function ContentTab({
         )}
       </div>
     </div>
+  );
+
+  // ── PACKS VIEW (engine selected) — subpage of the NavigationStack ──────
+  // Slides in from the inline-end side when the user picks an engine.
+  // Drag it back (iOS-style) to return to the engines grid.
+  let packsView: React.ReactNode = null;
+  if (selectedEngine) {
+    const meta = ENGINE_META[selectedEngine];
+    const Icon = ENGINE_ICONS[selectedEngine] ?? ListChecks;
+    const items = (filtered[selectedEngine] ?? []).filter((x) => x.content);
+    const stat = engineStats[selectedEngine] ?? {
+      packs: 0,
+      questions: 0,
+      attempted: 0,
+      correct: 0,
+    };
+    const accuracy =
+      stat.attempted > 0 ? Math.round((stat.correct / stat.attempted) * 100) : 0;
+
+    packsView = (
+      <div className="max-w-5xl mx-auto px-0 sm:px-0 py-2">
+        {/* Header */}
+        <div className="mb-5">
+          <button
+            onClick={() => setSelectedEngine(null)}
+            className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors mb-3"
+          >
+            <ArrowLeft className={cn("size-3.5", rtl && "rtl-flip-x")} />
+            {t("common.all")}
+          </button>
+          <div className="flex items-center gap-2 text-xs text-muted-foreground mb-1">
+            <Icon className="size-3.5" style={{ color: meta.color }} />
+            <span style={{ color: meta.color }}>{t(`engine.${selectedEngine}` as any)}</span>
+          </div>
+          <h1 className="text-2xl md:text-3xl font-bold tracking-tight mb-1">
+            {t(`engine.${selectedEngine}` as any)}
+          </h1>
+          <p className="text-sm text-muted-foreground">
+            {stat.packs} · {t("qbank.home.questions", { n: stat.questions })}
+          </p>
+        </div>
+
+        {/* Search */}
+        <div className="relative mb-3">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
+          <input
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder={t("qbank.home.search")}
+            className="w-full h-10 pl-10 pr-4 rounded-xl border border-border bg-card text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+          />
+        </div>
+
+        <ContentLangFilter />
+
+        {items.length === 0 ? (
+          <div className="text-center py-16">
+            <div className="size-14 rounded-full bg-muted/40 flex items-center justify-center mx-auto mb-4">
+              <Search className="size-6 text-muted-foreground" />
+            </div>
+            <h3 className="text-base font-semibold mb-1">{t("qbank.home.empty")}</h3>
+            <p className="text-sm text-muted-foreground">{t("qbank.home.search")}</p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            {items.map(({ node, content }, idx) => (
+              <PackCard
+                key={node.uid}
+                node={node}
+                content={content as AnyContent}
+                index={idx}
+                onOpenPack={onOpenPack}
+              />
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // NavigationStack: home (engines grid) is always rendered underneath.
+  // When `selectedEngine` is set, the packs view slides in on top and can
+  // be dragged back to dismiss — same iOS-style gesture as Settings.
+  return (
+    <NavigationStack
+      className="h-full"
+      homeClassName="medos-scroll medos-tabbar-pad"
+      subpageClassName="medos-scroll medos-tabbar-pad"
+      rtl={rtl}
+      home={enginesView}
+      subpage={packsView}
+      onBack={() => setSelectedEngine(null)}
+    />
   );
 }
 

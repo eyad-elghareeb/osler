@@ -35,6 +35,7 @@ import { setImmersiveMode } from "./immersive-mode";
 import { useI18n } from "./i18n-provider";
 import { ContentCacheButton } from "./content-cache-button";
 import { ContentLangFilter } from "./qbank-studio";
+import { NavigationStack } from "./navigation-stack";
 
 type ViewMode = "decks" | "subdecks" | "study" | "complete";
 
@@ -385,6 +386,173 @@ export function FlashcardStudio({
   ).length;
   const accuracy = doneCount > 0 ? Math.round((correctCount / doneCount) * 100) : 0;
 
+  /**
+   * renderDecksView — the top-level decks grid. Extracted as a closure so
+   * the same JSX can be used both as the default view (when `mode ===
+   * "decks"`) and as the `home` layer underneath the subdecks subpage in
+   * NavigationStack. Reading component state directly avoids prop drilling.
+   */
+  const renderDecksView = () => (
+    <div className="h-full overflow-y-auto medos-scroll medos-tabbar-pad">
+      <div className="max-w-5xl mx-auto px-4 md:px-8 py-8">
+        {/* Header */}
+        <div className="mb-6">
+          <div className="flex items-center gap-2 text-xs text-muted-foreground mb-1">
+            <Layers className="size-3.5" />
+            <span>{t("engine.flashcard")}</span>
+          </div>
+          <h1 className="text-2xl md:text-3xl font-bold tracking-tight mb-1">
+            {t("flash.home.title")}
+          </h1>
+          <p className="text-sm text-muted-foreground">
+            {t("flash.home.subtitle")}
+          </p>
+        </div>
+
+        {/* Stat bar */}
+        <div className="grid grid-cols-3 gap-3 mb-6">
+          <div className="bg-card border border-border rounded-xl p-3.5">
+            <div className="flex items-center gap-2 text-xs text-muted-foreground mb-1">
+              <Clock className="size-3.5" />
+              {t("flash.home.due")}
+            </div>
+            <div className="text-xl font-bold">{stats.due}</div>
+          </div>
+          <div className="bg-card border border-border rounded-xl p-3.5">
+            <div className="flex items-center gap-2 text-xs text-muted-foreground mb-1">
+              <BarChart3 className="size-3.5" />
+              {t("flash.home.new")}
+            </div>
+            <div className="text-xl font-bold">{stats.new}</div>
+          </div>
+          <div className="bg-card border border-border rounded-xl p-3.5">
+            <div className="flex items-center gap-2 text-xs text-muted-foreground mb-1">
+              <Brain className="size-3.5" />
+              {t("flash.home.total")}
+            </div>
+            <div className="text-xl font-bold">{stats.total}</div>
+          </div>
+        </div>
+
+        <ContentLangFilter />
+
+        {/* Deck grid */}
+        {tree.length === 0 ? (
+          <div className="text-center py-16">
+            <div className="size-14 rounded-full bg-muted/40 flex items-center justify-center mx-auto mb-4">
+              <Layers className="size-6 text-muted-foreground" />
+            </div>
+            <h3 className="text-base font-semibold mb-1">{t("flash.home.empty")}</h3>
+            <p className="text-sm text-muted-foreground">
+              {t("flash.home.empty")}
+            </p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            {tree.map((node, idx) => {
+              const isBranch = node.items.length > 0;
+              const totalCards = mergeCards(collectLeafUids(node)).length;
+              const dueCount = nodeDueCount(node);
+              const pct = totalCards > 0
+                ? Math.round(((totalCards - dueCount) / totalCards) * 100)
+                : 0;
+              // Per-pack content URLs (for the offline download button).
+              // For branch nodes (folders), include all leaf descendant files.
+              // Computed inline (cheap) to avoid hook-in-loop violations.
+              const collectPackUrls = (n: ContentTreeNode): string[] => {
+                const ownBase = `/osler-content/flashcard/${n.path}`;
+                const own = (n.files ?? []).map((f) => `${ownBase}${f}`);
+                if (n.items.length === 0) return own;
+                const childUrls: string[] = [];
+                for (const child of n.items) {
+                  childUrls.push(...collectPackUrls(child));
+                }
+                return [...own, ...childUrls];
+              };
+              const packUrls = collectPackUrls(node);
+              return (
+                <div
+                  key={node.uid}
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => {
+                    if (isBranch) {
+                      openSubdecks(idx);
+                    } else {
+                      startDeck(idx);
+                    }
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      if (isBranch) openSubdecks(idx);
+                      else startDeck(idx);
+                    }
+                  }}
+                  className={cn(
+                    "medos-fade-in text-start bg-card border border-border rounded-xl p-5 hover:border-primary/40 hover:shadow-md hover:bg-primary/[0.02] transition-colors group cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
+                    node.lang === "ar" && "osler-content-ar",
+                  )}
+                  dir={node.lang === "ar" ? "rtl" : undefined}
+                  lang={node.lang ?? undefined}
+                  style={{ animationDelay: `${idx * 0.04}s` }}
+                >
+                  <div className="flex items-center gap-3 mb-3">
+                    <div
+                      className="size-11 rounded-xl flex items-center justify-center shrink-0"
+                      style={{
+                        backgroundColor: `${FLASHCARD_COLOR}/15`,
+                        color: FLASHCARD_COLOR,
+                      }}
+                    >
+                      {isBranch ? (
+                        <Folder className="size-5" />
+                      ) : (
+                        <Layers className="size-5" />
+                      )}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <h3 className="font-semibold truncate">{node.title}</h3>
+                      <p className="text-xs text-muted-foreground">
+                        {isBranch
+                          ? t("flash.home.subdecks", { n: node.items.length })
+                          : t("flash.home.cards", { n: totalCards })}
+                      </p>
+                    </div>
+                    <ContentCacheButton packId={node.uid} urls={packUrls} />
+                    <ChevronRight className="size-4 text-muted-foreground/40 group-hover:text-muted-foreground transition-colors ml-auto shrink-0" />
+                  </div>
+                  {node.description && (
+                    <p className="text-xs text-muted-foreground/70 line-clamp-2 mb-3">
+                      {node.description}
+                    </p>
+                  )}
+                  <div className="flex items-center gap-3 text-xs">
+                    <span className="text-emerald-500 font-medium tabular-nums">
+                      {t("flash.dueCount", { count: dueCount })}
+                    </span>
+                    <span className="text-muted-foreground">
+                      {t("flash.totalCount", { count: totalCards })}
+                    </span>
+                  </div>
+                  <div className="mt-2 h-1.5 rounded-full bg-muted/40 overflow-hidden">
+                    <div
+                      className="h-full rounded-full transition-all duration-300"
+                      style={{
+                        width: `${pct}%`,
+                        backgroundColor: FLASHCARD_COLOR,
+                      }}
+                    />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+
   /* ── Complete view ──────────────────────────────────────────────── */
   if (mode === "complete" && currentDeck) {
     return (
@@ -628,274 +796,128 @@ export function FlashcardStudio({
     const totalCards = allCards.length;
     const totalDue = nodeDueCount(currentDeck);
 
+    // Wrap the subdecks view in NavigationStack so the user can swipe
+    // back to the decks list — same iOS-style gesture as Settings. The
+    // home layer (decks grid) is rendered underneath and dims to 65%
+    // opacity while the subdecks subpage is on top, exactly like the
+    // Settings → sub-section push animation.
     return (
-      <div className="h-full overflow-y-auto medos-scroll">
-        <div className="max-w-5xl mx-auto px-4 md:px-8 py-8">
-          {/* Header */}
-          <div className="mb-6">
-            <button
-              onClick={backToDecks}
-              className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors mb-3"
-            >
-              <ArrowLeft className="size-3.5" />
-              {t("flash.home.allDecks")}
-            </button>
-            <div className="flex items-center gap-2 text-xs text-muted-foreground mb-1">
-              <Layers className="size-3.5" />
-              <span>{ENGINE_META.flashcard.label}</span>
+      <NavigationStack
+        className="h-full"
+        homeClassName="medos-scroll medos-tabbar-pad"
+        subpageClassName="medos-scroll medos-tabbar-pad"
+        rtl={rtl}
+        home={renderDecksView()}
+        subpage={
+          <div className="max-w-5xl mx-auto px-4 md:px-8 py-8">
+            {/* Header */}
+            <div className="mb-6">
+              <button
+                onClick={backToDecks}
+                className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors mb-3"
+              >
+                <ArrowLeft className="size-3.5" />
+                {t("flash.home.allDecks")}
+              </button>
+              <div className="flex items-center gap-2 text-xs text-muted-foreground mb-1">
+                <Layers className="size-3.5" />
+                <span>{ENGINE_META.flashcard.label}</span>
+              </div>
+              <h1 className="text-2xl md:text-3xl font-bold tracking-tight mb-1">
+                {currentDeck.title}
+              </h1>
+              <p className="text-sm text-muted-foreground">
+                {t("flash.dueToday", { due: totalDue, total: totalCards })}
+              </p>
             </div>
-            <h1 className="text-2xl md:text-3xl font-bold tracking-tight mb-1">
-              {currentDeck.title}
-            </h1>
-            <p className="text-sm text-muted-foreground">
-              {t("flash.dueToday", { due: totalDue, total: totalCards })}
-            </p>
-          </div>
 
-          {/* Study All + Export buttons */}
-          <div className="flex items-center gap-2 mb-6">
-            <button
-              onClick={() => startDeck(deckIndex)}
-              className="h-10 px-4 rounded-xl bg-primary text-primary-foreground font-medium text-sm hover:bg-primary/90 transition-colors flex items-center gap-2"
-            >
-              <GraduationCap className="size-4" />
-              {t("flash.home.studyAll")}
-            </button>
-            <button
-              onClick={exportToAnki}
-              className="h-10 px-4 rounded-xl border border-border text-foreground font-medium text-sm hover:bg-muted/60 transition-colors flex items-center gap-2"
-            >
-              <Download className="size-4" />
-              {t("flash.exportAnki")}
-            </button>
-          </div>
+            {/* Study All + Export buttons */}
+            <div className="flex items-center gap-2 mb-6">
+              <button
+                onClick={() => startDeck(deckIndex)}
+                className="h-10 px-4 rounded-xl bg-primary text-primary-foreground font-medium text-sm hover:bg-primary/90 transition-colors flex items-center gap-2"
+              >
+                <GraduationCap className="size-4" />
+                {t("flash.home.studyAll")}
+              </button>
+              <button
+                onClick={exportToAnki}
+                className="h-10 px-4 rounded-xl border border-border text-foreground font-medium text-sm hover:bg-muted/60 transition-colors flex items-center gap-2"
+              >
+                <Download className="size-4" />
+                {t("flash.exportAnki")}
+              </button>
+            </div>
 
-          {/* Child deck grid */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {childNodes.map((child) => {
-              const isBranch = child.items.length > 0;
-              const count = nodeCardCount(child);
-              const dueCount = nodeDueCount(child);
-              return (
-                <button
-                  key={child.uid}
-                  onClick={() => {
-                    if (isBranch) {
-                      /* drill deeper — open this branch in subdecks view */
-                      const idx = tree.indexOf(currentDeck); // won't work for nested
-                      startDeck(deckIndex); // start session with merged cards for now
-                    } else {
-                      startSubdeck(deckIndex, child.uid);
-                    }
-                  }}
-                  className="medos-fade-in text-left bg-card border border-border rounded-xl p-5 hover:border-primary/40 hover:shadow-md hover:bg-primary/[0.02] transition-colors group"
-                >
-                  <div className="flex items-center gap-3 mb-3">
-                    <div
-                      className="size-11 rounded-xl flex items-center justify-center shrink-0"
-                      style={{
-                        backgroundColor: `${FLASHCARD_COLOR}/15`,
-                        color: FLASHCARD_COLOR,
-                      }}
-                    >
-                      {isBranch ? <Folder className="size-5" /> : <Layers className="size-5" />}
+            {/* Child deck grid */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {childNodes.map((child) => {
+                const isBranch = child.items.length > 0;
+                const count = nodeCardCount(child);
+                const dueCount = nodeDueCount(child);
+                return (
+                  <button
+                    key={child.uid}
+                    onClick={() => {
+                      if (isBranch) {
+                        /* drill deeper — open this branch in subdecks view */
+                        const idx = tree.indexOf(currentDeck); // won't work for nested
+                        startDeck(deckIndex); // start session with merged cards for now
+                      } else {
+                        startSubdeck(deckIndex, child.uid);
+                      }
+                    }}
+                    className="medos-fade-in text-left bg-card border border-border rounded-xl p-5 hover:border-primary/40 hover:shadow-md hover:bg-primary/[0.02] transition-colors group"
+                  >
+                    <div className="flex items-center gap-3 mb-3">
+                      <div
+                        className="size-11 rounded-xl flex items-center justify-center shrink-0"
+                        style={{
+                          backgroundColor: `${FLASHCARD_COLOR}/15`,
+                          color: FLASHCARD_COLOR,
+                        }}
+                      >
+                        {isBranch ? <Folder className="size-5" /> : <Layers className="size-5" />}
+                      </div>
+                      <div className="min-w-0">
+                        <h3 className="font-semibold truncate">{child.title}</h3>
+                        <p className="text-xs text-muted-foreground">
+                          {isBranch
+                            ? t("flash.home.subdecks", { n: child.items.length })
+                            : t("flash.home.cards", { n: count })}
+                        </p>
+                      </div>
+                      <ChevronRight className="size-4 text-muted-foreground/40 group-hover:text-muted-foreground transition-colors ml-auto shrink-0" />
                     </div>
-                    <div className="min-w-0">
-                      <h3 className="font-semibold truncate">{child.title}</h3>
-                      <p className="text-xs text-muted-foreground">
-                        {isBranch
-                          ? t("flash.home.subdecks", { n: child.items.length })
-                          : t("flash.home.cards", { n: count })}
+                    {child.description && (
+                      <p className="text-xs text-muted-foreground/70 line-clamp-2 mb-3">
+                        {child.description}
                       </p>
-                    </div>
-                    <ChevronRight className="size-4 text-muted-foreground/40 group-hover:text-muted-foreground transition-colors ml-auto shrink-0" />
-                  </div>
-                  {child.description && (
-                    <p className="text-xs text-muted-foreground/70 line-clamp-2 mb-3">
-                      {child.description}
-                    </p>
-                  )}
-                  {dueCount > 0 && (
-                    <div className="flex items-center gap-1.5">
-                      <span className="inline-flex items-center gap-1 text-xs font-medium text-emerald-500 bg-emerald-500/10 px-2 py-0.5 rounded-full">
-                        <Clock className="size-3" />
-                        {t("flash.dueCount", { count: dueCount })}
-                      </span>
-                    </div>
-                  )}
-                  {dueCount === 0 && count > 0 && (
-                    <span className="text-xs text-muted-foreground/50">{t("flash.allReviewed")}</span>
-                  )}
-                </button>
-              );
-            })}
+                    )}
+                    {dueCount > 0 && (
+                      <div className="flex items-center gap-1.5">
+                        <span className="inline-flex items-center gap-1 text-xs font-medium text-emerald-500 bg-emerald-500/10 px-2 py-0.5 rounded-full">
+                          <Clock className="size-3" />
+                          {t("flash.dueCount", { count: dueCount })}
+                        </span>
+                      </div>
+                    )}
+                    {dueCount === 0 && count > 0 && (
+                      <span className="text-xs text-muted-foreground/50">{t("flash.allReviewed")}</span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
           </div>
-        </div>
-      </div>
+        }
+        onBack={backToDecks}
+      />
     );
   }
 
   /* ── Decks view (grid) ───────────────────────────────────────────── */
-  return (
-    <div className="h-full overflow-y-auto medos-scroll medos-tabbar-pad">
-      <div className="max-w-5xl mx-auto px-4 md:px-8 py-8">
-        {/* Header */}
-        <div className="mb-6">
-          <div className="flex items-center gap-2 text-xs text-muted-foreground mb-1">
-            <Layers className="size-3.5" />
-            <span>{t("engine.flashcard")}</span>
-          </div>
-          <h1 className="text-2xl md:text-3xl font-bold tracking-tight mb-1">
-            {t("flash.home.title")}
-          </h1>
-          <p className="text-sm text-muted-foreground">
-            {t("flash.home.subtitle")}
-          </p>
-        </div>
-
-        {/* Stat bar */}
-        <div className="grid grid-cols-3 gap-3 mb-6">
-          <div className="bg-card border border-border rounded-xl p-3.5">
-            <div className="flex items-center gap-2 text-xs text-muted-foreground mb-1">
-              <Clock className="size-3.5" />
-              {t("flash.home.due")}
-            </div>
-            <div className="text-xl font-bold">{stats.due}</div>
-          </div>
-          <div className="bg-card border border-border rounded-xl p-3.5">
-            <div className="flex items-center gap-2 text-xs text-muted-foreground mb-1">
-              <BarChart3 className="size-3.5" />
-              {t("flash.home.new")}
-            </div>
-            <div className="text-xl font-bold">{stats.new}</div>
-          </div>
-          <div className="bg-card border border-border rounded-xl p-3.5">
-            <div className="flex items-center gap-2 text-xs text-muted-foreground mb-1">
-              <Brain className="size-3.5" />
-              {t("flash.home.total")}
-            </div>
-            <div className="text-xl font-bold">{stats.total}</div>
-          </div>
-        </div>
-
-        <ContentLangFilter />
-
-        {/* Deck grid */}
-        {tree.length === 0 ? (
-          <div className="text-center py-16">
-            <div className="size-14 rounded-full bg-muted/40 flex items-center justify-center mx-auto mb-4">
-              <Layers className="size-6 text-muted-foreground" />
-            </div>
-            <h3 className="text-base font-semibold mb-1">{t("flash.home.empty")}</h3>
-            <p className="text-sm text-muted-foreground">
-              {t("flash.home.empty")}
-            </p>
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {tree.map((node, idx) => {
-              const isBranch = node.items.length > 0;
-              const totalCards = mergeCards(collectLeafUids(node)).length;
-              const dueCount = nodeDueCount(node);
-              const pct = totalCards > 0
-                ? Math.round(((totalCards - dueCount) / totalCards) * 100)
-                : 0;
-              // Per-pack content URLs (for the offline download button).
-              // For branch nodes (folders), include all leaf descendant files.
-              // Computed inline (cheap) to avoid hook-in-loop violations.
-              const collectPackUrls = (n: ContentTreeNode): string[] => {
-                const ownBase = `/osler-content/flashcard/${n.path}`;
-                const own = (n.files ?? []).map((f) => `${ownBase}${f}`);
-                if (n.items.length === 0) return own;
-                const childUrls: string[] = [];
-                for (const child of n.items) {
-                  childUrls.push(...collectPackUrls(child));
-                }
-                return [...own, ...childUrls];
-              };
-              const packUrls = collectPackUrls(node);
-              return (
-                <div
-                  key={node.uid}
-                  role="button"
-                  tabIndex={0}
-                  onClick={() => {
-                    if (isBranch) {
-                      openSubdecks(idx);
-                    } else {
-                      startDeck(idx);
-                    }
-                  }}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" || e.key === " ") {
-                      e.preventDefault();
-                      if (isBranch) openSubdecks(idx);
-                      else startDeck(idx);
-                    }
-                  }}
-                  className={cn(
-                    "medos-fade-in text-start bg-card border border-border rounded-xl p-5 hover:border-primary/40 hover:shadow-md hover:bg-primary/[0.02] transition-colors group cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
-                    node.lang === "ar" && "osler-content-ar",
-                  )}
-                  dir={node.lang === "ar" ? "rtl" : undefined}
-                  lang={node.lang ?? undefined}
-                  style={{ animationDelay: `${idx * 0.04}s` }}
-                >
-                  <div className="flex items-center gap-3 mb-3">
-                    <div
-                      className="size-11 rounded-xl flex items-center justify-center shrink-0"
-                      style={{
-                        backgroundColor: `${FLASHCARD_COLOR}/15`,
-                        color: FLASHCARD_COLOR,
-                      }}
-                    >
-                      {isBranch ? (
-                        <Folder className="size-5" />
-                      ) : (
-                        <Layers className="size-5" />
-                      )}
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <h3 className="font-semibold truncate">{node.title}</h3>
-                      <p className="text-xs text-muted-foreground">
-                        {isBranch
-                          ? t("flash.home.subdecks", { n: node.items.length })
-                          : t("flash.home.cards", { n: totalCards })}
-                      </p>
-                    </div>
-                    <ContentCacheButton packId={node.uid} urls={packUrls} />
-                    <ChevronRight className="size-4 text-muted-foreground/40 group-hover:text-muted-foreground transition-colors ml-auto shrink-0" />
-                  </div>
-                  {node.description && (
-                    <p className="text-xs text-muted-foreground/70 line-clamp-2 mb-3">
-                      {node.description}
-                    </p>
-                  )}
-                  <div className="flex items-center gap-3 text-xs">
-                    <span className="text-emerald-500 font-medium tabular-nums">
-                      {t("flash.dueCount", { count: dueCount })}
-                    </span>
-                    <span className="text-muted-foreground">
-                      {t("flash.totalCount", { count: totalCards })}
-                    </span>
-                  </div>
-                  <div className="mt-2 h-1.5 rounded-full bg-muted/40 overflow-hidden">
-                    <div
-                      className="h-full rounded-full transition-all duration-300"
-                      style={{
-                        width: `${pct}%`,
-                        backgroundColor: FLASHCARD_COLOR,
-                      }}
-                    />
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </div>
-    </div>
-  );
+  return renderDecksView();
 }
 
 function RateButton({

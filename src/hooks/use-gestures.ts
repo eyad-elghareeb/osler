@@ -7,8 +7,7 @@
  *
  *   • `useSwipe(options)`            — directional swipes on an element.
  *   • `usePinch(options)`            — pinch-to-zoom on an element.
- *   • `useEdgeSwipe(options)`        — swipe in from a screen edge to trigger
- *                                       an action (e.g. open sidebar drawer).
+ *   • `useLongPress(options)`        — long-press detection on an element.
  *
  * All hooks are no-ops on devices without touch support, and gracefully
  * degrade on the desktop (mouse events aren't translated to swipes).
@@ -64,19 +63,6 @@ export interface PinchHandlers {
 export interface PinchOptions extends PinchHandlers {
   /** Minimum scale change before onPinchMove fires. Default 1.02. */
   threshold?: number;
-  disabled?: boolean;
-}
-
-export interface EdgeSwipeOptions {
-  /** Edge to watch: "left" | "right" | "top" | "bottom". */
-  edge: "left" | "right" | "top" | "bottom";
-  /** Width/height in px of the edge zone that initiates the swipe. Default 24. */
-  edgeZone?: number;
-  /** Min displacement to commit the action. Default 80. */
-  threshold?: number;
-  onSwipe: (e: PointerEvent) => void;
-  onSwipeProgress?: (progress: number) => void;
-  onSwipeCancel?: () => void;
   disabled?: boolean;
 }
 
@@ -244,107 +230,6 @@ export function usePinch<T extends HTMLElement = HTMLDivElement>(
       el.removeEventListener("touchcancel", onEnd);
     };
   }, [options.disabled]);
-
-  return ref;
-}
-
-// ─── useEdgeSwipe ─────────────────────────────────────────────────────────
-
-export function useEdgeSwipe<T extends HTMLElement = HTMLDivElement>(
-  options: EdgeSwipeOptions
-): React.RefObject<T | null> {
-  const ref = React.useRef<T | null>(null);
-  const optsRef = React.useRef(options);
-  optsRef.current = options;
-
-  React.useEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-    if (options.disabled) return;
-
-    let startX = 0;
-    let startY = 0;
-    let tracking = false;
-    let startPointerId = -1;
-
-    const onDown = (e: PointerEvent) => {
-      if (e.pointerType === "mouse" && e.button !== 0) return;
-      const o = optsRef.current;
-      const zone = o.edgeZone ?? 24;
-      const rect = el.getBoundingClientRect();
-      let inEdge = false;
-      switch (o.edge) {
-        case "left":   inEdge = e.clientX - rect.left <= zone; break;
-        case "right":  inEdge = rect.right - e.clientX <= zone; break;
-        case "top":    inEdge = e.clientY - rect.top <= zone; break;
-        case "bottom": inEdge = rect.bottom - e.clientY <= zone; break;
-      }
-      if (!inEdge) return;
-      // Avoid hijacking inputs.
-      const t = e.target as HTMLElement | null;
-      if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable)) {
-        return;
-      }
-      tracking = true;
-      startX = e.clientX;
-      startY = e.clientY;
-      startPointerId = e.pointerId;
-    };
-
-    const onMove = (e: PointerEvent) => {
-      if (!tracking || e.pointerId !== startPointerId) return;
-      const o = optsRef.current;
-      const dx = e.clientX - startX;
-      const dy = e.clientY - startY;
-      const threshold = o.threshold ?? 80;
-      let progress = 0;
-      switch (o.edge) {
-        case "left":   progress = Math.min(1, Math.max(0, dx / threshold)); break;
-        case "right":  progress = Math.min(1, Math.max(0, -dx / threshold)); break;
-        case "top":    progress = Math.min(1, Math.max(0, dy / threshold)); break;
-        case "bottom": progress = Math.min(1, Math.max(0, -dy / threshold)); break;
-      }
-      o.onSwipeProgress?.(progress);
-    };
-
-    const onUp = (e: PointerEvent) => {
-      if (!tracking || e.pointerId !== startPointerId) return;
-      tracking = false;
-      const o = optsRef.current;
-      const dx = e.clientX - startX;
-      const dy = e.clientY - startY;
-      const threshold = o.threshold ?? 80;
-      let triggered = false;
-      switch (o.edge) {
-        case "left":   triggered = dx >= threshold; break;
-        case "right":  triggered = -dx >= threshold; break;
-        case "top":    triggered = dy >= threshold; break;
-        case "bottom": triggered = -dy >= threshold; break;
-      }
-      if (triggered) o.onSwipe(e);
-      else o.onSwipeCancel?.();
-    };
-
-    const onCancel = () => {
-      if (!tracking) return;
-      tracking = false;
-      optsRef.current.onSwipeCancel?.();
-    };
-
-    el.addEventListener("pointerdown", onDown, { passive: true });
-    el.addEventListener("pointermove", onMove, { passive: true });
-    el.addEventListener("pointerup", onUp, { passive: true });
-    el.addEventListener("pointercancel", onCancel, { passive: true });
-    el.addEventListener("pointerleave", onCancel, { passive: true });
-
-    return () => {
-      el.removeEventListener("pointerdown", onDown);
-      el.removeEventListener("pointermove", onMove);
-      el.removeEventListener("pointerup", onUp);
-      el.removeEventListener("pointercancel", onCancel);
-      el.removeEventListener("pointerleave", onCancel);
-    };
-  }, [options.disabled, options.edge]);
 
   return ref;
 }

@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { motion, AnimatePresence, useMotionValue, animate } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import {
   Activity,
   LayoutDashboard,
@@ -44,7 +44,6 @@ import { GlobalSearchPanel } from "./global-search-panel";
 import type { SearchResult } from "@/lib/osler/search";
 import { cn } from "@/lib/utils";
 import { useIsMobile } from "@/hooks/use-mobile";
-import { useEdgeSwipe } from "@/hooks/use-gestures";
 import {
   withViewTransition,
   isViewTransitionsSupported,
@@ -126,10 +125,6 @@ interface AppShellProps {
   onLogout: () => void;
   /** Called when the user picks a result from the global search. */
   onSearchSelect?: (r: SearchResult) => void;
-  /** Optional: a back-navigation target for the mobile edge-swipe gesture.
-   *  When provided and the user swipes in from the start edge on mobile,
-   *  this is called instead of doing nothing. */
-  onSwipeBack?: () => void;
   children: React.ReactNode;
 }
 
@@ -139,7 +134,6 @@ export function AppShell({
   username,
   onLogout,
   onSearchSelect,
-  onSwipeBack,
   children,
 }: AppShellProps) {
   const { theme, toggleTheme } = useOslerTheme();
@@ -216,44 +210,6 @@ export function AppShell({
     onSearchSelect?.(r);
   };
 
-  // Mobile edge-swipe → back navigation with live visual feedback.
-  // The "start" edge in LTR is the left edge (swipe rightward = back);
-  // in RTL it's the right edge (swipe leftward = back). We only attach the
-  // listener on mobile to avoid hijacking desktop trackpad gestures.
-  const edgeSwipeX = useMotionValue(0);
-  const EDGE_SWIPE_MAX = 280;
-
-  const edgeSwipeRef = useEdgeSwipe<HTMLDivElement>({
-    edge: rtl ? "right" : "left",
-    edgeZone: 28,
-    threshold: 90,
-    disabled: !isMobile || !onSwipeBack,
-    onSwipeProgress: (progress) => {
-      // Rubber-band resistance: ease progress so the further you pull,
-      // the harder it gets — like iOS back-swipe.
-      const resistance = 1 - Math.pow(1 - Math.min(progress, 1), 2.5);
-      const sign = rtl ? -1 : 1;
-      edgeSwipeX.set(resistance * EDGE_SWIPE_MAX * sign);
-    },
-    onSwipe: () => {
-      haptic("selection");
-      // Animate fully off-screen, then navigate back.
-      const sign = rtl ? -1 : 1;
-      animate(edgeSwipeX, window.innerWidth * sign, {
-        type: "spring", stiffness: 400, damping: 40, mass: 0.8,
-      }).then(() => {
-        edgeSwipeX.set(0);
-        onSwipeBack?.();
-      });
-    },
-    onSwipeCancel: () => {
-      // Spring back to origin — iOS-like elastic return.
-      animate(edgeSwipeX, 0, {
-        type: "spring", stiffness: 500, damping: 40, mass: 0.8,
-      });
-    },
-  });
-
   const searchPlaceholder = t("search.globalPlaceholder");
 
   const isDashboard = view === "dashboard";
@@ -267,10 +223,7 @@ export function AppShell({
   // mobile sheet share the same component instance structure.
 
   return (
-    <div
-      ref={edgeSwipeRef}
-      className="h-screen md:h-screen h-[100dvh] flex flex-col bg-background overflow-hidden"
-    >
+    <div className="h-screen md:h-screen h-[100dvh] flex flex-col bg-background overflow-hidden">
       <header className="z-40 shrink-0 h-14 border-b border-border/60 bg-background/80 backdrop-blur-md supports-[backdrop-filter]:bg-background/60 safe-pt">
         <div className="h-full px-3 sm:px-4 flex items-center gap-2 sm:gap-3">
           {/* Logo */}
@@ -440,12 +393,7 @@ export function AppShell({
           framer-motion enter/exit animation entirely — the VT snapshot already
           crossfades the old and new views, and layering framer-motion on top
           would double-animate. When VT is unavailable we fall back to the
-          framer-motion fade.
-
-          On mobile, the entire content area is wrapped in a motion.div that
-          carries the edge-swipe offset so the view slides with the finger
-          during back-swipe gestures. */}
-      <motion.div style={{ x: edgeSwipeX }} className="flex-1 min-h-0 flex flex-col">
+          framer-motion fade. */}
       <main className="flex-1 min-h-0 overflow-y-auto medos-scroll-y medos-tabbar-pad">
         <LightboxProvider>
           {vtActive ? (
@@ -468,7 +416,6 @@ export function AppShell({
           )}
         </LightboxProvider>
       </main>
-      </motion.div>
 
       {/* Mobile tab bar */}
       <MobileTabBar view={view} onViewChange={handleViewChange} />

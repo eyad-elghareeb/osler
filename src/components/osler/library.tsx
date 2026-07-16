@@ -31,7 +31,6 @@ import {
 import type { ContentTreeNode } from "@/lib/osler/types";
 import { cn } from "@/lib/utils";
 import { useIsMobile } from "@/hooks/use-mobile";
-import { useEdgeSwipe } from "@/hooks/use-gestures";
 import { useArticleHighlighter } from "@/hooks/use-article-highlighter";
 import { useOslerTheme } from "./theme-provider";
 import { useI18n } from "./i18n-provider";
@@ -39,6 +38,7 @@ import { useLightbox } from "./lightbox-provider";
 import { HighlighterToolbar } from "./highlighter-toolbar";
 import { ContentCacheButton } from "./content-cache-button";
 import { FolderTreeNav } from "./folder-tree-nav";
+import { NavigationStack } from "./navigation-stack";
 import { applyHighlightsToHtml } from "@/lib/osler/article-highlights";
 import { setImmersiveMode } from "./immersive-mode";
 
@@ -51,6 +51,7 @@ type SidebarTab = "toc" | "bookmarks";
 const BOOKMARKS_KEY = "osler-article-bookmarks";
 
 export function Library({ initialArticleId }: LibraryProps) {
+  const { rtl } = useI18n();
   const [tree, setTree] = React.useState<ContentTreeNode[]>([]);
   const [allArticles, setAllArticles] = React.useState<ArticleMeta[]>([]);
   const [activeFile, setActiveFile] = React.useState<string | null>(
@@ -319,41 +320,52 @@ export function Library({ initialArticleId }: LibraryProps) {
     [bookmarks, allArticles]
   );
 
-  // Mobile: full-screen reader when article is active
-  if (isMobile && activeFile && activeArticle) {
-    return (
-      <MobileReader
-        article={activeArticle}
-        isBookmarked={bookmarks.has(activeFile)}
-        onToggleBookmark={() => toggleBookmark(activeFile)}
-        onBack={closeArticle}
-        zoom={zoom}
-        onZoomIn={() => setZoom((z) => Math.min(140, z + 10))}
-        onZoomOut={() => setZoom((z) => Math.max(80, z - 10))}
-        onResetZoom={() => setZoom(100)}
-        fontSize={fontSize}
-        onFontSizeChange={setFontSize}
-        loading={loading}
-        articleContentRef={articleContentRef}
-        processedHtml={processedArticleHtml}
-        hlCtrl={hlCtrl}
-      />
-    );
-  }
-
-  // Mobile: hub view (article list) when no article is selected
+  // Mobile: NavigationStack with MobileHub underneath and MobileReader
+  // sliding in on top when an article is open. Drag the reader back
+  // (iOS-style) to close the article and return to the hub — the exact
+  // same gesture as Settings, Flashcards, and QBank. The hub stays
+  // mounted underneath so going back is instant (no reload).
   if (isMobile) {
     return (
-      <MobileHub
-        allArticles={allArticles}
-        bookmarks={bookmarks}
-        bookmarkedArticles={bookmarkedArticles}
-        activeFile={activeFile}
-        onOpenArticle={openArticleByFile}
-        onToggleBookmark={toggleBookmark}
-        searchQuery={searchQuery}
-        onSearchChange={setSearchQuery}
-        matchedArticleFiles={matchedArticleFiles}
+      <NavigationStack
+        className="h-full"
+        homeClassName="medos-scroll"
+        subpageClassName="medos-scroll"
+        rtl={rtl}
+        home={
+          <MobileHub
+            allArticles={allArticles}
+            bookmarks={bookmarks}
+            bookmarkedArticles={bookmarkedArticles}
+            activeFile={activeFile}
+            onOpenArticle={openArticleByFile}
+            onToggleBookmark={toggleBookmark}
+            searchQuery={searchQuery}
+            onSearchChange={setSearchQuery}
+            matchedArticleFiles={matchedArticleFiles}
+          />
+        }
+        subpage={
+          activeFile && activeArticle ? (
+            <MobileReader
+              article={activeArticle}
+              isBookmarked={bookmarks.has(activeFile)}
+              onToggleBookmark={() => toggleBookmark(activeFile)}
+              onBack={closeArticle}
+              zoom={zoom}
+              onZoomIn={() => setZoom((z) => Math.min(140, z + 10))}
+              onZoomOut={() => setZoom((z) => Math.max(80, z - 10))}
+              onResetZoom={() => setZoom(100)}
+              fontSize={fontSize}
+              onFontSizeChange={setFontSize}
+              loading={loading}
+              articleContentRef={articleContentRef}
+              processedHtml={processedArticleHtml}
+              hlCtrl={hlCtrl}
+            />
+          ) : null
+        }
+        onBack={closeArticle}
       />
     );
   }
@@ -702,16 +714,16 @@ function MobileReader({
   hlCtrl: ReturnType<typeof useArticleHighlighter>;
 }) {
   const [fontPopoverOpen, setFontPopoverOpen] = React.useState(false);
-  const { t, rtl } = useI18n();
-  const edgeSwipeRef = useEdgeSwipe<HTMLDivElement>({
-    edge: rtl ? "right" : "left",
-    edgeZone: 28,
-    threshold: 90,
-    onSwipe: onBack,
-  });
+  const { t } = useI18n();
+  // NOTE: The swipe-to-go-back gesture is now handled by the parent
+  // NavigationStack (which wraps MobileReader as its subpage). MobileReader
+  // itself no longer needs its own edge-swipe ref — the NavigationStack's
+  // topmost subpage is draggable via the shared useSwipeBackDismiss hook.
+  // The `rtl` prop is also no longer needed here since the parent passes
+  // it to NavigationStack directly.
 
   return (
-    <div ref={edgeSwipeRef} className="fixed inset-0 z-50 bg-background flex flex-col">
+    <div className="absolute inset-0 bg-background flex flex-col">
       {/* Top bar */}
       <header className="shrink-0 border-b border-border bg-card/40 backdrop-blur-sm safe-pt">
         <div className="flex items-center gap-2 px-3 h-12">

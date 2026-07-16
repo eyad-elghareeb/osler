@@ -23,6 +23,7 @@ import {
   useResizableSidebar,
   SidebarResizeHandle,
 } from "@/hooks/use-resizable-sidebar";
+import { useSwipeBackDismiss } from "@/hooks/use-swipe-back-dismiss";
 
 const MODELS = [
   ["gemini-3.1-flash-lite", "Gemini 3.1 Flash-Lite (default, fast & modern)"],
@@ -135,7 +136,7 @@ export function AiAssistant({
   onClose,
   questionContext,
 }: AiAssistantProps) {
-  const { t } = useI18n();
+  const { t, rtl } = useI18n();
   const platform = usePlatform();
   const resizable = useResizableSidebar({
     storageKey: "osler-ai-assistant-width",
@@ -157,6 +158,22 @@ export function AiAssistant({
 
   const scrollRef = React.useRef<HTMLDivElement>(null);
   const inputRef = React.useRef<HTMLTextAreaElement>(null);
+
+  // ── Swipe-to-dismiss (mirrors Settings NavigationStack pattern) ──────
+  // Only meaningful in overlay mode (when `open`/`onClose` are provided).
+  // The hook returns {} when disabled, so the embedded-mode render path is
+  // unaffected. We still MUST call it unconditionally to satisfy the Rules
+  // of Hooks.
+  const isOverlay = open !== undefined && !!onClose;
+  const isPhone = platform.isPhone;
+  // Disable swipe while the inner settings panel is open so the user
+  // doesn't lose their API-key form mid-edit.
+  const dismissProps = useSwipeBackDismiss({
+    onDismiss: () => onClose?.(),
+    direction: isPhone ? "vertical" : "horizontal",
+    rtl,
+    disabled: !isOverlay || showSettings,
+  });
 
   React.useEffect(() => {
     setApiKey(localStorage.getItem(STORAGE_KEYS.apiKey) || "");
@@ -519,18 +536,18 @@ export function AiAssistant({
     </div>
   );
 
-  if (open !== undefined && onClose) {
-    const isPhone = platform.isPhone;
+  if (isOverlay) {
     return (
       <AnimatePresence>
         {open && (
           <motion.div
-            initial={isPhone ? { y: "100%", opacity: 0 } : { x: 360, opacity: 0 }}
+            initial={isPhone ? { y: "100%", opacity: 0 } : { x: rtl ? -360 : 360, opacity: 0 }}
             animate={isPhone ? { y: 0, opacity: 1 } : { x: 0, opacity: 1 }}
-            exit={isPhone ? { y: "100%", opacity: 0 } : { x: 360, opacity: 0 }}
+            exit={isPhone ? { y: "100%", opacity: 0 } : { x: rtl ? -360 : 360, opacity: 0 }}
             transition={isPhone
               ? { type: "spring", damping: 32, stiffness: 320 }
               : { type: "spring", damping: 28, stiffness: 300 }}
+            {...dismissProps}
             className={isPhone
               ? "fixed inset-0 z-50 bg-card flex flex-col"
               : "fixed right-0 top-12 bottom-0 z-50 border-l border-border bg-card shadow-xl flex flex-col"

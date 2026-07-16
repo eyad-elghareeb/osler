@@ -29,6 +29,7 @@ import {
   useResizableSidebar,
   SidebarResizeHandle,
 } from "@/hooks/use-resizable-sidebar";
+import { useSwipeBackDismiss } from "@/hooks/use-swipe-back-dismiss";
 import type {
   QuizSettings,
   QuestionAlign,
@@ -96,6 +97,16 @@ export function QuizSettingsPanel({
     minWidth: 320,
     maxWidth: 560,
     disabled: isPhone,
+  });
+
+  // ── Swipe-to-dismiss (mirrors Settings NavigationStack pattern) ──────
+  // Phones slide up from the bottom → vertical drag-down to dismiss.
+  // Desktop sidebar slides in from the inline-end side → horizontal drag
+  // toward that edge to dismiss. RTL flips the horizontal direction.
+  const dismissProps = useSwipeBackDismiss({
+    onDismiss: () => onClose(),
+    direction: isPhone ? "vertical" : "horizontal",
+    rtl,
   });
 
   const headerTone =
@@ -388,6 +399,7 @@ export function QuizSettingsPanel({
               ? { type: "spring", damping: 32, stiffness: 320 }
               : { type: "spring", damping: 28, stiffness: 300 }
           }
+          {...dismissProps}
           className={
             isPhone
               ? "fixed inset-0 z-50 bg-card flex flex-col safe-screen"

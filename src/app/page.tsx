@@ -36,10 +36,6 @@ export default function Home() {
   const [settingsSection, setSettingsSection] = React.useState<
     "language" | "ai" | "shortcuts" | "downloads" | "sync" | "backup" | "native" | "danger"
   >("language");
-  // Navigation stack for the mobile back-swipe gesture. Each push records
-  // the previous view so a swipe-back pops to it.
-  const navStackRef = React.useRef<OslerView[]>([]);
-
   const openSettingsSection = (section: typeof settingsSection) => {
     setSettingsSection(section);
     setView("settings");
@@ -116,36 +112,6 @@ export default function Home() {
   };
 
   /**
-   * Track the view stack so the mobile edge-swipe gesture can pop back to
-   * the previous view. We don't track every state change — only meaningful
-   * top-level view changes (not sub-mode switches inside a studio).
-   */
-  React.useEffect(() => {
-    const stack = navStackRef.current;
-    const top = stack[stack.length - 1];
-    if (top === view) return;
-    // If the new view is "dashboard", treat it as a reset (home).
-    if (view === "dashboard") {
-      navStackRef.current = [];
-      return;
-    }
-    stack.push(view);
-    // Cap the stack so it doesn't grow unbounded.
-    if (stack.length > 20) stack.shift();
-  }, [view]);
-
-  const handleSwipeBack = React.useCallback(() => {
-    const stack = navStackRef.current;
-    if (stack.length <= 1) {
-      setView("dashboard");
-      return;
-    }
-    stack.pop(); // remove current
-    const prev = stack[stack.length - 1] ?? "dashboard";
-    setView(prev);
-  }, []);
-
-  /**
    * Dispatch a global-search result to the right navigation action.
    * The result kinds map cleanly to the existing handlers.
    */
@@ -192,7 +158,6 @@ export default function Home() {
       username={username}
       onLogout={handleLogout}
       onSearchSelect={handleSearchSelect}
-      onSwipeBack={handleSwipeBack}
     >
       {view === "dashboard" ? (
         <Dashboard
