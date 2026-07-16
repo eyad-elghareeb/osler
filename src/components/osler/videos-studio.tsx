@@ -9,7 +9,6 @@ import {
   ChevronRight,
   ArrowLeft,
   Clock,
-  Search,
   Tag,
   Loader2,
   Folder,
@@ -26,7 +25,6 @@ import {
   loadVideoTree,
   loadNodeVideos,
   listAllVideos,
-  searchVideos as searchVideosAsync,
   resolveThumbnail,
   formatDuration,
 } from "@/lib/osler/videos";
@@ -82,10 +80,6 @@ export function VideosStudio({ initialVideoId, onOpenArticle }: VideosStudioProp
   const [folderVideos, setFolderVideos] = React.useState<VideoResource[]>([]);
   const [folderLoading, setFolderLoading] = React.useState(false);
   const [allVideos, setAllVideos] = React.useState<Array<VideoResource & { nodeUid: string; nodePath: string }>>([]);
-  const [searchQuery, setSearchQuery] = React.useState("");
-  const [debouncedSearch, setDebouncedSearch] = React.useState("");
-  const [searchResults, setSearchResults] = React.useState<Array<VideoResource & { nodeUid: string; nodePath: string }>>([]);
-  const [searching, setSearching] = React.useState(false);
 
   // The active video being played (or null = hub view).
   const [activeVideo, setActiveVideo] = React.useState<(VideoResource & { nodeUid: string; nodePath: string }) | null>(null);
@@ -113,25 +107,6 @@ export function VideosStudio({ initialVideoId, onOpenArticle }: VideosStudioProp
       }
     })();
   }, []);
-
-  // Debounce search.
-  React.useEffect(() => {
-    const t = setTimeout(() => setDebouncedSearch(searchQuery), 200);
-    return () => clearTimeout(t);
-  }, [searchQuery]);
-
-  // Run search when the debounced query changes.
-  React.useEffect(() => {
-    if (!debouncedSearch.trim()) {
-      setSearchResults([]);
-      setSearching(false);
-      return;
-    }
-    setSearching(true);
-    searchVideosAsync(debouncedSearch)
-      .then((r) => setSearchResults(r))
-      .finally(() => setSearching(false));
-  }, [debouncedSearch]);
 
   // Load videos in the selected folder.
   React.useEffect(() => {
@@ -222,8 +197,6 @@ export function VideosStudio({ initialVideoId, onOpenArticle }: VideosStudioProp
   }
 
   /* ── Render: Hub view ── */
-  const isSearching = debouncedSearch.trim().length > 0;
-  const visibleVideos = isSearching ? searchResults : folderVideos;
   const selectedNode = selectedNodeUid ? findNodeByUid(tree, selectedNodeUid) : null;
 
   // Per-pack content URLs (for the offline download button).
@@ -266,26 +239,6 @@ export function VideosStudio({ initialVideoId, onOpenArticle }: VideosStudioProp
           </div>
         </motion.div>
 
-        {/* Search */}
-        <div className="relative mb-4">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground pointer-events-none" />
-          <input
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder={t("videos.search")}
-            className="w-full h-10 pl-9 pr-9 rounded-lg border border-border/60 bg-card text-sm outline-none focus:border-primary/60 focus:ring-2 focus:ring-primary/10 transition-all placeholder:text-muted-foreground"
-          />
-          {searchQuery && (
-            <button
-              onClick={() => setSearchQuery("")}
-              className="absolute right-2 top-1/2 -translate-y-1/2 size-6 rounded-md flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors"
-              aria-label={t("common.close")}
-            >
-              <X className="size-3.5" />
-            </button>
-          )}
-        </div>
-
         <ContentLangFilter />
 
         {/* Two-pane layout: folder tree (desktop) + video grid */}
@@ -319,23 +272,19 @@ export function VideosStudio({ initialVideoId, onOpenArticle }: VideosStudioProp
             {/* Header row */}
             <div className="flex items-center justify-between mb-3">
               <div className="min-w-0">
-                {isSearching ? (
-                  <h2 className="text-sm font-semibold truncate">
-                    {t("videos.search")} &middot; {searchResults.length} {searchResults.length === 1 ? "video" : "videos"}
-                  </h2>
-                ) : selectedNode ? (
+                {selectedNode ? (
                   <h2 className="text-sm font-semibold truncate">{selectedNode.title}</h2>
                 ) : (
                   <h2 className="text-sm font-semibold truncate">{t("videos.allVideos")}</h2>
                 )}
               </div>
-              {!isSearching && selectedNode && (
+              {selectedNode && (
                 <ContentCacheButton packId={selectedNode.uid} urls={collectPackUrls(selectedNode)} />
               )}
             </div>
 
             {/* Folder quick-nav chips (mobile) */}
-            {isMobile && !isSearching && (
+            {isMobile && (
               <div className="flex gap-2 overflow-x-auto medos-scroll-x pb-2 mb-2 -mx-1 px-1">
                 {flattenLeaves(tree).map((node) => (
                   <button
@@ -355,28 +304,25 @@ export function VideosStudio({ initialVideoId, onOpenArticle }: VideosStudioProp
             )}
 
             {/* Video grid */}
-            {folderLoading && !isSearching ? (
+            {folderLoading ? (
               <div className="flex flex-col items-center justify-center py-20 text-muted-foreground gap-3">
                 <Loader2 className="size-6 animate-spin text-primary" />
                 <span className="text-sm">{t("videos.loading")}</span>
               </div>
-            ) : visibleVideos.length === 0 ? (
+            ) : folderVideos.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-16 text-center gap-3">
                 <div className="size-14 rounded-full bg-muted/40 flex items-center justify-center">
                   <VideoIcon className="size-6 text-muted-foreground" />
                 </div>
                 <div>
                   <p className="font-semibold text-sm mb-1">
-                    {isSearching ? t("videos.noResults") : t("videos.empty")}
+                    {t("videos.empty")}
                   </p>
-                  {isSearching && (
-                    <p className="text-xs text-muted-foreground">"{debouncedSearch}"</p>
-                  )}
                 </div>
               </div>
             ) : (
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                {visibleVideos.map((video, idx) => {
+                {folderVideos.map((video, idx) => {
                   const thumbnail = resolveThumbnail(video);
                   const lang = video.lang ?? "en";
                   return (

@@ -2,8 +2,8 @@
 
 import * as React from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { BookOpen, X, Clock, ChevronRight, Search, Bookmark, BookmarkCheck } from "lucide-react";
-import { loadArticleContent, listAllArticles, searchArticles as searchArticlesAsync, type Article, type ArticleMeta } from "@/lib/osler/articles";
+import { BookOpen, X, Clock, ChevronRight, Bookmark, BookmarkCheck } from "lucide-react";
+import { loadArticleContent, listAllArticles, type Article, type ArticleMeta } from "@/lib/osler/articles";
 import { cn } from "@/lib/utils";
 import { useArticleHighlighter } from "@/hooks/use-article-highlighter";
 import { useI18n } from "@/components/osler/i18n-provider";
@@ -25,12 +25,10 @@ export function FloatingArticleModal({
   onOpenArticle,
 }: FloatingArticleModalProps) {
   const [activeId, setActiveId] = React.useState(articleId);
-  const [query, setQuery] = React.useState("");
-  const [debouncedQuery, setDebouncedQuery] = React.useState("");
   const [showSidebar, setShowSidebar] = React.useState(false);
   const [bookmarks, setBookmarks] = React.useState<Set<string>>(new Set());
   const [article, setArticle] = React.useState<Article | null>(null);
-  const [searchResults, setSearchResults] = React.useState<ArticleMeta[]>([]);
+  const [allArticles, setAllArticles] = React.useState<ArticleMeta[]>([]);
 
   const hlCtrl = useArticleHighlighter({
     source: "library",
@@ -64,30 +62,13 @@ export function FloatingArticleModal({
     } catch {}
   }, []);
 
-  // Debounced search
+  // Load all articles for sidebar
   React.useEffect(() => {
-    const t = setTimeout(async () => {
-      if (!debouncedQuery) {
-        const all = await listAllArticles();
-        setSearchResults(all);
-        return;
-      }
-      const results = await searchArticlesAsync(debouncedQuery);
-      setSearchResults(results);
-    }, 200);
-    return () => clearTimeout(t);
-  }, [debouncedQuery]);
-
-  React.useEffect(() => {
-    const t = setTimeout(() => setDebouncedQuery(query), 200);
-    return () => clearTimeout(t);
-  }, [query]);
-
-  // Initial debouncedQuery is "", triggers search effect to load list on mount
+    listAllArticles().then(setAllArticles);
+  }, []);
 
   const handleOpen = (id: string) => {
     setActiveId(id);
-    setQuery("");
     setShowSidebar(false);
     onOpenArticle?.(id);
   };
@@ -242,20 +223,8 @@ export function FloatingArticleModal({
                     transition={{ duration: 0.2 }}
                     className="border-r border-border bg-sidebar overflow-hidden flex flex-col"
                   >
-                    <div className="p-3 border-b border-border">
-                      <div className="flex items-center gap-2 px-2.5 h-8 rounded-md bg-muted/50">
-                        <Search className="size-3.5 text-muted-foreground" />
-                        <input
-                          autoFocus
-                          value={query}
-                          onChange={(e) => setQuery(e.target.value)}
-                          placeholder={t("article.searchPlaceholder")}
-                          className="flex-1 bg-transparent outline-none text-xs min-w-0"
-                        />
-                      </div>
-                    </div>
                     <div className="flex-1 overflow-y-auto medos-scroll p-2 space-y-0.5">
-                      {searchResults.map((a) => (
+                      {allArticles.map((a) => (
                         <button
                           key={a.file}
                           onClick={() => handleOpen(a.file)}

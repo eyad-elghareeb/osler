@@ -15,11 +15,9 @@ import {
   Cog,
   NotebookPen,
   Plus,
-  Search,
   Trash2,
   Folder,
   ExternalLink,
-  X,
   Pencil,
   Eye,
   Tag,
@@ -351,7 +349,6 @@ function ProfileNotesSection({
 }) {
   const { t } = useI18n();
   const [allNotes, setAllNotes] = React.useState<NoteRecord[]>([]);
-  const [search, setSearch] = React.useState("");
   const [panelOpen, setPanelOpen] = React.useState(false);
   const [editingId, setEditingId] = React.useState<string | null>(null);
 
@@ -366,16 +363,7 @@ function ProfileNotesSection({
     return unsub;
   }, [refresh]);
 
-  const visibleNotes = React.useMemo(() => {
-    if (!search.trim()) return allNotes;
-    const q = search.trim().toLowerCase();
-    return allNotes.filter(
-      (n) =>
-        n.title.toLowerCase().includes(q) ||
-        n.body.toLowerCase().includes(q) ||
-        n.tags.some((t) => t.toLowerCase().includes(q)),
-    );
-  }, [allNotes, search]);
+  const visibleNotes = React.useMemo(() => allNotes, [allNotes]);
 
   const handleCreate = async () => {
     const note = await notesStore.create({ title: "", body: "" });
@@ -397,23 +385,6 @@ function ProfileNotesSection({
       <div className="bg-card border border-border rounded-lg p-4 mb-6">
         {/* Toolbar */}
         <div className="flex items-center gap-2 mb-4">
-          <div className="flex-1 flex items-center gap-2 h-9 px-3 rounded-lg border border-border bg-background">
-            <Search className="size-3.5 text-muted-foreground shrink-0" />
-            <input
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder={t("qbank.notes.search")}
-              className="flex-1 bg-transparent outline-none text-xs placeholder:text-muted-foreground min-w-0"
-            />
-            {search && (
-              <button
-                onClick={() => setSearch("")}
-                className="size-5 rounded hover:bg-muted flex items-center justify-center"
-              >
-                <X className="size-3" />
-              </button>
-            )}
-          </div>
           <Button
             size="sm"
             onClick={handleCreate}
@@ -432,19 +403,15 @@ function ProfileNotesSection({
               <NotebookPen className="size-6" />
             </div>
             <h3 className="text-sm font-semibold mb-1">
-              {search ? t("qbank.notes.empty.searching") : t("qbank.notes.empty.title")}
+              {t("qbank.notes.empty.title")}
             </h3>
             <p className="text-xs text-muted-foreground max-w-xs mx-auto mb-4">
-              {search
-                ? t("qbank.notes.empty.searchingBody")
-                : t("qbank.notes.empty.body")}
+              {t("qbank.notes.empty.body")}
             </p>
-            {!search && (
-              <Button onClick={handleCreate} size="sm" variant="outline" className="rounded-lg">
-                <Plus className="size-3.5 mr-1" />
-                {t("qbank.notes.empty.createFirst")}
-              </Button>
-            )}
+            <Button onClick={handleCreate} size="sm" variant="outline" className="rounded-lg">
+              <Plus className="size-3.5 mr-1" />
+              {t("qbank.notes.empty.createFirst")}
+            </Button>
           </div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">

@@ -15,7 +15,6 @@ import {
   Type,
   Minus,
   Plus as PlusIcon,
-  Search,
   BookmarkX,
   ArrowLeft,
   FileText,
@@ -30,7 +29,6 @@ import {
   loadArticleTree,
   loadArticleContent,
   listAllArticles,
-  searchArticles as searchLibraryArticles,
   type ArticleMeta,
   type Article,
 } from "@/lib/osler/articles";
@@ -86,13 +84,6 @@ export function Library({ initialArticleId }: LibraryProps) {
 
   const [loading, setLoading] = React.useState(false);
   const [sidebarTab, setSidebarTab] = React.useState<SidebarTab>("toc");
-  const [searchQuery, setSearchQuery] = React.useState("");
-  const [debouncedSearchQuery, setDebouncedSearchQuery] = React.useState("");
-
-  React.useEffect(() => {
-    const t = setTimeout(() => setDebouncedSearchQuery(searchQuery), 200);
-    return () => clearTimeout(t);
-  }, [searchQuery]);
 
   const hlCtrl = useArticleHighlighter({
     source: "library",
@@ -191,15 +182,6 @@ export function Library({ initialArticleId }: LibraryProps) {
       return next;
     });
   };
-
-  const [matchedArticleFiles, setMatchedArticleFiles] = React.useState<Set<string> | null>(null);
-
-  React.useEffect(() => {
-    if (!debouncedSearchQuery.trim()) { setMatchedArticleFiles(null); return; }
-    searchLibraryArticles(debouncedSearchQuery).then((results) => {
-      setMatchedArticleFiles(new Set(results.map((a) => a.file)));
-    });
-  }, [debouncedSearchQuery]);
 
   const articleContentRef = React.useRef<HTMLDivElement>(null);
 
@@ -480,9 +462,6 @@ export function Library({ initialArticleId }: LibraryProps) {
           activeFile={activeFile}
           onOpenArticle={openArticleByFile}
           onToggleBookmark={toggleBookmark}
-          searchQuery={searchQuery}
-          onSearchChange={setSearchQuery}
-          matchedArticleFiles={matchedArticleFiles}
         />
       }
       subpage={
@@ -559,9 +538,6 @@ export function Library({ initialArticleId }: LibraryProps) {
                 onOpenArticle={openArticleByFile}
                 bookmarks={bookmarks}
                 onToggleBookmark={toggleBookmark}
-                searchQuery={searchQuery}
-                onSearchChange={setSearchQuery}
-                matchedArticleFiles={matchedArticleFiles}
                 sidebarTab={sidebarTab}
                 onTabChange={setSidebarTab}
                 bookmarkedArticles={bookmarkedArticles}
@@ -582,9 +558,6 @@ export function Library({ initialArticleId }: LibraryProps) {
           onOpenArticle={openArticleByFile}
           bookmarks={bookmarks}
           onToggleBookmark={toggleBookmark}
-          searchQuery={searchQuery}
-          onSearchChange={setSearchQuery}
-          matchedArticleFiles={matchedArticleFiles}
           sidebarTab={sidebarTab}
           onTabChange={setSidebarTab}
           bookmarkedArticles={bookmarkedArticles}
@@ -678,9 +651,6 @@ function MobileHub({
   activeFile,
   onOpenArticle,
   onToggleBookmark,
-  searchQuery,
-  onSearchChange,
-  matchedArticleFiles,
 }: {
   allArticles: ArticleMeta[];
   bookmarks: Set<string>;
@@ -688,9 +658,6 @@ function MobileHub({
   activeFile: string | null;
   onOpenArticle: (file: string) => void;
   onToggleBookmark: (file: string) => void;
-  searchQuery: string;
-  onSearchChange: (q: string) => void;
-  matchedArticleFiles: Set<string> | null;
 }) {
   const { t } = useI18n();
   const [filter, setFilter] = React.useState<"all" | "bookmarked">("all");
@@ -708,34 +675,11 @@ function MobileHub({
     return Array.from(map.entries()).sort(([a], [b]) => a.localeCompare(b));
   }, [displayArticles]);
 
-  // Filter by search results
-  const filteredGrouped = React.useMemo(() => {
-    if (!matchedArticleFiles && !searchQuery.trim()) return grouped;
-    if (!matchedArticleFiles) return grouped;
-    return grouped
-      .map(([specialty, articles]) => {
-        const matched = articles.filter((a) => matchedArticleFiles.has(a.file));
-        return [specialty, matched] as [string, ArticleMeta[]];
-      })
-      .filter(([, articles]) => articles.length > 0);
-  }, [grouped, matchedArticleFiles, searchQuery]);
-
   return (
     <div className="h-full overflow-y-auto medos-scroll medos-tabbar-pad">
-      {/* Search bar */}
+      {/* Filter pills */}
       <div className="sticky top-0 z-10 bg-background border-b border-border px-4 py-3">
-        <div className="relative max-w-xl mx-auto">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground pointer-events-none" />
-          <input
-            type="text"
-            value={searchQuery}
-            onChange={(e) => onSearchChange(e.target.value)}
-            placeholder={t("library.search")}
-            className="w-full h-10 rounded-xl border border-border bg-card pl-10 pr-3 text-sm outline-none focus:border-primary transition-colors placeholder:text-muted-foreground/50"
-          />
-        </div>
-        {/* Filter pills */}
-        <div className="flex items-center gap-2 mt-3 max-w-xl mx-auto">
+        <div className="flex items-center gap-2 max-w-xl mx-auto">
           <button
             onClick={() => setFilter("all")}
             className={cn(
@@ -763,19 +707,17 @@ function MobileHub({
       </div>
 
       <div className="px-4 pb-4 medos-tabbar-pad">
-        {filteredGrouped.length === 0 ? (
+        {grouped.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-16 text-center">
             <BookOpen className="size-10 text-muted-foreground/30 mb-3" />
             <p className="text-sm text-muted-foreground">
-              {searchQuery.trim()
-                ? t("library.noResults")
-                : filter === "bookmarked"
-                  ? t("library.noBookmarks")
-                  : t("library.empty")}
+              {filter === "bookmarked"
+                ? t("library.noBookmarks")
+                : t("library.empty")}
             </p>
           </div>
         ) : (
-          filteredGrouped.map(([specialty, articles]) => (
+          grouped.map(([specialty, articles]) => (
             <div key={specialty} className="mt-5 first:mt-3">
               <div className="flex items-center gap-2 mb-2.5 px-0.5">
                 <FileText className="size-3.5 text-muted-foreground" />
@@ -1115,9 +1057,6 @@ function SidebarContent({
   onOpenArticle,
   bookmarks,
   onToggleBookmark,
-  searchQuery,
-  onSearchChange,
-  matchedArticleFiles,
   sidebarTab,
   onTabChange,
   bookmarkedArticles,
@@ -1131,9 +1070,6 @@ function SidebarContent({
   onOpenArticle: (file: string) => void;
   bookmarks: Set<string>;
   onToggleBookmark: (file: string) => void;
-  searchQuery: string;
-  onSearchChange: (q: string) => void;
-  matchedArticleFiles: Set<string> | null;
   sidebarTab: SidebarTab;
   onTabChange: (t: SidebarTab) => void;
   bookmarkedArticles: ArticleMeta[];
@@ -1190,19 +1126,6 @@ function SidebarContent({
             </button>
           </div>
         </div>
-        <div className="relative">
-          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground pointer-events-none" />
-          <input
-            type="text"
-            value={searchQuery}
-            onChange={(e) => {
-              onSearchChange(e.target.value);
-              if (e.target.value) onTabChange("toc");
-            }}
-            placeholder={t("library.search")}
-            className="w-full h-8 rounded-md border border-border bg-card pl-8 pr-3 text-xs outline-none focus:border-primary transition-colors placeholder:text-muted-foreground/50"
-          />
-        </div>
       </div>
 
       <div className="flex-1 overflow-y-auto medos-scroll p-2 space-y-0.5 medos-tabbar-pad md:pb-2">
@@ -1233,39 +1156,11 @@ function SidebarContent({
             ))}
           </div>
         ) : (
-          <>
-            <FolderTreeNav
-              tree={tree}
-              selected={activeFile}
-              onSelect={(node) => onOpenArticle(node.uid)}
-            />
-            {/* Search results */}
-            {searchQuery.trim() && matchedArticleFiles && (
-              <div className="mt-2 pt-2 border-t border-border space-y-0.5">
-                <div className="px-3 pb-1 text-[10px] uppercase tracking-wider text-muted-foreground/50 font-semibold">
-                  Search Results
-                </div>
-                {allArticles
-                  .filter((a) => matchedArticleFiles.has(a.file))
-                  .slice(0, 20)
-                  .map((a) => (
-                    <button
-                      key={a.file}
-                      onClick={() => onOpenArticle(a.file)}
-                      className={cn(
-                        "w-full flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm transition-colors text-left",
-                        "hover:bg-muted/60",
-                        a.file === activeFile && "bg-primary/10 text-primary font-medium"
-                      )}
-                      style={{ paddingLeft: "12px" }}
-                    >
-                      <BookOpen className="size-3.5 text-muted-foreground shrink-0" />
-                      <span className="flex-1 truncate">{a.title}</span>
-                    </button>
-                  ))}
-              </div>
-            )}
-          </>
+          <FolderTreeNav
+            tree={tree}
+            selected={activeFile}
+            onSelect={(node) => onOpenArticle(node.uid)}
+          />
         )}
       </div>
 

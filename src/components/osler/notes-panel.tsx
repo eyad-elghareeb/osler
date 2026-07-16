@@ -6,7 +6,6 @@ import {
   ArrowLeft,
   Plus,
   Trash2,
-  Search,
   NotebookPen,
   Notebook,
   Eye,
@@ -302,7 +301,6 @@ export function NotesPanel({
   const [view, setView] = React.useState<View>("list");
   const [activeNote, setActiveNote] = React.useState<NoteRecord | null>(null);
   const [editorMode, setEditorMode] = React.useState<EditorMode>("edit");
-  const [search, setSearch] = React.useState("");
   const [tagInput, setTagInput] = React.useState("");
   const [saving, setSaving] = React.useState(false);
   const [showAllPacks, setShowAllPacks] = React.useState(!packUid);
@@ -356,21 +354,11 @@ export function NotesPanel({
 
   // Filtered notes
   const visibleNotes = React.useMemo(() => {
-    let list = allNotes;
     if (!showAllPacks && packUid) {
-      list = list.filter((n) => n.packUid === packUid);
+      return allNotes.filter((n) => n.packUid === packUid);
     }
-    if (search.trim()) {
-      const q = search.trim().toLowerCase();
-      list = list.filter(
-        (n) =>
-          n.title.toLowerCase().includes(q) ||
-          n.body.toLowerCase().includes(q) ||
-          n.tags.some((tt) => tt.toLowerCase().includes(q))
-      );
-    }
-    return list;
-  }, [allNotes, packUid, showAllPacks, search]);
+    return allNotes;
+  }, [allNotes, packUid, showAllPacks]);
 
   const handleCreate = async () => {
     const note = await notesStore.create({
@@ -493,8 +481,6 @@ export function NotesPanel({
       {view === "list" ? (
         <ListView
           notes={visibleNotes}
-          search={search}
-          onSearch={setSearch}
           onCreate={handleCreate}
           onOpen={handleOpen}
           onDelete={handleDelete}
@@ -586,8 +572,6 @@ export function NotesPanel({
 
 function ListView({
   notes,
-  search,
-  onSearch,
   onCreate,
   onOpen,
   onDelete,
@@ -598,8 +582,6 @@ function ListView({
   onOpenInQBank,
 }: {
   notes: NoteRecord[];
-  search: string;
-  onSearch: (s: string) => void;
   onCreate: () => void;
   onOpen: (n: NoteRecord) => void;
   onDelete: (id: string) => void;
@@ -615,23 +597,6 @@ function ListView({
       {/* Toolbar */}
       <div className="px-4 py-3 border-b border-border space-y-2 shrink-0">
         <div className="flex items-center gap-2">
-          <div className="flex-1 flex items-center gap-2 h-9 px-3 rounded-lg border border-border bg-background">
-            <Search className="size-3.5 text-muted-foreground shrink-0" />
-            <input
-              value={search}
-              onChange={(e) => onSearch(e.target.value)}
-              placeholder={t("qbank.notes.search")}
-              className="flex-1 bg-transparent outline-none text-xs placeholder:text-muted-foreground min-w-0"
-            />
-            {search && (
-              <button
-                onClick={() => onSearch("")}
-                className="size-5 rounded hover:bg-muted flex items-center justify-center"
-              >
-                <X className="size-3" />
-              </button>
-            )}
-          </div>
           <Button
             size="sm"
             onClick={onCreate}
@@ -694,7 +659,7 @@ function ListView({
       {/* List */}
       <div className="flex-1 overflow-y-auto medos-scroll p-3 space-y-2">
         {notes.length === 0 ? (
-          <EmptyNotesState onCreate={onCreate} searching={!!search} />
+          <EmptyNotesState onCreate={onCreate} searching={false} />
         ) : (
           notes.map((note) => (
             <NoteCard

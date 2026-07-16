@@ -651,7 +651,6 @@ export function OsceStudio({ activeItem, activeContent, onExit, onOpenPack }: Os
   /* ── State ── */
   const [allPacks, setAllPacks] = React.useState<Array<{ node: ContentTreeNode; content: OsceContent }>>([]);
   const [packsLoading, setPacksLoading] = React.useState(true);
-  const [packSearch, setPackSearch] = React.useState("");
   const [stations, setStations] = React.useState<OsceStation[]>([]);
   const [activeIdx, setActiveIdx] = React.useState(0);
   const [phase, setPhase] = React.useState<OscePhase>("select");
@@ -1241,20 +1240,12 @@ export function OsceStudio({ activeItem, activeContent, onExit, onOpenPack }: Os
   }
 
   const filteredPacks = React.useMemo(() => {
-    const langFiltered = contentFilter === "all"
+    return contentFilter === "all"
       ? allPacks
       : allPacks.filter(({ node, content }) =>
           (node.lang ?? content.meta.lang ?? "en") === contentFilter
         );
-    if (!packSearch.trim()) return langFiltered;
-    const q = packSearch.toLowerCase();
-    return langFiltered.filter(
-      ({ node, content }) =>
-        node.title.toLowerCase().includes(q) ||
-        content.meta.tags?.some((t) => t.toLowerCase().includes(q)) ||
-        content.meta.description?.toLowerCase().includes(q)
-    );
-  }, [allPacks, packSearch, contentFilter]);
+  }, [allPacks, contentFilter]);
 
   if (phase === "select") {
     return (
@@ -1278,17 +1269,6 @@ export function OsceStudio({ activeItem, activeContent, onExit, onOpenPack }: Os
               </div>
             </div>
 
-            {/* Search */}
-            <div className="relative mt-5 mb-3">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground pointer-events-none" />
-              <input
-                value={packSearch}
-                onChange={(e) => setPackSearch(e.target.value)}
-                placeholder={t("qbank.home.search")}
-                className="w-full h-10 pl-9 pr-4 rounded-lg border border-border/60 bg-card text-sm outline-none focus:border-primary/60 focus:ring-2 focus:ring-primary/10 transition-all placeholder:text-muted-foreground"
-              />
-            </div>
-
             <ContentLangFilter />
 
             {/* Pack grid */}
@@ -1303,9 +1283,7 @@ export function OsceStudio({ activeItem, activeContent, onExit, onOpenPack }: Os
                 <div>
                   <p className="font-semibold text-sm mb-1">{t("osce.home.empty")}</p>
                   <p className="text-xs text-muted-foreground max-w-xs">
-                    {packSearch
-                      ? t("qbank.home.search")
-                      : t("osce.home.empty")}
+                    {t("osce.home.empty")}
                   </p>
                 </div>
                 <button

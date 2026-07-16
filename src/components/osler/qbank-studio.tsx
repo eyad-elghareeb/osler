@@ -902,14 +902,7 @@ function ContentTab({
   onOpenPack?: (item: ContentTreeNode) => void;
 }) {
   const { t, rtl, contentFilter } = useI18n();
-  const [searchQuery, setSearchQuery] = React.useState("");
-  const [debouncedSearchQuery, setDebouncedSearchQuery] = React.useState("");
   const [selectedEngine, setSelectedEngine] = React.useState<EngineType | null>(null);
-
-  React.useEffect(() => {
-    const tid = setTimeout(() => setDebouncedSearchQuery(searchQuery), 200);
-    return () => clearTimeout(tid);
-  }, [searchQuery]);
 
   // Group items by engine type (run unconditionally before any early return)
   const grouped = React.useMemo(() => {
@@ -924,24 +917,6 @@ function ContentTab({
     }
     return map;
   }, [data, contentFilter]);
-
-  // Filter by search (run unconditionally)
-  const filtered = React.useMemo(() => {
-    if (!data) return {};
-    if (!debouncedSearchQuery.trim()) return grouped;
-    const q = debouncedSearchQuery.toLowerCase();
-    const result: Record<string, typeof data.items> = {};
-    for (const [type, items] of Object.entries(grouped)) {
-      const matched = items.filter(
-        (entry) =>
-          entry.node.title.toLowerCase().includes(q) ||
-          entry.content?.meta.description?.toLowerCase().includes(q) ||
-          entry.content?.meta.tags?.some((t) => t.toLowerCase().includes(q))
-      );
-      if (matched.length > 0) result[type] = matched;
-    }
-    return result;
-  }, [grouped, debouncedSearchQuery, data]);
 
   // Per-engine aggregates for the stat bar / folder cards
   const engineStats = React.useMemo(() => {
@@ -989,7 +964,7 @@ function ContentTab({
   // This is the "home" layer of the NavigationStack. The PACKS VIEW below
   // becomes the subpage that slides in when the user picks an engine.
   // Swiping the subpage back (iOS-style) returns to this engines grid.
-  const engineEntries = Object.entries(filtered) as Array<
+  const engineEntries = Object.entries(grouped) as Array<
     [EngineType, typeof data.items]
   >;
 
@@ -1035,17 +1010,6 @@ function ContentTab({
               })()}
             </div>
           </div>
-        </div>
-
-        {/* Search */}
-        <div className="relative mb-3">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
-          <input
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder={t("qbank.home.search")}
-            className="w-full h-10 pl-10 pr-4 rounded-xl border border-border bg-card text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
-          />
         </div>
 
         {/* Content-language filter pills — drives the `contentFilter` state
@@ -1135,7 +1099,7 @@ function ContentTab({
   if (selectedEngine) {
     const meta = ENGINE_META[selectedEngine];
     const Icon = ENGINE_ICONS[selectedEngine] ?? ListChecks;
-    const items = (filtered[selectedEngine] ?? []).filter((x) => x.content);
+    const items = (grouped[selectedEngine] ?? []).filter((x) => x.content);
     const stat = engineStats[selectedEngine] ?? {
       packs: 0,
       questions: 0,
@@ -1166,17 +1130,6 @@ function ContentTab({
           <p className="text-sm text-muted-foreground">
             {stat.packs} · {t("qbank.home.questions", { n: stat.questions })}
           </p>
-        </div>
-
-        {/* Search */}
-        <div className="relative mb-3">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
-          <input
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder={t("qbank.home.search")}
-            className="w-full h-10 pl-10 pr-4 rounded-xl border border-border bg-card text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
-          />
         </div>
 
         <ContentLangFilter />
@@ -1243,7 +1196,6 @@ function CreateTestTab({
   const [customBatchInput, setCustomBatchInput] = React.useState("");
   const [selectedEngineTypes, setSelectedEngineTypes] = React.useState<string[]>([]);
   const [selectedTags, setSelectedTags] = React.useState<string[]>([]);
-  const [query, setQuery] = React.useState("");
   const [sort, setSort] = React.useState<"default" | "random">("default");
 
   // Compute available tags from all content packs
@@ -1268,19 +1220,11 @@ function CreateTestTab({
         p.content?.meta.tags?.some((t) => selectedTags.includes(t))
       );
     }
-    if (query.trim()) {
-      const q = query.toLowerCase();
-      packs = packs.filter(
-        (p) =>
-          p.node.title.toLowerCase().includes(q) ||
-          p.content?.meta.description?.toLowerCase().includes(q)
-      );
-    }
     if (sort === "random") {
       packs = [...packs].sort(() => Math.random() - 0.5);
     }
     return packs;
-  }, [data, selectedEngineTypes, selectedTags, query, sort]);
+  }, [data, selectedEngineTypes, selectedTags, sort]);
 
   const totalAvailable = filteredPacks.reduce(
     (sum, p) => sum + (p.content ? countQuestions(p.content) : 0),
@@ -1365,17 +1309,6 @@ function CreateTestTab({
         <div className="qbank-card">
           <SectionHeader number={3} title="Select Content" subtitle="Filter by engine type and tags to include." />
           <div className="mt-4 space-y-4">
-            {/* Search */}
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
-              <input
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                placeholder="Search packs by title or description…"
-                className="w-full h-10 pl-10 pr-4 rounded-xl border border-border bg-card text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
-              />
-            </div>
-
             {/* Engine type checkboxes */}
             <CheckboxColumn
               title="Engine Types (Subjects)"
