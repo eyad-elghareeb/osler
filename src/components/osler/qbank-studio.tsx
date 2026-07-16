@@ -645,9 +645,9 @@ function HomeView({
         setData({
           items: result.items.filter(
             (entry) =>
-              entry.node.type !== "flashcard" &&
-              entry.node.type !== "osce" &&
-              entry.node.type !== "video"
+              entry.node.type === "quiz" ||
+              entry.node.type === "bank" ||
+              entry.node.type === "written"
           ),
         });
       })
@@ -1673,6 +1673,13 @@ function QBankTimer({
 }) {
   const [now, setNow] = React.useState(() => Date.now());
   const [remaining, setRemaining] = React.useState(initialRemaining);
+  const onExpireRef = React.useRef(onExpire);
+  onExpireRef.current = onExpire;
+
+  // Wall-clock anchor: the absolute timestamp when the timer expires.
+  // Pauses push this into the future so no time is lost to sleep/throttle.
+  const endTimeRef = React.useRef(Date.now() + initialRemaining * 1000);
+  const pauseStartRef = React.useRef<number | null>(null);
 
   // 1s tick — drives the tutor-mode elapsed clock.
   React.useEffect(() => {
@@ -1680,22 +1687,31 @@ function QBankTimer({
     return () => clearInterval(id);
   }, []);
 
-  // Timed countdown — pause-aware, fully isolated from the parent view.
+  // Track pauses — push endTime forward by the paused duration so the
+  // user doesn't lose time to background throttling or screen sleep.
   React.useEffect(() => {
-    if (mode !== "timed" || paused) return;
-    const id = setInterval(() => {
-      setRemaining((r) => {
-        const next = r - 1;
-        if (next <= 0) {
-          clearInterval(id);
-          onExpire();
-          return 0;
-        }
-        return next;
-      });
-    }, 1000);
+    if (mode !== "timed") return;
+    if (paused) {
+      pauseStartRef.current = Date.now();
+    } else if (pauseStartRef.current !== null) {
+      endTimeRef.current += Date.now() - pauseStartRef.current;
+      pauseStartRef.current = null;
+    }
+  }, [paused, mode]);
+
+  // Timed countdown — derived from wall clock so throttled intervals
+  // after sleep/background still compute the correct remaining time.
+  React.useEffect(() => {
+    if (mode !== "timed") return;
+    const tick = () => {
+      const r = Math.max(0, Math.ceil((endTimeRef.current - Date.now()) / 1000));
+      setRemaining(r);
+      if (r <= 0) onExpireRef.current();
+    };
+    tick();
+    const id = setInterval(tick, 1000);
     return () => clearInterval(id);
-  }, [mode, paused, onExpire]);
+  }, [mode]);
 
   const display =
     mode === "timed" ? remaining : Math.floor((now - startedAt) / 1000);

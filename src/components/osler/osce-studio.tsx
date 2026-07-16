@@ -666,6 +666,7 @@ export function OsceStudio({ activeItem, activeContent, onExit, onOpenPack, onNa
 
   const [transcript, setTranscript] = React.useState<TranscriptEntry[]>([]);
   const [timerRemaining, setTimerRemaining] = React.useState(EXAM_TIME);
+  const timerEndTimeRef = React.useRef(Date.now() + EXAM_TIME * 1000);
   const [inputText, setInputText] = React.useState("");
   const [sending, setSending] = React.useState(false);
   const [thinking, setThinking] = React.useState(false);
@@ -1167,12 +1168,13 @@ export function OsceStudio({ activeItem, activeContent, onExit, onOpenPack, onNa
   React.useEffect(() => {
     if (phase !== "conversation") return;
     if (timerRef.current) clearInterval(timerRef.current);
+    // Set the end-time anchor from the current remaining so wall-clock
+    // ticks stay in sync even after background throttling / screen sleep.
+    timerEndTimeRef.current = Date.now() + timerRemaining * 1000;
     timerRef.current = setInterval(() => {
-      setTimerRemaining((prev) => {
-        const next = Math.max(0, prev - 1);
-        if (next <= 0) clearInterval(timerRef.current!);
-        return next;
-      });
+      const r = Math.max(0, Math.ceil((timerEndTimeRef.current - Date.now()) / 1000));
+      setTimerRemaining(r);
+      if (r <= 0 && timerRef.current) clearInterval(timerRef.current);
     }, 1000);
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
@@ -1181,6 +1183,13 @@ export function OsceStudio({ activeItem, activeContent, onExit, onOpenPack, onNa
 
   function stopTimer() {
     if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
+  }
+
+  /** Set the timer remaining and sync the wall-clock anchor so the
+   *  countdown stays accurate after background throttling / screen sleep. */
+  function resetTimer(seconds: number) {
+    timerEndTimeRef.current = Date.now() + seconds * 1000;
+    setTimerRemaining(seconds);
   }
 
   /* Session save/load */
@@ -1245,7 +1254,7 @@ export function OsceStudio({ activeItem, activeContent, onExit, onOpenPack, onNa
     setTranscript([]);
     setResult(null);
     setError(null);
-    setTimerRemaining(normalized[0]?.time || EXAM_TIME);
+    resetTimer(normalized[0]?.time || EXAM_TIME);
     setPhase("lobby");
   }
 
@@ -1397,10 +1406,10 @@ export function OsceStudio({ activeItem, activeContent, onExit, onOpenPack, onNa
       const saved = loadSession();
       if (saved && saved.transcript && saved.transcript.length) {
         setTranscript(saved.transcript);
-        setTimerRemaining(saved.timerRemaining || stationDuration);
+        resetTimer(saved.timerRemaining || stationDuration);
       } else {
         setTranscript([]);
-        setTimerRemaining(stationDuration);
+        resetTimer(stationDuration);
       }
       setRenderedCount(0);
       setResult(null);
@@ -1514,7 +1523,7 @@ export function OsceStudio({ activeItem, activeContent, onExit, onOpenPack, onNa
                         setActiveIdx(i);
                         setTranscript([]);
                         setResult(null);
-                        setTimerRemaining(s.time || EXAM_TIME);
+                        resetTimer(s.time || EXAM_TIME);
                       }}
                       className={cn(
                         "h-8 px-3 rounded-md text-xs font-medium border transition-colors",
@@ -1636,7 +1645,7 @@ export function OsceStudio({ activeItem, activeContent, onExit, onOpenPack, onNa
       if (voiceOn) stopSpeaking();
       setTranscript([]);
       setRenderedCount(0);
-      setTimerRemaining(activeCase?.time || EXAM_TIME);
+      resetTimer(activeCase?.time || EXAM_TIME);
       setResult(null);
       setError(null);
       clearSession();
@@ -2083,7 +2092,7 @@ export function OsceStudio({ activeItem, activeContent, onExit, onOpenPack, onNa
                       if (voiceOn) stopSpeaking();
                       setTranscript([]);
                       setRenderedCount(0);
-                      setTimerRemaining(activeCase?.time || EXAM_TIME);
+                      resetTimer(activeCase?.time || EXAM_TIME);
                       setResult(null);
                       setError(null);
                       clearSession();
@@ -2334,7 +2343,7 @@ export function OsceStudio({ activeItem, activeContent, onExit, onOpenPack, onNa
                   stopTimer();
                   setTranscript([]);
                   setRenderedCount(0);
-                  setTimerRemaining(activeCase?.time || EXAM_TIME);
+                  resetTimer(activeCase?.time || EXAM_TIME);
                   setResult(null);
                   setError(null);
                   clearSession();

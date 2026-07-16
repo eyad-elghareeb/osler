@@ -26,6 +26,9 @@ import type { SearchResult } from "@/lib/osler/search";
 
 const SESSION_KEY = "osler-session";
 
+/** Views that carry a content-pack param in the URL. */
+const PACK_VIEWS: ReadonlySet<OslerView> = new Set(["qbank", "flashcards", "osce"]);
+
 export default function Home() {
   const [username, setUsername] = React.useState<string | null>(null);
   const [view, setView] = React.useState<OslerView>("dashboard");
@@ -41,8 +44,18 @@ export default function Home() {
     setView("settings");
   };
 
-  // Flag to check if we are currently handling a popstate update (to avoid pushState loops)
   const isPopStateRef = React.useRef(false);
+  /** Refs so the popstate handler always reads fresh values. */
+  const activeItemRef = React.useRef(activeItem);
+  const activeContentRef = React.useRef(activeContent);
+  const activeArticleIdRef = React.useRef(activeArticleId);
+  const activeVideoIdRef = React.useRef(activeVideoId);
+  const viewRef = React.useRef(view);
+  React.useEffect(() => { activeItemRef.current = activeItem; }, [activeItem]);
+  React.useEffect(() => { activeContentRef.current = activeContent; }, [activeContent]);
+  React.useEffect(() => { activeArticleIdRef.current = activeArticleId; }, [activeArticleId]);
+  React.useEffect(() => { activeVideoIdRef.current = activeVideoId; }, [activeVideoId]);
+  React.useEffect(() => { viewRef.current = view; }, [view]);
 
   // Restore session
   React.useEffect(() => {
@@ -51,7 +64,19 @@ export default function Home() {
     if (stored) setUsername(stored);
   }, []);
 
-  // Initialize from URL on mount & set up popstate listener
+  // Build a ContentTreeNode from a loaded pack
+  function nodeFromPack(uid: string, content: AnyContent): ContentTreeNode {
+    return {
+      uid,
+      title: content.meta?.title || uid,
+      type: content.type as any,
+      path: "",
+      items: [],
+      lang: content.meta?.lang,
+    };
+  }
+
+  // Initialize from URL on mount & set up popstate + pageshow listeners
   React.useEffect(() => {
     if (typeof window === "undefined") return;
 
@@ -64,26 +89,16 @@ export default function Home() {
       const urlSection = params.get("section");
 
       if (urlView) setView(urlView);
-      if (urlSection) {
-        setSettingsSection(urlSection as any);
-      }
+      if (urlSection) setSettingsSection(urlSection as any);
       if (urlArticle) setActiveArticleId(urlArticle);
       if (urlVideo) setActiveVideoId(urlVideo);
 
       if (urlPack) {
         try {
           const content = await loadContentByUid(urlPack);
-          const mockNode: ContentTreeNode = {
-            uid: urlPack,
-            title: content.meta?.title || urlPack,
-            type: content.type as any,
-            path: "",
-            items: [],
-            lang: content.meta?.lang,
-          };
-          setActiveItem(mockNode);
+          setActiveItem(nodeFromPack(urlPack, content));
           setActiveContent(content);
-          
+
           if (!urlView) {
             if (content.type === "osce") setView("osce");
             else if (content.type === "flashcard") setView("flashcards");
@@ -113,18 +128,14 @@ export default function Home() {
         setActiveVideoId(urlVideo);
 
         if (urlPack) {
-          if (!activeItem || activeItem.uid !== urlPack) {
-            const content = await loadContentByUid(urlPack);
-            const mockNode: ContentTreeNode = {
-              uid: urlPack,
-              title: content.meta?.title || urlPack,
-              type: content.type as any,
-              path: "",
-              items: [],
-              lang: content.meta?.lang,
-            };
-            setActiveItem(mockNode);
-            setActiveContent(content);
+          if (!activeItemRef.current || activeItemRef.current.uid !== urlPack) {
+            try {
+              const content = await loadContentByUid(urlPack);
+              setActiveItem(nodeFromPack(urlPack, content));
+              setActiveContent(content);
+            } catch (e) {
+              console.error("Failed to load content pack from URL:", e);
+            }
           }
         } else {
           setActiveItem(null);
@@ -137,43 +148,55 @@ export default function Home() {
       }
     };
 
+    // On bfcache restore (screen wake on mobile), re-sync URL → state.
+    const handlePageShow = (e: PageTransitionEvent) => {
+      if (!e.persisted) return;
+      // bfcache restored — the URL may have changed while frozen.
+      // Re-read the URL and apply it the same way as a popstate.
+      handlePopState();
+    };
+
     window.addEventListener("popstate", handlePopState);
+    window.addEventListener("pageshow", handlePageShow);
     return () => {
       window.removeEventListener("popstate", handlePopState);
+      window.removeEventListener("pageshow", handlePageShow);
     };
   }, []);
 
-  // Synchronize state changes to URL
+  // Synchronize state changes to URL — only include params relevant to the current view.
   React.useEffect(() => {
     if (typeof window === "undefined") return;
     if (isPopStateRef.current) return;
 
     const params = new URLSearchParams();
-    if (view && view !== "dashboard") {
+    if (view !== "dashboard") {
       params.set("view", view);
     }
-    
-    const packUid = activeItem?.uid || activeContent?.meta?.uid;
-    if (packUid) {
-      params.set("pack", packUid);
+    if (view === "settings" && settingsSection !== "language") {
+      params.set("section", settingsSection);
     }
-    if (activeArticleId) {
+    if (PACK_VIEWS.has(view)) {
+      const packUid = activeItem?.uid || activeContent?.meta?.uid;
+      if (packUid) params.set("pack", packUid);
+    }
+    if (view === "library" && activeArticleId) {
       params.set("article", activeArticleId);
     }
-    if (activeVideoId) {
+    if (view === "videos" && activeVideoId) {
       params.set("video", activeVideoId);
-    }
-    if (view === "settings" && settingsSection && settingsSection !== "language") {
-      params.set("section", settingsSection);
     }
 
     const newSearch = params.toString() ? `?${params.toString()}` : "";
     const currentSearch = window.location.search;
 
     if (newSearch !== currentSearch) {
-      const isMinorChange =
-        (view === "settings" && currentSearch.includes("view=settings")) ||
-        (view === "library" && currentSearch.includes("view=library") && !activeArticleId && !currentSearch.includes("article="));
+      // Use replaceState when the change is non-navigational (same-view
+      // param tweak) or the initial load — avoids polluting the history
+      // stack with intermediate states.
+      const prevView = viewRef.current;
+      const sameView = prevView === view;
+      const isMinorChange = sameView || (view === "settings" && currentSearch.includes("view=settings"));
 
       if (isMinorChange) {
         window.history.replaceState(null, "", window.location.pathname + newSearch);
