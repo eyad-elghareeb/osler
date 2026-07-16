@@ -89,6 +89,12 @@
           { icon: "fas fa-image", label: "Image", insert: "![]()", cursorOffset: -1 },
         ],
       },
+      {
+        name: "Diagram",
+        items: [
+          { icon: "fas fa-project-diagram", label: "Mermaid diagram", insert: "```mermaid\ngraph TD\n  A --> B\n```", cursorOffset: -4 },
+        ],
+      },
     ];
 
     const el = document.createElement("div");
@@ -310,6 +316,97 @@
       });
     }
 
+    /* ── Mermaid chip overlay ─────────────────────────────────────────
+     *
+     * Scans the CodeMirror document for ```mermaid fenced blocks.
+     * For every opening fence line, it injects a CodeMirror line-widget
+     * containing a small "✦ Edit Diagram" chip button.
+     * Clicking the chip opens OslerMermaidEditor.openModal with the
+     * extracted source, and replaces the block on save.
+     * ──────────────────────────────────────────────────────────────── */
+
+    const _chipWidgets = []; // { widget, lineNo } — cleared on each sync
+
+    function syncMermaidChips() {
+      if (!cm) return;
+
+      // Clear previous widgets
+      _chipWidgets.forEach(({ widget }) => widget.clear());
+      _chipWidgets.length = 0;
+
+      if (typeof window.OslerMermaidEditor === "undefined") return;
+
+      const lineCount = cm.lineCount();
+
+      for (let i = 0; i < lineCount; i++) {
+        const lineText = cm.getLine(i);
+        if (!/^\s*```mermaid\s*$/.test(lineText)) continue;
+
+        // Found opening fence — record its line
+        const openLine = i;
+
+        // Find matching closing fence
+        let closeLine = -1;
+        for (let j = i + 1; j < lineCount; j++) {
+          if (/^\s*```\s*$/.test(cm.getLine(j))) {
+            closeLine = j;
+            break;
+          }
+        }
+        if (closeLine === -1) continue; // unclosed block — skip
+
+        // Build the chip DOM node
+        const chip = document.createElement("button");
+        chip.className = "mermaid-chip";
+        chip.type = "button";
+        chip.innerHTML = '<i class="fas fa-project-diagram"></i> Edit Diagram';
+
+        chip.addEventListener("click", () => {
+          // Extract source between fences (exclusive)
+          const sourceLines = [];
+          for (let k = openLine + 1; k < closeLine; k++) {
+            sourceLines.push(cm.getLine(k));
+          }
+          const currentCode = sourceLines.join("\n");
+
+          window.OslerMermaidEditor.openModal(currentCode, (newCode) => {
+            // Replace the content lines between the two fences
+            const from = { line: openLine + 1, ch: 0 };
+            const to   = { line: closeLine,     ch: 0 };
+            cm.replaceRange(
+              newCode.trim() + "\n",
+              from,
+              to
+            );
+            // Re-sync chips after replacement
+            setTimeout(syncMermaidChips, 50);
+          });
+        });
+
+        // Attach as a line widget below the opening fence
+        const widget = cm.addLineWidget(openLine, chip, {
+          above: false,
+          handleMouseEvents: true,
+          noHScroll: true,
+        });
+        _chipWidgets.push({ widget, lineNo: openLine });
+
+        // Skip past this block so we don't double-scan
+        i = closeLine;
+      }
+    }
+
+    // Re-sync chips on every change (debounced 350 ms)
+    let _chipTimer = null;
+    if (cm) {
+      cm.on("change", () => {
+        clearTimeout(_chipTimer);
+        _chipTimer = setTimeout(syncMermaidChips, 350);
+      });
+      // Initial scan after editor is ready
+      setTimeout(syncMermaidChips, 200);
+    }
+
     return {
       getMarkdown() {
         try { return editor.value(); } catch { return lastMd; }
@@ -320,10 +417,14 @@
         try { editor.value(md || ""); } catch {}
         lastMd = md || "";
         suppressChange = false;
+        // Re-scan chips whenever content is programmatically set
+        setTimeout(syncMermaidChips, 200);
       },
       destroy() {
+        clearTimeout(_chipTimer);
+        _chipWidgets.forEach(({ widget }) => widget.clear());
+        _chipWidgets.length = 0;
         try { if (editor && typeof editor.toTextArea === "function") editor.toTextArea(); } catch {}
-        // Clean up slash palette
         document.querySelectorAll(".slash-palette, .slash-palette-overlay").forEach((el) => el.remove());
         host.classList.remove("milkdown-container");
         host.innerHTML = "";
