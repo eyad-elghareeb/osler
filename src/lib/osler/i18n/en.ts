@@ -469,6 +469,25 @@ export const en = {
     "settings.section.shortcuts": "Keyboard",
     "settings.section.danger": "Data & Reset",
     "settings.section.backup": "Backup & Restore",
+    "settings.section.about": "About",
+    "settings.about.subtitle":
+      "Site identity, plugins, themes, and source repository — driven by osler.config.json.",
+    "settings.about.siteIdentity": "Site identity",
+    "settings.about.name": "Name",
+    "settings.about.tagline": "Tagline",
+    "settings.about.shortName": "Short name",
+    "settings.about.organisation": "Organisation",
+    "settings.about.themes": "Available themes",
+    "settings.about.activeTheme": "Active theme: {name}",
+    "settings.about.plugins": "Engine plugins",
+    "settings.about.adminControlled": "Admin-controlled",
+    "settings.about.pluginsNote":
+      "Engine plugins are enabled or disabled by the instance admin via osler.config.json — end users cannot toggle them.",
+    "settings.about.disabled": "{n} disabled",
+    "settings.about.github": "Source repository",
+    "settings.about.githubDesc":
+      "Osler is open source. File issues, contribute, or fork the project on GitHub.",
+    "settings.about.configPath": "Configuration file: {path}",
     "settings.section.sync.open": "Open Sync Page",
     "settings.language.uiLang": "Interface language",
     "settings.language.uiLangDesc":

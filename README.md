@@ -11,6 +11,8 @@
   <a href="#project-structure"><strong>Structure</strong></a> ·
   <a href="#setup"><strong>Setup</strong></a> ·
   <a href="#content-system"><strong>Content</strong></a> ·
+  <a href="#configuration-oslerconfigjson"><strong>Config</strong></a> ·
+  <a href="SELF-HOSTING.md"><strong>Self-Hosting</strong></a> ·
   <a href="#architecture"><strong>Architecture</strong></a>
 </p>
 
@@ -26,7 +28,7 @@
 </p>
 
 <p align="center">
-  <img alt="License" src="https://img.shields.io/github/license/anomalyco/osler?style=flat-square&label=License&color=0ea5e9">
+  <img alt="License" src="https://img.shields.io/github/license/eyad-elghareeb/osler?style=flat-square&label=License&color=0ea5e9">
   <img alt="PRs Welcome" src="https://img.shields.io/badge/PRs-Welcome-brightgreen?style=flat-square">
   <img alt="PWA" src="https://img.shields.io/badge/PWA-Ready-5A0FC8?style=flat-square&logo=pwa">
   <img alt="i18n" src="https://img.shields.io/badge/i18n-EN%20%7C%20AR-10b981?style=flat-square">
@@ -35,6 +37,10 @@
 <br>
 
 Unified medical study platform combining **Quiz Banks**, **Flashcards**, **OSCE Clinical Cases**, **Video Library**, and an **Article Library** — all in a single, installable PWA with full Arabic RTL support.
+
+> **🔗 Source:** <https://github.com/eyad-elghareeb/osler> · **License:** MIT · **Self-hosting guide:** [`SELF-HOSTING.md`](SELF-HOSTING.md)
+>
+> Osler is fully open-source and built for self-hosting. Fork the repo, edit `public/osler.config.json` to white-label the platform, choose which of the 7 engine plugins to include, deploy to your favourite host, and manage everything from the bundled Tauri admin app. See [`SELF-HOSTING.md`](SELF-HOSTING.md) for the complete guide.
 
 ---
 
@@ -267,6 +273,30 @@ src/
 └── build-deliverable.ps1     # Windows deployment
 
 <a href="tauri-admin">tauri-admin</a>/                  # Desktop admin panel (Tauri + Rust)
+  ├── src/
+  │   ├── commands.rs         # File CRUD, manifest, build/start runner, git
+  │   ├── config.rs           # osler.config.json read/write + instance generator
+  │   ├── deploy.rs           # Vercel / GitHub Pages / Cloudflare / Netlify deploy
+  │   ├── manifest.rs         # Content manifest generator (port of scripts/)
+  │   ├── runner.rs           # Build/start process runner
+  │   └── validate.rs         # Content JSON validator
+  ├── frontend/
+  │   ├── index.html          # Admin shell with custom titlebar
+  │   ├── main.js             # Tauri bridge + router + helpers
+  │   ├── i18n.js             # English + Arabic strings
+  │   ├── styles.css          # Admin theme tokens + components
+  │   └── views/
+  │       ├── dashboard.js    # Stats + quick actions + GitHub repo link
+  │       ├── wizard.js       # First-time setup wizard (auto-launches)
+  │       ├── instance.js     # New Osler instance generator
+  │       ├── config.js       # osler.config.json structured editor
+  │       ├── content.js      # Content tree browser + editor
+  │       ├── manifest.js     # Manifest viewer / regenerator
+  │       ├── build.js        # Build & start runner with live logs
+  │       ├── git.js          # Git status / add / commit / push / pull
+  │       ├── deploy.js       # Deploy dashboard
+  │       └── settings.js     # Admin language / theme / project root
+  └── default-osler-config.json  # Bundled template used by the instance generator
 </pre>
 
 ---
@@ -319,6 +349,40 @@ Content organized into category folders under `public/osler-content/`:
 
 ---
 
+## ✦ Configuration (`osler.config.json`)
+
+Every aspect of an Osler instance is driven by a single user-editable config file at `public/osler.config.json`. The schema lives in [`src/lib/osler/config.ts`](src/lib/osler/config.ts); the loader merges the user's file over sensible defaults so the app always boots, even with a missing or partial config.
+
+**What the config drives:**
+
+| Section | Drives |
+|---|---|
+| `site.{name,shortName,tagline,githubRepo,organisation}` | `<title>`, OG/Twitter metadata, PWA manifest name, in-app brand mark, About section, admin sidebar link |
+| `engines.<id>.{enabled,label,color,icon}` | **Plugin system** — toggle each of the 7 engines on/off; override label/color/icon per engine |
+| `themes.{default,custom[]}` | Default theme + custom oklch palettes; CSS variable overrides injected at runtime |
+| `defaults.{view,language,quiz,ai,sync}` | Default options applied on first use |
+| `wizard.{completed,completedAt}` | First-time wizard state |
+
+**Engine plugins:** Each of `quiz | bank | written | flashcard | osce | library | video` can be enabled or disabled. Disabling an engine hides it from the UI and skips its content loading — content packs on disk are preserved.
+
+**Custom themes:** Define additional palettes beyond dark/light. Each entry has an `id`, `name`, `variant`, and optional oklch color overrides (primary/background/foreground/accent/border/destructive). The theme provider injects one CSS rule per custom theme scoped to `.theme-<id>`.
+
+**GitHub repo reference:** The canonical repo URL is always surfaced — in the admin sidebar footer, on the admin dashboard, and in the in-app Settings → About section. Setting `site.githubRepo` in the config lets each instance point at its own fork.
+
+### Tauri admin: wizard + instance generator
+
+The Tauri admin app exposes three new views for managing the config:
+
+| View | Purpose |
+|---|---|
+| **Setup Wizard** | 6-step first-time setup — site identity, GitHub repo, engine plugins, theme, language. Auto-launches when no `osler.config.json` exists. |
+| **Instance Generator** | Scaffolds a brand-new Osler project into a target directory with a fresh config, content stubs, and a README. |
+| **Config Editor** | Structured editor for every section of `osler.config.json`, with a raw-JSON tab for power users. |
+
+The Rust backend (`tauri-admin/src/config.rs`) exposes `read_config`, `write_config`, `config_exists`, and `generate_instance` commands.
+
+---
+
 ## ✦ Architecture
 
 ### View Routing
@@ -358,4 +422,10 @@ All native features are wrapped in `src/lib/osler/native/` and feature-detect gr
   <a href="LICENSE">
     <img alt="MIT License" src="https://img.shields.io/badge/License-MIT-0ea5e9?style=for-the-badge">
   </a>
+</p>
+
+<p align="center">
+  <a href="https://github.com/eyad-elghareeb/osler">github.com/eyad-elghareeb/osler</a> ·
+  <a href="SELF-HOSTING.md">Self-hosting guide</a> ·
+  <a href="AGENTS.md">Contributor guide</a>
 </p>

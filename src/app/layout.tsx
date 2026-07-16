@@ -7,6 +7,7 @@ import { OslerI18nProvider } from "@/components/osler/i18n-provider";
 import { AnimationsProvider } from "@/components/osler/animations-provider";
 import { SerwistProvider } from "@/components/osler/serwist-provider";
 import { LANG_INIT_SCRIPT } from "@/lib/osler/i18n";
+import { getConfig } from "@/lib/osler/config";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -26,12 +27,32 @@ const cairo = Cairo({
   display: "swap",
 });
 
+/**
+ * Read the site identity from `osler.config.json` at build time so the static
+ * metadata (`<title>`, OpenGraph, PWA manifest name) reflects the user's
+ * customisation. Falls back to "Osler" defaults when the config is absent.
+ *
+ * On the client, the i18n provider overlays the same config values on
+ * `t("app.name")` / `t("app.tagline")` so the in-app brand mark and document
+ * title stay in sync after hydration.
+ */
+const siteConfig = (() => {
+  try {
+    return getConfig();
+  } catch {
+    return null;
+  }
+})();
+const siteName = siteConfig?.site.name ?? "Osler";
+const siteTagline = siteConfig?.site.tagline ?? "Medical Study Platform";
+const siteShortName = siteConfig?.site.shortName ?? "Osler";
+
 export const metadata: Metadata = {
-  title: "Osler — Medical Study Platform",
+  title: `${siteName} — ${siteTagline}`,
   description:
-    "Osler — Quiz, Question Bank, Flashcards, Written Prompts, and OSCE clinical cases.",
+    `${siteName} — Quiz, Question Bank, Flashcards, Written Prompts, and OSCE clinical cases.`,
   keywords: [
-    "Osler",
+    siteName,
     "medical",
     "USMLE",
     "quiz",
@@ -39,13 +60,13 @@ export const metadata: Metadata = {
     "OSCE",
     "question bank",
   ],
-  authors: [{ name: "Osler Team" }],
+  authors: [{ name: siteConfig?.site.organisation ?? "Osler Team" }],
   manifest: "/manifest.webmanifest",
-  applicationName: "Osler",
+  applicationName: siteName,
   appleWebApp: {
     capable: true,
     statusBarStyle: "black-translucent",
-    title: "Osler",
+    title: siteShortName,
   },
   formatDetection: {
     telephone: false,
@@ -60,14 +81,14 @@ export const metadata: Metadata = {
     apple: [{ url: "/assets/icons/apple-touch-icon.png" }],
   },
   openGraph: {
-    title: "Osler — Medical Study Platform",
+    title: `${siteName} — ${siteTagline}`,
     description: "Quiz, Bank, Flashcards, Written, OSCE — one app.",
-    siteName: "Osler",
+    siteName: siteName,
     type: "website",
   },
   twitter: {
     card: "summary_large_image",
-    title: "Osler — Medical Study Platform",
+    title: `${siteName} — ${siteTagline}`,
     description: "Quiz, Bank, Flashcards, Written, OSCE — one app.",
   },
 };
@@ -122,8 +143,8 @@ export default function RootLayout({
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-        <meta name="apple-mobile-web-app-title" content="Osler" />
-        <meta name="mobile-web-app-title" content="Osler" />
+        <meta name="apple-mobile-web-app-title" content={siteShortName} />
+        <meta name="mobile-web-app-title" content={siteShortName} />
         {/* Disable iOS Safari's telephone link detection — otherwise a
             sequence of digits in a medical record could get auto-linked
             as a phone number. */}

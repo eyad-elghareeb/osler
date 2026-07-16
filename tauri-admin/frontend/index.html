@@ -109,6 +109,18 @@
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1" /><rect x="14" y="3" width="7" height="7" rx="1" /><rect x="14" y="14" width="7" height="7" rx="1" /><rect x="3" y="14" width="7" height="7" rx="1" /></svg>
             <span data-i18n="nav.dashboard">Dashboard</span>
           </button>
+          <button class="nav-item" data-route="wizard" type="button">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2 4 6v6c0 5 3.5 8 8 10 4.5-2 8-5 8-10V6z" /><path d="m9 12 2 2 4-4" /></svg>
+            <span data-i18n="nav.wizard">Setup Wizard</span>
+          </button>
+          <button class="nav-item" data-route="instance" type="button">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14" /></svg>
+            <span data-i18n="nav.instance">New Instance</span>
+          </button>
+          <button class="nav-item" data-route="config" type="button">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3v5h5M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><path d="M9 13h6M9 17h6" /></svg>
+            <span data-i18n="nav.config">Config</span>
+          </button>
           <button class="nav-item" data-route="content" type="button">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16v16H4z" /><path d="M4 9h16M9 4v16" /></svg>
             <span data-i18n="nav.content">Content</span>
@@ -135,6 +147,10 @@
           </button>
         </nav>
         <div class="sidebar-footer">
+          <a id="sidebar-github-link" class="sidebar-github" href="https://github.com/eyad-elghareeb/osler" target="_blank" rel="noopener noreferrer" title="Osler on GitHub">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M12 .5C5.7.5.5 5.7.5 12c0 5.1 3.3 9.4 7.9 10.9.6.1.8-.2.8-.5v-2c-3.2.7-3.9-1.4-3.9-1.4-.5-1.3-1.3-1.7-1.3-1.7-1.1-.7.1-.7.1-.7 1.2.1 1.8 1.2 1.8 1.2 1 .1.8 1.7 2.6 1.2.1-.7.4-1.2.7-1.5-2.6-.3-5.3-1.3-5.3-5.8 0-1.3.5-2.3 1.2-3.2-.1-.3-.5-1.5.1-3.2 0 0 1-.3 3.3 1.2a11.5 11.5 0 0 1 6 0c2.3-1.5 3.3-1.2 3.3-1.2.7 1.7.3 2.9.1 3.2.8.9 1.2 1.9 1.2 3.2 0 4.6-2.8 5.5-5.4 5.8.4.4.8 1.1.8 2.2v3.3c0 .3.2.6.8.5 4.6-1.5 7.9-5.8 7.9-10.9C23.5 5.7 18.3.5 12 .5z" /></svg>
+            <span>GitHub</span>
+          </a>
           <div class="version">v0.2.0</div>
         </div>
       </aside>
@@ -154,6 +170,9 @@
   <script src="i18n.js"></script>
   <script src="views/markdown-editor.js"></script>
   <script src="views/mermaid-editor.js"></script>
+  <script src="views/wizard.js"></script>
+  <script src="views/instance.js"></script>
+  <script src="views/config.js"></script>
   <script src="views/dashboard.js"></script>
   <script src="views/content-editor.js"></script>
   <script src="views/content.js"></script>

@@ -27,6 +27,10 @@ import {
   Search,
   ArrowLeft,
   ChevronRight,
+  Github,
+  Info,
+  ExternalLink,
+  Palette,
 } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -62,6 +66,9 @@ import {
   isAnimationsEnabled,
   setAnimationsEnabled,
 } from "@/lib/osler/motion";
+import { getConfig, getGithubRepo, getSiteName, getSiteTagline, type EngineType } from "@/lib/osler/config";
+import { ENGINE_PLUGIN_IDS } from "@/lib/osler/config";
+import { useOslerTheme } from "./theme-provider";
 
 /* ─── Models & storage keys (shared with ai-assistant.tsx) ──────────── */
 
@@ -95,7 +102,7 @@ const OSCE_STORAGE_KEYS = {
 
 /* ─── Section catalog ─────────────────────────────────────────────── */
 
-type SettingsSection = "language" | "ai" | "shortcuts" | "downloads" | "sync" | "backup" | "native" | "danger";
+type SettingsSection = "language" | "ai" | "shortcuts" | "downloads" | "sync" | "backup" | "native" | "about" | "danger";
 
 interface SectionMeta {
   id: SettingsSection;
@@ -113,6 +120,7 @@ const SECTIONS: SectionMeta[] = [
   { id: "sync",      labelKey: "settings.section.sync",      icon: Smartphone,   keywords: "sync peer webrtc qr sync devices" },
   { id: "native",    labelKey: "settings.section.native",    icon: Fingerprint,  keywords: "native haptics biometric fingerprint view transitions wake lock network animations" },
   { id: "backup",    labelKey: "settings.section.backup",    icon: FileArchive,  keywords: "backup restore export import file" },
+  { id: "about",     labelKey: "settings.section.about",     icon: Info,         keywords: "about github repo version site name theme plugins config" },
   { id: "danger",    labelKey: "settings.section.danger",    icon: AlertTriangle, keywords: "danger reset clear data delete wipe progress" },
 ];
 
@@ -125,6 +133,7 @@ function renderSection(id: SettingsSection) {
     case "sync":      return <SyncSettingsSection />;
     case "native":    return <NativeSettingsSection />;
     case "backup":    return <BackupSettingsSection />;
+    case "about":     return <AboutSettingsSection />;
     case "danger":    return <DangerZoneSection />;
   }
 }
@@ -1610,5 +1619,135 @@ function DangerZoneSection() {
         </div>
       )}
     </Card>
+  );
+}
+
+/* ─── About section (site identity, plugins, themes, GitHub repo) ──── */
+
+/**
+ * AboutSettingsSection — surfaces the osler.config-driven site identity, the
+ * enabled engine plugins, the available themes, and the canonical GitHub repo
+ * link. Always present, even if the user hasn't customised anything — the
+ * GitHub repo link is mandatory per the project policy.
+ */
+function AboutSettingsSection() {
+  const { t } = useI18n();
+  const { availableThemes, theme: activeTheme } = useOslerTheme();
+  const cfg = React.useMemo(() => getConfig(), []);
+  const repo = getGithubRepo();
+
+  const enabledPlugins = ENGINE_PLUGIN_IDS.filter((id) => cfg.engines[id]?.enabled ?? true);
+  const disabledPlugins = ENGINE_PLUGIN_IDS.filter((id) => !(cfg.engines[id]?.enabled ?? true));
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center gap-3 mb-2">
+        <Info className="size-5 text-primary" />
+        <div>
+          <h2 className="text-base font-semibold">{t("settings.section.about")}</h2>
+          <p className="text-xs text-muted-foreground">{t("settings.about.subtitle")}</p>
+        </div>
+      </div>
+
+      <Card className="p-4 space-y-3">
+        <div className="text-xs uppercase tracking-wider text-muted-foreground">
+          {t("settings.about.siteIdentity")}
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
+          <div>
+            <div className="text-[10px] uppercase text-muted-foreground">{t("settings.about.name")}</div>
+            <div className="font-medium">{getSiteName()}</div>
+          </div>
+          <div>
+            <div className="text-[10px] uppercase text-muted-foreground">{t("settings.about.tagline")}</div>
+            <div className="font-medium">{getSiteTagline()}</div>
+          </div>
+          <div>
+            <div className="text-[10px] uppercase text-muted-foreground">{t("settings.about.shortName")}</div>
+            <div className="font-medium">{cfg.site.shortName}</div>
+          </div>
+          <div>
+            <div className="text-[10px] uppercase text-muted-foreground">{t("settings.about.organisation")}</div>
+            <div className="font-medium">{cfg.site.organisation || "—"}</div>
+          </div>
+        </div>
+      </Card>
+
+      <Card className="p-4 space-y-3">
+        <div className="flex items-center gap-2 text-xs uppercase tracking-wider text-muted-foreground">
+          <Palette className="size-3.5" />
+          {t("settings.about.themes")}
+        </div>
+        <div className="flex flex-wrap gap-2">
+          {availableThemes.map((th) => (
+            <span
+              key={th.id}
+              className={cn(
+                "text-xs px-2 py-1 rounded-full border",
+                th.id === activeTheme
+                  ? "border-primary bg-primary/10 text-primary"
+                  : "border-border text-muted-foreground",
+              )}
+            >
+              {th.name} <span className="opacity-60">· {th.variant}</span>
+            </span>
+          ))}
+        </div>
+        <div className="text-xs text-muted-foreground">
+          {t("settings.about.activeTheme", { name: availableThemes.find((x) => x.id === activeTheme)?.name ?? activeTheme })}
+        </div>
+      </Card>
+
+      <Card className="p-4 space-y-3">
+        <div className="flex items-center justify-between gap-2">
+          <div className="text-xs uppercase tracking-wider text-muted-foreground">
+            {t("settings.about.plugins")}
+          </div>
+          <span className="text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded-full border border-border bg-muted/40 text-muted-foreground">
+            {t("settings.about.adminControlled")}
+          </span>
+        </div>
+        <div className="flex flex-wrap gap-1.5">
+          {enabledPlugins.map((id) => (
+            <span key={id} className="text-xs px-2 py-1 rounded-full border border-primary/30 bg-primary/10 text-primary">
+              {id}
+            </span>
+          ))}
+        </div>
+        {disabledPlugins.length > 0 && (
+          <div className="text-xs text-muted-foreground">
+            {t("settings.about.disabled", { n: disabledPlugins.length })}: {disabledPlugins.join(", ")}
+          </div>
+        )}
+        <div className="text-xs text-muted-foreground">
+          {t("settings.about.pluginsNote")}
+        </div>
+      </Card>
+
+      <Card className="p-4 space-y-3">
+        <div className="flex items-center gap-2 text-xs uppercase tracking-wider text-muted-foreground">
+          <Github className="size-3.5" />
+          {t("settings.about.github")}
+        </div>
+        <a
+          href={repo}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex items-center gap-1.5 text-sm text-primary hover:underline"
+        >
+          {repo}
+          <ExternalLink className="size-3" />
+        </a>
+        <div className="text-xs text-muted-foreground">
+          {t("settings.about.githubDesc")}
+        </div>
+      </Card>
+
+      <Card className="p-4">
+        <div className="text-xs text-muted-foreground">
+          {t("settings.about.configPath", { path: "/osler.config.json" })}
+        </div>
+      </Card>
+    </div>
   );
 }

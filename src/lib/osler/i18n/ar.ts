@@ -470,6 +470,25 @@ export const ar = {
     "settings.section.shortcuts": "لوحة المفاتيح",
     "settings.section.danger": "البيانات وإعادة التعيين",
     "settings.section.backup": "النسخ والاستعادة",
+    "settings.section.about": "حول",
+    "settings.about.subtitle":
+      "هوية الموقع والإضافات والسمات والمستودع المصدر — تُدار عبر osler.config.json.",
+    "settings.about.siteIdentity": "هوية الموقع",
+    "settings.about.name": "الاسم",
+    "settings.about.tagline": "الوصف",
+    "settings.about.shortName": "الاسم المختصر",
+    "settings.about.organisation": "المؤسسة",
+    "settings.about.themes": "السمات المتاحة",
+    "settings.about.activeTheme": "السمة الحالية: {name}",
+    "settings.about.plugins": "إضافات المحركات",
+    "settings.about.adminControlled": "يديرها المشرف",
+    "settings.about.pluginsNote":
+      "إضافات المحركات يُفعّلها أو يعطّلها مشرف النسخة عبر osler.config.json — لا يستطيع المستخدم النهائي تبديلها.",
+    "settings.about.disabled": "{n} معطّلة",
+    "settings.about.github": "المستودع المصدر",
+    "settings.about.githubDesc":
+      "أوسلر مفتوح المصدر. أبلغ عن الأخطاء أو ساهم أو قم بعمل نسخة من المشروع على GitHub.",
+    "settings.about.configPath": "ملف الإعداد: {path}",
     "settings.section.sync.open": "فتح صفحة المزامنة",
     "settings.language.uiLang": "لغة الواجهة",
     "settings.language.uiLangDesc":

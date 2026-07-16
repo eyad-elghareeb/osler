@@ -17,6 +17,7 @@ import {
   isRtl,
   dirFor,
 } from "@/lib/osler/i18n";
+import { loadConfig, getConfig, getSiteName, getSiteTagline } from "@/lib/osler/config";
 
 interface I18nContextValue {
   /** Current UI language. */
@@ -44,11 +45,27 @@ export function OslerI18nProvider({ children }: { children: React.ReactNode }) {
   const [contentFilter, setContentFilterState] = React.useState<ContentLangFilter>(
     DEFAULT_CONTENT_LANG_FILTER,
   );
+  // Whether the osler.config has been loaded — used to force a re-render of
+  // any consumer that reads site name / tagline via t("app.name") etc.
+  const [, setConfigVersion] = React.useState(0);
 
   // Hydrate from localStorage on mount.
   React.useEffect(() => {
     setLangState(loadUiLang());
     setContentFilterState(loadContentLangFilter());
+  }, []);
+
+  // Load osler.config.json on mount so the brand mark / tagline reflect the
+  // user's customisation. We bump a version counter to force consumers to
+  // re-render with the new site name.
+  React.useEffect(() => {
+    let cancelled = false;
+    loadConfig().then(() => {
+      if (!cancelled) setConfigVersion((v) => v + 1);
+    });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   // Whenever lang changes, apply to <html> and persist.
@@ -72,8 +89,13 @@ export function OslerI18nProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const t = React.useCallback(
-    (key: StringKey, params?: Record<string, string | number>) =>
-      translate(lang, key, params),
+    (key: StringKey, params?: Record<string, string | number>) => {
+      // Overlay config-driven site identity on the i18n keys. The user can
+      // customise the site name in osler.config.json without touching i18n.
+      if (key === "app.name") return getSiteName() || translate(lang, key, params);
+      if (key === "app.tagline") return getSiteTagline() || translate(lang, key, params);
+      return translate(lang, key, params);
+    },
     [lang],
   );
   const tList = React.useCallback((key: StringKey) => translateList(lang, key), [lang]);
@@ -105,7 +127,25 @@ export function useI18n(): I18nContextValue {
       contentFilter: DEFAULT_CONTENT_LANG_FILTER,
       dir: "ltr",
       rtl: false,
-      t: (k) => k as string,
+      t: (k) => {
+        // Same overlay as above — so SSR / pre-provider renders also see the
+        // config-driven site name when available.
+        if (k === "app.name") {
+          try {
+            return getSiteName() || (k as string);
+          } catch {
+            return k as string;
+          }
+        }
+        if (k === "app.tagline") {
+          try {
+            return getSiteTagline() || (k as string);
+          } catch {
+            return k as string;
+          }
+        }
+        return k as string;
+      },
       tList: () => [],
       setLang: () => {},
       setContentFilter: () => {},
@@ -113,3 +153,7 @@ export function useI18n(): I18nContextValue {
   }
   return ctx;
 }
+
+// Re-export config helpers for consumers that need direct access without
+// going through the i18n layer.
+export { getConfig, loadConfig };

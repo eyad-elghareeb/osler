@@ -1,0 +1,31 @@
+{
+  "schemaVersion": 1,
+  "site": {
+    "name": "Osler",
+    "shortName": "Osler",
+    "tagline": "Medical Study Platform",
+    "githubRepo": "https://github.com/eyad-elghareeb/osler",
+    "organisation": "Osler Team"
+  },
+  "engines": {
+    "quiz":      { "enabled": true,  "label": "Quiz",           "singular": "Quiz",     "color": "oklch(0.62 0.16 250)", "icon": "clipboard" },
+    "bank":      { "enabled": true,  "label": "Question Bank",  "singular": "Bank",     "color": "oklch(0.58 0.14 245)", "icon": "book" },
+    "written":   { "enabled": true,  "label": "Written",        "singular": "Set",      "color": "oklch(0.78 0.16 80)",  "icon": "pen-tool" },
+    "flashcard": { "enabled": true,  "label": "Flashcards",     "singular": "Deck",     "color": "oklch(0.7 0.18 145)",  "icon": "layers" },
+    "osce":      { "enabled": true,  "label": "OSCE",           "singular": "OSCE",     "color": "oklch(0.7 0.2 16)",    "icon": "activity" },
+    "library":   { "enabled": true,  "label": "Library",        "singular": "Article",  "color": "oklch(0.65 0.15 280)", "icon": "book-open" },
+    "video":     { "enabled": true,  "label": "Videos",         "singular": "Video",    "color": "oklch(0.68 0.18 195)", "icon": "video" }
+  },
+  "themes": {
+    "default": "dark",
+    "custom": []
+  },
+  "defaults": {
+    "view": "dashboard",
+    "language": { "ui": "en", "content": "all" },
+    "quiz": { "questionCount": 10, "secondsPerQuestion": 60, "tutorMode": false, "shuffle": true },
+    "ai": { "model": "gemini-2.5-flash", "enabled": true, "temperature": 0.4 },
+    "sync": { "method": "network", "defaultRoom": "osler-default" }
+  },
+  "wizard": { "completed": false, "version": 1 }
+}

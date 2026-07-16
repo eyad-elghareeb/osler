@@ -98,6 +98,25 @@
       return;
     }
 
+    // ── Config-status banner ───────────────────────────────────────
+    // Show a banner prompting the user to run the wizard if no config exists.
+    try {
+      const ce = await invoke("config_exists");
+      if (ce && ce.exists === false) {
+        const banner = el("div", { class: "card", style: { padding: "0.75rem 1rem", marginBottom: "1rem", background: "var(--primary-dim)", border: "1px solid var(--primary)", display: "flex", alignItems: "center", gap: "0.75rem", flexWrap: "wrap" } });
+        banner.appendChild(el("div", { style: { flex: "1", minWidth: "200px" } },
+          el("div", { style: { fontWeight: "600", fontSize: "0.875rem", color: "var(--primary)" } }, t("dashboard.configMissing")),
+          el("div", { style: { fontSize: "0.75rem", color: "var(--text-muted)" } }, t("dashboard.configMissingDesc"))
+        ));
+        const runBtn = el("button", { class: "btn btn-sm btn-primary" }, t("dashboard.runWizard"));
+        runBtn.addEventListener("click", () => window.OslerAdmin.navigate("wizard"));
+        banner.appendChild(runBtn);
+        wrap.appendChild(banner);
+      }
+    } catch {
+      // Mock mode or older backend — skip the banner.
+    }
+
     // Stats grid
     const grid = el("div", { class: "grid grid-4" });
     wrap.appendChild(grid);
@@ -115,6 +134,24 @@
     // Quick actions
     wrap.appendChild(el("h2", { style: { marginTop: "2rem", marginBottom: "0.75rem", fontSize: "1rem", fontWeight: "600" } }, t("dashboard.quickActions")));
     const qaGrid = el("div", { class: "grid grid-3" });
+    qaGrid.appendChild(quickAction(
+      "M12 2 4 6v6c0 5 3.5 8 8 10 4.5-2 8-5 8-10V6z",
+      t("dashboard.qa.wizard"),
+      t("dashboard.qa.wizardDesc"),
+      () => window.OslerAdmin.navigate("wizard")
+    ));
+    qaGrid.appendChild(quickAction(
+      "M12 5v14M5 12h14",
+      t("dashboard.qa.newInstance"),
+      t("dashboard.qa.newInstanceDesc"),
+      () => window.OslerAdmin.navigate("instance")
+    ));
+    qaGrid.appendChild(quickAction(
+      "M14 3v5h5M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8zM9 13h6M9 17h6",
+      t("dashboard.qa.config"),
+      t("dashboard.qa.configDesc"),
+      () => window.OslerAdmin.navigate("config")
+    ));
     qaGrid.appendChild(quickAction(
       "M14 3v5h5M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8zM9 13h6M9 17h6",
       t("dashboard.qa.generateManifest"),
@@ -147,6 +184,20 @@
       () => window.OslerAdmin.navigate("deploy")
     ));
     wrap.appendChild(qaGrid);
+
+    // ── GitHub repo reference card ─────────────────────────────────
+    // The repo link is always surfaced on the dashboard per project policy.
+    const repoCard = el("div", { class: "card", style: { marginTop: "2rem", padding: "1rem", display: "flex", alignItems: "center", gap: "0.75rem", flexWrap: "wrap" } });
+    const repoIconWrap = el("div", { class: "brand-mark", style: { width: "36px", height: "36px" } });
+    repoIconWrap.innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M12 .5C5.7.5.5 5.7.5 12c0 5.1 3.3 9.4 7.9 10.9.6.1.8-.2.8-.5v-2c-3.2.7-3.9-1.4-3.9-1.4-.5-1.3-1.3-1.7-1.3-1.7-1.1-.7.1-.7.1-.7 1.2.1 1.8 1.2 1.8 1.2 1 .1.8 1.7 2.6 1.2.1-.7.4-1.2.7-1.5-2.6-.3-5.3-1.3-5.3-5.8 0-1.3.5-2.3 1.2-3.2-.1-.3-.5-1.5.1-3.2 0 0 1-.3 3.3 1.2a11.5 11.5 0 0 1 6 0c2.3-1.5 3.3-1.2 3.3-1.2.7 1.7.3 2.9.1 3.2.8.9 1.2 1.9 1.2 3.2 0 4.6-2.8 5.5-5.4 5.8.4.4.8 1.1.8 2.2v3.3c0 .3.2.6.8.5 4.6-1.5 7.9-5.8 7.9-10.9C23.5 5.7 18.3.5 12 .5z" /></svg>';
+    repoCard.appendChild(repoIconWrap);
+    repoCard.appendChild(el("div", { style: { flex: "1", minWidth: "200px" } },
+      el("div", { style: { fontWeight: "600", fontSize: "0.875rem" } }, t("dashboard.github")),
+      el("div", { style: { fontSize: "0.75rem", color: "var(--text-muted)" } }, t("dashboard.githubDesc"))
+    ));
+    const repoLink = el("a", { href: "https://github.com/eyad-elghareeb/osler", target: "_blank", rel: "noopener noreferrer", class: "btn btn-sm" }, "github.com/eyad-elghareeb/osler ↗");
+    repoCard.appendChild(repoLink);
+    wrap.appendChild(repoCard);
 
     view.appendChild(wrap);
 

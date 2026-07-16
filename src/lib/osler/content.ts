@@ -23,6 +23,7 @@ import type {
   FlashcardSubdeck,
   VideoContent,
 } from "./types";
+import { isEngineEnabled, getEngineOverride } from "./config";
 
 const BASE = "/osler-content";
 
@@ -162,7 +163,10 @@ export async function loadAllContent(): Promise<{
   items: Array<{ node: ContentTreeNode; content: AnyContent | null }>;
   trees: Record<string, ContentTreeNode[]>;
 }> {
-  const types: EngineType[] = ["quiz", "bank", "written", "flashcard", "osce", "video"];
+  // Filter out disabled engine plugins — only iterate engines enabled in osler.config.
+  const types: EngineType[] = ["quiz", "bank", "written", "flashcard", "osce", "video"].filter(
+    isEngineEnabled,
+  );
   const folders = new Set(types.map(categoryFolder));
   const allLeaves: ContentTreeNode[] = [];
   const trees: Record<string, ContentTreeNode[]> = {};
@@ -204,7 +208,10 @@ export async function loadAllContent(): Promise<{
  * Load a single content pack by its node uid.
  */
 export async function loadContentByUid(uid: string): Promise<AnyContent> {
-  const types: EngineType[] = ["quiz", "bank", "written", "flashcard", "osce", "video"];
+  // Only search engines that are enabled in osler.config.
+  const types: EngineType[] = ["quiz", "bank", "written", "flashcard", "osce", "video"].filter(
+    isEngineEnabled,
+  );
   const folders = new Set(types.map(categoryFolder));
 
   for (const folder of folders) {
@@ -276,6 +283,13 @@ export function isVideo(c: AnyContent): c is VideoContent {
 }
 
 /* ── Engine metadata helpers ────────────────────────────────────────── */
+
+/**
+ * Built-in engine metadata. Each field can be overridden per-instance via
+ * `osler.config.json` → `engines.<id>.{label,singular,color,icon}`. The
+ * override-aware accessor is `getEngineMeta(type)`; import `ENGINE_META`
+ * directly only when you intentionally want the built-in defaults.
+ */
 export const ENGINE_META: Record<
   EngineType,
   { label: string; singular: string; color: string; icon: string }
@@ -308,3 +322,24 @@ export const ENGINE_META: Record<
     icon: "video",
   },
 };
+
+/**
+ * Get engine metadata with any `osler.config` overrides applied. Falls back to
+ * `ENGINE_META` defaults for any field the user has not overridden.
+ */
+export function getEngineMeta(type: EngineType): {
+  label: string;
+  singular: string;
+  color: string;
+  icon: string;
+} {
+  const base = ENGINE_META[type];
+  const override = getEngineOverride(type);
+  if (!override) return base;
+  return {
+    label: override.label ?? base.label,
+    singular: override.singular ?? base.singular,
+    color: override.color ?? base.color,
+    icon: override.icon ?? base.icon,
+  };
+}

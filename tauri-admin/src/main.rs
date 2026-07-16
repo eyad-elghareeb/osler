@@ -7,6 +7,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 use osler_admin_lib::commands::{ProjectRoot, RunnerState};
+use osler_admin_lib::{commands, config, deploy};
 use std::sync::Arc;
 
 fn main() {
@@ -58,6 +59,11 @@ fn main() {
             deploy::deploy_status,
             deploy::deploy_stop,
             deploy::clear_deploy_logs,
+            // osler.config.json
+            config::read_config,
+            config::write_config,
+            config::config_exists,
+            config::generate_instance,
             // Shell / open
             commands::open_external,
             // Misc
@@ -74,5 +80,3 @@ fn main() {
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
-
-use osler_admin_lib::{commands, deploy};

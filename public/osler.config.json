@@ -1,0 +1,95 @@
+{
+  "$schema": "../src/lib/osler/config.ts",
+  "$comment": "Osler configuration file. Edit this to white-label the platform, enable/disable engine plugins, define custom themes, and set default options. The Tauri admin panel can also write this file via the Config Editor view. See AGENTS.md → 'Configuration system' for the full schema.",
+
+  "schemaVersion": 1,
+
+  "site": {
+    "name": "Osler",
+    "shortName": "Osler",
+    "tagline": "Medical Study Platform",
+    "githubRepo": "https://github.com/eyad-elghareeb/osler",
+    "organisation": "Osler Team",
+    "supportEmail": ""
+  },
+
+  "engines": {
+    "quiz":      { "enabled": true,  "label": "Quiz",           "singular": "Quiz",     "color": "oklch(0.62 0.16 250)", "icon": "clipboard" },
+    "bank":      { "enabled": true,  "label": "Question Bank",  "singular": "Bank",     "color": "oklch(0.58 0.14 245)", "icon": "book" },
+    "written":   { "enabled": true,  "label": "Written",        "singular": "Set",      "color": "oklch(0.78 0.16 80)",  "icon": "pen-tool" },
+    "flashcard": { "enabled": true,  "label": "Flashcards",     "singular": "Deck",     "color": "oklch(0.7 0.18 145)",  "icon": "layers" },
+    "osce":      { "enabled": true,  "label": "OSCE",           "singular": "OSCE",     "color": "oklch(0.7 0.2 16)",    "icon": "activity" },
+    "library":   { "enabled": true,  "label": "Library",        "singular": "Article",  "color": "oklch(0.65 0.15 280)", "icon": "book-open" },
+    "video":     { "enabled": true,  "label": "Videos",         "singular": "Video",    "color": "oklch(0.68 0.18 195)", "icon": "video" }
+  },
+
+  "themes": {
+    "default": "dark",
+    "custom": [
+      {
+        "id": "navy-clinic",
+        "name": "Navy Clinic",
+        "variant": "dark",
+        "primary": "oklch(0.58 0.14 245)",
+        "accent": "oklch(0.45 0.12 250)",
+        "background": "oklch(0.14 0.018 260)",
+        "foreground": "oklch(0.96 0.005 240)"
+      },
+      {
+        "id": "forest-rounds",
+        "name": "Forest Rounds",
+        "variant": "dark",
+        "primary": "oklch(0.7 0.18 145)",
+        "accent": "oklch(0.55 0.15 150)",
+        "background": "oklch(0.16 0.02 160)",
+        "foreground": "oklch(0.96 0.01 150)"
+      },
+      {
+        "id": "cream-journal",
+        "name": "Cream Journal",
+        "variant": "light",
+        "primary": "oklch(0.38 0.09 255)",
+        "accent": "oklch(0.7 0.12 240)",
+        "background": "oklch(0.99 0.005 240)",
+        "foreground": "oklch(0.18 0.02 250)"
+      },
+      {
+        "id": "crimson-ed",
+        "name": "Crimson ED",
+        "variant": "dark",
+        "primary": "oklch(0.65 0.22 16)",
+        "accent": "oklch(0.5 0.2 20)",
+        "background": "oklch(0.15 0.025 20)",
+        "foreground": "oklch(0.96 0.01 20)"
+      }
+    ]
+  },
+
+  "defaults": {
+    "view": "dashboard",
+    "language": {
+      "ui": "en",
+      "content": "all"
+    },
+    "quiz": {
+      "questionCount": 10,
+      "secondsPerQuestion": 60,
+      "tutorMode": false,
+      "shuffle": true
+    },
+    "ai": {
+      "model": "gemini-2.5-flash",
+      "enabled": true,
+      "temperature": 0.4
+    },
+    "sync": {
+      "method": "network",
+      "defaultRoom": "osler-default"
+    }
+  },
+
+  "wizard": {
+    "completed": false,
+    "version": 1
+  }
+}

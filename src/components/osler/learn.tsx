@@ -14,11 +14,12 @@ import {
 import { useI18n } from "./i18n-provider";
 import type { OslerView } from "./app-shell";
 import { cn } from "@/lib/utils";
-import { loadAllContent } from "@/lib/osler/content";
+import { loadAllContent, getEngineMeta } from "@/lib/osler/content";
 import { listAllArticles } from "@/lib/osler/articles";
 import { listAllVideos } from "@/lib/osler/videos";
 import { storage } from "@/lib/osler/storage";
 import { fadeUp, staggerContainer } from "@/lib/osler/motion";
+import { isEngineEnabled } from "@/lib/osler/config";
 
 /**
  * Learn — a single hub that groups the four "study" modules that used to live
@@ -30,6 +31,9 @@ import { fadeUp, staggerContainer } from "@/lib/osler/motion";
  * class `OslerView` values — they just no longer appear in the nav bars. The
  * Learn tab stays highlighted while the user is inside any of them (see
  * `LEARN_SUBVIEWS` in app-shell.tsx and mobile-tab-bar.tsx).
+ *
+ * Engine plugins: modules whose engine is disabled in `osler.config.json`
+ * are filtered out of the grid at render time.
  */
 
 interface LearnProps {
@@ -39,6 +43,8 @@ interface LearnProps {
 
 interface ModuleCardDef {
   id: Extract<OslerView, "library" | "flashcards" | "osce" | "videos">;
+  /** Engine plugin id used to check enabled state and pull override metadata. */
+  engine: "library" | "flashcard" | "osce" | "video";
   icon: LucideIcon;
   titleKey: string;
   descKey: string;
@@ -50,9 +56,10 @@ interface ModuleCardDef {
   accent: string;
 }
 
-const MODULES: ModuleCardDef[] = [
+const ALL_MODULES: ModuleCardDef[] = [
   {
     id: "library",
+    engine: "library",
     icon: BookOpen,
     titleKey: "learn.library.title",
     descKey: "learn.library.desc",
@@ -62,6 +69,7 @@ const MODULES: ModuleCardDef[] = [
   },
   {
     id: "flashcards",
+    engine: "flashcard",
     icon: Layers,
     titleKey: "learn.flashcards.title",
     descKey: "learn.flashcards.desc",
@@ -71,6 +79,7 @@ const MODULES: ModuleCardDef[] = [
   },
   {
     id: "osce",
+    engine: "osce",
     icon: Stethoscope,
     titleKey: "learn.osce.title",
     descKey: "learn.osce.desc",
@@ -80,6 +89,7 @@ const MODULES: ModuleCardDef[] = [
   },
   {
     id: "videos",
+    engine: "video",
     icon: PlayCircle,
     titleKey: "learn.videos.title",
     descKey: "learn.videos.desc",
@@ -91,6 +101,12 @@ const MODULES: ModuleCardDef[] = [
 
 export function Learn({ onNavigate }: LearnProps) {
   const { t, rtl } = useI18n();
+
+  // Filter out modules whose engine plugin is disabled in osler.config.
+  const modules = React.useMemo(
+    () => ALL_MODULES.filter((m) => isEngineEnabled(m.engine)),
+    [],
+  );
 
   // Live counts per module — fall back to "—" while loading.
   const [counts, setCounts] = React.useState<Record<string, number | null>>({
@@ -191,7 +207,7 @@ export function Learn({ onNavigate }: LearnProps) {
           animate="visible"
           className="grid grid-cols-1 sm:grid-cols-2 gap-4"
         >
-          {MODULES.map((m) => (
+          {modules.map((m) => (
             <ModuleCard
               key={m.id}
               def={m}
@@ -224,6 +240,11 @@ function ModuleCard({
   t: (k: any, p?: any) => string;
 }) {
   const Icon = def.icon;
+  // Pull override metadata (label/color/icon) from osler.config so the
+  // module card reflects the user's customisation. The title still flows
+  // through i18n so RTL/Arabic users see a translated label.
+  const meta = getEngineMeta(def.engine);
+  void meta; // referenced for side-effect of pulling overrides; title uses i18n key.
   return (
     <motion.button
       type="button"

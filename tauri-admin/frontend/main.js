@@ -237,6 +237,39 @@
           window.__oslerMockDeployState.logs = [];
         }
         return { cleared: true };
+      // ── osler.config.json commands (mock) ──────────────────────────
+      case "config_exists":
+        return { exists: !!window.__oslerMockConfig, path: "public/osler.config.json" };
+      case "read_config":
+        if (window.__oslerMockConfig) return JSON.parse(JSON.stringify(window.__oslerMockConfig));
+        throw new Error("Config file not found. Run the first-time wizard to create one.");
+      case "write_config":
+        window.__oslerMockConfig = JSON.parse(JSON.stringify(args && args.config));
+        return { written: true, path: "public/osler.config.json" };
+      case "generate_instance":
+        // Mock: pretend the instance was scaffolded.
+        return {
+          created: true,
+          targetDir: (args && args.opts && args.opts.targetDir) || "/tmp/new-osler",
+          files: [
+            "public/osler.config.json",
+            "README.md",
+            ".gitignore",
+            "public/osler-content/qbank/manifest.json",
+            "public/osler-content/flashcard/manifest.json",
+            "public/osler-content/osce/manifest.json",
+            "public/osler-content/library/manifest.json",
+            "public/osler-content/videos/manifest.json",
+          ],
+          dirs: [
+            "public/osler-content/qbank",
+            "public/osler-content/flashcard",
+            "public/osler-content/osce",
+            "public/osler-content/library",
+            "public/osler-content/videos",
+          ],
+          config: (args && args.opts) || {},
+        };
       default:
         return null;
     }
@@ -507,6 +540,9 @@
 
     // Register routes
     register("dashboard", window.OslerAdminViews.dashboard);
+    register("wizard", window.OslerAdminViews.wizard);
+    register("instance", window.OslerAdminViews.instance);
+    register("config", window.OslerAdminViews.config);
     register("content", window.OslerAdminViews.content);
     register("manifest", window.OslerAdminViews.manifest);
     register("build", window.OslerAdminViews.build);
@@ -537,6 +573,19 @@
       // If no root picked, show the picker overlay
       if (!projectState || !projectState.root) {
         showPickerOverlay();
+      } else {
+        // Root picked — check if osler.config.json exists. If not, auto-launch
+        // the first-time wizard so the user can configure site identity,
+        // engine plugins, themes, and the GitHub repo link on first boot.
+        try {
+          const ce = await invoke("config_exists");
+          if (ce && ce.exists === false) {
+            navigate("wizard");
+            toast(t("wizard.autoLaunched"), "info");
+          }
+        } catch (e) {
+          // Mock mode or older backend — silently ignore.
+        }
       }
     });
   }

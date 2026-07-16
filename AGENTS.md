@@ -164,6 +164,97 @@ Rules:
 
 ---
 
+## Configuration system (`osler.config.json`)
+
+Osler is fully driven by a runtime-loaded, user-editable config file at
+`public/osler.config.json`. The schema lives in `src/lib/osler/config.ts`;
+the loader (`loadConfig()`) merges the user's file over `DEFAULT_CONFIG` so
+every field is optional and the app always boots.
+
+### What the config drives
+
+| Section | Drives |
+|---|---|
+| `site.{name,shortName,tagline,githubRepo,organisation,supportEmail}` | `<title>`, OG/Twitter metadata, PWA manifest name, in-app brand mark, in-app About section, admin sidebar footer link |
+| `engines.<id>.{enabled,label,singular,color,icon}` | Engine plugin enable/disable; per-engine label/color/icon overrides via `getEngineMeta(type)` |
+| `themes.{default,custom[]}` | Default theme + custom palettes; each custom theme injects CSS variable overrides scoped to `.theme-<id>` |
+| `defaults.view` | Default landing view after login |
+| `defaults.language.{ui,content}` | Default UI language + content-language filter |
+| `defaults.quiz.*` | Default quiz builder options (question count, sec/question, tutor, shuffle) |
+| `defaults.ai.*` | Default AI assistant model + enabled + temperature |
+| `defaults.sync.*` | Default sync transport + room name |
+| `wizard.{completed,completedAt,version}` | First-time wizard state |
+
+### Engine plugin system
+
+The 7 engine types (`quiz | bank | written | flashcard | osce | library | video`)
+are each treated as a toggleable plugin. Disabling an engine:
+
+- Hides its module from the Learn hub (`learn.tsx` filters `ALL_MODULES` by `isEngineEnabled`).
+- Skips its category in `loadAllContent()` / `loadContentByUid()` — content is
+  never fetched from disk.
+- Does NOT delete content on disk — re-enabling the engine brings it back.
+
+**Plugins are admin-controlled, not user-controlled.** The decision of which
+engines to include is made by the instance admin via `osler.config.json` and
+applies to every user of the instance. There is no end-user UI to toggle
+plugins — the in-app Settings → About section shows the enabled plugins as
+read-only badges with an explicit "Admin-controlled" tag. Only the Tauri
+admin app (Setup Wizard, Instance Generator, Config Editor) writes plugin
+state.
+
+Per-engine overrides (label, color, icon) are surfaced through
+`getEngineMeta(type)` (override-aware); import `ENGINE_META` directly only when
+you intentionally want the built-in defaults.
+
+> 📖 **Self-hosting guide:** [`SELF-HOSTING.md`](SELF-HOSTING.md) covers forking,
+> white-labelling, plugin selection, deployment, and the branding checklist.
+
+### Custom themes
+
+`themes.custom[]` defines palettes in addition to the built-in `dark` / `light`.
+Each entry has `id`, `name`, `variant` ("dark" / "light"), and optional oklch
+color overrides (`primary`, `background`, `foreground`, `accent`, `border`,
+`destructive`, `mutedForeground`). The theme provider injects a single
+`<style id="osler-custom-themes">` block into `<head>` with one rule per
+custom theme, scoped to `.theme-<id>`. Switching to a custom theme adds both
+`.theme-<id>` and the variant class to `<html>` so existing `.dark` / `.light`
+checks (e.g. Mermaid) keep working.
+
+### Tauri admin integration
+
+The Tauri admin app reads/writes the config via three commands in
+`tauri-admin/src/config.rs`:
+
+- `read_config` — returns the parsed JSON (errors if file missing)
+- `write_config` — pretty-prints and writes the file
+- `config_exists` — boolean check used by the auto-wizard
+- `generate_instance` — scaffolds a brand-new Osler project into a target
+  directory with the user's site identity, engines, and theme patched into a
+  fresh `osler.config.json`
+
+The admin frontend exposes three new views (registered in
+`tauri-admin/frontend/main.js`):
+
+- **Setup Wizard** (`views/wizard.js`) — 6-step first-time setup, auto-launches
+  when no config exists on project bind.
+- **Instance Generator** (`views/instance.js`) — scaffolds new Osler projects.
+- **Config Editor** (`views/config.js`) — structured editor for every section
+  of `osler.config.json`, with a raw-JSON tab for power users.
+
+### Adding a new engine plugin
+
+1. Add the id to `EngineType` in `src/lib/osler/types.ts`.
+2. Add a default entry to `ENGINE_META` in `src/lib/osler/content.ts`.
+3. Add the id to `ENGINE_PLUGIN_IDS` and `DEFAULT_CONFIG.engines` in `src/lib/osler/config.ts`.
+4. Add the id to the `ENGINES` list in `tauri-admin/frontend/views/wizard.js`
+   and `tauri-admin/frontend/views/config.js` (so the admin UI surfaces it).
+5. Add the id to the bundled template in `tauri-admin/default-osler-config.json`.
+6. Add rendering support (a studio component + a branch in `page.tsx`).
+7. Add i18n keys for the new engine's labels (both `en` and `ar`).
+
+---
+
 ## Developer Commands
 
 | Command | Purpose |
