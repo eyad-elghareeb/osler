@@ -24,6 +24,7 @@ import {
   Minimize2,
   Code2,
   ExternalLink,
+  Download,
 } from "lucide-react";
 import {
   loadArticleTree,
@@ -596,27 +597,7 @@ export function Library({ initialArticleId }: LibraryProps) {
                   <Loader2 className="size-6 animate-spin text-muted-foreground" />
                 </div>
               ) : activeArticle.contentType === "pdf" ? (
-                <div className="flex-1 flex flex-col bg-muted/30">
-                  <div className="flex items-center justify-between px-6 py-3 border-b border-border/40 bg-card/50">
-                    <span className="text-xs font-medium text-muted-foreground">{t("library.pdfViewer")}</span>
-                    {activeArticle.fileUrl && (
-                      <a
-                        href={activeArticle.fileUrl}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="text-xs text-primary hover:underline flex items-center gap-1 font-medium"
-                      >
-                        <ExternalLink className="size-3" />
-                        {t("library.pdfOpen")}
-                      </a>
-                    )}
-                  </div>
-                  <iframe
-                    src={activeArticle.fileUrl}
-                    className="w-full flex-1 border-0 bg-background"
-                    title={activeArticle.title}
-                  />
-                </div>
+                <PdfViewer url={activeArticle.fileUrl!} title={activeArticle.title} />
               ) : activeArticle.contentType === "html" ? (
                 <div className="flex-1 flex flex-col bg-muted/20">
                   <iframe
@@ -813,8 +794,13 @@ function MobileHub({
                       dir={a.lang === "ar" ? "rtl" : undefined}
                       lang={a.lang ?? undefined}
                     >
-                      <div className="size-10 rounded-lg bg-primary/10 text-primary flex items-center justify-center shrink-0">
-                        <BookOpen className="size-5" />
+                      <div className={cn(
+                        "size-10 rounded-lg flex items-center justify-center shrink-0",
+                        a.contentType === "pdf"
+                          ? "bg-orange-500/10 text-orange-500"
+                          : "bg-primary/10 text-primary"
+                      )}>
+                        {a.contentType === "pdf" ? <FileText className="size-5" /> : <BookOpen className="size-5" />}
                       </div>
                       <div className="flex-1 min-w-0">
                         <div className="font-medium text-sm truncate">{a.title}</div>
@@ -982,6 +968,18 @@ function MobileReader({
               </button>
             )}
 
+            {article.fileUrl && article.contentType === "pdf" && (
+              <a
+                href={article.fileUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="size-9 rounded-lg flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors"
+                title={t("library.pdfOpen")}
+              >
+                <ExternalLink className="size-4" />
+              </a>
+            )}
+
             <HighlighterToolbar
               control={{
                 tool: hlCtrl.tool,
@@ -1012,34 +1010,36 @@ function MobileReader({
           </div>
         </div>
 
-        {/* Zoom controls row */}
-        <div className="flex items-center justify-between px-3 pb-2 border-b border-border/40">
-          <div className="flex items-center gap-0.5">
-            <button
-              onClick={onZoomOut}
-              disabled={zoom <= 80}
-              className="size-7 rounded-md flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors disabled:opacity-30"
-              title="Zoom out"
-            >
-              <ZoomOut className="size-3.5" />
-            </button>
-            <button
-              onClick={onResetZoom}
-              className="text-[10px] font-mono tabular-nums px-1.5 h-7 rounded-md hover:bg-muted text-muted-foreground min-w-[2.5rem]"
-              title="Reset zoom"
-            >
-              {zoom}%
-            </button>
-            <button
-              onClick={onZoomIn}
-              disabled={zoom >= 140}
-              className="size-7 rounded-md flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors disabled:opacity-30"
-              title="Zoom in"
-            >
-              <ZoomIn className="size-3.5" />
-            </button>
+        {/* Zoom controls row — only for markdown articles */}
+        {article.contentType === "md" && (
+          <div className="flex items-center justify-between px-3 pb-2 border-b border-border/40">
+            <div className="flex items-center gap-0.5">
+              <button
+                onClick={onZoomOut}
+                disabled={zoom <= 80}
+                className="size-7 rounded-md flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors disabled:opacity-30"
+                title="Zoom out"
+              >
+                <ZoomOut className="size-3.5" />
+              </button>
+              <button
+                onClick={onResetZoom}
+                className="text-[10px] font-mono tabular-nums px-1.5 h-7 rounded-md hover:bg-muted text-muted-foreground min-w-[2.5rem]"
+                title="Reset zoom"
+              >
+                {zoom}%
+              </button>
+              <button
+                onClick={onZoomIn}
+                disabled={zoom >= 140}
+                className="size-7 rounded-md flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors disabled:opacity-30"
+                title="Zoom in"
+              >
+                <ZoomIn className="size-3.5" />
+              </button>
+            </div>
           </div>
-        </div>
+        )}
       </header>
 
       {/* Content */}
@@ -1049,27 +1049,7 @@ function MobileReader({
             <Loader2 className="size-6 animate-spin text-muted-foreground" />
           </div>
         ) : article.contentType === "pdf" ? (
-          <div className="flex-1 flex flex-col bg-muted/30">
-            <div className="flex items-center justify-between px-4 py-2.5 border-b border-border/40 bg-card/50">
-              <span className="text-xs font-medium text-muted-foreground">{t("library.pdfViewer")}</span>
-              {article.fileUrl && (
-                <a
-                  href={article.fileUrl}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="text-xs text-primary hover:underline flex items-center gap-1 font-medium"
-                >
-                  <ExternalLink className="size-3" />
-                  {t("library.pdfOpen")}
-                </a>
-              )}
-            </div>
-            <iframe
-              src={article.fileUrl}
-              className="w-full flex-1 border-0 bg-background"
-              title={article.title}
-            />
-          </div>
+          <PdfViewer url={article.fileUrl!} title={article.title} />
         ) : article.contentType === "html" ? (
           <div className="flex-1 flex flex-col bg-muted/20">
             <iframe
@@ -1328,79 +1308,83 @@ function ArticleHeader({
           </div>
         )}
 
-        <div className="relative">
-          <button
-            onClick={() => setFontPopoverOpen(!fontPopoverOpen)}
-            className="osler-icon-btn size-8"
-            title={t("library.fontSize")}
-          >
-            <Type className="size-4" />
-          </button>
-          <AnimatePresence>
-            {fontPopoverOpen && (
-              <motion.div
-                initial={{ opacity: 0, y: 4 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: 4 }}
-                className="absolute right-0 top-full mt-1 z-30 bg-card border border-border rounded-lg shadow-lg p-3 w-auto"
+        {article.contentType === "md" && (
+          <>
+            <div className="relative">
+              <button
+                onClick={() => setFontPopoverOpen(!fontPopoverOpen)}
+                className="osler-icon-btn size-8"
+                title={t("library.fontSize")}
               >
-                <div className="flex items-center gap-2">
-                  <span className="text-[11px] text-muted-foreground w-16">{t("library.fontSize")}</span>
-                  <button
-                    onClick={() => onFontSizeChange(Math.max(12, fontSize - 1))}
-                    className="size-6 rounded bg-muted hover:bg-muted/70 flex items-center justify-center"
+                <Type className="size-4" />
+              </button>
+              <AnimatePresence>
+                {fontPopoverOpen && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 4 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: 4 }}
+                    className="absolute right-0 top-full mt-1 z-30 bg-card border border-border rounded-lg shadow-lg p-3 w-auto"
                   >
-                    <Minus className="size-3" />
-                  </button>
-                  <span className="text-xs font-mono tabular-nums w-5 text-center">{fontSize}</span>
-                  <button
-                    onClick={() => onFontSizeChange(Math.min(22, fontSize + 1))}
-                    className="size-6 rounded bg-muted hover:bg-muted/70 flex items-center justify-center"
-                  >
-                    <PlusIcon className="size-3" />
-                  </button>
-                </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
-        </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-[11px] text-muted-foreground w-16">{t("library.fontSize")}</span>
+                      <button
+                        onClick={() => onFontSizeChange(Math.max(12, fontSize - 1))}
+                        className="size-6 rounded bg-muted hover:bg-muted/70 flex items-center justify-center"
+                      >
+                        <Minus className="size-3" />
+                      </button>
+                      <span className="text-xs font-mono tabular-nums w-5 text-center">{fontSize}</span>
+                      <button
+                        onClick={() => onFontSizeChange(Math.min(22, fontSize + 1))}
+                        className="size-6 rounded bg-muted hover:bg-muted/70 flex items-center justify-center"
+                      >
+                        <PlusIcon className="size-3" />
+                      </button>
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
 
-        <div className="flex items-center gap-0.5 mr-1">
-          <button
-            onClick={onZoomOut}
-            disabled={zoom <= 80}
-            className="osler-icon-btn size-8 disabled:opacity-40"
-            title="Zoom out"
-          >
-            <ZoomOut className="size-4" />
-          </button>
-          <button
-            onClick={onResetZoom}
-            className="text-xs px-2 h-8 rounded-md hover:bg-muted text-muted-foreground font-mono tabular-nums min-w-[3rem]"
-            title="Reset zoom"
-          >
-            {zoom}%
-          </button>
-          <button
-            onClick={onZoomIn}
-            disabled={zoom >= 140}
-            className="osler-icon-btn size-8 disabled:opacity-40"
-            title="Zoom in"
-          >
-            <ZoomIn className="size-4" />
-          </button>
-        </div>
+            <div className="flex items-center gap-0.5 mr-1">
+              <button
+                onClick={onZoomOut}
+                disabled={zoom <= 80}
+                className="osler-icon-btn size-8 disabled:opacity-40"
+                title="Zoom out"
+              >
+                <ZoomOut className="size-4" />
+              </button>
+              <button
+                onClick={onResetZoom}
+                className="text-xs px-2 h-8 rounded-md hover:bg-muted text-muted-foreground font-mono tabular-nums min-w-[3rem]"
+                title="Reset zoom"
+              >
+                {zoom}%
+              </button>
+              <button
+                onClick={onZoomIn}
+                disabled={zoom >= 140}
+                className="osler-icon-btn size-8 disabled:opacity-40"
+                title="Zoom in"
+              >
+                <ZoomIn className="size-4" />
+              </button>
+            </div>
 
-        <HighlighterToolbar
-          control={{
-            tool: hlCtrl.tool,
-            color: hlCtrl.color,
-            count: hlCtrl.highlights.length,
-            onToolChange: hlCtrl.setTool,
-            onColorChange: hlCtrl.setColor,
-            onClearAll: hlCtrl.clearAll,
-          }}
-        />
+            <HighlighterToolbar
+              control={{
+                tool: hlCtrl.tool,
+                color: hlCtrl.color,
+                count: hlCtrl.highlights.length,
+                onToolChange: hlCtrl.setTool,
+                onColorChange: hlCtrl.setColor,
+                onClearAll: hlCtrl.clearAll,
+              }}
+            />
+          </>
+        )}
 
         {article.contentType === "md" && (
           <button
@@ -1410,6 +1394,18 @@ function ArticleHeader({
           >
             <Printer className="size-4" />
           </button>
+        )}
+
+        {article.fileUrl && article.contentType === "pdf" && (
+          <a
+            href={article.fileUrl}
+            target="_blank"
+            rel="noreferrer"
+            className="osler-icon-btn size-9 flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors"
+            title={t("library.pdfOpen")}
+          >
+            <ExternalLink className="size-4" />
+          </a>
         )}
 
         <button
@@ -1430,6 +1426,87 @@ function ArticleHeader({
         </button>
       </div>
     </header>
+  );
+}
+
+/* ── PDF Viewer ──────────────────────────────────────────────────── */
+
+function PdfViewer({ url, title }: { url: string; title: string }) {
+  const { t } = useI18n();
+  const isMobile = useIsMobile();
+
+  if (isMobile) {
+    // iOS Safari and most mobile browsers don't render PDFs in iframes.
+    // Show a clear CTA to open/download instead.
+    return (
+      <div className="flex-1 flex flex-col items-center justify-center px-6 py-12 gap-6 bg-muted/20">
+        <div className="w-20 h-20 rounded-2xl bg-orange-500/10 text-orange-500 flex items-center justify-center">
+          <FileText className="size-10" />
+        </div>
+        <div className="text-center max-w-xs">
+          <h2 className="text-base font-semibold mb-1">{title}</h2>
+          <p className="text-sm text-muted-foreground">{t("library.pdfOpenDesc")}</p>
+        </div>
+        <div className="flex flex-col gap-3 w-full max-w-xs">
+          <a
+            href={url}
+            target="_blank"
+            rel="noreferrer"
+            className="flex items-center justify-center gap-2 h-11 rounded-xl bg-primary text-primary-foreground text-sm font-medium transition-colors hover:bg-primary/90"
+            onClick={() => haptic("light")}
+          >
+            <ExternalLink className="size-4" />
+            {t("library.pdfOpen")}
+          </a>
+          <a
+            href={url}
+            download
+            className="flex items-center justify-center gap-2 h-11 rounded-xl bg-muted text-foreground text-sm font-medium transition-colors hover:bg-muted/70"
+            onClick={() => haptic("light")}
+          >
+            <Download className="size-4" />
+            {t("library.pdfDownload")}
+          </a>
+        </div>
+      </div>
+    );
+  }
+
+  // Desktop: native browser PDF rendering via iframe
+  return (
+    <div className="flex-1 flex flex-col">
+      <div className="flex items-center justify-between px-6 py-2.5 border-b border-border/40 bg-card/50 shrink-0">
+        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+          <FileText className="size-3.5 text-orange-500" />
+          <span className="font-medium">{t("library.pdfViewer")}</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <a
+            href={url}
+            download
+            className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1 transition-colors"
+            title={t("library.pdfDownload")}
+          >
+            <Download className="size-3" />
+            {t("library.pdfDownload")}
+          </a>
+          <a
+            href={url}
+            target="_blank"
+            rel="noreferrer"
+            className="text-xs text-primary hover:underline flex items-center gap-1 font-medium"
+          >
+            <ExternalLink className="size-3" />
+            {t("library.pdfOpen")}
+          </a>
+        </div>
+      </div>
+      <iframe
+        src={url}
+        className="w-full flex-1 border-0 bg-background"
+        title={title}
+      />
+    </div>
   );
 }
 
