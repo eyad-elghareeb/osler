@@ -676,11 +676,11 @@ function HomeView({
         </div>
 
         {/* Tab bar — fixed below header */}
-        <div className="shrink-0 border-b border-border px-3 sm:px-6 lg:px-8">
-          <nav className="-mb-px flex gap-0">
+        <div className="shrink-0 border-b border-border px-3 sm:px-6 lg:px-8 w-full max-w-7xl mx-auto">
+          <nav className="-mb-px flex gap-0 justify-center">
             {[
               { id: "content" as const, label: t("qbank.home.tabContent"), icon: Grid3x3 },
-              { id: "create" as const, label: t("qbank.home.createTest"), icon: Plus },
+              { id: "create" as const, label: t("qbank.home.tabCreate"), icon: Plus },
               { id: "previous" as const, label: t("qbank.home.tabPrevious"), icon: History },
             ].map((t) => {
               const Icon = t.icon;
