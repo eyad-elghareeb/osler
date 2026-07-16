@@ -1800,15 +1800,85 @@ html.osler-ar body,
   font-family: var(--font-mono, monospace);
 }
 
-/* SVG colours adapt to the current theme */
-.dark .osler-mermaid-inner svg text,
-.dark .osler-mermaid-inner svg .label {
-  fill: oklch(0.92 0.01 0) !important;
+/* Theme-adaptable Mermaid diagram overrides */
+.osler-mermaid-inner svg,
+.osler-mermaid-svg svg {
+  font-family: inherit !important;
 }
-.dark .osler-mermaid-inner svg path,
-.dark .osler-mermaid-inner svg rect,
-.dark .osler-mermaid-inner svg polygon {
-  stroke: oklch(0.5 0.03 260) !important;
+
+/* Nodes / Shapes */
+.osler-mermaid-inner svg .node rect,
+.osler-mermaid-inner svg .node circle,
+.osler-mermaid-inner svg .node polygon,
+.osler-mermaid-inner svg .node path,
+.osler-mermaid-svg svg .node rect,
+.osler-mermaid-svg svg .node circle,
+.osler-mermaid-svg svg .node polygon,
+.osler-mermaid-svg svg .node path {
+  fill: var(--card) !important;
+  stroke: oklch(from var(--border) l c h / 0.8) !important;
+  stroke-width: 1.5px !important;
+  rx: 8px !important;
+  ry: 8px !important;
+  transition: all 0.2s ease !important;
+}
+
+/* Labels / Texts */
+.osler-mermaid-inner svg .label,
+.osler-mermaid-inner svg text,
+.osler-mermaid-svg svg .label,
+.osler-mermaid-svg svg text {
+  fill: var(--foreground) !important;
+  font-weight: 500 !important;
+  font-size: 13px !important;
+}
+
+/* Connecting Lines (edges) */
+.osler-mermaid-inner svg .edgePath .path,
+.osler-mermaid-svg svg .edgePath .path {
+  stroke: oklch(from var(--border) l c h / 0.9) !important;
+  stroke-width: 1.5px !important;
+}
+
+/* Arrowheads */
+.osler-mermaid-inner svg marker path,
+.osler-mermaid-inner svg .marker,
+.osler-mermaid-svg svg marker path,
+.osler-mermaid-svg svg .marker {
+  fill: oklch(from var(--border) l c h / 0.9) !important;
+  stroke: none !important;
+}
+
+/* Edge Labels (text on lines) */
+.osler-mermaid-inner svg .edgeLabel rect,
+.osler-mermaid-svg svg .edgeLabel rect {
+  fill: var(--background) !important;
+  rx: 4px !important;
+  ry: 4px !important;
+}
+
+.osler-mermaid-inner svg .edgeLabel text,
+.osler-mermaid-svg svg .edgeLabel text {
+  fill: var(--muted-foreground) !important;
+  font-size: 11px !important;
+  font-weight: 400 !important;
+}
+
+/* Subgraph Containers / Clusters */
+.osler-mermaid-inner svg .cluster rect,
+.osler-mermaid-svg svg .cluster rect {
+  fill: oklch(from var(--muted) l c h / 0.3) !important;
+  stroke: oklch(from var(--border) l c h / 0.6) !important;
+  stroke-width: 1px !important;
+  rx: 12px !important;
+  ry: 12px !important;
+}
+
+.osler-mermaid-inner svg .cluster .label text,
+.osler-mermaid-svg svg .cluster .label text {
+  fill: var(--muted-foreground) !important;
+  font-weight: 600 !important;
+  font-size: 12px !important;
 }
 
 /* In the modal explorer */
