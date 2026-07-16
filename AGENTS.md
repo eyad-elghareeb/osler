@@ -297,6 +297,15 @@ The admin frontend exposes three new views (registered in
 
 The app uses a client-side view state (`OslerView` type in `app-shell.tsx`) rather than Next.js pages. All views live under a single route (`/`) and are toggled via the `AppShell` component.
 
+To support sharing, direct navigation, browser back/forward buttons, and state persistence across screen locks/wakeups or reloads, the state in `src/app/page.tsx` synchronizes with URL query parameters:
+- `view`: The current active `OslerView` (e.g. `?view=library`).
+- `pack`: The UID of the active content pack (`?view=qbank&pack=pack-uid`). Loads asynchronously via `loadContentByUid` on mount/popstate.
+- `article`: The ID of the open library article (`?view=library&article=folder/slug`).
+- `video`: The ID of the open video (`?view=videos&video=id`).
+- `section`: The active Settings panel section (`?view=settings&section=ai`).
+
+State-to-URL synchronization uses `window.history.pushState` and `window.history.replaceState`. A global `popstate` listener synchronizes browser back/forward navigation back into the React states.
+
 Available views: `dashboard`, `learn`, `library`, `qbank`, `flashcards`, `osce`, `videos`, `profile`, `settings`.
 
 Library, Flashcards, OSCE, and Videos are sub-views under the **Learn** hub. They keep their own `OslerView` values but no longer appear in the nav bars. The Learn tab stays highlighted while inside any sub-view via `LEARN_SUBVIEWS` in `app-shell.tsx`.
