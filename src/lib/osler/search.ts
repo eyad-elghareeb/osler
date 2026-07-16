@@ -326,6 +326,48 @@ export const SEARCH_GROUP_LABEL_KEY: Record<SearchKind, StringKey> = {
   nav: "search.group.navigation",
 };
 
+/* ───────────────────── View-aware filtering ────────────────────────── */
+
+/** Which SearchKinds are relevant for each OslerView. */
+const VIEW_KINDS: Record<string, SearchKind[]> = {
+  dashboard: ["article", "qbank", "flashcard", "osce", "video", "setting", "nav"],
+  learn:     ["article", "qbank", "flashcard", "osce", "video", "nav"],
+  library:   ["article", "nav"],
+  qbank:     ["qbank", "nav"],
+  flashcards:["flashcard", "nav"],
+  osce:      ["osce", "nav"],
+  videos:    ["video", "nav"],
+  profile:   ["nav", "setting"],
+  settings:  ["setting", "nav"],
+};
+
+/** Placeholder i18n key for each view's search input. */
+export const VIEW_PLACEHOLDER_KEY: Record<string, string> = {
+  dashboard:  "search.globalPlaceholder",
+  learn:      "search.placeholder.learn",
+  library:    "search.placeholder.library",
+  qbank:      "search.placeholder.qbank",
+  flashcards: "search.placeholder.flashcards",
+  osce:       "search.placeholder.osce",
+  videos:     "search.placeholder.videos",
+  profile:    "search.placeholder.profile",
+  settings:   "search.placeholder.settings",
+};
+
+/**
+ * Filter search results to only kinds relevant to the current view.
+ * Falls back to showing everything if the view is unknown.
+ */
+export function filterByView(
+  results: SearchResult[],
+  view: string | undefined,
+): SearchResult[] {
+  if (!view) return results;
+  const kinds = VIEW_KINDS[view];
+  if (!kinds) return results;
+  return results.filter((r) => kinds.includes(r.kind));
+}
+
 /** Translate the static catalog titles (settings sections + nav labels). */
 export function localiseResultTitle(
   r: SearchResult,

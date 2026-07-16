@@ -43,6 +43,8 @@ import { PwaInstallButton } from "./pwa-install-button";
 import { LightboxProvider } from "./lightbox-provider";
 import { GlobalSearchPanel } from "./global-search-panel";
 import type { SearchResult } from "@/lib/osler/search";
+import { VIEW_PLACEHOLDER_KEY } from "@/lib/osler/search";
+import type { StringKey } from "@/lib/osler/i18n";
 import { cn } from "@/lib/utils";
 import { useIsMobile } from "@/hooks/use-mobile";
 import {
@@ -212,7 +214,7 @@ export function AppShell({
     onSearchSelect?.(r);
   };
 
-  const searchPlaceholder = t("search.globalPlaceholder");
+  const searchPlaceholder = t((VIEW_PLACEHOLDER_KEY[view] ?? "search.globalPlaceholder") as StringKey);
 
   const isDashboard = view === "dashboard";
   const isQbank = view === "qbank";
@@ -295,6 +297,7 @@ export function AppShell({
                   query={query}
                   onQueryChange={setQuery}
                   onSelect={handleSearchSelect}
+                  view={view}
                 />
               </PopoverContent>
             </Popover>
@@ -321,6 +324,7 @@ export function AppShell({
                 query={query}
                 onQueryChange={setQuery}
                 onSelect={handleSearchSelect}
+                view={view}
                 variant="sheet"
               />
             </SheetContent>

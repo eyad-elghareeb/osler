@@ -30,11 +30,14 @@ import {
   searchAll,
   groupResults,
   localiseResultTitle,
+  filterByView,
+  VIEW_PLACEHOLDER_KEY,
   SEARCH_GROUP_LABEL_KEY,
   type SearchResult,
   type SearchKind,
 } from "@/lib/osler/search";
 import { useI18n } from "./i18n-provider";
+import type { StringKey } from "@/lib/osler/i18n";
 import { cn } from "@/lib/utils";
 import { haptic } from "@/lib/osler/native";
 
@@ -44,6 +47,8 @@ interface GlobalSearchPanelProps {
   onQueryChange: (q: string) => void;
   /** Called when the user picks a result. Parent closes the panel. */
   onSelect: (r: SearchResult) => void;
+  /** Current view — filters results to only kinds relevant to this view. */
+  view?: string;
   /** Optional: autofocus the input on mount. */
   autoFocus?: boolean;
   /** Optional: render with extra padding (used inside mobile sheet). */
@@ -64,6 +69,7 @@ export function GlobalSearchPanel({
   query,
   onQueryChange,
   onSelect,
+  view,
   autoFocus = true,
   variant = "popover",
 }: GlobalSearchPanelProps) {
@@ -98,8 +104,8 @@ export function GlobalSearchPanel({
 
   const results = React.useMemo(() => {
     if (!index) return [];
-    return searchAll(index, query);
-  }, [index, query]);
+    return filterByView(searchAll(index, query), view);
+  }, [index, query, view]);
 
   const grouped = React.useMemo(() => groupResults(results), [results]);
 
@@ -135,7 +141,8 @@ export function GlobalSearchPanel({
     if (el) el.scrollIntoView({ block: "nearest" });
   }, [activeIdx]);
 
-  const placeholder = t("search.globalPlaceholder");
+  const placeholderKey = (VIEW_PLACEHOLDER_KEY[view ?? "dashboard"] ?? "search.globalPlaceholder") as StringKey;
+  const placeholder = t(placeholderKey);
   const padCls = variant === "sheet" ? "p-4" : "p-3";
 
   let runningIdx = -1; // flat index as we render groups
