@@ -150,21 +150,28 @@ export function OslerThemeProvider({ children }: { children: React.ReactNode }) 
   );
 
   const toggleTheme = React.useCallback(() => {
-    // If a custom theme is active, find its counterpart (same base name,
-    // opposite variant) and switch to that. This lets users cycle between
-    // e.g. "navy-clinic" ↔ "navy-clinic-light" with one tap.
     const custom = customThemes.find((t) => t.id === theme);
     if (custom) {
       const oppositeVariant = custom.variant === "dark" ? "light" : "dark";
-      const counterpart = customThemes.find(
-        (t) => t.id !== custom.id && t.variant === oppositeVariant,
-      );
+      // Find the specific counterpart by name pattern: strip -dark/-light
+      // suffix from the current theme's name and look for a match with
+      // the opposite variant. E.g. "navy-clinic" → look for "navy-clinic-light".
+      const baseName = custom.id
+        .replace(/-dark$/i, "")
+        .replace(/-light$/i, "");
+      const counterpart =
+        customThemes.find(
+          (t) => t.id !== custom.id && t.variant === oppositeVariant && t.id.startsWith(baseName),
+        ) ??
+        customThemes.find(
+          (t) => t.id !== custom.id && t.variant === oppositeVariant,
+        );
       if (counterpart) {
         setThemeId(counterpart.id);
         return;
       }
     }
-    // Built-in theme or no custom counterpart found: flip dark ↔ light.
+    // Built-in theme or no custom counterpart: flip dark ↔ light.
     const isDark = custom ? custom.variant === "dark" : theme === "dark";
     setThemeId(isDark ? "light" : "dark");
   }, [theme, customThemes, setThemeId]);

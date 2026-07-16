@@ -1059,7 +1059,7 @@ function MobileReader({
       </header>
 
       {/* Content */}
-      <div className="flex-1 overflow-y-auto medos-scroll safe-pb flex flex-col">
+      <div className="flex-1 overflow-y-auto medos-scroll safe-pb flex flex-col" style={{ touchAction: "pan-y" }}>
         {loading ? (
           <div className="flex items-center justify-center py-20">
             <Loader2 className="size-6 animate-spin text-muted-foreground" />

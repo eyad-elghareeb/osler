@@ -24,7 +24,6 @@ import {
   SwitchCamera,
   Sun,
   Wifi,
-  Search,
   ArrowLeft,
   ChevronRight,
   Github,
@@ -183,7 +182,6 @@ export function Settings({
     if (typeof window === "undefined") return false;
     return window.innerWidth < 768 && initialSection === "language";
   });
-  const [query, setQuery] = React.useState("");
 
   // Handle form-factor transitions (desktop ↔ mobile resize). We skip the
   // initial mount to avoid clobbering the lazy initializer's value — the
@@ -214,30 +212,15 @@ export function Settings({
     setMobileHome(false);
   }, [initialSection]);
 
-  // Settings search — filter the catalog by label + keywords. The match
-  // is generous (substring on the lowercased combined hay) so partial
-  // queries like "key" match both "Keyboard" and "API Key".
-  const filteredSections = React.useMemo(() => {
-    const q = query.trim().toLowerCase();
-    if (!q) return SECTIONS;
-    return SECTIONS.filter((s) => {
-      const label = t(s.labelKey).toLowerCase();
-      const hay = `${label} ${s.keywords}`;
-      return q.split(/\s+/).every((tok) => hay.includes(tok));
-    });
-  }, [query, t]);
-
   const pickSection = (id: SettingsSection) => {
     haptic("selection");
     setSection(id);
     setMobileHome(false);
-    setQuery("");
   };
 
   const goHome = () => {
     haptic("selection");
     setMobileHome(true);
-    setQuery("");
   };
 
   // The iOS NavigationController-style back swipe, parallax, and stacked
@@ -252,32 +235,6 @@ export function Settings({
     const activeMeta = SECTIONS.find((s) => s.id === section);
     return (
       <div className="h-full flex flex-col medos-tabbar-pad">
-        {/* Search bar — fixed at the top, outside the page stack so it
-            doesn't slide with the subpages. Using shrink-0 + flex-col
-            instead of the old sticky/h-[calc()] approach which had
-            spacing issues when the safe-area inset varied. */}
-        <div className="shrink-0 px-4 pt-4 pb-3 bg-background/95 backdrop-blur-md safe-pt z-10">
-          <div className="max-w-2xl mx-auto flex items-center gap-2 h-10 px-3 rounded-lg border border-border/60 bg-muted/40">
-            <Search className="size-4 text-muted-foreground shrink-0" />
-            <input
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder={t("settings.searchPlaceholder")}
-              aria-label={t("settings.searchPlaceholder")}
-              className="flex-1 bg-transparent outline-none text-sm placeholder:text-muted-foreground min-w-0"
-            />
-            {query && (
-              <button
-                onClick={() => setQuery("")}
-                className="text-[10px] text-muted-foreground hover:text-foreground shrink-0"
-                aria-label={t("common.cancel")}
-              >
-                {t("common.cancel")}
-              </button>
-            )}
-          </div>
-        </div>
-
         {/* Page stack — NavigationStack handles the home-underneath +
             subpage-overlay layout, drag-to-go-back, and parallax. */}
         <NavigationStack
@@ -287,73 +244,33 @@ export function Settings({
           rtl={rtl}
           home={
             <div className="max-w-2xl mx-auto px-4 py-3">
-              {query ? (
-                <>
-                  <div className="text-[10px] uppercase tracking-wider text-muted-foreground px-1 mb-2">
-                    {t("settings.sidebarTitle")}
-                  </div>
-                  <div className="rounded-lg border border-border/60 overflow-hidden bg-card">
-                    {filteredSections.length === 0 ? (
-                      <div className="px-4 py-6 text-center text-sm text-muted-foreground">
-                        {t("settings.searchEmpty")}
-                      </div>
-                    ) : (
-                      filteredSections.map((s, idx) => {
-                        const I = s.icon;
-                        return (
-                          <button
-                            key={s.id}
-                            onClick={() => pickSection(s.id)}
-                            className={cn(
-                              "w-full text-start px-4 py-3 flex items-center gap-3 hover:bg-muted/60 transition-colors",
-                              idx > 0 && "border-t border-border/60",
-                            )}
-                          >
-                            <span className="size-8 rounded-md bg-primary/10 text-primary flex items-center justify-center shrink-0">
-                              <I className="size-4" />
-                            </span>
-                            <span className="flex-1 min-w-0">
-                              <span className="block text-sm font-medium truncate">{t(s.labelKey)}</span>
-                              <span className="block text-[11px] text-muted-foreground truncate">{s.keywords}</span>
-                            </span>
-                            <ChevronRight className={cn("size-4 text-muted-foreground shrink-0", rtl && "rtl-flip-x")} />
-                          </button>
-                        );
-                      })
-                    )}
-                  </div>
-                </>
-              ) : (
-                <>
-                  <div className="text-[10px] uppercase tracking-wider text-muted-foreground px-1 mb-2">
-                    {t("settings.mobileHomeSubtitle")}
-                  </div>
-                  <div className="rounded-lg border border-border/60 overflow-hidden bg-card">
-                    {SECTIONS.map((s, idx) => {
-                      const I = s.icon;
-                      return (
-                        <button
-                          key={s.id}
-                          onClick={() => pickSection(s.id)}
-                          className={cn(
-                            "w-full text-start px-4 py-3 flex items-center gap-3 hover:bg-muted/60 transition-colors",
-                            idx > 0 && "border-t border-border/60",
-                          )}
-                        >
-                          <span className="size-8 rounded-md bg-primary/10 text-primary flex items-center justify-center shrink-0">
-                            <I className="size-4" />
-                          </span>
-                          <span className="flex-1 min-w-0">
-                            <span className="block text-sm font-medium truncate">{t(s.labelKey)}</span>
-                            <span className="block text-[11px] text-muted-foreground truncate">{s.keywords}</span>
-                          </span>
-                          <ChevronRight className={cn("size-4 text-muted-foreground shrink-0", rtl && "rtl-flip-x")} />
-                        </button>
-                      );
-                    })}
-                  </div>
-                </>
-              )}
+              <div className="text-[10px] uppercase tracking-wider text-muted-foreground px-1 mb-2">
+                {t("settings.mobileHomeSubtitle")}
+              </div>
+              <div className="rounded-lg border border-border/60 overflow-hidden bg-card">
+                {SECTIONS.map((s, idx) => {
+                  const I = s.icon;
+                  return (
+                    <button
+                      key={s.id}
+                      onClick={() => pickSection(s.id)}
+                      className={cn(
+                        "w-full text-start px-4 py-3 flex items-center gap-3 hover:bg-muted/60 transition-colors",
+                        idx > 0 && "border-t border-border/60",
+                      )}
+                    >
+                      <span className="size-8 rounded-md bg-primary/10 text-primary flex items-center justify-center shrink-0">
+                        <I className="size-4" />
+                      </span>
+                      <span className="flex-1 min-w-0">
+                        <span className="block text-sm font-medium truncate">{t(s.labelKey)}</span>
+                        <span className="block text-[11px] text-muted-foreground truncate">{s.keywords}</span>
+                      </span>
+                      <ChevronRight className={cn("size-4 text-muted-foreground shrink-0", rtl && "rtl-flip-x")} />
+                    </button>
+                  );
+                })}
+              </div>
             </div>
           }
           subpage={
@@ -407,28 +324,11 @@ export function Settings({
           <div className="grid grid-cols-1 md:grid-cols-[220px_1fr] lg:grid-cols-[260px_1fr] gap-6">
             {/* Sidebar */}
             <aside className="md:sticky md:top-6 md:self-start">
-              {/* Settings search */}
-              <div className="flex items-center gap-2 h-9 px-3 rounded-md border border-border/60 bg-muted/40 mb-3">
-                <Search className="size-3.5 text-muted-foreground shrink-0" />
-                <input
-                  value={query}
-                  onChange={(e) => setQuery(e.target.value)}
-                  placeholder={t("settings.searchPlaceholder")}
-                  aria-label={t("settings.searchPlaceholder")}
-                  className="flex-1 bg-transparent outline-none text-sm placeholder:text-muted-foreground min-w-0"
-                />
-              </div>
-
               <div className="text-[10px] uppercase tracking-wider text-muted-foreground px-2 mb-1.5">
                 {t("settings.sidebarTitle")}
               </div>
               <nav className="space-y-0.5">
-                {filteredSections.length === 0 ? (
-                  <div className="px-3 py-4 text-xs text-muted-foreground">
-                    {t("settings.searchEmpty")}
-                  </div>
-                ) : (
-                  filteredSections.map((s) => {
+                {SECTIONS.map((s) => {
                     const I = s.icon;
                     const active = section === s.id;
                     return (
@@ -444,10 +344,9 @@ export function Settings({
                       >
                         <I className="size-4 shrink-0" />
                         <span className="truncate">{t(s.labelKey)}</span>
-                      </button>
-                    );
-                  })
-                )}
+                        </button>
+                      );
+                    })}
               </nav>
             </aside>
 
