@@ -19,6 +19,11 @@ import {
   BookmarkX,
   ArrowLeft,
   FileText,
+  Printer,
+  Maximize2,
+  Minimize2,
+  Code2,
+  ExternalLink,
 } from "lucide-react";
 import {
   loadArticleTree,
@@ -41,6 +46,8 @@ import { FolderTreeNav } from "./folder-tree-nav";
 import { NavigationStack } from "./navigation-stack";
 import { applyHighlightsToHtml } from "@/lib/osler/article-highlights";
 import { setImmersiveMode } from "./immersive-mode";
+import { MermaidModal } from "./mermaid-modal";
+import { haptic } from "@/lib/osler/native";
 
 interface LibraryProps {
   initialArticleId?: string;
@@ -51,7 +58,7 @@ type SidebarTab = "toc" | "bookmarks";
 const BOOKMARKS_KEY = "osler-article-bookmarks";
 
 export function Library({ initialArticleId }: LibraryProps) {
-  const { rtl } = useI18n();
+  const { rtl, t } = useI18n();
   const [tree, setTree] = React.useState<ContentTreeNode[]>([]);
   const [allArticles, setAllArticles] = React.useState<ArticleMeta[]>([]);
   const [activeFile, setActiveFile] = React.useState<string | null>(
@@ -108,7 +115,7 @@ export function Library({ initialArticleId }: LibraryProps) {
     })();
   }, []);
 
-  // Enrich tree: turn leaf nodes with .md files into branch nodes with virtual children
+  // Enrich tree: turn leaf nodes with files into branch nodes with virtual children
   const displayTree = React.useMemo(() => {
     function enrich(nodes: ContentTreeNode[]): ContentTreeNode[] {
       return nodes.map((node) => {
@@ -118,7 +125,7 @@ export function Library({ initialArticleId }: LibraryProps) {
             const meta = allArticles.find((a) => a.file === filePath);
             return {
               uid: filePath,
-              title: meta?.title ?? file.replace(/\.md$/, "").replace(/-/g, " "),
+              title: meta?.title ?? file.replace(/\.(md|pdf|html)$/, "").replace(/-/g, " "),
               type: "library" as const,
               path: node.path,
               items: [],
@@ -201,6 +208,139 @@ export function Library({ initialArticleId }: LibraryProps) {
     if (!activeArticle) return "";
     return applyHighlightsToHtml(activeArticle.html, hlCtrl.highlights as any);
   }, [activeArticle?.html, hlCtrl.highlights, theme]);
+
+  // Mermaid modal state
+  const [mermaidModal, setMermaidModal] = React.useState<{ svg: string; title?: string } | null>(null);
+
+  // Print article handler — opens a clean print window
+  const printArticle = React.useCallback(() => {
+    if (!activeArticle) return;
+    haptic("light");
+    // Inject a minimal print-only page that shows just the article title block + content
+    const printHtml = `<!DOCTYPE html>
+<html lang="${activeArticle.lang ?? "en"}" dir="${activeArticle.lang === "ar" ? "rtl" : "ltr"}">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>${activeArticle.title}</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 11pt; color: #1a1a1a; background: #fff; }
+    body { max-width: 760px; margin: 0 auto; padding: 1.5cm 1cm; }
+    .title-block { margin-bottom: 1.5rem; padding-bottom: 1rem; border-bottom: 2px solid #1a1a1a; }
+    .title-block h1 { font-size: 22pt; font-weight: 700; margin-bottom: 0.3rem; }
+    .title-block .meta { font-size: 9pt; color: #555; }
+    .title-block .meta span + span::before { content: ' · '; }
+    h1 { font-size: 18pt; font-weight: 700; margin: 1.2rem 0 0.5rem; page-break-after: avoid; }
+    h2 { font-size: 14pt; font-weight: 600; margin: 1rem 0 0.4rem; page-break-after: avoid; border-bottom: 1px solid #ddd; padding-bottom: 3pt; }
+    h3 { font-size: 12pt; font-weight: 600; margin: 0.8rem 0 0.3rem; page-break-after: avoid; }
+    p { margin: 0.55rem 0; line-height: 1.6; }
+    ul, ol { padding-left: 1.4rem; margin: 0.5rem 0; }
+    li { margin: 0.2rem 0; }
+    strong { font-weight: 600; }
+    em { font-style: italic; color: #333; }
+    a { color: #1a1a1a; text-decoration: underline; }
+    code { font-family: monospace; background: #f4f4f4; border: 1px solid #ddd; padding: 1px 4px; font-size: 9pt; border-radius: 3px; }
+    pre { background: #f4f4f4; border: 1px solid #ddd; padding: 0.5rem; margin: 0.5rem 0; white-space: pre-wrap; font-size: 9pt; page-break-inside: avoid; border-radius: 4px; }
+    blockquote { border-left: 3px solid #555; background: #f8f8f8; margin: 0.75rem 0; padding: 0.5rem 1rem; page-break-inside: avoid; }
+    table { border-collapse: collapse; width: 100%; margin: 0.75rem 0; page-break-inside: avoid; }
+    th, td { border: 1px solid #ccc; padding: 4pt 6pt; font-size: 9pt; text-align: left; }
+    th { background: #f0f0f0; font-weight: 600; }
+    img { max-width: 100%; page-break-inside: avoid; }
+    .osler-mermaid-toolbar { display: none; }
+    @page { margin: 1.5cm; }
+  </style>
+</head>
+<body>
+  <div class="title-block">
+    <h1>${activeArticle.title}</h1>
+    <div class="meta">
+      ${activeArticle.specialty ? `<span>${activeArticle.specialty}</span>` : ""}
+      ${activeArticle.system ? `<span>${activeArticle.system}</span>` : ""}
+      ${activeArticle.readTimeMin ? `<span>${activeArticle.readTimeMin} min read</span>` : ""}
+      ${activeArticle.tags?.length ? `<span>${activeArticle.tags.join(", ")}</span>` : ""}
+      <span>Printed ${new Date().toLocaleDateString()}</span>
+    </div>
+  </div>
+  <div class="article-body">${processedArticleHtml}</div>
+</body>
+</html>`;
+    const win = window.open("", "_blank");
+    if (!win) return;
+    win.document.write(printHtml);
+    win.document.close();
+    win.focus();
+    // Small delay so images load before print dialog
+    setTimeout(() => { win.print(); win.close(); }, 400);
+  }, [activeArticle, processedArticleHtml]);
+
+  // Mermaid post-processing: find placeholders, dynamically render SVG
+  React.useEffect(() => {
+    if (!activeArticle || activeArticle.contentType !== "md") return;
+    const el = articleContentRef.current;
+    if (!el) return;
+
+    const placeholders = Array.from(el.querySelectorAll<HTMLElement>(".osler-mermaid[data-diagram]"));
+    if (placeholders.length === 0) return;
+
+    let cancelled = false;
+    (async () => {
+      try {
+        const mermaid = (await import("mermaid")).default;
+        const isDark = document.documentElement.classList.contains("dark");
+        mermaid.initialize({
+          startOnLoad: false,
+          theme: isDark ? "dark" : "default",
+          securityLevel: "loose",
+          fontFamily: "inherit",
+        });
+
+        for (let i = 0; i < placeholders.length; i++) {
+          if (cancelled) break;
+          const placeholder = placeholders[i];
+          const encoded = placeholder.getAttribute("data-diagram");
+          if (!encoded) continue;
+          const diagram = decodeURIComponent(encoded);
+
+          // Build the card structure
+          const inner = document.createElement("div");
+          inner.className = "osler-mermaid-inner";
+          const toolbar = document.createElement("div");
+          toolbar.className = "osler-mermaid-toolbar";
+
+          try {
+            const id = `osler-mermaid-${i}-${Date.now()}`;
+            const { svg } = await mermaid.render(id, diagram);
+            inner.innerHTML = svg;
+
+            // Expand button
+            const expandBtn = document.createElement("button");
+            expandBtn.className = "osler-icon-btn size-7 text-xs flex items-center gap-1 text-muted-foreground hover:text-foreground transition-colors";
+            expandBtn.title = "Explore diagram";
+            expandBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg><span style="font-size:11px">Explore</span>`;
+            const svgSnapshot = svg;
+            expandBtn.addEventListener("click", () => {
+              setMermaidModal({ svg: svgSnapshot });
+            });
+            toolbar.appendChild(expandBtn);
+          } catch {
+            inner.innerHTML = `<div class="osler-mermaid-error">Failed to render diagram</div>`;
+          }
+
+          placeholder.innerHTML = "";
+          placeholder.appendChild(inner);
+          placeholder.appendChild(toolbar);
+          // Remove the data-diagram attr so re-renders don't re-process
+          placeholder.removeAttribute("data-diagram");
+        }
+      } catch {
+        // mermaid import failed — silently skip
+      }
+    })();
+
+    return () => { cancelled = true; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [processedArticleHtml, theme]);
 
   // Reliable cross-platform (mouse + touch) auto-highlighting.
   //
@@ -362,6 +502,7 @@ export function Library({ initialArticleId }: LibraryProps) {
               articleContentRef={articleContentRef}
               processedHtml={processedArticleHtml}
               hlCtrl={hlCtrl}
+              onPrint={printArticle}
             />
           ) : null
         }
@@ -447,11 +588,43 @@ export function Library({ initialArticleId }: LibraryProps) {
               fontSize={fontSize}
               onFontSizeChange={setFontSize}
               hlCtrl={hlCtrl}
+              onPrint={printArticle}
             />
-            <div className="flex-1 overflow-y-auto medos-scroll medos-tabbar-pad md:pb-0">
+            <div className="flex-1 overflow-y-auto medos-scroll medos-tabbar-pad md:pb-0 relative flex flex-col">
               {loading ? (
                 <div className="flex items-center justify-center py-20">
                   <Loader2 className="size-6 animate-spin text-muted-foreground" />
+                </div>
+              ) : activeArticle.contentType === "pdf" ? (
+                <div className="flex-1 flex flex-col bg-muted/30">
+                  <div className="flex items-center justify-between px-6 py-3 border-b border-border/40 bg-card/50">
+                    <span className="text-xs font-medium text-muted-foreground">{t("library.pdfViewer")}</span>
+                    {activeArticle.fileUrl && (
+                      <a
+                        href={activeArticle.fileUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-xs text-primary hover:underline flex items-center gap-1 font-medium"
+                      >
+                        <ExternalLink className="size-3" />
+                        {t("library.pdfOpen")}
+                      </a>
+                    )}
+                  </div>
+                  <iframe
+                    src={activeArticle.fileUrl}
+                    className="w-full flex-1 border-0 bg-background"
+                    title={activeArticle.title}
+                  />
+                </div>
+              ) : activeArticle.contentType === "html" ? (
+                <div className="flex-1 flex flex-col bg-muted/20">
+                  <iframe
+                    srcDoc={activeArticle.content}
+                    sandbox="allow-scripts allow-same-origin allow-modals allow-popups"
+                    className="w-full flex-1 border-0 bg-background"
+                    title={activeArticle.title}
+                  />
                 </div>
               ) : (
                 <motion.div
@@ -485,6 +658,16 @@ export function Library({ initialArticleId }: LibraryProps) {
           />
         )}
       </main>
+      
+      <AnimatePresence>
+        {mermaidModal && (
+          <MermaidModal
+            svg={mermaidModal.svg}
+            title={mermaidModal.title || activeArticle?.title}
+            onClose={() => setMermaidModal(null)}
+          />
+        )}
+      </AnimatePresence>
     </div>
   );
 }
@@ -680,8 +863,6 @@ function MobileHub({
   );
 }
 
-/* ── Mobile Reader ────────────────────────────────────────────────── */
-
 function MobileReader({
   article,
   isBookmarked,
@@ -697,6 +878,7 @@ function MobileReader({
   articleContentRef,
   processedHtml,
   hlCtrl,
+  onPrint,
 }: {
   article: Article;
   isBookmarked: boolean;
@@ -712,6 +894,7 @@ function MobileReader({
   articleContentRef: React.RefObject<HTMLDivElement | null>;
   processedHtml: string;
   hlCtrl: ReturnType<typeof useArticleHighlighter>;
+  onPrint: () => void;
 }) {
   const [fontPopoverOpen, setFontPopoverOpen] = React.useState(false);
   const { t } = useI18n();
@@ -788,6 +971,16 @@ function MobileReader({
                 )}
               </AnimatePresence>
             </div>
+            
+            {article.contentType === "md" && (
+              <button
+                onClick={onPrint}
+                className="size-9 rounded-lg flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors"
+                title={t("library.print")}
+              >
+                <Printer className="size-4" />
+              </button>
+            )}
 
             <HighlighterToolbar
               control={{
@@ -850,10 +1043,41 @@ function MobileReader({
       </header>
 
       {/* Content */}
-      <div className="flex-1 overflow-y-auto medos-scroll safe-pb">
+      <div className="flex-1 overflow-y-auto medos-scroll safe-pb flex flex-col">
         {loading ? (
           <div className="flex items-center justify-center py-20">
             <Loader2 className="size-6 animate-spin text-muted-foreground" />
+          </div>
+        ) : article.contentType === "pdf" ? (
+          <div className="flex-1 flex flex-col bg-muted/30">
+            <div className="flex items-center justify-between px-4 py-2.5 border-b border-border/40 bg-card/50">
+              <span className="text-xs font-medium text-muted-foreground">{t("library.pdfViewer")}</span>
+              {article.fileUrl && (
+                <a
+                  href={article.fileUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-xs text-primary hover:underline flex items-center gap-1 font-medium"
+                >
+                  <ExternalLink className="size-3" />
+                  {t("library.pdfOpen")}
+                </a>
+              )}
+            </div>
+            <iframe
+              src={article.fileUrl}
+              className="w-full flex-1 border-0 bg-background"
+              title={article.title}
+            />
+          </div>
+        ) : article.contentType === "html" ? (
+          <div className="flex-1 flex flex-col bg-muted/20">
+            <iframe
+              srcDoc={article.content}
+              sandbox="allow-scripts allow-same-origin allow-modals allow-popups"
+              className="w-full flex-1 border-0 bg-background"
+              title={article.title}
+            />
           </div>
         ) : (
           <motion.div
@@ -1057,8 +1281,6 @@ function SidebarContent({
   );
 }
 
-/* ── Article Header ───────────────────────────────────────────────── */
-
 function ArticleHeader({
   article,
   isBookmarked,
@@ -1070,6 +1292,7 @@ function ArticleHeader({
   fontSize,
   onFontSizeChange,
   hlCtrl,
+  onPrint,
 }: {
   article: Article;
   isBookmarked: boolean;
@@ -1081,6 +1304,7 @@ function ArticleHeader({
   fontSize: number;
   onFontSizeChange: (s: number) => void;
   hlCtrl: ReturnType<typeof useArticleHighlighter>;
+  onPrint: () => void;
 }) {
   const [fontPopoverOpen, setFontPopoverOpen] = React.useState(false);
   const { t } = useI18n();
@@ -1177,6 +1401,16 @@ function ArticleHeader({
             onClearAll: hlCtrl.clearAll,
           }}
         />
+
+        {article.contentType === "md" && (
+          <button
+            onClick={onPrint}
+            className="osler-icon-btn size-9 flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors"
+            title={t("library.print")}
+          >
+            <Printer className="size-4" />
+          </button>
+        )}
 
         <button
           onClick={onToggleBookmark}

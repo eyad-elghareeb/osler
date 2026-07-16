@@ -4,15 +4,19 @@ import remarkGfm from "remark-gfm";
 import remarkRehype from "remark-rehype";
 import rehypeRaw from "rehype-raw";
 import rehypeStringify from "rehype-stringify";
+import type { Plugin } from "unified";
 import { loadCategoryTree } from "./content";
 import type { ContentTreeNode, ContentLang } from "./types";
 
+
 const BASE = "/osler-content/library";
 
+export type ArticleContentType = "md" | "pdf" | "html";
+
 export interface ArticleMeta {
-  /** File name (e.g. "stemi.md") */
+  /** Relative file path from library root (e.g. "cardiology/ischemic-syndrome/stemi.md") */
   file: string;
-  /** Extracted from frontmatter */
+  /** Extracted from frontmatter (md) or filename */
   title: string;
   specialty?: string;
   system?: string;
@@ -20,11 +24,15 @@ export interface ArticleMeta {
   tags?: string[];
   /** Language the article body is authored in. `en` if not specified. */
   lang?: ContentLang;
+  /** Content type. Defaults to "md". */
+  contentType?: ArticleContentType;
 }
 
 export interface Article extends ArticleMeta {
   content: string;
   html: string;
+  /** Full URL to the raw file (used for PDF/HTML iframes). */
+  fileUrl?: string;
 }
 
 let treeCache: ContentTreeNode[] | null = null;
@@ -63,15 +71,65 @@ function parseFrontmatter(md: string): { meta: Record<string, unknown>; body: st
   return { meta: fm, body };
 }
 
+/**
+ * Rehype plugin: converts ```mermaid fenced blocks into
+ * <div class="osler-mermaid" data-diagram="…encoded…"> placeholders.
+ * The client-side renderer picks these up after hydration.
+ */
+const rehypeMermaid: Plugin<[]> = () => (tree: any) => {
+  function walk(node: any, parent: any, index: number) {
+    if (
+      node.type === "element" &&
+      node.tagName === "pre" &&
+      parent !== null
+    ) {
+      const code = node.children?.find(
+        (c: any) => c.type === "element" && c.tagName === "code"
+      );
+      if (code) {
+        const cls: string[] = (code.properties?.className as string[]) ?? [];
+        if (cls.some((c) => c === "language-mermaid")) {
+          const text: string = code.children
+            .filter((c: any) => c.type === "text")
+            .map((c: any) => c.value as string)
+            .join("");
+          parent.children[index] = {
+            type: "element",
+            tagName: "div",
+            properties: {
+              className: ["osler-mermaid"],
+              "data-diagram": encodeURIComponent(text),
+            },
+            children: [],
+          };
+          return; // don't recurse into replaced node
+        }
+      }
+    }
+    if (Array.isArray(node.children)) {
+      for (let i = 0; i < node.children.length; i++) {
+        walk(node.children[i], node, i);
+      }
+    }
+  }
+  walk(tree, null, 0);
+};
+
+
 async function mdToHtml(md: string): Promise<string> {
   const result = await unified()
     .use(remarkParse)
     .use(remarkGfm)
     .use(remarkRehype, { allowDangerousHtml: true })
     .use(rehypeRaw)
+    .use(rehypeMermaid)
     .use(rehypeStringify)
     .process(md);
   return String(result);
+}
+
+function extOf(file: string): string {
+  return file.split(".").pop()?.toLowerCase() ?? "";
 }
 
 /** Load the library content tree. Cached after first call. */
@@ -95,23 +153,53 @@ export async function listLeafNodes(): Promise<ContentTreeNode[]> {
   return result;
 }
 
-/** Fetch and parse metadata from .md files in a leaf node. */
+/** Fetch and parse metadata from files in a leaf node (md, pdf, html). */
 async function loadLeafMeta(node: ContentTreeNode): Promise<ArticleMeta[]> {
   const files = node.files ?? [];
   const results = await Promise.all(
     files.map(async (file) => {
-      const res = await fetch(`${BASE}/${node.path}${file}`, { cache: "no-store" });
+      const ext = extOf(file);
+      const filePath = `${node.path}${file}`;
+
+      if (ext === "pdf") {
+        return {
+          file: filePath,
+          title: file.replace(/\.pdf$/, "").replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()),
+          specialty: node.title,
+          lang: node.lang ?? "en",
+          contentType: "pdf" as ArticleContentType,
+        } as ArticleMeta;
+      }
+
+      if (ext === "html") {
+        const res = await fetch(`${BASE}/${filePath}`, { cache: "no-store" });
+        if (!res.ok) return null;
+        const text = await res.text();
+        // Extract <title> from HTML if present
+        const titleMatch = text.match(/<title[^>]*>([^<]+)<\/title>/i);
+        return {
+          file: filePath,
+          title: titleMatch?.[1]?.trim() ?? file.replace(/\.html$/, "").replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()),
+          specialty: node.title,
+          lang: node.lang ?? "en",
+          contentType: "html" as ArticleContentType,
+        } as ArticleMeta;
+      }
+
+      // Default: markdown
+      const res = await fetch(`${BASE}/${filePath}`, { cache: "no-store" });
       if (!res.ok) return null;
       const text = await res.text();
       const { meta } = parseFrontmatter(text);
       return {
-        file: `${node.path}${file}`,
+        file: filePath,
         title: (meta.title as string) ?? file.replace(/\.md$/, ""),
         specialty: meta.specialty as string | undefined,
         system: meta.system as string | undefined,
         readTimeMin: meta.readTimeMin ? Number(meta.readTimeMin) : undefined,
         tags: meta.tags as string[] | undefined,
         lang: (meta.lang === "ar" || meta.lang === "en") ? meta.lang : (node.lang ?? "en"),
+        contentType: "md" as ArticleContentType,
       } as ArticleMeta;
     })
   );
@@ -134,14 +222,44 @@ export async function listAllArticles(): Promise<ArticleMeta[]> {
   return all;
 }
 
-/** Fetch and parse a single .md file into an Article (with html). */
+/** Fetch and parse a single file into an Article (with html). */
 export async function loadArticleContent(filePath: string): Promise<Article | null> {
+  const ext = extOf(filePath);
+
+  if (ext === "pdf") {
+    return {
+      file: filePath.split("/").pop() ?? "",
+      title: (filePath.split("/").pop() ?? "").replace(/\.pdf$/, "").replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()),
+      content: "",
+      html: "",
+      fileUrl: `${BASE}/${filePath}`,
+      lang: "en",
+      contentType: "pdf",
+    };
+  }
+
+  if (ext === "html") {
+    const res = await fetch(`${BASE}/${filePath}`, { cache: "no-store" });
+    if (!res.ok) return null;
+    const text = await res.text();
+    const titleMatch = text.match(/<title[^>]*>([^<]+)<\/title>/i);
+    return {
+      file: filePath.split("/").pop() ?? "",
+      title: titleMatch?.[1]?.trim() ?? (filePath.split("/").pop() ?? "").replace(/\.html$/, "").replace(/-/g, " "),
+      content: text,
+      html: text,
+      fileUrl: `${BASE}/${filePath}`,
+      lang: "en",
+      contentType: "html",
+    };
+  }
+
+  // Default: markdown
   const res = await fetch(`${BASE}/${filePath}`, { cache: "no-store" });
   if (!res.ok) return null;
   const text = await res.text();
   const { meta, body } = parseFrontmatter(text);
   const html = await mdToHtml(body);
-  // Look up lang from the leaf cache if available; fall back to frontmatter.
   const nodeLang = await lookupNodeLangForFile(filePath);
   return {
     file: filePath.split("/").pop() ?? "",
@@ -155,6 +273,7 @@ export async function loadArticleContent(filePath: string): Promise<Article | nu
       : (nodeLang ?? "en"),
     content: body,
     html,
+    contentType: "md",
   };
 }
 

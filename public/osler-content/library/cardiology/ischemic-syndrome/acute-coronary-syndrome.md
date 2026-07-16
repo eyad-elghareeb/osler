@@ -21,6 +21,19 @@ tags:
 | NSTEMI | None / transient | Elevated |
 | STEMI | Persistent ST elevation | Elevated |
 
+```mermaid
+graph TD
+    A[Chest Pain / Suspected ACS] --> B{12-Lead ECG}
+    B -->|ST Elevation| C[STEMI]
+    B -->|No ST Elevation| D[NSTE-ACS]
+    C --> E[Immediate PCI / Reperfusion]
+    D --> F{Troponin Level}
+    F -->|Elevated| G[NSTEMI]
+    F -->|Normal| H[Unstable Angina]
+    G --> I[Risk Stratification / PCI in 2-24h]
+    H --> J[Medical Management / Stress Test]
+```
+
 ## Pathophysiology
 
 The central event is **plaque rupture or erosion**, exposing the thrombogenic lipid core to circulating blood.

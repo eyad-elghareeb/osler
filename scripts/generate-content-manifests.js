@@ -91,7 +91,7 @@ function buildUid(type, segments) {
 function getDataFileNames(dirPath) {
   if (!fs.existsSync(dirPath)) return [];
   return fs.readdirSync(dirPath, { withFileTypes: true })
-    .filter((e) => e.isFile() && (e.name.endsWith(".json") || e.name.endsWith(".md")) && e.name !== MANIFEST_NAME)
+    .filter((e) => e.isFile() && (e.name.endsWith(".json") || e.name.endsWith(".md") || e.name.endsWith(".pdf") || e.name.endsWith(".html")) && e.name !== MANIFEST_NAME)
     .map((e) => e.name)
     .sort();
 }
@@ -108,7 +108,7 @@ function scanDirectory(dirPath, relativePath, parentType) {
 
   const subdirs = entries.filter((e) => e.isDirectory());
   const dataFiles = entries.filter(
-    (e) => e.isFile() && (e.name.endsWith(".json") || e.name.endsWith(".md"))
+    (e) => e.isFile() && (e.name.endsWith(".json") || e.name.endsWith(".md") || e.name.endsWith(".pdf") || e.name.endsWith(".html"))
   );
 
   const nodes = [];

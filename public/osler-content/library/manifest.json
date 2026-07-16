@@ -82,6 +82,7 @@
           "type": "library",
           "path": "neurology/cerebrovascular/",
           "files": [
+            "gcs-calculator.html",
             "ischemic-stroke.md",
             "subarachnoid-hemorrhage.md"
           ],

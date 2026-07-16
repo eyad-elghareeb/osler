@@ -1755,3 +1755,222 @@ html.osler-ar body,
 }
 
 /* Mobile tab bar safe-area already symmetric, no changes needed. */
+
+/* ── Mermaid diagram cards ──────────────────────────────────────────── */
+
+.osler-mermaid {
+  position: relative;
+  margin: 1.5rem 0;
+  border-radius: 12px;
+  border: 1px solid oklch(from var(--border) l c h / 0.6);
+  background: oklch(from var(--card) l c h / 0.6);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.osler-mermaid-inner {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem;
+  min-height: 120px;
+  overflow: auto;
+}
+
+.osler-mermaid-inner svg {
+  max-width: 100%;
+  height: auto;
+}
+
+.osler-mermaid-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding: 0.375rem 0.75rem;
+  border-top: 1px solid oklch(from var(--border) l c h / 0.4);
+  background: oklch(from var(--muted) l c h / 0.4);
+  gap: 0.5rem;
+}
+
+.osler-mermaid-error {
+  padding: 1rem 1.5rem;
+  color: var(--destructive);
+  font-size: 0.8rem;
+  font-family: var(--font-mono, monospace);
+}
+
+/* SVG colours adapt to the current theme */
+.dark .osler-mermaid-inner svg text,
+.dark .osler-mermaid-inner svg .label {
+  fill: oklch(0.92 0.01 0) !important;
+}
+.dark .osler-mermaid-inner svg path,
+.dark .osler-mermaid-inner svg rect,
+.dark .osler-mermaid-inner svg polygon {
+  stroke: oklch(0.5 0.03 260) !important;
+}
+
+/* In the modal explorer */
+.osler-mermaid-svg svg {
+  max-width: none;
+  height: auto;
+}
+
+/* ── HTML artifact iframe ─────────────────────────────────────────── */
+
+.osler-html-artifact {
+  display: flex;
+  flex-direction: column;
+  border-radius: 12px;
+  border: 1px solid oklch(from var(--border) l c h / 0.6);
+  overflow: hidden;
+  background: var(--card);
+}
+
+.osler-html-artifact-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0 0.75rem;
+  height: 2.5rem;
+  background: oklch(from var(--muted) l c h / 0.5);
+  border-bottom: 1px solid oklch(from var(--border) l c h / 0.5);
+  font-size: 0.75rem;
+  color: var(--muted-foreground);
+}
+
+.osler-html-artifact iframe {
+  border: 0;
+  width: 100%;
+  flex: 1;
+}
+
+/* ── Print / PDF ────────────────────────────────────────────────────── */
+
+@media print {
+  /* Hide everything except the article body */
+  header,
+  aside,
+  nav,
+  footer,
+  .mobile-tab-bar,
+  [data-print-hide],
+  [class*="MobileTabBar"],
+  [class*="sidebar"],
+  [class*="highlighter"],
+  .osler-html-artifact,
+  .osler-mermaid-toolbar {
+    display: none !important;
+  }
+
+  html, body {
+    overflow: visible !important;
+    height: auto !important;
+    background: #ffffff !important;
+    color: #1a1a1a !important;
+  }
+
+  /* Make the print target full-width */
+  [data-print-article] {
+    display: block !important;
+    position: static !important;
+    width: 100% !important;
+    max-width: 760px !important;
+    margin: 0 auto !important;
+    padding: 0 !important;
+    font-size: 11pt !important;
+    line-height: 1.6 !important;
+    color: #1a1a1a !important;
+    background: #ffffff !important;
+  }
+
+  .osler-print-title-block {
+    margin-bottom: 2rem;
+    padding-bottom: 1rem;
+    border-bottom: 2px solid #1a1a1a;
+  }
+
+  .osler-print-title-block h1 {
+    font-size: 22pt !important;
+    font-weight: 700 !important;
+    margin: 0 0 0.25rem !important;
+    color: #1a1a1a !important;
+  }
+
+  .osler-print-title-block .meta {
+    font-size: 9pt !important;
+    color: #555 !important;
+  }
+
+  /* Re-style library-article for print */
+  .library-article {
+    background: transparent !important;
+    padding: 0 !important;
+    max-width: 100% !important;
+  }
+
+  .library-article h1 { font-size: 18pt !important; page-break-after: avoid; }
+  .library-article h2 { font-size: 14pt !important; page-break-after: avoid; margin-top: 1.5rem !important; }
+  .library-article h3 { font-size: 12pt !important; page-break-after: avoid; }
+
+  .library-article table {
+    page-break-inside: avoid;
+    border-collapse: collapse !important;
+  }
+  .library-article th,
+  .library-article td {
+    border: 1px solid #ccc !important;
+    padding: 4pt 6pt !important;
+    font-size: 9pt !important;
+    color: #1a1a1a !important;
+  }
+  .library-article th { background: #f0f0f0 !important; }
+
+  .library-article blockquote {
+    border-left: 3px solid #555 !important;
+    background: #f8f8f8 !important;
+    color: #333 !important;
+    margin: 0.75rem 0 !important;
+    padding: 0.5rem 1rem !important;
+    page-break-inside: avoid;
+  }
+
+  .library-article code {
+    background: #f4f4f4 !important;
+    color: #1a1a1a !important;
+    border: 1px solid #ddd !important;
+    padding: 1px 4px !important;
+    font-size: 9pt !important;
+  }
+
+  .library-article pre {
+    background: #f4f4f4 !important;
+    color: #1a1a1a !important;
+    border: 1px solid #ddd !important;
+    padding: 0.5rem !important;
+    page-break-inside: avoid;
+    white-space: pre-wrap !important;
+    font-size: 9pt !important;
+  }
+
+  .library-article img {
+    max-width: 100% !important;
+    page-break-inside: avoid;
+    box-shadow: none !important;
+    border-radius: 0 !important;
+  }
+
+  .library-article a {
+    color: #1a1a1a !important;
+    text-decoration: underline !important;
+  }
+
+  /* Expand details on print */
+  details { open: true; }
+  details > summary::marker { content: ""; }
+
+  /* Mermaid: show raw SVG, hide toolbar */
+  .osler-mermaid { border: 1px solid #ccc !important; background: #fff !important; }
+}
+

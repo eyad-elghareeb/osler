@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Glasgow Coma Scale (GCS) Calculator</title>
+  <style>
+    :root {
+      --bg: #0b0f19;
+      --card: #151c2c;
+      --border: #242f47;
+      --text: #f1f5f9;
+      --muted: #94a3b8;
+      --primary: #3b82f6;
+      --primary-hover: #2563eb;
+      --success: #10b981;
+      --warning: #f59e0b;
+      --error: #ef4444;
+    }
+    
+    @media (prefers-color-scheme: light) {
+      :root {
+        --bg: #f8fafc;
+        --card: #ffffff;
+        --border: #e2e8f0;
+        --text: #0f172a;
+        --muted: #64748b;
+        --primary: #2563eb;
+        --primary-hover: #1d4ed8;
+        --success: #059669;
+        --warning: #d97706;
+        --error: #dc2626;
+      }
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      margin: 0;
+      padding: 1.5rem;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+      box-sizing: border-box;
+    }
+
+    .calc-container {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 1.5rem;
+      width: 100%;
+      max-width: 500px;
+      box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
+    }
+
+    h1 {
+      font-size: 1.25rem;
+      font-weight: 700;
+      margin: 0 0 0.5rem 0;
+      text-align: center;
+    }
+
+    .subtitle {
+      font-size: 0.85rem;
+      color: var(--muted);
+      margin-bottom: 1.5rem;
+      text-align: center;
+    }
+
+    .section {
+      margin-bottom: 1.25rem;
+    }
+
+    .section-title {
+      font-size: 0.9rem;
+      font-weight: 600;
+      color: var(--primary);
+      margin-bottom: 0.5rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .options-group {
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+    }
+
+    .option-btn {
+      background: transparent;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--text);
+      padding: 0.75rem 1rem;
+      text-align: left;
+      font-size: 0.85rem;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .option-btn:hover {
+      background: var(--border);
+    }
+
+    .option-btn.selected {
+      background: var(--primary);
+      border-color: var(--primary);
+      color: #ffffff;
+      font-weight: 500;
+    }
+
+    .score-badge {
+      font-size: 0.8rem;
+      padding: 0.15rem 0.4rem;
+      border-radius: 4px;
+      background: rgba(0, 0, 0, 0.15);
+      color: var(--muted);
+    }
+    .option-btn.selected .score-badge {
+      background: rgba(255, 255, 255, 0.2);
+      color: #ffffff;
+    }
+
+    .result-pane {
+      margin-top: 1.5rem;
+      padding: 1.25rem;
+      background: var(--border);
+      border-radius: 12px;
+      text-align: center;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0.25rem;
+    }
+
+    .result-score {
+      font-size: 2.25rem;
+      font-weight: 800;
+      color: var(--text);
+    }
+
+    .result-sub {
+      font-size: 0.85rem;
+      font-weight: 500;
+      color: var(--muted);
+      padding: 0.25rem 0.75rem;
+      border-radius: 9999px;
+      margin-top: 0.25rem;
+    }
+
+    .score-mild { background: rgba(16, 185, 129, 0.15); color: var(--success); }
+    .score-mod { background: rgba(245, 158, 11, 0.15); color: var(--warning); }
+    .score-severe { background: rgba(239, 68, 68, 0.15); color: var(--error); }
+  </style>
+</head>
+<body>
+
+<div class="calc-container">
+  <h1>Glasgow Coma Scale (GCS)</h1>
+  <div class="subtitle">Standardized neurological assessment tool</div>
+
+  <!-- Eye Opening -->
+  <div class="section">
+    <div class="section-title">Eye Opening (E)</div>
+    <div class="options-group" id="group-eye">
+      <button class="option-btn" data-val="4" onclick="selectOpt('eye', this)">Spontaneous <span class="score-badge">+4</span></button>
+      <button class="option-btn" data-val="3" onclick="selectOpt('eye', this)">To Sound <span class="score-badge">+3</span></button>
+      <button class="option-btn" data-val="2" onclick="selectOpt('eye', this)">To Pressure <span class="score-badge">+2</span></button>
+      <button class="option-btn" data-val="1" onclick="selectOpt('eye', this)">None <span class="score-badge">+1</span></button>
+    </div>
+  </div>
+
+  <!-- Verbal Response -->
+  <div class="section">
+    <div class="section-title">Verbal Response (V)</div>
+    <div class="options-group" id="group-verbal">
+      <button class="option-btn" data-val="5" onclick="selectOpt('verbal', this)">Oriented <span class="score-badge">+5</span></button>
+      <button class="option-btn" data-val="4" onclick="selectOpt('verbal', this)">Confused <span class="score-badge">+4</span></button>
+      <button class="option-btn" data-val="3" onclick="selectOpt('verbal', this)">Inappropriate Words <span class="score-badge">+3</span></button>
+      <button class="option-btn" data-val="2" onclick="selectOpt('verbal', this)">Incomprehensible Sounds <span class="score-badge">+2</span></button>
+      <button class="option-btn" data-val="1" onclick="selectOpt('verbal', this)">None <span class="score-badge">+1</span></button>
+    </div>
+  </div>
+
+  <!-- Motor Response -->
+  <div class="section">
+    <div class="section-title">Motor Response (M)</div>
+    <div class="options-group" id="group-motor">
+      <button class="option-btn" data-val="6" onclick="selectOpt('motor', this)">Obeys Commands <span class="score-badge">+6</span></button>
+      <button class="option-btn" data-val="5" onclick="selectOpt('motor', this)">Localising Pain <span class="score-badge">+5</span></button>
+      <button class="option-btn" data-val="4" onclick="selectOpt('motor', this)">Normal Flexion (Withdrawal) <span class="score-badge">+4</span></button>
+      <button class="option-btn" data-val="3" onclick="selectOpt('motor', this)">Abnormal Flexion (Decorticate) <span class="score-badge">+3</span></button>
+      <button class="option-btn" data-val="2" onclick="selectOpt('motor', this)">Extension (Decerebrate) <span class="score-badge">+2</span></button>
+      <button class="option-btn" data-val="1" onclick="selectOpt('motor', this)">None <span class="score-badge">+1</span></button>
+    </div>
+  </div>
+
+  <!-- Result Pane -->
+  <div class="result-pane">
+    <div class="result-score" id="total-score">3 / 15</div>
+    <div class="result-sub score-severe" id="severity-label">Severe Injury</div>
+  </div>
+</div>
+
+<script>
+  const state = {
+    eye: 1,
+    verbal: 1,
+    motor: 1
+  };
+
+  function selectOpt(category, btn) {
+    const parent = btn.parentElement;
+    parent.querySelectorAll('.option-btn').forEach(b => b.classList.remove('selected'));
+    btn.classList.add('selected');
+    state[category] = parseInt(btn.getAttribute('data-val'));
+    updateScore();
+  }
+
+  function updateScore() {
+    const total = state.eye + state.verbal + state.motor;
+    document.getElementById('total-score').innerText = `${total} / 15`;
+    
+    const severity = document.getElementById('severity-label');
+    severity.className = 'result-sub';
+    
+    if (total >= 13) {
+      severity.innerText = 'Mild Brain Injury';
+      severity.classList.add('score-mild');
+    } else if (total >= 9) {
+      severity.innerText = 'Moderate Brain Injury';
+      severity.classList.add('score-mod');
+    } else {
+      severity.innerText = 'Severe Brain Injury';
+      severity.classList.add('score-severe');
+    }
+  }
+
+  // Set default initial selections (none/lowest score)
+  document.querySelectorAll('.options-group').forEach(group => {
+    const lastBtn = group.querySelector('.option-btn:last-child');
+    if (lastBtn) lastBtn.classList.add('selected');
+  });
+  updateScore();
+</script>
+
+</body>
+</html>
