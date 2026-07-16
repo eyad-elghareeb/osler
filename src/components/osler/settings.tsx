@@ -66,7 +66,8 @@ import {
   isAnimationsEnabled,
   setAnimationsEnabled,
 } from "@/lib/osler/motion";
-import { getConfig, getGithubRepo, getSiteName, getSiteTagline, type EngineType } from "@/lib/osler/config";
+import { getConfig, getGithubRepo, getSiteName, getSiteTagline } from "@/lib/osler/config";
+import type { EngineType } from "@/lib/osler/types";
 import { ENGINE_PLUGIN_IDS } from "@/lib/osler/config";
 import { useOslerTheme } from "./theme-provider";
 

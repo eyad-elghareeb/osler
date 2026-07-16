@@ -23,7 +23,7 @@ import type {
   FlashcardSubdeck,
   VideoContent,
 } from "./types";
-import { isEngineEnabled, getEngineOverride } from "./config";
+import { isEngineEnabled, getEngineOverride, enabledEngines } from "./config";
 
 const BASE = "/osler-content";
 
@@ -164,9 +164,7 @@ export async function loadAllContent(): Promise<{
   trees: Record<string, ContentTreeNode[]>;
 }> {
   // Filter out disabled engine plugins — only iterate engines enabled in osler.config.
-  const types: EngineType[] = ["quiz", "bank", "written", "flashcard", "osce", "video"].filter(
-    isEngineEnabled,
-  );
+  const types = enabledEngines();
   const folders = new Set(types.map(categoryFolder));
   const allLeaves: ContentTreeNode[] = [];
   const trees: Record<string, ContentTreeNode[]> = {};
@@ -209,9 +207,7 @@ export async function loadAllContent(): Promise<{
  */
 export async function loadContentByUid(uid: string): Promise<AnyContent> {
   // Only search engines that are enabled in osler.config.
-  const types: EngineType[] = ["quiz", "bank", "written", "flashcard", "osce", "video"].filter(
-    isEngineEnabled,
-  );
+  const types = enabledEngines();
   const folders = new Set(types.map(categoryFolder));
 
   for (const folder of folders) {

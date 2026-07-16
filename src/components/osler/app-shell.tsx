@@ -38,6 +38,7 @@ import {
 import { useOslerTheme } from "./theme-provider";
 import { useI18n } from "./i18n-provider";
 import { MobileTabBar } from "./mobile-tab-bar";
+import { useImmersiveMode } from "./immersive-mode";
 import { PwaInstallButton } from "./pwa-install-button";
 import { LightboxProvider } from "./lightbox-provider";
 import { GlobalSearchPanel } from "./global-search-panel";
@@ -136,9 +137,10 @@ export function AppShell({
   onSearchSelect,
   children,
 }: AppShellProps) {
-  const { theme, toggleTheme } = useOslerTheme();
+  const { theme, isDark, toggleTheme } = useOslerTheme();
   const { t, rtl } = useI18n();
   const isMobile = useIsMobile();
+  const immersive = useImmersiveMode();
   const [searchOpen, setSearchOpen] = React.useState(false);
   const [query, setQuery] = React.useState("");
   const lastViewRef = React.useRef<OslerView>(view);
@@ -224,7 +226,7 @@ export function AppShell({
 
   return (
     <div className="h-screen md:h-screen h-[100dvh] flex flex-col bg-background overflow-hidden">
-      <header className="z-40 shrink-0 h-14 border-b border-border/60 bg-background/80 backdrop-blur-md supports-[backdrop-filter]:bg-background/60 safe-pt">
+      <header className={cn("z-40 shrink-0 h-14 border-b border-border/60 bg-background/80 backdrop-blur-md supports-[backdrop-filter]:bg-background/60 safe-pt", isMobile && immersive && "hidden")}>
         <div className="h-full px-3 sm:px-4 flex items-center gap-2 sm:gap-3">
           {/* Logo */}
           <button
@@ -331,10 +333,10 @@ export function AppShell({
           <button
             onClick={toggleTheme}
             aria-label="Toggle theme"
-            title={theme === "dark" ? t("theme.toggleToLight") : t("theme.toggleToDark")}
+            title={isDark ? t("theme.toggleToLight") : t("theme.toggleToDark")}
             className="size-9 rounded-md hover:bg-muted/60 transition-colors flex items-center justify-center shrink-0"
           >
-            {theme === "dark" ? (
+            {isDark ? (
               <Sun className="size-4" />
             ) : (
               <Moon className="size-4" />

@@ -3038,7 +3038,7 @@ function QuizView({
                       {mobileTabsActive && mobileTutorTab === "question" ? (
                         <div className="flex-1 min-h-0" />
                       ) : mobileTabsActive ? (
-                        <div className="flex-1 min-h-0 flex flex-col px-4 sm:px-6 py-4">
+                        <div className="flex-1 min-h-0 flex flex-col">
                           <VerticalSnapGallery
                             items={session.questions}
                             currentIndex={session.current}
@@ -3058,8 +3058,7 @@ function QuizView({
                               const eqHighlights = highlights.get(activeItem.uid, idx);
                               return (
                                 <div className="h-full overflow-y-auto medos-scroll pr-1 -mr-1 pb-6" style={{ touchAction: "none" }}>
-                                  <div className="px-4 sm:px-6 py-4">
-                                    {session.engine === "written" ? (
+                                  {session.engine === "written" ? (
                                       <WrittenEvaluationPanel
                                         draft={session.writtenDrafts[eq.id] ?? { text: "", rubricChecked: eq.rubric ? eq.rubric.map(() => false) : [], submitted: false }}
                                         question={eq}
@@ -3076,7 +3075,6 @@ function QuizView({
                                         {t("qbank.session.selectOne")}
                                       </div>
                                     )}
-                                  </div>
                                 </div>
                               );
                             }}

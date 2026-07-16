@@ -137,6 +137,7 @@ export function useSwipeBackDismiss(
         dragConstraints: { top: 0, bottom: 0 },
         // Only allow dragging downward (toward dismiss). Upward is locked.
         dragElastic: { top: 0, bottom: elasticity },
+        style: { touchAction: "pan-y" } as React.CSSProperties,
         onDragEnd: (_e, info) => {
           const isBack =
             info.offset.y > threshold || info.velocity.y > velocityThreshold;
@@ -155,6 +156,7 @@ export function useSwipeBackDismiss(
       dragConstraints: { left: 0, right: 0 },
       // LTR: only allow dragging right (toward dismiss). RTL: only left.
       dragElastic: { left: rtl ? elasticity : 0, right: rtl ? 0 : elasticity },
+      style: { touchAction: "pan-y" } as React.CSSProperties,
       onDragEnd: (_e, info) => {
         const isBack = rtl
           ? info.offset.x < -threshold || info.velocity.x < -velocityThreshold

@@ -466,49 +466,65 @@ export function Library({ initialArticleId }: LibraryProps) {
   // (iOS-style) to close the article and return to the hub — the exact
   // same gesture as Settings, Flashcards, and QBank. The hub stays
   // mounted underneath so going back is instant (no reload).
+  const mobileLayout = isMobile ? (
+    <NavigationStack
+      className="h-full"
+      homeClassName="medos-scroll"
+      subpageClassName="medos-scroll"
+      rtl={rtl}
+      home={
+        <MobileHub
+          allArticles={allArticles}
+          bookmarks={bookmarks}
+          bookmarkedArticles={bookmarkedArticles}
+          activeFile={activeFile}
+          onOpenArticle={openArticleByFile}
+          onToggleBookmark={toggleBookmark}
+          searchQuery={searchQuery}
+          onSearchChange={setSearchQuery}
+          matchedArticleFiles={matchedArticleFiles}
+        />
+      }
+      subpage={
+        activeFile && activeArticle ? (
+          <MobileReader
+            article={activeArticle}
+            isBookmarked={bookmarks.has(activeFile)}
+            onToggleBookmark={() => toggleBookmark(activeFile)}
+            onBack={closeArticle}
+            zoom={zoom}
+            onZoomIn={() => setZoom((z) => Math.min(140, z + 10))}
+            onZoomOut={() => setZoom((z) => Math.max(80, z - 10))}
+            onResetZoom={() => setZoom(100)}
+            fontSize={fontSize}
+            onFontSizeChange={setFontSize}
+            loading={loading}
+            articleContentRef={articleContentRef}
+            processedHtml={processedArticleHtml}
+            hlCtrl={hlCtrl}
+            onPrint={printArticle}
+          />
+        ) : null
+      }
+      onBack={closeArticle}
+    />
+  ) : null;
+
+  /* ── Render ─────────────────────────────────────────────────────────── */
   if (isMobile) {
     return (
-      <NavigationStack
-        className="h-full"
-        homeClassName="medos-scroll"
-        subpageClassName="medos-scroll"
-        rtl={rtl}
-        home={
-          <MobileHub
-            allArticles={allArticles}
-            bookmarks={bookmarks}
-            bookmarkedArticles={bookmarkedArticles}
-            activeFile={activeFile}
-            onOpenArticle={openArticleByFile}
-            onToggleBookmark={toggleBookmark}
-            searchQuery={searchQuery}
-            onSearchChange={setSearchQuery}
-            matchedArticleFiles={matchedArticleFiles}
-          />
-        }
-        subpage={
-          activeFile && activeArticle ? (
-            <MobileReader
-              article={activeArticle}
-              isBookmarked={bookmarks.has(activeFile)}
-              onToggleBookmark={() => toggleBookmark(activeFile)}
-              onBack={closeArticle}
-              zoom={zoom}
-              onZoomIn={() => setZoom((z) => Math.min(140, z + 10))}
-              onZoomOut={() => setZoom((z) => Math.max(80, z - 10))}
-              onResetZoom={() => setZoom(100)}
-              fontSize={fontSize}
-              onFontSizeChange={setFontSize}
-              loading={loading}
-              articleContentRef={articleContentRef}
-              processedHtml={processedArticleHtml}
-              hlCtrl={hlCtrl}
-              onPrint={printArticle}
+      <>
+        {mobileLayout}
+        <AnimatePresence>
+          {mermaidModal && (
+            <MermaidModal
+              svg={mermaidModal.svg}
+              title={mermaidModal.title || activeArticle?.title}
+              onClose={() => setMermaidModal(null)}
             />
-          ) : null
-        }
-        onBack={closeArticle}
-      />
+          )}
+        </AnimatePresence>
+      </>
     );
   }
 
@@ -639,7 +655,7 @@ export function Library({ initialArticleId }: LibraryProps) {
           />
         )}
       </main>
-      
+
       <AnimatePresence>
         {mermaidModal && (
           <MermaidModal
