@@ -157,6 +157,21 @@ Rules:
 - Honor `prefers-reduced-motion` — the libs do this automatically, but don't add raw CSS animations that ignore it.
 - For full-screen overlays (video player, OSCE simulator, sync modal), use `.safe-screen` / `.safe-pt` / `.safe-pb` so content doesn't sit under the notch.
 
+### Swipe-back navigation (Learn sub-views)
+
+Learn sub-views (Library, Flashcards, OSCE, Videos) support iOS-style swipe-back to return to the Learn hub:
+
+- Use `useSwipeBackDismiss` from `@/hooks/use-swipe-back-dismiss` with `direction: "horizontal"`.
+- Wrap the component root in `<motion.div {...swipeDismissProps}>` to enable the gesture.
+- **Disable the gesture** during immersive states where swipe conflicts with content interaction:
+  - Flashcards: `disabled: mode === "study" || mode === "complete"`
+  - Videos: `disabled: !!activeVideo`
+  - Library: `disabled: isMobile ? !!activeFile : false` (disable when reading an article on mobile)
+  - OSCE: `disabled: phase !== "select"` (only enable on the scenario picker)
+- The hook already handles RTL, haptic feedback, velocity-aware dismiss, and snap-to-origin.
+- Do NOT add edge-zone detection — the existing hook works from anywhere on the page.
+- View transitions via `withViewTransition()` in `app-shell.tsx` handle the slide animation automatically.
+
 ### Testing
 
 - **No test framework is configured.** There are no test files, no test runner config, and no test scripts.

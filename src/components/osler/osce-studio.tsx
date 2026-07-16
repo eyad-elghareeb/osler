@@ -556,6 +556,8 @@ interface OsceStudioProps {
   activeContent: OsceContent | null;
   onExit: () => void;
   onOpenPack?: (item: ContentTreeNode) => void;
+  /** Called when the user swipes back to navigate to the Learn hub. */
+  onNavigateBack?: () => void;
 }
 
 /* ── Achievements Builder ──────────────────────────────────────────── */
@@ -644,7 +646,7 @@ function getSpeakerGender(c: OsceStation): string {
 
 /* ── OSCE Studio Component ───────────────────────────────────────── */
 
-export function OsceStudio({ activeItem, activeContent, onExit, onOpenPack }: OsceStudioProps) {
+export function OsceStudio({ activeItem, activeContent, onExit, onOpenPack, onNavigateBack }: OsceStudioProps) {
   const isMobile = useIsMobile();
   const { t, rtl, contentFilter } = useI18n();
 
@@ -703,6 +705,14 @@ export function OsceStudio({ activeItem, activeContent, onExit, onOpenPack }: Os
     direction: "horizontal",
     rtl,
     disabled: phase !== "debrief",
+  });
+
+  // Swipe-back to navigate to Learn hub (only when in select phase)
+  const learnHubDismiss = useSwipeBackDismiss({
+    onDismiss: () => onNavigateBack?.(),
+    direction: "horizontal",
+    rtl,
+    disabled: phase !== "select",
   });
 
   const abortRef = React.useRef<AbortController | null>(null);
@@ -1249,7 +1259,7 @@ export function OsceStudio({ activeItem, activeContent, onExit, onOpenPack }: Os
 
   if (phase === "select") {
     return (
-      <div className="h-full overflow-y-auto medos-scroll medos-tabbar-pad">
+      <motion.div {...learnHubDismiss} className="h-full overflow-y-auto medos-scroll medos-tabbar-pad">
         <div className="max-w-5xl mx-auto px-4 md:px-8 py-8">
           <motion.div
             initial={{ opacity: 0, y: 8 }}
@@ -1369,9 +1379,9 @@ export function OsceStudio({ activeItem, activeContent, onExit, onOpenPack }: Os
                 })}
               </div>
             )}
-          </motion.div>
+           </motion.div>
         </div>
-      </div>
+      </motion.div>
     );
   }
 

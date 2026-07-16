@@ -171,7 +171,7 @@ export default function Home() {
       {view === "learn" ? <Learn onNavigate={setView} /> : null}
 
       {view === "library" ? (
-        <Library initialArticleId={activeArticleId} />
+        <Library initialArticleId={activeArticleId} onNavigateBack={() => setView("learn")} />
       ) : null}
 
       {view === "qbank" ? (
@@ -190,6 +190,7 @@ export default function Home() {
           onExit={handleExitQBank}
           onOpenPack={openPack}
           onNavigateHome={() => setView("dashboard")}
+          onNavigateBack={() => setView("learn")}
         />
       ) : null}
 
@@ -199,11 +200,12 @@ export default function Home() {
           activeContent={osceContent}
           onExit={() => { handleExit(); setView("dashboard"); }}
           onOpenPack={openPack}
+          onNavigateBack={() => setView("learn")}
         />
       ) : null}
 
       {view === "videos" ? (
-        <VideosStudio initialVideoId={activeVideoId} onOpenArticle={openArticle} />
+        <VideosStudio initialVideoId={activeVideoId} onOpenArticle={openArticle} onNavigateBack={() => setView("learn")} />
       ) : null}
 
       {view === "profile" ? (

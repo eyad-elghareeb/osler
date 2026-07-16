@@ -47,16 +47,19 @@ import { applyHighlightsToHtml } from "@/lib/osler/article-highlights";
 import { setImmersiveMode } from "./immersive-mode";
 import { MermaidModal } from "./mermaid-modal";
 import { haptic } from "@/lib/osler/native";
+import { useSwipeBackDismiss } from "@/hooks/use-swipe-back-dismiss";
 
 interface LibraryProps {
   initialArticleId?: string;
+  /** Called when the user swipes back to navigate to the Learn hub. */
+  onNavigateBack?: () => void;
 }
 
 type SidebarTab = "toc" | "bookmarks";
 
 const BOOKMARKS_KEY = "osler-article-bookmarks";
 
-export function Library({ initialArticleId }: LibraryProps) {
+export function Library({ initialArticleId, onNavigateBack }: LibraryProps) {
   const { rtl, t } = useI18n();
   const [tree, setTree] = React.useState<ContentTreeNode[]>([]);
   const [allArticles, setAllArticles] = React.useState<ArticleMeta[]>([]);
@@ -69,6 +72,14 @@ export function Library({ initialArticleId }: LibraryProps) {
   const [fontSize, setFontSize] = React.useState(15);
   const [sidebarOpen, setSidebarOpen] = React.useState(false);
   const isMobile = useIsMobile();
+
+  // Swipe-back gesture to navigate to Learn hub (disabled when an article is open on mobile)
+  const swipeDismissProps = useSwipeBackDismiss({
+    onDismiss: () => onNavigateBack?.(),
+    direction: "horizontal",
+    rtl,
+    disabled: isMobile ? !!activeFile : false,
+  });
 
   React.useEffect(() => {
     if (isMobile && !activeFile) setSidebarOpen(true);
@@ -492,7 +503,10 @@ export function Library({ initialArticleId }: LibraryProps) {
   /* ── Render ─────────────────────────────────────────────────────────── */
   if (isMobile) {
     return (
-      <>
+      <motion.div
+        {...swipeDismissProps}
+        className="h-full"
+      >
         {mobileLayout}
         <AnimatePresence>
           {mermaidModal && (
@@ -503,13 +517,13 @@ export function Library({ initialArticleId }: LibraryProps) {
             />
           )}
         </AnimatePresence>
-      </>
+      </motion.div>
     );
   }
 
   /* ── Desktop layout (unchanged) ─────────────────────────────────── */
   return (
-    <div className="flex h-full overflow-hidden bg-background">
+    <motion.div {...swipeDismissProps} className="flex h-full overflow-hidden bg-background">
       <AnimatePresence>
         {sidebarOpen && (
           <motion.div
@@ -638,7 +652,7 @@ export function Library({ initialArticleId }: LibraryProps) {
           />
         )}
       </AnimatePresence>
-    </div>
+    </motion.div>
   );
 }
 

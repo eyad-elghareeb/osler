@@ -43,6 +43,7 @@ import {
   isWakeLockSupported,
   haptic,
 } from "@/lib/osler/native";
+import { useSwipeBackDismiss } from "@/hooks/use-swipe-back-dismiss";
 
 /* ── Constants ─────────────────────────────────────────────────────── */
 
@@ -69,9 +70,11 @@ interface VideosStudioProps {
   initialVideoId?: string;
   /** Optional callback to open a library article. */
   onOpenArticle?: (id: string) => void;
+  /** Called when the user swipes back to navigate to the Learn hub. */
+  onNavigateBack?: () => void;
 }
 
-export function VideosStudio({ initialVideoId, onOpenArticle }: VideosStudioProps) {
+export function VideosStudio({ initialVideoId, onOpenArticle, onNavigateBack }: VideosStudioProps) {
   const isMobile = useIsMobile();
   const { t, contentFilter, rtl } = useI18n();
 
@@ -88,6 +91,17 @@ export function VideosStudio({ initialVideoId, onOpenArticle }: VideosStudioProp
 
   // Sidebar open/close for mobile.
   const [sidebarOpen, setSidebarOpen] = React.useState(false);
+
+  // Swipe-back gesture to navigate to Learn hub (disabled when watching a video)
+  const swipeDismissProps = useSwipeBackDismiss({
+    onDismiss: () => {
+      if (activeVideo) closeVideo();
+      else onNavigateBack?.();
+    },
+    direction: "horizontal",
+    rtl,
+    disabled: !!activeVideo,
+  });
 
   /* ── Load tree + all videos ── */
   React.useEffect(() => {
@@ -210,7 +224,7 @@ export function VideosStudio({ initialVideoId, onOpenArticle }: VideosStudioProp
   }
 
   return (
-    <div className="h-full overflow-y-auto medos-scroll medos-tabbar-pad">
+    <motion.div {...swipeDismissProps} className="h-full overflow-y-auto medos-scroll medos-tabbar-pad">
       <div className="max-w-6xl mx-auto px-4 md:px-8 py-8">
         {/* Page header */}
         <motion.div
@@ -410,7 +424,7 @@ export function VideosStudio({ initialVideoId, onOpenArticle }: VideosStudioProp
           </main>
         </div>
       </div>
-    </div>
+    </motion.div>
   );
 }
 

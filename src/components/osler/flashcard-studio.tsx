@@ -36,6 +36,7 @@ import { useI18n } from "./i18n-provider";
 import { ContentCacheButton } from "./content-cache-button";
 import { ContentLangFilter } from "./qbank-studio";
 import { NavigationStack } from "./navigation-stack";
+import { useSwipeBackDismiss } from "@/hooks/use-swipe-back-dismiss";
 
 type ViewMode = "decks" | "subdecks" | "study" | "complete";
 
@@ -45,6 +46,8 @@ interface FlashcardStudioProps {
   onExit: () => void;
   onOpenPack?: (item: ContentTreeNode) => void;
   onNavigateHome?: () => void;
+  /** Called when the user swipes back to navigate to the Learn hub. */
+  onNavigateBack?: () => void;
 }
 
 const FLASHCARD_COLOR = "oklch(0.7 0.18 145)";
@@ -63,6 +66,7 @@ export function FlashcardStudio({
   onExit,
   onOpenPack,
   onNavigateHome,
+  onNavigateBack,
 }: FlashcardStudioProps) {
   const { t, rtl } = useI18n();
   const {
@@ -95,6 +99,14 @@ export function FlashcardStudio({
     { cardId: string; rating: "again" | "hard" | "good" | "easy" }[]
   >([]);
   const [stats, setStats] = React.useState({ new: 0, due: 0, total: 0 });
+
+  // Swipe-back gesture to navigate to Learn hub (disabled during study/complete modes)
+  const swipeDismissProps = useSwipeBackDismiss({
+    onDismiss: () => onNavigateBack?.(),
+    direction: "horizontal",
+    rtl,
+    disabled: mode === "study" || mode === "complete",
+  });
 
   // Compute stats from leafContent
   React.useEffect(() => {
@@ -917,7 +929,11 @@ export function FlashcardStudio({
   }
 
   /* ── Decks view (grid) ───────────────────────────────────────────── */
-  return renderDecksView();
+  return (
+    <motion.div {...swipeDismissProps} className="h-full">
+      {renderDecksView()}
+    </motion.div>
+  );
 }
 
 function RateButton({
