@@ -140,14 +140,58 @@ fn validate_written(content: &Value) -> Vec<String> {
     errors
 }
 
+fn validate_flashcard_image(parent: &Value, key: &str, errors: &mut Vec<String>, ctx: &str) {
+    match parent.get(key) {
+        None => {}
+        Some(v) => {
+            let items: Vec<&Value> = if let Some(arr) = v.as_array() {
+                arr.iter().collect()
+            } else {
+                vec![v]
+            };
+            for (j, img) in items.iter().enumerate() {
+                if !img.is_object() {
+                    errors.push(format!("{}: `{}[{}]` must be an object", ctx, key, j));
+                    continue;
+                }
+                require_string(img, "src", &mut *errors, &format!("{}: {}[{}]", ctx, key, j));
+            }
+        }
+    }
+}
+
 fn validate_flashcard(content: &Value) -> Vec<String> {
     let mut errors = Vec::new();
     if let Some(arr) = require_array(content, "cards", &mut errors) {
         for (i, c) in arr.iter().enumerate() {
             let ctx = format!("cards[{}]", i);
             require_string(c, "id", &mut errors, &ctx);
-            require_string(c, "front", &mut errors, &ctx);
-            require_string(c, "back", &mut errors, &ctx);
+
+            let ty = c.get("type").and_then(|v| v.as_str()).unwrap_or("basic");
+            match ty {
+                "cloze" => {
+                    require_string(c, "text", &mut errors, &ctx);
+                }
+                _ => {
+                    // Basic cards (default) need a front and back.
+                    let has_front = c.get("front").and_then(|v| v.as_str()).map(|s| !s.is_empty()).unwrap_or(false);
+                    let has_back = c.get("back").and_then(|v| v.as_str()).map(|s| !s.is_empty()).unwrap_or(false);
+                    if ty == "basic" && (!has_front || !has_back) {
+                        errors.push(format!("{}: basic cards require both `front` and `back`", ctx));
+                    }
+                }
+            }
+
+            if let Some(cur) = c.get("type") {
+                if !cur.is_string() {
+                    errors.push(format!("{}: `type` must be a string (\"basic\" or \"cloze\")", ctx));
+                } else if !["basic", "cloze"].contains(&cur.as_str().unwrap_or("")) {
+                    errors.push(format!("{}: `type` must be \"basic\" or \"cloze\"", ctx));
+                }
+            }
+
+            validate_flashcard_image(c, "image", &mut errors, &ctx);
+            validate_flashcard_image(c, "backImage", &mut errors, &ctx);
             require_array_of_strings(c, "tags", &mut errors, &ctx);
         }
     }

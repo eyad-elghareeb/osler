@@ -123,6 +123,42 @@
     return wrap;
   }
 
+  function imageList(images, onChange) {
+    const wrap = el("div", { class: "fe-images" });
+    let arr = Array.isArray(images)
+      ? images.map((im) => (typeof im === "string" ? { src: im } : { ...im }))
+      : images
+        ? [{ ...(typeof images === "string" ? { src: images } : images) }]
+        : [];
+
+    function commit() { onChange(arr.length ? arr : undefined); }
+
+    function render() {
+      wrap.innerHTML = "";
+      arr.forEach((img, i) => {
+        const row = el("div", { class: "fe-image-row" });
+        row.appendChild(fieldGroup("Src", textInput(img.src || "", "image.png", (v) => { img.src = v; commit(); })));
+        row.appendChild(fieldGroup("Alt", textInput(img.alt || "", "", (v) => { img.alt = v; commit(); })));
+        row.appendChild(fieldGroup("Caption", textInput(img.caption || "", "", (v) => { img.caption = v; commit(); })));
+        const rm = el("button", { class: "fe-icon-btn danger", type: "button", title: "Remove image", onClick: () => {
+          arr.splice(i, 1);
+          commit();
+          render();
+        }}, ic(ICONS.remove, 14));
+        row.appendChild(rm);
+        wrap.appendChild(row);
+      });
+      const add = el("button", { class: "fe-btn-add fe-btn-add-wide", type: "button", onClick: () => {
+        arr.push({ src: "" });
+        commit();
+        render();
+      }}, ic(ICONS.add, 12), " Add Image");
+      wrap.appendChild(add);
+    }
+    render();
+    return wrap;
+  }
+
   function fieldGroup(label, content) {
     const g = el("div", { class: "fe-group" });
     if (label) g.appendChild(makeLabel(label));
@@ -415,8 +451,27 @@
 
         const body = el("div", { class: "fe-item-body" });
         body.appendChild(fieldGroup("ID", textInput(c.id, "e.g. fc-001", (v) => { c.id = v; onChange(); })));
-        body.appendChild(fieldGroup("Front", textArea(c.front, "Question side", (v) => { c.front = v; onChange(); })));
-        body.appendChild(fieldGroup("Back", textArea(c.back, "Answer side", (v) => { c.back = v; onChange(); })));
+        body.appendChild(fieldGroup("Type", selectInput(c.type || "basic", [
+          { value: "basic", label: "Basic" },
+          { value: "cloze", label: "Cloze" },
+        ], (v) => {
+          c.type = (v === "basic") ? undefined : v;
+          onChange();
+          renderAll();
+        })));
+
+        const isCloze = (c.type || "basic") === "cloze";
+        if (isCloze) {
+          body.appendChild(fieldGroup("Text ({{c1::answer::hint}})", textArea(c.text, "Cloze source text", (v) => { c.text = v; onChange(); })));
+          body.appendChild(fieldGroup("Extra", textArea(c.extra, "Shown under the answer", (v) => { c.extra = v; onChange(); })));
+        } else {
+          body.appendChild(fieldGroup("Front", textArea(c.front, "Question side", (v) => { c.front = v; onChange(); })));
+          body.appendChild(fieldGroup("Back", textArea(c.back, "Answer side", (v) => { c.back = v; onChange(); })));
+        }
+
+        body.appendChild(fieldGroup("Image (front)", imageList(c.image, (v) => { c.image = v; onChange(); })));
+        body.appendChild(fieldGroup("Image (back)", imageList(c.backImage, (v) => { c.backImage = v; onChange(); })));
+        body.appendChild(fieldGroup("Audio", textInput(c.audio || "", "clip.mp3", (v) => { c.audio = v || undefined; onChange(); })));
         if (subdecks.length > 0) {
           body.appendChild(fieldGroup("Subdeck", selectInput(c.subdeckId || "", [
             { value: "", label: "None" },
