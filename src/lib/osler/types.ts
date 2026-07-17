@@ -57,9 +57,19 @@ export interface CategoryManifest {
 }
 
 /* ── Quiz ────────────────────────────────────────────────────────────── */
+/** An image attached to a question. `src` resolves like flashcard assets —
+ *  a bare filename is looked up in the pack's `images/` subfolder. */
+export interface ContentImage {
+  src: string;
+  alt?: string;
+  caption?: string;
+}
+
 export interface QuizQuestion {
   id: string;
   question: string;
+  /** Optional image(s) shown above the stem (resolved against the pack folder). */
+  images?: ContentImage | ContentImage[];
   options: string[];
   correct: number;
   explanation: string;
@@ -78,6 +88,8 @@ export interface BankQuestion {
   id: string;
   passageId: string;
   question: string;
+  /** Optional image(s) shown above the question stem. */
+  images?: ContentImage | ContentImage[];
   options: string[];
   correct: number;
   explanation: string;
@@ -88,6 +100,8 @@ export interface BankQuestion {
 export interface BankPassage {
   id: string;
   content: string;
+  /** Optional image(s) shown alongside the passage text. */
+  images?: ContentImage | ContentImage[];
   questions: BankQuestion[];
 }
 

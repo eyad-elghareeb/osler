@@ -3,10 +3,11 @@
   "questions": [
     {
       "id": "q-ac-001",
-      "question": "A 52-year-old male presents with crushing substernal chest pain for 45 minutes. ECG shows ST-segment elevation in leads II, III, and aVF with reciprocal changes in I and aVL. Troponin I is 2.4 ng/mL. What is the most likely culprit artery?",
+      "question": "A 52-year-old male presents with crushing substernal chest pain for 45 minutes. ECG shows **ST-segment elevation** in leads II, III, and aVF with reciprocal changes in I and aVL. Troponin I is 2.4 ng/mL. What is the most likely culprit artery?",
+      "images": [{ "src": "inferior-stemi-ecg.svg", "alt": "Inferior STEMI ECG", "caption": "12-lead ECG: inferior ST elevation" }],
       "options": ["Left anterior descending (LAD)", "Right coronary artery (RCA)", "Left circumflex artery (LCx)", "Left main coronary artery", "Diagonal branch"],
       "correct": 1,
-      "explanation": "ST elevation in II, III, aVF with reciprocal depression in I, aVL localizes to the inferior wall, which is supplied by the right coronary artery in 85% of patients.",
+      "explanation": "ST elevation in **II, III, aVF** with reciprocal depression in I, aVL localizes to the inferior wall, which is supplied by the right coronary artery in 85% of patients.",
       "tags": ["cardiology", "stemi", "ecg-localization"],
       "difficulty": 2
     },

@@ -159,6 +159,29 @@
     return wrap;
   }
 
+  function renderChoiceImages(q, onChange) {
+    const opts = Array.isArray(q.options) ? q.options : [];
+    if (!Array.isArray(q.choiceImages)) q.choiceImages = opts.map(() => undefined);
+    while (q.choiceImages.length < opts.length) q.choiceImages.push(undefined);
+
+    const wrap = el("div", { class: "fe-choice-images" });
+    function render() {
+      wrap.innerHTML = "";
+      opts.forEach((_opt, i) => {
+        const group = el("div", { class: "fe-choice-image-row" });
+        group.appendChild(el("span", { class: "fe-choice-image-label" }, "Choice " + (i + 1)));
+        const il = imageList(q.choiceImages[i], (v) => {
+          q.choiceImages[i] = v;
+          onChange();
+        });
+        group.appendChild(il);
+        wrap.appendChild(group);
+      });
+    }
+    render();
+    return wrap;
+  }
+
   function fieldGroup(label, content) {
     const g = el("div", { class: "fe-group" });
     if (label) g.appendChild(makeLabel(label));
@@ -264,7 +287,12 @@
     optsWrap.appendChild(optsList);
     body.appendChild(optsWrap);
 
-    body.appendChild(fieldGroup("Explanation (Markdown)", textArea(q.explanation, "Explanation", (v) => { q.explanation = v; onChange(); })));
+    body.appendChild(fieldGroup("Explanation (Markdown)", textArea(q.explanation, "Explanation — supports **bold**, *italic*, `code`, [links](https://…), and ![alt](image.png) inline images", (v) => { q.explanation = v; onChange(); })));
+    // QBank Markdown hint
+    const mdHint = el("div", { class: "fe-hint" }, "Question & options support Markdown + inline images. Images live in an images/ folder next to this JSON — reference them as ecg.png or images/ecg.png.");
+    body.appendChild(mdHint);
+    body.appendChild(fieldGroup("Stem image(s)", imageList(q.images, (v) => { q.images = v; onChange(); })));
+    body.appendChild(fieldGroup("Per-choice image(s)", renderChoiceImages(q, onChange)));
     body.appendChild(fieldGroup("Tags", tagList(q.tags, (v) => { q.tags = v; onChange(); })));
     if (q.difficulty !== undefined) {
       body.appendChild(fieldGroup("Difficulty (1-5)", numberInput(q.difficulty, (v) => { q.difficulty = v; onChange(); })));

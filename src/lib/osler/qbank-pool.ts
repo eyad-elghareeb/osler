@@ -25,14 +25,31 @@
 import type {
   AnyContent,
   BankContent,
+  BankQuestion,
+  ContentImage,
   EngineType,
   FlashcardContent,
   OsceContent,
   QuizContent,
+  QuizQuestion,
   WrittenContent,
   ContentTreeNode,
 } from "./types";
 import { storage } from "./storage";
+
+/** Map an engine type to its content category folder (mirrors content.ts). */
+function categoryFolderForEngine(type: EngineType): string {
+  const map: Record<string, string> = {
+    quiz: "qbank",
+    bank: "qbank",
+    written: "qbank",
+    flashcard: "flashcard",
+    osce: "osce",
+    library: "library",
+    video: "videos",
+  };
+  return map[type] ?? type;
+}
 
 /* ── Types ──────────────────────────────────────────────────────────── */
 
@@ -48,6 +65,10 @@ export interface PoolQuestionChild {
 export interface PoolQuestion {
   id: string;
   stem: string;
+  /** Optional image(s) shown above the stem (resolved against the source pack). */
+  images?: ContentImage | ContentImage[];
+  /** Optional image(s) shown above a specific choice, keyed by 0-based index. */
+  choiceImages?: (ContentImage | ContentImage[] | undefined)[];
   choices: string[];
   correct: number; // -1 for non-MCQ
   explanation: string;
@@ -66,6 +87,10 @@ export interface PoolQuestion {
   sourceUid?: string;
   /** Title of the originating pack. */
   sourceTitle?: string;
+  /** Content-relative folder path of the originating pack (for asset resolution). */
+  sourcePath?: string;
+  /** Category folder of the originating pack (qbank / flashcard / osce / …). */
+  sourceCategory?: string;
 }
 
 export type OnlyMode = "all" | "wrong" | "flagged" | "new";
@@ -105,13 +130,22 @@ export function contentToQuestions(
   content: AnyContent,
   sourceUid?: string,
   sourceTitle?: string,
+  sourceNode?: ContentTreeNode,
 ): PoolQuestion[] {
+  const sourcePath = sourceNode?.path;
+  const sourceCategory = sourceNode
+    ? categoryFolderForEngine(sourceNode.type)
+    : undefined;
   const out: PoolQuestion[] = [];
   if (content.type === "quiz") {
     (content as QuizContent).questions.forEach((q) => {
       out.push({
         id: q.id,
         stem: q.question,
+        images: q.images,
+        choiceImages: q.options.map((_o, i) =>
+          (q as QuizQuestion & { choiceImages?: (ContentImage | ContentImage[] | undefined)[] }).choiceImages?.[i],
+        ),
         choices: q.options,
         correct: q.correct,
         explanation: q.explanation,
@@ -119,6 +153,8 @@ export function contentToQuestions(
         difficulty: q.difficulty ? `${q.difficulty}/5` : undefined,
         sourceUid,
         sourceTitle,
+        sourcePath,
+        sourceCategory,
       });
     });
   } else if (content.type === "bank") {
@@ -127,6 +163,10 @@ export function contentToQuestions(
         out.push({
           id: q.id,
           stem: `${p.content}\n\n${q.question}`,
+          images: p.images ?? q.images,
+          choiceImages: q.options.map((_o, i) =>
+            (q as BankQuestion & { choiceImages?: (ContentImage | ContentImage[] | undefined)[] }).choiceImages?.[i],
+          ),
           choices: q.options,
           correct: q.correct,
           explanation: q.explanation,
@@ -134,6 +174,8 @@ export function contentToQuestions(
           difficulty: q.difficulty ? `${q.difficulty}/5` : undefined,
           sourceUid,
           sourceTitle,
+          sourcePath,
+          sourceCategory,
         });
       });
     });
@@ -232,7 +274,7 @@ export function buildQuestionPool(entries: PoolSourceEntry[]): PoolQuestion[] {
     ) {
       continue;
     }
-    const stamped = contentToQuestions(content, node.uid, node.title);
+    const stamped = contentToQuestions(content, node.uid, node.title, node);
     pool.push(...stamped);
   }
   return pool;

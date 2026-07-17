@@ -26,7 +26,18 @@
           "files": [
             "questions.json"
           ],
-          "items": []
+          "items": [
+            {
+              "uid": "quiz-cardiology-acute-coronary",
+              "title": "Acute Coronary",
+              "type": "quiz",
+              "path": "cardiology/acute-coronary/",
+              "files": [
+                "questions.json"
+              ],
+              "items": []
+            }
+          ]
         },
         {
           "uid": "bank-cardiology-arrhythmias",

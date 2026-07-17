@@ -20,6 +20,10 @@ const path = require("path");
 const CONTENT_DIR = path.resolve(__dirname, "..", "public", "osler-content");
 const MANIFEST_NAME = "manifest.json";
 
+// Folders that hold binary assets (images, audio) next to a pack's JSON.
+// They contain no content data files and must not be scanned as content nodes.
+const ASSET_FOLDERS = new Set(["images", "assets"]);
+
 // Direct folder name → type mapping
 const FOLDER_TYPE_MAP = {
   flashcard: "flashcard",
@@ -111,7 +115,7 @@ function scanDirectory(dirPath, relativePath, parentType) {
     .filter((e) => !e.name.startsWith(".") && e.name !== MANIFEST_NAME)
     .sort((a, b) => a.name.localeCompare(b.name));
 
-  const subdirs = entries.filter((e) => e.isDirectory());
+  const subdirs = entries.filter((e) => e.isDirectory() && !ASSET_FOLDERS.has(e.name));
   const dataFiles = entries.filter(
     (e) => e.isFile() && (e.name.endsWith(".json") || e.name.endsWith(".md") || e.name.endsWith(".pdf") || e.name.endsWith(".html"))
   );

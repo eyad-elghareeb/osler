@@ -98,6 +98,8 @@ fn validate_quiz(content: &Value) -> Vec<String> {
                 None => errors.push(format!("{}: missing `options`", ctx)),
             }
             require_array_of_strings(q, "tags", &mut errors, &ctx);
+            validate_qbank_images(q, "images", &mut errors, &ctx);
+            validate_qbank_images(q, "choiceImages", &mut errors, &ctx);
         }
     }
     errors
@@ -110,6 +112,7 @@ fn validate_bank(content: &Value) -> Vec<String> {
             let ctx = format!("passages[{}]", i);
             require_string(p, "id", &mut errors, &ctx);
             require_string(p, "content", &mut errors, &ctx);
+            validate_qbank_images(p, "images", &mut errors, &ctx);
             if let Some(qs) = p.get("questions").and_then(|v| v.as_array()) {
                 for (j, q) in qs.iter().enumerate() {
                     let qctx = format!("{}.questions[{}]", ctx, j);
@@ -118,6 +121,8 @@ fn validate_bank(content: &Value) -> Vec<String> {
                     require_usize(q, "correct", &mut errors, &qctx);
                     require_string(q, "explanation", &mut errors, &qctx);
                     require_array_of_strings(q, "options", &mut errors, &qctx);
+                    validate_qbank_images(q, "images", &mut errors, &qctx);
+                    validate_qbank_images(q, "choiceImages", &mut errors, &qctx);
                 }
             } else {
                 errors.push(format!("{}: missing `questions` array", ctx));
@@ -155,6 +160,37 @@ fn validate_flashcard_image(parent: &Value, key: &str, errors: &mut Vec<String>,
                     continue;
                 }
                 require_string(img, "src", &mut *errors, &format!("{}: {}[{}]", ctx, key, j));
+            }
+        }
+    }
+}
+
+/// Validate a QBank image field (stem `images` or per-choice `choiceImages`).
+/// `images` is a single object or array of objects; `choiceImages` is an array
+/// whose elements are each a single object, array of objects, or null.
+fn validate_qbank_images(parent: &Value, key: &str, errors: &mut Vec<String>, ctx: &str) {
+    match parent.get(key) {
+        None => {}
+        Some(v) => {
+            let items: Vec<&Value> = if let Some(arr) = v.as_array() {
+                // choiceImages: array of (object | array | null)
+                arr.iter().filter(|e| !e.is_null()).collect()
+            } else {
+                vec![v]
+            };
+            for (j, img) in items.iter().enumerate() {
+                let imgs: Vec<&Value> = if let Some(arr) = img.as_array() {
+                    arr.iter().collect()
+                } else {
+                    vec![*img]
+                };
+                for (k, im) in imgs.iter().enumerate() {
+                    if !im.is_object() {
+                        errors.push(format!("{}: `{}[{}]` must be an object", ctx, key, j));
+                        continue;
+                    }
+                    require_string(im, "src", &mut *errors, &format!("{}: {}[{}][{}]", ctx, key, j, k));
+                }
             }
         }
     }

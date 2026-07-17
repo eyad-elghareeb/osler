@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="480" height="240" viewBox="0 0 480 240">
+  <rect width="480" height="240" fill="#0b1020"/>
+  <g stroke="#39ff14" stroke-width="1.5" fill="none">
+    <polyline points="0,120 40,120 50,120 60,60 70,180 80,120 120,120 130,120 140,70 150,170 160,120 200,120 210,120 220,55 230,185 240,120 280,120 290,120 300,65 310,175 320,120 360,120 370,120 380,60 390,180 400,120 480,120"/>
+  </g>
+  <text x="240" y="225" fill="#9ca3af" font-family="monospace" font-size="13" text-anchor="middle">Inferior STEMI — II, III, aVF elevation</text>
+</svg>

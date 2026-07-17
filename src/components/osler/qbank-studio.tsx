@@ -68,6 +68,7 @@ import {
 import type {
   AnyContent,
   BankContent,
+  ContentImage,
   EngineType,
   FlashcardContent,
   ContentTreeNode,
@@ -90,6 +91,7 @@ import {
 } from "@/lib/osler/storage";
 import { listAllArticles } from "@/lib/osler/articles";
 import type { Article, ArticleMeta } from "@/lib/osler/articles";
+import { renderRichText, resolveContentAsset } from "@/lib/osler/richtext";
 import {
   HIGHLIGHT_COLOR_KEYS,
   HIGHLIGHT_PALETTE,
@@ -139,6 +141,38 @@ const ARABIC_LETTERS = ["أ", "ب", "ج", "د", "ه", "و", "ز", "ح", "ط", "�
 const choiceLetter = (idx: number, lang?: string): string =>
   (lang && lang.startsWith("ar") ? ARABIC_LETTERS : LETTERS)[idx] ?? "?";
 const HIGHLIGHT_COLORS = HIGHLIGHT_COLOR_KEYS;
+
+/** Resolve the content-relative base (category + folder) for a question. */
+function questionAssetBase(q: SessionQuestion, item?: ContentTreeNode): {
+  category: string;
+  path: string;
+} {
+  if (q.sourceCategory && q.sourcePath) {
+    return { category: q.sourceCategory, path: q.sourcePath };
+  }
+  if (!item) return { category: "qbank", path: "" };
+  const category =
+    item.type === "flashcard"
+      ? "flashcard"
+      : item.type === "osce"
+        ? "osce"
+        : item.type === "library"
+          ? "library"
+          : "qbank";
+  return { category, path: item.path };
+}
+
+/** Render markdown + inline images for a piece of question text. */
+function renderQuestionText(text: string, q: SessionQuestion, item?: ContentTreeNode): string {
+  const base = questionAssetBase(q, item);
+  return renderRichText(text, base.category, base.path);
+}
+
+/** Normalize a ContentImage field (single or array) to an array. */
+function imageListOf(field?: ContentImage | ContentImage[]): ContentImage[] {
+  if (!field) return [];
+  return Array.isArray(field) ? field : [field];
+}
 
 interface QBankStudioProps {
   activeItem?: ContentTreeNode | null;
@@ -211,6 +245,10 @@ interface SessionQuestionChild {
 interface SessionQuestion {
   id: string;
   stem: string;
+  /** Optional image(s) shown above the stem. */
+  images?: ContentImage | ContentImage[];
+  /** Optional image(s) shown above a specific choice, keyed by 0-based index. */
+  choiceImages?: (ContentImage | ContentImage[] | undefined)[];
   choices: string[];
   correct: number; // -1 for non-MCQ
   explanation: string;
@@ -230,6 +268,10 @@ interface SessionQuestion {
   sourceUid?: string;
   /** Title of the originating pack (for review/retake UI). */
   sourceTitle?: string;
+  /** Content-relative folder path of the originating pack (asset resolution). */
+  sourcePath?: string;
+  /** Category folder of the originating pack (asset resolution). */
+  sourceCategory?: string;
 }
 
 export function QBankStudio({
@@ -318,7 +360,7 @@ export function QBankStudio({
 
   const startSession = React.useCallback(
     (item: ContentTreeNode, content: AnyContent, maxQuestions?: number) => {
-      let questions = contentToQuestions(content);
+      let questions = contentToQuestions(content, item.uid, item.title, item);
       if (questions.length === 0) return;
       if (maxQuestions && maxQuestions > 0 && maxQuestions < questions.length) {
         questions = questions.slice(0, maxQuestions);
@@ -3097,7 +3139,7 @@ function TrackerTab({
                     </div>
                     {isExpanded && q && (
                       <div className="mt-3 pt-3 border-t border-border text-sm space-y-2">
-                        <div className="font-medium">{q.stem}</div>
+                        <div className="font-medium uworld-prose" dangerouslySetInnerHTML={{ __html: renderQuestionText(q.stem, q) }} />
                         {q.choices.length > 0 && (
                           <div className="space-y-1">
                             {q.choices.map((choice, i) => (
@@ -3621,10 +3663,33 @@ function QuizView({
           </div>
         </div>
 
+        {/* Stem images */}
+        {imageListOf(question.images).length > 0 && (
+          <div className="flex flex-col gap-3 mb-4">
+            {imageListOf(question.images).map((img, i) => (
+              <figure key={i} className="m-0">
+                <img
+                  src={resolveContentAsset(img.src, questionAssetBase(question, activeItem).category, questionAssetBase(question, activeItem).path)}
+                  alt={img.alt ?? ""}
+                  className="rounded-xl border border-border max-h-[320px] w-auto mx-auto"
+                />
+                {img.caption && (
+                  <figcaption className="text-center text-xs text-muted-foreground mt-1.5">
+                    {img.caption}
+                  </figcaption>
+                )}
+              </figure>
+            ))}
+          </div>
+        )}
+
         {/* Stem */}
         <div className="relative">
           <div className="uworld-prose" style={stemStyle}>
-            <HighlightedContent text={question.stem} highlights={qHighlights} />
+            <HighlightedContent
+              html={renderQuestionText(question.stem, question, activeItem)}
+              highlights={qHighlights}
+            />
           </div>
         </div>
 
@@ -3712,7 +3777,22 @@ function QuizView({
                     className={`flex-1 min-w-0 uworld-prose ${quizSettingsState.textAffectsChoices ? "" : "text-[14px] leading-relaxed"} pt-0.5 select-text ${hasStrikethrough ? "line-through text-muted-foreground" : ""}`}
                     style={choiceStyle}
                   >
-                    <HighlightedContent text={choice} highlights={qHighlights} />
+                    <HighlightedContent
+                      html={renderQuestionText(choice, question, activeItem)}
+                      highlights={qHighlights}
+                    />
+                    {imageListOf(question.choiceImages?.[idx]).length > 0 && (
+                      <div className="flex flex-col gap-2 mt-2">
+                        {imageListOf(question.choiceImages?.[idx]).map((img, ii) => (
+                          <img
+                            key={ii}
+                            src={resolveContentAsset(img.src, questionAssetBase(question, activeItem).category, questionAssetBase(question, activeItem).path)}
+                            alt={img.alt ?? ""}
+                            className="rounded-lg border border-border max-h-[200px] w-auto"
+                          />
+                        ))}
+                      </div>
+                    )}
                   </div>
                 </button>
               );
@@ -3893,7 +3973,7 @@ function QuizView({
                   }}
                 />
               ) : (
-                <ExplanationCard q={question} selected={qSelected} nonMcq={!qIsMCQ} highlights={qHighlights} packUid={activeItem.uid} questionIdx={qIdx} lang={activeItem.lang ?? "en"} />
+                <ExplanationCard q={question} selected={qSelected} nonMcq={!qIsMCQ} highlights={qHighlights} packUid={activeItem.uid} questionIdx={qIdx} lang={activeItem.lang ?? "en"} item={activeItem} />
               )}
             </div>
           </div>
@@ -3932,7 +4012,7 @@ function QuizView({
                   }}
                 />
               ) : (
-                <ExplanationCard q={question} selected={undefined} nonMcq highlights={qHighlights} packUid={activeItem.uid} questionIdx={qIdx} lang={activeItem.lang ?? "en"} />
+                <ExplanationCard q={question} selected={undefined} nonMcq highlights={qHighlights} packUid={activeItem.uid} questionIdx={qIdx} lang={activeItem.lang ?? "en"} item={activeItem} />
               )}
             </div>
           </div>
@@ -4533,7 +4613,7 @@ function QuizView({
                                         onChildPassFail={() => {}}
                                       />
                                     ) : eqSubmitted ? (
-                                      <ExplanationCard q={eq} selected={eqSelected} nonMcq={!eqIsMCQ} highlights={eqHighlights} packUid={activeItem.uid} questionIdx={idx} lang={activeItem.lang ?? "en"} />
+                                      <ExplanationCard q={eq} selected={eqSelected} nonMcq={!eqIsMCQ} highlights={eqHighlights} packUid={activeItem.uid} questionIdx={idx} lang={activeItem.lang ?? "en"} item={activeItem} />
                                     ) : (
                                       <div className="flex items-center justify-center h-full text-sm text-muted-foreground">
                                         {t("qbank.session.selectOne")}
@@ -4583,7 +4663,7 @@ function QuizView({
                                 }}
                               />
                             ) : (
-                              <ExplanationCard q={q} selected={selected} nonMcq={!isMCQ} highlights={currentHighlights} packUid={activeItem.uid} questionIdx={session.current} lang={activeItem.lang ?? "en"} />
+                              <ExplanationCard q={q} selected={selected} nonMcq={!isMCQ} highlights={currentHighlights} packUid={activeItem.uid} questionIdx={session.current} lang={activeItem.lang ?? "en"} item={activeItem} />
                             )}
                           </div>
                         </div>
@@ -5645,6 +5725,7 @@ function ExplanationCard({
   packUid,
   questionIdx,
   lang,
+  item,
   onRemoveHighlight,
 }: {
   q: SessionQuestion;
@@ -5654,11 +5735,13 @@ function ExplanationCard({
   packUid?: string;
   questionIdx?: number;
   lang?: string;
+  item?: ContentTreeNode;
   onRemoveHighlight?: (id: string) => void;
 }) {
   const hl = questionHighlights ?? [];
 
   const { t } = useI18n();
+  const base = item ? questionAssetBase(q, item) : { category: "qbank", path: "" };
   if (nonMcq) {
     return (
       <div className="rounded-xl border-2 border-blue-600 overflow-hidden">
@@ -5680,7 +5763,7 @@ function ExplanationCard({
           </div>
           <div className="uworld-prose text-[14px]" style={{ whiteSpace: "pre-wrap" }}>
             <HighlightedContent
-              text={q.explanation || t("qbank.explanation.noExplanation")}
+              html={renderQuestionText(q.explanation || t("qbank.explanation.noExplanation"), q, item)}
               highlights={hl}
             />
           </div>
@@ -5727,7 +5810,7 @@ function ExplanationCard({
         </div>
         <div className="uworld-prose text-[14px]" style={{ whiteSpace: "pre-wrap" }}>
           <HighlightedContent
-            text={q.explanation || t("qbank.explanation.noExplanation")}
+            html={renderQuestionText(q.explanation || t("qbank.explanation.noExplanation"), q, item)}
             highlights={hl}
           />
         </div>
@@ -5988,12 +6071,17 @@ function countQuestions(content: AnyContent): number {
   return poolCountQuestions(content);
 }
 
-function contentToQuestions(content: AnyContent): SessionQuestion[] {
+function contentToQuestions(
+  content: AnyContent,
+  sourceUid?: string,
+  sourceTitle?: string,
+  sourceNode?: ContentTreeNode,
+): SessionQuestion[] {
   // Delegate to the shared module. Note: sourceUid/sourceTitle are NOT
   // stamped here — single-pack paths still rely on `session.itemId` for
   // progress recording. The multi-pack path (buildQuestionPool) stamps them
   // explicitly when constructing the pool.
-  return poolContentToQuestions(content) as SessionQuestion[];
+  return poolContentToQuestions(content, sourceUid, sourceTitle, sourceNode) as SessionQuestion[];
 }
 
 function saveSession(s: SessionData) {

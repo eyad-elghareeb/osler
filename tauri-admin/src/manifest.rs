@@ -16,6 +16,10 @@ use std::path::{Path, PathBuf};
 
 const MANIFEST_NAME: &str = "manifest.json";
 
+/// Folders that hold binary assets (images, audio) next to a pack's JSON.
+/// They contain no content data files and must not be scanned as content nodes.
+const ASSET_FOLDERS: &[&str] = &["images", "assets"];
+
 const FOLDER_TYPE_MAP: &[(&str, &str)] = &[
     ("flashcard", "flashcard"),
     ("osce", "osce"),
@@ -120,7 +124,13 @@ fn scan_directory(dir_path: &Path, relative_path: &str, parent_type: Option<&str
         .collect();
     entries.sort_by_key(|e| e.file_name());
 
-    let mut subdirs: Vec<_> = entries.iter().filter(|e| e.file_type().map(|t| t.is_dir()).unwrap_or(false)).collect();
+    let mut subdirs: Vec<_> = entries
+        .iter()
+        .filter(|e| {
+            e.file_type().map(|t| t.is_dir()).unwrap_or(false)
+                && !ASSET_FOLDERS.contains(&e.file_name().to_string_lossy().as_ref())
+        })
+        .collect();
     let data_files: Vec<_> = entries
         .iter()
         .filter(|e| {
