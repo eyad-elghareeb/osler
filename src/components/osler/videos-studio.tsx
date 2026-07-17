@@ -217,6 +217,7 @@ export function VideosStudio({ initialVideoId, onOpenArticle, onNavigateBack }: 
   function collectPackUrls(node: ContentTreeNode): string[] {
     const ownBase = `/osler-content/videos/${node.path}`;
     const own = (node.files ?? []).map((f) => `${ownBase}${f}`);
+    for (const img of node.images ?? []) own.push(`${ownBase}images/${img}`);
     if (node.items.length === 0) return own;
     const childUrls: string[] = [];
     for (const child of node.items) childUrls.push(...collectPackUrls(child));

@@ -9,6 +9,7 @@
       "files": [
         "questions.json"
       ],
+      "images": [],
       "items": []
     },
     {
@@ -17,6 +18,7 @@
       "type": "quiz",
       "path": "cardiology/",
       "files": [],
+      "images": [],
       "items": [
         {
           "uid": "quiz-cardiology-acute-coronary",
@@ -26,6 +28,10 @@
           "files": [
             "questions.json"
           ],
+          "images": [
+            "inferior-stemi-ecg.svg",
+            "rca-supply.svg"
+          ],
           "items": [
             {
               "uid": "quiz-cardiology-acute-coronary",
@@ -34,6 +40,10 @@
               "path": "cardiology/acute-coronary/",
               "files": [
                 "questions.json"
+              ],
+              "images": [
+                "inferior-stemi-ecg.svg",
+                "rca-supply.svg"
               ],
               "items": []
             }
@@ -47,6 +57,7 @@
           "files": [
             "passages.json"
           ],
+          "images": [],
           "items": []
         }
       ]
@@ -59,6 +70,7 @@
       "files": [
         "passages.json"
       ],
+      "images": [],
       "items": []
     },
     {
@@ -69,6 +81,7 @@
       "files": [
         "prompts.json"
       ],
+      "images": [],
       "items": []
     },
     {
@@ -79,6 +92,7 @@
       "files": [
         "questions.json"
       ],
+      "images": [],
       "items": []
     },
     {
@@ -87,6 +101,7 @@
       "type": "quiz",
       "path": "nephrology/",
       "files": [],
+      "images": [],
       "items": [
         {
           "uid": "written-nephrology-acute-kidney-injury",
@@ -96,6 +111,7 @@
           "files": [
             "prompts.json"
           ],
+          "images": [],
           "items": []
         }
       ]
@@ -106,6 +122,7 @@
       "type": "quiz",
       "path": "neurology/",
       "files": [],
+      "images": [],
       "items": [
         {
           "uid": "written-neurology-seizures",
@@ -115,6 +132,7 @@
           "files": [
             "prompts.json"
           ],
+          "images": [],
           "items": []
         },
         {
@@ -125,6 +143,7 @@
           "files": [
             "questions.json"
           ],
+          "images": [],
           "items": []
         }
       ]

@@ -43,6 +43,26 @@ function categoryFolder(type: EngineType): string {
   return CATEGORY_PATHS[type] ?? type;
 }
 
+/**
+ * Base URL for a content node's folder (used to build precache URLs).
+ */
+export function packBasePath(node: ContentTreeNode): string {
+  const folder = categoryFolder(node.type);
+  return `${BASE}/${folder}/${node.path}`;
+}
+
+/**
+ * All cacheable URLs for a leaf node: its data files plus any images in its
+ * `images/` subfolder. Returns an empty array for branch nodes.
+ */
+export function nodeUrls(node: ContentTreeNode): string[] {
+  if (node.items.length > 0) return [];
+  const base = packBasePath(node);
+  const urls = (node.files ?? []).map((f) => `${base}${f}`);
+  for (const img of node.images ?? []) urls.push(`${base}images/${img}`);
+  return urls;
+}
+
 /* ── Tree loading ─────────────────────────────────────────────────── */
 
 /**

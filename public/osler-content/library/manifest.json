@@ -7,6 +7,7 @@
       "type": "library",
       "path": "arabic/",
       "files": [],
+      "images": [],
       "items": [
         {
           "uid": "library-arabic-cardiology",
@@ -16,6 +17,7 @@
           "files": [
             "stemi-arabic.md"
           ],
+          "images": [],
           "items": []
         }
       ]
@@ -26,6 +28,7 @@
       "type": "library",
       "path": "cardiology/",
       "files": [],
+      "images": [],
       "items": [
         {
           "uid": "library-cardiology-heart-failure",
@@ -35,6 +38,7 @@
           "files": [
             "heart-failure-reduced-ef.md"
           ],
+          "images": [],
           "items": []
         },
         {
@@ -46,6 +50,7 @@
             "acute-coronary-syndrome.md",
             "st-elevation-mi.md"
           ],
+          "images": [],
           "items": []
         }
       ]
@@ -56,6 +61,7 @@
       "type": "library",
       "path": "gastroenterology/",
       "files": [],
+      "images": [],
       "items": [
         {
           "uid": "library-gastroenterology-hepatobiliary",
@@ -65,6 +71,7 @@
           "files": [
             "cirrhosis.md"
           ],
+          "images": [],
           "items": []
         }
       ]
@@ -75,6 +82,7 @@
       "type": "library",
       "path": "neurology/",
       "files": [],
+      "images": [],
       "items": [
         {
           "uid": "library-neurology-cerebrovascular",
@@ -86,6 +94,7 @@
             "ischemic-stroke.md",
             "subarachnoid-hemorrhage.md"
           ],
+          "images": [],
           "items": []
         }
       ]
@@ -96,6 +105,7 @@
       "type": "library",
       "path": "pulmonology/",
       "files": [],
+      "images": [],
       "items": [
         {
           "uid": "library-pulmonology-obstructive-disease",
@@ -106,6 +116,7 @@
             "asthma.md",
             "copd.md"
           ],
+          "images": [],
           "items": []
         },
         {
@@ -116,6 +127,7 @@
           "files": [
             "pulmonary-embolism.md"
           ],
+          "images": [],
           "items": []
         }
       ]

@@ -40,6 +40,8 @@ export interface ContentTreeNode {
   path: string;
   /** Data JSON files in this folder (present only on leaf nodes). */
   files?: string[];
+  /** Image asset filenames in this folder's `images/` subfolder (leaf nodes only). */
+  images?: string[];
   /** Child nodes — empty array for leaf (content-having) nodes. */
   items: ContentTreeNode[];
   /**

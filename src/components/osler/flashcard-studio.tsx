@@ -845,6 +845,7 @@ export function FlashcardStudio({
               const collectPackUrls = (n: ContentTreeNode): string[] => {
                 const ownBase = `/osler-content/flashcard/${n.path}`;
                 const own = (n.files ?? []).map((f) => `${ownBase}${f}`);
+                for (const img of n.images ?? []) own.push(`${ownBase}images/${img}`);
                 if (n.items.length === 0) return own;
                 const childUrls: string[] = [];
                 for (const child of n.items) {

@@ -84,12 +84,12 @@ export function ContentCacheButton({
     case "cached":
       icon = <Check className={iconSize} />;
       label = t("cache.cached");
-      colorClass = "text-emerald-500 dark:text-emerald-400";
+      colorClass = "text-success";
       break;
     case "partial":
       icon = <Check className={iconSize} />;
       label = t("cache.partial");
-      colorClass = "text-amber-500";
+      colorClass = "text-warning";
       break;
     case "error":
       icon = <AlertCircle className={iconSize} />;
@@ -132,21 +132,23 @@ export function ContentCacheButton({
 /**
  * Helper — build the list of URLs for a content pack given its node.
  * Used by all studios (qbank, flashcard, osce) to feed ContentCacheButton.
+ * Includes the pack's data files plus any images in its `images/` subfolder
+ * so offline mode has full visual assets.
  */
 export function buildPackUrls(
   basePath: string,
   files: string[] | undefined,
-  includeManifest = true
+  images?: string[]
 ): string[] {
   const urls: string[] = [];
-  if (includeManifest) {
-    // The manifest URL is the category manifest, not the pack manifest.
-    // Each pack doesn't have its own manifest — the category manifest lists
-    // all packs. We don't include it per-pack to avoid duplicate caching.
-  }
   if (files && files.length > 0) {
     for (const file of files) {
       urls.push(`${basePath}${file}`);
+    }
+  }
+  if (images && images.length > 0) {
+    for (const img of images) {
+      urls.push(`${basePath}images/${img}`);
     }
   }
   return urls;

@@ -1034,8 +1034,10 @@ function PackCard({
           : "qbank";
   const packUrls = React.useMemo(() => {
     const base = `/osler-content/${categoryFolder}/${node.path}`;
-    return (node.files ?? []).map((f) => `${base}${f}`);
-  }, [categoryFolder, node.path, node.files]);
+    const urls = (node.files ?? []).map((f) => `${base}${f}`);
+    for (const img of node.images ?? []) urls.push(`${base}images/${img}`);
+    return urls;
+  }, [categoryFolder, node.path, node.files, node.images]);
 
   return (
     <div

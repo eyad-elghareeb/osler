@@ -106,6 +106,20 @@ function getDataFileNames(dirPath) {
 }
 
 /**
+ * Get list of binary asset filenames in a directory's `images` subfolder
+ * (e.g. png/jpg/svg/gif/webp). Returned relative to the images/ folder so
+ * the client can build precache URLs as <base>/images/<name>.
+ */
+function getImageFileNames(dirPath) {
+  const imagesDir = path.join(dirPath, "images");
+  if (!fs.existsSync(imagesDir) || !fs.statSync(imagesDir).isDirectory()) return [];
+  return fs.readdirSync(imagesDir, { withFileTypes: true })
+    .filter((e) => e.isFile() && /\.(png|jpe?g|svg|gif|webp|avif|bmp)$/i.test(e.name))
+    .map((e) => e.name)
+    .sort();
+}
+
+/**
  * Recursively scan a directory and build content tree nodes.
  */
 function scanDirectory(dirPath, relativePath, parentType) {
@@ -142,6 +156,7 @@ function scanDirectory(dirPath, relativePath, parentType) {
         type,
         path: childRelative + "/",
         files: getDataFileNames(childPath),
+        images: getImageFileNames(childPath),
         items: children,
       });
     } else {
@@ -154,6 +169,7 @@ function scanDirectory(dirPath, relativePath, parentType) {
         type,
         path: childRelative + "/",
         files: getDataFileNames(childPath),
+        images: getImageFileNames(childPath),
         items: [],
       });
     }
@@ -169,6 +185,7 @@ function scanDirectory(dirPath, relativePath, parentType) {
       type,
       path: relativePath + "/",
       files: dataFiles.map((e) => e.name).sort(),
+      images: getImageFileNames(dirPath),
       items: [],
     }];
   }

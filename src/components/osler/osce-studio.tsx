@@ -1322,6 +1322,7 @@ export function OsceStudio({ activeItem, activeContent, onExit, onOpenPack, onNa
                   // Per-pack content URLs for the offline download button.
                   const packBase = `/osler-content/osce/${node.path}`;
                   const packUrls = (node.files ?? []).map((f) => `${packBase}${f}`);
+                  for (const img of node.images ?? []) packUrls.push(`${packBase}images/${img}`);
                   return (
                     <motion.div
                       key={node.uid}

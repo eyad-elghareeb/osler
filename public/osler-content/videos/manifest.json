@@ -7,6 +7,7 @@
       "type": "video",
       "path": "cardiology/",
       "files": [],
+      "images": [],
       "items": [
         {
           "uid": "video-cardiology-clinical-skills",
@@ -16,6 +17,7 @@
           "files": [
             "videos.json"
           ],
+          "images": [],
           "items": []
         },
         {
@@ -26,6 +28,7 @@
           "files": [
             "videos.json"
           ],
+          "images": [],
           "items": []
         }
       ]
@@ -36,6 +39,7 @@
       "type": "video",
       "path": "nephrology/",
       "files": [],
+      "images": [],
       "items": [
         {
           "uid": "video-nephrology-dialysis",
@@ -45,6 +49,7 @@
           "files": [
             "videos.json"
           ],
+          "images": [],
           "items": []
         }
       ]
@@ -55,6 +60,7 @@
       "type": "video",
       "path": "neurology/",
       "files": [],
+      "images": [],
       "items": [
         {
           "uid": "video-neurology-stroke",
@@ -64,6 +70,7 @@
           "files": [
             "videos.json"
           ],
+          "images": [],
           "items": []
         }
       ]
@@ -74,6 +81,7 @@
       "type": "video",
       "path": "pharmacology/",
       "files": [],
+      "images": [],
       "items": [
         {
           "uid": "video-pharmacology-antibiotics",
@@ -83,6 +91,7 @@
           "files": [
             "videos.json"
           ],
+          "images": [],
           "items": []
         }
       ]
