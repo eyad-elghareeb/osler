@@ -16,10 +16,10 @@
  *   - Tracker tab (for building review sessions from selections)
  *
  * Constraints enforced here (see `osler-qbank-rework-plan.md` §2):
- *   - `buildQuestionPool` only merges `quiz` + `bank` packs. `written` has a
- *     different render path and must NOT be pooled with quiz/bank. Callers
- *     that pass a `written` pack alongside quiz/bank will get the written
- *     pack dropped with a console warning.
+ *   - `buildQuestionPool` merges `quiz` + `bank` + `written` packs freely.
+ *     MCQ and written questions coexist in the same pool; per-question
+ *     detection (`correct >= 0` for MCQ, rubric/modelAnswer for written)
+ *     drives the rendering branch at runtime.
  */
 
 import type {
@@ -213,31 +213,17 @@ export interface PoolSourceEntry {
  * Build a merged question pool from multiple source packs.
  *
  * Rules (see plan §2):
- *   - `quiz` and `bank` may be freely mixed (both flatten to the same MCQ
- *     shape and render via the same QuizView path).
- *   - `written` is rendered via a different path (WrittenEngineView) and
- *     must NOT be pooled with quiz/bank. If `entries` contains a `written`
- *     pack alongside quiz/bank, the written pack is dropped with a warning.
+ *   - `quiz`, `bank`, and `written` may be freely mixed in one pool.
+ *     MCQ questions (quiz/bank) have `correct >= 0` and choices; written
+ *     questions have `correct === -1` and rubric/modelAnswer. Per-question
+ *     detection drives the rendering branch at runtime.
  *   - `flashcard`/`osce`/`video` are ignored here — QBank Studio does not
  *     own them.
  */
 export function buildQuestionPool(entries: PoolSourceEntry[]): PoolQuestion[] {
-  const hasQuizBank = entries.some(
-    (e) => e.content && (e.content.type === "quiz" || e.content.type === "bank"),
-  );
-  const hasWritten = entries.some((e) => e.content?.type === "written");
-
-  if (hasQuizBank && hasWritten) {
-    console.warn(
-      "[qbank-pool] Cannot merge quiz/bank packs with written packs in a single session — dropping written entries. See osler-qbank-rework-plan.md §2.",
-    );
-  }
-
   const pool: PoolQuestion[] = [];
   for (const { node, content } of entries) {
     if (!content) continue;
-    // Drop written if mixed with quiz/bank
-    if (content.type === "written" && hasQuizBank) continue;
     // Drop flashcard/osce/video — not owned by QBank
     if (
       content.type === "flashcard" ||
@@ -335,6 +321,9 @@ export function pickQuestions(
  *   - quiz/bank → "mcq"
  *   - written   → "written"
  *   - others    → null (not pool-able)
+ *
+ * Note: quiz/bank and written CAN be mixed — this function only classifies
+ * individual types. The source picker uses `canPoolTogether` for mixing logic.
  */
 export function poolFamilyForEngine(type: EngineType): "mcq" | "written" | null {
   if (type === "quiz" || type === "bank") return "mcq";
@@ -344,8 +333,8 @@ export function poolFamilyForEngine(type: EngineType): "mcq" | "written" | null 
 
 /**
  * Given a list of selected engine types, return the family they all share
- * (or null if mixed). Used by the source picker to disable cross-family
- * selections.
+ * (or null if mixed). Used by the source picker to determine if all selected
+ * packs belong to a single family.
  */
 export function sharedPoolFamily(types: EngineType[]): "mcq" | "written" | null {
   if (types.length === 0) return null;
@@ -355,4 +344,26 @@ export function sharedPoolFamily(types: EngineType[]): "mcq" | "written" | null 
     if (poolFamilyForEngine(t) !== first) return null;
   }
   return first;
+}
+
+/**
+ * Check if a set of engine types can be pooled together.
+ * quiz/bank/written are all compatible. flashcard/osce/video cannot participate.
+ */
+export function canPoolTogether(types: EngineType[]): boolean {
+  return types.every((t) => {
+    const f = poolFamilyForEngine(t);
+    return f === "mcq" || f === "written";
+  });
+}
+
+/**
+ * Determine the engine type for a pool question (per-question detection).
+ * MCQ questions (correct >= 0) return "quiz"; written/osce questions return
+ * their actual engine type.
+ */
+export function engineForPoolQuestion(q: PoolQuestion): EngineType {
+  if (q.correct >= 0) return "quiz";
+  if (q.rubric && q.rubric.length > 0 && q.choices.length === 0) return "written";
+  return "quiz";
 }

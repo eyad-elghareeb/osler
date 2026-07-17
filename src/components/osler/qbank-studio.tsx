@@ -59,6 +59,7 @@ import {
   pickQuestions,
   poolFamilyForEngine,
   sharedPoolFamily,
+  canPoolTogether,
   type PoolQuestion,
   type OnlyMode,
   type OrderMode,
@@ -430,10 +431,12 @@ export function QBankStudio({
     // with dismissAfterCorrect=true and the answer is correct, mark the
     // record as dismissed (Tracker will hide it from the default view).
     const shouldDismiss = !!session.dismissAfterCorrect && correct;
+    // Per-question engine detection for mixed sessions.
+    const qEngine = q.correct >= 0 ? "quiz" : (q.rubric?.length ? "written" : session.engine);
     storage.recordAnswer(
       uid,
       q.id,
-      session.engine,
+      qEngine,
       selected,
       correct,
       !!session.flagged[idx],
@@ -530,10 +533,11 @@ export function QBankStudio({
                   : true;
               const uid = q.sourceUid ?? activeItem?.uid ?? session.itemId;
               const shouldDismiss = !!session.dismissAfterCorrect && correct;
+              const qEngine = q.rubric?.length ? "written" : session.engine;
               storage.recordAnswer(
                 uid,
                 q.id,
-                session.engine,
+                qEngine,
                 undefined,
                 correct,
                 !!session.flagged[session.current],
@@ -1688,12 +1692,19 @@ function CreateTestTab({
     [selectedEntries],
   );
 
-  // The shared pool family — "mcq" (quiz/bank mergeable) or "written" (alone).
-  // null means no selection yet, or a forbidden mix (which the picker blocks).
+  // The shared pool family — "mcq" (quiz/bank only), "written" (written only),
+  // or null (no selection yet, or a mixed mcq+written session).
   const sharedFamily = React.useMemo(
     () => sharedPoolFamily(selectedEngineTypes),
     [selectedEngineTypes],
   );
+
+  // Whether the current selection contains both mcq and written packs.
+  const isMixedSession = React.useMemo(() => {
+    if (selectedEngineTypes.length === 0) return false;
+    const families = new Set(selectedEngineTypes.map(poolFamilyForEngine).filter(Boolean));
+    return families.has("mcq") && families.has("written");
+  }, [selectedEngineTypes]);
 
   // Build the merged question pool from selected sources (question-level stamped).
   const mergedPool = React.useMemo(
@@ -1737,7 +1748,7 @@ function CreateTestTab({
     }
   }, [totalAvailable, countInput]);
 
-  // Toggle a leaf source on/off, enforcing the quiz+bank vs written rule.
+  // Toggle a leaf source on/off, allowing mcq+written mixing.
   const toggleSource = React.useCallback(
     (uid: string) => {
       const entry = entryByUid.get(uid);
@@ -1752,16 +1763,11 @@ function CreateTestTab({
         }
         // Adding — check compatibility with the existing selection.
         if (prev.length > 0) {
-          const existingEngines = new Set(
-            prev
-              .map((u) => entryByUid.get(u)?.node.type as EngineType)
-              .filter(Boolean),
-          );
-          const sharedExisting = sharedPoolFamily(Array.from(existingEngines));
-          if (sharedExisting && sharedExisting !== newFamily) {
-            // Cross-family — block the add. (Toast would be nicer; for now
-            // we silently reject and the explanatory text below the picker
-            // makes the rule visible.)
+          const existingEngines = prev
+            .map((u) => entryByUid.get(u)?.node.type as EngineType)
+            .filter(Boolean);
+          const candidateEngines = [...existingEngines, engine];
+          if (!canPoolTogether(candidateEngines)) {
             return prev;
           }
         }
@@ -1783,9 +1789,11 @@ function CreateTestTab({
     if (mergedPool.length === 0) return;
     const finalPool = pickQuestions(filteredPool, desiredCount, order);
     if (finalPool.length === 0) return;
-    // The session's engine — for an MCQ family pool, use the first source's
-    // engine (or "quiz" as a safe default). For written, "written".
-    const engine = sharedFamily === "written" ? "written" : (selectedEntries[0]?.node.type as EngineType) ?? "quiz";
+    // The session's engine — for mixed sessions, use the first question's
+    // type. Per-question rendering is driven by qIsMCQ (correct >= 0).
+    const engine = isMixedSession
+      ? (finalPool[0].correct >= 0 ? "quiz" : "written")
+      : sharedFamily === "written" ? "written" : (selectedEntries[0]?.node.type as EngineType) ?? "quiz";
     const title =
       selectedEntries.length === 1
         ? selectedEntries[0].node.title
@@ -1877,8 +1885,6 @@ function CreateTestTab({
                         if (isLeaf) {
                           const entry = entryByUid.get(child.uid);
                           const isChecked = selectedSourceUids.includes(child.uid);
-                          const family = poolFamilyForEngine(childType);
-                          const wouldCrossFamily = !isChecked && sharedFamily !== null && family !== null && sharedFamily !== family;
                           const qCount = entry?.content ? countQuestions(entry.content) : 0;
                           return (
                             <button
@@ -1887,9 +1893,7 @@ function CreateTestTab({
                               className={cn(
                                 "flex items-center gap-3 p-3 rounded-xl border transition-colors text-start",
                                 isChecked ? "border-primary bg-primary/5" : "border-border hover:border-primary/30",
-                                wouldCrossFamily && "opacity-40 cursor-not-allowed",
                               )}
-                              disabled={wouldCrossFamily}
                               ref={child.uid === initialSourceUid ? preselectScrollRef as React.Ref<HTMLButtonElement> : undefined}
                             >
                               <div
@@ -1905,7 +1909,6 @@ function CreateTestTab({
                               <input
                                 type="checkbox"
                                 checked={isChecked}
-                                disabled={wouldCrossFamily}
                                 onChange={(e) => { e.stopPropagation(); toggleSource(child.uid); }}
                                 onClick={(e) => e.stopPropagation()}
                                 className="size-4 rounded accent-primary shrink-0"
@@ -1978,8 +1981,6 @@ function CreateTestTab({
                       // Leaf — pack with checkbox
                       const entry = entryByUid.get(node.uid);
                       const isChecked = selectedSourceUids.includes(node.uid);
-                      const family = poolFamilyForEngine(nodeType);
-                      const wouldCrossFamily = !isChecked && sharedFamily !== null && family !== null && sharedFamily !== family;
                       const qCount = entry?.content ? countQuestions(entry.content) : 0;
                       return (
                         <button
@@ -1988,9 +1989,7 @@ function CreateTestTab({
                           className={cn(
                             "flex items-center gap-3 p-3 rounded-xl border transition-colors text-start",
                             isChecked ? "border-primary bg-primary/5" : "border-border hover:border-primary/30",
-                            wouldCrossFamily && "opacity-40 cursor-not-allowed",
                           )}
-                          disabled={wouldCrossFamily}
                           ref={node.uid === initialSourceUid ? preselectScrollRef as React.Ref<HTMLButtonElement> : undefined}
                         >
                           <div
@@ -2006,7 +2005,6 @@ function CreateTestTab({
                           <input
                             type="checkbox"
                             checked={isChecked}
-                            disabled={wouldCrossFamily}
                             onChange={(e) => { e.stopPropagation(); toggleSource(node.uid); }}
                             onClick={(e) => e.stopPropagation()}
                             className="size-4 rounded accent-primary shrink-0"
@@ -2019,12 +2017,6 @@ function CreateTestTab({
               )}
             </div>
 
-            {/* Mixed-family notice */}
-            {sharedFamily === "written" && (
-              <p className="text-xs text-muted-foreground bg-muted/40 px-3 py-2 rounded-lg">
-                {t("qbank.create.writtenMixedBlock")}
-              </p>
-            )}
             {selectedEntries.length > 0 && (
               <div className="flex flex-wrap gap-1.5">
                 {selectedEntries.map(({ node }) => (
@@ -3246,9 +3238,13 @@ function QuizView({
   const submitted = session.revealed[session.current] || false;
   const selected = session.answers[session.current];
   const isMCQ = q ? q.correct >= 0 : false;
+  const qIsWritten = q ? (!q.correct || q.correct < 0) && (!!q.rubric?.length || !!q.modelAnswer) : false;
   const isPausedOrLocked = session.examPaused;
-  const engineLabel = ENGINE_META[session.engine].label;
   const { t, rtl } = useI18n();
+  const hasMCQ = session.questions.some((q) => q.correct >= 0);
+  const hasWritten = session.questions.some((q) => q.correct < 0 && q.rubric && q.rubric.length > 0);
+  const isMixedQSession = hasMCQ && hasWritten;
+  const engineLabel = isMixedQSession ? t("qbank.session.mixed") : ENGINE_META[session.engine].label;
 
   // P3-1/P2-4: when called from a custom session (no activeItem prop), build
   // a synthetic ContentTreeNode so the rest of QuizView (which assumes
@@ -3530,6 +3526,9 @@ function QuizView({
     const qSubmitted = session.revealed[qIdx] || false;
     const qSelected = session.answers[qIdx];
     const qIsMCQ = question.correct >= 0;
+    // Per-question written detection: non-MCQ with rubric or modelAnswer
+    // (handles mixed sessions where both quiz and written coexist).
+    const qIsWritten = !qIsMCQ && (!!question.rubric?.length || !!question.modelAnswer);
     const qStrikethroughs = session.strikethroughs[qIdx] ?? [];
     const qHighlights = highlights.get(activeItem.uid, qIdx);
     const qWrittenDraft = session.writtenDrafts[question.id] ?? {
@@ -3661,7 +3660,7 @@ function QuizView({
         ) : null}
 
         {/* Written engine: textarea + grading (interactive only — too complex for previews) */}
-        {interactive && session.engine === "written" && (
+        {interactive && qIsWritten && (
           <WrittenEngineView
             question={question}
             draft={qWrittenDraft}
@@ -3797,7 +3796,7 @@ function QuizView({
         {interactive && qSubmitted && !useSplitExplanation && (
           <div className="mt-3 border-t border-border/40 bg-muted/20 py-3 sm:py-4 px-4 sm:px-6 lg:px-8 -mr-1 rounded-lg">
             <div className={contentAlignClass}>
-              {session.engine === "written" ? (
+              {qIsWritten ? (
                 <WrittenEvaluationPanel
                   draft={qWrittenDraft}
                   question={question}
@@ -3849,7 +3848,7 @@ function QuizView({
         {interactive && qSubmitted && !qIsMCQ && session.mode !== "tutor" && !useSplitExplanation && (
           <div className="mt-3 border-t border-border/40 bg-muted/20 py-3 sm:py-4 px-4 sm:px-6 lg:px-8 -mr-1 rounded-lg">
             <div className={contentAlignClass}>
-              {session.engine === "written" ? (
+              {qIsWritten ? (
                 <WrittenEvaluationPanel
                   draft={qWrittenDraft}
                   question={question}
@@ -4446,10 +4445,11 @@ function QuizView({
                               const eqSubmitted = session.revealed[idx] || false;
                               const eqSelected = session.answers[idx];
                               const eqIsMCQ = eq.correct >= 0;
+                              const eqIsWritten = !eqIsMCQ && (!!eq.rubric?.length || !!eq.modelAnswer);
                               const eqHighlights = highlights.get(activeItem.uid, idx);
                               return (
                                 <div className="h-full overflow-y-auto medos-scroll p-2 pb-6" style={{ touchAction: "none" }}>
-                                  {session.engine === "written" ? (
+                                  {eqIsWritten ? (
                                       <WrittenEvaluationPanel
                                         draft={session.writtenDrafts[eq.id] ?? { text: "", rubricChecked: eq.rubric ? eq.rubric.map(() => false) : [], submitted: false }}
                                         question={eq}
@@ -4474,7 +4474,7 @@ function QuizView({
                       ) : (
                         <div className="flex-1 overflow-y-auto medos-scroll">
                           <div className="px-4 sm:px-6 py-4">
-                            {session.engine === "written" ? (
+                            {qIsWritten ? (
                               <WrittenEvaluationPanel
                                 draft={writtenDraft}
                                 question={q}
@@ -4612,7 +4612,7 @@ function QuizView({
                 {t("qbank.session.submitAnswer")}
               </Button>
             )}
-            {!submitted && !isMCQ && session.engine !== "written" && (
+            {!submitted && !isMCQ && !qIsWritten && (
               <Button size="sm" onClick={onSubmit} className="h-9 rounded-lg">
                 {session.engine === "flashcard" ? t("qbank.session.revealAnswer") : t("qbank.session.submitSelfGrade")}
               </Button>
@@ -4728,7 +4728,7 @@ function QuizView({
               >
                 {t("qbank.session.submitAnswer")}
               </Button>
-            ) : !submitted && !isMCQ && session.engine !== "written" ? (
+            ) : !submitted && !isMCQ && !qIsWritten ? (
               <Button
                 size="sm" onClick={onSubmit}
                 className="flex-1 h-10 rounded-lg medos-touch-target"
@@ -5684,14 +5684,12 @@ function ResultsView({
   const nonMcqCorrect = session.questions.filter((q, i) => {
     if (q.correct >= 0) return false;
     if (!session.revealed[i]) return false;
-    if (session.engine === "flashcard") return session.ratings[q.id] === "easy";
-    if (session.engine === "written" || session.engine === "osce") {
+    if (session.engine === "flashcard" && !q.rubric?.length) return session.ratings[q.id] === "easy";
+    // Per-question: if the question has a rubric, use rubric-based scoring
+    // (handles mixed sessions where written questions coexist with other types).
+    if (q.rubric && q.rubric.length > 0) {
       const rubric = session.rubricState[q.id] ?? [];
-      return (
-        q.rubric &&
-        q.rubric.length > 0 &&
-        rubric.filter(Boolean).length / q.rubric.length >= 0.6
-      );
+      return rubric.filter(Boolean).length / q.rubric.length >= 0.6;
     }
     return false;
   }).length;
@@ -5814,7 +5812,7 @@ function ResultsView({
               const isMCQ = q.correct >= 0;
               const isCorrect = isMCQ
                 ? submittedQ && ans === q.correct
-                : session.engine === "flashcard"
+                : session.engine === "flashcard" && !q.rubric?.length
                 ? session.ratings[q.id] === "easy"
                 : submittedQ &&
                   q.rubric &&

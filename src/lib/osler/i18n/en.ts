@@ -176,6 +176,7 @@ export const en = {
     "qbank.session.unflagQuestion": "Unflag this question",
     "qbank.session.unflagShort": "Unflag",
     "qbank.session.standard": "standard",
+    "qbank.session.mixed": "mixed",
     "qbank.session.difficulty": "Difficulty",
     "qbank.session.shortcut.prev": "Previous / Next question",
     "qbank.session.shortcut.select": "Select answer choice",

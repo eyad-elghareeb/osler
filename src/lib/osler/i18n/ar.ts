@@ -177,6 +177,7 @@ export const ar = {
     "qbank.session.unflagQuestion": "إزالة التعليم عن هذا السؤال",
     "qbank.session.unflagShort": "إزالة التعليم",
     "qbank.session.standard": "قياسي",
+    "qbank.session.mixed": "مختلط",
     "qbank.session.difficulty": "الصعوبة",
     "qbank.session.shortcut.prev": "السابق / التالي",
     "qbank.session.shortcut.select": "اختيار إجابة",

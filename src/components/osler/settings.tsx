@@ -669,8 +669,8 @@ function saveAiForm(state: AiFormState): void {
 
 function validateAiForm(state: AiFormState): Record<string, string> {
   const errors: Record<string, string> = {};
-  if (state.apiKey && !/^[A-Za-z0-9_\-]{20,}$/.test(state.apiKey.trim())) {
-    errors.apiKey = "API keys are usually 30+ characters of letters, digits, hyphens, and underscores.";
+  if (state.apiKey && !/^[A-Za-z0-9_\-.]{20,}$/.test(state.apiKey.trim())) {
+    errors.apiKey = "API keys are usually 30+ characters of letters, digits, hyphens, underscores, or periods.";
   }
   const mw = Number(state.maxWait);
   if (!Number.isFinite(mw) || mw < 5 || mw > 300) {
