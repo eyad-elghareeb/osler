@@ -349,6 +349,7 @@ export const ar = {
     "qbank.create.sourceHint": "اختر حزمة أو أكثر من أي مجلد. يمكن خلط اختبارات البنوك مع بعضها؛ الأسئلة المقالية يجب أداؤها منفردة.",
     "qbank.create.onlyMode": "تصفية حسب التقدّم",
     "qbank.create.onlyAll": "الكل",
+    "qbank.create.onlyNew": "جديد فقط",
     "qbank.create.onlyWrong": "الخطأ فقط",
     "qbank.create.onlyFlagged": "المعلَّمة فقط",
     "qbank.create.tagQuestionLevel": "الوسوم (لكل سؤال)",

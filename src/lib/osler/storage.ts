@@ -302,7 +302,7 @@ export interface SavedSession {
   /** Tag filters that were active when the session was built. */
   tagsFilter?: string[];
   /** Progress-mode filter that was active when the session was built. */
-  onlyMode?: "all" | "wrong" | "flagged";
+  onlyMode?: "all" | "wrong" | "flagged" | "new";
 }
 
 /* ── Progress (question-level) ──────────────────────────────────────── */

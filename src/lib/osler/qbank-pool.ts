@@ -68,7 +68,7 @@ export interface PoolQuestion {
   sourceTitle?: string;
 }
 
-export type OnlyMode = "all" | "wrong" | "flagged";
+export type OnlyMode = "all" | "wrong" | "flagged" | "new";
 export type OrderMode = "sequential" | "random";
 
 /* ── Counting ───────────────────────────────────────────────────────── */
@@ -290,6 +290,7 @@ export function filterPoolByProgress(
     const uid = q.sourceUid;
     if (!uid) return false;
     const rec = storage.getRecord(uid, q.id);
+    if (mode === "new") return !rec;
     if (!rec) return false;
     if (rec.dismissed) return false;
     if (mode === "wrong") return !rec.correct;

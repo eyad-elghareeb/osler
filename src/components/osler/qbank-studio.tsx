@@ -1187,6 +1187,9 @@ function ContentTab({
       if (node.items.length > 0) {
         const idx = filteredRootTree.findIndex((n) => n.uid === node.uid);
         if (idx >= 0) setSelectedFolderIdx(idx);
+      } else if (node.type === "quiz") {
+        // Quiz packs are small — start directly.
+        onOpenPack?.(node);
       } else if (onPickForCreateTest) {
         onPickForCreateTest(node);
       } else {
@@ -1596,7 +1599,7 @@ function CreateTestTab({
   // Tag filter operates on question-level tags (P2-3).
   const [selectedTags, setSelectedTags] = React.useState<string[]>([]);
   // Progress-mode filter (P4-2): "all" | "wrong" | "flagged".
-  const [onlyMode, setOnlyMode] = React.useState<OnlyMode>("all");
+  const [onlyMode, setOnlyMode] = React.useState<OnlyMode>("new");
   // Order: sequential | random.
   const [order, setOrder] = React.useState<OrderMode>("sequential");
   // Stepper value (P4-1).
@@ -2080,6 +2083,7 @@ function CreateTestTab({
           <div className="mt-4 flex flex-wrap gap-2">
             {([
               { id: "all" as const, label: t("qbank.create.onlyAll") },
+              { id: "new" as const, label: t("qbank.create.onlyNew") },
               { id: "wrong" as const, label: t("qbank.create.onlyWrong") },
               { id: "flagged" as const, label: t("qbank.create.onlyFlagged") },
             ]).map((opt) => (
@@ -2194,7 +2198,7 @@ function CreateTestTab({
               />
               <SummaryRow
                 label={t("qbank.create.onlyMode")}
-                value={onlyMode === "all" ? t("qbank.create.onlyAll") : onlyMode === "wrong" ? t("qbank.create.onlyWrong") : t("qbank.create.onlyFlagged")}
+                value={onlyMode === "all" ? t("qbank.create.onlyAll") : onlyMode === "new" ? t("qbank.create.onlyNew") : onlyMode === "wrong" ? t("qbank.create.onlyWrong") : t("qbank.create.onlyFlagged")}
               />
             </div>
 

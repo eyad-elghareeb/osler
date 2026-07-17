@@ -348,6 +348,7 @@ export const en = {
     "qbank.create.sourceHint": "Pick one or more packs from any folder. Quiz and bank packs can be mixed; written packs must be taken alone.",
     "qbank.create.onlyMode": "Filter by progress",
     "qbank.create.onlyAll": "All",
+    "qbank.create.onlyNew": "New only",
     "qbank.create.onlyWrong": "Wrong only",
     "qbank.create.onlyFlagged": "Flagged only",
     "qbank.create.tagQuestionLevel": "Tags (per question)",
