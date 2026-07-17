@@ -23,7 +23,14 @@ import {
   GraduationCap,
 } from "lucide-react";
 import { ENGINE_META } from "@/lib/osler/content";
-import type { FlashcardContent, FlashcardSubdeck, ContentTreeNode, AnyContent } from "@/lib/osler/types";
+import type {
+  FlashcardContent,
+  FlashcardSubdeck,
+  ContentTreeNode,
+  AnyContent,
+  Flashcard,
+  FlashcardImage,
+} from "@/lib/osler/types";
 import { flashcardReview, storage } from "@/lib/osler/storage";
 import { useContentTree } from "@/hooks/use-content-tree";
 import { useShortcutBindings } from "@/hooks/use-shortcuts";
@@ -59,6 +66,233 @@ const SUBDECK_ICONS: Record<string, string> = {
   pharmacology: "pill",
   gastroenterology: "stomach",
 };
+
+/* ── Rich-text rendering (markdown subset, shared with OSCE/AI chat) ──── */
+
+/**
+ * Render a small, safe markdown subset to HTML. Escapes first, then applies
+ * bold / italic / inline-code / links / line-breaks. Deliberately narrow so
+ * card content stays trustworthy without a full markdown pipeline.
+ */
+function renderCardMarkdown(text: string): string {
+  if (!text) return "";
+  let h = text
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+  // Inline code (before other inline rules so its content isn't re-processed).
+  h = h.replace(/`([^`]+)`/g, "<code>$1</code>");
+  // Bold, then italic.
+  h = h.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
+  h = h.replace(/(^|[^*])\*(?!\*)([^*]+?)\*(?!\*)/g, "$1<em>$2</em>");
+  // Markdown links [label](url).
+  h = h.replace(
+    /\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g,
+    '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>',
+  );
+  h = h.replace(/\n/g, "<br>");
+  return h;
+}
+
+/**
+ * Resolve a card asset (image / audio) src against the pack folder. Absolute
+ * URLs and data URIs are returned untouched; bare filenames are prefixed with
+ * the pack's public path.
+ */
+function resolveAsset(src: string, packPath: string): string {
+  if (!src) return src;
+  if (/^(https?:)?\/\//.test(src) || src.startsWith("data:") || src.startsWith("/")) {
+    return src;
+  }
+  return `/osler-content/flashcard/${packPath}${src}`;
+}
+
+/** Normalize the `image` / `backImage` field (single or array) to an array. */
+function asImageList(
+  field: FlashcardImage | FlashcardImage[] | undefined,
+): FlashcardImage[] {
+  if (!field) return [];
+  return Array.isArray(field) ? field : [field];
+}
+
+/* ── Anki export helpers ──────────────────────────────────────────────── */
+
+/**
+ * Take a resolved asset URL/path and return the bare filename Anki uses to
+ * reference media in its collection.media folder (e.g. `/osler-content/.../ecg.png`
+ * → `ecg.png`). Absolute http(s) URLs and data URIs are returned untouched so
+ * Anki can fetch/inline them directly.
+ */
+function ankiMediaRef(resolved: string): string {
+  if (/^https?:\/\//.test(resolved) || resolved.startsWith("data:")) return resolved;
+  const clean = resolved.split(/[?#]/)[0];
+  const parts = clean.split("/");
+  return parts[parts.length - 1] || clean;
+}
+
+/**
+ * Convert a card's markdown (bold/italic/code/links/line-breaks + inline
+ * `![alt](src)` images) to HTML suitable for an Anki field. Images are
+ * rewritten to `<img src="filename">` using {@link ankiMediaRef} so they line
+ * up with files placed in Anki's media folder. `packPath` resolves bare
+ * filenames the same way the in-app renderer does.
+ */
+function markdownToAnkiHtml(text: string, packPath: string): string {
+  if (!text) return "";
+  // Pull inline images out first so the escaping pass doesn't mangle them.
+  const imgTokens: string[] = [];
+  let src = text.replace(
+    /!\[([^\]]*)\]\(([^\s)]+)\)/g,
+    (_full, alt: string, url: string) => {
+      const ref = ankiMediaRef(resolveAsset(url, packPath));
+      const altAttr = alt.replace(/"/g, "&quot;");
+      imgTokens.push(`<img src="${ref}" alt="${altAttr}">`);
+      return `\u0000IMG${imgTokens.length - 1}\u0000`;
+    },
+  );
+  let h = renderCardMarkdown(src);
+  // Restore the image tokens.
+  h = h.replace(/\u0000IMG(\d+)\u0000/g, (_m, i: string) => imgTokens[Number(i)] ?? "");
+  return h;
+}
+
+/**
+ * Convert Anki cloze source to an Anki-importable HTML field. The `{{cN::..}}`
+ * braces MUST survive (Anki parses them), so markdown is only applied to the
+ * text *outside* the braces and to the answer text *inside* each brace.
+ */
+function clozeToAnkiHtml(text: string, packPath: string): string {
+  if (!text) return "";
+  const clozeTokens: string[] = [];
+  // Extract each cloze, markdown-render its answer/hint, stash a placeholder.
+  const withoutCloze = text.replace(
+    /\{\{c(\d+)::(.*?)(?:::(.*?))?\}\}/g,
+    (_full, idx: string, answer: string, hint?: string) => {
+      const ans = markdownToAnkiHtml(answer, packPath);
+      const token = hint
+        ? `{{c${idx}::${ans}::${hint}}}`
+        : `{{c${idx}::${ans}}}`;
+      clozeTokens.push(token);
+      return `\u0000CLZ${clozeTokens.length - 1}\u0000`;
+    },
+  );
+  let h = markdownToAnkiHtml(withoutCloze, packPath);
+  h = h.replace(/\u0000CLZ(\d+)\u0000/g, (_m, i: string) => clozeTokens[Number(i)] ?? "");
+  return h;
+}
+
+/** Escape a field for a tab-separated Anki import (tabs and newlines are structural). */
+function ankiField(html: string): string {
+  return html.replace(/\t/g, " ").replace(/\r?\n/g, "<br>");
+}
+
+/** Append `<img>` tags for a card's structured image field(s) to a field's HTML. */
+function appendImagesHtml(html: string, images: FlashcardImage[], packPath: string): string {
+  if (images.length === 0) return html;
+  const imgs = images
+    .map((img) => {
+      const ref = ankiMediaRef(resolveAsset(img.src, packPath));
+      const alt = (img.alt ?? "").replace(/"/g, "&quot;");
+      const caption = img.caption
+        ? `<div>${markdownToAnkiHtml(img.caption, packPath)}</div>`
+        : "";
+      return `<img src="${ref}" alt="${alt}">${caption}`;
+    })
+    .join("");
+  return html ? `${html}<br>${imgs}` : imgs;
+}
+
+/** Trigger a browser download for a text blob. */
+function downloadTextFile(filename: string, content: string, mime: string) {
+  const blob = new Blob([content], { type: mime });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+/* ── Cloze handling ───────────────────────────────────────────────────── */
+
+const CLOZE_RE = /\{\{c(\d+)::(.*?)(?:::(.*?))?\}\}/g;
+
+/** Collect the distinct cloze indices present in a source string. */
+function clozeIndices(text: string): number[] {
+  const set = new Set<number>();
+  let m: RegExpExecArray | null;
+  CLOZE_RE.lastIndex = 0;
+  while ((m = CLOZE_RE.exec(text)) !== null) {
+    set.add(parseInt(m[1], 10));
+  }
+  return Array.from(set).sort((a, b) => a - b);
+}
+
+/**
+ * Render cloze text for a given active index.
+ *  - reveal=false → the active deletion shows `[...]` (or `[hint]`), all other
+ *    deletions show their answer text.
+ *  - reveal=true  → the active deletion shows its highlighted answer, others
+ *    show plain answer text.
+ */
+function renderCloze(text: string, activeIdx: number, reveal: boolean): string {
+  const escaped = text
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+  // Re-run the regex on the escaped string; brace syntax survives escaping.
+  return escaped.replace(
+    /\{\{c(\d+)::(.*?)(?:::(.*?))?\}\}/g,
+    (_full, idxStr: string, answer: string, hint?: string) => {
+      const idx = parseInt(idxStr, 10);
+      const inner = renderCardMarkdown(answer);
+      if (idx !== activeIdx) return inner;
+      if (reveal) {
+        return `<span class="cloze-answer">${inner}</span>`;
+      }
+      const label = hint ? `[${renderCardMarkdown(hint)}]` : "[&hellip;]";
+      return `<span class="cloze-blank">${label}</span>`;
+    },
+  );
+}
+
+/* ── Card expansion ───────────────────────────────────────────────────── */
+
+/**
+ * A study card is one reviewable unit. Cloze source cards expand into one
+ * study card per cloze index (each with a derived `reviewId` so SM-2 tracks
+ * them independently). Basic cards map 1:1.
+ */
+interface StudyCard {
+  /** Stable id used for SM-2 review storage (card.id or card.id::c<idx>). */
+  reviewId: string;
+  card: Flashcard;
+  /** Active cloze index (only meaningful for cloze cards). */
+  clozeIdx: number | null;
+}
+
+function expandCards(cards: Flashcard[]): StudyCard[] {
+  const out: StudyCard[] = [];
+  for (const card of cards) {
+    const isCloze = card.type === "cloze" || (!!card.text && CLOZE_RE.test(card.text));
+    if (isCloze && card.text) {
+      const indices = clozeIndices(card.text);
+      if (indices.length === 0) {
+        out.push({ reviewId: card.id, card, clozeIdx: null });
+      } else {
+        for (const idx of indices) {
+          out.push({ reviewId: `${card.id}::c${idx}`, card, clozeIdx: idx });
+        }
+      }
+    } else {
+      out.push({ reviewId: card.id, card, clozeIdx: null });
+    }
+  }
+  return out;
+}
 
 export function FlashcardStudio({
   activeItem,
@@ -115,9 +349,9 @@ export function FlashcardStudio({
       for (const [uid, content] of leafContent) {
         if (content.type !== "flashcard") continue;
         const fc = content as FlashcardContent;
-        const cards = fc.cards;
-        totalC += cards.length;
-        const cardIds = cards.map((c) => c.id);
+        const studyCards = expandCards(fc.cards);
+        totalC += studyCards.length;
+        const cardIds = studyCards.map((c) => c.reviewId);
         const dueIds = flashcardReview.getCardsDue(uid, cardIds);
         dueC += dueIds.length;
       }
@@ -134,28 +368,52 @@ export function FlashcardStudio({
     return currentDeck.items ?? [];
   }, [currentDeck]);
 
-  const currentDeckCards = React.useMemo(() => {
+  // The active deck's cards, expanded into study cards (cloze cards split
+  // into one reviewable unit per cloze index).
+  const currentDeckCards = React.useMemo<StudyCard[]>(() => {
     if (!currentDeck) return [];
     if (activeSubdeckId) {
       const subdeck = currentDeck.items.find((c) => c.uid === activeSubdeckId);
-      if (subdeck) return mergeCards(collectLeafUids(subdeck));
+      if (subdeck) return expandCards(mergeCards(collectLeafUids(subdeck)));
     }
-    return mergeCards(collectLeafUids(currentDeck));
+    return expandCards(mergeCards(collectLeafUids(currentDeck)));
   }, [currentDeck, activeSubdeckId, leafContent]);
+
+  // Map each card id to its source pack path so image / audio assets can be
+  // resolved relative to the folder the card was authored in. Built by walking
+  // the flashcard tree once and matching leaf uids to their content.
+  const cardPathById = React.useMemo(() => {
+    const map = new Map<string, string>();
+    const walk = (node: ContentTreeNode) => {
+      if (node.items.length === 0) {
+        const content = leafContent.get(node.uid);
+        if (content?.type === "flashcard") {
+          for (const card of (content as FlashcardContent).cards) {
+            map.set(card.id, node.path);
+          }
+        }
+        return;
+      }
+      node.items.forEach(walk);
+    };
+    tree.forEach(walk);
+    return map;
+  }, [tree, leafContent]);
 
   const currentCard = currentDeckCards[cardIndex];
   const isSessionCard = currentCard
-    ? sessionCards.includes(currentCard.id)
+    ? sessionCards.includes(currentCard.reviewId)
     : false;
 
-  function startSession(cards: FlashcardContent["cards"], uid: string) {
-    const cardIds = cards.map((c) => c.id);
+  function startSession(cards: Flashcard[], uid: string) {
+    const studyCards = expandCards(cards);
+    const cardIds = studyCards.map((c) => c.reviewId);
     const dueIds = flashcardReview.getCardsDue(uid, cardIds);
-    const cardsToStudy =
+    const toStudy =
       dueIds.length > 0
-        ? cards.filter((c) => dueIds.includes(c.id))
-        : cards.slice(0, 10);
-    setSessionCards(cardsToStudy.map((c) => c.id));
+        ? studyCards.filter((c) => dueIds.includes(c.reviewId))
+        : studyCards.slice(0, 10);
+    setSessionCards(toStudy.map((c) => c.reviewId));
     setCardIndex(0);
     setFlipped(false);
     setIsFlipping(false);
@@ -194,10 +452,10 @@ export function FlashcardStudio({
 
   function rateCard(rating: "again" | "hard" | "good" | "easy") {
     if (!currentDeck || !currentCard) return;
-    flashcardReview.recordReview(currentDeck.uid, currentCard.id, rating);
+    flashcardReview.recordReview(currentDeck.uid, currentCard.reviewId, rating);
     setSessionResults((prev) => [
       ...prev,
-      { cardId: currentCard.id, rating },
+      { cardId: currentCard.reviewId, rating },
     ]);
 
     if (cardIndex < sessionCards.length - 1) {
@@ -267,53 +525,117 @@ export function FlashcardStudio({
     }
   }
 
+  // Render an image list for a card face.
+  const renderImages = (images: FlashcardImage[], packPath: string) => {
+    if (images.length === 0) return null;
+    return (
+      <div className="flex flex-wrap items-center justify-center gap-3 my-3 w-full">
+        {images.map((img, i) => (
+          <figure key={i} className="flex flex-col items-center max-w-full">
+            <img
+              src={resolveAsset(img.src, packPath)}
+              alt={img.alt ?? ""}
+              className="max-h-[38vh] max-w-full rounded-lg border border-border object-contain"
+              loading="lazy"
+            />
+            {img.caption && (
+              <figcaption className="mt-1 text-xs text-muted-foreground text-center">
+                {img.caption}
+              </figcaption>
+            )}
+          </figure>
+        ))}
+      </div>
+    );
+  };
+
   // Render a single flashcard face.
   //
-  // Flip animation: the front cover shrinks vertically (scaleY 1 → 0) to
-  // reveal the back layer underneath. This replaces the previous
-  // "slide-up + split Q/A" approach — now the back is a single, full-card
-  // surface (answer prominent, question echoed as a small label) so the
-  // reveal feels like the card itself transforming rather than two panels
-  // splitting apart. The origin is set to the top edge so the front
-  // appears to collapse upward into the answer.
+  // Basic cards use the vertical shrink-to-reveal flip (front cover collapses
+  // upward to expose the answer underneath). Cloze cards render a single
+  // surface where the flip toggles the active deletion between `[…]` and the
+  // highlighted answer.
   //
   // `isFlipped` only affects the current card — preview cards in the
   // gallery (prev/next) are always rendered unflipped.
   const renderFlashcardFace = (
-    card: { front: string; back: string } | undefined,
+    study: StudyCard | undefined,
     isFlipped: boolean,
   ) => {
-    if (!card) return null;
+    if (!study) return null;
+    const { card, clozeIdx } = study;
+    const packPath = cardPathById.get(card.id) ?? "";
+    const frontImages = asImageList(card.image);
+    const backImages = asImageList(card.backImage);
+
+    // ── Cloze card ──────────────────────────────────────────────────
+    if (clozeIdx !== null && card.text) {
+      const html = renderCloze(card.text, clozeIdx, isFlipped);
+      return (
+        <div className="relative w-full h-full overflow-hidden rounded-xl border border-border shadow-lg bg-card">
+          <div className="absolute inset-0 flex flex-col">
+            <div className="shrink-0 px-4 sm:px-6 pt-4 sm:pt-5 pb-2 border-b border-border/40">
+              <div className="text-[10px] uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+                <Sparkles className="size-3" />
+                {t("flash.cloze")}
+              </div>
+            </div>
+            <div className="flex-1 min-h-0 flex flex-col items-center justify-center p-4 sm:p-8 overflow-y-auto medos-scroll">
+              {renderImages(frontImages, packPath)}
+              <div
+                className="text-base sm:text-xl leading-relaxed max-w-2xl uworld-prose text-center"
+                dangerouslySetInnerHTML={{ __html: html }}
+              />
+              {isFlipped && card.extra && (
+                <div className="mt-5 pt-4 border-t border-border/40 w-full max-w-2xl">
+                  <div
+                    className="text-sm leading-relaxed text-muted-foreground uworld-prose text-center"
+                    dangerouslySetInnerHTML={{ __html: renderCardMarkdown(card.extra) }}
+                  />
+                </div>
+              )}
+              {isFlipped && renderImages(backImages, packPath)}
+              {!isFlipped && (
+                <div className="mt-6 text-xs text-muted-foreground/60">
+                  {t("flash.tapToReveal")}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    // ── Basic card ──────────────────────────────────────────────────
     return (
       <div className="relative w-full h-full overflow-hidden rounded-xl border border-border shadow-lg">
-        {/* Back layer — full-card answer with a small question echo at top.
-            Sits underneath the front cover; revealed when the front shrinks. */}
+        {/* Back layer — full-card answer with a small question echo at top. */}
         <div className="absolute inset-0 flex flex-col bg-card rounded-xl">
           <div className="shrink-0 px-4 sm:px-6 pt-4 sm:pt-5 pb-2 border-b border-border/40">
             <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1 flex items-center gap-1.5">
               <Lightbulb className="size-3" />
               {t("flash.question")}
             </div>
-            <div className="text-xs sm:text-sm leading-snug max-w-lg uworld-prose text-muted-foreground line-clamp-3">
-              {card.front}
-            </div>
+            <div
+              className="text-xs sm:text-sm leading-snug max-w-lg uworld-prose text-muted-foreground line-clamp-3"
+              dangerouslySetInnerHTML={{ __html: renderCardMarkdown(card.front ?? "") }}
+            />
           </div>
-          <div className="flex-1 min-h-0 flex flex-col items-center justify-center p-4 sm:p-6 bg-[color-mix(in_oklch,var(--primary)_4%,var(--card))] rounded-b-xl">
+          <div className="flex-1 min-h-0 flex flex-col items-center justify-center p-4 sm:p-6 bg-[color-mix(in_oklch,var(--primary)_4%,var(--card))] rounded-b-xl overflow-y-auto medos-scroll">
             <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-2 flex items-center gap-1.5">
               <Sparkles className="size-3" />
               {t("flash.answer")}
             </div>
-            <div className="text-sm sm:text-base leading-relaxed max-w-lg uworld-prose text-center overflow-y-auto medos-scroll">
-              {card.back}
-            </div>
+            <div
+              className="text-sm sm:text-base leading-relaxed max-w-lg uworld-prose text-center"
+              dangerouslySetInnerHTML={{ __html: renderCardMarkdown(card.back ?? "") }}
+            />
+            {renderImages(backImages, packPath)}
           </div>
         </div>
-        {/* Front cover — shrinks vertically to reveal the back.
-            originY: 0 keeps the top edge fixed; the bottom edge rises
-            toward the top as scaleY → 0. A subtle opacity fade softens
-            the collapse so it reads as a transformation, not a wipe. */}
+        {/* Front cover — shrinks vertically to reveal the back. */}
         <motion.div
-          className="absolute inset-0 flex flex-col items-center justify-center p-6 sm:p-10 bg-card rounded-xl"
+          className="absolute inset-0 flex flex-col items-center justify-center p-6 sm:p-10 bg-card rounded-xl overflow-y-auto medos-scroll"
           style={{ originY: 0 }}
           animate={{
             scaleY: isFlipped ? 0 : 1,
@@ -325,9 +647,11 @@ export function FlashcardStudio({
             <Lightbulb className="size-3" />
             {t("flash.question")}
           </div>
-          <div className="text-lg sm:text-xl leading-relaxed max-w-lg uworld-prose text-center">
-            {card.front}
-          </div>
+          {renderImages(frontImages, packPath)}
+          <div
+            className="text-lg sm:text-xl leading-relaxed max-w-lg uworld-prose text-center"
+            dangerouslySetInnerHTML={{ __html: renderCardMarkdown(card.front ?? "") }}
+          />
           <div className="mt-auto pt-6 text-xs text-muted-foreground/60">
             {t("flash.tapToReveal")}
           </div>
@@ -363,32 +687,79 @@ export function FlashcardStudio({
 
   function exportToAnki() {
     if (!currentDeck) return;
+    haptic("success");
     const cards = mergeCards(collectLeafUids(currentDeck));
     const title = currentDeck.title;
-    const lines: string[] = [];
+    const deckName = title.replace(/::/g, "-").trim() || "Osler";
+    const slug = title.replace(/\s+/g, "-").toLowerCase() || "deck";
+
+    // Anki imports one note type per file, so basic and cloze rows are kept
+    // in separate buckets and written to separate files when both exist.
+    const basicRows: string[] = [];
+    const clozeRows: string[] = [];
 
     for (const card of cards) {
+      const packPath = cardPathById.get(card.id) ?? "";
       const sdId = card.subdeckId ?? "";
       const tagPrefix = sdId
         ? `${title.replace(/\s+/g, "::")}::${sdId.replace(/\s+/g, "::")}`
         : title.replace(/\s+/g, "::");
       const tags = [tagPrefix, ...(card.tags ?? [])]
-        .map((t) => t.replace(/\s+/g, "-"))
+        .map((tg) => tg.replace(/\s+/g, "-"))
         .join(" ");
-      const front = card.front.replace(/\t/g, " ").replace(/\n/g, "<br>");
-      const back = card.back.replace(/\t/g, " ").replace(/\n/g, "<br>");
-      lines.push(`${front}\t${back}\t${tags}`);
+
+      const isCloze =
+        card.type === "cloze" || (!!card.text && /\{\{c\d+::/.test(card.text));
+
+      if (isCloze && card.text) {
+        // Cloze note type: Text + Extra fields. Braces are preserved so Anki
+        // generates the deletions; markdown/images are converted to HTML.
+        let textHtml = clozeToAnkiHtml(card.text, packPath);
+        textHtml = appendImagesHtml(textHtml, asImageList(card.image), packPath);
+        let extraHtml = markdownToAnkiHtml(card.extra ?? "", packPath);
+        extraHtml = appendImagesHtml(extraHtml, asImageList(card.backImage), packPath);
+        clozeRows.push(`${ankiField(textHtml)}\t${ankiField(extraHtml)}\t${tags}`);
+      } else {
+        // Basic note type: Front + Back fields.
+        let frontHtml = markdownToAnkiHtml(card.front ?? "", packPath);
+        frontHtml = appendImagesHtml(frontHtml, asImageList(card.image), packPath);
+        let backHtml = markdownToAnkiHtml(card.back ?? "", packPath);
+        backHtml = appendImagesHtml(backHtml, asImageList(card.backImage), packPath);
+        basicRows.push(`${ankiField(frontHtml)}\t${ankiField(backHtml)}\t${tags}`);
+      }
     }
 
-    const blob = new Blob([lines.join("\n")], { type: "text/tab-separated-values" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `${title.replace(/\s+/g, "-").toLowerCase()}-anki-import.txt`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+    // Anki import header directives — tell Anki the columns are tab-separated,
+    // fields contain HTML, which column holds tags, the note type, and the
+    // target deck, so the user doesn't have to configure the import dialog.
+    const header = (notetype: string, columns: string) =>
+      [
+        "#separator:tab",
+        "#html:true",
+        `#notetype:${notetype}`,
+        `#deck:${deckName}`,
+        "#tags column:3",
+        `#columns:${columns}`,
+      ].join("\n") + "\n";
+
+    if (basicRows.length > 0) {
+      downloadTextFile(
+        `${slug}-anki-basic.txt`,
+        header("Basic", "Front\tBack\tTags") + basicRows.join("\n"),
+        "text/plain;charset=utf-8",
+      );
+    }
+    if (clozeRows.length > 0) {
+      downloadTextFile(
+        `${slug}-anki-cloze.txt`,
+        header("Cloze", "Text\tExtra\tTags") + clozeRows.join("\n"),
+        "text/plain;charset=utf-8",
+      );
+    }
+    // Nothing to export (empty deck) — still give feedback via a no-op file.
+    if (basicRows.length === 0 && clozeRows.length === 0) {
+      downloadTextFile(`${slug}-anki-basic.txt`, header("Basic", "Front\tBack\tTags"), "text/plain;charset=utf-8");
+    }
   }
 
   const doneCount = sessionResults.length;

@@ -29,6 +29,13 @@
       "front": "Triple therapy for HFrEF with strongest mortality benefit",
       "back": "ACE inhibitor (or ARB) + Beta-blocker + Aldosterone antagonist",
       "tags": ["cardiology", "heart-failure"]
+    },
+    {
+      "id": "fc-019",
+      "type": "cloze",
+      "text": "The **first-line** treatment for acute STEMI is {{c1::primary percutaneous coronary intervention::the reperfusion strategy}} within {{c2::90 minutes}} of first medical contact.",
+      "extra": "Fibrinolysis is an alternative when PCI is not available within 120 minutes.",
+      "tags": ["cardiology", "ischemia"]
     }
   ]
 }

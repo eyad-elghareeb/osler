@@ -141,10 +141,10 @@ export function contentToQuestions(
     (content as FlashcardContent).cards.forEach((c) => {
       out.push({
         id: c.id,
-        stem: c.front,
+        stem: c.front ?? c.text ?? "",
         choices: [],
         correct: -1,
-        explanation: c.back,
+        explanation: c.back ?? c.extra ?? "",
         tags: c.tags,
         sourceUid,
         sourceTitle,

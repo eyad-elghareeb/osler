@@ -107,10 +107,48 @@ export interface FlashcardSubdeck {
 }
 
 /* ── Flashcard ───────────────────────────────────────────────────────── */
+
+/**
+ * Card format, Anki-style.
+ *  - "basic"  — a front/back card (default when omitted).
+ *  - "cloze"  — a single `text` field with `{{c1::hidden}}` deletions.
+ *               Each distinct cloze index (c1, c2 …) becomes its own review
+ *               card so the same passage can hide different terms.
+ */
+export type FlashcardType = "basic" | "cloze";
+
+/**
+ * An image attached to a card face. `src` is resolved relative to the pack's
+ * folder (e.g. `ecg.png` → `/osler-content/flashcard/<path>/ecg.png`) unless
+ * it is already an absolute URL or a `data:` URI.
+ */
+export interface FlashcardImage {
+  src: string;
+  alt?: string;
+  caption?: string;
+}
+
 export interface Flashcard {
   id: string;
-  front: string;
-  back: string;
+  /** Card format. Defaults to "basic" when omitted. */
+  type?: FlashcardType;
+  /** Front face (basic cards). Markdown is supported. */
+  front?: string;
+  /** Back face (basic cards). Markdown is supported. */
+  back?: string;
+  /**
+   * Cloze source text (cloze cards). Uses Anki `{{c1::answer::hint}}` syntax.
+   * The hint (`::hint`) is optional.
+   */
+  text?: string;
+  /** Extra info shown under the answer on cloze cards. Markdown supported. */
+  extra?: string;
+  /** Image(s) shown on the front / question face. */
+  image?: FlashcardImage | FlashcardImage[];
+  /** Image(s) shown on the back / answer face. */
+  backImage?: FlashcardImage | FlashcardImage[];
+  /** Optional audio clip URL (resolved like images). */
+  audio?: string;
   tags?: string[];
   subdeckId?: string;
 }

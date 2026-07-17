@@ -398,6 +398,7 @@ export const en = {
     "flash.restart": "Restart",
     "flash.question": "Question",
     "flash.answer": "Answer",
+    "flash.cloze": "Fill in the blank",
     "flash.tapToReveal": "Tap to reveal answer",
     "flash.ratePrompt": "How well did you know this?",
     "flash.exportAnki": "Export to Anki",

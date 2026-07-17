@@ -399,6 +399,7 @@ export const ar = {
     "flash.restart": "إعادة",
     "flash.question": "سؤال",
     "flash.answer": "إجابة",
+    "flash.cloze": "املأ الفراغ",
     "flash.tapToReveal": "اضغط لإظهار الإجابة",
     "flash.ratePrompt": "ما مدى معرفتك بهذا؟",
     "flash.exportAnki": "تصدير إلى Anki",

@@ -663,6 +663,30 @@ html::-webkit-scrollbar-thumb:hover {
   opacity: 0.85;
 }
 
+/* ── Flashcard cloze deletions ──────────────────────────────────────────
+ * `.cloze-blank` is the hidden deletion shown as [ … ] before reveal.
+ * `.cloze-answer` is the same span after reveal, highlighted so the eye
+ * lands on the term that was being tested. Both use semantic tokens so
+ * they track dark/light and custom themes.
+ */
+.cloze-blank {
+  display: inline-block;
+  min-width: 2.5rem;
+  padding: 0 0.35rem;
+  border-radius: 5px;
+  color: var(--primary);
+  font-weight: 700;
+  background: color-mix(in oklch, var(--primary) 12%, transparent);
+  border-bottom: 2px solid var(--primary);
+}
+.cloze-answer {
+  padding: 0.05rem 0.3rem;
+  border-radius: 5px;
+  color: var(--primary);
+  font-weight: 700;
+  background: color-mix(in oklch, var(--primary) 14%, transparent);
+}
+
 /* ── Borderless window drag region ──────────────────────────────────────
  * The top bar has `data-tauri-drag-region` which makes it a window drag
  * region in Tauri. Interactive elements inside it (buttons, inputs, popovers)
