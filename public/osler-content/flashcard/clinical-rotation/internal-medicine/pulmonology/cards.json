@@ -1,0 +1,34 @@
+{
+  "cards": [
+    {
+      "id": "fc-cr-pulm-001",
+      "front": "What is the A-a gradient and when does it increase?",
+      "back": "A-a gradient = PAO2 - PaO2. Normal = (age/4) + 4. Increased in: V/Q mismatch (PE, pneumonia), shunt (ARDS, atelectasis), diffusion impairment (pulmonary fibrosis). Normal in hypoventilation.",
+      "tags": ["pulmonology", "abg", "gas-exchange"]
+    },
+    {
+      "id": "fc-cr-pulm-002",
+      "front": "What are the three phases of a ventilation-perfusion (V/Q) scan and their findings in PE?",
+      "back": "Phase 1: Ventilation scan (normal in PE — airways patent). Phase 2: Perfusion scan (wedge-shaped defect = mismatch). V/Q mismatch = high probability for PE. V/Q match = pneumonia/atelectasis.",
+      "tags": ["pulmonology", "pe", "vq-scan"]
+    },
+    {
+      "id": "fc-cr-pulm-003",
+      "front": "What is the BODE index in COPD?",
+      "back": "BMI, Obstruction (FEV1), Dyspnea (mMRC), Exercise (6-minute walk). Score 0-10; higher = worse prognosis. BODE ≥7 predicts high 4-year mortality. Used to guide transplant consideration.",
+      "tags": ["pulmonology", "copd", "prognosis"]
+    },
+    {
+      "id": "fc-cr-pulm-004",
+      "front": "What is the most common cause of community-acquired pneumonia requiring ICU admission?",
+      "back": "Streptococcus pneumoniae overall, but Legionella pneumophila is a leading cause of severe CAP. Consider Legionella if hyponatremia, confusion, or diarrhea accompany pneumonia.",
+      "tags": ["pulmonology", "cap", "infectious"]
+    },
+    {
+      "id": "fc-cr-pulm-005",
+      "front": "What are the radiographic hallmarks of ARDS vs cardiogenic pulmonary edema on CXR?",
+      "back": "ARDS: bilateral diffuse opacities, no cardiomegaly, no pleural effusions, air bronchograms. Cardiogenic: cardiomegaly, Kerley B lines, perihilar 'batwing' pattern, pleural effusions, vascular redistribution.",
+      "tags": ["pulmonology", "ards", "cxr-interpretation"]
+    }
+  ]
+}

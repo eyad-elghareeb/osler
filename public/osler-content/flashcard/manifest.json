@@ -2,6 +2,73 @@
   "type": "flashcard",
   "items": [
     {
+      "uid": "flashcard-clinical-rotation",
+      "title": "Clinical Rotation",
+      "type": "flashcard",
+      "path": "clinical-rotation/",
+      "files": [],
+      "items": [
+        {
+          "uid": "flashcard-clinical-rotation-internal-medicine",
+          "title": "Internal Medicine",
+          "type": "flashcard",
+          "path": "clinical-rotation/internal-medicine/",
+          "files": [],
+          "items": [
+            {
+              "uid": "flashcard-clinical-rotation-internal-medicine-cardiology",
+              "title": "Cardiology",
+              "type": "flashcard",
+              "path": "clinical-rotation/internal-medicine/cardiology/",
+              "files": [
+                "cards.json"
+              ],
+              "items": []
+            },
+            {
+              "uid": "flashcard-clinical-rotation-internal-medicine-pulmonology",
+              "title": "Pulmonology",
+              "type": "flashcard",
+              "path": "clinical-rotation/internal-medicine/pulmonology/",
+              "files": [
+                "cards.json"
+              ],
+              "items": []
+            }
+          ]
+        },
+        {
+          "uid": "flashcard-clinical-rotation-surgery",
+          "title": "Surgery",
+          "type": "flashcard",
+          "path": "clinical-rotation/surgery/",
+          "files": [],
+          "items": [
+            {
+              "uid": "flashcard-clinical-rotation-surgery-orthopedics",
+              "title": "Orthopedics",
+              "type": "flashcard",
+              "path": "clinical-rotation/surgery/orthopedics/",
+              "files": [
+                "cards.json"
+              ],
+              "items": []
+            },
+            {
+              "uid": "flashcard-clinical-rotation-surgery-trauma",
+              "title": "Trauma",
+              "type": "flashcard",
+              "path": "clinical-rotation/surgery/trauma/",
+              "files": [
+                "cards.json"
+              ],
+              "items": []
+            }
+          ]
+        }
+      ]
+    },
+    {
       "uid": "flashcard-medical-board-review",
       "title": "Medical Board Review",
       "type": "flashcard",

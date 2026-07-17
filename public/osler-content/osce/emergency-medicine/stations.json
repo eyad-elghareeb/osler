@@ -1,0 +1,62 @@
+{
+  "stations": [
+    {
+      "id": "osce-em-001",
+      "title": "Anaphylaxis Management",
+      "type": "history",
+      "specialty": "Emergency Medicine",
+      "difficulty": "Medium",
+      "task": "Manage a patient with acute anaphylaxis after food exposure",
+      "time": 8,
+      "examiner": { "name": "Dr. Patel", "title": "Emergency Medicine Attending" },
+      "patient": {
+        "name": "Lisa Chang",
+        "age": 25,
+        "gender": "female",
+        "avatarSeed": "lisa-c",
+        "opening": "(Wheezing, flushed, clutching throat) I can't breathe... my lips are swelling..."
+      },
+      "hiddenProfile": {
+        "diagnosis": "Anaphylaxis to tree nuts",
+        "keySymptoms": ["Acute onset dyspnea", "Urticaria and facial angioedema", "Throat tightness"],
+        "redFlags": ["Stridor on inspiration", "SpO2 90% on room air", "BP 80/50 mmHg"],
+        "pastHistory": ["Tree nut allergy since childhood", "Mild eczema", "No prior anaphylaxis"],
+        "vitalSigns": "BP 80/50, HR 120, RR 28, O2 sat 90%, Temp 37.0°C"
+      },
+      "rubric": { "mustAsk": ["What did you eat?", "Do you have an EpiPen?", "Have you had this reaction before?"], "bonus": ["Ask about timing from exposure to symptoms"] },
+      "dataPresented": null,
+      "questions": [
+        { "question": "What is the first-line treatment?", "answer": "IM epinephrine 0.3-0.5 mg (1:1000) in the anterolateral thigh, repeat every 5-15 minutes", "rubric": "Administers IM epinephrine immediately" }
+      ]
+    },
+    {
+      "id": "osce-em-002",
+      "title": "Sepsis Recognition and Initial Management",
+      "type": "history",
+      "specialty": "Emergency Medicine",
+      "difficulty": "Hard",
+      "task": "Recognize and initiate management for a patient presenting with sepsis",
+      "time": 12,
+      "examiner": { "name": "Dr. Johnson", "title": "Emergency Medicine Attending" },
+      "patient": {
+        "name": "Robert Kim",
+        "age": 72,
+        "gender": "male",
+        "avatarSeed": "robert-k",
+        "opening": "(Confused, febrile) I don't feel well... my wife brought me in..."
+      },
+      "hiddenProfile": {
+        "diagnosis": "Sepsis secondary to urinary tract infection",
+        "keySymptoms": ["Fever 39.2°C", "Altered mental status", "Tachycardia", "Hypotension"],
+        "redFlags": ["qSOFA score ≥ 2 (AMS, RR >22, SBP <100)", "Lactate 4.2 mmol/L", "Urinalysis: >100 WBC, nitrites positive"],
+        "pastHistory": ["BPH with chronic urinary retention", "Type 2 diabetes", "CKD stage 3"],
+        "vitalSigns": "BP 88/55, HR 118, RR 28, O2 sat 95%, Temp 39.2°C, GCS 13"
+      },
+      "rubric": { "mustAsk": ["When did the confusion start?", "Any fever or chills?", "Any recent urinary symptoms?"], "bonus": ["Ask about recent procedures or catheterization", "Assess urine output"] },
+      "dataPresented": null,
+      "questions": [
+        { "question": "What is the immediate management in the first hour?", "answer": "Blood cultures, lactate, broad-spectrum antibiotics (e.g., piperacillin-tazobactam), 30 mL/kg crystalloid bolus, vasopressors if hypotensive after fluids", "rubric": "Initiates sepsis bundle within 1 hour" }
+      ]
+    }
+  ]
+}

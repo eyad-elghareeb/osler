@@ -1,0 +1,40 @@
+{
+  "cards": [
+    {
+      "id": "fc-trauma-001",
+      "front": "What are the lethal triad in trauma?",
+      "back": "Hypothermia, acidosis, and coagulopathy. Each worsens the others in a vicious cycle. Management: warm the patient, restore perfusion, replace clotting factors early with massive transfusion protocol.",
+      "tags": ["trauma", "emergency", "critical-care"]
+    },
+    {
+      "id": "fc-trauma-002",
+      "front": "What is the ATLS primary survey (ABCDE)?",
+      "back": "A: Airway with cervical spine protection. B: Breathing and ventilation. C: Circulation with hemorrhage control. D: Disability (neurologic status). E: Exposure and environmental control.",
+      "tags": ["trauma", "atls", "primary-survey"]
+    },
+    {
+      "id": "fc-trauma-003",
+      "front": "What is the initial management of a tension pneumothorax?",
+      "back": "Immediate needle decompression — 14G needle in the 2nd intercostal space, midclavicular line (or 4th/5th ICS, anterior axillary line). Followed by chest tube (28-32 Fr) insertion.",
+      "tags": ["trauma", "pneumothorax", "emergency"]
+    },
+    {
+      "id": "fc-trauma-004",
+      "front": "What is the ratio for massive transfusion protocol (MTP)?",
+      "back": "1:1:1 ratio of pRBC : FFP : platelets. In practice, approximately 10 units pRBC with 10 units FFP and 1 unit apheresis platelets. Activate MTP when expected transfusion ≥ 10 pRBC within 24 hours.",
+      "tags": ["trauma", "mtp", "transfusion"]
+    },
+    {
+      "id": "fc-trauma-005",
+      "front": "What is the FAST exam and what does it look for?",
+      "back": "Focused Assessment with Sonography in Trauma. Four views: subxiphoid (pericardial effusion), right upper quadrant (Morison's pouch/free fluid), left upper quadrant (splenorenal), suprapubic (pelvic free fluid). Positive = free intraperitoneal fluid.",
+      "tags": ["trauma", "ultrasound", "fast"]
+    },
+    {
+      "id": "fc-trauma-006",
+      "front": "What is the management of a Grade III splenic laceration in a hemodynamically stable patient?",
+      "back": "Non-operative management (NOM): ICU monitoring, serial abdominal exams, serial hemoglobin checks, NPO initially, CT angiography to assess for active extravasation. If hemodynamically unstable → splenectomy.",
+      "tags": ["trauma", "spleen", "abdominal"]
+    }
+  ]
+}

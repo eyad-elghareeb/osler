@@ -1,0 +1,28 @@
+{
+  "cards": [
+    {
+      "id": "fc-ortho-001",
+      "front": "What is the Neer classification of proximal humerus fractures?",
+      "back": "Based on number of displaced parts (1-4 parts): 1-part = <1 cm displacement. 2-part = surgical neck or greater tuberosity displaced. 3-part = greater tuberosity + surgical neck. 4-part = both tuberosities + surgical neck displaced. More parts = higher avascular necrosis risk.",
+      "tags": ["orthopedics", "fracture", "humeral"]
+    },
+    {
+      "id": "fc-ortho-002",
+      "front": "What is the Garden classification of femoral neck fractures and its clinical significance?",
+      "back": "Type I: incomplete, valgus impacted (lowest AVN risk). Type II: complete, non-displaced. Type III: complete, partially displaced. Type IV: completely displaced (highest AVN risk). Types I-II = internal fixation; Types III-IV = arthroplasty in elderly.",
+      "tags": ["orthopedics", "hip", "fracture"]
+    },
+    {
+      "id": "fc-ortho-003",
+      "front": "What is the most common nerve injured in a distal humerus fracture?",
+      "back": "Ulnar nerve — most commonly injured due to its proximity to the medial epicondyle. Always check ulnar nerve function (sensation to small finger, finger abduction/adduction) in distal humerus fractures.",
+      "tags": ["orthopedics", "nerve-injury", "humeral"]
+    },
+    {
+      "id": "fc-ortho-004",
+      "front": "What is the Ottawa ankle rule?",
+      "back": "Clinical decision rule to determine need for X-ray: X-ray indicated if bony tenderness at posterior edge or tip of lateral/medial malleolus OR inability to bear weight (4 steps) immediately after injury and in ED. Sensitivity >95%.",
+      "tags": ["orthopedics", "ankle", "clinical-decision"]
+    }
+  ]
+}

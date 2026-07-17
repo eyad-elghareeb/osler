@@ -1,0 +1,51 @@
+{
+  "type": "written",
+  "prompts": [
+    {
+      "id": "w-aki-001",
+      "prompt": "A 68-year-old male with diabetes and hypertension is admitted for elective hip replacement. On postoperative day 2, his creatinine rises from 1.0 to 2.8 mg/dL and urine output drops to 200 mL over 8 hours. Describe the KDIGO staging, initial workup, and management of this patient's acute kidney injury.",
+      "modelAnswer": "KDIGO staging: Creatinine rise from 1.0 to 2.8 mg/dL (2.8x baseline) = Stage 2 AKI. Urine output <0.5 mL/kg/hr for 6-12 hours supports the diagnosis. Initial workup: (1) Urinalysis with microscopy — muddy brown granular casts suggest ATN (most likely post-surgical), (2) Renal ultrasound to exclude obstruction, (3) Urine sodium and fractional excretion of sodium — FENa <1% suggests prerenal, >2% suggests intrinsic renal, (4) Basic metabolic panel, (5) Medication review for nephrotoxins (NSAIDs, contrast, aminoglycosides). Management: discontinue nephrotoxins, optimize volume status (fluid challenge if hypovolemic), maintain MAP >65 mmHg, avoid nephrotoxic agents, adjust renally cleared medications, monitor electrolytes (especially potassium), and consider nephrology consultation if no improvement in 48-72 hours.",
+      "rubric": [
+        "Correctly stages the AKI using KDIGO criteria",
+        "Distinguishes prerenal from intrinsic renal causes using FENa and urinalysis",
+        "Lists key diagnostic studies (UA, US, BMP, FENa)",
+        "Identifies and discontinues nephrotoxic medications",
+        "Describes supportive management (fluid optimization, MAP target)",
+        "Mentions monitoring for complications (hyperkalemia, fluid overload)"
+      ],
+      "explanation": "Postoperative AKI is most commonly ATN from hypoperfusion, nephrotoxin exposure, or both. The KDIGO staging guides management intensity, with Stage 2 warranting close monitoring and nephrology consultation.",
+      "wordLimit": 500,
+      "tags": ["nephrology", "aki", "postoperative"]
+    },
+    {
+      "id": "w-aki-002",
+      "prompt": "Compare the pathophysiology, clinical features, and management of hepatorenal syndrome (HRS) versus acute tubular necrosis (ATN) in a patient with decompensated cirrhosis and worsening renal function.",
+      "rubric": [
+        "Explains HRS as functional renal failure from splanchnic vasodilation and renal vasoconstriction",
+        "Explains ATN as structural kidney injury from ischemia or nephrotoxins",
+        "Distinguishes by urine sodium (HRS <10 mEq/L, ATN >40 mEq/L)",
+        "Describes diagnostic criteria for HRS (cirrhosis + ascites + creatinine >1.5 after volume expansion)",
+        "Discusses HRS-specific treatment (terlipressin + albumin, TIPS, transplant evaluation)",
+        "Discusses ATN management (supportive, dialysis if needed)"
+      ],
+      "explanation": "HRS is a diagnosis of exclusion — it requires excluding structural kidney disease (ATN). The distinction is critical because HRS is potentially reversible with vasoconstrictor therapy and liver transplant, while ATN requires supportive care.",
+      "wordLimit": 500,
+      "tags": ["nephrology", "hepatology", "cirrhosis", "aki"]
+    },
+    {
+      "id": "w-aki-003",
+      "prompt": "A 50-year-old female with SLE presents with rapidly declining renal function, dark urine, and hypertension. Urinalysis shows RBC casts and dysmorphic RBCs. Complement levels are low and anti-dsDNA is elevated. Describe the diagnostic approach and treatment of lupus nephritis.",
+      "rubric": [
+        "Recognizes active urinary sediment (RBC casts, dysmorphic RBCs) as glomerulonephritis",
+        "Interprets low complement and elevated anti-dsDNA as active lupus serology",
+        "Describes indication for renal biopsy (mandatory for lupus nephritis classification)",
+        "Lists ISN/RPS classification (Class I-VI)",
+        "Outlines treatment by class (Class III/IV: mycophenolate or cyclophosphamide + high-dose corticosteroids)",
+        "Discusses maintenance therapy and monitoring for flare"
+      ],
+      "explanation": "Lupus nephritis classification by renal biopsy guides treatment. Classes III and IV are the most aggressive and require immunosuppression. The combination of low complement, high anti-dsDNA, and active urine sediment is classic for lupus nephritis flare.",
+      "wordLimit": 500,
+      "tags": ["nephrology", "rheumatology", "lupus", "glomerulonephritis"]
+    }
+  ]
+}

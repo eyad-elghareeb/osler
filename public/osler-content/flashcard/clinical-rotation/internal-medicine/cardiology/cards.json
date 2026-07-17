@@ -1,0 +1,40 @@
+{
+  "cards": [
+    {
+      "id": "fc-cr-card-001",
+      "front": "What is Killip classification used for?",
+      "back": "Classifying severity of acute heart failure complicating MI. Killip I = no HF signs, Killip II = crackles/JVD/S3, Killip III = pulmonary edema, Killip IV = cardiogenic shock.",
+      "tags": ["cardiology", "heart-failure", "mi"]
+    },
+    {
+      "id": "fc-cr-card-002",
+      "front": "What is the diagnostic criteria for myocarditis on endomyocardial biopsy (Dallas criteria)?",
+      "back": "Inflammatory infiltrate in the myocardium with myocyte damage/necrosis not typical of ischemic injury. Lymphocytic predominance is most common.",
+      "tags": ["cardiology", "myocarditis"]
+    },
+    {
+      "id": "fc-cr-card-003",
+      "front": "What is the JVP waveform in tricuspid regurgitation?",
+      "back": "Cannon 'v' waves — large, prominent v waves replacing the normal x descent, caused by retrograde blood flow into the right atrium during systole.",
+      "tags": ["cardiology", "jvp", "valvular"]
+    },
+    {
+      "id": "fc-cr-card-004",
+      "front": "What is the difference between cardiac tamponade and constrictive pericarditis on exam?",
+      "back": "Tamponade: pulsus paradoxus, elevated JVP with quiet heart, muffled heart sounds (Beck's triad). Constrictive: pericardial knock, Kussmaul sign, no pulsus paradoxus.",
+      "tags": ["cardiology", "pericardial", "differential"]
+    },
+    {
+      "id": "fc-cr-card-005",
+      "front": "What are the two most common causes of death in the first 24 hours after acute MI?",
+      "back": "Ventricular fibrillation (VF) and cardiogenic shock. VF risk is highest in the first few hours; cardiogenic shock typically develops within 24-48 hours.",
+      "tags": ["cardiology", "mi", "mortality"]
+    },
+    {
+      "id": "fc-cr-card-006",
+      "front": "What is the Framingham criteria for diagnosing heart failure?",
+      "back": "Requires 2 major criteria OR 1 major + 2 minor criteria. Major: PND, orthopnea, crackles, S3 gallop, elevated JVP, pulmonary edema on CXR, cardiomegaly on CXR. Minor: bilateral ankle edema, nocturnal cough, dyspnea on exertion, hepatomegaly, pleural effusion.",
+      "tags": ["cardiology", "heart-failure", "diagnosis"]
+    }
+  ]
+}

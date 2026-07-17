@@ -31,6 +31,25 @@
       ]
     },
     {
+      "uid": "video-nephrology",
+      "title": "Nephrology",
+      "type": "video",
+      "path": "nephrology/",
+      "files": [],
+      "items": [
+        {
+          "uid": "video-nephrology-dialysis",
+          "title": "Dialysis",
+          "type": "video",
+          "path": "nephrology/dialysis/",
+          "files": [
+            "videos.json"
+          ],
+          "items": []
+        }
+      ]
+    },
+    {
       "uid": "video-neurology",
       "title": "Neurology",
       "type": "video",
@@ -42,6 +61,25 @@
           "title": "Stroke",
           "type": "video",
           "path": "neurology/stroke/",
+          "files": [
+            "videos.json"
+          ],
+          "items": []
+        }
+      ]
+    },
+    {
+      "uid": "video-pharmacology",
+      "title": "Pharmacology",
+      "type": "video",
+      "path": "pharmacology/",
+      "files": [],
+      "items": [
+        {
+          "uid": "video-pharmacology-antibiotics",
+          "title": "Antibiotics",
+          "type": "video",
+          "path": "pharmacology/antibiotics/",
           "files": [
             "videos.json"
           ],

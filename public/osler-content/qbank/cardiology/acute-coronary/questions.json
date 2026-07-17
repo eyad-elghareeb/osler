@@ -1,0 +1,59 @@
+{
+  "type": "quiz",
+  "questions": [
+    {
+      "id": "q-ac-001",
+      "question": "A 52-year-old male presents with crushing substernal chest pain for 45 minutes. ECG shows ST-segment elevation in leads II, III, and aVF with reciprocal changes in I and aVL. Troponin I is 2.4 ng/mL. What is the most likely culprit artery?",
+      "options": ["Left anterior descending (LAD)", "Right coronary artery (RCA)", "Left circumflex artery (LCx)", "Left main coronary artery", "Diagonal branch"],
+      "correct": 1,
+      "explanation": "ST elevation in II, III, aVF with reciprocal depression in I, aVL localizes to the inferior wall, which is supplied by the right coronary artery in 85% of patients.",
+      "tags": ["cardiology", "stemi", "ecg-localization"],
+      "difficulty": 2
+    },
+    {
+      "id": "q-ac-002",
+      "question": "A 67-year-old diabetic female presents with acute chest pain. Troponin is elevated at 8.2 ng/mL. ECG shows ST depression in V1-V4. Echocardiogram reveals new posterior wall hypokinesis. Which vessel is most likely occluded?",
+      "options": ["RCA", "LAD", "LCx", "Right diagonal", "Obtuse marginal"],
+      "correct": 2,
+      "explanation": "ST depression in V1-V4 with posterior wall hypokinesis suggests posterior MI. The posterior wall is primarily supplied by the left circumflex artery (LCx).",
+      "tags": ["cardiology", "nstemi", "posterior-mi"],
+      "difficulty": 3
+    },
+    {
+      "id": "q-ac-003",
+      "question": "A patient presents with NSTEMI and a GRACE score of 165. What is the recommended timing for invasive coronary angiography?",
+      "options": ["Within 2 hours", "Within 24 hours", "Within 72 hours", "No invasive strategy — medical therapy only", "Within 1 week"],
+      "correct": 0,
+      "explanation": "GRACE score >140 indicates very high risk, warranting an invasive strategy within 2 hours according to ESC guidelines for NSTEMI management.",
+      "tags": ["cardiology", "nstemi", "invasive-strategy"],
+      "difficulty": 3
+    },
+    {
+      "id": "q-ac-004",
+      "question": "A 45-year-old female presents with recurrent chest pain at rest with transient ST-segment elevation that resolves spontaneously. Cardiac biomarkers are normal. What is the most likely diagnosis?",
+      "options": ["NSTEMI", "Unstable angina", "Prinzmetal (variant) angina", "Takotsubo cardiomyopathy", "Aortic dissection"],
+      "correct": 2,
+      "explanation": "Recurrent rest chest pain with transient ST elevation that resolves spontaneously, with normal biomarkers, is classic for Prinzmetal (vasospastic) angina caused by coronary vasospasm.",
+      "tags": ["cardiology", "angina", "vasospastic"],
+      "difficulty": 2
+    },
+    {
+      "id": "q-ac-005",
+      "question": "A 70-year-old male with anterior STEMI receives primary PCI with drug-eluting stent placement. Which dual antiplatelet regimen and duration is most appropriate?",
+      "options": ["Aspirin + clopidogrel for 1 month", "Aspirin + ticagrelor for 12 months", "Aspirin + prasugrel for 1 month", "Aspirin + clopidogrel for 12 months", "Aspirin monotherapy for 12 months"],
+      "correct": 1,
+      "explanation": "After DES for ACS, dual antiplatelet therapy with aspirin + potent P2Y12 inhibitor (ticagrelor or prasugrel) for 12 months is the guideline-recommended duration.",
+      "tags": ["cardiology", "antiplatelet", "post-acs"],
+      "difficulty": 2
+    },
+    {
+      "id": "q-ac-006",
+      "question": "A 55-year-old presents with acute chest pain and elevated troponin. ECG shows new left bundle branch block (LBBB). According to the Sgarbossa criteria, which finding most specifically indicates acute MI in the setting of LBBB?",
+      "options": ["Concordant ST elevation ≥ 1 mm", "Discordant ST elevation ≥ 5 mm", "Concordant ST depression ≥ 1 mm in V1-V3", "ST elevation in leads without LBBB", "T-wave inversion in the lateral leads"],
+      "correct": 0,
+      "explanation": "Concordant ST elevation (ST elevation in the same direction as the QRS) is the most specific Sgarbossa criterion for acute MI in LBBB, with a specificity approaching 99%.",
+      "tags": ["cardiology", "stemi", "sgarbossa", "lbbb"],
+      "difficulty": 3
+    }
+  ]
+}

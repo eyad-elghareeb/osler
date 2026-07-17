@@ -1,0 +1,54 @@
+{
+  "videos": [
+    {
+      "id": "dialysis-principles",
+      "title": "Principles of Hemodialysis",
+      "description": "A comprehensive overview of hemodialysis principles including vascular access creation (AV fistula vs graft vs catheter), dialysis membrane technology, anticoagulation during dialysis, and common complications including dialysis disequilibrium syndrome and access-related issues.",
+      "specialty": "Nephrology",
+      "topic": "Dialysis",
+      "duration": 2100,
+      "source": {
+        "type": "youtube",
+        "id": "NEXAMPLE001"
+      },
+      "instructor": "Ninja Nerd",
+      "tags": ["dialysis", "nephrology", "hemodialysis", "vascular-access"],
+      "chapters": [
+        { "time": 0, "title": "Introduction to dialysis" },
+        { "time": 180, "title": "Indications for dialysis" },
+        { "time": 360, "title": "Vascular access — AV fistula" },
+        { "time": 600, "title": "AV graft vs catheter" },
+        { "time": 840, "title": "Dialysis membrane and circuit" },
+        { "time": 1080, "title": "Anticoagulation during dialysis" },
+        { "time": 1320, "title": "Ultrafiltration and fluid management" },
+        { "time": 1560, "title": "Dialysis disequilibrium syndrome" },
+        { "time": 1800, "title": "Access complications" }
+      ],
+      "lang": "en"
+    },
+    {
+      "id": "peritoneal-dialysis-overview",
+      "title": "Peritoneal Dialysis — Mechanism and Management",
+      "description": "An overview of peritoneal dialysis including catheter placement, dwell times, exchange procedures, and comparing continuous ambulatory PD vs automated PD (cycler). Discusses peritonitis prevention and management.",
+      "specialty": "Nephrology",
+      "topic": "Dialysis",
+      "duration": 1560,
+      "source": {
+        "type": "youtube",
+        "id": "NEXAMPLE002"
+      },
+      "instructor": "Strong Medicine",
+      "tags": ["peritoneal-dialysis", "nephrology", "dialysis"],
+      "chapters": [
+        { "time": 0, "title": "Introduction" },
+        { "time": 120, "title": "Peritoneal membrane physiology" },
+        { "time": 360, "title": "CAPD vs APD" },
+        { "time": 600, "title": "Catheter placement and care" },
+        { "time": 840, "title": "Exchange procedure" },
+        { "time": 1080, "title": "Peritonitis — diagnosis and treatment" },
+        { "time": 1320, "title": "Exit site infections" }
+      ],
+      "lang": "en"
+    }
+  ]
+}

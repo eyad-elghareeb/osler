@@ -49,7 +49,20 @@ import {
   ArrowLeft,
   ArrowUpDown,
 } from "lucide-react";
-import { loadAllContent, ENGINE_META, flattenTree } from "@/lib/osler/content";
+import { loadAllContent, loadContentByUid, ENGINE_META, flattenTree } from "@/lib/osler/content";
+import {
+  contentToQuestions as poolContentToQuestions,
+  countQuestions as poolCountQuestions,
+  buildQuestionPool,
+  filterPoolByTags,
+  filterPoolByProgress,
+  pickQuestions,
+  poolFamilyForEngine,
+  sharedPoolFamily,
+  type PoolQuestion,
+  type OnlyMode,
+  type OrderMode,
+} from "@/lib/osler/qbank-pool";
 import type {
   AnyContent,
   BankContent,
@@ -71,6 +84,7 @@ import {
   type WrittenDraft,
   type WrittenEvaluation,
   type QuizSettings,
+  type QuestionRecord,
 } from "@/lib/osler/storage";
 import { listAllArticles } from "@/lib/osler/articles";
 import type { Article, ArticleMeta } from "@/lib/osler/articles";
@@ -113,6 +127,7 @@ import { haptic } from "@/lib/osler/native";
 import { gradeWithAI, createManualEvaluation } from "@/lib/osler/grading";
 import { useI18n } from "./i18n-provider";
 import { NavigationStack } from "./navigation-stack";
+import { FolderTreeNav } from "./folder-tree-nav";
 import type { StringKey } from "@/lib/osler/i18n";
 
 const LETTERS = ["A", "B", "C", "D", "E", "F", "G", "H"];
@@ -130,9 +145,9 @@ interface QBankStudioProps {
   onOpenPack?: (item: ContentTreeNode) => void;
 }
 
-type QuizMode = "home" | "quiz" | "results";
+type QuizMode = "home" | "quiz" | "results" | "review";
 type TestMode = "tutor" | "timed";
-type HomeTab = "content" | "create" | "previous";
+type HomeTab = "content" | "create" | "previous" | "tracker";
 
 interface SessionData {
   itemId: string;
@@ -157,6 +172,29 @@ interface SessionData {
   ratings: Record<string, "easy" | "hard" | "unknown">;
   // Strikethroughs: questionIdx → number[] (choice indices)
   strikethroughs: Record<number, number[]>;
+  /**
+   * Tag filters that were active when this session was built (mirrored onto
+   * SavedSession for review/retake). Undefined for legacy single-pack sessions.
+   */
+  tagsFilter?: string[];
+  /**
+   * Progress-mode filter that was active when this session was built
+   * ("all" | "wrong" | "flagged"). Mirrored onto SavedSession.
+   */
+  onlyMode?: OnlyMode;
+  /**
+   * When true, answering a question correctly during this session marks
+   * its stored progress record as `dismissed=true` so it disappears from
+   * the Tracker's default wrong/flagged view. Driven by the Tracker's
+   * "Remove once answered correctly" toggle.
+   */
+  dismissAfterCorrect?: boolean;
+  /**
+   * True when this session is a read-only review of a previously-saved
+   * session. In review mode, no further `recordAnswer` calls are made —
+   * the view just shows what was answered/revealed at save time.
+   */
+  isReview?: boolean;
 }
 
 interface SessionQuestionChild {
@@ -181,6 +219,15 @@ interface SessionQuestion {
   redFlags?: string[];
   differential?: string[];
   children?: SessionQuestionChild[];
+  /**
+   * Originating pack uid for this question (set when building a multi-pack
+   * pool so answers can be recorded against the *real* source pack, not the
+   * synthetic session id). Legacy single-pack sessions fall back to
+   * `session.itemId`.
+   */
+  sourceUid?: string;
+  /** Title of the originating pack (for review/retake UI). */
+  sourceTitle?: string;
 }
 
 export function QBankStudio({
@@ -196,6 +243,56 @@ export function QBankStudio({
   const [, force] = React.useReducer((x) => x + 1, 0);
   const pendingQuestionLimitRef = React.useRef(0);
   const { t } = useI18n();
+
+  // Cross-tab plumbing (P0-4): a pack picked from Content tab gets handed to
+  // Create Test as `initialSourceUid`. The custom-session callback is
+  // implemented here so Create Test / Tracker / Previous Tests can all
+  // spin up a session from a built question pool without going through the
+  // `activeItem`/`activeContent` effect.
+  const [pendingCreateTestSourceUid, setPendingCreateTestSourceUid] =
+    React.useState<string | null>(null);
+
+  const handlePickForCreateTest = React.useCallback(
+    (node: ContentTreeNode) => {
+      setPendingCreateTestSourceUid(node.uid);
+      setHomeTab("create");
+    },
+    [],
+  );
+
+  const startCustomSession = React.useCallback(
+    (pool: PoolQuestion[], meta: { title: string; engine: EngineType; mode?: TestMode; dismissAfterCorrect?: boolean; tagsFilter?: string[]; onlyMode?: OnlyMode; isReview?: boolean }) => {
+      if (pool.length === 0) return;
+      const sessionId = `custom-${Date.now()}`;
+      const totalTime = pool.length * 60;
+      setImmersiveMode(true);
+      setSession({
+        itemId: sessionId,
+        itemTitle: meta.title,
+        engine: meta.engine,
+        mode: meta.mode ?? testMode,
+        questions: pool as SessionQuestion[],
+        answers: {},
+        revealed: {},
+        flagged: {},
+        current: 0,
+        startedAt: Date.now(),
+        examTimeRemaining: totalTime,
+        examPaused: false,
+        sessionId,
+        writtenDrafts: {},
+        rubricState: {},
+        ratings: {},
+        strikethroughs: {},
+        tagsFilter: meta.tagsFilter,
+        onlyMode: meta.onlyMode,
+        dismissAfterCorrect: meta.dismissAfterCorrect,
+        isReview: meta.isReview,
+      });
+      setMode(meta.isReview ? "review" : "quiz");
+    },
+    [testMode],
+  );
 
   // Tools state (calculator, lab values, article modal, AI, quiz settings, notes)
   const [calculatorOpen, setCalculatorOpen] = React.useState(false);
@@ -272,12 +369,20 @@ export function QBankStudio({
     setSession((s) => {
       if (!s) return s;
       const completed = { ...s, completedAt: Date.now() };
-      // Save to sessions list
-      saveSession(completed);
+      // P3-1: don't persist review sessions — they're read-only replays.
+      if (!s.isReview) {
+        saveSession(completed);
+      }
       return completed;
     });
+    // P3-1: review sessions skip the results view and exit straight to home
+    // (no score to show — answers were already known at save time).
+    if (session?.isReview) {
+      exitToHome();
+      return;
+    }
     setMode("results");
-  }, []);
+  }, [session?.isReview]);
 
   const restartSession = () => {
     if (activeItem && activeContent) {
@@ -311,26 +416,38 @@ export function QBankStudio({
 
   // Record answers to storage when revealed
   const recordAnswer = (idx: number, q: SessionQuestion) => {
-    if (!session || !activeItem) return;
+    if (!session) return;
+    // P3-1: read-only review mode — no progress writes.
+    if (session.isReview) return;
+    // P2-5: route progress through the question's real sourceUid, not the
+    // synthetic session id. Fall back to activeItem.uid (single-pack path)
+    // and finally session.itemId (legacy compat).
+    const uid = q.sourceUid ?? activeItem?.uid ?? session.itemId;
+    if (!uid) return;
     const selected = session.answers[idx];
     const correct = selected === q.correct;
+    // P5-6: dismiss-after-correct semantics — if the session was started
+    // with dismissAfterCorrect=true and the answer is correct, mark the
+    // record as dismissed (Tracker will hide it from the default view).
+    const shouldDismiss = !!session.dismissAfterCorrect && correct;
     storage.recordAnswer(
-      activeItem.uid,
+      uid,
       q.id,
       session.engine,
       selected,
       correct,
-      !!session.flagged[idx]
+      !!session.flagged[idx],
+      shouldDismiss,
     );
     force();
   };
 
-  if (mode === "quiz" && session) {
+  if ((mode === "quiz" || mode === "review") && session) {
     return (
       <>
         <QuizView
           session={session}
-          activeItem={activeItem!}
+          activeItem={activeItem ?? undefined}
           calculatorOpen={calculatorOpen}
           labValuesOpen={labValuesOpen}
           aiAssistantOpen={aiAssistantOpen}
@@ -366,13 +483,17 @@ export function QBankStudio({
             if (willAutoSubmit && q && isMCQ) {
               // Record progress for the auto-submitted answer.
               const correct = idx === q.correct;
+              // P2-5: route through sourceUid if present (merged/custom sessions).
+              const uid = q.sourceUid ?? activeItem?.uid ?? session.itemId;
+              const shouldDismiss = !!session.dismissAfterCorrect && correct;
               storage.recordAnswer(
-                activeItem!.uid,
+                uid,
                 q.id,
                 session.engine,
                 idx,
                 correct,
-                !!session.flagged[session.current]
+                !!session.flagged[session.current],
+                shouldDismiss,
               );
               force();
             }
@@ -407,13 +528,16 @@ export function QBankStudio({
                 q.rubric && q.rubric.length > 0
                   ? rubricScore / q.rubric.length >= 0.6
                   : true;
+              const uid = q.sourceUid ?? activeItem?.uid ?? session.itemId;
+              const shouldDismiss = !!session.dismissAfterCorrect && correct;
               storage.recordAnswer(
-                activeItem!.uid,
+                uid,
                 q.id,
                 session.engine,
                 undefined,
                 correct,
-                !!session.flagged[session.current]
+                !!session.flagged[session.current],
+                shouldDismiss,
               );
               force();
             }
@@ -457,13 +581,17 @@ export function QBankStudio({
             // Record answer for flashcard
             const q = session.questions.find((q) => q.id === qid);
             if (q) {
+              const correct = rating === "easy";
+              const uid = q.sourceUid ?? activeItem?.uid ?? session.itemId;
+              const shouldDismiss = !!session.dismissAfterCorrect && correct;
               storage.recordAnswer(
-                activeItem!.uid,
+                uid,
                 qid,
                 session.engine,
                 undefined,
-                rating === "easy",
-                !!session.flagged[session.current]
+                correct,
+                !!session.flagged[session.current],
+                shouldDismiss,
               );
             }
             force();
@@ -607,6 +735,10 @@ export function QBankStudio({
       homeTab={homeTab}
       onHomeTabChange={setHomeTab}
       onSetQuestionLimit={(n) => { pendingQuestionLimitRef.current = n; }}
+      pendingCreateTestSourceUid={pendingCreateTestSourceUid}
+      onPickForCreateTest={handlePickForCreateTest}
+      onClearPendingCreateTestSource={() => setPendingCreateTestSourceUid(null)}
+      onStartCustomSession={startCustomSession}
     />
   );
 }
@@ -624,6 +756,10 @@ function HomeView({
   homeTab,
   onHomeTabChange,
   onSetQuestionLimit,
+  pendingCreateTestSourceUid,
+  onPickForCreateTest,
+  onClearPendingCreateTestSource,
+  onStartCustomSession,
 }: {
   testMode: TestMode;
   onTestModeChange: (m: TestMode) => void;
@@ -631,9 +767,29 @@ function HomeView({
   homeTab: HomeTab;
   onHomeTabChange: (t: HomeTab) => void;
   onSetQuestionLimit?: (n: number) => void;
+  /** Uid of the pack the user just clicked in Content tab — pre-checks it in Create Test. */
+  pendingCreateTestSourceUid?: string | null;
+  /** Called when a leaf pack is clicked in Content tab (P1-2). */
+  onPickForCreateTest?: (node: ContentTreeNode) => void;
+  /** Clear the pending pre-selection after Create Test has consumed it. */
+  onClearPendingCreateTestSource?: () => void;
+  /** Start a custom session from a built question pool (P2-4 / P3-2 / P5-5). */
+  onStartCustomSession?: (
+    pool: PoolQuestion[],
+    meta: {
+      title: string;
+      engine: EngineType;
+      mode?: TestMode;
+      dismissAfterCorrect?: boolean;
+      tagsFilter?: string[];
+      onlyMode?: OnlyMode;
+      isReview?: boolean;
+    }
+  ) => void;
 }) {
   const [data, setData] = React.useState<{
     items: PackEntry[];
+    trees: Record<string, ContentTreeNode[]>;
   } | null>(null);
   const [, force] = React.useReducer((x) => x + 1, 0);
   const { t } = useI18n();
@@ -649,6 +805,7 @@ function HomeView({
               entry.node.type === "bank" ||
               entry.node.type === "written"
           ),
+          trees: result.trees,
         });
       })
       .catch(console.error);
@@ -682,6 +839,7 @@ function HomeView({
               { id: "content" as const, label: t("qbank.home.tabContent"), icon: Grid3x3 },
               { id: "create" as const, label: t("qbank.home.tabCreate"), icon: Plus },
               { id: "previous" as const, label: t("qbank.home.tabPrevious"), icon: History },
+              { id: "tracker" as const, label: t("qbank.home.tabTracker"), icon: Activity },
             ].map((t) => {
               const Icon = t.icon;
               const active = homeTab === t.id;
@@ -712,6 +870,7 @@ function HomeView({
             <ContentTab
               data={data}
               onOpenPack={onOpenPack}
+              onPickForCreateTest={onPickForCreateTest}
             />
           )}
           {homeTab === "create" && (
@@ -722,6 +881,9 @@ function HomeView({
                 onTestModeChange={onTestModeChange}
                 onOpenPack={onOpenPack}
                 onSetQuestionLimit={onSetQuestionLimit}
+                initialSourceUid={pendingCreateTestSourceUid}
+                onConsumeInitialSource={onClearPendingCreateTestSource}
+                onStartCustomSession={onStartCustomSession}
               />
             </div>
           )}
@@ -730,6 +892,15 @@ function HomeView({
               <PreviousTestsTab
                 sessions={savedSessions}
                 onDelete={(id) => sessions.delete(id)}
+                onStartCustomSession={onStartCustomSession}
+              />
+            </div>
+          )}
+          {homeTab === "tracker" && (
+            <div className="h-full overflow-y-auto medos-scroll medos-tabbar-pad">
+              <TrackerTab
+                data={data}
+                onStartCustomSession={onStartCustomSession}
               />
             </div>
           )}
@@ -897,46 +1068,133 @@ export function ContentLangFilter() {
 function ContentTab({
   data,
   onOpenPack,
+  onPickForCreateTest,
 }: {
-  data: { items: PackEntry[] } | null;
+  data: { items: PackEntry[]; trees: Record<string, ContentTreeNode[]> } | null;
   onOpenPack?: (item: ContentTreeNode) => void;
+  /** P1-2: leaf pack click hands off to Create Test instead of starting a quiz. */
+  onPickForCreateTest?: (node: ContentTreeNode) => void;
 }) {
   const { t, rtl, contentFilter } = useI18n();
-  const [selectedEngine, setSelectedEngine] = React.useState<EngineType | null>(null);
+  const [selectedFolderIdx, setSelectedFolderIdx] = React.useState<number | null>(null);
+  const [search, setSearch] = React.useState("");
 
-  // Group items by engine type (run unconditionally before any early return)
-  const grouped = React.useMemo(() => {
-    if (!data) return {};
-    const map: Record<string, typeof data.items> = {};
-    for (const entry of data.items) {
-      // Apply content-language filter from settings
-      const lang = entry.node.lang ?? entry.content?.meta.lang ?? "en";
-      if (contentFilter !== "all" && lang !== contentFilter) continue;
-      if (!map[entry.node.type]) map[entry.node.type] = [];
-      map[entry.node.type].push(entry);
-    }
-    return map;
-  }, [data, contentFilter]);
-
-  // Per-engine aggregates for the stat bar / folder cards
-  const engineStats = React.useMemo(() => {
-    const map: Record<
-      string,
-      { packs: number; questions: number; attempted: number; correct: number }
-    > = {};
+  // Build a uid → content map for O(1) lookup when computing per-folder stats.
+  const contentByUid = React.useMemo(() => {
+    const map = new Map<string, AnyContent>();
     if (!data) return map;
     for (const { node, content } of data.items) {
-      if (!content) continue;
-      const t = node.type;
-      if (!map[t]) map[t] = { packs: 0, questions: 0, attempted: 0, correct: 0 };
-      map[t].packs += 1;
-      map[t].questions += countQuestions(content);
-      const p = storage.packProgress(node.uid);
-      map[t].attempted += p.attempted;
-      map[t].correct += p.correct;
+      if (content) map.set(node.uid, content);
     }
     return map;
   }, [data]);
+
+  // The qbank tree — all packs share one folder, types are in the JSON.
+  // All qbank engine types (quiz/bank/written) share the same tree.
+  const qbankTree = React.useMemo(() => {
+    if (!data) return [] as ContentTreeNode[];
+    // Try quiz first, then bank, then written — they all share the same tree.
+    return data.trees.quiz ?? data.trees.bank ?? data.trees.written ?? [];
+  }, [data]);
+
+  // Apply content-language filter to root nodes
+  const filteredRootTree = React.useMemo(() => {
+    if (contentFilter === "all") return qbankTree;
+    return qbankTree.filter((node) => {
+      const lang = node.lang ?? contentByUid.get(node.uid)?.meta.lang ?? "en";
+      return lang === contentFilter;
+    });
+  }, [qbankTree, contentFilter, contentByUid]);
+
+  /**
+   * Recursively collect all leaf uids under a tree node.
+   */
+  const collectLeafUids = React.useCallback((node: ContentTreeNode): string[] => {
+    if (node.items.length === 0) return [node.uid];
+    return node.items.flatMap(collectLeafUids);
+  }, []);
+
+  /**
+   * Per-folder stat rollup — aggregates all leaf packs under a node.
+   */
+  const folderStats = React.useCallback(
+    (node: ContentTreeNode): { packs: number; questions: number; attempted: number; correct: number } => {
+      const uids = collectLeafUids(node);
+      let packs = 0;
+      let questions = 0;
+      let attempted = 0;
+      let correct = 0;
+      for (const uid of uids) {
+        const content = contentByUid.get(uid);
+        if (!content) continue;
+        packs += 1;
+        questions += countQuestions(content);
+        const p = storage.packProgress(uid);
+        attempted += p.attempted;
+        correct += p.correct;
+      }
+      return { packs, questions, attempted, correct };
+    },
+    [contentByUid, collectLeafUids],
+  );
+
+  /**
+   * Recursively filter a tree by a title-substring match.
+   */
+  const filterTree = React.useCallback(
+    (nodes: ContentTreeNode[], q: string): ContentTreeNode[] => {
+      if (!q) return nodes;
+      const needle = q.toLowerCase();
+      function walk(list: ContentTreeNode[]): ContentTreeNode[] {
+        const out: ContentTreeNode[] = [];
+        for (const node of list) {
+          const titleMatch = node.title.toLowerCase().includes(needle);
+          if (node.items.length === 0) {
+            if (titleMatch) out.push(node);
+          } else {
+            const children = walk(node.items);
+            if (titleMatch || children.length > 0) {
+              out.push({ ...node, items: children });
+            }
+          }
+        }
+        return out;
+      }
+      return walk(nodes);
+    },
+    [],
+  );
+
+  // Aggregate stats across all content
+  const totalStats = React.useMemo(() => {
+    let packs = 0;
+    let questions = 0;
+    let attempted = 0;
+    let correct = 0;
+    for (const { node, content } of data?.items ?? []) {
+      if (!content) continue;
+      packs += 1;
+      questions += countQuestions(content);
+      const p = storage.packProgress(node.uid);
+      attempted += p.attempted;
+      correct += p.correct;
+    }
+    return { packs, questions, attempted, correct };
+  }, [data]);
+
+  const handleNodeClick = React.useCallback(
+    (node: ContentTreeNode) => {
+      if (node.items.length > 0) {
+        const idx = filteredRootTree.findIndex((n) => n.uid === node.uid);
+        if (idx >= 0) setSelectedFolderIdx(idx);
+      } else if (onPickForCreateTest) {
+        onPickForCreateTest(node);
+      } else {
+        onOpenPack?.(node);
+      }
+    },
+    [filteredRootTree, onPickForCreateTest, onOpenPack],
+  );
 
   if (!data) {
     return (
@@ -960,219 +1218,341 @@ function ContentTab({
     );
   }
 
-  // ── ENGINES VIEW (folder grid, mirrors the flashcard decks view) ───────
-  // This is the "home" layer of the NavigationStack. The PACKS VIEW below
-  // becomes the subpage that slides in when the user picks an engine.
-  // Swiping the subpage back (iOS-style) returns to this engines grid.
-  const engineEntries = Object.entries(grouped) as Array<
-    [EngineType, typeof data.items]
-  >;
+  const selectedFolder = selectedFolderIdx !== null ? filteredRootTree[selectedFolderIdx] : null;
+  const accuracy = totalStats.attempted > 0
+    ? Math.round((totalStats.correct / totalStats.attempted) * 100)
+    : 0;
 
-  const enginesView = (
-    <div className="h-full overflow-y-auto medos-scroll">
-      <div className="max-w-5xl mx-auto px-0 sm:px-0 py-2">
-        {/* Stat bar */}
-        <div className="grid grid-cols-3 gap-3 mb-6">
-          <div className="bg-card border border-border rounded-xl p-3.5">
-            <div className="flex items-center gap-2 text-xs text-muted-foreground mb-1">
-              <Grid3x3 className="size-3.5" />
-              {t("dash.packsStarted")}
-            </div>
-            <div className="text-xl font-bold">{data.items.length}</div>
+  // ── DECKS VIEW (root-level pack/folder grid) ──────────────────────────
+  const decksView = (
+    <div className="max-w-5xl mx-auto px-4 md:px-6 lg:px-8 py-6 md:py-8">
+      {/* Header */}
+      <div className="osler-page-header">
+        <div className="flex items-center gap-2 text-xs text-muted-foreground mb-1">
+          <ClipboardCheck className="size-3.5" />
+          <span>{t("qbank.home.title")}</span>
+        </div>
+        <h1 className="osler-page-header__title">
+          {t("qbank.home.title")}
+        </h1>
+        <p className="osler-page-header__subtitle">
+          {t("qbank.home.subtitle")}
+        </p>
+      </div>
+
+      {/* Stat bar */}
+      <div className="grid grid-cols-3 gap-3 mb-6">
+        <div className="osler-stat-tile--compact">
+          <div className="flex items-center gap-2 text-xs text-muted-foreground mb-1">
+            <Grid3x3 className="size-3.5" />
+            {t("dash.packsStarted")}
           </div>
-          <div className="bg-card border border-border rounded-xl p-3.5">
-            <div className="flex items-center gap-2 text-xs text-muted-foreground mb-1">
-              <ListChecks className="size-3.5" />
-              {t("dash.attemptedLabel")}
-            </div>
-            <div className="text-xl font-bold">
-              {Object.values(engineStats).reduce((s, e) => s + e.questions, 0)}
-            </div>
+          <div className="osler-stat-tile__value">{totalStats.packs}</div>
+        </div>
+        <div className="osler-stat-tile--compact">
+          <div className="flex items-center gap-2 text-xs text-muted-foreground mb-1">
+            <ListChecks className="size-3.5" />
+            {t("dash.attemptedLabel")}
           </div>
-          <div className="bg-card border border-border rounded-xl p-3.5">
-            <div className="flex items-center gap-2 text-xs text-muted-foreground mb-1">
-              <Activity className="size-3.5" />
-              {t("dash.accuracy")}
-            </div>
-            <div className="text-xl font-bold">
-              {(() => {
-                const totalAttempted = Object.values(engineStats).reduce(
-                  (s, e) => s + e.attempted,
-                  0
-                );
-                const totalCorrect = Object.values(engineStats).reduce(
-                  (s, e) => s + e.correct,
-                  0
-                );
-                return totalAttempted > 0
-                  ? `${Math.round((totalCorrect / totalAttempted) * 100)}%`
-                  : "—";
-              })()}
-            </div>
+          <div className="osler-stat-tile__value">{totalStats.questions}</div>
+        </div>
+        <div className="osler-stat-tile--compact">
+          <div className="flex items-center gap-2 text-xs text-muted-foreground mb-1">
+            <Activity className="size-3.5" />
+            {t("dash.accuracy")}
+          </div>
+          <div className="osler-stat-tile__value">
+            {totalStats.attempted > 0 ? `${accuracy}%` : "—"}
           </div>
         </div>
+      </div>
 
-        {/* Content-language filter pills — drives the `contentFilter` state
-            from the i18n provider. Reflects the user's choice from Settings. */}
-        <ContentLangFilter />
+      <ContentLangFilter />
 
-        {/* Engine folders */}
+      {/* Pack / folder grid */}
+      {filteredRootTree.length === 0 ? (
+        <div className="osler-empty">
+          <div className="osler-empty__icon">
+            <Search className="size-6" />
+          </div>
+          <h3 className="osler-empty__title">{t("qbank.home.empty")}</h3>
+          <p className="osler-empty__body">{t("qbank.home.search")}</p>
+        </div>
+      ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {engineEntries.map(([type, items], idx) => {
-            const meta = ENGINE_META[type];
-            const Icon = ENGINE_ICONS[type] ?? ListChecks;
-            const stat = engineStats[type] ?? {
-              packs: 0,
-              questions: 0,
-              attempted: 0,
-              correct: 0,
-            };
-            const accuracy =
-              stat.attempted > 0
-                ? Math.round((stat.correct / stat.attempted) * 100)
-                : 0;
-            return (
-              <button
-                key={type}
-                onClick={() => setSelectedEngine(type)}
-                className="medos-fade-in text-start bg-card border border-border rounded-xl p-5 hover:border-primary/40 hover:shadow-md hover:bg-primary/[0.02] transition-colors group flex flex-col gap-3"
-                style={{ animationDelay: `${idx * 0.04}s` }}
-              >
-                <div className="flex items-center gap-3">
-                  <div
-                    className="size-11 rounded-xl flex items-center justify-center shrink-0"
-                    style={{ backgroundColor: `${meta.color}/15`, color: meta.color }}
-                  >
-                    <Icon className="size-5" />
+          {filteredRootTree.map((node, idx) => {
+            const isBranch = node.items.length > 0;
+            const nodeType = node.type as EngineType;
+            const meta = ENGINE_META[nodeType];
+            const Icon = ENGINE_ICONS[nodeType] ?? ListChecks;
+
+            if (isBranch) {
+              const fs = folderStats(node);
+              const acc = fs.attempted > 0 ? Math.round((fs.correct / fs.attempted) * 100) : 0;
+              return (
+                <div
+                  key={node.uid}
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => setSelectedFolderIdx(idx)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      setSelectedFolderIdx(idx);
+                    }
+                  }}
+                  className="medos-fade-in text-start bg-card border border-border rounded-xl p-5 hover:border-primary/40 hover:shadow-md hover:bg-primary/[0.02] transition-colors group cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+                  style={{ animationDelay: `${idx * 0.04}s` }}
+                >
+                  <div className="flex items-center gap-3 mb-3">
+                    <div
+                      className="size-11 rounded-xl flex items-center justify-center shrink-0"
+                      style={{ backgroundColor: `${meta.color}/15`, color: meta.color }}
+                    >
+                      <Folder className="size-5" />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <h3 className="font-semibold truncate">{node.title}</h3>
+                      <p className="text-xs text-muted-foreground">
+                        {t("qbank.home.packs", { n: fs.packs })}
+                      </p>
+                    </div>
+                    <ChevronRight className="size-4 text-muted-foreground/40 group-hover:text-muted-foreground transition-colors shrink-0" />
                   </div>
-                  <div className="min-w-0 flex-1">
-                    <h3 className="font-semibold truncate text-foreground">{t(`engine.${type}` as any)}</h3>
-                    <p className="text-xs text-muted-foreground">
-                      {items.length} {t("dash.packsStarted").toLowerCase()}
-                    </p>
-                  </div>
-                  <ChevronRight className="size-4 text-muted-foreground/40 group-hover:text-muted-foreground transition-colors shrink-0" />
+                  <p className="text-xs text-muted-foreground/70 line-clamp-2 mb-3">
+                    {t("qbank.home.questions", { n: fs.questions })}
+                  </p>
+                  {fs.attempted > 0 ? (
+                    <>
+                      <div className="flex items-center gap-2 text-xs">
+                        <span className="text-success font-medium tabular-nums">{acc}%</span>
+                        <span className="text-muted-foreground">{t("dash.accuracy")}</span>
+                      </div>
+                      <div className="mt-2 h-1.5 rounded-full bg-muted/40 overflow-hidden">
+                        <div
+                          className="h-full rounded-full bg-success transition-all duration-300"
+                          style={{ width: `${acc}%` }}
+                        />
+                      </div>
+                    </>
+                  ) : (
+                    <span className="text-xs text-muted-foreground/50">{t("qbank.home.start")}</span>
+                  )}
                 </div>
-                <p className="text-xs text-muted-foreground/70 line-clamp-2">
-                  {t("qbank.home.questions", { n: stat.questions })}
-                </p>
-                {stat.attempted > 0 ? (
-                  <>
-                    <div className="flex items-center gap-2 text-[11px]">
-                      <span className="text-success font-medium tabular-nums">
-                        {accuracy}%
-                      </span>
-                      <span className="text-muted-foreground">{t("dash.accuracy")}</span>
-                    </div>
-                    <div className="h-1.5 rounded-full bg-muted/40 overflow-hidden">
-                      <div
-                        className="h-full rounded-full bg-success transition-all duration-300"
-                        style={{ width: `${accuracy}%` }}
-                      />
-                    </div>
-                  </>
-                ) : (
-                  <span className="text-[11px] text-muted-foreground/50">{t("qbank.home.start")}</span>
-                )}
-              </button>
-            );
+              );
+            }
+
+            // Leaf — render as a pack card (same pattern as flashcard leaf)
+            return <PackCard key={node.uid} node={node} content={contentByUid.get(node.uid)!} index={idx} onOpenPack={handleNodeClick} />;
           })}
         </div>
-
-        {engineEntries.length === 0 && (
-          <div className="text-center py-16">
-            <div className="size-14 rounded-full bg-muted/40 flex items-center justify-center mx-auto mb-4">
-              <Search className="size-6 text-muted-foreground" />
-            </div>
-            <h3 className="text-base font-semibold mb-1">{t("qbank.home.empty")}</h3>
-            <p className="text-sm text-muted-foreground">{t("qbank.home.search")}</p>
-          </div>
-        )}
-      </div>
+      )}
     </div>
   );
 
-  // ── PACKS VIEW (engine selected) — subpage of the NavigationStack ──────
-  // Slides in from the inline-end side when the user picks an engine.
-  // Drag it back (iOS-style) to return to the engines grid.
-  let packsView: React.ReactNode = null;
-  if (selectedEngine) {
-    const meta = ENGINE_META[selectedEngine];
-    const Icon = ENGINE_ICONS[selectedEngine] ?? ListChecks;
-    const items = (grouped[selectedEngine] ?? []).filter((x) => x.content);
-    const stat = engineStats[selectedEngine] ?? {
-      packs: 0,
-      questions: 0,
-      attempted: 0,
-      correct: 0,
-    };
-    const accuracy =
-      stat.attempted > 0 ? Math.round((stat.correct / stat.attempted) * 100) : 0;
+  // ── SUBFOLDER VIEW (folder selected) — subpage of the NavigationStack ──
+  let subfolderView: React.ReactNode = null;
+  if (selectedFolder) {
+    const nodeType = selectedFolder.type as EngineType;
+    const meta = ENGINE_META[nodeType];
+    const fs = folderStats(selectedFolder);
+    const acc = fs.attempted > 0 ? Math.round((fs.correct / fs.attempted) * 100) : 0;
 
-    packsView = (
-      <div className="max-w-5xl mx-auto px-0 sm:px-0 py-2">
-        {/* Header */}
-        <div className="mb-5">
+    const childTree = filterTree(selectedFolder.items, search.trim());
+
+    subfolderView = (
+      <div className="max-w-5xl mx-auto px-4 md:px-6 lg:px-8 py-6 md:py-8">
+        {/* Header with back button */}
+        <div className="mb-6">
           <button
-            onClick={() => setSelectedEngine(null)}
+            onClick={() => { setSelectedFolderIdx(null); setSearch(""); }}
             className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors mb-3"
           >
             <ArrowLeft className={cn("size-3.5", rtl && "rtl-flip-x")} />
-            {t("common.all")}
+            {t("qbank.home.allPacks")}
           </button>
           <div className="flex items-center gap-2 text-xs text-muted-foreground mb-1">
-            <Icon className="size-3.5" style={{ color: meta.color }} />
-            <span style={{ color: meta.color }}>{t(`engine.${selectedEngine}` as any)}</span>
+            <Folder className="size-3.5" style={{ color: meta.color }} />
+            <span style={{ color: meta.color }}>{t(`engine.${nodeType}` as any)}</span>
           </div>
           <h1 className="text-2xl md:text-3xl font-bold tracking-tight mb-1">
-            {t(`engine.${selectedEngine}` as any)}
+            {selectedFolder.title}
           </h1>
           <p className="text-sm text-muted-foreground">
-            {stat.packs} · {t("qbank.home.questions", { n: stat.questions })}
+            {fs.packs} {t("dash.packsStarted").toLowerCase()} · {t("qbank.home.questions", { n: fs.questions })}
+            {fs.attempted > 0 && (
+              <>
+                {" · "}
+                <span className="text-success font-medium tabular-nums">{acc}%</span>{" "}
+                {t("dash.accuracy")}
+              </>
+            )}
           </p>
         </div>
 
         <ContentLangFilter />
 
-        {items.length === 0 ? (
-          <div className="text-center py-16">
-            <div className="size-14 rounded-full bg-muted/40 flex items-center justify-center mx-auto mb-4">
-              <Search className="size-6 text-muted-foreground" />
+        {/* Search */}
+        <div className="relative mb-4">
+          <Search className={cn("size-4 text-muted-foreground absolute top-1/2 -translate-y-1/2", rtl ? "right-3" : "left-3")} />
+          <input
+            type="text"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder={t("qbank.home.search")}
+            className={cn(
+              "w-full h-10 rounded-xl border border-border bg-card text-sm px-9 focus:outline-none focus:ring-2 focus:ring-primary/30",
+              rtl ? "pr-9 pl-3 text-right" : "pl-9 pr-3",
+            )}
+          />
+          {search && (
+            <button
+              onClick={() => setSearch("")}
+              className={cn(
+                "absolute top-1/2 -translate-y-1/2 size-6 rounded-full hover:bg-muted flex items-center justify-center text-muted-foreground",
+                rtl ? "left-2" : "right-2",
+              )}
+              aria-label="Clear search"
+            >
+              <X className="size-3.5" />
+            </button>
+          )}
+        </div>
+
+        {/* Child items grid */}
+        {childTree.length === 0 ? (
+          <div className="osler-empty">
+            <div className="osler-empty__icon">
+              <Search className="size-6" />
             </div>
-            <h3 className="text-base font-semibold mb-1">{t("qbank.home.empty")}</h3>
-            <p className="text-sm text-muted-foreground">{t("qbank.home.search")}</p>
+            <h3 className="osler-empty__title">{t("qbank.home.empty")}</h3>
+            <p className="osler-empty__body">{t("qbank.home.search")}</p>
           </div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {items.map(({ node, content }, idx) => (
-              <PackCard
-                key={node.uid}
-                node={node}
-                content={content as AnyContent}
-                index={idx}
-                onOpenPack={onOpenPack}
-              />
-            ))}
+            {childTree.map((child, idx) => {
+              const isBranch = child.items.length > 0;
+              const childType = child.type as EngineType;
+              const childMeta = ENGINE_META[childType];
+              const ChildIcon = ENGINE_ICONS[childType] ?? ListChecks;
+
+              if (isBranch) {
+                const cfs = folderStats(child);
+                const cacc = cfs.attempted > 0 ? Math.round((cfs.correct / cfs.attempted) * 100) : 0;
+                return (
+                  <div
+                    key={child.uid}
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => {
+                      // For nested branches: start a merged session with all leaf packs
+                      if (onPickForCreateTest) {
+                        const leaves = collectLeafUids(child);
+                        for (const uid of leaves) {
+                          const leafNode = findNodeByUid(qbankTree, uid);
+                          if (leafNode) onPickForCreateTest(leafNode);
+                        }
+                      } else {
+                        // Open first leaf
+                        const leaves = collectLeafUids(child);
+                        const firstLeaf = findNodeByUid(qbankTree, leaves[0]);
+                        if (firstLeaf) onOpenPack?.(firstLeaf);
+                      }
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") e.preventDefault();
+                    }}
+                    className="medos-fade-in text-start bg-card border border-border rounded-xl p-5 hover:border-primary/40 hover:shadow-md hover:bg-primary/[0.02] transition-colors group cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+                    style={{ animationDelay: `${idx * 0.04}s` }}
+                  >
+                    <div className="flex items-center gap-3 mb-3">
+                      <div
+                        className="size-11 rounded-xl flex items-center justify-center shrink-0"
+                        style={{ backgroundColor: `${childMeta.color}/15`, color: childMeta.color }}
+                      >
+                        <Folder className="size-5" />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <h3 className="font-semibold truncate">{child.title}</h3>
+                        <p className="text-xs text-muted-foreground">
+                          {t("qbank.home.packs", { n: cfs.packs })}
+                        </p>
+                      </div>
+                      <ChevronRight className="size-4 text-muted-foreground/40 group-hover:text-muted-foreground transition-colors shrink-0" />
+                    </div>
+                    <p className="text-xs text-muted-foreground/70 line-clamp-2 mb-3">
+                      {t("qbank.home.questions", { n: cfs.questions })}
+                    </p>
+                    {cfs.attempted > 0 ? (
+                      <>
+                        <div className="flex items-center gap-2 text-xs">
+                          <span className="text-success font-medium tabular-nums">{cacc}%</span>
+                          <span className="text-muted-foreground">{t("dash.accuracy")}</span>
+                        </div>
+                        <div className="mt-2 h-1.5 rounded-full bg-muted/40 overflow-hidden">
+                          <div
+                            className="h-full rounded-full bg-success transition-all duration-300"
+                            style={{ width: `${cacc}%` }}
+                          />
+                        </div>
+                      </>
+                    ) : (
+                      <span className="text-xs text-muted-foreground/50">{t("qbank.home.start")}</span>
+                    )}
+                  </div>
+                );
+              }
+
+              // Leaf child — pack card
+              const childContent = contentByUid.get(child.uid);
+              if (!childContent) return null;
+              return <PackCard key={child.uid} node={child} content={childContent} index={idx} onOpenPack={handleNodeClick} />;
+            })}
           </div>
         )}
       </div>
     );
   }
 
-  // NavigationStack: home (engines grid) is always rendered underneath.
-  // When `selectedEngine` is set, the packs view slides in on top and can
-  // be dragged back to dismiss — same iOS-style gesture as Settings.
+  // NavigationStack: home (decks grid) is always rendered underneath.
+  // When a folder is selected, the subfolder view slides in on top.
   return (
     <NavigationStack
       className="h-full"
       homeClassName="medos-scroll medos-tabbar-pad"
       subpageClassName="medos-scroll medos-tabbar-pad"
       rtl={rtl}
-      home={enginesView}
-      subpage={packsView}
-      onBack={() => setSelectedEngine(null)}
+      home={decksView}
+      subpage={subfolderView}
+      onBack={() => { setSelectedFolderIdx(null); setSearch(""); }}
     />
   );
+}
+
+/** Recursively search a tree for a node by uid. */
+function findNodeByUid(nodes: ContentTreeNode[], uid: string): ContentTreeNode | null {
+  for (const node of nodes) {
+    if (node.uid === uid) return node;
+    if (node.items.length > 0) {
+      const found = findNodeByUid(node.items, uid);
+      if (found) return found;
+    }
+  }
+  return null;
+}
+
+/* Helper: collect all uids (leaf + branch) under a tree — used to
+ * auto-expand every folder when a search is active. */
+function collectAllUids(nodes: ContentTreeNode[]): string[] {
+  const out: string[] = [];
+  function walk(list: ContentTreeNode[]) {
+    for (const n of list) {
+      out.push(n.uid);
+      if (n.items.length > 0) walk(n.items);
+    }
+  }
+  walk(nodes);
+  return out;
 }
 
 /* ─────────────────────────────────────────────────────────────────────────
@@ -1184,177 +1564,604 @@ function CreateTestTab({
   onTestModeChange,
   onOpenPack,
   onSetQuestionLimit,
+  initialSourceUid,
+  onConsumeInitialSource,
+  onStartCustomSession,
 }: {
-  data: { items: PackEntry[] } | null;
+  data: { items: PackEntry[]; trees: Record<string, ContentTreeNode[]> } | null;
   testMode: TestMode;
   onTestModeChange: (m: TestMode) => void;
   onOpenPack?: (item: ContentTreeNode) => void;
   onSetQuestionLimit?: (n: number) => void;
-}) {
-  const { t } = useI18n();
-  const [batchSize, setBatchSize] = React.useState(20);
-  const [customBatchInput, setCustomBatchInput] = React.useState("");
-  const [selectedEngineTypes, setSelectedEngineTypes] = React.useState<string[]>([]);
-  const [selectedTags, setSelectedTags] = React.useState<string[]>([]);
-  const [sort, setSort] = React.useState<"default" | "random">("default");
-
-  // Compute available tags from all content packs
-  const allTags = React.useMemo(() => {
-    if (!data) return [];
-    const tagSet = new Set<string>();
-    for (const { content } of data.items) {
-      content?.meta.tags?.forEach((t) => tagSet.add(t));
+  /** P2-2: uid of a pack picked in Content tab — pre-check it in the source picker. */
+  initialSourceUid?: string | null;
+  /** Called once the pre-selection has been consumed (so a remount doesn't re-apply it). */
+  onConsumeInitialSource?: () => void;
+  /** P2-4: start a custom multi-pack session from a built question pool. */
+  onStartCustomSession?: (
+    pool: PoolQuestion[],
+    meta: {
+      title: string;
+      engine: EngineType;
+      mode?: TestMode;
+      tagsFilter?: string[];
+      onlyMode?: OnlyMode;
     }
-    return Array.from(tagSet).sort();
+  ) => void;
+}) {
+  const { t, rtl } = useI18n();
+  // Source picker state — list of selected pack uids (any folder, any engine
+  // family — but quiz+bank only OR written only, never mixed).
+  const [selectedSourceUids, setSelectedSourceUids] = React.useState<string[]>([]);
+  // Tag filter operates on question-level tags (P2-3).
+  const [selectedTags, setSelectedTags] = React.useState<string[]>([]);
+  // Progress-mode filter (P4-2): "all" | "wrong" | "flagged".
+  const [onlyMode, setOnlyMode] = React.useState<OnlyMode>("all");
+  // Order: sequential | random.
+  const [order, setOrder] = React.useState<OrderMode>("sequential");
+  // Stepper value (P4-1).
+  const [countInput, setCountInput] = React.useState("20");
+  // Tree search (mirrors the Content tab pattern).
+  const [search, setSearch] = React.useState("");
+  // Folder navigation for source picker (flashcard-style deck browser).
+  const [selectedFolderIdx, setSelectedFolderIdx] = React.useState<number | null>(null);
+  // Ref for scrolling a pre-selected source into view.
+  const preselectScrollRef = React.useRef<HTMLElement | null>(null);
+
+  // uid → {node, content} map for O(1) lookup.
+  const entryByUid = React.useMemo(() => {
+    const map = new Map<string, PackEntry>();
+    if (!data) return map;
+    for (const entry of data.items) map.set(entry.node.uid, entry);
+    return map;
   }, [data]);
 
-  // Filter packs based on selections
-  const filteredPacks = React.useMemo(() => {
-    if (!data) return [];
-    let packs = [...data.items];
-    if (selectedEngineTypes.length > 0) {
-      packs = packs.filter((p) => selectedEngineTypes.includes(p.node.type));
-    }
-    if (selectedTags.length > 0) {
-      packs = packs.filter((p) =>
-        p.content?.meta.tags?.some((t) => selectedTags.includes(t))
-      );
-    }
-    if (sort === "random") {
-      packs = [...packs].sort(() => Math.random() - 0.5);
-    }
-    return packs;
-  }, [data, selectedEngineTypes, selectedTags, sort]);
+  // The qbank tree — all packs share one folder, types are in the JSON.
+  // All qbank engine types (quiz/bank/written) share the same tree, so
+  // we only read one key to avoid duplicating content.
+  const qbankTree = React.useMemo(() => {
+    if (!data) return [] as ContentTreeNode[];
+    return data.trees.quiz ?? data.trees.bank ?? data.trees.written ?? [];
+  }, [data]);
 
-  const totalAvailable = filteredPacks.reduce(
-    (sum, p) => sum + (p.content ? countQuestions(p.content) : 0),
-    0
+  /**
+   * Recursively filter the tree by a search substring AND by
+   * enabled engine family (so we don't show flashcard/osce leaves QBank
+   * doesn't own).
+   */
+  const filteredTree = React.useMemo(() => {
+    if (!qbankTree.length) return [] as ContentTreeNode[];
+    const qbankEngineTypes = new Set(["quiz", "bank", "written"]);
+    const needle = search.trim().toLowerCase();
+
+    function walk(list: ContentTreeNode[]): ContentTreeNode[] {
+      const out: ContentTreeNode[] = [];
+      for (const node of list) {
+        if (!qbankEngineTypes.has(node.type)) continue;
+        const titleMatch = !needle || node.title.toLowerCase().includes(needle);
+        if (node.items.length === 0) {
+          if (titleMatch) out.push(node);
+        } else {
+          const children = walk(node.items);
+          if (titleMatch || children.length > 0) {
+            out.push({ ...node, items: children });
+          }
+        }
+      }
+      return out;
+    }
+    return walk(qbankTree);
+  }, [qbankTree, search]);
+
+  // P2-2: when `initialSourceUid` changes, pre-check that source and scroll
+  // it into view. Consume the prop so a remount doesn't re-trigger.
+  React.useEffect(() => {
+    if (!initialSourceUid) return;
+    setSelectedSourceUids((prev) =>
+      prev.includes(initialSourceUid) ? prev : [...prev, initialSourceUid],
+    );
+    // Defer the scroll until after the DOM updates.
+    requestAnimationFrame(() => {
+      preselectScrollRef.current?.scrollIntoView({
+        behavior: "smooth",
+        block: "center",
+      });
+    });
+    onConsumeInitialSource?.();
+  }, [initialSourceUid, onConsumeInitialSource]);
+
+  // Selected pack entries (resolved from uids).
+  const selectedEntries = React.useMemo(
+    () =>
+      selectedSourceUids
+        .map((uid) => entryByUid.get(uid))
+        .filter((e): e is PackEntry => !!e && !!e.content),
+    [selectedSourceUids, entryByUid],
   );
-  const actualBatchSize = customBatchInput.trim()
-    ? Math.min(parseInt(customBatchInput) || 0, totalAvailable)
-    : Math.min(batchSize, totalAvailable);
 
-  const engineOptions = Object.entries(ENGINE_META).map(([key, meta]) => ({
-    id: key,
-    label: meta.label,
-  }));
+  // Engine types currently selected — used to enforce the quiz+bank-only merge rule.
+  const selectedEngineTypes = React.useMemo(
+    () => Array.from(new Set(selectedEntries.map((e) => e.node.type as EngineType))),
+    [selectedEntries],
+  );
+
+  // The shared pool family — "mcq" (quiz/bank mergeable) or "written" (alone).
+  // null means no selection yet, or a forbidden mix (which the picker blocks).
+  const sharedFamily = React.useMemo(
+    () => sharedPoolFamily(selectedEngineTypes),
+    [selectedEngineTypes],
+  );
+
+  // Build the merged question pool from selected sources (question-level stamped).
+  const mergedPool = React.useMemo(
+    () => buildQuestionPool(selectedEntries),
+    [selectedEntries],
+  );
+
+  // Available question-level tags across the selected sources only (P2-3).
+  // Recomputed when selection changes.
+  const availableTags = React.useMemo(() => {
+    const set = new Set<string>();
+    for (const q of mergedPool) {
+      if (q.tags) for (const tag of q.tags) set.add(tag);
+    }
+    return Array.from(set).sort();
+  }, [mergedPool]);
+
+  // Prune selectedTags if they're no longer in the available set (e.g. user
+  // removed the only source that had a given tag).
+  React.useEffect(() => {
+    if (selectedTags.length === 0) return;
+    const available = new Set(availableTags);
+    const next = selectedTags.filter((t) => available.has(t));
+    if (next.length !== selectedTags.length) setSelectedTags(next);
+  }, [availableTags, selectedTags]);
+
+  // Final pool after tag + progress filters are applied.
+  const filteredPool = React.useMemo(() => {
+    let pool = filterPoolByTags(mergedPool, selectedTags);
+    pool = filterPoolByProgress(pool, onlyMode);
+    return pool;
+  }, [mergedPool, selectedTags, onlyMode]);
+
+  const totalAvailable = filteredPool.length;
+  const desiredCount = Math.max(1, Math.min(parseInt(countInput) || 1, Math.max(1, totalAvailable)));
+  // Clamp the stepper value if it overshoots the new pool size.
+  React.useEffect(() => {
+    const parsed = parseInt(countInput) || 0;
+    if (parsed > totalAvailable && totalAvailable > 0) {
+      setCountInput(String(totalAvailable));
+    }
+  }, [totalAvailable, countInput]);
+
+  // Toggle a leaf source on/off, enforcing the quiz+bank vs written rule.
+  const toggleSource = React.useCallback(
+    (uid: string) => {
+      const entry = entryByUid.get(uid);
+      if (!entry) return;
+      const engine = entry.node.type as EngineType;
+      const newFamily = poolFamilyForEngine(engine);
+      if (!newFamily) return;
+
+      setSelectedSourceUids((prev) => {
+        if (prev.includes(uid)) {
+          return prev.filter((x) => x !== uid);
+        }
+        // Adding — check compatibility with the existing selection.
+        if (prev.length > 0) {
+          const existingEngines = new Set(
+            prev
+              .map((u) => entryByUid.get(u)?.node.type as EngineType)
+              .filter(Boolean),
+          );
+          const sharedExisting = sharedPoolFamily(Array.from(existingEngines));
+          if (sharedExisting && sharedExisting !== newFamily) {
+            // Cross-family — block the add. (Toast would be nicer; for now
+            // we silently reject and the explanatory text below the picker
+            // makes the rule visible.)
+            return prev;
+          }
+        }
+        return [...prev, uid];
+      });
+    },
+    [entryByUid],
+  );
+
+  // Build & start a custom session.
+  const handleCreateTest = () => {
+    if (!onStartCustomSession) {
+      // Fallback for legacy single-pack path (no callback wired up).
+      onSetQuestionLimit?.(desiredCount);
+      const first = selectedEntries[0];
+      if (first) onOpenPack?.(first.node);
+      return;
+    }
+    if (mergedPool.length === 0) return;
+    const finalPool = pickQuestions(filteredPool, desiredCount, order);
+    if (finalPool.length === 0) return;
+    // The session's engine — for an MCQ family pool, use the first source's
+    // engine (or "quiz" as a safe default). For written, "written".
+    const engine = sharedFamily === "written" ? "written" : (selectedEntries[0]?.node.type as EngineType) ?? "quiz";
+    const title =
+      selectedEntries.length === 1
+        ? selectedEntries[0].node.title
+        : `${selectedEntries.length} ${t("qbank.create.sources")}`;
+    onStartCustomSession(finalPool, {
+      title,
+      engine,
+      mode: testMode,
+      tagsFilter: selectedTags,
+      onlyMode,
+    });
+  };
+
+  if (!data) {
+    return (
+      <div className="flex items-center justify-center py-16">
+        <Loader2 className="size-6 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
       {/* Builder column */}
       <div className="lg:col-span-2 space-y-5">
-        {/* Section 1: Test Mode */}
+        {/* Test Mode */}
         <div className="qbank-card">
-          <SectionHeader number={1} title="Select Test Mode" subtitle="Choose how you want to take this test." />
+          <SectionHeader number={1} title={t("qbank.home.testMode")} subtitle={t("qbank.home.timed") + " / " + t("qbank.home.tutor")} />
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-4">
             <ModeCard
               active={testMode === "timed"}
               onClick={() => onTestModeChange("timed")}
               icon={TimerIcon}
-              label="Timed"
+              label={t("qbank.home.timed")}
               description="Simulates actual exam conditions. The test must be completed in the allotted time."
             />
             <ModeCard
               active={testMode === "tutor"}
               onClick={() => onTestModeChange("tutor")}
               icon={Sparkles}
-              label="Tutor"
+              label={t("qbank.home.tutor")}
               description="Get immediate feedback and explanations after each question."
             />
           </div>
         </div>
 
-        {/* Section 2: Number of Questions */}
+        {/* Source packs — flashcard-style deck browser with folder hierarchy */}
         <div className="qbank-card">
-          <SectionHeader number={2} title="Number of Questions" subtitle="Pick a preset or enter a custom value." />
-          <div className="mt-4 flex flex-wrap items-center gap-2">
-            {[10, 20, 40, 60].map((n) => (
-              <button
-                key={n}
-                onClick={() => {
-                  setBatchSize(n);
-                  setCustomBatchInput("");
-                }}
-                className={cn(
-                  "px-4 py-2 rounded-xl text-sm font-medium border-2 transition-all",
-                  batchSize === n && !customBatchInput
-                    ? "border-primary bg-primary/10 text-primary"
-                    : "border-border bg-card text-foreground hover:border-primary/40 hover:bg-primary/5"
-                )}
-              >
-                {n}
-              </button>
-            ))}
-            <div className="flex items-center gap-2 ml-1">
+          <SectionHeader number={2} title={t("qbank.create.sources")} subtitle={t("qbank.create.sourceHint")} />
+          <div className="mt-4 space-y-3">
+            {/* Search box */}
+            <div className="relative">
+              <Search className={cn("size-4 text-muted-foreground absolute top-1/2 -translate-y-1/2", rtl ? "right-3" : "left-3")} />
               <input
-                type="number" min={1} max={200}
-                value={customBatchInput}
-                onChange={(e) => {
-                  setCustomBatchInput(e.target.value);
-                  const v = parseInt(e.target.value);
-                  if (v > 0 && v <= 200) setBatchSize(v);
-                }}
-                placeholder="Custom"
-                className="w-24 h-9 rounded-xl border border-border bg-card text-sm px-3 focus:outline-none focus:ring-2 focus:ring-primary/30 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                type="text"
+                value={search}
+                onChange={(e) => { setSearch(e.target.value); setSelectedFolderIdx(null); }}
+                placeholder={t("qbank.home.search")}
+                className={cn(
+                  "w-full h-9 rounded-xl border border-border bg-card text-sm px-9 focus:outline-none focus:ring-2 focus:ring-primary/30",
+                  rtl ? "pr-9 pl-3 text-right" : "pl-9 pr-3",
+                )}
               />
-              <span className="text-xs text-muted-foreground">questions</span>
             </div>
-            <div className="ml-auto text-xs text-muted-foreground">
-              {totalAvailable} available
+
+            {/* Folder hierarchy browser */}
+            <div className="rounded-xl border border-border bg-card max-h-80 overflow-y-auto medos-scroll">
+              {selectedFolderIdx !== null ? (
+                /* Subfolder view — children of the selected folder */
+                <div className="p-3">
+                  <button
+                    onClick={() => { setSelectedFolderIdx(null); setSearch(""); }}
+                    className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors mb-3"
+                  >
+                    <ArrowLeft className={cn("size-3.5", rtl && "rtl-flip-x")} />
+                    {t("qbank.home.allPacks")}
+                  </button>
+                  <div className="grid grid-cols-1 gap-2">
+                    {filteredTree[selectedFolderIdx]?.items
+                      .filter((child) => {
+                        const qbankTypes = new Set(["quiz", "bank", "written"]);
+                        return qbankTypes.has(child.type);
+                      })
+                      .map((child) => {
+                        const isLeaf = child.items.length === 0;
+                        const childType = child.type as EngineType;
+                        const childMeta = ENGINE_META[childType];
+                        const ChildIcon = ENGINE_ICONS[childType] ?? ListChecks;
+                        if (isLeaf) {
+                          const entry = entryByUid.get(child.uid);
+                          const isChecked = selectedSourceUids.includes(child.uid);
+                          const family = poolFamilyForEngine(childType);
+                          const wouldCrossFamily = !isChecked && sharedFamily !== null && family !== null && sharedFamily !== family;
+                          const qCount = entry?.content ? countQuestions(entry.content) : 0;
+                          return (
+                            <button
+                              key={child.uid}
+                              onClick={() => toggleSource(child.uid)}
+                              className={cn(
+                                "flex items-center gap-3 p-3 rounded-xl border transition-colors text-start",
+                                isChecked ? "border-primary bg-primary/5" : "border-border hover:border-primary/30",
+                                wouldCrossFamily && "opacity-40 cursor-not-allowed",
+                              )}
+                              disabled={wouldCrossFamily}
+                              ref={child.uid === initialSourceUid ? preselectScrollRef as React.Ref<HTMLButtonElement> : undefined}
+                            >
+                              <div
+                                className="size-9 rounded-lg flex items-center justify-center shrink-0"
+                                style={{ backgroundColor: `${childMeta.color}/15`, color: childMeta.color }}
+                              >
+                                <ChildIcon className="size-4" />
+                              </div>
+                              <div className="min-w-0 flex-1">
+                                <h4 className="text-sm font-medium truncate">{child.title}</h4>
+                                <p className="text-[11px] text-muted-foreground">{qCount} {t("qbank.home.questions", { n: qCount }).split(" ").slice(1).join(" ")}</p>
+                              </div>
+                              <input
+                                type="checkbox"
+                                checked={isChecked}
+                                disabled={wouldCrossFamily}
+                                onChange={(e) => { e.stopPropagation(); toggleSource(child.uid); }}
+                                onClick={(e) => e.stopPropagation()}
+                                className="size-4 rounded accent-primary shrink-0"
+                              />
+                            </button>
+                          );
+                        }
+                        // Nested branch — show as a card that merges all its leaves
+                        const entry = entryByUid.get(child.uid);
+                        const fs = entry?.content ? countQuestions(entry.content) : 0;
+                        return (
+                          <div
+                            key={child.uid}
+                            className="flex items-center gap-3 p-3 rounded-xl border border-border"
+                          >
+                            <div
+                              className="size-9 rounded-lg flex items-center justify-center shrink-0"
+                              style={{ backgroundColor: `${childMeta.color}/15`, color: childMeta.color }}
+                            >
+                              <Folder className="size-4" />
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <h4 className="text-sm font-medium truncate">{child.title}</h4>
+                              <p className="text-[11px] text-muted-foreground">{child.items.length} {t("qbank.home.packs", { n: child.items.length }).split(" ").slice(1).join(" ")}</p>
+                            </div>
+                          </div>
+                        );
+                      })}
+                  </div>
+                </div>
+              ) : (
+                /* Root view — top-level folders and packs */
+                <div className="p-3 grid grid-cols-1 gap-2">
+                  {filteredTree.length === 0 ? (
+                    <p className="text-xs text-muted-foreground text-center py-6">
+                      {t("qbank.home.noItems")}
+                    </p>
+                  ) : (
+                    filteredTree.map((node, idx) => {
+                      const isBranch = node.items.length > 0;
+                      const nodeType = node.type as EngineType;
+                      const meta = ENGINE_META[nodeType];
+                      const NodeIcon = ENGINE_ICONS[nodeType] ?? ListChecks;
+
+                      if (isBranch) {
+                        const childCount = node.items.length;
+                        return (
+                          <button
+                            key={node.uid}
+                            onClick={() => setSelectedFolderIdx(idx)}
+                            className="flex items-center gap-3 p-3 rounded-xl border border-border hover:border-primary/30 hover:bg-primary/[0.02] transition-colors text-start group"
+                          >
+                            <div
+                              className="size-9 rounded-lg flex items-center justify-center shrink-0"
+                              style={{ backgroundColor: `${meta.color}/15`, color: meta.color }}
+                            >
+                              <Folder className="size-4" />
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <h4 className="text-sm font-medium truncate">{node.title}</h4>
+                              <p className="text-[11px] text-muted-foreground">
+                                {childCount} {t("qbank.home.packs", { n: childCount }).split(" ").slice(1).join(" ")}
+                              </p>
+                            </div>
+                            <ChevronRight className="size-4 text-muted-foreground/40 group-hover:text-muted-foreground transition-colors shrink-0" />
+                          </button>
+                        );
+                      }
+
+                      // Leaf — pack with checkbox
+                      const entry = entryByUid.get(node.uid);
+                      const isChecked = selectedSourceUids.includes(node.uid);
+                      const family = poolFamilyForEngine(nodeType);
+                      const wouldCrossFamily = !isChecked && sharedFamily !== null && family !== null && sharedFamily !== family;
+                      const qCount = entry?.content ? countQuestions(entry.content) : 0;
+                      return (
+                        <button
+                          key={node.uid}
+                          onClick={() => toggleSource(node.uid)}
+                          className={cn(
+                            "flex items-center gap-3 p-3 rounded-xl border transition-colors text-start",
+                            isChecked ? "border-primary bg-primary/5" : "border-border hover:border-primary/30",
+                            wouldCrossFamily && "opacity-40 cursor-not-allowed",
+                          )}
+                          disabled={wouldCrossFamily}
+                          ref={node.uid === initialSourceUid ? preselectScrollRef as React.Ref<HTMLButtonElement> : undefined}
+                        >
+                          <div
+                            className="size-9 rounded-lg flex items-center justify-center shrink-0"
+                            style={{ backgroundColor: `${meta.color}/15`, color: meta.color }}
+                          >
+                            <NodeIcon className="size-4" />
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <h4 className="text-sm font-medium truncate">{node.title}</h4>
+                            <p className="text-[11px] text-muted-foreground">{qCount} {t("qbank.home.questions", { n: qCount }).split(" ").slice(1).join(" ")}</p>
+                          </div>
+                          <input
+                            type="checkbox"
+                            checked={isChecked}
+                            disabled={wouldCrossFamily}
+                            onChange={(e) => { e.stopPropagation(); toggleSource(node.uid); }}
+                            onClick={(e) => e.stopPropagation()}
+                            className="size-4 rounded accent-primary shrink-0"
+                          />
+                        </button>
+                      );
+                    })
+                  )}
+                </div>
+              )}
             </div>
-          </div>
-        </div>
 
-        {/* Section 3: Content Selection */}
-        <div className="qbank-card">
-          <SectionHeader number={3} title="Select Content" subtitle="Filter by engine type and tags to include." />
-          <div className="mt-4 space-y-4">
-            {/* Engine type checkboxes */}
-            <CheckboxColumn
-              title="Engine Types (Subjects)"
-              items={engineOptions.map((e) => ({
-                id: e.id,
-                label: e.label,
-                count: data?.items.filter((p) => p.node.type === e.id && (selectedTags.length === 0 || p.content?.meta.tags?.some((t) => selectedTags.includes(t)))).length ?? 0,
-              }))}
-              selected={selectedEngineTypes}
-              onChange={setSelectedEngineTypes}
-              onClear={() => setSelectedEngineTypes([])}
-            />
-
-            {/* Tags */}
-            {allTags.length > 0 && (
-              <CheckboxColumn
-                title={t("qbank.home.tagsTopics")}
-                items={allTags.map((t) => ({
-                  id: t,
-                  label: t,
-                  count: data?.items.filter(
-                    (p) =>
-                      p.content?.meta.tags?.includes(t) &&
-                      (selectedEngineTypes.length === 0 || selectedEngineTypes.includes(p.node.type))
-                  ).length ?? 0,
-                }))}
-                selected={selectedTags}
-                onChange={setSelectedTags}
-                onClear={() => setSelectedTags([])}
-              />
+            {/* Mixed-family notice */}
+            {sharedFamily === "written" && (
+              <p className="text-xs text-muted-foreground bg-muted/40 px-3 py-2 rounded-lg">
+                {t("qbank.create.writtenMixedBlock")}
+              </p>
+            )}
+            {selectedEntries.length > 0 && (
+              <div className="flex flex-wrap gap-1.5">
+                {selectedEntries.map(({ node }) => (
+                  <span
+                    key={node.uid}
+                    className="inline-flex items-center gap-1.5 px-2 py-1 rounded-full bg-primary/10 text-primary text-xs font-medium"
+                  >
+                    {node.title}
+                    <button
+                      onClick={() => toggleSource(node.uid)}
+                      className="hover:bg-primary/20 rounded-full size-4 flex items-center justify-center"
+                      aria-label="Remove"
+                    >
+                      <X className="size-3" />
+                    </button>
+                  </span>
+                ))}
+              </div>
             )}
           </div>
         </div>
 
-        {/* Section 4: Ordering */}
+        {/* Tag filter (P2-3) — question-level tags from selected sources */}
+        {availableTags.length > 0 && (
+          <div className="qbank-card">
+            <SectionHeader number={3} title={t("qbank.create.tagQuestionLevel")} subtitle={t("qbank.home.tagsTopics")} />
+            <div className="mt-4 flex flex-wrap gap-2">
+              {availableTags.map((tag) => {
+                const active = selectedTags.includes(tag);
+                return (
+                  <button
+                    key={tag}
+                    onClick={() =>
+                      setSelectedTags((prev) =>
+                        prev.includes(tag) ? prev.filter((x) => x !== tag) : [...prev, tag],
+                      )
+                    }
+                    className={cn(
+                      "px-3 py-1.5 rounded-full text-xs font-medium border transition-colors",
+                      active
+                        ? "border-primary bg-primary/10 text-primary"
+                        : "border-border bg-card text-foreground hover:border-primary/40",
+                    )}
+                  >
+                    {tag}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* Progress-mode filter (P4-2) */}
         <div className="qbank-card">
-          <SectionHeader number={4} title={t("qbank.home.questionOrder")} subtitle="Choose how questions are ordered in your test." />
-          <div className="mt-4">
-            <select
-              value={sort}
-              onChange={(e) => setSort(e.target.value as "default" | "random")}
-              className="w-full sm:w-64 h-9 rounded-xl border border-border bg-card text-sm px-3 focus:outline-none focus:ring-2 focus:ring-primary/30"
-            >
-              <option value="default">{t("qbank.home.defaultOrder")}</option>
-              <option value="random">{t("qbank.home.randomized")}</option>
-            </select>
+          <SectionHeader number={4} title={t("qbank.create.onlyMode")} subtitle={t("qbank.tracker.wrongAndFlagged")} />
+          <div className="mt-4 flex flex-wrap gap-2">
+            {([
+              { id: "all" as const, label: t("qbank.create.onlyAll") },
+              { id: "wrong" as const, label: t("qbank.create.onlyWrong") },
+              { id: "flagged" as const, label: t("qbank.create.onlyFlagged") },
+            ]).map((opt) => (
+              <button
+                key={opt.id}
+                onClick={() => setOnlyMode(opt.id)}
+                className={cn(
+                  "px-4 py-2 rounded-xl text-sm font-medium border-2 transition-all",
+                  onlyMode === opt.id
+                    ? "border-primary bg-primary/10 text-primary"
+                    : "border-border bg-card text-foreground hover:border-primary/40",
+                )}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Count + order (P4-1) */}
+        <div className="qbank-card">
+          <SectionHeader number={5} title={t("qbank.create.countStepper")} subtitle={t("qbank.home.questionOrder")} />
+          <div className="mt-4 flex flex-wrap items-center gap-3">
+            {/* Stepper */}
+            <div className="flex items-center gap-1">
+              <button
+                onClick={() => setCountInput(String(Math.max(1, desiredCount - 1)))}
+                disabled={desiredCount <= 1}
+                className="size-9 rounded-xl border border-border bg-card hover:bg-muted/60 flex items-center justify-center disabled:opacity-40 disabled:cursor-not-allowed"
+                aria-label="Decrement"
+              >
+                <ChevronDown className="size-4 rotate-90" />
+              </button>
+              <input
+                type="number"
+                min={1}
+                max={totalAvailable > 0 ? totalAvailable : 1}
+                value={countInput}
+                onChange={(e) => {
+                  const v = parseInt(e.target.value);
+                  if (isNaN(v)) setCountInput("");
+                  else setCountInput(String(Math.max(1, Math.min(v, totalAvailable || 1))));
+                }}
+                className="w-20 h-9 rounded-xl border border-border bg-card text-sm text-center font-medium tabular-nums focus:outline-none focus:ring-2 focus:ring-primary/30 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+              />
+              <button
+                onClick={() => setCountInput(String(Math.min(totalAvailable || 1, desiredCount + 1)))}
+                disabled={desiredCount >= totalAvailable || totalAvailable === 0}
+                className="size-9 rounded-xl border border-border bg-card hover:bg-muted/60 flex items-center justify-center disabled:opacity-40 disabled:cursor-not-allowed"
+                aria-label="Increment"
+              >
+                <ChevronRight className="size-4" />
+              </button>
+            </div>
+            <span className="text-xs text-muted-foreground">
+              {t("qbank.create.availableAfterFilter", { n: totalAvailable })}
+            </span>
+
+            {/* Order toggle */}
+            <div className="ms-auto flex items-center gap-2">
+              <span className="text-xs text-muted-foreground">{t("qbank.home.questionOrder")}:</span>
+              <div className="flex rounded-xl border border-border bg-card overflow-hidden">
+                <button
+                  onClick={() => setOrder("sequential")}
+                  className={cn(
+                    "px-3 py-1.5 text-xs font-medium transition-colors",
+                    order === "sequential" ? "bg-primary/10 text-primary" : "text-muted-foreground hover:text-foreground",
+                  )}
+                >
+                  {t("qbank.home.defaultOrder")}
+                </button>
+                <button
+                  onClick={() => setOrder("random")}
+                  className={cn(
+                    "px-3 py-1.5 text-xs font-medium transition-colors",
+                    order === "random" ? "bg-primary/10 text-primary" : "text-muted-foreground hover:text-foreground",
+                  )}
+                >
+                  {t("qbank.home.randomized")}
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -1371,51 +2178,52 @@ function CreateTestTab({
               <SummaryRow label={t("qbank.home.testMode")} value={testMode === "timed" ? t("qbank.home.timed") : t("qbank.home.tutor")} />
               <SummaryRow
                 label={t("qbank.home.questionsLabel")}
-                value={actualBatchSize > 0 ? String(actualBatchSize) : "—"}
+                value={totalAvailable > 0 ? String(desiredCount) : "—"}
               />
               <SummaryRow
-                label={t("qbank.home.engines")}
-                value={selectedEngineTypes.length > 0 ? selectedEngineTypes.length + t("qbank.home.selected") : t("qbank.home.all")}
+                label={t("qbank.home.packs")}
+                value={String(selectedEntries.length)}
+              />
+              <SummaryRow
+                label={t("qbank.home.totalAvailable")}
+                value={String(totalAvailable)}
               />
               <SummaryRow
                 label={t("qbank.home.tags")}
                 value={selectedTags.length > 0 ? selectedTags.length + t("qbank.home.selected") : t("qbank.home.all")}
               />
-              <SummaryRow label={t("qbank.home.packs")} value={String(filteredPacks.length)} />
-              <SummaryRow label={t("qbank.home.totalAvailable")} value={String(totalAvailable)} />
+              <SummaryRow
+                label={t("qbank.create.onlyMode")}
+                value={onlyMode === "all" ? t("qbank.create.onlyAll") : onlyMode === "wrong" ? t("qbank.create.onlyWrong") : t("qbank.create.onlyFlagged")}
+              />
             </div>
 
             <div className="mt-5 pt-4 border-t border-border">
               <Button
-                onClick={() => {
-                  onSetQuestionLimit?.(actualBatchSize);
-                  if (filteredPacks.length > 0 && filteredPacks[0].content) {
-                    onOpenPack?.(filteredPacks[0].node);
-                  }
-                }}
-                disabled={filteredPacks.length === 0 || actualBatchSize === 0}
+                onClick={handleCreateTest}
+                disabled={selectedEntries.length === 0 || totalAvailable === 0}
                 className="w-full h-11 text-sm font-semibold rounded-xl"
               >
-                <Plus className="size-4 mr-2" />
-                {t("qbank.home.createTest")}
+                <Plus className={cn("size-4", rtl ? "ml-2" : "mr-2")} />
+                {t("qbank.create.startCustom")}
               </Button>
               <p className="text-[11px] text-muted-foreground text-center mt-2">
-                {filteredPacks.length > 0
-                  ? `Create a test with ${actualBatchSize} question${actualBatchSize !== 1 ? "s" : ""} from ${filteredPacks[0].node.title}.`
-                  : "Adjust filters to find available content."}
+                {selectedEntries.length > 0
+                  ? t("qbank.create.availableAfterFilter", { n: totalAvailable })
+                  : t("qbank.home.noItems")}
               </p>
             </div>
           </div>
 
           {/* Selected packs preview */}
-          {filteredPacks.length > 0 && (
+          {selectedEntries.length > 0 && (
             <div className="qbank-card">
               <h3 className="text-sm font-semibold text-foreground flex items-center gap-2 mb-3">
                 <ListChecks className="size-4 text-primary" />
-                Matching Packs
+                {t("qbank.create.matchingPacks")}
               </h3>
               <div className="space-y-2 max-h-64 overflow-y-auto medos-scroll">
-                {filteredPacks.slice(0, 20).map(({ node, content }) => (
+                {selectedEntries.slice(0, 20).map(({ node, content }) => (
                   <div
                     key={node.uid}
                     className="flex items-center gap-2 px-2 py-1.5 rounded-lg bg-muted/30"
@@ -1426,15 +2234,15 @@ function CreateTestTab({
                     <div className="flex-1 min-w-0">
                       <span className="text-xs font-medium truncate block">{node.title}</span>
                       <span className="text-[10px] text-muted-foreground">
-                        {ENGINE_META[node.type].label}
+                        {ENGINE_META[node.type as EngineType].label}
                         {content && ` · ${countQuestions(content)} questions`}
                       </span>
                     </div>
                   </div>
                 ))}
-                {filteredPacks.length > 20 && (
+                {selectedEntries.length > 20 && (
                   <p className="text-xs text-muted-foreground text-center pt-1">
-                    +{filteredPacks.length - 20} more
+                    +{selectedEntries.length - 20} more
                   </p>
                 )}
               </div>
@@ -1577,11 +2385,135 @@ function ModeCard({
 function PreviousTestsTab({
   sessions: sessionList,
   onDelete,
+  onStartCustomSession,
 }: {
   sessions: SavedSession[];
   onDelete: (id: string) => void;
+  /**
+   * P3-1/P3-2: review a past session (read-only) or retake just its wrong
+   * questions. Both build a pool from the session's questionRefs/sourceUids.
+   */
+  onStartCustomSession?: (
+    pool: PoolQuestion[],
+    meta: {
+      title: string;
+      engine: EngineType;
+      mode?: TestMode;
+      onlyMode?: OnlyMode;
+      isReview?: boolean;
+      dismissAfterCorrect?: boolean;
+    }
+  ) => void;
 }) {
   const { t } = useI18n();
+  const [busy, setBusy] = React.useState<string | null>(null);
+  const [error, setError] = React.useState<string | null>(null);
+
+  /**
+   * Build a PoolQuestion[] for a saved session by:
+   *   1. loading each distinct sourceUid via loadContentByUid
+   *   2. flattening each into PoolQuestion[] via contentToQuestions
+   *   3. filtering to just the ids listed in session.questionRefs (in order)
+   *
+   * If `wrongOnly` is true, further filter to ids whose stored progress
+   * record is incorrect (using storage.getRecord).
+   *
+   * Falls back gracefully for legacy sessions without questionRefs:
+   * loads the single packUid via loadContentByUid and uses all questions.
+   */
+  const buildPoolForSession = React.useCallback(
+    async (s: SavedSession, wrongOnly: boolean): Promise<PoolQuestion[]> => {
+      const refs = s.questionRefs;
+      // Group refs by sourceUid so we load each pack only once.
+      const bySource = new Map<string, string[]>();
+      if (refs && refs.length > 0) {
+        for (const r of refs) {
+          const list = bySource.get(r.sourceUid) ?? [];
+          list.push(r.id);
+          bySource.set(r.sourceUid, list);
+        }
+      } else {
+        // Legacy session — best-effort fallback.
+        bySource.set(s.packUid, []);
+      }
+
+      const pool: PoolQuestion[] = [];
+      for (const [sourceUid, ids] of bySource.entries()) {
+        try {
+          const content = await loadContentByUid(sourceUid);
+          const stamped = poolContentToQuestions(content, sourceUid, content.meta.title);
+          if (ids.length === 0) {
+            // Legacy fallback — keep all questions.
+            pool.push(...stamped);
+          } else {
+            // Keep only the ids listed in questionRefs, in order.
+            const byId = new Map(stamped.map((q) => [q.id, q]));
+            for (const id of ids) {
+              const q = byId.get(id);
+              if (q) pool.push(q);
+            }
+          }
+        } catch (e) {
+          console.warn(`Failed to load source ${sourceUid}:`, e);
+        }
+      }
+
+      if (wrongOnly) {
+        return filterPoolByProgress(pool, "wrong");
+      }
+      return pool;
+    },
+    [],
+  );
+
+  const handleReview = React.useCallback(
+    async (s: SavedSession) => {
+      if (!onStartCustomSession) return;
+      setBusy(s.id);
+      setError(null);
+      try {
+        const pool = await buildPoolForSession(s, false);
+        if (pool.length === 0) {
+          setError(t("qbank.review.noQuestions"));
+          return;
+        }
+        onStartCustomSession(pool, {
+          title: s.packTitle,
+          engine: s.engine,
+          mode: s.mode,
+          isReview: true,
+        });
+      } finally {
+        setBusy(null);
+      }
+    },
+    [buildPoolForSession, onStartCustomSession, t],
+  );
+
+  const handleRetakeWrong = React.useCallback(
+    async (s: SavedSession) => {
+      if (!onStartCustomSession) return;
+      setBusy(s.id + "-retake");
+      setError(null);
+      try {
+        const pool = await buildPoolForSession(s, true);
+        if (pool.length === 0) {
+          setError(t("qbank.review.noQuestions"));
+          return;
+        }
+        onStartCustomSession(pool, {
+          title: `${s.packTitle} — ${t("qbank.review.retakeWrong")}`,
+          engine: s.engine,
+          mode: s.mode,
+          onlyMode: "wrong",
+        });
+      } finally {
+        setBusy(null);
+      }
+    },
+    [buildPoolForSession, onStartCustomSession, t],
+  );
+
   if (sessionList.length === 0) {
     return (
       <div className="qbank-card text-center py-12">
@@ -1596,6 +2528,11 @@ function PreviousTestsTab({
 
   return (
     <div className="space-y-3">
+      {error && (
+        <div className="qbank-card text-sm text-destructive bg-destructive/5 px-4 py-3">
+          {error}
+        </div>
+      )}
       {sessionList.map((s) => {
         const total = s.totalQuestions;
         const pct = total ? Math.round((s.correctCount / total) * 100) : 0;
@@ -1636,6 +2573,36 @@ function PreviousTestsTab({
                 <span>{new Date(s.startedAt).toLocaleDateString()}</span>
               </div>
             </div>
+            {/* P3-1: Review (read-only) */}
+            {onStartCustomSession && (
+              <button
+                onClick={() => handleReview(s)}
+                disabled={busy !== null}
+                className="size-8 rounded-md hover:bg-primary/10 hover:text-primary flex items-center justify-center shrink-0 transition-colors disabled:opacity-40"
+                title={t("qbank.review.openReview")}
+              >
+                {busy === s.id ? (
+                  <Loader2 className="size-4 animate-spin" />
+                ) : (
+                  <Eye className="size-4" />
+                )}
+              </button>
+            )}
+            {/* P3-2: Retake wrong-only */}
+            {onStartCustomSession && (
+              <button
+                onClick={() => handleRetakeWrong(s)}
+                disabled={busy !== null || s.incorrectCount === 0}
+                className="size-8 rounded-md hover:bg-primary/10 hover:text-primary flex items-center justify-center shrink-0 transition-colors disabled:opacity-40"
+                title={t("qbank.review.retakeWrong")}
+              >
+                {busy === s.id + "-retake" ? (
+                  <Loader2 className="size-4 animate-spin" />
+                ) : (
+                  <RotateCcw className="size-4" />
+                )}
+              </button>
+            )}
             <button
               onClick={() => onDelete(s.id)}
               className="size-8 rounded-md hover:bg-destructive/10 hover:text-destructive flex items-center justify-center shrink-0 transition-colors"
@@ -1651,6 +2618,464 @@ function PreviousTestsTab({
 }
 
 
+
+/* ─────────────────────────────────────────────────────────────────────────
+ * TRACKER TAB — Overall / per-folder insight + wrong & flagged browser
+ * ───────────────────────────────────────────────────────────────────────── */
+function TrackerTab({
+  data,
+  onStartCustomSession,
+}: {
+  data: { items: PackEntry[]; trees: Record<string, ContentTreeNode[]> } | null;
+  onStartCustomSession?: (
+    pool: PoolQuestion[],
+    meta: {
+      title: string;
+      engine: EngineType;
+      mode?: TestMode;
+      dismissAfterCorrect?: boolean;
+      isReview?: boolean;
+      onlyMode?: OnlyMode;
+    }
+  ) => void;
+}) {
+  const { t, rtl } = useI18n();
+  const [, force] = React.useReducer((x) => x + 1, 0);
+  React.useEffect(() => storage.subscribe(force), []);
+
+  // Selection of question records for the "Start review session" action.
+  const [selectedKeys, setSelectedKeys] = React.useState<Set<string>>(new Set());
+  // "Keep in tracker" vs "Remove once answered correctly".
+  const [dismissAfterCorrect, setDismissAfterCorrect] = React.useState(false);
+  // Show dismissed records in the wrong & flagged list (P5-6).
+  const [showDismissed, setShowDismissed] = React.useState(false);
+  // Expanded pack uid → resolves question text lazily on row-expand.
+  const [expandedRecords, setExpandedRecords] = React.useState<Set<string>>(new Set());
+
+  // Build a uid → content map for resolving question text on expand.
+  const contentByUid = React.useMemo(() => {
+    const map = new Map<string, AnyContent>();
+    if (!data) return map;
+    for (const { node, content } of data.items) {
+      if (content) map.set(node.uid, content);
+    }
+    return map;
+  }, [data]);
+
+  // P5-2: overall progress.
+  const overall = React.useMemo(() => {
+    const all = storage.allProgress();
+    let attempted = 0;
+    let correct = 0;
+    let wrong = 0;
+    let flagged = 0;
+    for (const p of all) {
+      attempted += p.attempted;
+      correct += p.correct;
+      wrong += p.wrong;
+      flagged += p.flagged;
+    }
+    return { attempted, correct, wrong, flagged, accuracy: attempted > 0 ? Math.round((correct / attempted) * 100) : 0 };
+  }, [data]);
+
+  // P5-3: per-folder insight. Walk every QBank-owned engine tree, compute
+  // aggregated stats per node (recursive — same pattern as ContentTab).
+  const collectLeafUids = React.useCallback((node: ContentTreeNode): string[] => {
+    if (node.items.length === 0) return [node.uid];
+    return node.items.flatMap(collectLeafUids);
+  }, []);
+
+  const folderStats = React.useCallback(
+    (node: ContentTreeNode) => {
+      const uids = collectLeafUids(node);
+      let attempted = 0;
+      let correct = 0;
+      for (const uid of uids) {
+        const p = storage.packProgress(uid);
+        attempted += p.attempted;
+        correct += p.correct;
+      }
+      return { attempted, correct, accuracy: attempted > 0 ? Math.round((correct / attempted) * 100) : null };
+    },
+    [collectLeafUids],
+  );
+
+  // P5-4: wrong & flagged question records. We compute across ALL QBank-owned
+  // pack uids (not just selected ones). Dismissed records are filtered by
+  // default; showDismissed reveals them.
+  const allQBankUids = React.useMemo(() => {
+    if (!data) return [] as string[];
+    return data.items
+      .filter((e) => e.node.type === "quiz" || e.node.type === "bank" || e.node.type === "written")
+      .map((e) => e.node.uid);
+  }, [data]);
+
+  const wrongAndFlagged = React.useMemo(() => {
+    if (allQBankUids.length === 0) return [] as Array<QuestionRecord & { key: string }>;
+    // Use the dedicated helper — much cheaper than scanning memoryCache in userland.
+    const raw = storage.wrongOrFlagged(allQBankUids);
+    const out: Array<QuestionRecord & { key: string }> = raw.map((r) => ({
+      ...r,
+      key: `${r.uid}:${r.qid}`,
+    }));
+    // Sort newest-first.
+    out.sort((a, b) => b.timestamp - a.timestamp);
+    return out;
+  }, [allQBankUids, data]);
+
+  // If showDismissed is on, also pull dismissed records (they're filtered
+  // out by wrongOrFlagged). We re-scan storage.recordsForUids and include
+  // dismissed ones.
+  const dismissedRecords = React.useMemo(() => {
+    if (!showDismissed) return [] as Array<QuestionRecord & { key: string }>;
+    const all = storage.recordsForUids(allQBankUids);
+    return all
+      .filter((r) => r.dismissed)
+      .map((r) => ({ ...r, key: `${r.uid}:${r.qid}` }))
+      .sort((a, b) => b.timestamp - a.timestamp);
+  }, [showDismissed, allQBankUids, data]);
+
+  const visibleRecords = showDismissed
+    ? [...wrongAndFlagged, ...dismissedRecords]
+    : wrongAndFlagged;
+
+  // Resolve a question's text/stem/explanation lazily on row-expand.
+  const resolveQuestion = React.useCallback(
+    (uid: string, qid: string): PoolQuestion | null => {
+      const content = contentByUid.get(uid);
+      if (!content) return null;
+      const pool = poolContentToQuestions(content, uid, content.meta.title);
+      return pool.find((q) => q.id === qid) ?? null;
+    },
+    [contentByUid],
+  );
+
+  // Resolve pack title for a uid.
+  const packTitleFor = React.useCallback(
+    (uid: string): string => {
+      const entry = data?.items.find((e) => e.node.uid === uid);
+      return entry?.node.title ?? uid;
+    },
+    [data],
+  );
+
+  // P5-5: build a review pool from selected records.
+  const handleStartReview = () => {
+    if (!onStartCustomSession) return;
+    if (selectedKeys.size === 0) return;
+    const pool: PoolQuestion[] = [];
+    // Group selected keys by sourceUid to minimize content loads.
+    const bySource = new Map<string, string[]>();
+    for (const key of selectedKeys) {
+      const [uid, qid] = key.split(":");
+      const list = bySource.get(uid) ?? [];
+      list.push(qid);
+      bySource.set(uid, list);
+    }
+    for (const [uid, qids] of bySource.entries()) {
+      const content = contentByUid.get(uid);
+      if (!content) continue;
+      const stamped = poolContentToQuestions(content, uid, content.meta.title);
+      const byId = new Map(stamped.map((q) => [q.id, q]));
+      for (const qid of qids) {
+        const q = byId.get(qid);
+        if (q) pool.push(q);
+      }
+    }
+    if (pool.length === 0) return;
+    onStartCustomSession(pool, {
+      title: `${pool.length} ${t("qbank.tracker.startReview")}`,
+      engine: pool[0]?.sourceUid ? (contentByUid.get(pool[0].sourceUid!)?.type as EngineType) ?? "quiz" : "quiz",
+      mode: "tutor",
+      dismissAfterCorrect,
+    });
+    // Clear selection after starting.
+    setSelectedKeys(new Set());
+  };
+
+  const toggleSelected = (key: string) => {
+    setSelectedKeys((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  };
+
+  const toggleAllVisible = () => {
+    setSelectedKeys((prev) => {
+      if (prev.size === visibleRecords.length) return new Set();
+      return new Set(visibleRecords.map((r) => r.key));
+    });
+  };
+
+  const toggleExpand = (key: string) => {
+    setExpandedRecords((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  };
+
+  if (!data) {
+    return (
+      <div className="flex items-center justify-center py-16">
+        <Loader2 className="size-6 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* Header */}
+      <div>
+        <h2 className="text-xl font-semibold text-foreground">{t("qbank.tracker.title")}</h2>
+        <p className="text-sm text-muted-foreground mt-1">{t("qbank.tracker.subtitle")}</p>
+      </div>
+
+      {/* P5-2: Overview */}
+      <div>
+        <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground mb-3">
+          {t("qbank.tracker.overview")}
+        </h3>
+        {overall.attempted === 0 ? (
+          <div className="qbank-card text-center py-10 text-sm text-muted-foreground">
+            {t("qbank.tracker.noRecords")}
+          </div>
+        ) : (
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <div className="qbank-card">
+              <div className="text-xs text-muted-foreground">{t("qbank.tracker.attempted")}</div>
+              <div className="text-2xl font-bold tabular-nums">{overall.attempted}</div>
+            </div>
+            <div className="qbank-card">
+              <div className="text-xs text-muted-foreground">{t("qbank.tracker.correctLabel")}</div>
+              <div className="text-2xl font-bold tabular-nums text-success">{overall.correct}</div>
+            </div>
+            <div className="qbank-card">
+              <div className="text-xs text-muted-foreground">{t("qbank.tracker.wrongLabel")}</div>
+              <div className="text-2xl font-bold tabular-nums text-destructive">{overall.wrong}</div>
+            </div>
+            <div className="qbank-card">
+              <div className="text-xs text-muted-foreground">{t("qbank.tracker.accuracy")}</div>
+              <div className="text-2xl font-bold tabular-nums">{overall.accuracy}%</div>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* P5-3: By folder — single qbank tree, folder hierarchy */}
+      <div>
+        <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground mb-3">
+          {t("qbank.tracker.byFolder")}
+        </h3>
+        {(() => {
+          const qbankTree = data.trees.quiz ?? data.trees.bank ?? data.trees.written ?? [];
+          if (qbankTree.length === 0) {
+            return <div className="qbank-card text-center py-10 text-sm text-muted-foreground">{t("qbank.tracker.noRecords")}</div>;
+          }
+          return (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+              {qbankTree.map((node) => {
+                const fs = folderStats(node);
+                if (fs.attempted === 0) return null;
+                const acc = fs.accuracy ?? 0;
+                const nodeType = node.type as EngineType;
+                const meta = ENGINE_META[nodeType];
+                const isBranch = node.items.length > 0;
+                const NodeIcon = isBranch ? Folder : (ENGINE_ICONS[nodeType] ?? ListChecks);
+                return (
+                  <div key={node.uid} className="qbank-card">
+                    <div className="flex items-center gap-3 mb-2">
+                      <div
+                        className="size-9 rounded-lg flex items-center justify-center shrink-0"
+                        style={{ backgroundColor: `${meta.color}/15`, color: meta.color }}
+                      >
+                        <NodeIcon className="size-4" />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <h4 className="text-sm font-medium truncate">{node.title}</h4>
+                        <p className="text-[11px] text-muted-foreground">
+                          {isBranch
+                            ? t("qbank.home.packs", { n: node.items.length })
+                            : t(`engine.${nodeType}` as any)}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-3 text-xs">
+                      <span className="text-muted-foreground tabular-nums">
+                        {fs.attempted} {t("qbank.tracker.attempted").toLowerCase()}
+                      </span>
+                      <span className={cn("ms-auto font-medium tabular-nums", acc >= 70 ? "text-success" : acc >= 50 ? "text-warning" : "text-destructive")}>
+                        {acc}%
+                      </span>
+                    </div>
+                    <div className="mt-2 h-1.5 rounded-full bg-muted/40 overflow-hidden">
+                      <div
+                        className="h-full rounded-full transition-all duration-300"
+                        style={{
+                          width: `${acc}%`,
+                          backgroundColor: acc >= 70 ? "oklch(0.65 0.17 155)" : acc >= 50 ? "oklch(0.75 0.15 80)" : "oklch(0.6 0.2 25)",
+                        }}
+                      />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          );
+        })()}
+      </div>
+
+      {/* P5-4 + P5-5: Wrong & Flagged browser + Start review */}
+      <div>
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+            {t("qbank.tracker.wrongAndFlagged")}
+          </h3>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => setShowDismissed((s) => !s)}
+              className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+            >
+              {showDismissed ? t("qbank.tracker.hideDismissed") : t("qbank.tracker.showDismissed")}
+            </button>
+            {visibleRecords.length > 0 && (
+              <button
+                onClick={toggleAllVisible}
+                className="text-xs text-primary hover:underline"
+              >
+                {selectedKeys.size === visibleRecords.length
+                  ? t("qbank.tracker.selectAll")
+                  : t("qbank.tracker.selectAll")}
+              </button>
+            )}
+          </div>
+        </div>
+
+        {visibleRecords.length === 0 ? (
+          <div className="qbank-card text-center py-10 text-sm text-muted-foreground">
+            {t("qbank.tracker.noRecords")}
+          </div>
+        ) : (
+          <>
+            {/* Review-session toolbar */}
+            <div className="qbank-card flex flex-wrap items-center gap-3 mb-3">
+              <span className="text-xs text-muted-foreground tabular-nums">
+                {t("qbank.tracker.selected", { n: selectedKeys.size })}
+              </span>
+              <label className="flex items-center gap-2 text-xs cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={dismissAfterCorrect}
+                  onChange={(e) => setDismissAfterCorrect(e.target.checked)}
+                  className="size-3.5 rounded accent-primary"
+                />
+                {t("qbank.tracker.removeOnCorrect")}
+              </label>
+              <Button
+                onClick={handleStartReview}
+                disabled={selectedKeys.size === 0 || !onStartCustomSession}
+                size="sm"
+                className="ms-auto"
+              >
+                {t("qbank.tracker.startReview")}
+              </Button>
+            </div>
+
+            {/* Records list */}
+            <div className="space-y-2">
+              {visibleRecords.map((r) => {
+                const isSelected = selectedKeys.has(r.key);
+                const isExpanded = expandedRecords.has(r.key);
+                const q = isExpanded ? resolveQuestion(r.uid, r.qid) : null;
+                const packTitle = packTitleFor(r.uid);
+                return (
+                  <div key={r.key} className="qbank-card">
+                    <div className="flex items-center gap-3">
+                      <input
+                        type="checkbox"
+                        checked={isSelected}
+                        onChange={() => toggleSelected(r.key)}
+                        className="size-3.5 rounded accent-primary shrink-0"
+                      />
+                      <button
+                        onClick={() => toggleExpand(r.key)}
+                        className="flex-1 min-w-0 text-start"
+                      >
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="text-sm font-medium truncate">{packTitle}</span>
+                          {r.dismissed && (
+                            <Badge variant="outline" className="text-[10px]">
+                              {t("qbank.tracker.dismissed")}
+                            </Badge>
+                          )}
+                          <Badge
+                            variant="outline"
+                            className={cn(
+                              "text-[10px]",
+                              r.correct ? "border-success/30 text-success" : "border-destructive/30 text-destructive",
+                            )}
+                          >
+                            {r.correct ? t("qbank.tracker.correctLabel") : t("qbank.tracker.wrongLabel")}
+                          </Badge>
+                          {r.flagged && (
+                            <Badge variant="outline" className="text-[10px] border-amber-500/30 text-amber-500">
+                              <Flag className="size-2.5 mr-1" />
+                              {t("qbank.tracker.flaggedLabel")}
+                            </Badge>
+                          )}
+                        </div>
+                        <div className="text-[11px] text-muted-foreground mt-0.5">
+                          {t("qbank.tracker.lastAttempt")}: {new Date(r.timestamp).toLocaleString()}
+                        </div>
+                      </button>
+                      <ChevronRight
+                        className={cn(
+                          "size-4 text-muted-foreground transition-transform shrink-0",
+                          isExpanded && "rotate-90",
+                          rtl && "rtl-flip-x",
+                        )}
+                      />
+                    </div>
+                    {isExpanded && q && (
+                      <div className="mt-3 pt-3 border-t border-border text-sm space-y-2">
+                        <div className="font-medium">{q.stem}</div>
+                        {q.choices.length > 0 && (
+                          <div className="space-y-1">
+                            {q.choices.map((choice, i) => (
+                              <div
+                                key={i}
+                                className={cn(
+                                  "px-2 py-1 rounded text-xs",
+                                  i === q.correct && "bg-success/10 text-success font-medium",
+                                  i === r.selected && i !== q.correct && "bg-destructive/10 text-destructive line-through",
+                                )}
+                              >
+                                <span className="font-medium me-2">{choiceLetter(i, contentByUid.get(r.uid)?.meta.lang)}</span>
+                                {choice}
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                        {q.explanation && (
+                          <div className="text-xs text-muted-foreground bg-muted/40 px-3 py-2 rounded-lg">
+                            {q.explanation}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
 
 /* ─────────────────────────────────────────────────────────────────────────
  * QUIZ VIEW — Full QBank Studio with all tools
@@ -1747,7 +3172,7 @@ function ElapsedTime({ startedAt }: { startedAt: number }) {
 
 function QuizView({
   session,
-  activeItem,
+  activeItem: activeItemProp,
   calculatorOpen,
   labValuesOpen,
   aiAssistantOpen,
@@ -1780,7 +3205,7 @@ function QuizView({
   onExitRequest,
 }: {
   session: SessionData;
-  activeItem: ContentTreeNode;
+  activeItem?: ContentTreeNode;
   calculatorOpen: boolean;
   labValuesOpen: boolean;
   aiAssistantOpen: boolean;
@@ -1820,6 +3245,19 @@ function QuizView({
   const isPausedOrLocked = session.examPaused;
   const engineLabel = ENGINE_META[session.engine].label;
   const { t, rtl } = useI18n();
+
+  // P3-1/P2-4: when called from a custom session (no activeItem prop), build
+  // a synthetic ContentTreeNode so the rest of QuizView (which assumes
+  // activeItem is defined) keeps working. The values mirror what would have
+  // been passed for the equivalent single-pack path.
+  const activeItem: ContentTreeNode = activeItemProp ?? {
+    uid: session.itemId,
+    title: session.itemTitle,
+    type: session.engine,
+    path: "",
+    files: [],
+    items: [],
+  };
 
   // Highlighter state — a single "tool": null = off, "eraser" = erase, or a color key
   const [tool, setTool] = React.useState<string | null>(null);
@@ -4453,107 +5891,15 @@ function formatTime(sec: number): string {
 }
 
 function countQuestions(content: AnyContent): number {
-  switch (content.type) {
-    case "quiz":
-      return content.questions.length;
-    case "bank":
-      return content.passages.reduce((a, p) => a + p.questions.length, 0);
-    case "flashcard":
-      return content.cards.length;
-    case "written":
-      return content.prompts.length;
-    case "osce":
-      return content.stations.length;
-    default:
-      return 0;
-  }
+  return poolCountQuestions(content);
 }
 
 function contentToQuestions(content: AnyContent): SessionQuestion[] {
-  const out: SessionQuestion[] = [];
-  if (content.type === "quiz") {
-    (content as QuizContent).questions.forEach((q) => {
-      out.push({
-        id: q.id,
-        stem: q.question,
-        choices: q.options,
-        correct: q.correct,
-        explanation: q.explanation,
-        tags: q.tags,
-        difficulty: q.difficulty ? `${q.difficulty}/5` : undefined,
-      });
-    });
-  } else if (content.type === "bank") {
-    (content as BankContent).passages.forEach((p) => {
-      p.questions.forEach((q) => {
-        out.push({
-          id: q.id,
-          stem: `${p.content}\n\n${q.question}`,
-          choices: q.options,
-          correct: q.correct,
-          explanation: q.explanation,
-          tags: q.tags,
-          difficulty: q.difficulty ? `${q.difficulty}/5` : undefined,
-        });
-      });
-    });
-  } else if (content.type === "flashcard") {
-    (content as FlashcardContent).cards.forEach((c) => {
-      out.push({
-        id: c.id,
-        stem: c.front,
-        choices: [],
-        correct: -1,
-        explanation: c.back,
-        tags: c.tags,
-      });
-    });
-  } else if (content.type === "written") {
-    (content as WrittenContent).prompts.forEach((p) => {
-      const children = p.children?.map((c) => ({
-        id: c.id,
-        label: c.label,
-        question: c.question,
-        modelAnswer: c.modelAnswer,
-        rubric: c.rubric,
-        explanation: c.explanation,
-      }));
-      out.push({
-        id: p.id,
-        stem: p.prompt,
-        choices: [],
-        correct: -1,
-        modelAnswer: p.modelAnswer,
-        explanation: p.explanation ?? (
-          p.rubric.length > 0
-            ? `Self-grading rubric:\n${p.rubric.map((r, i) => `${i + 1}. ${r}`).join("\n")}`
-            : ""
-        ),
-        rubric: p.rubric,
-        tags: p.tags,
-        children,
-      });
-    });
-  } else if (content.type === "osce") {
-    (content as OsceContent).stations.forEach((s) => {
-      const rubricArr = s.rubric?.mustAsk || [];
-      out.push({
-        id: s.id,
-        stem: s.task || s.title,
-        choices: [],
-        correct: -1,
-        explanation:
-          rubricArr.length > 0
-            ? `Performance rubric:\n${rubricArr.map((r: string, i: number) => `${i + 1}. ${r}`).join("\n")}`
-            : "",
-        rubric: rubricArr,
-        redFlags: s.hiddenProfile?.redFlags || [],
-        differential: s.hiddenProfile?.keySymptoms || [],
-        tags: ["osce"],
-      });
-    });
-  }
-  return out;
+  // Delegate to the shared module. Note: sourceUid/sourceTitle are NOT
+  // stamped here — single-pack paths still rely on `session.itemId` for
+  // progress recording. The multi-pack path (buildQuestionPool) stamps them
+  // explicitly when constructing the pool.
+  return poolContentToQuestions(content) as SessionQuestion[];
 }
 
 function saveSession(s: SessionData) {
@@ -4582,6 +5928,15 @@ function saveSession(s: SessionData) {
   const incorrectCount = answeredCount - mcqCorrect;
   const flaggedCount = Object.values(s.flagged).filter(Boolean).length;
 
+  // P2-6: persist questionRefs (id+sourceUid parallel to the questions array),
+  // the deduped source uids, and the filters that were active when the session
+  // was built. Lets Previous Tests / Tracker reopen & retake accurately.
+  const questionRefs = s.questions.map((q) => ({
+    id: q.id,
+    sourceUid: q.sourceUid ?? s.itemId,
+  }));
+  const sources = Array.from(new Set(questionRefs.map((r) => r.sourceUid)));
+
   const saved: SavedSession = {
     id: s.sessionId,
     packUid: s.itemId,
@@ -4603,6 +5958,10 @@ function saveSession(s: SessionData) {
     writtenDrafts: s.writtenDrafts,
     rubricState: s.rubricState,
     ratings: s.ratings,
+    questionRefs,
+    sources,
+    tagsFilter: s.tagsFilter,
+    onlyMode: s.onlyMode,
   };
   sessions.save(saved);
 }

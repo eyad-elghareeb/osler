@@ -1,0 +1,62 @@
+{
+  "stations": [
+    {
+      "id": "osce-neuro-001",
+      "title": "Seizure — Status Epilepticus",
+      "type": "history",
+      "specialty": "Neurology",
+      "difficulty": "Hard",
+      "task": "Manage a patient presenting with ongoing generalized tonic-clonic seizure lasting more than 5 minutes",
+      "time": 12,
+      "examiner": { "name": "Dr. Rodriguez", "title": "Neurology Attending" },
+      "patient": {
+        "name": "Michael Brown",
+        "age": 42,
+        "gender": "male",
+        "avatarSeed": "michael-b",
+        "opening": "(Actively seizing on arrival — generalized tonic-clonic activity for 8 minutes)"
+      },
+      "hiddenProfile": {
+        "diagnosis": "Status epilepticus (generalized tonic-clonic)",
+        "keySymptoms": ["Ongoing seizure activity > 5 minutes", "Post-ictal state expected after termination"],
+        "redFlags": ["Seizure ongoing > 5 minutes (established status epilepticus)", "Recent alcohol withdrawal", "Temperature 38.2°C"],
+        "pastHistory": ["Alcohol use disorder", "Prior seizure 2 years ago (no workup)", "No AEDs"],
+        "vitalSigns": "BP 160/100, HR 120, RR 26, O2 sat 91%, Temp 38.2°C"
+      },
+      "rubric": { "mustAsk": ["When did the seizure start?", "Has the patient had seizures before?", "Any fever or recent illness?"], "bonus": ["Check glucose immediately", "Assess for signs of meningismus"] },
+      "dataPresented": null,
+      "questions": [
+        { "question": "What is the first-line treatment for established status epilepticus?", "answer": "IV lorazepam 0.1 mg/kg (or midazolam IM if no IV access)", "rubric": "Initiates benzodiazepine therapy within 5 minutes" }
+      ]
+    },
+    {
+      "id": "osce-neuro-002",
+      "title": "Peripheral Neuropathy Evaluation",
+      "type": "history",
+      "specialty": "Neurology",
+      "difficulty": "Medium",
+      "task": "Evaluate a patient with progressive bilateral lower extremity numbness and weakness",
+      "time": 10,
+      "examiner": { "name": "Dr. Kim", "title": "Neurology Attending" },
+      "patient": {
+        "name": "Helen Davis",
+        "age": 58,
+        "gender": "female",
+        "avatarSeed": "helen-d",
+        "opening": "Doctor, my feet have been numb for months and now I'm starting to trip when I walk."
+      },
+      "hiddenProfile": {
+        "diagnosis": "Chronic inflammatory demyelinating polyneuropathy (CIDP)",
+        "keySymptoms": ["Progressive bilateral leg numbness over 6 months", "Gait instability", "Symmetric distal weakness"],
+        "redFlags": ["Waddening gait", "Areflexia in lower extremities", "Positive Romberg sign"],
+        "pastHistory": ["Hypothyroidism", "No diabetes", "No alcohol use"],
+        "vitalSigns": "BP 120/75, HR 72, RR 16, O2 sat 98%"
+      },
+      "rubric": { "mustAsk": ["When did the numbness start?", "Is it getting worse?", "Any weakness?"], "bonus": ["Ask about family history of neuropathy", "Inquire about balance and fall risk"] },
+      "dataPresented": null,
+      "questions": [
+        { "question": "What nerve conduction study finding distinguishes CIDP from diabetic neuropathy?", "answer": "Prolonged distal motor latencies and conduction block (demyelinating pattern)", "rubric": "Recognizes demyelinating features on NCS" }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,56 @@
+{
+  "videos": [
+    {
+      "id": "antibiotics-overview",
+      "title": "Antibiotics — Mechanisms of Action",
+      "description": "A systematic review of antibiotic mechanisms organized by drug class: cell wall synthesis inhibitors (beta-lactams, glycopeptides), protein synthesis inhibitors (macrolides, tetracyclines, aminoglycosides), fluoroquinolones, and antifolates. Includes spectrum of activity and resistance patterns.",
+      "specialty": "Pharmacology",
+      "topic": "Antibiotics",
+      "duration": 2400,
+      "source": {
+        "type": "youtube",
+        "id": "NEXAMPLE003"
+      },
+      "instructor": "Ninja Nerd",
+      "tags": ["antibiotics", "pharmacology", "mechanism-of-action", "microbiology"],
+      "chapters": [
+        { "time": 0, "title": "Introduction" },
+        { "time": 180, "title": "Cell wall inhibitors — beta-lactams" },
+        { "time": 480, "title": "Cell wall inhibitors — glycopeptides" },
+        { "time": 720, "title": "Protein synthesis inhibitors — 30S ribosome" },
+        { "time": 960, "title": "Protein synthesis inhibitors — 50S ribosome" },
+        { "time": 1200, "title": "Fluoroquinolones" },
+        { "time": 1440, "title": "Antifolates (TMP-SMX)" },
+        { "time": 1680, "title": "Nitroimidazoles (metronidazole)" },
+        { "time": 1920, "title": "Resistance mechanisms" },
+        { "time": 2160, "title": "Empiric therapy principles" }
+      ],
+      "lang": "en"
+    },
+    {
+      "id": "antibiotic-stewardship",
+      "title": "Antibiotic Stewardship in Practice",
+      "description": "A practical guide to antibiotic stewardship principles including de-escalation strategies, narrow-spectrum selection, duration of therapy, and IV-to-oral conversion. Includes case-based examples for common infections.",
+      "specialty": "Pharmacology",
+      "topic": "Antibiotics",
+      "duration": 1800,
+      "source": {
+        "type": "youtube",
+        "id": "NEXAMPLE004"
+      },
+      "instructor": "Strong Medicine",
+      "tags": ["antibiotic-stewardship", "pharmacology", "infectious-disease"],
+      "chapters": [
+        { "time": 0, "title": "Why stewardship matters" },
+        { "time": 240, "title": "Empiric vs directed therapy" },
+        { "time": 480, "title": "De-escalation strategies" },
+        { "time": 720, "title": "Duration of therapy" },
+        { "time": 960, "title": "IV-to-oral conversion" },
+        { "time": 1200, "title": "Case 1: Community-acquired pneumonia" },
+        { "time": 1440, "title": "Case 2: Urinary tract infection" },
+        { "time": 1620, "title": "Case 3: Skin and soft tissue infection" }
+      ],
+      "lang": "en"
+    }
+  ]
+}

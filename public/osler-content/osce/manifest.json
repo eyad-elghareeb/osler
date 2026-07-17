@@ -2,10 +2,40 @@
   "type": "osce",
   "items": [
     {
+      "uid": "osce-cardiology",
+      "title": "Cardiology",
+      "type": "osce",
+      "path": "cardiology/",
+      "files": [
+        "stations.json"
+      ],
+      "items": []
+    },
+    {
       "uid": "osce-clinical-skills",
       "title": "Clinical Skills",
       "type": "osce",
       "path": "clinical-skills/",
+      "files": [
+        "stations.json"
+      ],
+      "items": []
+    },
+    {
+      "uid": "osce-emergency-medicine",
+      "title": "Emergency Medicine",
+      "type": "osce",
+      "path": "emergency-medicine/",
+      "files": [
+        "stations.json"
+      ],
+      "items": []
+    },
+    {
+      "uid": "osce-neurology",
+      "title": "Neurology",
+      "type": "osce",
+      "path": "neurology/",
       "files": [
         "stations.json"
       ],

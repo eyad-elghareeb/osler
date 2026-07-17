@@ -1,0 +1,51 @@
+{
+  "type": "written",
+  "prompts": [
+    {
+      "id": "w-seiz-001",
+      "prompt": "A 28-year-old male presents with his first generalized tonic-clonic seizure. He has no prior history of seizures, head trauma, or substance use. Describe the emergency department workup, initial management, and criteria for outpatient vs inpatient disposition.",
+      "modelAnswer": "The ED workup for a first unprovoked seizure includes: (1) Stat glucose to exclude hypoglycemia, (2) Basic metabolic panel (electrolytes, calcium, magnesium), (3) CBC, (4) CT head without contrast to exclude structural lesion (mass, hemorrhage, stroke), (5) LP if febrile or immunocompromised to exclude meningitis/encephalitis, (6) Toxicology screen if substance use suspected, (7) ECG to exclude cardiac syncope mimicking seizure. Initiate a brief period of observation post-ictal. Admit if: altered mental status persists, focal neurological deficits, first seizure in pregnancy, structural brain lesion on CT, fever, coagulopathy, or seizure recurrence during observation. Discharge with neurology follow-up within 4 weeks if all workup is negative and the patient returns to baseline.",
+      "rubric": [
+        "Describes glucose and electrolyte evaluation",
+        "Orders CT head without contrast to exclude structural lesion",
+        "Considers LP if infectious etiology suspected",
+        "Lists indications for admission (persistent AMS, focal deficits, structural lesion)",
+        "Provides safe discharge criteria and follow-up plan",
+        "Does not automatically start antiepileptic medication after a single unprovoked seizure"
+      ],
+      "explanation": "The key teaching point is that a single unprovoked seizure in an adult with a normal workup does not require immediate antiepileptic medication — the decision to start depends on recurrence risk and patient preference after discussion.",
+      "wordLimit": 450,
+      "tags": ["neurology", "seizure", "emergency-medicine"]
+    },
+    {
+      "id": "w-seiz-002",
+      "prompt": "Compare and contrast the mechanisms of action, indications, drug interactions, and adverse effect profiles of carbamazepine, valproic acid, and levetiracetam as antiepileptic drugs.",
+      "rubric": [
+        "Describes carbamazepine's sodium channel blockade mechanism",
+        "Describes valproic acid's multiple mechanisms (GABA enhancement, sodium/calcium channel blockade)",
+        "Describes levetiracetam's SV2A protein binding mechanism",
+        "Lists key indications for each drug (e.g., carbamazepine for focal seizures, VPA for generalized epilepsy)",
+        "Mentions CYP450 enzyme induction/inhibition interactions",
+        "Discusses major adverse effects (carbamazepine: aplastic anemia, SIADH; VPA: teratogenicity, hepatotoxicity, pancreatitis; LEV: behavioral/psychiatric effects)"
+      ],
+      "explanation": "These three drugs represent different generations and mechanisms of AEDs. Carbamazepine is a traditional first-line for focal seizures, valproic acid is broad-spectrum but has significant teratogenic risk, and levetiracetam has a favorable drug interaction profile but can cause behavioral side effects.",
+      "wordLimit": 500,
+      "tags": ["neurology", "pharmacology", "antiepileptics"]
+    },
+    {
+      "id": "w-seiz-003",
+      "prompt": "A 45-year-old female with known epilepsy on lamotrigine presents with increasing seizure frequency over the past month despite adherence. She also started oral contraceptives 3 months ago. Explain the pharmacokinetic interaction and your management plan.",
+      "rubric": [
+        "Identifies UGT enzyme induction by lamotrigine and CYP3A4 induction by ethinyl estradiol",
+        "Explains bidirectional pharmacokinetic interaction: OCs lower lamotrigine levels, lamotrigine may lower OC efficacy",
+        "Describes checking lamotrigine serum level",
+        "Recommends dose adjustment of lamotrigine",
+        "Discusses alternative contraceptive methods or AED selection",
+        "Addresses seizure risk from subtherapeutic lamotrigine levels"
+      ],
+      "explanation": "This case tests understanding of AED-OC interactions. Lamotrigine is metabolized by UGT, and ethinyl estradiol induces UGT, lowering lamotrigine levels. Conversely, lamotrigine may reduce OC efficacy, requiring discussion of contraception.",
+      "wordLimit": 400,
+      "tags": ["neurology", "pharmacology", "drug-interaction", "epilepsy"]
+    }
+  ]
+}

@@ -1,0 +1,59 @@
+{
+  "type": "quiz",
+  "questions": [
+    {
+      "id": "q-str-001",
+      "question": "A 62-year-old hypertensive male presents with sudden-onset left hemiparesis, left hemisensory loss, and left homonymous hemianopia. What is the most likely vascular territory involved?",
+      "options": ["Left MCA (deep perforators / lenticulostriate)", "Right MCA (cortical branch)", "Left ACA", "Right PCA", "Basilar artery"],
+      "correct": 0,
+      "explanation": "Pure motor hemiparesis with sensory loss and homonymous hemianopia in the left visual field points to a right MCA territory lacunar infarct, specifically from lenticulostriate artery occlusion causing internal capsule damage.",
+      "tags": ["neurology", "stroke", "vascular-territory"],
+      "difficulty": 3
+    },
+    {
+      "id": "q-str-002",
+      "question": "A 55-year-old female on warfarin for atrial fibrillation presents with left-sided weakness. CT head shows a right frontal hemorrhage. INR is 3.8. Blood pressure is 185/100 mmHg. What is the first priority in management?",
+      "options": ["Immediate CT angiogram to look for AVM", "Reverse anticoagulation with vitamin K and 4-factor PCC", "Start nimodipine", "Perform emergency craniotomy", "Administer IV mannitol"],
+      "correct": 1,
+      "explanation": "In anticoagulation-associated ICH, the first priority is rapid reversal of anticoagulation. Vitamin K + 4-factor PCC is preferred over FFP for faster, more effective INR reversal.",
+      "tags": ["neurology", "ich", "anticoagulation-reversal"],
+      "difficulty": 3
+    },
+    {
+      "id": "q-str-003",
+      "question": "A 70-year-old male presents with acute-onset vertigo, nystagmus, dysarthria, and ataxia. He has a history of hypertension. MRI shows an acute infarct in the lateral medulla. Which artery is most likely occluded?",
+      "options": ["Anterior inferior cerebellar artery (AICA)", "Posterior inferior cerebellar artery (PICA)", "Superior cerebellar artery (SCA)", "Basilar artery", "Anterior spinal artery"],
+      "correct": 1,
+      "explanation": "Lateral medullary syndrome (Wallenberg syndrome) is caused by PICA occlusion, presenting with vertigo, nystagmus, ataxia, ipsilateral Horner syndrome, and contralateral pain/temperature loss.",
+      "tags": ["neurology", "stroke", "wallenberg", "pica"],
+      "difficulty": 3
+    },
+    {
+      "id": "q-str-004",
+      "question": "A 48-year-old female presents with acute right hemiparesis and global aphasia. CT shows no hemorrhage. CTA reveals left MCA M1 segment occlusion. NIHSS is 22. She is within 4.5 hours of onset. What is the most appropriate treatment?",
+      "options": ["IV tPA only", "IV tPA + mechanical thrombectomy", "Mechanical thrombectomy alone", "IV aspirin and observation", "IV heparin infusion"],
+      "correct": 1,
+      "explanation": "With large vessel occlusion (M1 MCA) and NIHSS ≥ 6 within 24 hours, mechanical thrombectomy is indicated. Since she is also within 4.5 hours, IV tPA should be administered concurrently with thrombectomy.",
+      "tags": ["neurology", "stroke", "thrombectomy", "lvo"],
+      "difficulty": 3
+    },
+    {
+      "id": "q-str-005",
+      "question": "A 38-year-old female presents with acute right hemiparesis and word-finding difficulty. MRI shows multiple small infarcts in different vascular territories (left MCA, right PCA, bilateral ACA). Which workup is most appropriate?",
+      "options": ["Carotid ultrasound and echocardiogram only", "Hypercoagulability panel, TEE, and brain MRI with contrast", "CT angiogram of head and neck only", "Start aspirin and statin", "No further workup needed at this age"],
+      "correct": 1,
+      "explanation": "Multiple infarcts in different vascular territories in a young patient without vascular risk factors demands a comprehensive workup for embolic sources (TEE, echo) and hypercoagulable states (antiphospholipid, protein C/S, Factor V Leiden, etc.).",
+      "tags": ["neurology", "stroke", "young-patient", "workup"],
+      "difficulty": 3
+    },
+    {
+      "id": "q-str-006",
+      "question": "A 75-year-old hypertensive male presents with sudden-onset severe headache, vomiting, and declining consciousness. CT head shows a hypertensive intracerebral hemorrhage in the left basal ganglia measuring 45 mL with 8 mm midline shift. GCS is 10. What is the most appropriate management?",
+      "options": ["Conservative management with ICU monitoring", "Emergency surgical evacuation (craniotomy or minimally invasive surgery)", "External ventricular drain placement only", "IV mannitol and blood pressure control", "Thrombolysis"],
+      "correct": 1,
+      "explanation": "Supratentorial ICH >30 mL with midline shift >5 mm and declining consciousness (GCS ≤10) is a surgical candidate. Early surgical evacuation can improve outcomes in superficial hematomas.",
+      "tags": ["neurology", "ich", "surgical-indication"],
+      "difficulty": 3
+    }
+  ]
+}

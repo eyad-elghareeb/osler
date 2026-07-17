@@ -100,13 +100,16 @@ export async function loadNodeContent(node: ContentTreeNode): Promise<AnyContent
     })
   );
 
-  // Merge all data arrays
+  // Merge all data arrays and preserve scalar fields like `type`
   const merged: Record<string, unknown[]> = {};
   for (const data of results) {
     for (const [key, val] of Object.entries(data)) {
       if (Array.isArray(val)) {
         if (!merged[key]) merged[key] = [];
         merged[key].push(...val);
+      } else if (typeof val === "string" && key === "type") {
+        // Preserve explicit `type` field from data file
+        merged[key] = [val] as unknown[];
       }
     }
   }
@@ -118,6 +121,10 @@ export async function loadNodeContent(node: ContentTreeNode): Promise<AnyContent
  * Build an AnyContent object from a leaf node and merged data arrays.
  */
 function buildContent(node: ContentTreeNode, data: Record<string, unknown[]>): AnyContent {
+  // Use explicit `type` from data file if present, otherwise fall back to node.type
+  const explicitType = data.type?.[0] as EngineType | undefined;
+  const nodeType = explicitType || node.type;
+
   const meta = {
     uid: node.uid,
     title: node.title,
@@ -125,7 +132,7 @@ function buildContent(node: ContentTreeNode, data: Record<string, unknown[]>): A
     lang: node.lang ?? "en",
   };
 
-  switch (node.type) {
+  switch (nodeType) {
     case "flashcard": {
       const cards = (data.cards ?? []) as Flashcard[];
       // If this node has children (branch node), they become subdecks
@@ -149,7 +156,7 @@ function buildContent(node: ContentTreeNode, data: Record<string, unknown[]>): A
     case "video":
       return { meta, type: "video", videos: data.videos ?? [] } as VideoContent;
     default:
-      throw new Error(`Unknown content type: ${node.type}`);
+      throw new Error(`Unknown content type: ${nodeType}`);
   }
 }
 
@@ -171,16 +178,28 @@ export async function loadAllContent(): Promise<{
 
   for (const folder of folders) {
     try {
-      let engineType: EngineType;
-      if (folder === "flashcard") engineType = "flashcard";
-      else if (folder === "osce") engineType = "osce";
-      else if (folder === "videos") engineType = "video";
-      else engineType = "quiz";
-
       const res = await fetch(`${BASE}/${folder}/manifest.json`, { cache: "no-store" });
       if (!res.ok) continue;
       const manifest = (await res.json()) as CategoryManifest;
-      trees[engineType] = manifest.items;
+
+      // For multi-type folders (qbank hosts quiz, bank, written), store the
+      // same tree under every engine type that maps to this folder so the UI
+      // can look up trees[engineType] for any qbank type.
+      const qbankTypes: EngineType[] = ["quiz", "bank", "written"];
+      if (folder === "qbank") {
+        for (const et of qbankTypes) {
+          if (types.includes(et)) trees[et] = manifest.items;
+        }
+      } else {
+        let engineType: EngineType;
+        if (folder === "flashcard") engineType = "flashcard";
+        else if (folder === "osce") engineType = "osce";
+        else if (folder === "videos") engineType = "video";
+        else if (folder === "library") engineType = "library";
+        else engineType = "quiz";
+        trees[engineType] = manifest.items;
+      }
+
       const leaves = flattenTree(manifest.items);
       allLeaves.push(...leaves);
     } catch {

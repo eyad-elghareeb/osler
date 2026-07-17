@@ -1,0 +1,62 @@
+{
+  "stations": [
+    {
+      "id": "osce-card-001",
+      "title": "Acute Chest Pain — Aortic Dissection",
+      "type": "history",
+      "specialty": "Cardiology",
+      "difficulty": "Hard",
+      "task": "Evaluate a patient with acute tearing chest pain and assess for aortic dissection",
+      "time": 12,
+      "examiner": { "name": "Dr. Lee", "title": "Cardiology Attending" },
+      "patient": {
+        "name": "David Thompson",
+        "age": 65,
+        "gender": "male",
+        "avatarSeed": "david-t",
+        "opening": "Doctor, I have this tearing pain in my chest that started suddenly an hour ago and is radiating to my back."
+      },
+      "hiddenProfile": {
+        "diagnosis": "Stanford Type A aortic dissection",
+        "keySymptoms": ["Sudden-onset tearing chest pain radiating to back", "Blood pressure differential between arms (180/100 right, 140/80 left)"],
+        "redFlags": ["Marfanoid habitus", "Uncontrolled hypertension", "Wide mediastinum on CXR"],
+        "pastHistory": ["Hypertension (poorly controlled)", "Marfan syndrome", "No prior cardiac history"],
+        "vitalSigns": "BP 180/100 (right arm), HR 95, RR 20, O2 sat 96%, Temp 37.1°C"
+      },
+      "rubric": { "mustAsk": ["When exactly did the pain start?", "What does the pain feel like?", "Is there pain radiating anywhere?"], "bonus": ["Ask about family history of Marfan or aortic disease", "Check blood pressures in both arms"] },
+      "dataPresented": null,
+      "questions": [
+        { "question": "What imaging study confirms the diagnosis?", "answer": "CT angiogram of the chest (or TEE)", "rubric": "Identifies appropriate imaging for aortic dissection" }
+      ]
+    },
+    {
+      "id": "osce-card-002",
+      "title": "New-Onset Atrial Fibrillation",
+      "type": "history",
+      "specialty": "Cardiology",
+      "difficulty": "Medium",
+      "task": "Evaluate a patient presenting with palpitations and newly diagnosed atrial fibrillation",
+      "time": 10,
+      "examiner": { "name": "Dr. Nakamura", "title": "Cardiology Fellow" },
+      "patient": {
+        "name": "Patricia Moore",
+        "age": 70,
+        "gender": "female",
+        "avatarSeed": "patricia-m",
+        "opening": "My heart has been racing all morning and I feel lightheaded and short of breath."
+      },
+      "hiddenProfile": {
+        "diagnosis": "New-onset atrial fibrillation with rapid ventricular response",
+        "keySymptoms": ["Palpitations for 6 hours", "Dyspnea on exertion", "Lightheadedness"],
+        "redFlags": ["Ventricular rate 140 bpm", "No prior AF history", "Mild dyspnea at rest"],
+        "pastHistory": ["Hypertension", "Type 2 diabetes", "No prior AF or stroke"],
+        "vitalSigns": "BP 130/80, HR 140 (irregularly irregular), RR 22, O2 sat 94%"
+      },
+      "rubric": { "mustAsk": ["When did the palpitations start?", "Have you had this before?", "Any chest pain or shortness of breath?"], "bonus": ["Assess CHA2DS2-VASc score components", "Ask about alcohol or caffeine intake"] },
+      "dataPresented": null,
+      "questions": [
+        { "question": "What is the first step in management?", "answer": "Rate control with beta-blocker (if no contraindication) and anticoagulation assessment", "rubric": "Addresses rate control and anticoagulation" }
+      ]
+    }
+  ]
+}

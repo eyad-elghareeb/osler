@@ -39,12 +39,17 @@ const DATA_TYPE_KEYS = [
 ];
 
 /**
- * Infer engine type from a data JSON file's top-level keys.
+ * Read the engine type from a data JSON file.
+ * First checks for an explicit `type` field at the top level.
+ * Falls back to inferring from data keys (questions → quiz, etc.).
  */
 function inferTypeFromData(filePath) {
   try {
     const raw = fs.readFileSync(filePath, "utf-8");
     const data = JSON.parse(raw);
+    // Explicit type field takes priority
+    if (data.type && typeof data.type === "string") return data.type;
+    // Fallback: infer from data keys
     for (const { key, type } of DATA_TYPE_KEYS) {
       if (Array.isArray(data[key]) && data[key].length > 0) return type;
     }

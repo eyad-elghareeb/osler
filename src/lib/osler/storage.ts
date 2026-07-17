@@ -214,6 +214,13 @@ export interface QuestionRecord {
   correct: boolean;
   flagged: boolean;
   timestamp: number;
+  /**
+   * Soft-dismissed flag — set to true when a question was answered correctly
+   * during a "remove on correct" review session. Records are never deleted,
+   * only marked dismissed, so the Tracker can reveal them again via a
+   * "show dismissed" toggle.
+   */
+  dismissed?: boolean;
 }
 
 export interface PackProgress {
@@ -282,6 +289,20 @@ export interface SavedSession {
   writtenDrafts?: Record<string, WrittenDraft>;
   rubricState?: Record<string, boolean[]>;
   ratings?: Record<string, "easy" | "hard" | "unknown">;
+  /**
+   * Ordered list of {id, sourceUid} pairs parallel to the session's
+   * questions array — lets a saved session be reopened in review mode
+   * without needing to keep the full SessionQuestion[] in storage.
+   * Optional for backward compat with sessions saved before this field
+   * existed.
+   */
+  questionRefs?: Array<{ id: string; sourceUid: string }>;
+  /** All pack uids included in this session (deduped). */
+  sources?: string[];
+  /** Tag filters that were active when the session was built. */
+  tagsFilter?: string[];
+  /** Progress-mode filter that was active when the session was built. */
+  onlyMode?: "all" | "wrong" | "flagged";
 }
 
 /* ── Progress (question-level) ──────────────────────────────────────── */
@@ -293,11 +314,19 @@ export const storage = {
     engine: EngineType,
     selected: number | undefined,
     correct: boolean,
-    flagged: boolean
+    flagged: boolean,
+    dismissed?: boolean
   ) {
     const key = `${uid}:${qid}`;
+    // Preserve existing dismissed flag if caller doesn't explicitly pass one
+    // (so a wrong answer during a "remove on correct" review doesn't accidentally
+    // re-show a previously dismissed question).
+    const existing = getCached<QuestionRecord>("progress", key);
+    const finalDismissed = dismissed ?? existing?.dismissed ?? false;
     const record: QuestionRecord = {
-      uid, qid, engine, selected, correct, flagged, timestamp: Date.now(),
+      uid, qid, engine, selected, correct, flagged,
+      dismissed: finalDismissed,
+      timestamp: Date.now(),
     };
     setCached("progress", key, record);
     idbPut("progress", key, record).catch(console.warn);
@@ -366,6 +395,40 @@ export const storage = {
       flagged: records.filter((r) => r.flagged).length,
       lastAttempt: Math.max(...records.map((r) => r.timestamp)),
     }));
+  },
+
+  /**
+   * Return all progress records whose uid is in the given list.
+   * Filters the in-memory cache once per call — much cheaper than
+   * calling `getRecord` per question when scanning many packs.
+   */
+  recordsForUids(uids: string[]): QuestionRecord[] {
+    const set = new Set(uids);
+    const out: QuestionRecord[] = [];
+    for (const [k, v] of memoryCache) {
+      if (!k.startsWith("progress:")) continue;
+      const r = v as QuestionRecord;
+      if (set.has(r.uid)) out.push(r);
+    }
+    return out;
+  },
+
+  /**
+   * Return all progress records (across the given uids, or all if omitted)
+   * that are either incorrect or flagged — i.e. the questions the user
+   * wants to revisit. Dismissed records are excluded by default.
+   */
+  wrongOrFlagged(uids?: string[]): QuestionRecord[] {
+    const set = uids ? new Set(uids) : null;
+    const out: QuestionRecord[] = [];
+    for (const [k, v] of memoryCache) {
+      if (!k.startsWith("progress:")) continue;
+      const r = v as QuestionRecord;
+      if (set && !set.has(r.uid)) continue;
+      if (r.dismissed) continue;
+      if (!r.correct || r.flagged) out.push(r);
+    }
+    return out;
   },
 
   subscribe(cb: () => void): () => void {

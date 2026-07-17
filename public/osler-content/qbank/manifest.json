@@ -12,6 +12,35 @@
       "items": []
     },
     {
+      "uid": "quiz-cardiology",
+      "title": "Cardiology",
+      "type": "quiz",
+      "path": "cardiology/",
+      "files": [],
+      "items": [
+        {
+          "uid": "quiz-cardiology-acute-coronary",
+          "title": "Acute Coronary",
+          "type": "quiz",
+          "path": "cardiology/acute-coronary/",
+          "files": [
+            "questions.json"
+          ],
+          "items": []
+        },
+        {
+          "uid": "bank-cardiology-arrhythmias",
+          "title": "Arrhythmias",
+          "type": "bank",
+          "path": "cardiology/arrhythmias/",
+          "files": [
+            "passages.json"
+          ],
+          "items": []
+        }
+      ]
+    },
+    {
       "uid": "bank-clinical-vignettes",
       "title": "Clinical Vignettes",
       "type": "bank",
@@ -40,6 +69,54 @@
         "questions.json"
       ],
       "items": []
+    },
+    {
+      "uid": "quiz-nephrology",
+      "title": "Nephrology",
+      "type": "quiz",
+      "path": "nephrology/",
+      "files": [],
+      "items": [
+        {
+          "uid": "written-nephrology-acute-kidney-injury",
+          "title": "Acute Kidney Injury",
+          "type": "written",
+          "path": "nephrology/acute-kidney-injury/",
+          "files": [
+            "prompts.json"
+          ],
+          "items": []
+        }
+      ]
+    },
+    {
+      "uid": "quiz-neurology",
+      "title": "Neurology",
+      "type": "quiz",
+      "path": "neurology/",
+      "files": [],
+      "items": [
+        {
+          "uid": "written-neurology-seizures",
+          "title": "Seizures",
+          "type": "written",
+          "path": "neurology/seizures/",
+          "files": [
+            "prompts.json"
+          ],
+          "items": []
+        },
+        {
+          "uid": "quiz-neurology-stroke",
+          "title": "Stroke",
+          "type": "quiz",
+          "path": "neurology/stroke/",
+          "files": [
+            "questions.json"
+          ],
+          "items": []
+        }
+      ]
     }
   ]
 }

@@ -1,0 +1,83 @@
+{
+  "type": "bank",
+  "passages": [
+    {
+      "id": "p-arr-001",
+      "content": "A 72-year-old male with a history of hypertension and dilated cardiomyopathy presents with palpitations and lightheadedness for 3 days. On exam, the pulse is irregularly irregular at approximately 130 bpm. ECG shows atrial fibrillation with rapid ventricular response. Echocardiogram reveals LVEF of 25%. CHA2DS2-VASc score is 5. He is not currently anticoagulated.",
+      "questions": [
+        {
+          "id": "bq-arr-001",
+          "passageId": "p-arr-001",
+          "question": "What is the most appropriate initial rate control strategy for this patient?",
+          "options": ["Amiodarone bolus", "IV diltiazem", "Metoprolol (beta-blocker)", "Verapamil oral", "Flecainide"],
+          "correct": 2,
+          "explanation": "Beta-blockers are preferred for rate control in AF with HFrEF (LVEF 25%). Non-dihydropyridine calcium channel blockers (verapamil, diltiazem) are contraindicated in HFrEF due to negative inotropic effects.",
+          "tags": ["cardiology", "afib", "rate-control", "heart-failure"],
+          "difficulty": 2
+        },
+        {
+          "id": "bq-arr-002",
+          "passageId": "p-arr-001",
+          "question": "What is the most appropriate long-term anticoagulation strategy for this patient?",
+          "options": ["Aspirin monotherapy", "Warfarin with target INR 2-3", "DOAC (apixaban or rivaroxaban)", "Clopidogrel monotherapy", "No anticoagulation needed"],
+          "correct": 2,
+          "explanation": "With CHA2DS2-VASc ≥ 2, oral anticoagulation is indicated. DOACs are preferred over warfarin in non-valvular AF due to lower bleeding risk and no need for INR monitoring.",
+          "tags": ["cardiology", "afib", "anticoagulation"],
+          "difficulty": 2
+        }
+      ]
+    },
+    {
+      "id": "p-arr-002",
+      "content": "A 35-year-old male marathon runner presents with episodic palpitations that start abruptly and terminate suddenly, lasting minutes to hours. During an episode, ECG shows narrow complex tachycardia at 180 bpm with retrograde P waves visible after each QRS. The rhythm is regular. Blood pressure during the episode is 100/70 mmHg.",
+      "questions": [
+        {
+          "id": "bq-arr-003",
+          "passageId": "p-arr-002",
+          "question": "What is the most likely diagnosis?",
+          "options": ["Atrial flutter", "AV nodal reentrant tachycardia (AVNRT)", "Atrial fibrillation", "Wolff-Parkinson-White syndrome with orthodromic tachycardia", "Sinus tachycardia"],
+          "correct": 1,
+          "explanation": "Paroxysmal regular narrow complex tachycardia in a young healthy person with retrograde P waves is most consistent with AVNRT, the most common form of SVT.",
+          "tags": ["cardiology", "arrhythmia", "svt", "avnrt"],
+          "difficulty": 2
+        },
+        {
+          "id": "bq-arr-004",
+          "passageId": "p-arr-002",
+          "question": "What is the first-line acute management for this tachycardia?",
+          "options": ["Amiodarone IV", "Adenosine 6 mg rapid IV push", "Procainamide IV", "Synchronized cardioversion", "Flecainide oral"],
+          "correct": 1,
+          "explanation": "Vagal maneuvers first, then adenosine 6 mg rapid IV push is first-line for hemodynamically stable AVNRT. Adenosine transiently blocks the AV node, terminating the reentrant circuit.",
+          "tags": ["cardiology", "svt", "adenosine"],
+          "difficulty": 2
+        }
+      ]
+    },
+    {
+      "id": "p-arr-003",
+      "content": "A 68-year-old male with history of anterior MI presents with syncope. Holter monitor reveals alternating left and right bundle branch block. Echocardiogram shows LVEF 30% with anterior wall akinesis. The patient reports two episodes of syncope in the past month without prodrome.",
+      "questions": [
+        {
+          "id": "bq-arr-005",
+          "passageId": "p-arr-003",
+          "question": "What is the most likely mechanism of syncope in this patient?",
+          "options": ["Vasovagal syncope", "Complete heart block (intermittent high-grade AV block)", "Neurocardiogenic syncope", "Orthostatic hypotension", "Seizure"],
+          "correct": 1,
+          "explanation": "Alternating bundle branch block indicates bilateral conduction system disease. In a patient with prior anterior MI and syncope, this pattern suggests intermittent high-grade or complete AV block, placing the patient at risk for Stokes-Adams attacks.",
+          "tags": ["cardiology", "conduction", "syncope", "av-block"],
+          "difficulty": 3
+        },
+        {
+          "id": "bq-arr-006",
+          "passageId": "p-arr-003",
+          "question": "What is the definitive treatment for this patient?",
+          "options": ["Permanent pacemaker insertion", "ICD implantation", "Temporary pacing wire followed by permanent pacemaker", "Radiofrequency ablation of the AV node", "Medical therapy with isoproterenol"],
+          "correct": 2,
+          "explanation": "Alternating bundle branch block with syncope indicates high risk for complete heart block. A temporary pacing wire should be placed emergently, followed by permanent pacemaker. ICD is also indicated given LVEF <35%, but pacing is the priority for conduction disease.",
+          "tags": ["cardiology", "pacemaker", "av-block"],
+          "difficulty": 3
+        }
+      ]
+    }
+  ]
+}
