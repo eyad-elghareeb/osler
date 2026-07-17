@@ -64,7 +64,12 @@ export function Profile({ username, onViewChange, onOpenSettingsSection }: Profi
   React.useEffect(() => {
     const update = () => setProgress(storage.allProgress());
     update();
-    return storage.subscribe(update);
+    const unsub = storage.subscribe(update);
+    const unsubHydrated = storage.onHydrated(update);
+    return () => {
+      unsub();
+      unsubHydrated();
+    };
   }, []);
 
   const attemptedTotal = progress.reduce((a, b) => a + b.attempted, 0);

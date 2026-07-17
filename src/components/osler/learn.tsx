@@ -157,26 +157,31 @@ export function Learn({ onNavigate }: LearnProps) {
   >(null);
 
   React.useEffect(() => {
-    const all = storage.allProgress();
-    if (all.length === 0) return;
-    // Pick the most-recent pack's engine and map to a module id.
-    const sorted = [...all].sort(
-      (a, b) => (b.lastAttempt ?? 0) - (a.lastAttempt ?? 0),
-    );
-    const latestUid = sorted[0]?.uid;
-    if (!latestUid) return;
-    // Resolve engine via the in-memory cache if loaded already; if not, skip.
-    loadAllContent()
-      .then((data) => {
-        const item = data.items.find((x) => x.node.uid === latestUid);
-        if (!item) return;
-        const eng = item.node.type;
-        if (eng === "flashcard") setRecentModule("flashcards");
-        else if (eng === "osce") setRecentModule("osce");
-        else if (eng === "library") setRecentModule("library");
-        else if (eng === "video") setRecentModule("videos");
-      })
-      .catch(() => {});
+    const pickRecent = () => {
+      const all = storage.allProgress();
+      if (all.length === 0) return;
+      // Pick the most-recent pack's engine and map to a module id.
+      const sorted = [...all].sort(
+        (a, b) => (b.lastAttempt ?? 0) - (a.lastAttempt ?? 0),
+      );
+      const latestUid = sorted[0]?.uid;
+      if (!latestUid) return;
+      // Resolve engine via the in-memory cache if loaded already; if not, skip.
+      loadAllContent()
+        .then((data) => {
+          const item = data.items.find((x) => x.node.uid === latestUid);
+          if (!item) return;
+          const eng = item.node.type;
+          if (eng === "flashcard") setRecentModule("flashcards");
+          else if (eng === "osce") setRecentModule("osce");
+          else if (eng === "library") setRecentModule("library");
+          else if (eng === "video") setRecentModule("videos");
+        })
+        .catch(() => {});
+    };
+    pickRecent();
+    const unsubHydrated = storage.onHydrated(pickRecent);
+    return () => unsubHydrated();
   }, []);
 
   return (

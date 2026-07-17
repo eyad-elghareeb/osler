@@ -1601,7 +1601,12 @@ function DangerZoneSection() {
   React.useEffect(() => {
     const update = () => setProgressCount(storage.allProgress().length);
     update();
-    return storage.subscribe(update);
+    const unsub = storage.subscribe(update);
+    const unsubHydrated = storage.onHydrated(update);
+    return () => {
+      unsub();
+      unsubHydrated();
+    };
   }, []);
 
   const handleClearProgress = () => {

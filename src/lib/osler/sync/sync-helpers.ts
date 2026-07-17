@@ -29,6 +29,12 @@ export async function buildExportPayload(): Promise<SyncPayload> {
     data["osler_notes"] = notes;
   }
 
+  // Article highlights (per-article keys)
+  const articleHighlights = storage.exportArticleHighlights();
+  for (const [articleId, items] of Object.entries(articleHighlights)) {
+    data[`osler_article_highlights_${articleId}`] = items;
+  }
+
   return {
     timestamp: Date.now(),
     senderName: typeof window !== "undefined"

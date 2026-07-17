@@ -6,7 +6,7 @@
 import type { EngineType } from "./types";
 
 const DB_NAME = "osler-db-v1";
-const DB_VERSION = 2;
+const DB_VERSION = 4;
 
 /* ── IndexedDB helpers ──────────────────────────────────────────────── */
 
@@ -29,15 +29,20 @@ function openDB(): Promise<IDBDatabase> {
       if (!db.objectStoreNames.contains("progress")) {
         db.createObjectStore("progress", { keyPath: "key" });
       }
-      if (!db.objectStoreNames.contains("sessions")) {
-        db.createObjectStore("sessions", { keyPath: "id" });
+      // v3: fix sessions store keyPath from "id" to "key" (generic helpers use { key, value } shape)
+      if (db.objectStoreNames.contains("sessions")) {
+        db.deleteObjectStore("sessions");
       }
+      db.createObjectStore("sessions", { keyPath: "key" });
       if (!db.objectStoreNames.contains("highlights")) {
         db.createObjectStore("highlights", { keyPath: "key" });
       }
-      if (!db.objectStoreNames.contains("articleHighlights")) {
-        db.createObjectStore("articleHighlights", { keyPath: "articleId" });
+      // v4: fix articleHighlights store keyPath from "articleId" to "key"
+      // (generic helpers store { key, value }; a missing keyPath key throws DataError).
+      if (db.objectStoreNames.contains("articleHighlights")) {
+        db.deleteObjectStore("articleHighlights");
       }
+      db.createObjectStore("articleHighlights", { keyPath: "key" });
       if (!db.objectStoreNames.contains("stickyNotes")) {
         db.createObjectStore("stickyNotes", { keyPath: "key" });
       }
@@ -97,40 +102,40 @@ async function idbGetAll<T>(storeName: string): Promise<T[]> {
 
 async function idbPut(storeName: string, key: string, value: unknown): Promise<void> {
   const db = await openDB();
-  return new Promise((resolve, reject) => {
+  return trackWrite(new Promise((resolve, reject) => {
     const tx = db.transaction(storeName, "readwrite");
     const store = tx.objectStore(storeName);
     store.put({ key, value });
     tx.oncomplete = () => resolve();
     tx.onerror = () => reject(tx.error);
-  });
+  }));
 }
 
 async function idbDelete(storeName: string, key: string): Promise<void> {
   const db = await openDB();
-  return new Promise((resolve, reject) => {
+  return trackWrite(new Promise((resolve, reject) => {
     const tx = db.transaction(storeName, "readwrite");
     const store = tx.objectStore(storeName);
     store.delete(key);
     tx.oncomplete = () => resolve();
     tx.onerror = () => reject(tx.error);
-  });
+  }));
 }
 
 async function idbClear(storeName: string): Promise<void> {
   const db = await openDB();
-  return new Promise((resolve, reject) => {
+  return trackWrite(new Promise((resolve, reject) => {
     const tx = db.transaction(storeName, "readwrite");
     const store = tx.objectStore(storeName);
     store.clear();
     tx.oncomplete = () => resolve();
     tx.onerror = () => reject(tx.error);
-  });
+  }));
 }
 
 async function idbPutBatch(storeName: string, entries: Array<{ key: string; value: unknown }>): Promise<void> {
   const db = await openDB();
-  return new Promise((resolve, reject) => {
+  return trackWrite(new Promise((resolve, reject) => {
     const tx = db.transaction(storeName, "readwrite");
     const store = tx.objectStore(storeName);
     for (const entry of entries) {
@@ -138,13 +143,25 @@ async function idbPutBatch(storeName: string, entries: Array<{ key: string; valu
     }
     tx.oncomplete = () => resolve();
     tx.onerror = () => reject(tx.error);
-  });
+  }));
 }
 
 /* ── In-memory cache for synchronous reads (hydration from IDB) ─────── */
 
 const memoryCache = new Map<string, unknown>();
 let cacheHydrated = false;
+
+/**
+ * Pending IDB write promises. Tracked so we can flush them on page unload,
+ * guaranteeing the last in-flight write is durable before the tab closes.
+ */
+const pendingWrites = new Set<Promise<void>>();
+
+function trackWrite(p: Promise<void>): Promise<void> {
+  pendingWrites.add(p);
+  p.finally(() => pendingWrites.delete(p)).catch(() => {});
+  return p;
+}
 
 async function hydrateCache(): Promise<void> {
   if (cacheHydrated) return;
@@ -170,6 +187,10 @@ async function hydrateCache(): Promise<void> {
     cacheHydrated = true;
   } catch (e) {
     console.warn("Failed to hydrate IndexedDB cache:", e);
+  } finally {
+    // Notes have their own cache; mark hydration done regardless of IDB success
+    // so synchronous readers can re-render with whatever we have.
+    dispatchChange("osler-hydrated");
   }
 }
 
@@ -446,6 +467,39 @@ export const storage = {
 
   async ensureCacheHydrated(): Promise<void> {
     await hydrateCache();
+    // Notes live in a separate cache; await it so exports never read stale [].
+    if (typeof window !== "undefined") {
+      await ensureNotesCache().catch(() => {});
+    }
+  },
+
+  /** Resolve once the in-memory cache has been hydrated from IDB. */
+  isHydrated(): boolean {
+    return cacheHydrated;
+  },
+
+  /**
+   * Subscribe to the hydration-completion event. Fires immediately (and
+   * invokes cb once) if hydration already finished, so callers can safely
+   * seed synchronous state after the cache is populated.
+   */
+  onHydrated(cb: () => void): () => void {
+    if (typeof window === "undefined") return () => {};
+    if (cacheHydrated) {
+      cb();
+      return () => {};
+    }
+    const handler = () => cb();
+    window.addEventListener("osler-hydrated", handler);
+    return () => window.removeEventListener("osler-hydrated", handler);
+  },
+
+  /**
+   * Await all in-flight IndexedDB writes. Called automatically on page
+   * unload so the most recent write is never lost on refresh/close.
+   */
+  async flush(): Promise<void> {
+    await Promise.allSettled(Array.from(pendingWrites));
   },
 
   exportProgressRecords(): Record<string, QuestionRecord> {
@@ -454,6 +508,18 @@ export const storage = {
       if (k.startsWith("progress:")) {
         const record = v as QuestionRecord;
         result[`${record.uid}:${record.qid}`] = record;
+      }
+    }
+    return result;
+  },
+
+  /** Serialize all article highlights (articleId -> HighlightItem[]) for backup/sync. */
+  exportArticleHighlights(): Record<string, HighlightItem[]> {
+    const result: Record<string, HighlightItem[]> = {};
+    for (const [k, v] of memoryCache) {
+      if (k.startsWith("articleHighlights:")) {
+        const articleId = k.replace("articleHighlights:", "");
+        result[articleId] = v as HighlightItem[];
       }
     }
     return result;
@@ -505,6 +571,22 @@ export const storage = {
         }
         dispatchChange("osler-flashcard-changed");
       }
+    }
+
+    // 3b. Article highlights (per-article keys: osler_article_highlights_<articleId>)
+    const articleHlEntries = Object.entries(data)
+      .filter(([key]) => key.startsWith("osler_article_highlights_"))
+      .map(([key, value]) => ({
+        key: key.replace("osler_article_highlights_", ""),
+        value: value as HighlightItem[],
+      }))
+      .filter((e) => Array.isArray(e.value));
+    if (articleHlEntries.length > 0) {
+      await idbPutBatch("articleHighlights", articleHlEntries);
+      for (const e of articleHlEntries) {
+        setCached("articleHighlights", e.key, e.value);
+      }
+      dispatchChange("osler-article-highlights-changed");
     }
 
     // 4. Notes
@@ -1021,6 +1103,18 @@ async function ensureNotesCache(): Promise<NoteRecord[]> {
 // Start hydrating immediately
 if (typeof window !== "undefined") {
   ensureNotesCache().catch(console.warn);
+}
+
+// Flush pending IndexedDB writes before the tab is hidden/closed so the
+// most recent mutation (answer, session, highlight) is never lost on refresh.
+if (typeof window !== "undefined") {
+  const flushOnUnload = () => {
+    void storage.flush();
+  };
+  window.addEventListener("pagehide", flushOnUnload);
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "hidden") flushOnUnload();
+  });
 }
 
 export const notes = {

@@ -839,7 +839,12 @@ function HomeView({
   React.useEffect(() => {
     const update = () => setSavedSessions(sessions.list());
     update();
-    return sessions.subscribe(update);
+    const unsub = sessions.subscribe(update);
+    const unsubHydrated = storage.onHydrated(update);
+    return () => {
+      unsub();
+      unsubHydrated();
+    };
   }, []);
 
   React.useEffect(() => storage.subscribe(force), []);
@@ -2685,7 +2690,14 @@ function TrackerTab({
 }) {
   const { t, rtl } = useI18n();
   const [, force] = React.useReducer((x) => x + 1, 0);
-  React.useEffect(() => storage.subscribe(force), []);
+  React.useEffect(() => {
+    const unsub = storage.subscribe(force);
+    const unsubHydrated = storage.onHydrated(force);
+    return () => {
+      unsub();
+      unsubHydrated();
+    };
+  }, []);
 
   // Selection of question records for the "Start review session" action.
   const [selectedKeys, setSelectedKeys] = React.useState<Set<string>>(new Set());
@@ -2720,7 +2732,7 @@ function TrackerTab({
       flagged += p.flagged;
     }
     return { attempted, correct, wrong, flagged, accuracy: attempted > 0 ? Math.round((correct / attempted) * 100) : 0 };
-  }, [data]);
+  }, [data, force]);
 
   // P5-3: per-folder insight. Walk every QBank-owned engine tree, compute
   // aggregated stats per node (recursive — same pattern as ContentTab).

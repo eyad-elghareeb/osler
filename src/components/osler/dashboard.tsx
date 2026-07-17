@@ -79,7 +79,12 @@ export function Dashboard({
       });
     };
     update();
-    return storage.subscribe(update);
+    const unsub = storage.subscribe(update);
+    const unsubHydrated = storage.onHydrated(update);
+    return () => {
+      unsub();
+      unsubHydrated();
+    };
   }, []);
 
   const recentPacks = React.useMemo(() => {
