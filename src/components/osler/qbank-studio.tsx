@@ -263,7 +263,7 @@ export function QBankStudio({
   );
 
   const startCustomSession = React.useCallback(
-    (pool: PoolQuestion[], meta: { title: string; engine: EngineType; mode?: TestMode; dismissAfterCorrect?: boolean; tagsFilter?: string[]; onlyMode?: OnlyMode; isReview?: boolean; savedDrafts?: Record<string, WrittenDraft>; savedRubricState?: Record<string, boolean[]> }) => {
+    (pool: PoolQuestion[], meta: { title: string; engine: EngineType; mode?: TestMode; dismissAfterCorrect?: boolean; tagsFilter?: string[]; onlyMode?: OnlyMode; isReview?: boolean; savedDrafts?: Record<string, WrittenDraft>; savedRubricState?: Record<string, boolean[]>; savedAnswers?: Record<number, number>; savedRevealed?: Record<number, boolean>; savedFlagged?: Record<number, boolean>; savedRatings?: Record<string, "easy" | "hard" | "unknown">; savedCurrent?: number }) => {
       if (pool.length === 0) return;
       const sessionId = `custom-${Date.now()}`;
       const totalTime = pool.length * 60;
@@ -274,17 +274,17 @@ export function QBankStudio({
         engine: meta.engine,
         mode: meta.mode ?? testMode,
         questions: pool as SessionQuestion[],
-        answers: {},
-        revealed: {},
-        flagged: {},
-        current: 0,
+        answers: meta.savedAnswers ?? {},
+        revealed: meta.savedRevealed ?? {},
+        flagged: meta.savedFlagged ?? {},
+        current: meta.savedCurrent ?? 0,
         startedAt: Date.now(),
         examTimeRemaining: totalTime,
         examPaused: false,
         sessionId,
         writtenDrafts: meta.savedDrafts ?? {},
         rubricState: meta.savedRubricState ?? {},
-        ratings: {},
+        ratings: meta.savedRatings ?? {},
         strikethroughs: {},
         tagsFilter: meta.tagsFilter,
         onlyMode: meta.onlyMode,
@@ -406,9 +406,11 @@ export function QBankStudio({
   };
 
   // Request exit confirmation — opens a modal when there is an in-progress
-  // session; otherwise just exits immediately.
+  // session; otherwise just exits immediately. Review sessions skip confirmation.
   const requestExit = () => {
-    if (mode === "quiz" && session) {
+    if (mode === "review" || (mode === "quiz" && session?.isReview)) {
+      exitToHome();
+    } else if (mode === "quiz" && session) {
       setExitConfirmOpen(true);
     } else {
       exitToHome();
@@ -471,6 +473,7 @@ export function QBankStudio({
           onOpenArticle={(id) => setArticleModalId(id)}
           onExitRequest={requestExit}
           onSelect={(idx) => {
+            if (session.isReview) return;
             if (session.revealed[session.current]) return;
             const q = session.questions[session.current];
             const isMCQ = !!q && q.correct >= 0;
@@ -610,6 +613,7 @@ export function QBankStudio({
             force();
           }}
           onToggleFlag={() => {
+            if (session.isReview) return;
             setSession((s) =>
               s
                 ? {
@@ -622,9 +626,10 @@ export function QBankStudio({
                 : s
             );
           }}
-          onTogglePause={() =>
-            setSession((s) => (s ? { ...s, examPaused: !s.examPaused } : s))
-          }
+          onTogglePause={() => {
+            if (session.isReview) return;
+            setSession((s) => (s ? { ...s, examPaused: !s.examPaused } : s));
+          }}
           onTimeUp={endSession}
           onPrev={() =>
             setSession((s) =>
@@ -799,6 +804,11 @@ function HomeView({
       isReview?: boolean;
       savedDrafts?: Record<string, WrittenDraft>;
       savedRubricState?: Record<string, boolean[]>;
+      savedAnswers?: Record<number, number>;
+      savedRevealed?: Record<number, boolean>;
+      savedFlagged?: Record<number, boolean>;
+      savedRatings?: Record<string, "easy" | "hard" | "unknown">;
+      savedCurrent?: number;
     }
   ) => void;
 }) {
@@ -2413,6 +2423,11 @@ function PreviousTestsTab({
       dismissAfterCorrect?: boolean;
       savedDrafts?: Record<string, WrittenDraft>;
       savedRubricState?: Record<string, boolean[]>;
+      savedAnswers?: Record<number, number>;
+      savedRevealed?: Record<number, boolean>;
+      savedFlagged?: Record<number, boolean>;
+      savedRatings?: Record<string, "easy" | "hard" | "unknown">;
+      savedCurrent?: number;
     }
   ) => void;
 }) {
@@ -2488,6 +2503,13 @@ function PreviousTestsTab({
           setError(t("qbank.review.noQuestions"));
           return;
         }
+        // Convert answers/revealed/flagged from string-keyed (JSON) to number-keyed
+        const savedAnswers: Record<number, number> = {};
+        const savedRevealed: Record<number, boolean> = {};
+        const savedFlagged: Record<number, boolean> = {};
+        for (const [k, v] of Object.entries(s.answers)) savedAnswers[+k] = v;
+        for (const [k, v] of Object.entries(s.revealed)) savedRevealed[+k] = v;
+        for (const [k, v] of Object.entries(s.flagged)) savedFlagged[+k] = v;
         onStartCustomSession(pool, {
           title: s.packTitle,
           engine: s.engine,
@@ -2495,6 +2517,11 @@ function PreviousTestsTab({
           isReview: true,
           savedDrafts: s.writtenDrafts,
           savedRubricState: s.rubricState,
+          savedAnswers,
+          savedRevealed,
+          savedFlagged,
+          savedRatings: s.ratings,
+          savedCurrent: s.current,
         });
       } finally {
         setBusy(null);
@@ -3256,7 +3283,8 @@ function QuizView({
 }) {
   const q = session.questions[session.current];
   const isLast = session.current >= session.questions.length - 1;
-  const submitted = session.revealed[session.current] || false;
+  const readonly = !!session.isReview;
+  const submitted = readonly || session.revealed[session.current] || false;
   const selected = session.answers[session.current];
   const isMCQ = q ? q.correct >= 0 : false;
   const qIsWritten = q ? (!q.correct || q.correct < 0) && (!!q.rubric?.length || !!q.modelAnswer) : false;
@@ -3544,7 +3572,7 @@ function QuizView({
   const renderQuestionContent = (qIdx: number, interactive: boolean) => {
     const question = session.questions[qIdx];
     if (!question) return null;
-    const qSubmitted = session.revealed[qIdx] || false;
+    const qSubmitted = readonly || session.revealed[qIdx] || false;
     const qSelected = session.answers[qIdx];
     const qIsMCQ = question.correct >= 0;
     // Per-question written detection: non-MCQ with rubric or modelAnswer
@@ -4046,6 +4074,13 @@ function QuizView({
   React.useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+      // Navigation-only shortcuts in readonly (review) mode
+      if (readonly) {
+        if (e.key === "ArrowLeft") { e.preventDefault(); goPrev(); }
+        if (e.key === "ArrowRight") { e.preventDefault(); goNext(); }
+        if (e.key === "?" && !e.shiftKey) { e.preventDefault(); setShowShortcuts((s) => !s); }
+        return;
+      }
       if (e.key === "f" || e.key === "F") { e.preventDefault(); onToggleFlag(); }
       if (e.key === "ArrowLeft") { e.preventDefault(); goPrev(); }
       if (e.key === "ArrowRight") { e.preventDefault(); goNext(); }
@@ -4071,7 +4106,7 @@ function QuizView({
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [q, isMCQ, submitted, selected, onToggleFlag, goPrev, goNext, onSelect, onSubmit, onToggleAiAssistant, onToggleNotes, onToggleQuizSettings, setTool]);
+  }, [q, isMCQ, submitted, selected, onToggleFlag, goPrev, goNext, onSelect, onSubmit, onToggleAiAssistant, onToggleNotes, onToggleQuizSettings, setTool, readonly]);
 
   const currentHighlights = React.useMemo(
     () => highlights.get(activeItem.uid, session.current),
@@ -4180,8 +4215,15 @@ function QuizView({
         </button>
 
         <div className="flex-1 flex items-center justify-center min-w-0">
-          <div className="text-sm font-semibold tracking-wide truncate">
-            {t("qbank.session.question", { n: session.current + 1, total: session.questions.length })}
+          <div className="flex items-center gap-2">
+            <div className="text-sm font-semibold tracking-wide truncate">
+              {t("qbank.session.question", { n: session.current + 1, total: session.questions.length })}
+            </div>
+            {readonly && (
+              <span className="hidden sm:inline-flex text-[10px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded-full bg-primary-foreground/15 text-primary-foreground/80">
+                {t("qbank.review.title")}
+              </span>
+            )}
           </div>
         </div>
 
@@ -4200,55 +4242,61 @@ function QuizView({
           <Sliders className="size-3.5" />
         </button>
 
-        <div className="flex items-center gap-1">
-          <QBankTimer
-            key={session.startedAt}
-            mode={session.mode}
-            startedAt={session.startedAt}
-            initialRemaining={session.examTimeRemaining}
-            paused={session.examPaused}
-            onExpire={onTimeUp}
-          />
-          <button
-            onClick={onTogglePause}
-            className="size-7 rounded-lg bg-primary-foreground/15 hover:bg-primary-foreground/25 flex items-center justify-center transition-colors shrink-0"
-            title={isPausedOrLocked ? "Resume" : "Pause"}
-            aria-label={isPausedOrLocked ? "Resume" : "Pause"}
-          >
-            {isPausedOrLocked ? <Play className="size-3.5" /> : <Pause className="size-3.5" />}
-          </button>
-        </div>
+        {!readonly && (
+          <div className="flex items-center gap-1">
+            <QBankTimer
+              key={session.startedAt}
+              mode={session.mode}
+              startedAt={session.startedAt}
+              initialRemaining={session.examTimeRemaining}
+              paused={session.examPaused}
+              onExpire={onTimeUp}
+            />
+            <button
+              onClick={onTogglePause}
+              className="size-7 rounded-lg bg-primary-foreground/15 hover:bg-primary-foreground/25 flex items-center justify-center transition-colors shrink-0"
+              title={isPausedOrLocked ? "Resume" : "Pause"}
+              aria-label={isPausedOrLocked ? "Resume" : "Pause"}
+            >
+              {isPausedOrLocked ? <Play className="size-3.5" /> : <Pause className="size-3.5" />}
+            </button>
+          </div>
+        )}
 
-        {/* Unified highlighter: colors + eraser tool */}
-        <HighlighterToolbar
-          tone="header"
-          control={{
-            tool,
-            color,
-            count: currentHighlights.length,
-            onToolChange: setTool,
-            onColorChange: setColor,
-            onClearAll: () => {
-              highlights.clearAll(activeItem.uid);
-              setHlVersion((v) => v + 1);
-            },
-          }}
-        />
+        {!readonly && (
+          <>
+            {/* Unified highlighter: colors + eraser tool */}
+            <HighlighterToolbar
+              tone="header"
+              control={{
+                tool,
+                color,
+                count: currentHighlights.length,
+                onToolChange: setTool,
+                onColorChange: setColor,
+                onClearAll: () => {
+                  highlights.clearAll(activeItem.uid);
+                  setHlVersion((v) => v + 1);
+                },
+              }}
+            />
 
-        {/* Notes button — opens notes sidebar (replaces sticky notes) */}
-        <button
-          onClick={onToggleNotes}
-          className={`size-7 rounded-lg flex items-center justify-center transition-colors shrink-0 ${
-            notesOpen
-              ? "bg-primary-foreground/30 ring-1 ring-inset ring-primary-foreground/40"
-              : "bg-primary-foreground/15 hover:bg-primary-foreground/25"
-          }`}
-          title="Notes"
-          aria-label="Notes"
-          aria-pressed={notesOpen}
-        >
-          <NotebookPen className="size-3.5" />
-        </button>
+            {/* Notes button — opens notes sidebar (replaces sticky notes) */}
+            <button
+              onClick={onToggleNotes}
+              className={`size-7 rounded-lg flex items-center justify-center transition-colors shrink-0 ${
+                notesOpen
+                  ? "bg-primary-foreground/30 ring-1 ring-inset ring-primary-foreground/40"
+                  : "bg-primary-foreground/15 hover:bg-primary-foreground/25"
+              }`}
+              title="Notes"
+              aria-label="Notes"
+              aria-pressed={notesOpen}
+            >
+              <NotebookPen className="size-3.5" />
+            </button>
+          </>
+        )}
       </header>
 
       {/* ── Body: Question panel ─────────────────────────────────────────── */}
@@ -4283,6 +4331,7 @@ function QuizView({
                     progressPct={progressPct}
                     onJumpTo={(idx) => { onJumpTo(idx); onToggleNavMobile(); }}
                     onEndTest={() => { onFinish(); onToggleNavMobile(); }}
+                    readonly={readonly}
                   />
                 </div>
                 <div className="px-4 py-2.5 border-t border-border flex items-center justify-between text-xs text-muted-foreground">
@@ -4327,7 +4376,7 @@ function QuizView({
         {/* Center — Question panel */}
         <main ref={questionBodyRef} className="flex-1 min-w-0 flex flex-col bg-background">
           <AnimatePresence>
-            {isPausedOrLocked && (
+            {isPausedOrLocked && !readonly && (
               <motion.div
                 initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
                 className="absolute inset-0 z-30 bg-background/95 flex items-center justify-center"
@@ -4349,7 +4398,7 @@ function QuizView({
           </AnimatePresence>
 
           {/* Mobile tutor-mode tab switcher — shown only on phones in split mode after submit */}
-          {submitted && session.mode === "tutor" && useSplitExplanation && (
+          {submitted && session.mode === "tutor" && useSplitExplanation && !readonly && (
             <div className="md:hidden flex border-b border-border bg-muted/30 safe-pt">
               <button
                 onClick={() => setMobileTutorTab("question")}
@@ -4549,93 +4598,99 @@ function QuizView({
 
             <div className="flex-1" />
 
-            <div className="flex items-center gap-1">
-              <Button variant="outline" size="sm" onClick={onToggleCalculator} className={`h-9 px-2.5 rounded-lg ${calculatorOpen ? "border-primary bg-primary/10 text-primary" : ""}`} title={t("qbank.session.calculator")}>
-                <CalcIcon className="size-4" />
-              </Button>
-              <Button variant="outline" size="sm" onClick={onToggleLabValues} className={`h-9 px-2.5 rounded-lg ${labValuesOpen ? "border-primary bg-primary/10 text-primary" : ""}`} title={t("qbank.session.labValues")}>
-                <FlaskConical className="size-4" />
-              </Button>
-              <Button
-                variant="outline" size="sm"
-                onClick={onToggleAiAssistant}
-                className={`h-9 px-2.5 rounded-lg ${aiAssistantOpen ? "border-primary bg-primary/10 text-primary" : ""}`}
-                title={t("qbank.session.aiAssistant")}
-              >
-                <Sparkles className="size-4" />
-              </Button>
-              {!isMobile && (
-                <Popover open={articleSearchOpen} onOpenChange={setArticleSearchOpen}>
-                  <PopoverTrigger asChild>
-                    <Button variant="outline" size="sm" className="h-9 px-2.5 rounded-lg" title={t("qbank.session.openArticle")}>
-                      <BookOpen className="size-4" />
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent align="end" className="w-72 p-0 max-h-64 overflow-y-auto">
-                    <div className="py-1">
-                      <div className="px-4 py-2 text-xs font-bold uppercase tracking-wider text-primary border-b border-border">{t("qbank.session.openArticle")}</div>
-                      {articleList.map((a) => (
-                        <button
-                          key={a.file}
-                          onClick={() => {
-                            onOpenArticle(a.file);
-                            setArticleSearchOpen(false);
-                          }}
-                          className="w-full text-left text-sm px-4 py-2.5 hover:bg-muted transition-colors flex items-center gap-2 border-b border-border/40 last:border-0"
-                        >
-                          <FileText className="size-3.5 shrink-0 text-muted-foreground" />
-                          <span className="truncate">{a.title}</span>
-                        </button>
-                      ))}
-                    </div>
-                  </PopoverContent>
-                </Popover>
-              )}
-              <Button
-                variant="outline" size="sm"
-                onClick={() => setShowShortcuts((s) => !s)}
-                className={`h-9 px-2.5 rounded-lg ${showShortcuts ? "border-primary bg-primary/10 text-primary" : ""}`}
-                title={t("qbank.session.keyboardShortcuts")}
-              >
-                <Keyboard className="size-4" />
-              </Button>
-            </div>
+            {!readonly && (
+              <>
+                <div className="flex items-center gap-1">
+                  <Button variant="outline" size="sm" onClick={onToggleCalculator} className={`h-9 px-2.5 rounded-lg ${calculatorOpen ? "border-primary bg-primary/10 text-primary" : ""}`} title={t("qbank.session.calculator")}>
+                    <CalcIcon className="size-4" />
+                  </Button>
+                  <Button variant="outline" size="sm" onClick={onToggleLabValues} className={`h-9 px-2.5 rounded-lg ${labValuesOpen ? "border-primary bg-primary/10 text-primary" : ""}`} title={t("qbank.session.labValues")}>
+                    <FlaskConical className="size-4" />
+                  </Button>
+                  <Button
+                    variant="outline" size="sm"
+                    onClick={onToggleAiAssistant}
+                    className={`h-9 px-2.5 rounded-lg ${aiAssistantOpen ? "border-primary bg-primary/10 text-primary" : ""}`}
+                    title={t("qbank.session.aiAssistant")}
+                  >
+                    <Sparkles className="size-4" />
+                  </Button>
+                  {!isMobile && (
+                    <Popover open={articleSearchOpen} onOpenChange={setArticleSearchOpen}>
+                      <PopoverTrigger asChild>
+                        <Button variant="outline" size="sm" className="h-9 px-2.5 rounded-lg" title={t("qbank.session.openArticle")}>
+                          <BookOpen className="size-4" />
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent align="end" className="w-72 p-0 max-h-64 overflow-y-auto">
+                        <div className="py-1">
+                          <div className="px-4 py-2 text-xs font-bold uppercase tracking-wider text-primary border-b border-border">{t("qbank.session.openArticle")}</div>
+                          {articleList.map((a) => (
+                            <button
+                              key={a.file}
+                              onClick={() => {
+                                onOpenArticle(a.file);
+                                setArticleSearchOpen(false);
+                              }}
+                              className="w-full text-left text-sm px-4 py-2.5 hover:bg-muted transition-colors flex items-center gap-2 border-b border-border/40 last:border-0"
+                            >
+                              <FileText className="size-3.5 shrink-0 text-muted-foreground" />
+                              <span className="truncate">{a.title}</span>
+                            </button>
+                          ))}
+                        </div>
+                      </PopoverContent>
+                    </Popover>
+                  )}
+                  <Button
+                    variant="outline" size="sm"
+                    onClick={() => setShowShortcuts((s) => !s)}
+                    className={`h-9 px-2.5 rounded-lg ${showShortcuts ? "border-primary bg-primary/10 text-primary" : ""}`}
+                    title={t("qbank.session.keyboardShortcuts")}
+                  >
+                    <Keyboard className="size-4" />
+                  </Button>
+                </div>
 
-            <div className="h-5 w-px bg-border mx-1 hidden sm:block" />
+                <div className="h-5 w-px bg-border mx-1 hidden sm:block" />
 
-            <Button
-              variant="outline" size="sm" onClick={onToggleFlag}
-              className={`h-9 rounded-lg ${session.flagged[session.current] ? "border-amber-400 bg-amber-500/10 text-amber-300 hover:bg-amber-500/15" : ""}`}
-              title={session.flagged[session.current] ? t("qbank.session.unflagQuestion") : t("qbank.session.flagForReview")}
-            >
-              <Flag className={`size-4 ${session.flagged[session.current] ? "fill-amber-500 text-amber-500" : ""}`} />
-              <span className="hidden sm:inline ml-1">{session.flagged[session.current] ? t("qbank.session.flagged") : t("qbank.session.flag")}</span>
-            </Button>
+                <Button
+                  variant="outline" size="sm" onClick={onToggleFlag}
+                  className={`h-9 rounded-lg ${session.flagged[session.current] ? "border-amber-400 bg-amber-500/10 text-amber-300 hover:bg-amber-500/15" : ""}`}
+                  title={session.flagged[session.current] ? t("qbank.session.unflagQuestion") : t("qbank.session.flagForReview")}
+                >
+                  <Flag className={`size-4 ${session.flagged[session.current] ? "fill-amber-500 text-amber-500" : ""}`} />
+                  <span className="hidden sm:inline ml-1">{session.flagged[session.current] ? t("qbank.session.flagged") : t("qbank.session.flag")}</span>
+                </Button>
 
-            <div className="h-5 w-px bg-border mx-1 hidden sm:block" />
+                <div className="h-5 w-px bg-border mx-1 hidden sm:block" />
 
-            {!submitted && isMCQ && (
-              <Button size="sm" onClick={onSubmit} disabled={selected === undefined} className="h-9 rounded-lg">
-                {t("qbank.session.submitAnswer")}
-              </Button>
-            )}
-            {!submitted && !isMCQ && !qIsWritten && (
-              <Button size="sm" onClick={onSubmit} className="h-9 rounded-lg">
-                {session.engine === "flashcard" ? t("qbank.session.revealAnswer") : t("qbank.session.submitSelfGrade")}
-              </Button>
-            )}
-            {submitted && session.mode === "tutor" && (
-              <Button variant="outline" size="sm" onClick={onRetry} className="h-9 rounded-lg" title={t("qbank.session.retryQuestion")}>
-                <RotateCcw className="size-4 mr-1" />
-                <span className="hidden sm:inline">{t("qbank.session.retry")}</span>
-              </Button>
+                {!submitted && isMCQ && (
+                  <Button size="sm" onClick={onSubmit} disabled={selected === undefined} className="h-9 rounded-lg">
+                    {t("qbank.session.submitAnswer")}
+                  </Button>
+                )}
+                {!submitted && !isMCQ && !qIsWritten && (
+                  <Button size="sm" onClick={onSubmit} className="h-9 rounded-lg">
+                    {session.engine === "flashcard" ? t("qbank.session.revealAnswer") : t("qbank.session.submitSelfGrade")}
+                  </Button>
+                )}
+                {submitted && session.mode === "tutor" && (
+                  <Button variant="outline" size="sm" onClick={onRetry} className="h-9 rounded-lg" title={t("qbank.session.retryQuestion")}>
+                    <RotateCcw className="size-4 mr-1" />
+                    <span className="hidden sm:inline">{t("qbank.session.retry")}</span>
+                  </Button>
+                )}
+              </>
             )}
 
             <Button
               size="sm" onClick={goNext} className="h-9 rounded-lg"
-              variant={isLast ? "destructive" : "default"}
+              variant={readonly ? "default" : isLast ? "destructive" : "default"}
             >
-              {isLast ? (
+              {readonly ? (
+                <>{isLast ? t("qbank.review.exit") : t("common.next")} <ChevronRight className="size-4 ml-1" /></>
+              ) : isLast ? (
                 <>{t("qbank.session.endTest")} <ChevronRight className="size-4 ml-1" /></>
               ) : submitted && session.mode === "tutor" ? (
                 <>{t("qbank.session.nextQuestion")} <ChevronRight className="size-4 ml-1" /></>
@@ -4658,77 +4713,90 @@ function QuizView({
               <ChevronLeft className="size-4" />
             </Button>
 
-            <Button
-              variant="outline" size="icon"
-              onClick={onToggleFlag}
-              className={`size-10 rounded-lg shrink-0 medos-touch-target ${session.flagged[session.current] ? "border-amber-400 bg-amber-500/10 text-amber-300" : ""}`}
-              title={session.flagged[session.current] ? t("qbank.session.unflagShort") : t("qbank.session.flag")}
-            >
-              <Flag className={`size-4 ${session.flagged[session.current] ? "fill-amber-500 text-amber-500" : ""}`} />
-            </Button>
-
-            {/* Tools dropdown for mobile */}
-              <Popover>
-                <PopoverTrigger asChild>
-                  <Button variant="outline" size="icon" className="size-10 rounded-lg shrink-0 medos-touch-target" title={t("qbank.session.tools")}>
-                    <CalcIcon className="size-4" />
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent side="top" align="end" className="min-w-44">
-                <div className="py-1">
-                  <button onClick={onToggleCalculator} className="w-full text-left text-sm px-3 py-2 hover:bg-muted flex items-center gap-2">
-                    <CalcIcon className="size-4" /> {t("qbank.session.calculator")}
-                  </button>
-                  <button onClick={onToggleLabValues} className="w-full text-left text-sm px-3 py-2 hover:bg-muted flex items-center gap-2">
-                    <FlaskConical className="size-4" /> {t("qbank.session.labValues")}
-                  </button>
-                  <button onClick={onToggleAiAssistant} className="w-full text-left text-sm px-3 py-2 hover:bg-muted flex items-center gap-2">
-                    <Sparkles className="size-4" /> {t("qbank.session.aiAssistant")}
-                  </button>
-                  <button onClick={() => setArticleSearchOpen(true)} className="w-full text-left text-sm px-3 py-2 hover:bg-muted flex items-center gap-2">
-                    <BookOpen className="size-4" /> {t("qbank.session.articles")}
-                  </button>
-                  {submitted && session.mode === "tutor" && (
-                    <button onClick={onRetry} className="w-full text-left text-sm px-3 py-2 hover:bg-muted flex items-center gap-2">
-                      <RotateCcw className="size-4" /> {t("qbank.session.retry")}
-                    </button>
-                  )}
-                </div>
-              </PopoverContent>
-            </Popover>
-
-            {/* Mobile article search dropdown — anchored above bottom bar */}
-            <AnimatePresence>
-              {articleSearchOpen && (
-                <motion.div
-                  initial={{ opacity: 0, y: 8 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: 8 }}
-                  transition={{ duration: 0.15 }}
-                  className="sm:hidden fixed bottom-20 right-2 z-50 w-72 max-h-72 overflow-y-auto rounded-xl border border-border bg-card shadow-xl"
+            {!readonly && (
+              <>
+                <Button
+                  variant="outline" size="icon"
+                  onClick={onToggleFlag}
+                  className={`size-10 rounded-lg shrink-0 medos-touch-target ${session.flagged[session.current] ? "border-amber-400 bg-amber-500/10 text-amber-300" : ""}`}
+                  title={session.flagged[session.current] ? t("qbank.session.unflagShort") : t("qbank.session.flag")}
                 >
-                  <div className="py-1">
-                    <div className="px-4 py-2 text-xs font-bold uppercase tracking-wider text-primary border-b border-border">{t("qbank.session.openArticle")}</div>
-                    {articleList.map((a) => (
-                      <button
-                        key={a.file}
-                        onClick={() => {
-                          onOpenArticle(a.file);
-                          setArticleSearchOpen(false);
-                        }}
-                        className="w-full text-left text-sm px-4 py-2.5 hover:bg-muted transition-colors flex items-center gap-2 border-b border-border/40 last:border-0"
-                      >
-                        <FileText className="size-3.5 shrink-0 text-muted-foreground" />
-                        <span className="truncate">{a.title}</span>
+                  <Flag className={`size-4 ${session.flagged[session.current] ? "fill-amber-500 text-amber-500" : ""}`} />
+                </Button>
+
+                {/* Tools dropdown for mobile */}
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button variant="outline" size="icon" className="size-10 rounded-lg shrink-0 medos-touch-target" title={t("qbank.session.tools")}>
+                        <CalcIcon className="size-4" />
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent side="top" align="end" className="min-w-44">
+                    <div className="py-1">
+                      <button onClick={onToggleCalculator} className="w-full text-left text-sm px-3 py-2 hover:bg-muted flex items-center gap-2">
+                        <CalcIcon className="size-4" /> {t("qbank.session.calculator")}
                       </button>
-                    ))}
-                  </div>
-                </motion.div>
-              )}
-            </AnimatePresence>
+                      <button onClick={onToggleLabValues} className="w-full text-left text-sm px-3 py-2 hover:bg-muted flex items-center gap-2">
+                        <FlaskConical className="size-4" /> {t("qbank.session.labValues")}
+                      </button>
+                      <button onClick={onToggleAiAssistant} className="w-full text-left text-sm px-3 py-2 hover:bg-muted flex items-center gap-2">
+                        <Sparkles className="size-4" /> {t("qbank.session.aiAssistant")}
+                      </button>
+                      <button onClick={() => setArticleSearchOpen(true)} className="w-full text-left text-sm px-3 py-2 hover:bg-muted flex items-center gap-2">
+                        <BookOpen className="size-4" /> {t("qbank.session.articles")}
+                      </button>
+                      {submitted && session.mode === "tutor" && (
+                        <button onClick={onRetry} className="w-full text-left text-sm px-3 py-2 hover:bg-muted flex items-center gap-2">
+                          <RotateCcw className="size-4" /> {t("qbank.session.retry")}
+                        </button>
+                      )}
+                    </div>
+                  </PopoverContent>
+                </Popover>
+
+                {/* Mobile article search dropdown — anchored above bottom bar */}
+                <AnimatePresence>
+                  {articleSearchOpen && (
+                    <motion.div
+                      initial={{ opacity: 0, y: 8 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: 8 }}
+                      transition={{ duration: 0.15 }}
+                      className="sm:hidden fixed bottom-20 right-2 z-50 w-72 max-h-72 overflow-y-auto rounded-xl border border-border bg-card shadow-xl"
+                    >
+                      <div className="py-1">
+                        <div className="px-4 py-2 text-xs font-bold uppercase tracking-wider text-primary border-b border-border">{t("qbank.session.openArticle")}</div>
+                        {articleList.map((a) => (
+                          <button
+                            key={a.file}
+                            onClick={() => {
+                              onOpenArticle(a.file);
+                              setArticleSearchOpen(false);
+                            }}
+                            className="w-full text-left text-sm px-4 py-2.5 hover:bg-muted transition-colors flex items-center gap-2 border-b border-border/40 last:border-0"
+                          >
+                            <FileText className="size-3.5 shrink-0 text-muted-foreground" />
+                            <span className="truncate">{a.title}</span>
+                          </button>
+                        ))}
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </>
+            )}
 
             {/* Primary action button — fills remaining space */}
-            {!submitted && isMCQ ? (
+            {readonly ? (
+              <Button
+                size="sm" onClick={goNext}
+                variant="default"
+                className="flex-1 h-10 rounded-lg medos-touch-target"
+              >
+                {isLast ? t("qbank.review.exit") : t("common.next")}
+                <ChevronRight className="size-4 ml-1" />
+              </Button>
+            ) : !submitted && isMCQ ? (
               <Button
                 size="sm" onClick={onSubmit} disabled={selected === undefined}
                 className="flex-1 h-10 rounded-lg medos-touch-target"
@@ -5483,6 +5551,7 @@ interface NavigatorPanelProps {
   progressPct: number;
   onJumpTo: (idx: number) => void;
   onEndTest: () => void;
+  readonly?: boolean;
 }
 
 function NavigatorPanel(p: NavigatorPanelProps) {
@@ -5542,11 +5611,13 @@ function NavigatorPanel(p: NavigatorPanelProps) {
       </div>
 
       {/* Compact end test button */}
-      <div className="p-2 border-t border-sidebar-border">
-        <Button variant="ghost" size="sm" onClick={p.onEndTest} className="w-full h-8 text-xs rounded-md text-destructive hover:text-destructive hover:bg-destructive/10">
-          End Test
-        </Button>
-      </div>
+      {!p.readonly && (
+        <div className="p-2 border-t border-sidebar-border">
+          <Button variant="ghost" size="sm" onClick={p.onEndTest} className="w-full h-8 text-xs rounded-md text-destructive hover:text-destructive hover:bg-destructive/10">
+            End Test
+          </Button>
+        </div>
+      )}
     </div>
   );
 }
