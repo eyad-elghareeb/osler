@@ -73,6 +73,8 @@ export interface QuizQuestion {
   options: string[];
   correct: number;
   explanation: string;
+  /** Optional image(s) shown below the explanation. */
+  explanationImages?: ContentImage | ContentImage[];
   tags?: string[];
   difficulty?: number;
 }
@@ -93,6 +95,8 @@ export interface BankQuestion {
   options: string[];
   correct: number;
   explanation: string;
+  /** Optional image(s) shown below the explanation. */
+  explanationImages?: ContentImage | ContentImage[];
   tags?: string[];
   difficulty?: number;
 }

@@ -293,6 +293,7 @@
     body.appendChild(mdHint);
     body.appendChild(fieldGroup("Stem image(s)", imageList(q.images, (v) => { q.images = v; onChange(); })));
     body.appendChild(fieldGroup("Per-choice image(s)", renderChoiceImages(q, onChange)));
+    body.appendChild(fieldGroup("Explanation image(s)", imageList(q.explanationImages, (v) => { q.explanationImages = v; onChange(); })));
     body.appendChild(fieldGroup("Tags", tagList(q.tags, (v) => { q.tags = v; onChange(); })));
     if (q.difficulty !== undefined) {
       body.appendChild(fieldGroup("Difficulty (1-5)", numberInput(q.difficulty, (v) => { q.difficulty = v; onChange(); })));

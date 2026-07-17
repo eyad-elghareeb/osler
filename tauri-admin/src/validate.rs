@@ -100,6 +100,7 @@ fn validate_quiz(content: &Value) -> Vec<String> {
             require_array_of_strings(q, "tags", &mut errors, &ctx);
             validate_qbank_images(q, "images", &mut errors, &ctx);
             validate_qbank_images(q, "choiceImages", &mut errors, &ctx);
+            validate_qbank_images(q, "explanationImages", &mut errors, &ctx);
         }
     }
     errors
@@ -123,6 +124,7 @@ fn validate_bank(content: &Value) -> Vec<String> {
                     require_array_of_strings(q, "options", &mut errors, &qctx);
                     validate_qbank_images(q, "images", &mut errors, &qctx);
                     validate_qbank_images(q, "choiceImages", &mut errors, &qctx);
+                    validate_qbank_images(q, "explanationImages", &mut errors, &qctx);
                 }
             } else {
                 errors.push(format!("{}: missing `questions` array", ctx));

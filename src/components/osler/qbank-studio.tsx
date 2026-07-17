@@ -252,6 +252,8 @@ interface SessionQuestion {
   choices: string[];
   correct: number; // -1 for non-MCQ
   explanation: string;
+  /** Optional image(s) shown below the explanation. */
+  explanationImages?: ContentImage | ContentImage[];
   modelAnswer?: string;
   tags?: string[];
   difficulty?: string;
@@ -5767,6 +5769,24 @@ function ExplanationCard({
               highlights={hl}
             />
           </div>
+          {imageListOf(q.explanationImages).length > 0 && (
+            <div className="flex flex-col gap-3 mt-3">
+              {imageListOf(q.explanationImages).map((img, ei) => (
+                <figure key={ei} className="m-0">
+                  <img
+                    src={resolveContentAsset(img.src, questionAssetBase(q, item).category, questionAssetBase(q, item).path)}
+                    alt={img.alt ?? ""}
+                    className="rounded-xl border border-border max-h-[320px] w-auto mx-auto"
+                  />
+                  {img.caption && (
+                    <figcaption className="text-center text-xs text-muted-foreground mt-1.5">
+                      {img.caption}
+                    </figcaption>
+                  )}
+                </figure>
+              ))}
+            </div>
+          )}
           {q.tags && q.tags.length > 0 && (
             <div className="mt-4 pt-3 border-t border-border flex flex-wrap gap-1.5">
               {q.tags.map((t) => (
@@ -5814,6 +5834,24 @@ function ExplanationCard({
             highlights={hl}
           />
         </div>
+        {imageListOf(q.explanationImages).length > 0 && (
+          <div className="flex flex-col gap-3 mt-3">
+            {imageListOf(q.explanationImages).map((img, ei) => (
+              <figure key={ei} className="m-0">
+                <img
+                  src={resolveContentAsset(img.src, questionAssetBase(q, item).category, questionAssetBase(q, item).path)}
+                  alt={img.alt ?? ""}
+                  className="rounded-xl border border-border max-h-[320px] w-auto mx-auto"
+                />
+                {img.caption && (
+                  <figcaption className="text-center text-xs text-muted-foreground mt-1.5">
+                    {img.caption}
+                  </figcaption>
+                )}
+              </figure>
+            ))}
+          </div>
+        )}
         {q.tags && q.tags.length > 0 && (
           <div className="mt-4 pt-3 border-t border-border flex flex-wrap gap-1.5">
             <Badge variant="secondary" className="text-[10px] rounded-md capitalize">{q.difficulty ?? "standard"}</Badge>

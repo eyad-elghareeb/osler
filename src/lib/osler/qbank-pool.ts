@@ -72,6 +72,8 @@ export interface PoolQuestion {
   choices: string[];
   correct: number; // -1 for non-MCQ
   explanation: string;
+  /** Optional image(s) shown below the explanation. */
+  explanationImages?: ContentImage | ContentImage[];
   modelAnswer?: string;
   tags?: string[];
   difficulty?: string;
@@ -149,6 +151,7 @@ export function contentToQuestions(
         choices: q.options,
         correct: q.correct,
         explanation: q.explanation,
+        explanationImages: q.explanationImages,
         tags: q.tags,
         difficulty: q.difficulty ? `${q.difficulty}/5` : undefined,
         sourceUid,
@@ -170,6 +173,7 @@ export function contentToQuestions(
           choices: q.options,
           correct: q.correct,
           explanation: q.explanation,
+          explanationImages: q.explanationImages,
           tags: q.tags,
           difficulty: q.difficulty ? `${q.difficulty}/5` : undefined,
           sourceUid,

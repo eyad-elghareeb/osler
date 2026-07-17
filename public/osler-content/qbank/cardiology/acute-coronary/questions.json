@@ -8,6 +8,7 @@
       "options": ["Left anterior descending (LAD)", "Right coronary artery (RCA)", "Left circumflex artery (LCx)", "Left main coronary artery", "Diagonal branch"],
       "correct": 1,
       "explanation": "ST elevation in **II, III, aVF** with reciprocal depression in I, aVL localizes to the inferior wall, which is supplied by the right coronary artery in 85% of patients.",
+      "explanationImages": [{ "src": "rca-supply.svg", "alt": "RCA coronary supply", "caption": "RCA supplies the inferior wall in 85% of patients" }],
       "tags": ["cardiology", "stemi", "ecg-localization"],
       "difficulty": 2
     },

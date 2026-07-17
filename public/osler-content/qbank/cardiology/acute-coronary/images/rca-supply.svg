@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="480" height="240" viewBox="0 0 480 240">
+  <rect width="480" height="240" fill="#0b1020"/>
+  <g stroke="#60a5fa" stroke-width="2" fill="none" stroke-linecap="round">
+    <path d="M240 40 C240 90 240 110 240 130"/>
+    <path d="M240 130 C200 160 160 180 120 200"/>
+    <path d="M240 130 C280 160 320 180 360 200"/>
+    <path d="M120 200 C100 210 100 220 110 225"/>
+    <path d="M360 200 C380 210 380 220 370 225"/>
+  </g>
+  <text x="240" y="225" fill="#9ca3af" font-family="monospace" font-size="13" text-anchor="middle">RCA → inferior wall</text>
+</svg>
