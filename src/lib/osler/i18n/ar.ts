@@ -225,6 +225,7 @@ export const ar = {
     "qbank.written.selfGradingRubric": "معايير التقييم الذاتي",
     "qbank.written.selfScore": "النتيجة الذاتية",
     "qbank.written.rateCard": "قيّم هذه البطاقة",
+    "qbank.written.noApiKey": "تقييم الذكاء الاصطناعي غير متاح — أدخل مفتاح Gemini API في الإعدادات لتفعيله.",
 
     /* Quiz Settings panel */
     "qbank.settings.title": "إعدادات الاختبار",

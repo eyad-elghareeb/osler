@@ -224,6 +224,7 @@ export const en = {
     "qbank.written.selfGradingRubric": "Self-Grading Rubric",
     "qbank.written.selfScore": "Self score",
     "qbank.written.rateCard": "Rate this card",
+    "qbank.written.noApiKey": "AI grading unavailable — set your Gemini API key in Settings to enable it.",
 
     /* Quiz Settings panel */
     "qbank.settings.title": "Quiz Settings",

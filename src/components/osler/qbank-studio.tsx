@@ -50,6 +50,7 @@ import {
   ArrowUpDown,
 } from "lucide-react";
 import { loadAllContent, loadContentByUid, ENGINE_META, flattenTree } from "@/lib/osler/content";
+import { toast } from "@/hooks/use-toast";
 import {
   contentToQuestions as poolContentToQuestions,
   countQuestions as poolCountQuestions,
@@ -262,7 +263,7 @@ export function QBankStudio({
   );
 
   const startCustomSession = React.useCallback(
-    (pool: PoolQuestion[], meta: { title: string; engine: EngineType; mode?: TestMode; dismissAfterCorrect?: boolean; tagsFilter?: string[]; onlyMode?: OnlyMode; isReview?: boolean }) => {
+    (pool: PoolQuestion[], meta: { title: string; engine: EngineType; mode?: TestMode; dismissAfterCorrect?: boolean; tagsFilter?: string[]; onlyMode?: OnlyMode; isReview?: boolean; savedDrafts?: Record<string, WrittenDraft>; savedRubricState?: Record<string, boolean[]> }) => {
       if (pool.length === 0) return;
       const sessionId = `custom-${Date.now()}`;
       const totalTime = pool.length * 60;
@@ -281,8 +282,8 @@ export function QBankStudio({
         examTimeRemaining: totalTime,
         examPaused: false,
         sessionId,
-        writtenDrafts: {},
-        rubricState: {},
+        writtenDrafts: meta.savedDrafts ?? {},
+        rubricState: meta.savedRubricState ?? {},
         ratings: {},
         strikethroughs: {},
         tagsFilter: meta.tagsFilter,
@@ -373,6 +374,9 @@ export function QBankStudio({
       // P3-1: don't persist review sessions — they're read-only replays.
       if (!s.isReview) {
         saveSession(completed);
+        if (!s.itemId.startsWith("custom-")) {
+          writtenDrafts.clear(s.itemId);
+        }
       }
       return completed;
     });
@@ -550,7 +554,12 @@ export function QBankStudio({
             setSession((s) => {
               if (!s) return s;
               const drafts = { ...s.writtenDrafts, [qid]: draft };
-              writtenDrafts.save(s.itemId, drafts);
+              // Only persist to IndexedDB for single-pack sessions (restorable
+              // via writtenDrafts.get). Custom sessions don't have an IndexedDB
+              // restore path — their drafts are passed via SavedSession.writtenDrafts.
+              if (!s.itemId.startsWith("custom-")) {
+                writtenDrafts.save(s.itemId, drafts);
+              }
               // Auto-reveal when evaluation is set (shows the right 45% column)
               const next: SessionData = { ...s, writtenDrafts: drafts };
               if (draft.evaluation && !next.revealed[next.current]) {
@@ -788,6 +797,8 @@ function HomeView({
       tagsFilter?: string[];
       onlyMode?: OnlyMode;
       isReview?: boolean;
+      savedDrafts?: Record<string, WrittenDraft>;
+      savedRubricState?: Record<string, boolean[]>;
     }
   ) => void;
 }) {
@@ -1593,6 +1604,8 @@ function CreateTestTab({
       mode?: TestMode;
       tagsFilter?: string[];
       onlyMode?: OnlyMode;
+      savedDrafts?: Record<string, WrittenDraft>;
+      savedRubricState?: Record<string, boolean[]>;
     }
   ) => void;
 }) {
@@ -2398,6 +2411,8 @@ function PreviousTestsTab({
       onlyMode?: OnlyMode;
       isReview?: boolean;
       dismissAfterCorrect?: boolean;
+      savedDrafts?: Record<string, WrittenDraft>;
+      savedRubricState?: Record<string, boolean[]>;
     }
   ) => void;
 }) {
@@ -2478,6 +2493,8 @@ function PreviousTestsTab({
           engine: s.engine,
           mode: s.mode,
           isReview: true,
+          savedDrafts: s.writtenDrafts,
+          savedRubricState: s.rubricState,
         });
       } finally {
         setBusy(null);
@@ -2502,6 +2519,8 @@ function PreviousTestsTab({
           engine: s.engine,
           mode: s.mode,
           onlyMode: "wrong",
+          savedDrafts: s.writtenDrafts,
+          savedRubricState: s.rubricState,
         });
       } finally {
         setBusy(null);
@@ -2632,6 +2651,8 @@ function TrackerTab({
       dismissAfterCorrect?: boolean;
       isReview?: boolean;
       onlyMode?: OnlyMode;
+      savedDrafts?: Record<string, WrittenDraft>;
+      savedRubricState?: Record<string, boolean[]>;
     }
   ) => void;
 }) {
@@ -3365,7 +3386,7 @@ function QuizView({
     async (q: SessionQuestion, draft: WrittenDraft) => {
       const apiKey = localStorage.getItem("osler_gemini_api_key");
       if (!apiKey) {
-        createManualEvaluation(draft.text);
+        toast({ title: t("qbank.written.noApiKey"), variant: "destructive" });
         return;
       }
       setWrittenAIGrading(q.id);
@@ -3802,13 +3823,8 @@ function QuizView({
                   question={question}
                   passed={qWrittenPassed}
                   isManual={qWrittenDraft.evaluation?.score === null}
-                  onRubricToggle={(idx) => {
-                    const cur = qWrittenDraft.rubricChecked;
-                    const next = [...cur];
-                    while (next.length < (question.rubric?.length ?? 0)) next.push(false);
-                    next[idx] = !next[idx];
-                    onWrittenDraftChange(question.id, { ...qWrittenDraft, rubricChecked: next });
-                  }}
+                  rubricState={qRubricState}
+                  onRubricToggle={(idx) => onRubricToggle(question.id, idx)}
                   onPassFail={(v) => {
                     const ev = qWrittenDraft.evaluation;
                     if (!ev) {
@@ -3854,13 +3870,8 @@ function QuizView({
                   question={question}
                   passed={qWrittenPassed}
                   isManual={qWrittenDraft.evaluation?.score === null}
-                  onRubricToggle={(idx) => {
-                    const cur = qWrittenDraft.rubricChecked;
-                    const next = [...cur];
-                    while (next.length < (question.rubric?.length ?? 0)) next.push(false);
-                    next[idx] = !next[idx];
-                    onWrittenDraftChange(question.id, { ...qWrittenDraft, rubricChecked: next });
-                  }}
+                  rubricState={qRubricState}
+                  onRubricToggle={(idx) => onRubricToggle(question.id, idx)}
                   onPassFail={(v) => {
                     const ev = qWrittenDraft.evaluation;
                     if (!ev) {
@@ -4449,12 +4460,13 @@ function QuizView({
                               const eqHighlights = highlights.get(activeItem.uid, idx);
                               return (
                                 <div className="h-full overflow-y-auto medos-scroll p-2 pb-6" style={{ touchAction: "none" }}>
-                                  {eqIsWritten ? (
+                                   {eqIsWritten ? (
                                       <WrittenEvaluationPanel
                                         draft={session.writtenDrafts[eq.id] ?? { text: "", rubricChecked: eq.rubric ? eq.rubric.map(() => false) : [], submitted: false }}
                                         question={eq}
                                         passed={false}
                                         isManual
+                                        rubricState={session.rubricState[eq.id] ?? (eq.rubric ? eq.rubric.map(() => false) : [])}
                                         onRubricToggle={() => {}}
                                         onPassFail={() => {}}
                                         onChildPassFail={() => {}}
@@ -4480,13 +4492,8 @@ function QuizView({
                                 question={q}
                                 passed={writtenPassed}
                                 isManual={writtenDraft.evaluation?.score === null}
-                                onRubricToggle={(idx) => {
-                                  const cur = writtenDraft.rubricChecked;
-                                  const next = [...cur];
-                                  while (next.length < (q.rubric?.length ?? 0)) next.push(false);
-                                  next[idx] = !next[idx];
-                                  onWrittenDraftChange(q.id, { ...writtenDraft, rubricChecked: next });
-                                }}
+                                rubricState={rubricState}
+                                onRubricToggle={(idx) => onRubricToggle(q.id, idx)}
                                 onPassFail={(v) => {
                                   const ev = writtenDraft.evaluation;
                                   if (!ev) {
@@ -5165,6 +5172,7 @@ function WrittenEvaluationPanel({
   question,
   passed,
   isManual,
+  rubricState,
   onRubricToggle,
   onPassFail,
   onChildPassFail,
@@ -5173,6 +5181,7 @@ function WrittenEvaluationPanel({
   question: SessionQuestion;
   passed: boolean;
   isManual: boolean;
+  rubricState: boolean[];
   onRubricToggle: (idx: number) => void;
   onPassFail?: (v: "pass" | "fail") => void;
   onChildPassFail?: (childIdx: number, v: "pass" | "fail") => void;
@@ -5230,7 +5239,7 @@ function WrittenEvaluationPanel({
             {t("qbank.written.selfGradingRubric")}
           </h4>
           {question.rubric.map((item, i) => {
-            const checked = draft.rubricChecked[i] ?? false;
+            const checked = rubricState[i] ?? false;
             return (
               <button
                 key={i}
@@ -5255,7 +5264,7 @@ function WrittenEvaluationPanel({
           <div className="pt-2 border-t border-border text-xs text-muted-foreground">
             {t("qbank.written.selfScore")}:{" "}
             <span className="font-semibold text-foreground">
-              {draft.rubricChecked.filter(Boolean).length}
+              {rubricState.filter(Boolean).length}
             </span>{" "}
             / {question.rubric.length}
           </div>
