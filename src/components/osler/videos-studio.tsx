@@ -224,32 +224,30 @@ export function VideosStudio({ initialVideoId, onOpenArticle, onNavigateBack }: 
   }
 
   return (
-    <motion.div {...swipeDismissProps} className="h-full overflow-y-auto medos-scroll medos-tabbar-pad">
-      <div className="max-w-6xl mx-auto px-4 md:px-8 py-8">
+    <motion.div {...swipeDismissProps} className="osler-page">
+      <div className="osler-page__inner--wide">
         {/* Page header */}
         <motion.div
           initial={{ opacity: 0, y: 8 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.3 }}
-          className="mb-6"
+          className="osler-page-header--inline"
         >
-          <div className="flex items-center gap-3 mb-2">
-            <div
-              className="size-10 rounded-xl flex items-center justify-center shrink-0 border"
-              style={{
-                backgroundColor: `color-mix(in oklch, ${VIDEO_COLOR} 12%, transparent)`,
-                borderColor: `color-mix(in oklch, ${VIDEO_COLOR} 30%, transparent)`,
-                color: VIDEO_COLOR,
-              }}
-            >
-              <PlayCircle className="size-5" />
-            </div>
-            <div>
-              <h1 className="text-xl md:text-2xl font-bold tracking-tight">
-                {t("videos.title")}
-              </h1>
-              <p className="text-xs text-muted-foreground">{t("videos.subtitle")}</p>
-            </div>
+          <div
+            className="size-10 rounded-xl flex items-center justify-center shrink-0 border"
+            style={{
+              backgroundColor: `color-mix(in oklch, ${VIDEO_COLOR} 12%, transparent)`,
+              borderColor: `color-mix(in oklch, ${VIDEO_COLOR} 30%, transparent)`,
+              color: VIDEO_COLOR,
+            }}
+          >
+            <PlayCircle className="size-5" />
+          </div>
+          <div>
+            <h1 className="osler-page-header__title">
+              {t("videos.title")}
+            </h1>
+            <p className="osler-page-header__subtitle">{t("videos.subtitle")}</p>
           </div>
         </motion.div>
 
@@ -259,7 +257,7 @@ export function VideosStudio({ initialVideoId, onOpenArticle, onNavigateBack }: 
         <div className="flex flex-col md:flex-row gap-4 mt-4">
           {/* Desktop sidebar: folder tree */}
           <aside className="hidden md:flex flex-col w-64 shrink-0">
-            <div className="bg-card border border-border/60 rounded-xl p-3">
+            <div className="osler-card--compact">
               <div className="flex items-center gap-2 text-xs uppercase tracking-wider text-muted-foreground font-semibold mb-2 px-2">
                 <Folder className="size-3.5" />
                 {t("videos.folders")}
@@ -319,17 +317,17 @@ export function VideosStudio({ initialVideoId, onOpenArticle, onNavigateBack }: 
 
             {/* Video grid */}
             {folderLoading ? (
-              <div className="flex flex-col items-center justify-center py-20 text-muted-foreground gap-3">
+              <div className="osler-loading">
                 <Loader2 className="size-6 animate-spin text-primary" />
                 <span className="text-sm">{t("videos.loading")}</span>
               </div>
             ) : folderVideos.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-16 text-center gap-3">
-                <div className="size-14 rounded-full bg-muted/40 flex items-center justify-center">
-                  <VideoIcon className="size-6 text-muted-foreground" />
+              <div className="osler-empty">
+                <div className="osler-empty__icon">
+                  <VideoIcon className="size-6" />
                 </div>
                 <div>
-                  <p className="font-semibold text-sm mb-1">
+                  <p className="osler-empty__title">
                     {t("videos.empty")}
                   </p>
                 </div>
@@ -350,7 +348,7 @@ export function VideosStudio({ initialVideoId, onOpenArticle, onNavigateBack }: 
                       dir={lang === "ar" ? "rtl" : undefined}
                       lang={lang}
                       className={cn(
-                        "text-start group bg-card border border-border/60 rounded-xl overflow-hidden hover:border-primary/40 hover:shadow-md transition-all duration-200 active:scale-[0.99] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
+                        "text-start group bg-card border border-border rounded-xl overflow-hidden hover:border-primary/40 hover:shadow-md transition-all duration-200 active:scale-[0.99] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
                         lang === "ar" && "osler-content-ar"
                       )}
                     >

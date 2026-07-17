@@ -10,6 +10,7 @@ import {
   ShieldCheck,
   ShieldAlert,
 } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { useI18n } from "./i18n-provider";
 import { useBiometricAvailability } from "@/hooks/use-native";
 import {
@@ -127,12 +128,12 @@ export function LoginScreen({ onLogin }: LoginScreenProps) {
             initial={{ scale: 0.8, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}
             transition={{ delay: 0.1, type: "spring", stiffness: 200 }}
-            className="w-16 h-16 rounded-2xl bg-primary flex items-center justify-center text-primary-foreground mx-auto mb-4 shadow-lg"
+            className="w-16 h-16 rounded-2xl bg-primary flex items-center justify-center text-primary-foreground mx-auto mb-4 shadow-md"
           >
             <Activity className="size-8" />
           </motion.div>
-          <h1 className="text-2xl font-bold tracking-tight">{t("login.title")}</h1>
-          <p className="text-sm text-muted-foreground mt-1">
+          <h1 className="text-2xl md:text-3xl font-bold tracking-tight">{t("login.title")}</h1>
+          <p className="text-sm text-muted-foreground mt-1 max-w-md mx-auto">
             {t("login.subtitle")}
           </p>
         </div>
@@ -147,28 +148,25 @@ export function LoginScreen({ onLogin }: LoginScreenProps) {
             transition={{ delay: 0.15 }}
             className="mb-3"
           >
-            <button
+            <Button
               type="button"
+              size="lg"
               onClick={handleQuickUnlock}
               disabled={biometricStatus === "authenticating" || biometricStatus === "enrolling"}
-              className={cn(
-                "w-full h-12 rounded-xl bg-primary text-primary-foreground text-sm font-semibold",
-                "flex items-center justify-center gap-2.5 shadow-md transition-all",
-                "hover:bg-primary/90 active:scale-[0.99] disabled:opacity-60 disabled:active:scale-100",
-              )}
+              className="w-full h-10 rounded-md gap-2.5"
             >
               {biometricStatus === "authenticating" ? (
                 <>
-                  <Loader2 className="size-5 animate-spin" />
+                  <Loader2 className="size-4 animate-spin" />
                   {t("native.biometric.unlocking")}
                 </>
               ) : (
                 <>
-                  <Fingerprint className="size-5" />
+                  <Fingerprint className="size-4" />
                   {t("native.biometric.quickUnlock")}
                 </>
               )}
-            </button>
+            </Button>
             <div className="flex items-center justify-center gap-1.5 my-3 text-[10px] text-muted-foreground">
               <span className="h-px bg-border flex-1 max-w-[60px]" />
               {t("common.or")}
@@ -211,13 +209,10 @@ export function LoginScreen({ onLogin }: LoginScreenProps) {
             </p>
           </div>
 
-          <button
-            type="submit"
-            className="w-full h-10 rounded-md bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors flex items-center justify-center gap-2"
-          >
+          <Button type="submit" size="lg" className="w-full gap-2">
             {t("login.signIn")}
             <ArrowRight className={cn("size-4", rtl && "rtl-flip-x")} />
-          </button>
+          </Button>
 
           {/* Biometric enrollment row — only render if the device supports it.
               If a credential is already enrolled, this becomes a "disable"
@@ -233,7 +228,7 @@ export function LoginScreen({ onLogin }: LoginScreenProps) {
                     exit={{ opacity: 0 }}
                     className="flex items-center gap-2 text-xs text-muted-foreground"
                   >
-                    <ShieldCheck className="size-3.5 text-green-500 shrink-0" />
+                    <ShieldCheck className="size-3.5 text-success shrink-0" />
                     <span className="flex-1">
                       {t("native.biometric.enrolled", {
                         user: getBiometricUsername() ?? username,
@@ -252,28 +247,33 @@ export function LoginScreen({ onLogin }: LoginScreenProps) {
                     </button>
                   </motion.div>
                 ) : (
-                  <motion.button
+                  <motion.div
                     key="enroll"
-                    type="button"
-                    onClick={handleEnrollBiometric}
-                    disabled={biometricStatus === "enrolling" || !username.trim()}
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
                     exit={{ opacity: 0 }}
-                    className="w-full flex items-center justify-center gap-2 h-9 rounded-md border border-border bg-background hover:bg-muted/40 transition-colors text-xs font-medium disabled:opacity-50"
                   >
-                    {biometricStatus === "enrolling" ? (
-                      <>
-                        <Loader2 className="size-3.5 animate-spin" />
-                        {t("native.biometric.unlocking")}
-                      </>
-                    ) : (
-                      <>
-                        <Fingerprint className="size-3.5" />
-                        {t("native.biometric.enroll")}
-                      </>
-                    )}
-                  </motion.button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="default"
+                      onClick={handleEnrollBiometric}
+                      disabled={biometricStatus === "enrolling" || !username.trim()}
+                      className="w-full gap-2 text-xs"
+                    >
+                      {biometricStatus === "enrolling" ? (
+                        <>
+                          <Loader2 className="size-3.5 animate-spin" />
+                          {t("native.biometric.unlocking")}
+                        </>
+                      ) : (
+                        <>
+                          <Fingerprint className="size-3.5" />
+                          {t("native.biometric.enroll")}
+                        </>
+                      )}
+                    </Button>
+                  </motion.div>
                 )}
               </AnimatePresence>
 
@@ -300,16 +300,18 @@ export function LoginScreen({ onLogin }: LoginScreenProps) {
             </div>
           )}
 
-          <button
+          <Button
             type="button"
+            variant="link"
+            size="sm"
             onClick={() => {
               haptic("light");
               onLogin("Guest");
             }}
-            className="w-full text-xs text-muted-foreground hover:text-foreground transition-colors"
+            className="w-full text-xs text-muted-foreground hover:text-foreground"
           >
             {t("login.guest")}
-          </button>
+          </Button>
         </form>
 
         <p className="text-center text-[10px] text-muted-foreground mt-6">

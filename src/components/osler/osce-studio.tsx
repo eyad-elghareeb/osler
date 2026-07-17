@@ -1268,21 +1268,21 @@ export function OsceStudio({ activeItem, activeContent, onExit, onOpenPack, onNa
 
   if (phase === "select") {
     return (
-      <motion.div {...learnHubDismiss} className="h-full overflow-y-auto medos-scroll medos-tabbar-pad">
-        <div className="max-w-5xl mx-auto px-4 md:px-8 py-8">
+      <motion.div {...learnHubDismiss} className="osler-page">
+        <div className="osler-page__inner">
           <motion.div
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.3 }}
           >
             {/* Page header */}
-            <div className="flex items-center gap-3 mb-2">
+            <div className="osler-page-header--inline">
               <div className="size-10 rounded-xl bg-primary/15 border border-primary/30 flex items-center justify-center shrink-0">
                 <Stethoscope className="size-5 text-primary" />
               </div>
               <div>
-                <h1 className="text-xl font-bold tracking-tight">{t("osce.home.title")}</h1>
-                <p className="text-xs text-muted-foreground">
+                <h1 className="osler-page-header__title">{t("osce.home.title")}</h1>
+                <p className="osler-page-header__subtitle">
                   {t("osce.home.subtitle")}
                 </p>
               </div>
@@ -1292,22 +1292,24 @@ export function OsceStudio({ activeItem, activeContent, onExit, onOpenPack, onNa
 
             {/* Pack grid */}
             {packsLoading ? (
-              <div className="flex flex-col items-center justify-center py-20 text-muted-foreground gap-3">
-                <Loader2 className="size-7 animate-spin text-primary" />
+              <div className="osler-loading">
+                <Loader2 className="size-6 animate-spin text-primary" />
                 <span className="text-sm">Loading scenarios…</span>
               </div>
             ) : filteredPacks.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-20 gap-4 text-center">
-                <Stethoscope className="size-12 text-muted-foreground/40" />
+              <div className="osler-empty">
+                <div className="osler-empty__icon">
+                  <Stethoscope className="size-6" />
+                </div>
                 <div>
-                  <p className="font-semibold text-sm mb-1">{t("osce.home.empty")}</p>
-                  <p className="text-xs text-muted-foreground max-w-xs">
+                  <p className="osler-empty__title mb-1">{t("osce.home.empty")}</p>
+                  <p className="osler-empty__body">
                     {t("osce.home.empty")}
                   </p>
                 </div>
                 <button
                   onClick={onExit}
-                  className="h-9 px-4 rounded-md border border-border/60 text-sm font-medium hover:bg-muted/60 transition-colors"
+                  className="h-9 px-4 rounded-md border border-border text-sm font-medium hover:bg-muted/60 transition-colors"
                 >
                   {t("nav.dashboard")}
                 </button>

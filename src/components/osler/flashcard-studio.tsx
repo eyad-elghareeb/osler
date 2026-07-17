@@ -406,43 +406,43 @@ export function FlashcardStudio({
    */
   const renderDecksView = () => (
     <div className="h-full overflow-y-auto medos-scroll medos-tabbar-pad">
-      <div className="max-w-5xl mx-auto px-4 md:px-8 py-8">
+      <div className="max-w-5xl mx-auto px-4 md:px-6 lg:px-8 py-6 md:py-8">
         {/* Header */}
-        <div className="mb-6">
+        <div className="osler-page-header">
           <div className="flex items-center gap-2 text-xs text-muted-foreground mb-1">
             <Layers className="size-3.5" />
             <span>{t("engine.flashcard")}</span>
           </div>
-          <h1 className="text-2xl md:text-3xl font-bold tracking-tight mb-1">
+          <h1 className="osler-page-header__title">
             {t("flash.home.title")}
           </h1>
-          <p className="text-sm text-muted-foreground">
+          <p className="osler-page-header__subtitle">
             {t("flash.home.subtitle")}
           </p>
         </div>
 
         {/* Stat bar */}
         <div className="grid grid-cols-3 gap-3 mb-6">
-          <div className="bg-card border border-border rounded-xl p-3.5">
+          <div className="osler-stat-tile--compact">
             <div className="flex items-center gap-2 text-xs text-muted-foreground mb-1">
               <Clock className="size-3.5" />
               {t("flash.home.due")}
             </div>
-            <div className="text-xl font-bold">{stats.due}</div>
+            <div className="osler-stat-tile__value">{stats.due}</div>
           </div>
-          <div className="bg-card border border-border rounded-xl p-3.5">
+          <div className="osler-stat-tile--compact">
             <div className="flex items-center gap-2 text-xs text-muted-foreground mb-1">
               <BarChart3 className="size-3.5" />
               {t("flash.home.new")}
             </div>
-            <div className="text-xl font-bold">{stats.new}</div>
+            <div className="osler-stat-tile__value">{stats.new}</div>
           </div>
-          <div className="bg-card border border-border rounded-xl p-3.5">
+          <div className="osler-stat-tile--compact">
             <div className="flex items-center gap-2 text-xs text-muted-foreground mb-1">
               <Brain className="size-3.5" />
               {t("flash.home.total")}
             </div>
-            <div className="text-xl font-bold">{stats.total}</div>
+            <div className="osler-stat-tile__value">{stats.total}</div>
           </div>
         </div>
 
@@ -450,12 +450,12 @@ export function FlashcardStudio({
 
         {/* Deck grid */}
         {tree.length === 0 ? (
-          <div className="text-center py-16">
-            <div className="size-14 rounded-full bg-muted/40 flex items-center justify-center mx-auto mb-4">
-              <Layers className="size-6 text-muted-foreground" />
+          <div className="osler-empty">
+            <div className="osler-empty__icon">
+              <Layers className="size-6" />
             </div>
-            <h3 className="text-base font-semibold mb-1">{t("flash.home.empty")}</h3>
-            <p className="text-sm text-muted-foreground">
+            <h3 className="osler-empty__title">{t("flash.home.empty")}</h3>
+            <p className="osler-empty__body">
               {t("flash.home.empty")}
             </p>
           </div>
@@ -540,7 +540,7 @@ export function FlashcardStudio({
                     </p>
                   )}
                   <div className="flex items-center gap-3 text-xs">
-                    <span className="text-emerald-500 font-medium tabular-nums">
+                    <span className="text-success font-medium tabular-nums">
                       {t("flash.dueCount", { count: dueCount })}
                     </span>
                     <span className="text-muted-foreground">
@@ -574,9 +574,9 @@ export function FlashcardStudio({
             initial={{ scale: 0.8, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}
             transition={{ type: "spring", stiffness: 200, damping: 20 }}
-            className="size-20 rounded-full bg-emerald-500/15 border-2 border-emerald-500/30 flex items-center justify-center mx-auto mb-6"
+            className="size-20 rounded-full bg-success/15 border-2 border-success/30 flex items-center justify-center mx-auto mb-6"
           >
-            <Brain className="size-9 text-emerald-500" />
+            <Brain className="size-9 text-success" />
           </motion.div>
 
           <h2 className="text-2xl font-bold mb-2">{t("flash.session.completeTitle")}</h2>
@@ -593,11 +593,11 @@ export function FlashcardStudio({
               <div className="text-[11px] text-muted-foreground mt-1">{t("flash.session.reviewed")}</div>
             </div>
             <div className="bg-card border border-border rounded-xl p-4">
-              <div className="text-2xl font-bold text-emerald-500">{accuracy}%</div>
+              <div className="text-2xl font-bold text-success">{accuracy}%</div>
               <div className="text-[11px] text-muted-foreground mt-1">{t("flash.session.accuracy")}</div>
             </div>
             <div className="bg-card border border-border rounded-xl p-4">
-              <div className="text-2xl font-bold text-amber-500">
+              <div className="text-2xl font-bold text-warning">
                 {sessionResults.filter((r) => r.rating === "again").length}
               </div>
               <div className="text-[11px] text-muted-foreground mt-1">{t("flash.session.rateAgain")}</div>

@@ -66,6 +66,279 @@
     - Build + lint must pass before committing. If `npx tsc --noEmit` or `npx eslint <files>` fails, fix it first — never commit broken code.
     - After committing, run `git status` to confirm the tree is clean before moving to the next task.
 
+19. **Follow the Design System.** Every new view, card, button, or status indicator must use the shared design tokens, primitives, and CSS utility classes defined in [Design System](#design-system) below. Never hand-roll a Tailwind recipe for a page header, section heading, stat tile, empty state, loading state, card, or status color when a canonical version already exists. Never use hardcoded Tailwind palette colors (`text-emerald-500`, `text-amber-500`, `text-red-500`, `bg-orange-500/10`, etc.) — use the semantic `success` / `warning` / `destructive` / `info` tokens instead.
+
+---
+
+## Design System
+
+The Osler design system lives in three places:
+
+1. **CSS design tokens** — `src/app/globals.css` declares the color, radius, and font tokens in the `@theme inline` block, then maps them to light/dark/custom-theme values in `:root`, `.light`, and `.theme-<id>` blocks.
+2. **Shared primitives** — `src/components/osler/ui-primitives.tsx` exports `PageHeader`, `SectionHeading`, `StatTile`, `EmptyState`, `LoadingState`, `OslerCard`, `InteractiveCard`. These are the canonical implementations of those patterns.
+3. **CSS utility classes** — `src/app/globals.css` defines `.osler-*` utility classes (`.osler-page`, `.osler-page__inner`, `.osler-page-header`, `.osler-section-heading`, `.osler-card--*`, `.osler-stat-tile--*`, `.osler-empty`, `.osler-loading`, `.osler-icon-btn`) that encode the canonical Tailwind recipe for each pattern.
+
+**When in doubt, prefer primitives over raw Tailwind.** The primitives pull the recipe from one place, so a future tweak to spacing or typography ripples through every view automatically.
+
+### Color tokens (semantic, never hardcoded)
+
+| Token | Light value | Dark value | Use it for |
+|---|---|---|---|
+| `--background` / `--foreground` | near-white / dark navy | dark navy / near-white | Page background and body text |
+| `--card` / `--card-foreground` | pure white / dark navy | elevated navy / near-white | Card surfaces |
+| `--primary` / `--primary-foreground` | deep navy / white | medium blue / white | Primary actions, active nav, links |
+| `--secondary` / `--muted` | light gray / gray | navy-gray / muted gray | Inactive states, secondary surfaces |
+| `--accent` | mid blue | darker blue | Hover/focus accents on outline buttons |
+| `--destructive` | warm red | red | Destructive actions (delete, sign out) |
+| `--border` / `--input` / `--ring` | light gray / light gray / navy | white@8% / white@10% / blue | Borders, inputs, focus rings |
+| `--success` | deep green | bright green | Correct answers, positive metrics, "complete" state |
+| `--warning` | deep amber | bright amber | Accuracy %, due counts, flagged items, "in progress" |
+| `--info` | deep cyan | bright cyan | Informational accents (used sparingly) |
+| `--chart-1..5` | brand palette | brand palette | Per-engine accent colors in pack cards / charts |
+
+**Rules:**
+
+- **Never** use `text-emerald-500`, `text-green-500`, `text-amber-500`, `text-orange-500`, `text-red-500`, or any other Tailwind palette color in components. Use `text-success`, `text-warning`, `text-destructive`, or `text-info` instead. Tailwind v4 auto-generates these from the `--color-*` tokens in the `@theme inline` block.
+- **Never** use `bg-emerald-500/15`, `border-amber-500/30`, or any palette color with opacity. Use `bg-success/15`, `border-warning/30`, etc.
+- The `oklch()` values for per-engine accent colors are exported from `ENGINE_META` in `@/lib/osler/content` — always read them from there, never hardcode.
+- Custom themes (`themes.custom[]` in `osler.config.json`) can override `primary`, `background`, `foreground`, `accent`, `border`, `destructive`, `mutedForeground`, and the new `success` / `warning` / `info` tokens.
+
+### Page layout
+
+Every hub view (Dashboard, Learn, Profile, Settings desktop, QBank hub, Flashcard hub, OSCE hub, Videos hub) follows the same outer structure:
+
+```tsx
+<div className="osler-page">
+  <div className="osler-page__inner">  // or __inner--wide / __inner--narrow
+    <PageHeader ... />
+    {/* content sections */}
+  </div>
+</div>
+```
+
+- **`osler-page`** — outer scroll wrapper with thin scrollbar styling and mobile bottom-tab-bar padding. Replaces the previous `h-full overflow-y-auto medos-scroll medos-tabbar-pad md:pb-0` string.
+- **`osler-page__inner`** — centered content column at `max-w-5xl`. Use `__inner--wide` (`max-w-6xl`) for media-heavy views (Dashboard, Videos) and `__inner--narrow` (`max-w-4xl`) for text-heavy views (Profile, Settings).
+- **Standard padding**: `px-4 md:px-6 lg:px-8 py-6 md:py-8`. The previous `py-4 sm:py-6` and `py-3` variants are gone — every hub view uses `py-6 md:py-8` for consistent vertical rhythm.
+- **Standard max-widths**: `max-w-4xl` (narrow) / `max-w-5xl` (default) / `max-w-6xl` (wide) / `max-w-7xl` (extra-wide, used by QBank hub only). Never introduce a new max-width without adding it as a new `.osler-page__inner--*` variant.
+- **Never** hardcode viewport arithmetic like `h-[calc(100vh-3.5rem)]` to subtract the app-shell header — it breaks if the header height changes. Use `h-full` and let the parent flexbox handle the layout.
+
+### Page headers (`<PageHeader>`)
+
+```tsx
+// Stacked variant — default for hub views (Dashboard, Learn, Flashcards)
+<PageHeader
+  eyebrow="Good afternoon"          // optional, small uppercase label
+  eyebrowIcon={Flame}               // optional lucide icon
+  title={t("dash.welcomeBack", { name: username })}
+  subtitle={t("dash.intro")}
+/>
+
+// Inline variant — for views with an icon chip (OSCE, Videos, Settings, Profile)
+<PageHeader
+  inline
+  inlineIcon={Stethoscope}
+  inlineIconColor={ENGINE_META.osce.color}  // optional — defaults to primary
+  title={t("osce.home.title")}
+  subtitle={t("osce.home.subtitle")}
+  actions={<Button>...</Button>}    // optional right-aligned actions
+/>
+```
+
+**Rules:**
+
+- The page title (h1) is always `text-2xl md:text-3xl font-bold tracking-tight` in the stacked variant, or `text-xl md:text-2xl font-bold tracking-tight` in the inline variant. Never `text-xl font-semibold` or `text-lg font-bold` for a page title.
+- The subtitle is always `text-sm text-muted-foreground max-w-2xl`.
+- The eyebrow is always `text-xs uppercase tracking-wider text-muted-foreground` with an optional lucide icon at `size-3`.
+- Use the inline variant when the view has a natural icon (OSCE Stethoscope, Videos PlayCircle, Settings gear, Profile avatar). Use the stacked variant for content-first views (Dashboard, Learn, Flashcards).
+
+### Section headings (`<SectionHeading>`)
+
+```tsx
+<SectionHeading>{t("dash.quickActions")}</SectionHeading>
+<SectionHeading icon={NotebookPen}>{t("qbank.notes.title")}</SectionHeading>
+<SectionHeading actions={<Button size="sm" variant="link">View all</Button>}>
+  {t("dash.featuredArticles")}
+</SectionHeading>
+```
+
+- Always `text-sm font-semibold uppercase tracking-wider text-muted-foreground mb-3`.
+- Optional `icon` prop renders a `size-4` lucide icon before the label.
+- Optional `actions` prop renders a right-aligned row of buttons/links (typically a "View all" link).
+- Never hand-roll `<h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground mb-3">` — use the primitive.
+
+### Cards
+
+Pick exactly one padding scale per card, and prefer `.osler-card--*` CSS classes or the `<OslerCard>` / `<InteractiveCard>` primitives over hand-rolled Tailwind:
+
+| Variant | Padding | When to use |
+|---|---|---|
+| `.osler-card--compact` | `p-3` | Dense grids, sidebar panels, lab-value rows |
+| `.osler-card--default` | `p-4` | Default for most cards (stat tiles, quick actions, featured articles) |
+| `.osler-card--roomy` | `p-5 md:p-6` | Hero cards, primary content cards, profile header |
+| `.osler-card--interactive` | `p-5 md:p-6` + hover | Clickable pack/module cards |
+
+**Rules:**
+
+- **Always** use `rounded-xl` for cards. Never `rounded-lg` or `rounded-2xl` (the Calculator modal's `rounded-2xl` is a known outlier — do not copy it).
+- **Always** use `border border-border` for resting cards. Never `border-border/60` (was the old recipe — too faint).
+- **Hover state**: `hover:border-primary/40 hover:shadow-md`. Optionally add `hover:bg-primary/[0.02]` for subtle background tint on interactive cards. Never `hover:border-primary/40` alone without a shadow for clickable cards.
+- **Never** use `bg-background` for a card surface — cards are always `bg-card`.
+- Use `<InteractiveCard animationDelay={idx * 40}>` for the staggered fade-in mount animation that pack grids use.
+
+### Stat tiles (`<StatTile>`)
+
+```tsx
+<StatTile
+  label={t("dash.correctLabel")}
+  value={stats.correct}
+  icon={CheckCircle2}
+  color="success"            // primary | success | warning | destructive | info
+  onClick={() => onViewChange("profile")}  // optional — renders a <button>
+/>
+```
+
+- **Default** size: `rounded-xl p-4` with `text-2xl font-bold tabular-nums` value.
+- **Compact** size (`compact` prop): `rounded-xl p-3.5` with `text-xl font-bold` value. Use in dense 3-column grids (QBank / Flashcard hub stat bars).
+- The label is always `text-[11px] font-medium uppercase tracking-wider text-muted-foreground`.
+- Never duplicate the StatTile component across views — import from `ui-primitives.tsx`.
+
+### Empty states (`<EmptyState>`)
+
+```tsx
+<EmptyState
+  icon={Layers}
+  title={t("flash.home.empty")}
+  description={t("flash.home.empty")}
+  actions={<Button variant="outline">Back to dashboard</Button>}
+/>
+```
+
+- Always `size-14 rounded-full bg-muted/40` for the icon container.
+- Always `text-base font-semibold` for the title.
+- Always `text-sm text-muted-foreground max-w-sm` for the body.
+- Center vertically with `py-16`. Never `py-20` or `py-12`.
+
+### Loading states (`<LoadingState>`)
+
+```tsx
+<LoadingState label={t("videos.loading")} />           // default size-6 spinner
+<LoadingState size="sm" />                              // size-5 spinner (inline)
+<LoadingState size="lg" label="Loading scenarios…" />   // size-7 spinner (full hub)
+```
+
+- Always use `Loader2` from `lucide-react` with `animate-spin`.
+- Always `text-muted-foreground` for the spinner (not `text-primary` — the spinner is informational, not a brand cue).
+- Always `py-16`. Never `py-20`.
+
+### Buttons
+
+Always use `<Button>` from `@/components/ui/button` — never hand-roll a `<button>` with ad-hoc Tailwind classes for primary actions. The Button component now supports these sizes:
+
+| Size | Height | Use it for |
+|---|---|---|
+| `sm` | `h-8` | Compact actions in toolbars, table rows, small CTA |
+| `default` | `h-9` | Default for most buttons |
+| `lg` | `h-10` | Primary CTAs in forms, login submit, modal actions |
+| `icon` | `size-9` | Icon-only buttons (36×36px, default) |
+| `iconSm` | `size-7` | Compact icon buttons (28×28px, e.g. session top bar) |
+| `iconLg` | `size-10` | Large icon buttons (40×40px, e.g. desktop article reader toolbar) |
+
+**Variants:** `default` (filled primary), `outline` (border + bg-background), `secondary` (bg-secondary), `ghost` (transparent, hover bg-accent), `destructive` (red), `link` (text-only with underline).
+
+**Rules:**
+
+- **Never** hand-roll a `<button>` element with `bg-primary text-primary-foreground text-sm font-medium` — use `<Button>` instead.
+- **Never** mix `rounded-md`, `rounded-xl`, `rounded-lg` for primary actions within the same form. Login screen used to have `h-12 rounded-xl` biometric + `h-10 rounded-md` submit — that was a bug; both are now `<Button size="lg">`.
+- **Icon buttons**: prefer `variant="ghost" size="icon"` (or `iconSm`/`iconLg`) over hand-rolled `<button className="size-9 rounded-md ...">`. The `.osler-icon-btn` CSS class is also available for non-component cases (e.g. avatar triggers in the app shell).
+
+### Icon button sizing — old vs new
+
+| Old (remove) | New (use) |
+|---|---|
+| `<button className="size-6 rounded-md ...">` | `<Button variant="ghost" size="iconSm">` |
+| `<button className="size-7 rounded-md ...">` | `<Button variant="ghost" size="iconSm">` |
+| `<button className="size-8 rounded-md ...">` | `<Button variant="ghost" size="icon">` |
+| `<button className="size-9 rounded-md ...">` | `<Button variant="ghost" size="icon">` |
+| `<button className="size-10 rounded-md ...">` | `<Button variant="ghost" size="iconLg">` |
+
+### Tab bars
+
+Osler uses two tab styles:
+
+1. **Underline tabs** (nav-style) — `border-b-2 border-primary text-primary` for active, `border-b-2 border-transparent text-muted-foreground hover:text-foreground` for inactive. Use for: QBank hub tabs (Content / Create / Previous), Lab Values category tabs.
+2. **Pill tabs** (filter-style) — `bg-primary text-primary-foreground` for active, `bg-muted/60 text-muted-foreground hover:text-foreground` for inactive. Use for: content-language filter pills, mobile folder chips, library TOC/Bookmarks toggle.
+
+**Rules:**
+
+- Pick the style that matches the role: nav = underline, filter = pill. Never mix within the same component.
+- The desktop top-nav and mobile bottom-tab-bar have their own active-indicator styles (`bg-primary/10 border border-primary/30` for desktop, color change + top accent bar for mobile) — these are intentional form-factor differences, not inconsistencies to "fix".
+
+### In-session top bars
+
+Quiz session (QBank active test) uses a primary-color navy bar (`bg-primary text-primary-foreground` via inline style) — this is the UWorld-style quiz mode indicator and is intentionally distinct.
+
+All other in-session top bars (Flashcard study, OSCE conversation, Library reader, Lab Values panel, Calculator modal) standardize on:
+
+```
+h-12 flex items-center px-3 sm:px-4 gap-2 shrink-0
+border-b border-border bg-card/60 backdrop-blur-md safe-pt
+```
+
+- Always `h-12` (48px). Never `py-2` / `py-3` or any other implicit height.
+- Always `bg-card/60 backdrop-blur-md`. Never `bg-card/40` (too faint) or `bg-card/80` (too opaque).
+- Always `border-b border-border` (no opacity).
+- Always include `safe-pt` so content doesn't sit under the notch on mobile.
+
+### Article typography
+
+Three near-identical typography systems existed (`.medos-article`, `.uworld-prose`, `.library-article`). The canonical system going forward is `.uworld-prose` for QBank/Flashcard rich text and `.library-article` for the Library article viewer. `.medos-article` is being phased out — do not use it in new code.
+
+When adding new rich-text rendering (e.g. AI chat messages, notes), reuse `.uworld-prose` rather than introducing a fourth system.
+
+### Typography hierarchy summary
+
+| Element | Recipe |
+|---|---|
+| Page title (h1) | `text-2xl md:text-3xl font-bold tracking-tight` (or `text-xl md:text-2xl` in inline header) |
+| Section heading (h2) | `text-sm font-semibold uppercase tracking-wider text-muted-foreground` |
+| Card title (h3) | `text-sm font-semibold` or `text-base font-semibold` |
+| Card subtitle / metadata | `text-xs text-muted-foreground` |
+| Body text | `text-sm` (default) |
+| Caption / micro label | `text-[11px]` (use sparingly — prefer `text-xs`) |
+| Stat value | `text-2xl font-bold tabular-nums` (or `text-xl` in compact stat tiles) |
+
+**Never** use `text-[10px]`, `text-[9px]`, or other sub-11px sizes for visible text. Use `text-xs` (12px) instead.
+
+### Spacing scale
+
+| Token | Use |
+|---|---|
+| `gap-1.5` (6px) | Tight clusters (icon + label inside a button) |
+| `gap-2` (8px) | Default gap between related items in a row |
+| `gap-3` (12px) | Default gap between cards in a grid |
+| `gap-4` (16px) | Gap between sections / sidebar + main |
+| `gap-6` (24px) | Major page-level sections |
+| `mb-3` (12px) | Below a section heading |
+| `mb-6` (24px) | Between major content blocks |
+| `mb-8` (32px) | Between top-level page sections |
+
+### What to do when extending the design system
+
+1. **Adding a new semantic token** (e.g. `--info-soft`): declare it in `:root` and `.light`, add it to the `@theme inline` mapping, then verify Tailwind generates `text-info-soft` / `bg-info-soft` utilities by using it in a component.
+2. **Adding a new shared primitive**: add it to `src/components/osler/ui-primitives.tsx`. Export it as a named export. Add a corresponding `.osler-*` CSS class in `globals.css` if the recipe is non-trivial.
+3. **Adding a new CSS utility class**: declare it in `globals.css` under the `Osler Design System` section. Use `@apply` only with real Tailwind utilities — never `@apply` another custom class (Tailwind v4 rejects that).
+4. **Migrating an existing view**: prefer mechanical, surgical edits that swap hand-rolled Tailwind for the shared primitive. Do not restructure the view's component tree. Keep all behavior identical.
+
+### Cleanup backlog (known drift, not blocking)
+
+These items are documented as known drift and may be cleaned up incrementally. Do not block new work on them, but fix them when you touch the relevant file:
+
+- The QBank session UI (active quiz mode) still uses `text-emerald-500` / `text-amber-500` / `text-red-500` for correct/wrong/flagged indicators. These should eventually migrate to `text-success` / `text-warning` / `text-destructive`.
+- The Flashcard study top bar uses `border-border/60` instead of `border-border`. Migrate when next editing `flashcard-studio.tsx`.
+- The OSCE session sidebar uses `bg-card/40` and `border-border/60`. Migrate when next editing `osce-studio.tsx`.
+- ~28 unused custom CSS classes are defined in `globals.css` (`.osler-card` system, `.osler-engine-*` layout, `.osler-stat` system, `.qbank-topbar*`, `.qbank-nav-strip*`, `.qbank-choice*`, `.uworld-tree-checkbox`, `.uworld-grid-bg`, `.uworld-pulse`, `.library-toc*`, `.medos-grid-bg`, `.medos-pulse`, `.medos-h-dvh`). Delete them when the namespace consolidation work is scheduled.
+- The `ENGINE_COLORS` map in `dashboard.tsx` duplicates colors that already live in `ENGINE_META` in `@/lib/osler/content`. Refactor to read from `ENGINE_META` instead.
+
 ---
 
 ## Conventions

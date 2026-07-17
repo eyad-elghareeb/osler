@@ -37,6 +37,12 @@
   --color-popover: var(--popover);
   --color-card-foreground: var(--card-foreground);
   --color-card: var(--card);
+  --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
+  --color-warning: var(--warning);
+  --color-warning-foreground: var(--warning-foreground);
+  --color-info: var(--info);
+  --color-info-foreground: var(--info-foreground);
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
@@ -77,6 +83,13 @@
   --sidebar-accent-foreground: oklch(0.96 0.005 240);
   --sidebar-border: oklch(1 0 0 / 6%);
   --sidebar-ring: oklch(0.58 0.14 245);
+  /* Semantic status colors — used in place of `text-emerald-500` / `text-amber-500` / `text-red-500`. */
+  --success: oklch(0.7 0.18 145);
+  --success-foreground: oklch(0.14 0.018 260);
+  --warning: oklch(0.78 0.16 80);
+  --warning-foreground: oklch(0.18 0.02 250);
+  --info: oklch(0.68 0.18 195);
+  --info-foreground: oklch(0.14 0.018 260);
 }
 
 /* Light theme (optional toggle) */
@@ -112,6 +125,13 @@
   --sidebar-accent-foreground: oklch(0.2 0.02 250);
   --sidebar-border: oklch(0.9 0.01 240);
   --sidebar-ring: oklch(0.38 0.09 255);
+  /* Semantic status colors — light theme uses deeper chroma for AA contrast on white. */
+  --success: oklch(0.55 0.15 145);
+  --success-foreground: oklch(0.99 0 0);
+  --warning: oklch(0.6 0.16 70);
+  --warning-foreground: oklch(0.99 0 0);
+  --info: oklch(0.5 0.16 220);
+  --info-foreground: oklch(0.99 0 0);
 }
 
 @layer base {
@@ -199,6 +219,172 @@ html::-webkit-scrollbar-thumb:hover {
 .medos-fade-in {
   animation: medos-fade-in 0.25s ease-out both;
 }
+
+/* ───────────────────────────────────────────────────────────────────────
+ * Osler Design System — shared utility classes
+ *
+ * The Tailwind recipes below are the canonical styles for hub pages,
+ * cards, headers, stat tiles, empty states, and loading states. Use
+ * them instead of re-deriving the same string of classes in every
+ * component. See `AGENTS.md → Design System` for the full rules.
+ * ─────────────────────────────────────────────────────────────────────── */
+
+/* Thin scrollbar mixin — inlined into `.osler-page` and friends so we
+ * don't depend on `@apply medos-scroll` (Tailwind v4 can only `@apply`
+ * real Tailwind utilities, not custom classes). */
+@layer base {
+  .osler-has-scroll {
+    scrollbar-width: thin;
+    scrollbar-color: color-mix(in oklch, var(--ring) 40%, transparent) transparent;
+  }
+  .osler-has-scroll::-webkit-scrollbar { width: 8px; height: 8px; }
+  .osler-has-scroll::-webkit-scrollbar-track { background: transparent; }
+  .osler-has-scroll::-webkit-scrollbar-thumb {
+    background-color: color-mix(in oklch, var(--ring) 40%, transparent);
+    border-radius: 999px;
+    border: 2px solid transparent;
+    background-clip: content-box;
+  }
+  .osler-has-scroll::-webkit-scrollbar-thumb:hover {
+    background-color: color-mix(in oklch, var(--ring) 65%, transparent);
+  }
+}
+
+/* Standard page container for hub views (Dashboard, Learn, Profile, etc.).
+ * Combines an outer scroll wrapper with a centered, padded content column.
+ * The scrollbar CSS is inlined because Tailwind v4 `@apply` cannot pull in
+ * other custom classes — only true Tailwind utilities. */
+.osler-page {
+  @apply h-full overflow-y-auto md:pb-0;
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in oklch, var(--ring) 40%, transparent) transparent;
+  /* Mobile bottom-tab-bar spacer — replicates `.medos-tabbar-pad` */
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+.osler-page::-webkit-scrollbar { width: 8px; height: 8px; }
+.osler-page::-webkit-scrollbar-track { background: transparent; }
+.osler-page::-webkit-scrollbar-thumb {
+  background-color: color-mix(in oklch, var(--ring) 40%, transparent);
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+.osler-page::-webkit-scrollbar-thumb:hover {
+  background-color: color-mix(in oklch, var(--ring) 65%, transparent);
+}
+@media (max-width: 767px) {
+  .osler-page {
+    padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 4rem);
+  }
+}
+.osler-page__inner {
+  @apply max-w-5xl mx-auto px-4 md:px-6 lg:px-8 py-6 md:py-8;
+}
+.osler-page__inner--wide {
+  @apply max-w-6xl mx-auto px-4 md:px-6 lg:px-8 py-6 md:py-8;
+}
+.osler-page__inner--narrow {
+  @apply max-w-4xl mx-auto px-4 md:px-6 lg:px-8 py-6 md:py-8;
+}
+
+/* Page header block — eyebrow + title + subtitle stack.
+ * Use inside `.osler-page__inner` at the top of a hub view. */
+.osler-page-header {
+  @apply mb-6 md:mb-8;
+}
+.osler-page-header__eyebrow {
+  @apply text-xs uppercase tracking-wider text-muted-foreground mb-1 flex items-center gap-1.5;
+}
+.osler-page-header__title {
+  @apply text-2xl md:text-3xl font-bold tracking-tight mb-1;
+}
+.osler-page-header__subtitle {
+  @apply text-sm text-muted-foreground max-w-2xl;
+}
+/* Inline variant: icon chip + title + subtitle in a row (compact views). */
+.osler-page-header--inline {
+  @apply flex items-center gap-3 mb-6 md:mb-8;
+}
+.osler-page-header--inline .osler-page-header__title {
+  @apply text-xl md:text-2xl mb-0;
+}
+.osler-page-header--inline .osler-page-header__subtitle {
+  @apply text-xs;
+}
+
+/* Section heading — small uppercase label that introduces a content block. */
+.osler-section-heading {
+  @apply text-sm font-semibold uppercase tracking-wider text-muted-foreground mb-3;
+}
+
+/* Card patterns — pick exactly one of `compact` / `default` / `roomy`.
+ * All cards share the same radius, border color, and hover treatment. */
+.osler-card {
+  @apply bg-card border border-border rounded-xl transition-colors;
+}
+.osler-card--compact {
+  @apply bg-card border border-border rounded-xl p-3 transition-colors;
+}
+.osler-card--default {
+  @apply bg-card border border-border rounded-xl p-4 transition-colors;
+}
+.osler-card--roomy {
+  @apply bg-card border border-border rounded-xl p-5 md:p-6 transition-colors;
+}
+/* Interactive card — clickable pack / module / quick action. */
+.osler-card--interactive {
+  @apply bg-card border border-border rounded-xl p-5 md:p-6 transition-all hover:border-primary/40 hover:shadow-md cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40;
+}
+
+/* Stat tile — label + big value, used in Dashboard, Profile, QBank/Flashcard hubs. */
+.osler-stat-tile {
+  @apply bg-card border border-border rounded-xl p-4 transition-colors;
+}
+.osler-stat-tile__label {
+  @apply text-[11px] font-medium uppercase tracking-wider text-muted-foreground;
+}
+.osler-stat-tile__value {
+  @apply text-2xl font-bold tabular-nums;
+}
+/* Compact variant for 3-column dense grids (QBank / Flashcard hub stat bars). */
+.osler-stat-tile--compact {
+  @apply bg-card border border-border rounded-xl p-3.5;
+}
+.osler-stat-tile--compact .osler-stat-tile__value {
+  @apply text-xl;
+}
+
+/* Empty state — centered icon + title + body. */
+.osler-empty {
+  @apply flex flex-col items-center justify-center py-16 text-center gap-3;
+}
+.osler-empty__icon {
+  @apply size-14 rounded-full bg-muted/40 flex items-center justify-center text-muted-foreground;
+}
+.osler-empty__title {
+  @apply text-base font-semibold;
+}
+.osler-empty__body {
+  @apply text-sm text-muted-foreground max-w-sm;
+}
+
+/* Loading state — centered spinner. */
+.osler-loading {
+  @apply flex flex-col items-center justify-center py-16 text-muted-foreground gap-3;
+}
+
+/* Icon button sizing — replaces ad-hoc `size-6` / `size-7` / `size-8` usage. */
+.osler-icon-btn-sm {
+  @apply size-7 rounded-md flex items-center justify-center transition-colors hover:bg-muted/60 text-muted-foreground hover:text-foreground;
+}
+.osler-icon-btn {
+  @apply size-9 rounded-md flex items-center justify-center transition-colors hover:bg-muted/60 text-muted-foreground hover:text-foreground;
+}
+
+/* Status accent utilities — `text-success` / `bg-success/10` etc. are
+ * auto-generated by Tailwind v4 from the `--color-success` / `--color-warning`
+ * / `--color-info` tokens declared in the `@theme inline` block above. Use
+ * them in place of `text-emerald-500` / `text-amber-500` / `text-red-500`. */
 
 /* Article content (rendered inside the article viewer) */
 .medos-article {

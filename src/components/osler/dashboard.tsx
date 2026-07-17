@@ -29,6 +29,12 @@ import type { OslerView } from "./app-shell";
 import { useI18n } from "./i18n-provider";
 import { cn } from "@/lib/utils";
 import { fadeUp, staggerContainer, staggerContainerSlow } from "@/lib/osler/motion";
+import {
+  PageHeader,
+  SectionHeading,
+  StatTile as SharedStatTile,
+  type StatTileProps,
+} from "./ui-primitives";
 
 interface DashboardProps {
   username: string;
@@ -133,25 +139,20 @@ export function Dashboard({
   })();
 
   return (
-    <div className="h-full overflow-y-auto medos-scroll medos-tabbar-pad md:pb-0">
-      <div className="max-w-6xl mx-auto px-4 md:px-8 py-8">
+    <div className="osler-page">
+      <div className="osler-page__inner--wide">
         {/* Hero */}
         <motion.div
           initial={{ opacity: 0, y: 8 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.3 }}
-          className="mb-8"
         >
-          <p className="text-xs uppercase tracking-wider text-muted-foreground mb-1 flex items-center gap-1.5">
-            <Flame className="size-3 text-amber-500" />
-            {greeting}
-          </p>
-          <h1 className="text-2xl md:text-3xl font-bold tracking-tight mb-1">
-            {t("dash.welcomeBack", { name: username })}
-          </h1>
-          <p className="text-sm text-muted-foreground max-w-2xl">
-            {t("dash.intro")}
-          </p>
+          <PageHeader
+            eyebrow={greeting}
+            eyebrowIcon={Flame}
+            title={t("dash.welcomeBack", { name: username })}
+            subtitle={t("dash.intro")}
+          />
         </motion.div>
 
         {/* Continue card */}
@@ -160,7 +161,7 @@ export function Dashboard({
             initial={{ opacity: 0, y: 6 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.3, delay: 0.05 }}
-            className="relative overflow-hidden bg-card border border-border rounded-xl p-5 md:p-6 mb-6"
+            className="relative overflow-hidden osler-card--roomy mb-6"
           >
             <div className="flex items-start justify-between gap-4 flex-wrap">
               <div className="flex-1 min-w-0">
@@ -178,7 +179,7 @@ export function Dashboard({
                   <span className="text-muted-foreground">
                     {t("dash.attempted", { n: continuePack.progress.attempted })}
                   </span>
-                  <span className="text-emerald-500">
+                  <span className="text-success">
                     {t("dash.correct", { n: continuePack.progress.correct })}
                   </span>
                   <span className="text-muted-foreground">·</span>
@@ -213,34 +214,34 @@ export function Dashboard({
             label={t("dash.packsStarted")}
             value={stats.packs}
             icon={LibraryIcon}
+            color="primary"
             onClick={() => onViewChange("qbank")}
           />
           <StatTile
             label={t("dash.attemptedLabel")}
             value={stats.attempted}
             icon={Activity}
+            color="primary"
             onClick={() => onViewChange("profile")}
           />
           <StatTile
             label={t("dash.correctLabel")}
             value={stats.correct}
             icon={CheckCircle2}
-            color="text-emerald-500"
+            color="success"
             onClick={() => onViewChange("profile")}
           />
           <StatTile
             label={t("dash.accuracy")}
             value={`${accuracy}%`}
             icon={Sparkles}
-            color="text-amber-500"
+            color="warning"
             onClick={() => onViewChange("profile")}
           />
         </div>
 
         {/* Quick actions */}
-        <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground mb-3">
-          {t("dash.quickActions")}
-        </h2>
+        <SectionHeading>{t("dash.quickActions")}</SectionHeading>
         <motion.div
           variants={staggerContainer}
           initial="hidden"
@@ -280,19 +281,20 @@ export function Dashboard({
         </motion.div>
 
         {/* Featured articles */}
-        <div className="flex items-center justify-between mb-3">
-          <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
-            {t("dash.featuredArticles")}
-          </h2>
-          <button
-            type="button"
-            onClick={() => onViewChange("library")}
-            className="text-xs text-primary hover:underline flex items-center gap-1"
-          >
-            {t("common.viewAll")}
-            <ArrowRight className={cn("size-3", rtl && "rtl-flip-x")} />
-          </button>
-        </div>
+        <SectionHeading
+          actions={
+            <button
+              type="button"
+              onClick={() => onViewChange("library")}
+              className="text-xs text-primary hover:underline flex items-center gap-1"
+            >
+              {t("common.viewAll")}
+              <ArrowRight className={cn("size-3", rtl && "rtl-flip-x")} />
+            </button>
+          }
+        >
+          {t("dash.featuredArticles")}
+        </SectionHeading>
         <motion.div
           variants={staggerContainer}
           initial="hidden"
@@ -306,7 +308,7 @@ export function Dashboard({
               variants={fadeUp}
               whileHover={{ y: -2 }}
               onClick={() => onOpenArticle?.(a.file)}
-              className="text-start bg-card border border-border rounded-lg p-4 hover:border-primary/40 hover:bg-primary/5 transition-colors"
+              className="text-start osler-card--default hover:border-primary/40 hover:bg-primary/5 transition-colors"
             >
               <div className="flex items-center gap-2 mb-2 text-xs text-muted-foreground">
                 <BookOpen className="size-3.5" />
@@ -332,9 +334,7 @@ export function Dashboard({
         {/* Recent packs */}
         {recentPacks.length > 0 ? (
           <>
-            <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground mb-3">
-              {t("dash.recentActivity")}
-            </h2>
+            <SectionHeading>{t("dash.recentActivity")}</SectionHeading>
             <motion.div
               variants={staggerContainerSlow}
               initial="hidden"
@@ -348,7 +348,7 @@ export function Dashboard({
                   variants={fadeUp}
                   whileHover={{ y: -2 }}
                   onClick={() => content && onOpenPack?.(node, content)}
-                  className="text-start bg-card border border-border rounded-lg p-4 hover:border-primary/40 transition-colors"
+                  className="text-start osler-card--default hover:border-primary/40 transition-colors"
                 >
                   <div className="flex items-start gap-3">
                     <div
@@ -369,7 +369,7 @@ export function Dashboard({
                       </p>
                       <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
                         <span>{t("dash.attempted", { n: progress.attempted })}</span>
-                        <span className="text-emerald-500">
+                        <span className="text-success">
                           {t("dash.correct", { n: progress.correct })}
                         </span>
                         {progress.lastAttempt ? (
@@ -395,30 +395,25 @@ function StatTile({
   label,
   value,
   icon: Icon,
-  color,
+  color = "primary",
   onClick,
 }: {
   label: string;
   value: string | number;
   icon: React.ComponentType<{ className?: string }>;
-  color?: string;
+  color?: StatTileProps["color"];
   onClick?: () => void;
 }) {
+  // Local wrapper kept for backwards-compat with the rest of this file —
+  // delegates to the shared primitive so visual style stays in sync.
   return (
-    <motion.button
-      type="button"
+    <SharedStatTile
+      label={label}
+      value={value}
+      icon={Icon as any}
+      color={color}
       onClick={onClick}
-      whileHover={{ y: -2 }}
-      className="text-left bg-card border border-border rounded-lg p-4 transition-colors hover:border-primary/40"
-    >
-      <div className="flex items-center justify-between mb-2">
-        <span className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
-          {label}
-        </span>
-        <Icon className={cn("size-4", color ?? "text-primary")} />
-      </div>
-      <div className="text-2xl font-bold">{value}</div>
-    </motion.button>
+    />
   );
 }
 
@@ -440,7 +435,7 @@ function QuickAction({
       onClick={onClick}
       variants={fadeUp}
       whileHover={{ y: -2 }}
-      className="text-start bg-card border border-border rounded-lg p-4 flex items-center gap-3 transition-colors hover:border-primary/40"
+      className="text-start osler-card--default flex items-center gap-3 hover:border-primary/40 transition-colors"
     >
       <div className="w-10 h-10 rounded-lg bg-primary/15 text-primary flex items-center justify-center shrink-0">
         <Icon className="size-5" />

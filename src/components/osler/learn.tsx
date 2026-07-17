@@ -20,6 +20,7 @@ import { listAllVideos } from "@/lib/osler/videos";
 import { storage } from "@/lib/osler/storage";
 import { fadeUp, staggerContainer } from "@/lib/osler/motion";
 import { isEngineEnabled } from "@/lib/osler/config";
+import { PageHeader } from "./ui-primitives";
 
 /**
  * Learn — a single hub that groups the four "study" modules that used to live
@@ -179,25 +180,20 @@ export function Learn({ onNavigate }: LearnProps) {
   }, []);
 
   return (
-    <div className="h-full overflow-y-auto medos-scroll medos-tabbar-pad md:pb-0">
-      <div className="max-w-5xl mx-auto px-4 md:px-8 py-8">
+    <div className="osler-page">
+      <div className="osler-page__inner">
         {/* Header */}
         <motion.div
           initial={{ opacity: 0, y: 8 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.3 }}
-          className="mb-8"
         >
-          <p className="text-xs uppercase tracking-wider text-muted-foreground mb-1 flex items-center gap-1.5">
-            <Sparkles className="size-3 text-amber-500" />
-            {t("nav.learn")}
-          </p>
-          <h1 className="text-2xl md:text-3xl font-bold tracking-tight mb-1">
-            {t("learn.title")}
-          </h1>
-          <p className="text-sm text-muted-foreground max-w-2xl">
-            {t("learn.subtitle")}
-          </p>
+          <PageHeader
+            eyebrow={t("nav.learn")}
+            eyebrowIcon={Sparkles}
+            title={t("learn.title")}
+            subtitle={t("learn.subtitle")}
+          />
         </motion.div>
 
         {/* Simple 2×2 grid (1 col on mobile, 2 cols on md+) */}

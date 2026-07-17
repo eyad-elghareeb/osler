@@ -35,6 +35,12 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { NotesPanel } from "./notes-panel";
 import { SyncModal } from "./sync/sync-modal";
+import {
+  PageHeader,
+  SectionHeading,
+  StatTile as SharedStatTile,
+  type StatTileProps,
+} from "./ui-primitives";
 
 interface ProfileProps {
   username: string;
@@ -83,20 +89,20 @@ export function Profile({ username, onViewChange, onOpenSettingsSection }: Profi
   }, [progress, data]);
 
   return (
-    <div className="h-full overflow-y-auto medos-scroll medos-tabbar-pad md:pb-0">
-      <div className="max-w-4xl mx-auto px-4 md:px-8 py-8">
+    <div className="osler-page">
+      <div className="osler-page__inner--narrow">
         {/* Profile header */}
         <motion.div
           initial={{ opacity: 0, y: 8 }}
           animate={{ opacity: 1, y: 0 }}
-          className="bg-card border border-border rounded-lg p-4 sm:p-6 mb-6 flex items-center gap-4"
+          className="osler-card--roomy mb-6 flex items-center gap-4"
         >
           <div className="w-16 h-16 rounded-full bg-gradient-to-br from-primary/80 to-primary/40 flex items-center justify-center text-2xl font-bold text-primary-foreground">
             {username.slice(0, 2).toUpperCase()}
           </div>
           <div className="flex-1 min-w-0">
-            <h1 className="text-xl font-semibold truncate">{username}</h1>
-            <p className="text-xs text-muted-foreground">{t("nav.localSession")} · {t("login.footer")}</p>
+            <h1 className="text-xl md:text-2xl font-bold tracking-tight truncate">{username}</h1>
+            <p className="text-xs text-muted-foreground mt-0.5">{t("nav.localSession")} · {t("login.footer")}</p>
           </div>
           <div className="hidden sm:flex flex-col items-end gap-1">
             <Badge variant="secondary" className="text-[10px]">
@@ -111,19 +117,19 @@ export function Profile({ username, onViewChange, onOpenSettingsSection }: Profi
             <>
               <button
                 onClick={() => setSyncOpen(true)}
-                className="size-9 rounded-lg hover:bg-muted/60 transition-colors flex items-center justify-center shrink-0"
+                className="osler-icon-btn shrink-0"
                 aria-label={t("sync.title")}
                 title={t("sync.title")}
               >
-                <Wifi className="size-4 text-muted-foreground hover:text-foreground transition-colors" />
+                <Wifi className="size-4" />
               </button>
               <button
                 onClick={() => onViewChange("settings")}
-                className="size-9 rounded-lg hover:bg-muted/60 transition-colors flex items-center justify-center shrink-0"
+                className="osler-icon-btn shrink-0"
                 aria-label={t("nav.settings")}
                 title={t("nav.settings")}
               >
-                <Cog className="size-4 text-muted-foreground hover:text-foreground transition-colors" />
+                <Cog className="size-4" />
               </button>
             </>
           )}
@@ -135,34 +141,32 @@ export function Profile({ username, onViewChange, onOpenSettingsSection }: Profi
             label={t("dash.attemptedLabel")}
             value={attemptedTotal}
             icon={Target}
-            color="text-primary"
+            color="primary"
           />
           <StatTile
             label={t("dash.correctLabel")}
             value={correctTotal}
             icon={Award}
-            color="text-emerald-500"
+            color="success"
           />
           <StatTile
             label="Wrong"
             value={wrongTotal}
             icon={TrendingUp}
-            color="text-red-500"
+            color="destructive"
           />
           <StatTile
             label={t("dash.accuracy")}
             value={`${accuracy}%`}
             icon={Zap}
-            color="text-amber-500"
+            color="warning"
           />
         </div>
 
         {/* Engine breakdown */}
-        <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground mb-3">
-          Performance by Engine
-        </h2>
+        <SectionHeading>Performance by Engine</SectionHeading>
         {Object.keys(engineStats).length === 0 ? (
-          <div className="bg-card border border-border rounded-lg p-8 text-center text-sm text-muted-foreground mb-6">
+          <div className="osler-card--default text-center text-sm text-muted-foreground mb-6 py-8">
             {t("profile.noSessions")}
           </div>
         ) : (
@@ -174,7 +178,7 @@ export function Profile({ username, onViewChange, onOpenSettingsSection }: Profi
               return (
                 <div
                   key={eng}
-                  className="bg-card border border-border rounded-lg p-4"
+                  className="osler-card--default"
                 >
                   <div className="flex items-center justify-between mb-2">
                     <div className="flex items-center gap-2">
@@ -206,9 +210,7 @@ export function Profile({ username, onViewChange, onOpenSettingsSection }: Profi
         <ProfileNotesSection onViewChange={onViewChange} />
 
         {/* Achievement stubs */}
-        <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground mb-3">
-          Achievements
-        </h2>
+        <SectionHeading>Achievements</SectionHeading>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
           <Achievement
             icon={Target}
@@ -265,27 +267,20 @@ function StatTile({
   label,
   value,
   icon: Icon,
-  color,
+  color = "primary",
 }: {
   label: string;
   value: string | number;
   icon: React.ComponentType<{ className?: string }>;
-  color?: string;
+  color?: StatTileProps["color"];
 }) {
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 6 }}
-      animate={{ opacity: 1, y: 0 }}
-      className="bg-card border border-border rounded-lg p-4"
-    >
-      <div className="flex items-center justify-between mb-2">
-        <span className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
-          {label}
-        </span>
-        <Icon className={cn("size-4", color ?? "text-primary")} />
-      </div>
-      <div className="text-2xl font-bold">{value}</div>
-    </motion.div>
+    <SharedStatTile
+      label={label}
+      value={value}
+      icon={Icon as any}
+      color={color}
+    />
   );
 }
 
@@ -303,10 +298,10 @@ function Achievement({
   return (
     <div
       className={cn(
-        "bg-card border rounded-lg p-4 flex items-center gap-3 transition-all",
+        "osler-card--default flex items-center gap-3 transition-all",
         unlocked
           ? "border-primary/40 bg-primary/5"
-          : "border-border opacity-60"
+          : "opacity-60"
       )}
     >
       <div
@@ -378,11 +373,10 @@ function ProfileNotesSection({
 
   return (
     <>
-      <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground mb-3 flex items-center gap-2">
-        <NotebookPen className="size-4" />
+      <SectionHeading icon={NotebookPen}>
         {t("qbank.notes.title")}
-      </h2>
-      <div className="bg-card border border-border rounded-lg p-4 mb-6">
+      </SectionHeading>
+      <div className="osler-card--default mb-6">
         {/* Toolbar */}
         <div className="flex items-center gap-2 mb-4">
           <Button
@@ -402,10 +396,10 @@ function ProfileNotesSection({
             <div className="size-12 rounded-full bg-primary/10 text-primary flex items-center justify-center mx-auto mb-3">
               <NotebookPen className="size-6" />
             </div>
-            <h3 className="text-sm font-semibold mb-1">
+            <h3 className="text-base font-semibold mb-1">
               {t("qbank.notes.empty.title")}
             </h3>
-            <p className="text-xs text-muted-foreground max-w-xs mx-auto mb-4">
+            <p className="text-sm text-muted-foreground max-w-xs mx-auto mb-4">
               {t("qbank.notes.empty.body")}
             </p>
             <Button onClick={handleCreate} size="sm" variant="outline" className="rounded-lg">
@@ -492,7 +486,7 @@ function ProfileNoteCard({
   }, [note.body]);
 
   return (
-    <div className="group rounded-lg border border-border bg-background hover:border-primary/40 hover:bg-primary/5 transition-colors p-3.5 cursor-pointer">
+    <div className="group rounded-lg border border-border bg-card hover:border-primary/40 hover:bg-primary/5 transition-colors p-3.5 cursor-pointer">
       <div onClick={onOpen} className="space-y-1.5">
         <div className="flex items-start justify-between gap-2">
           <h4 className="text-sm font-semibold truncate flex-1">

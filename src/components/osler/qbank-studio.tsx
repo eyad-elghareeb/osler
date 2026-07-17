@@ -663,20 +663,20 @@ function HomeView({
   React.useEffect(() => storage.subscribe(force), []);
 
   return (
-    <div className="flex h-[calc(100vh-3.5rem)] overflow-hidden bg-background">
+    <div className="flex h-full overflow-hidden bg-background">
       <div className="flex-1 min-w-0 flex flex-col overflow-hidden">
         {/* Page header — fixed at top */}
-        <div className="shrink-0 max-w-7xl mx-auto w-full px-3 sm:px-6 lg:px-8 pt-4 sm:pt-6">
-          <h1 className="text-2xl font-semibold tracking-tight text-foreground">
+        <div className="shrink-0 max-w-7xl mx-auto w-full px-4 md:px-6 lg:px-8 pt-6 md:pt-8">
+          <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-foreground">
             QBank Studio
           </h1>
-          <p className="text-sm text-muted-foreground mt-1">
+          <p className="text-sm text-muted-foreground mt-1 max-w-2xl">
             Browse premade content packs or build a custom test with UWorld-style tools.
           </p>
         </div>
 
         {/* Tab bar — fixed below header */}
-        <div className="shrink-0 border-b border-border px-3 sm:px-6 lg:px-8 w-full max-w-7xl mx-auto">
+        <div className="shrink-0 border-b border-border px-4 md:px-6 lg:px-8 w-full max-w-7xl mx-auto">
           <nav className="-mb-px flex gap-0 justify-center">
             {[
               { id: "content" as const, label: t("qbank.home.tabContent"), icon: Grid3x3 },
@@ -707,7 +707,7 @@ function HomeView({
         {/* Content zone — flex-1 min-h-0. Scrolling happens inside each
             tab's own content (NavigationStack home/subpage layers for the
             Content tab; overflow-y-auto wrappers for Create/Previous). */}
-        <div className="flex-1 min-h-0 max-w-7xl mx-auto w-full px-3 sm:px-6 lg:px-8 py-4 sm:py-6">
+        <div className="flex-1 min-h-0 max-w-7xl mx-auto w-full px-4 md:px-6 lg:px-8 py-4 sm:py-6">
           {homeTab === "content" && (
             <ContentTab
               data={data}
@@ -839,12 +839,12 @@ function PackCard({
       {packProgress.attempted > 0 ? (
         <>
           <div className="flex items-center gap-2 text-[11px]">
-            <span className="text-emerald-500 font-medium tabular-nums">{accuracy}%</span>
+            <span className="text-success font-medium tabular-nums">{accuracy}%</span>
             <span className="text-muted-foreground">{t("dash.accuracy")}</span>
           </div>
           <div className="h-1.5 rounded-full bg-muted/40 overflow-hidden">
             <div
-              className="h-full rounded-full bg-emerald-500 transition-all duration-300"
+              className="h-full rounded-full bg-success transition-all duration-300"
               style={{ width: `${accuracy}%` }}
             />
           </div>
@@ -941,19 +941,19 @@ function ContentTab({
   if (!data) {
     return (
       <div className="flex items-center justify-center py-16">
-        <Loader2 className="size-5 animate-spin text-muted-foreground" />
+        <Loader2 className="size-6 animate-spin text-muted-foreground" />
       </div>
     );
   }
 
   if (data.items.length === 0) {
     return (
-      <div className="text-center py-16">
-        <div className="size-14 rounded-full bg-muted/40 flex items-center justify-center mx-auto mb-4">
-          <Grid3x3 className="size-6 text-muted-foreground" />
+      <div className="osler-empty">
+        <div className="osler-empty__icon">
+          <Grid3x3 className="size-6" />
         </div>
-        <h3 className="text-base font-semibold mb-1">{t("qbank.home.empty")}</h3>
-        <p className="text-sm text-muted-foreground">
+        <h3 className="osler-empty__title">{t("qbank.home.empty")}</h3>
+        <p className="osler-empty__body">
           {t("qbank.home.empty")}
         </p>
       </div>
@@ -1059,14 +1059,14 @@ function ContentTab({
                 {stat.attempted > 0 ? (
                   <>
                     <div className="flex items-center gap-2 text-[11px]">
-                      <span className="text-emerald-500 font-medium tabular-nums">
+                      <span className="text-success font-medium tabular-nums">
                         {accuracy}%
                       </span>
                       <span className="text-muted-foreground">{t("dash.accuracy")}</span>
                     </div>
                     <div className="h-1.5 rounded-full bg-muted/40 overflow-hidden">
                       <div
-                        className="h-full rounded-full bg-emerald-500 transition-all duration-300"
+                        className="h-full rounded-full bg-success transition-all duration-300"
                         style={{ width: `${accuracy}%` }}
                       />
                     </div>
@@ -1443,7 +1443,7 @@ function CreateTestTab({
 
           <div className="qbank-card">
             <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
-              <Lightbulb className="size-4 text-amber-500" />
+              <Lightbulb className="size-4 text-warning" />
               {t("qbank.home.tip")}
             </h3>
             <p

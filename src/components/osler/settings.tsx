@@ -287,7 +287,7 @@ export function Settings({
                     <span>{t("settings.backToList")}</span>
                   </button>
                 </div>
-                <h1 className="text-lg font-bold flex items-center gap-2 mb-4">
+                <h1 className="text-xl md:text-2xl font-bold tracking-tight flex items-center gap-2 mb-4">
                   {(() => {
                     const I = activeMeta?.icon ?? SettingsIcon;
                     return <I className="size-5 text-primary" />;
@@ -307,17 +307,19 @@ export function Settings({
   // ── Desktop: sidebar + content pane ────────────────────────────────
   return (
     <div className="h-full overflow-y-auto medos-scroll">
-      <div className="max-w-5xl mx-auto px-4 md:px-8 py-6 md:py-8">
+      <div className="max-w-5xl mx-auto px-4 md:px-6 lg:px-8 py-6 md:py-8">
         <motion.div
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.28 }}
         >
-          <div className="flex items-center gap-3 mb-6">
-            <SettingsIcon className="size-6 text-primary" />
+          <div className="osler-page-header--inline">
+            <div className="size-10 rounded-xl bg-primary/15 border border-primary/30 flex items-center justify-center shrink-0">
+              <SettingsIcon className="size-5 text-primary" />
+            </div>
             <div>
-              <h1 className="text-xl font-bold">{t("settings.title")}</h1>
-              <p className="text-sm text-muted-foreground">{t("settings.subtitle")}</p>
+              <h1 className="osler-page-header__title">{t("settings.title")}</h1>
+              <p className="osler-page-header__subtitle">{t("settings.subtitle")}</p>
             </div>
           </div>
 

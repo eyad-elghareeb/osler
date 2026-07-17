@@ -124,14 +124,14 @@ export function LabValuesSidebar({ open, onClose }: { open?: boolean; onClose: (
 
   const content = (
     <div className="h-full flex flex-col">
-      <div className="px-4 py-3 border-b border-border flex items-center justify-between shrink-0">
+      <div className="h-12 px-4 flex items-center justify-between border-b border-border bg-card/60 backdrop-blur-md shrink-0 safe-pt">
         <div className="flex items-center gap-2">
           <FlaskConical className="size-4 text-primary" />
           <h3 className="text-sm font-semibold text-foreground">Lab Values</h3>
         </div>
         <button
           onClick={onClose}
-          className="size-7 rounded-lg hover:bg-muted flex items-center justify-center transition-colors"
+          className="osler-icon-btn-sm"
         >
           <X className="size-4" />
         </button>

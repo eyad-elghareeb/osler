@@ -338,7 +338,7 @@ export function AppShell({
             onClick={toggleTheme}
             aria-label="Toggle theme"
             title={isDark ? t("theme.toggleToLight") : t("theme.toggleToDark")}
-            className="size-9 rounded-md hover:bg-muted/60 transition-colors flex items-center justify-center shrink-0"
+            className="osler-icon-btn shrink-0"
           >
             {isDark ? (
               <Sun className="size-4" />
