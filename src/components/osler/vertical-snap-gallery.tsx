@@ -289,6 +289,7 @@ function useVerticalSnap(options: UseVerticalSnapOptions): UseVerticalSnapState 
     let tracking = false;
     let axisLocked: "x" | "y" | null = null;
     let startPointerId = -1;
+    let captured = false;
     let lastY = 0, lastT = 0;
     // Remember the original touch target from pointerdown. After
     // setPointerCapture, all subsequent pointermove events have
@@ -297,8 +298,7 @@ function useVerticalSnap(options: UseVerticalSnapOptions): UseVerticalSnapState 
     let downTarget: EventTarget | null = null;
     // True when the touch started on an interactive element (button, etc.)
     // inside a scrollable area. The gesture proceeds so the user can drag
-    // to scroll; on tap we dispatch click() on the original target.
-    let isButtonTouch = false;
+    // to scroll; native click on the original target fires on tap.
 
     // Scroll-mode state
     let scrollMode = false;
@@ -310,20 +310,12 @@ function useVerticalSnap(options: UseVerticalSnapOptions): UseVerticalSnapState 
 
     const onDown = (e: PointerEvent) => {
       if (e.pointerType === "mouse" && e.button !== 0) return;
-      isButtonTouch = false;
-      if (isInteractiveTarget(e.target, container)) {
-        // Interactive element (button, link, etc.) — mark as button-touch
-        // so a tap (no movement) dispatches click() on pointerup. The
-        // gesture itself always proceeds: the scroll-vs-snap decision at
-        // 8px crossing handles scrollable content, and non-scrollable
-        // content goes straight to snap mode.
-        isButtonTouch = true;
-      }
-      // Capture the pointer so ALL subsequent pointermove/pointerup events
-      // go to THIS element — the browser won't send pointercancel even if
-      // the finger moves over a scrollable child. This is what makes touch
-      // behave identically to mouse: the gesture can't be hijacked mid-flight.
-      try { container.setPointerCapture(e.pointerId); } catch { /* ignore */ }
+      // NOTE: we do NOT capture the pointer on pointerdown. Capturing here
+      // would redirect the synthetic `click` away from the actual element
+      // under the pointer (e.g. an <img>), breaking image lightboxes and
+      // other click handlers inside the card on both mouse and touch.
+      // Instead we capture only once a real drag begins (see onMove), so a
+      // plain tap keeps its native click target intact.
       tracking = true;
       axisLocked = null;
       scrollMode = false;
@@ -351,6 +343,10 @@ function useVerticalSnap(options: UseVerticalSnapOptions): UseVerticalSnapState 
         if (absX > 8 || absY > 8) {
           if (absY >= absX * (1 / maxDriftRatio)) {
             axisLocked = "y";
+            // Capture the pointer now that a real vertical drag is underway,
+            // so the gesture can't be hijacked mid-flight by a scrollable
+            // child. A plain tap never reaches here, preserving native click.
+            try { container.setPointerCapture(e.pointerId); captured = true; } catch { /* ignore */ }
             // Reset lastY at the moment of axis lock so the first delta
             // in scroll/snap mode is small (just the incremental move),
             // not the full distance from pointerdown.
@@ -484,26 +480,23 @@ function useVerticalSnap(options: UseVerticalSnapOptions): UseVerticalSnapState 
 
     const onUp = (e: PointerEvent) => {
       if (!tracking || e.pointerId !== startPointerId) return;
-      try { container.releasePointerCapture(e.pointerId); } catch { /* ignore */ }
-      // Tap on a button inside a scrollable area — dispatch click on the
-      // original target so the consumer's onClick fires (select, etc.).
-      // Touch events (onTouchStart for long-press) already fired on the
-      // original target regardless of pointer capture, so long-press works.
-      if (isButtonTouch && !movedRef.current) {
-        isButtonTouch = false;
-        tracking = false;
-        if (downTarget instanceof HTMLElement) downTarget.click();
-        return;
+      if (captured) {
+        try { container.releasePointerCapture(e.pointerId); } catch { /* ignore */ }
+        captured = false;
       }
-      isButtonTouch = false;
+      // Without pointer capture on a plain tap, the browser fires the native
+      // click on the actual target (button, img, link) for both mouse and
+      // touch, so no manual click dispatch is needed.
       finishGesture(e.clientY, Date.now());
     };
 
     const onCancel = (e: PointerEvent) => {
       if (!tracking) return;
-      try { container.releasePointerCapture(e.pointerId); } catch { /* ignore */ }
+      if (captured) {
+        try { container.releasePointerCapture(e.pointerId); } catch { /* ignore */ }
+        captured = false;
+      }
       tracking = false;
-      isButtonTouch = false;
       scrollMode = false;
       scrollTarget = null;
       movedRef.current = false;
