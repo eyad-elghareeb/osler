@@ -35,7 +35,7 @@
     - Use safe-area utilities (`.safe-pt`, `.safe-pb`, `.safe-screen`) for any full-screen overlay so content never sits under the notch.
 
 15. **Prefer already-made and tested solutions over handrolling.** Before writing new code, check:
-    - **shadcn/ui** (`@/components/ui/*`) — 48 primitives already vendored. Use them for dialogs, dropdowns, popovers, tabs, etc. Never re-implement a shadcn component.
+    - **shadcn/ui** (`@/components/ui/*`) — 49 primitives already vendored. Use them for dialogs, dropdowns, popovers, tabs, etc. Never re-implement a shadcn component.
     - **framer-motion** — for any animation. Never raw `requestAnimationFrame` transitions.
     - **lucide-react** — for icons. Never inline SVGs.
     - **`@/lib/osler/native`** — for Vibration, View Transitions, WebAuthn, Network Information, Wake Lock. Never call `navigator.vibrate()` / `navigator.credentials.*` / `navigator.wakeLock.*` directly — go through the wrappers.
@@ -346,9 +346,9 @@ These items are documented as known drift and may be cleaned up incrementally. D
 ### Project structure
 
 - `src/components/osler/` — app-specific components
-- `src/components/ui/` — shadcn/ui primitives (48 files, do not add custom logic here)
+- `src/components/ui/` — shadcn/ui primitives (49 files, do not add custom logic here)
 - `src/lib/osler/` — business logic, types, data loading, storage
-- `src/hooks/` — shared React hooks (`useContentTree`, `useArticleHighlighter`, `useGestures`, `useContentCache`, `useQuizSettings`, `useResizableSidebar`, `useDisableBlur`, `useShortcutBindings`, `useShortcutListener`)
+- `src/hooks/` — shared React hooks: `useContentTree`, `useArticleHighlighter`, `useGestures`, `useContentCache`, `useQuizSettings`, `useResizableSidebar`, `useDisableBlur`, `useShortcuts` (`useShortcutBindings` / `useShortcutListener` / `useShortcutSequenceReset`), `useSwipeBackDismiss`, `useSwipeTabs`, `useSwipeGallery`, `useToast`, `usePlatform`, `useMobile`, `useNative`
 - `public/osler-content/` — folder-based content (see Content system)
 - `scripts/` — manifest generator and build helpers
 - `tauri-admin/` — separate Tauri desktop admin panel (Rust)
@@ -363,9 +363,9 @@ These items are documented as known drift and may be cleaned up incrementally. D
 ### CSS
 
 - Tailwind CSS v4 with `@tailwindcss/postcss` plugin (not v3 `tailwindcss` PostCSS plugin)
-- Use Tailwind utility classes and semantic design tokens (`bg-background`, `text-primary`, `border-border/60`)
+- Use Tailwind utility classes and semantic design tokens (`bg-background`, `text-primary`, `border-border`)
 - Use `oklch()` for color values in `globals.css`
-- Border opacity uses `/60` suffix convention: `border-border/60`
+- Resting cards use `border border-border`; opacity suffixes like `border-border/60` are drift and are being phased out (see cleanup backlog)
 
 ### Keyboard shortcuts
 
@@ -380,7 +380,9 @@ These items are documented as known drift and may be cleaned up incrementally. D
 - **Type inheritance**: content under `flashcard/` is auto-type "flashcard"; `qbank/` types auto-detected from file keys (`questions` → `quiz`, `passages` → `bank`, `prompts` → `written`); `osce/` → "osce"; `videos/` → "video"
 - **Multiple `.json` files per leaf folder**: all files fetched and merged (arrays concatenated)
 - **Branch nodes** (folders with subfolders) → grouping decks; **Leaf nodes** (no subfolders) → content items
-- Auto-generate manifests via `npm run generate-manifests` (script: `scripts/generate-content-manifests.js`) — re-run after adding/removing content
+- **Images**: a leaf node may declare an `images: [...]` file list and ship an `images/` subfolder. Bare filenames in rich text / card fields resolve against the node's `images/` subfolder automatically (`src/lib/osler/richtext.ts`, `articles.ts`). Library article images live in `<articleDir>/images/`.
+- **Flashcard types**: `basic` (front/back) and `cloze` (Anki `{{c1::answer::hint}}` syntax). Cloze cards split into one review unit per distinct cloze index; SM-2 tracks each separately. Markdown is supported in all fields; images resolve via the pack's `images/` subfolder. Anki export (`.txt`) is available for basic + cloze decks.
+- Auto-generate manifests via `npm run generate-manifests` (script: `scripts/generate-content-manifests.js`) — re-run after adding/removing content or images
 
 ### Content loading
 
@@ -587,9 +589,9 @@ Library, Flashcards, OSCE, and Videos are sub-views under the **Learn** hub. The
 
 | View | Component | Handles |
 |---|---|---|
-| Quiz/Bank/Written | `QBankStudio.tsx` (~4300 lines) | Unified quiz engine, adaptive UI per type |
-| Flashcards | `FlashcardStudio.tsx` (~880 lines) | Deck browser + spaced repetition |
-| OSCE | `OsceStudio.tsx` (~2400 lines) | Clinical OSCE simulator + AI voice interaction |
+| Quiz/Bank/Written | `QBankStudio.tsx` (~6190 lines) | Unified quiz engine, adaptive UI per type |
+| Flashcards | `FlashcardStudio.tsx` (~1350 lines) | Deck browser + spaced repetition |
+| OSCE | `OsceStudio.tsx` (~2470 lines) | Clinical OSCE simulator + AI voice interaction |
 | Videos | `VideosStudio.tsx` | Video player with YouTube/Plyr/Invidious |
 
 ### Viewport quirks
@@ -603,7 +605,14 @@ Library, Flashcards, OSCE, and Videos are sub-views under the **Learn** hub. The
 
 - Sync library: `@/lib/osler/sync/` (6 modules: protocol, helpers, file, QR, network transport, index)
 - Three methods: WebRTC (PeerJS + MQTT relay), QR code (LZ-string + CRC32), file backup (`.osler-backup`)
-- Sync settings UI in `@/components/osler/sync/` (4 panel components)
+- Sync settings UI in `@/components/osler/sync/` (`sync-modal.tsx`, `sync-settings-section.tsx`, `network-sync-panel.tsx`, `qr-sync-panel.tsx`, `file-sync-panel.tsx`, `network-info-badge.tsx`)
+
+### Offline content cache
+
+- Service worker (`src/app/sw.ts`, Serwist) precaches the app shell + runtime caches content on demand.
+- `useContentCache` hook (`src/hooks/use-content-cache.ts`) drives per-pack precaching: a leaf node's data files plus any `images/` URLs are computed via `nodeUrls` and pushed to the SW's runtime cache.
+- UI surfaces: `content-cache-button.tsx` (per-pack download/remove in QBank/Flashcard/OSCE/Videos hubs) and the Offline section in `settings.tsx`.
+- Images are always precached alongside their pack so decks/articles render fully offline.
 
 ---
 

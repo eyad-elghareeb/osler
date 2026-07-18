@@ -1,8 +1,11 @@
 
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="https://capsule-render.vercel.app/api?type=waving&color=0:1e3a5f,100:0ea5e9&height=200&section=header&text=Osler&fontSize=80&fontColor=fff&fontAlignY=35&desc=Medical%20Study%20Platform&descAlignY=55&descSize=20">
-  <img alt="Osler Banner" src="https://capsule-render.vercel.app/api?type=waving&color=0:1e3a5f,100:0ea5e9&height=200&section=header&text=Osler&fontSize=80&fontColor=fff&fontAlignY=35&desc=Medical%20Study%20Platform&descAlignY=55&descSize=20">
-</picture>
+<p align="center">
+  <img alt="Osler Logo" src="public/assets/icon.svg" width="128" height="128">
+</p>
+
+<h1 align="center">Osler</h1>
+
+<p align="center"><strong>Medical Study Platform</strong></p>
 
 <p align="center">
   <a href="#features"><strong>Features</strong></a> ·
@@ -52,6 +55,8 @@ Unified medical study platform combining **Quiz Banks**, **Flashcards**, **OSCE 
 - Collapsible specialty tree TOC sidebar
 - 9+ medical articles across Cardiology, Pulmonology, Neurology, Gastroenterology
 - Rendered from Markdown via `remark`/`rehype` pipeline
+- Inline images (`images/` subfolder per article) and Mermaid diagrams with theme-aware rendering
+- Inline & standalone PDF content, article printing (PDF/HTML export)
 - Article search via Ctrl+K with autocomplete
 - Text highlighting with color palette + eraser tool
 - Sticky notes, bookmarks, zoom controls (80%–140%)
@@ -70,13 +75,15 @@ All 5 engine types through a single interface:
 | **Written** | Prompt + rubric review |
 | **OSCE** | Scenario + Red Flags + Differential + Rubric (via OSCE Studio) |
 
-Key features: Timed/Tutor modes · Question navigator with state colors · Split-pane explanation · Results dashboard (score, percentile, distribution) · Image lightbox
+Key features: Timed/Tutor modes · Question navigator with state colors · Split-pane explanation with inline images & Markdown · Mixed quiz+written sessions · Cross-pack pool builder · Results dashboard (score, percentile, distribution) · Tracker & review sessions (wrong/flagged, previous-session review) · Per-pack offline download · Image lightbox
 </details>
 
 <details>
 <summary><strong>🃏 Flashcard Studio</strong> — Spaced repetition</summary>
 - Folder-based deck navigation with due-count badges
 - Tap-to-flip front/back reveal
+- Anki-style support: images, Markdown, and cloze (`{{c1::answer}}`) cards with one review unit per cloze
+- Anki export (`.txt` import files) for basic + cloze decks
 - Subdeck support for hierarchical organization
 </details>
 
@@ -152,7 +159,8 @@ Every feature is **feature-detected and degrades gracefully** — iOS Safari sil
 
 <p align="center">
   <b>Also includes:</b> Lab Values reference · Floating Calculator · Notes System (Markdown editor) · 
-  Quiz Reader Customization · PWA Install · Offline Content Cache · 6 Achievements
+  Quiz Reader Customization · Mermaid diagram explorer · 8 custom themes + visual theme selector · 
+  PWA Install · Offline Content Cache (per-pack precache) · 6 Achievements
 </p>
 
 ---
@@ -179,7 +187,7 @@ Every feature is **feature-detected and degrades gracefully** — iOS Safari sil
 | **UI Library** | React 19 |
 | **Language** | TypeScript 5 (strict, `noImplicitAny: false`) |
 | **Styling** | Tailwind CSS 4 (`@theme inline` tokens, oklch colors) |
-| **Components** | shadcn/ui (48 primitives) |
+| **Components** | shadcn/ui (49 primitives) |
 | **Icons** | lucide-react |
 | **Motion** | framer-motion |
 | **Fonts** | Geist Sans · Geist Mono · Cairo (`next/font/google`) |
@@ -218,7 +226,7 @@ src/
 │   │   ├── dashboard.tsx      # Home view
 │   │   ├── learn.tsx          # Learn hub (Library/Flashcards/OSCE/Videos)
 │   │   ├── library.tsx        # Article reader
-│   │   ├── qbank-studio.tsx   # Unified quiz engine (~3100 lines)
+│   │   ├── qbank-studio.tsx   # Unified quiz engine (~6190 lines)
 │   │   ├── flashcard-studio.tsx
 │   │   ├── osce-studio.tsx    # OSCE clinical simulator
 │   │   ├── videos-studio.tsx  # Video library + player
@@ -230,7 +238,7 @@ src/
 │   │   ├── lab-values.tsx     # Lab reference sidebar
 │   │   ├── sync/              # Sync setting panels
 │   │   └── ...                # Utilities, overlays, providers
-│   └── <a href="src/components/ui">ui</a>/                   # 48 shadcn/ui primitives
+│   └── <a href="src/components/ui">ui</a>/                   # 49 shadcn/ui primitives
 ├── <a href="src/hooks">hooks</a>/                    # Shared React hooks
 │   ├── use-article-highlighter.ts
 │   ├── use-content-tree.ts
