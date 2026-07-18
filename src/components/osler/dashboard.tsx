@@ -18,10 +18,11 @@ import {
   Library as LibraryIcon,
   Flame,
   PlayCircle,
+  RotateCcw,
 } from "lucide-react";
 import { loadAllContent, ENGINE_META } from "@/lib/osler/content";
 import type { AnyContent, ContentTreeNode, EngineType } from "@/lib/osler/types";
-import { storage } from "@/lib/osler/storage";
+import { storage, sessions } from "@/lib/osler/storage";
 import { listAllArticles, loadArticleContent } from "@/lib/osler/articles";
 import { listAllVideos } from "@/lib/osler/videos";
 import type { Article } from "@/lib/osler/articles";
@@ -87,6 +88,57 @@ export function Dashboard({
     };
   }, []);
 
+  // Active (in-progress) session from IDB
+  const [activeSession, setActiveSession] = React.useState<{
+    itemTitle: string;
+    engine: EngineType;
+    current: number;
+    total: number;
+    startedAt: number;
+    mode: string;
+  } | null>(null);
+
+  React.useEffect(() => {
+    const check = () => {
+      const raw = sessions.getActive() as {
+        itemTitle?: string;
+        engine?: EngineType;
+        current?: number;
+        questions?: Array<unknown>;
+        startedAt?: number;
+        completedAt?: number;
+        isReview?: boolean;
+        mode?: string;
+      } | null;
+      if (
+        raw &&
+        !raw.completedAt &&
+        !raw.isReview &&
+        Array.isArray(raw.questions) &&
+        raw.questions.length > 0 &&
+        raw.itemTitle &&
+        raw.engine &&
+        typeof raw.current === "number" &&
+        Date.now() - (raw.startedAt ?? 0) < 7 * 24 * 60 * 60 * 1000
+      ) {
+        setActiveSession({
+          itemTitle: raw.itemTitle,
+          engine: raw.engine,
+          current: raw.current,
+          total: raw.questions.length,
+          startedAt: raw.startedAt ?? 0,
+          mode: raw.mode ?? "tutor",
+        });
+      } else {
+        setActiveSession(null);
+      }
+    };
+    check();
+    const unsub = sessions.subscribe(check);
+    const unsubH = storage.onHydrated(check);
+    return () => { unsub(); unsubH(); };
+  }, []);
+
   const recentPacks = React.useMemo(() => {
     if (!data) return [];
     return data.items
@@ -136,6 +188,16 @@ export function Dashboard({
     })();
   }, []);
 
+  const timeAgo = (ts: number) => {
+    const diff = Date.now() - ts;
+    const mins = Math.floor(diff / 60000);
+    if (mins < 1) return t("dash.timeAgo.justNow");
+    if (mins < 60) return t("dash.timeAgo.minutes", { n: mins });
+    const hrs = Math.floor(mins / 60);
+    if (hrs < 24) return t("dash.timeAgo.hours", { n: hrs });
+    return t("dash.timeAgo.days", { n: Math.floor(hrs / 24) });
+  };
+
   const greeting = (() => {
     const h = new Date().getHours();
     if (h < 12) return t("dash.greetingMorning");
@@ -159,6 +221,53 @@ export function Dashboard({
             subtitle={t("dash.intro")}
           />
         </motion.div>
+
+        {/* Active session — resume mid-quiz */}
+        {activeSession ? (
+          <motion.div
+            initial={{ opacity: 0, y: 6 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.3, delay: 0.05 }}
+            className="relative overflow-hidden osler-card--roomy mb-6 border border-primary/30 bg-primary/[0.04]"
+          >
+            <div className="flex items-start justify-between gap-4 flex-wrap">
+              <div className="flex-1 min-w-0">
+                <span className="text-[11px] uppercase tracking-wider text-primary font-medium flex items-center gap-1.5">
+                  <RotateCcw className="size-3" />
+                  {t("dash.resumeSession")}
+                </span>
+                <h2 className="text-lg md:text-xl font-semibold mt-1 mb-1">
+                  {activeSession.itemTitle}
+                </h2>
+                <div className="flex items-center gap-3 text-xs flex-wrap">
+                  <span className="text-muted-foreground">
+                    {t("dash.sessionProgress", {
+                      n: activeSession.current + 1,
+                      total: activeSession.total,
+                    })}
+                  </span>
+                  <span className="text-muted-foreground">·</span>
+                  <span className="text-muted-foreground capitalize">
+                    {activeSession.mode}
+                  </span>
+                  <span className="text-muted-foreground">·</span>
+                  <span className="flex items-center gap-1 text-muted-foreground">
+                    <Clock className="size-3" />
+                    {timeAgo(activeSession.startedAt)}
+                  </span>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => onViewChange("qbank")}
+                className="inline-flex items-center gap-1.5 px-4 h-10 rounded-md bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors shrink-0"
+              >
+                {t("common.resume")}
+                <ArrowRight className={cn("size-4", rtl && "rtl-flip-x")} />
+              </button>
+            </div>
+          </motion.div>
+        ) : null}
 
         {/* Continue card */}
         {continuePack ? (
@@ -380,7 +489,7 @@ export function Dashboard({
                         {progress.lastAttempt ? (
                           <span className="flex items-center gap-1">
                             <Clock className="size-2.5" />
-                            {timeAgo(progress.lastAttempt, t)}
+                            {timeAgo(progress.lastAttempt)}
                           </span>
                         ) : null}
                       </div>

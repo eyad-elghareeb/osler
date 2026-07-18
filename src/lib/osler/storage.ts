@@ -648,6 +648,24 @@ export const sessions = {
       window.removeEventListener("storage", handler);
     };
   },
+
+  /** Persist the active (in-progress) session so it survives hard refresh. */
+  saveActive(session: unknown) {
+    const key = "session:__active__";
+    setCached("sessions", key, session);
+    idbPut("sessions", key, session).catch(console.warn);
+  },
+
+  /** Load the active session from IDB (returns null if none). */
+  getActive(): unknown | null {
+    return getCached<unknown>("sessions", "session:__active__");
+  },
+
+  /** Clear the active session from IDB when session ends or is exited. */
+  clearActive() {
+    deleteCached("sessions", "session:__active__");
+    idbDelete("sessions", "session:__active__").catch(console.warn);
+  },
 };
 
 /* ── Highlights (per question in a pack) ────────────────────────────── */

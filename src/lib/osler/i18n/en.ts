@@ -101,6 +101,9 @@ export const en = {
     "dash.timeAgo.hours": "{n}h ago",
     "dash.timeAgo.days": "{n}d ago",
 
+    "dash.resumeSession": "Resume Session",
+    "dash.sessionProgress": "Question {n} of {total}",
+
     "qbank.home.title": "Q-Bank Studio",
     "qbank.home.subtitle":
       "Build a study session from quizzes, banks, written prompts, OSCE stations, and flashcards.",

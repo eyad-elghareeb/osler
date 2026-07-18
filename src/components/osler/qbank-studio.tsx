@@ -330,6 +330,103 @@ export function QBankStudio({
   const { t } = useI18n();
   const { openLightbox } = useLightbox();
 
+  // ── Auto-persist active session to IndexedDB ─────────────────────
+  // Prevents data loss on hard refresh (Ctrl+Shift+R, Cmd+Shift+R, etc.)
+  // Three layers of protection (modeled after MU61S8 reference):
+  //   1. Debounced save (500ms) on every session state change
+  //   2. Periodic interval save (5s) as a safety net
+  //   3. beforeunload handler for immediate save on tab close / refresh
+  const autoSaveTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+  const sessionRef = React.useRef(session);
+  sessionRef.current = session;
+
+  // Debounced save on state change
+  React.useEffect(() => {
+    if (!session || session.isReview || session.completedAt) {
+      sessions.clearActive();
+      return;
+    }
+    if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
+    autoSaveTimerRef.current = setTimeout(() => {
+      sessions.saveActive(session);
+    }, 500);
+    return () => {
+      if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
+    };
+  }, [session]);
+
+  // Periodic backup save every 5 seconds
+  React.useEffect(() => {
+    const id = setInterval(() => {
+      const s = sessionRef.current;
+      if (s && !s.isReview && !s.completedAt) {
+        sessions.saveActive(s);
+      }
+    }, 5000);
+    return () => clearInterval(id);
+  }, []);
+
+  // Force-save on tab close / browser refresh
+  React.useEffect(() => {
+    const handleBeforeUnload = () => {
+      const s = sessionRef.current;
+      if (s && !s.isReview && !s.completedAt) {
+        sessions.saveActive(s);
+      }
+    };
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
+  }, []);
+
+  // Save when tab goes hidden (app switch, tab switch, screen lock)
+  React.useEffect(() => {
+    const handleVisibility = () => {
+      if (document.hidden) {
+        const s = sessionRef.current;
+        if (s && !s.isReview && !s.completedAt) {
+          sessions.saveActive(s);
+        }
+      }
+    };
+    document.addEventListener("visibilitychange", handleVisibility);
+    return () => document.removeEventListener("visibilitychange", handleVisibility);
+  }, []);
+
+  // ── Restore active session from IndexedDB on mount ─────────────────
+  // Only restores when no pack is selected via URL (activeItem is null),
+  // so the startSession effect for URL packs is never overridden.
+  const restoreBlockedRef = React.useRef(false);
+  React.useEffect(() => {
+    if (mode !== "home" || session || activeItem) {
+      restoreBlockedRef.current = true;
+      return;
+    }
+    const restore = () => {
+      if (restoreBlockedRef.current) return;
+      const saved = sessions.getActive() as SessionData | null;
+      if (
+        saved &&
+        saved.sessionId &&
+        !saved.completedAt &&
+        !saved.isReview &&
+        Array.isArray(saved.questions) &&
+        saved.questions.length > 0 &&
+        // Staleness check: discard if older than 7 days
+        Date.now() - (saved.startedAt ?? 0) < 7 * 24 * 60 * 60 * 1000
+      ) {
+        restoreBlockedRef.current = true;
+        setSession(saved);
+        setMode("quiz");
+        setTestMode(saved.mode);
+      } else if (saved) {
+        sessions.clearActive();
+      }
+    };
+    restore();
+    const unsub = storage.onHydrated(restore);
+    return unsub;
+  }, []);
+
   // Cross-tab plumbing (P0-4): a pack picked from Content tab gets handed to
   // Create Test as `initialSourceUid`. The custom-session callback is
   // implemented here so Create Test / Tracker / Previous Tests can all
@@ -464,6 +561,7 @@ export function QBankStudio({
       }
       return completed;
     });
+    sessions.clearActive();
     // P3-1: review sessions skip the results view and exit straight to home
     // (no score to show — answers were already known at save time).
     if (session?.isReview) {
@@ -483,6 +581,7 @@ export function QBankStudio({
   };
 
   const exitToHome = () => {
+    sessions.clearActive();
     setMode("home");
     setSession(null);
     setImmersiveMode(false);

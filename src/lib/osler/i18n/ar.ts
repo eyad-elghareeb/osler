@@ -102,6 +102,9 @@ export const ar = {
     "dash.timeAgo.hours": "قبل {n} س",
     "dash.timeAgo.days": "قبل {n} ي",
 
+    "dash.resumeSession": "استئناف الجلسة",
+    "dash.sessionProgress": "السؤال {n} من {total}",
+
     "qbank.home.title": "استوديو بنك الأسئلة",
     "qbank.home.subtitle":
       "اعمل جلسة مذاكرة من الاختبارات والبنوك والأسئلة المقالية ومحطات OSCE والبطاقات.",
