@@ -124,6 +124,7 @@ import { useShortcutBindings, useShortcutListener } from "@/hooks/use-shortcuts"
 import { defaultBindings } from "@/lib/osler/shortcuts";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { VerticalSnapGallery } from "./vertical-snap-gallery";
+import { useLightbox } from "./lightbox-provider";
 import { useSwipeTabs } from "@/hooks/use-swipe-tabs";
 import { useQuizSettings } from "@/hooks/use-quiz-settings";
 import { setImmersiveMode } from "./immersive-mode";
@@ -172,6 +173,42 @@ function renderQuestionText(text: string, q: SessionQuestion, item?: ContentTree
 function imageListOf(field?: ContentImage | ContentImage[]): ContentImage[] {
   if (!field) return [];
   return Array.isArray(field) ? field : [field];
+}
+
+/** A content image that opens the lightbox when tapped/clicked. Used for stem,
+ * choice and explanation images so they work even inside the swipe gallery,
+ * where pointer capture can swallow the synthetic click. */
+function ContentImageFigure({
+  img,
+  category,
+  path,
+  className,
+}: {
+  img: ContentImage;
+  category: string;
+  path: string;
+  className: string;
+}) {
+  const { openLightbox } = useLightbox();
+  const src = resolveContentAsset(img.src, category, path);
+  return (
+    <figure key={img.src} className="m-0">
+      <img
+        src={src}
+        alt={img.alt ?? ""}
+        onClick={(e) => {
+          e.stopPropagation();
+          openLightbox(src, img.alt ?? "");
+        }}
+        className={cn(className, "cursor-zoom-in")}
+      />
+      {img.caption && (
+        <figcaption className="text-center text-xs text-muted-foreground mt-1.5">
+          {img.caption}
+        </figcaption>
+      )}
+    </figure>
+  );
 }
 
 interface QBankStudioProps {
@@ -289,6 +326,7 @@ export function QBankStudio({
   const [, force] = React.useReducer((x) => x + 1, 0);
   const pendingQuestionLimitRef = React.useRef(0);
   const { t } = useI18n();
+  const { openLightbox } = useLightbox();
 
   // Cross-tab plumbing (P0-4): a pack picked from Content tab gets handed to
   // Create Test as `initialSourceUid`. The custom-session callback is
@@ -3670,19 +3708,14 @@ function QuizView({
         {/* Stem images */}
         {imageListOf(question.images).length > 0 && (
           <div className="flex flex-col gap-3 mb-4">
-            {imageListOf(question.images).map((img, i) => (
-              <figure key={i} className="m-0">
-                <img
-                  src={resolveContentAsset(img.src, questionAssetBase(question, activeItem).category, questionAssetBase(question, activeItem).path)}
-                  alt={img.alt ?? ""}
-                  className="rounded-xl border border-border max-h-[320px] w-auto mx-auto"
-                />
-                {img.caption && (
-                  <figcaption className="text-center text-xs text-muted-foreground mt-1.5">
-                    {img.caption}
-                  </figcaption>
-                )}
-              </figure>
+            {imageListOf(question.images).map((img) => (
+              <ContentImageFigure
+                key={img.src}
+                img={img}
+                category={questionAssetBase(question, activeItem).category}
+                path={questionAssetBase(question, activeItem).path}
+                className="rounded-xl border border-border max-h-[320px] w-auto mx-auto"
+              />
             ))}
           </div>
         )}
@@ -3787,11 +3820,12 @@ function QuizView({
                     />
                     {imageListOf(question.choiceImages?.[idx]).length > 0 && (
                       <div className="flex flex-col gap-2 mt-2">
-                        {imageListOf(question.choiceImages?.[idx]).map((img, ii) => (
-                          <img
-                            key={ii}
-                            src={resolveContentAsset(img.src, questionAssetBase(question, activeItem).category, questionAssetBase(question, activeItem).path)}
-                            alt={img.alt ?? ""}
+                        {imageListOf(question.choiceImages?.[idx]).map((img) => (
+                          <ContentImageFigure
+                            key={img.src}
+                            img={img}
+                            category={questionAssetBase(question, activeItem).category}
+                            path={questionAssetBase(question, activeItem).path}
                             className="rounded-lg border border-border max-h-[200px] w-auto"
                           />
                         ))}
@@ -4118,32 +4152,35 @@ function QuizView({
   // subsequent synthetic click event from double-firing.
   React.useEffect(() => {
     if (!eraserMode) return;
-    const removeHighlight = (target: EventTarget | null) => {
+    const removeHighlight = (target: EventTarget | null): boolean => {
       const el = target as HTMLElement;
-      if (!el) return;
+      if (!el) return false;
       const span = el.closest("[data-osler-hl-id]") as HTMLElement | null;
       if (span) {
         const id = span.getAttribute("data-osler-hl-id");
         if (id) {
           highlights.remove(activeItem.uid, session.current, id);
           setHlVersion((v) => v + 1);
+          return true;
         }
       }
+      return false;
     };
     const onClick = (e: MouseEvent) => {
-      e.preventDefault();
-      e.stopPropagation();
-      removeHighlight(e.target);
+      const removed = removeHighlight(e.target);
+      if (removed) {
+        e.preventDefault();
+        e.stopPropagation();
+      }
     };
     const onTouchEnd = (e: TouchEvent) => {
-      // Prevent the synthetic click that follows touchend
-      e.preventDefault();
       const touch = e.changedTouches[0];
       if (!touch) return;
       const el = document.elementFromPoint(touch.clientX, touch.clientY);
-      if (el) {
+      // Prevent the synthetic click that follows touchend
+      if (el && removeHighlight(el)) {
+        e.preventDefault();
         e.stopPropagation();
-        removeHighlight(el);
       }
     };
     document.addEventListener("click", onClick, true);
@@ -5773,19 +5810,14 @@ function ExplanationCard({
           </div>
           {imageListOf(q.explanationImages).length > 0 && (
             <div className="flex flex-col gap-3 mt-3">
-              {imageListOf(q.explanationImages).map((img, ei) => (
-                <figure key={ei} className="m-0">
-                  <img
-                    src={resolveContentAsset(img.src, questionAssetBase(q, item).category, questionAssetBase(q, item).path)}
-                    alt={img.alt ?? ""}
-                    className="rounded-xl border border-border max-h-[320px] w-auto mx-auto"
-                  />
-                  {img.caption && (
-                    <figcaption className="text-center text-xs text-muted-foreground mt-1.5">
-                      {img.caption}
-                    </figcaption>
-                  )}
-                </figure>
+              {imageListOf(q.explanationImages).map((img) => (
+                <ContentImageFigure
+                  key={img.src}
+                  img={img}
+                  category={questionAssetBase(q, item).category}
+                  path={questionAssetBase(q, item).path}
+                  className="rounded-xl border border-border max-h-[320px] w-auto mx-auto"
+                />
               ))}
             </div>
           )}
@@ -5838,19 +5870,14 @@ function ExplanationCard({
         </div>
         {imageListOf(q.explanationImages).length > 0 && (
           <div className="flex flex-col gap-3 mt-3">
-            {imageListOf(q.explanationImages).map((img, ei) => (
-              <figure key={ei} className="m-0">
-                <img
-                  src={resolveContentAsset(img.src, questionAssetBase(q, item).category, questionAssetBase(q, item).path)}
-                  alt={img.alt ?? ""}
-                  className="rounded-xl border border-border max-h-[320px] w-auto mx-auto"
-                />
-                {img.caption && (
-                  <figcaption className="text-center text-xs text-muted-foreground mt-1.5">
-                    {img.caption}
-                  </figcaption>
-                )}
-              </figure>
+            {imageListOf(q.explanationImages).map((img) => (
+              <ContentImageFigure
+                key={img.src}
+                img={img}
+                category={questionAssetBase(q, item).category}
+                path={questionAssetBase(q, item).path}
+                className="rounded-xl border border-border max-h-[320px] w-auto mx-auto"
+              />
             ))}
           </div>
         )}
