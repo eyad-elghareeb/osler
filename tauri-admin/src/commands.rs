@@ -1015,7 +1015,7 @@ pub fn git_clone(
     Ok(json!({
         "cloned": true,
         "url": url,
-        "targetDir": targetDir_absolute(&target),
+        "targetDir": target_dir_absolute(&target),
         "branch": branch,
         "remote": remote,
     }))
@@ -1024,7 +1024,7 @@ pub fn git_clone(
 /// Cross-platform helper that returns the absolute path of `target` as a
 /// string. Used by `git_clone` so the response is always absolute regardless
 /// of what the caller passed in.
-fn targetDir_absolute(target: &Path) -> String {
+fn target_dir_absolute(target: &Path) -> String {
     let canonical = std::fs::canonicalize(target).unwrap_or_else(|_| target.to_path_buf());
     canonical.to_string_lossy().to_string()
 }

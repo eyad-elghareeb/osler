@@ -62,18 +62,19 @@ const GH_OAUTH_TOKEN: &str = "https://github.com/login/oauth/access_token";
    ═══════════════════════════════════════════════════════════════════════ */
 
 #[derive(Default, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct GitHubAuthState {
     pub authenticated: bool,
     pub login: String,
     pub name: String,
-    pub avatarUrl: String,
+    pub avatar_url: String,
     pub scopes: Vec<String>,
     /// Where the active token came from: "project" | "global" | ""
-    pub tokenSource: String,
+    pub token_source: String,
     /// Whether an OAuth flow is currently pending (server listening).
-    pub oauthPending: bool,
+    pub oauth_pending: bool,
     /// Last OAuth error, if any.
-    pub oauthError: String,
+    pub oauth_error: String,
 }
 
 #[derive(Default, Clone)]
@@ -87,11 +88,12 @@ struct OAuthPending {
 /// Runtime OAuth config (client_id, optional client_secret for confidential
 /// apps). Persisted at the global config path so users set it once per machine.
 #[derive(Default, Clone, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct OAuthConfig {
     #[serde(default)]
-    pub clientId: String,
+    pub client_id: String,
     #[serde(default)]
-    pub clientSecret: String,
+    pub client_secret: String,
 }
 
 fn shared_oauth() -> &'static Arc<Mutex<OAuthPending>> {
@@ -186,13 +188,14 @@ const GH_TOKEN_FILE: &str = "github.json";
 const GH_OAUTH_CONFIG_FILE: &str = "oauth-config.json";
 
 #[derive(Clone, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 struct StoredToken {
     token: String,
     login: String,
     name: String,
-    avatarUrl: String,
+    avatar_url: String,
     scopes: Vec<String>,
-    savedAt: u64,
+    saved_at: u64,
 }
 
 fn project_token_path(root: &Path) -> PathBuf {
@@ -271,6 +274,7 @@ fn write_oauth_config(cfg: &OAuthConfig) -> Result<(), String> {
     Ok(())
 }
 
+#[allow(unused_variables)]
 fn restrict_perms(p: &Path) {
     #[cfg(unix)]
     {
@@ -645,8 +649,8 @@ fn exchange_code_for_token(code: &str, client_id: &str, client_secret: &str) -> 
 pub fn gh_get_oauth_config() -> Result<Value, String> {
     let cfg = read_oauth_config();
     Ok(json!({
-        "clientId": cfg.clientId,
-        "clientSecretSet": !cfg.clientSecret.is_empty(),
+        "clientId": cfg.client_id,
+        "clientSecretSet": !cfg.client_secret.is_empty(),
         "redirectUri": REDIRECT_URI,
         "scopes": OAUTH_SCOPES,
         "defaultClientId": DEFAULT_GH_CLIENT_ID,
@@ -656,10 +660,10 @@ pub fn gh_get_oauth_config() -> Result<Value, String> {
 #[tauri::command]
 pub fn gh_set_oauth_config(client_id: String, client_secret: Option<String>) -> Result<Value, String> {
     let mut cfg = read_oauth_config();
-    cfg.clientId = client_id.trim().to_string();
+    cfg.client_id = client_id.trim().to_string();
     if let Some(secret) = client_secret {
         // Empty string clears the secret; non-empty replaces it.
-        cfg.clientSecret = secret.trim().to_string();
+        cfg.client_secret = secret.trim().to_string();
     }
     write_oauth_config(&cfg)?;
     Ok(json!({ "saved": true }))
@@ -668,12 +672,12 @@ pub fn gh_set_oauth_config(client_id: String, client_secret: Option<String>) -> 
 /// Start the OAuth Web Flow. Generates a state, spawns the local callback
 /// server, and returns the authorize URL. The frontend opens it via
 /// `open_external`. The frontend then polls `gh_auth_status` until
-/// `oauthPending` flips to false and `authenticated` flips to true.
+/// `oauth_pending` flips to false and `authenticated` flips to true.
 #[tauri::command]
 pub fn gh_sign_in(window: Window) -> Result<Value, String> {
     let cfg = read_oauth_config();
-    let client_id = if !cfg.clientId.is_empty() {
-        cfg.clientId.clone()
+    let client_id = if !cfg.client_id.is_empty() {
+        cfg.client_id.clone()
     } else if !DEFAULT_GH_CLIENT_ID.is_empty() {
         DEFAULT_GH_CLIENT_ID.to_string()
     } else {
@@ -700,7 +704,7 @@ pub fn gh_sign_in(window: Window) -> Result<Value, String> {
         p.token = String::new();
     }
 
-    start_callback_server(state.clone(), client_id.clone(), cfg.clientSecret.clone());
+    start_callback_server(state.clone(), client_id.clone(), cfg.client_secret.clone());
 
     let auth_url = format!(
         "{}?client_id={}&redirect_uri={}&scope={}&state={}",
@@ -757,7 +761,7 @@ pub fn gh_auth_status(state: State<'_, ProjectRoot>) -> Result<Value, String> {
                         .and_then(|v| v.as_str())
                         .unwrap_or("")
                         .to_string(),
-                    avatarUrl: user
+                    avatar_url: user
                         .get("avatar_url")
                         .and_then(|v| v.as_str())
                         .unwrap_or("")
@@ -770,7 +774,7 @@ pub fn gh_auth_status(state: State<'_, ProjectRoot>) -> Result<Value, String> {
                         .map(|s| s.trim().to_string())
                         .filter(|s| !s.is_empty())
                         .collect(),
-                    savedAt: now_millis(),
+                    saved_at: now_millis(),
                 };
                 let root = root_from_state(&state);
                 let _ = write_stored_token(root.as_deref(), &stored);
@@ -783,11 +787,11 @@ pub fn gh_auth_status(state: State<'_, ProjectRoot>) -> Result<Value, String> {
                 g.authenticated = true;
                 g.login = stored.login.clone();
                 g.name = stored.name.clone();
-                g.avatarUrl = stored.avatarUrl.clone();
+                g.avatar_url = stored.avatar_url.clone();
                 g.scopes = stored.scopes.clone();
-                g.tokenSource = if root.is_some() { "project" } else { "global" }.to_string();
-                g.oauthPending = false;
-                g.oauthError = String::new();
+                g.token_source = if root.is_some() { "project" } else { "global" }.to_string();
+                g.oauth_pending = false;
+                g.oauth_error = String::new();
                 return Ok(serde_json::to_value(&*g).map_err(|e| e.to_string())?);
             }
             Err(e) => {
@@ -806,8 +810,8 @@ pub fn gh_auth_status(state: State<'_, ProjectRoot>) -> Result<Value, String> {
     };
     if !oauth_err.is_empty() && !oauth_pending {
         let mut g = shared_auth().lock().unwrap();
-        g.oauthPending = false;
-        g.oauthError = oauth_err.clone();
+        g.oauth_pending = false;
+        g.oauth_error = oauth_err.clone();
         return Ok(serde_json::to_value(&*g).map_err(|e| e.to_string())?);
     }
 
@@ -818,19 +822,19 @@ pub fn gh_auth_status(state: State<'_, ProjectRoot>) -> Result<Value, String> {
         g.authenticated = true;
         g.login = stored.login;
         g.name = stored.name;
-        g.avatarUrl = stored.avatarUrl;
+        g.avatar_url = stored.avatar_url;
         g.scopes = stored.scopes;
-        g.tokenSource = source;
-        g.oauthPending = shared_oauth().lock().unwrap().pending;
-        g.oauthError = shared_oauth().lock().unwrap().error.clone();
+        g.token_source = source;
+        g.oauth_pending = shared_oauth().lock().unwrap().pending;
+        g.oauth_error = shared_oauth().lock().unwrap().error.clone();
         return Ok(serde_json::to_value(&*g).map_err(|e| e.to_string())?);
     }
 
     // Not authenticated.
     let mut g = shared_auth().lock().unwrap();
     *g = GitHubAuthState::default();
-    g.oauthPending = shared_oauth().lock().unwrap().pending;
-    g.oauthError = shared_oauth().lock().unwrap().error.clone();
+    g.oauth_pending = shared_oauth().lock().unwrap().pending;
+    g.oauth_error = shared_oauth().lock().unwrap().error.clone();
     Ok(serde_json::to_value(&*g).map_err(|e| e.to_string())?)
 }
 
