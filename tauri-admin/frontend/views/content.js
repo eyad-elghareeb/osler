@@ -168,6 +168,7 @@
       body.appendChild(host);
       try {
         activeMarkdownEditor = await window.OslerMarkdownEditor.create(host, currentContent, {
+          filePath: currentPath,
           onChange(md) {
             currentContent = md;
             dirty = true;

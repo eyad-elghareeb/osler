@@ -56,6 +56,43 @@
       ]
     },
     {
+      "uid": "library-demos",
+      "title": "Demos",
+      "type": "library",
+      "path": "demos/",
+      "files": [],
+      "images": [],
+      "items": [
+        {
+          "uid": "library-demos-image-support-demo",
+          "title": "Image Support Demo",
+          "type": "library",
+          "path": "demos/image-support-demo/",
+          "files": [
+            "image-support-demo.md"
+          ],
+          "images": [
+            "ecg-lead-ii.svg"
+          ],
+          "items": [
+            {
+              "uid": "library-demos-image-support-demo",
+              "title": "Image Support Demo",
+              "type": "library",
+              "path": "demos/image-support-demo/",
+              "files": [
+                "image-support-demo.md"
+              ],
+              "images": [
+                "ecg-lead-ii.svg"
+              ],
+              "items": []
+            }
+          ]
+        }
+      ]
+    },
+    {
       "uid": "library-gastroenterology",
       "title": "Gastroenterology",
       "type": "library",

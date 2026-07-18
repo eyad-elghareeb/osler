@@ -1367,6 +1367,37 @@ h1, h2, h3, h4 { letter-spacing: -0.01em; }
   overflow: hidden;
 }
 
+/* Image upload bar — sits above the EasyMDE toolbar so authors can drop
+   images into the article's images/ folder (matches QBank/Flashcard). */
+.md-upload-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.4rem 0.6rem;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface-2, var(--surface));
+}
+.md-upload-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.35rem 0.65rem;
+  border-radius: var(--radius, 8px);
+  border: 1px solid var(--border);
+  background: var(--primary);
+  color: var(--primary-contrast, #fff);
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+.md-upload-btn:hover { opacity: 0.9; }
+.md-upload-btn i { font-size: 0.85rem; }
+.md-upload-hint {
+  font-size: 0.72rem;
+  color: var(--text-dim);
+  line-height: 1.3;
+}
+
 .milkdown-container .EasyMDEContainer {
   display: flex;
   flex-direction: column;

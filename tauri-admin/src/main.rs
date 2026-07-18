@@ -30,6 +30,8 @@ fn main() {
             commands::create_file,
             commands::create_folder,
             commands::delete_path,
+            commands::upload_content_asset,
+            commands::read_file_base64,
             commands::move_path,
             commands::rename_path,
             // Manifest

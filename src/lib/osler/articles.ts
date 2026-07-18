@@ -13,6 +13,22 @@ const BASE = "/osler-content/library";
 
 export type ArticleContentType = "md" | "pdf" | "html";
 
+/**
+ * Resolve an image src used inside a library article against the article's
+ * own folder. Mirrors the QBank/Flashcard convention: bare filenames and
+ * `images/<name>` are looked up in the `<articleDir>/images/` subfolder next
+ * to the `.md` file; absolute URLs, `data:` URIs, and `/`-rooted paths are
+ * returned untouched.
+ */
+export function resolveArticleAsset(src: string, articleDir: string): string {
+  if (!src) return src;
+  if (/^(https?:)?\/\//.test(src) || src.startsWith("data:") || src.startsWith("/")) {
+    return src;
+  }
+  const base = src.includes("/") ? src : `images/${src}`;
+  return `${BASE}/${articleDir}${base}`;
+}
+
 export interface ArticleMeta {
   /** Relative file path from library root (e.g. "cardiology/ischemic-syndrome/stemi.md") */
   file: string;
@@ -116,13 +132,35 @@ const rehypeMermaid: Plugin<[]> = () => (tree: any) => {
 };
 
 
-async function mdToHtml(md: string): Promise<string> {
+/**
+ * Rehype plugin: rewrite image `src` attributes so relative references
+ * resolve against the article's own folder (where its `images/` subfolder
+ * lives). Absolute URLs, `data:` URIs, and `/`-rooted paths pass through.
+ */
+const rehypeArticleImages: Plugin<[string]> = (articleDir: string) => (tree: any) => {
+  function walk(node: any) {
+    if (
+      node.type === "element" &&
+      node.tagName === "img" &&
+      node.properties?.src
+    ) {
+      node.properties.src = resolveArticleAsset(node.properties.src, articleDir);
+    }
+    if (Array.isArray(node.children)) {
+      for (const child of node.children) walk(child);
+    }
+  }
+  walk(tree);
+};
+
+async function mdToHtml(md: string, articleDir: string): Promise<string> {
   const result = await unified()
     .use(remarkParse)
     .use(remarkGfm)
     .use(remarkRehype, { allowDangerousHtml: true })
     .use(rehypeRaw)
     .use(rehypeMermaid)
+    .use(rehypeArticleImages, articleDir)
     .use(rehypeStringify)
     .process(md);
   return String(result);
@@ -259,7 +297,10 @@ export async function loadArticleContent(filePath: string): Promise<Article | nu
   if (!res.ok) return null;
   const text = await res.text();
   const { meta, body } = parseFrontmatter(text);
-  const html = await mdToHtml(body);
+  const articleDir = filePath.includes("/")
+    ? filePath.slice(0, filePath.lastIndexOf("/") + 1)
+    : "";
+  const html = await mdToHtml(body, articleDir);
   const nodeLang = await lookupNodeLangForFile(filePath);
   return {
     file: filePath.split("/").pop() ?? "",

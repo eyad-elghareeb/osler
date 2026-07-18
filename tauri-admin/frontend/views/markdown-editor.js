@@ -193,8 +193,26 @@
 
   /* ── Editor creation ───────────────────────────────────── */
 
+  function toBase64(arrayBuffer) {
+    let binary = "";
+    const bytes = new Uint8Array(arrayBuffer);
+    const chunk = 0x8000;
+    for (let i = 0; i < bytes.length; i += chunk) {
+      binary += String.fromCharCode.apply(null, bytes.subarray(i, i + chunk));
+    }
+    return btoa(binary);
+  }
+
+  function toast(msg, kind) {
+    try {
+      const t = window.OslerAdmin && window.OslerAdmin.toast;
+      if (t) t(msg, kind);
+    } catch {}
+  }
+
   async function create(host, initialMarkdown, opts) {
     opts = opts || {};
+    const filePath = opts.filePath || "";
     ensureCss();
     host.classList.add("milkdown-container");
     host.innerHTML = "";
@@ -405,6 +423,108 @@
       });
       // Initial scan after editor is ready
       setTimeout(syncMermaidChips, 200);
+    }
+
+    /* ── Image upload ──────────────────────────────────────────────────
+     *
+     * Lets an author pick an image from disk and have it copied into the
+     * `images/` folder next to the current markdown file (matching the
+     * QBank/Flashcard/Library asset convention). The reference
+     * `![alt](images/name)` is inserted at the cursor.
+     * ──────────────────────────────────────────────────────────────── */
+
+    if (filePath && cm) {
+      const uploadBar = document.createElement("div");
+      uploadBar.className = "md-upload-bar";
+
+      const uploadBtn = document.createElement("button");
+      uploadBtn.type = "button";
+      uploadBtn.className = "md-upload-btn";
+      const uploadLabel = (window.OslerAdmin && window.OslerAdmin.t)
+        ? window.OslerAdmin.t("content.file.uploadImage")
+        : "Upload image";
+      uploadBtn.innerHTML = '<i class="fas fa-image"></i> ' + uploadLabel;
+      uploadBtn.addEventListener("click", () => pickAndUploadImage());
+
+      const hint = document.createElement("span");
+      hint.className = "md-upload-hint";
+      hint.textContent = (window.OslerAdmin && window.OslerAdmin.t)
+        ? window.OslerAdmin.t("content.file.imageHint")
+        : "Images are saved to an images/ folder next to this file.";
+
+      const fileInput = document.createElement("input");
+      fileInput.type = "file";
+      fileInput.accept = "image/*";
+      fileInput.style.display = "none";
+      fileInput.addEventListener("change", async (e) => {
+        const input = e.target;
+        const file = input.files && input.files[0];
+        if (file) await uploadImageFile(file);
+        input.value = "";
+      });
+
+      uploadBar.appendChild(uploadBtn);
+      uploadBar.appendChild(hint);
+      uploadBar.appendChild(fileInput);
+      host.insertBefore(uploadBar, ta);
+
+      async function pickAndUploadImage() {
+        try {
+          const res = await window.OslerAdmin.invoke("plugin:dialog|open", {
+            options: {
+              multiple: false,
+              title: "Select an image",
+              filters: [{ name: "Images", extensions: ["png", "jpg", "jpeg", "gif", "svg", "webp", "avif", "bmp"] }],
+            },
+          });
+          // In Tauri the dialog returns an array of paths (or a single path).
+          let chosen = res;
+          if (Array.isArray(chosen)) chosen = chosen[0];
+          if (!chosen) return;
+          const read = await window.OslerAdmin.invoke("read_file_base64", { path: String(chosen) });
+          if (!read || !read.data) {
+            toast("Could not read the selected image.", "error");
+            return;
+          }
+          await uploadImageFileFromBase64(read.data, read.name || String(chosen).split(/[\\/]/).pop());
+        } catch (err) {
+          // In a plain browser there's no Tauri dialog — fall back to the
+          // native file input.
+          fileInput.click();
+        }
+      }
+
+      async function uploadImageFile(file, fallbackName) {
+        try {
+          const buf = await file.arrayBuffer();
+          const b64 = toBase64(buf);
+          await doUploadAsset(b64, fallbackName || file.name);
+        } catch (err) {
+          toast("Upload failed: " + String(err), "error");
+        }
+      }
+
+      async function uploadImageFileFromBase64(b64, fallbackName) {
+        try {
+          await doUploadAsset(b64, fallbackName);
+        } catch (err) {
+          toast("Upload failed: " + String(err), "error");
+        }
+      }
+
+      async function doUploadAsset(b64, fileName) {
+        const res = await window.OslerAdmin.invoke("upload_content_asset", {
+          contentPath: filePath,
+          fileName: fileName,
+          data: b64,
+        });
+        const reference = res && res.reference ? res.reference : "images/" + fileName;
+        const cursor = cm.getCursor();
+        cm.replaceSelection("![](" + reference + ")");
+        cm.focus();
+        cm.setCursor({ line: cursor.line, ch: cursor.ch + reference.length + 4 });
+        toast("Image uploaded to images/ — reference inserted.", "success");
+      }
     }
 
     return {

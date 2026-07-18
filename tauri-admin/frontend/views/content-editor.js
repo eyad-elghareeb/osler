@@ -11,6 +11,60 @@
 
   function ic(path, size) { return svgIcon(path, size || 14); }
 
+  // Content-relative path of the file currently being edited (set by render()).
+  // Used by imageList() to know which images/ folder an uploaded asset lands in.
+  let currentContentPath = "";
+
+  function t(key, params) {
+    try {
+      if (window.OslerAdmin && window.OslerAdmin.t) return window.OslerAdmin.t(key, params);
+    } catch {}
+    return key;
+  }
+
+  function toBase64(arrayBuffer) {
+    let binary = "";
+    const bytes = new Uint8Array(arrayBuffer);
+    const chunk = 0x8000;
+    for (let i = 0; i < bytes.length; i += chunk) {
+      binary += String.fromCharCode.apply(null, bytes.subarray(i, i + chunk));
+    }
+    return btoa(binary);
+  }
+
+  function toast(msg, kind) {
+    try {
+      if (window.OslerAdmin && window.OslerAdmin.toast) window.OslerAdmin.toast(msg, kind);
+    } catch {}
+  }
+
+  function pickAndUploadAsset(onUploaded) {
+    const fileInput = el("input", { type: "file", accept: "image/*", style: { display: "none" } });
+    document.body.appendChild(fileInput);
+    const cleanup = () => { fileInput.remove(); };
+    fileInput.addEventListener("change", async (e) => {
+      const file = e.target.files && e.target.files[0];
+      if (!file) { cleanup(); return; }
+      try {
+        const buf = await file.arrayBuffer();
+        const b64 = toBase64(buf);
+        const res = await window.OslerAdmin.invoke("upload_content_asset", {
+          contentPath: currentContentPath,
+          fileName: file.name,
+          data: b64,
+        });
+        const reference = res && res.reference ? res.reference : "images/" + file.name;
+        onUploaded(reference);
+        toast(t("content.file.imageUploaded"), "success");
+      } catch (err) {
+        toast("Upload failed: " + String(err), "error");
+      }
+      cleanup();
+    });
+    fileInput.click();
+  }
+
+
   const ICONS = {
     add: "M12 5v14M5 12h14",
     remove: "M5 12h14",
@@ -18,6 +72,7 @@
     down: "M12 5v14M5 12l7 7 7-7",
     grab: "M8 6h8M8 12h8M8 18h8",
     chevronDown: "M6 9l6 6 6-6",
+    upload: "M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12",
   };
 
   function makeLabel(text) {
@@ -154,6 +209,18 @@
         render();
       }}, ic(ICONS.add, 12), " Add Image");
       wrap.appendChild(add);
+
+      if (currentContentPath) {
+        const upload = el("button", { class: "fe-btn-add fe-btn-add-wide", type: "button", title: t("content.file.uploadImage") }, ic(ICONS.upload, 12), t("content.file.uploadImage"));
+        upload.addEventListener("click", () => {
+          pickAndUploadAsset((reference) => {
+            arr.push({ src: reference });
+            commit();
+            render();
+          });
+        });
+        wrap.appendChild(upload);
+      }
     }
     render();
     return wrap;
@@ -1055,6 +1122,7 @@
   /* ── Main entry ───────────────────────────────────────── */
 
   function render(container, path, content, onChange) {
+    currentContentPath = path || "";
     const type = detectType(content);
     if (!type) return false;
 

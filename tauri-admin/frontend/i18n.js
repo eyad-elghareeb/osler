@@ -92,6 +92,9 @@
       "content.file.valid": "✓ Valid",
       "content.file.invalid": "{n} error(s)",
       "content.file.confirmDelete": "Delete {name}? This cannot be undone.",
+      "content.file.uploadImage": "Upload image",
+      "content.file.imageHint": "Images are saved to an images/ folder next to this file. Reference them as images/name.png in your markdown.",
+      "content.file.imageUploaded": "Image uploaded to images/ — reference added.",
 
       "manifest.title": "Manifest",
       "manifest.subtitle":
@@ -462,6 +465,9 @@
       "content.file.valid": "✓ صالح",
       "content.file.invalid": "{n} خطأ",
       "content.file.confirmDelete": "حذف {name}؟ لا يمكن التراجع عن هذا.",
+      "content.file.uploadImage": "رفع صورة",
+      "content.file.imageHint": "تُحفظ الصور في مجلد images/ بجوار هذا الملف. أشر إليها بصيغة images/name.png في الماركداون.",
+      "content.file.imageUploaded": "تم رفع الصورة إلى images/ — تمت إضافة المرجع.",
 
       "manifest.title": "المانيفست",
       "manifest.subtitle":
