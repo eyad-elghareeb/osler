@@ -586,7 +586,7 @@
     document.querySelectorAll(".nav-item").forEach((btn) => {
       btn.addEventListener("click", () => navigate(btn.getAttribute("data-route")));
     });
-    document.getElementById("brand").addEventListener("click", () => navigate("dashboard"));
+    document.getElementById("brand").addEventListener("click", () => navigate("start"));
     document.getElementById("project-pill").addEventListener("click", pickProjectRoot);
     document.getElementById("lang-toggle").addEventListener("click", () => {
       window.OslerAdminI18n.toggleLang();
@@ -594,18 +594,50 @@
     document.getElementById("theme-toggle").addEventListener("click", toggleTheme);
     updateThemeIcon();
 
-    // Register routes
-    register("dashboard", window.OslerAdminViews.dashboard);
-    register("wizard", window.OslerAdminViews.wizard);
-    register("instance", window.OslerAdminViews.instance);
-    register("config", window.OslerAdminViews.config);
+    // Register routes (4 top-level, down from 11).
+    // Each wrapper view internally hosts the original views as tabs.
+    register("start", window.OslerAdminViews.start);
     register("content", window.OslerAdminViews.content);
-    register("manifest", window.OslerAdminViews.manifest);
-    register("build", window.OslerAdminViews.build);
-    register("git", window.OslerAdminViews.git);
-    register("github", window.OslerAdminViews.github);
-    register("deploy", window.OslerAdminViews.deploy);
-    register("settings", window.OslerAdminViews.settings);
+    register("configure", window.OslerAdminViews.configure);
+    register("run-publish", window.OslerAdminViews.runPublish);
+
+    // Legacy routes redirect to their new home inside a wrapper view.
+    // Kept so old bookmarked routes + the auto-launch logic below still work.
+    register("dashboard", (view) => {
+      window.__oslerStartTab = "overview";
+      window.OslerAdmin.navigate("start");
+    });
+    register("wizard", (view) => {
+      window.__oslerStartTab = "wizard";
+      window.OslerAdmin.navigate("start");
+    });
+    register("instance", (view) => {
+      window.__oslerStartTab = "instance";
+      window.OslerAdmin.navigate("start");
+    });
+    register("config", (view) => {
+      window.OslerAdmin.navigate("configure");
+    });
+    register("manifest", (view) => {
+      window.OslerAdmin.navigate("content");
+    });
+    register("build", (view) => {
+      window.OslerAdmin.navigate("run-publish");
+    });
+    register("git", (view) => {
+      window.OslerAdmin.navigate("run-publish");
+      // Open on the Git tab — wrapper reads this hint on next mount.
+      setTimeout(() => { window.__oslerRpTab = "git"; }, 0);
+    });
+    register("github", (view) => {
+      window.OslerAdmin.navigate("run-publish");
+    });
+    register("deploy", (view) => {
+      window.OslerAdmin.navigate("run-publish");
+    });
+    register("settings", (view) => {
+      window.OslerAdmin.navigate("configure");
+    });
 
     // Initialise custom window controls (borderless window titlebar buttons)
     wcInit();
@@ -626,18 +658,20 @@
           }
         }
       }
-      navigate("dashboard");
+      navigate("start");
       // If no root picked, show the picker overlay
       if (!projectState || !projectState.root) {
         showPickerOverlay();
       } else {
         // Root picked — check if osler.config.json exists. If not, auto-launch
-        // the first-time wizard so the user can configure site identity,
-        // engine plugins, themes, and the GitHub repo link on first boot.
+        // the first-time wizard (now hosted inside the Start tab group) so the
+        // user can configure site identity, engine plugins, themes, and the
+        // GitHub repo link on first boot.
         try {
           const ce = await invoke("config_exists");
           if (ce && ce.exists === false) {
-            navigate("wizard");
+            window.__oslerStartTab = "wizard";
+            navigate("start");
             toast(t("wizard.autoLaunched"), "info");
           }
         } catch (e) {

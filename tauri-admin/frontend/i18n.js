@@ -362,6 +362,28 @@
       "nav.instance": "New Instance",
       "nav.config": "Config",
 
+      "nav.start": "Start",
+      "nav.configure": "Configure",
+      "nav.runPublish": "Run & Publish",
+
+      "start.title": "Start",
+      "start.subtitle": "Project overview, first-run setup wizard, and new-instance scaffolder.",
+      "start.tab.overview": "Overview",
+      "start.tab.wizard": "Setup wizard",
+      "start.tab.instance": "New instance",
+
+      "configure.title": "Configure",
+      "configure.subtitle": "Edit osler.config.json and app preferences (language, theme, project root).",
+      "configure.tab.config": "Project config",
+      "configure.tab.settings": "App settings",
+
+      "runPublish.title": "Run & Publish",
+      "runPublish.subtitle": "Build the app, commit & push to Git/GitHub, and deploy to a hosting provider.",
+      "runPublish.tab.build": "Build",
+      "runPublish.tab.git": "Git",
+      "runPublish.tab.github": "GitHub",
+      "runPublish.tab.deploy": "Deploy",
+
       "dashboard.configMissing": "osler.config.json not found",
       "dashboard.configMissingDesc": "Run the first-time wizard to set site identity, plugins, and theme.",
       "dashboard.runWizard": "Run Wizard",
@@ -854,6 +876,28 @@
       "nav.wizard": "معالج الإعداد",
       "nav.instance": "نسخة جديدة",
       "nav.config": "الإعداد",
+
+      "nav.start": "ابدأ",
+      "nav.configure": "اضبط",
+      "nav.runPublish": "شغّل وانشر",
+
+      "start.title": "ابدأ",
+      "start.subtitle": "نظرة عامة على المشروع، ومعالج الإعداد الأول، وإنشاء نسخة جديدة.",
+      "start.tab.overview": "نظرة عامة",
+      "start.tab.wizard": "معالج الإعداد",
+      "start.tab.instance": "نسخة جديدة",
+
+      "configure.title": "اضبط",
+      "configure.subtitle": "حرّر osler.config.json وتفضيلات التطبيق (اللغة، السمة، جذر المشروع).",
+      "configure.tab.config": "إعداد المشروع",
+      "configure.tab.settings": "إعدادات التطبيق",
+
+      "runPublish.title": "شغّل وانشر",
+      "runPublish.subtitle": "ابنِ التطبيق، وأرسل التغييرات إلى Git/GitHub، وانشر على مزود الاستضافة.",
+      "runPublish.tab.build": "بناء",
+      "runPublish.tab.git": "Git",
+      "runPublish.tab.github": "GitHub",
+      "runPublish.tab.deploy": "نشر",
 
       "dashboard.configMissing": "لم يُعثر على osler.config.json",
       "dashboard.configMissingDesc": "شغّل معالج الإعداد الأول لضبط هوية الموقع والإضافات والسمة.",

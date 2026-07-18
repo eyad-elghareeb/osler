@@ -2300,3 +2300,50 @@ h1, h2, h3, h4 { letter-spacing: -0.01em; }
 :root[data-theme="light"] .mermaid-sidebar {
   background: oklch(0.96 0.008 240);
 }
+
+/* ─────────────────────────────────────────────────────────────────────────
+   Tab bar — used by the 4 wrapper views (Start, Configure, Run & Publish).
+   Each wrapper renders a horizontal tab strip above its content host.
+   ─────────────────────────────────────────────────────────────────────── */
+.tabbar {
+  display: flex;
+  gap: 0.25rem;
+  padding: 0.25rem;
+  margin: 0 0 1rem;
+  background: var(--surface-2, var(--surface));
+  border: 1px solid var(--border);
+  border-radius: var(--radius, 8px);
+  overflow-x: auto;
+}
+.tabbar-item {
+  appearance: none;
+  background: transparent;
+  color: var(--text-muted);
+  border: 1px solid transparent;
+  border-radius: 6px;
+  padding: 0.5rem 0.875rem;
+  font: inherit;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.12s ease, color 0.12s ease, border-color 0.12s ease;
+}
+.tabbar-item:hover {
+  color: var(--text);
+  background: var(--surface);
+}
+.tabbar-item.active {
+  color: var(--primary-foreground, #fff);
+  background: var(--primary);
+  border-color: var(--primary);
+}
+.tab-host {
+  /* Wrapper container that the original view renders into */
+  min-height: 0;
+}
+.tab-host > .view {
+  /* Original views already add .view + .medos-fade-in — neutralise the
+     outer padding so the tab content fills the wrapper cleanly. */
+  padding-top: 0;
+}

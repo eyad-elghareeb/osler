@@ -415,6 +415,23 @@
     const refreshBtn = el("button", { class: "btn btn-ghost btn-sm" }, svgIcon("M21 12a9 9 0 1 1-9-9c2.39 0 4.68.94 6.36 2.64L21 9", 14), t("common.refresh"));
     refreshBtn.addEventListener("click", refreshTree);
     headerActions.appendChild(refreshBtn);
+    // Regenerate-manifest shortcut — saves users a trip to a separate Manifest view.
+    const regenBtn = el("button", { class: "btn btn-ghost btn-sm" }, svgIcon("M21 12a9 9 0 1 1-9-9c2.39 0 4.68.94 6.36 2.64L21 9", 14), t("manifest.regenerate"));
+    regenBtn.addEventListener("click", async () => {
+      regenBtn.disabled = true;
+      const original = regenBtn.textContent;
+      regenBtn.textContent = t("common.loading");
+      try {
+        const res = await invoke("generate_manifest");
+        toast(t("manifest.regenerateDone", { n: (res.generated || []).length }), "success");
+      } catch (e) {
+        toast(t("toast.error", { msg: String(e) }), "error");
+      } finally {
+        regenBtn.disabled = false;
+        regenBtn.textContent = original;
+      }
+    });
+    headerActions.appendChild(regenBtn);
     header.appendChild(headerActions);
     wrap.appendChild(header);
 

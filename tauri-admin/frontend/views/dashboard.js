@@ -63,20 +63,6 @@
     return tile;
   }
 
-  function quickAction(iconPath, title, desc, onClick) {
-    const btn = el("button", { class: "card", style: { textAlign: "start", cursor: "pointer", display: "flex", gap: "0.75rem", alignItems: "flex-start" } });
-    const iconWrap = el("div", {
-      class: "brand-mark",
-      style: { width: "40px", height: "40px", flexShrink: "0" },
-    });
-    iconWrap.appendChild(svgIcon(iconPath, 20));
-    const text = el("div", {}, el("div", { style: { fontSize: "0.875rem", fontWeight: "600" } }, title), el("div", { style: { fontSize: "0.75rem", color: "var(--text-muted)", marginTop: "0.25rem" } }, desc));
-    btn.appendChild(iconWrap);
-    btn.appendChild(text);
-    btn.addEventListener("click", onClick);
-    return btn;
-  }
-
   window.OslerAdminViews = window.OslerAdminViews || {};
   window.OslerAdminViews.dashboard = async function (view) {
     const projectState = window.OslerAdmin.projectState;
@@ -109,7 +95,11 @@
           el("div", { style: { fontSize: "0.75rem", color: "var(--text-muted)" } }, t("dashboard.configMissingDesc"))
         ));
         const runBtn = el("button", { class: "btn btn-sm btn-primary" }, t("dashboard.runWizard"));
-        runBtn.addEventListener("click", () => window.OslerAdmin.navigate("wizard"));
+        runBtn.addEventListener("click", () => {
+          // Tell the Start wrapper to open on the wizard tab.
+          window.__oslerStartTab = "wizard";
+          window.OslerAdmin.navigate("start");
+        });
         banner.appendChild(runBtn);
         wrap.appendChild(banner);
       }
@@ -130,60 +120,6 @@
     grid.appendChild(packTile);
     grid.appendChild(branchTile);
     grid.appendChild(remoteTile);
-
-    // Quick actions
-    wrap.appendChild(el("h2", { style: { marginTop: "2rem", marginBottom: "0.75rem", fontSize: "1rem", fontWeight: "600" } }, t("dashboard.quickActions")));
-    const qaGrid = el("div", { class: "grid grid-3" });
-    qaGrid.appendChild(quickAction(
-      "M12 2 4 6v6c0 5 3.5 8 8 10 4.5-2 8-5 8-10V6z",
-      t("dashboard.qa.wizard"),
-      t("dashboard.qa.wizardDesc"),
-      () => window.OslerAdmin.navigate("wizard")
-    ));
-    qaGrid.appendChild(quickAction(
-      "M12 5v14M5 12h14",
-      t("dashboard.qa.newInstance"),
-      t("dashboard.qa.newInstanceDesc"),
-      () => window.OslerAdmin.navigate("instance")
-    ));
-    qaGrid.appendChild(quickAction(
-      "M14 3v5h5M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8zM9 13h6M9 17h6",
-      t("dashboard.qa.config"),
-      t("dashboard.qa.configDesc"),
-      () => window.OslerAdmin.navigate("config")
-    ));
-    qaGrid.appendChild(quickAction(
-      "M14 3v5h5M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8zM9 13h6M9 17h6",
-      t("dashboard.qa.generateManifest"),
-      t("dashboard.qa.generateManifestDesc"),
-      async () => {
-        try {
-          const res = await invoke("generate_manifest");
-          toast(t("manifest.regenerateDone", { n: (res.generated || []).length }), "success");
-        } catch (e) {
-          toast(t("toast.error", { msg: String(e) }), "error");
-        }
-      }
-    ));
-    qaGrid.appendChild(quickAction(
-      "m21 12-7.5 7.5a4.95 4.95 0 0 1-7-7L14 5M16 7l-4-4-4 4M8 17l4 4 4-4",
-      t("dashboard.qa.runBuild"),
-      t("dashboard.qa.runBuildDesc"),
-      () => window.OslerAdmin.navigate("build")
-    ));
-    qaGrid.appendChild(quickAction(
-      "M6 3v12M6 21a3 3 0 0 0 3-3M18 3a3 3 0 0 1-3 3M6 15a3 3 0 0 1 3-3h6a3 3 0 0 0 3-3",
-      t("dashboard.qa.gitPush"),
-      t("dashboard.qa.gitPushDesc"),
-      () => window.OslerAdmin.navigate("git")
-    ));
-    qaGrid.appendChild(quickAction(
-      "M3.5 13.5 12 5l8.5 8.5M5 12v8h14v-8M12 5v15",
-      t("dashboard.qa.deploy"),
-      t("dashboard.qa.deployDesc"),
-      () => window.OslerAdmin.navigate("deploy")
-    ));
-    wrap.appendChild(qaGrid);
 
     // ── GitHub repo reference card ─────────────────────────────────
     // The repo link is always surfaced on the dashboard per project policy.
