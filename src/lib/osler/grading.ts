@@ -319,3 +319,73 @@ export function createManualEvaluation(userAnswer: string): WrittenEvaluation {
     source: "Manual grade",
   };
 }
+
+const TRANSCRIPTION_PROMPT = [
+  "You are an OCR assistant. Transcribe ALL handwritten or printed text from this photo of a written answer.",
+  "Return ONLY the raw transcribed text — no commentary, no markdown, no wrapping, no labels.",
+  "If the photo contains multiple sections or numbered parts, separate them with blank lines.",
+  "Preserve the student's original wording exactly. Do not correct spelling or grammar.",
+].join("\n");
+
+export interface TranscribeOptions {
+  photoBase64: string;
+  mimeType?: string;
+  signal?: AbortSignal;
+}
+
+export async function transcribePhoto(options: TranscribeOptions): Promise<string> {
+  const apiKey = getApiKey();
+  if (!apiKey) throw new Error("No Gemini API key saved.");
+  const model = getSelectedModel();
+
+  const attempts = [model, GRADING_MODELS[0][0]];
+  const unique = [...new Set(attempts)];
+
+  let lastError: Error | null = null;
+  for (const m of unique) {
+    if (options.signal?.aborted) throw new DOMException("Transcription cancelled.", "AbortError");
+    try {
+      const body: Record<string, unknown> = {
+        systemInstruction: { parts: [{ text: TRANSCRIPTION_PROMPT }] },
+        contents: [{
+          parts: [
+            { text: "Transcribe all text in this image:" },
+            { inlineData: { mimeType: options.mimeType || "image/jpeg", data: options.photoBase64 } },
+          ],
+        }],
+      };
+      body.generationConfig = { temperature: 0 };
+
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 30000);
+      const combinedSignal = options.signal
+        ? combineSignals(options.signal, controller.signal)
+        : controller.signal;
+
+      try {
+        const response = await fetch(
+          `${GEMINI_BASE}/models/${encodeURIComponent(m)}:generateContent`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json", "x-goog-api-key": apiKey },
+            body: JSON.stringify(body),
+            signal: combinedSignal,
+          },
+        );
+        const text = await response.text();
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        let payload: Record<string, unknown> | null = null;
+        try { payload = JSON.parse(text); } catch { /* ignore */ }
+        const result = extractGeminiText(payload).trim();
+        if (result) return result;
+        throw new Error("Empty transcription response");
+      } finally {
+        clearTimeout(timeoutId);
+      }
+    } catch (err) {
+      lastError = err instanceof Error ? err : new Error(String(err));
+      if (lastError.name === "AbortError") throw lastError;
+    }
+  }
+  throw lastError || new Error("Transcription failed on all models.");
+}
