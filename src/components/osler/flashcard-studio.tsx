@@ -105,7 +105,10 @@ function resolveAsset(src: string, packPath: string): string {
   if (/^(https?:)?\/\//.test(src) || src.startsWith("data:") || src.startsWith("/")) {
     return src;
   }
-  return `/osler-content/flashcard/${packPath}${src}`;
+  // Bare filename → resolve against the pack's images/ subfolder (the
+  // content-asset convention shared with QBank/OSCE via resolveContentAsset).
+  const base = src.includes("/") ? src : `images/${src}`;
+  return `/osler-content/flashcard/${packPath}${base}`;
 }
 
 /** Normalize the `image` / `backImage` field (single or array) to an array. */

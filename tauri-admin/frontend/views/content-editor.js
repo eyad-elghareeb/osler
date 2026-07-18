@@ -567,6 +567,9 @@
 
         body.appendChild(fieldGroup("Image (front)", imageList(c.image, (v) => { c.image = v; onChange(); })));
         body.appendChild(fieldGroup("Image (back)", imageList(c.backImage, (v) => { c.backImage = v; onChange(); })));
+        // Flashcard image hint — mirrors the QBank convention.
+        const fcImgHint = el("div", { class: "fe-hint" }, "Images live in an images/ folder next to this JSON — reference them as ecg.png or images/ecg.png. Front/Back text supports Markdown (**bold**, *italic*, `code`).");
+        body.appendChild(fcImgHint);
         body.appendChild(fieldGroup("Audio", textInput(c.audio || "", "clip.mp3", (v) => { c.audio = v || undefined; onChange(); })));
         if (subdecks.length > 0) {
           body.appendChild(fieldGroup("Subdeck", selectInput(c.subdeckId || "", [
