@@ -160,6 +160,33 @@
           "items": []
         }
       ]
+    },
+    {
+      "uid": "flashcard-sample-deck",
+      "title": "Sample Deck",
+      "type": "flashcard",
+      "path": "sample-deck/",
+      "files": [
+        "cards.json"
+      ],
+      "images": [
+        "sample-ecg.svg"
+      ],
+      "items": [
+        {
+          "uid": "flashcard-sample-deck",
+          "title": "Sample Deck",
+          "type": "flashcard",
+          "path": "sample-deck/",
+          "files": [
+            "cards.json"
+          ],
+          "images": [
+            "sample-ecg.svg"
+          ],
+          "items": []
+        }
+      ]
     }
   ]
 }

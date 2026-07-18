@@ -1,0 +1,19 @@
+{
+  "cards": [
+    {
+      "id": "sample-001",
+      "front": "Identify the **abnormality** shown on this tracing",
+      "back": "This is a *sample* **ST-segment elevation** pattern used to verify image + markdown rendering.",
+      "image": { "src": "sample-ecg.svg", "alt": "Sample ECG tracing", "caption": "12-lead sample tracing (test asset)" },
+      "tags": ["sample", "test"]
+    },
+    {
+      "id": "sample-002",
+      "type": "cloze",
+      "text": "The **first-line** treatment for acute STEMI is {{c1::primary PCI::the reperfusion strategy}} within {{c2::90 minutes}} of first medical contact.",
+      "extra": "Fibrinolysis is an alternative when **PCI** is unavailable within 120 minutes.",
+      "backImage": { "src": "sample-ecg.svg", "alt": "Sample ECG tracing", "caption": "Shown on the answer face too" },
+      "tags": ["sample", "test", "cloze"]
+    }
+  ]
+}

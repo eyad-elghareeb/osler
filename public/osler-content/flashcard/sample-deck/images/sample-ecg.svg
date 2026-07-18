@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="480" height="300" viewBox="0 0 480 300" role="img" aria-label="Sample ECG tracing">
+  <rect width="480" height="300" fill="#0b1220"/>
+  <line x1="0" y1="150" x2="480" y2="150" stroke="#1f2a3a" stroke-width="1"/>
+  <polyline points="0,150 40,150 50,150 60,90 70,210 80,150 120,150 130,150 140,120 150,180 160,150 220,150 230,150 240,100 250,200 260,150 320,150 330,150 340,130 350,170 360,150 480,150" fill="none" stroke="#22c55e" stroke-width="2"/>
+  <text x="16" y="28" fill="#94a3b8" font-family="monospace" font-size="14">Lead II — sample tracing</text>
+  <text x="16" y="284" fill="#64748b" font-family="monospace" font-size="11">Osler sample asset</text>
+</svg>

@@ -239,24 +239,35 @@ function clozeIndices(text: string): number[] {
  *    show plain answer text.
  */
 function renderCloze(text: string, activeIdx: number, reveal: boolean): string {
-  const escaped = text
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;");
-  // Re-run the regex on the escaped string; brace syntax survives escaping.
-  return escaped.replace(
+  // Extract each cloze so its braces survive markdown escaping/rendering,
+  // then render markdown on the surrounding (non-cloze) text too. Cloze
+  // braces MUST survive untouched — they are not markdown.
+  const clozeTokens: string[] = [];
+  const withoutCloze = text.replace(
     /\{\{c(\d+)::(.*?)(?:::(.*?))?\}\}/g,
     (_full, idxStr: string, answer: string, hint?: string) => {
       const idx = parseInt(idxStr, 10);
       const inner = renderCardMarkdown(answer);
-      if (idx !== activeIdx) return inner;
-      if (reveal) {
-        return `<span class="cloze-answer">${inner}</span>`;
-      }
-      const label = hint ? `[${renderCardMarkdown(hint)}]` : "[&hellip;]";
-      return `<span class="cloze-blank">${label}</span>`;
+      const token = hint
+        ? `{{c${idx}::${inner}::${renderCardMarkdown(hint)}}}`
+        : `{{c${idx}::${inner}}}`;
+      clozeTokens.push(token);
+      return `\u0000CLZ${clozeTokens.length - 1}\u0000`;
     },
   );
+  let h = renderCardMarkdown(withoutCloze);
+  h = h.replace(/\u0000CLZ(\d+)\u0000/g, (_m, i: string) => {
+    const token = clozeTokens[Number(i)] ?? "";
+    const m = token.match(/\{\{c(\d+)::(.*?)(?:::(.*?))?\}\}/);
+    if (!m) return token;
+    const idx = parseInt(m[1], 10);
+    const inner = m[2];
+    if (idx !== activeIdx) return inner;
+    if (reveal) return `<span class="cloze-answer">${inner}</span>`;
+    const label = m[3] ? `[${m[3]}]` : "[&hellip;]";
+    return `<span class="cloze-blank">${label}</span>`;
+  });
+  return h;
 }
 
 /* ── Card expansion ───────────────────────────────────────────────────── */
