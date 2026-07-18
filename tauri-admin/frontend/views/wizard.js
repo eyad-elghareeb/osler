@@ -45,6 +45,7 @@
   const STEPS = [
     { id: "site",     label: "Site identity" },
     { id: "repo",     label: "GitHub repo"   },
+    { id: "oauth",    label: "GitHub sign-in" },
     { id: "engines",  label: "Engine plugins" },
     { id: "theme",    label: "Theme" },
     { id: "language", label: "Language" },
@@ -61,6 +62,8 @@
       organisation: "Osler Team",
       supportEmail: "",
       githubRepo: "https://github.com/eyad-elghareeb/osler",
+      oauthClientId: "",
+      oauthClientSecret: "",
       engines: Object.fromEntries(ENGINES.map((e) => [e.id, true])),
       defaultTheme: "dark",
       defaultLang: "en",
@@ -107,9 +110,18 @@
           }
         }
       }
-    } catch {
-      // No config yet — keep defaults.
-    }
+      } catch {
+        // No config yet — keep defaults.
+      }
+
+      // Pre-fill the OAuth fields from the persisted OAuth config (if any).
+      try {
+        const oauth = await invoke("gh_get_oauth_config");
+        if (oauth) {
+          state.oauthClientId = oauth.clientId && !oauth.usingDefaultApp ? oauth.clientId : "";
+          state.oauthClientSecret = "";
+        }
+      } catch { /* no oauth config yet */ }
 
     // ── Step indicator ──────────────────────────────────────────────
     const stepBar = el("div", { class: "wizard-stepbar", style: { display: "flex", gap: "0.5rem", marginBottom: "1.5rem", flexWrap: "wrap" } });
@@ -204,6 +216,17 @@
 
       try {
         await invoke("write_config", { config: cfg });
+        // Persist the optional OAuth client_id/secret so GitHub sign-in is
+        // preconfigured for this user. Blank values leave the build-time
+        // default app in place (or require the user to set their own later).
+        if (state.oauthClientId.trim() || state.oauthClientSecret.trim()) {
+          try {
+            await invoke("gh_set_oauth_config", {
+              clientId: state.oauthClientId.trim() || null,
+              clientSecret: state.oauthClientSecret.trim() || null,
+            });
+          } catch { /* non-fatal — sign-in can still be configured later */ }
+        }
         toast(t("wizard.saved"), "success");
         window.OslerAdmin.navigate("dashboard");
       } catch (e) {
@@ -226,6 +249,7 @@
       switch (STEPS[step].id) {
         case "site":     renderSite(card); break;
         case "repo":     renderRepo(card); break;
+        case "oauth":    renderOAuth(card); break;
         case "engines":  renderEngines(card); break;
         case "theme":    renderTheme(card); break;
         case "language": renderLanguage(card); break;
@@ -289,6 +313,26 @@
       card.appendChild(el("div", {
         style: { marginTop: "1rem", padding: "0.75rem", borderRadius: "var(--radius-sm)", background: "var(--surface-2)", fontSize: "0.75rem", color: "var(--text-muted)" },
       }, el("strong", {}, "ℹ "), t("wizard.step.repo.policy")));
+    }
+
+    function renderOAuth(card) {
+      card.appendChild(el("h2", { style: { marginBottom: "0.5rem" } }, t("wizard.step.oauth.title")));
+      card.appendChild(el("p", { style: { color: "var(--text-muted)", fontSize: "0.875rem", marginBottom: "1rem" } }, t("wizard.step.oauth.desc")));
+
+      field(card, t("wizard.step.oauth.clientId"), textInput(state.oauthClientId, (v) => state.oauthClientId = v, t("wizard.step.oauth.clientIdPh")));
+
+      // The client_secret is optional for public OAuth apps — show it but make
+      // clear it can stay blank.
+      const secretWrap = el("div", {});
+      const secretInput = textInput(state.oauthClientSecret, (v) => state.oauthClientSecret = v, t("wizard.step.oauth.clientSecretPh"));
+      secretInput.type = "password";
+      field(secretWrap, t("wizard.step.oauth.clientSecret"), secretInput, t("wizard.step.oauth.clientSecretHint"));
+      card.appendChild(secretWrap);
+
+      card.appendChild(el("div", {
+        style: { marginTop: "0.5rem", padding: "0.75rem", borderRadius: "var(--radius-sm)", background: "var(--surface-2)", fontSize: "0.75rem", color: "var(--text-muted)", lineHeight: "1.5" },
+        html: t("wizard.step.oauth.help", { redirect: "http://localhost:7878/callback" }),
+      }));
     }
 
     function renderEngines(card) {

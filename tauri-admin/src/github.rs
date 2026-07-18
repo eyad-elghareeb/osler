@@ -37,11 +37,26 @@ use tauri::{State, Window};
    Constants — OAuth endpoints + client_id placeholder
    ═══════════════════════════════════════════════════════════════════════ */
 
-/// OAuth client_id. **Replace with your own** by registering an OAuth App at
-/// https://github.com/settings/developers (set the redirect URI to
-/// `http://localhost:7878/callback`). Can be overridden at runtime via
-/// `gh_set_oauth_config`.
-const DEFAULT_GH_CLIENT_ID: &str = "";
+/// OAuth client_id, injected at build time from the `GH_OAUTH_CLIENT_ID` value
+/// in the project's `.env` (a PUBLIC client id — safe to ship). If no `.env`
+/// was present at build time, this resolves to an empty string and the user
+/// must set their own client_id via Settings → GitHub (or the setup wizard).
+/// This is a public OAuth app identifier — never a secret.
+const DEFAULT_GH_CLIENT_ID: &str = match option_env!("OSLER_GH_CLIENT_ID") {
+    Some(id) if !id.is_empty() => id,
+    _ => "",
+};
+
+/// Optional OAuth client_secret, injected at build time from the
+/// `GH_OAUTH_CLIENT_SECRET` value in the project's `.env`. Only needed when the
+/// GitHub OAuth App is registered as a *confidential* app. Like the client_id,
+/// this is supplied by the builder of the app (not the end user) and is safe to
+/// bake into a privately-distributed build. For public releases, the app should
+/// be registered as a public client so no secret is required.
+const DEFAULT_GH_CLIENT_SECRET: &str = match option_env!("OSLER_GH_CLIENT_SECRET") {
+    Some(s) if !s.is_empty() => s,
+    _ => "",
+};
 
 /// OAuth redirect URI. Must match what's registered for the OAuth App on
 /// GitHub. The local HTTP server binds this exact port.
@@ -648,12 +663,17 @@ fn exchange_code_for_token(code: &str, client_id: &str, client_secret: &str) -> 
 #[tauri::command]
 pub fn gh_get_oauth_config() -> Result<Value, String> {
     let cfg = read_oauth_config();
+    // The effective client_id is the user override if set, else the build-time
+    // default. `usingDefaultApp` tells the UI to show a "preconfigured" hint.
+    let using_default = cfg.client_id.is_empty() && !DEFAULT_GH_CLIENT_ID.is_empty();
+    let secret_from_default = cfg.client_secret.is_empty() && !DEFAULT_GH_CLIENT_SECRET.is_empty();
     Ok(json!({
-        "clientId": cfg.client_id,
-        "clientSecretSet": !cfg.client_secret.is_empty(),
+        "clientId": if cfg.client_id.is_empty() { DEFAULT_GH_CLIENT_ID } else { cfg.client_id.as_str() },
+        "clientSecretSet": !cfg.client_secret.is_empty() || secret_from_default,
         "redirectUri": REDIRECT_URI,
         "scopes": OAUTH_SCOPES,
         "defaultClientId": DEFAULT_GH_CLIENT_ID,
+        "usingDefaultApp": using_default,
     }))
 }
 
@@ -682,9 +702,17 @@ pub fn gh_sign_in(window: Window) -> Result<Value, String> {
         DEFAULT_GH_CLIENT_ID.to_string()
     } else {
         return Err(
-            "No GitHub OAuth client_id configured. Open Settings → GitHub and set your client_id (register one at https://github.com/settings/developers with redirect URI http://localhost:7878/callback)."
+            "No GitHub OAuth client_id configured. Register an OAuth App at https://github.com/settings/developers with redirect URI http://localhost:7878/callback, then set the client_id in Settings → GitHub (or in the setup wizard)."
                 .to_string(),
         );
+    };
+
+    // Prefer the user's saved secret; otherwise fall back to the build-time
+    // default secret (for confidential OAuth apps).
+    let client_secret = if !cfg.client_secret.is_empty() {
+        cfg.client_secret.clone()
+    } else {
+        DEFAULT_GH_CLIENT_SECRET.to_string()
     };
 
     // If a flow is already pending, refuse to start another — the port is busy.
@@ -704,7 +732,7 @@ pub fn gh_sign_in(window: Window) -> Result<Value, String> {
         p.token = String::new();
     }
 
-    start_callback_server(state.clone(), client_id.clone(), cfg.client_secret.clone());
+    start_callback_server(state.clone(), client_id.clone(), client_secret.clone());
 
     let auth_url = format!(
         "{}?client_id={}&redirect_uri={}&scope={}&state={}",

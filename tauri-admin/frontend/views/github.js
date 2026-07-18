@@ -147,7 +147,11 @@
     // OAuth client_id config
     const cfg = state.oauthCfg || {};
     const cfgRow = el("div", { style: { display: "flex", gap: "0.5rem", alignItems: "end", flexWrap: "wrap", marginTop: "0.5rem" } });
+    const usingDefault = !!cfg.usingDefaultApp;
     let clientIdVal = cfg.clientId || cfg.defaultClientId || "";
+    if (usingDefault) {
+      clientIdVal = cfg.defaultClientId || "";
+    }
     const clientIdInput = labeledInput(t("gh.cfg.clientId"), clientIdVal, (v) => { clientIdVal = v; }, "Iv23xxxxxxxxxxxxxxxxxx");
     clientIdInput.style.flex = "1";
     clientIdInput.style.minWidth = "240px";
@@ -177,6 +181,13 @@
       style: { marginTop: "0.75rem", padding: "0.75rem", borderRadius: "var(--radius-sm)", background: "var(--surface-2)", fontSize: "0.75rem", color: "var(--text-muted)", lineHeight: "1.5" },
       html: t("gh.cfg.help", { redirect: cfg.redirectUri || "http://localhost:7878/callback" }),
     }));
+
+    // If a default public OAuth app is baked in, show a one-tap hint.
+    if (usingDefault) {
+      c.appendChild(el("div", {
+        style: { marginTop: "0.5rem", padding: "0.6rem 0.75rem", borderRadius: "var(--radius-sm)", background: "var(--success-dim)", border: "1px solid color-mix(in oklch, var(--success) 40%, transparent)", fontSize: "0.75rem", color: "var(--success)", lineHeight: "1.4" },
+      }, "✓ " + t("gh.cfg.usingDefaultApp")));
+    }
 
     // If a flow is pending, show a banner
     if (state.auth && state.auth.oauthPending) {
