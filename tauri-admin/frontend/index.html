@@ -36,9 +36,12 @@
 <body>
   <div id="app" class="medos-grid-bg">
     <!-- Top bar — matches the Osler web app shell: glassy backdrop, brand left,
-         project pill center, language + theme toggles right. -->
+         project pill center, language + theme toggles right.
+         Every child container also carries data-tauri-drag-region so the
+         whole upper bar is draggable on Tauri 2 (interactive elements like
+         buttons/inputs self-exclude via the platform's hit-test logic). -->
     <header class="topbar" data-tauri-drag-region>
-      <div class="topbar-left">
+      <div class="topbar-left" data-tauri-drag-region>
         <button id="brand" class="brand" type="button" data-route="dashboard">
           <span class="brand-mark">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
@@ -51,7 +54,7 @@
           </span>
         </button>
       </div>
-      <div class="topbar-center">
+      <div class="topbar-center" data-tauri-drag-region>
         <button id="project-pill" class="project-pill" type="button" title="Pick project root">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M3 7v13a1 1 0 0 0 1 1h16a1 1 0 0 0 1-1V9a1 1 0 0 0-1-1h-9l-2-3H4a1 1 0 0 0-1 1z" />
@@ -59,7 +62,7 @@
           <span id="project-pill-text" data-i18n="project.notPicked">Pick project root…</span>
         </button>
       </div>
-      <div class="topbar-right">
+      <div class="topbar-right" data-tauri-drag-region>
         <button id="lang-toggle" class="icon-btn" type="button" title="Toggle language" aria-label="Toggle language">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <circle cx="12" cy="12" r="10" />
@@ -137,6 +140,10 @@
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="6" r="3" /><circle cx="6" cy="18" r="3" /><circle cx="18" cy="12" r="3" /><path d="M6 9v6" /><path d="M9 18h3a3 3 0 0 0 3-3V9" /></svg>
             <span data-i18n="nav.git">Git</span>
           </button>
+          <button class="nav-item" data-route="github" type="button">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 .5C5.7.5.5 5.7.5 12c0 5.1 3.3 9.4 7.9 10.9.6.1.8-.2.8-.5v-2c-3.2.7-3.9-1.4-3.9-1.4-.5-1.3-1.3-1.7-1.3-1.7-1.1-.7.1-.7.1-.7 1.2.1 1.8 1.2 1.8 1.2 1 .1.8 1.7 2.6 1.2.1-.7.4-1.2.7-1.5-2.6-.3-5.3-1.3-5.3-5.8 0-1.3.5-2.3 1.2-3.2-.1-.3-.5-1.5.1-3.2 0 0 1-.3 3.3 1.2a11.5 11.5 0 0 1 6 0c2.3-1.5 3.3-1.2 3.3-1.2.7 1.7.3 2.9.1 3.2.8.9 1.2 1.9 1.2 3.2 0 4.6-2.8 5.5-5.4 5.8.4.4.8 1.1.8 2.2v3.3c0 .3.2.6.8.5 4.6-1.5 7.9-5.8 7.9-10.9C23.5 5.7 18.3.5 12 .5z" /></svg>
+            <span data-i18n="nav.github">GitHub</span>
+          </button>
           <button class="nav-item" data-route="deploy" type="button">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 13.5 12 5l8.5 8.5" /><path d="M5 12v8h14v-8" /><path d="M12 5v15" /><circle cx="12" cy="3" r="1.5" /></svg>
             <span data-i18n="nav.deploy">Deploy</span>
@@ -179,6 +186,7 @@
   <script src="views/manifest.js"></script>
   <script src="views/build.js"></script>
   <script src="views/git.js"></script>
+  <script src="views/github.js"></script>
   <script src="views/deploy.js"></script>
   <script src="views/settings.js"></script>
   <script>

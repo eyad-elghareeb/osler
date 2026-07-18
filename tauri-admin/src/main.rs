@@ -7,7 +7,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 use osler_admin_lib::commands::{ProjectRoot, RunnerState};
-use osler_admin_lib::{commands, config, deploy};
+use osler_admin_lib::{commands, config, deploy, github};
 use std::sync::Arc;
 
 fn main() {
@@ -45,13 +45,36 @@ fn main() {
             commands::run_start,
             commands::stop_runner,
             commands::runner_status,
-            // Git
+            // Git — basic (status/add/commit/push/pull/remote)
             commands::git_status,
             commands::git_add,
             commands::git_commit,
             commands::git_push,
             commands::git_pull,
             commands::git_remote,
+            // Git — extended (branch/checkout/push_branch/list_branches/clone/remote/fetch)
+            commands::git_repo_identity,
+            commands::git_create_branch,
+            commands::git_checkout,
+            commands::git_push_branch,
+            commands::git_list_branches,
+            commands::git_current_branch,
+            commands::git_add_remote,
+            commands::git_fetch_remote,
+            commands::git_clone,
+            // GitHub — OAuth sign-in, repos, fork, PR workflow
+            github::gh_get_oauth_config,
+            github::gh_set_oauth_config,
+            github::gh_sign_in,
+            github::gh_sign_out,
+            github::gh_auth_status,
+            github::gh_list_user_repos,
+            github::gh_get_repo_info,
+            github::gh_fork_repo,
+            github::gh_create_pr,
+            github::gh_list_prs,
+            github::gh_merge_pr,
+            github::gh_close_pr,
             // Deploy (Vercel / GitHub Pages / Cloudflare Pages / Netlify)
             deploy::get_deploy_config,
             deploy::set_deploy_config,

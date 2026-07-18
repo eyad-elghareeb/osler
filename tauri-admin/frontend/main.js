@@ -125,6 +125,62 @@
         return { entries: [] };
       case "git_remote":
         return { remote: "", branch: "" };
+      case "git_repo_identity":
+        return { owner: "eyad-elghareeb", repo: "osler", remote: "https://github.com/eyad-elghareeb/osler.git" };
+      case "git_list_branches":
+        return {
+          branches: [
+            { name: "main", sha: "abc1234", current: true, remote: false },
+            { name: "content/sample-branch", sha: "def5678", current: false, remote: false },
+          ],
+          current: "main",
+        };
+      case "git_current_branch":
+        return { branch: "main" };
+      case "git_create_branch":
+        return { created: true, branch: args && args.name, base: args && args.base || "main" };
+      case "git_checkout":
+        return { checkedOut: args && args.branch };
+      case "git_push_branch":
+        return { pushed: true, remote: args && args.remote || "origin", branch: args && args.branch, output: "" };
+      case "git_add_remote":
+        return { added: true, name: args && args.name, url: args && args.url };
+      case "git_fetch_remote":
+        return { fetched: true, remote: args && args.remote || "origin", output: "" };
+      case "git_clone":
+        return { cloned: true, url: args && args.url, targetDir: args && args.targetDir, branch: "main", remote: args && args.url };
+      // ── GitHub OAuth + API mocks ──────────────────────────────────
+      case "gh_get_oauth_config":
+        return { clientId: "", clientSecretSet: false, redirectUri: "http://localhost:7878/callback", scopes: "repo user", defaultClientId: "" };
+      case "gh_set_oauth_config":
+        return { saved: true };
+      case "gh_sign_in":
+        return { started: true, authUrl: "https://github.com/login/oauth/authorize?client_id=demo", state: "demo-state" };
+      case "gh_sign_out":
+        return { signedOut: true };
+      case "gh_auth_status":
+        if (window.__oslerMockGhAuth) return JSON.parse(JSON.stringify(window.__oslerMockGhAuth));
+        return { authenticated: false, login: "", name: "", avatarUrl: "", scopes: [], tokenSource: "", oauthPending: false, oauthError: "" };
+      case "gh_list_user_repos":
+        return { repos: preview ? [
+          { id: 1, fullName: "mock-user/osler", owner: "mock-user", description: "Mock repo for preview", private: false, fork: false, defaultBranch: "main", htmlUrl: "https://github.com/mock-user/osler", updatedAt: "2025-01-01T00:00:00Z", permissions: { admin: true, push: true, pull: true } },
+          { id: 2, fullName: "mock-user/osler-content", owner: "mock-user", description: "Sample content repo", private: true, fork: false, defaultBranch: "main", htmlUrl: "https://github.com/mock-user/osler-content", updatedAt: "2024-12-15T00:00:00Z", permissions: { admin: true, push: true, pull: true } },
+        ] : [] };
+      case "gh_get_repo_info":
+        return { id: 1, fullName: (args && args.owner || "mock") + "/" + (args && args.repo || "repo"), owner: args && args.owner, description: "", private: false, fork: false, defaultBranch: "main", htmlUrl: "https://github.com/" + (args && args.owner || "mock") + "/" + (args && args.repo || "repo"), cloneUrl: "https://github.com/" + (args && args.owner || "mock") + "/" + (args && args.repo || "repo") + ".git", permissions: { admin: false, push: false, pull: true }, parent: null };
+      case "gh_fork_repo":
+        return { forked: true, fullName: "mock-user/" + (args && args.repo || "repo"), cloneUrl: "https://github.com/mock-user/" + (args && args.repo || "repo") + ".git", htmlUrl: "https://github.com/mock-user/" + (args && args.repo || "repo"), defaultBranch: "main" };
+      case "gh_create_pr":
+        return { created: true, number: 42, htmlUrl: "https://github.com/" + (args && args.owner || "mock") + "/" + (args && args.repo || "repo") + "/pull/42", state: "open", title: args && args.title || "" };
+      case "gh_list_prs":
+        return { prs: preview ? [
+          { number: 41, title: "Add cardiology quiz pack", state: "open", draft: false, htmlUrl: "https://github.com/mock-user/osler/pull/41", user: "alice", head: "content/cardio-quiz", headRepo: "alice/osler", base: "main", baseRepo: "mock-user/osler", mergeable: true, body: "Adds 20 cardiology questions", updatedAt: "2025-01-15T00:00:00Z" },
+          { number: 40, title: "WIP: Neurology flashcards", state: "open", draft: true, htmlUrl: "https://github.com/mock-user/osler/pull/40", user: "bob", head: "content/neuro-flash", headRepo: "bob/osler", base: "main", baseRepo: "mock-user/osler", mergeable: null, body: "", updatedAt: "2025-01-10T00:00:00Z" },
+        ] : [] };
+      case "gh_merge_pr":
+        return { merged: true, sha: "deadbeef", message: "Pull request successfully merged." };
+      case "gh_close_pr":
+        return { closed: true, number: args && args.prNumber };
       case "read_manifest":
         throw new Error("No manifest in mock mode");
       case "generate_manifest":
@@ -547,6 +603,7 @@
     register("manifest", window.OslerAdminViews.manifest);
     register("build", window.OslerAdminViews.build);
     register("git", window.OslerAdminViews.git);
+    register("github", window.OslerAdminViews.github);
     register("deploy", window.OslerAdminViews.deploy);
     register("settings", window.OslerAdminViews.settings);
 

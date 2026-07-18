@@ -791,6 +791,244 @@ pub fn git_remote(state: State<'_, ProjectRoot>) -> Result<Value, String> {
     Ok(json!({ "remote": remote, "branch": branch }))
 }
 
+/// Resolve `owner/repo` from a GitHub remote URL. Accepts SSH
+/// (git@github.com:owner/repo.git), HTTPS (https://github.com/owner/repo.git),
+/// and bare `owner/repo` strings. Returns None if the URL doesn't look like a
+/// GitHub repo URL.
+fn parse_github_owner_repo(remote_url: &str) -> Option<(String, String)> {
+    let s = remote_url.trim();
+    // SSH form: git@github.com:owner/repo.git
+    if let Some(rest) = s.strip_prefix("git@github.com:") {
+        let rest = rest.trim_end_matches(".git");
+        let parts: Vec<&str> = rest.splitn(2, '/').collect();
+        if parts.len() == 2 {
+            return Some((parts[0].to_string(), parts[1].to_string()));
+        }
+    }
+    // HTTPS form: https://github.com/owner/repo(.git)
+    for prefix in ["https://github.com/", "http://github.com/"] {
+        if let Some(rest) = s.strip_prefix(prefix) {
+            let rest = rest.trim_end_matches(".git");
+            let parts: Vec<&str> = rest.splitn(2, '/').collect();
+            if parts.len() == 2 {
+                return Some((parts[0].to_string(), parts[1].to_string()));
+            }
+        }
+    }
+    // Bare owner/repo
+    let parts: Vec<&str> = s.splitn(2, '/').collect();
+    if parts.len() == 2 && !parts[0].is_empty() && !parts[1].is_empty() && !s.contains("://") {
+        return Some((parts[0].to_string(), parts[1].to_string()));
+    }
+    None
+}
+
+/// Returns the (owner, repo) tuple for the current project's `origin` remote.
+/// Used by the PR workflow so the frontend doesn't have to parse git URLs.
+#[tauri::command]
+pub fn git_repo_identity(state: State<'_, ProjectRoot>) -> Result<Value, String> {
+    let root = root_or_err(&state)?;
+    let remote = git_remote_string(&root)?;
+    match parse_github_owner_repo(&remote) {
+        Some((owner, repo)) => Ok(json!({ "owner": owner, "repo": repo, "remote": remote })),
+        None => Ok(json!({ "owner": null, "repo": null, "remote": remote })),
+    }
+}
+
+/// Create a new local branch from `base` (defaults to the current branch) and
+/// check it out. Used by the "Start content session" wizard.
+#[tauri::command]
+pub fn git_create_branch(
+    name: String,
+    base: Option<String>,
+    state: State<'_, ProjectRoot>,
+) -> Result<Value, String> {
+    let root = root_or_err(&state)?;
+    let base = match base {
+        Some(b) if !b.is_empty() => b,
+        _ => git_branch_string(&root)?,
+    };
+    // Create the branch from base (without checking it out yet).
+    git(&root, &["branch", &name, &base])?;
+    // Check it out.
+    git(&root, &["checkout", &name])?;
+    Ok(json!({ "created": true, "branch": name, "base": base }))
+}
+
+/// Check out an existing local (or remote-tracking) branch.
+#[tauri::command]
+pub fn git_checkout(branch: String, state: State<'_, ProjectRoot>) -> Result<Value, String> {
+    let root = root_or_err(&state)?;
+    git(&root, &["checkout", &branch])?;
+    Ok(json!({ "checkedOut": branch }))
+}
+
+/// Push a local branch to a remote (defaults to `origin`), setting up upstream
+/// tracking so future `git push` / `git pull` need no arguments. If the push
+/// fails with a 403-style error (no write access), the error is surfaced to
+/// the frontend so it can trigger the auto-fork flow.
+#[tauri::command]
+pub fn git_push_branch(
+    branch: String,
+    remote: Option<String>,
+    state: State<'_, ProjectRoot>,
+) -> Result<Value, String> {
+    let root = root_or_err(&state)?;
+    let remote = remote.unwrap_or_else(|| "origin".to_string());
+    let mut cmd = std::process::Command::new("git");
+    cmd.args(["push", "-u", &remote, &branch]).current_dir(&root);
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x08000000;
+        cmd.creation_flags(CREATE_NO_WINDOW);
+    }
+    let out = crate::deploy::run_cmd_timeout(cmd, 60)
+        .map_err(|e| format!("Git push failed: {}", e))?;
+    let stdout = String::from_utf8_lossy(&out.stdout).to_string();
+    let stderr = String::from_utf8_lossy(&out.stderr).to_string();
+    if !out.status.success() {
+        return Err(format!(
+            "git push -u {} {} failed.\nstdout: {}\nstderr: {}",
+            remote, branch, stdout, stderr
+        ));
+    }
+    Ok(json!({ "pushed": true, "remote": remote, "branch": branch, "output": stdout + &stderr }))
+}
+
+/// List local + remote-tracking branches. Returns each branch's name, whether
+/// it's the current branch, and whether it's a remote-tracking ref.
+#[tauri::command]
+pub fn git_list_branches(state: State<'_, ProjectRoot>) -> Result<Value, String> {
+    let root = root_or_err(&state)?;
+    let current = git_branch_string(&root).unwrap_or_default();
+    let s = git(&root, &["branch", "--all", "--format=%(refname:short)\t%(objectname:short)"])?;
+    let branches: Vec<Value> = s
+        .lines()
+        .map(|l| {
+            let l = l.trim();
+            if l.is_empty() {
+                return json!(null);
+            }
+            let mut parts = l.splitn(2, '\t');
+            let name = parts.next().unwrap_or("").to_string();
+            let sha = parts.next().unwrap_or("").to_string();
+            let is_remote = name.contains('/');
+            json!({
+                "name": name,
+                "sha": sha,
+                "current": name == current,
+                "remote": is_remote,
+            })
+        })
+        .filter(|v| !v.is_null())
+        .collect();
+    Ok(json!({ "branches": branches, "current": current }))
+}
+
+/// Convenience: return the current branch name.
+#[tauri::command]
+pub fn git_current_branch(state: State<'_, ProjectRoot>) -> Result<Value, String> {
+    let root = root_or_err(&state)?;
+    let b = git_branch_string(&root)?;
+    Ok(json!({ "branch": b }))
+}
+
+/// Add a new git remote (e.g. a fork). Refuses to overwrite an existing remote
+/// of the same name unless `force` is true.
+#[tauri::command]
+pub fn git_add_remote(
+    name: String,
+    url: String,
+    force: Option<bool>,
+    state: State<'_, ProjectRoot>,
+) -> Result<Value, String> {
+    let root = root_or_err(&state)?;
+    let args: Vec<&str> = if force.unwrap_or(false) {
+        vec!["remote", "add", "-f", &name, &url]
+    } else {
+        vec!["remote", "add", &name, &url]
+    };
+    git(&root, &args)?;
+    Ok(json!({ "added": true, "name": name, "url": url }))
+}
+
+/// Fetch a single remote (default: origin). Useful after adding a fork remote
+/// to materialize its remote-tracking branches before opening a PR.
+#[tauri::command]
+pub fn git_fetch_remote(
+    remote: Option<String>,
+    state: State<'_, ProjectRoot>,
+) -> Result<Value, String> {
+    let root = root_or_err(&state)?;
+    let remote = remote.unwrap_or_else(|| "origin".to_string());
+    let mut cmd = std::process::Command::new("git");
+    cmd.args(["fetch", &remote]).current_dir(&root);
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x08000000;
+        cmd.creation_flags(CREATE_NO_WINDOW);
+    }
+    let out = crate::deploy::run_cmd_timeout(cmd, 120)
+        .map_err(|e| format!("Git fetch failed: {}", e))?;
+    let s = String::from_utf8_lossy(&out.stdout).to_string();
+    Ok(json!({ "fetched": true, "remote": remote, "output": s }))
+}
+
+/// Clone a remote repo into `target_dir`. The target's parent must exist; the
+/// target itself must not (or must be empty). Runs `git clone <url> <dir>` and
+/// blocks until done — typical clones take 5-60 seconds depending on repo size.
+#[tauri::command]
+pub fn git_clone(
+    url: String,
+    target_dir: String,
+    state: State<'_, ProjectRoot>,
+) -> Result<Value, String> {
+    let _root = root_or_err(&state)?;
+    let target = PathBuf::from(&target_dir);
+    if target.exists() && target.is_dir() {
+        let mut entries = std::fs::read_dir(&target).map_err(|e| e.to_string())?;
+        if entries.next().is_some() {
+            return Err(format!("Target directory is not empty: {}", target.display()));
+        }
+    } else if let Some(parent) = target.parent() {
+        std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+    }
+
+    let mut cmd = std::process::Command::new("git");
+    cmd.args(["clone", &url, &target_dir]);
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x08000000;
+        cmd.creation_flags(CREATE_NO_WINDOW);
+    }
+    let out = crate::deploy::run_cmd_timeout(cmd, 300)
+        .map_err(|e| format!("Git clone failed: {}", e))?;
+    if !out.status.success() {
+        let stderr = String::from_utf8_lossy(&out.stderr).to_string();
+        return Err(format!("git clone failed: {}", stderr));
+    }
+    let branch = git_branch_string(&target).unwrap_or_else(|_| "main".to_string());
+    let remote = git_remote_string(&target).unwrap_or_else(|_| url.clone());
+    Ok(json!({
+        "cloned": true,
+        "url": url,
+        "targetDir": targetDir_absolute(&target),
+        "branch": branch,
+        "remote": remote,
+    }))
+}
+
+/// Cross-platform helper that returns the absolute path of `target` as a
+/// string. Used by `git_clone` so the response is always absolute regardless
+/// of what the caller passed in.
+fn targetDir_absolute(target: &Path) -> String {
+    let canonical = std::fs::canonicalize(target).unwrap_or_else(|_| target.to_path_buf());
+    canonical.to_string_lossy().to_string()
+}
+
 /* ═══════════════════════════════════════════════════════════════════════
    Misc
    ═══════════════════════════════════════════════════════════════════════ */

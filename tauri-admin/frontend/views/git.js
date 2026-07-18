@@ -118,6 +118,22 @@
 
     // Commit bar
     const commitBar = el("div", { class: "card", style: { display: "flex", gap: "0.5rem", marginBottom: "1rem", alignItems: "center", flexWrap: "wrap" } });
+
+    // "Start content session" shortcut — jumps to GitHub → Content Session tab
+    // where the user can pick a base branch + create a working branch + push + open PR.
+    const sessionBtn = el("button", { class: "btn btn-accent btn-sm", type: "button", title: t("git.sessionHint") },
+      el("span", { style: { display: "inline-flex", alignItems: "center", gap: "0.375rem" } },
+        svgIcon("M12 2 4 6v6c0 5 3.5 8 8 10 4.5-2 8-5 8-10V6z", 14),
+        t("git.startSession")
+      )
+    );
+    sessionBtn.addEventListener("click", () => {
+      // Tell the GitHub view to open on the session tab.
+      window.__oslerGhTab = "session";
+      window.OslerAdmin.navigate("github");
+    });
+    commitBar.appendChild(sessionBtn);
+
     const msgInput = el("input", {
       class: "input",
       id: "git-commit-msg",
