@@ -1546,6 +1546,35 @@ html[dir="rtl"] {
 @media print {
   .no-print { display: none !important; }
   body { background: white !important; color: black !important; }
+
+  /* Hide app chrome */
+  .osler-page__inner--wide > .no-print,
+  .osler-page__inner > .no-print,
+  nav, header, .mobile-tab-bar { display: none !important; }
+
+  /* Reset page background */
+  html, body, .osler-page { background: white !important; overflow: visible !important; height: auto !important; }
+
+  /* Cards: remove borders, use subtle bg */
+  .qbank-card, [class*="osler-card"] {
+    border-color: #e5e7eb !important;
+    background: white !important;
+    break-inside: avoid;
+  }
+
+  /* Score badges — use solid colors for print */
+  .text-blue-500, .text-success { color: #1e5fa8 !important; }
+  .text-red-500, .text-destructive { color: #b43232 !important; }
+  .text-amber-500, .text-warning { color: #b47a00 !important; }
+
+  /* Buttons hidden in print */
+  button:not(.print-show) { display: none !important; }
+
+  /* Page breaks */
+  .qbank-card + .qbank-card { page-break-inside: avoid; }
+
+  /* Ensure proper page margins */
+  @page { margin: 1.5cm; }
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════

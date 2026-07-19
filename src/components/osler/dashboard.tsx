@@ -19,6 +19,7 @@ import {
   Flame,
   PlayCircle,
   RotateCcw,
+  FileText,
 } from "lucide-react";
 import { loadAllContent, ENGINE_META } from "@/lib/osler/content";
 import type { AnyContent, ContentTreeNode, EngineType } from "@/lib/osler/types";
@@ -36,6 +37,10 @@ import {
   StatTile as SharedStatTile,
   type StatTileProps,
 } from "./ui-primitives";
+import { PdfExportDialog, type PdfExportOptions } from "./pdf-export-dialog";
+import { generateDashboardPdf, downloadPdf } from "@/lib/osler/pdf";
+import { toast } from "@/hooks/use-toast";
+import { Button } from "@/components/ui/button";
 
 interface DashboardProps {
   username: string;
@@ -61,6 +66,7 @@ export function Dashboard({
   onOpenArticle,
 }: DashboardProps) {
   const { t, rtl } = useI18n();
+  const [pdfDialogOpen, setPdfDialogOpen] = React.useState(false);
   const [data, setData] = React.useState<{
     items: Array<{ node: ContentTreeNode; content: AnyContent | null }>;
   } | null>(null);
@@ -160,6 +166,28 @@ export function Dashboard({
     ? Math.round((stats.correct / stats.attempted) * 100)
     : 0;
 
+  const handleExportPdf = async (opts: PdfExportOptions) => {
+    const doc = generateDashboardPdf({
+      username,
+      stats: {
+        packs: stats.packs,
+        attempted: stats.attempted,
+        correct: stats.correct,
+        accuracy,
+      },
+      recentPacks: recentPacks.map(({ node, progress }) => ({
+        title: node.title,
+        engine: node.type,
+        attempted: progress.attempted,
+        correct: progress.correct,
+        lastAttempt: progress.lastAttempt,
+      })),
+      opts,
+    });
+    downloadPdf(doc, `${username} — Performance Report`);
+    toast({ title: t("pdf.pdfReady"), description: t("pdf.pdfReadyDesc") });
+  };
+
   const [featuredArticles, setFeaturedArticles] = React.useState<Article[]>([]);
   const [articleCount, setArticleCount] = React.useState(0);
   const [videoCount, setVideoCount] = React.useState(0);
@@ -219,6 +247,18 @@ export function Dashboard({
             eyebrowIcon={Flame}
             title={t("dash.welcomeBack", { name: username })}
             subtitle={t("dash.intro")}
+            actions={
+              stats.attempted > 0 ? (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setPdfDialogOpen(true)}
+                  className="rounded-xl"
+                >
+                  <FileText className="size-4 mr-1.5" /> {t("pdf.exportReport")}
+                </Button>
+              ) : undefined
+            }
           />
         </motion.div>
 
@@ -501,6 +541,15 @@ export function Dashboard({
           </>
         ) : null}
       </div>
+
+      <PdfExportDialog
+        open={pdfDialogOpen}
+        onOpenChange={setPdfDialogOpen}
+        defaultTitle={`${username}'s Progress`}
+        defaultSubtitle="Comprehensive Performance Report"
+        variant="dashboard"
+        onExport={handleExportPdf}
+      />
     </div>
   );
 }

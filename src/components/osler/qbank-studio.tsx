@@ -136,6 +136,8 @@ import { useI18n } from "./i18n-provider";
 import { NavigationStack } from "./navigation-stack";
 import { FolderTreeNav } from "./folder-tree-nav";
 import type { StringKey } from "@/lib/osler/i18n";
+import { generateResultsPdf, downloadPdf } from "@/lib/osler/pdf";
+import { PdfExportDialog, type PdfExportOptions } from "./pdf-export-dialog";
 
 const LETTERS = ["A", "B", "C", "D", "E", "F", "G", "H"];
 const ARABIC_LETTERS = ["أ", "ب", "ج", "د", "ه", "و", "ز", "ح", "ط", "ي"];
@@ -6433,6 +6435,8 @@ function ResultsView({
   onGoHome: () => void;
   onRestart: () => void;
 }) {
+  const { t } = useI18n();
+  const [pdfDialogOpen, setPdfDialogOpen] = React.useState(false);
   const total = session.questions.length;
   const answeredCount = Object.keys(session.answers).filter(
     (k) => session.answers[+k] !== undefined
@@ -6463,6 +6467,43 @@ function ResultsView({
   const avgTimeSec = answeredCount ? Math.round(totalTimeSec / answeredCount) : 0;
   const percentile = Math.min(99, Math.max(1, Math.round(pct * 0.9 + 5)));
 
+  const handleExportPdf = async (opts: PdfExportOptions) => {
+    const questions = session.questions.map((q) => ({
+      stem: q.stem,
+      choices: q.choices,
+      correct: q.correct,
+      explanation: q.explanation,
+      modelAnswer: q.modelAnswer,
+      isWritten: q.correct < 0,
+      difficulty: q.difficulty,
+      tags: q.tags,
+      rubric: q.rubric,
+    }));
+
+    const doc = generateResultsPdf({
+      packTitle: item.title,
+      mode: session.mode,
+      score: {
+        pct,
+        correct: totalCorrect,
+        total,
+        answered: answeredCount,
+        incorrect: incorrectCount,
+        flagged: flaggedCount,
+        percentile,
+        totalTime: formatTime(totalTimeSec),
+        avgTime: formatTime(avgTimeSec),
+      },
+      questions,
+      userAnswers: session.answers,
+      revealed: session.revealed,
+      flagged: session.flagged,
+      opts,
+    });
+    downloadPdf(doc, `${item.title} — Results`);
+    toast({ title: t("pdf.pdfReady"), description: t("pdf.pdfReadyDesc") });
+  };
+
   return (
     <div className="h-[calc(100vh-3.5rem)] overflow-y-auto medos-scroll">
       <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-4">
@@ -6475,6 +6516,9 @@ function ResultsView({
             </p>
           </div>
           <div className="flex gap-2">
+            <Button variant="outline" onClick={() => setPdfDialogOpen(true)} className="rounded-xl">
+              <FileText className="size-4 mr-1.5" /> {t("pdf.exportResults")}
+            </Button>
             <Button variant="outline" onClick={onRestart} className="rounded-xl">
               <RotateCcw className="size-4 mr-1.5" /> Restart
             </Button>
@@ -6604,6 +6648,15 @@ function ResultsView({
           </div>
         </div>
       </div>
+
+      <PdfExportDialog
+        open={pdfDialogOpen}
+        onOpenChange={setPdfDialogOpen}
+        defaultTitle={item.title}
+        defaultSubtitle={`${session.mode === "timed" ? "Timed" : "Tutor"} Mode`}
+        variant="quiz"
+        onExport={handleExportPdf}
+      />
     </div>
   );
 }

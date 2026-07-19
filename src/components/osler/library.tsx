@@ -47,6 +47,9 @@ import { applyHighlightsToHtml } from "@/lib/osler/article-highlights";
 import { setImmersiveMode } from "./immersive-mode";
 import { MermaidModal } from "./mermaid-modal";
 import { haptic } from "@/lib/osler/native";
+import { useToast } from "@/hooks/use-toast";
+import { PdfExportDialog, type PdfExportOptions } from "./pdf-export-dialog";
+import { generateArticlePdf, downloadPdf } from "@/lib/osler/pdf";
 import { useSwipeBackDismiss } from "@/hooks/use-swipe-back-dismiss";
 
 interface LibraryProps {
@@ -267,6 +270,21 @@ export function Library({ initialArticleId, onNavigateBack }: LibraryProps) {
     // Small delay so images load before print dialog
     setTimeout(() => { win.print(); win.close(); }, 400);
   }, [activeArticle, processedArticleHtml]);
+
+  const [pdfDialogOpen, setPdfDialogOpen] = React.useState(false);
+  const { toast } = useToast();
+  const handleExportArticlePdf = React.useCallback(async (opts: PdfExportOptions) => {
+    if (!activeArticle) return;
+    const doc = generateArticlePdf({
+      title: activeArticle.title,
+      subtitle: activeArticle.specialty,
+      author: opts.author,
+      content: processedArticleHtml,
+      opts,
+    });
+    downloadPdf(doc, activeArticle.title);
+    toast({ title: t("pdf.pdfReady"), description: t("pdf.pdfReadyDesc") });
+  }, [activeArticle, processedArticleHtml, toast]);
 
   // Mermaid post-processing: find placeholders, dynamically render SVG
   React.useEffect(() => {
@@ -493,6 +511,7 @@ export function Library({ initialArticleId, onNavigateBack }: LibraryProps) {
             processedHtml={processedArticleHtml}
             hlCtrl={hlCtrl}
             onPrint={printArticle}
+            onExportPdf={() => setPdfDialogOpen(true)}
           />
         ) : null
       }
@@ -503,21 +522,31 @@ export function Library({ initialArticleId, onNavigateBack }: LibraryProps) {
   /* ── Render ─────────────────────────────────────────────────────────── */
   if (isMobile) {
     return (
-      <motion.div
-        {...swipeDismissProps}
-        className="h-full"
-      >
-        {mobileLayout}
-        <AnimatePresence>
-          {mermaidModal && (
-            <MermaidModal
-              svg={mermaidModal.svg}
-              title={mermaidModal.title || activeArticle?.title}
-              onClose={() => setMermaidModal(null)}
-            />
-          )}
-        </AnimatePresence>
-      </motion.div>
+      <>
+        <motion.div
+          {...swipeDismissProps}
+          className="h-full"
+        >
+          {mobileLayout}
+          <AnimatePresence>
+            {mermaidModal && (
+              <MermaidModal
+                svg={mermaidModal.svg}
+                title={mermaidModal.title || activeArticle?.title}
+                onClose={() => setMermaidModal(null)}
+              />
+            )}
+          </AnimatePresence>
+        </motion.div>
+        <PdfExportDialog
+          open={pdfDialogOpen}
+          onOpenChange={setPdfDialogOpen}
+          defaultTitle={activeArticle?.title ?? "Article"}
+          defaultSubtitle={activeArticle?.specialty}
+          variant="quiz"
+          onExport={handleExportArticlePdf}
+        />
+      </>
     );
   }
 
@@ -593,6 +622,7 @@ export function Library({ initialArticleId, onNavigateBack }: LibraryProps) {
               onFontSizeChange={setFontSize}
               hlCtrl={hlCtrl}
               onPrint={printArticle}
+              onExportPdf={() => setPdfDialogOpen(true)}
             />
             <div className="flex-1 overflow-y-auto medos-scroll medos-tabbar-pad md:pb-0 relative flex flex-col">
               {loading ? (
@@ -652,6 +682,15 @@ export function Library({ initialArticleId, onNavigateBack }: LibraryProps) {
           />
         )}
       </AnimatePresence>
+
+      <PdfExportDialog
+        open={pdfDialogOpen}
+        onOpenChange={setPdfDialogOpen}
+        defaultTitle={activeArticle?.title ?? "Article"}
+        defaultSubtitle={activeArticle?.specialty}
+        variant="quiz"
+        onExport={handleExportArticlePdf}
+      />
     </motion.div>
   );
 }
@@ -837,6 +876,7 @@ function MobileReader({
   processedHtml,
   hlCtrl,
   onPrint,
+  onExportPdf,
 }: {
   article: Article;
   isBookmarked: boolean;
@@ -853,6 +893,7 @@ function MobileReader({
   processedHtml: string;
   hlCtrl: ReturnType<typeof useArticleHighlighter>;
   onPrint: () => void;
+  onExportPdf: () => void;
 }) {
   const [fontPopoverOpen, setFontPopoverOpen] = React.useState(false);
   const { t } = useI18n();
@@ -931,13 +972,22 @@ function MobileReader({
             </div>
             
             {article.contentType === "md" && (
-              <button
-                onClick={onPrint}
-                className="size-9 rounded-lg flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors"
-                title={t("library.print")}
-              >
-                <Printer className="size-4" />
-              </button>
+              <>
+                <button
+                  onClick={onPrint}
+                  className="size-9 rounded-lg flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors"
+                  title={t("library.print")}
+                >
+                  <Printer className="size-4" />
+                </button>
+                <button
+                  onClick={onExportPdf}
+                  className="size-9 rounded-lg flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors"
+                  title={t("pdf.exportResults")}
+                >
+                  <FileText className="size-4" />
+                </button>
+              </>
             )}
 
             {article.fileUrl && article.contentType === "pdf" && (
@@ -1198,6 +1248,7 @@ function ArticleHeader({
   onFontSizeChange,
   hlCtrl,
   onPrint,
+  onExportPdf,
 }: {
   article: Article;
   isBookmarked: boolean;
@@ -1210,6 +1261,7 @@ function ArticleHeader({
   onFontSizeChange: (s: number) => void;
   hlCtrl: ReturnType<typeof useArticleHighlighter>;
   onPrint: () => void;
+  onExportPdf: () => void;
 }) {
   const [fontPopoverOpen, setFontPopoverOpen] = React.useState(false);
   const { t } = useI18n();
@@ -1312,13 +1364,22 @@ function ArticleHeader({
         )}
 
         {article.contentType === "md" && (
-          <button
-            onClick={onPrint}
-            className="osler-icon-btn size-9 flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors"
-            title={t("library.print")}
-          >
-            <Printer className="size-4" />
-          </button>
+          <>
+            <button
+              onClick={onPrint}
+              className="osler-icon-btn size-9 flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors"
+              title={t("library.print")}
+            >
+              <Printer className="size-4" />
+            </button>
+            <button
+              onClick={onExportPdf}
+              className="osler-icon-btn size-9 flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors"
+              title={t("pdf.exportResults")}
+            >
+              <FileText className="size-4" />
+            </button>
+          </>
         )}
 
         {article.fileUrl && article.contentType === "pdf" && (

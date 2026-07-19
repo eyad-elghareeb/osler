@@ -18,6 +18,7 @@ const VideosStudio = dynamic(
 import { Profile } from "@/components/osler/profile";
 import { Settings } from "@/components/osler/settings";
 import { loadContentByUid } from "@/lib/osler/content";
+import { loadPdfFonts } from "@/lib/osler/pdf-fonts";
 import type {
   AnyContent,
   ContentTreeNode,
@@ -63,6 +64,9 @@ export default function Home() {
     const stored = sessionStorage.getItem(SESSION_KEY);
     if (stored) setUsername(stored);
   }, []);
+
+  // Pre-load PDF fonts so they are cached before any PDF export
+  React.useEffect(() => { loadPdfFonts(); }, []);
 
   // Build a ContentTreeNode from a loaded pack
   function nodeFromPack(uid: string, content: AnyContent): ContentTreeNode {
