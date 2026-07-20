@@ -24,6 +24,7 @@ export const en = {
     "common.previous": "Previous",
     "common.close": "Close",
     "common.confirm": "Confirm",
+    "common.dismiss": "Dismiss",
     "common.loading": "Loading…",
     "common.none": "None",
     "common.all": "All",
@@ -103,6 +104,7 @@ export const en = {
 
     "dash.resumeSession": "Resume Session",
     "dash.sessionProgress": "Question {n} of {total}",
+    "dash.resumePrompt": "You have an unfinished session. Would you like to resume or dismiss it?",
 
     "qbank.home.title": "Q-Bank Studio",
     "qbank.home.subtitle":

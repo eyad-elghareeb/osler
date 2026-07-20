@@ -19,7 +19,7 @@ import {
   Flame,
   PlayCircle,
   RotateCcw,
-  FileText,
+  X,
 } from "lucide-react";
 import { loadAllContent, ENGINE_META } from "@/lib/osler/content";
 import type { AnyContent, ContentTreeNode, EngineType } from "@/lib/osler/types";
@@ -37,10 +37,18 @@ import {
   StatTile as SharedStatTile,
   type StatTileProps,
 } from "./ui-primitives";
-import { PdfExportDialog, type PdfExportOptions } from "./pdf-export-dialog";
-import { generateDashboardPdf, downloadPdf } from "@/lib/osler/pdf";
 import { toast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 interface DashboardProps {
   username: string;
@@ -66,7 +74,6 @@ export function Dashboard({
   onOpenArticle,
 }: DashboardProps) {
   const { t, rtl } = useI18n();
-  const [pdfDialogOpen, setPdfDialogOpen] = React.useState(false);
   const [data, setData] = React.useState<{
     items: Array<{ node: ContentTreeNode; content: AnyContent | null }>;
   } | null>(null);
@@ -94,7 +101,7 @@ export function Dashboard({
     };
   }, []);
 
-  // Active (in-progress) session from IDB
+  // Active (in-progress) session from IDB — shown as a popup, not auto-resumed
   const [activeSession, setActiveSession] = React.useState<{
     itemTitle: string;
     engine: EngineType;
@@ -103,6 +110,7 @@ export function Dashboard({
     startedAt: number;
     mode: string;
   } | null>(null);
+  const [resumeDialogOpen, setResumeDialogOpen] = React.useState(false);
 
   React.useEffect(() => {
     const check = () => {
@@ -135,14 +143,22 @@ export function Dashboard({
           startedAt: raw.startedAt ?? 0,
           mode: raw.mode ?? "tutor",
         });
+        setResumeDialogOpen(true);
       } else {
         setActiveSession(null);
+        setResumeDialogOpen(false);
       }
     };
     check();
     const unsub = sessions.subscribe(check);
     const unsubH = storage.onHydrated(check);
     return () => { unsub(); unsubH(); };
+  }, []);
+
+  const dismissResume = React.useCallback(() => {
+    sessions.clearActive();
+    setActiveSession(null);
+    setResumeDialogOpen(false);
   }, []);
 
   const recentPacks = React.useMemo(() => {
@@ -165,28 +181,6 @@ export function Dashboard({
   const accuracy = stats.attempted
     ? Math.round((stats.correct / stats.attempted) * 100)
     : 0;
-
-  const handleExportPdf = async (opts: PdfExportOptions) => {
-    const doc = generateDashboardPdf({
-      username,
-      stats: {
-        packs: stats.packs,
-        attempted: stats.attempted,
-        correct: stats.correct,
-        accuracy,
-      },
-      recentPacks: recentPacks.map(({ node, progress }) => ({
-        title: node.title,
-        engine: node.type,
-        attempted: progress.attempted,
-        correct: progress.correct,
-        lastAttempt: progress.lastAttempt,
-      })),
-      opts,
-    });
-    downloadPdf(doc, `${username} — Performance Report`);
-    toast({ title: t("pdf.pdfReady"), description: t("pdf.pdfReadyDesc") });
-  };
 
   const [featuredArticles, setFeaturedArticles] = React.useState<Article[]>([]);
   const [articleCount, setArticleCount] = React.useState(0);
@@ -247,67 +241,53 @@ export function Dashboard({
             eyebrowIcon={Flame}
             title={t("dash.welcomeBack", { name: username })}
             subtitle={t("dash.intro")}
-            actions={
-              stats.attempted > 0 ? (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setPdfDialogOpen(true)}
-                  className="rounded-xl"
-                >
-                  <FileText className="size-4 mr-1.5" /> {t("pdf.exportReport")}
-                </Button>
-              ) : undefined
-            }
+            actions={undefined}
           />
         </motion.div>
 
-        {/* Active session — resume mid-quiz */}
-        {activeSession ? (
-          <motion.div
-            initial={{ opacity: 0, y: 6 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.3, delay: 0.05 }}
-            className="relative overflow-hidden osler-card--roomy mb-6 border border-primary/30 bg-primary/[0.04]"
-          >
-            <div className="flex items-start justify-between gap-4 flex-wrap">
-              <div className="flex-1 min-w-0">
-                <span className="text-[11px] uppercase tracking-wider text-primary font-medium flex items-center gap-1.5">
-                  <RotateCcw className="size-3" />
-                  {t("dash.resumeSession")}
-                </span>
-                <h2 className="text-lg md:text-xl font-semibold mt-1 mb-1">
-                  {activeSession.itemTitle}
-                </h2>
-                <div className="flex items-center gap-3 text-xs flex-wrap">
-                  <span className="text-muted-foreground">
-                    {t("dash.sessionProgress", {
-                      n: activeSession.current + 1,
-                      total: activeSession.total,
-                    })}
-                  </span>
-                  <span className="text-muted-foreground">·</span>
-                  <span className="text-muted-foreground capitalize">
-                    {activeSession.mode}
-                  </span>
-                  <span className="text-muted-foreground">·</span>
-                  <span className="flex items-center gap-1 text-muted-foreground">
-                    <Clock className="size-3" />
-                    {timeAgo(activeSession.startedAt)}
-                  </span>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => onViewChange("qbank")}
-                className="inline-flex items-center gap-1.5 px-4 h-10 rounded-md bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors shrink-0"
-              >
-                {t("common.resume")}
-                <ArrowRight className={cn("size-4", rtl && "rtl-flip-x")} />
-              </button>
-            </div>
-          </motion.div>
-        ) : null}
+        {/* Resume session dialog */}
+        <AlertDialog open={resumeDialogOpen} onOpenChange={setResumeDialogOpen}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle className="flex items-center gap-2">
+                <RotateCcw className="size-5 text-primary" />
+                {t("dash.resumeSession")}
+              </AlertDialogTitle>
+              <AlertDialogDescription>
+                {activeSession ? (
+                  <div className="space-y-3 mt-2">
+                    <p className="text-sm text-foreground font-medium">{activeSession.itemTitle}</p>
+                    <div className="flex items-center gap-3 text-xs text-muted-foreground flex-wrap">
+                      <span>{t("dash.sessionProgress", { n: activeSession.current + 1, total: activeSession.total })}</span>
+                      <span>·</span>
+                      <span className="capitalize">{activeSession.mode}</span>
+                      <span>·</span>
+                      <span className="flex items-center gap-1">
+                        <Clock className="size-3" />
+                        {timeAgo(activeSession.startedAt)}
+                      </span>
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      {t("dash.resumePrompt")}
+                    </p>
+                  </div>
+                ) : null}
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel onClick={dismissResume}>
+                <X className="size-3.5 mr-1.5" />
+                {t("common.dismiss")}
+              </AlertDialogCancel>
+              <AlertDialogAction asChild>
+                <Button onClick={() => { setResumeDialogOpen(false); onViewChange("qbank"); }}>
+                  <RotateCcw className="size-3.5 mr-1.5" />
+                  {t("common.resume")}
+                </Button>
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
 
         {/* Continue card */}
         {continuePack ? (
@@ -542,14 +522,6 @@ export function Dashboard({
         ) : null}
       </div>
 
-      <PdfExportDialog
-        open={pdfDialogOpen}
-        onOpenChange={setPdfDialogOpen}
-        defaultTitle={`${username}'s Progress`}
-        defaultSubtitle="Comprehensive Performance Report"
-        variant="dashboard"
-        onExport={handleExportPdf}
-      />
     </div>
   );
 }

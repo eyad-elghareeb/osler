@@ -136,7 +136,7 @@ import { useI18n } from "./i18n-provider";
 import { NavigationStack } from "./navigation-stack";
 import { FolderTreeNav } from "./folder-tree-nav";
 import type { StringKey } from "@/lib/osler/i18n";
-import { generateResultsPdf, downloadPdf } from "@/lib/osler/pdf";
+import { generateResultsPdf, generateDashboardPdf, downloadPdf, type FullQuestion } from "@/lib/osler/pdf";
 import { PdfExportDialog, type PdfExportOptions } from "./pdf-export-dialog";
 
 const LETTERS = ["A", "B", "C", "D", "E", "F", "G", "H"];
@@ -922,13 +922,24 @@ export function QBankStudio({
     );
   }
 
-  if (mode === "results" && session && activeItem) {
+  if (mode === "results" && session) {
+    const isCustom = session.itemId.startsWith("custom-");
+    const resultsItem = activeItem ?? {
+      uid: session.itemId,
+      title: session.itemTitle,
+      type: session.engine,
+      path: "",
+      items: [],
+    } as ContentTreeNode;
     return (
       <ResultsView
         session={session}
-        item={activeItem}
+        item={resultsItem}
         onGoHome={exitToHome}
-        onRestart={restartSession}
+        onRestart={isCustom ? () => {
+          // For custom sessions, go back to home since we can't easily rebuild
+          exitToHome();
+        } : restartSession}
       />
     );
   }
@@ -2627,6 +2638,8 @@ function PreviousTestsTab({
   ) => void;
 }) {
   const { t } = useI18n();
+  const [pdfDialogOpen, setPdfDialogOpen] = React.useState(false);
+  const [pdfTargetId, setPdfTargetId] = React.useState<string | null>(null);
   const [busy, setBusy] = React.useState<string | null>(null);
   const [error, setError] = React.useState<string | null>(null);
 
@@ -2751,6 +2764,46 @@ function PreviousTestsTab({
     [buildPoolForSession, onStartCustomSession, t],
   );
 
+  const handleExport = React.useCallback(async (s: SavedSession, opts: PdfExportOptions) => {
+    const totalTimeSec = Math.floor(((s.completedAt ?? Date.now()) - s.startedAt) / 1000);
+    const avgTimeSec = s.answeredCount ? Math.round(totalTimeSec / s.answeredCount) : 0;
+    const pct = s.totalQuestions ? Math.round((s.correctCount / s.totalQuestions) * 100) : 0;
+    const pool = await buildPoolForSession(s, false);
+    const questions: FullQuestion[] = pool.map((q) => ({
+      stem: q.stem,
+      choices: q.choices,
+      correct: q.correct,
+      explanation: q.explanation,
+      modelAnswer: q.modelAnswer,
+      isWritten: q.correct < 0,
+      difficulty: q.difficulty,
+      tags: q.tags,
+      rubric: q.rubric,
+    }));
+    const doc = generateResultsPdf({
+      packTitle: s.packTitle,
+      mode: s.mode,
+      score: {
+        pct,
+        correct: s.correctCount,
+        total: s.totalQuestions,
+        answered: s.answeredCount,
+        incorrect: s.incorrectCount,
+        flagged: s.flaggedCount,
+        percentile: Math.min(99, Math.max(1, Math.round(pct * 0.9 + 5))),
+        totalTime: formatTime(totalTimeSec),
+        avgTime: formatTime(avgTimeSec),
+      },
+      questions,
+      userAnswers: s.answers,
+      revealed: s.revealed,
+      flagged: s.flagged,
+      opts,
+    });
+    downloadPdf(doc, `${s.packTitle} — Results`);
+    toast({ title: t("pdf.pdfReady"), description: t("pdf.pdfReadyDesc") });
+  }, [buildPoolForSession, t]);
+
   if (sessionList.length === 0) {
     return (
       <div className="qbank-card text-center py-12">
@@ -2840,6 +2893,17 @@ function PreviousTestsTab({
                 )}
               </button>
             )}
+            {/* Export PDF */}
+            <button
+              onClick={() => {
+                setPdfTargetId(s.id);
+                setPdfDialogOpen(true);
+              }}
+              className="size-8 rounded-md hover:text-primary hover:bg-primary/10 flex items-center justify-center shrink-0 transition-colors"
+              title={t("pdf.exportResults")}
+            >
+              <FileText className="size-4" />
+            </button>
             <button
               onClick={() => onDelete(s.id)}
               className="size-8 rounded-md hover:bg-destructive/10 hover:text-destructive flex items-center justify-center shrink-0 transition-colors"
@@ -2850,6 +2914,17 @@ function PreviousTestsTab({
           </div>
         );
       })}
+      {/* PDF export dialog for selected session */}
+      <PdfExportDialog
+        open={pdfDialogOpen}
+        onOpenChange={(open) => { setPdfDialogOpen(open); if (!open) setPdfTargetId(null); }}
+        defaultTitle={pdfTargetId ? sessionList.find(s => s.id === pdfTargetId)?.packTitle ?? "Session" : "Session"}
+        variant="quiz"
+        onExport={(opts) => {
+          const s = sessionList.find(s => s.id === pdfTargetId);
+          if (s) handleExport(s, opts);
+        }}
+      />
     </div>
   );
 }
@@ -3072,12 +3147,71 @@ function TrackerTab({
     );
   }
 
+  const [trackerPdfOpen, setTrackerPdfOpen] = React.useState(false);
+
+  // Build folder stats list for tracker PDF export
+  const folderStatsList = React.useMemo(() => {
+    if (!data) return [] as Array<{ title: string; engine: string; attempted: number; correct: number; lastAttempt: number | null }>;
+    const qbankTree = data.trees.quiz ?? data.trees.bank ?? data.trees.written ?? [];
+    const list: Array<{ title: string; engine: string; attempted: number; correct: number; lastAttempt: number | null }> = [];
+    for (const node of qbankTree) {
+      const fs = folderStats(node);
+      if (fs.attempted > 0) {
+        list.push({
+          title: node.title,
+          engine: node.type,
+          attempted: fs.attempted,
+          correct: fs.correct,
+          lastAttempt: null, // not tracked at folder level
+        });
+      }
+    }
+    return list;
+  }, [data, folderStats]);
+
+  const handleExportTrackerPdf = React.useCallback((opts: PdfExportOptions) => {
+    const doc = generateDashboardPdf({
+      username: "Tracker Report",
+      stats: {
+        packs: folderStatsList.filter((fs) => fs.attempted > 0).length,
+        attempted: overall.attempted,
+        correct: overall.correct,
+        accuracy: overall.accuracy,
+      },
+      recentPacks: folderStatsList
+        .filter((fs) => fs.attempted > 0)
+        .map((fs) => ({
+          title: fs.title,
+          engine: fs.engine ?? "quiz",
+          attempted: fs.attempted,
+          correct: fs.correct,
+          lastAttempt: fs.lastAttempt ?? null,
+        })),
+      opts,
+    });
+    downloadPdf(doc, "Tracker Report");
+    toast({ title: t("pdf.pdfReady"), description: t("pdf.pdfReadyDesc") });
+    setTrackerPdfOpen(false);
+  }, [overall, folderStatsList, t]);
+
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div>
-        <h2 className="text-xl font-semibold text-foreground">{t("qbank.tracker.title")}</h2>
-        <p className="text-sm text-muted-foreground mt-1">{t("qbank.tracker.subtitle")}</p>
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h2 className="text-xl font-semibold text-foreground">{t("qbank.tracker.title")}</h2>
+          <p className="text-sm text-muted-foreground mt-1">{t("qbank.tracker.subtitle")}</p>
+        </div>
+        {overall.attempted > 0 && (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setTrackerPdfOpen(true)}
+            className="rounded-xl shrink-0"
+          >
+            <FileText className="size-4 mr-1.5" /> {t("pdf.exportReport")}
+          </Button>
+        )}
       </div>
 
       {/* P5-2: Overview */}
@@ -3287,12 +3421,13 @@ function TrackerTab({
                     </div>
                     {isExpanded && q && (
                       <div className="mt-3 pt-3 border-t border-border text-sm space-y-2">
-                        <div className="font-medium uworld-prose" dangerouslySetInnerHTML={{ __html: renderQuestionText(q.stem, q) }} />
+                        <div className="font-medium uworld-prose" dir="auto" dangerouslySetInnerHTML={{ __html: renderQuestionText(q.stem, q) }} />
                         {q.choices.length > 0 && (
                           <div className="space-y-1">
                             {q.choices.map((choice, i) => (
                               <div
                                 key={i}
+                                dir="auto"
                                 className={cn(
                                   "px-2 py-1 rounded text-xs",
                                   i === q.correct && "bg-success/10 text-success font-medium",
@@ -3319,6 +3454,14 @@ function TrackerTab({
           </>
         )}
       </div>
+
+      <PdfExportDialog
+        open={trackerPdfOpen}
+        onOpenChange={setTrackerPdfOpen}
+        defaultTitle="Tracker Report"
+        variant="dashboard"
+        onExport={handleExportTrackerPdf}
+      />
     </div>
   );
 }
@@ -3828,7 +3971,7 @@ function QuizView({
 
         {/* Stem */}
         <div className="relative">
-          <div className="uworld-prose" style={stemStyle}>
+          <div className="uworld-prose" style={stemStyle} dir="auto">
             <HighlightedContent
               html={renderQuestionText(question.stem, question, activeItem)}
               highlights={qHighlights}
@@ -3919,6 +4062,7 @@ function QuizView({
                   <div
                     className={`flex-1 min-w-0 uworld-prose ${quizSettingsState.textAffectsChoices ? "" : "text-[14px] leading-relaxed"} pt-0.5 select-text ${hasStrikethrough ? "line-through text-muted-foreground" : ""}`}
                     style={choiceStyle}
+                    dir="auto"
                   >
                     <HighlightedContent
                       html={renderQuestionText(choice, question, activeItem)}
@@ -6322,7 +6466,7 @@ function ExplanationCard({
             <Lightbulb className="size-4 text-primary" />
             <h3 className="text-sm font-semibold text-foreground">{t("qbank.explanation.title")}</h3>
           </div>
-          <div className="uworld-prose text-[14px]" style={{ whiteSpace: "pre-wrap" }}>
+          <div className="uworld-prose text-[14px]" style={{ whiteSpace: "pre-wrap" }} dir="auto">
             <HighlightedContent
               html={renderQuestionText(q.explanation || t("qbank.explanation.noExplanation"), q, item)}
               highlights={hl}
@@ -6382,7 +6526,7 @@ function ExplanationCard({
           <Lightbulb className="size-4 text-primary" />
           <h3 className="text-sm font-semibold text-foreground">{t("qbank.explanation.title")}</h3>
         </div>
-        <div className="uworld-prose text-[14px]" style={{ whiteSpace: "pre-wrap" }}>
+        <div className="uworld-prose text-[14px]" style={{ whiteSpace: "pre-wrap" }} dir="auto">
           <HighlightedContent
             html={renderQuestionText(q.explanation || t("qbank.explanation.noExplanation"), q, item)}
             highlights={hl}

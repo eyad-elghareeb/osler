@@ -436,7 +436,9 @@ class PdfDoc {
     d.setLineWidth(0.3);
     d.line(ms, hh, pw - ms, hh);
 
-    // Two-column divider (drawn once per page; content painted after covers stray overlap).
+    // Two-column divider — drawn only on question-content pages (not
+    // cover, TOC, answer key, or report sections) so early/section-break
+    // pages never get a stray divider.
     if (this.twoColEnabled) {
       d.setDrawColor(...C.RULE_SOFT);
       d.setLineWidth(0.25);
@@ -588,7 +590,9 @@ class PdfDoc {
     const maxW = opts.maxW ?? this.L.fw;
     const text = isArabic ? convertArabic(normalizeText(raw)) : normalizeText(raw);
     const lines: string[] = d.splitTextToSize(text, maxW);
+    if (isArabic) d.setR2L(true);
     d.text(lines, x, y, { align: opts.align ?? "left" });
+    if (isArabic) d.setR2L(false);
     return y + lines.length * lh(size, opts.lineFactor);
   }
 
@@ -931,14 +935,70 @@ class PdfDoc {
   // ── Question rendering ──
 
   estimateQuestionH(q: FullQuestion, opts: QuestionDrawOpts): number {
+    const d = this.doc;
     const density = this.L.density;
-    let h = sp(11, density);
-    if (!q.isWritten && q.choices.length > 0) h += q.choices.length * (7 * this.L.typeScale + sp(1, density));
-    if (opts.answersMode === "inline" && !q.isWritten && opts.showExplanations) {
-      h += sp(5, density);
-      if (q.explanation) h += sp(7, density);
+    const ts = this.L.typeScale;
+    const cw = opts.twoCol ? this.L.cw : this.L.fw;
+    const am = opts.answersMode ?? "inline";
+    const style = opts.styleMode ?? "standard";
+    const showExpl = opts.showExplanations ?? true;
+    const written = q.isWritten ?? false;
+
+    const saveFont = d.getFont();
+    const saveSize = d.getFontSize();
+
+    let h = 0;
+
+    // ── Header row ──
+    if (style === "mcqnotes") {
+      h += sp(1.5, density);
+    } else {
+      h += lh(9.5 * ts, 1.2) + sp(0.5, density) + 4 + sp(1.5, density);
     }
-    if (q.isWritten && q.modelAnswer && opts.showExplanations) h += sp(7, density);
+
+    // ── Stem ──
+    if (q.stem) {
+      const sSize = style === "mcqnotes" ? 8.4 : 9.5;
+      d.setFont(F[style === "mcqnotes" ? "Hm" : "B"], hs("normal"));
+      d.setFontSize(sSize * ts);
+      const stemLines = d.splitTextToSize(normalizeText(stripMd(q.stem)), cw - 2).length;
+      h += stemLines * lh(sSize * ts) + sp(1.5, density);
+    }
+
+    // ── Choices ──
+    if (!written && q.choices.length > 0) {
+      d.setFont(F.B, hs("normal"));
+      d.setFontSize(8.6 * ts);
+      for (const c of q.choices) {
+        const cl = d.splitTextToSize(normalizeText(stripMd(c)), cw - 15).length;
+        h += cl * lh(8.6 * ts) + sp(0.4, density);
+      }
+    }
+
+    // ── Inline answer + explanation ──
+    if (am === "inline" && !written) {
+      if (showExpl && q.correct >= 0 && q.correct < q.choices.length) {
+        h += sp(0.5, density) + sp(4.5, density) + sp(1.5, density);
+      }
+      if (showExpl && q.explanation) {
+        h += sp(0.5, density);
+        const pad = sp(3, density);
+        d.setFontSize(8.6 * ts);
+        const bl = d.splitTextToSize(normalizeText(stripMd(q.explanation)), cw - pad * 2).length;
+        h += sp(4, density) + bl * lh(8.6 * ts) + sp(1.5, density) + sp(1.5, density);
+      }
+    }
+
+    if (written && q.modelAnswer && showExpl) {
+      h += sp(0.5, density);
+      const pad = sp(3, density);
+      d.setFontSize(8.6 * ts);
+      const bl = d.splitTextToSize(normalizeText(stripMd(q.modelAnswer)), cw - pad * 2).length;
+      h += sp(4, density) + bl * lh(8.6 * ts) + sp(1.5, density) + sp(1.5, density);
+    }
+
+    d.setFont(saveFont.fontName, saveFont.fontStyle);
+    d.setFontSize(saveSize);
     return h;
   }
 
@@ -975,7 +1035,13 @@ class PdfDoc {
         d.setFont(F.Hn, hs("normal"));
         d.setFontSize(6.6 * this.L.typeScale);
         d.setTextColor(...C.MUTED);
-        d.text(metaParts.join("   "), x + cw, this.y, { align: "right" });
+        const metaText = metaParts.join("   ");
+        // Truncate metadata to fit column width (avoid overflow in two-col mode)
+        const metaMaxW = cw * 0.55;
+        const truncatedMeta = d.getTextWidth(metaText) > metaMaxW
+          ? trunc(metaText, Math.floor(metaMaxW / (6.6 * this.L.typeScale * 0.35)))
+          : metaText;
+        d.text(truncatedMeta, x + cw, this.y, { align: "right" });
       }
       this.y += sp(2, density);
       this.y = this.hRule(this.y, cw, 0.4, C.COBALT, x);
@@ -1093,37 +1159,38 @@ class PdfDoc {
     d.text(tracked(title), this.L.ms + 8, this.y + bannerH / 2 + 1.6);
 
     this.y += bannerH + sp(2.5, density);
+    this.colTopY = this.y;
   }
 
   drawAnswerBlock(q: FullQuestion, qNum: number, showExpl: boolean): void {
     const d = this.doc;
     const density = this.L.density;
-    const fw = this.L.fw;
-    const x = this.L.ms;
+    const cw = this.twoColEnabled ? this.L.cw : this.L.fw;
+    const x = this.colX;
 
     this.checkPage(sp(11, density));
     this.y = this.trackedLabel(`ANSWER ${qNum}`, x, this.y, 9.5, C.EMERALD);
-    this.y = this.hRule(this.y, fw, 1.1, C.SAGE);
+    this.y = this.hRule(this.y, cw, 1.1, C.SAGE);
     this.y += sp(1, density);
 
     d.setFont(F.Bi, hs("italic"));
     d.setFontSize(8 * this.L.typeScale);
     d.setTextColor(...C.MUTED);
-    const stemLines: string[] = d.splitTextToSize(`"${trunc(stripMd(q.stem), 110)}"`, fw);
+    const stemLines: string[] = d.splitTextToSize(`"${trunc(stripMd(q.stem), 110)}"`, cw);
     d.text(stemLines, x, this.y);
     this.y += stemLines.length * lh(8 * this.L.typeScale) + sp(1.5, density);
 
     if (q.correct >= 0 && q.correct < q.choices.length) {
-      this.y = this.correctBadge(LETTERS[q.correct], q.choices[q.correct], this.y, fw, x);
+      this.y = this.correctBadge(LETTERS[q.correct], q.choices[q.correct], this.y, cw, x);
     }
 
     if (q.explanation && showExpl) {
       this.y += sp(0.5, density);
-      this.y = this.text(q.explanation, x, this.y, { font: "B", size: 8.8, color: C.CHARCOAL, maxW: fw });
+      this.y = this.text(q.explanation, x, this.y, { font: "B", size: 8.8, color: C.CHARCOAL, maxW: cw });
       this.y += sp(1, density);
     }
 
-    this.y = this.hRule(this.y, fw, 0.3, [190, 218, 200]);
+    this.y = this.hRule(this.y, cw, 0.3, [190, 218, 200]);
     this.y += sp(1.5, density);
   }
 
@@ -1743,7 +1810,7 @@ export function generateArticlePdf(cfg: ArticlePdfConfig): jsPDF {
       0,
     );
     doc.addBookmark("Cover");
-    doc.newPage(true);
+    doc.newPage({ skipOutgoing: true });
   }
   const contentStartPage = opts.includeCover ? 2 : 1;
 
@@ -1775,54 +1842,274 @@ export function generateArticlePdf(cfg: ArticlePdfConfig): jsPDF {
   doc.y = doc.hRule(doc.y, fw, 0.4, C.RULE);
   doc.y += sp(2, density);
 
-  const plainText = stripHtml(cfg.content);
-  const paragraphs = plainText.split(/\n{2,}/).filter((p) => p.trim());
+  // Pass 1 — extract structured elements (headings, paragraphs, lists, tables, blockquotes)
+  // from the raw HTML for richer rendering that matches the print-button output.
+  interface ArticleBlock {
+    type: "h2" | "h3" | "h4" | "p" | "blockquote" | "code" | "list" | "table";
+    text: string;
+    rows?: string[][];
+    items?: string[];
+    isOrdered?: boolean;
+  }
 
-  for (const para of paragraphs) {
-    const trimmed = para.trim();
+  const blocks: ArticleBlock[] = [];
+  // Try to parse HTML structure first
+  const htmlContent = cfg.content;
+  let remaining = htmlContent.trim();
+
+  // Simple HTML-aware block parser
+  const tagRx = /<\/?(h[2-4]|p|blockquote|pre|ul|ol|li|table|thead|tbody|tr|th|td|br|div|strong|em|b|i|code|span|a|img|figure|figcaption)[^>]*>/gi;
+  // Split by block-level tags
+  const blockParts = remaining.split(/(<(?:h[2-4]|p|blockquote|pre|ul|ol|table)[^>]*>[\s\S]*?<\/(?:h[2-4]|p|blockquote|pre|ul|ol|table)>)/i);
+
+  for (const part of blockParts) {
+    const trimmed = part.trim();
     if (!trimmed) continue;
 
-    const htmlH = detectHtmlHeading(trimmed);
-    const isMdH2 = /^##\s/.test(trimmed);
-    const isMdH3 = /^###\s/.test(trimmed);
-    const isAllCaps = /^[A-Z][A-Z\s]{3,}$/.test(trimmed) && trimmed.length < 80;
+    // H2
+    const h2m = trimmed.match(/^<h2\b[^>]*>(.+?)<\/h2>/i);
+    if (h2m) {
+      blocks.push({ type: "h2", text: stripHtml(h2m[1]).trim() });
+      continue;
+    }
 
-    if ((htmlH && htmlH.level === 2) || isMdH2) {
-      const headingText = htmlH ? htmlH.text : trimmed.replace(/^##\s+/, "");
-      doc.checkPage(sp(6, density));
-      doc.y += sp(1.5, density);
-      d.setFont(F.H, hs("bold"));
-      d.setFontSize(12.5 * ts);
-      d.setTextColor(...C.INK);
-      const hLines: string[] = d.splitTextToSize(headingText, fw);
-      d.text(hLines, x, doc.y);
-      doc.y += hLines.length * lh(12.5 * ts) + sp(1, density);
-      doc.y = doc.hRule(doc.y, fw * 0.16, 0.6, C.GOLD);
-      doc.y += sp(1.5, density);
-    } else if ((htmlH && htmlH.level === 3) || isMdH3) {
-      const headingText = htmlH ? htmlH.text : trimmed.replace(/^###\s+/, "");
-      doc.checkPage(sp(4.5, density));
-      doc.y += sp(0.5, density);
-      d.setFont(F.H, hs("bold"));
-      d.setFontSize(10.5 * ts);
-      d.setTextColor(...C.COBALT);
-      const hLines: string[] = d.splitTextToSize(headingText, fw);
-      d.text(hLines, x, doc.y);
-      doc.y += hLines.length * lh(10.5 * ts) + sp(1.5, density);
-    } else if (isAllCaps) {
-      doc.checkPage(sp(6, density));
-      doc.y += sp(1.5, density);
-      d.setFont(F.H, hs("bold"));
-      d.setFontSize(11 * ts);
-      d.setTextColor(...C.INK);
-      d.text(trimmed, x, doc.y);
-      doc.y += lh(11 * ts) + sp(1.5, density);
-      doc.y = doc.hRule(doc.y, fw, 0.25);
-      doc.y += sp(1.5, density);
-    } else {
-      doc.checkPage(sp(3, density));
-      doc.y = doc.text(trimmed, x, doc.y, { font: "B", size: 9.4, color: C.CHARCOAL, maxW: fw });
-      doc.y += sp(1.5, density);
+    // H3
+    const h3m = trimmed.match(/^<h3\b[^>]*>(.+?)<\/h3>/i);
+    if (h3m) {
+      blocks.push({ type: "h3", text: stripHtml(h3m[1]).trim() });
+      continue;
+    }
+
+    // H4 (styled as h3 variant)
+    const h4m = trimmed.match(/^<h4\b[^>]*>(.+?)<\/h4>/i);
+    if (h4m) {
+      blocks.push({ type: "h4", text: stripHtml(h4m[1]).trim() });
+      continue;
+    }
+
+    // Blockquote
+    const bqm = trimmed.match(/^<blockquote[^>]*>([\s\S]*?)<\/blockquote>/i);
+    if (bqm) {
+      blocks.push({ type: "blockquote", text: stripHtml(bqm[1]).trim() });
+      continue;
+    }
+
+    // Pre/Code block
+    const cm = trimmed.match(/^<pre[^>]*>(?:<code[^>]*>)?([\s\S]*?)(?:<\/code>)?<\/pre>/i);
+    if (cm) {
+      blocks.push({ type: "code", text: stripHtml(cm[1]).trim() });
+      continue;
+    }
+
+    // Lists
+    const ulm = trimmed.match(/^<ul[^>]*>([\s\S]*?)<\/ul>/i);
+    if (ulm) {
+      const items = ulm[1].match(/<li[^>]*>([\s\S]*?)<\/li>/gi) || [];
+      blocks.push({
+        type: "list",
+        text: "",
+        items: items.map((li: string) => stripHtml(li).trim()),
+        isOrdered: false,
+      });
+      continue;
+    }
+    const olm = trimmed.match(/^<ol[^>]*>([\s\S]*?)<\/ol>/i);
+    if (olm) {
+      const items = olm[1].match(/<li[^>]*>([\s\S]*?)<\/li>/gi) || [];
+      blocks.push({
+        type: "list",
+        text: "",
+        items: items.map((li: string) => stripHtml(li).trim()),
+        isOrdered: true,
+      });
+      continue;
+    }
+
+    // Table
+    const tm = trimmed.match(/^<table[^>]*>([\s\S]*?)<\/table>/i);
+    if (tm) {
+      const rows: string[][] = [];
+      const trs = tm[1].match(/<tr[^>]*>([\s\S]*?)<\/tr>/gi) || [];
+      for (const tr of trs) {
+        const cells: string[] = [];
+        const ths = tr.match(/<th[^>]*>([\s\S]*?)<\/th>/gi) || [];
+        const tds = tr.match(/<td[^>]*>([\s\S]*?)<\/td>/gi) || [];
+        for (const cell of [...ths, ...tds]) {
+          cells.push(stripHtml(cell).trim());
+        }
+        if (cells.length > 0) rows.push(cells);
+      }
+      blocks.push({ type: "table", text: "", rows });
+      continue;
+    }
+
+    // Plain paragraph or div
+    let cleanText = trimmed
+      .replace(/^<p[^>]*>/i, "")
+      .replace(/<\/p>$/i, "")
+      .replace(/^<div[^>]*>/i, "")
+      .replace(/<\/div>$/i, "")
+      .replace(/<br\s*\/?>/gi, "\n");
+    cleanText = stripHtml(cleanText).trim();
+    if (cleanText) blocks.push({ type: "p", text: cleanText });
+  }
+
+  // Fallback: if HTML parser didn't produce blocks, split on double-newlines
+  if (blocks.length === 0) {
+    const paragraphs = stripHtml(cfg.content).split(/\n{2,}/).filter((p) => p.trim());
+    for (const para of paragraphs) {
+      const t = para.trim();
+      if (!t) continue;
+      if (/^##\s/.test(t)) {
+        blocks.push({ type: "h2", text: t.replace(/^##\s+/, "") });
+      } else if (/^###\s/.test(t)) {
+        blocks.push({ type: "h3", text: t.replace(/^###\s+/, "") });
+      } else {
+        blocks.push({ type: "p", text: t });
+      }
+    }
+  }
+
+  // Render blocks — matches the print-button CSS hierarchy
+  for (const block of blocks) {
+    switch (block.type) {
+      case "h2": {
+        doc.checkPage(sp(6, density));
+        doc.y += sp(2, density);
+        d.setFont(F.H, hs("bold"));
+        d.setFontSize(14 * ts);
+        d.setTextColor(...C.INK);
+        const hLines: string[] = d.splitTextToSize(block.text, fw);
+        d.text(hLines, x, doc.y);
+        doc.y += hLines.length * lh(14 * ts) + sp(0.5, density);
+        doc.y = doc.hRule(doc.y, fw, 0.4, C.RULE);
+        doc.y += sp(1.5, density);
+        break;
+      }
+      case "h3": {
+        doc.checkPage(sp(4.5, density));
+        doc.y += sp(1, density);
+        d.setFont(F.H, hs("bold"));
+        d.setFontSize(11.5 * ts);
+        d.setTextColor(...C.COBALT);
+        const hLines: string[] = d.splitTextToSize(block.text, fw);
+        d.text(hLines, x, doc.y);
+        doc.y += hLines.length * lh(11.5 * ts) + sp(1.2, density);
+        break;
+      }
+      case "h4": {
+        doc.checkPage(sp(3.5, density));
+        doc.y += sp(0.5, density);
+        d.setFont(F.Hm, hs("bold"));
+        d.setFontSize(9.8 * ts);
+        d.setTextColor(...C.SLATE);
+        const hLines: string[] = d.splitTextToSize(block.text, fw);
+        d.text(hLines, x, doc.y);
+        doc.y += hLines.length * lh(9.8 * ts) + sp(0.8, density);
+        break;
+      }
+      case "blockquote": {
+        doc.checkPage(sp(5, density));
+        doc.y += sp(0.5, density);
+        // Draw blockquote bar
+        d.setFillColor(...C.PALE_BLUE);
+        d.rect(x, doc.y, 1.6, 0, "F");
+        d.setDrawColor(...C.COBALT);
+        d.setLineWidth(0.5);
+        // Estimate height
+        const bqFontSize = 8.8 * ts;
+        d.setFont(F.Bi, hs("italic"));
+        d.setFontSize(bqFontSize);
+        const bqLines: string[] = d.splitTextToSize(block.text, fw - 6);
+        const bqH = bqLines.length * lh(bqFontSize) + sp(2, density);
+        d.setFillColor(...C.PALE_BLUE);
+        d.setDrawColor(...C.COBALT);
+        d.setLineWidth(0.5);
+        d.rect(x, doc.y, fw, bqH, "FD");
+        d.setFillColor(255, 255, 255);
+        d.rect(x, doc.y, 1.6, bqH, "F");
+        d.setDrawColor(...C.COBALT);
+        d.line(x, doc.y, x, doc.y + bqH);
+        d.setTextColor(...C.SLATE);
+        d.text(bqLines, x + 4, doc.y + sp(1, density));
+        doc.y += bqH + sp(2, density);
+        break;
+      }
+      case "code": {
+        doc.checkPage(sp(5, density));
+        doc.y += sp(0.5, density);
+        d.setFont(F.Hn, hs("normal"));
+        d.setFontSize(7.8 * ts);
+        d.setTextColor(...C.SLATE);
+        const codeLines: string[] = d.splitTextToSize(block.text, fw - 8);
+        const codeH = codeLines.length * lh(7.8 * ts, 1.3) + sp(2, density);
+        d.setFillColor(...C.RULE_SOFT);
+        d.setDrawColor(...C.RULE);
+        d.setLineWidth(0.3);
+        d.roundedRect(x, doc.y, fw, codeH, 1, 1, "FD");
+        d.setTextColor(...C.CHARCOAL);
+        d.text(codeLines, x + 4, doc.y + sp(1, density));
+        doc.y += codeH + sp(2, density);
+        break;
+      }
+      case "list": {
+        doc.checkPage(sp(3, density));
+        doc.y += sp(0.5, density);
+        d.setFont(F.B, hs("normal"));
+        d.setFontSize(9 * ts);
+        d.setTextColor(...C.CHARCOAL);
+        const items = block.items ?? [];
+        for (let i = 0; i < items.length; i++) {
+          const prefix = block.isOrdered ? `${i + 1}. ` : "  \u2022  ";
+          const itemText = `${prefix}${items[i]}`;
+          const lines: string[] = d.splitTextToSize(itemText, fw - 4);
+          doc.checkPage(lines.length * lh(9 * ts));
+          d.text(lines, x + 2, doc.y);
+          doc.y += lines.length * lh(9 * ts) + sp(0.3, density);
+        }
+        doc.y += sp(1, density);
+        break;
+      }
+      case "table": {
+        doc.checkPage(sp(8, density));
+        doc.y += sp(1, density);
+        const rows = block.rows ?? [];
+        if (rows.length > 0) {
+          const colCount = Math.max(...rows.map((r) => r.length));
+          const colW = fw / colCount;
+          d.setFont(F.Hn, hs("normal"));
+          d.setFontSize(7.6 * ts);
+          for (let ri = 0; ri < rows.length; ri++) {
+            const row = rows[ri];
+            const isHeader = ri === 0;
+            const cellH = 5.5 * ts;
+            doc.checkPage(cellH + 2);
+            for (let ci = 0; ci < colCount; ci++) {
+              const cellX = x + ci * colW;
+              const cellText = row[ci] ?? "";
+              d.setFillColor(...(isHeader ? C.PALE_BLUE : C.WHITE));
+              d.setDrawColor(...C.RULE);
+              d.setLineWidth(0.2);
+              d.rect(cellX, doc.y, colW, cellH, "FD");
+              d.setFont(F.Hm, hs(isHeader ? "bold" : "normal"));
+              d.setFontSize(isHeader ? 7.6 * ts : 7.2 * ts);
+              d.setTextColor(...(isHeader ? C.COBALT : C.CHARCOAL));
+              const cellDisplay = trunc(cellText, Math.floor(colW / (7.2 * ts * 0.35)));
+              d.text(cellDisplay, cellX + 1.5, doc.y + 4);
+            }
+            doc.y += cellH;
+          }
+          doc.y += sp(1.5, density);
+        }
+        break;
+      }
+      case "p":
+      default: {
+        doc.checkPage(sp(3, density));
+        doc.y = doc.text(block.text, x, doc.y, { font: "B", size: 9.4, color: C.CHARCOAL, maxW: fw });
+        doc.y += sp(1.5, density);
+        break;
+      }
     }
   }
 

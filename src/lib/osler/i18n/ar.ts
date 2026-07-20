@@ -24,6 +24,7 @@ export const ar = {
     "common.previous": "السابق",
     "common.close": "إغلاق",
     "common.confirm": "تأكيد",
+    "common.dismiss": "تجاهل",
     "common.loading": "جارٍ التحميل…",
     "common.none": "لا شيء",
     "common.all": "الكل",
