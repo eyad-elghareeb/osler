@@ -86,13 +86,11 @@ export const C = {
 type SectionKey = keyof typeof C.SECTION;
 
 /** Style-mode → spacing density. Font sizes never shrink; whitespace does. */
-type StyleMode = "standard" | "styled" | "compact" | "detailed" | "mcqnotes";
+type StyleMode = "standard" | "compact" | "mcqnotes";
 const DENSITY: Record<StyleMode, number> = {
-  standard: 1.0,
-  styled: 1.0,
-  compact: 0.8,
-  detailed: 1.08,
-  mcqnotes: 0.6,
+  standard: 0.95,
+  compact: 0.72,
+  mcqnotes: 0.55,
 };
 
 // ═══════════════════════════════════════════════════════════════
@@ -201,7 +199,7 @@ const F = {
   Bb: "helvetica", // body emphasis (sans, used inline within serif body)
 };
 
-function resolveFonts(doc: jsPDF): void {
+function resolveFonts(doc: jsPDF, fontType: "serif" | "sans" = "serif"): void {
   const fl = doc.getFontList();
   if (fl.Poppins) {
     F.H = "Poppins";
@@ -210,9 +208,17 @@ function resolveFonts(doc: jsPDF): void {
     F.Hl = fl["Poppins-Light"] ? "Poppins-Light" : "Poppins";
     F.Bb = fl["Poppins-Medium"] ? "Poppins-Medium" : "Poppins";
   }
-  if (fl.Lora) {
-    F.B = "Lora";
-    F.Bi = "Lora";
+  if (fontType === "sans") {
+    F.B = fl.Poppins ? "Poppins" : "helvetica";
+    F.Bi = fl.Poppins ? "Poppins" : "helvetica";
+  } else {
+    if (fl.Lora) {
+      F.B = "Lora";
+      F.Bi = "Lora";
+    } else {
+      F.B = "times";
+      F.Bi = "times";
+    }
   }
 }
 
@@ -304,9 +310,11 @@ interface Layout {
   cw: number; // single-column width in two-col mode
   typeScale: number; // page-size driven — affects font sizes
   density: number; // style-mode driven — affects spacing only
+  fontSizeMultiplier: number;
+  fontType: "serif" | "sans";
 }
 
-function computeLayout(cfg: PdfPageConfig, styleMode: StyleMode): Layout {
+function computeLayout(cfg: PdfPageConfig, styleMode: StyleMode, fontSizeOpt?: "small" | "medium" | "large", fontTypeOpt?: "serif" | "sans"): Layout {
   let [pw, ph] = PAGE_DIMS[cfg.pageSize] ?? PAGE_DIMS.a4;
   if (cfg.orientation === "landscape") [pw, ph] = [ph, pw];
   const pageScale = pw / 210;
@@ -319,6 +327,10 @@ function computeLayout(cfg: PdfPageConfig, styleMode: StyleMode): Layout {
   const gu = pt2mm(14);
   const hh = pt2mm(26);
   const fh = pt2mm(18);
+
+  const fontSizeMultiplier = fontSizeOpt === "small" ? 0.85 : fontSizeOpt === "large" ? 1.15 : 1.0;
+  const fontType = fontTypeOpt ?? "serif";
+
   return {
     pw,
     ph,
@@ -332,6 +344,8 @@ function computeLayout(cfg: PdfPageConfig, styleMode: StyleMode): Layout {
     cw: (pw - 2 * ms - gu) / 2,
     typeScale,
     density,
+    fontSizeMultiplier,
+    fontType,
   };
 }
 
@@ -357,8 +371,8 @@ class PdfDoc {
   /** Chapter number → the physical page it starts on (for TOC + bookmarks). */
   chapterPages: number[] = [];
 
-  constructor(cfg: PdfPageConfig, title: string, styleMode: StyleMode) {
-    this.L = computeLayout(cfg, styleMode);
+  constructor(cfg: PdfPageConfig, title: string, styleMode: StyleMode, fontSizeOpt?: "small" | "medium" | "large", fontTypeOpt?: "serif" | "sans") {
+    this.L = computeLayout(cfg, styleMode, fontSizeOpt, fontTypeOpt);
     this.title = title;
     this.doc = new jsPDF({ orientation: cfg.orientation, unit: "mm", format: cfg.pageSize });
     this.doc.setLineHeightFactor(1.15);
@@ -367,7 +381,7 @@ class PdfDoc {
     if (!registered && typeof console !== "undefined") {
       console.warn("[osler/pdf] Custom fonts were not ready in time — falling back to core PDF fonts.");
     }
-    resolveFonts(this.doc);
+    resolveFonts(this.doc, this.L.fontType);
   }
 
   // ── Metadata ──
@@ -582,7 +596,7 @@ class PdfDoc {
       style = opts.style ?? "normal";
     }
 
-    const size = (opts.size ?? 9.5) * this.L.typeScale;
+    const size = (opts.size ?? 9.5) * this.L.typeScale * this.L.fontSizeMultiplier;
     d.setFont(font, hs(style));
     d.setFontSize(size);
     d.setTextColor(...(opts.color ?? C.CHARCOAL));
@@ -590,10 +604,16 @@ class PdfDoc {
     const maxW = opts.maxW ?? this.L.fw;
     const text = isArabic ? convertArabic(normalizeText(raw)) : normalizeText(raw);
     const lines: string[] = d.splitTextToSize(text, maxW);
-    if (isArabic) d.setR2L(true);
-    d.text(lines, x, y, { align: opts.align ?? "left" });
-    if (isArabic) d.setR2L(false);
-    return y + lines.length * lh(size, opts.lineFactor);
+    if (isArabic) {
+      d.setR2L(true);
+      // For Arabic/R2L rendering, alignment is right-aligned, so x must be shifted by maxW.
+      // Arabic (Cairo) needs tighter inter-line spacing than Latin fonts.
+      d.text(lines, x + maxW, y, { align: "right" });
+      d.setR2L(false);
+    } else {
+      d.text(lines, x, y, { align: opts.align ?? "left" });
+    }
+    return y + lines.length * lh(size, isArabic ? 1.3 : (opts.lineFactor ?? 1.45));
   }
 
   hRule(y: number, w: number, thick = 0.3, color: RGB = C.RULE, x?: number): number {
@@ -1016,38 +1036,7 @@ class PdfDoc {
     let x = this.colX;
 
     // ── Header row ──
-    if (style === "styled") {
-      d.setFont(F.H, hs("bold"));
-      d.setFontSize(7.6 * this.L.typeScale);
-      d.setTextColor(...C.GOLD);
-      d.text(tracked(`QUESTION ${qNum}`), x, this.y);
-      this.y += sp(2, density);
-      this.y = this.hRule(this.y, cw, 0.7, C.GOLD, x);
-      this.y += sp(1.5, density);
-    } else if (style === "detailed") {
-      d.setFont(F.H, hs("bold"));
-      d.setFontSize(7.6 * this.L.typeScale);
-      d.setTextColor(...C.COBALT);
-      d.text(`QUESTION ${qNum}`, x, this.y);
-      const metaParts: string[] = [];
-      if (q.difficulty) metaParts.push(String(q.difficulty).toUpperCase());
-      if (q.tags?.length) metaParts.push(q.tags.slice(0, 3).join(" · "));
-      if (metaParts.length) {
-        d.setFont(F.Hn, hs("normal"));
-        d.setFontSize(6.6 * this.L.typeScale);
-        d.setTextColor(...C.MUTED);
-        const metaText = metaParts.join("   ");
-        // Truncate metadata to fit column width (avoid overflow in two-col mode)
-        const metaMaxW = cw * 0.55;
-        const truncatedMeta = d.getTextWidth(metaText) > metaMaxW
-          ? trunc(metaText, Math.floor(metaMaxW / (6.6 * this.L.typeScale * 0.35)))
-          : metaText;
-        d.text(truncatedMeta, x + cw, this.y, { align: "right" });
-      }
-      this.y += sp(2, density);
-      this.y = this.hRule(this.y, cw, 0.4, C.COBALT, x);
-      this.y += sp(1.5, density);
-    } else if (style === "mcqnotes") {
+    if (style === "mcqnotes") {
       d.setFont(F.Hm, hs("normal"));
       d.setFontSize(7 * this.L.typeScale);
       d.setTextColor(...C.MUTED);
@@ -1116,7 +1105,7 @@ class PdfDoc {
       this.y = this.calloutBox("MODEL ANSWER", q.modelAnswer, this.y, cw, x, C.PALE_BLUE, C.ROYAL);
     }
 
-    if (isWritten && style === "detailed" && q.rubric?.length && showExpl) {
+    if (isWritten && q.rubric?.length && showExpl) {
       this.y += sp(0.5, density);
       cw = opts.twoCol ? this.L.cw : this.L.fw; x = this.colX;
       this.y = this.calloutBox(
@@ -1138,9 +1127,7 @@ class PdfDoc {
       this.y += sp(1.5, density);
     }
 
-    const sepColor = style === "styled" ? C.GOLD : C.RULE;
-    const sepThick = style === "styled" ? 0.4 : 0.25;
-    this.y = this.hRule(this.y, cw, sepThick, sepColor, x);
+    this.y = this.hRule(this.y, cw, 0.25, C.RULE, x);
     this.y += sp(0.75, density);
   }
 
@@ -1443,6 +1430,8 @@ export interface PdfExportOptions {
   twoCol: boolean;
   showScoreSummary?: boolean;
   showReview?: boolean;
+  fontSize?: "small" | "medium" | "large";
+  fontType?: "serif" | "sans";
 }
 
 interface QuestionDrawOpts {
@@ -1461,6 +1450,8 @@ export interface PdfExportConfig {
   showExplanations: boolean;
   twoCol: boolean;
   author?: string;
+  fontSize?: "small" | "medium" | "large";
+  fontType?: "serif" | "sans";
   chapters: Array<{
     title: string;
     description?: string;
@@ -1510,7 +1501,7 @@ interface CompilationResult {
 }
 
 function renderCompilation(cfg: PdfExportConfig, knownChapterPages: number[] | null): CompilationResult {
-  const doc = new PdfDoc(cfg.page, cfg.cover.title, cfg.styleMode);
+  const doc = new PdfDoc(cfg.page, cfg.cover.title, cfg.styleMode, cfg.fontSize, cfg.fontType);
   const L = doc.L;
   const multiChapter = cfg.chapters.length > 1;
   const totalQ = cfg.chapters.reduce((a, ch) => a + ch.questions.length, 0);
@@ -1614,7 +1605,7 @@ export function generateQuizCompilationPdf(cfg: PdfExportConfig): jsPDF {
 
 export function generateResultsPdf(cfg: ResultsPdfConfig): jsPDF {
   const opts = cfg.opts;
-  const doc = new PdfDoc(opts.page, cfg.packTitle, opts.styleMode);
+  const doc = new PdfDoc(opts.page, cfg.packTitle, opts.styleMode, opts.fontSize, opts.fontType);
   const L = doc.L;
   doc.setMeta({ title: opts.title || cfg.packTitle, author: opts.author, subject: "Quiz results" });
 
@@ -1702,7 +1693,7 @@ export function generateResultsPdf(cfg: ResultsPdfConfig): jsPDF {
 
 export function generateDashboardPdf(cfg: DashboardPdfConfig): jsPDF {
   const opts = cfg.opts;
-  const doc = new PdfDoc(opts.page, opts.title || "Performance Report", opts.styleMode);
+  const doc = new PdfDoc(opts.page, opts.title || "Performance Report", opts.styleMode, opts.fontSize, opts.fontType);
   const L = doc.L;
   doc.setMeta({ title: opts.title || `${cfg.username}'s Progress`, author: opts.author, subject: "Performance report" });
 
@@ -1807,7 +1798,7 @@ export function generateDashboardPdf(cfg: DashboardPdfConfig): jsPDF {
 
 export function generateArticlePdf(cfg: ArticlePdfConfig): jsPDF {
   const opts = cfg.opts;
-  const doc = new PdfDoc(opts.page, cfg.title, opts.styleMode);
+  const doc = new PdfDoc(opts.page, cfg.title, opts.styleMode, opts.fontSize, opts.fontType);
   const L = doc.L;
   const density = L.density;
   const ts = L.typeScale;

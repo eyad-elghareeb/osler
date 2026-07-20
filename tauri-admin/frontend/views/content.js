@@ -144,6 +144,18 @@
       detectBtn.addEventListener("click", validateCurrent);
       actions.appendChild(detectBtn);
     }
+    // Export PDF — opens the content in the main Osler app for full PDF export
+    if (isJson || isMd) {
+      const exportBtn = el("button", { class: "btn btn-ghost btn-sm" }, svgIcon("M14 3v5h5M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z", 14), "Export PDF");
+      exportBtn.title = "Open in the main app to export as PDF";
+      exportBtn.addEventListener("click", () => {
+        const baseUrl = "http://localhost:3000";
+        const relativePath = currentPath.replace(/^.*?public\/osler-content\//, "");
+        const params = new URLSearchParams({ path: relativePath });
+        invoke("open_external", { url: `${baseUrl}/admin/pdf-export?${params.toString()}` });
+      });
+      actions.appendChild(exportBtn);
+    }
     if (isMd) {
       actions.appendChild(el("span", { class: "badge badge-accent" }, "Markdown"));
     }

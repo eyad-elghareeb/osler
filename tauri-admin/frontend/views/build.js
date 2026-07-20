@@ -1,4 +1,4 @@
-// views/build.js — Run npm/bun build & start, stream logs.
+// views/build.js — Run npm/bun build & start, stream logs, live preview.
 
 (function () {
   "use strict";
@@ -7,7 +7,6 @@
   const { el, svgIcon, escapeHtml, t } = helpers;
 
   let pollTimer = null;
-  let activeTab = "build"; // "build" | "start"
 
   function renderStatus(status) {
     const statusEl = document.getElementById("build-status");
@@ -62,7 +61,6 @@
       const status = await invoke("runner_status");
       renderStatus(status);
       renderLogs(status);
-      // Stop polling when not running
       if (!status.running && pollTimer) {
         clearInterval(pollTimer);
         pollTimer = null;
@@ -76,6 +74,23 @@
     pollOnce();
   }
 
+  function switchTab(tab) {
+    document.querySelectorAll(".build-tab-btn").forEach((btn) => btn.classList.remove("active"));
+    document.getElementById("build-logs-panel").style.display = tab === "logs" ? "" : "none";
+    document.getElementById("build-preview-panel").style.display = tab === "preview" ? "" : "none";
+    const activeBtn = document.querySelector(`.build-tab-btn[data-tab="${tab}"]`);
+    if (activeBtn) activeBtn.classList.add("active");
+    // Refresh iframe src when switching to preview to avoid stale content
+    if (tab === "preview") {
+      const iframe = document.getElementById("preview-iframe");
+      if (iframe) {
+        const src = iframe.src;
+        iframe.src = "";
+        setTimeout(() => { iframe.src = src; }, 100);
+      }
+    }
+  }
+
   window.OslerAdminViews = window.OslerAdminViews || {};
   window.OslerAdminViews.build = async function (view) {
     if (!requireProject()) {
@@ -83,7 +98,7 @@
       return;
     }
 
-    const wrap = el("div", { class: "view medos-fade-in" });
+    const wrap = el("div", { class: "view medos-fade-in", style: { height: "calc(100vh - var(--topbar-h))", display: "flex", flexDirection: "column" } });
     const header = el("div", { class: "view-header" });
     header.appendChild(el("div", {},
       el("h1", {}, t("build.title")),
@@ -136,15 +151,68 @@
     actionBar.appendChild(startBtn);
     actionBar.appendChild(stopBtn);
     actionBar.appendChild(el("span", { style: { flex: "1" } }));
+    // Preview URL input
+    const urlInput = el("input", {
+      type: "text",
+      id: "preview-url",
+      value: "http://localhost:3000",
+      placeholder: "http://localhost:3000",
+      style: { width: "200px", padding: "0.375rem 0.5rem", fontSize: "0.8rem", border: "1px solid var(--border)", borderRadius: "6px", background: "var(--surface)", color: "var(--text)" }
+    });
+    actionBar.appendChild(urlInput);
     actionBar.appendChild(clearBtn);
     wrap.appendChild(actionBar);
 
     // Note
     wrap.appendChild(el("p", { style: { fontSize: "0.75rem", color: "var(--text-muted)", margin: "0 0 1rem" } }, t("build.note")));
 
-    // Console
-    const console = el("div", { class: "log-view", id: "build-console" });
-    wrap.appendChild(console);
+    // Tab bar — Logs | Preview
+    const tabBar = el("div", { style: { display: "flex", gap: "0.25rem", marginBottom: "0.75rem", borderBottom: "1px solid var(--border)" } });
+    const logsTab = el("button", { class: "build-tab-btn active", "data-tab": "logs", style: { padding: "0.4rem 1rem", fontSize: "0.8rem", fontWeight: "500", border: "none", borderBottom: "2px solid var(--primary)", background: "none", cursor: "pointer", color: "var(--primary)" } }, "Logs");
+    logsTab.addEventListener("click", () => switchTab("logs"));
+    const previewTab = el("button", { class: "build-tab-btn", "data-tab": "preview", style: { padding: "0.4rem 1rem", fontSize: "0.8rem", fontWeight: "500", border: "none", borderBottom: "2px solid transparent", background: "none", cursor: "pointer", color: "var(--text-muted)" } }, "Preview");
+    previewTab.addEventListener("click", () => switchTab("preview"));
+    tabBar.appendChild(logsTab);
+    tabBar.appendChild(previewTab);
+    wrap.appendChild(tabBar);
+
+    // Logs panel
+    const logsPanel = el("div", { id: "build-logs-panel", style: { flex: "1", display: "flex", flexDirection: "column", minHeight: "0" } });
+    const console = el("div", { class: "log-view", id: "build-console", style: { flex: "1" } });
+    logsPanel.appendChild(console);
+    wrap.appendChild(logsPanel);
+
+    // Preview panel (initially hidden)
+    const previewPanel = el("div", { id: "build-preview-panel", style: { flex: "1", display: "none", flexDirection: "column", minHeight: "0" } });
+    const previewToolbar = el("div", { style: { display: "flex", gap: "0.5rem", alignItems: "center", marginBottom: "0.5rem", fontSize: "0.8rem" } });
+    previewToolbar.appendChild(el("span", { style: { color: "var(--text-muted)" } }, "Preview URL:"));
+    const refreshPreviewBtn = el("button", { class: "btn btn-ghost btn-sm" }, svgIcon("M21 12a9 9 0 1 1-9-9c2.39 0 4.68.94 6.36 2.64L21 9", 14), " Refresh");
+    refreshPreviewBtn.addEventListener("click", () => {
+      const iframe = document.getElementById("preview-iframe");
+      const urlInput = document.getElementById("preview-url");
+      if (iframe && urlInput) {
+        iframe.src = urlInput.value;
+      }
+    });
+    previewToolbar.appendChild(refreshPreviewBtn);
+    const openInBrowserBtn = el("button", { class: "btn btn-ghost btn-sm" }, "Open in Browser");
+    openInBrowserBtn.addEventListener("click", () => {
+      const urlInput = document.getElementById("preview-url");
+      if (urlInput) invoke("open_external", { url: urlInput.value });
+    });
+    previewToolbar.appendChild(openInBrowserBtn);
+    previewPanel.appendChild(previewToolbar);
+
+    const iframeWrap = el("div", { style: { flex: "1", border: "1px solid var(--border)", borderRadius: "8px", overflow: "hidden", background: "#fff" } });
+    const iframe = el("iframe", {
+      id: "preview-iframe",
+      src: "http://localhost:3000",
+      style: { width: "100%", height: "100%", border: "none" },
+    });
+    iframeWrap.appendChild(iframe);
+    previewPanel.appendChild(iframeWrap);
+
+    wrap.appendChild(previewPanel);
 
     view.appendChild(wrap);
 

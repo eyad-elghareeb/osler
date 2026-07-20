@@ -50,6 +50,8 @@ import {
   ArrowUpDown,
   Camera,
   RefreshCw,
+  Download,
+  PackageOpen,
 } from "lucide-react";
 import { loadAllContent, loadContentByUid, ENGINE_META, flattenTree } from "@/lib/osler/content";
 import { toast } from "@/hooks/use-toast";
@@ -136,8 +138,19 @@ import { useI18n } from "./i18n-provider";
 import { NavigationStack } from "./navigation-stack";
 import { FolderTreeNav } from "./folder-tree-nav";
 import type { StringKey } from "@/lib/osler/i18n";
-import { generateResultsPdf, generateDashboardPdf, downloadPdf, type FullQuestion } from "@/lib/osler/pdf";
+import { generateResultsPdf, generateDashboardPdf, generateQuizCompilationPdf, downloadPdf, type FullQuestion, type PdfExportConfig } from "@/lib/osler/pdf";
 import { PdfExportDialog, type PdfExportOptions } from "./pdf-export-dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
+import { ScrollArea } from "@/components/ui/scroll-area";
 
 const LETTERS = ["A", "B", "C", "D", "E", "F", "G", "H"];
 const ARABIC_LETTERS = ["أ", "ب", "ج", "د", "ه", "و", "ز", "ح", "ط", "ي"];
@@ -1018,6 +1031,16 @@ function HomeView({
   const [, force] = React.useReducer((x) => x + 1, 0);
   const { t } = useI18n();
   const [savedSessions, setSavedSessions] = React.useState<SavedSession[]>([]);
+  const [exportDialogOpen, setExportDialogOpen] = React.useState(false);
+  const [contextMenuNode, setContextMenuNode] = React.useState<ContentTreeNode | null>(null);
+  const [contextMenuPos, setContextMenuPos] = React.useState<{ x: number; y: number } | null>(null);
+
+  const handleContextMenu = React.useCallback((e: React.MouseEvent, node: ContentTreeNode) => {
+    e.preventDefault();
+    setContextMenuNode(node);
+    setContextMenuPos({ x: e.clientX, y: e.clientY });
+    setExportDialogOpen(true);
+  }, []);
 
   React.useEffect(() => {
     loadAllContent()
@@ -1050,17 +1073,7 @@ function HomeView({
 
   return (
     <div className="flex h-full overflow-hidden bg-background">
-      <div className="flex-1 min-w-0 flex flex-col overflow-hidden">
-        {/* Page header — fixed at top */}
-        <div className="shrink-0 max-w-7xl mx-auto w-full px-4 md:px-6 lg:px-8 pt-6 md:pt-8">
-          <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-foreground">
-            QBank Studio
-          </h1>
-          <p className="text-sm text-muted-foreground mt-1 max-w-2xl">
-            Browse premade content packs or build a custom test with UWorld-style tools.
-          </p>
-        </div>
-
+      <div className="flex-1 min-w-0 flex flex-col overflow-hidden pt-6 md:pt-8">
         {/* Tab bar — fixed below header */}
         <div className="shrink-0 border-b border-border px-4 md:px-6 lg:px-8 w-full max-w-7xl mx-auto">
           <nav className="-mb-px flex gap-0 justify-center">
@@ -1100,6 +1113,7 @@ function HomeView({
               data={data}
               onOpenPack={onOpenPack}
               onPickForCreateTest={onPickForCreateTest}
+              onContextMenu={handleContextMenu}
             />
           )}
           {homeTab === "create" && (
@@ -1135,7 +1149,305 @@ function HomeView({
           )}
         </div>
       </div>
+
+      {/* Right-click export dialog for content packs */}
+      {exportDialogOpen && contextMenuNode && (
+        <PackExportDialog
+          open={exportDialogOpen}
+          onOpenChange={setExportDialogOpen}
+          node={contextMenuNode}
+          items={data?.items ?? []}
+        />
+      )}
     </div>
+  );
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+ * PACK EXPORT DIALOG — Export selected pack(s) as a compiled PDF booklet
+ * ───────────────────────────────────────────────────────────────────────── */
+function PackExportDialog({
+  open,
+  onOpenChange,
+  node,
+  items,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  node: ContentTreeNode;
+  items: PackEntry[];
+}) {
+  const { t } = useI18n();
+  const [styleMode, setStyleMode] = React.useState<"standard" | "compact" | "mcqnotes">("standard");
+  const [answersMode, setAnswersMode] = React.useState<PdfExportOptions["answersMode"]>("endbook");
+  const [showExplanations, setShowExplanations] = React.useState(true);
+  const [twoCol, setTwoCol] = React.useState(false);
+  const [fontSize, setFontSize] = React.useState<"small" | "medium" | "large">("medium");
+  const [fontType, setFontType] = React.useState<"serif" | "sans">("serif");
+  const [includeCover, setIncludeCover] = React.useState(true);
+  const [exporting, setExporting] = React.useState(false);
+  const [selectedUids, setSelectedUids] = React.useState<Set<string>>(new Set());
+
+  // Collect all leaf (pack) nodes under the context-menu target.
+  const collectLeafPacks = React.useCallback((n: ContentTreeNode): ContentTreeNode[] => {
+    if (n.items.length === 0) return [n];
+    return n.items.flatMap(collectLeafPacks);
+  }, []);
+
+  const leafPacks = React.useMemo(() => collectLeafPacks(node), [node, collectLeafPacks]);
+
+  // Pre-select all leaf packs on mount.
+  React.useEffect(() => {
+    if (open) setSelectedUids(new Set(leafPacks.map((p) => p.uid)));
+  }, [open, leafPacks]);
+
+  const togglePack = (uid: string) => {
+    setSelectedUids((prev) => {
+      const next = new Set(prev);
+      if (next.has(uid)) next.delete(uid);
+      else next.add(uid);
+      return next;
+    });
+  };
+
+  const handleExport = async () => {
+    setExporting(true);
+    try {
+      const selected = leafPacks.filter((p) => selectedUids.has(p.uid));
+      const chapters = selected
+        .map((p) => {
+          const entry = items.find((i) => i.node.uid === p.uid);
+          if (!entry?.content) return null;
+          const questions = toQuestions(entry.content);
+          return {
+            title: p.title,
+            description: entry.content.meta.description ?? "",
+            questions: questions.map((q) => ({
+              stem: q.stem,
+              choices: q.choices ?? [],
+              correct: q.correct ?? 0,
+              explanation: q.explanation ?? "",
+              difficulty: (q as any).difficulty,
+              tags: (q as any).tags,
+            })),
+          };
+        })
+        .filter(Boolean) as PdfExportConfig["chapters"];
+
+      if (chapters.length === 0) {
+        toast({ title: "No packs selected", variant: "destructive" });
+        setExporting(false);
+        return;
+      }
+
+      const cfg: PdfExportConfig = {
+        page: { pageSize: "a4", orientation: "portrait" },
+        cover: { title: node.title, subtitle: `${chapters.length} pack(s) · ${chapters.reduce((a, c) => a + c.questions.length, 0)} questions` },
+        includeCover,
+        styleMode,
+        answersMode,
+        showExplanations,
+        twoCol,
+        fontSize,
+        fontType,
+        chapters,
+      };
+      const doc = generateQuizCompilationPdf(cfg);
+      downloadPdf(doc, node.title.replace(/[^a-zA-Z0-9\s\-_]/g, "").trim() || "export");
+      toast({ title: "PDF exported successfully" });
+    } catch (e) {
+      toast({ title: "Export failed", description: String(e), variant: "destructive" });
+    } finally {
+      setExporting(false);
+      onOpenChange(false);
+    }
+  };
+
+  function toQuestions(content: AnyContent): Array<{ stem: string; choices?: string[]; correct?: number; explanation?: string }> {
+    const c = content as any;
+    if (c.questions) return c.questions;
+    if (c.passages) {
+      return c.passages.flatMap((p: any) => (p.questions ?? []).map((q: any) => ({ ...q, stem: `${p.title ? p.title + " — " : ""}${q.stem}` })));
+    }
+    if (c.prompts) return c.prompts;
+    return [];
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-lg max-h-[85vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Download className="size-5 text-primary" />
+            Export PDF — {node.title}
+          </DialogTitle>
+          <DialogDescription>
+            Select packs to include in the compiled PDF booklet.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-4 py-2">
+          {/* Pack selection */}
+          <div className="space-y-1.5">
+            <Label className="text-xs">Packs ({leafPacks.length})</Label>
+            <div className="border border-border rounded-lg max-h-48 overflow-y-auto medos-scroll divide-y divide-border">
+              {leafPacks.map((p) => {
+                const entry = items.find((i) => i.node.uid === p.uid);
+                const qCount = entry?.content ? toQuestions(entry.content).length : 0;
+                return (
+                  <label
+                    key={p.uid}
+                    className="flex items-center gap-3 px-3 py-2 cursor-pointer hover:bg-muted/40 transition-colors"
+                  >
+                    <Checkbox
+                      checked={selectedUids.has(p.uid)}
+                      onCheckedChange={() => togglePack(p.uid)}
+                    />
+                    <div className="flex-1 min-w-0">
+                      <div className="text-sm font-medium truncate">{p.title}</div>
+                      <div className="text-xs text-muted-foreground">{qCount} questions</div>
+                    </div>
+                  </label>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Style mode */}
+          <div className="space-y-1.5">
+            <Label className="text-xs">Style</Label>
+            <div className="flex gap-1.5 flex-wrap">
+              {(["standard", "compact", "mcqnotes"] as const).map((m) => (
+                <button
+                  key={m}
+                  type="button"
+                  onClick={() => { haptic("selection"); setStyleMode(m); }}
+                  className={cn(
+                    "px-3 h-7 rounded-full text-xs font-medium transition-colors",
+                    styleMode === m ? "bg-primary text-primary-foreground" : "bg-muted/60 text-muted-foreground hover:text-foreground"
+                  )}
+                >
+                  {m === "standard" ? "Standard" : m === "compact" ? "Compact" : "MCQ Notes"}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Answers mode */}
+          <div className="space-y-1.5">
+            <Label className="text-xs">Answers</Label>
+            <div className="flex gap-1.5 flex-wrap">
+              {(["inline", "endchapter", "endbook", "none"] as const).map((m) => (
+                <button
+                  key={m}
+                  type="button"
+                  onClick={() => { haptic("selection"); setAnswersMode(m); }}
+                  className={cn(
+                    "px-3 h-7 rounded-full text-xs font-medium transition-colors capitalize",
+                    answersMode === m ? "bg-primary text-primary-foreground" : "bg-muted/60 text-muted-foreground hover:text-foreground"
+                  )}
+                >
+                  {m === "endbook" ? "End of book" : m === "endchapter" ? "Per chapter" : m === "inline" ? "Inline" : "None"}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Toggles */}
+          <div className="flex items-center justify-between">
+            <Label className="text-xs">Show explanations</Label>
+            <button
+              type="button"
+              onClick={() => { haptic("selection"); setShowExplanations(!showExplanations); }}
+              className={cn(
+                "w-10 h-5.5 rounded-full transition-colors relative",
+                showExplanations ? "bg-primary" : "bg-muted"
+              )}
+            >
+              <span className={cn("absolute top-0.5 size-4.5 rounded-full bg-white transition-transform", showExplanations ? "left-5" : "left-0.5")} />
+            </button>
+          </div>
+
+          <div className="flex items-center justify-between">
+            <Label className="text-xs">Include cover page</Label>
+            <button
+              type="button"
+              onClick={() => { haptic("selection"); setIncludeCover(!includeCover); }}
+              className={cn(
+                "w-10 h-5.5 rounded-full transition-colors relative",
+                includeCover ? "bg-primary" : "bg-muted"
+              )}
+            >
+              <span className={cn("absolute top-0.5 size-4.5 rounded-full bg-white transition-transform", includeCover ? "left-5" : "left-0.5")} />
+            </button>
+          </div>
+
+          <div className="flex items-center justify-between">
+            <Label className="text-xs">Two-column layout</Label>
+            <button
+              type="button"
+              onClick={() => { haptic("selection"); setTwoCol(!twoCol); }}
+              className={cn(
+                "w-10 h-5.5 rounded-full transition-colors relative",
+                twoCol ? "bg-primary" : "bg-muted"
+              )}
+            >
+              <span className={cn("absolute top-0.5 size-4.5 rounded-full bg-white transition-transform", twoCol ? "left-5" : "left-0.5")} />
+            </button>
+          </div>
+
+          {/* Font size */}
+          <div className="space-y-1.5">
+            <Label className="text-xs">Font size</Label>
+            <div className="flex gap-1.5">
+              {(["small", "medium", "large"] as const).map((sz) => (
+                <button
+                  key={sz}
+                  type="button"
+                  onClick={() => { haptic("selection"); setFontSize(sz); }}
+                  className={cn(
+                    "px-2.5 h-6 rounded-md text-xs font-medium transition-colors capitalize",
+                    fontSize === sz ? "bg-primary text-primary-foreground" : "bg-muted/60 text-muted-foreground"
+                  )}
+                >
+                  {sz}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Font type */}
+          <div className="space-y-1.5">
+            <Label className="text-xs">Font type</Label>
+            <div className="flex gap-1.5">
+              {(["serif", "sans"] as const).map((ft) => (
+                <button
+                  key={ft}
+                  type="button"
+                  onClick={() => { haptic("selection"); setFontType(ft); }}
+                  className={cn(
+                    "px-2.5 h-6 rounded-md text-xs font-medium transition-colors capitalize",
+                    fontType === ft ? "bg-primary text-primary-foreground" : "bg-muted/60 text-muted-foreground"
+                  )}
+                >
+                  {ft}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        <DialogFooter>
+          <Button variant="outline" onClick={() => onOpenChange(false)} className="rounded-xl">
+            Cancel
+          </Button>
+          <Button onClick={handleExport} disabled={exporting || selectedUids.size === 0} className="rounded-xl">
+            <Download className="size-4 mr-1.5" />
+            {exporting ? "Generating…" : "Export PDF"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -1160,11 +1472,13 @@ function PackCard({
   content,
   index,
   onOpenPack,
+  onContextMenu,
 }: {
   node: ContentTreeNode;
   content: AnyContent;
   index: number;
   onOpenPack?: (item: ContentTreeNode) => void;
+  onContextMenu?: (e: React.MouseEvent, item: ContentTreeNode) => void;
 }) {
   const { t, rtl } = useI18n();
   const meta = ENGINE_META[node.type as EngineType];
@@ -1199,6 +1513,12 @@ function PackCard({
       role="button"
       tabIndex={0}
       onClick={() => onOpenPack?.(node)}
+      onContextMenu={(e) => {
+        if (onContextMenu) {
+          e.preventDefault();
+          onContextMenu(e, node);
+        }
+      }}
       onKeyDown={(e) => {
         if (e.key === "Enter" || e.key === " ") {
           e.preventDefault();
@@ -1300,11 +1620,13 @@ function ContentTab({
   data,
   onOpenPack,
   onPickForCreateTest,
+  onContextMenu,
 }: {
   data: { items: PackEntry[]; trees: Record<string, ContentTreeNode[]> } | null;
   onOpenPack?: (item: ContentTreeNode) => void;
   /** P1-2: leaf pack click hands off to Create Test instead of starting a quiz. */
   onPickForCreateTest?: (node: ContentTreeNode) => void;
+  onContextMenu?: (e: React.MouseEvent, item: ContentTreeNode) => void;
 }) {
   const { t, rtl, contentFilter } = useI18n();
   const [selectedFolderIdx, setSelectedFolderIdx] = React.useState<number | null>(null);
@@ -1577,7 +1899,7 @@ function ContentTab({
             }
 
             // Leaf — render as a pack card (same pattern as flashcard leaf)
-            return <PackCard key={node.uid} node={node} content={contentByUid.get(node.uid)!} index={idx} onOpenPack={handleNodeClick} />;
+            return <PackCard key={node.uid} node={node} content={contentByUid.get(node.uid)!} index={idx} onOpenPack={handleNodeClick} onContextMenu={onContextMenu} />;
           })}
         </div>
       )}
@@ -6771,21 +7093,41 @@ function ResultsView({
               return (
                 <div
                   key={q.id}
-                  className="flex items-center gap-3 p-3 rounded-md border border-border bg-card"
+                  className="flex items-center gap-3 p-3 rounded-md border border-border bg-card justify-between"
                 >
-                  <div
-                    className={cn(
-                      "w-7 h-7 rounded-full flex items-center justify-center text-xs font-semibold shrink-0",
-                      isCorrect
-                        ? "bg-blue-500/15 text-blue-500"
-                        : submittedQ
-                        ? "bg-red-500/15 text-red-500"
-                        : "bg-muted text-muted-foreground"
-                    )}
-                  >
-                    {submittedQ ? (isCorrect ? "✓" : "✗") : i + 1}
+                  <div className="flex items-center gap-3 flex-1 min-w-0">
+                    <div
+                      className={cn(
+                        "w-7 h-7 rounded-full flex items-center justify-center text-xs font-semibold shrink-0",
+                        isCorrect
+                          ? "bg-blue-500/15 text-blue-500"
+                          : submittedQ
+                          ? "bg-red-500/15 text-red-500"
+                          : "bg-muted text-muted-foreground"
+                      )}
+                    >
+                      {submittedQ ? (isCorrect ? "✓" : "✗") : i + 1}
+                    </div>
+                    <p className="text-xs line-clamp-2 flex-1">{q.stem}</p>
                   </div>
-                  <p className="text-xs line-clamp-2 flex-1">{q.stem}</p>
+                  {isMCQ && submittedQ && (
+                    <div className="text-[11px] shrink-0 font-medium ml-2">
+                      {isCorrect ? (
+                        <span className="text-success">
+                          {t("qbank.explanation.correctAnswer", { letter: choiceLetter(q.correct, item.lang) })}
+                        </span>
+                      ) : (
+                        <span className="flex flex-col sm:flex-row gap-1 sm:gap-2">
+                          <span className="text-destructive">
+                            {t("qbank.explanation.yourAnswer", { letter: ans !== undefined ? choiceLetter(ans, item.lang) : "—" })}
+                          </span>
+                          <span className="text-success">
+                            ({t("qbank.explanation.correctAnswer", { letter: choiceLetter(q.correct, item.lang) })})
+                          </span>
+                        </span>
+                      )}
+                    </div>
+                  )}
                 </div>
               );
             })}

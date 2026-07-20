@@ -29,12 +29,14 @@ export interface PdfExportOptions {
   author: string;
   includeCover: boolean;
   page: PdfPageConfig;
-  styleMode: "standard" | "styled" | "compact" | "detailed" | "mcqnotes";
+  styleMode: "standard" | "compact" | "mcqnotes";
   answersMode: "inline" | "endchapter" | "endbook" | "none";
   showExplanations: boolean;
   twoCol: boolean;
   showScoreSummary?: boolean;
   showReview?: boolean;
+  fontSize?: "small" | "medium" | "large";
+  fontType?: "serif" | "sans";
 }
 
 interface PdfExportDialogProps {
@@ -46,7 +48,7 @@ interface PdfExportDialogProps {
   onExport: (options: PdfExportOptions) => void | Promise<void>;
 }
 
-const STYLE_MODES = ["standard", "styled", "compact", "detailed", "mcqnotes"] as const;
+const STYLE_MODES = ["standard", "compact", "mcqnotes"] as const;
 const ANSWER_MODES = ["inline", "endchapter", "endbook", "none"] as const;
 const PAGE_SIZES = ["a4", "a3", "a5", "letter"] as const;
 
@@ -65,12 +67,14 @@ export function PdfExportDialog({
   const [includeCover, setIncludeCover] = React.useState(true);
   const [pageSize, setPageSize] = React.useState<"a4" | "a3" | "a5" | "letter">("a4");
   const [orientation, setOrientation] = React.useState<"portrait" | "landscape">("portrait");
-  const [styleMode, setStyleMode] = React.useState<"standard" | "styled" | "compact" | "detailed" | "mcqnotes">("styled");
+  const [styleMode, setStyleMode] = React.useState<"standard" | "compact" | "mcqnotes">("standard");
   const [answersMode, setAnswersMode] = React.useState<PdfExportOptions["answersMode"]>("endbook");
   const [showExplanations, setShowExplanations] = React.useState(true);
   const [twoCol, setTwoCol] = React.useState(false);
   const [showScoreSummary, setShowScoreSummary] = React.useState(true);
   const [showReview, setShowReview] = React.useState(true);
+  const [fontSize, setFontSize] = React.useState<"small" | "medium" | "large">("medium");
+  const [fontType, setFontType] = React.useState<"serif" | "sans">("serif");
   const [exporting, setExporting] = React.useState(false);
   const [showAdvanced, setShowAdvanced] = React.useState(false);
 
@@ -97,6 +101,8 @@ export function PdfExportDialog({
         twoCol,
         showScoreSummary,
         showReview,
+        fontSize,
+        fontType,
       });
     } finally {
       setExporting(false);
@@ -106,9 +112,7 @@ export function PdfExportDialog({
 
   const styleLabels: Record<string, () => string> = {
     standard: () => t("pdf.style.standard"),
-    styled: () => t("pdf.style.styled"),
     compact: () => t("pdf.style.compact"),
-    detailed: () => t("pdf.style.detailed"),
     mcqnotes: () => t("pdf.style.mcqnotes"),
   };
 
@@ -278,6 +282,50 @@ export function PdfExportDialog({
                       )}
                     >
                       {o === "portrait" ? t("pdf.portrait") : t("pdf.landscape")}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Font size option */}
+              <div className="space-y-1.5">
+                <Label className="text-xs">{t("pdf.fontSize")}</Label>
+                <div className="flex gap-1.5">
+                  {(["small", "medium", "large"] as const).map((sz) => (
+                    <button
+                      key={sz}
+                      type="button"
+                      onClick={() => { haptic("selection"); setFontSize(sz); }}
+                      className={cn(
+                        "px-2.5 h-6 rounded-md text-xs font-medium transition-colors capitalize",
+                        fontSize === sz
+                          ? "bg-primary text-primary-foreground"
+                          : "bg-muted/60 text-muted-foreground"
+                      )}
+                    >
+                      {sz === "small" ? t("pdf.fontSize.small") : sz === "large" ? t("pdf.fontSize.large") : t("pdf.fontSize.medium")}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Font type option */}
+              <div className="space-y-1.5">
+                <Label className="text-xs">{t("pdf.fontType")}</Label>
+                <div className="flex gap-1.5">
+                  {(["serif", "sans"] as const).map((ft) => (
+                    <button
+                      key={ft}
+                      type="button"
+                      onClick={() => { haptic("selection"); setFontType(ft); }}
+                      className={cn(
+                        "px-2.5 h-6 rounded-md text-xs font-medium transition-colors capitalize",
+                        fontType === ft
+                          ? "bg-primary text-primary-foreground"
+                          : "bg-muted/60 text-muted-foreground"
+                      )}
+                    >
+                      {ft === "serif" ? t("pdf.fontType.serif") : t("pdf.fontType.sans")}
                     </button>
                   ))}
                 </div>
