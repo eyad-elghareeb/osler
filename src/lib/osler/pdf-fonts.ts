@@ -1,100 +1,116 @@
+/**
+ * Loads and registers the webfonts used by the Osler PDF engine:
+ *   · Poppins  — headings, labels, running chrome (Latin)
+ *   · Lora     — body serif (Latin)
+ *   · Cairo    — Arabic (headings + body)
+ *
+ * Fonts are fetched once, cached as base64 in memory, and registered into
+ * every new jsPDF document. `loadPdfFonts()` is safe to call repeatedly or
+ * concurrently — a single in-flight request is shared by all callers.
+ */
+
 import type { jsPDF } from "jspdf";
 
-interface FontCache {
-  [key: string]: string;
+interface FontFile {
+  family: string;
+  style: "normal" | "italic" | "bold" | "bolditalic";
+  path: string;
 }
 
+const FONT_FILES: FontFile[] = [
+  { family: "Poppins", style: "normal", path: "/fonts/poppins/Poppins-Regular.ttf" },
+  { family: "Poppins", style: "bold", path: "/fonts/poppins/Poppins-Bold.ttf" },
+  { family: "Poppins", style: "italic", path: "/fonts/poppins/Poppins-Italic.ttf" },
+  { family: "Poppins", style: "bolditalic", path: "/fonts/poppins/Poppins-BoldItalic.ttf" },
+  { family: "Poppins-Medium", style: "normal", path: "/fonts/poppins/Poppins-Medium.ttf" },
+  { family: "Poppins-Light", style: "normal", path: "/fonts/poppins/Poppins-Light.ttf" },
+  { family: "Poppins-Light", style: "italic", path: "/fonts/poppins/Poppins-LightItalic.ttf" },
+  { family: "Lora", style: "normal", path: "/fonts/lora/Lora-Regular.ttf" },
+  { family: "Lora", style: "italic", path: "/fonts/lora/Lora-Italic.ttf" },
+  { family: "Cairo", style: "normal", path: "/fonts/cairo/Cairo-Regular.ttf" },
+  { family: "Cairo", style: "bold", path: "/fonts/cairo/Cairo-Bold.ttf" },
+];
+
+type FontCache = Map<string, string>; // path -> base64
+
 let cache: FontCache | null = null;
+let inFlight: Promise<void> | null = null;
 
-const FONT_PATHS = {
-  "Poppins-Regular.ttf": "/fonts/poppins/Poppins-Regular.ttf",
-  "Poppins-Bold.ttf": "/fonts/poppins/Poppins-Bold.ttf",
-  "Poppins-Italic.ttf": "/fonts/poppins/Poppins-Italic.ttf",
-  "Poppins-BoldItalic.ttf": "/fonts/poppins/Poppins-BoldItalic.ttf",
-  "Poppins-Medium.ttf": "/fonts/poppins/Poppins-Medium.ttf",
-  "Poppins-Light.ttf": "/fonts/poppins/Poppins-Light.ttf",
-  "Poppins-LightItalic.ttf": "/fonts/poppins/Poppins-LightItalic.ttf",
-  "Cairo-Regular.ttf": "/fonts/cairo/Cairo-Regular.ttf",
-  "Cairo-Bold.ttf": "/fonts/cairo/Cairo-Bold.ttf",
-};
+/**
+ * This module only ever runs in the browser (every caller is a "use client"
+ * component), so a plain `btoa` pass is enough — no FileReader round-trip,
+ * no Node fallback to carry around.
+ */
+function bufferToBase64(buf: ArrayBuffer): string {
+  const bytes = new Uint8Array(buf);
+  let binary = "";
+  const chunkSize = 0x8000;
+  for (let i = 0; i < bytes.length; i += chunkSize) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + chunkSize));
+  }
+  return btoa(binary);
+}
 
-async function fetchBase64(url: string): Promise<string> {
-  const res = await fetch(url);
-  const blob = await res.blob();
-  return new Promise<string>((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => {
-      const data = reader.result as string;
-      resolve(data.split(",")[1]);
-    };
-    reader.onerror = () => reject(new Error("Failed to read font blob"));
-    reader.readAsDataURL(blob);
-  });
+async function fetchFontBase64(path: string): Promise<string | null> {
+  try {
+    const res = await fetch(path);
+    if (!res.ok) return null;
+    const buf = await res.arrayBuffer();
+    return bufferToBase64(buf);
+  } catch {
+    return null;
+  }
 }
 
 async function loadAllFonts(): Promise<FontCache> {
-  const c: FontCache = {};
-  const entries = Object.entries(FONT_PATHS);
-  const results = await Promise.allSettled(
-    entries.map(async ([name, path]) => {
-      c[name] = await fetchBase64(path);
-    })
+  const next: FontCache = new Map();
+  await Promise.all(
+    FONT_FILES.map(async (f) => {
+      const b64 = await fetchFontBase64(f.path);
+      if (b64) next.set(f.path, b64);
+    }),
   );
-  const failed = results.filter((r) => r.status === "rejected").length;
-  if (failed > 0) console.warn(`[pdf] ${failed}/${entries.length} fonts failed to load`);
-  return c;
+  return next;
 }
 
+/**
+ * Fetches and caches every PDF webfont. Safe to call from multiple places
+ * (e.g. on app mount and again right before an export) — concurrent calls
+ * share one in-flight request, and once fonts are cached this resolves
+ * immediately.
+ */
 export async function loadPdfFonts(): Promise<void> {
   if (cache) return;
-  cache = await loadAllFonts();
-}
-
-export function registerPdfFonts(doc: jsPDF): boolean {
-  if (!cache) return false;
-  try {
-    if (cache["Poppins-Regular.ttf"]) {
-      doc.addFileToVFS("Poppins-Regular.ttf", cache["Poppins-Regular.ttf"]);
-      doc.addFont("Poppins-Regular.ttf", "Poppins", "normal");
-    }
-    if (cache["Poppins-Bold.ttf"]) {
-      doc.addFileToVFS("Poppins-Bold.ttf", cache["Poppins-Bold.ttf"]);
-      doc.addFont("Poppins-Bold.ttf", "Poppins", "bold");
-    }
-    if (cache["Poppins-Italic.ttf"]) {
-      doc.addFileToVFS("Poppins-Italic.ttf", cache["Poppins-Italic.ttf"]);
-      doc.addFont("Poppins-Italic.ttf", "Poppins", "italic");
-    }
-    if (cache["Poppins-BoldItalic.ttf"]) {
-      doc.addFileToVFS("Poppins-BoldItalic.ttf", cache["Poppins-BoldItalic.ttf"]);
-      doc.addFont("Poppins-BoldItalic.ttf", "Poppins", "bolditalic");
-    }
-    if (cache["Poppins-Medium.ttf"]) {
-      doc.addFileToVFS("Poppins-Medium.ttf", cache["Poppins-Medium.ttf"]);
-      doc.addFont("Poppins-Medium.ttf", "Poppins-Medium", "normal");
-    }
-    if (cache["Poppins-Light.ttf"]) {
-      doc.addFileToVFS("Poppins-Light.ttf", cache["Poppins-Light.ttf"]);
-      doc.addFont("Poppins-Light.ttf", "Poppins-Light", "normal");
-    }
-    if (cache["Poppins-LightItalic.ttf"]) {
-      doc.addFileToVFS("Poppins-LightItalic.ttf", cache["Poppins-LightItalic.ttf"]);
-      doc.addFont("Poppins-LightItalic.ttf", "Poppins-Light", "italic");
-    }
-    if (cache["Cairo-Regular.ttf"]) {
-      doc.addFileToVFS("Cairo-Regular.ttf", cache["Cairo-Regular.ttf"]);
-      doc.addFont("Cairo-Regular.ttf", "Cairo", "normal");
-    }
-    if (cache["Cairo-Bold.ttf"]) {
-      doc.addFileToVFS("Cairo-Bold.ttf", cache["Cairo-Bold.ttf"]);
-      doc.addFont("Cairo-Bold.ttf", "Cairo", "bold");
-    }
-    return true;
-  } catch {
-    return false;
-  }
+  if (inFlight) return inFlight;
+  inFlight = loadAllFonts()
+    .then((result) => {
+      cache = result;
+    })
+    .finally(() => {
+      inFlight = null;
+    });
+  return inFlight;
 }
 
 export function pdfFontsLoaded(): boolean {
   return cache !== null;
+}
+
+/**
+ * Registers every cached font family/style into a jsPDF document.
+ * Returns `true` if fonts were available to register, `false` if the
+ * cache hasn't finished loading yet (caller falls back to core fonts).
+ */
+export function registerPdfFonts(doc: jsPDF): boolean {
+  if (!cache) return false;
+  let any = false;
+  for (const f of FONT_FILES) {
+    const b64 = cache.get(f.path);
+    if (!b64) continue;
+    const vfsName = f.path.split("/").pop() as string;
+    doc.addFileToVFS(vfsName, b64);
+    doc.addFont(vfsName, f.family, f.style);
+    any = true;
+  }
+  return any;
 }

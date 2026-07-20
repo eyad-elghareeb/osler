@@ -1,85 +1,115 @@
 /**
- * Osler PDF Generator — matched to QuizTool premium ReportLab design.
+ * Osler PDF Engine
+ * ─────────────────
+ * A single, self-contained module that produces every PDF export Osler
+ * offers (quiz results, dashboard performance reports, library articles,
+ * and multi-chapter quiz booklets) from one shared design system.
  *
- * Design principles (mirrored from QuizTool pdf_generator.py §1–§16):
- *   · No side-stripe borders — full hairline outline or bg tint only
- *   · ALL-CAPS labels with charSpace tracking
- *   · Type hierarchy ≥1.25× ratio per step
- *   · 4pt spacing grid: 4 | 8 | 12 | 16 | 24 | 36 | 48
- *   · Color 60/30/10: navy dominates, cobalt/emerald carry structure, gold is accent
- *   · Frame-based two-column layout
- *   · Hyperlinked TOC with PDF page anchors
- *   · KeepTogether orphan prevention for question blocks
+ * Design principles
+ *   · Editorial premium cover — soft vignette, hairline double frame,
+ *     corner registration ticks, a drawn brand mark, restrained gold accents.
+ *   · Quiet running chrome — a slim header rule + tracked-caps title/section
+ *     pill, a footer with real "NN / total" pagination and a brand line.
+ *   · One spacing/type system: `typeScale` adapts to page size (A3 vs A5),
+ *     `density` adapts to style mode (compact vs. spacious) — the two never
+ *     get conflated, so every option in the export dialog visibly does
+ *     something on every document type.
+ *   · All on-page text is routed through a single drawing primitive that
+ *     strips markdown, normalizes smart punctuation, and switches to Cairo
+ *     for Arabic — no direct calls to the underlying library, so nothing
+ *     can silently skip normalization.
+ *   · Icons (check / cross / bullet) are drawn as small vector strokes, not
+ *     Unicode glyphs — core PDF fonts don't reliably carry glyphs like ✓.
+ *   · Real two-column flow: content actually fills the left column, then
+ *     the right, then a new page — not a cosmetic narrower margin.
+ *   · TOC hyperlinks are computed with a two-pass render (a silent measure
+ *     pass discovers real page numbers, a second pass renders with them)
+ *     rather than an assumed page count, so links are correct regardless of
+ *     how long each chapter runs.
+ *   · Native PDF outline (bookmarks) for Cover / Contents / each chapter /
+ *     Answer Key, plus document metadata (title/author/creator).
  *
- * Typography: Poppins (headings/labels) + Times (body) + Courier (mono)
- * When Poppins unavailable, falls back to Helvetica.
- * When Arabic detected, uses Cairo (loaded separately).
+ * Typography: Poppins (headings, labels, UI chrome) + Lora (body serif) +
+ * Cairo (Arabic). Falls back to core Helvetica/Times when a webfont hasn't
+ * finished loading.
  */
 
 import { jsPDF } from "jspdf";
 import { convertArabic } from "arabic-reshaper";
-import { registerPdfFonts } from "@/lib/osler/pdf-fonts";
+import { registerPdfFonts } from "./pdf-fonts";
 
 // ═══════════════════════════════════════════════════════════════
-// § 1  COLOR PALETTE  —  60 / 30 / 10 strategy
-//     Exact values from QuizTool pdf_generator.py §2
+// § 1  DESIGN TOKENS
 // ═══════════════════════════════════════════════════════════════
-
-export const C = {
-  NAVY:       [11, 30, 51]    as RGB,
-  COBALT:     [26, 58, 92]    as RGB,
-  ROYAL:      [30, 95, 168]   as RGB,
-  PALE_BLUE:  [235, 243, 250] as RGB,
-
-  GOLD:       [201, 146, 10]  as RGB,
-  GOLD_MID:   [232, 169, 18]  as RGB,
-
-  EMERALD:    [10, 92, 54]    as RGB,
-  SAGE:       [24, 133, 90]   as RGB,
-  PALE_GREEN: [230, 245, 237] as RGB,
-  MINT_RULE:  [168, 216, 188] as RGB,
-
-  CHARCOAL:   [26, 26, 46]    as RGB,
-  SLATE:      [58, 69, 84]    as RGB,
-  MUTED:      [107, 122, 141] as RGB,
-  RULE_GRAY:  [208, 216, 228] as RGB,
-  PALE_GRAY:  [244, 246, 249] as RGB,
-
-  LINK:       [21, 101, 192]  as RGB,
-  WHITE:      [255, 255, 255] as RGB,
-
-  COVER_DARK:   [13, 39, 68]  as RGB,
-  COVER_MID:    [15, 48, 96]  as RGB,
-  COVER_LIGHT:  [19, 45, 80]  as RGB,
-  COVER_PILLAR: [20, 48, 78]  as RGB,
-  COVER_GRID:   [24, 48, 74]  as RGB,
-  COVER_WELL:   [28, 61, 96]  as RGB,
-  COVER_FOOTER: [6, 14, 24]   as RGB,
-  COVER_CIRC: [[14, 46, 80], [22, 58, 100], [30, 72, 120]] as [RGB, RGB, RGB],
-
-  HEADER_FG: {
-    questions: [168, 196, 220] as RGB,
-    answers:   [168, 216, 190] as RGB,
-    contents:  [140, 174, 206] as RGB,
-  },
-};
 
 type RGB = [number, number, number];
 
+export const C = {
+  INK: [17, 24, 39] as RGB, // primary heading ink
+  NAVY: [12, 28, 48] as RGB, // brand navy — cover base
+  NAVY_DEEP: [7, 17, 30] as RGB, // vignette edge
+  NAVY_SOFT: [22, 46, 74] as RGB, // vignette center highlight
+  COBALT: [27, 56, 88] as RGB,
+  ROYAL: [32, 89, 156] as RGB,
+  PALE_BLUE: [232, 240, 249] as RGB,
+
+  GOLD: [176, 133, 45] as RGB, // refined foil gold
+  GOLD_SOFT: [214, 184, 128] as RGB, // gold on dark backgrounds
+  GOLD_DEEP: [140, 103, 30] as RGB,
+
+  EMERALD: [15, 94, 62] as RGB,
+  SAGE: [30, 128, 92] as RGB,
+  PALE_GREEN: [230, 244, 238] as RGB,
+
+  CRIMSON: [151, 45, 45] as RGB,
+  PALE_ROSE: [250, 234, 234] as RGB,
+
+  CHARCOAL: [30, 32, 38] as RGB,
+  SLATE: [72, 82, 97] as RGB,
+  MUTED: [121, 131, 147] as RGB,
+  RULE: [223, 228, 236] as RGB,
+  RULE_SOFT: [237, 240, 245] as RGB,
+  PAPER: [249, 249, 247] as RGB,
+  WHITE: [255, 255, 255] as RGB,
+  LINK: [32, 89, 156] as RGB,
+
+  SECTION: {
+    cover: { bg: [255, 255, 255], fg: [255, 255, 255] },
+    contents: { bg: [231, 233, 244], fg: [64, 68, 122] },
+    questions: { bg: [230, 237, 246], fg: [37, 78, 124] },
+    answers: { bg: [227, 242, 235], fg: [17, 100, 68] },
+    report: { bg: [246, 238, 224], fg: [138, 100, 26] },
+    article: { bg: [234, 236, 240], fg: [63, 71, 87] },
+  } as Record<string, { bg: RGB; fg: RGB }>,
+};
+
+type SectionKey = keyof typeof C.SECTION;
+
+/** Style-mode → spacing density. Font sizes never shrink; whitespace does. */
+type StyleMode = "standard" | "styled" | "compact" | "detailed" | "mcqnotes";
+const DENSITY: Record<StyleMode, number> = {
+  standard: 1.0,
+  styled: 1.0,
+  compact: 0.8,
+  detailed: 1.08,
+  mcqnotes: 0.6,
+};
+
 // ═══════════════════════════════════════════════════════════════
-// § 2  SPACING GRID  —  4pt base  +  line-height helper
+// § 2  SPACING GRID
 // ═══════════════════════════════════════════════════════════════
 
-function sp(n: number, scale = 1.0): number {
-  return Math.round(n * 4 * scale * 10) / 10;
+/** 4pt base grid, scaled by density (style mode), never by type size. */
+function sp(n: number, density = 1.0): number {
+  return Math.round(n * 4 * density * 10) / 10;
 }
 
-function lh(sizePt: number, factor = 1.47): number {
+function lh(sizePt: number, factor = 1.45): number {
   return sizePt * factor * 0.3528;
 }
 
 // ═══════════════════════════════════════════════════════════════
-// § 3  HELPERS
+// § 3  TEXT UTILITIES  —  every string reaches the page through these
 // ═══════════════════════════════════════════════════════════════
 
 const LETTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
@@ -95,6 +125,7 @@ function stripMd(text: string): string {
     .trim();
 }
 
+/** Normalize smart punctuation & symbols core PDF fonts can't render. */
 function normalizeText(text: string): string {
   if (!text) return "";
   return text
@@ -107,10 +138,9 @@ function normalizeText(text: string): string {
     .replace(/\u2190/g, "<-")
     .replace(/\u2192/g, "->")
     .replace(/\u2194/g, "<->")
-    .replace(/\u2713/g, "[X]")
-    .replace(/\u2717/g, "[ ]")
-    .replace(/\u25BA/g, ">")
-    .replace(/\u25B6/g, ">")
+    .replace(/\u2713|\u2714/g, "[X]")
+    .replace(/\u2717|\u2718/g, "[ ]")
+    .replace(/\u25BA|\u25B6/g, ">")
     .replace(/\u2002|\u2003|\u00A0/g, " ")
     .trim();
 }
@@ -118,7 +148,7 @@ function normalizeText(text: string): string {
 /** Strip HTML tags, preserving paragraph/heading breaks. */
 function stripHtml(text: string): string {
   if (!text) return "";
-  let s = text
+  const s = text
     .replace(/<br\s*\/?>/gi, "\n")
     .replace(/<\/p>/gi, "\n\n")
     .replace(/<\/h[1-6]>/gi, "\n\n")
@@ -134,10 +164,9 @@ function stripHtml(text: string): string {
   return s.replace(/\n{3,}/g, "\n\n").trim();
 }
 
-/** Detect HTML heading tags in a line. */
 function detectHtmlHeading(line: string): { level: number; text: string } | null {
   const m = line.match(/^<h([2-3])\b[^>]*>(.+?)<\/h[2-3]>/i);
-  if (m) return { level: parseInt(m[1]), text: m[2].replace(/<[^>]+>/g, "") };
+  if (m) return { level: parseInt(m[1], 10), text: m[2].replace(/<[^>]+>/g, "") };
   return null;
 }
 
@@ -153,32 +182,37 @@ function clamp(val: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, val));
 }
 
+/** Small-caps tracking via inter-character spacing (no kerning API in core PDF text). */
+function tracked(text: string): string {
+  return text.split("").join(" ");
+}
+
 // ═══════════════════════════════════════════════════════════════
 // § 4  FONT RESOLUTION
 // ═══════════════════════════════════════════════════════════════
 
 const F = {
-  H:   "helvetica",  // heading bold
-  Hn:  "helvetica",  // heading normal
-  Hl:  "helvetica",  // heading light
-  Hli: "helvetica",  // heading light italic
-  Hm:  "helvetica",  // heading medium
-  B:   "times",      // body normal
-  Bb:  "times",      // body bold
-  Bi:  "times",      // body italic
-  Bbi: "times",      // body bold italic
-  M:   "courier",    // mono normal
-  Mb:  "courier",    // mono bold
+  H: "helvetica", // heading bold
+  Hn: "helvetica", // heading normal
+  Hm: "helvetica", // heading medium
+  Hl: "helvetica", // heading light
+  B: "times", // body normal (serif)
+  Bi: "times", // body italic
+  Bb: "helvetica", // body emphasis (sans, used inline within serif body)
 };
 
 function resolveFonts(doc: jsPDF): void {
   const fl = doc.getFontList();
   if (fl.Poppins) {
-    F.H   = "Poppins";
-    F.Hn  = "Poppins";
-    F.Hl  = fl["Poppins-Light"] ? "Poppins-Light" : "Poppins";
-    F.Hli = fl["Poppins-Light"] ? "Poppins-Light" : "Poppins";
-    F.Hm  = fl["Poppins-Medium"] ? "Poppins-Medium" : "Poppins";
+    F.H = "Poppins";
+    F.Hn = "Poppins";
+    F.Hm = fl["Poppins-Medium"] ? "Poppins-Medium" : "Poppins";
+    F.Hl = fl["Poppins-Light"] ? "Poppins-Light" : "Poppins";
+    F.Bb = fl["Poppins-Medium"] ? "Poppins-Medium" : "Poppins";
+  }
+  if (fl.Lora) {
+    F.B = "Lora";
+    F.Bi = "Lora";
   }
 }
 
@@ -189,8 +223,60 @@ function hs(style: string): string {
   return "normal";
 }
 
+function lerp(a: RGB, b: RGB, t: number): RGB {
+  return [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
+}
+
 // ═══════════════════════════════════════════════════════════════
-// § 5  PAGE LAYOUT
+// § 5  VECTOR ICONS  —  drawn strokes, never relying on Unicode glyphs
+// ═══════════════════════════════════════════════════════════════
+
+function drawCheck(doc: jsPDF, cx: number, cy: number, s: number, color: RGB): void {
+  doc.setDrawColor(...color);
+  doc.setLineWidth(Math.max(0.35, s * 0.22));
+  doc.setLineCap(1);
+  doc.line(cx - s * 0.5, cy + s * 0.02, cx - s * 0.12, cy + s * 0.42);
+  doc.line(cx - s * 0.12, cy + s * 0.42, cx + s * 0.55, cy - s * 0.42);
+  doc.setLineCap(0);
+}
+
+function drawCross(doc: jsPDF, cx: number, cy: number, s: number, color: RGB): void {
+  doc.setDrawColor(...color);
+  doc.setLineWidth(Math.max(0.35, s * 0.2));
+  doc.setLineCap(1);
+  doc.line(cx - s * 0.4, cy - s * 0.4, cx + s * 0.4, cy + s * 0.4);
+  doc.line(cx - s * 0.4, cy + s * 0.4, cx + s * 0.4, cy - s * 0.4);
+  doc.setLineCap(0);
+}
+
+/** A small drawn pulse/heartbeat line inside a hairline circle — Osler's mark. */
+function drawPulseMark(doc: jsPDF, cx: number, cy: number, r: number, ring: RGB, line: RGB): void {
+  doc.setDrawColor(...ring);
+  doc.setLineWidth(Math.max(0.3, r * 0.045));
+  doc.circle(cx, cy, r, "S");
+  const w = r * 1.05;
+  const pts: [number, number][] = [
+    [cx - w, cy],
+    [cx - w * 0.5, cy],
+    [cx - w * 0.24, cy - r * 0.7],
+    [cx + w * 0.02, cy + r * 0.7],
+    [cx + w * 0.28, cy - r * 0.32],
+    [cx + w * 0.5, cy],
+    [cx + w, cy],
+  ];
+  doc.setDrawColor(...line);
+  doc.setLineWidth(Math.max(0.35, r * 0.065));
+  doc.setLineCap(1);
+  doc.setLineJoin(1);
+  for (let i = 0; i < pts.length - 1; i++) {
+    doc.line(pts[i][0], pts[i][1], pts[i + 1][0], pts[i + 1][1]);
+  }
+  doc.setLineCap(0);
+  doc.setLineJoin(0);
+}
+
+// ═══════════════════════════════════════════════════════════════
+// § 6  PAGE LAYOUT
 // ═══════════════════════════════════════════════════════════════
 
 export interface PdfPageConfig {
@@ -199,38 +285,58 @@ export interface PdfPageConfig {
 }
 
 const PAGE_DIMS: Record<string, [number, number]> = {
-  a4: [210, 297], a3: [297, 420], a5: [148, 210], letter: [216, 279],
+  a4: [210, 297],
+  a3: [297, 420],
+  a5: [148, 210],
+  letter: [216, 279],
 };
 
 interface Layout {
-  pw: number; ph: number;
-  ms: number; mt: number; mb: number; gu: number; bh: number;
-  fw: number; cw: number;
-  fs: number; scale: number;
+  pw: number;
+  ph: number;
+  ms: number; // side margin
+  mt: number; // top margin (below header)
+  mb: number; // bottom margin (above footer)
+  gu: number; // column gutter
+  hh: number; // header block height
+  fh: number; // footer block height
+  fw: number; // full content width
+  cw: number; // single-column width in two-col mode
+  typeScale: number; // page-size driven — affects font sizes
+  density: number; // style-mode driven — affects spacing only
 }
 
-function computeLayout(cfg: PdfPageConfig, compact = false): Layout {
+function computeLayout(cfg: PdfPageConfig, styleMode: StyleMode): Layout {
   let [pw, ph] = PAGE_DIMS[cfg.pageSize] ?? PAGE_DIMS.a4;
   if (cfg.orientation === "landscape") [pw, ph] = [ph, pw];
-  const scale = pw / 210;
-  const pt2mm = (pt: number) => Math.max(4, +(pt * scale * 0.3528).toFixed(1));
-  const ms = pt2mm(28);
-  const mt = pt2mm(52);
-  const mb = pt2mm(36);
-  const gu = pt2mm(16);
-  const bh = pt2mm(28);
-  let fs = clamp(scale, 0.80, 1.22);
-  if (compact) fs *= 0.88;
+  const pageScale = pw / 210;
+  const typeScale = clamp(pageScale, 0.82, 1.18);
+  const density = DENSITY[styleMode] ?? 1.0;
+  const pt2mm = (pt: number) => Math.max(3, +(pt * pageScale * 0.3528).toFixed(2));
+  const ms = pt2mm(26);
+  const mt = pt2mm(48);
+  const mb = pt2mm(32);
+  const gu = pt2mm(14);
+  const hh = pt2mm(26);
+  const fh = pt2mm(18);
   return {
-    pw, ph, ms, mt, mb, gu, bh,
+    pw,
+    ph,
+    ms,
+    mt,
+    mb,
+    gu,
+    hh,
+    fh,
     fw: pw - 2 * ms,
     cw: (pw - 2 * ms - gu) / 2,
-    fs, scale,
+    typeScale,
+    density,
   };
 }
 
 // ═══════════════════════════════════════════════════════════════
-// § 6  PDF DOCUMENT CLASS
+// § 7  PDF DOCUMENT CLASS
 // ═══════════════════════════════════════════════════════════════
 
 class PdfDoc {
@@ -239,102 +345,226 @@ class PdfDoc {
   y = 0;
   page = 1;
   title: string;
+
   headerLabel = "";
-  headerBg: RGB = C.COBALT;
-  headerFg: RGB = C.HEADER_FG.questions;
+  section: SectionKey = "questions";
+
   colX = 0;
-  /** Track which page each chapter starts on (for TOC hyperlinks). */
+  col: 0 | 1 = 0;
+  colTopY = 0;
+  twoColEnabled = false;
+
+  /** Chapter number → the physical page it starts on (for TOC + bookmarks). */
   chapterPages: number[] = [];
 
-  constructor(cfg: PdfPageConfig, title: string, compact = false) {
-    this.L = computeLayout(cfg, compact);
+  constructor(cfg: PdfPageConfig, title: string, styleMode: StyleMode) {
+    this.L = computeLayout(cfg, styleMode);
     this.title = title;
-    this.doc = new jsPDF({
-      orientation: cfg.orientation,
-      unit: "mm",
-      format: cfg.pageSize,
-    });
+    this.doc = new jsPDF({ orientation: cfg.orientation, unit: "mm", format: cfg.pageSize });
     this.doc.setLineHeightFactor(1.15);
     this.y = this.L.mt;
-    registerPdfFonts(this.doc);
+    const registered = registerPdfFonts(this.doc);
+    if (!registered && typeof console !== "undefined") {
+      console.warn("[osler/pdf] Custom fonts were not ready in time — falling back to core PDF fonts.");
+    }
     resolveFonts(this.doc);
+  }
+
+  // ── Metadata ──
+
+  setMeta(meta: { title: string; author?: string; subject?: string }): void {
+    this.doc.setDocumentProperties({
+      title: meta.title,
+      author: meta.author || "Osler",
+      creator: "Osler",
+      subject: meta.subject ?? "Generated by Osler",
+    });
+  }
+
+  // ── Bookmarks (native PDF outline) ──
+
+  addBookmark(title: string, parent: unknown = null): unknown {
+    try {
+      return this.doc.outline.add(parent as never, title, { pageNumber: this.page });
+    } catch {
+      return null;
+    }
   }
 
   // ── Page chrome ──
 
-  setHeader(label: string, bg: RGB, fg: RGB) {
+  setHeader(label: string, section: SectionKey): void {
     this.headerLabel = label;
-    this.headerBg = bg;
-    this.headerFg = fg;
+    this.section = section;
   }
 
-  drawChrome() {
+  drawChrome(): void {
     const d = this.doc;
-    const { pw, ph, ms, bh } = this.L;
+    const { pw, ph, ms, hh, fh, typeScale } = this.L;
+    const tint = C.SECTION[this.section];
 
-    d.setFillColor(...this.headerBg);
-    d.rect(0, 0, pw, bh, "F");
-
+    // Top hairline — the one saturated line on every content page.
     d.setFillColor(...C.GOLD);
-    d.rect(0, 0, pw, 3.5, "F");
+    d.rect(0, 0, pw, 0.85, "F");
 
-    d.setFont(F.H, hs("bold"));
-    d.setFontSize(7);
-    d.setTextColor(...C.WHITE);
-    d.text(trunc(this.title, 55).replace(/[\u2013\u2014]/g, "-"), ms, bh * 0.6);
+    // Document title, tracked small caps, left aligned.
+    const baseline = hh * 0.58;
+    d.setFont(F.Hm, hs("normal"));
+    d.setFontSize(7.4 * typeScale);
+    d.setTextColor(...C.INK);
+    d.text(tracked(trunc(this.title, 52).toUpperCase()), ms, baseline);
 
+    // Section pill, right aligned.
     if (this.headerLabel) {
-      const spaced = this.headerLabel.split("").join(" ");
-      d.setFont(F.Hl, hs("normal"));
-      d.setFontSize(7);
-      d.setTextColor(...this.headerFg);
-      const w = d.getTextWidth(spaced);
-      d.text(spaced, pw - ms - w, bh * 0.6);
+      const label = tracked(this.headerLabel.toUpperCase());
+      d.setFont(F.H, hs("bold"));
+      d.setFontSize(6.4 * typeScale);
+      const tw = d.getTextWidth(label);
+      const padX = 3.2;
+      const pillW = tw + padX * 2;
+      const pillH = 5.6 * typeScale;
+      const pillX = pw - ms - pillW;
+      const pillY = baseline - pillH * 0.72;
+      d.setFillColor(...tint.bg);
+      d.roundedRect(pillX, pillY, pillW, pillH, pillH / 2, pillH / 2, "F");
+      d.setTextColor(...tint.fg);
+      d.text(label, pillX + pillW / 2, pillY + pillH * 0.68, { align: "center" });
     }
 
-    d.setFont(F.Hn, hs("normal"));
-    d.setFontSize(7);
-    d.setTextColor(...C.MUTED);
-    d.text(`— ${this.page} —`, pw / 2, ph - 14, { align: "center" });
+    // Header rule.
+    d.setDrawColor(...C.RULE);
+    d.setLineWidth(0.3);
+    d.line(ms, hh, pw - ms, hh);
 
-    d.setDrawColor(...C.RULE_GRAY);
-    d.setLineWidth(0.35);
-    d.line(ms, ph - 24, pw - ms, ph - 24);
+    // Two-column divider (drawn once per page; content painted after covers stray overlap).
+    if (this.twoColEnabled) {
+      d.setDrawColor(...C.RULE_SOFT);
+      d.setLineWidth(0.25);
+      d.line(ms + this.L.cw + this.L.gu / 2, this.L.mt, ms + this.L.cw + this.L.gu / 2, ph - this.L.mb);
+    }
+
+    // Footer rule.
+    const footerRuleY = ph - fh;
+    d.setDrawColor(...C.RULE);
+    d.setLineWidth(0.3);
+    d.line(ms, footerRuleY, pw - ms, footerRuleY);
+
+    const footerBaseline = ph - fh * 0.34;
+
+    // Brand wordmark, bottom-left.
+    d.setFont(F.Hl, hs("normal"));
+    d.setFontSize(6.2 * typeScale);
+    d.setTextColor(...C.MUTED);
+    d.text(tracked("OSLER"), ms, footerBaseline);
+
+    // Short doc title, bottom-right (helps loose printed pages find their way home).
+    d.setFont(F.Hl, hs("normal"));
+    d.setFontSize(6.2 * typeScale);
+    d.setTextColor(...C.MUTED);
+    d.text(trunc(this.title, 34), pw - ms, footerBaseline, { align: "right" });
+
+    // Page-number slot is intentionally left blank — stamped in finalize()
+    // once the true page count is known.
   }
 
-  newPage(skipPre = false): void {
-    if (!skipPre) this.drawChrome();
+  private drawFooterPageNumber(current: number, total: number): void {
+    const d = this.doc;
+    const { pw, fh, ph, typeScale } = this.L;
+    const y = ph - fh * 0.34;
+    const cur = String(current).padStart(2, "0");
+    const rest = ` / ${String(total).padStart(2, "0")}`;
+
+    d.setFont(F.H, hs("bold"));
+    d.setFontSize(7 * typeScale);
+    const w1 = d.getTextWidth(cur);
+    d.setFont(F.Hn, hs("normal"));
+    d.setFontSize(7 * typeScale);
+    const w2 = d.getTextWidth(rest);
+
+    let x = pw / 2 - (w1 + w2) / 2;
+    d.setFont(F.H, hs("bold"));
+    d.setTextColor(...C.INK);
+    d.text(cur, x, y);
+    x += w1;
+    d.setFont(F.Hn, hs("normal"));
+    d.setTextColor(...C.MUTED);
+    d.text(rest, x, y);
+  }
+
+  /** Loops every rendered content page and stamps accurate "NN / total" numbers. */
+  finalize(contentStartPage: number): void {
+    const totalPages = this.doc.getNumberOfPages();
+    const totalNumbered = Math.max(1, totalPages - contentStartPage + 1);
+    for (let p = contentStartPage; p <= totalPages; p++) {
+      this.doc.setPage(p);
+      this.drawFooterPageNumber(p - contentStartPage + 1, totalNumbered);
+    }
+    this.doc.setPage(totalPages);
+  }
+
+  /**
+   * Finalizes the current page's chrome, creates a new page, optionally
+   * switches the running header label/section, and draws chrome for the
+   * new page. Passing `header` here (rather than calling `setHeader()`
+   * mid-page) is what keeps section transitions — Contents → Questions,
+   * Questions → Answer Key, etc. — from drawing two overlapping header
+   * pills on the same page.
+   */
+  newPage(opts: { skipOutgoing?: boolean; header?: { label: string; section: SectionKey } } = {}): void {
+    if (!opts.skipOutgoing) this.drawChrome();
     this.doc.addPage();
     this.page++;
+    this.col = 0;
     this.colX = this.L.ms;
     this.y = this.L.mt;
+    this.colTopY = this.L.mt;
+    if (opts.header) {
+      this.headerLabel = opts.header.label;
+      this.section = opts.header.section;
+    }
     this.drawChrome();
   }
 
-  checkPage(needed: number): void {
-    if (this.y + needed > this.L.ph - this.L.mb) this.newPage();
+  /** Start (or restart) a flowing content region — plain single column, or real two-column. */
+  beginFlow(twoCol: boolean): void {
+    this.twoColEnabled = twoCol;
+    this.col = 0;
+    this.colX = this.L.ms;
+    this.colTopY = this.y;
   }
 
-  /** Keep a block together: if estimated height doesn't fit, start new page. */
-  keepTogether(estimatedH: number): void {
-    const available = this.L.ph - this.L.mb - this.y;
-    if (estimatedH > available) this.newPage();
+  /**
+   * Ensure `needed` mm of vertical room exists at the current position.
+   * In two-column mode, an overflowing left column flips to the right
+   * column at the same top instead of jumping straight to a new page.
+   */
+  checkPage(needed: number): void {
+    if (this.y + needed <= this.L.ph - this.L.mb) return;
+    if (this.twoColEnabled && this.col === 0) {
+      this.col = 1;
+      this.colX = this.L.ms + this.L.cw + this.L.gu;
+      this.y = this.colTopY;
+    } else {
+      this.newPage();
+    }
   }
 
   // ── Drawing primitives ──
 
+  /** The single text-drawing entry point: markdown-strips, normalizes, and RTL-switches. */
   text(
     str: string,
     x: number,
     y: number,
     opts: {
-      font?: "helvetica" | "times" | "courier" | "Cairo" | "Poppins";
+      font?: "H" | "Hn" | "Hm" | "Hl" | "B" | "Bi" | "Bb";
       style?: "normal" | "bold" | "italic" | "bolditalic";
       size?: number;
       color?: RGB;
       align?: "left" | "center" | "right";
       maxW?: number;
-    } = {}
+      lineFactor?: number;
+    } = {},
   ): number {
     const d = this.doc;
     const raw = stripMd(str);
@@ -346,11 +576,11 @@ class PdfDoc {
       font = "Cairo";
       style = opts.style === "bold" ? "bold" : "normal";
     } else {
-      font = opts.font ?? F.B;
+      font = F[opts.font ?? "B"];
       style = opts.style ?? "normal";
     }
 
-    const size = opts.size ?? 9.5;
+    const size = (opts.size ?? 9.5) * this.L.typeScale;
     d.setFont(font, hs(style));
     d.setFontSize(size);
     d.setTextColor(...(opts.color ?? C.CHARCOAL));
@@ -359,360 +589,362 @@ class PdfDoc {
     const text = isArabic ? convertArabic(normalizeText(raw)) : normalizeText(raw);
     const lines: string[] = d.splitTextToSize(text, maxW);
     d.text(lines, x, y, { align: opts.align ?? "left" });
-    return y + lines.length * lh(size);
+    return y + lines.length * lh(size, opts.lineFactor);
   }
 
-  hRule(y: number, w: number, thick = 0.35, color: RGB = C.RULE_GRAY): number {
+  hRule(y: number, w: number, thick = 0.3, color: RGB = C.RULE, x?: number): number {
     this.doc.setDrawColor(...color);
     this.doc.setLineWidth(thick);
-    this.doc.line(this.L.ms, y, this.L.ms + w, y);
-    return y + 4;
+    this.doc.line(x ?? this.L.ms, y, (x ?? this.L.ms) + w, y);
+    return y + 3.6 * this.L.density;
   }
 
   doubleRule(y: number, w: number): number {
     const d = this.doc;
     d.setDrawColor(...C.GOLD);
-    d.setLineWidth(2.0);
-    d.line(this.L.ms, y + 4, this.L.ms + w, y + 4);
-    d.setLineWidth(0.7);
-    d.line(this.L.ms, y + 1, this.L.ms + w, y + 1);
-    return y + 8;
+    d.setLineWidth(1.6);
+    d.line(this.L.ms, y, this.L.ms + w, y);
+    d.setLineWidth(0.5);
+    d.line(this.L.ms, y + 2.4, this.L.ms + w, y + 2.4);
+    return y + 8 * this.L.density;
   }
 
-  trackedLabel(
-    text: string, y: number,
-    size = 10.5, color: RGB = C.COBALT,
-    fontName?: string,
-  ): number {
+  trackedLabel(text: string, x: number, y: number, size = 10, color: RGB = C.COBALT): number {
     const d = this.doc;
-    const tracked = text.split("").join(" ");
-    d.setFont(fontName ?? F.H, hs("bold"));
-    d.setFontSize(size);
+    d.setFont(F.H, hs("bold"));
+    d.setFontSize(size * this.L.typeScale);
     d.setTextColor(...color);
-    d.text(tracked, this.L.ms, y);
-    return y + lh(size) * 1.2;
+    d.text(tracked(text), x, y);
+    return y + lh(size * this.L.typeScale, 1.2);
   }
 
-  calloutBox(
-    label: string, body: string, y: number, w: number,
-    bg: RGB, border: RGB, fs = 1.0,
-  ): number {
+  /** Rounded callout panel (explanation / model answer / rubric). */
+  calloutBox(label: string, body: string, y: number, w: number, x: number, bg: RGB, border: RGB): number {
     const d = this.doc;
-    const pad = sp(3, fs);
-    const x = this.L.ms;
+    const density = this.L.density;
+    const pad = sp(3, density);
+    const bodySize = 8.6 * this.L.typeScale;
 
-    d.setFont(F.Bi, hs("italic"));
-    d.setFontSize(8.5 * fs);
-    const bodyLines: string[] = d.splitTextToSize(stripMd(body), w - pad * 2);
-    const bodyH = bodyLines.length * lh(8.5 * fs);
-    const totalH = sp(1.5, fs) + bodyH + sp(2, fs);
+    d.setFontSize(bodySize);
+    const bodyLines: string[] = d.splitTextToSize(normalizeText(stripMd(body)), w - pad * 2);
+    const bodyH = bodyLines.length * lh(bodySize);
+    const labelH = sp(4, density);
+    const totalH = labelH + bodyH + sp(1.5, density);
 
     this.checkPage(totalH + 6);
-    const boxY = y;
+    const boxY = this.y;
 
     d.setFillColor(...bg);
     d.setDrawColor(...border);
-    d.setLineWidth(0.55);
-    d.roundedRect(x, boxY, w, totalH, 1, 1, "FD");
+    d.setLineWidth(0.5);
+    d.roundedRect(x, boxY, w, totalH, 1.2, 1.2, "FD");
 
     d.setFont(F.H, hs("bold"));
-    d.setFontSize(7 * fs);
+    d.setFontSize(6.6 * this.L.typeScale);
     d.setTextColor(...border);
-    d.text(label, x + pad / 2, boxY + sp(1, fs));
+    d.text(tracked(label), x + pad, boxY + sp(1.5, density));
 
     d.setFont(F.Bi, hs("italic"));
-    d.setFontSize(8.5 * fs);
+    d.setFontSize(bodySize);
     d.setTextColor(...C.SLATE);
-    d.text(bodyLines, x + pad / 2, boxY + sp(1, fs) + sp(1.5, fs));
+    d.text(bodyLines, x + pad, boxY + labelH + sp(0.5, density));
 
-    return boxY + totalH + 3;
+    return boxY + totalH + sp(1.5, density);
   }
 
-  correctBadge(letter: string, optText: string, y: number, w: number, fs = 1.0): number {
+  /** Correct-answer badge — vector check icon, never a Unicode glyph. */
+  correctBadge(letter: string, optText: string, y: number, w: number, x: number): number {
     const d = this.doc;
-    const pad = sp(3, fs);
-    const x = this.L.ms;
-    const badgeH = sp(2, fs) + sp(1.5, fs);
+    const density = this.L.density;
+    const pad = sp(2.5, density);
+    const badgeH = sp(4.5, density);
 
     this.checkPage(badgeH + 4);
+    const boxY = this.y;
     d.setFillColor(...C.EMERALD);
-    d.roundedRect(x, y, w, badgeH, 1, 1, "F");
+    d.roundedRect(x, boxY, w, badgeH, 1.2, 1.2, "F");
+
+    const iconCx = x + pad + 1.6;
+    const iconCy = boxY + badgeH / 2;
+    d.setFillColor(255, 255, 255);
+    d.circle(iconCx, iconCy, 2.1, "F");
+    drawCheck(d, iconCx, iconCy, 2.4, C.EMERALD);
 
     d.setFont(F.H, hs("bold"));
-    d.setFontSize(9 * fs);
+    d.setFontSize(8.4 * this.L.typeScale);
     d.setTextColor(...C.WHITE);
-    d.text(`${"\u2713"}  Correct Answer: ${letter}. ${trunc(stripMd(optText), 80)}`, x + pad / 2, y + badgeH / 2 + 1.5);
+    const label = `Correct Answer — ${letter}.  ${trunc(stripMd(optText), 78)}`;
+    d.text(label, iconCx + 5, boxY + badgeH / 2 + 1.4);
 
-    return y + badgeH + 3;
+    return boxY + badgeH + sp(1.5, density);
   }
 
   // ── Cover page ──
 
-  drawCover(cfg: CoverConfig, totalQ: number, chCount: number, fs = 1.0): void {
+  drawCover(cfg: CoverConfig, totalQ: number, chCount: number): void {
     const d = this.doc;
     const { pw, ph } = this.L;
 
-    // Full NAVY background
+    // Base fill.
     d.setFillColor(...C.NAVY);
     d.rect(0, 0, pw, ph, "F");
 
-    // Upper cobalt block (top 26%)
-    d.setFillColor(...C.COVER_DARK);
-    d.rect(0, ph * 0.74, pw, ph * 0.26, "F");
+    // Simulated vertical vignette — soft light center, deep edges.
+    const bands = 56;
+    for (let i = 0; i < bands; i++) {
+      const t = i / (bands - 1);
+      const curve = Math.sin(Math.PI * t); // 0 at edges, 1 at center
+      const color = lerp(C.NAVY_DEEP, C.NAVY_SOFT, curve * 0.55);
+      const bandH = ph / bands;
+      d.setFillColor(...color);
+      d.rect(0, i * bandH, pw, bandH + 0.4, "F");
+    }
 
-    // Diagonal band 1
-    d.setFillColor(...C.COVER_MID);
-    d.triangle(0, ph * 0.87, pw * 0.62, ph * 0.87, pw * 0.46, ph);
-
-    // Diagonal band 2
-    d.setFillColor(...C.COVER_LIGHT);
-    d.triangle(pw * 0.70, ph, pw, ph, pw * 0.85, ph * 0.74);
-
-    // GOLD bottom edge accent
-    d.setFillColor(...C.GOLD);
-    d.rect(0, ph - 5, pw, 5, "F");
-
-    // Gold separator below cobalt block
-    d.setDrawColor(...C.GOLD);
-    d.setLineWidth(0.8);
-    d.line(pw * 0.06, ph * 0.74 - 2, pw * 0.94, ph * 0.74 - 2);
-
-    // Right pillar
-    d.setFillColor(...C.COVER_PILLAR);
-    d.rect(pw * 0.965, 0, pw * 0.035, ph, "F");
-    d.setFillColor(...C.GOLD);
-    // Gold chip at golden-ratio height
-    d.rect(pw * 0.965, ph * 0.382, pw * 0.009, ph * 0.236, "F");
-
-    // Footer band (bottom 9%)
-    d.setFillColor(...C.COVER_FOOTER);
-    d.rect(0, 0, pw, ph * 0.09, "F");
-    d.setFillColor(...C.GOLD);
-    d.rect(0, ph * 0.09, pw, 2, "F");
-
-    // Footer grid
-    d.setDrawColor(...C.COVER_GRID);
+    // Hairline double frame, inset from the edge.
+    const inset = pw * 0.045;
+    const inset2 = inset + 1.1;
+    d.setDrawColor(...C.GOLD_DEEP);
     d.setLineWidth(0.35);
-    const step = Math.max(20, Math.round(pw / 28));
-    for (let x = 0; x < pw * 0.96; x += step) d.line(x, 0, x, ph * 0.089);
-    d.line(0, ph * 0.035, pw * 0.96, ph * 0.035);
-    d.line(0, ph * 0.065, pw * 0.96, ph * 0.065);
+    d.rect(inset, inset, pw - inset * 2, ph - inset * 2, "S");
+    d.setDrawColor(...C.GOLD_SOFT);
+    d.setLineWidth(0.25);
+    d.rect(inset2, inset2, pw - inset2 * 2, ph - inset2 * 2, "S");
 
-    // Content well
-    d.setDrawColor(...C.COVER_WELL);
-    d.setLineWidth(0.6);
-    d.roundedRect(pw * 0.05, ph * 0.10, pw * 0.87, ph * 0.58, 3, 3, "S");
+    // Corner registration ticks, just outside the frame.
+    const tick = 4.2;
+    const corners: [number, number, number, number][] = [
+      [inset, inset, 1, 1],
+      [pw - inset, inset, -1, 1],
+      [inset, ph - inset, 1, -1],
+      [pw - inset, ph - inset, -1, -1],
+    ];
+    d.setDrawColor(...C.GOLD_SOFT);
+    d.setLineWidth(0.3);
+    for (const [cx, cy, dx, dy] of corners) {
+      d.line(cx, cy, cx - dx * tick, cy);
+      d.line(cx, cy, cx, cy - dy * tick);
+    }
 
-    // Decorative circles
-    C.COVER_CIRC.forEach((shade, i) => {
-      d.setFillColor(...shade);
-      d.circle(pw * 0.10 + i * (13 * pw / 595), ph * 0.70, (5 - i * 0.5) * (pw / 595), "F");
-    });
+    let cy = ph * 0.185;
 
-    // ── Text content ──
-    let cy = ph * 0.28;
-
-    // Eyebrow
+    // Eyebrow.
     d.setFont(F.Hl, hs("normal"));
-    d.setFontSize(8 * fs);
-    d.setTextColor(106, 144, 184);
-    d.text(cfg.eyebrow ?? "O S L E R   R E P O R T", pw / 2, cy, { align: "center" });
-    cy += sp(8, fs);
+    d.setFontSize(8.2);
+    d.setTextColor(...C.GOLD_SOFT);
+    d.text(tracked(cfg.eyebrow ?? "OSLER REPORT"), pw / 2, cy, { align: "center" });
+    cy += 13;
 
-    // Hero title — Poppins-Bold 44pt (extreme scale)
-    const titleSize = 44 * fs;
+    // Brand mark.
+    drawPulseMark(d, pw / 2, cy, pw * 0.028, [90, 118, 148], C.GOLD_SOFT);
+    cy += pw * 0.028 + 12;
+
+    // Title.
+    const titleSize = clamp(pw * 0.155, 26, 40);
     d.setFont(F.H, hs("bold"));
     d.setFontSize(titleSize);
     d.setTextColor(...C.WHITE);
-    const titleLines: string[] = d.splitTextToSize(cfg.title ?? "Report", pw * 0.75);
+    const titleLines: string[] = d.splitTextToSize(normalizeText(cfg.title || "Report"), pw * 0.76);
     d.text(titleLines, pw / 2, cy, { align: "center" });
-    cy += titleLines.length * lh(titleSize, 1.1) + sp(3, fs);
+    cy += titleLines.length * lh(titleSize, 1.08) + 6;
 
-    // Subtitle — Lora-Italic (or Times-Italic fallback)
+    // Subtitle.
     if (cfg.subtitle) {
-      const subSize = 17 * fs;
+      const subSize = clamp(pw * 0.058, 11, 16);
       d.setFont(F.Bi, hs("italic"));
       d.setFontSize(subSize);
-      d.setTextColor(192, 216, 240);
-      const subLines: string[] = d.splitTextToSize(cfg.subtitle, pw * 0.65);
+      d.setTextColor(198, 214, 232);
+      const subLines: string[] = d.splitTextToSize(normalizeText(cfg.subtitle), pw * 0.62);
       d.text(subLines, pw / 2, cy, { align: "center" });
-      cy += subLines.length * lh(subSize) + sp(2, fs);
+      cy += subLines.length * lh(subSize) + 5;
     }
 
-    // Double-rule
-    cy += sp(1, fs);
+    // Divider.
+    cy += 3;
     d.setDrawColor(...C.GOLD);
-    d.setLineWidth(2.4);
-    d.line(pw * 0.25, cy, pw * 0.75, cy);
-    d.setLineWidth(0.7);
-    d.line(pw * 0.25, cy + 3, pw * 0.75, cy + 3);
-    cy += sp(5, fs);
+    d.setLineWidth(1.4);
+    d.line(pw * 0.32, cy, pw * 0.68, cy);
+    d.setLineWidth(0.4);
+    d.line(pw * 0.32, cy + 2.2, pw * 0.68, cy + 2.2);
+    cy += 12;
 
-    // Metadata
+    // Metadata.
     d.setFont(F.Hl, hs("normal"));
-    d.setFontSize(10 * fs);
-    d.setTextColor(140, 174, 206);
-    if (cfg.author) { d.text(cfg.author, pw / 2, cy, { align: "center" }); cy += sp(3, fs); }
-    if (cfg.date) { d.text(cfg.date, pw / 2, cy, { align: "center" }); cy += sp(3, fs); }
+    d.setFontSize(9.5);
+    d.setTextColor(160, 182, 208);
+    const metaBits = [cfg.author, cfg.date].filter(Boolean) as string[];
+    if (metaBits.length) {
+      d.text(metaBits.join("   ·   "), pw / 2, cy, { align: "center" });
+      cy += 8;
+    }
     if (cfg.description) {
-      d.setFontSize(9 * fs);
-      const descLines: string[] = d.splitTextToSize(cfg.description, pw * 0.6);
+      d.setFontSize(8.6);
+      const descLines: string[] = d.splitTextToSize(normalizeText(cfg.description), pw * 0.58);
       d.text(descLines, pw / 2, cy, { align: "center" });
-      cy += descLines.length * lh(9 * fs) + sp(2, fs);
+      cy += descLines.length * lh(8.6) + 4;
     }
 
-    // Stats
-    const qWord = totalQ === 1 ? "question" : "questions";
-    const chWord = chCount === 1 ? "chapter" : "chapters";
-    d.setFontSize(10 * fs);
-    d.text(`${chCount} ${chWord}  —  ${totalQ} ${qWord}`, pw / 2, cy, { align: "center" });
-    cy += sp(6, fs);
-
-    // Feature lines
-    d.setFont(F.Hn, hs("normal"));
-    d.setFontSize(9 * fs);
-    d.setTextColor(200, 223, 240);
-    const features = cfg.features ?? ["Generated by Osler"];
-    for (const f of features) {
-      d.text(f, pw / 2, cy, { align: "center" });
-      cy += sp(3, fs);
+    // Stat strip — thin hairline separated inline stats.
+    if (totalQ > 0 || chCount > 0) {
+      cy += 4;
+      const parts: string[] = [];
+      if (chCount > 0) parts.push(`${chCount} ${chCount === 1 ? "CHAPTER" : "CHAPTERS"}`);
+      if (totalQ > 0) parts.push(`${totalQ} ${totalQ === 1 ? "QUESTION" : "QUESTIONS"}`);
+      d.setFont(F.H, hs("bold"));
+      d.setFontSize(9.5);
+      const widths = parts.map((p) => d.getTextWidth(tracked(p)));
+      const sepW = 8;
+      const totalW = widths.reduce((a, b) => a + b, 0) + sepW * (parts.length - 1);
+      let sx = pw / 2 - totalW / 2;
+      for (let i = 0; i < parts.length; i++) {
+        d.setTextColor(...C.GOLD_SOFT);
+        d.text(tracked(parts[i]), sx, cy, { align: "left" });
+        sx += widths[i];
+        if (i < parts.length - 1) {
+          d.setDrawColor(120, 140, 164);
+          d.setLineWidth(0.3);
+          d.line(sx + sepW / 2, cy - 3, sx + sepW / 2, cy - 3 + 4.2);
+          sx += sepW;
+        }
+      }
+      cy += 10;
     }
 
-    // Footer note
+    // Feature checklist.
+    const features = cfg.features ?? [];
+    if (features.length) {
+      cy += 3;
+      d.setFont(F.Hn, hs("normal"));
+      d.setFontSize(8.6);
+      for (const f of features) {
+        const fw = d.getTextWidth(f);
+        const fx = pw / 2 - fw / 2;
+        drawCheck(d, fx - 6, cy - 1.6, 3, C.GOLD_SOFT);
+        d.setTextColor(206, 222, 240);
+        d.text(f, fx, cy, { align: "left" });
+        cy += 6.4;
+      }
+    }
+
+    // Footer note, inside the frame.
     d.setFont(F.Hl, hs("normal"));
-    d.setFontSize(7.5 * fs);
-    d.setTextColor(69, 96, 128);
-    d.text(
-      cfg.footerNote ?? "Tap any TOC entry or question number to navigate.",
-      pw / 2, ph * 0.12, { align: "center" },
-    );
+    d.setFontSize(7.4);
+    d.setTextColor(96, 118, 144);
+    d.text(cfg.footerNote ?? "Prepared by Osler", pw / 2, ph - inset - 7, { align: "center" });
   }
 
-  // ── TOC (with page-number hyperlinks) ──
+  // ── Table of contents ──
 
-  drawTocEntry(
-    chNum: number, title: string, qCount: number, desc: string,
-    targetPage: number, fs = 1.0,
-  ): void {
+  drawTocEntry(chNum: number, title: string, qCount: number, desc: string, targetPage: number): void {
     const d = this.doc;
-    this.checkPage(20);
+    const density = this.L.density;
+    this.checkPage(sp(6, density) + (desc ? 8 : 0));
 
-    // CH number
-    const chLabelY = this.y;
+    const entryTop = this.y;
     d.setFont(F.H, hs("bold"));
-    d.setFontSize(8 * fs);
+    d.setFontSize(7.6 * this.L.typeScale);
     d.setTextColor(...C.GOLD);
     d.text(`CH ${String(chNum).padStart(2, "0")}`, this.L.ms, this.y);
-    this.y += sp(2.5, fs);
+    this.y += sp(2.6, density);
 
-    // Title + count
-    const titleY = this.y;
-    const entryTop = chLabelY;
     d.setFont(F.Hm, hs("normal"));
-    d.setFontSize(11 * fs);
+    d.setFontSize(11 * this.L.typeScale);
     d.setTextColor(...C.CHARCOAL);
-    const titleW = d.getTextWidth(title);
-    d.text(title, this.L.ms + 2, this.y);
+    d.text(trunc(title, 62), this.L.ms + 1.5, this.y);
+
     d.setFont(F.Hn, hs("normal"));
-    d.setFontSize(8 * fs);
+    d.setFontSize(7.6 * this.L.typeScale);
     d.setTextColor(...C.MUTED);
     d.text(`${qCount} Q`, this.L.ms + this.L.fw, this.y, { align: "right" });
 
-    // Create hyperlink to target page
-    const linkH = desc ? 14 : 10;
-    d.link(this.L.ms, chLabelY - 6, this.L.fw, linkH, { pageNumber: targetPage });
+    const linkH = desc ? 15 : 10;
+    d.link(this.L.ms, entryTop - 5, this.L.fw, linkH, { pageNumber: targetPage });
+    this.y += sp(3, density);
 
-    this.y += sp(3, fs);
-
-    // Desc
     if (desc) {
       d.setFont(F.Bi, hs("italic"));
-      d.setFontSize(8.5 * fs);
+      d.setFontSize(8.2 * this.L.typeScale);
       d.setTextColor(...C.MUTED);
-      const lines: string[] = d.splitTextToSize(stripMd(desc), this.L.fw - 10);
-      d.text(lines, this.L.ms + 6, this.y);
-      this.y += lines.length * lh(8.5 * fs) + sp(1, fs);
+      const lines: string[] = d.splitTextToSize(stripMd(desc), this.L.fw - 8);
+      d.text(lines, this.L.ms + 4, this.y);
+      this.y += lines.length * lh(8.2 * this.L.typeScale) + sp(1, density);
     }
 
-    this.y = this.hRule(this.y, this.L.fw, 0.3);
-    this.y += sp(1, fs);
+    this.y = this.hRule(this.y, this.L.fw, 0.25);
+    this.y += sp(0.5, density);
   }
 
   // ── Chapter header ──
 
-  drawChapterHeader(chNum: number, title: string, desc: string, isSingle: boolean, fs = 1.0): void {
+  drawChapterHeader(chNum: number, title: string, desc: string, isSingle: boolean): void {
     const d = this.doc;
     const fw = this.L.fw;
-
-    // Record which page this chapter starts on (for TOC hyperlinks)
+    const density = this.L.density;
     this.chapterPages[chNum] = this.page;
 
     if (isSingle) {
       this.checkPage(30);
       if (title) {
         d.setFont(F.H, hs("bold"));
-        d.setFontSize(22 * fs);
-        d.setTextColor(...C.CHARCOAL);
+        d.setFontSize(20 * this.L.typeScale);
+        d.setTextColor(...C.INK);
         const lines: string[] = d.splitTextToSize(title, fw);
         d.text(lines, this.L.ms + fw / 2, this.y, { align: "center" });
-        this.y += lines.length * lh(22 * fs, 1.25) + sp(2, fs);
+        this.y += lines.length * lh(20 * this.L.typeScale, 1.2) + sp(1.5, density);
       }
       if (desc) {
         d.setFont(F.Bi, hs("italic"));
-        d.setFontSize(10 * fs);
+        d.setFontSize(9.5 * this.L.typeScale);
         d.setTextColor(...C.MUTED);
         const lines: string[] = d.splitTextToSize(stripMd(desc), fw - 10);
         d.text(lines, this.L.ms + fw / 2, this.y, { align: "center" });
-        this.y += lines.length * lh(10 * fs) + sp(3, fs);
+        this.y += lines.length * lh(9.5 * this.L.typeScale) + sp(2.5, density);
       }
+      this.y = this.hRule(this.y, fw * 0.28, 0.6, C.GOLD, this.L.ms + fw * 0.36);
+      this.y += sp(1.5, density);
     } else {
-      this.checkPage(36);
+      this.checkPage(34);
       d.setFont(F.H, hs("bold"));
-      d.setFontSize(8 * fs);
+      d.setFontSize(7.6 * this.L.typeScale);
       d.setTextColor(...C.GOLD);
-      d.text(`CHAPTER  ${String(chNum).padStart(2, "0")}`, this.L.ms, this.y);
-      this.y += sp(3, fs);
+      d.text(tracked(`CHAPTER ${String(chNum).padStart(2, "0")}`), this.L.ms, this.y);
+      this.y += sp(3, density);
 
       d.setFont(F.H, hs("bold"));
-      d.setFontSize(18 * fs);
-      d.setTextColor(...C.CHARCOAL);
+      d.setFontSize(16 * this.L.typeScale);
+      d.setTextColor(...C.INK);
       d.text(title, this.L.ms, this.y);
-      this.y += sp(4, fs);
+      this.y += sp(3.5, density);
 
       if (desc) {
         d.setFont(F.Bi, hs("italic"));
-        d.setFontSize(9 * fs);
+        d.setFontSize(8.6 * this.L.typeScale);
         d.setTextColor(...C.MUTED);
         const lines: string[] = d.splitTextToSize(stripMd(desc), fw - 10);
         d.text(lines, this.L.ms, this.y);
-        this.y += lines.length * lh(9 * fs) + sp(3, fs);
+        this.y += lines.length * lh(8.6 * this.L.typeScale) + sp(2.5, density);
       }
-
-      this.y = this.hRule(this.y, fw, 1.5, C.GOLD);
-      this.y += sp(3, fs);
+      this.y = this.hRule(this.y, fw, 1, C.GOLD);
+      this.y += sp(2.5, density);
     }
   }
 
   // ── Question rendering ──
 
-  /** Estimate question height so KeepTogether can prevent orphans. */
-  estimateQuestionH(q: FullQuestion, opts: QuestionDrawOpts, fs = 1.0): number {
-    let h = 50; // base: header + stem
-    if (!q.isWritten && q.choices.length > 0) {
-      h += q.choices.length * 14 * fs; // options
-    }
+  estimateQuestionH(q: FullQuestion, opts: QuestionDrawOpts): number {
+    const density = this.L.density;
+    let h = sp(11, density);
+    if (!q.isWritten && q.choices.length > 0) h += q.choices.length * (7 * this.L.typeScale + sp(1, density));
     if (opts.answersMode === "inline" && !q.isWritten && opts.showExplanations) {
-      h += 24 * fs; // badge
-      if (q.explanation) h += 28 * fs; // callout
+      h += sp(5, density);
+      if (q.explanation) h += sp(7, density);
     }
-    if (q.isWritten && q.modelAnswer && opts.showExplanations) {
-      h += 28 * fs;
-    }
+    if (q.isWritten && q.modelAnswer && opts.showExplanations) h += sp(7, density);
     return h;
   }
 
-  drawQuestion(q: FullQuestion, qNum: number, opts: QuestionDrawOpts, fs = 1.0): void {
+  drawQuestion(q: FullQuestion, qNum: number, opts: QuestionDrawOpts): void {
     const d = this.doc;
+    const density = this.L.density;
     const cw = opts.twoCol ? this.L.cw : this.L.fw;
     const x = this.colX;
     const answersMode = opts.answersMode ?? "inline";
@@ -720,313 +952,245 @@ class PdfDoc {
     const style = opts.styleMode ?? "standard";
     const isWritten = q.isWritten ?? false;
 
-    // KeepTogether: prevent orphaned headers
-    this.keepTogether(this.estimateQuestionH(q, opts, fs) + 10);
+    this.checkPage(this.estimateQuestionH(q, opts) + 8);
 
-    // Header — standard/styled/detailed
+    // ── Header row ──
     if (style === "styled") {
       d.setFont(F.H, hs("bold"));
-      d.setFontSize(8 * fs);
+      d.setFontSize(7.6 * this.L.typeScale);
       d.setTextColor(...C.GOLD);
-      d.text("Q U E S T I O N  " + qNum, x, this.y);
-      this.y += sp(2, fs);
-      this.y = this.hRule(this.y, cw, 0.8, C.GOLD);
-      this.y += sp(2, fs);
+      d.text(tracked(`QUESTION ${qNum}`), x, this.y);
+      this.y += sp(2, density);
+      this.y = this.hRule(this.y, cw, 0.7, C.GOLD, x);
+      this.y += sp(1.5, density);
     } else if (style === "detailed") {
       d.setFont(F.H, hs("bold"));
-      d.setFontSize(8 * fs);
+      d.setFontSize(7.6 * this.L.typeScale);
       d.setTextColor(...C.COBALT);
-      d.text("QUESTION " + qNum, x, this.y);
+      d.text(`QUESTION ${qNum}`, x, this.y);
       const metaParts: string[] = [];
-      if (q.difficulty) metaParts.push(q.difficulty.toUpperCase());
-      if (q.tags?.length) metaParts.push(q.tags.slice(0, 3).join(" | "));
+      if (q.difficulty) metaParts.push(String(q.difficulty).toUpperCase());
+      if (q.tags?.length) metaParts.push(q.tags.slice(0, 3).join(" · "));
       if (metaParts.length) {
         d.setFont(F.Hn, hs("normal"));
-        d.setFontSize(7 * fs);
+        d.setFontSize(6.6 * this.L.typeScale);
         d.setTextColor(...C.MUTED);
-        d.text(metaParts.join("  |  "), x + cw, this.y, { align: "right" });
+        d.text(metaParts.join("   "), x + cw, this.y, { align: "right" });
       }
-      this.y += sp(2, fs);
-      this.y = this.hRule(this.y, cw, 0.5, C.COBALT);
-      this.y += sp(2, fs);
+      this.y += sp(2, density);
+      this.y = this.hRule(this.y, cw, 0.4, C.COBALT, x);
+      this.y += sp(1.5, density);
+    } else if (style === "mcqnotes") {
+      d.setFont(F.Hm, hs("normal"));
+      d.setFontSize(7 * this.L.typeScale);
+      d.setTextColor(...C.MUTED);
+      d.text(`Q${qNum}`, x, this.y);
+      this.y += sp(1.5, density);
     } else {
-      this.y = this.trackedLabel(`QUESTION ${qNum}`, this.y, 10.5 * fs, C.COBALT, undefined);
-      this.y += sp(1, fs);
-      this.y = this.hRule(this.y, cw, 1.5, C.ROYAL);
-      this.y += sp(2, fs);
+      this.y = this.trackedLabel(`QUESTION ${qNum}`, x, this.y, 9.5, C.COBALT);
+      this.y += sp(0.5, density);
+      this.y = this.hRule(this.y, cw, 1.1, C.ROYAL, x);
+      this.y += sp(1.5, density);
     }
 
-    // Stem — Poppins-/Lora-body justified
+    // ── Stem ──
     if (q.stem) {
+      const stemFont: "B" | "Hm" = style === "mcqnotes" ? "Hm" : "B";
+      const stemSize = style === "mcqnotes" ? 8.4 : 9.5;
       this.y = this.text(q.stem, x, this.y, {
-        font: "times", size: 9.5 * fs, color: C.CHARCOAL, maxW: cw - 4,
+        font: stemFont,
+        size: stemSize,
+        color: C.CHARCOAL,
+        maxW: cw - 2,
       });
-      this.y += sp(2, fs);
+      this.y += sp(1.5, density);
     }
 
-    // Options
+    // ── Options ──
     if (!isWritten && q.choices.length > 0) {
       const showInline = answersMode === "inline";
       for (let i = 0; i < q.choices.length; i++) {
         const letter = LETTERS[i] ?? String(i + 1);
         const isCorrect = i === q.correct;
+        const highlight = showInline && isCorrect;
 
-        if (style === "styled") {
-          const col = isCorrect && showInline ? C.EMERALD : C.ROYAL;
-          d.setFont(F.H, hs("bold"));
-          d.setFontSize(9 * fs);
-          d.setTextColor(...col);
-          d.text(`${letter})`, x + 4, this.y);
-          d.setFont(F.B, hs("normal"));
-          d.setFontSize(9 * fs);
-          d.setTextColor(...C.SLATE);
-          const optLines: string[] = d.splitTextToSize(stripMd(q.choices[i]), cw - 14);
-          d.text(optLines, x + 12, this.y);
-          this.y += optLines.length * lh(9 * fs) + sp(0.5, fs);
-        } else if (showInline && isCorrect) {
-          d.setFont(F.H, hs("bold"));
-          d.setFontSize(9 * fs);
-          d.setTextColor(...C.EMERALD);
-          d.text(`✓ ${letter})`, x + 4, this.y);
-          d.setFont(F.Bb, hs("bold"));
-          d.setFontSize(9 * fs);
-          d.setTextColor(...C.EMERALD);
-          const optLines: string[] = d.splitTextToSize(stripMd(q.choices[i]), cw - 16);
-          d.text(optLines, x + 14, this.y);
-          this.y += optLines.length * lh(9 * fs) + sp(0.5, fs);
-        } else {
-          d.setFont(F.H, hs("bold"));
-          d.setFontSize(9 * fs);
-          d.setTextColor(...C.ROYAL);
-          d.text(`${letter})`, x + 4, this.y);
-          d.setFont(F.B, hs("normal"));
-          d.setFontSize(9 * fs);
-          d.setTextColor(...C.SLATE);
-          const optLines: string[] = d.splitTextToSize(stripMd(q.choices[i]), cw - 14);
-          d.text(optLines, x + 12, this.y);
-          this.y += optLines.length * lh(9 * fs) + sp(0.5, fs);
-        }
+        d.setFont(F.H, hs("bold"));
+        d.setFontSize(8.4 * this.L.typeScale);
+        d.setTextColor(...(highlight ? C.EMERALD : C.ROYAL));
+        d.text(`${letter}`, x + 3.2, this.y);
+        if (highlight) drawCheck(d, x + 8.6, this.y - 1.4, 2.4, C.EMERALD);
+
+        d.setFont(highlight ? F.Bb : F.B, hs("normal"));
+        d.setFontSize(8.6 * this.L.typeScale);
+        d.setTextColor(...(highlight ? C.EMERALD : C.SLATE));
+        const optLines: string[] = d.splitTextToSize(normalizeText(stripMd(q.choices[i])), cw - 15);
+        d.text(optLines, x + 13, this.y);
+        this.y += optLines.length * lh(8.6 * this.L.typeScale) + sp(0.4, density);
       }
     }
 
-    // Inline answer + explanation
+    // ── Inline answer + explanation ──
     if (answersMode === "inline" && !isWritten) {
       if (showExpl && q.correct >= 0 && q.correct < q.choices.length) {
-        this.y += sp(1, fs);
-        this.y = this.correctBadge(LETTERS[q.correct], q.choices[q.correct], this.y, cw, fs);
+        this.y += sp(0.5, density);
+        this.y = this.correctBadge(LETTERS[q.correct], q.choices[q.correct], this.y, cw, x);
       }
       if (showExpl && q.explanation) {
-        this.y += sp(1, fs);
-        this.y = this.calloutBox("EXPLANATION", q.explanation, this.y, cw, C.PALE_GREEN, C.SAGE, fs);
+        this.y += sp(0.5, density);
+        this.y = this.calloutBox("EXPLANATION", q.explanation, this.y, cw, x, C.PALE_GREEN, C.SAGE);
       }
     }
 
-    // Model answer for written
     if (isWritten && q.modelAnswer && showExpl) {
-      this.y += sp(1, fs);
-      this.y = this.calloutBox("MODEL ANSWER", q.modelAnswer, this.y, cw, C.PALE_BLUE, C.ROYAL, fs);
+      this.y += sp(0.5, density);
+      this.y = this.calloutBox("MODEL ANSWER", q.modelAnswer, this.y, cw, x, C.PALE_BLUE, C.ROYAL);
     }
 
-    // Rubric criteria for written (detailed mode)
     if (isWritten && style === "detailed" && q.rubric?.length && showExpl) {
-      this.y += sp(1, fs);
+      this.y += sp(0.5, density);
       this.y = this.calloutBox(
         "RUBRIC CRITERIA",
         q.rubric.map((r, ri) => `${ri + 1}. ${r}`).join("\n"),
-        this.y, cw, [245, 243, 255], [120, 100, 180], fs,
+        this.y,
+        cw,
+        x,
+        [244, 242, 253],
+        [118, 98, 178],
       );
     }
 
-    // "See Answer" link for endchapter/endbook
     if ((answersMode === "endchapter" || answersMode === "endbook") && !isWritten) {
       d.setFont(F.Hn, hs("normal"));
-      d.setFontSize(7.5 * fs);
+      d.setFontSize(7 * this.L.typeScale);
       d.setTextColor(...C.LINK);
-      d.text(`See Answer >`, x + cw, this.y, { align: "right" });
-      this.y += sp(2, fs);
+      d.text("See Answer Key ->", x + cw, this.y, { align: "right" });
+      this.y += sp(1.5, density);
     }
 
-    // Separator
-    const sepCol = style === "styled" ? C.GOLD : C.RULE_GRAY;
-    const sepThick = style === "styled" ? 0.5 : 0.35;
-    this.y = this.hRule(this.y, cw, sepThick, sepCol);
-    this.y += sp(2, fs);
-  }
-
-  /** MCQ Notes ultra-compact mode: Q + answer + explanation. */
-  drawMcqnotesQuestion(q: FullQuestion, qNum: number, opts: QuestionDrawOpts, fs = 1.0): void {
-    const d = this.doc;
-    const cw = opts.twoCol ? this.L.cw : this.L.fw;
-    const x = this.colX;
-    const showExpl = opts.showExplanations ?? true;
-
-    this.keepTogether(30);
-
-    // Question — compact bold
-    if (q.stem) {
-      d.setFont(F.Bb, hs("bold"));
-      d.setFontSize(8.5 * fs);
-      d.setTextColor(...C.CHARCOAL);
-      const lines: string[] = d.splitTextToSize(stripMd(q.stem), cw - 4);
-      d.text(lines, x, this.y);
-      this.y += lines.length * lh(8.5 * fs, 1.4) + sp(1, fs);
-    }
-
-    // Answer
-    if (q.correct >= 0 && q.correct < q.choices.length) {
-      d.setFont(F.Hn, hs("normal"));
-      d.setFontSize(8 * fs);
-      d.setTextColor(...C.EMERALD);
-      d.text(`✓ ${LETTERS[q.correct]}. ${stripMd(q.choices[q.correct])}`, x + sp(3, fs), this.y);
-      this.y += sp(2, fs);
-    }
-
-    // Explanation — compact italic
-    if (q.explanation && showExpl) {
-      d.setFont(F.Bi, hs("italic"));
-      d.setFontSize(7.5 * fs);
-      d.setTextColor(...C.MUTED);
-      const lines: string[] = d.splitTextToSize(stripMd(q.explanation), cw - sp(5, fs));
-      d.text(lines, x + sp(5, fs), this.y);
-      this.y += lines.length * lh(7.5 * fs, 1.4) + sp(1, fs);
-    }
-
-    // Light separator
-    this.y = this.hRule(this.y, cw, 0.25, C.RULE_GRAY);
-    this.y += sp(1, fs);
-  }
-
-  /** Written question with model answer, rubric. */
-  drawWrittenQuestion(q: FullQuestion, qNum: number, opts: QuestionDrawOpts, fs = 1.0): void {
-    // Delegate to drawQuestion which already handles isWritten
-    const writtenQ = { ...q, isWritten: true };
-    this.drawQuestion(writtenQ, qNum, opts, fs);
+    const sepColor = style === "styled" ? C.GOLD : C.RULE;
+    const sepThick = style === "styled" ? 0.4 : 0.25;
+    this.y = this.hRule(this.y, cw, sepThick, sepColor, x);
+    this.y += sp(1.5, density);
   }
 
   // ── Answer key ──
 
-  drawAnswerKeyBanner(title: string, fs = 1.0): void {
+  drawAnswerKeyBanner(title: string): void {
     const d = this.doc;
+    const density = this.L.density;
     const fw = this.L.fw;
-    const bannerH = Math.max(30, 42 * this.L.scale);
-
-    this.checkPage(bannerH + sp(4, fs));
+    const bannerH = sp(9, density);
+    this.checkPage(bannerH + sp(3, density));
 
     d.setFillColor(...C.EMERALD);
-    d.roundedRect(this.L.ms, this.y, fw, bannerH - 4, 1, 1, "F");
-
+    d.roundedRect(this.L.ms, this.y, fw, bannerH, 1.2, 1.2, "F");
     d.setFillColor(...C.GOLD);
-    d.rect(this.L.ms, this.y - 1, fw, 4, "F");
+    d.rect(this.L.ms, this.y, 1.6, bannerH, "F");
 
-    d.setDrawColor(...C.GOLD);
-    d.setLineWidth(0.8);
-    d.line(this.L.ms, this.y - 1, this.L.ms + fw, this.y - 1);
-
-    const spaced = title.split("").join(" ");
     d.setFont(F.H, hs("bold"));
-    d.setFontSize(11);
+    d.setFontSize(11 * this.L.typeScale);
     d.setTextColor(...C.WHITE);
-    d.text(spaced, this.L.ms + 12, this.y + bannerH / 2 - 2);
+    d.text(tracked(title), this.L.ms + 8, this.y + bannerH / 2 + 1.6);
 
-    this.y += bannerH + sp(2, fs);
+    this.y += bannerH + sp(2.5, density);
   }
 
-  drawAnswerBlock(q: FullQuestion, qNum: number, showExpl: boolean, fs = 1.0): void {
+  drawAnswerBlock(q: FullQuestion, qNum: number, showExpl: boolean): void {
     const d = this.doc;
+    const density = this.L.density;
     const fw = this.L.fw;
     const x = this.L.ms;
 
-    this.checkPage(40);
-
-    this.y = this.trackedLabel(`ANSWER ${qNum}`, this.y, 10.5 * fs, C.EMERALD);
-
-    this.y = this.hRule(this.y, fw, 1.5, C.SAGE);
-    this.y += sp(1, fs);
+    this.checkPage(sp(11, density));
+    this.y = this.trackedLabel(`ANSWER ${qNum}`, x, this.y, 9.5, C.EMERALD);
+    this.y = this.hRule(this.y, fw, 1.1, C.SAGE);
+    this.y += sp(1, density);
 
     d.setFont(F.Bi, hs("italic"));
-    d.setFontSize(8 * fs);
+    d.setFontSize(8 * this.L.typeScale);
     d.setTextColor(...C.MUTED);
-    d.text(`"${trunc(stripMd(q.stem), 80)}"`, x, this.y);
-    this.y += sp(3, fs);
+    const stemLines: string[] = d.splitTextToSize(`"${trunc(stripMd(q.stem), 110)}"`, fw);
+    d.text(stemLines, x, this.y);
+    this.y += stemLines.length * lh(8 * this.L.typeScale) + sp(1.5, density);
 
     if (q.correct >= 0 && q.correct < q.choices.length) {
-      this.y = this.correctBadge(LETTERS[q.correct], q.choices[q.correct], this.y, fw, fs);
+      this.y = this.correctBadge(LETTERS[q.correct], q.choices[q.correct], this.y, fw, x);
     }
 
     if (q.explanation && showExpl) {
-      this.y += sp(1, fs);
-      this.y = this.text(q.explanation, x + 2, this.y, {
-        font: "times", size: 9.5 * fs, color: C.CHARCOAL, maxW: fw - 8,
-      });
-      this.y += sp(2, fs);
+      this.y += sp(0.5, density);
+      this.y = this.text(q.explanation, x, this.y, { font: "B", size: 8.8, color: C.CHARCOAL, maxW: fw });
+      this.y += sp(1, density);
     }
 
-    this.y = this.hRule(this.y, fw, 0.4, C.MINT_RULE);
-    this.y += sp(3, fs);
+    this.y = this.hRule(this.y, fw, 0.3, [190, 218, 200]);
+    this.y += sp(1.5, density);
   }
 
   // ── Score summary ──
 
-  drawScoreSummary(score: ScoreSummaryData, fs = 1.0): void {
+  drawScoreSummary(score: ScoreSummaryData): void {
     const d = this.doc;
+    const density = this.L.density;
     const fw = this.L.fw;
     const x = this.L.ms;
+    const ts = this.L.typeScale;
 
-    this.checkPage(60);
-
-    const cardH = 50;
-    d.setFillColor(...C.PALE_GRAY);
-    d.setDrawColor(...C.RULE_GRAY);
-    d.setLineWidth(0.4);
-    d.roundedRect(x, this.y, fw, cardH, 2, 2, "FD");
+    this.checkPage(sp(15, density));
+    const cardH = sp(12.5, density);
+    d.setFillColor(...C.PAPER);
+    d.setDrawColor(...C.RULE);
+    d.setLineWidth(0.35);
+    d.roundedRect(x, this.y, fw, cardH, 1.6, 1.6, "FD");
 
     const colW = fw / 3;
     const midX = x + colW;
     const rightX = x + 2 * colW;
 
-    d.setDrawColor(...C.RULE_GRAY);
-    d.setLineWidth(0.3);
+    d.setDrawColor(...C.RULE);
+    d.setLineWidth(0.25);
     d.line(midX, this.y + 4, midX, this.y + cardH - 4);
     d.line(rightX, this.y + 4, rightX, this.y + cardH - 4);
 
-    // Col 1: Score
+    // Col 1 — score.
     let cx = x + colW / 2;
     d.setFont(F.Hn, hs("normal"));
-    d.setFontSize(7);
+    d.setFontSize(6.6 * ts);
     d.setTextColor(...C.MUTED);
-    d.text("YOUR SCORE", cx, this.y + 10, { align: "center" });
+    d.text(tracked("YOUR SCORE"), cx, this.y + cardH * 0.22, { align: "center" });
 
-    const scoreCol: RGB = score.pct >= 70 ? C.EMERALD : score.pct >= 50 ? C.GOLD : [180, 50, 50];
+    const scoreCol: RGB = score.pct >= 70 ? C.EMERALD : score.pct >= 50 ? C.GOLD_DEEP : C.CRIMSON;
     d.setFont(F.H, hs("bold"));
-    d.setFontSize(28);
+    d.setFontSize(25 * ts);
     d.setTextColor(...scoreCol);
-    d.text(`${score.pct}%`, cx, this.y + 26, { align: "center" });
+    d.text(`${score.pct}%`, cx, this.y + cardH * 0.6, { align: "center" });
 
     d.setFont(F.Hn, hs("normal"));
-    d.setFontSize(7);
+    d.setFontSize(6.6 * ts);
     d.setTextColor(...C.MUTED);
-    d.text(`${score.correct} of ${score.total} correct`, cx, this.y + 35, { align: "center" });
+    d.text(`${score.correct} of ${score.total} correct`, cx, this.y + cardH * 0.85, { align: "center" });
 
-    // Col 2: Percentile
+    // Col 2 — percentile.
     cx = midX + colW / 2;
     d.setFont(F.Hn, hs("normal"));
-    d.setFontSize(7);
+    d.setFontSize(6.6 * ts);
     d.setTextColor(...C.MUTED);
-    d.text("PERCENTILE RANK", cx, this.y + 10, { align: "center" });
+    d.text(tracked("PERCENTILE"), cx, this.y + cardH * 0.22, { align: "center" });
 
     d.setFont(F.H, hs("bold"));
-    d.setFontSize(28);
+    d.setFontSize(25 * ts);
     d.setTextColor(...C.ROYAL);
-    d.text(`${score.percentile}`, cx, this.y + 26, { align: "center" });
-
+    d.text(`${score.percentile}`, cx, this.y + cardH * 0.6, { align: "center" });
+    const numW = d.getTextWidth(`${score.percentile}`);
     d.setFont(F.Hn, hs("normal"));
-    d.setFontSize(7);
-    d.setTextColor(...C.MUTED);
-    d.text("th", cx + 14, this.y + 22);
-    d.text(`Higher than ${score.percentile}%`, cx, this.y + 35, { align: "center" });
+    d.setFontSize(7.5 * ts);
+    d.text("th", cx + numW / 2 + 2, this.y + cardH * 0.5);
 
-    // Col 3: Stats
-    cx = rightX + colW / 2;
+    d.setFontSize(6.6 * ts);
+    d.setTextColor(...C.MUTED);
+    d.text(`Higher than ${score.percentile}%`, cx, this.y + cardH * 0.85, { align: "center" });
+
+    // Col 3 — stats.
     const stats: [string, string][] = [
       ["Answered", `${score.answered}/${score.total}`],
       ["Incorrect", `${score.incorrect}`],
@@ -1034,104 +1198,115 @@ class PdfDoc {
       ["Total Time", score.totalTime],
       ["Avg / Q", score.avgTime],
     ];
-    let sy = this.y + 8;
+    let sy = this.y + cardH * 0.18;
+    const rowH = cardH * 0.16;
     for (const [label, value] of stats) {
       d.setFont(F.Hn, hs("normal"));
-      d.setFontSize(6.5);
+      d.setFontSize(6.2 * ts);
       d.setTextColor(...C.MUTED);
       d.text(label, rightX + 6, sy);
       d.setFont(F.H, hs("bold"));
-      d.setFontSize(7);
-      d.setTextColor(...C.CHARCOAL);
+      d.setFontSize(6.6 * ts);
+      d.setTextColor(...C.INK);
       d.text(value, rightX + colW - 6, sy, { align: "right" });
-      sy += 7;
+      sy += rowH;
     }
 
-    this.y += cardH + sp(3, fs);
+    this.y += cardH + sp(3, density);
 
-    // Distribution bar
-    this.checkPage(20);
+    // Distribution bar.
+    this.checkPage(sp(5, density));
     d.setFont(F.H, hs("bold"));
-    d.setFontSize(9);
-    d.setTextColor(...C.CHARCOAL);
+    d.setFontSize(8.6 * ts);
+    d.setTextColor(...C.INK);
     d.text("Score Distribution", x, this.y);
-    this.y += sp(3, fs);
+    this.y += sp(2.5, density);
 
-    const barH = 4;
+    const barH = 3.2;
     const tot = score.total || 1;
     const correctW = (score.correct / tot) * fw;
     const incorrectW = (score.incorrect / tot) * fw;
 
-    d.setFillColor(...C.PALE_GRAY);
-    d.roundedRect(x, this.y, fw, barH, 1.5, 1.5, "F");
-
+    d.setFillColor(...C.RULE_SOFT);
+    d.roundedRect(x, this.y, fw, barH, 1.2, 1.2, "F");
     if (correctW > 0) {
       d.setFillColor(...C.ROYAL);
-      d.roundedRect(x, this.y, correctW, barH, 1.5, 1.5, "F");
+      d.roundedRect(x, this.y, correctW, barH, 1.2, 1.2, "F");
     }
     if (incorrectW > 0) {
-      d.setFillColor(180, 50, 50);
+      d.setFillColor(...C.CRIMSON);
       d.rect(x + correctW, this.y, incorrectW, barH, "F");
     }
+    this.y += barH + sp(2, density);
 
-    this.y += barH + sp(2, fs);
-
-    d.setFontSize(6.5);
-    const legends: [string, RGB][] = [["Correct", C.ROYAL], ["Incorrect", [180, 50, 50]], ["Unanswered", C.MUTED]];
+    d.setFontSize(6.2 * ts);
+    const legends: [string, RGB][] = [
+      ["Correct", C.ROYAL],
+      ["Incorrect", C.CRIMSON],
+      ["Unanswered", C.MUTED],
+    ];
     let lx = x;
     for (const [label, col] of legends) {
       d.setFillColor(...col);
-      d.circle(lx + 2, this.y - 1, 1.5, "F");
+      d.circle(lx + 1.4, this.y - 0.8, 1.2, "F");
       d.setTextColor(...C.MUTED);
-      d.text(label, lx + 5, this.y);
-      lx += d.getTextWidth(label) + 12;
+      d.text(label, lx + 4, this.y);
+      lx += d.getTextWidth(label) + 10;
     }
-    this.y += sp(4, fs);
+    this.y += sp(3, density);
   }
 
   // ── Question review list ──
 
-  drawQuestionReview(questions: QuestionReviewItem[], fs = 1.0): void {
+  drawQuestionReview(items: QuestionReviewItem[]): void {
     const d = this.doc;
+    const density = this.L.density;
+    const ts = this.L.typeScale;
 
-    this.checkPage(16);
+    this.checkPage(sp(6, density));
     d.setFont(F.H, hs("bold"));
-    d.setFontSize(11);
-    d.setTextColor(...C.CHARCOAL);
+    d.setFontSize(10.5 * ts);
+    d.setTextColor(...C.INK);
     d.text("Question Review", this.L.ms, this.y);
-    this.y += sp(4, fs);
+    this.y += sp(3.5, density);
 
-    for (const q of questions) {
-      this.checkPage(12);
+    for (const q of items) {
+      this.checkPage(sp(3, density));
+      const rowH = sp(2.2, density);
+      const badgeR = 2.6;
+      const badgeCx = this.L.ms + badgeR;
+      const badgeCy = this.y - 1.4;
 
-      const rowH = 9;
-      const isCorrect = q.correct;
-      const isUnanswered = q.unanswered;
-
-      const badgeBg: RGB = isCorrect ? [235, 243, 250] : isUnanswered ? [240, 243, 246] : [252, 235, 235];
-      const badgeFg: RGB = isCorrect ? C.ROYAL : isUnanswered ? C.MUTED : [180, 50, 50];
-      d.setFillColor(...badgeBg);
-      d.circle(this.L.ms + 4, this.y - 2, 3.5, "F");
-
-      d.setFont(F.H, hs("bold"));
-      d.setFontSize(6.5);
-      d.setTextColor(...badgeFg);
-      const badgeText = isUnanswered ? String(q.num) : isCorrect ? "[X]" : "[ ]";
-      d.text(badgeText, this.L.ms + 4, this.y - 0.5, { align: "center" });
+      if (q.unanswered) {
+        d.setFillColor(...C.RULE_SOFT);
+        d.circle(badgeCx, badgeCy, badgeR, "F");
+        d.setFont(F.H, hs("bold"));
+        d.setFontSize(6.2 * ts);
+        d.setTextColor(...C.MUTED);
+        d.text(String(q.num), badgeCx, badgeCy + 1, { align: "center" });
+      } else if (q.correct) {
+        d.setFillColor(...C.PALE_BLUE);
+        d.circle(badgeCx, badgeCy, badgeR, "F");
+        drawCheck(d, badgeCx, badgeCy, badgeR * 0.95, C.ROYAL);
+      } else {
+        d.setFillColor(...C.PALE_ROSE);
+        d.circle(badgeCx, badgeCy, badgeR, "F");
+        drawCross(d, badgeCx, badgeCy, badgeR * 0.95, C.CRIMSON);
+      }
 
       d.setFont(F.B, hs("normal"));
-      d.setFontSize(7.5);
+      d.setFontSize(7.6 * ts);
       d.setTextColor(...C.CHARCOAL);
-      const textLines: string[] = d.splitTextToSize(stripMd(q.stem), this.L.fw - 16);
-      d.text(textLines.slice(0, 2), this.L.ms + 12, this.y);
+      const lines: string[] = d.splitTextToSize(normalizeText(stripMd(q.stem)), this.L.fw - 14);
+      d.text(lines.slice(0, 2), this.L.ms + 10, this.y);
       this.y += rowH;
     }
-    this.y += sp(2, fs);
+    this.y += sp(1.5, density);
   }
 }
 
 // ═══════════════════════════════════════════════════════════════
-// § 7  PUBLIC TYPES
+// § 8  PUBLIC TYPES
 // ═══════════════════════════════════════════════════════════════
 
 export interface CoverConfig {
@@ -1182,7 +1357,7 @@ export interface PdfExportOptions {
   author: string;
   includeCover: boolean;
   page: PdfPageConfig;
-  styleMode: "standard" | "styled" | "compact" | "detailed" | "mcqnotes";
+  styleMode: StyleMode;
   answersMode: "inline" | "endchapter" | "endbook" | "none";
   showExplanations: boolean;
   twoCol: boolean;
@@ -1203,6 +1378,7 @@ export interface PdfExportConfig {
   answersMode: PdfExportOptions["answersMode"];
   showExplanations: boolean;
   twoCol: boolean;
+  author?: string;
   chapters: Array<{
     title: string;
     description?: string;
@@ -1243,57 +1419,57 @@ export interface ArticlePdfConfig {
 }
 
 // ═══════════════════════════════════════════════════════════════
-// § 8  FULL QUIZ COMPILATION EXPORT  —  with hyperlinked TOC
+// § 9  QUIZ COMPILATION  —  multi-chapter booklet, two-pass TOC
 // ═══════════════════════════════════════════════════════════════
 
-export function generateQuizCompilationPdf(cfg: PdfExportConfig): jsPDF {
-  const isCompact = cfg.styleMode === "compact";
-  const doc = new PdfDoc(cfg.page, cfg.cover.title, isCompact);
+interface CompilationResult {
+  doc: jsPDF;
+  chapterPages: number[];
+}
+
+function renderCompilation(cfg: PdfExportConfig, knownChapterPages: number[] | null): CompilationResult {
+  const doc = new PdfDoc(cfg.page, cfg.cover.title, cfg.styleMode);
   const L = doc.L;
   const multiChapter = cfg.chapters.length > 1;
   const totalQ = cfg.chapters.reduce((a, ch) => a + ch.questions.length, 0);
+  doc.setMeta({ title: cfg.cover.title, author: cfg.author, subject: "Quiz booklet" });
 
-  // ── Cover ──
+  const showToc = multiChapter && cfg.includeCover;
+
   if (cfg.includeCover) {
-    doc.drawCover(cfg.cover, totalQ, cfg.chapters.length, L.fs);
-    doc.newPage(true);
-  }
-
-  // ── TOC ──
-  if (multiChapter && cfg.includeCover) {
-    doc.setHeader("CONTENTS", C.NAVY, C.HEADER_FG.contents);
+    doc.drawCover(cfg.cover, totalQ, cfg.chapters.length);
+    doc.addBookmark("Cover");
+    doc.newPage({
+      skipOutgoing: true,
+      header: showToc ? { label: "CONTENTS", section: "contents" } : { label: "QUESTIONS", section: "questions" },
+    });
+  } else {
+    doc.setHeader("QUESTIONS", "questions");
     doc.y = L.mt;
     doc.drawChrome();
+  }
+  const contentStartPage = cfg.includeCover ? 2 : 1;
+
+  if (showToc) {
+    doc.addBookmark("Contents");
 
     doc.doc.setFont(F.H, hs("bold"));
-    doc.doc.setFontSize(20);
-    doc.doc.setTextColor(...C.CHARCOAL);
+    doc.doc.setFontSize(18 * L.typeScale);
+    doc.doc.setTextColor(...C.INK);
     doc.doc.text("Table of Contents", L.ms, doc.y);
-    doc.y += sp(4, L.fs);
+    doc.y += sp(4, L.density);
     doc.y = doc.doubleRule(doc.y, L.fw);
-    doc.y += sp(2, L.fs);
+    doc.y += sp(1.5, L.density);
 
-    // First pass to record chapter page numbers
-    // Each chapter starts after TOC + previous chapters
-    // We approximate: first chapter starts on the next page
-    cfg.chapters.forEach((_ch, i) => {
-      const targetPage = doc.page + 1 + i; // TOC occupies current page
-      doc.drawTocEntry(
-        i + 1, _ch.title, _ch.questions.length, _ch.description ?? "",
-        targetPage, L.fs,
-      );
+    cfg.chapters.forEach((ch, i) => {
+      const targetPage = knownChapterPages ? knownChapterPages[i + 1] : doc.page;
+      doc.drawTocEntry(i + 1, ch.title, ch.questions.length, ch.description ?? "", targetPage);
     });
-    doc.newPage();
+    doc.newPage({ header: { label: "QUESTIONS", section: "questions" } });
   }
 
-  // ── Chapters ──
-  doc.setHeader("QUESTIONS", C.COBALT, C.HEADER_FG.questions);
-  doc.colX = L.ms;
-  doc.y = L.mt;
-  doc.drawChrome();
-
   let globalQ = 0;
-  const allAnswers: Array<{ num: number; q: FullQuestion; globalNum: number }> = [];
+  const allAnswers: Array<{ num: number; q: FullQuestion }> = [];
   const drawOpts: QuestionDrawOpts = {
     answersMode: cfg.answersMode,
     showExplanations: cfg.answersMode === "inline" ? cfg.showExplanations : false,
@@ -1302,210 +1478,173 @@ export function generateQuizCompilationPdf(cfg: PdfExportConfig): jsPDF {
   };
 
   cfg.chapters.forEach((ch, ci) => {
-    if (ci > 0) doc.newPage();
-    doc.drawChapterHeader(ci + 1, ch.title, ch.description ?? "", !multiChapter, L.fs);
+    if (ci > 0) doc.newPage({ header: { label: "QUESTIONS", section: "questions" } });
+    const chapterItem = doc.addBookmark(`${String(ci + 1).padStart(2, "0")}. ${ch.title}`);
+    doc.drawChapterHeader(ci + 1, ch.title, ch.description ?? "", !multiChapter);
+    doc.beginFlow(cfg.twoCol);
 
     for (const q of ch.questions) {
       globalQ++;
-      if (cfg.styleMode === "mcqnotes") {
-        doc.drawMcqnotesQuestion(q, globalQ, drawOpts, L.fs);
-      } else {
-        doc.drawQuestion(q, globalQ, drawOpts, L.fs);
-      }
+      doc.drawQuestion(q, globalQ, drawOpts);
       if (cfg.answersMode !== "inline" && cfg.answersMode !== "none" && !q.isWritten) {
-        allAnswers.push({ num: globalQ, q, globalNum: globalQ });
+        allAnswers.push({ num: globalQ, q });
       }
     }
 
-    // End-of-chapter answer key
     if (cfg.answersMode === "endchapter" && allAnswers.length > 0) {
       const chapterAnswers = allAnswers.splice(0);
-      doc.newPage();
-      doc.setHeader("ANSWER KEY", C.EMERALD, C.HEADER_FG.answers);
-      doc.y = L.mt;
-      doc.drawChrome();
-      doc.drawAnswerKeyBanner(`CHAPTER ${ci + 1} - ANSWER KEY`, L.fs);
-      for (const entry of chapterAnswers) {
-        doc.drawAnswerBlock(entry.q, entry.num, cfg.showExplanations, L.fs);
-      }
-      doc.setHeader("QUESTIONS", C.COBALT, C.HEADER_FG.questions);
+      doc.newPage({ header: { label: "ANSWER KEY", section: "answers" } });
+      doc.addBookmark("Answer Key", chapterItem);
+      doc.drawAnswerKeyBanner(`CHAPTER ${ci + 1} — ANSWER KEY`);
+      for (const entry of chapterAnswers) doc.drawAnswerBlock(entry.q, entry.num, cfg.showExplanations);
     }
   });
 
-  // ── End-of-book answer key ──
   if (cfg.answersMode === "endbook" && allAnswers.length > 0) {
-    doc.newPage();
-    doc.setHeader("ANSWER KEY", C.EMERALD, C.HEADER_FG.answers);
-    doc.y = L.mt;
-    doc.drawChrome();
-    doc.drawAnswerKeyBanner("COMPLETE ANSWER KEY", L.fs);
-    for (const entry of allAnswers) {
-      doc.drawAnswerBlock(entry.q, entry.num, cfg.showExplanations, L.fs);
-    }
+    doc.newPage({ header: { label: "ANSWER KEY", section: "answers" } });
+    doc.addBookmark("Answer Key");
+    doc.drawAnswerKeyBanner("COMPLETE ANSWER KEY");
+    for (const entry of allAnswers) doc.drawAnswerBlock(entry.q, entry.num, cfg.showExplanations);
   }
 
-  doc.drawChrome();
-  return doc.doc;
+  doc.finalize(contentStartPage);
+  return { doc: doc.doc, chapterPages: doc.chapterPages };
+}
+
+/**
+ * Multi-chapter quiz booklet — cover, hyperlinked & bookmarked table of
+ * contents, per-chapter questions, and answer keys. Uses a silent measure
+ * pass to learn real chapter page numbers before rendering final TOC links,
+ * so links stay correct no matter how long each chapter runs.
+ */
+export function generateQuizCompilationPdf(cfg: PdfExportConfig): jsPDF {
+  const multiChapter = cfg.chapters.length > 1;
+  let chapterPages: number[] | null = null;
+  if (multiChapter && cfg.includeCover) {
+    chapterPages = renderCompilation(cfg, null).chapterPages;
+  }
+  return renderCompilation(cfg, chapterPages).doc;
 }
 
 // ═══════════════════════════════════════════════════════════════
-// § 9  RESULTS VIEW PDF
+// § 10  RESULTS PDF  —  single attempt, real two-column flow
 // ═══════════════════════════════════════════════════════════════
 
 export function generateResultsPdf(cfg: ResultsPdfConfig): jsPDF {
-  const isCompact = cfg.opts.styleMode === "compact";
-  const doc = new PdfDoc(cfg.opts.page, cfg.packTitle, isCompact);
-  const L = doc.L;
   const opts = cfg.opts;
+  const doc = new PdfDoc(opts.page, cfg.packTitle, opts.styleMode);
+  const L = doc.L;
+  doc.setMeta({ title: opts.title || cfg.packTitle, author: opts.author, subject: "Quiz results" });
 
-  // ── Cover ──
   if (opts.includeCover) {
     doc.drawCover(
       {
         title: opts.title || cfg.packTitle,
-        subtitle: opts.subtitle || `${cfg.mode === "timed" ? "Timed" : "Tutor"} Mode - ${cfg.score.total} Questions`,
-        eyebrow: "T E S T   R E S U L T S",
+        subtitle: opts.subtitle || `${cfg.mode === "timed" ? "Timed" : "Tutor"} Mode  ·  ${cfg.score.total} Questions`,
+        eyebrow: "TEST RESULTS",
         author: opts.author,
         date: new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" }),
         features: [
-          "Score Analysis & Percentile Rank",
-          opts.answersMode === "inline" ? "Inline Answer Key with Explanations" :
-          opts.answersMode === "endbook" ? "Complete Answer Key at End" :
-          opts.answersMode === "endchapter" ? "Per-Chapter Answer Keys" : "Question Review",
-          "Performance Statistics",
+          "Score analysis & percentile rank",
+          opts.answersMode === "inline"
+            ? "Inline answer key with explanations"
+            : opts.answersMode === "endbook"
+              ? "Complete answer key at the end"
+              : opts.answersMode === "endchapter"
+                ? "Per-chapter answer keys"
+                : "Question review",
+          "Performance statistics",
         ],
       },
-      cfg.score.total, 1, L.fs
+      cfg.score.total,
+      1,
     );
-    doc.newPage(true);
-  }
-
-  // ── Content pages ──
-  doc.setHeader("QUESTIONS", C.COBALT, C.HEADER_FG.questions);
-  doc.colX = L.ms;
-  doc.y = L.mt;
-  doc.drawChrome();
-
-  doc.drawScoreSummary(cfg.score, L.fs);
-
-  const allAnswers: Array<{ num: number; q: FullQuestion }> = [];
-
-  const setupTwoCol = (leftCol = true) => {
-    if (opts.twoCol) {
-      doc.colX = leftCol ? L.ms : L.ms + L.cw + L.gu;
-    } else {
-      doc.colX = L.ms;
-    }
-  };
-
-  // Questions
-  if (opts.answersMode === "inline" || opts.answersMode === "none") {
-    const drawOpts: QuestionDrawOpts = {
-      answersMode: opts.answersMode,
-      showExplanations: opts.showExplanations,
-      styleMode: opts.styleMode,
-      twoCol: opts.twoCol,
-    };
-    setupTwoCol(true);
-    cfg.questions.forEach((q, i) => {
-      if (opts.twoCol) doc.checkPage(20);
-      if (opts.styleMode === "mcqnotes") {
-        doc.drawMcqnotesQuestion(q, i + 1, drawOpts, L.fs);
-      } else {
-        doc.drawQuestion(q, i + 1, drawOpts, L.fs);
-      }
-    });
+    doc.addBookmark("Cover");
+    doc.newPage({ skipOutgoing: true, header: { label: "QUESTIONS", section: "questions" } });
   } else {
-    const drawOpts: QuestionDrawOpts = {
-      answersMode: opts.answersMode,
-      showExplanations: false,
-      styleMode: opts.styleMode,
-      twoCol: opts.twoCol,
-    };
-    setupTwoCol(true);
-    cfg.questions.forEach((q, i) => {
-      if (opts.twoCol) doc.checkPage(20);
-      if (opts.styleMode === "mcqnotes") {
-        doc.drawMcqnotesQuestion(q, i + 1, drawOpts, L.fs);
-      } else {
-        doc.drawQuestion(q, i + 1, drawOpts, L.fs);
-      }
-      if (!q.isWritten) allAnswers.push({ num: i + 1, q });
-    });
-  }
-
-  // ── Answer key section ──
-  if (allAnswers.length > 0 && opts.answersMode !== "inline" && opts.answersMode !== "none") {
-    doc.newPage();
-    doc.setHeader("ANSWER KEY", C.EMERALD, C.HEADER_FG.answers);
-    doc.colX = L.ms;
+    doc.setHeader("QUESTIONS", "questions");
     doc.y = L.mt;
     doc.drawChrome();
-    doc.drawAnswerKeyBanner(
-      opts.answersMode === "endchapter" ? "ANSWER KEY" : "COMPLETE ANSWER KEY",
-      L.fs
-    );
-    for (const entry of allAnswers) {
-      doc.drawAnswerBlock(entry.q, entry.num, opts.showExplanations, L.fs);
+  }
+  const contentStartPage = opts.includeCover ? 2 : 1;
+  doc.beginFlow(opts.twoCol);
+  doc.addBookmark("Results");
+
+  doc.drawScoreSummary(cfg.score);
+  doc.colTopY = doc.y;
+
+  const allAnswers: Array<{ num: number; q: FullQuestion }> = [];
+  const includeExplanationsInline = opts.answersMode === "inline";
+  const drawOpts: QuestionDrawOpts = {
+    answersMode: opts.answersMode,
+    showExplanations: includeExplanationsInline ? opts.showExplanations : false,
+    styleMode: opts.styleMode,
+    twoCol: opts.twoCol,
+  };
+
+  cfg.questions.forEach((q, i) => {
+    doc.drawQuestion(q, i + 1, drawOpts);
+    if (opts.answersMode !== "inline" && opts.answersMode !== "none" && !q.isWritten) {
+      allAnswers.push({ num: i + 1, q });
     }
+  });
+
+  if (allAnswers.length > 0 && opts.answersMode !== "inline" && opts.answersMode !== "none") {
+    doc.newPage({ header: { label: "ANSWER KEY", section: "answers" } });
+    doc.addBookmark("Answer Key");
+    doc.drawAnswerKeyBanner("COMPLETE ANSWER KEY");
+    for (const entry of allAnswers) doc.drawAnswerBlock(entry.q, entry.num, opts.showExplanations);
   }
 
-  // ── Question review list ──
-  doc.newPage();
-  doc.setHeader("QUESTIONS", C.COBALT, C.HEADER_FG.questions);
-  doc.colX = L.ms;
-  doc.y = L.mt;
-  doc.drawChrome();
+  doc.newPage({ header: { label: "REVIEW", section: "questions" } });
+  doc.addBookmark("Question Review");
 
   const reviewItems: QuestionReviewItem[] = cfg.questions.map((q, i) => {
     const ans = cfg.userAnswers[i];
     const isSubmitted = !!cfg.revealed[i];
     const isMCQ = q.correct >= 0;
-    const isCorrect = isMCQ
-      ? isSubmitted && ans === q.correct
-      : false;
-    return {
-      num: i + 1,
-      stem: q.stem,
-      correct: !!isCorrect,
-      unanswered: !isSubmitted,
-    };
+    const isCorrect = isMCQ ? isSubmitted && ans === q.correct : false;
+    return { num: i + 1, stem: q.stem, correct: isCorrect, unanswered: !isSubmitted };
   });
-  doc.drawQuestionReview(reviewItems, L.fs);
+  doc.drawQuestionReview(reviewItems);
 
-  doc.drawChrome();
+  doc.finalize(contentStartPage);
   return doc.doc;
 }
 
 // ═══════════════════════════════════════════════════════════════
-// § 10  DASHBOARD PERFORMANCE REPORT
+// § 11  DASHBOARD PERFORMANCE REPORT
 // ═══════════════════════════════════════════════════════════════
 
 export function generateDashboardPdf(cfg: DashboardPdfConfig): jsPDF {
-  const isCompact = cfg.opts.styleMode === "compact";
   const opts = cfg.opts;
-  const doc = new PdfDoc(cfg.opts.page, opts.title || "Performance Report", isCompact);
+  const doc = new PdfDoc(opts.page, opts.title || "Performance Report", opts.styleMode);
   const L = doc.L;
+  doc.setMeta({ title: opts.title || `${cfg.username}'s Progress`, author: opts.author, subject: "Performance report" });
 
   if (opts.includeCover) {
     doc.drawCover(
       {
         title: opts.title || `${cfg.username}'s Progress`,
         subtitle: opts.subtitle || "Comprehensive Performance Report",
-        eyebrow: "P E R F O R M A N C E   R E P O R T",
+        eyebrow: "PERFORMANCE REPORT",
         author: opts.author || cfg.username,
         date: new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" }),
-        features: ["Overall Accuracy & Progress", "Pack-by-Pack Breakdown", "Study Statistics"],
+        features: ["Overall accuracy & progress", "Pack-by-pack breakdown", "Study statistics"],
         footerNote: "Generated by Osler",
       },
-      cfg.stats.attempted, cfg.stats.packs, L.fs
+      cfg.stats.attempted,
+      cfg.stats.packs,
     );
-    doc.newPage(true);
+    doc.addBookmark("Cover");
+    doc.newPage({ skipOutgoing: true, header: { label: "PERFORMANCE", section: "report" } });
+  } else {
+    doc.setHeader("PERFORMANCE", "report");
+    doc.y = L.mt;
+    doc.drawChrome();
   }
-
-  doc.setHeader("PERFORMANCE", C.COBALT, C.HEADER_FG.questions);
-  doc.y = L.mt;
-  doc.drawChrome();
+  const contentStartPage = opts.includeCover ? 2 : 1;
+  doc.addBookmark("Performance Summary");
 
   doc.drawScoreSummary({
     pct: cfg.stats.accuracy,
@@ -1515,199 +1654,185 @@ export function generateDashboardPdf(cfg: DashboardPdfConfig): jsPDF {
     incorrect: cfg.stats.attempted - cfg.stats.correct,
     flagged: 0,
     percentile: Math.min(99, Math.max(1, Math.round(cfg.stats.accuracy * 0.9 + 5))),
-    totalTime: "-",
-    avgTime: "-",
-  }, L.fs);
+    totalTime: "—",
+    avgTime: "—",
+  });
 
   if (cfg.recentPacks.length > 0) {
     const d = doc.doc;
-    doc.checkPage(16);
+    const density = L.density;
+    const ts = L.typeScale;
+    doc.checkPage(sp(5, density));
     d.setFont(F.H, hs("bold"));
-    d.setFontSize(11);
-    d.setTextColor(...C.CHARCOAL);
+    d.setFontSize(10 * ts);
+    d.setTextColor(...C.INK);
     d.text("Pack Breakdown", L.ms, doc.y);
-    doc.y += sp(4, L.fs);
+    doc.y += sp(3.5, density);
 
     for (const pack of cfg.recentPacks) {
-      doc.checkPage(18);
+      doc.checkPage(sp(6, density));
       const rowY = doc.y;
       const acc = pack.attempted > 0 ? Math.round((pack.correct / pack.attempted) * 100) : 0;
 
       d.setFillColor(...C.PALE_BLUE);
-      d.roundedRect(L.ms, rowY - 3, 24, 7, 1, 1, "F");
+      d.roundedRect(L.ms, rowY - 3, 22, 6.4, 1, 1, "F");
       d.setFont(F.H, hs("bold"));
-      d.setFontSize(6);
+      d.setFontSize(5.6 * ts);
       d.setTextColor(...C.ROYAL);
-      d.text(pack.engine.toUpperCase(), L.ms + 12, rowY + 0.5, { align: "center" });
+      d.text(tracked(pack.engine.toUpperCase()), L.ms + 11, rowY + 0.4, { align: "center" });
 
       d.setFont(F.H, hs("bold"));
-      d.setFontSize(9);
-      d.setTextColor(...C.CHARCOAL);
-      d.text(trunc(pack.title, 45), L.ms + 28, rowY);
+      d.setFontSize(8.6 * ts);
+      d.setTextColor(...C.INK);
+      d.text(trunc(pack.title, 44), L.ms + 27, rowY);
       if (pack.lastAttempt) {
         d.setFont(F.Hn, hs("normal"));
-        d.setFontSize(7);
+        d.setFontSize(6.6 * ts);
         d.setTextColor(...C.MUTED);
         d.text(new Date(pack.lastAttempt).toLocaleDateString(), L.ms + L.fw, rowY, { align: "right" });
       }
 
       d.setFont(F.Hn, hs("normal"));
-      d.setFontSize(7);
+      d.setFontSize(6.6 * ts);
       d.setTextColor(...C.MUTED);
-      d.text(`${pack.attempted} attempted - ${pack.correct} correct - ${acc}%`, L.ms + 28, rowY + 5);
+      d.text(`${pack.attempted} attempted  ·  ${pack.correct} correct  ·  ${acc}%`, L.ms + 27, rowY + 4.6);
 
-      const barY = rowY + 8;
-      const barW = L.fw - 28;
-      d.setFillColor(...C.PALE_GRAY);
-      d.roundedRect(L.ms + 28, barY, barW, 2.5, 1, 1, "F");
+      const barY = rowY + 7.4;
+      const barW = L.fw - 27;
+      d.setFillColor(...C.RULE_SOFT);
+      d.roundedRect(L.ms + 27, barY, barW, 2.2, 1, 1, "F");
       if (pack.attempted > 0) {
         d.setFillColor(...C.ROYAL);
-        d.roundedRect(L.ms + 28, barY, (pack.correct / pack.attempted) * barW, 2.5, 1, 1, "F");
+        d.roundedRect(L.ms + 27, barY, (pack.correct / pack.attempted) * barW, 2.2, 1, 1, "F");
       }
 
-      doc.y = barY + sp(4, L.fs);
-      doc.y = doc.hRule(doc.y, L.fw, 0.25);
-      doc.y += sp(1, L.fs);
+      doc.y = barY + sp(3.5, density);
+      doc.y = doc.hRule(doc.y, L.fw, 0.2);
+      doc.y += sp(0.5, density);
     }
   }
 
   doc.drawChrome();
+  doc.finalize(contentStartPage);
   return doc.doc;
 }
 
 // ═══════════════════════════════════════════════════════════════
-// § 11  LIBRARY ARTICLE PDF  —  with HTML content handling
+// § 12  LIBRARY ARTICLE PDF  —  HTML-aware, serif body typography
 // ═══════════════════════════════════════════════════════════════
 
 export function generateArticlePdf(cfg: ArticlePdfConfig): jsPDF {
-  const doc = new PdfDoc(cfg.opts.page, cfg.title, cfg.opts.styleMode === "compact");
-  const L = doc.L;
   const opts = cfg.opts;
+  const doc = new PdfDoc(opts.page, cfg.title, opts.styleMode);
+  const L = doc.L;
+  const density = L.density;
+  const ts = L.typeScale;
+  doc.setMeta({ title: cfg.title, author: opts.author || cfg.author, subject: "Library article" });
 
   if (opts.includeCover) {
     doc.drawCover(
       {
         title: cfg.title,
         subtitle: cfg.subtitle,
-        eyebrow: "L I B R A R Y   A R T I C L E",
+        eyebrow: "LIBRARY ARTICLE",
         author: opts.author || cfg.author,
         date: new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" }),
-        features: ["Printed from Osler Library"],
+        features: ["Printed from the Osler Library"],
       },
-      0, 0, L.fs
+      0,
+      0,
     );
+    doc.addBookmark("Cover");
     doc.newPage(true);
   }
+  const contentStartPage = opts.includeCover ? 2 : 1;
 
-  doc.setHeader("ARTICLE", C.COBALT, C.HEADER_FG.questions);
+  doc.setHeader("ARTICLE", "article");
   doc.y = L.mt;
   doc.drawChrome();
+  doc.addBookmark(cfg.title);
 
   const d = doc.doc;
   const x = L.ms;
   const fw = L.fw;
 
-  // Title
   d.setFont(F.H, hs("bold"));
-  d.setFontSize(16);
-  d.setTextColor(...C.CHARCOAL);
+  d.setFontSize(17 * ts);
+  d.setTextColor(...C.INK);
   const titleLines: string[] = d.splitTextToSize(cfg.title, fw);
   d.text(titleLines, x, doc.y);
-  doc.y += titleLines.length * lh(16) + sp(3, L.fs);
+  doc.y += titleLines.length * lh(17 * ts) + sp(2, density);
 
-  // Metadata line
   const metaParts: string[] = [];
   if (cfg.author) metaParts.push(cfg.author);
   metaParts.push(new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" }));
   d.setFont(F.Hn, hs("normal"));
-  d.setFontSize(8);
+  d.setFontSize(7.6 * ts);
   d.setTextColor(...C.MUTED);
-  d.text(metaParts.join("  -  "), x, doc.y);
-  doc.y += sp(3, L.fs);
+  d.text(metaParts.join("   ·   "), x, doc.y);
+  doc.y += sp(2, density);
 
-  doc.y = doc.hRule(doc.y, fw, 0.5, C.RULE_GRAY);
-  doc.y += sp(3, L.fs);
+  doc.y = doc.hRule(doc.y, fw, 0.4, C.RULE);
+  doc.y += sp(2, density);
 
-  // Body — strip HTML and parse into paragraphs
   const plainText = stripHtml(cfg.content);
-  const paragraphs = plainText.split(/\n{2,}/).filter(p => p.trim());
+  const paragraphs = plainText.split(/\n{2,}/).filter((p) => p.trim());
 
   for (const para of paragraphs) {
     const trimmed = para.trim();
     if (!trimmed) continue;
 
-    // Detect HTML-style headings or markdown headings or ALL-CAPS
     const htmlH = detectHtmlHeading(trimmed);
     const isMdH2 = /^##\s/.test(trimmed);
     const isMdH3 = /^###\s/.test(trimmed);
     const isAllCaps = /^[A-Z][A-Z\s]{3,}$/.test(trimmed) && trimmed.length < 80;
 
-    if (htmlH && htmlH.level === 2) {
-      doc.checkPage(16);
-      doc.y += sp(2, L.fs);
+    if ((htmlH && htmlH.level === 2) || isMdH2) {
+      const headingText = htmlH ? htmlH.text : trimmed.replace(/^##\s+/, "");
+      doc.checkPage(sp(6, density));
+      doc.y += sp(1.5, density);
       d.setFont(F.H, hs("bold"));
-      d.setFontSize(13);
-      d.setTextColor(...C.CHARCOAL);
-      const hLines: string[] = d.splitTextToSize(htmlH.text, fw);
+      d.setFontSize(12.5 * ts);
+      d.setTextColor(...C.INK);
+      const hLines: string[] = d.splitTextToSize(headingText, fw);
       d.text(hLines, x, doc.y);
-      doc.y += hLines.length * lh(13) + sp(1, L.fs);
-      doc.y = doc.hRule(doc.y, fw, 0.5, C.GOLD);
-      doc.y += sp(2, L.fs);
-    } else if (htmlH && htmlH.level === 3) {
-      doc.checkPage(12);
-      doc.y += sp(1, L.fs);
+      doc.y += hLines.length * lh(12.5 * ts) + sp(1, density);
+      doc.y = doc.hRule(doc.y, fw * 0.16, 0.6, C.GOLD);
+      doc.y += sp(1.5, density);
+    } else if ((htmlH && htmlH.level === 3) || isMdH3) {
+      const headingText = htmlH ? htmlH.text : trimmed.replace(/^###\s+/, "");
+      doc.checkPage(sp(4.5, density));
+      doc.y += sp(0.5, density);
       d.setFont(F.H, hs("bold"));
-      d.setFontSize(11);
+      d.setFontSize(10.5 * ts);
       d.setTextColor(...C.COBALT);
-      const hLines: string[] = d.splitTextToSize(htmlH.text, fw);
+      const hLines: string[] = d.splitTextToSize(headingText, fw);
       d.text(hLines, x, doc.y);
-      doc.y += hLines.length * lh(11) + sp(2, L.fs);
-    } else if (isMdH2) {
-      doc.checkPage(16);
-      doc.y += sp(2, L.fs);
-      d.setFont(F.H, hs("bold"));
-      d.setFontSize(13);
-      d.setTextColor(...C.CHARCOAL);
-      const hLines: string[] = d.splitTextToSize(trimmed.replace(/^##\s+/, ""), fw);
-      d.text(hLines, x, doc.y);
-      doc.y += hLines.length * lh(13) + sp(1, L.fs);
-      doc.y = doc.hRule(doc.y, fw, 0.5, C.GOLD);
-      doc.y += sp(2, L.fs);
-    } else if (isMdH3) {
-      doc.checkPage(12);
-      doc.y += sp(1, L.fs);
-      d.setFont(F.H, hs("bold"));
-      d.setFontSize(11);
-      d.setTextColor(...C.COBALT);
-      d.text(trimmed.replace(/^###\s+/, ""), x, doc.y);
-      doc.y += lh(11) + sp(2, L.fs);
+      doc.y += hLines.length * lh(10.5 * ts) + sp(1.5, density);
     } else if (isAllCaps) {
-      doc.checkPage(16);
-      doc.y += sp(2, L.fs);
+      doc.checkPage(sp(6, density));
+      doc.y += sp(1.5, density);
       d.setFont(F.H, hs("bold"));
-      d.setFontSize(12);
-      d.setTextColor(...C.CHARCOAL);
+      d.setFontSize(11 * ts);
+      d.setTextColor(...C.INK);
       d.text(trimmed, x, doc.y);
-      doc.y += lh(12) + sp(2, L.fs);
-      doc.y = doc.hRule(doc.y, fw, 0.3);
-      doc.y += sp(2, L.fs);
+      doc.y += lh(11 * ts) + sp(1.5, density);
+      doc.y = doc.hRule(doc.y, fw, 0.25);
+      doc.y += sp(1.5, density);
     } else {
-      doc.checkPage(10);
-      d.setFont(F.B, hs("normal"));
-      d.setFontSize(9.5);
-      d.setTextColor(...C.CHARCOAL);
-      const bodyLines: string[] = d.splitTextToSize(stripMd(trimmed), fw - 4);
-      d.text(bodyLines, x + 2, doc.y);
-      doc.y += bodyLines.length * lh(9.5) + sp(2, L.fs);
+      doc.checkPage(sp(3, density));
+      doc.y = doc.text(trimmed, x, doc.y, { font: "B", size: 9.4, color: C.CHARCOAL, maxW: fw });
+      doc.y += sp(1.5, density);
     }
   }
 
   doc.drawChrome();
+  doc.finalize(contentStartPage);
   return doc.doc;
 }
 
 // ═══════════════════════════════════════════════════════════════
-// § 12  DOWNLOAD HELPER
+// § 13  DOWNLOAD HELPER
 // ═══════════════════════════════════════════════════════════════
 
 export function downloadPdf(doc: jsPDF, filename: string): void {
