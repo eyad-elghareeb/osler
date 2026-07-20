@@ -1005,14 +1005,15 @@ class PdfDoc {
   drawQuestion(q: FullQuestion, qNum: number, opts: QuestionDrawOpts): void {
     const d = this.doc;
     const density = this.L.density;
-    const cw = opts.twoCol ? this.L.cw : this.L.fw;
-    const x = this.colX;
     const answersMode = opts.answersMode ?? "inline";
     const showExpl = opts.showExplanations ?? true;
     const style = opts.styleMode ?? "standard";
     const isWritten = q.isWritten ?? false;
 
     this.checkPage(this.estimateQuestionH(q, opts) + 8);
+    // Derive column state AFTER checkPage — it may have switched columns
+    let cw = opts.twoCol ? this.L.cw : this.L.fw;
+    let x = this.colX;
 
     // ── Header row ──
     if (style === "styled") {
@@ -1099,21 +1100,25 @@ class PdfDoc {
     if (answersMode === "inline" && !isWritten) {
       if (showExpl && q.correct >= 0 && q.correct < q.choices.length) {
         this.y += sp(0.5, density);
+        cw = opts.twoCol ? this.L.cw : this.L.fw; x = this.colX;
         this.y = this.correctBadge(LETTERS[q.correct], q.choices[q.correct], this.y, cw, x);
       }
       if (showExpl && q.explanation) {
         this.y += sp(0.5, density);
+        cw = opts.twoCol ? this.L.cw : this.L.fw; x = this.colX;
         this.y = this.calloutBox("EXPLANATION", q.explanation, this.y, cw, x, C.PALE_GREEN, C.SAGE);
       }
     }
 
     if (isWritten && q.modelAnswer && showExpl) {
       this.y += sp(0.5, density);
+      cw = opts.twoCol ? this.L.cw : this.L.fw; x = this.colX;
       this.y = this.calloutBox("MODEL ANSWER", q.modelAnswer, this.y, cw, x, C.PALE_BLUE, C.ROYAL);
     }
 
     if (isWritten && style === "detailed" && q.rubric?.length && showExpl) {
       this.y += sp(0.5, density);
+      cw = opts.twoCol ? this.L.cw : this.L.fw; x = this.colX;
       this.y = this.calloutBox(
         "RUBRIC CRITERIA",
         q.rubric.map((r, ri) => `${ri + 1}. ${r}`).join("\n"),
@@ -1165,10 +1170,12 @@ class PdfDoc {
   drawAnswerBlock(q: FullQuestion, qNum: number, showExpl: boolean): void {
     const d = this.doc;
     const density = this.L.density;
-    const cw = this.twoColEnabled ? this.L.cw : this.L.fw;
-    const x = this.colX;
 
     this.checkPage(sp(11, density));
+    // Must read column state AFTER checkPage — it may have switched columns
+    let cw = this.twoColEnabled ? this.L.cw : this.L.fw;
+    let x = this.colX;
+
     this.y = this.trackedLabel(`ANSWER ${qNum}`, x, this.y, 9.5, C.EMERALD);
     this.y = this.hRule(this.y, cw, 1.1, C.SAGE);
     this.y += sp(1, density);
@@ -1181,15 +1188,21 @@ class PdfDoc {
     this.y += stemLines.length * lh(8 * this.L.typeScale) + sp(1.5, density);
 
     if (q.correct >= 0 && q.correct < q.choices.length) {
+      cw = this.twoColEnabled ? this.L.cw : this.L.fw;
+      x = this.colX;
       this.y = this.correctBadge(LETTERS[q.correct], q.choices[q.correct], this.y, cw, x);
     }
 
     if (q.explanation && showExpl) {
+      cw = this.twoColEnabled ? this.L.cw : this.L.fw;
+      x = this.colX;
       this.y += sp(0.5, density);
       this.y = this.text(q.explanation, x, this.y, { font: "B", size: 8.8, color: C.CHARCOAL, maxW: cw });
       this.y += sp(1, density);
     }
 
+    cw = this.twoColEnabled ? this.L.cw : this.L.fw;
+    x = this.colX;
     this.y = this.hRule(this.y, cw, 0.3, [190, 218, 200]);
     this.y += sp(1.5, density);
   }
