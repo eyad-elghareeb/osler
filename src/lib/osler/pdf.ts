@@ -1141,7 +1141,7 @@ class PdfDoc {
     const sepColor = style === "styled" ? C.GOLD : C.RULE;
     const sepThick = style === "styled" ? 0.4 : 0.25;
     this.y = this.hRule(this.y, cw, sepThick, sepColor, x);
-    this.y += sp(1.5, density);
+    this.y += sp(0.75, density);
   }
 
   // ── Answer key ──
@@ -2124,7 +2124,7 @@ export function generateArticlePdf(cfg: ArticlePdfConfig): jsPDF {
       default: {
         doc.checkPage(sp(3, density));
         doc.y = doc.text(block.text, x, doc.y, { font: "B", size: 9.4, color: C.CHARCOAL, maxW: fw });
-        doc.y += sp(1.5, density);
+        doc.y += sp(0.75, density);
         break;
       }
     }
