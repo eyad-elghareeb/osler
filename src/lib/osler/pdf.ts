@@ -1441,6 +1441,8 @@ export interface PdfExportOptions {
   answersMode: "inline" | "endchapter" | "endbook" | "none";
   showExplanations: boolean;
   twoCol: boolean;
+  showScoreSummary?: boolean;
+  showReview?: boolean;
 }
 
 interface QuestionDrawOpts {
@@ -1650,7 +1652,7 @@ export function generateResultsPdf(cfg: ResultsPdfConfig): jsPDF {
   doc.beginFlow(opts.twoCol);
   doc.addBookmark("Results");
 
-  doc.drawScoreSummary(cfg.score);
+  if (opts.showScoreSummary !== false) doc.drawScoreSummary(cfg.score);
   doc.colTopY = doc.y;
 
   const allAnswers: Array<{ num: number; q: FullQuestion }> = [];
@@ -1676,17 +1678,19 @@ export function generateResultsPdf(cfg: ResultsPdfConfig): jsPDF {
     for (const entry of allAnswers) doc.drawAnswerBlock(entry.q, entry.num, opts.showExplanations);
   }
 
-  doc.newPage({ header: { label: "REVIEW", section: "questions" } });
-  doc.addBookmark("Question Review");
+  if (opts.showReview !== false) {
+    doc.newPage({ header: { label: "REVIEW", section: "questions" } });
+    doc.addBookmark("Question Review");
 
-  const reviewItems: QuestionReviewItem[] = cfg.questions.map((q, i) => {
-    const ans = cfg.userAnswers[i];
-    const isSubmitted = !!cfg.revealed[i];
-    const isMCQ = q.correct >= 0;
-    const isCorrect = isMCQ ? isSubmitted && ans === q.correct : false;
-    return { num: i + 1, stem: q.stem, correct: isCorrect, unanswered: !isSubmitted };
-  });
-  doc.drawQuestionReview(reviewItems);
+    const reviewItems: QuestionReviewItem[] = cfg.questions.map((q, i) => {
+      const ans = cfg.userAnswers[i];
+      const isSubmitted = !!cfg.revealed[i];
+      const isMCQ = q.correct >= 0;
+      const isCorrect = isMCQ ? isSubmitted && ans === q.correct : false;
+      return { num: i + 1, stem: q.stem, correct: isCorrect, unanswered: !isSubmitted };
+    });
+    doc.drawQuestionReview(reviewItems);
+  }
 
   doc.finalize(contentStartPage);
   return doc.doc;

@@ -33,6 +33,8 @@ export interface PdfExportOptions {
   answersMode: "inline" | "endchapter" | "endbook" | "none";
   showExplanations: boolean;
   twoCol: boolean;
+  showScoreSummary?: boolean;
+  showReview?: boolean;
 }
 
 interface PdfExportDialogProps {
@@ -67,6 +69,8 @@ export function PdfExportDialog({
   const [answersMode, setAnswersMode] = React.useState<PdfExportOptions["answersMode"]>("endbook");
   const [showExplanations, setShowExplanations] = React.useState(true);
   const [twoCol, setTwoCol] = React.useState(false);
+  const [showScoreSummary, setShowScoreSummary] = React.useState(true);
+  const [showReview, setShowReview] = React.useState(true);
   const [exporting, setExporting] = React.useState(false);
   const [showAdvanced, setShowAdvanced] = React.useState(false);
 
@@ -91,6 +95,8 @@ export function PdfExportDialog({
         answersMode,
         showExplanations,
         twoCol,
+        showScoreSummary,
+        showReview,
       });
     } finally {
       setExporting(false);
@@ -315,6 +321,50 @@ export function PdfExportDialog({
                       className={cn(
                         "absolute top-0.5 size-4.5 rounded-full bg-white transition-transform",
                         twoCol ? "left-5" : "left-0.5"
+                      )}
+                    />
+                  </button>
+                </div>
+              )}
+
+              {/* Score summary toggle (results only) */}
+              {variant === "results" && (
+                <div className="flex items-center justify-between">
+                  <Label className="text-xs">{t("pdf.showScoreSummary")}</Label>
+                  <button
+                    type="button"
+                    onClick={() => { haptic("selection"); setShowScoreSummary(!showScoreSummary); }}
+                    className={cn(
+                      "w-10 h-5.5 rounded-full transition-colors relative",
+                      showScoreSummary ? "bg-primary" : "bg-muted"
+                    )}
+                  >
+                    <span
+                      className={cn(
+                        "absolute top-0.5 size-4.5 rounded-full bg-white transition-transform",
+                        showScoreSummary ? "left-5" : "left-0.5"
+                      )}
+                    />
+                  </button>
+                </div>
+              )}
+
+              {/* Question review toggle (results only) */}
+              {variant === "results" && (
+                <div className="flex items-center justify-between">
+                  <Label className="text-xs">{t("pdf.showReview")}</Label>
+                  <button
+                    type="button"
+                    onClick={() => { haptic("selection"); setShowReview(!showReview); }}
+                    className={cn(
+                      "w-10 h-5.5 rounded-full transition-colors relative",
+                      showReview ? "bg-primary" : "bg-muted"
+                    )}
+                  >
+                    <span
+                      className={cn(
+                        "absolute top-0.5 size-4.5 rounded-full bg-white transition-transform",
+                        showReview ? "left-5" : "left-0.5"
                       )}
                     />
                   </button>

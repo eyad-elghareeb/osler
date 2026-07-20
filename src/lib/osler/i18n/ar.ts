@@ -1021,6 +1021,8 @@ export const ar = {
     "pdf.answer.none": "مخفي",
     "pdf.showExplanations": "إظهار الشرح",
     "pdf.twoColumn": "تخطيط عمودين",
+    "pdf.showScoreSummary": "ملخص النتيجة",
+    "pdf.showReview": "مراجعة الأسئلة",
     "pdf.pageSize": "حجم الصفحة",
     "pdf.orientation": "الاتجاه",
     "pdf.portrait": "عمودي",

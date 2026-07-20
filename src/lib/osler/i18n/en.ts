@@ -1026,6 +1026,8 @@ export const en = {
     "pdf.answer.none": "Hidden",
     "pdf.showExplanations": "Show explanations",
     "pdf.twoColumn": "Two-column layout",
+    "pdf.showScoreSummary": "Score summary",
+    "pdf.showReview": "Question review",
     "pdf.pageSize": "Page size",
     "pdf.orientation": "Orientation",
     "pdf.portrait": "Portrait",
