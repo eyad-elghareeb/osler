@@ -172,6 +172,36 @@ function hasArabic(text: string): boolean {
   return /[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]/.test(text);
 }
 
+/**
+ * Cairo (the Arabic PDF font) has all initial/medial/final presentation forms
+ * but is missing ISOLATED forms (42 codepoints in FE70-FEFC and FB50-FDFF).
+ * This fallback replaces any missing presentation codepoint with its basic
+ * Arabic equivalent so isolated letters render instead of appearing as tofu.
+ */
+const ARABIC_PRES_FALLBACK: Record<number, number> = {
+  0xFE80: 0x0621, 0xFE81: 0x0622, 0xFE83: 0x0623, 0xFE85: 0x0624,
+  0xFE87: 0x0625, 0xFE89: 0x0626, 0xFE8D: 0x0627, 0xFE8F: 0x0628,
+  0xFE93: 0x0629, 0xFE95: 0x062A, 0xFE99: 0x062B, 0xFE9D: 0x062C,
+  0xFEA1: 0x062D, 0xFEA5: 0x062E, 0xFEA9: 0x062F, 0xFEAB: 0x0630,
+  0xFEAD: 0x0631, 0xFEAF: 0x0632, 0xFEB1: 0x0633, 0xFEB5: 0x0634,
+  0xFEB9: 0x0635, 0xFEBD: 0x0636, 0xFEC1: 0x0637, 0xFEC5: 0x0638,
+  0xFEC9: 0x0639, 0xFECD: 0x063A, 0xFED1: 0x0641, 0xFED5: 0x0642,
+  0xFED9: 0x0643, 0xFEDD: 0x0644, 0xFEE1: 0x0645, 0xFEE5: 0x0646,
+  0xFEE9: 0x0647, 0xFEED: 0x0648, 0xFEEF: 0x0649, 0xFEF1: 0x064A,
+  0xFB56: 0x067E, 0xFB7A: 0x0686, 0xFB8A: 0x0698,
+  0xFB8E: 0x06A9, 0xFB92: 0x06AF, 0xFBFC: 0x06CC,
+};
+
+function fallbackArabicPres(text: string): string {
+  let out = "";
+  for (let i = 0; i < text.length; i++) {
+    const cp = text.charCodeAt(i);
+    const fallback = ARABIC_PRES_FALLBACK[cp];
+    out += fallback ? String.fromCharCode(fallback) : text[i];
+  }
+  return out;
+}
+
 function trunc(text: string, max: number): string {
   return text.length <= max ? text : text.slice(0, max - 1) + "\u2026";
 }
@@ -602,14 +632,21 @@ class PdfDoc {
     d.setTextColor(...(opts.color ?? C.CHARCOAL));
 
     const maxW = opts.maxW ?? this.L.fw;
-    const text = isArabic ? convertArabic(normalizeText(raw)) : normalizeText(raw);
+    let text: string;
+    if (isArabic) {
+      // jsPDF's R2L mode naively reverses characters but the presentation
+      // forms from convertArabic are already positionally shaped — reversing
+      // them puts initial forms at the end and final forms at the start.
+      // Correct approach: reverse logical→visual order FIRST, then shape
+      // for visual-order context, then render LTR with right alignment.
+      const normalized = normalizeText(raw);
+      text = fallbackArabicPres(convertArabic(normalized.split("").reverse().join("")));
+    } else {
+      text = normalizeText(raw);
+    }
     const lines: string[] = d.splitTextToSize(text, maxW);
     if (isArabic) {
-      d.setR2L(true);
-      // For Arabic/R2L rendering, alignment is right-aligned, so x must be shifted by maxW.
-      // Arabic (Cairo) needs tighter inter-line spacing than Latin fonts.
       d.text(lines, x + maxW, y, { align: "right" });
-      d.setR2L(false);
     } else {
       d.text(lines, x, y, { align: opts.align ?? "left" });
     }
@@ -648,10 +685,15 @@ class PdfDoc {
     const density = this.L.density;
     const pad = sp(3, density);
     const bodySize = 8.6 * this.L.typeScale;
+    const bodyMaxW = w - pad * 2;
 
+    const rawBody = stripMd(body);
+    const bodyHasArabic = hasArabic(rawBody);
+    d.setFont(bodyHasArabic ? "Cairo" : F.Bi, hs(bodyHasArabic ? "normal" : "italic"));
     d.setFontSize(bodySize);
-    const bodyLines: string[] = d.splitTextToSize(normalizeText(stripMd(body)), w - pad * 2);
-    const bodyH = bodyLines.length * lh(bodySize);
+    const bodyText = bodyHasArabic ? fallbackArabicPres(convertArabic(normalizeText(rawBody).split("").reverse().join(""))) : normalizeText(rawBody);
+    const bodyLines: string[] = d.splitTextToSize(bodyText, bodyMaxW);
+    const bodyH = bodyLines.length * lh(bodySize, bodyHasArabic ? 1.3 : 1.45);
     const labelH = sp(4, density);
     const totalH = labelH + bodyH + sp(1.5, density);
 
@@ -668,10 +710,12 @@ class PdfDoc {
     d.setTextColor(...border);
     d.text(tracked(label), x + pad, boxY + sp(1.5, density));
 
-    d.setFont(F.Bi, hs("italic"));
-    d.setFontSize(bodySize);
-    d.setTextColor(...C.SLATE);
-    d.text(bodyLines, x + pad, boxY + labelH + sp(0.5, density));
+    this.text(body, x + pad, boxY + labelH + sp(0.5, density), {
+      font: "Bi",
+      size: bodySize / this.L.typeScale,
+      color: C.SLATE,
+      maxW: bodyMaxW,
+    });
 
     return boxY + totalH + sp(1.5, density);
   }
@@ -694,11 +738,14 @@ class PdfDoc {
     d.circle(iconCx, iconCy, 2.1, "F");
     drawCheck(d, iconCx, iconCy, 2.4, C.EMERALD);
 
-    d.setFont(F.H, hs("bold"));
-    d.setFontSize(8.4 * this.L.typeScale);
-    d.setTextColor(...C.WHITE);
     const label = `Correct Answer — ${letter}.  ${trunc(stripMd(optText), 78)}`;
-    d.text(label, iconCx + 5, boxY + badgeH / 2 + 1.4);
+    this.text(label, iconCx + 5, boxY + badgeH / 2 + 1.4, {
+      font: "H",
+      style: "bold",
+      size: 8.4,
+      color: C.WHITE,
+      maxW: w - (iconCx + 10),
+    });
 
     return boxY + badgeH + sp(1.5, density);
   }
@@ -979,19 +1026,29 @@ class PdfDoc {
     // ── Stem ──
     if (q.stem) {
       const sSize = style === "mcqnotes" ? 8.4 : 9.5;
-      d.setFont(F[style === "mcqnotes" ? "Hm" : "B"], hs("normal"));
+      const raw = stripMd(q.stem);
+      const isAr = hasArabic(raw);
+      d.setFont(isAr ? "Cairo" : F[style === "mcqnotes" ? "Hm" : "B"], hs("normal"));
       d.setFontSize(sSize * ts);
-      const stemLines = d.splitTextToSize(normalizeText(stripMd(q.stem)), cw - 2).length;
-      h += stemLines * lh(sSize * ts) + sp(1.5, density);
+      const stemLines = d.splitTextToSize(
+        isAr ? fallbackArabicPres(convertArabic(normalizeText(raw).split("").reverse().join(""))) : normalizeText(raw),
+        cw - 2
+      ).length;
+      h += stemLines * lh(sSize * ts, isAr ? 1.3 : 1.45) + sp(1.5, density);
     }
 
     // ── Choices ──
     if (!written && q.choices.length > 0) {
-      d.setFont(F.B, hs("normal"));
-      d.setFontSize(8.6 * ts);
       for (const c of q.choices) {
-        const cl = d.splitTextToSize(normalizeText(stripMd(c)), cw - 15).length;
-        h += cl * lh(8.6 * ts) + sp(0.4, density);
+        const raw = stripMd(c);
+        const isAr = hasArabic(raw);
+        d.setFont(isAr ? "Cairo" : F.B, hs("normal"));
+        d.setFontSize(8.6 * ts);
+        const cl = d.splitTextToSize(
+          isAr ? fallbackArabicPres(convertArabic(normalizeText(raw).split("").reverse().join(""))) : normalizeText(raw),
+          cw - 15
+        ).length;
+        h += cl * lh(8.6 * ts, isAr ? 1.3 : 1.45) + sp(0.4, density);
       }
     }
 
@@ -1003,18 +1060,30 @@ class PdfDoc {
       if (showExpl && q.explanation) {
         h += sp(0.5, density);
         const pad = sp(3, density);
+        const xRaw = stripMd(q.explanation);
+        const xAr = hasArabic(xRaw);
+        d.setFont(xAr ? "Cairo" : F.Bi, hs(xAr ? "normal" : "italic"));
         d.setFontSize(8.6 * ts);
-        const bl = d.splitTextToSize(normalizeText(stripMd(q.explanation)), cw - pad * 2).length;
-        h += sp(4, density) + bl * lh(8.6 * ts) + sp(1.5, density) + sp(1.5, density);
+        const bl = d.splitTextToSize(
+          xAr ? fallbackArabicPres(convertArabic(normalizeText(xRaw).split("").reverse().join(""))) : normalizeText(xRaw),
+          cw - pad * 2
+        ).length;
+        h += sp(4, density) + bl * lh(8.6 * ts, xAr ? 1.3 : 1.45) + sp(1.5, density) + sp(1.5, density);
       }
     }
 
     if (written && q.modelAnswer && showExpl) {
       h += sp(0.5, density);
       const pad = sp(3, density);
+      const mRaw = stripMd(q.modelAnswer);
+      const mAr = hasArabic(mRaw);
+      d.setFont(mAr ? "Cairo" : F.Bi, hs(mAr ? "normal" : "italic"));
       d.setFontSize(8.6 * ts);
-      const bl = d.splitTextToSize(normalizeText(stripMd(q.modelAnswer)), cw - pad * 2).length;
-      h += sp(4, density) + bl * lh(8.6 * ts) + sp(1.5, density) + sp(1.5, density);
+      const bl = d.splitTextToSize(
+        mAr ? fallbackArabicPres(convertArabic(normalizeText(mRaw).split("").reverse().join(""))) : normalizeText(mRaw),
+        cw - pad * 2
+      ).length;
+      h += sp(4, density) + bl * lh(8.6 * ts, mAr ? 1.3 : 1.45) + sp(1.5, density) + sp(1.5, density);
     }
 
     d.setFont(saveFont.fontName, saveFont.fontStyle);
@@ -1069,19 +1138,35 @@ class PdfDoc {
         const letter = LETTERS[i] ?? String(i + 1);
         const isCorrect = i === q.correct;
         const highlight = showInline && isCorrect;
+        const choiceText = q.choices[i];
+        const isChoiceArabic = hasArabic(stripMd(choiceText));
 
-        d.setFont(F.H, hs("bold"));
-        d.setFontSize(8.4 * this.L.typeScale);
-        d.setTextColor(...(highlight ? C.EMERALD : C.ROYAL));
-        d.text(`${letter}`, x + 3.2, this.y);
-        if (highlight) drawCheck(d, x + 8.6, this.y - 1.4, 2.4, C.EMERALD);
-
-        d.setFont(highlight ? F.Bb : F.B, hs("normal"));
-        d.setFontSize(8.6 * this.L.typeScale);
-        d.setTextColor(...(highlight ? C.EMERALD : C.SLATE));
-        const optLines: string[] = d.splitTextToSize(normalizeText(stripMd(q.choices[i])), cw - 15);
-        d.text(optLines, x + 13, this.y);
-        this.y += optLines.length * lh(8.6 * this.L.typeScale) + sp(0.4, density);
+        if (isChoiceArabic) {
+          d.setFont("Cairo", hs("bold"));
+          d.setFontSize(8.4 * this.L.typeScale);
+          d.setTextColor(...(highlight ? C.EMERALD : C.ROYAL));
+          d.text(`${letter}`, x + cw - 3.2, this.y, { align: "right" });
+          if (highlight) drawCheck(d, x + cw - 8.6, this.y - 1.4, 2.4, C.EMERALD);
+          this.y = this.text(choiceText, x, this.y, {
+            font: "B", size: 8.6,
+            color: (highlight ? C.EMERALD : C.SLATE),
+            maxW: cw - 18,
+            align: "right",
+          });
+        } else {
+          d.setFont(F.H, hs("bold"));
+          d.setFontSize(8.4 * this.L.typeScale);
+          d.setTextColor(...(highlight ? C.EMERALD : C.ROYAL));
+          d.text(`${letter}`, x + 3.2, this.y);
+          if (highlight) drawCheck(d, x + 8.6, this.y - 1.4, 2.4, C.EMERALD);
+          this.y = this.text(choiceText, x + 13, this.y, {
+            font: highlight ? "Bb" : "B",
+            size: 8.6,
+            color: (highlight ? C.EMERALD : C.SLATE),
+            maxW: cw - 15,
+          });
+        }
+        this.y += sp(0.4, density);
       }
     }
 
@@ -1167,12 +1252,13 @@ class PdfDoc {
     this.y = this.hRule(this.y, cw, 1.1, C.SAGE);
     this.y += sp(1, density);
 
-    d.setFont(F.Bi, hs("italic"));
-    d.setFontSize(8 * this.L.typeScale);
-    d.setTextColor(...C.MUTED);
-    const stemLines: string[] = d.splitTextToSize(`"${trunc(stripMd(q.stem), 110)}"`, cw);
-    d.text(stemLines, x, this.y);
-    this.y += stemLines.length * lh(8 * this.L.typeScale) + sp(1.5, density);
+    this.y = this.text(`"${trunc(stripMd(q.stem), 110)}"`, x, this.y, {
+      font: "Bi",
+      size: 8,
+      color: C.MUTED,
+      maxW: cw,
+    });
+    this.y += sp(1.5, density);
 
     if (q.correct >= 0 && q.correct < q.choices.length) {
       cw = this.twoColEnabled ? this.L.cw : this.L.fw;
@@ -1361,11 +1447,12 @@ class PdfDoc {
         drawCross(d, badgeCx, badgeCy, badgeR * 0.95, C.CRIMSON);
       }
 
-      d.setFont(F.B, hs("normal"));
-      d.setFontSize(7.6 * ts);
-      d.setTextColor(...C.CHARCOAL);
-      const lines: string[] = d.splitTextToSize(normalizeText(stripMd(q.stem)), this.L.fw - 14);
-      d.text(lines.slice(0, 2), this.L.ms + 10, this.y);
+      this.y = this.text(q.stem, this.L.ms + 10, this.y, {
+        font: "B",
+        size: 7.6,
+        color: C.CHARCOAL,
+        maxW: this.L.fw - 14,
+      });
       this.y += rowH;
     }
     this.y += sp(1.5, density);
