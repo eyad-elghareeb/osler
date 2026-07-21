@@ -26,8 +26,10 @@ import {
 import { useSwipeBackDismiss } from "@/hooks/use-swipe-back-dismiss";
 
 const MODELS = [
-  ["gemini-3.1-flash-lite", "Gemini 3.1 Flash-Lite (default, fast & modern)"],
+  ["gemini-3.6-flash", "Gemini 3.6 Flash (newest, fastest Flash)"],
+  ["gemini-3.5-flash-lite", "Gemini 3.5 Flash-Lite (fast & efficient)"],
   ["gemini-3.5-flash", "Gemini 3.5 Flash (latest, strongest Flash)"],
+  ["gemini-3.1-flash-lite", "Gemini 3.1 Flash-Lite (default, fast & modern)"],
   ["gemini-3.1-pro-preview", "Gemini 3.1 Pro Preview (most capable, premium)"],
   ["gemma-4-26b-a4b-it", "Gemma 4 26B IT (open model, strong & free)"],
   ["gemma-4-31b-it", "Gemma 4 31B IT (larger open model)"],

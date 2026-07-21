@@ -1242,7 +1242,7 @@ function PackExportDialog({
 
       const cfg: PdfExportConfig = {
         page: { pageSize: "a4", orientation: "portrait" },
-        cover: { title: node.title, subtitle: `${chapters.length} pack(s) · ${chapters.reduce((a, c) => a + c.questions.length, 0)} questions` },
+        cover: { title: node.title ?? "QBank Export", subtitle: `${chapters.length} pack(s) · ${chapters.reduce((a, c) => a + c.questions.length, 0)} questions` },
         includeCover,
         styleMode,
         answersMode,
@@ -1253,7 +1253,7 @@ function PackExportDialog({
         chapters,
       };
       const doc = generateQuizCompilationPdf(cfg);
-      downloadPdf(doc, node.title.replace(/[^a-zA-Z0-9\s\-_]/g, "").trim() || "export");
+      downloadPdf(doc, (node.title ?? "").replace(/[^a-zA-Z0-9\s\-_]/g, "").trim() || "export");
       toast({ title: "PDF exported successfully" });
     } catch (e) {
       toast({ title: "Export failed", description: String(e), variant: "destructive" });
@@ -1265,11 +1265,38 @@ function PackExportDialog({
 
   function toQuestions(content: AnyContent): Array<{ stem: string; choices?: string[]; correct?: number; explanation?: string }> {
     const c = content as any;
-    if (c.questions) return c.questions;
-    if (c.passages) {
-      return c.passages.flatMap((p: any) => (p.questions ?? []).map((q: any) => ({ ...q, stem: `${p.title ? p.title + " — " : ""}${q.stem}` })));
+    if (c.questions) {
+      return c.questions.map((q: any) => ({
+        stem: q.question ?? q.stem ?? "",
+        choices: q.options ?? q.choices ?? [],
+        correct: q.correct ?? 0,
+        explanation: q.explanation ?? "",
+        difficulty: q.difficulty,
+        tags: q.tags,
+      }));
     }
-    if (c.prompts) return c.prompts;
+    if (c.passages) {
+      return c.passages.flatMap((p: any) =>
+        (p.questions ?? []).map((q: any) => ({
+          stem: `${p.title ? p.title + " — " : ""}${q.question ?? q.stem ?? ""}`,
+          choices: q.options ?? q.choices ?? [],
+          correct: q.correct ?? 0,
+          explanation: q.explanation ?? "",
+          difficulty: q.difficulty,
+          tags: q.tags,
+        }))
+      );
+    }
+    if (c.prompts) {
+      return c.prompts.map((q: any) => ({
+        stem: q.question ?? q.stem ?? "",
+        choices: q.options ?? q.choices ?? [],
+        correct: q.correct ?? 0,
+        explanation: q.explanation ?? "",
+        difficulty: q.difficulty,
+        tags: q.tags,
+      }));
+    }
     return [];
   }
 
