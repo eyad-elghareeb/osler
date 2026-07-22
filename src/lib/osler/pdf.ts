@@ -37,6 +37,33 @@
 import { jsPDF } from "jspdf";
 import { registerPdfFonts } from "./pdf-fonts";
 
+/**
+ * Register a preProcessText handler that applies Cairo font fallback for
+ * isolated Arabic presentation forms AFTER jsPDF's built-in processArabic
+ * runs. Without this, processArabic would undo fallbackArabicPres by
+ * converting the basic chars back to the same missing isolated forms.
+ */
+let _fallbackRegistered = false;
+function _ensureFallbackRegistered(): void {
+  if (_fallbackRegistered) return;
+  _fallbackRegistered = true;
+  jsPDF.API.events.push(["preProcessText", (args: any) => {
+    const t = args.text;
+    if (typeof t === "string") {
+      args.text = fallbackArabicPres(t);
+    } else if (Array.isArray(t)) {
+      for (let i = 0; i < t.length; i++) {
+        if (Array.isArray(t[i])) {
+          t[i][0] = fallbackArabicPres(t[i][0]);
+        } else if (typeof t[i] === "string") {
+          t[i] = fallbackArabicPres(t[i]);
+        }
+      }
+    }
+    return args;
+  }]);
+}
+
 // ═══════════════════════════════════════════════════════════════
 // § 1  DESIGN TOKENS
 // ═══════════════════════════════════════════════════════════════
@@ -404,6 +431,7 @@ class PdfDoc {
     this.L = computeLayout(cfg, styleMode, fontSizeOpt, fontTypeOpt);
     this.title = title;
     this.doc = new jsPDF({ orientation: cfg.orientation, unit: "mm", format: cfg.pageSize });
+    _ensureFallbackRegistered();
     this.doc.setLineHeightFactor(1.15);
     this.y = this.L.mt;
     const registered = registerPdfFonts(this.doc);
@@ -632,9 +660,7 @@ class PdfDoc {
 
     const maxW = opts.maxW ?? this.L.fw;
     const normalized = normalizeText(raw);
-    const lines: string[] = isArabic
-      ? d.splitTextToSize(fallbackArabicPres(d.processArabic(normalized)), maxW)
-      : d.splitTextToSize(normalized, maxW);
+    const lines: string[] = d.splitTextToSize(normalized, maxW);
     if (isArabic) {
       d.setR2L(true);
       d.text(lines, x + maxW, y, { align: "right", isOutputVisual: true });
@@ -683,8 +709,7 @@ class PdfDoc {
     const bodyHasArabic = hasArabic(rawBody);
     d.setFont(bodyHasArabic ? "Cairo" : F.Bi, hs(bodyHasArabic ? "normal" : "italic"));
     d.setFontSize(bodySize);
-    const bodyText = bodyHasArabic ? fallbackArabicPres(d.processArabic(normalizeText(rawBody))) : normalizeText(rawBody);
-    const bodyLines: string[] = d.splitTextToSize(bodyText, bodyMaxW);
+    const bodyLines: string[] = d.splitTextToSize(normalizeText(rawBody), bodyMaxW);
     const bodyH = bodyLines.length * lh(bodySize, bodyHasArabic ? 1.3 : 1.45);
     const labelH = sp(4, density);
     const totalH = labelH + bodyH + sp(1.5, density);
@@ -1022,10 +1047,7 @@ class PdfDoc {
       const isAr = hasArabic(raw);
       d.setFont(isAr ? "Cairo" : F[style === "mcqnotes" ? "Hm" : "B"], hs("normal"));
       d.setFontSize(sSize * ts);
-      const stemLines = d.splitTextToSize(
-        isAr ? fallbackArabicPres(d.processArabic(normalizeText(raw))) : normalizeText(raw),
-        cw - 2
-      ).length;
+      const stemLines = d.splitTextToSize(normalizeText(raw), cw - 2).length;
       h += stemLines * lh(sSize * ts, isAr ? 1.3 : 1.45) + sp(1.5, density);
     }
 
@@ -1036,10 +1058,7 @@ class PdfDoc {
         const isAr = hasArabic(raw);
         d.setFont(isAr ? "Cairo" : F.B, hs("normal"));
         d.setFontSize(8.6 * ts);
-        const cl = d.splitTextToSize(
-          isAr ? fallbackArabicPres(d.processArabic(normalizeText(raw))) : normalizeText(raw),
-          cw - 15
-        ).length;
+        const cl = d.splitTextToSize(normalizeText(raw), cw - 15).length;
         h += cl * lh(8.6 * ts, isAr ? 1.3 : 1.45) + sp(0.4, density);
       }
     }
@@ -1056,10 +1075,7 @@ class PdfDoc {
         const xAr = hasArabic(xRaw);
         d.setFont(xAr ? "Cairo" : F.Bi, hs(xAr ? "normal" : "italic"));
         d.setFontSize(8.6 * ts);
-        const bl = d.splitTextToSize(
-          xAr ? fallbackArabicPres(d.processArabic(normalizeText(xRaw))) : normalizeText(xRaw),
-          cw - pad * 2
-        ).length;
+        const bl = d.splitTextToSize(normalizeText(xRaw), cw - pad * 2).length;
         h += sp(4, density) + bl * lh(8.6 * ts, xAr ? 1.3 : 1.45) + sp(1.5, density) + sp(1.5, density);
       }
     }
@@ -1071,10 +1087,7 @@ class PdfDoc {
       const mAr = hasArabic(mRaw);
       d.setFont(mAr ? "Cairo" : F.Bi, hs(mAr ? "normal" : "italic"));
       d.setFontSize(8.6 * ts);
-      const bl = d.splitTextToSize(
-        mAr ? fallbackArabicPres(d.processArabic(normalizeText(mRaw))) : normalizeText(mRaw),
-        cw - pad * 2
-      ).length;
+        const bl = d.splitTextToSize(normalizeText(mRaw), cw - pad * 2).length;
       h += sp(4, density) + bl * lh(8.6 * ts, mAr ? 1.3 : 1.45) + sp(1.5, density) + sp(1.5, density);
     }
 
