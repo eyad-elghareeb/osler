@@ -136,6 +136,7 @@ import { haptic } from "@/lib/osler/native";
 import { gradeWithAI, createManualEvaluation, transcribePhoto } from "@/lib/osler/grading";
 import { useI18n } from "./i18n-provider";
 import { NavigationStack } from "./navigation-stack";
+import { PageHeader } from "./ui-primitives";
 import { FolderTreeNav } from "./folder-tree-nav";
 import type { StringKey } from "@/lib/osler/i18n";
 import { generateResultsPdf, generateDashboardPdf, generateQuizCompilationPdf, downloadPdf, type FullQuestion, type PdfExportConfig } from "@/lib/osler/pdf";
@@ -1073,7 +1074,15 @@ function HomeView({
 
   return (
     <div className="flex h-full overflow-hidden bg-background">
-      <div className="flex-1 min-w-0 flex flex-col overflow-hidden pt-6 md:pt-8">
+      <div className="flex-1 min-w-0 flex flex-col overflow-hidden">
+        {/* Page header */}
+        <div className="px-4 md:px-6 lg:px-8 w-full max-w-7xl mx-auto pt-6 md:pt-8 pb-4">
+          <PageHeader
+            eyebrowIcon={ClipboardCheck}
+            title={t("qbank.home.title")}
+            subtitle={t("qbank.home.subtitle")}
+          />
+        </div>
         {/* Tab bar — fixed below header */}
         <div className="shrink-0 border-b border-border px-4 md:px-6 lg:px-8 w-full max-w-7xl mx-auto">
           <nav className="-mb-px flex gap-0 justify-center">
@@ -1809,20 +1818,6 @@ function ContentTab({
   // ── DECKS VIEW (root-level pack/folder grid) ──────────────────────────
   const decksView = (
     <div className="max-w-5xl mx-auto px-4 md:px-6 lg:px-8 py-6 md:py-8">
-      {/* Header */}
-      <div className="osler-page-header">
-        <div className="flex items-center gap-2 text-xs text-muted-foreground mb-1">
-          <ClipboardCheck className="size-3.5" />
-          <span>{t("qbank.home.title")}</span>
-        </div>
-        <h1 className="osler-page-header__title">
-          {t("qbank.home.title")}
-        </h1>
-        <p className="osler-page-header__subtitle">
-          {t("qbank.home.subtitle")}
-        </p>
-      </div>
-
       {/* Stat bar */}
       <div className="grid grid-cols-3 gap-3 mb-6">
         <div className="osler-stat-tile--compact">
