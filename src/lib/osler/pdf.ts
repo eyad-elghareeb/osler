@@ -637,7 +637,7 @@ class PdfDoc {
       : d.splitTextToSize(normalized, maxW);
     if (isArabic) {
       d.setR2L(true);
-      d.text(lines, x + maxW, y, { align: "right" });
+      d.text(lines, x + maxW, y, { align: "right", isOutputVisual: true });
       d.setR2L(false);
     } else {
       d.text(lines, x, y, { align: opts.align ?? "left" });
