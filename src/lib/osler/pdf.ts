@@ -35,7 +35,6 @@
  */
 
 import { jsPDF } from "jspdf";
-import { convertArabic } from "arabic-reshaper";
 import { registerPdfFonts } from "./pdf-fonts";
 
 // ═══════════════════════════════════════════════════════════════
@@ -632,21 +631,14 @@ class PdfDoc {
     d.setTextColor(...(opts.color ?? C.CHARCOAL));
 
     const maxW = opts.maxW ?? this.L.fw;
-    let text: string;
+    const normalized = normalizeText(raw);
+    const lines: string[] = isArabic
+      ? d.splitTextToSize(fallbackArabicPres(d.processArabic(normalized)), maxW)
+      : d.splitTextToSize(normalized, maxW);
     if (isArabic) {
-      // jsPDF's R2L mode naively reverses characters but the presentation
-      // forms from convertArabic are already positionally shaped — reversing
-      // them puts initial forms at the end and final forms at the start.
-      // Correct approach: reverse logical→visual order FIRST, then shape
-      // for visual-order context, then render LTR with right alignment.
-      const normalized = normalizeText(raw);
-      text = fallbackArabicPres(convertArabic(normalized.split("").reverse().join("")));
-    } else {
-      text = normalizeText(raw);
-    }
-    const lines: string[] = d.splitTextToSize(text, maxW);
-    if (isArabic) {
+      d.setR2L(true);
       d.text(lines, x + maxW, y, { align: "right" });
+      d.setR2L(false);
     } else {
       d.text(lines, x, y, { align: opts.align ?? "left" });
     }
@@ -691,7 +683,7 @@ class PdfDoc {
     const bodyHasArabic = hasArabic(rawBody);
     d.setFont(bodyHasArabic ? "Cairo" : F.Bi, hs(bodyHasArabic ? "normal" : "italic"));
     d.setFontSize(bodySize);
-    const bodyText = bodyHasArabic ? fallbackArabicPres(convertArabic(normalizeText(rawBody).split("").reverse().join(""))) : normalizeText(rawBody);
+    const bodyText = bodyHasArabic ? fallbackArabicPres(d.processArabic(normalizeText(rawBody))) : normalizeText(rawBody);
     const bodyLines: string[] = d.splitTextToSize(bodyText, bodyMaxW);
     const bodyH = bodyLines.length * lh(bodySize, bodyHasArabic ? 1.3 : 1.45);
     const labelH = sp(4, density);
@@ -1031,7 +1023,7 @@ class PdfDoc {
       d.setFont(isAr ? "Cairo" : F[style === "mcqnotes" ? "Hm" : "B"], hs("normal"));
       d.setFontSize(sSize * ts);
       const stemLines = d.splitTextToSize(
-        isAr ? fallbackArabicPres(convertArabic(normalizeText(raw).split("").reverse().join(""))) : normalizeText(raw),
+        isAr ? fallbackArabicPres(d.processArabic(normalizeText(raw))) : normalizeText(raw),
         cw - 2
       ).length;
       h += stemLines * lh(sSize * ts, isAr ? 1.3 : 1.45) + sp(1.5, density);
@@ -1045,7 +1037,7 @@ class PdfDoc {
         d.setFont(isAr ? "Cairo" : F.B, hs("normal"));
         d.setFontSize(8.6 * ts);
         const cl = d.splitTextToSize(
-          isAr ? fallbackArabicPres(convertArabic(normalizeText(raw).split("").reverse().join(""))) : normalizeText(raw),
+          isAr ? fallbackArabicPres(d.processArabic(normalizeText(raw))) : normalizeText(raw),
           cw - 15
         ).length;
         h += cl * lh(8.6 * ts, isAr ? 1.3 : 1.45) + sp(0.4, density);
@@ -1065,7 +1057,7 @@ class PdfDoc {
         d.setFont(xAr ? "Cairo" : F.Bi, hs(xAr ? "normal" : "italic"));
         d.setFontSize(8.6 * ts);
         const bl = d.splitTextToSize(
-          xAr ? fallbackArabicPres(convertArabic(normalizeText(xRaw).split("").reverse().join(""))) : normalizeText(xRaw),
+          xAr ? fallbackArabicPres(d.processArabic(normalizeText(xRaw))) : normalizeText(xRaw),
           cw - pad * 2
         ).length;
         h += sp(4, density) + bl * lh(8.6 * ts, xAr ? 1.3 : 1.45) + sp(1.5, density) + sp(1.5, density);
@@ -1080,7 +1072,7 @@ class PdfDoc {
       d.setFont(mAr ? "Cairo" : F.Bi, hs(mAr ? "normal" : "italic"));
       d.setFontSize(8.6 * ts);
       const bl = d.splitTextToSize(
-        mAr ? fallbackArabicPres(convertArabic(normalizeText(mRaw).split("").reverse().join(""))) : normalizeText(mRaw),
+        mAr ? fallbackArabicPres(d.processArabic(normalizeText(mRaw))) : normalizeText(mRaw),
         cw - pad * 2
       ).length;
       h += sp(4, density) + bl * lh(8.6 * ts, mAr ? 1.3 : 1.45) + sp(1.5, density) + sp(1.5, density);
