@@ -50,6 +50,16 @@ Unified medical study platform combining **Quiz Banks**, **Flashcards**, **OSCE 
 ## ✦ Features
 
 <details open>
+<summary><strong>📄 PDF Export Engine & Customizer</strong> — Export tests & articles</summary>
+
+- Full PDF export engine powered by `jsPDF` v4 with multi-style layout support (Standard MCQ, Flashcard Notes, AMBOSS-style)
+- Customizable export dialog (`pdf-export-dialog.tsx`) with page size (A4/Letter), single or two-column layout, score summary, and detailed review toggles
+- High-fidelity typography with embedded Poppins, Lora, and Cairo (v31, all 8 weights) fonts
+- Full Arabic RTL support using `bidi-js` for proper Bidirectional reordering and contextual shaping
+- Hyperlinked Table of Contents and `KeepTogether` block layout protection to prevent split questions across page breaks
+</details>
+
+<details open>
 <summary><strong>📖 Article Library</strong> — AMBOSS-style reader</summary>
 
 - Collapsible specialty tree TOC sidebar
@@ -72,10 +82,10 @@ All 5 engine types through a single interface:
 | **Quiz** | Standard MCQ with 5 choices |
 | **Bank** | Passage-based questions |
 | **Flashcard** | Front/back reveal (via Flashcard Studio) |
-| **Written** | Prompt + rubric review |
+| **Written** | Prompt + rubric review + photo mode (camera capture, crop, Gemini OCR) |
 | **OSCE** | Scenario + Red Flags + Differential + Rubric (via OSCE Studio) |
 
-Key features: Timed/Tutor modes · Question navigator with state colors · Split-pane explanation with inline images & Markdown · Mixed quiz+written sessions · Cross-pack pool builder · Results dashboard (score, percentile, distribution) · Tracker & review sessions (wrong/flagged, previous-session review) · Per-pack offline download · Image lightbox
+Key features: Timed/Tutor modes · Question navigator with state colors · Split-pane explanation with inline images & Markdown · Mixed quiz+written sessions · Written photo mode (camera capture & Gemini transcription) · Session auto-resume banner on Dashboard · Cross-pack pool builder · Results dashboard (score, percentile, distribution) · Tracker & review sessions (wrong/flagged, previous-session review) · Per-pack offline download · Image lightbox
 </details>
 
 <details>
@@ -119,7 +129,7 @@ Key features: Timed/Tutor modes · Question navigator with state colors · Split
 - Configurable model + API key
 - Context-aware answers based on current question/content
 - Chat history with clear/reset
-- Written answer grading via Gemini API
+- Written answer grading & handwritten photo OCR via Gemini API
 </details>
 
 <details>
@@ -158,7 +168,7 @@ Every feature is **feature-detected and degrades gracefully** — iOS Safari sil
 <br>
 
 <p align="center">
-  <b>Also includes:</b> Lab Values reference · Floating Calculator · Notes System (Markdown editor) · 
+  <b>Also includes:</b> PDF Export & Customizer · Lab Values reference · Floating Calculator · Notes System (Markdown editor) · 
   Quiz Reader Customization · Mermaid diagram explorer · 8 custom themes + visual theme selector · 
   PWA Install · Offline Content Cache (per-pack precache) · 6 Achievements
 </p>
@@ -169,9 +179,9 @@ Every feature is **feature-detected and degrades gracefully** — iOS Safari sil
 
 | View | Component | Description |
 |------|-----------|-------------|
-| 🏠 **Dashboard** | `dashboard.tsx` | Greeting, continue-learning, stat tiles, quick actions, featured articles, activity |
+| 🏠 **Dashboard** | `dashboard.tsx` | Greeting, active-session resume banner, continue-learning, stat tiles, quick actions, featured articles, activity |
 | 🎓 **Learn** | `learn.tsx` | Hub grouping Library, Flashcards, OSCE, and Videos — module grid with counts & continue badge |
-| 📝 **Q-Bank** | `qbank-studio.tsx` | Unified engine — Create Test, quiz player, results dashboard |
+| 📝 **Q-Bank** | `qbank-studio.tsx` | Unified engine — Create Test, quiz player, results dashboard, written photo mode, PDF export |
 | 👤 **Profile** | `profile.tsx` | Stats, engine breakdown, achievements, notes |
 | ⚙️ **Settings** | `settings.tsx` | Theme, AI, language, shortcuts, sync, downloads |
 
@@ -190,11 +200,12 @@ Every feature is **feature-detected and degrades gracefully** — iOS Safari sil
 | **Components** | shadcn/ui (49 primitives) |
 | **Icons** | lucide-react |
 | **Motion** | framer-motion |
-| **Fonts** | Geist Sans · Geist Mono · Cairo (`next/font/google`) |
+| **Fonts** | Geist Sans · Geist Mono · Cairo (`next/font/google`) · Poppins · Lora |
+| **PDF Generation** | jsPDF v4 · bidi-js (Arabic BiDi & shaping) · Custom Embedded Fonts |
 | **i18n** | Custom flat-dictionary system (en/ar) + RTL support |
 | **Content** | Markdown articles + JSON content packs |
-| **Storage** | localStorage (IndexedDB-ready schema) |
-| **AI** | Gemini API (configurable model + key) |
+| **Storage** | localStorage + IndexedDB (reactive `storage.ts`) |
+| **AI** | Gemini API (configurable model + key, OCR & grading) |
 | **Markdown** | unified + remark + rehype + react-markdown + remark-gfm |
 | **Video** | YouTube IFrame API + Plyr + Invidious |
 | **Sync** | PeerJS (WebRTC) + MQTT relay + QR (LZ-string + CRC32) |
@@ -223,13 +234,14 @@ src/
 │   │   ├── mobile-tab-bar.tsx # Bottom nav (&lt;768px)
 │   │   ├── theme-provider.tsx # Dark/light context
 │   │   ├── i18n-provider.tsx  # UI language + RTL context
-│   │   ├── dashboard.tsx      # Home view
+│   │   ├── dashboard.tsx      # Home view + session resume banner
 │   │   ├── learn.tsx          # Learn hub (Library/Flashcards/OSCE/Videos)
 │   │   ├── library.tsx        # Article reader
 │   │   ├── qbank-studio.tsx   # Unified quiz engine (~6190 lines)
 │   │   ├── flashcard-studio.tsx
 │   │   ├── osce-studio.tsx    # OSCE clinical simulator
 │   │   ├── videos-studio.tsx  # Video library + player
+│   │   ├── pdf-export-dialog.tsx # PDF export customization modal
 │   │   ├── notes-panel.tsx    # Markdown notes editor
 │   │   ├── ai-assistant.tsx   # Gemini chat panel
 │   │   ├── profile.tsx        # Stats + achievements
@@ -254,9 +266,12 @@ src/
     │   ├── content.ts         # Manifest + content pack loader
     │   ├── articles.ts        # Markdown article loader
     │   ├── videos.ts          # Video content loader
-    │   ├── storage.ts         # Progress + highlights + notes
+    │   ├── storage.ts         # Progress + active session + highlights + notes
     │   ├── shortcuts.ts       # Keyboard shortcut system
-    │   ├── grading.ts         # Gemini answer grading
+    │   ├── grading.ts         # Gemini answer grading & photo OCR
+    │   ├── pdf.ts             # PDF export engine (jsPDF + bidi-js layout)
+    │   ├── arabic.ts          # Arabic BiDi reordering & letter shaping helper
+    │   ├── pdf-fonts.ts       # Embedded Poppins, Lora, Cairo font loader
     │   ├── native/            # PWA native-feature wrappers
     │   │   ├── haptics.ts         # Vibration API
     │   │   ├── view-transitions.ts # View Transitions API
@@ -281,29 +296,30 @@ src/
 └── build-deliverable.ps1     # Windows deployment
 
 <a href="tauri-admin">tauri-admin</a>/                  # Desktop admin panel (Tauri + Rust)
+  ├── build.rs                # Build-time GitHub OAuth secret injection
   ├── src/
   │   ├── commands.rs         # File CRUD, manifest, build/start runner, git
   │   ├── config.rs           # osler.config.json read/write + instance generator
   │   ├── deploy.rs           # Vercel / GitHub Pages / Cloudflare / Netlify deploy
+  │   ├── github.rs           # GitHub OAuth & repo sync
   │   ├── manifest.rs         # Content manifest generator (port of scripts/)
   │   ├── runner.rs           # Build/start process runner
   │   └── validate.rs         # Content JSON validator
   ├── frontend/
-  │   ├── index.html          # Admin shell with custom titlebar
+  │   ├── index.html          # Admin shell (4 main sections: Dashboard, Content, Configure, Run & Publish)
   │   ├── main.js             # Tauri bridge + router + helpers
   │   ├── i18n.js             # English + Arabic strings
   │   ├── styles.css          # Admin theme tokens + components
   │   └── views/
-  │       ├── dashboard.js    # Stats + quick actions + GitHub repo link
-  │       ├── wizard.js       # First-time setup wizard (auto-launches)
-  │       ├── instance.js     # New Osler instance generator
-  │       ├── config.js       # osler.config.json structured editor
-  │       ├── content.js      # Content tree browser + editor
-  │       ├── manifest.js     # Manifest viewer / regenerator
-  │       ├── build.js        # Build & start runner with live logs
-  │       ├── git.js          # Git status / add / commit / push / pull
-  │       ├── deploy.js       # Deploy dashboard
-  │       └── settings.js     # Admin language / theme / project root
+  │       ├── dashboard.js    # Quick stats + recent activity + GitHub link
+  │       ├── content.js      # Simplified content tree browser & editor
+  │       ├── configure.js    # osler.config.json & instance generator hub
+  │       ├── run-publish.js  # Build, start, git & deploy hub
+  │       ├── wizard.js       # First-time setup wizard
+  │       ├── instance.js     # Instance generator
+  │       ├── config.js       # Config editor
+  │       ├── start.js        # Server runner
+  │       └── build.js        # Build runner & PDF preview tools
   └── default-osler-config.json  # Bundled template used by the instance generator
 </pre>
 

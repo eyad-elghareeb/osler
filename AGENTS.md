@@ -39,6 +39,7 @@
     - **framer-motion** — for any animation. Never raw `requestAnimationFrame` transitions.
     - **lucide-react** — for icons. Never inline SVGs.
     - **`@/lib/osler/native`** — for Vibration, View Transitions, WebAuthn, Network Information, Wake Lock. Never call `navigator.vibrate()` / `navigator.credentials.*` / `navigator.wakeLock.*` directly — go through the wrappers.
+    - **`@/lib/osler/pdf`** — for PDF exports (QBank test papers, Flashcard notes, Dashboard stats, Articles). Never instantiate `jsPDF` or handle Arabic shaping manually — go through `pdf.ts`, `arabic.ts`, and `pdf-export-dialog.tsx`.
     - **`@/lib/osler/storage`** — for any persistent state. Never touch `localStorage` or IndexedDB directly (biometric credential ID is the documented exception, see `biometric.ts`).
     - **`@/lib/osler/sync`** — for cross-device sync. Never open a new PeerJS / MQTT channel outside the existing `NetworkTransport`.
     - **`@tanstack/react-query`** + **`zustand`** are in deps but largely unused. Prefer the existing `storage` singleton + React local state unless a feature genuinely needs query caching or cross-component stores.
@@ -345,9 +346,9 @@ These items are documented as known drift and may be cleaned up incrementally. D
 
 ### Project structure
 
-- `src/components/osler/` — app-specific components
+- `src/components/osler/` — app-specific components (including `pdf-export-dialog.tsx` for PDF customization)
 - `src/components/ui/` — shadcn/ui primitives (49 files, do not add custom logic here)
-- `src/lib/osler/` — business logic, types, data loading, storage
+- `src/lib/osler/` — business logic, types, data loading, storage, grading, PDF engine (`pdf.ts`, `arabic.ts`, `pdf-fonts.ts`)
 - `src/hooks/` — shared React hooks: `useContentTree`, `useArticleHighlighter`, `useGestures`, `useContentCache`, `useQuizSettings`, `useResizableSidebar`, `useDisableBlur`, `useShortcuts` (`useShortcutBindings` / `useShortcutListener` / `useShortcutSequenceReset`), `useSwipeBackDismiss`, `useSwipeTabs`, `useSwipeGallery`, `useToast`, `usePlatform`, `useMobile`, `useNative`
 - `public/osler-content/` — folder-based content (see Content system)
 - `scripts/` — manifest generator and build helpers
