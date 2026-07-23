@@ -60,21 +60,29 @@ tauri-admin/
 │   │                         scripts/generate-content-manifests.js)
 │   ├── validate.rs         — Content JSON schema validation
 │   └── runner.rs           — Build/start runner (state in commands.rs)
-└── frontend/
-    ├── index.html          — App shell + pre-hydration script + EasyMDE CSS
-    ├── styles.css          — Design tokens + components + RTL + EasyMDE overrides
-    ├── i18n.js             — English + Arabic dictionary (incl. deploy strings)
-    ├── main.js             — Tauri bridge + router + toasts + preview-mode mock
-    └── views/
-        ├── dashboard.js    — Project overview + quick actions (incl. Deploy)
-        ├── content.js      — File tree + JSON/markdown editor (uses EasyMDE)
-        ├── markdown-editor.js — EasyMDE wrapper (loads from CDN on demand)
-        ├── content-editor.js  — Structured form editors for known JSON types
-        ├── manifest.js     — View + regenerate manifest.json per category
-        ├── build.js        — Run build/start, stream logs
-        ├── git.js          — Status, stage, commit, push, pull
-        ├── deploy.js       — Connect Provider & Deploy page (4 providers)
-        └── settings.js     — UI language, theme, project root
+    └── frontend/
+        ├── index.html          — App shell + pre-hydration script + EasyMDE CSS
+        ├── styles.css          — Design tokens + components + RTL + EasyMDE overrides
+        ├── i18n.js             — English + Arabic dictionary (incl. deploy strings)
+        ├── main.js             — Tauri bridge + router + toasts + preview-mode mock
+        └── views/
+            ├── dashboard.js    — Project overview + quick actions + deploy card
+            ├── content.js      — File tree + JSON/markdown editor (uses EasyMDE)
+            ├── markdown-editor.js — EasyMDE wrapper (loads from CDN on demand)
+            ├── content-editor.js  — Structured form editors for known JSON types
+            ├── manifest.js     — View + regenerate manifest.json per category
+            ├── build.js        — Run build/start, stream logs
+            ├── git.js          — Status, stage, commit, push, pull
+            ├── github.js       — GitHub repo sync (connect, push, pull)
+            ├── deploy.js       — Connect Provider & Deploy page (4 providers)
+            ├── start.js        — Server runner (npm run start with live logs)
+            ├── run-publish.js  — Combined build, start, git & deploy hub
+            ├── configure.js    — Config editor & instance generator hub
+            ├── wizard.js       — 6-step first-time setup wizard
+            ├── instance.js     — Scaffold new Osler instances
+            ├── config.js       — Structured config editor (5 tabs)
+            ├── settings.js     — UI language, theme, project root
+            └── mermaid-editor.js — Mermaid diagram editor & explorer
 ```
 
 ## Commands (Rust → frontend)

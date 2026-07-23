@@ -205,7 +205,7 @@ Every feature is **feature-detected and degrades gracefully** — iOS Safari sil
 | **PDF Generation** | jsPDF v4 · bidi-js (Arabic BiDi & shaping) · Custom Embedded Fonts |
 | **i18n** | Custom flat-dictionary system (en/ar) + RTL support |
 | **Content** | Markdown articles + JSON content packs |
-| **Storage** | localStorage + IndexedDB (reactive `storage.ts`) |
+| **Storage** | IndexedDB (reactive `storage.ts` with in-memory cache) + localStorage (config cache, theme, UI lang) |
 | **AI** | Gemini API (configurable model + key, OCR & grading) |
 | **Markdown** | unified + remark + rehype + react-markdown + remark-gfm |
 | **Video** | YouTube IFrame API + Plyr + Invidious |
@@ -381,16 +381,17 @@ Every aspect of an Osler instance is driven by a single user-editable config fil
 **What the config drives:**
 
 | Section | Drives |
-|---|---|
-| `site.{name,shortName,tagline,githubRepo,organisation}` | `<title>`, OG/Twitter metadata, PWA manifest name, in-app brand mark, About section, admin sidebar link |
-| `engines.<id>.{enabled,label,color,icon}` | **Plugin system** — toggle each of the 7 engines on/off; override label/color/icon per engine |
-| `themes.{default,custom[]}` | Default theme + custom oklch palettes; CSS variable overrides injected at runtime |
+|---|---|---|
+| `site.{name,shortName,tagline,githubRepo,organisation,supportEmail}` | `<title>`, OG/Twitter metadata, PWA manifest name, in-app brand mark, About section, admin sidebar link, support link |
+| `engines.<id>.{enabled,label,singular,color,icon}` | **Plugin system** — toggle each of the 7 engines on/off; override label/singular/color/icon per engine |
+| `themes.{default,custom[]}` | Default theme + custom oklch palettes with full token support (primary, primaryForeground, background, foreground, card, cardForeground, popover, popoverForeground, secondary, secondaryForeground, muted, mutedForeground, accent, destructive, border, input, ring, plus 9 sidebar* tokens); CSS variable overrides injected at runtime |
+| `cloud.{enabled,apiUrl,turnstileSiteKey,syncQbank,syncFlashcards}` | Optional Cloudflare Worker accounts + cross-device progress sync |
 | `defaults.{view,language,quiz,ai,sync}` | Default options applied on first use |
 | `wizard.{completed,completedAt}` | First-time wizard state |
 
 **Engine plugins:** Each of `quiz | bank | written | flashcard | osce | library | video` can be enabled or disabled. Disabling an engine hides it from the UI and skips its content loading — content packs on disk are preserved.
 
-**Custom themes:** Define additional palettes beyond dark/light. Each entry has an `id`, `name`, `variant`, and optional oklch color overrides (primary/background/foreground/accent/border/destructive). The theme provider injects one CSS rule per custom theme scoped to `.theme-<id>`.
+**Custom themes:** Define additional palettes beyond dark/light. Each entry has an `id`, `name`, `variant`, and optional oklch color overrides for all design tokens: `primary`, `primaryForeground`, `background`, `foreground`, `card`, `cardForeground`, `popover`, `popoverForeground`, `secondary`, `secondaryForeground`, `muted`, `mutedForeground`, `accent`, `destructive`, `border`, `input`, `ring`, plus 9 `sidebar*` tokens. The theme provider injects one CSS rule per custom theme scoped to `.theme-<id>`.
 
 **GitHub repo reference:** The canonical repo URL is always surfaced — in the admin sidebar footer, on the admin dashboard, and in the in-app Settings → About section. Setting `site.githubRepo` in the config lets each instance point at its own fork.
 
@@ -424,7 +425,7 @@ Quiz, Bank, Written → `QBankStudio.tsx` adapts UI per content type. Flashcards
 Dark mode default (navy + light blue — UWorld style). Light mode: cream background, dark navy primary. Persisted to `localStorage` (`osler-theme`). Uses oklch color space with `@theme inline` tokens.
 
 ### Progress Tracking
-Namespaced `localStorage` keys (`osler-progress-v1`, `osler-qbank-sessions-v1`). Reactive subscribe pattern via `storage.ts`. Flashcard spaced repetition stored separately.
+IndexedDB-backed reactive store with in-memory cache (`storage.ts`). Old `localStorage` keys (`osler-progress-v1`, `osler-qbank-sessions-v1`) are migrated to IndexedDB on first boot. Reactive subscribe pattern (`osler-progress-changed` events) for cross-component state updates. Flashcard spaced repetition stored separately.
 
 ### PWA
 Fully installable. Service worker auto-updates on new builds. Cross-platform install flows (Android Chrome, iOS Safari, desktop).

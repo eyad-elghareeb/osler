@@ -201,6 +201,311 @@ async function cleanupStale(env) {
   } catch {}
 }
 
+/* ─── Admin helpers ─────────────────────────────────────────────────────── */
+
+const ADMIN_ROLES = new Set(["admin", "content_admin"]);
+
+function isAdmin(session) { return session?.user?.role === "admin"; }
+function isAdminOrContent(session) { return ADMIN_ROLES.has(session?.user?.role); }
+
+function adminPublicUser(user) {
+  return { id: user.id, username: user.username, displayName: user.display_name, role: user.role, email: user.email ?? null, createdAt: user.created_at };
+}
+
+async function auditLog(env, actorId, action, targetId, detail) {
+  try {
+    await env.DB.prepare("INSERT INTO admin_audit (id, actor_id, action, target_id, detail, created_at) VALUES (?, ?, ?, ?, ?, ?)")
+      .bind(id(), actorId, action, targetId ?? null, detail ? JSON.stringify(detail) : null, now()).run();
+  } catch {}
+}
+
+/* R2 key helpers */
+function r2Draft(base)     { return `${base}/draft.json`; }
+function r2Pending(base)   { return `${base}/pending.json`; }
+function r2Published(base) { return `${base}/published.json`; }
+
+async function r2Get(env, key) {
+  if (!env.CONTENT) return null;
+  const obj = await env.CONTENT.get(key);
+  if (!obj) return null;
+  return obj.text();
+}
+async function r2Put(env, key, text) {
+  if (!env.CONTENT) throw new Error("Content storage not configured");
+  await env.CONTENT.put(key, text, { httpMetadata: { contentType: "application/json" } });
+}
+async function r2Delete(env, key) {
+  if (!env.CONTENT) return;
+  await env.CONTENT.delete(key);
+}
+
+/* ─── Admin route handler ────────────────────────────────────────────────── */
+
+async function handleAdmin(request, env, session, url, origin) {
+  const path = url.pathname; // starts with /v1/admin
+
+  /* ── Identity ── */
+  if (request.method === "GET" && path === "/v1/admin/me") {
+    return json({ user: adminPublicUser(session.user), capabilities: {
+      manageUsers: isAdmin(session),
+      manageContent: isAdminOrContent(session),
+      approveContent: isAdmin(session),
+      publishDirect: isAdmin(session),
+      viewStats: isAdmin(session),
+    }}, 200, origin);
+  }
+
+  /* ── Stats (admin only) ── */
+  if (request.method === "GET" && path === "/v1/admin/stats") {
+    if (!isAdmin(session)) return json({ error: "Forbidden" }, 403, origin);
+    const [userCount, sessionCount, contentCount, pendingCount] = await Promise.all([
+      env.DB.prepare("SELECT COUNT(*) as n FROM users").first(),
+      env.DB.prepare("SELECT COUNT(*) as n FROM sessions WHERE revoked_at IS NULL AND expires_at > ?").bind(now()).first(),
+      env.DB.prepare("SELECT COUNT(*) as n FROM content_objects WHERE status = 'published'").first(),
+      env.DB.prepare("SELECT COUNT(*) as n FROM content_objects WHERE status = 'pending'").first(),
+    ]);
+    return json({ userCount: userCount?.n ?? 0, sessionCount: sessionCount?.n ?? 0, contentCount: contentCount?.n ?? 0, pendingCount: pendingCount?.n ?? 0 }, 200, origin);
+  }
+
+  /* ── Users (admin only) ── */
+  if (path.startsWith("/v1/admin/users")) {
+    if (!isAdmin(session)) return json({ error: "Forbidden" }, 403, origin);
+
+    // List
+    if (request.method === "GET" && path === "/v1/admin/users") {
+      const page = Math.max(1, Number(url.searchParams.get("page") || 1));
+      const q = (url.searchParams.get("q") || "").trim();
+      const limit = 25; const offset = (page - 1) * limit;
+      let rows, total;
+      if (q) {
+        [rows, total] = await Promise.all([
+          env.DB.prepare("SELECT * FROM users WHERE username LIKE ? OR display_name LIKE ? OR email LIKE ? ORDER BY created_at DESC LIMIT ? OFFSET ?").bind(`%${q}%`, `%${q}%`, `%${q}%`, limit, offset).all(),
+          env.DB.prepare("SELECT COUNT(*) as n FROM users WHERE username LIKE ? OR display_name LIKE ? OR email LIKE ?").bind(`%${q}%`, `%${q}%`, `%${q}%`).first(),
+        ]);
+      } else {
+        [rows, total] = await Promise.all([
+          env.DB.prepare("SELECT * FROM users ORDER BY created_at DESC LIMIT ? OFFSET ?").bind(limit, offset).all(),
+          env.DB.prepare("SELECT COUNT(*) as n FROM users").first(),
+        ]);
+      }
+      return json({ users: (rows.results || []).map(adminPublicUser), total: total?.n ?? 0, page, limit }, 200, origin);
+    }
+
+    // Single user (base path only — no sub-routes like /reset-password)
+    const userIdMatch = path.match(/^\/v1\/admin\/users\/([^/]+)$/);
+    const resetPasswordMatch = path.match(/^\/v1\/admin\/users\/([^/]+)\/reset-password$/);
+    if (userIdMatch) {
+      const targetId = userIdMatch[1];
+      if (request.method === "GET") {
+        const user = await env.DB.prepare("SELECT * FROM users WHERE id = ?").bind(targetId).first();
+        if (!user) return json({ error: "User not found" }, 404, origin);
+        return json(adminPublicUser(user), 200, origin);
+      }
+      if (request.method === "PATCH") {
+        const body = await readJson(request);
+        const user = await env.DB.prepare("SELECT * FROM users WHERE id = ?").bind(targetId).first();
+        if (!user) return json({ error: "User not found" }, 404, origin);
+        const validRoles = new Set(["student", "admin", "content_admin"]);
+        const newRole = body.role && validRoles.has(body.role) ? body.role : user.role;
+        const newName = typeof body.displayName === "string" ? body.displayName.trim().slice(0, 80) || user.display_name : user.display_name;
+        await env.DB.prepare("UPDATE users SET role = ?, display_name = ?, updated_at = ? WHERE id = ?").bind(newRole, newName, now(), targetId).run();
+        await auditLog(env, session.user.id, "change_role", targetId, { from: user.role, to: newRole });
+        const updated = await env.DB.prepare("SELECT * FROM users WHERE id = ?").bind(targetId).first();
+        return json(adminPublicUser(updated), 200, origin);
+      }
+      if (request.method === "DELETE") {
+        if (targetId === session.user.id) return json({ error: "Cannot delete your own account" }, 400, origin);
+        const user = await env.DB.prepare("SELECT * FROM users WHERE id = ?").bind(targetId).first();
+        if (!user) return json({ error: "User not found" }, 404, origin);
+        await env.DB.batch([
+          env.DB.prepare("PRAGMA foreign_keys = ON;"),
+          env.DB.prepare("DELETE FROM progress_documents WHERE user_id = ?").bind(targetId),
+          env.DB.prepare("DELETE FROM sessions WHERE user_id = ?").bind(targetId),
+          env.DB.prepare("DELETE FROM password_reset_tokens WHERE user_id = ?").bind(targetId),
+          env.DB.prepare("DELETE FROM auth_identities WHERE user_id = ?").bind(targetId),
+          env.DB.prepare("DELETE FROM auth_handoffs WHERE user_id = ?").bind(targetId),
+          env.DB.prepare("DELETE FROM users WHERE id = ?").bind(targetId),
+        ]);
+        await auditLog(env, session.user.id, "delete_user", targetId, { username: user.username });
+        return json({ ok: true }, 200, origin);
+      }
+    }
+    if (resetPasswordMatch) {
+      const targetId = resetPasswordMatch[1];
+      if (request.method === "POST") {
+        const body = await readJson(request);
+        const password = typeof body.password === "string" && body.password.length >= 10 ? body.password : null;
+        if (!password) return json({ error: "Password must be at least 10 characters" }, 400, origin);
+        const user = await env.DB.prepare("SELECT * FROM users WHERE id = ?").bind(targetId).first();
+        if (!user) return json({ error: "User not found" }, 404, origin);
+        const hashed = await passwordHash(password);
+        await env.DB.batch([
+          env.DB.prepare("UPDATE users SET password_hash = ?, password_salt = ?, has_password = 1, updated_at = ? WHERE id = ?").bind(hashed.hash, hashed.salt, now(), targetId),
+          env.DB.prepare("UPDATE sessions SET revoked_at = ? WHERE user_id = ? AND revoked_at IS NULL").bind(now(), targetId),
+        ]);
+        await auditLog(env, session.user.id, "reset_password", targetId, { username: user.username });
+        return json({ ok: true }, 200, origin);
+      }
+    }
+  }
+
+  /* ── Content (admin + content_admin) ── */
+  if (path.startsWith("/v1/admin/content")) {
+    if (!isAdminOrContent(session)) return json({ error: "Forbidden" }, 403, origin);
+
+    // Pending review queue
+    if (request.method === "GET" && path === "/v1/admin/content/pending") {
+      if (!isAdmin(session)) return json({ error: "Forbidden" }, 403, origin);
+      const rows = await env.DB.prepare(
+        "SELECT co.*, u.username as creator_username, u.display_name as creator_display_name FROM content_objects co JOIN users u ON u.id = co.created_by WHERE co.status = 'pending' ORDER BY co.submitted_at ASC"
+      ).all();
+      return json({ items: rows.results || [] }, 200, origin);
+    }
+
+    // List content objects
+    if (request.method === "GET" && path === "/v1/admin/content") {
+      const status = url.searchParams.get("status") || "published";
+      const validStatuses = new Set(["draft", "pending", "published", "rejected", "all"]);
+      const safeStatus = validStatuses.has(status) ? status : "published";
+      let rows;
+      if (isAdmin(session)) {
+        rows = safeStatus === "all"
+          ? await env.DB.prepare("SELECT co.*, u.username as creator_username FROM content_objects co JOIN users u ON u.id = co.created_by ORDER BY co.updated_at DESC").all()
+          : await env.DB.prepare("SELECT co.*, u.username as creator_username FROM content_objects co JOIN users u ON u.id = co.created_by WHERE co.status = ? ORDER BY co.updated_at DESC").bind(safeStatus).all();
+      } else {
+        // content_admin sees only their own drafts/pending/rejected + all published
+        rows = safeStatus === "published"
+          ? await env.DB.prepare("SELECT co.*, u.username as creator_username FROM content_objects co JOIN users u ON u.id = co.created_by WHERE co.status = 'published' ORDER BY co.updated_at DESC").all()
+          : await env.DB.prepare("SELECT co.*, u.username as creator_username FROM content_objects co JOIN users u ON u.id = co.created_by WHERE co.created_by = ? AND co.status = ? ORDER BY co.updated_at DESC").bind(session.user.id, safeStatus).all();
+      }
+      return json({ items: rows.results || [] }, 200, origin);
+    }
+
+    // Create new content object
+    if (request.method === "POST" && path === "/v1/admin/content") {
+      if (!env.CONTENT) return json({ error: "Content storage not configured" }, 503, origin);
+      const body = await readJson(request);
+      const validTypes = new Set(["quiz","bank","flashcard","written","osce","library","video"]);
+      if (!body.contentType || !validTypes.has(body.contentType)) return json({ error: "Invalid content type" }, 400, origin);
+      const objectId = id();
+      const r2Base = `content/${body.contentType}/${objectId}`;
+      const initialContent = body.content || JSON.stringify({ title: body.title || "Untitled" }, null, 2);
+      await r2Put(env, r2Draft(r2Base), initialContent);
+      await env.DB.prepare(
+        "INSERT INTO content_objects (id, r2_key_base, content_type, title, language, status, created_by, created_at, updated_at) VALUES (?, ?, ?, ?, ?, 'draft', ?, ?, ?)"
+      ).bind(objectId, r2Base, body.contentType, body.title || null, body.language || "en", session.user.id, now(), now()).run();
+      return json({ id: objectId, r2KeyBase: r2Base, status: "draft" }, 201, origin);
+    }
+
+    const contentIdMatch = path.match(/^\/v1\/admin\/content\/([^/]+)(\/(.+))?$/);
+    if (contentIdMatch) {
+      const objectId = contentIdMatch[1];
+      const action = contentIdMatch[3] || null;
+
+      // Skip if this is actually the /pending list route (handled above)
+      if (objectId === "pending") return json({ error: "Not found" }, 404, origin);
+
+      const obj = await env.DB.prepare("SELECT * FROM content_objects WHERE id = ?").bind(objectId).first();
+      if (!obj) return json({ error: "Content not found" }, 404, origin);
+
+      // content_admin can only access their own non-published objects + all published
+      if (!isAdmin(session) && obj.created_by !== session.user.id && obj.status !== "published") {
+        return json({ error: "Forbidden" }, 403, origin);
+      }
+
+      // GET object metadata + body
+      if (request.method === "GET" && !action) {
+        const bodyKey = obj.status === "published" ? r2Published(obj.r2_key_base) : r2Draft(obj.r2_key_base);
+        const body = await r2Get(env, bodyKey);
+        return json({ ...obj, body: body ?? null }, 200, origin);
+      }
+
+      // GET diff (pending vs published) — admin only
+      if (request.method === "GET" && action === "diff") {
+        if (!isAdmin(session)) return json({ error: "Forbidden" }, 403, origin);
+        const [pending, published] = await Promise.all([
+          r2Get(env, r2Pending(obj.r2_key_base)),
+          r2Get(env, r2Published(obj.r2_key_base)),
+        ]);
+        return json({ pending: pending ?? null, published: published ?? null }, 200, origin);
+      }
+
+      // PUT draft — save draft body
+      if (request.method === "PUT" && action === "draft") {
+        if (!env.CONTENT) return json({ error: "Content storage not configured" }, 503, origin);
+        if (!isAdmin(session) && obj.created_by !== session.user.id) return json({ error: "Forbidden" }, 403, origin);
+        const body = await request.text();
+        if (!body || body.length > 1_000_000) return json({ error: "Invalid body" }, 400, origin);
+        await r2Put(env, r2Draft(obj.r2_key_base), body);
+        await env.DB.prepare("UPDATE content_objects SET updated_at = ? WHERE id = ?").bind(now(), objectId).run();
+        return json({ ok: true }, 200, origin);
+      }
+
+      // POST submit — snapshot draft to pending, set status=pending
+      if (request.method === "POST" && action === "submit") {
+        if (!env.CONTENT) return json({ error: "Content storage not configured" }, 503, origin);
+        if (!isAdmin(session) && obj.created_by !== session.user.id) return json({ error: "Forbidden" }, 403, origin);
+        const draft = await r2Get(env, r2Draft(obj.r2_key_base));
+        if (!draft) return json({ error: "Draft is empty" }, 400, origin);
+        await r2Put(env, r2Pending(obj.r2_key_base), draft);
+        await env.DB.prepare("UPDATE content_objects SET status = 'pending', submitted_at = ?, updated_at = ? WHERE id = ?").bind(now(), now(), objectId).run();
+        return json({ ok: true, status: "pending" }, 200, origin);
+      }
+
+      // POST approve — promote pending to published (admin only)
+      if (request.method === "POST" && action === "approve") {
+        if (!isAdmin(session)) return json({ error: "Forbidden" }, 403, origin);
+        if (!env.CONTENT) return json({ error: "Content storage not configured" }, 503, origin);
+        const pending = await r2Get(env, r2Pending(obj.r2_key_base));
+        if (!pending) return json({ error: "No pending snapshot found" }, 400, origin);
+        await r2Put(env, r2Published(obj.r2_key_base), pending);
+        await env.DB.prepare("UPDATE content_objects SET status = 'published', reviewed_by = ?, reviewed_at = ?, rejection_reason = NULL, updated_at = ? WHERE id = ?").bind(session.user.id, now(), now(), objectId).run();
+        await auditLog(env, session.user.id, "approve", objectId, { title: obj.title });
+        return json({ ok: true, status: "published" }, 200, origin);
+      }
+
+      // POST reject — set status=rejected with reason (admin only)
+      if (request.method === "POST" && action === "reject") {
+        if (!isAdmin(session)) return json({ error: "Forbidden" }, 403, origin);
+        const body = await readJson(request);
+        const reason = typeof body.reason === "string" ? body.reason.trim().slice(0, 1000) : "";
+        await env.DB.prepare("UPDATE content_objects SET status = 'rejected', reviewed_by = ?, reviewed_at = ?, rejection_reason = ?, updated_at = ? WHERE id = ?").bind(session.user.id, now(), reason || null, now(), objectId).run();
+        await auditLog(env, session.user.id, "reject", objectId, { title: obj.title, reason });
+        return json({ ok: true, status: "rejected" }, 200, origin);
+      }
+
+      // POST publish — direct publish skipping review (admin only)
+      if (request.method === "POST" && action === "publish") {
+        if (!isAdmin(session)) return json({ error: "Forbidden" }, 403, origin);
+        if (!env.CONTENT) return json({ error: "Content storage not configured" }, 503, origin);
+        const draft = await r2Get(env, r2Draft(obj.r2_key_base));
+        if (!draft) return json({ error: "Draft is empty" }, 400, origin);
+        await r2Put(env, r2Published(obj.r2_key_base), draft);
+        await env.DB.prepare("UPDATE content_objects SET status = 'published', reviewed_by = ?, reviewed_at = ?, rejection_reason = NULL, updated_at = ? WHERE id = ?").bind(session.user.id, now(), now(), objectId).run();
+        await auditLog(env, session.user.id, "publish_direct", objectId, { title: obj.title });
+        return json({ ok: true, status: "published" }, 200, origin);
+      }
+
+      // DELETE content object (admin only)
+      if (request.method === "DELETE" && !action) {
+        if (!isAdmin(session)) return json({ error: "Forbidden" }, 403, origin);
+        await Promise.all([
+          r2Delete(env, r2Draft(obj.r2_key_base)),
+          r2Delete(env, r2Pending(obj.r2_key_base)),
+          r2Delete(env, r2Published(obj.r2_key_base)),
+        ]);
+        await env.DB.prepare("DELETE FROM content_objects WHERE id = ?").bind(objectId).run();
+        await auditLog(env, session.user.id, "delete_content", objectId, { title: obj.title });
+        return json({ ok: true }, 200, origin);
+      }
+    }
+
+    return json({ error: "Not found" }, 404, origin);
+  }
+
+  return null; // not an admin route
+}
+
 export default {
   async scheduled(event, env, ctx) {
     if (env.DB) ctx.waitUntil(cleanupStale(env));
@@ -311,6 +616,14 @@ export default {
       }
       const session = await requireUser(request, env);
       if (!session) return json({ error: "Authentication required" }, 401, origin);
+
+      // Admin namespace — delegate to handleAdmin()
+      if (url.pathname.startsWith("/v1/admin")) {
+        if (!isAdminOrContent(session)) return json({ error: "Forbidden" }, 403, origin);
+        const adminResponse = await handleAdmin(request, env, session, url, origin);
+        if (adminResponse) return adminResponse;
+        return json({ error: "Not found" }, 404, origin);
+      }
       if (request.method === "GET" && url.pathname === "/v1/auth/me") return json(await accountPayload(env, session.user), 200, origin);
       if (request.method === "PATCH" && url.pathname === "/v1/account") {
         const body = await readJson(request);

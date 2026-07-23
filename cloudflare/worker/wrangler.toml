@@ -8,6 +8,13 @@ binding = "DB"
 database_name = "osler-cloud"
 database_id = "REPLACE_WITH_D1_DATABASE_ID"
 
+# Optional: R2 bucket for web-admin content storage.
+# Create with: wrangler r2 bucket create osler-content
+# Remove or comment out this block if you don't use web-admin content management.
+[[r2_buckets]]
+binding = "CONTENT"
+bucket_name = "osler-content"
+
 [vars]
 # Set this to the Pages/custom-domain origin hosting the Osler app.
 ALLOWED_ORIGIN = "http://localhost:3000"

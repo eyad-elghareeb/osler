@@ -65,6 +65,12 @@ Every white-label decision lives in **`public/osler.config.json`**. The schema i
     "ai":       { "model": "gemini-2.5-flash", "enabled": true, "temperature": 0.4 },
     "sync":     { "method": "network", "defaultRoom": "mms-2026" }
   },
+  "cloud": {
+    "enabled": false,
+    "apiUrl": "",
+    "syncQbank": true,
+    "syncFlashcards": true
+  },
   "wizard": { "completed": true, "version": 1 }
 }
 ```
@@ -72,10 +78,11 @@ Every white-label decision lives in **`public/osler.config.json`**. The schema i
 ### What each section drives
 
 | Section | Drives |
-|---|---|
-| `site.{name,shortName,tagline,githubRepo,organisation,supportEmail}` | `<title>`, OG/Twitter metadata, PWA manifest name, in-app brand mark, in-app About section, admin sidebar link |
-| `engines.<id>.{enabled,label,singular,color,icon}` | **Plugin system** — toggle each of the 7 engines on/off; optional per-engine label/color/icon overrides |
-| `themes.{default,custom[]}` | Default theme + custom oklch palettes; CSS variable overrides injected at runtime |
+|---|---|---|
+| `site.{name,shortName,tagline,githubRepo,organisation,supportEmail}` | `<title>`, OG/Twitter metadata, PWA manifest name, in-app brand mark, in-app About section, admin sidebar link, support link |
+| `engines.<id>.{enabled,label,singular,color,icon}` | **Plugin system** — toggle each of the 7 engines on/off; optional per-engine label/singular/color/icon overrides |
+| `themes.{default,custom[]}` | Default theme + custom oklch palettes with full token support (primary, primaryForeground, background, foreground, card, cardForeground, popover, popoverForeground, secondary, secondaryForeground, muted, mutedForeground, accent, destructive, border, input, ring, plus 9 sidebar* tokens); CSS variable overrides injected at runtime |
+| `cloud.{enabled,apiUrl,turnstileSiteKey,syncQbank,syncFlashcards}` | Optional Cloudflare Worker accounts + cross-device progress sync |
 | `defaults.{view,language,quiz,ai,sync}` | Default options applied on first use |
 | `wizard.{completed,completedAt}` | First-time wizard state |
 
@@ -172,7 +179,10 @@ Beyond the built-in `dark` and `light` themes, you can define any number of cust
 - `id` — stable identifier used in the `data-theme` attribute and the theme switcher
 - `name` — display name
 - `variant` — `"dark"` or `"light"` (controls base background/foreground defaults; also drives any code that checks `.dark` / `.light` such as Mermaid)
-- Optional oklch color overrides: `primary`, `accent`, `background`, `foreground`, `mutedForeground`, `destructive`, `border`
+- Optional oklch color overrides for all design tokens:
+  - Core: `primary`, `primaryForeground`, `background`, `foreground`, `accent`, `muted`, `mutedForeground`, `destructive`, `border`, `input`, `ring`
+  - Surfaces: `card`, `cardForeground`, `popover`, `popoverForeground`, `secondary`, `secondaryForeground`
+  - Sidebar: `sidebar`, `sidebarForeground`, `sidebarPrimary`, `sidebarPrimaryForeground`, `sidebarAccent`, `sidebarAccentForeground`, `sidebarBorder`, `sidebarRing`
 
 The theme provider injects a single `<style id="osler-custom-themes">` block into `<head>` with one rule per custom theme, scoped to `.theme-<id>`. Switching to a custom theme adds both `.theme-<id>` and the variant class to `<html>` so existing `.dark` / `.light` checks keep working.
 
@@ -185,17 +195,60 @@ The theme provider injects a single `<style id="osler-custom-themes">` block int
       "name": "School Navy",
       "variant": "dark",
       "primary":    "oklch(0.45 0.18 260)",
+      "primaryForeground": "oklch(0.99 0 0)",
       "accent":     "oklch(0.55 0.15 250)",
       "background": "oklch(0.13 0.02 260)",
-      "foreground": "oklch(0.96 0.01 260)"
+      "foreground": "oklch(0.96 0.01 260)",
+      "card":       "oklch(0.19 0.022 260)",
+      "cardForeground": "oklch(0.96 0.01 260)",
+      "popover":    "oklch(0.19 0.022 260)",
+      "popoverForeground": "oklch(0.96 0.01 260)",
+      "secondary":  "oklch(0.26 0.025 260)",
+      "secondaryForeground": "oklch(0.96 0.01 260)",
+      "muted":      "oklch(0.24 0.02 260)",
+      "mutedForeground": "oklch(0.7 0.015 240)",
+      "destructive":"oklch(0.68 0.21 22)",
+      "border":     "oklch(1 0 0 / 8%)",
+      "input":      "oklch(1 0 0 / 10%)",
+      "ring":       "oklch(0.45 0.18 260)",
+      "sidebar":    "oklch(0.17 0.02 260)",
+      "sidebarForeground": "oklch(0.96 0.01 260)",
+      "sidebarPrimary": "oklch(0.45 0.18 260)",
+      "sidebarPrimaryForeground": "oklch(0.99 0 0)",
+      "sidebarAccent": "oklch(0.26 0.025 260)",
+      "sidebarAccentForeground": "oklch(0.96 0.01 260)",
+      "sidebarBorder": "oklch(1 0 0 / 6%)",
+      "sidebarRing": "oklch(0.45 0.18 260)"
     },
     {
       "id": "clinic-light",
       "name": "Clinic Light",
       "variant": "light",
       "primary":    "oklch(0.35 0.10 255)",
+      "primaryForeground": "oklch(0.99 0 0)",
+      "accent":     "oklch(0.65 0.12 250)",
       "background": "oklch(0.99 0.005 240)",
-      "foreground": "oklch(0.18 0.02 250)"
+      "foreground": "oklch(0.18 0.02 250)",
+      "card":       "oklch(1 0 0)",
+      "cardForeground": "oklch(0.18 0.02 250)",
+      "popover":    "oklch(1 0 0)",
+      "popoverForeground": "oklch(0.18 0.02 250)",
+      "secondary":  "oklch(0.95 0.01 240)",
+      "secondaryForeground": "oklch(0.2 0.02 250)",
+      "muted":      "oklch(0.95 0.01 240)",
+      "mutedForeground": "oklch(0.5 0.015 240)",
+      "destructive":"oklch(0.58 0.24 27)",
+      "border":     "oklch(0.9 0.01 240)",
+      "input":      "oklch(0.9 0.01 240)",
+      "ring":       "oklch(0.38 0.09 255)",
+      "sidebar":    "oklch(0.97 0.005 240)",
+      "sidebarForeground": "oklch(0.18 0.02 250)",
+      "sidebarPrimary": "oklch(0.35 0.10 255)",
+      "sidebarPrimaryForeground": "oklch(0.99 0 0)",
+      "sidebarAccent": "oklch(0.92 0.025 240)",
+      "sidebarAccentForeground": "oklch(0.2 0.02 250)",
+      "sidebarBorder": "oklch(0.9 0.01 240)",
+      "sidebarRing": "oklch(0.38 0.09 255)"
     }
   ]
 }
