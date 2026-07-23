@@ -9,7 +9,10 @@ import {
   Loader2,
   ShieldCheck,
   ShieldAlert,
+  Eye,
+  EyeOff,
 } from "lucide-react";
+
 import { Button } from "@/components/ui/button";
 import { useI18n } from "./i18n-provider";
 import { useBiometricAvailability } from "@/hooks/use-native";
@@ -52,7 +55,10 @@ export function LoginScreen({ onLogin }: LoginScreenProps) {
   const [username, setUsername] = React.useState("");
   const [password, setPassword] = React.useState("");
   const [passwordConfirm, setPasswordConfirm] = React.useState("");
+  const [showPassword, setShowPassword] = React.useState(false);
+  const [showPasswordConfirm, setShowPasswordConfirm] = React.useState(false);
   const [biometricStatus, setBiometricStatus] = React.useState<
+
     "idle" | "enrolling" | "authenticating" | "error"
   >("idle");
   const [biometricMsg, setBiometricMsg] = React.useState<string>("");
@@ -380,38 +386,67 @@ export function LoginScreen({ onLogin }: LoginScreenProps) {
             </div>
           )}
 
-          {cloudMode !== "reset" || !!resetToken ? <div>
-            <label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-              {t("login.password")}
-            </label>
-            <input
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder={cloudActive ? t("login.passwordSecurePlaceholder") : t("login.passwordPlaceholder")}
-              minLength={cloudActive ? 10 : undefined}
-              required={cloudActive}
-              className="mt-1.5 w-full h-10 px-3 bg-background border border-border rounded-md text-sm outline-none focus:border-primary transition-colors"
-            />
-            {!cloudActive && <p className="text-[10px] text-muted-foreground mt-1">{t("login.demoNote")}</p>}
-          </div> : null}
+          {cloudMode !== "reset" || !!resetToken ? (
+            <div>
+              <label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                {t("login.password")}
+              </label>
+              <div className="relative mt-1.5">
+                <input
+                  type={showPassword ? "text" : "password"}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder={cloudActive ? t("login.passwordSecurePlaceholder") : t("login.passwordPlaceholder")}
+                  minLength={cloudActive ? 10 : undefined}
+                  required={cloudActive}
+                  className="w-full h-10 ps-3 pe-10 bg-background border border-border rounded-md text-sm outline-none focus:border-primary transition-colors"
+                />
+                <button
+                  type="button"
+                  onClick={() => {
+                    haptic("light");
+                    setShowPassword((v) => !v);
+                  }}
+                  className="absolute inset-y-0 end-0 pe-3 flex items-center text-muted-foreground hover:text-foreground transition-colors"
+                  aria-label={showPassword ? "Hide password" : "Show password"}
+                >
+                  {showPassword ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
+                </button>
+              </div>
+              {!cloudActive && <p className="text-[10px] text-muted-foreground mt-1">{t("login.demoNote")}</p>}
+            </div>
+          ) : null}
 
           {cloudActive && cloudMode === "register" && (
             <div>
               <label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
                 {t("login.confirmPassword")}
               </label>
-              <input
-                type="password"
-                value={passwordConfirm}
-                onChange={(e) => setPasswordConfirm(e.target.value)}
-                placeholder={t("login.passwordSecurePlaceholder")}
-                minLength={10}
-                required
-                className="mt-1.5 w-full h-10 px-3 bg-background border border-border rounded-md text-sm outline-none focus:border-primary transition-colors"
-              />
+              <div className="relative mt-1.5">
+                <input
+                  type={showPasswordConfirm ? "text" : "password"}
+                  value={passwordConfirm}
+                  onChange={(e) => setPasswordConfirm(e.target.value)}
+                  placeholder={t("login.passwordSecurePlaceholder")}
+                  minLength={10}
+                  required
+                  className="w-full h-10 ps-3 pe-10 bg-background border border-border rounded-md text-sm outline-none focus:border-primary transition-colors"
+                />
+                <button
+                  type="button"
+                  onClick={() => {
+                    haptic("light");
+                    setShowPasswordConfirm((v) => !v);
+                  }}
+                  className="absolute inset-y-0 end-0 pe-3 flex items-center text-muted-foreground hover:text-foreground transition-colors"
+                  aria-label={showPasswordConfirm ? "Hide password" : "Show password"}
+                >
+                  {showPasswordConfirm ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
+                </button>
+              </div>
             </div>
           )}
+
 
           {cloudError && <p className="text-xs text-destructive">{cloudError}</p>}
           {resetSent && <p className="text-xs text-success">{t("login.resetSent")}</p>}
