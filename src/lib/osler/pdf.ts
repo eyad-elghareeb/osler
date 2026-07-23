@@ -158,6 +158,10 @@ function normalizeText(text: string): string {
     .replace(/\u2717|\u2718/g, "[ ]")
     .replace(/\u25BA|\u25B6/g, ">")
     .replace(/\u2002|\u2003|\u00A0/g, " ")
+    // Insert ZWNJ between Arabic letters and Arabic punctuation so that
+    // jsPDF's processArabic does not treat punctuation as a connecting letter.
+    .replace(/([\u0621-\u064A\u0671-\u06D3])([\u060C\u061B\u061F\u066A-\u066D])/g, '$1\u200C$2')
+    .replace(/([\u060C\u061B\u061F\u066A-\u066D])([\u0621-\u064A\u0671-\u06D3])/g, '$1\u200C$2')
     .trim();
 }
 
@@ -465,6 +469,27 @@ class PdfDoc {
       console.warn("[osler/pdf] Custom fonts were not ready in time — falling back to core PDF fonts.");
     }
     resolveFonts(this.doc, this.L.fontType);
+
+    // Ensure every d.text() call with Arabic text gets the correct Bidi
+    // engine options (isInputVisual=false, isOutputVisual=true) so that
+    // jsPDF processes our logical-order text into visual order for PDF
+    // rendering. Without this, direct d.text() calls (e.g. in drawChrome,
+    // trackedLabel, calloutBox, cover/TOC/chapter headers) would use the
+    // default isInputVisual=true and produce wrong ordering for mixed
+    // Arabic+English content.
+    {
+      const doc = this.doc;
+      const origText: any = doc.text.bind(doc);
+      doc.text = ((text: any, x: number, y: number, options?: any, ...rest: any[]) => {
+        if (typeof text === "string"
+          ? hasArabic(text)
+          : Array.isArray(text) && text.some((t: any) => typeof t === "string" && hasArabic(t))
+        ) {
+          options = { ...options, isInputVisual: false, isOutputVisual: true };
+        }
+        return origText(text, x, y, options, ...rest);
+      }) as any;
+    }
   }
 
   // ── Metadata ──
