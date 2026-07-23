@@ -1,12 +1,16 @@
 # Osler Cloud Worker
 
-This Worker provides optional email/password accounts, role-ready authorization, password reset, and local-first QBank/flashcard sync. It needs only Workers + D1 on Cloudflare's free tier.
+This Worker provides optional email/password & Google accounts, role-ready authorization (`student` | `admin`), password reset, account management (profile updates, password changes, data export, account deletion), and local-first QBank & flashcard sync. It runs entirely on Cloudflare's free tier (Workers + D1).
 
-1. Create the D1 database: `npx wrangler d1 create osler-cloud`, then place its id in `wrangler.toml`.
-2. Copy `.dev.vars.example` to `.dev.vars`, set `JWT_SECRET`, then deploy the secret with `npx wrangler secret put JWT_SECRET`.
-3. Apply the schema with `npm run db:migrate` and deploy with `npm run deploy`.
-4. Set `ALLOWED_ORIGIN` to the exact Osler app origin and paste the deployed URL into `public/osler.config.json` → `cloud.apiUrl`.
+## Deployment Steps
 
-Turnstile is optional but recommended for public registration. Set `TURNSTILE_ENABLED=true`, configure the two Turnstile keys, and put the public site key in the frontend config. Password-reset email is enabled only if a Resend free-tier API key, sender, and `APP_ORIGIN` are supplied; accounts without an email cannot reset their password.
+1. Create the D1 database: `npx wrangler d1 create osler-cloud`, then update `database_id` in `wrangler.toml`.
+2. Copy `.dev.vars.example` to `.dev.vars`, set `JWT_SECRET`, and push it to Cloudflare: `npx wrangler secret put JWT_SECRET`.
+3. (Optional - Google Sign-In) Set `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET`: `npx wrangler secret put GOOGLE_CLIENT_ID`, `npx wrangler secret put GOOGLE_CLIENT_SECRET`, and set `WORKER_URL` in `wrangler.toml`.
+4. Apply D1 migrations: `npm run db:migrate` (runs `0001_initial.sql` and `0002_accounts_and_google.sql`).
+5. Deploy: `npm run deploy`.
+6. Set `ALLOWED_ORIGIN` in `wrangler.toml` to the exact Osler web app origin, and set `public/osler.config.json` -> `cloud.apiUrl` to the deployed Worker URL.
 
-The Worker batches sync into two documents and merges each record by its local timestamp. This minimizes D1 writes and lets local IndexedDB remain usable offline.
+Turnstile is recommended for public registration. Set `TURNSTILE_ENABLED=true`, configure `TURNSTILE_SECRET_KEY`, and set `turnstileSiteKey` in `osler.config.json`. Password-reset email uses Resend (`RESEND_API_KEY`, `EMAIL_FROM`, `APP_ORIGIN`).
+
+Sync batches progress into two documents (QBank & flashcards) and merges records by timestamp to minimize D1 writes while keeping IndexedDB fully functional offline.

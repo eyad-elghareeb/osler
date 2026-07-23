@@ -13,3 +13,5 @@ database_id = "REPLACE_WITH_D1_DATABASE_ID"
 ALLOWED_ORIGIN = "http://localhost:3000"
 # Set to true after configuring TURNSTILE_SECRET_KEY and publishing its site key.
 TURNSTILE_ENABLED = "false"
+# The Worker callback base URL. Replace after first deployment.
+WORKER_URL = "http://localhost:8787"

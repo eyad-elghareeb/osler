@@ -41,7 +41,8 @@
     - **`@/lib/osler/native`** — for Vibration, View Transitions, WebAuthn, Network Information, Wake Lock. Never call `navigator.vibrate()` / `navigator.credentials.*` / `navigator.wakeLock.*` directly — go through the wrappers.
     - **`@/lib/osler/pdf`** — for PDF exports (QBank test papers, Flashcard notes, Dashboard stats, Articles). Never instantiate `jsPDF` or handle Arabic shaping manually — go through `pdf.ts`, `arabic.ts`, and `pdf-export-dialog.tsx`.
     - **`@/lib/osler/storage`** — for any persistent state. Never touch `localStorage` or IndexedDB directly (biometric credential ID is the documented exception, see `biometric.ts`).
-    - **`@/lib/osler/sync`** — for cross-device sync. Never open a new PeerJS / MQTT channel outside the existing `NetworkTransport`.
+    - **`@/lib/osler/cloud`** — for Cloudflare Worker account sessions, Google OAuth, profile/password updates, data export, account deletion, and automated cloud sync. Never bypass `cloud.ts` or make direct fetch calls to the Worker endpoints outside of it.
+    - **`@/lib/osler/sync`** — for P2P cross-device sync. Never open a new PeerJS / MQTT channel outside the existing `NetworkTransport`.
     - **`@tanstack/react-query`** + **`zustand`** are in deps but largely unused. Prefer the existing `storage` singleton + React local state unless a feature genuinely needs query caching or cross-component stores.
     - If a third-party library in `package.json` already solves the problem, use it. Do not add a new dependency when an existing one covers the case.
 

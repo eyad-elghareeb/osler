@@ -7,3 +7,7 @@ RESEND_API_KEY=
 EMAIL_FROM=Osler <noreply@example.com>
 # Public URL of the web app used in password-reset links.
 APP_ORIGIN=http://localhost:3000
+# Optional: enables Google sign-in using the Worker OAuth callback.
+WORKER_URL=http://localhost:8787
+GOOGLE_CLIENT_ID=
+GOOGLE_CLIENT_SECRET=

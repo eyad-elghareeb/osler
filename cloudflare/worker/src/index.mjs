@@ -1,8 +1,13 @@
+// Implementation plan: secure Google OAuth, account controls, and durable sync.
+// This temporary note is removed before commit.
 const encoder = new TextEncoder();
 const PASSWORD_ITERATIONS = 310_000;
 const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 const RESET_TTL_MS = 30 * 60 * 1000;
 const MAX_DOCUMENT_BYTES = 900_000;
+const OAUTH_TTL_MS = 10 * 60 * 1000;
+const HANDOFF_TTL_MS = 5 * 60 * 1000;
+let googleKeys = { expiresAt: 0, keys: [] };
 
 const json = (body, status = 200, origin = "") => new Response(JSON.stringify(body), {
   status,
@@ -10,7 +15,7 @@ const json = (body, status = 200, origin = "") => new Response(JSON.stringify(bo
 });
 const cors = (origin) => ({
   "access-control-allow-origin": origin,
-  "access-control-allow-methods": "GET, POST, PUT, OPTIONS",
+  "access-control-allow-methods": "GET, POST, PUT, PATCH, DELETE, OPTIONS",
   "access-control-allow-headers": "authorization, content-type",
   "access-control-max-age": "86400",
   vary: "Origin",
@@ -106,6 +111,79 @@ async function getDocument(env, userId, kind) {
   try { return { records: JSON.parse(row.payload), updatedAt: row.updated_at }; } catch { return { records: {}, updatedAt: 0 }; }
 }
 
+function googleReady(env) {
+  return !!(env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET && env.WORKER_URL);
+}
+
+function workerCallback(env) {
+  return `${env.WORKER_URL.replace(/\/$/, "")}/v1/auth/google/callback`;
+}
+
+async function googleSigningKey(kid) {
+  if (googleKeys.expiresAt < now()) {
+    const response = await fetch("https://www.googleapis.com/oauth2/v3/certs");
+    if (!response.ok) throw new Error("Could not load Google signing keys");
+    const maxAge = response.headers.get("cache-control")?.match(/max-age=(\d+)/)?.[1];
+    googleKeys = { keys: (await response.json()).keys ?? [], expiresAt: now() + Number(maxAge ?? 3600) * 1000 };
+  }
+  return googleKeys.keys.find((key) => key.kid === kid);
+}
+
+async function verifyGoogleIdToken(token, env, nonce) {
+  const [encodedHeader, encodedPayload, encodedSignature] = String(token ?? "").split(".");
+  if (!encodedHeader || !encodedPayload || !encodedSignature) throw new Error("Invalid Google identity token");
+  const header = JSON.parse(new TextDecoder().decode(unb64url(encodedHeader)));
+  const claims = JSON.parse(new TextDecoder().decode(unb64url(encodedPayload)));
+  if (header.alg !== "RS256") throw new Error("Unexpected Google token algorithm");
+  const jwk = await googleSigningKey(header.kid);
+  if (!jwk) throw new Error("Unknown Google signing key");
+  const key = await crypto.subtle.importKey("jwk", jwk, { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" }, false, ["verify"]);
+  const verified = await crypto.subtle.verify("RSASSA-PKCS1-v1_5", key, unb64url(encodedSignature), encoder.encode(`${encodedHeader}.${encodedPayload}`));
+  const audience = Array.isArray(claims.aud) ? claims.aud : [claims.aud];
+  if (!verified || !audience.includes(env.GOOGLE_CLIENT_ID) || !["accounts.google.com", "https://accounts.google.com"].includes(claims.iss) || Number(claims.exp) * 1000 <= now() || claims.nonce !== nonce || !claims.email_verified || !claims.sub || !validEmail(claims.email)) {
+    throw new Error("Google identity could not be verified");
+  }
+  return claims;
+}
+
+async function availableGoogleUsername(env, email) {
+  const seed = (email.split("@")[0].toLowerCase().replace(/[^a-z0-9_.-]/g, "-").replace(/^-+|-+$/g, "") || "google-user").slice(0, 26);
+  for (let suffix = 0; suffix < 50; suffix += 1) {
+    const candidate = suffix ? `${seed.slice(0, 32 - String(suffix).length - 1)}-${suffix}` : seed;
+    const existing = await env.DB.prepare("SELECT id FROM users WHERE username = ? COLLATE NOCASE").bind(candidate).first();
+    if (!existing) return candidate;
+  }
+  return `google-${id().slice(0, 8)}`;
+}
+
+async function googleUser(env, claims) {
+  const existingIdentity = await env.DB.prepare("SELECT u.* FROM auth_identities i JOIN users u ON u.id = i.user_id WHERE i.provider = 'google' AND i.provider_subject = ?").bind(claims.sub).first();
+  if (existingIdentity) return existingIdentity;
+  let user = await env.DB.prepare("SELECT * FROM users WHERE email = ? COLLATE NOCASE").bind(claims.email.toLowerCase()).first();
+  if (!user) {
+    const generatedPassword = await passwordHash(`${id()}${id()}`);
+    const userId = id();
+    await env.DB.prepare("INSERT INTO users (id, username, email, display_name, password_hash, password_salt, has_password, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?)")
+      .bind(userId, await availableGoogleUsername(env, claims.email), claims.email.toLowerCase(), String(claims.name || claims.email.split("@")[0]).slice(0, 80), generatedPassword.hash, generatedPassword.salt, now(), now()).run();
+    user = await env.DB.prepare("SELECT * FROM users WHERE id = ?").bind(userId).first();
+  }
+  await env.DB.prepare("INSERT INTO auth_identities (provider, provider_subject, user_id, provider_email, created_at) VALUES ('google', ?, ?, ?, ?)")
+    .bind(claims.sub, user.id, claims.email.toLowerCase(), now()).run();
+  return user;
+}
+
+async function createAuthHandoff(env, userId) {
+  const ticket = `${id()}${id()}`;
+  await env.DB.prepare("INSERT INTO auth_handoffs (id, ticket_hash, user_id, expires_at, created_at) VALUES (?, ?, ?, ?, ?)")
+    .bind(id(), await sha256(ticket), userId, now() + HANDOFF_TTL_MS, now()).run();
+  return ticket;
+}
+
+async function accountPayload(env, user) {
+  const identities = await env.DB.prepare("SELECT provider FROM auth_identities WHERE user_id = ? ORDER BY provider").bind(user.id).all();
+  return { user: { ...publicUser(user), hasPassword: Number(user.has_password ?? 1) === 1 }, providers: identities.results.map((identity) => identity.provider) };
+}
+
 export default {
   async fetch(request, env) {
     const origin = requestOrigin(request, env);
@@ -114,7 +192,44 @@ export default {
     if (!env.DB || !env.JWT_SECRET) return json({ error: "Worker is not configured" }, 503, origin);
     const url = new URL(request.url);
     try {
-      if (request.method === "GET" && url.pathname === "/v1/health") return json({ ok: true }, 200, origin);
+      if (request.method === "GET" && url.pathname === "/v1/health") return json({ ok: true, googleEnabled: googleReady(env) }, 200, origin);
+      if (request.method === "GET" && url.pathname === "/v1/auth/google/start") {
+        if (!googleReady(env)) return json({ error: "Google sign-in is not configured" }, 503, origin);
+        const returnTo = url.searchParams.get("returnTo") || "";
+        let validatedReturnTo;
+        try { validatedReturnTo = new URL(returnTo); } catch { return json({ error: "Invalid return URL" }, 400, origin); }
+        if (validatedReturnTo.origin !== env.ALLOWED_ORIGIN) return json({ error: "Invalid return URL" }, 400, origin);
+        const state = `${id()}${id()}`;
+        const nonce = `${id()}${id()}`;
+        await env.DB.prepare("INSERT INTO oauth_states (state, nonce, return_to, expires_at, created_at) VALUES (?, ?, ?, ?, ?)")
+          .bind(state, nonce, returnTo, now() + OAUTH_TTL_MS, now()).run();
+        const authorize = new URL("https://accounts.google.com/o/oauth2/v2/auth");
+        authorize.search = new URLSearchParams({ client_id: env.GOOGLE_CLIENT_ID, redirect_uri: workerCallback(env), response_type: "code", scope: "openid email profile", state, nonce, prompt: "select_account" }).toString();
+        return Response.redirect(authorize.toString(), 302);
+      }
+      if (request.method === "GET" && url.pathname === "/v1/auth/google/callback") {
+        const stateValue = url.searchParams.get("state") || "";
+        const code = url.searchParams.get("code");
+        const state = await env.DB.prepare("SELECT * FROM oauth_states WHERE state = ? AND expires_at > ?").bind(stateValue, now()).first();
+        if (state) await env.DB.prepare("DELETE FROM oauth_states WHERE state = ?").bind(stateValue).run();
+        if (!state || !code || !googleReady(env)) return Response.redirect(`${env.ALLOWED_ORIGIN}/?cloudAuthError=google`, 302);
+        const form = new URLSearchParams({ code, client_id: env.GOOGLE_CLIENT_ID, client_secret: env.GOOGLE_CLIENT_SECRET, redirect_uri: workerCallback(env), grant_type: "authorization_code" });
+        const response = await fetch("https://oauth2.googleapis.com/token", { method: "POST", headers: { "content-type": "application/x-www-form-urlencoded" }, body: form });
+        if (!response.ok) return Response.redirect(`${state.return_to}/?cloudAuthError=google`, 302);
+        const claims = await verifyGoogleIdToken((await response.json()).id_token, env, state.nonce);
+        const user = await googleUser(env, claims);
+        const ticket = await createAuthHandoff(env, user.id);
+        return Response.redirect(`${state.return_to.replace(/\/$/, "")}/?cloudAuth=${encodeURIComponent(ticket)}`, 302);
+      }
+      if (request.method === "POST" && url.pathname === "/v1/auth/google/consume") {
+        const body = await readJson(request);
+        const ticket = typeof body.ticket === "string" ? body.ticket : "";
+        const handoff = ticket && await env.DB.prepare("SELECT * FROM auth_handoffs WHERE ticket_hash = ? AND used_at IS NULL AND expires_at > ?").bind(await sha256(ticket), now()).first();
+        if (!handoff) return json({ error: "This sign-in link is invalid or expired" }, 400, origin);
+        await env.DB.prepare("UPDATE auth_handoffs SET used_at = ? WHERE id = ?").bind(now(), handoff.id).run();
+        const user = await env.DB.prepare("SELECT * FROM users WHERE id = ?").bind(handoff.user_id).first();
+        return json(await issueSession(user, env), 200, origin);
+      }
       if (request.method === "GET" && url.pathname === "/v1/auth/username-available") {
         const username = url.searchParams.get("username")?.trim() || "";
         if (!validUsername(username)) return json({ available: false }, 200, origin);
@@ -130,7 +245,7 @@ export default {
         if (!await verifyTurnstile(body.turnstileToken, request, env)) return json({ error: "Verification failed" }, 400, origin);
         const userId = id(); const password = await passwordHash(body.password);
         try {
-          await env.DB.prepare("INSERT INTO users (id, username, email, display_name, password_hash, password_salt, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
+          await env.DB.prepare("INSERT INTO users (id, username, email, display_name, password_hash, password_salt, has_password, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?)")
             .bind(userId, username, email, displayName, password.hash, password.salt, now(), now()).run();
         } catch { return json({ error: "That username or email is already in use" }, 409, origin); }
         const user = await env.DB.prepare("SELECT * FROM users WHERE id = ?").bind(userId).first();
@@ -140,7 +255,7 @@ export default {
         const body = await readJson(request); const identifier = String(body.identifier || "").trim();
         if (!identifier || !validPassword(body.password)) return json({ error: "Invalid username or password" }, 401, origin);
         if (!await verifyTurnstile(body.turnstileToken, request, env)) return json({ error: "Verification failed" }, 400, origin);
-        const user = await env.DB.prepare("SELECT * FROM users WHERE username = ? COLLATE NOCASE OR email = ? COLLATE NOCASE").bind(identifier, identifier).first();
+        const user = await env.DB.prepare("SELECT * FROM users WHERE has_password = 1 AND (username = ? COLLATE NOCASE OR email = ? COLLATE NOCASE)").bind(identifier, identifier).first();
         if (!user || !await passwordMatches(body.password, user.password_salt, user.password_hash)) return json({ error: "Invalid username or password" }, 401, origin);
         return json(await issueSession(user, env), 200, origin);
       }
@@ -167,7 +282,7 @@ export default {
         if (!row) return json({ error: "This reset link is invalid or expired" }, 400, origin);
         const password = await passwordHash(body.password);
         await env.DB.batch([
-          env.DB.prepare("UPDATE users SET password_hash = ?, password_salt = ?, updated_at = ? WHERE id = ?").bind(password.hash, password.salt, now(), row.user_id),
+          env.DB.prepare("UPDATE users SET password_hash = ?, password_salt = ?, has_password = 1, updated_at = ? WHERE id = ?").bind(password.hash, password.salt, now(), row.user_id),
           env.DB.prepare("UPDATE password_reset_tokens SET used_at = ? WHERE id = ?").bind(now(), row.id),
           env.DB.prepare("UPDATE sessions SET revoked_at = ? WHERE user_id = ? AND revoked_at IS NULL").bind(now(), row.user_id),
         ]);
@@ -175,7 +290,34 @@ export default {
       }
       const session = await requireUser(request, env);
       if (!session) return json({ error: "Authentication required" }, 401, origin);
-      if (request.method === "GET" && url.pathname === "/v1/auth/me") return json({ user: publicUser(session.user) }, 200, origin);
+      if (request.method === "GET" && url.pathname === "/v1/auth/me") return json(await accountPayload(env, session.user), 200, origin);
+      if (request.method === "PATCH" && url.pathname === "/v1/account") {
+        const body = await readJson(request);
+        const displayName = typeof body.displayName === "string" ? body.displayName.trim().slice(0, 80) : session.user.display_name;
+        const email = body.email === null || body.email === "" ? null : typeof body.email === "string" ? body.email.trim().toLowerCase() : session.user.email;
+        if (!displayName || !validEmail(email)) return json({ error: "Invalid account details" }, 400, origin);
+        try { await env.DB.prepare("UPDATE users SET display_name = ?, email = ?, updated_at = ? WHERE id = ?").bind(displayName, email, now(), session.user.id).run(); } catch { return json({ error: "That email is already in use" }, 409, origin); }
+        return json(await accountPayload(env, await env.DB.prepare("SELECT * FROM users WHERE id = ?").bind(session.user.id).first()), 200, origin);
+      }
+      if (request.method === "POST" && url.pathname === "/v1/account/password") {
+        const body = await readJson(request);
+        if (!validPassword(body.password)) return json({ error: "Password must be at least 10 characters" }, 400, origin);
+        if (Number(session.user.has_password ?? 1) === 1 && !await passwordMatches(String(body.currentPassword || ""), session.user.password_salt, session.user.password_hash)) return json({ error: "Current password is incorrect" }, 401, origin);
+        const password = await passwordHash(body.password);
+        await env.DB.batch([
+          env.DB.prepare("UPDATE users SET password_hash = ?, password_salt = ?, has_password = 1, updated_at = ? WHERE id = ?").bind(password.hash, password.salt, now(), session.user.id),
+          env.DB.prepare("UPDATE sessions SET revoked_at = ? WHERE user_id = ? AND revoked_at IS NULL").bind(now(), session.user.id),
+        ]);
+        return json(await issueSession(await env.DB.prepare("SELECT * FROM users WHERE id = ?").bind(session.user.id).first(), env), 200, origin);
+      }
+      if (request.method === "GET" && url.pathname === "/v1/account/export") return json({ account: await accountPayload(env, session.user), progress: { qbank: await getDocument(env, session.user.id, "qbank"), flashcards: await getDocument(env, session.user.id, "flashcards") }, exportedAt: now() }, 200, origin);
+      if (request.method === "DELETE" && url.pathname === "/v1/account") {
+        const body = await readJson(request);
+        if (body.confirm !== "DELETE") return json({ error: "Type DELETE to confirm account deletion" }, 400, origin);
+        if (Number(session.user.has_password ?? 1) === 1 && !await passwordMatches(String(body.password || ""), session.user.password_salt, session.user.password_hash)) return json({ error: "Current password is incorrect" }, 401, origin);
+        await env.DB.prepare("DELETE FROM users WHERE id = ?").bind(session.user.id).run();
+        return json({ ok: true }, 200, origin);
+      }
       if (request.method === "GET" && url.pathname === "/v1/sync") {
         return json({ qbank: await getDocument(env, session.user.id, "qbank"), flashcards: await getDocument(env, session.user.id, "flashcards") }, 200, origin);
       }

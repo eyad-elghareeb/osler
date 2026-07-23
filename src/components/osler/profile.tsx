@@ -24,6 +24,8 @@ import {
   Check,
   ArrowLeft,
   Wifi,
+  Cloud,
+  User,
 } from "lucide-react";
 import { storage, notes as notesStore, type NoteRecord } from "@/lib/osler/storage";
 import { loadAllContent, ENGINE_META } from "@/lib/osler/content";
@@ -35,6 +37,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { NotesPanel } from "./notes-panel";
 import { SyncModal } from "./sync/sync-modal";
+import { readCloudSession } from "@/lib/osler/cloud";
 import {
   PageHeader,
   SectionHeading,
@@ -45,7 +48,7 @@ import {
 interface ProfileProps {
   username: string;
   onViewChange?: (v: OslerView) => void;
-  onOpenSettingsSection?: (section: "language" | "ai" | "shortcuts" | "downloads" | "sync" | "backup" | "danger") => void;
+  onOpenSettingsSection?: (section: "account" | "language" | "ai" | "shortcuts" | "downloads" | "sync" | "backup" | "danger") => void;
 }
 
 export function Profile({ username, onViewChange, onOpenSettingsSection }: ProfileProps) {
@@ -97,48 +100,76 @@ export function Profile({ username, onViewChange, onOpenSettingsSection }: Profi
     <div className="osler-page">
       <div className="osler-page__inner--narrow">
         {/* Profile header */}
-        <motion.div
-          initial={{ opacity: 0, y: 8 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="osler-card--roomy mb-6 flex items-center gap-4"
-        >
-          <div className="w-16 h-16 rounded-full bg-gradient-to-br from-primary/80 to-primary/40 flex items-center justify-center text-2xl font-bold text-primary-foreground">
-            {username.slice(0, 2).toUpperCase()}
-          </div>
-          <div className="flex-1 min-w-0">
-            <h1 className="text-xl md:text-2xl font-bold tracking-tight truncate">{username}</h1>
-            <p className="text-xs text-muted-foreground mt-0.5">{t("nav.localSession")} · {t("login.footer")}</p>
-          </div>
-          <div className="hidden sm:flex flex-col items-end gap-1">
-            <Badge variant="secondary" className="text-[10px]">
-              <Flame className="size-3 me-1" />
-              {progress.length > 0 ? "Active learner" : "New here"}
-            </Badge>
-            <span className="text-[10px] text-muted-foreground">
-              {attemptedTotal} questions answered
-            </span>
-          </div>
-          {onViewChange && (
-            <>
-              <button
-                onClick={() => setSyncOpen(true)}
-                className="osler-icon-btn shrink-0"
-                aria-label={t("sync.title")}
-                title={t("sync.title")}
-              >
-                <Wifi className="size-4" />
-              </button>
-              <button
-                onClick={() => onViewChange("settings")}
-                className="osler-icon-btn shrink-0"
-                aria-label={t("nav.settings")}
-                title={t("nav.settings")}
-              >
-                <Cog className="size-4" />
-              </button>
-            </>
-          )}
-        </motion.div>
+        {(() => {
+          const cloudSession = readCloudSession();
+          return (
+            <motion.div
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="osler-card--roomy mb-6 flex items-center gap-4"
+            >
+              <div className="w-16 h-16 rounded-full bg-gradient-to-br from-primary/80 to-primary/40 flex items-center justify-center text-2xl font-bold text-primary-foreground shrink-0 shadow-sm">
+                {(cloudSession?.user.displayName || username).slice(0, 2).toUpperCase()}
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2">
+                  <h1 className="text-xl md:text-2xl font-bold tracking-tight truncate">
+                    {cloudSession?.user.displayName || username}
+                  </h1>
+                  {cloudSession && (
+                    <Badge variant="outline" className="text-[10px] bg-primary/10 text-primary border-primary/30">
+                      <Cloud className="size-3 me-1" />
+                      {cloudSession.user.role}
+                    </Badge>
+                  )}
+                </div>
+                <p className="text-xs text-muted-foreground mt-0.5 truncate">
+                  {cloudSession ? (cloudSession.user.email || `@${cloudSession.user.username}`) : t("nav.localSession")} · {t("login.footer")}
+                </p>
+              </div>
+              <div className="hidden sm:flex flex-col items-end gap-1">
+                <Badge variant="secondary" className="text-[10px]">
+                  <Flame className="size-3 me-1" />
+                  {progress.length > 0 ? "Active learner" : "New here"}
+                </Badge>
+                <span className="text-[10px] text-muted-foreground">
+                  {attemptedTotal} questions answered
+                </span>
+              </div>
+              {onViewChange && (
+                <>
+                  <button
+                    onClick={() => {
+                      if (onOpenSettingsSection) onOpenSettingsSection("account");
+                      else onViewChange("settings");
+                    }}
+                    className="osler-icon-btn shrink-0"
+                    aria-label={t("settings.section.account")}
+                    title={t("settings.section.account")}
+                  >
+                    <User className="size-4" />
+                  </button>
+                  <button
+                    onClick={() => setSyncOpen(true)}
+                    className="osler-icon-btn shrink-0"
+                    aria-label={t("sync.title")}
+                    title={t("sync.title")}
+                  >
+                    <Wifi className="size-4" />
+                  </button>
+                  <button
+                    onClick={() => onViewChange("settings")}
+                    className="osler-icon-btn shrink-0"
+                    aria-label={t("nav.settings")}
+                    title={t("nav.settings")}
+                  >
+                    <Cog className="size-4" />
+                  </button>
+                </>
+              )}
+            </motion.div>
+          );
+        })()}
 
         {/* Stats grid */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">

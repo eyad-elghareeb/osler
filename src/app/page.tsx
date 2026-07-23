@@ -27,6 +27,7 @@ import type { SearchResult } from "@/lib/osler/search";
 import {
   cloudEnabled,
   clearCloudSession,
+  consumeGoogleLogin,
   readCloudSession,
   startCloudSync,
   logoutCloudAccount,
@@ -47,7 +48,7 @@ export default function Home() {
   const [activeArticleId, setActiveArticleId] = React.useState<string | undefined>(undefined);
   const [activeVideoId, setActiveVideoId] = React.useState<string | undefined>(undefined);
   const [settingsSection, setSettingsSection] = React.useState<
-    "language" | "ai" | "shortcuts" | "downloads" | "sync" | "backup" | "native" | "danger"
+    "account" | "appearance" | "language" | "ai" | "shortcuts" | "downloads" | "sync" | "backup" | "native" | "about" | "danger"
   >("language");
   const openSettingsSection = (section: typeof settingsSection) => {
     setSettingsSection(section);
@@ -83,6 +84,26 @@ export default function Home() {
       const stored = sessionStorage.getItem(SESSION_KEY);
       if (!cancelled && stored) setUsername(stored);
     })();
+    return () => { cancelled = true; };
+  }, []);
+
+  React.useEffect(() => {
+    const ticket = new URLSearchParams(window.location.search).get("cloudAuth");
+    if (!ticket) return;
+    let cancelled = false;
+    void consumeGoogleLogin(ticket).then((session) => {
+      if (cancelled) return;
+      setCloudSession(session);
+      setUsername(session.user.displayName);
+      const url = new URL(window.location.href);
+      url.searchParams.delete("cloudAuth");
+      window.history.replaceState(null, "", `${url.pathname}${url.search}`);
+    }).catch(() => {
+      const url = new URL(window.location.href);
+      url.searchParams.delete("cloudAuth");
+      url.searchParams.set("cloudAuthError", "google");
+      window.history.replaceState(null, "", `${url.pathname}${url.search}`);
+    });
     return () => { cancelled = true; };
   }, []);
 

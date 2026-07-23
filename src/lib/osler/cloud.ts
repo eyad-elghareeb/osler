@@ -11,6 +11,7 @@ export interface CloudUser {
   displayName: string;
   role: "student" | "admin";
   email: string | null;
+  hasPassword: boolean;
 }
 
 export interface CloudSession {
@@ -49,6 +50,11 @@ async function request<T>(path: string, init: RequestInit = {}, token?: string):
 
 export async function cloudEnabled(): Promise<boolean> {
   return !!await cloudConfig();
+}
+
+export async function cloudGoogleEnabled(): Promise<boolean> {
+  const status = await request<{ googleEnabled: boolean }>("/v1/health", { method: "GET" });
+  return status.googleEnabled;
 }
 
 export function readCloudSession(): CloudSession | null {
@@ -96,6 +102,46 @@ export async function loginCloudAccount(input: {
   return session;
 }
 
+export function startGoogleLogin(): void {
+  if (typeof window === "undefined") return;
+  const config = getConfig();
+  window.location.assign(`${config.cloud.apiUrl.replace(/\/$/, "")}/v1/auth/google/start?returnTo=${encodeURIComponent(window.location.origin)}`);
+}
+
+export async function consumeGoogleLogin(ticket: string): Promise<CloudSession> {
+  const session = await request<CloudSession>("/v1/auth/google/consume", { method: "POST", body: JSON.stringify({ ticket }) });
+  saveCloudSession(session);
+  return session;
+}
+
+export interface CloudAccount {
+  user: CloudUser;
+  providers: string[];
+}
+
+export async function getCloudAccount(session: CloudSession): Promise<CloudAccount> {
+  return request<CloudAccount>("/v1/auth/me", { method: "GET" }, session.token);
+}
+
+export async function updateCloudAccount(session: CloudSession, input: { displayName: string; email: string | null }): Promise<CloudAccount> {
+  return request<CloudAccount>("/v1/account", { method: "PATCH", body: JSON.stringify(input) }, session.token);
+}
+
+export async function changeCloudPassword(session: CloudSession, input: { currentPassword?: string; password: string }): Promise<CloudSession> {
+  const next = await request<CloudSession>("/v1/account/password", { method: "POST", body: JSON.stringify(input) }, session.token);
+  saveCloudSession(next);
+  return next;
+}
+
+export async function exportCloudAccount(session: CloudSession): Promise<unknown> {
+  return request("/v1/account/export", { method: "GET" }, session.token);
+}
+
+export async function deleteCloudAccount(session: CloudSession, input: { password?: string }): Promise<void> {
+  await request("/v1/account", { method: "DELETE", body: JSON.stringify({ confirm: "DELETE", ...input }) }, session.token);
+  clearCloudSession();
+}
+
 export async function requestPasswordReset(email: string, turnstileToken?: string): Promise<void> {
   await request("/v1/auth/reset/request", { method: "POST", body: JSON.stringify({ email, turnstileToken }) });
 }
@@ -113,6 +159,11 @@ export async function logoutCloudAccount(session: CloudSession | null): Promise<
 }
 
 let stopSync: (() => void) | null = null;
+let forceSync: (() => void) | null = null;
+
+export function syncCloudNow(): void {
+  forceSync?.();
+}
 
 export function startCloudSync(session: CloudSession): () => void {
   stopSync?.();
@@ -130,6 +181,7 @@ export function startCloudSync(session: CloudSession): () => void {
       return;
     }
     syncing = true;
+    window.dispatchEvent(new CustomEvent("osler-cloud-sync-status", { detail: { state: "syncing" } }));
     try {
       await storage.ensureCacheHydrated();
       const config = getConfig();
@@ -151,11 +203,13 @@ export function startCloudSync(session: CloudSession): () => void {
       void saved;
       dirty = false;
       lastSyncAt = Date.now();
+      window.dispatchEvent(new CustomEvent("osler-cloud-sync-status", { detail: { state: "synced", syncedAt: lastSyncAt } }));
     } catch (error) {
       if (error instanceof CloudApiError && error.status === 401) {
         clearCloudSession();
         window.dispatchEvent(new CustomEvent("osler-cloud-session-expired"));
       }
+      window.dispatchEvent(new CustomEvent("osler-cloud-sync-status", { detail: { state: "offline" } }));
     } finally {
       syncing = false;
     }
@@ -170,12 +224,18 @@ export function startCloudSync(session: CloudSession): () => void {
   window.addEventListener("osler-flashcard-changed", schedule);
   window.addEventListener("online", onOnline);
   void sync();
+  forceSync = () => {
+    dirty = true;
+    lastSyncAt = 0;
+    void sync();
+  };
   stopSync = () => {
     stopped = true;
     if (timer) clearTimeout(timer);
     window.removeEventListener("osler-progress-changed", schedule);
     window.removeEventListener("osler-flashcard-changed", schedule);
     window.removeEventListener("online", onOnline);
+    forceSync = null;
   };
   return stopSync;
 }

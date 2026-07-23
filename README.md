@@ -133,17 +133,18 @@ Key features: Timed/Tutor modes · Question navigator with state colors · Split
 </details>
 
 <details>
-<summary><strong>🔗 Progress Sync</strong> — Cross-device</summary>
+<summary><strong>🔗 Progress Sync & Accounts</strong> — Cross-device & Cloud</summary>
 
-Three transport methods:
+Four transport & auth methods:
 
-| Method | Technology |
-|--------|------------|
-| **Network** | WebRTC via PeerJS + MQTT relay discovery, room-based |
-| **QR Code** | Multi-part encoding with LZ-string + CRC32 checksum |
-| **File** | Download/import `.osler-backup` files |
+| Method | Technology | Scope |
+|--------|------------|-------|
+| **Cloud Backend** | Cloudflare Workers + D1 | Accounts (Email/Password, Google OAuth), roles (`student`/`admin`), PBKDF2 hashes, automated background sync |
+| **Network** | WebRTC via PeerJS + MQTT relay | P2P device-to-device room sync |
+| **QR Code** | Multi-part encoding with LZ-string + CRC32 | Instant offline camera scan |
+| **File** | Download/import `.osler-backup` files | Manual JSON backup/restore |
 
-Syncs progress, sessions, flashcard reviews, and notes.
+Syncs progress, sessions, flashcard reviews, and notes. See [`docs/cloudflare-backend.md`](docs/cloudflare-backend.md) for Worker deployment steps.
 
 The network panel surfaces live connection info from the **Network Information API** — Wi-Fi/cellular type, effective type (2g/3g/4g), downlink speed, RTT, and Data Saver flag — so users can immediately see whether peer-to-peer sync is likely to succeed.
 </details>
