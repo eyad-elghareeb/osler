@@ -1,50 +1,61 @@
 /**
- * Arabic text shaping for PDF output.
+ * Arabic text shaping + bidirectional reordering for PDF output.
  *
- * Uses `arabic-reshaper` for battle-tested character shaping, with
- * workarounds for a known bug: when a connecting letter (4 forms) is
- * preceded by an end-letter (non-connecting, like ا د ذ ر ز و) and
- * followed by a non-Arabic character, the shaping algorithm returns
- * isolated form instead of final form.
+ * The pipeline is split into TWO stages so that line-breaking happens
+ * in logical order (before BiDi reordering). If we BiDi-reordered the
+ * whole paragraph first and then split it into lines, the line order
+ * would be reversed for multi-line Arabic — the first line would show
+ * the END of the paragraph and the last line would show the BEGINNING.
  *
- * The fix runs in two stages:
- *   1. Pre-process: convert end-letters to final forms BEFORE shaping,
- *      so the algorithm doesn't see them as non-connecting.
- *   2. Post-process: catch any remaining incorrect isolated→final
- *      swaps after shaping.
+ * Stage 1 — `shapeArabicLetters(text)`:
+ *   `arabic-reshaper` converts basic Arabic codepoints (U+0600–U+06FF)
+ *   into their Presentation Forms-A/B equivalents (U+FB50–U+FDFF,
+ *   U+FE70–U+FEFF) so jsPDF can render the correct contextual form
+ *   (isolated / initial / medial / final) per letter. This is a
+ *   battle-tested JS port of the well-known Python `arabic_reshaper`
+ *   library by Louy Alakkad. The output stays in **logical order** —
+ *   no reordering yet.
  *
- * Also applies a Cairo font fallback — Cairo is missing 42 isolated
- * presentation-form codepoints (FE70–FEFC, FB50–FDFF) so they need
- * to be mapped back to their basic Arabic equivalents.
+ * Stage 2 — `bidiReorder(text)`:
+ *   `bidi-js` implements the Unicode Bidirectional Algorithm (UAX #9).
+ *   It is the same library PDFKit ships with (a JS port of GNU
+ *   fribidi). It properly reorders mixed LTR/RTL runs (Arabic + Latin
+ *   acronyms + numbers + punctuation) so that "ST", "(STEMI)", "aVF",
+ *   "90", "V1" etc. keep their correct character order inside an RTL
+ *   paragraph. This MUST be applied **per line** (after
+ *   `splitTextToSize`), not on the whole paragraph.
+ *
+ * Stage 3 — Cairo fallback (applied in stage 1):
+ *   Cairo (the font we ship for Arabic) is missing ~42 isolated-form
+ *   codepoints, so we map those back to their basic Arabic equivalents
+ *   before jsPDF tries to look up the glyph.
  *
  * @module
  */
 import arabicReshaper from "arabic-reshaper";
+import bidiFactory from "bidi-js";
+
+// `bidiFactory` returns a fresh instance — we only need one.
+const bidi = bidiFactory();
 
 /** Detect any Arabic characters in text. */
 export function hasArabic(text: string): boolean {
   return /[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]/.test(text);
 }
 
-// ── Static data ──────────────────────────────────────────────────
-// End-letter basic codepoints → final presentation form codepoints.
-// Derived from Unicode Arabic Presentation Forms B (FE70–FEFF).
-// These are end-letters (non-connecting) that only have isolated + final forms.
-const _END_LETTER_TO_FINAL: Record<number, number> = {
-  0x0622: 0xFE82, 0x0623: 0xFE84, 0x0624: 0xFE86, 0x0625: 0xFE88,
-  0x0627: 0xFE8E, 0x0629: 0xFE94, 0x062F: 0xFEAA, 0x0630: 0xFEAC,
-  0x0631: 0xFEAE, 0x0632: 0xFEB0, 0x0648: 0xFEEE, 0x0649: 0xFEF0,
-  0x0671: 0xFB51, 0x0688: 0xFB89, 0x068C: 0xFB85, 0x068D: 0xFB83,
-  0x068E: 0xFB87, 0x0691: 0xFB8D, 0x0698: 0xFB8B, 0x06BA: 0xFB9F,
-  0x06C0: 0xFBA5, 0x06C5: 0xFBE1, 0x06C6: 0xFBDA, 0x06C7: 0xFBD8,
-  0x06C8: 0xFBDC, 0x06C9: 0xFBE3, 0x06CB: 0xFBDF, 0x06D2: 0xFBAF,
-  0x06D3: 0xFBB1,
-};
-const _END_LETTER_BASIC = new Set(
-  Object.keys(_END_LETTER_TO_FINAL).map(Number),
-);
-
-// Cairo font isolated-form fallback (42 missing codepoints → basic char).
+// ── Cairo font fallback ──────────────────────────────────────────
+// Cairo is missing 42 isolated presentation-form codepoints
+// (FE70–FEFC, FB50–FDFF). When `arabic-reshaper` emits one of these
+// as the isolated form, jsPDF cannot find the glyph and renders a
+// blank box. We map them back to their basic Arabic equivalents,
+// which Cairo does ship. After mapping, the visual glyph is
+// identical because the isolated presentation form and the basic
+// codepoint are designed to render the same way.
+//
+// IMPORTANT: this map is intentionally keyed on the *isolated*
+// presentation form codepoints only. Initial/medial/final forms are
+// all present in Cairo and must NOT be replaced — replacing them
+// would break the cursive joining.
 const _CAIRO_FALLBACK: Record<number, number> = {
   0xFE80: 0x0621, 0xFE81: 0x0622, 0xFE83: 0x0623, 0xFE85: 0x0624,
   0xFE87: 0x0625, 0xFE89: 0x0626, 0xFE8D: 0x0627, 0xFE8F: 0x0628,
@@ -59,84 +70,6 @@ const _CAIRO_FALLBACK: Record<number, number> = {
   0xFB8E: 0x06A9, 0xFB92: 0x06AF, 0xFBFC: 0x06CC,
 };
 
-// ── Maps built dynamically from arabic-reshaper ──────────────────
-// These are populated once at module load time.
-
-/** All presentation-form codepoints of end-letters (isolated + final). */
-const _PRES_END_LETTER = new Set<number>();
-/** Isolated → final form codepoints for 4-form connecting letters. */
-const _ISOLATED_TO_FINAL: Record<number, number> = {};
-
-function _isArabicCp(cp: number): boolean {
-  return (
-    (cp >= 0x0600 && cp <= 0x06FF) ||
-    (cp >= 0x0750 && cp <= 0x077F) ||
-    (cp >= 0x08A0 && cp <= 0x08FF) ||
-    (cp >= 0xFB50 && cp <= 0xFDFF) ||
-    (cp >= 0xFE70 && cp <= 0xFEFF)
-  );
-}
-
-function _initMaps(): void {
-  for (const basicCp of _END_LETTER_BASIC) {
-    const ch = String.fromCharCode(basicCp);
-    const isolated = arabicReshaper.convertArabic(ch);
-    _PRES_END_LETTER.add(isolated.charCodeAt(0));
-    const finalCtx = arabicReshaper.convertArabic("\u0645" + ch);
-    _PRES_END_LETTER.add(finalCtx.charCodeAt(finalCtx.length - 1));
-  }
-  for (let cp = 0x0621; cp <= 0x06D3; cp++) {
-    const ch = String.fromCharCode(cp);
-    const isolated = arabicReshaper.convertArabic(ch);
-    if (isolated.length === 0) continue;
-    const finalCtx = arabicReshaper.convertArabic("\u0645" + ch);
-    if (finalCtx.length === 0) continue;
-    const isoCp = isolated.charCodeAt(0);
-    const finalCp = finalCtx.charCodeAt(finalCtx.length - 1);
-    if (isoCp !== cp && isoCp !== finalCp) {
-      _ISOLATED_TO_FINAL[isoCp] = finalCp;
-    }
-  }
-}
-_initMaps();
-
-// ── Shaping pipeline ─────────────────────────────────────────────
-
-/** Pre-process: convert end-letters to final form when not followed by Arabic. */
-function _fixEndLetters(text: string): string {
-  let out = "";
-  for (let i = 0; i < text.length; i++) {
-    const cp = text.charCodeAt(i);
-    const finalCp = _END_LETTER_TO_FINAL[cp];
-    if (finalCp && i + 1 < text.length && !_isArabicCp(text.charCodeAt(i + 1))) {
-      out += String.fromCharCode(finalCp);
-    } else {
-      out += text[i];
-    }
-  }
-  return out;
-}
-
-/** Post-process: swap isolated→final for connecting letters after end-letters. */
-function _fixIsolatedToFinal(text: string): string {
-  let out = "";
-  for (let i = 0; i < text.length; i++) {
-    const cp = text.charCodeAt(i);
-    const finalCp = _ISOLATED_TO_FINAL[cp];
-    if (finalCp) {
-      const prevCp = i > 0 ? text.charCodeAt(i - 1) : -1;
-      const nextCp = i + 1 < text.length ? text.charCodeAt(i + 1) : -1;
-      if (prevCp >= 0 && _PRES_END_LETTER.has(prevCp) && !_isArabicCp(nextCp)) {
-        out += String.fromCharCode(finalCp);
-        continue;
-      }
-    }
-    out += text[i];
-  }
-  return out;
-}
-
-/** Cairo fallback: replace missing isolated forms with basic Arabic chars. */
 function _fallbackCairo(text: string): string {
   let out = "";
   for (let i = 0; i < text.length; i++) {
@@ -148,22 +81,66 @@ function _fallbackCairo(text: string): string {
 }
 
 /**
- * Shape Arabic text into presentation forms suitable for PDF rendering.
+ * Stage 1: Shape Arabic letters into contextual presentation forms.
  *
- * Pipeline: fixEndLetters → arabic-reshaper → fixIsolatedToFinal → fallbackCairo.
+ * Uses `arabic-reshaper` for letter-joining, ligatures (LAM-ALEF),
+ * and transparent diacritics. The output stays in **logical order**
+ * (no BiDi reordering) so that `splitTextToSize` can break it into
+ * lines at the correct word boundaries. After line-breaking, call
+ * `bidiReorder()` on each line to get visual order.
  *
- * Letters without Arabic pass through unchanged.
+ * Also applies the Cairo isolated-form fallback.
+ */
+export function shapeArabicLetters(text: string): string {
+  if (!hasArabic(text)) return text;
+  return _fallbackCairo(arabicReshaper.convertArabic(text));
+}
+
+/**
+ * Stage 2: Apply the Unicode Bidirectional Algorithm to reorder a
+ * single line of text into visual order.
+ *
+ * `bidi-js` is a port of GNU fribidi and properly handles:
+ *   - strong LTR (Latin letters, Latin digits) inside RTL paragraphs
+ *   - neutral characters (punctuation, spaces) adopting the
+ *     surrounding direction
+ *   - mirrored characters (parentheses, brackets) flipping to
+ *     their visual mirror in RTL runs
+ *   - nested isolates and embeddings
+ *
+ * MUST be called **per line** (after `splitTextToSize`), not on the
+ * whole paragraph. Calling it on the whole paragraph before line-
+ * breaking reverses the line order for multi-line Arabic.
+ */
+export function bidiReorder(text: string): string {
+  if (!hasArabic(text)) return text;
+  const levels = bidi.getEmbeddingLevels(text);
+  return bidi.getReorderedString(text, levels);
+}
+
+/**
+ * Convenience: shape + BiDi in one call, for SINGLE-LINE text only.
+ *
+ * For multi-line text (anything that will be passed to
+ * `splitTextToSize`), use `shapeArabicLetters` first, then
+ * `bidiReorder` per line. Using this on multi-line text will reverse
+ * the line order.
  */
 export function shapeArabic(text: string): string {
   if (!hasArabic(text)) return text;
-  return _fallbackCairo(_fixIsolatedToFinal(arabicReshaper.convertArabic(_fixEndLetters(text))));
+  return bidiReorder(shapeArabicLetters(text));
 }
 
 /**
  * Apply only the Cairo isolated-form fallback to already-shaped text.
- * Used as a preProcessText handler in jsPDF to fix missing glyphs after
- * jsPDF's own processArabic has run.
+ *
+ * Kept for backwards compatibility with the `preProcessText` hook in
+ * `pdf.ts`, which runs on every string jsPDF touches (including ones
+ * we've already shaped) — running the full pipeline again there would
+ * double-shape. The fallback is idempotent, so it's safe to apply
+ * repeatedly.
  */
 export function fallbackArabicPres(text: string): string {
+  if (!hasArabic(text)) return text;
   return _fallbackCairo(text);
 }

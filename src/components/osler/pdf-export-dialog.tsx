@@ -21,7 +21,8 @@ import { Label } from "@/components/ui/label";
 import { useI18n } from "./i18n-provider";
 import { cn } from "@/lib/utils";
 import { haptic } from "@/lib/osler/native";
-import type { PdfPageConfig } from "@/lib/osler/pdf";
+import type { PdfPageConfig, PdfLang } from "@/lib/osler/pdf";
+import { loadUiLang } from "@/lib/osler/i18n";
 
 export interface PdfExportOptions {
   title: string;
@@ -37,6 +38,7 @@ export interface PdfExportOptions {
   showReview?: boolean;
   fontSize?: "small" | "medium" | "large";
   fontType?: "serif" | "sans";
+  lang?: PdfLang;
 }
 
 interface PdfExportDialogProps {
@@ -103,6 +105,7 @@ export function PdfExportDialog({
         showReview,
         fontSize,
         fontType,
+        lang: loadUiLang(),
       });
     } finally {
       setExporting(false);

@@ -36,7 +36,8 @@
 
 import { jsPDF } from "jspdf";
 import { registerPdfFonts } from "./pdf-fonts";
-import { hasArabic, shapeArabic, fallbackArabicPres } from "@/lib/osler/arabic";
+import { hasArabic, shapeArabic, shapeArabicLetters, bidiReorder, fallbackArabicPres } from "@/lib/osler/arabic";
+import { translate, type UiLang, type StringKey } from "@/lib/osler/i18n";
 
 // ═══════════════════════════════════════════════════════════════
 // § 1  DESIGN TOKENS
@@ -84,6 +85,23 @@ export const C = {
 };
 
 type SectionKey = keyof typeof C.SECTION;
+
+// ═══════════════════════════════════════════════════════════════
+// § 1b  I18N HELPERS
+// ═══════════════════════════════════════════════════════════════
+
+/**
+ * The UI language to use for PDF template strings (QUESTION, EXPLANATION,
+ * CHAPTER, etc.). Defaults to "en" if not specified. When set to "ar",
+ * all chrome text is translated to Arabic and rendered RTL.
+ */
+export type PdfLang = UiLang;
+
+/** A `t()` helper bound to a specific language. */
+function makeT(lang: PdfLang) {
+  return (key: StringKey, params?: Record<string, string | number>) =>
+    translate(lang, key, params);
+}
 
 /** Style-mode → spacing density. Font sizes never shrink; whitespace does. */
 type StyleMode = "standard" | "compact" | "mcqnotes";
@@ -168,7 +186,31 @@ function detectHtmlHeading(line: string): { level: number; text: string } | null
   return null;
 }
 
-// hasArabic, shapeArabic, fallbackArabicPres imported from @/lib/osler/arabic
+// hasArabic, shapeArabic, shapeArabicLetters, bidiReorder, fallbackArabicPres imported from @/lib/osler/arabic
+
+/**
+ * Split text into lines for a given max width, then BiDi-reorder each
+ * line independently.
+ *
+ * For Arabic text, the line-breaking MUST happen in logical order
+ * (before BiDi reordering). If we BiDi-reordered the whole paragraph
+ * first and then split, the line order would be reversed — the first
+ * line would show the END of the paragraph and the last line would
+ * show the BEGINNING.
+ *
+ * So the correct sequence is:
+ *   1. `shapeArabicLetters(text)` — shape into presentation forms,
+ *      keep logical order
+ *   2. `splitTextToSize(shaped, maxW)` — break into lines at word
+ *      boundaries (still logical order)
+ *   3. `bidiReorder(line)` per line — reorder each line into visual
+ *      order
+ *
+ * For non-Arabic text, this just delegates to `splitTextToSize`.
+ */
+function splitAndShapeArabic(doc: jsPDF, text: string, maxW: number): string[] {
+  return doc.splitTextToSize(text, maxW);
+}
 
 function trunc(text: string, max: number): string {
   return text.length <= max ? text : text.slice(0, max - 1) + "\u2026";
@@ -181,6 +223,19 @@ function clamp(val: number, min: number, max: number): number {
 /** Small-caps tracking via inter-character spacing (no kerning API in core PDF text). */
 function tracked(text: string): string {
   return text.split("").join(" ");
+}
+
+/**
+ * Render a label string: for Arabic, shape letters (cursive joining
+ * only, no BiDi — jsPDF's built-in Bidi engine handles direction);
+ * for non-Arabic, apply letter-spacing tracking.
+ *
+ * Use this instead of `tracked()` whenever the string could be Arabic
+ * (i18n labels, user-supplied titles, etc.).  Applying letter-spacing
+ * to Arabic breaks cursive joining, so `tracked` is skipped for Arabic.
+ */
+function tlabel(text: string): string {
+  return hasArabic(text) ? shapeArabicLetters(text) : tracked(text);
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -365,6 +420,8 @@ class PdfDoc {
   y = 0;
   page = 1;
   title: string;
+  lang: PdfLang;
+  t: (key: StringKey, params?: Record<string, string | number>) => string;
 
   headerLabel = "";
   section: SectionKey = "questions";
@@ -377,9 +434,19 @@ class PdfDoc {
   /** Chapter number → the physical page it starts on (for TOC + bookmarks). */
   chapterPages: number[] = [];
 
-  constructor(cfg: PdfPageConfig, title: string, styleMode: StyleMode, fontSizeOpt?: "small" | "medium" | "large", fontTypeOpt?: "serif" | "sans") {
+  /**
+   * Pending "See Answer Key" link annotations. Each entry records the
+   * position of a "See Answer Key" text on a question page. When the
+   * matching answer key page is known, `resolveAnswerKeyLinks()` adds
+   * `doc.link()` annotations pointing to it.
+   */
+  pendingAnswerKeyLinks: Array<{ page: number; x: number; y: number; w: number; h: number; chapterIdx: number }> = [];
+
+  constructor(cfg: PdfPageConfig, title: string, styleMode: StyleMode, fontSizeOpt?: "small" | "medium" | "large", fontTypeOpt?: "serif" | "sans", lang: PdfLang = "en") {
     this.L = computeLayout(cfg, styleMode, fontSizeOpt, fontTypeOpt);
     this.title = title;
+    this.lang = lang;
+    this.t = makeT(lang);
     this.doc = new jsPDF({ orientation: cfg.orientation, unit: "mm", format: cfg.pageSize });
     (this.doc as any).internal.events.subscribe("preProcessText", (args: any) => {
       const t = args.text;
@@ -443,15 +510,22 @@ class PdfDoc {
 
     // Document title, tracked small caps, left aligned.
     const baseline = hh * 0.58;
-    d.setFont(F.Hm, hs("normal"));
+    const titleRaw = trunc(this.title, 52);
+    const titleAr = hasArabic(titleRaw);
+    d.setFont(titleAr ? "Cairo" : F.Hm, hs("normal"));
     d.setFontSize(7.4 * typeScale);
     d.setTextColor(...C.INK);
-    d.text(tracked(trunc(this.title, 52).toUpperCase()), ms, baseline);
+    if (titleAr) {
+      d.text(shapeArabicLetters(titleRaw), ms + this.L.fw, baseline, { align: "right" });
+    } else {
+      d.text(tracked(titleRaw.toUpperCase()), ms, baseline);
+    }
 
     // Section pill, right aligned.
     if (this.headerLabel) {
-      const label = tracked(this.headerLabel.toUpperCase());
-      d.setFont(F.H, hs("bold"));
+      const headerAr = hasArabic(this.headerLabel);
+      const label = headerAr ? shapeArabicLetters(this.headerLabel) : tracked(this.headerLabel.toUpperCase());
+      d.setFont(headerAr ? "Cairo" : F.H, hs("bold"));
       d.setFontSize(6.4 * typeScale);
       const tw = d.getTextWidth(label);
       const padX = 3.2;
@@ -494,10 +568,11 @@ class PdfDoc {
     d.text(tracked("OSLER"), ms, footerBaseline);
 
     // Short doc title, bottom-right (helps loose printed pages find their way home).
-    d.setFont(F.Hl, hs("normal"));
+    const shortTitle = trunc(this.title, 34);
+    d.setFont(hasArabic(shortTitle) ? "Cairo" : F.Hl, hs("normal"));
     d.setFontSize(6.2 * typeScale);
     d.setTextColor(...C.MUTED);
-    d.text(trunc(this.title, 34), pw - ms, footerBaseline, { align: "right" });
+    d.text(hasArabic(shortTitle) ? shapeArabicLetters(shortTitle) : shortTitle, pw - ms, footerBaseline, { align: "right" });
 
     // Page-number slot is intentionally left blank — stamped in finalize()
     // once the true page count is known.
@@ -604,8 +679,7 @@ class PdfDoc {
   ): number {
     const d = this.doc;
     const raw = stripMd(str);
-    const shaped = shapeArabic(raw);
-    const isArabic = hasArabic(shaped);
+    const isArabic = hasArabic(raw);
 
     let font: string;
     let style: string;
@@ -624,12 +698,15 @@ class PdfDoc {
     d.setTextColor(...(opts.color ?? C.CHARCOAL));
 
     const maxW = opts.maxW ?? this.L.fw;
-    const normalized = normalizeText(shaped);
-    const lines: string[] = d.splitTextToSize(normalized, maxW);
+    // Shape Arabic letters for cursive joining (Cairo font needs
+    // presentation form codepoints), but keep LOGICAL order.
+    // jsPDF's built-in Bidi engine (postProcessText) handles
+    // direction conversion automatically.
+    const prepared = isArabic ? shapeArabicLetters(raw) : raw;
+    const normalized = normalizeText(prepared);
+    const lines = d.splitTextToSize(normalized, maxW);
     if (isArabic) {
-      d.setR2L(true);
-      d.text(lines, x + maxW, y, { align: "right", isOutputVisual: true });
-      d.setR2L(false);
+      d.text(lines, x + maxW, y, { align: "right", isInputVisual: false, isOutputVisual: true });
     } else {
       d.text(lines, x, y, { align: opts.align ?? "left" });
     }
@@ -653,12 +730,17 @@ class PdfDoc {
     return y + 8 * this.L.density;
   }
 
-  trackedLabel(text: string, x: number, y: number, size = 10, color: RGB = C.COBALT): number {
+  trackedLabel(text: string, x: number, y: number, size = 10, color: RGB = C.COBALT, maxW?: number): number {
     const d = this.doc;
-    d.setFont(F.H, hs("bold"));
+    const isAr = hasArabic(text);
+    d.setFont(isAr ? "Cairo" : F.H, hs("bold"));
     d.setFontSize(size * this.L.typeScale);
     d.setTextColor(...color);
-    d.text(tracked(text), x, y);
+    if (isAr) {
+      d.text(shapeArabicLetters(text), x + (maxW ?? this.L.fw), y, { align: "right" });
+    } else {
+      d.text(tracked(text), x, y);
+    }
     return y + lh(size * this.L.typeScale, 1.2);
   }
 
@@ -674,7 +756,13 @@ class PdfDoc {
     const bodyHasArabic = hasArabic(rawBody);
     d.setFont(bodyHasArabic ? "Cairo" : F.Bi, hs(bodyHasArabic ? "normal" : "italic"));
     d.setFontSize(bodySize);
-    const bodyLines: string[] = d.splitTextToSize(normalizeText(rawBody), bodyMaxW);
+    // Measure using the shaped (logical-order) string so the line count
+    // matches what `this.text()` actually renders below. We use
+    // `shapeArabicLetters` (shape only, no BiDi) because line-breaking
+    // must happen in logical order; the actual rendering via
+    // `this.text()` will BiDi-reorder each line independently.
+    const shapedBody = bodyHasArabic ? shapeArabicLetters(rawBody) : rawBody;
+    const bodyLines: string[] = d.splitTextToSize(normalizeText(shapedBody), bodyMaxW);
     const bodyH = bodyLines.length * lh(bodySize, bodyHasArabic ? 1.3 : 1.45);
     const labelH = sp(4, density);
     const totalH = labelH + bodyH + sp(1.5, density);
@@ -687,10 +775,15 @@ class PdfDoc {
     d.setLineWidth(0.5);
     d.roundedRect(x, boxY, w, totalH, 1.2, 1.2, "FD");
 
-    d.setFont(F.H, hs("bold"));
+    const labelAr = hasArabic(label);
+    d.setFont(labelAr ? "Cairo" : F.H, hs("bold"));
     d.setFontSize(6.6 * this.L.typeScale);
     d.setTextColor(...border);
-    d.text(tracked(label), x + pad, boxY + sp(1.5, density));
+    if (labelAr) {
+      d.text(shapeArabicLetters(label), x + w - pad, boxY + sp(1.5, density), { align: "right" });
+    } else {
+      d.text(tracked(label), x + pad, boxY + sp(1.5, density));
+    }
 
     this.text(body, x + pad, boxY + labelH + sp(0.5, density), {
       font: "Bi",
@@ -720,7 +813,7 @@ class PdfDoc {
     d.circle(iconCx, iconCy, 2.1, "F");
     drawCheck(d, iconCx, iconCy, 2.4, C.EMERALD);
 
-    const label = `Correct Answer — ${letter}.  ${trunc(stripMd(optText), 78)}`;
+    const label = `${this.t("pdf.tpl.correctAnswer")} — ${letter}.  ${trunc(stripMd(optText), 78)}`;
     this.text(label, iconCx + 5, boxY + badgeH / 2 + 1.4, {
       font: "H",
       style: "bold",
@@ -784,7 +877,8 @@ class PdfDoc {
     d.setFont(F.Hl, hs("normal"));
     d.setFontSize(8.2);
     d.setTextColor(...C.GOLD_SOFT);
-    d.text(tracked(cfg.eyebrow ?? "OSLER REPORT"), pw / 2, cy, { align: "center" });
+    const eyebrow = cfg.eyebrow ?? this.t("pdf.tpl.oslerReport");
+    d.text(tlabel(eyebrow), pw / 2, cy, { align: "center" });
     cy += 13;
 
     // Brand mark.
@@ -793,22 +887,31 @@ class PdfDoc {
 
     // Title.
     const titleSize = clamp(pw * 0.155, 26, 40);
-    d.setFont(F.H, hs("bold"));
+    const titleIsAr = hasArabic(cfg.title || "");
+    d.setFont(titleIsAr ? "Cairo" : F.H, hs("bold"));
     d.setFontSize(titleSize);
     d.setTextColor(...C.WHITE);
-    const titleLines: string[] = d.splitTextToSize(normalizeText(cfg.title || "Report"), pw * 0.76);
+    const titleLines: string[] = titleIsAr
+      ? splitAndShapeArabic(d, shapeArabicLetters(normalizeText(cfg.title || "Report")), pw * 0.76)
+      : d.splitTextToSize(normalizeText(cfg.title || "Report"), pw * 0.76);
+    // Center alignment works for Arabic because each line is already in
+    // visual order after per-line BiDi — jsPDF measures the visual width
+    // and centers the line as a block.
     d.text(titleLines, pw / 2, cy, { align: "center" });
-    cy += titleLines.length * lh(titleSize, 1.08) + 6;
+    cy += titleLines.length * lh(titleSize, titleIsAr ? 1.25 : 1.08) + 6;
 
     // Subtitle.
     if (cfg.subtitle) {
       const subSize = clamp(pw * 0.058, 11, 16);
-      d.setFont(F.Bi, hs("italic"));
+      const subIsAr = hasArabic(cfg.subtitle);
+      d.setFont(subIsAr ? "Cairo" : F.Bi, hs(subIsAr ? "normal" : "italic"));
       d.setFontSize(subSize);
       d.setTextColor(198, 214, 232);
-      const subLines: string[] = d.splitTextToSize(normalizeText(cfg.subtitle), pw * 0.62);
+      const subLines: string[] = subIsAr
+        ? splitAndShapeArabic(d, shapeArabicLetters(normalizeText(cfg.subtitle)), pw * 0.62)
+        : d.splitTextToSize(normalizeText(cfg.subtitle), pw * 0.62);
       d.text(subLines, pw / 2, cy, { align: "center" });
-      cy += subLines.length * lh(subSize) + 5;
+      cy += subLines.length * lh(subSize, subIsAr ? 1.25 : 1.45) + 5;
     }
 
     // Divider.
@@ -826,12 +929,17 @@ class PdfDoc {
     d.setTextColor(160, 182, 208);
     const metaBits = [cfg.author, cfg.date].filter(Boolean) as string[];
     if (metaBits.length) {
-      d.text(metaBits.join("   ·   "), pw / 2, cy, { align: "center" });
+      const metaStr = metaBits.join("   ·   ");
+      d.text(tlabel(metaStr), pw / 2, cy, { align: "center" });
       cy += 8;
     }
     if (cfg.description) {
       d.setFontSize(8.6);
-      const descLines: string[] = d.splitTextToSize(normalizeText(cfg.description), pw * 0.58);
+      const descAr = hasArabic(cfg.description);
+      const descPrepared = descAr ? shapeArabicLetters(normalizeText(cfg.description)) : normalizeText(cfg.description);
+      const descLines: string[] = descAr
+        ? splitAndShapeArabic(d, descPrepared, pw * 0.58)
+        : d.splitTextToSize(descPrepared, pw * 0.58);
       d.text(descLines, pw / 2, cy, { align: "center" });
       cy += descLines.length * lh(8.6) + 4;
     }
@@ -840,18 +948,18 @@ class PdfDoc {
     if (totalQ > 0 || chCount > 0) {
       cy += 4;
       const parts: string[] = [];
-      if (chCount > 0) parts.push(`${chCount} ${chCount === 1 ? "CHAPTER" : "CHAPTERS"}`);
-      if (totalQ > 0) parts.push(`${totalQ} ${totalQ === 1 ? "QUESTION" : "QUESTIONS"}`);
+      if (chCount > 0) parts.push(`${chCount} ${chCount === 1 ? this.t("pdf.tpl.chapterSingular") : this.t("pdf.tpl.chapters")}`);
+      if (totalQ > 0) parts.push(`${totalQ} ${totalQ === 1 ? this.t("pdf.tpl.questionSingular") : this.t("pdf.tpl.questionsPlural")}`);
       d.setFont(F.H, hs("bold"));
       d.setFontSize(9.5);
-      const widths = parts.map((p) => d.getTextWidth(tracked(p)));
+      const labeledParts = parts.map((p) => ({ text: tlabel(p), w: d.getTextWidth(tlabel(p)) }));
       const sepW = 8;
-      const totalW = widths.reduce((a, b) => a + b, 0) + sepW * (parts.length - 1);
+      const totalW = labeledParts.reduce((a, b) => a + b.w, 0) + sepW * (parts.length - 1);
       let sx = pw / 2 - totalW / 2;
-      for (let i = 0; i < parts.length; i++) {
+      for (let i = 0; i < labeledParts.length; i++) {
         d.setTextColor(...C.GOLD_SOFT);
-        d.text(tracked(parts[i]), sx, cy, { align: "left" });
-        sx += widths[i];
+        d.text(labeledParts[i].text, sx, cy, { align: "left" });
+        sx += labeledParts[i].w;
         if (i < parts.length - 1) {
           d.setDrawColor(120, 140, 164);
           d.setLineWidth(0.3);
@@ -869,11 +977,12 @@ class PdfDoc {
       d.setFont(F.Hn, hs("normal"));
       d.setFontSize(8.6);
       for (const f of features) {
-        const fw = d.getTextWidth(f);
+        const ft = tlabel(f);
+        const fw = d.getTextWidth(ft);
         const fx = pw / 2 - fw / 2;
         drawCheck(d, fx - 6, cy - 1.6, 3, C.GOLD_SOFT);
         d.setTextColor(206, 222, 240);
-        d.text(f, fx, cy, { align: "left" });
+        d.text(ft, fx, cy, { align: "left" });
         cy += 6.4;
       }
     }
@@ -882,7 +991,7 @@ class PdfDoc {
     d.setFont(F.Hl, hs("normal"));
     d.setFontSize(7.4);
     d.setTextColor(96, 118, 144);
-    d.text(cfg.footerNote ?? "Prepared by Osler", pw / 2, ph - inset - 7, { align: "center" });
+    d.text(tlabel(cfg.footerNote ?? this.t("pdf.tpl.preparedByOsler")), pw / 2, ph - inset - 7, { align: "center" });
   }
 
   // ── Table of contents ──
@@ -896,13 +1005,22 @@ class PdfDoc {
     d.setFont(F.H, hs("bold"));
     d.setFontSize(7.6 * this.L.typeScale);
     d.setTextColor(...C.GOLD);
-    d.text(`CH ${String(chNum).padStart(2, "0")}`, this.L.ms, this.y);
+    d.text(tlabel(`${this.t("pdf.tpl.ch")} ${String(chNum).padStart(2, "0")}`), this.L.ms, this.y);
     this.y += sp(2.6, density);
 
     d.setFont(F.Hm, hs("normal"));
     d.setFontSize(11 * this.L.typeScale);
     d.setTextColor(...C.CHARCOAL);
-    d.text(trunc(title, 62), this.L.ms + 1.5, this.y);
+    const tocTitleIsAr = hasArabic(title);
+    if (tocTitleIsAr) {
+      d.setFont("Cairo", hs("normal"));
+      // TOC titles are single-line (truncated), so shapeArabic (shape+Bidi)
+      // is fine here — no multi-line wrapping to worry about.
+      const tShaped = shapeArabicLetters(trunc(title, 62));
+      d.text(tShaped, this.L.ms + this.L.fw - 1.5, this.y, { align: "right" });
+    } else {
+      d.text(trunc(title, 62), this.L.ms + 1.5, this.y);
+    }
 
     d.setFont(F.Hn, hs("normal"));
     d.setFontSize(7.6 * this.L.typeScale);
@@ -914,12 +1032,17 @@ class PdfDoc {
     this.y += sp(3, density);
 
     if (desc) {
-      d.setFont(F.Bi, hs("italic"));
+      const descIsAr = hasArabic(desc);
+      d.setFont(descIsAr ? "Cairo" : F.Bi, hs(descIsAr ? "normal" : "italic"));
       d.setFontSize(8.2 * this.L.typeScale);
       d.setTextColor(...C.MUTED);
-      const lines: string[] = d.splitTextToSize(stripMd(desc), this.L.fw - 8);
-      d.text(lines, this.L.ms + 4, this.y);
-      this.y += lines.length * lh(8.2 * this.L.typeScale) + sp(1, density);
+      const descPrepared = descIsAr ? shapeArabicLetters(stripMd(desc)) : stripMd(desc);
+      const lines: string[] = descIsAr
+        ? splitAndShapeArabic(d, descPrepared, this.L.fw - 8)
+        : d.splitTextToSize(descPrepared, this.L.fw - 8);
+      if (descIsAr) d.text(lines, this.L.ms + this.L.fw - 4, this.y, { align: "right" });
+      else d.text(lines, this.L.ms + 4, this.y);
+      this.y += lines.length * lh(8.2 * this.L.typeScale, descIsAr ? 1.3 : 1.45) + sp(1, density);
     }
 
     this.y = this.hRule(this.y, this.L.fw, 0.25);
@@ -937,19 +1060,29 @@ class PdfDoc {
     if (isSingle) {
       this.checkPage(30);
       if (title) {
-        d.setFont(F.H, hs("bold"));
+        const titleIsAr = hasArabic(title);
+        d.setFont(titleIsAr ? "Cairo" : F.H, hs("bold"));
         d.setFontSize(20 * this.L.typeScale);
         d.setTextColor(...C.INK);
-        const lines: string[] = d.splitTextToSize(title, fw);
-        d.text(lines, this.L.ms + fw / 2, this.y, { align: "center" });
+        const titlePrepared = titleIsAr ? shapeArabicLetters(title) : title;
+        const lines: string[] = titleIsAr
+          ? splitAndShapeArabic(d, titlePrepared, fw)
+          : d.splitTextToSize(titlePrepared, fw);
+        if (titleIsAr) d.text(lines, this.L.ms + fw, this.y, { align: "right" });
+        else d.text(lines, this.L.ms + fw / 2, this.y, { align: "center" });
         this.y += lines.length * lh(20 * this.L.typeScale, 1.2) + sp(1.5, density);
       }
       if (desc) {
-        d.setFont(F.Bi, hs("italic"));
+        const descIsAr = hasArabic(desc);
+        d.setFont(descIsAr ? "Cairo" : F.Bi, hs(descIsAr ? "normal" : "italic"));
         d.setFontSize(9.5 * this.L.typeScale);
         d.setTextColor(...C.MUTED);
-        const lines: string[] = d.splitTextToSize(stripMd(desc), fw - 10);
-        d.text(lines, this.L.ms + fw / 2, this.y, { align: "center" });
+        const descPrepared = descIsAr ? shapeArabicLetters(stripMd(desc)) : stripMd(desc);
+        const lines: string[] = descIsAr
+          ? splitAndShapeArabic(d, descPrepared, fw - 10)
+          : d.splitTextToSize(descPrepared, fw - 10);
+        if (descIsAr) d.text(lines, this.L.ms + fw, this.y, { align: "right" });
+        else d.text(lines, this.L.ms + fw / 2, this.y, { align: "center" });
         this.y += lines.length * lh(9.5 * this.L.typeScale) + sp(2.5, density);
       }
       this.y = this.hRule(this.y, fw * 0.28, 0.6, C.GOLD, this.L.ms + fw * 0.36);
@@ -959,22 +1092,36 @@ class PdfDoc {
       d.setFont(F.H, hs("bold"));
       d.setFontSize(7.6 * this.L.typeScale);
       d.setTextColor(...C.GOLD);
-      d.text(tracked(`CHAPTER ${String(chNum).padStart(2, "0")}`), this.L.ms, this.y);
+      d.text(tlabel(`${this.t("pdf.tpl.chapter")} ${String(chNum).padStart(2, "0")}`), this.L.ms, this.y);
       this.y += sp(3, density);
 
       d.setFont(F.H, hs("bold"));
       d.setFontSize(16 * this.L.typeScale);
       d.setTextColor(...C.INK);
-      d.text(title, this.L.ms, this.y);
-      this.y += sp(3.5, density);
+      const titleIsAr = hasArabic(title);
+      if (titleIsAr) {
+        d.setFont("Cairo", hs("bold"));
+        const titlePrepared = shapeArabicLetters(title);
+        const titleLines: string[] = splitAndShapeArabic(d, titlePrepared, fw);
+        d.text(titleLines, this.L.ms + fw, this.y, { align: "right" });
+        this.y += titleLines.length * lh(16 * this.L.typeScale, 1.3);
+      } else {
+        d.text(title, this.L.ms, this.y);
+        this.y += sp(3.5, density);
+      }
 
       if (desc) {
-        d.setFont(F.Bi, hs("italic"));
+        const descIsAr = hasArabic(desc);
+        d.setFont(descIsAr ? "Cairo" : F.Bi, hs(descIsAr ? "normal" : "italic"));
         d.setFontSize(8.6 * this.L.typeScale);
         d.setTextColor(...C.MUTED);
-        const lines: string[] = d.splitTextToSize(stripMd(desc), fw - 10);
-        d.text(lines, this.L.ms, this.y);
-        this.y += lines.length * lh(8.6 * this.L.typeScale) + sp(2.5, density);
+        const descPrepared = descIsAr ? shapeArabicLetters(stripMd(desc)) : stripMd(desc);
+        const lines: string[] = descIsAr
+          ? splitAndShapeArabic(d, descPrepared, fw - 10)
+          : d.splitTextToSize(descPrepared, fw - 10);
+        if (descIsAr) d.text(lines, this.L.ms + fw - 5, this.y, { align: "right" });
+        else d.text(lines, this.L.ms, this.y);
+        this.y += lines.length * lh(8.6 * this.L.typeScale, descIsAr ? 1.3 : 1.45) + sp(2.5, density);
       }
       this.y = this.hRule(this.y, fw, 1, C.GOLD);
       this.y += sp(2.5, density);
@@ -1012,7 +1159,10 @@ class PdfDoc {
       const isAr = hasArabic(raw);
       d.setFont(isAr ? "Cairo" : F[style === "mcqnotes" ? "Hm" : "B"], hs("normal"));
       d.setFontSize(sSize * ts);
-      const stemLines = d.splitTextToSize(normalizeText(raw), cw - 2).length;
+      // Measure on the shaped (logical-order) string so the line count
+      // matches what `this.text()` actually renders.
+      const stemShaped = isAr ? shapeArabicLetters(raw) : raw;
+      const stemLines = d.splitTextToSize(normalizeText(stemShaped), cw - 2).length;
       h += stemLines * lh(sSize * ts, isAr ? 1.3 : 1.45) + sp(1.5, density);
     }
 
@@ -1023,7 +1173,8 @@ class PdfDoc {
         const isAr = hasArabic(raw);
         d.setFont(isAr ? "Cairo" : F.B, hs("normal"));
         d.setFontSize(8.6 * ts);
-        const cl = d.splitTextToSize(normalizeText(raw), cw - 15).length;
+        const cShaped = isAr ? shapeArabicLetters(raw) : raw;
+        const cl = d.splitTextToSize(normalizeText(cShaped), cw - 15).length;
         h += cl * lh(8.6 * ts, isAr ? 1.3 : 1.45) + sp(0.4, density);
       }
     }
@@ -1040,7 +1191,8 @@ class PdfDoc {
         const xAr = hasArabic(xRaw);
         d.setFont(xAr ? "Cairo" : F.Bi, hs(xAr ? "normal" : "italic"));
         d.setFontSize(8.6 * ts);
-        const bl = d.splitTextToSize(normalizeText(xRaw), cw - pad * 2).length;
+        const xShaped = xAr ? shapeArabicLetters(xRaw) : xRaw;
+        const bl = d.splitTextToSize(normalizeText(xShaped), cw - pad * 2).length;
         h += sp(4, density) + bl * lh(8.6 * ts, xAr ? 1.3 : 1.45) + sp(1.5, density) + sp(1.5, density);
       }
     }
@@ -1052,7 +1204,8 @@ class PdfDoc {
       const mAr = hasArabic(mRaw);
       d.setFont(mAr ? "Cairo" : F.Bi, hs(mAr ? "normal" : "italic"));
       d.setFontSize(8.6 * ts);
-        const bl = d.splitTextToSize(normalizeText(mRaw), cw - pad * 2).length;
+        const mShaped = mAr ? shapeArabicLetters(mRaw) : mRaw;
+        const bl = d.splitTextToSize(normalizeText(mShaped), cw - pad * 2).length;
       h += sp(4, density) + bl * lh(8.6 * ts, mAr ? 1.3 : 1.45) + sp(1.5, density) + sp(1.5, density);
     }
 
@@ -1079,10 +1232,17 @@ class PdfDoc {
       d.setFont(F.Hm, hs("normal"));
       d.setFontSize(7 * this.L.typeScale);
       d.setTextColor(...C.MUTED);
-      d.text(`Q${qNum}`, x, this.y);
+      const qLabel = `${this.t("pdf.tpl.q")}${qNum}`;
+      const mcqAr = hasArabic(qLabel);
+      if (mcqAr) {
+        d.setFont("Cairo", hs("normal"));
+        d.text(shapeArabicLetters(qLabel), x + cw, this.y, { align: "right" });
+      } else {
+        d.text(qLabel, x, this.y);
+      }
       this.y += sp(1.5, density);
     } else {
-      this.y = this.trackedLabel(`QUESTION ${qNum}`, x, this.y, 9.5, C.COBALT);
+      this.y = this.trackedLabel(`${this.t("pdf.tpl.question")} ${qNum}`, x, this.y, 9.5, C.COBALT, cw);
       this.y += sp(0.5, density);
       this.y = this.hRule(this.y, cw, 1.1, C.ROYAL, x);
       this.y += sp(1.5, density);
@@ -1150,21 +1310,21 @@ class PdfDoc {
       if (showExpl && q.explanation) {
         this.y += sp(0.5, density);
         cw = opts.twoCol ? this.L.cw : this.L.fw; x = this.colX;
-        this.y = this.calloutBox("EXPLANATION", q.explanation, this.y, cw, x, C.PALE_GREEN, C.SAGE);
+        this.y = this.calloutBox(this.t("pdf.tpl.explanation"), q.explanation, this.y, cw, x, C.PALE_GREEN, C.SAGE);
       }
     }
 
     if (isWritten && q.modelAnswer && showExpl) {
       this.y += sp(0.5, density);
       cw = opts.twoCol ? this.L.cw : this.L.fw; x = this.colX;
-      this.y = this.calloutBox("MODEL ANSWER", q.modelAnswer, this.y, cw, x, C.PALE_BLUE, C.ROYAL);
+      this.y = this.calloutBox(this.t("pdf.tpl.modelAnswer"), q.modelAnswer, this.y, cw, x, C.PALE_BLUE, C.ROYAL);
     }
 
     if (isWritten && q.rubric?.length && showExpl) {
       this.y += sp(0.5, density);
       cw = opts.twoCol ? this.L.cw : this.L.fw; x = this.colX;
       this.y = this.calloutBox(
-        "RUBRIC CRITERIA",
+        this.t("pdf.tpl.rubricCriteria"),
         q.rubric.map((r, ri) => `${ri + 1}. ${r}`).join("\n"),
         this.y,
         cw,
@@ -1175,10 +1335,28 @@ class PdfDoc {
     }
 
     if ((answersMode === "endchapter" || answersMode === "endbook") && !isWritten) {
-      d.setFont(F.Hn, hs("normal"));
+      const seeAnswerText = this.t("pdf.tpl.seeAnswerKey");
+      const arrow = this.lang === "ar" ? " ←" : " ->";
+      const fullText = seeAnswerText + arrow;
+      const seeAnswerAr = hasArabic(seeAnswerText);
+      d.setFont(seeAnswerAr ? "Cairo" : F.Hn, hs("normal"));
       d.setFontSize(7 * this.L.typeScale);
       d.setTextColor(...C.LINK);
-      d.text("See Answer Key ->", x + cw, this.y, { align: "right" });
+      const displayText = seeAnswerAr ? shapeArabicLetters(fullText) : fullText;
+      const textW = d.getTextWidth(displayText);
+      // Record the position of this "See Answer Key" text so we can
+      // add a hyperlink annotation once the answer key page is known.
+      // The text is right-aligned at (x + cw), so the clickable rect
+      // spans from (x + cw - textW) to (x + cw).
+      this.pendingAnswerKeyLinks.push({
+        page: this.page,
+        x: x + cw - textW - 1,
+        y: this.y - 3.5,
+        w: textW + 2,
+        h: 5,
+        chapterIdx: opts.chapterIdx ?? -1,
+      });
+      d.text(displayText, x + cw, this.y, { align: "right" });
       this.y += sp(1.5, density);
     }
 
@@ -1187,6 +1365,28 @@ class PdfDoc {
   }
 
   // ── Answer key ──
+
+  /**
+   * Resolve all pending "See Answer Key" links for the given chapter
+   * (or all chapters if chapterIdx is -1) to point at the current page.
+   * Must be called AFTER the answer key banner has been drawn on the
+   * target page, so that `this.page` is the answer key's page number.
+   */
+  resolveAnswerKeyLinks(chapterIdx: number): void {
+    const targetPage = this.page;
+    const d = this.doc;
+    for (const link of this.pendingAnswerKeyLinks) {
+      if (chapterIdx === -1 || link.chapterIdx === chapterIdx) {
+        d.setPage(link.page);
+        d.link(link.x, link.y, link.w, link.h, { pageNumber: targetPage });
+        d.setPage(targetPage);
+      }
+    }
+    // Remove resolved links
+    this.pendingAnswerKeyLinks = this.pendingAnswerKeyLinks.filter(
+      (l) => !(chapterIdx === -1 || l.chapterIdx === chapterIdx),
+    );
+  }
 
   drawAnswerKeyBanner(title: string): void {
     const d = this.doc;
@@ -1200,10 +1400,15 @@ class PdfDoc {
     d.setFillColor(...C.GOLD);
     d.rect(this.L.ms, this.y, 1.6, bannerH, "F");
 
-    d.setFont(F.H, hs("bold"));
+    const titleAr = hasArabic(title);
+    d.setFont(titleAr ? "Cairo" : F.H, hs("bold"));
     d.setFontSize(11 * this.L.typeScale);
     d.setTextColor(...C.WHITE);
-    d.text(tracked(title), this.L.ms + 8, this.y + bannerH / 2 + 1.6);
+    if (titleAr) {
+      d.text(shapeArabicLetters(title), this.L.ms + fw - 8, this.y + bannerH / 2 + 1.6, { align: "right" });
+    } else {
+      d.text(tracked(title), this.L.ms + 8, this.y + bannerH / 2 + 1.6);
+    }
 
     this.y += bannerH + sp(2.5, density);
     this.colTopY = this.y;
@@ -1218,7 +1423,7 @@ class PdfDoc {
     let cw = this.twoColEnabled ? this.L.cw : this.L.fw;
     let x = this.colX;
 
-    this.y = this.trackedLabel(`ANSWER ${qNum}`, x, this.y, 9.5, C.EMERALD);
+    this.y = this.trackedLabel(`${this.t("pdf.tpl.answers")} ${qNum}`, x, this.y, 9.5, C.EMERALD, cw);
     this.y = this.hRule(this.y, cw, 1.1, C.SAGE);
     this.y += sp(1, density);
 
@@ -1280,7 +1485,7 @@ class PdfDoc {
     d.setFont(F.Hn, hs("normal"));
     d.setFontSize(6.6 * ts);
     d.setTextColor(...C.MUTED);
-    d.text(tracked("YOUR SCORE"), cx, this.y + cardH * 0.22, { align: "center" });
+    d.text(tlabel(this.t("pdf.tpl.yourScore")), cx, this.y + cardH * 0.22, { align: "center" });
 
     const scoreCol: RGB = score.pct >= 70 ? C.EMERALD : score.pct >= 50 ? C.GOLD_DEEP : C.CRIMSON;
     d.setFont(F.H, hs("bold"));
@@ -1291,14 +1496,14 @@ class PdfDoc {
     d.setFont(F.Hn, hs("normal"));
     d.setFontSize(6.6 * ts);
     d.setTextColor(...C.MUTED);
-    d.text(`${score.correct} of ${score.total} correct`, cx, this.y + cardH * 0.85, { align: "center" });
+    d.text(tlabel(`${score.correct} ${this.t("pdf.tpl.of")} ${score.total} ${this.t("pdf.tpl.correctCount")}`), cx, this.y + cardH * 0.85, { align: "center" });
 
     // Col 2 — percentile.
     cx = midX + colW / 2;
     d.setFont(F.Hn, hs("normal"));
     d.setFontSize(6.6 * ts);
     d.setTextColor(...C.MUTED);
-    d.text(tracked("PERCENTILE"), cx, this.y + cardH * 0.22, { align: "center" });
+    d.text(tlabel(this.t("pdf.tpl.percentile")), cx, this.y + cardH * 0.22, { align: "center" });
 
     d.setFont(F.H, hs("bold"));
     d.setFontSize(25 * ts);
@@ -1307,11 +1512,11 @@ class PdfDoc {
     const numW = d.getTextWidth(`${score.percentile}`);
     d.setFont(F.Hn, hs("normal"));
     d.setFontSize(7.5 * ts);
-    d.text("th", cx + numW / 2 + 2, this.y + cardH * 0.5);
+    d.text(this.t("pdf.tpl.th"), cx + numW / 2 + 2, this.y + cardH * 0.5);
 
     d.setFontSize(6.6 * ts);
     d.setTextColor(...C.MUTED);
-    d.text(`Higher than ${score.percentile}%`, cx, this.y + cardH * 0.85, { align: "center" });
+    d.text(tlabel(this.t("pdf.tpl.higherThan", { n: score.percentile })), cx, this.y + cardH * 0.85, { align: "center" });
 
     // Col 3 — stats.
     const stats: [string, string][] = [
@@ -1342,7 +1547,7 @@ class PdfDoc {
     d.setFont(F.H, hs("bold"));
     d.setFontSize(8.6 * ts);
     d.setTextColor(...C.INK);
-    d.text("Score Distribution", x, this.y);
+    d.text(tlabel(this.t("pdf.tpl.scoreDistribution")), x, this.y);
     this.y += sp(2.5, density);
 
     const barH = 3.2;
@@ -1390,7 +1595,7 @@ class PdfDoc {
     d.setFont(F.H, hs("bold"));
     d.setFontSize(10.5 * ts);
     d.setTextColor(...C.INK);
-    d.text("Question Review", this.L.ms, this.y);
+    d.text(tlabel(this.t("pdf.tpl.questionReview")), this.L.ms, this.y);
     this.y += sp(3.5, density);
 
     for (const q of items) {
@@ -1489,6 +1694,8 @@ export interface PdfExportOptions {
   showReview?: boolean;
   fontSize?: "small" | "medium" | "large";
   fontType?: "serif" | "sans";
+  /** UI language for PDF template strings (QUESTION, EXPLANATION, etc.). Defaults to "en". */
+  lang?: PdfLang;
 }
 
 interface QuestionDrawOpts {
@@ -1496,6 +1703,8 @@ interface QuestionDrawOpts {
   showExplanations: boolean;
   styleMode: PdfExportOptions["styleMode"];
   twoCol: boolean;
+  /** Index of the chapter this question belongs to (for answer-key links). */
+  chapterIdx?: number;
 }
 
 export interface PdfExportConfig {
@@ -1509,6 +1718,7 @@ export interface PdfExportConfig {
   author?: string;
   fontSize?: "small" | "medium" | "large";
   fontType?: "serif" | "sans";
+  lang?: PdfLang;
   chapters: Array<{
     title: string;
     description?: string;
@@ -1558,8 +1768,10 @@ interface CompilationResult {
 }
 
 function renderCompilation(cfg: PdfExportConfig, knownChapterPages: number[] | null): CompilationResult {
-  const doc = new PdfDoc(cfg.page, cfg.cover.title, cfg.styleMode, cfg.fontSize, cfg.fontType);
+  const lang = cfg.lang ?? "en";
+  const doc = new PdfDoc(cfg.page, cfg.cover.title, cfg.styleMode, cfg.fontSize, cfg.fontType, lang);
   const L = doc.L;
+  const t = doc.t;
   const multiChapter = cfg.chapters.length > 1;
   const totalQ = cfg.chapters.reduce((a, ch) => a + ch.questions.length, 0);
   doc.setMeta({ title: cfg.cover.title, author: cfg.author, subject: "Quiz booklet" });
@@ -1568,25 +1780,32 @@ function renderCompilation(cfg: PdfExportConfig, knownChapterPages: number[] | n
 
   if (cfg.includeCover) {
     doc.drawCover(cfg.cover, totalQ, cfg.chapters.length);
-    doc.addBookmark("Cover");
+    doc.addBookmark(t("pdf.tpl.cover"));
     doc.newPage({
       skipOutgoing: true,
-      header: showToc ? { label: "CONTENTS", section: "contents" } : { label: "QUESTIONS", section: "questions" },
+      header: showToc ? { label: t("pdf.tpl.contents").toUpperCase(), section: "contents" } : { label: t("pdf.tpl.questions"), section: "questions" },
     });
   } else {
-    doc.setHeader("QUESTIONS", "questions");
+    doc.setHeader(t("pdf.tpl.questions"), "questions");
     doc.y = L.mt;
     doc.drawChrome();
   }
   const contentStartPage = cfg.includeCover ? 2 : 1;
 
   if (showToc) {
-    doc.addBookmark("Contents");
+    doc.addBookmark(t("pdf.tpl.contents"));
 
     doc.doc.setFont(F.H, hs("bold"));
     doc.doc.setFontSize(18 * L.typeScale);
     doc.doc.setTextColor(...C.INK);
-    doc.doc.text("Table of Contents", L.ms, doc.y);
+    const tocTitle = t("pdf.tpl.tableOfContents");
+    const tocTitleIsAr = hasArabic(tocTitle);
+    if (tocTitleIsAr) {
+      doc.doc.setFont("Cairo", hs("bold"));
+      doc.doc.text(shapeArabicLetters(tocTitle), L.ms + L.fw, doc.y, { align: "right" });
+    } else {
+      doc.doc.text(tocTitle, L.ms, doc.y);
+    }
     doc.y += sp(4, L.density);
     doc.y = doc.doubleRule(doc.y, L.fw);
     doc.y += sp(1.5, L.density);
@@ -1595,20 +1814,21 @@ function renderCompilation(cfg: PdfExportConfig, knownChapterPages: number[] | n
       const targetPage = knownChapterPages ? knownChapterPages[i + 1] : doc.page;
       doc.drawTocEntry(i + 1, ch.title, ch.questions.length, ch.description ?? "", targetPage);
     });
-    doc.newPage({ header: { label: "QUESTIONS", section: "questions" } });
+    doc.newPage({ header: { label: t("pdf.tpl.questions"), section: "questions" } });
   }
 
   let globalQ = 0;
   const allAnswers: Array<{ num: number; q: FullQuestion }> = [];
-  const drawOpts: QuestionDrawOpts = {
-    answersMode: cfg.answersMode,
-    showExplanations: cfg.answersMode === "inline" ? cfg.showExplanations : false,
-    styleMode: cfg.styleMode,
-    twoCol: cfg.twoCol,
-  };
 
   cfg.chapters.forEach((ch, ci) => {
-    if (ci > 0) doc.newPage({ header: { label: "QUESTIONS", section: "questions" } });
+    const drawOpts: QuestionDrawOpts = {
+      answersMode: cfg.answersMode,
+      showExplanations: cfg.answersMode === "inline" ? cfg.showExplanations : false,
+      styleMode: cfg.styleMode,
+      twoCol: cfg.twoCol,
+      chapterIdx: ci,
+    };
+    if (ci > 0) doc.newPage({ header: { label: t("pdf.tpl.questions"), section: "questions" } });
     const chapterItem = doc.addBookmark(`${String(ci + 1).padStart(2, "0")}. ${ch.title}`);
     doc.drawChapterHeader(ci + 1, ch.title, ch.description ?? "", !multiChapter);
     doc.beginFlow(cfg.twoCol);
@@ -1623,17 +1843,21 @@ function renderCompilation(cfg: PdfExportConfig, knownChapterPages: number[] | n
 
     if (cfg.answersMode === "endchapter" && allAnswers.length > 0) {
       const chapterAnswers = allAnswers.splice(0);
-      doc.newPage({ header: { label: "ANSWER KEY", section: "answers" } });
-      doc.addBookmark("Answer Key", chapterItem);
-      doc.drawAnswerKeyBanner(`CHAPTER ${ci + 1} — ANSWER KEY`);
+      doc.newPage({ header: { label: t("pdf.tpl.answerKey").toUpperCase(), section: "answers" } });
+      doc.addBookmark(t("pdf.tpl.answerKey"), chapterItem);
+      doc.drawAnswerKeyBanner(t("pdf.tpl.chapterAnswerKey", { n: ci + 1 }));
+      // Resolve all pending "See Answer Key" links for this chapter.
+      doc.resolveAnswerKeyLinks(ci);
       for (const entry of chapterAnswers) doc.drawAnswerBlock(entry.q, entry.num, cfg.showExplanations);
     }
   });
 
   if (cfg.answersMode === "endbook" && allAnswers.length > 0) {
-    doc.newPage({ header: { label: "ANSWER KEY", section: "answers" } });
-    doc.addBookmark("Answer Key");
-    doc.drawAnswerKeyBanner("COMPLETE ANSWER KEY");
+    doc.newPage({ header: { label: t("pdf.tpl.answerKey").toUpperCase(), section: "answers" } });
+    doc.addBookmark(t("pdf.tpl.answerKey"));
+    doc.drawAnswerKeyBanner(t("pdf.tpl.completeAnswerKey"));
+    // Resolve ALL pending links (endbook mode — all chapters point here).
+    doc.resolveAnswerKeyLinks(-1);
     for (const entry of allAnswers) doc.drawAnswerBlock(entry.q, entry.num, cfg.showExplanations);
   }
 
@@ -1662,43 +1886,45 @@ export function generateQuizCompilationPdf(cfg: PdfExportConfig): jsPDF {
 
 export function generateResultsPdf(cfg: ResultsPdfConfig): jsPDF {
   const opts = cfg.opts;
-  const doc = new PdfDoc(opts.page, cfg.packTitle, opts.styleMode, opts.fontSize, opts.fontType);
+  const lang = opts.lang ?? "en";
+  const doc = new PdfDoc(opts.page, cfg.packTitle, opts.styleMode, opts.fontSize, opts.fontType, lang);
   const L = doc.L;
+  const t = doc.t;
   doc.setMeta({ title: opts.title || cfg.packTitle, author: opts.author, subject: "Quiz results" });
 
   if (opts.includeCover) {
     doc.drawCover(
       {
         title: opts.title || cfg.packTitle,
-        subtitle: opts.subtitle || `${cfg.mode === "timed" ? "Timed" : "Tutor"} Mode  ·  ${cfg.score.total} Questions`,
-        eyebrow: "TEST RESULTS",
+        subtitle: opts.subtitle || `${cfg.mode === "timed" ? t("pdf.tpl.timedMode") : t("pdf.tpl.tutorMode")}  ·  ${t("pdf.tpl.questionsCount", { n: cfg.score.total })}`,
+        eyebrow: t("pdf.tpl.testResults"),
         author: opts.author,
         date: new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" }),
         features: [
-          "Score analysis & percentile rank",
+          t("pdf.tpl.feature.scoreAnalysis"),
           opts.answersMode === "inline"
-            ? "Inline answer key with explanations"
+            ? t("pdf.tpl.feature.inlineAnswers")
             : opts.answersMode === "endbook"
-              ? "Complete answer key at the end"
+              ? t("pdf.tpl.feature.endbookAnswers")
               : opts.answersMode === "endchapter"
-                ? "Per-chapter answer keys"
-                : "Question review",
-          "Performance statistics",
+                ? t("pdf.tpl.feature.endchapterAnswers")
+                : t("pdf.tpl.feature.questionReview"),
+          t("pdf.tpl.feature.performanceStats"),
         ],
       },
       cfg.score.total,
       1,
     );
-    doc.addBookmark("Cover");
-    doc.newPage({ skipOutgoing: true, header: { label: "QUESTIONS", section: "questions" } });
+    doc.addBookmark(t("pdf.tpl.cover"));
+    doc.newPage({ skipOutgoing: true, header: { label: t("pdf.tpl.questions"), section: "questions" } });
   } else {
-    doc.setHeader("QUESTIONS", "questions");
+    doc.setHeader(t("pdf.tpl.questions"), "questions");
     doc.y = L.mt;
     doc.drawChrome();
   }
   const contentStartPage = opts.includeCover ? 2 : 1;
   doc.beginFlow(opts.twoCol);
-  doc.addBookmark("Results");
+  doc.addBookmark(t("pdf.tpl.results"));
 
   if (opts.showScoreSummary !== false) doc.drawScoreSummary(cfg.score);
   doc.colTopY = doc.y;
@@ -1720,15 +1946,16 @@ export function generateResultsPdf(cfg: ResultsPdfConfig): jsPDF {
   });
 
   if (allAnswers.length > 0 && opts.answersMode !== "inline" && opts.answersMode !== "none") {
-    doc.newPage({ header: { label: "ANSWER KEY", section: "answers" } });
-    doc.addBookmark("Answer Key");
-    doc.drawAnswerKeyBanner("COMPLETE ANSWER KEY");
+    doc.newPage({ header: { label: t("pdf.tpl.answerKey").toUpperCase(), section: "answers" } });
+    doc.addBookmark(t("pdf.tpl.answerKey"));
+    doc.drawAnswerKeyBanner(t("pdf.tpl.completeAnswerKey"));
+    doc.resolveAnswerKeyLinks(-1);
     for (const entry of allAnswers) doc.drawAnswerBlock(entry.q, entry.num, opts.showExplanations);
   }
 
   if (opts.showReview !== false) {
-    doc.newPage({ header: { label: "REVIEW", section: "questions" } });
-    doc.addBookmark("Question Review");
+    doc.newPage({ header: { label: t("pdf.tpl.questionReview").toUpperCase(), section: "questions" } });
+    doc.addBookmark(t("pdf.tpl.questionReview"));
 
     const reviewItems: QuestionReviewItem[] = cfg.questions.map((q, i) => {
       const ans = cfg.userAnswers[i];
@@ -1750,33 +1977,35 @@ export function generateResultsPdf(cfg: ResultsPdfConfig): jsPDF {
 
 export function generateDashboardPdf(cfg: DashboardPdfConfig): jsPDF {
   const opts = cfg.opts;
-  const doc = new PdfDoc(opts.page, opts.title || "Performance Report", opts.styleMode, opts.fontSize, opts.fontType);
+  const lang = opts.lang ?? "en";
+  const doc = new PdfDoc(opts.page, opts.title || "Performance Report", opts.styleMode, opts.fontSize, opts.fontType, lang);
   const L = doc.L;
+  const t = doc.t;
   doc.setMeta({ title: opts.title || `${cfg.username}'s Progress`, author: opts.author, subject: "Performance report" });
 
   if (opts.includeCover) {
     doc.drawCover(
       {
         title: opts.title || `${cfg.username}'s Progress`,
-        subtitle: opts.subtitle || "Comprehensive Performance Report",
-        eyebrow: "PERFORMANCE REPORT",
+        subtitle: opts.subtitle || t("pdf.tpl.report"),
+        eyebrow: t("pdf.tpl.oslerReport"),
         author: opts.author || cfg.username,
         date: new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" }),
         features: ["Overall accuracy & progress", "Pack-by-pack breakdown", "Study statistics"],
-        footerNote: "Generated by Osler",
+        footerNote: t("pdf.tpl.preparedByOsler"),
       },
       cfg.stats.attempted,
       cfg.stats.packs,
     );
-    doc.addBookmark("Cover");
-    doc.newPage({ skipOutgoing: true, header: { label: "PERFORMANCE", section: "report" } });
+    doc.addBookmark(t("pdf.tpl.cover"));
+    doc.newPage({ skipOutgoing: true, header: { label: t("pdf.tpl.report"), section: "report" } });
   } else {
-    doc.setHeader("PERFORMANCE", "report");
+    doc.setHeader(t("pdf.tpl.report"), "report");
     doc.y = L.mt;
     doc.drawChrome();
   }
   const contentStartPage = opts.includeCover ? 2 : 1;
-  doc.addBookmark("Performance Summary");
+  doc.addBookmark(t("pdf.tpl.report"));
 
   doc.drawScoreSummary({
     pct: cfg.stats.accuracy,
@@ -1798,7 +2027,7 @@ export function generateDashboardPdf(cfg: DashboardPdfConfig): jsPDF {
     d.setFont(F.H, hs("bold"));
     d.setFontSize(10 * ts);
     d.setTextColor(...C.INK);
-    d.text("Pack Breakdown", L.ms, doc.y);
+    d.text(tlabel(t("pdf.tpl.packBreakdown")), L.ms, doc.y);
     doc.y += sp(3.5, density);
 
     for (const pack of cfg.recentPacks) {
@@ -1816,7 +2045,14 @@ export function generateDashboardPdf(cfg: DashboardPdfConfig): jsPDF {
       d.setFont(F.H, hs("bold"));
       d.setFontSize(8.6 * ts);
       d.setTextColor(...C.INK);
-      d.text(trunc(pack.title, 44), L.ms + 27, rowY);
+      const titleStr = trunc(pack.title, 44);
+      const titleAr = hasArabic(titleStr);
+      d.setFont(titleAr ? "Cairo" : F.H, hs("bold"));
+      if (titleAr) {
+        d.text(shapeArabicLetters(titleStr), L.ms + L.fw - 27, rowY, { align: "right" });
+      } else {
+        d.text(titleStr, L.ms + 27, rowY);
+      }
       if (pack.lastAttempt) {
         d.setFont(F.Hn, hs("normal"));
         d.setFontSize(6.6 * ts);
@@ -1827,7 +2063,7 @@ export function generateDashboardPdf(cfg: DashboardPdfConfig): jsPDF {
       d.setFont(F.Hn, hs("normal"));
       d.setFontSize(6.6 * ts);
       d.setTextColor(...C.MUTED);
-      d.text(`${pack.attempted} attempted  ·  ${pack.correct} correct  ·  ${acc}%`, L.ms + 27, rowY + 4.6);
+      d.text(tlabel(`${pack.attempted} ${t("pdf.tpl.attempted")}  ·  ${pack.correct} ${t("pdf.tpl.correct")}  ·  ${acc}%`), L.ms + 27, rowY + 4.6);
 
       const barY = rowY + 7.4;
       const barW = L.fw - 27;
@@ -1855,10 +2091,12 @@ export function generateDashboardPdf(cfg: DashboardPdfConfig): jsPDF {
 
 export function generateArticlePdf(cfg: ArticlePdfConfig): jsPDF {
   const opts = cfg.opts;
-  const doc = new PdfDoc(opts.page, cfg.title, opts.styleMode, opts.fontSize, opts.fontType);
+  const lang = opts.lang ?? "en";
+  const doc = new PdfDoc(opts.page, cfg.title, opts.styleMode, opts.fontSize, opts.fontType, lang);
   const L = doc.L;
   const density = L.density;
   const ts = L.typeScale;
+  const t = doc.t;
   doc.setMeta({ title: cfg.title, author: opts.author || cfg.author, subject: "Library article" });
 
   if (opts.includeCover) {
@@ -1866,20 +2104,20 @@ export function generateArticlePdf(cfg: ArticlePdfConfig): jsPDF {
       {
         title: cfg.title,
         subtitle: cfg.subtitle,
-        eyebrow: "LIBRARY ARTICLE",
+        eyebrow: t("pdf.tpl.libraryArticle"),
         author: opts.author || cfg.author,
         date: new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" }),
-        features: ["Printed from the Osler Library"],
+        features: [t("pdf.tpl.feature.printedFromLibrary")],
       },
       0,
       0,
     );
-    doc.addBookmark("Cover");
+    doc.addBookmark(t("pdf.tpl.cover"));
     doc.newPage({ skipOutgoing: true });
   }
   const contentStartPage = opts.includeCover ? 2 : 1;
 
-  doc.setHeader("ARTICLE", "article");
+  doc.setHeader(t("pdf.tpl.article"), "article");
   doc.y = L.mt;
   doc.drawChrome();
   doc.addBookmark(cfg.title);
@@ -1888,12 +2126,19 @@ export function generateArticlePdf(cfg: ArticlePdfConfig): jsPDF {
   const x = L.ms;
   const fw = L.fw;
 
-  d.setFont(F.H, hs("bold"));
-  d.setFontSize(17 * ts);
-  d.setTextColor(...C.INK);
-  const titleLines: string[] = d.splitTextToSize(cfg.title, fw);
-  d.text(titleLines, x, doc.y);
-  doc.y += titleLines.length * lh(17 * ts) + sp(2, density);
+  {
+    const titleIsAr = hasArabic(cfg.title);
+    d.setFont(titleIsAr ? "Cairo" : F.H, hs("bold"));
+    d.setFontSize(17 * ts);
+    d.setTextColor(...C.INK);
+    const titlePrepared = titleIsAr ? shapeArabicLetters(cfg.title) : cfg.title;
+    const titleLines: string[] = titleIsAr
+      ? splitAndShapeArabic(d, titlePrepared, fw)
+      : d.splitTextToSize(titlePrepared, fw);
+    if (titleIsAr) d.text(titleLines, x + fw, doc.y, { align: "right" });
+    else d.text(titleLines, x, doc.y);
+    doc.y += titleLines.length * lh(17 * ts, titleIsAr ? 1.3 : 1.45) + sp(2, density);
+  }
 
   const metaParts: string[] = [];
   if (cfg.author) metaParts.push(cfg.author);
@@ -1901,7 +2146,7 @@ export function generateArticlePdf(cfg: ArticlePdfConfig): jsPDF {
   d.setFont(F.Hn, hs("normal"));
   d.setFontSize(7.6 * ts);
   d.setTextColor(...C.MUTED);
-  d.text(metaParts.join("   ·   "), x, doc.y);
+  d.text(tlabel(metaParts.join("   ·   ")), x, doc.y);
   doc.y += sp(2, density);
 
   doc.y = doc.hRule(doc.y, fw, 0.4, C.RULE);
@@ -2041,12 +2286,19 @@ export function generateArticlePdf(cfg: ArticlePdfConfig): jsPDF {
       case "h2": {
         doc.checkPage(sp(6, density));
         doc.y += sp(2, density);
-        d.setFont(F.H, hs("bold"));
-        d.setFontSize(14 * ts);
-        d.setTextColor(...C.INK);
-        const hLines: string[] = d.splitTextToSize(block.text, fw);
-        d.text(hLines, x, doc.y);
-        doc.y += hLines.length * lh(14 * ts) + sp(0.5, density);
+        {
+          const isAr = hasArabic(block.text);
+          d.setFont(isAr ? "Cairo" : F.H, hs("bold"));
+          d.setFontSize(14 * ts);
+          d.setTextColor(...C.INK);
+          const prepared = isAr ? shapeArabicLetters(block.text) : block.text;
+          const hLines: string[] = isAr
+            ? splitAndShapeArabic(d, prepared, fw)
+            : d.splitTextToSize(prepared, fw);
+          if (isAr) d.text(hLines, x + fw, doc.y, { align: "right" });
+          else d.text(hLines, x, doc.y);
+          doc.y += hLines.length * lh(14 * ts, isAr ? 1.3 : 1.45) + sp(0.5, density);
+        }
         doc.y = doc.hRule(doc.y, fw, 0.4, C.RULE);
         doc.y += sp(1.5, density);
         break;
@@ -2054,23 +2306,37 @@ export function generateArticlePdf(cfg: ArticlePdfConfig): jsPDF {
       case "h3": {
         doc.checkPage(sp(4.5, density));
         doc.y += sp(1, density);
-        d.setFont(F.H, hs("bold"));
-        d.setFontSize(11.5 * ts);
-        d.setTextColor(...C.COBALT);
-        const hLines: string[] = d.splitTextToSize(block.text, fw);
-        d.text(hLines, x, doc.y);
-        doc.y += hLines.length * lh(11.5 * ts) + sp(1.2, density);
+        {
+          const isAr = hasArabic(block.text);
+          d.setFont(isAr ? "Cairo" : F.H, hs("bold"));
+          d.setFontSize(11.5 * ts);
+          d.setTextColor(...C.COBALT);
+          const prepared = isAr ? shapeArabicLetters(block.text) : block.text;
+          const hLines: string[] = isAr
+            ? splitAndShapeArabic(d, prepared, fw)
+            : d.splitTextToSize(prepared, fw);
+          if (isAr) d.text(hLines, x + fw, doc.y, { align: "right" });
+          else d.text(hLines, x, doc.y);
+          doc.y += hLines.length * lh(11.5 * ts, isAr ? 1.3 : 1.45) + sp(1.2, density);
+        }
         break;
       }
       case "h4": {
         doc.checkPage(sp(3.5, density));
         doc.y += sp(0.5, density);
-        d.setFont(F.Hm, hs("bold"));
-        d.setFontSize(9.8 * ts);
-        d.setTextColor(...C.SLATE);
-        const hLines: string[] = d.splitTextToSize(block.text, fw);
-        d.text(hLines, x, doc.y);
-        doc.y += hLines.length * lh(9.8 * ts) + sp(0.8, density);
+        {
+          const isAr = hasArabic(block.text);
+          d.setFont(isAr ? "Cairo" : F.Hm, hs("bold"));
+          d.setFontSize(9.8 * ts);
+          d.setTextColor(...C.SLATE);
+          const prepared = isAr ? shapeArabicLetters(block.text) : block.text;
+          const hLines: string[] = isAr
+            ? splitAndShapeArabic(d, prepared, fw)
+            : d.splitTextToSize(prepared, fw);
+          if (isAr) d.text(hLines, x + fw, doc.y, { align: "right" });
+          else d.text(hLines, x, doc.y);
+          doc.y += hLines.length * lh(9.8 * ts, isAr ? 1.3 : 1.45) + sp(0.8, density);
+        }
         break;
       }
       case "blockquote": {
@@ -2083,10 +2349,14 @@ export function generateArticlePdf(cfg: ArticlePdfConfig): jsPDF {
         d.setLineWidth(0.5);
         // Estimate height
         const bqFontSize = 8.8 * ts;
-        d.setFont(F.Bi, hs("italic"));
+        const bqIsAr = hasArabic(block.text);
+        d.setFont(bqIsAr ? "Cairo" : F.Bi, hs(bqIsAr ? "normal" : "italic"));
         d.setFontSize(bqFontSize);
-        const bqLines: string[] = d.splitTextToSize(block.text, fw - 6);
-        const bqH = bqLines.length * lh(bqFontSize) + sp(2, density);
+        const bqPrepared = bqIsAr ? shapeArabicLetters(block.text) : block.text;
+        const bqLines: string[] = bqIsAr
+          ? splitAndShapeArabic(d, bqPrepared, fw - 6)
+          : d.splitTextToSize(bqPrepared, fw - 6);
+        const bqH = bqLines.length * lh(bqFontSize, bqIsAr ? 1.3 : 1.45) + sp(2, density);
         d.setFillColor(...C.PALE_BLUE);
         d.setDrawColor(...C.COBALT);
         d.setLineWidth(0.5);
@@ -2096,7 +2366,8 @@ export function generateArticlePdf(cfg: ArticlePdfConfig): jsPDF {
         d.setDrawColor(...C.COBALT);
         d.line(x, doc.y, x, doc.y + bqH);
         d.setTextColor(...C.SLATE);
-        d.text(bqLines, x + 4, doc.y + sp(1, density));
+        if (bqIsAr) d.text(bqLines, x + fw - 2, doc.y + sp(1, density), { align: "right" });
+        else d.text(bqLines, x + 4, doc.y + sp(1, density));
         doc.y += bqH + sp(2, density);
         break;
       }
@@ -2106,6 +2377,8 @@ export function generateArticlePdf(cfg: ArticlePdfConfig): jsPDF {
         d.setFont(F.Hn, hs("normal"));
         d.setFontSize(7.8 * ts);
         d.setTextColor(...C.SLATE);
+        // Code blocks are virtually always LTR — keep them LTR even if they
+        // contain an Arabic string literal, so the indentation reads correctly.
         const codeLines: string[] = d.splitTextToSize(block.text, fw - 8);
         const codeH = codeLines.length * lh(7.8 * ts, 1.3) + sp(2, density);
         d.setFillColor(...C.RULE_SOFT);
@@ -2120,17 +2393,41 @@ export function generateArticlePdf(cfg: ArticlePdfConfig): jsPDF {
       case "list": {
         doc.checkPage(sp(3, density));
         doc.y += sp(0.5, density);
-        d.setFont(F.B, hs("normal"));
-        d.setFontSize(9 * ts);
-        d.setTextColor(...C.CHARCOAL);
         const items = block.items ?? [];
         for (let i = 0; i < items.length; i++) {
-          const prefix = block.isOrdered ? `${i + 1}. ` : "  \u2022  ";
-          const itemText = `${prefix}${items[i]}`;
-          const lines: string[] = d.splitTextToSize(itemText, fw - 4);
-          doc.checkPage(lines.length * lh(9 * ts));
-          d.text(lines, x + 2, doc.y);
-          doc.y += lines.length * lh(9 * ts) + sp(0.3, density);
+          // For an Arabic list item, render the bullet/number on the RIGHT
+          // (Arabic readers expect list markers at the right edge) and the
+          // text right-aligned. For LTR items, keep the original left-aligned
+          // prefix-on-the-left layout.
+          const itemRaw = items[i];
+          const itemIsAr = hasArabic(itemRaw);
+          if (itemIsAr) {
+            d.setFont("Cairo", hs("normal"));
+            d.setFontSize(9 * ts);
+            d.setTextColor(...C.CHARCOAL);
+            const marker = block.isOrdered ? `${i + 1}.` : "\u2022";
+            const markerW = d.getTextWidth(marker) + 2;
+            const shapedItem = shapeArabicLetters(itemRaw);
+            const lines: string[] = splitAndShapeArabic(d, shapedItem, fw - 4 - markerW);
+            doc.checkPage(lines.length * lh(9 * ts, 1.3));
+            // Marker flush-right at the column edge.
+            d.setTextColor(...C.COBALT);
+            d.text(marker, x + fw - 2, doc.y, { align: "right" });
+            // Text right-aligned, indented from the marker.
+            d.setTextColor(...C.CHARCOAL);
+            d.text(lines, x + fw - 2 - markerW, doc.y, { align: "right" });
+            doc.y += lines.length * lh(9 * ts, 1.3) + sp(0.3, density);
+          } else {
+            d.setFont(F.B, hs("normal"));
+            d.setFontSize(9 * ts);
+            d.setTextColor(...C.CHARCOAL);
+            const prefix = block.isOrdered ? `${i + 1}. ` : "  \u2022  ";
+            const itemText = `${prefix}${itemRaw}`;
+            const lines: string[] = d.splitTextToSize(itemText, fw - 4);
+            doc.checkPage(lines.length * lh(9 * ts));
+            d.text(lines, x + 2, doc.y);
+            doc.y += lines.length * lh(9 * ts) + sp(0.3, density);
+          }
         }
         doc.y += sp(1, density);
         break;
@@ -2142,8 +2439,6 @@ export function generateArticlePdf(cfg: ArticlePdfConfig): jsPDF {
         if (rows.length > 0) {
           const colCount = Math.max(...rows.map((r) => r.length));
           const colW = fw / colCount;
-          d.setFont(F.Hn, hs("normal"));
-          d.setFontSize(7.6 * ts);
           for (let ri = 0; ri < rows.length; ri++) {
             const row = rows[ri];
             const isHeader = ri === 0;
@@ -2152,15 +2447,23 @@ export function generateArticlePdf(cfg: ArticlePdfConfig): jsPDF {
             for (let ci = 0; ci < colCount; ci++) {
               const cellX = x + ci * colW;
               const cellText = row[ci] ?? "";
+              const cellIsAr = hasArabic(cellText);
               d.setFillColor(...(isHeader ? C.PALE_BLUE : C.WHITE));
               d.setDrawColor(...C.RULE);
               d.setLineWidth(0.2);
               d.rect(cellX, doc.y, colW, cellH, "FD");
-              d.setFont(F.Hm, hs(isHeader ? "bold" : "normal"));
+              d.setFont(cellIsAr ? "Cairo" : F.Hm, hs(isHeader ? "bold" : "normal"));
               d.setFontSize(isHeader ? 7.6 * ts : 7.2 * ts);
               d.setTextColor(...(isHeader ? C.COBALT : C.CHARCOAL));
-              const cellDisplay = trunc(cellText, Math.floor(colW / (7.2 * ts * 0.35)));
-              d.text(cellDisplay, cellX + 1.5, doc.y + 4);
+              // Table cells are single-line (truncated), so shapeArabic
+              // (shape+Bidi) is fine here.
+              const cellShaped = shapeArabicLetters(cellText);
+              const cellDisplay = trunc(cellShaped, Math.floor(colW / (7.2 * ts * 0.35)));
+              if (cellIsAr) {
+                d.text(cellDisplay, cellX + colW - 1.5, doc.y + 4, { align: "right" });
+              } else {
+                d.text(cellDisplay, cellX + 1.5, doc.y + 4);
+              }
             }
             doc.y += cellH;
           }

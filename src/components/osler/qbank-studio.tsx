@@ -139,6 +139,7 @@ import { NavigationStack } from "./navigation-stack";
 import { PageHeader } from "./ui-primitives";
 import { FolderTreeNav } from "./folder-tree-nav";
 import type { StringKey } from "@/lib/osler/i18n";
+import { loadUiLang } from "@/lib/osler/i18n";
 import { generateResultsPdf, generateDashboardPdf, generateQuizCompilationPdf, downloadPdf, type FullQuestion, type PdfExportConfig } from "@/lib/osler/pdf";
 import { PdfExportDialog, type PdfExportOptions } from "./pdf-export-dialog";
 import {
@@ -1259,6 +1260,7 @@ function PackExportDialog({
         twoCol,
         fontSize,
         fontType,
+        lang: loadUiLang(),
         chapters,
       };
       const doc = generateQuizCompilationPdf(cfg);
