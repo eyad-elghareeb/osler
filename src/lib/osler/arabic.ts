@@ -86,7 +86,6 @@ function _initMaps(): void {
     _PRES_END_LETTER.add(finalCtx.charCodeAt(finalCtx.length - 1));
   }
   for (let cp = 0x0621; cp <= 0x06D3; cp++) {
-    if (_END_LETTER_BASIC.has(cp)) continue;
     const ch = String.fromCharCode(cp);
     const isolated = arabicReshaper.convertArabic(ch);
     if (isolated.length === 0) continue;
