@@ -3485,14 +3485,6 @@ function TrackerTab({
     });
   };
 
-  if (!data) {
-    return (
-      <div className="flex items-center justify-center py-16">
-        <Loader2 className="size-6 animate-spin text-muted-foreground" />
-      </div>
-    );
-  }
-
   const [trackerPdfOpen, setTrackerPdfOpen] = React.useState(false);
 
   // Build folder stats list for tracker PDF export
@@ -3539,6 +3531,14 @@ function TrackerTab({
     toast({ title: t("pdf.pdfReady"), description: t("pdf.pdfReadyDesc") });
     setTrackerPdfOpen(false);
   }, [overall, folderStatsList, t]);
+
+  if (!data) {
+    return (
+      <div className="flex items-center justify-center py-16">
+        <Loader2 className="size-6 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
