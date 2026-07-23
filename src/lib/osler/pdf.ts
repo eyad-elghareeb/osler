@@ -36,6 +36,7 @@
 
 import { jsPDF } from "jspdf";
 import { registerPdfFonts } from "./pdf-fonts";
+import { hasArabic, shapeArabic, fallbackArabicPres } from "@/lib/osler/arabic";
 
 // ═══════════════════════════════════════════════════════════════
 // § 1  DESIGN TOKENS
@@ -167,114 +168,7 @@ function detectHtmlHeading(line: string): { level: number; text: string } | null
   return null;
 }
 
-function hasArabic(text: string): boolean {
-  return /[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]/.test(text);
-}
-
-/**
- * Cairo (the Arabic PDF font) has all initial/medial/final presentation forms
- * but is missing ISOLATED forms (42 codepoints in FE70-FEFC and FB50-FDFF).
- * This fallback replaces any missing presentation codepoint with its basic
- * Arabic equivalent so isolated letters render instead of appearing as tofu.
- */
-const ARABIC_PRES_FALLBACK: Record<number, number> = {
-  0xFE80: 0x0621, 0xFE81: 0x0622, 0xFE83: 0x0623, 0xFE85: 0x0624,
-  0xFE87: 0x0625, 0xFE89: 0x0626, 0xFE8D: 0x0627, 0xFE8F: 0x0628,
-  0xFE93: 0x0629, 0xFE95: 0x062A, 0xFE99: 0x062B, 0xFE9D: 0x062C,
-  0xFEA1: 0x062D, 0xFEA5: 0x062E, 0xFEA9: 0x062F, 0xFEAB: 0x0630,
-  0xFEAD: 0x0631, 0xFEAF: 0x0632, 0xFEB1: 0x0633, 0xFEB5: 0x0634,
-  0xFEB9: 0x0635, 0xFEBD: 0x0636, 0xFEC1: 0x0637, 0xFEC5: 0x0638,
-  0xFEC9: 0x0639, 0xFECD: 0x063A, 0xFED1: 0x0641, 0xFED5: 0x0642,
-  0xFED9: 0x0643, 0xFEDD: 0x0644, 0xFEE1: 0x0645, 0xFEE5: 0x0646,
-  0xFEE9: 0x0647, 0xFEED: 0x0648, 0xFEEF: 0x0649, 0xFEF1: 0x064A,
-  0xFB56: 0x067E, 0xFB7A: 0x0686, 0xFB8A: 0x0698,
-  0xFB8E: 0x06A9, 0xFB92: 0x06AF, 0xFBFC: 0x06CC,
-};
-
-function fallbackArabicPres(text: string): string {
-  let out = "";
-  for (let i = 0; i < text.length; i++) {
-    const cp = text.charCodeAt(i);
-    const fallback = ARABIC_PRES_FALLBACK[cp];
-    out += fallback ? String.fromCharCode(fallback) : text[i];
-  }
-  return out;
-}
-
-/**
- * jsPDF's getCorrectForm has a bug: when a connecting letter (4 forms)
- * is preceded by an end letter and followed by a non-Arabic character,
- * clause `!isArabicLetter(nextChar) && isArabicEndLetter(beforeChar)`
- * returns isolatedForm (0) instead of finalForm (1).
- *
- * Maps are built dynamically from jsPDF's own processArabic at first use.
- */
-let _arEndLetterPresForms: Set<number> | null = null;
-let _arIsolatedToFinal: Record<number, number> | null = null;
-
-function _buildArabicMaps(doc: jsPDF): void {
-  if (_arEndLetterPresForms && _arIsolatedToFinal) return;
-  const endForms = new Set<number>();
-  const isoToFinal: Record<number, number> = {};
-  const api = (doc as any).__arabicParser__;
-
-  for (let cp = 0x0621; cp <= 0x06D3; cp++) {
-    const ch = String.fromCharCode(cp);
-    if (!api.isInArabicSubstitutionA(ch)) continue;
-
-    const hasFinal = api.arabicLetterHasFinalForm(ch);
-    const hasMedial = api.arabicLetterHasMedialForm(ch);
-
-    if (!hasFinal) {
-      const s = api.processArabic(ch);
-      endForms.add(s.charCodeAt(0));
-    } else if (!hasMedial) {
-      const s = api.processArabic(ch);
-      endForms.add(s.charCodeAt(0));
-      const sp = api.processArabic("\u0645" + ch);
-      endForms.add(sp.charCodeAt(sp.length - 1));
-    } else {
-      const s = api.processArabic(ch);
-      const isolatedCp = s.charCodeAt(0);
-      const sp = api.processArabic("\u0645" + ch);
-      const finalCp = sp.charCodeAt(sp.length - 1);
-      if (isolatedCp !== finalCp) isoToFinal[isolatedCp] = finalCp;
-    }
-  }
-
-  _arEndLetterPresForms = endForms;
-  _arIsolatedToFinal = isoToFinal;
-}
-
-function fixConnectorAfterEndLetter(doc: jsPDF, text: string): string {
-  const endForms = _arEndLetterPresForms;
-  const isoToFinal = _arIsolatedToFinal;
-  if (!endForms || !isoToFinal) return text;
-
-  let out = "";
-  for (let i = 0; i < text.length; i++) {
-    const cp = text.charCodeAt(i);
-    const finalForm = isoToFinal[cp];
-    if (finalForm) {
-      const prevCp = i > 0 ? text.charCodeAt(i - 1) : -1;
-      const nextCp = i + 1 < text.length ? text.charCodeAt(i + 1) : -1;
-      const prevIsEnd = prevCp >= 0 && endForms.has(prevCp);
-      const nextIsArabic = nextCp >= 0 && (
-        (nextCp >= 0x0600 && nextCp <= 0x06FF) ||
-        (nextCp >= 0x0750 && nextCp <= 0x077F) ||
-        (nextCp >= 0x08A0 && nextCp <= 0x08FF) ||
-        (nextCp >= 0xFB50 && nextCp <= 0xFDFF) ||
-        (nextCp >= 0xFE70 && nextCp <= 0xFEFF)
-      );
-      if (prevIsEnd && !nextIsArabic) {
-        out += String.fromCharCode(finalForm);
-        continue;
-      }
-    }
-    out += text[i];
-  }
-  return out;
-}
+// hasArabic, shapeArabic, fallbackArabicPres imported from @/lib/osler/arabic
 
 function trunc(text: string, max: number): string {
   return text.length <= max ? text : text.slice(0, max - 1) + "\u2026";
@@ -479,18 +373,16 @@ class PdfDoc {
     this.L = computeLayout(cfg, styleMode, fontSizeOpt, fontTypeOpt);
     this.title = title;
     this.doc = new jsPDF({ orientation: cfg.orientation, unit: "mm", format: cfg.pageSize });
-    _buildArabicMaps(this.doc);
     (this.doc as any).internal.events.subscribe("preProcessText", (args: any) => {
       const t = args.text;
-      const fix = (s: string) => fallbackArabicPres(fixConnectorAfterEndLetter(this.doc, s));
       if (typeof t === "string") {
-        args.text = fix(t);
+        args.text = fallbackArabicPres(t);
       } else if (Array.isArray(t)) {
         for (let i = 0; i < t.length; i++) {
           if (Array.isArray(t[i])) {
-            t[i][0] = fix(t[i][0]);
+            t[i][0] = fallbackArabicPres(t[i][0]);
           } else if (typeof t[i] === "string") {
-            t[i] = fix(t[i]);
+            t[i] = fallbackArabicPres(t[i]);
           }
         }
       }
@@ -704,7 +596,8 @@ class PdfDoc {
   ): number {
     const d = this.doc;
     const raw = stripMd(str);
-    const isArabic = hasArabic(raw);
+    const shaped = shapeArabic(raw);
+    const isArabic = hasArabic(shaped);
 
     let font: string;
     let style: string;
@@ -722,7 +615,7 @@ class PdfDoc {
     d.setTextColor(...(opts.color ?? C.CHARCOAL));
 
     const maxW = opts.maxW ?? this.L.fw;
-    const normalized = normalizeText(raw);
+    const normalized = normalizeText(shaped);
     const lines: string[] = d.splitTextToSize(normalized, maxW);
     if (isArabic) {
       d.setR2L(true);
