@@ -36,7 +36,7 @@
 
 import { jsPDF } from "jspdf";
 import { registerPdfFonts } from "./pdf-fonts";
-import { hasArabic, shapeArabic, shapeArabicLetters, bidiReorder, fallbackArabicPres } from "@/lib/osler/arabic";
+import { hasArabic, fallbackArabicPres } from "@/lib/osler/arabic";
 import { translate, type UiLang, type StringKey } from "@/lib/osler/i18n";
 
 // ═══════════════════════════════════════════════════════════════
@@ -208,10 +208,6 @@ function detectHtmlHeading(line: string): { level: number; text: string } | null
  *
  * For non-Arabic text, this just delegates to `splitTextToSize`.
  */
-function splitAndShapeArabic(doc: jsPDF, text: string, maxW: number): string[] {
-  return doc.splitTextToSize(text, maxW);
-}
-
 function trunc(text: string, max: number): string {
   return text.length <= max ? text : text.slice(0, max - 1) + "\u2026";
 }
@@ -226,16 +222,16 @@ function tracked(text: string): string {
 }
 
 /**
- * Render a label string: for Arabic, shape letters (cursive joining
- * only, no BiDi — jsPDF's built-in Bidi engine handles direction);
- * for non-Arabic, apply letter-spacing tracking.
+ * Render a label string: for Arabic, return as-is (jsPDF's built-in
+ * processArabic handles letter shaping inside d.text()); for non-Arabic,
+ * apply letter-spacing tracking.
  *
  * Use this instead of `tracked()` whenever the string could be Arabic
  * (i18n labels, user-supplied titles, etc.).  Applying letter-spacing
  * to Arabic breaks cursive joining, so `tracked` is skipped for Arabic.
  */
 function tlabel(text: string): string {
-  return hasArabic(text) ? shapeArabicLetters(text) : tracked(text);
+  return hasArabic(text) ? text : tracked(text);
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -516,7 +512,7 @@ class PdfDoc {
     d.setFontSize(7.4 * typeScale);
     d.setTextColor(...C.INK);
     if (titleAr) {
-      d.text(shapeArabicLetters(titleRaw), ms + this.L.fw, baseline, { align: "right" });
+      d.text(titleRaw, ms + this.L.fw, baseline, { align: "right" });
     } else {
       d.text(tracked(titleRaw.toUpperCase()), ms, baseline);
     }
@@ -524,7 +520,7 @@ class PdfDoc {
     // Section pill, right aligned.
     if (this.headerLabel) {
       const headerAr = hasArabic(this.headerLabel);
-      const label = headerAr ? shapeArabicLetters(this.headerLabel) : tracked(this.headerLabel.toUpperCase());
+      const label = headerAr ? this.headerLabel : tracked(this.headerLabel.toUpperCase());
       d.setFont(headerAr ? "Cairo" : F.H, hs("bold"));
       d.setFontSize(6.4 * typeScale);
       const tw = d.getTextWidth(label);
@@ -572,7 +568,7 @@ class PdfDoc {
     d.setFont(hasArabic(shortTitle) ? "Cairo" : F.Hl, hs("normal"));
     d.setFontSize(6.2 * typeScale);
     d.setTextColor(...C.MUTED);
-    d.text(hasArabic(shortTitle) ? shapeArabicLetters(shortTitle) : shortTitle, pw - ms, footerBaseline, { align: "right" });
+    d.text(shortTitle, pw - ms, footerBaseline, { align: "right" });
 
     // Page-number slot is intentionally left blank — stamped in finalize()
     // once the true page count is known.
@@ -698,12 +694,12 @@ class PdfDoc {
     d.setTextColor(...(opts.color ?? C.CHARCOAL));
 
     const maxW = opts.maxW ?? this.L.fw;
-    // Shape Arabic letters for cursive joining (Cairo font needs
-    // presentation form codepoints), but keep LOGICAL order.
-    // jsPDF's built-in Bidi engine (postProcessText) handles
-    // direction conversion automatically.
-    const prepared = isArabic ? shapeArabicLetters(raw) : raw;
-    const normalized = normalizeText(prepared);
+    // Pass raw text to d.text() — jsPDF's built-in processArabic
+    // (preProcessText) handles all letter shaping, and the Bidi
+    // engine (postProcessText) handles direction. Our preProcessText
+    // handler (fallbackArabicPres) maps isolated forms Cairo is
+    // missing back to basic codepoints after processArabic runs.
+    const normalized = normalizeText(raw);
     const lines = d.splitTextToSize(normalized, maxW);
     if (isArabic) {
       d.text(lines, x + maxW, y, { align: "right", isInputVisual: false, isOutputVisual: true });
@@ -737,7 +733,7 @@ class PdfDoc {
     d.setFontSize(size * this.L.typeScale);
     d.setTextColor(...color);
     if (isAr) {
-      d.text(shapeArabicLetters(text), x + (maxW ?? this.L.fw), y, { align: "right" });
+      d.text(text, x + (maxW ?? this.L.fw), y, { align: "right" });
     } else {
       d.text(tracked(text), x, y);
     }
@@ -756,13 +752,9 @@ class PdfDoc {
     const bodyHasArabic = hasArabic(rawBody);
     d.setFont(bodyHasArabic ? "Cairo" : F.Bi, hs(bodyHasArabic ? "normal" : "italic"));
     d.setFontSize(bodySize);
-    // Measure using the shaped (logical-order) string so the line count
-    // matches what `this.text()` actually renders below. We use
-    // `shapeArabicLetters` (shape only, no BiDi) because line-breaking
-    // must happen in logical order; the actual rendering via
-    // `this.text()` will BiDi-reorder each line independently.
-    const shapedBody = bodyHasArabic ? shapeArabicLetters(rawBody) : rawBody;
-    const bodyLines: string[] = d.splitTextToSize(normalizeText(shapedBody), bodyMaxW);
+    // jsPDF's getStringUnitWidth applies processArabic internally,
+    // so splitTextToSize measures shaped widths even from raw text.
+    const bodyLines: string[] = d.splitTextToSize(normalizeText(rawBody), bodyMaxW);
     const bodyH = bodyLines.length * lh(bodySize, bodyHasArabic ? 1.3 : 1.45);
     const labelH = sp(4, density);
     const totalH = labelH + bodyH + sp(1.5, density);
@@ -780,7 +772,7 @@ class PdfDoc {
     d.setFontSize(6.6 * this.L.typeScale);
     d.setTextColor(...border);
     if (labelAr) {
-      d.text(shapeArabicLetters(label), x + w - pad, boxY + sp(1.5, density), { align: "right" });
+      d.text(label, x + w - pad, boxY + sp(1.5, density), { align: "right" });
     } else {
       d.text(tracked(label), x + pad, boxY + sp(1.5, density));
     }
@@ -891,12 +883,7 @@ class PdfDoc {
     d.setFont(titleIsAr ? "Cairo" : F.H, hs("bold"));
     d.setFontSize(titleSize);
     d.setTextColor(...C.WHITE);
-    const titleLines: string[] = titleIsAr
-      ? splitAndShapeArabic(d, shapeArabicLetters(normalizeText(cfg.title || "Report")), pw * 0.76)
-      : d.splitTextToSize(normalizeText(cfg.title || "Report"), pw * 0.76);
-    // Center alignment works for Arabic because each line is already in
-    // visual order after per-line BiDi — jsPDF measures the visual width
-    // and centers the line as a block.
+    const titleLines: string[] = d.splitTextToSize(normalizeText(cfg.title || "Report"), pw * 0.76);
     d.text(titleLines, pw / 2, cy, { align: "center" });
     cy += titleLines.length * lh(titleSize, titleIsAr ? 1.25 : 1.08) + 6;
 
@@ -907,9 +894,7 @@ class PdfDoc {
       d.setFont(subIsAr ? "Cairo" : F.Bi, hs(subIsAr ? "normal" : "italic"));
       d.setFontSize(subSize);
       d.setTextColor(198, 214, 232);
-      const subLines: string[] = subIsAr
-        ? splitAndShapeArabic(d, shapeArabicLetters(normalizeText(cfg.subtitle)), pw * 0.62)
-        : d.splitTextToSize(normalizeText(cfg.subtitle), pw * 0.62);
+      const subLines: string[] = d.splitTextToSize(normalizeText(cfg.subtitle), pw * 0.62);
       d.text(subLines, pw / 2, cy, { align: "center" });
       cy += subLines.length * lh(subSize, subIsAr ? 1.25 : 1.45) + 5;
     }
@@ -935,11 +920,7 @@ class PdfDoc {
     }
     if (cfg.description) {
       d.setFontSize(8.6);
-      const descAr = hasArabic(cfg.description);
-      const descPrepared = descAr ? shapeArabicLetters(normalizeText(cfg.description)) : normalizeText(cfg.description);
-      const descLines: string[] = descAr
-        ? splitAndShapeArabic(d, descPrepared, pw * 0.58)
-        : d.splitTextToSize(descPrepared, pw * 0.58);
+      const descLines: string[] = d.splitTextToSize(normalizeText(cfg.description), pw * 0.58);
       d.text(descLines, pw / 2, cy, { align: "center" });
       cy += descLines.length * lh(8.6) + 4;
     }
@@ -1014,10 +995,7 @@ class PdfDoc {
     const tocTitleIsAr = hasArabic(title);
     if (tocTitleIsAr) {
       d.setFont("Cairo", hs("normal"));
-      // TOC titles are single-line (truncated), so shapeArabic (shape+Bidi)
-      // is fine here — no multi-line wrapping to worry about.
-      const tShaped = shapeArabicLetters(trunc(title, 62));
-      d.text(tShaped, this.L.ms + this.L.fw - 1.5, this.y, { align: "right" });
+      d.text(trunc(title, 62), this.L.ms + this.L.fw - 1.5, this.y, { align: "right" });
     } else {
       d.text(trunc(title, 62), this.L.ms + 1.5, this.y);
     }
@@ -1036,10 +1014,7 @@ class PdfDoc {
       d.setFont(descIsAr ? "Cairo" : F.Bi, hs(descIsAr ? "normal" : "italic"));
       d.setFontSize(8.2 * this.L.typeScale);
       d.setTextColor(...C.MUTED);
-      const descPrepared = descIsAr ? shapeArabicLetters(stripMd(desc)) : stripMd(desc);
-      const lines: string[] = descIsAr
-        ? splitAndShapeArabic(d, descPrepared, this.L.fw - 8)
-        : d.splitTextToSize(descPrepared, this.L.fw - 8);
+      const lines: string[] = d.splitTextToSize(stripMd(desc), this.L.fw - 8);
       if (descIsAr) d.text(lines, this.L.ms + this.L.fw - 4, this.y, { align: "right" });
       else d.text(lines, this.L.ms + 4, this.y);
       this.y += lines.length * lh(8.2 * this.L.typeScale, descIsAr ? 1.3 : 1.45) + sp(1, density);
@@ -1064,10 +1039,7 @@ class PdfDoc {
         d.setFont(titleIsAr ? "Cairo" : F.H, hs("bold"));
         d.setFontSize(20 * this.L.typeScale);
         d.setTextColor(...C.INK);
-        const titlePrepared = titleIsAr ? shapeArabicLetters(title) : title;
-        const lines: string[] = titleIsAr
-          ? splitAndShapeArabic(d, titlePrepared, fw)
-          : d.splitTextToSize(titlePrepared, fw);
+        const lines: string[] = d.splitTextToSize(title, fw);
         if (titleIsAr) d.text(lines, this.L.ms + fw, this.y, { align: "right" });
         else d.text(lines, this.L.ms + fw / 2, this.y, { align: "center" });
         this.y += lines.length * lh(20 * this.L.typeScale, 1.2) + sp(1.5, density);
@@ -1077,10 +1049,7 @@ class PdfDoc {
         d.setFont(descIsAr ? "Cairo" : F.Bi, hs(descIsAr ? "normal" : "italic"));
         d.setFontSize(9.5 * this.L.typeScale);
         d.setTextColor(...C.MUTED);
-        const descPrepared = descIsAr ? shapeArabicLetters(stripMd(desc)) : stripMd(desc);
-        const lines: string[] = descIsAr
-          ? splitAndShapeArabic(d, descPrepared, fw - 10)
-          : d.splitTextToSize(descPrepared, fw - 10);
+        const lines: string[] = d.splitTextToSize(stripMd(desc), fw - 10);
         if (descIsAr) d.text(lines, this.L.ms + fw, this.y, { align: "right" });
         else d.text(lines, this.L.ms + fw / 2, this.y, { align: "center" });
         this.y += lines.length * lh(9.5 * this.L.typeScale) + sp(2.5, density);
@@ -1101,10 +1070,9 @@ class PdfDoc {
       const titleIsAr = hasArabic(title);
       if (titleIsAr) {
         d.setFont("Cairo", hs("bold"));
-        const titlePrepared = shapeArabicLetters(title);
-        const titleLines: string[] = splitAndShapeArabic(d, titlePrepared, fw);
-        d.text(titleLines, this.L.ms + fw, this.y, { align: "right" });
-        this.y += titleLines.length * lh(16 * this.L.typeScale, 1.3);
+        const lines: string[] = d.splitTextToSize(title, fw);
+        d.text(lines, this.L.ms + fw, this.y, { align: "right" });
+        this.y += lines.length * lh(16 * this.L.typeScale, 1.3);
       } else {
         d.text(title, this.L.ms, this.y);
         this.y += sp(3.5, density);
@@ -1115,10 +1083,7 @@ class PdfDoc {
         d.setFont(descIsAr ? "Cairo" : F.Bi, hs(descIsAr ? "normal" : "italic"));
         d.setFontSize(8.6 * this.L.typeScale);
         d.setTextColor(...C.MUTED);
-        const descPrepared = descIsAr ? shapeArabicLetters(stripMd(desc)) : stripMd(desc);
-        const lines: string[] = descIsAr
-          ? splitAndShapeArabic(d, descPrepared, fw - 10)
-          : d.splitTextToSize(descPrepared, fw - 10);
+        const lines: string[] = d.splitTextToSize(stripMd(desc), fw - 10);
         if (descIsAr) d.text(lines, this.L.ms + fw - 5, this.y, { align: "right" });
         else d.text(lines, this.L.ms, this.y);
         this.y += lines.length * lh(8.6 * this.L.typeScale, descIsAr ? 1.3 : 1.45) + sp(2.5, density);
@@ -1159,10 +1124,7 @@ class PdfDoc {
       const isAr = hasArabic(raw);
       d.setFont(isAr ? "Cairo" : F[style === "mcqnotes" ? "Hm" : "B"], hs("normal"));
       d.setFontSize(sSize * ts);
-      // Measure on the shaped (logical-order) string so the line count
-      // matches what `this.text()` actually renders.
-      const stemShaped = isAr ? shapeArabicLetters(raw) : raw;
-      const stemLines = d.splitTextToSize(normalizeText(stemShaped), cw - 2).length;
+      const stemLines = d.splitTextToSize(normalizeText(raw), cw - 2).length;
       h += stemLines * lh(sSize * ts, isAr ? 1.3 : 1.45) + sp(1.5, density);
     }
 
@@ -1173,8 +1135,7 @@ class PdfDoc {
         const isAr = hasArabic(raw);
         d.setFont(isAr ? "Cairo" : F.B, hs("normal"));
         d.setFontSize(8.6 * ts);
-        const cShaped = isAr ? shapeArabicLetters(raw) : raw;
-        const cl = d.splitTextToSize(normalizeText(cShaped), cw - 15).length;
+        const cl = d.splitTextToSize(normalizeText(raw), cw - 15).length;
         h += cl * lh(8.6 * ts, isAr ? 1.3 : 1.45) + sp(0.4, density);
       }
     }
@@ -1191,8 +1152,7 @@ class PdfDoc {
         const xAr = hasArabic(xRaw);
         d.setFont(xAr ? "Cairo" : F.Bi, hs(xAr ? "normal" : "italic"));
         d.setFontSize(8.6 * ts);
-        const xShaped = xAr ? shapeArabicLetters(xRaw) : xRaw;
-        const bl = d.splitTextToSize(normalizeText(xShaped), cw - pad * 2).length;
+        const bl = d.splitTextToSize(normalizeText(xRaw), cw - pad * 2).length;
         h += sp(4, density) + bl * lh(8.6 * ts, xAr ? 1.3 : 1.45) + sp(1.5, density) + sp(1.5, density);
       }
     }
@@ -1204,8 +1164,7 @@ class PdfDoc {
       const mAr = hasArabic(mRaw);
       d.setFont(mAr ? "Cairo" : F.Bi, hs(mAr ? "normal" : "italic"));
       d.setFontSize(8.6 * ts);
-        const mShaped = mAr ? shapeArabicLetters(mRaw) : mRaw;
-        const bl = d.splitTextToSize(normalizeText(mShaped), cw - pad * 2).length;
+        const bl = d.splitTextToSize(normalizeText(mRaw), cw - pad * 2).length;
       h += sp(4, density) + bl * lh(8.6 * ts, mAr ? 1.3 : 1.45) + sp(1.5, density) + sp(1.5, density);
     }
 
@@ -1236,7 +1195,7 @@ class PdfDoc {
       const mcqAr = hasArabic(qLabel);
       if (mcqAr) {
         d.setFont("Cairo", hs("normal"));
-        d.text(shapeArabicLetters(qLabel), x + cw, this.y, { align: "right" });
+        d.text(qLabel, x + cw, this.y, { align: "right" });
       } else {
         d.text(qLabel, x, this.y);
       }
@@ -1342,8 +1301,7 @@ class PdfDoc {
       d.setFont(seeAnswerAr ? "Cairo" : F.Hn, hs("normal"));
       d.setFontSize(7 * this.L.typeScale);
       d.setTextColor(...C.LINK);
-      const displayText = seeAnswerAr ? shapeArabicLetters(fullText) : fullText;
-      const textW = d.getTextWidth(displayText);
+      const textW = d.getTextWidth(fullText);
       // Record the position of this "See Answer Key" text so we can
       // add a hyperlink annotation once the answer key page is known.
       // The text is right-aligned at (x + cw), so the clickable rect
@@ -1356,7 +1314,7 @@ class PdfDoc {
         h: 5,
         chapterIdx: opts.chapterIdx ?? -1,
       });
-      d.text(displayText, x + cw, this.y, { align: "right" });
+      d.text(fullText, x + cw, this.y, { align: "right" });
       this.y += sp(1.5, density);
     }
 
@@ -1405,7 +1363,7 @@ class PdfDoc {
     d.setFontSize(11 * this.L.typeScale);
     d.setTextColor(...C.WHITE);
     if (titleAr) {
-      d.text(shapeArabicLetters(title), this.L.ms + fw - 8, this.y + bannerH / 2 + 1.6, { align: "right" });
+      d.text(title, this.L.ms + fw - 8, this.y + bannerH / 2 + 1.6, { align: "right" });
     } else {
       d.text(tracked(title), this.L.ms + 8, this.y + bannerH / 2 + 1.6);
     }
@@ -1802,7 +1760,7 @@ function renderCompilation(cfg: PdfExportConfig, knownChapterPages: number[] | n
     const tocTitleIsAr = hasArabic(tocTitle);
     if (tocTitleIsAr) {
       doc.doc.setFont("Cairo", hs("bold"));
-      doc.doc.text(shapeArabicLetters(tocTitle), L.ms + L.fw, doc.y, { align: "right" });
+      doc.doc.text(tocTitle, L.ms + L.fw, doc.y, { align: "right" });
     } else {
       doc.doc.text(tocTitle, L.ms, doc.y);
     }
@@ -2049,7 +2007,7 @@ export function generateDashboardPdf(cfg: DashboardPdfConfig): jsPDF {
       const titleAr = hasArabic(titleStr);
       d.setFont(titleAr ? "Cairo" : F.H, hs("bold"));
       if (titleAr) {
-        d.text(shapeArabicLetters(titleStr), L.ms + L.fw - 27, rowY, { align: "right" });
+        d.text(titleStr, L.ms + L.fw - 27, rowY, { align: "right" });
       } else {
         d.text(titleStr, L.ms + 27, rowY);
       }
@@ -2131,10 +2089,7 @@ export function generateArticlePdf(cfg: ArticlePdfConfig): jsPDF {
     d.setFont(titleIsAr ? "Cairo" : F.H, hs("bold"));
     d.setFontSize(17 * ts);
     d.setTextColor(...C.INK);
-    const titlePrepared = titleIsAr ? shapeArabicLetters(cfg.title) : cfg.title;
-    const titleLines: string[] = titleIsAr
-      ? splitAndShapeArabic(d, titlePrepared, fw)
-      : d.splitTextToSize(titlePrepared, fw);
+    const titleLines: string[] = d.splitTextToSize(cfg.title, fw);
     if (titleIsAr) d.text(titleLines, x + fw, doc.y, { align: "right" });
     else d.text(titleLines, x, doc.y);
     doc.y += titleLines.length * lh(17 * ts, titleIsAr ? 1.3 : 1.45) + sp(2, density);
@@ -2291,10 +2246,7 @@ export function generateArticlePdf(cfg: ArticlePdfConfig): jsPDF {
           d.setFont(isAr ? "Cairo" : F.H, hs("bold"));
           d.setFontSize(14 * ts);
           d.setTextColor(...C.INK);
-          const prepared = isAr ? shapeArabicLetters(block.text) : block.text;
-          const hLines: string[] = isAr
-            ? splitAndShapeArabic(d, prepared, fw)
-            : d.splitTextToSize(prepared, fw);
+          const hLines: string[] = d.splitTextToSize(block.text, fw);
           if (isAr) d.text(hLines, x + fw, doc.y, { align: "right" });
           else d.text(hLines, x, doc.y);
           doc.y += hLines.length * lh(14 * ts, isAr ? 1.3 : 1.45) + sp(0.5, density);
@@ -2311,10 +2263,7 @@ export function generateArticlePdf(cfg: ArticlePdfConfig): jsPDF {
           d.setFont(isAr ? "Cairo" : F.H, hs("bold"));
           d.setFontSize(11.5 * ts);
           d.setTextColor(...C.COBALT);
-          const prepared = isAr ? shapeArabicLetters(block.text) : block.text;
-          const hLines: string[] = isAr
-            ? splitAndShapeArabic(d, prepared, fw)
-            : d.splitTextToSize(prepared, fw);
+          const hLines: string[] = d.splitTextToSize(block.text, fw);
           if (isAr) d.text(hLines, x + fw, doc.y, { align: "right" });
           else d.text(hLines, x, doc.y);
           doc.y += hLines.length * lh(11.5 * ts, isAr ? 1.3 : 1.45) + sp(1.2, density);
@@ -2329,10 +2278,7 @@ export function generateArticlePdf(cfg: ArticlePdfConfig): jsPDF {
           d.setFont(isAr ? "Cairo" : F.Hm, hs("bold"));
           d.setFontSize(9.8 * ts);
           d.setTextColor(...C.SLATE);
-          const prepared = isAr ? shapeArabicLetters(block.text) : block.text;
-          const hLines: string[] = isAr
-            ? splitAndShapeArabic(d, prepared, fw)
-            : d.splitTextToSize(prepared, fw);
+          const hLines: string[] = d.splitTextToSize(block.text, fw);
           if (isAr) d.text(hLines, x + fw, doc.y, { align: "right" });
           else d.text(hLines, x, doc.y);
           doc.y += hLines.length * lh(9.8 * ts, isAr ? 1.3 : 1.45) + sp(0.8, density);
@@ -2352,10 +2298,7 @@ export function generateArticlePdf(cfg: ArticlePdfConfig): jsPDF {
         const bqIsAr = hasArabic(block.text);
         d.setFont(bqIsAr ? "Cairo" : F.Bi, hs(bqIsAr ? "normal" : "italic"));
         d.setFontSize(bqFontSize);
-        const bqPrepared = bqIsAr ? shapeArabicLetters(block.text) : block.text;
-        const bqLines: string[] = bqIsAr
-          ? splitAndShapeArabic(d, bqPrepared, fw - 6)
-          : d.splitTextToSize(bqPrepared, fw - 6);
+        const bqLines: string[] = d.splitTextToSize(block.text, fw - 6);
         const bqH = bqLines.length * lh(bqFontSize, bqIsAr ? 1.3 : 1.45) + sp(2, density);
         d.setFillColor(...C.PALE_BLUE);
         d.setDrawColor(...C.COBALT);
@@ -2407,8 +2350,7 @@ export function generateArticlePdf(cfg: ArticlePdfConfig): jsPDF {
             d.setTextColor(...C.CHARCOAL);
             const marker = block.isOrdered ? `${i + 1}.` : "\u2022";
             const markerW = d.getTextWidth(marker) + 2;
-            const shapedItem = shapeArabicLetters(itemRaw);
-            const lines: string[] = splitAndShapeArabic(d, shapedItem, fw - 4 - markerW);
+            const lines: string[] = d.splitTextToSize(itemRaw, fw - 4 - markerW);
             doc.checkPage(lines.length * lh(9 * ts, 1.3));
             // Marker flush-right at the column edge.
             d.setTextColor(...C.COBALT);
@@ -2455,10 +2397,7 @@ export function generateArticlePdf(cfg: ArticlePdfConfig): jsPDF {
               d.setFont(cellIsAr ? "Cairo" : F.Hm, hs(isHeader ? "bold" : "normal"));
               d.setFontSize(isHeader ? 7.6 * ts : 7.2 * ts);
               d.setTextColor(...(isHeader ? C.COBALT : C.CHARCOAL));
-              // Table cells are single-line (truncated), so shapeArabic
-              // (shape+Bidi) is fine here.
-              const cellShaped = shapeArabicLetters(cellText);
-              const cellDisplay = trunc(cellShaped, Math.floor(colW / (7.2 * ts * 0.35)));
+              const cellDisplay = trunc(cellText, Math.floor(colW / (7.2 * ts * 0.35)));
               if (cellIsAr) {
                 d.text(cellDisplay, cellX + colW - 1.5, doc.y + 4, { align: "right" });
               } else {
