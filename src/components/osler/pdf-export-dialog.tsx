@@ -259,7 +259,7 @@ export function PdfExportDialog({
                           : "bg-muted/60 text-muted-foreground"
                       )}
                     >
-                      {ps}
+                      {t(`pdf.pageSize.${ps}` as "pdf.pageSize.a4")}
                     </button>
                   ))}
                 </div>
