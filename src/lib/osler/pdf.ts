@@ -37,33 +37,6 @@
 import { jsPDF } from "jspdf";
 import { registerPdfFonts } from "./pdf-fonts";
 
-/**
- * Register a preProcessText handler that applies Cairo font fallback for
- * isolated Arabic presentation forms AFTER jsPDF's built-in processArabic
- * runs. Without this, processArabic would undo fallbackArabicPres by
- * converting the basic chars back to the same missing isolated forms.
- */
-let _fallbackRegistered = false;
-function _ensureFallbackRegistered(): void {
-  if (_fallbackRegistered) return;
-  _fallbackRegistered = true;
-  jsPDF.API.events.push(["preProcessText", (args: any) => {
-    const t = args.text;
-    if (typeof t === "string") {
-      args.text = fallbackArabicPres(t);
-    } else if (Array.isArray(t)) {
-      for (let i = 0; i < t.length; i++) {
-        if (Array.isArray(t[i])) {
-          t[i][0] = fallbackArabicPres(t[i][0]);
-        } else if (typeof t[i] === "string") {
-          t[i] = fallbackArabicPres(t[i]);
-        }
-      }
-    }
-    return args;
-  }]);
-}
-
 // ═══════════════════════════════════════════════════════════════
 // § 1  DESIGN TOKENS
 // ═══════════════════════════════════════════════════════════════
@@ -431,7 +404,20 @@ class PdfDoc {
     this.L = computeLayout(cfg, styleMode, fontSizeOpt, fontTypeOpt);
     this.title = title;
     this.doc = new jsPDF({ orientation: cfg.orientation, unit: "mm", format: cfg.pageSize });
-    _ensureFallbackRegistered();
+    (this.doc as any).internal.events.subscribe("preProcessText", (args: any) => {
+      const t = args.text;
+      if (typeof t === "string") {
+        args.text = fallbackArabicPres(t);
+      } else if (Array.isArray(t)) {
+        for (let i = 0; i < t.length; i++) {
+          if (Array.isArray(t[i])) {
+            t[i][0] = fallbackArabicPres(t[i][0]);
+          } else if (typeof t[i] === "string") {
+            t[i] = fallbackArabicPres(t[i]);
+          }
+        }
+      }
+    });
     this.doc.setLineHeightFactor(1.15);
     this.y = this.L.mt;
     const registered = registerPdfFonts(this.doc);
