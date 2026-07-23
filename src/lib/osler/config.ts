@@ -156,6 +156,19 @@ export interface SyncDefaultsConfig {
   defaultRoom: string;
 }
 
+/** Optional Cloudflare Worker account and progress-sync service. */
+export interface CloudConfig {
+  /** Cloud mode remains fully opt-in; local IndexedDB works when disabled. */
+  enabled: boolean;
+  /** Absolute Worker URL, for example https://study-api.example.com. */
+  apiUrl: string;
+  /** Optional public Turnstile site key used to protect authentication forms. */
+  turnstileSiteKey?: string;
+  /** Sync only the requested learning data, keeping D1 writes small. */
+  syncQbank: boolean;
+  syncFlashcards: boolean;
+}
+
 /** First-time wizard state. */
 export interface WizardConfig {
   /** Has the wizard been completed (either in admin or in-app)? */
@@ -208,6 +221,8 @@ export interface OslerConfig {
     ai: AiDefaultsConfig;
     sync: SyncDefaultsConfig;
   };
+  /** Optional cloud accounts and cross-device progress sync. */
+  cloud: CloudConfig;
   /** First-time wizard state. */
   wizard: WizardConfig;
 }
@@ -499,6 +514,12 @@ export const DEFAULT_CONFIG: OslerConfig = {
       defaultRoom: "osler-default",
     },
   },
+  cloud: {
+    enabled: false,
+    apiUrl: "",
+    syncQbank: true,
+    syncFlashcards: true,
+  },
   wizard: {
     completed: false,
     version: 1,
@@ -578,6 +599,10 @@ function mergeConfig(user: unknown): OslerConfig {
     if (u.defaults.sync && typeof u.defaults.sync === "object") {
       out.defaults.sync = { ...out.defaults.sync, ...u.defaults.sync };
     }
+  }
+
+  if (u.cloud && typeof u.cloud === "object") {
+    out.cloud = { ...out.cloud, ...u.cloud };
   }
 
   // wizard

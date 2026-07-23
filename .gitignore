@@ -5,6 +5,7 @@ node_modules/
 
 # next.js
 .next/
+.next-*/
 out/
 build/
 dist/
@@ -28,6 +29,7 @@ server.log
 .env.development.local
 .env.test.local
 .env.production.local
+cloudflare/worker/.dev.vars
 
 # typescript
 *.tsbuildinfo

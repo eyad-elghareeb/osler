@@ -1,0 +1,15 @@
+name = "osler-cloud"
+main = "src/index.mjs"
+compatibility_date = "2026-07-23"
+workers_dev = true
+
+[[d1_databases]]
+binding = "DB"
+database_name = "osler-cloud"
+database_id = "REPLACE_WITH_D1_DATABASE_ID"
+
+[vars]
+# Set this to the Pages/custom-domain origin hosting the Osler app.
+ALLOWED_ORIGIN = "http://localhost:3000"
+# Set to true after configuring TURNSTILE_SECRET_KEY and publishing its site key.
+TURNSTILE_ENABLED = "false"

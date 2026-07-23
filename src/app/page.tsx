@@ -24,6 +24,14 @@ import type {
   ContentTreeNode,
 } from "@/lib/osler/types";
 import type { SearchResult } from "@/lib/osler/search";
+import {
+  cloudEnabled,
+  clearCloudSession,
+  readCloudSession,
+  startCloudSync,
+  logoutCloudAccount,
+  type CloudSession,
+} from "@/lib/osler/cloud";
 
 const SESSION_KEY = "osler-session";
 
@@ -32,6 +40,7 @@ const PACK_VIEWS: ReadonlySet<OslerView> = new Set(["qbank", "flashcards", "osce
 
 export default function Home() {
   const [username, setUsername] = React.useState<string | null>(null);
+  const [cloudSession, setCloudSession] = React.useState<CloudSession | null>(null);
   const [view, setView] = React.useState<OslerView>("dashboard");
   const [activeItem, setActiveItem] = React.useState<ContentTreeNode | null>(null);
   const [activeContent, setActiveContent] = React.useState<AnyContent | null>(null);
@@ -58,11 +67,38 @@ export default function Home() {
   React.useEffect(() => { activeVideoIdRef.current = activeVideoId; }, [activeVideoId]);
   React.useEffect(() => { viewRef.current = view; }, [view]);
 
-  // Restore session
+  // Restore either the signed cloud session or the legacy local session.
   React.useEffect(() => {
     if (typeof window === "undefined") return;
-    const stored = sessionStorage.getItem(SESSION_KEY);
-    if (stored) setUsername(stored);
+    let cancelled = false;
+    void (async () => {
+      if (await cloudEnabled()) {
+        const session = readCloudSession();
+        if (!cancelled && session) {
+          setUsername(session.user.displayName);
+          setCloudSession(session);
+        }
+        return;
+      }
+      const stored = sessionStorage.getItem(SESSION_KEY);
+      if (!cancelled && stored) setUsername(stored);
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  React.useEffect(() => {
+    if (!cloudSession) return;
+    return startCloudSync(cloudSession);
+  }, [cloudSession]);
+
+  React.useEffect(() => {
+    const expire = () => {
+      clearCloudSession();
+      setCloudSession(null);
+      setUsername(null);
+    };
+    window.addEventListener("osler-cloud-session-expired", expire);
+    return () => window.removeEventListener("osler-cloud-session-expired", expire);
   }, []);
 
   // Pre-load PDF fonts so they are cached before any PDF export
@@ -213,18 +249,23 @@ export default function Home() {
   const handleLogin = (name: string) => {
     setUsername(name);
     if (typeof window !== "undefined") {
+      const session = readCloudSession();
+      if (session) setCloudSession(session);
       sessionStorage.setItem(SESSION_KEY, name);
     }
   };
 
   const handleLogout = () => {
+    const currentCloudSession = cloudSession;
     setUsername(null);
+    setCloudSession(null);
     setView("dashboard");
     setActiveItem(null);
     setActiveContent(null);
     if (typeof window !== "undefined") {
       sessionStorage.removeItem(SESSION_KEY);
     }
+    void logoutCloudAccount(currentCloudSession);
   };
 
   const osceContent = React.useMemo(() => {

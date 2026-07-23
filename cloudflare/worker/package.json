@@ -1,0 +1,13 @@
+{
+  "name": "osler-cloud-worker",
+  "private": true,
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "db:migrate:local": "wrangler d1 migrations apply osler-cloud --local",
+    "db:migrate": "wrangler d1 migrations apply osler-cloud --remote"
+  },
+  "devDependencies": {
+    "wrangler": "^4.0.0"
+  }
+}

@@ -21,6 +21,25 @@ import {
   haptic,
 } from "@/lib/osler/native";
 import { cn } from "@/lib/utils";
+import { getConfig } from "@/lib/osler/config";
+import {
+  CloudApiError,
+  cloudEnabled,
+  cloudUsernameAvailable,
+  confirmPasswordReset,
+  loginCloudAccount,
+  registerCloudAccount,
+  requestPasswordReset,
+} from "@/lib/osler/cloud";
+
+declare global {
+  interface Window {
+    turnstile?: {
+      render: (container: HTMLElement, options: { sitekey: string; callback: (token: string) => void; "expired-callback": () => void }) => string;
+      remove: (widgetId: string) => void;
+    };
+  }
+}
 
 interface LoginScreenProps {
   onLogin: (username: string) => void;
@@ -30,12 +49,68 @@ export function LoginScreen({ onLogin }: LoginScreenProps) {
   const { t, rtl } = useI18n();
   const [username, setUsername] = React.useState("");
   const [password, setPassword] = React.useState("");
+  const [passwordConfirm, setPasswordConfirm] = React.useState("");
   const [biometricStatus, setBiometricStatus] = React.useState<
     "idle" | "enrolling" | "authenticating" | "error"
   >("idle");
   const [biometricMsg, setBiometricMsg] = React.useState<string>("");
+  const [cloudMode, setCloudMode] = React.useState<"login" | "register" | "reset">("login");
+  const [cloudActive, setCloudActive] = React.useState(false);
+  const [email, setEmail] = React.useState("");
+  const [displayName, setDisplayName] = React.useState("");
+  const [cloudBusy, setCloudBusy] = React.useState(false);
+  const [cloudError, setCloudError] = React.useState("");
+  const [resetSent, setResetSent] = React.useState(false);
+  const [resetToken, setResetToken] = React.useState("");
+  const [usernameStatus, setUsernameStatus] = React.useState<"idle" | "checking" | "available" | "taken">("idle");
+  const [turnstileToken, setTurnstileToken] = React.useState("");
+  const turnstileRef = React.useRef<HTMLDivElement>(null);
 
   const { availability, refresh: refreshBiometric } = useBiometricAvailability();
+
+  React.useEffect(() => {
+    let cancelled = false;
+    void cloudEnabled().then((enabled) => {
+      if (!cancelled) setCloudActive(enabled);
+    });
+    const token = new URLSearchParams(window.location.search).get("reset");
+    if (token) {
+      setResetToken(token);
+      setCloudMode("reset");
+    }
+    return () => { cancelled = true; };
+  }, []);
+
+  React.useEffect(() => {
+    const sitekey = cloudActive ? getConfig().cloud.turnstileSiteKey : undefined;
+    const container = turnstileRef.current;
+    if (!sitekey || !container) return;
+    let widgetId = "";
+    const render = () => {
+      if (!window.turnstile || !container.isConnected) return;
+      container.replaceChildren();
+      widgetId = window.turnstile.render(container, {
+        sitekey,
+        callback: setTurnstileToken,
+        "expired-callback": () => setTurnstileToken(""),
+      });
+    };
+    const existing = document.querySelector<HTMLScriptElement>('script[src^="https://challenges.cloudflare.com/turnstile/"]');
+    if (existing) {
+      existing.addEventListener("load", render, { once: true });
+      render();
+    } else {
+      const script = document.createElement("script");
+      script.src = "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit";
+      script.async = true;
+      script.defer = true;
+      script.addEventListener("load", render, { once: true });
+      document.head.appendChild(script);
+    }
+    return () => {
+      if (widgetId && window.turnstile) window.turnstile.remove(widgetId);
+    };
+  }, [cloudActive]);
 
   // Pre-fill the username field if a biometric credential is already enrolled.
   React.useEffect(() => {
@@ -45,8 +120,55 @@ export function LoginScreen({ onLogin }: LoginScreenProps) {
     }
   }, [availability?.enrolled]);
 
-  const submit = (e: React.FormEvent) => {
+  const submit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (cloudActive) {
+      setCloudBusy(true);
+      setCloudError("");
+      try {
+        if (cloudMode === "register") {
+          if (password !== passwordConfirm) {
+            setCloudError(t("login.passwordMismatch"));
+            haptic("error");
+            return;
+          }
+          const session = await registerCloudAccount({
+            username: username.trim(),
+            email: email.trim() || undefined,
+            displayName: displayName.trim() || username.trim(),
+            password,
+            turnstileToken: turnstileToken || undefined,
+          });
+          haptic("success");
+          onLogin(session.user.displayName);
+          return;
+        }
+        if (cloudMode === "reset") {
+          if (resetToken) {
+            await confirmPasswordReset(resetToken, password);
+            setResetToken("");
+            setCloudMode("login");
+            setCloudError("");
+            haptic("success");
+          } else {
+            await requestPasswordReset(email, turnstileToken || undefined);
+            setResetSent(true);
+            haptic("success");
+          }
+          return;
+        }
+        const session = await loginCloudAccount({ identifier: username.trim(), password, turnstileToken: turnstileToken || undefined });
+        haptic("success");
+        onLogin(session.user.displayName);
+        return;
+      } catch (error) {
+        setCloudError(error instanceof CloudApiError ? error.message : t("login.cloud.error"));
+        haptic("error");
+      } finally {
+        setCloudBusy(false);
+      }
+      return;
+    }
     const name = username.trim() || "Guest";
     haptic("success");
     onLogin(name);
@@ -111,9 +233,19 @@ export function LoginScreen({ onLogin }: LoginScreenProps) {
     }
   };
 
-  const canEnroll = !!availability?.supported && !!availability?.platformAuthenticator;
+  const canEnroll = !cloudActive && !!availability?.supported && !!availability?.platformAuthenticator;
   const canQuickUnlock = !!availability?.enrolled && !!availability?.enabled;
-  const biometricSupported = canEnroll || canQuickUnlock;
+  const biometricSupported = !cloudActive && (canEnroll || canQuickUnlock);
+
+  const checkUsername = async () => {
+    if (!cloudActive || cloudMode !== "register" || !username.trim()) return;
+    setUsernameStatus("checking");
+    try {
+      setUsernameStatus(await cloudUsernameAvailable(username.trim()) ? "available" : "taken");
+    } catch {
+      setUsernameStatus("idle");
+    }
+  };
 
   return (
     <div className="min-h-dvh flex items-center justify-center p-4 bg-background safe-py">
@@ -179,21 +311,59 @@ export function LoginScreen({ onLogin }: LoginScreenProps) {
           onSubmit={submit}
           className="bg-card border border-border rounded-xl p-6 space-y-4"
         >
+          {cloudMode === "register" && (
+            <div>
+              <label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                {t("login.displayName")}
+              </label>
+              <input
+                type="text"
+                value={displayName}
+                onChange={(e) => setDisplayName(e.target.value)}
+                placeholder={t("login.displayNamePlaceholder")}
+                className="mt-1.5 w-full h-10 px-3 bg-background border border-border rounded-md text-sm outline-none focus:border-primary transition-colors"
+              />
+            </div>
+          )}
+
           <div>
             <label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-              {t("login.username")}
+              {cloudActive ? t("login.identifier") : t("login.username")}
             </label>
             <input
               type="text"
               value={username}
-              onChange={(e) => setUsername(e.target.value)}
-              placeholder={t("login.usernamePlaceholder")}
+              onChange={(e) => { setUsername(e.target.value); setUsernameStatus("idle"); }}
+              onBlur={checkUsername}
+              placeholder={cloudActive ? t("login.identifierPlaceholder") : t("login.usernamePlaceholder")}
               autoFocus
               className="mt-1.5 w-full h-10 px-3 bg-background border border-border rounded-md text-sm outline-none focus:border-primary transition-colors"
             />
+            {cloudActive && cloudMode === "register" && usernameStatus !== "idle" && (
+              <p className={cn("text-xs mt-1", usernameStatus === "available" ? "text-success" : usernameStatus === "taken" ? "text-destructive" : "text-muted-foreground")}>
+                {usernameStatus === "checking" ? t("login.usernameChecking") : usernameStatus === "available" ? t("login.usernameAvailable") : t("login.usernameTaken")}
+              </p>
+            )}
           </div>
 
-          <div>
+          {cloudActive && (cloudMode === "register" || cloudMode === "reset") && !resetToken && (
+            <div>
+              <label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                {t("login.email")}
+              </label>
+              <input
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder={t("login.emailPlaceholder")}
+                required={cloudMode === "reset"}
+                className="mt-1.5 w-full h-10 px-3 bg-background border border-border rounded-md text-sm outline-none focus:border-primary transition-colors"
+              />
+              {cloudMode === "register" && <p className="text-xs text-muted-foreground mt-1">{t("login.emailOptional")}</p>}
+            </div>
+          )}
+
+          {cloudMode !== "reset" || !!resetToken ? <div>
             <label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
               {t("login.password")}
             </label>
@@ -201,18 +371,54 @@ export function LoginScreen({ onLogin }: LoginScreenProps) {
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              placeholder={t("login.passwordPlaceholder")}
+              placeholder={cloudActive ? t("login.passwordSecurePlaceholder") : t("login.passwordPlaceholder")}
+              minLength={cloudActive ? 10 : undefined}
+              required={cloudActive}
               className="mt-1.5 w-full h-10 px-3 bg-background border border-border rounded-md text-sm outline-none focus:border-primary transition-colors"
             />
-            <p className="text-[10px] text-muted-foreground mt-1">
-              {t("login.demoNote")}
-            </p>
-          </div>
+            {!cloudActive && <p className="text-[10px] text-muted-foreground mt-1">{t("login.demoNote")}</p>}
+          </div> : null}
 
-          <Button type="submit" size="lg" className="w-full gap-2">
-            {t("login.signIn")}
-            <ArrowRight className={cn("size-4", rtl && "rtl-flip-x")} />
+          {cloudActive && cloudMode === "register" && (
+            <div>
+              <label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                {t("login.confirmPassword")}
+              </label>
+              <input
+                type="password"
+                value={passwordConfirm}
+                onChange={(e) => setPasswordConfirm(e.target.value)}
+                placeholder={t("login.passwordSecurePlaceholder")}
+                minLength={10}
+                required
+                className="mt-1.5 w-full h-10 px-3 bg-background border border-border rounded-md text-sm outline-none focus:border-primary transition-colors"
+              />
+            </div>
+          )}
+
+          {cloudError && <p className="text-xs text-destructive">{cloudError}</p>}
+          {resetSent && <p className="text-xs text-success">{t("login.resetSent")}</p>}
+          {cloudActive && getConfig().cloud.turnstileSiteKey && <div ref={turnstileRef} className="flex justify-center" />}
+
+          <Button type="submit" size="lg" disabled={cloudBusy} className="w-full gap-2">
+            {cloudBusy ? <Loader2 className="size-4 animate-spin" /> : null}
+            {cloudMode === "register" ? t("login.createAccount") : cloudMode === "reset" ? (resetToken ? t("login.resetPassword") : t("login.sendReset")) : t("login.signIn")}
+            {!cloudBusy && <ArrowRight className={cn("size-4", rtl && "rtl-flip-x")} />}
           </Button>
+
+          {cloudActive && (
+            <div className="flex flex-wrap justify-center gap-x-3 gap-y-1 text-xs">
+              <Button type="button" variant="link" size="sm" onClick={() => { setCloudMode(cloudMode === "register" ? "login" : "register"); setCloudError(""); }}>
+                {cloudMode === "register" ? t("login.haveAccount") : t("login.createAccount")}
+              </Button>
+              {cloudMode !== "reset" && <Button type="button" variant="link" size="sm" onClick={() => { setCloudMode("reset"); setCloudError(""); }}>
+                {t("login.forgotPassword")}
+              </Button>}
+              {cloudMode === "reset" && <Button type="button" variant="link" size="sm" onClick={() => { setCloudMode("login"); setResetToken(""); }}>
+                {t("login.backToSignIn")}
+              </Button>}
+            </div>
+          )}
 
           {/* Biometric enrollment row — only render if the device supports it.
               If a credential is already enrolled, this becomes a "disable"

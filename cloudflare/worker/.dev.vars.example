@@ -1,0 +1,9 @@
+# Generate a long random value: openssl rand -base64 48
+JWT_SECRET=replace-with-a-long-random-secret
+# Required only when TURNSTILE_ENABLED=true.
+TURNSTILE_SECRET_KEY=
+# Optional: enables password-reset emails through Resend's free tier.
+RESEND_API_KEY=
+EMAIL_FROM=Osler <noreply@example.com>
+# Public URL of the web app used in password-reset links.
+APP_ORIGIN=http://localhost:3000
