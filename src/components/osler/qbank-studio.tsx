@@ -1244,7 +1244,7 @@ function PackExportDialog({
         .filter(Boolean) as PdfExportConfig["chapters"];
 
       if (chapters.length === 0) {
-        toast({ title: "No packs selected", variant: "destructive" });
+        toast({ title: t("pdf.context.noPacks"), variant: "destructive" });
         setExporting(false);
         return;
       }
@@ -1263,9 +1263,9 @@ function PackExportDialog({
       };
       const doc = generateQuizCompilationPdf(cfg);
       downloadPdf(doc, (node.title ?? "").replace(/[^a-zA-Z0-9\s\-_]/g, "").trim() || "export");
-      toast({ title: "PDF exported successfully" });
+      toast({ title: t("pdf.pdfReadyDesc") });
     } catch (e) {
-      toast({ title: "Export failed", description: String(e), variant: "destructive" });
+      toast({ title: t("pdf.context.exportFailed"), description: String(e), variant: "destructive" });
     } finally {
       setExporting(false);
       onOpenChange(false);
@@ -1315,17 +1315,17 @@ function PackExportDialog({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Download className="size-5 text-primary" />
-            Export PDF — {node.title}
+            {t("pdf.context.title", { title: node.title })}
           </DialogTitle>
           <DialogDescription>
-            Select packs to include in the compiled PDF booklet.
+            {t("pdf.context.desc")}
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4 py-2">
           {/* Pack selection */}
           <div className="space-y-1.5">
-            <Label className="text-xs">Packs ({leafPacks.length})</Label>
+            <Label className="text-xs">{t("pdf.context.packs", { n: leafPacks.length })}</Label>
             <div className="border border-border rounded-lg max-h-48 overflow-y-auto medos-scroll divide-y divide-border">
               {leafPacks.map((p) => {
                 const entry = items.find((i) => i.node.uid === p.uid);
@@ -1341,7 +1341,7 @@ function PackExportDialog({
                     />
                     <div className="flex-1 min-w-0">
                       <div className="text-sm font-medium truncate">{p.title}</div>
-                      <div className="text-xs text-muted-foreground">{qCount} questions</div>
+                      <div className="text-xs text-muted-foreground">{t("pdf.context.questions", { n: qCount })}</div>
                     </div>
                   </label>
                 );
@@ -1351,7 +1351,7 @@ function PackExportDialog({
 
           {/* Style mode */}
           <div className="space-y-1.5">
-            <Label className="text-xs">Style</Label>
+            <Label className="text-xs">{t("pdf.styleMode")}</Label>
             <div className="flex gap-1.5 flex-wrap">
               {(["standard", "compact", "mcqnotes"] as const).map((m) => (
                 <button
@@ -1363,7 +1363,7 @@ function PackExportDialog({
                     styleMode === m ? "bg-primary text-primary-foreground" : "bg-muted/60 text-muted-foreground hover:text-foreground"
                   )}
                 >
-                  {m === "standard" ? "Standard" : m === "compact" ? "Compact" : "MCQ Notes"}
+                  {t(`pdf.style.${m}` as "pdf.style.standard")}
                 </button>
               ))}
             </div>
@@ -1371,7 +1371,7 @@ function PackExportDialog({
 
           {/* Answers mode */}
           <div className="space-y-1.5">
-            <Label className="text-xs">Answers</Label>
+            <Label className="text-xs">{t("pdf.answersMode")}</Label>
             <div className="flex gap-1.5 flex-wrap">
               {(["inline", "endchapter", "endbook", "none"] as const).map((m) => (
                 <button
@@ -1383,7 +1383,7 @@ function PackExportDialog({
                     answersMode === m ? "bg-primary text-primary-foreground" : "bg-muted/60 text-muted-foreground hover:text-foreground"
                   )}
                 >
-                  {m === "endbook" ? "End of book" : m === "endchapter" ? "Per chapter" : m === "inline" ? "Inline" : "None"}
+                  {t(`pdf.answer.${m}` as "pdf.answer.inline")}
                 </button>
               ))}
             </div>
@@ -1391,7 +1391,7 @@ function PackExportDialog({
 
           {/* Toggles */}
           <div className="flex items-center justify-between">
-            <Label className="text-xs">Show explanations</Label>
+            <Label className="text-xs">{t("pdf.showExplanations")}</Label>
             <button
               type="button"
               onClick={() => { haptic("selection"); setShowExplanations(!showExplanations); }}
@@ -1405,7 +1405,7 @@ function PackExportDialog({
           </div>
 
           <div className="flex items-center justify-between">
-            <Label className="text-xs">Include cover page</Label>
+            <Label className="text-xs">{t("pdf.includeCover")}</Label>
             <button
               type="button"
               onClick={() => { haptic("selection"); setIncludeCover(!includeCover); }}
@@ -1419,7 +1419,7 @@ function PackExportDialog({
           </div>
 
           <div className="flex items-center justify-between">
-            <Label className="text-xs">Two-column layout</Label>
+            <Label className="text-xs">{t("pdf.twoColumn")}</Label>
             <button
               type="button"
               onClick={() => { haptic("selection"); setTwoCol(!twoCol); }}
@@ -1434,7 +1434,7 @@ function PackExportDialog({
 
           {/* Font size */}
           <div className="space-y-1.5">
-            <Label className="text-xs">Font size</Label>
+            <Label className="text-xs">{t("pdf.fontSize")}</Label>
             <div className="flex gap-1.5">
               {(["small", "medium", "large"] as const).map((sz) => (
                 <button
@@ -1446,7 +1446,7 @@ function PackExportDialog({
                     fontSize === sz ? "bg-primary text-primary-foreground" : "bg-muted/60 text-muted-foreground"
                   )}
                 >
-                  {sz}
+                  {t(`pdf.fontSize.${sz}` as "pdf.fontSize.small")}
                 </button>
               ))}
             </div>
@@ -1454,7 +1454,7 @@ function PackExportDialog({
 
           {/* Font type */}
           <div className="space-y-1.5">
-            <Label className="text-xs">Font type</Label>
+            <Label className="text-xs">{t("pdf.fontType")}</Label>
             <div className="flex gap-1.5">
               {(["serif", "sans"] as const).map((ft) => (
                 <button
@@ -1466,7 +1466,7 @@ function PackExportDialog({
                     fontType === ft ? "bg-primary text-primary-foreground" : "bg-muted/60 text-muted-foreground"
                   )}
                 >
-                  {ft}
+                  {t(`pdf.fontType.${ft}` as "pdf.fontType.serif")}
                 </button>
               ))}
             </div>
@@ -1475,11 +1475,11 @@ function PackExportDialog({
 
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)} className="rounded-xl">
-            Cancel
+            {t("common.cancel")}
           </Button>
           <Button onClick={handleExport} disabled={exporting || selectedUids.size === 0} className="rounded-xl">
-            <Download className="size-4 mr-1.5" />
-            {exporting ? "Generating…" : "Export PDF"}
+            <Download className="size-4 me-1.5" />
+            {exporting ? t("pdf.generating") : t("pdf.context.generate")}
           </Button>
         </DialogFooter>
       </DialogContent>
