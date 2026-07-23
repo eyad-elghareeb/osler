@@ -1,5 +1,3 @@
-// Implementation plan: secure Google OAuth, account controls, and durable sync.
-// This temporary note is removed before commit.
 const encoder = new TextEncoder();
 const PASSWORD_ITERATIONS = 310_000;
 const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
@@ -11,8 +9,15 @@ let googleKeys = { expiresAt: 0, keys: [] };
 
 const json = (body, status = 200, origin = "") => new Response(JSON.stringify(body), {
   status,
-  headers: { "content-type": "application/json; charset=utf-8", ...cors(origin) },
+  headers: {
+    "content-type": "application/json; charset=utf-8",
+    "x-content-type-options": "nosniff",
+    "x-frame-options": "DENY",
+    "referrer-policy": "strict-origin-when-cross-origin",
+    ...cors(origin),
+  },
 });
+
 const cors = (origin) => ({
   "access-control-allow-origin": origin,
   "access-control-allow-methods": "GET, POST, PUT, PATCH, DELETE, OPTIONS",
@@ -184,12 +189,28 @@ async function accountPayload(env, user) {
   return { user: { ...publicUser(user), hasPassword: Number(user.has_password ?? 1) === 1 }, providers: identities.results.map((identity) => identity.provider) };
 }
 
+async function cleanupStale(env) {
+  try {
+    await env.DB.batch([
+      env.DB.prepare("PRAGMA foreign_keys = ON;"),
+      env.DB.prepare("DELETE FROM oauth_states WHERE expires_at < ?").bind(now()),
+      env.DB.prepare("DELETE FROM auth_handoffs WHERE expires_at < ?").bind(now()),
+      env.DB.prepare("DELETE FROM password_reset_tokens WHERE expires_at < ?").bind(now()),
+      env.DB.prepare("DELETE FROM sessions WHERE expires_at < ? OR revoked_at IS NOT NULL").bind(now()),
+    ]);
+  } catch {}
+}
+
 export default {
-  async fetch(request, env) {
+  async scheduled(event, env, ctx) {
+    if (env.DB) ctx.waitUntil(cleanupStale(env));
+  },
+  async fetch(request, env, ctx) {
     const origin = requestOrigin(request, env);
     if (origin === null) return json({ error: "Origin is not allowed" }, 403, "");
     if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: cors(origin) });
     if (!env.DB || !env.JWT_SECRET) return json({ error: "Worker is not configured" }, 503, origin);
+    if (ctx?.waitUntil) ctx.waitUntil(cleanupStale(env));
     const url = new URL(request.url);
     try {
       if (request.method === "GET" && url.pathname === "/v1/health") return json({ ok: true, googleEnabled: googleReady(env) }, 200, origin);
@@ -315,7 +336,15 @@ export default {
         const body = await readJson(request);
         if (body.confirm !== "DELETE") return json({ error: "Type DELETE to confirm account deletion" }, 400, origin);
         if (Number(session.user.has_password ?? 1) === 1 && !await passwordMatches(String(body.password || ""), session.user.password_salt, session.user.password_hash)) return json({ error: "Current password is incorrect" }, 401, origin);
-        await env.DB.prepare("DELETE FROM users WHERE id = ?").bind(session.user.id).run();
+        await env.DB.batch([
+          env.DB.prepare("PRAGMA foreign_keys = ON;"),
+          env.DB.prepare("DELETE FROM progress_documents WHERE user_id = ?").bind(session.user.id),
+          env.DB.prepare("DELETE FROM sessions WHERE user_id = ?").bind(session.user.id),
+          env.DB.prepare("DELETE FROM password_reset_tokens WHERE user_id = ?").bind(session.user.id),
+          env.DB.prepare("DELETE FROM auth_identities WHERE user_id = ?").bind(session.user.id),
+          env.DB.prepare("DELETE FROM auth_handoffs WHERE user_id = ?").bind(session.user.id),
+          env.DB.prepare("DELETE FROM users WHERE id = ?").bind(session.user.id),
+        ]);
         return json({ ok: true }, 200, origin);
       }
       if (request.method === "GET" && url.pathname === "/v1/sync") {
@@ -337,7 +366,9 @@ export default {
       }
       return json({ error: "Not found" }, 404, origin);
     } catch (error) {
-      console.error(error); return json({ error: error instanceof Error ? error.message : "Unexpected error" }, 400, origin);
+      console.error(error);
+      const isUserError = error instanceof Error && (error.message.includes("Invalid") || error.message.includes("too large") || error.message.includes("required") || error.message.includes("already in use"));
+      return json({ error: isUserError ? error.message : "Internal server error" }, isUserError ? 400 : 500, origin);
     }
   },
 };
