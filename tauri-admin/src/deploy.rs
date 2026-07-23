@@ -552,29 +552,6 @@ fn run_deploy(
     Ok(url)
 }
 
-fn run_local_build(root: &Path) -> Result<(), String> {
-    let pm = which::which("bun")
-        .map(|_| "bun")
-        .or_else(|_| which::which("npm").map(|_| "npm"))
-        .map_err(|_| "Neither bun nor npm found on PATH".to_string())?;
-
-    let mut cmd = std::process::Command::new(pm);
-    cmd.args(["run", "build"]).current_dir(root);
-
-    #[cfg(windows)]
-    {
-        use std::os::windows::process::CommandExt;
-        const CREATE_NO_WINDOW: u32 = 0x08000000;
-        cmd.creation_flags(CREATE_NO_WINDOW);
-    }
-
-    let output = run_cmd_timeout(cmd, 300).map_err(|e| format!("Build timed out or failed: {}", e))?;
-    if !output.status.success() {
-        return Err(String::from_utf8_lossy(&output.stderr).to_string());
-    }
-    Ok(())
-}
-
 fn git_push_quiet(root: &Path, secs: u64) -> Result<(), String> {
     let mut cmd = std::process::Command::new("git");
     cmd.args(["push"]).current_dir(root);
