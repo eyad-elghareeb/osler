@@ -201,6 +201,57 @@ function fallbackArabicPres(text: string): string {
   return out;
 }
 
+/**
+ * jsPDF's getCorrectForm has a bug: when a connecting letter (4 forms)
+ * is preceded by an end letter and followed by a non-Arabic character,
+ * clause `!isArabicLetter(nextChar) && isArabicEndLetter(beforeChar)`
+ * returns isolatedForm (0) instead of finalForm (1).
+ *
+ * This function post-processes shaped text to fix that.
+ */
+const _END_LETTER_PRES_FORMS = new Set([
+  0xfe80, 0xfe81, 0xfe82, 0xfe83, 0xfe84, 0xfe85, 0xfe86, 0xfe87, 0xfe88,
+  0xfe8d, 0xfe8e, 0xfe93, 0xfe94, 0xfea9, 0xfeaa, 0xfeab, 0xfeac, 0xfead,
+  0xfeae, 0xfeaf, 0xfeb0, 0xfeed, 0xfeee, 0xfeef, 0xfef0, 0xfb50, 0xfb51,
+  0xfbdd, 0xfb88, 0xfb89, 0xfb84, 0xfb85, 0xfb82, 0xfb83, 0xfb86, 0xfb87,
+  0xfb8c, 0xfb8d, 0xfb8a, 0xfb8b, 0xfb9e, 0xfb9f, 0xfba4, 0xfba5, 0xfbe0,
+  0xfbe1, 0xfbd9, 0xfbda, 0xfbd7, 0xfbd8, 0xfbdb, 0xfbdc, 0xfbe2, 0xfbe3,
+  0xfbde, 0xfbdf, 0xfbae, 0xfbaf, 0xfbb0, 0xfbb1,
+]);
+const _ISOLATED_TO_FINAL: Record<number, number> = {
+  0xfe89: 0xfe8a, 0xfe8f: 0xfe90, 0xfe95: 0xfe96, 0xfe99: 0xfe9a,
+  0xfe9d: 0xfe9e, 0xfea1: 0xfea2, 0xfea5: 0xfea6, 0xfeb1: 0xfeb2,
+  0xfeb5: 0xfeb6, 0xfeb9: 0xfeba, 0xfebd: 0xfebe, 0xfec1: 0xfec2,
+  0xfec5: 0xfec6, 0xfec9: 0xfeca, 0xfecd: 0xfece, 0xfed1: 0xfed2,
+  0xfed5: 0xfed6, 0xfed9: 0xfeda, 0xfedd: 0xfede, 0xfee1: 0xfee2,
+  0xfee5: 0xfee6, 0xfee9: 0xfeea, 0xfef1: 0xfef2,
+};
+function fixConnectorAfterEndLetter(text: string): string {
+  let out = "";
+  for (let i = 0; i < text.length; i++) {
+    const cp = text.charCodeAt(i);
+    const finalForm = _ISOLATED_TO_FINAL[cp];
+    if (finalForm) {
+      const prevCp = i > 0 ? text.charCodeAt(i - 1) : -1;
+      const nextCp = i + 1 < text.length ? text.charCodeAt(i + 1) : -1;
+      const prevIsEnd = prevCp >= 0 && _END_LETTER_PRES_FORMS.has(prevCp);
+      const nextIsArabic = nextCp >= 0 && (
+        (nextCp >= 0x0600 && nextCp <= 0x06FF) ||
+        (nextCp >= 0x0750 && nextCp <= 0x077F) ||
+        (nextCp >= 0x08A0 && nextCp <= 0x08FF) ||
+        (nextCp >= 0xFB50 && nextCp <= 0xFDFF) ||
+        (nextCp >= 0xFE70 && nextCp <= 0xFEFF)
+      );
+      if (prevIsEnd && !nextIsArabic) {
+        out += String.fromCharCode(finalForm);
+        continue;
+      }
+    }
+    out += text[i];
+  }
+  return out;
+}
+
 function trunc(text: string, max: number): string {
   return text.length <= max ? text : text.slice(0, max - 1) + "\u2026";
 }
@@ -406,14 +457,15 @@ class PdfDoc {
     this.doc = new jsPDF({ orientation: cfg.orientation, unit: "mm", format: cfg.pageSize });
     (this.doc as any).internal.events.subscribe("preProcessText", (args: any) => {
       const t = args.text;
+      const fix = (s: string) => fallbackArabicPres(fixConnectorAfterEndLetter(s));
       if (typeof t === "string") {
-        args.text = fallbackArabicPres(t);
+        args.text = fix(t);
       } else if (Array.isArray(t)) {
         for (let i = 0; i < t.length; i++) {
           if (Array.isArray(t[i])) {
-            t[i][0] = fallbackArabicPres(t[i][0]);
+            t[i][0] = fix(t[i][0]);
           } else if (typeof t[i] === "string") {
-            t[i] = fallbackArabicPres(t[i]);
+            t[i] = fix(t[i]);
           }
         }
       }
