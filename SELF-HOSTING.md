@@ -140,7 +140,7 @@ The admin app is a separate Tauri (Rust + HTML/JS) desktop application that live
 - Regenerate content manifests
 - Run `npm run build` / `npm run start` with live log streaming
 - Git add / commit / push / pull against your remote
-- Deploy to Vercel / GitHub Pages / Cloudflare Pages / Netlify
+- Deploy to Vercel / GitHub Pages / Cloudflare (Pages + Worker full stack) / Netlify
 - **Read & write `osler.config.json`** with a structured editor (the Config view)
 - **Run the first-time setup wizard** (auto-launches on first bind if no config exists)
 - **Generate brand-new Osler instances** into a target directory

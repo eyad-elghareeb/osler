@@ -15,12 +15,26 @@ Osler remains local-first by default. When `cloud.enabled` is `false`, the app b
 
 The Tauri Admin instance generator opt-in Cloudflare section writes `cloud` config to `public/osler.config.json` and scaffolds the Worker project, migrations, and backend guide.
 
-## Deploying on the Cloudflare free tier
+## Deployment Options
 
-From `cloudflare/worker`:
+### Option A: One-Click Full Stack via Tauri Admin (Recommended)
+
+In **Tauri Admin** (under the **Deploy** tab):
+1. Enter your Cloudflare **API token** and **Account ID**.
+2. Click **Deploy**. Tauri Admin deploys **everything**:
+   - Cloudflare Pages (Frontend Web Application)
+   - Cloudflare Worker (Backend & Progress Sync API from `cloudflare/worker`)
+
+Tauri Admin handles worker deployment via Wrangler CLI (or direct Cloudflare REST API fallback if Wrangler is uninstalled), with zero manual terminal commands required.
+
+### Option B: Manual CLI Deployment
+
+For manual deployment from `cloudflare/worker`:
 
 ```bash
 npm install
+# Copy secrets template reference
+cp .env.example .dev.vars
 npx wrangler d1 create osler-cloud
 # Paste the returned database_id into wrangler.toml
 npx wrangler secret put JWT_SECRET

@@ -339,7 +339,7 @@ npm run build                  # Production build
 npm run lint                   # ESLint
 ```
 
-> No `.env` file required. Gemini AI key configured in-app (Settings > AI Assistant).
+> Environment templates available in `.env.example` (root) and `cloudflare/worker/.env.example` (backend). Gemini AI key configured in-app (Settings > AI Assistant).
 
 ---
 

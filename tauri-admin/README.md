@@ -27,8 +27,11 @@ just like the web app.
   side-by-side, fullscreen, undo/redo, guide) and a live status bar showing
   line/word/cursor counts.
 - **Connect Provider & Deploy page** — save Personal Access Tokens for Vercel,
-  GitHub Pages, Cloudflare Pages, and Netlify; test each connection; then
-  trigger production deploys straight from the dashboard. Tokens are stored
+  GitHub Pages, Cloudflare, and Netlify; test each connection; then
+  trigger production deploys straight from the dashboard. Deploying to **Cloudflare**
+  deploys **everything** (Pages frontend + Worker backend & sync API from `cloudflare/worker`).
+  Deploying to other providers (Vercel, GitHub Pages, Netlify) deploys cloud-side via REST API/Git
+  without requiring or executing local builds on your system. Tokens are stored
   under `.osler-admin/deploy.json` (mode 0600 on Unix, auto-added to
   `.gitignore`) and redacted as `••••••••` whenever re-read by the UI. Empty
   token submissions preserve the existing value, so you can update non-secret
