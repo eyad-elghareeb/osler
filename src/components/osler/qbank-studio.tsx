@@ -1263,7 +1263,7 @@ function PackExportDialog({
       };
       const doc = generateQuizCompilationPdf(cfg);
       downloadPdf(doc, (node.title ?? "").replace(/[^a-zA-Z0-9\s\-_]/g, "").trim() || "export");
-      toast({ title: t("pdf.pdfReadyDesc") });
+      toast({ title: t("pdf.pdfReady"), description: t("pdf.pdfReadyDesc") });
     } catch (e) {
       toast({ title: t("pdf.context.exportFailed"), description: String(e), variant: "destructive" });
     } finally {
