@@ -36,7 +36,7 @@
 
 import { jsPDF } from "jspdf";
 import { registerPdfFonts } from "./pdf-fonts";
-import { hasArabic, fallbackArabicPres } from "@/lib/osler/arabic";
+import { hasArabic, fallbackArabicPres, shapeArabicLetters, bidiReorder } from "@/lib/osler/arabic";
 import { translate, type UiLang, type StringKey } from "@/lib/osler/i18n";
 
 // ═══════════════════════════════════════════════════════════════
@@ -462,6 +462,34 @@ class PdfDoc {
         }
       }
     });
+    // jsPDF ships its own preProcessText hook (`processArabic`) that
+    // re-shapes Arabic letters based on their neighbors in the string —
+    // but by the time text reaches this hook, our doc.text wrapper below
+    // has ALREADY shaped + bidi-reordered it into final visual order. On
+    // a reordered string, "neighboring" characters are no longer logical
+    // neighbors, so jsPDF's re-shaping can spuriously trigger things like
+    // a LAM-ALEF ligature merge wherever a reordered lam happens to land
+    // next to an alef — corrupting words such as "المزمن" into a garbled
+    // "لامزمن"-looking result. That corruption is especially likely for
+    // the handful of isolated-form letters our Cairo-fallback map (just
+    // above / in arabic.ts) converts back to basic codepoints, since only
+    // basic codepoints are recognized by jsPDF's re-shaper.
+    // We already do correct, adjacency-aware shaping ourselves (see the
+    // doc.text wrapper below), so we remove jsPDF's own hook for this
+    // document instance. This doesn't affect `splitTextToSize`/width
+    // measurement, which calls `processArabic` directly rather than via
+    // this event.
+    {
+      const topics = (this.doc as any).internal.events.getTopics?.();
+      const builtinProcessArabic = (this.doc as any).processArabic;
+      if (topics?.preProcessText && builtinProcessArabic) {
+        for (const token of Object.keys(topics.preProcessText)) {
+          if (topics.preProcessText[token][0] === builtinProcessArabic) {
+            delete topics.preProcessText[token];
+          }
+        }
+      }
+    }
     this.doc.setLineHeightFactor(1.15);
     this.y = this.L.mt;
     const registered = registerPdfFonts(this.doc);
@@ -470,22 +498,50 @@ class PdfDoc {
     }
     resolveFonts(this.doc, this.L.fontType);
 
-    // Ensure every d.text() call with Arabic text gets the correct Bidi
-    // engine options (isInputVisual=false, isOutputVisual=true) so that
-    // jsPDF processes our logical-order text into visual order for PDF
-    // rendering. Without this, direct d.text() calls (e.g. in drawChrome,
-    // trackedLabel, calloutBox, cover/TOC/chapter headers) would use the
-    // default isInputVisual=true and produce wrong ordering for mixed
-    // Arabic+English content.
+    // Every d.text() call with Arabic text is bidi-reordered here, once,
+    // for the whole document — instead of relying on jsPDF's own built-in
+    // `__bidiEngine__` (via isInputVisual/isOutputVisual). That engine is a
+    // simplified UAX#9 implementation that mis-reorders lines containing
+    // multiple direction changes — e.g. a Latin acronym in parentheses
+    // sitting mid-sentence in an Arabic paragraph ("... وبلغم (COPD) مريض
+    // ...") — and can shuffle whole phrases rather than just the acronym.
+    //
+    // `bidi-js` (the same library PDFKit ships with) is a much more
+    // complete implementation and already lived in ./arabic.ts, unused.
+    // We now run its two-stage pipeline ourselves, per line, right before
+    // the text reaches jsPDF:
+    //   1. `shapeArabicLetters` — contextual letter shaping, logical order
+    //   2. `bidiReorder`        — UAX#9 reordering into visual order
+    // and then tell jsPDF the text is already in final visual order
+    // (isInputVisual=true, isOutputVisual=true — a no-op for its own
+    // engine) so it doesn't reorder it a second time.
+    //
+    // Shaping must run BEFORE reordering (not after, and not left to
+    // jsPDF's own preProcessText hook here) because letter-joining forms
+    // depend on *logical* adjacency; reordering first would compute joins
+    // against the wrong neighbours. jsPDF's built-in `processArabic`
+    // shaping hook still fires after this, but it only recognizes basic
+    // Arabic-block codepoints (U+0600–U+06FF); since our text is already
+    // in presentation-form codepoints by then, it's a safe no-op.
     {
       const doc = this.doc;
       const origText: any = doc.text.bind(doc);
+      const toVisual = (line: string) => bidiReorder(shapeArabicLetters(line));
       doc.text = ((text: any, x: number, y: number, options?: any, ...rest: any[]) => {
-        if (typeof text === "string"
-          ? hasArabic(text)
-          : Array.isArray(text) && text.some((t: any) => typeof t === "string" && hasArabic(t))
-        ) {
-          options = { ...options, isInputVisual: false, isOutputVisual: true };
+        const isArr = Array.isArray(text);
+        const containsArabic = isArr
+          ? text.some((t: any) => (typeof t === "string" ? hasArabic(t) : Array.isArray(t) && typeof t[0] === "string" && hasArabic(t[0])))
+          : typeof text === "string" && hasArabic(text);
+
+        if (containsArabic) {
+          text = isArr
+            ? text.map((t: any) => {
+                if (typeof t === "string") return toVisual(t);
+                if (Array.isArray(t)) return [toVisual(t[0]), t[1], t[2]];
+                return t;
+              })
+            : toVisual(text);
+          options = { ...options, isInputVisual: true, isOutputVisual: true };
         }
         return origText(text, x, y, options, ...rest);
       }) as any;
@@ -719,15 +775,14 @@ class PdfDoc {
     d.setTextColor(...(opts.color ?? C.CHARCOAL));
 
     const maxW = opts.maxW ?? this.L.fw;
-    // Pass raw text to d.text() — jsPDF's built-in processArabic
-    // (preProcessText) handles all letter shaping, and the Bidi
-    // engine (postProcessText) handles direction. Our preProcessText
-    // handler (fallbackArabicPres) maps isolated forms Cairo is
-    // missing back to basic codepoints after processArabic runs.
+    // Pass raw (logical-order) text to d.text() — the doc.text wrapper
+    // installed in the constructor shapes + bidi-reorders Arabic lines
+    // (via arabic.ts's shapeArabicLetters + bidiReorder) before jsPDF
+    // ever sees them, so no per-call bidi flags are needed here.
     const normalized = normalizeText(raw);
     const lines = d.splitTextToSize(normalized, maxW);
     if (isArabic) {
-      d.text(lines, x + maxW, y, { align: "right", isInputVisual: false, isOutputVisual: true });
+      d.text(lines, x + maxW, y, { align: "right" });
     } else {
       d.text(lines, x, y, { align: opts.align ?? "left" });
     }
