@@ -195,6 +195,9 @@ const F = {
   B: "times", // body normal (serif)
   Bi: "times", // body italic
   Bb: "helvetica", // body emphasis (sans, used inline within serif body)
+  // Arabic font variants — filled by resolveFonts() when Cairo weights are registered
+  Ar: "Cairo", // arabic body normal (style: "bold" for bold)
+  Arm: "Cairo", // arabic medium/emphasis (Cairo-Medium when available)
 };
 
 function resolveFonts(doc: jsPDF, fontType: "serif" | "sans" = "serif"): void {
@@ -217,6 +220,11 @@ function resolveFonts(doc: jsPDF, fontType: "serif" | "sans" = "serif"): void {
       F.B = "times";
       F.Bi = "times";
     }
+  }
+  // Cairo Arabic weight variants — maps to F.Ar / F.Arm
+  if (fl.Cairo) {
+    F.Ar = "Cairo";
+    F.Arm = fl["Cairo-Medium"] ? "Cairo-Medium" : "Cairo";
   }
 }
 
@@ -602,8 +610,9 @@ class PdfDoc {
     let font: string;
     let style: string;
     if (isArabic) {
-      font = "Cairo";
-      style = opts.style === "bold" ? "bold" : "normal";
+      const af = opts.font ?? "B";
+      font = af === "Hm" || af === "Bb" ? F.Arm : F.Ar;
+      style = af === "H" || opts.style === "bold" ? "bold" : "normal";
     } else {
       font = F[opts.font ?? "B"];
       style = opts.style ?? "normal";

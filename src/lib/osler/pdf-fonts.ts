@@ -2,7 +2,7 @@
  * Loads and registers the webfonts used by the Osler PDF engine:
  *   · Poppins  — headings, labels, running chrome (Latin)
  *   · Lora     — body serif (Latin)
- *   · Cairo    — Arabic (headings + body)
+ *   · Cairo    — Arabic (headings + body) — 8 weights (200–900)
  *
  * Fonts are fetched once, cached as base64 in memory, and registered into
  * every new jsPDF document. `loadPdfFonts()` is safe to call repeatedly or
@@ -29,6 +29,12 @@ const FONT_FILES: FontFile[] = [
   { family: "Lora", style: "italic", path: "/fonts/lora/Lora-Italic.ttf" },
   { family: "Cairo", style: "normal", path: "/fonts/cairo/Cairo-Regular.ttf" },
   { family: "Cairo", style: "bold", path: "/fonts/cairo/Cairo-Bold.ttf" },
+  { family: "Cairo-ExtraLight", style: "normal", path: "/fonts/cairo/Cairo-ExtraLight.ttf" },
+  { family: "Cairo-Light", style: "normal", path: "/fonts/cairo/Cairo-Light.ttf" },
+  { family: "Cairo-Medium", style: "normal", path: "/fonts/cairo/Cairo-Medium.ttf" },
+  { family: "Cairo-SemiBold", style: "normal", path: "/fonts/cairo/Cairo-SemiBold.ttf" },
+  { family: "Cairo-ExtraBold", style: "normal", path: "/fonts/cairo/Cairo-ExtraBold.ttf" },
+  { family: "Cairo-Black", style: "normal", path: "/fonts/cairo/Cairo-Black.ttf" },
 ];
 
 type FontCache = Map<string, string>; // path -> base64
