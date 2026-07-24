@@ -85,11 +85,17 @@ export async function loadCategoryTree(type: EngineType): Promise<ContentTreeNod
 
 /**
  * Flatten a content tree to a list of leaf nodes.
+ * Skips asset subdirectories (images/, assets/) that may appear as nodes
+ * from Worker-generated manifests but contain no content data.
  */
+const ASSET_DIR_NAMES = new Set(["images", "assets"]);
+
 export function flattenTree(nodes: ContentTreeNode[]): ContentTreeNode[] {
   const leaves: ContentTreeNode[] = [];
   function walk(list: ContentTreeNode[]) {
     for (const node of list) {
+      const lastSeg = node.path.replace(/\/$/, "").split("/").pop() ?? "";
+      if (ASSET_DIR_NAMES.has(lastSeg)) continue;
       if (node.items.length === 0) {
         leaves.push(node);
       } else {
@@ -107,12 +113,28 @@ function engineTypeForCategory(type: EngineType, node: ContentTreeNode): EngineT
   return node.type;
 }
 
+/** Infer engine type from a node's data file names when node.type is missing. */
+const FILE_TYPE_KEYS: Record<string, EngineType> = {
+  questions: "quiz", passages: "bank", prompts: "written",
+  cards: "flashcard", videos: "video", stations: "osce",
+};
+
+function inferTypeFromFiles(files: string[]): EngineType {
+  for (const f of files) {
+    const base = f.replace(/\.[^.]+$/, "");
+    if (FILE_TYPE_KEYS[base]) return FILE_TYPE_KEYS[base];
+  }
+  return "quiz";
+}
+
 /**
  * Load content from a leaf node's folder by fetching all its .json data files
  * and merging their arrays. Falls back to local URLs if the Worker is unreachable.
  */
 export async function loadNodeContent(node: ContentTreeNode): Promise<AnyContent> {
-  const folder = categoryFolder(node.type);
+  const effectiveType = node.type || inferTypeFromFiles(node.files ?? []);
+  const folder = categoryFolder(effectiveType);
+  if (!folder) throw new Error(`Cannot resolve folder for node type: ${node.type}`);
   const dataFiles = (node.files ?? []).filter((f) => f.endsWith(".json"));
   if (dataFiles.length === 0) {
     throw new Error(`No JSON data files in ${node.path}`);
@@ -149,16 +171,16 @@ export async function loadNodeContent(node: ContentTreeNode): Promise<AnyContent
     }
   }
 
-  return buildContent(node, merged);
+  return buildContent(node, merged, effectiveType);
 }
 
 /**
  * Build an AnyContent object from a leaf node and merged data arrays.
  */
-function buildContent(node: ContentTreeNode, data: Record<string, unknown[]>): AnyContent {
-  // Use explicit `type` from data file if present, otherwise fall back to node.type
+function buildContent(node: ContentTreeNode, data: Record<string, unknown[]>, effectiveType?: EngineType): AnyContent {
+  // Use explicit `type` from data file if present, otherwise fall back to effectiveType, then node.type
   const explicitType = data.type?.[0] as EngineType | undefined;
-  const nodeType = explicitType || node.type;
+  const nodeType = explicitType || effectiveType || node.type || "quiz";
 
   const meta = {
     uid: node.uid,

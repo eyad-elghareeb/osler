@@ -446,7 +446,23 @@ async function hybridPublish(env, obj, body, targetPath) {
 }
 
 /* Rebuild the manifest for one category by walking the content-files/ keyspace.
- * Writes the result to `content-manifests/<category>/manifest.json`. */
+ * Writes the result to `content-manifests/<category>/manifest.json`.
+ * Produces nodes with `uid` and `type` fields matching the local
+ * generate-content-manifests.js output. */
+const ASSET_FOLDERS = new Set(["images", "assets"]);
+const CATEGORY_TYPE_MAP = { qbank: null, flashcard: "flashcard", osce: "osce", library: "library", videos: "video" };
+const FILE_TYPE_KEYS = { questions: "quiz", passages: "bank", prompts: "written", cards: "flashcard", videos: "video", stations: "osce" };
+
+function inferTypeFromFileName(files) {
+  for (const f of files) {
+    const base = f.replace(/\.[^.]+$/, "");
+    if (FILE_TYPE_KEYS[base]) return FILE_TYPE_KEYS[base];
+  }
+  return null;
+}
+function sanitizeSeg(s) { return s.replace(/[\s]+/g, "-").replace(/[^a-zA-Z0-9_-]/g, "").toLowerCase() || s; }
+function buildUid(type, segments) { return [type, ...segments.map(sanitizeSeg)].filter(Boolean).join("-"); }
+
 async function regenerateManifestForCategory(env, category) {
   if (!env.CONTENT) return null;
   const prefix = `content-files/${category}/`;
@@ -454,9 +470,8 @@ async function regenerateManifestForCategory(env, category) {
   if (!listed || !listed.objects) return null;
   const keys = listed.objects.map((o) => o.key);
 
-  // Group keys into folders by their parent path. A "leaf" is a folder that
-  // contains at least one .json (or .md for library) data file.
-  const folders = new Map(); // path → { files: [], images: [] }
+  // Group keys into folders by their parent path.
+  const folders = new Map(); // folderPath → { files: [], images: [] }
   for (const fullKey of keys) {
     const rel = fullKey.slice(prefix.length);
     if (!rel) continue;
@@ -466,21 +481,33 @@ async function regenerateManifestForCategory(env, category) {
     if (!folders.has(folderPath)) folders.set(folderPath, { files: [], images: [] });
     const f = folders.get(folderPath);
     if (file) {
-      if (file.toLowerCase().endsWith(".json") || file.toLowerCase().endsWith(".md") || file.toLowerCase().endsWith(".html")) {
+      if (file.toLowerCase().endsWith(".json") || file.toLowerCase().endsWith(".md") || file.toLowerCase().endsWith(".html") || file.toLowerCase().endsWith(".pdf")) {
         f.files.push(file);
-      } else if (parts[parts.length - 1] === "images" || file.match(/\.(png|jpe?g|gif|svg|webp|avif|bmp)$/i)) {
+      } else if (file.match(/\.(png|jpe?g|gif|svg|webp|avif|bmp|mp3|m4a|mp4)$/i)) {
         f.images.push(file);
       }
     }
   }
 
-  // Build the tree from the flat folder map. Each folder path becomes a node;
-  // its parent is the path with the last segment removed.
+  // Remove asset subfolder entries (images/, assets/) — they are not content nodes
+  for (const path of [...folders.keys()]) {
+    const seg = path.split("/").pop();
+    if (ASSET_FOLDERS.has(seg)) folders.delete(path);
+  }
+
+  const parentType = CATEGORY_TYPE_MAP[category] || null;
+
+  // Build the tree from the flat folder map.
   const nodes = new Map();
-  for (const [path, info] of folders.entries()) {
-    nodes.set(path, {
-      path: path ? `${path}/` : "",
-      title: path ? path.split("/").pop() : category,
+  for (const [fp, info] of folders.entries()) {
+    const inferredType = parentType || inferTypeFromFileName(info.files) || "quiz";
+    const segments = fp ? fp.split("/") : [];
+    const uid = buildUid(inferredType, [category, ...segments]);
+    nodes.set(fp, {
+      uid,
+      title: fp ? fp.split("/").pop().replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()) : category,
+      type: inferredType,
+      path: fp ? `${fp}/` : "",
       files: info.files,
       images: info.images,
       items: [],
@@ -488,9 +515,9 @@ async function regenerateManifestForCategory(env, category) {
   }
   // Attach children to parents.
   const roots = [];
-  for (const [path, node] of nodes.entries()) {
-    if (!path) { roots.push(node); continue; }
-    const parent = path.includes("/") ? path.slice(0, path.lastIndexOf("/")) : "";
+  for (const [fp, node] of nodes.entries()) {
+    if (!fp) { roots.push(node); continue; }
+    const parent = fp.includes("/") ? fp.slice(0, fp.lastIndexOf("/")) : "";
     if (nodes.has(parent)) {
       nodes.get(parent).items.push(node);
     } else {
@@ -498,8 +525,7 @@ async function regenerateManifestForCategory(env, category) {
     }
   }
   const manifest = {
-    category,
-    generatedAt: now(),
+    type: parentType || (roots.length > 0 ? roots[0].type : "quiz"),
     items: roots.sort((a, b) => a.title.localeCompare(b.title)),
   };
   const manifestKey = `content-manifests/${category}/manifest.json`;
