@@ -499,37 +499,16 @@ fn run_deploy(
     provider: &str,
     root: &Path,
     cfg: &Value,
-    skip_build: bool,
+    _skip_build: bool,
 ) -> Result<String, String> {
     log_info(format!("Starting {} deploy", provider));
     stop_if_requested()?;
 
-    // Step 1 — build (unless skipped). For Vercel / Cloudflare / Netlify, the
-    // provider's own build infra handles the actual Next.js build from the
-    // pushed Git source, so we only need a local build for GitHub Pages.
-    if !skip_build && provider == "github_pages" {
-        log_info("Building the project locally for GitHub Pages…");
-        stop_if_requested()?;
-        match run_local_build(root) {
-            Ok(()) => log_ok("Local build complete."),
-            Err(e) => return Err(format!("Local build failed: {}", e)),
-        }
-    } else if !skip_build && (provider == "cloudflare_pages_direct" || provider == "netlify_direct") {
-        // Reserved for future direct-upload modes — not currently triggered.
-        log_info("Building the project locally…");
-        stop_if_requested()?;
-        match run_local_build(root) {
-            Ok(()) => log_ok("Local build complete."),
-            Err(e) => return Err(format!("Local build failed: {}", e)),
-        }
-    }
+    // Other providers (Vercel, GitHub Pages, Netlify) deploy cloud-side via REST API / Git remote
+    // without invoking local build tasks on the user's local system.
+    // Cloudflare deploys everything: Pages (Frontend) + Worker (Backend & Sync).
 
-    // Step 2 — push to Git first (so the provider's rebuild picks up changes).
-    // Only attempt the push for Git-connected providers. For Vercel /
-    // Cloudflare Pages / Netlify, the provider's CI rebuilds from the
-    // connected Git remote, so a push is helpful but not strictly required.
-    // We cap it at 20s (down from 30s) and never block the deploy on its
-    // failure — the provider will deploy whatever's already on the remote.
+    // Step 1 — Push current branch to remote (non-blocking, capped at 20s) if configured
     if provider != "github_pages" {
         log_info("Pushing current branch to remote… (capped at 20s; non-blocking)");
         stop_if_requested()?;
@@ -539,7 +518,7 @@ fn run_deploy(
         }
     }
 
-    // Step 3 — dispatch to provider.
+    // Step 2 — Dispatch to provider pipeline.
     log_info(format!("Phase: dispatching to provider '{}'", provider));
     stop_if_requested()?;
     let url = match provider {
@@ -555,10 +534,10 @@ fn run_deploy(
             log_info("Checkpoint: deploy_github_pages returned");
             r
         }
-        "cloudflare_pages" => {
-            log_info("Checkpoint: calling deploy_cloudflare_pages…");
-            let r = deploy_cloudflare_pages(root, cfg)?;
-            log_info("Checkpoint: deploy_cloudflare_pages returned");
+        "cloudflare_pages" | "cloudflare" => {
+            log_info("Checkpoint: calling deploy_cloudflare (Pages + Worker)…");
+            let r = deploy_cloudflare_everything(root, cfg)?;
+            log_info("Checkpoint: deploy_cloudflare returned");
             r
         }
         "netlify" => {
@@ -571,29 +550,6 @@ fn run_deploy(
     };
 
     Ok(url)
-}
-
-fn run_local_build(root: &Path) -> Result<(), String> {
-    let pm = which::which("bun")
-        .map(|_| "bun")
-        .or_else(|_| which::which("npm").map(|_| "npm"))
-        .map_err(|_| "Neither bun nor npm found on PATH".to_string())?;
-
-    let mut cmd = std::process::Command::new(pm);
-    cmd.args(["run", "build"]).current_dir(root);
-
-    #[cfg(windows)]
-    {
-        use std::os::windows::process::CommandExt;
-        const CREATE_NO_WINDOW: u32 = 0x08000000;
-        cmd.creation_flags(CREATE_NO_WINDOW);
-    }
-
-    let output = run_cmd_timeout(cmd, 300).map_err(|e| format!("Build timed out or failed: {}", e))?;
-    if !output.status.success() {
-        return Err(String::from_utf8_lossy(&output.stderr).to_string());
-    }
-    Ok(())
 }
 
 fn git_push_quiet(root: &Path, secs: u64) -> Result<(), String> {
@@ -1081,6 +1037,160 @@ fn deploy_cloudflare_pages(root: &Path, cfg: &Value) -> Result<String, String> {
         .unwrap_or_else(|| format!("https://dash.cloudflare.com/{}/pages/view/{}", account_id, project));
     log_ok(format!("Cloudflare deployment created (id: {})", id));
     Ok(url_out)
+}
+
+fn deploy_cloudflare_everything(root: &Path, cfg: &Value) -> Result<String, String> {
+    let token = read_field_or_err(cfg, "cloudflare_pages", "api_token", "API token")?;
+    let account_id = read_field_or_err(cfg, "cloudflare_pages", "account_id", "Account ID")?;
+    let custom_worker = read_field(cfg, "cloudflare_pages", "worker_name");
+
+    // Step 1/2: Deploy Cloudflare Pages (Frontend web app)
+    log_info("--- Step 1/2: Deploying Cloudflare Pages (Frontend) ---");
+    let pages_url = deploy_cloudflare_pages(root, cfg)?;
+
+    // Step 2/2: Deploy Cloudflare Worker (Backend & Sync)
+    log_info("--- Step 2/2: Deploying Cloudflare Worker (Backend & Sync) ---");
+    match deploy_cloudflare_worker(root, &token, &account_id, custom_worker.as_deref()) {
+        Ok(()) => log_ok("Cloudflare Worker deploy step finished successfully."),
+        Err(e) => log_warn(format!("Cloudflare Worker deploy skipped or notice: {}", e)),
+    }
+
+    Ok(pages_url)
+}
+
+fn deploy_cloudflare_worker(
+    root: &Path,
+    token: &str,
+    account_id: &str,
+    custom_worker_name: Option<&str>,
+) -> Result<(), String> {
+    let worker_dir = root.join("cloudflare").join("worker");
+    if !worker_dir.is_dir() {
+        log_info("No cloudflare/worker directory found — skipping Worker deploy.");
+        return Ok(());
+    }
+
+    log_info("Deploying Cloudflare Worker backend from cloudflare/worker…");
+
+    let mut script_name = custom_worker_name.unwrap_or("osler-cloud").to_string();
+    let wrangler_path = worker_dir.join("wrangler.toml");
+    if wrangler_path.is_file() {
+        if let Ok(content) = std::fs::read_to_string(&wrangler_path) {
+            for line in content.lines() {
+                let trimmed = line.trim();
+                if trimmed.starts_with("name =") {
+                    if let Some(val) = trimmed.split('=').nth(1) {
+                        let name_val = val.trim().trim_matches('"').trim_matches('\'');
+                        if !name_val.is_empty() {
+                            script_name = name_val.to_string();
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Attempt Wrangler CLI execution first
+    let pm = which::which("npx")
+        .map(|_| "npx")
+        .or_else(|_| which::which("bunx").map(|_| "bunx"))
+        .or_else(|_| which::which("wrangler").map(|_| "wrangler"));
+
+    let wrangler_res = if let Ok(cmd_name) = pm {
+        let mut cmd = std::process::Command::new(cmd_name);
+        if cmd_name == "npx" || cmd_name == "bunx" {
+            cmd.args(["wrangler", "deploy"]);
+        } else {
+            cmd.args(["deploy"]);
+        }
+        cmd.current_dir(&worker_dir);
+        cmd.env("CLOUDFLARE_API_TOKEN", token);
+        cmd.env("CLOUDFLARE_ACCOUNT_ID", account_id);
+        #[cfg(windows)]
+        {
+            use std::os::windows::process::CommandExt;
+            const CREATE_NO_WINDOW: u32 = 0x08000000;
+            cmd.creation_flags(CREATE_NO_WINDOW);
+        }
+        run_cmd_timeout(cmd, 120)
+    } else {
+        Err("Wrangler CLI not found on local system PATH".to_string())
+    };
+
+    match wrangler_res {
+        Ok(out) if out.status.success() => {
+            log_ok("Cloudflare Worker deployed successfully via Wrangler.");
+            Ok(())
+        }
+        Ok(out) => {
+            let err_msg = String::from_utf8_lossy(&out.stderr);
+            log_warn(format!("Wrangler deploy returned non-zero exit ({}), uploading directly via Cloudflare API…", err_msg.trim()));
+            deploy_cloudflare_worker_api(token, account_id, &script_name, &worker_dir).map(|_| ())
+        }
+        Err(e) => {
+            log_info(format!("Wrangler CLI notice ({}), uploading directly via Cloudflare API…", e));
+            deploy_cloudflare_worker_api(token, account_id, &script_name, &worker_dir).map(|_| ())
+        }
+    }
+}
+
+fn deploy_cloudflare_worker_api(
+    token: &str,
+    account_id: &str,
+    script_name: &str,
+    worker_dir: &Path,
+) -> Result<String, String> {
+    let index_path = worker_dir.join("src").join("index.mjs");
+    if !index_path.is_file() {
+        return Err(format!("Worker script not found at {}", index_path.display()));
+    }
+    let script_content = std::fs::read_to_string(&index_path)
+        .map_err(|e| format!("Failed to read worker script: {}", e))?;
+
+    let client = build_cloudflare_client();
+    let url = format!(
+        "https://api.cloudflare.com/client/v4/accounts/{}/workers/scripts/{}",
+        account_id, script_name
+    );
+
+    let boundary = format!("------------------------{}", now_millis());
+    let mut body: Vec<u8> = Vec::new();
+
+    let metadata_json = json!({
+        "main_module": "index.mjs",
+        "compatibility_date": "2026-07-23"
+    }).to_string();
+
+    // Part 1: metadata
+    body.extend_from_slice(format!("--{}\r\n", boundary).as_bytes());
+    body.extend_from_slice(b"Content-Disposition: form-data; name=\"metadata\"; filename=\"metadata.json\"\r\n");
+    body.extend_from_slice(b"Content-Type: application/json\r\n\r\n");
+    body.extend_from_slice(metadata_json.as_bytes());
+    body.extend_from_slice(b"\r\n");
+
+    // Part 2: main module index.mjs
+    body.extend_from_slice(format!("--{}\r\n", boundary).as_bytes());
+    body.extend_from_slice(b"Content-Disposition: form-data; name=\"index.mjs\"; filename=\"index.mjs\"\r\n");
+    body.extend_from_slice(b"Content-Type: application/javascript+module\r\n\r\n");
+    body.extend_from_slice(script_content.as_bytes());
+    body.extend_from_slice(b"\r\n");
+
+    body.extend_from_slice(format!("--{}--\r\n", boundary).as_bytes());
+
+    let resp = client
+        .put(&url)
+        .set("Authorization", &format!("Bearer {}", token))
+        .set("Content-Type", &format!("multipart/form-data; boundary={}", boundary))
+        .send_bytes(&body)
+        .map_err(|e| format!("Cloudflare Worker API request failed: {}", e))?;
+
+    let status = resp.status();
+    let text = resp.into_string().map_err(|e| e.to_string())?;
+    if status < 200 || status >= 300 {
+        return Err(format!("Cloudflare Worker API {}: {}", status, text));
+    }
+    log_ok(format!("Cloudflare Worker '{}' deployed via Cloudflare API", script_name));
+    Ok(format!("https://{}.{}.workers.dev", script_name, account_id))
 }
 
 /* ═══════════════════════════════════════════════════════════════════════

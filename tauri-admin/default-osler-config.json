@@ -27,5 +27,11 @@
     "ai": { "model": "gemini-2.5-flash", "enabled": true, "temperature": 0.4 },
     "sync": { "method": "network", "defaultRoom": "osler-default" }
   },
+  "cloud": {
+    "enabled": false,
+    "apiUrl": "",
+    "syncQbank": true,
+    "syncFlashcards": true
+  },
   "wizard": { "completed": false, "version": 1 }
 }

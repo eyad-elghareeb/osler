@@ -56,6 +56,13 @@
       defaultTheme: "dark",
       defaultLang: "en",
       includeSampleContent: true,
+      cloud: {
+        enabled: false,
+        workerUrl: "",
+        workerName: "",
+        allowedOrigin: "",
+        turnstileSiteKey: "",
+      },
       result: null, // set after generate_instance succeeds
       busy: false,
     };
@@ -171,6 +178,33 @@
     tlRow.appendChild(langCell);
     form.appendChild(tlRow);
 
+    // Optional Cloudflare backend. Credentials are intentionally never
+    // collected here; the generated Worker has a secrets template instead.
+    const cloudWrap = el("div", { class: "card", style: { padding: "1rem", marginBottom: "1rem", background: "var(--surface-2)" } });
+    const cloudRow = el("label", { style: { display: "flex", alignItems: "center", gap: "0.5rem", cursor: "pointer", fontSize: "0.875rem" } });
+    const cloudChk = el("input", { type: "checkbox" });
+    cloudChk.checked = state.cloud.enabled;
+    cloudRow.appendChild(cloudChk);
+    cloudRow.appendChild(el("span", {}, t("instance.cloud.enable")));
+    cloudWrap.appendChild(cloudRow);
+    cloudWrap.appendChild(el("p", { style: { margin: "0.5rem 0 0", color: "var(--text-muted)", fontSize: "0.75rem", lineHeight: "1.5" } }, t("instance.cloud.hint")));
+    const cloudFields = el("div", { class: "grid grid-2", style: { marginTop: "0.75rem" } });
+    const workerUrl = labeledInput(t("instance.cloud.workerUrl"), state.cloud.workerUrl, (v) => state.cloud.workerUrl = v, "https://my-school-api.workers.dev");
+    const workerName = labeledInput(t("instance.cloud.workerName"), state.cloud.workerName, (v) => state.cloud.workerName = v, "my-school-cloud");
+    const allowedOrigin = labeledInput(t("instance.cloud.allowedOrigin"), state.cloud.allowedOrigin, (v) => state.cloud.allowedOrigin = v, "https://study.example.com");
+    const turnstileKey = labeledInput(t("instance.cloud.turnstileKey"), state.cloud.turnstileSiteKey, (v) => state.cloud.turnstileSiteKey = v, t("instance.cloud.optional"));
+    cloudFields.append(workerUrl, workerName, allowedOrigin, turnstileKey);
+    cloudWrap.appendChild(cloudFields);
+    function renderCloudFields() {
+      cloudFields.style.display = state.cloud.enabled ? "grid" : "none";
+    }
+    cloudChk.addEventListener("change", () => {
+      state.cloud.enabled = cloudChk.checked;
+      renderCloudFields();
+    });
+    renderCloudFields();
+    form.appendChild(cloudWrap);
+
     // Sample content checkbox
     const sampleRow = el("label", { style: { display: "flex", alignItems: "center", gap: "0.5rem", cursor: "pointer", marginBottom: "1rem", fontSize: "0.875rem" } });
     const sampleChk = el("input", { type: "checkbox" });
@@ -195,6 +229,7 @@
       if (!state.siteName.trim()) { toast(t("instance.err.noName"), "error"); return; }
       if (!state.shortName.trim()) state.shortName = state.siteName;
       if (state.enabledEngines.length === 0) { toast(t("instance.err.noEngines"), "error"); return; }
+      if (state.cloud.enabled && !state.cloud.workerUrl.trim()) { toast(t("instance.err.noWorkerUrl"), "error"); return; }
 
       state.busy = true;
       genBtn.disabled = true;
@@ -212,6 +247,7 @@
           defaultTheme: state.defaultTheme,
           defaultLang: state.defaultLang,
           includeSampleContent: state.includeSampleContent,
+          cloud: state.cloud,
         };
         const res = await invoke("generate_instance", { opts });
         state.result = res;

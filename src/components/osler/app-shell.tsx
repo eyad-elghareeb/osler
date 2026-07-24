@@ -14,7 +14,10 @@ import {
   Search,
   Settings as SettingsIcon,
   GraduationCap,
+  Cloud,
 } from "lucide-react";
+import { readCloudSession, type CloudSession } from "@/lib/osler/cloud";
+
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -145,7 +148,18 @@ export function AppShell({
   const immersive = useImmersiveMode();
   const [searchOpen, setSearchOpen] = React.useState(false);
   const [query, setQuery] = React.useState("");
+  const [cloudSession, setCloudSession] = React.useState<CloudSession | null>(() => readCloudSession());
+  const [syncStatus, setSyncStatus] = React.useState<"synced" | "syncing" | "offline">("synced");
   const lastViewRef = React.useRef<OslerView>(view);
+
+  React.useEffect(() => {
+    const onSyncStatus = (e: Event) => {
+      const detail = (e as CustomEvent).detail;
+      if (detail?.state) setSyncStatus(detail.state);
+    };
+    window.addEventListener("osler-cloud-sync-status", onSyncStatus);
+    return () => window.removeEventListener("osler-cloud-sync-status", onSyncStatus);
+  }, []);
 
   // Detect View Transitions API support once on mount. The state also
   // responds to runtime changes (e.g. user toggles reduced-motion).
@@ -159,6 +173,7 @@ export function AppShell({
     resetNavHistory(view);
     lastViewRef.current = view;
   }, []);
+
 
   /**
    * Wrapper around `onViewChange` that:
@@ -330,6 +345,19 @@ export function AppShell({
             </SheetContent>
           </Sheet>
 
+          {/* Cloud Sync Status Indicator */}
+          {cloudSession && (
+            <button
+              onClick={() => handleViewChange("settings")}
+              aria-label={t("settings.account.syncTitle")}
+              title={syncStatus === "synced" ? t("settings.account.syncSynced") : syncStatus === "syncing" ? t("settings.account.syncSyncing") : t("settings.account.syncOffline")}
+              className="hidden sm:flex items-center gap-1.5 h-8 px-2 rounded-md border border-border/60 bg-muted/40 hover:bg-muted/60 transition-colors shrink-0"
+            >
+              <span className={cn("size-2 rounded-full shrink-0", syncStatus === "synced" ? "bg-success animate-pulse" : syncStatus === "syncing" ? "bg-warning animate-spin" : "bg-muted")} />
+              <Cloud className="size-3.5 text-muted-foreground" />
+            </button>
+          )}
+
           {/* PWA install */}
           <PwaInstallButton />
 
@@ -352,16 +380,16 @@ export function AppShell({
             <DropdownMenuTrigger asChild>
               <button className="flex items-center gap-2 h-9 px-2 rounded-md hover:bg-muted/60 transition-colors shrink-0">
                 <div className="size-7 rounded-full bg-gradient-to-br from-primary/80 to-primary/40 flex items-center justify-center text-xs font-semibold text-primary-foreground">
-                  {username.slice(0, 2).toUpperCase()}
+                  {(cloudSession?.user.displayName || username).slice(0, 2).toUpperCase()}
                 </div>
                 <ChevronDown className="size-3.5 text-muted-foreground hidden sm:block" />
               </button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-56">
               <DropdownMenuLabel className="flex flex-col gap-0.5">
-                <span className="text-sm font-medium">{username}</span>
+                <span className="text-sm font-medium">{cloudSession?.user.displayName || username}</span>
                 <span className="text-xs text-muted-foreground font-normal">
-                  {t("nav.localSession")}
+                  {cloudSession ? `${cloudSession.user.email || `@${cloudSession.user.username}`} · ${cloudSession.user.role}` : t("nav.localSession")}
                 </span>
               </DropdownMenuLabel>
               <DropdownMenuSeparator />
@@ -379,6 +407,7 @@ export function AppShell({
                 <SettingsIcon className="size-4 me-2" />
                 {t("nav.settings")}
               </DropdownMenuItem>
+
               <DropdownMenuItem
                 className="cursor-pointer text-destructive focus:text-destructive"
                 onClick={onLogout}

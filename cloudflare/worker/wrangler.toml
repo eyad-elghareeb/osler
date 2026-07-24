@@ -1,0 +1,32 @@
+name = "osler-cloud"
+main = "src/index.mjs"
+compatibility_date = "2026-07-23"
+workers_dev = true
+
+[[d1_databases]]
+binding = "DB"
+database_name = "osler-cloud"
+database_id = "REPLACE_WITH_D1_DATABASE_ID"
+
+# Optional: R2 bucket for web-admin content storage.
+# Create with: wrangler r2 bucket create osler-content
+# Remove or comment out this block if you don't use web-admin content management.
+[[r2_buckets]]
+binding = "CONTENT"
+bucket_name = "osler-content"
+
+# Cron triggers — runs the cleanup job (expired sessions, OAuth states,
+# password-reset tokens, audit-log entries older than 1 year). The free tier
+# allows up to 5 cron triggers.
+[triggers]
+crons = ["0 * * * *"]
+
+[vars]
+# Set this to the Pages/custom-domain origin hosting the Osler app.
+# Multiple origins are not supported; set this to the exact origin
+# (scheme + host + port) the browser uses to load your app.
+ALLOWED_ORIGIN = "http://localhost:3000"
+# Set to true after configuring TURNSTILE_SECRET_KEY and publishing its site key.
+TURNSTILE_ENABLED = "false"
+# The Worker callback base URL. Replace after first deployment.
+WORKER_URL = "http://localhost:8787"

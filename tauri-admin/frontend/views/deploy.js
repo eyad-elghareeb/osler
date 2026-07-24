@@ -50,7 +50,7 @@
     },
     {
       id: "cloudflare_pages",
-      name: "Cloudflare Pages",
+      name: "Cloudflare (Pages + Worker)",
       glyph: "CF",
       logoClass: "cf",
       desc: t("deploy.cf.desc"),
@@ -59,6 +59,7 @@
         { id: "account_id", label: t("deploy.field.accountId"), type: "text", placeholder: "abcd1234abcd1234abcd1234abcd1234" },
         { id: "project_name", label: t("deploy.field.projectName"), type: "text", placeholder: "osler-web" },
         { id: "branch", label: t("deploy.field.branch"), type: "text", placeholder: "main" },
+        { id: "worker_name", label: t("deploy.field.workerName"), type: "text", placeholder: "osler-cloud", hint: t("deploy.cf.workerHint") },
       ],
       docsUrl: "https://dash.cloudflare.com/profile/api-tokens",
     },

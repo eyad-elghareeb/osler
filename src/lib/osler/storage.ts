@@ -513,6 +513,32 @@ export const storage = {
     return result;
   },
 
+  /** Merge server records without allowing an older device to overwrite newer local work. */
+  async mergeCloudProgress(
+    progress: Record<string, QuestionRecord> | undefined,
+    flashcards: Record<string, FlashcardReviewRecord> | undefined,
+  ): Promise<void> {
+    const progressEntries = Object.entries(progress ?? {}).filter(([key, incoming]) => {
+      const local = getCached<QuestionRecord>("progress", key);
+      return !!incoming && (!local || incoming.timestamp > local.timestamp);
+    }).map(([key, value]) => ({ key, value }));
+    if (progressEntries.length) {
+      await idbPutBatch("progress", progressEntries);
+      progressEntries.forEach((entry) => setCached("progress", entry.key, entry.value));
+      dispatchChange("osler-progress-changed");
+    }
+
+    const flashcardEntries = Object.entries(flashcards ?? {}).filter(([key, incoming]) => {
+      const local = getCached<FlashcardReviewRecord>("flashcardReviews", key);
+      return !!incoming && (!local || incoming.lastReviewed > local.lastReviewed);
+    }).map(([key, value]) => ({ key, value }));
+    if (flashcardEntries.length) {
+      await idbPutBatch("flashcardReviews", flashcardEntries);
+      flashcardEntries.forEach((entry) => setCached("flashcardReviews", entry.key, entry.value));
+      dispatchChange("osler-flashcard-changed");
+    }
+  },
+
   /** Serialize all article highlights (articleId -> HighlightItem[]) for backup/sync. */
   exportArticleHighlights(): Record<string, HighlightItem[]> {
     const result: Record<string, HighlightItem[]> = {};
