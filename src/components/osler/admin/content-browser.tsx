@@ -95,7 +95,7 @@ export function ContentBrowser({ capabilities }: ContentBrowserProps) {
       })
       .catch((err) => {
         if (err?.status === 503) setR2Missing(true);
-        else toast({ title: "Failed to load content", variant: "destructive" });
+        else toast({ title: t("admin.toast.failedLoadContent"), variant: "destructive" });
       })
       .finally(() => setCloudLoading(false));
   }, [cloudStatus, toast]);
@@ -152,7 +152,7 @@ export function ContentBrowser({ capabilities }: ContentBrowserProps) {
         .sort((a, b) => (b.updated_at - a.updated_at))
         .map((item) => ({
           id: `cloud-${item.id}`,
-          name: item.title ?? "Untitled",
+          name: item.title ?? t("admin.content.untitled"),
           kind: "file" as const,
           ext: "json",
           size: item.body?.length,
@@ -239,7 +239,7 @@ export function ContentBrowser({ capabilities }: ContentBrowserProps) {
       {/* Two-pane tree + preview layout */}
       <div className="grid grid-cols-1 lg:grid-cols-[280px_1fr] gap-3 h-[calc(100vh-220px)] min-h-[420px]">
         {/* Tree pane */}
-        <div className="border border-border/60 rounded-xl overflow-hidden lg:min-h-0">
+        <div className="border border-border rounded-xl overflow-hidden lg:min-h-0">
           {tab === "cloud" && cloudLoading ? (
             <LoadingState label={t("common.loading")} className="h-full" />
           ) : tab === "local" && localLoading ? (
@@ -257,7 +257,7 @@ export function ContentBrowser({ capabilities }: ContentBrowserProps) {
         </div>
 
         {/* Preview pane */}
-        <div className="border border-border/60 rounded-xl overflow-hidden bg-background">
+        <div className="border border-border rounded-xl overflow-hidden bg-background">
           {!selectedNode ? (
             <EmptyState
               icon={FileText}
@@ -363,14 +363,14 @@ function PreviewPane({ node, tab }: { node: ContentTreeNode; tab: Tab }) {
           {(node.items ?? []).map((child) => (
             <div
               key={child.id}
-              className="border border-border/60 rounded-lg p-3 text-sm bg-card/40"
+              className="border border-border rounded-lg p-3 text-sm bg-card/40"
             >
               <div className="flex items-center gap-2">
                 <FileText className="size-3.5 text-muted-foreground" />
                 <span className="font-medium truncate">{child.name}</span>
               </div>
               {child.cloudObject?.status && (
-                <span className="mt-1 inline-block text-[10px] uppercase tracking-wider text-muted-foreground">
+                <span className="mt-1 inline-block text-xs uppercase tracking-wider text-muted-foreground">
                   {child.cloudObject.status}
                 </span>
               )}
@@ -406,7 +406,7 @@ function PreviewPane({ node, tab }: { node: ContentTreeNode; tab: Tab }) {
         <dl className="grid grid-cols-2 gap-2 text-xs shrink-0">
           <MetaRow label={t("admin.content.col.type")} value={node.cloudObject.content_type} />
           <MetaRow label={t("admin.content.col.author")} value={node.cloudObject.creator_username ? `@${node.cloudObject.creator_username}` : "—"} />
-          <MetaRow label="Language" value={node.cloudObject.language} />
+          <MetaRow label={t("admin.content.language")} value={node.cloudObject.language} />
           <MetaRow label={t("admin.content.col.updated")} value={new Date(node.cloudObject.updated_at).toLocaleString()} />
         </dl>
       )}
@@ -414,16 +414,16 @@ function PreviewPane({ node, tab }: { node: ContentTreeNode; tab: Tab }) {
       {tab === "local" && (
         <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
           <div className="text-xs text-muted-foreground mb-1.5 shrink-0">
-            Read-only preview. Use Upload to create an editable cloud copy.
+            {t("admin.content.readOnlyPreview")}
           </div>
-          <div className="flex-1 min-h-0 overflow-auto medos-scroll-y border border-border/60 rounded-lg bg-background p-3">
+          <div className="flex-1 min-h-0 overflow-auto medos-scroll-y border border-border rounded-lg bg-background p-3">
             {previewLoading ? (
               <div className="text-xs text-muted-foreground text-center py-6">
-                Loading preview…
+                {t("admin.content.previewLoading")}
               </div>
             ) : previewBody == null ? (
               <div className="text-xs text-muted-foreground text-center py-6">
-                Preview unavailable.
+                {t("admin.content.previewUnavailable")}
               </div>
             ) : (
               <pre className="text-[11px] font-mono whitespace-pre-wrap break-words text-foreground/90">
@@ -437,7 +437,7 @@ function PreviewPane({ node, tab }: { node: ContentTreeNode; tab: Tab }) {
 
       {tab === "cloud" && (
         <p className="text-xs text-muted-foreground shrink-0">
-          Click to open in the full editor.
+          {t("admin.content.clickToEdit")}
         </p>
       )}
     </div>
@@ -446,8 +446,8 @@ function PreviewPane({ node, tab }: { node: ContentTreeNode; tab: Tab }) {
 
 function MetaRow({ label, value }: { label: string; value: string }) {
   return (
-    <div className="border border-border/60 rounded-lg px-2.5 py-1.5 bg-muted/30">
-      <dt className="text-[10px] uppercase tracking-wider text-muted-foreground">{label}</dt>
+    <div className="border border-border rounded-lg px-2.5 py-1.5 bg-muted/30">
+      <dt className="text-xs uppercase tracking-wider text-muted-foreground">{label}</dt>
       <dd className="text-xs font-medium truncate">{value}</dd>
     </div>
   );
@@ -491,7 +491,7 @@ function CreateContentDialog({
       toast({ title: t("admin.content.saved") });
       onCreated(res.id);
     } catch {
-      toast({ title: "Failed to create content", variant: "destructive" });
+      toast({ title: t("admin.toast.failedCreateContent"), variant: "destructive" });
     } finally {
       setBusy(false);
     }
@@ -618,17 +618,17 @@ function UploadDialog({
           {dropped.length > 0 && (
             <div className="space-y-1.5">
               <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                Queued files ({dropped.length})
+                {t("admin.content.queuedFiles", { n: dropped.length })}
               </p>
               <div className="max-h-44 overflow-y-auto medos-scroll-y space-y-1">
                 {dropped.map((d, i) => (
                   <div
                     key={i}
-                    className="flex items-center gap-2 px-2.5 py-1.5 border border-border/60 rounded-md bg-card/40 text-xs"
+                    className="flex items-center gap-2 px-2.5 py-1.5 border border-border rounded-md bg-card/40 text-xs"
                   >
                     <FileText className="size-3.5 text-muted-foreground shrink-0" />
                     <span className="flex-1 truncate font-mono">{d.file.name}</span>
-                    <span className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                    <span className="text-xs uppercase tracking-wider text-muted-foreground">
                       {d.contentType}
                     </span>
                     <button

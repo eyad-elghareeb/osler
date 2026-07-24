@@ -60,3 +60,5 @@ __pycache__/
 # local dev script
 dev.ps1
 
+cloudflare/worker/seed-admin.mjs
+worker.log

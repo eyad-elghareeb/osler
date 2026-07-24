@@ -75,10 +75,10 @@ export function AdminShell({ children, cfEmail }: AdminShellProps) {
 }
 
 function AdminShellInner({ children, cfEmail }: AdminShellProps) {
-  const { t } = useI18n();
+  const { t, rtl } = useI18n();
   const router = useRouter();
   const pathname = usePathname();
-  const { settings, update } = useAdminSettings();
+  const { settings, update, theme, toggleTheme } = useAdminSettings();
 
   const [identity, setIdentity] = React.useState<AdminIdentity | null>(null);
   const [loading, setLoading] = React.useState(true);
@@ -92,28 +92,6 @@ function AdminShellInner({ children, cfEmail }: AdminShellProps) {
   React.useEffect(() => {
     const session = readCloudSession();
     if (!session) {
-      // Dev preview fallback — no real auth, full capabilities.
-      if (process.env.NODE_ENV !== "production") {
-        setIdentity({
-          user: {
-            id: "dev-admin",
-            username: "devadmin",
-            displayName: "Dev Admin",
-            role: "admin",
-            email: "dev@local.test",
-            createdAt: Date.now(),
-          },
-          capabilities: {
-            manageUsers: true,
-            manageContent: true,
-            approveContent: true,
-            publishDirect: true,
-            viewStats: true,
-            viewAudit: true,
-            manageSessions: true,
-          },
-        });
-      }
       setLoading(false);
       return;
     }
@@ -122,16 +100,17 @@ function AdminShellInner({ children, cfEmail }: AdminShellProps) {
       .then((id) => {
         if (id.capabilities.manageContent) setIdentity(id);
       })
-      .catch(() => {
-        // Dev preview fallback when the cloud API is unreachable.
-        if (process.env.NODE_ENV !== "production") {
+      .catch((err) => {
+        // Dev preview fallback when the cloud API is completely unreachable
+        // (network error, server not started, etc.) — not for auth failures.
+        if (process.env.NODE_ENV !== "production" && err instanceof TypeError) {
           setIdentity({
             user: {
               id: "dev-admin",
-              username: "devadmin",
-              displayName: "Dev Admin",
+              username: "admin",
+              displayName: "Admin",
               role: "admin",
-              email: "dev@local.test",
+              email: "admin@local.test",
               createdAt: Date.now(),
             },
             capabilities: {
@@ -163,10 +142,6 @@ function AdminShellInner({ children, cfEmail }: AdminShellProps) {
     clearCloudSession();
     setIdentity(null);
   }, []);
-
-  const toggleTheme = React.useCallback(() => {
-    update("theme", settings.theme === "dark" ? "light" : "dark");
-  }, [settings.theme, update]);
 
   const toggleSidebar = React.useCallback(() => {
     update("sidebarCollapsed", !settings.sidebarCollapsed);
@@ -204,14 +179,14 @@ function AdminShellInner({ children, cfEmail }: AdminShellProps) {
   if (!identity) {
     return (
       <div className="flex h-screen flex-col bg-background">
-        <header className="flex h-14 shrink-0 items-center border-b border-border/60 bg-background/80 backdrop-blur-md px-4 safe-pt">
+        <header className="flex h-14 shrink-0 items-center border-b border-border bg-background/80 backdrop-blur-md px-4 safe-pt">
           <div className="flex items-center gap-2.5">
             <div className="size-8 rounded-lg bg-primary/15 border border-primary/30 flex items-center justify-center">
               <Activity className="size-4 text-primary" />
             </div>
             <div className="leading-tight">
               <div className="text-sm font-semibold">{t("app.name")}</div>
-              <div className="text-[10px] text-muted-foreground">
+              <div className="text-xs text-muted-foreground">
                 {t("admin.shell.brandAdmin")} · {t("admin.shell.tagline")}
               </div>
             </div>
@@ -278,11 +253,11 @@ function AdminShellInner({ children, cfEmail }: AdminShellProps) {
     <div
       className={cn(
         "h-screen md:h-screen h-[100dvh] flex flex-col bg-background overflow-hidden",
-        settings.language === "ar" && "rtl",
+        rtl && "rtl",
       )}
     >
       {/* Top bar — mirrors main site AppShell header style */}
-      <header className="z-40 shrink-0 h-14 border-b border-border/60 bg-background/80 backdrop-blur-md supports-[backdrop-filter]:bg-background/60 safe-pt">
+      <header className="z-40 shrink-0 h-14 border-b border-border bg-background/80 backdrop-blur-md supports-[backdrop-filter]:bg-background/60 safe-pt">
         <div className="h-full px-3 sm:px-4 flex items-center gap-2 sm:gap-3">
           {/* Sidebar toggle (desktop) */}
           <button
@@ -318,7 +293,7 @@ function AdminShellInner({ children, cfEmail }: AdminShellProps) {
               <div className="text-sm font-semibold">
                 {t("app.name")} · {t("admin.shell.brandAdmin")}
               </div>
-              <div className="text-[10px] text-muted-foreground">
+              <div className="text-xs text-muted-foreground">
                 {t("admin.shell.tagline")}
               </div>
             </div>
@@ -347,10 +322,10 @@ function AdminShellInner({ children, cfEmail }: AdminShellProps) {
           {/* Theme toggle */}
           <button
             onClick={toggleTheme}
-            aria-label="Toggle theme"
+            aria-label={t("admin.settings.theme.desc")}
             className="osler-icon-btn shrink-0"
           >
-            {settings.theme === "dark" ? (
+            {theme === "dark" ? (
               <Sun className="size-4" />
             ) : (
               <Moon className="size-4" />
@@ -401,7 +376,7 @@ function AdminShellInner({ children, cfEmail }: AdminShellProps) {
         {/* Desktop sidebar */}
         <aside
           className={cn(
-            "hidden md:flex shrink-0 flex-col border-e border-border/60 bg-card/40 transition-[width] duration-200",
+            "hidden md:flex shrink-0 flex-col border-e border-border bg-card/40 transition-[width] duration-200",
             sidebarCollapsed ? "w-[56px]" : "w-60",
           )}
         >
@@ -419,12 +394,12 @@ function AdminShellInner({ children, cfEmail }: AdminShellProps) {
 
         {/* Mobile nav sheet */}
         <Sheet open={mobileNavOpen} onOpenChange={setMobileNavOpen}>
-          <SheetContent side="start" className="w-72 p-0">
+          <SheetContent side="left" className="w-72 p-0">
             <SheetHeader className="sr-only">
               <SheetTitle>{t("admin.shell.brandAdmin")}</SheetTitle>
             </SheetHeader>
             <div className="flex h-full flex-col">
-              <div className="h-14 shrink-0 border-b border-border/60 flex items-center px-4">
+              <div className="h-14 shrink-0 border-b border-border flex items-center px-4">
                 <div className="flex items-center gap-2.5">
                   <div className="size-7 rounded-lg bg-primary/15 border border-primary/30 flex items-center justify-center">
                     <Activity className="size-4 text-primary" />
@@ -433,8 +408,8 @@ function AdminShellInner({ children, cfEmail }: AdminShellProps) {
                     <div className="text-sm font-semibold">
                       {t("admin.shell.brandAdmin")}
                     </div>
-                    <div className="text-[10px] text-muted-foreground">
-                      {t("admin.shell.tagline")}
+                    <div className="text-xs text-muted-foreground">
+                      {t("admin.shell.brandAdmin")}
                     </div>
                   </div>
                 </div>
@@ -522,7 +497,7 @@ function SidebarNav({
         />
       ))}
 
-      <div className="my-2 border-t border-border/60" />
+      <div className="my-2 border-t border-border" />
 
       <SidebarSectionLabel collapsed={collapsed}>{sectionSystemLabel}</SidebarSectionLabel>
       {systemItems.map((item) => (
@@ -537,7 +512,7 @@ function SidebarNav({
         />
       ))}
 
-      <div className="mt-auto pt-2 border-t border-border/60">
+      <div className="mt-auto pt-2 border-t border-border">
         <button
           onClick={() => {
             onNavigate?.();
@@ -568,7 +543,7 @@ function SidebarSectionLabel({
     return <div className="mx-auto my-1 h-px w-6 bg-border/60" aria-hidden />;
   }
   return (
-    <p className="px-3 pt-1 pb-0.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70">
+    <p className="px-3 pt-1 pb-0.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground/70">
       {children}
     </p>
   );
@@ -607,7 +582,7 @@ function SidebarLink({
       <Icon className="size-4 shrink-0" />
       {!collapsed && <span className="flex-1 truncate">{label}</span>}
       {!collapsed && item.badge != null && item.badge > 0 && (
-        <Badge variant="destructive" className="h-5 min-w-5 px-1 text-[10px]">
+        <Badge variant="destructive" className="h-5 min-w-5 px-1 text-xs">
           {item.badge > 99 ? "99+" : item.badge}
         </Badge>
       )}

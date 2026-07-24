@@ -3,13 +3,11 @@
 /**
  * Admin settings context — persists admin-specific UI/UX preferences.
  *
- * These settings live in localStorage and are independent from the user's
- * main-app preferences. They control how the admin panel looks and behaves
- * for the signed-in admin user.
+ * Theme and language changes are delegated to the main app providers
+ * (OslerThemeProvider / OslerI18nProvider) so the admin and main app
+ * always share a single source of truth for <html> class/attr state.
  *
  * Settings exposed:
- *  - language: UI language for the admin panel (en/ar)
- *  - theme: dark | light
  *  - workingMode: compact | comfortable — controls density
  *  - reducedMotion: boolean — disables framer-motion transitions
  *  - defaultLanding: which admin page to land on after sign-in
@@ -20,15 +18,13 @@
  */
 
 import * as React from "react";
+import { useOslerTheme } from "@/components/osler/theme-provider";
+import { useI18n } from "@/components/osler/i18n-provider";
 
-export type AdminLang = "en" | "ar";
-export type AdminTheme = "dark" | "light";
 export type AdminWorkingMode = "compact" | "comfortable";
 export type AdminLanding = "dashboard" | "content" | "review" | "audit";
 
 export interface AdminSettings {
-  language: AdminLang;
-  theme: AdminTheme;
   workingMode: AdminWorkingMode;
   reducedMotion: boolean;
   defaultLanding: AdminLanding;
@@ -39,8 +35,6 @@ export interface AdminSettings {
 }
 
 const DEFAULT_SETTINGS: AdminSettings = {
-  language: "en",
-  theme: "dark",
   workingMode: "comfortable",
   reducedMotion: false,
   defaultLanding: "content",
@@ -58,7 +52,11 @@ function loadSettings(): AdminSettings {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return DEFAULT_SETTINGS;
     const parsed = JSON.parse(raw);
-    return { ...DEFAULT_SETTINGS, ...parsed };
+    // Migrate: remove deprecated language/theme keys from old persisted data
+    const { language: _, theme: __, ...rest } = parsed;
+    void _;
+    void __;
+    return { ...DEFAULT_SETTINGS, ...rest };
   } catch {
     return DEFAULT_SETTINGS;
   }
@@ -73,6 +71,14 @@ function saveSettings(s: AdminSettings) {
 
 interface AdminSettingsContextValue {
   settings: AdminSettings;
+  /** Read-only: current UI language (delegated to main i18n provider). */
+  language: "en" | "ar";
+  /** Read-only: current theme (delegated to main theme provider). */
+  theme: "dark" | "light";
+  /** Switch the admin UI language — delegates to OslerI18nProvider. */
+  setLanguage: (lang: "en" | "ar") => void;
+  /** Toggle dark/light — delegates to OslerThemeProvider. */
+  toggleTheme: () => void;
   update: <K extends keyof AdminSettings>(key: K, value: AdminSettings[K]) => void;
   reset: () => void;
 }
@@ -82,6 +88,8 @@ const AdminSettingsContext = React.createContext<AdminSettingsContextValue | nul
 export function AdminSettingsProvider({ children }: { children: React.ReactNode }) {
   const [settings, setSettings] = React.useState<AdminSettings>(DEFAULT_SETTINGS);
   const [hydrated, setHydrated] = React.useState(false);
+  const { isDark, toggleTheme: mainToggleTheme } = useOslerTheme();
+  const { lang, setLang } = useI18n();
 
   // Hydrate from localStorage on mount.
   React.useEffect(() => {
@@ -89,16 +97,13 @@ export function AdminSettingsProvider({ children }: { children: React.ReactNode 
     setHydrated(true);
   }, []);
 
-  // Apply theme + working mode + reduced motion to <html> immediately on
-  // every settings change (after hydration).
+  // Apply working mode + reduced motion to <html> (theme/language are handled
+  // by the main providers — we must NOT touch those here).
   React.useEffect(() => {
     if (!hydrated) return;
     const html = document.documentElement;
-    html.classList.toggle("dark", settings.theme === "dark");
     html.classList.toggle("admin-compact", settings.workingMode === "compact");
     html.classList.toggle("admin-reduced-motion", settings.reducedMotion);
-    html.setAttribute("lang", settings.language);
-    html.setAttribute("dir", settings.language === "ar" ? "rtl" : "ltr");
   }, [settings, hydrated]);
 
   const update = React.useCallback(
@@ -112,14 +117,29 @@ export function AdminSettingsProvider({ children }: { children: React.ReactNode 
     [],
   );
 
+  const setLanguage = React.useCallback(
+    (next: "en" | "ar") => {
+      setLang(next);
+    },
+    [setLang],
+  );
+
   const reset = React.useCallback(() => {
     setSettings(DEFAULT_SETTINGS);
     saveSettings(DEFAULT_SETTINGS);
   }, []);
 
   const value = React.useMemo(
-    () => ({ settings, update, reset }),
-    [settings, update, reset],
+    () => ({
+      settings,
+      language: lang,
+      theme: (isDark ? "dark" : "light") as "dark" | "light",
+      setLanguage,
+      toggleTheme: mainToggleTheme,
+      update,
+      reset,
+    }),
+    [settings, lang, isDark, setLanguage, mainToggleTheme, update, reset],
   );
 
   return (
@@ -135,6 +155,10 @@ export function useAdminSettings() {
     // Fallback for components rendered outside the provider.
     return {
       settings: DEFAULT_SETTINGS,
+      language: "en" as const,
+      theme: "dark" as const,
+      setLanguage: () => {},
+      toggleTheme: () => {},
       update: () => {},
       reset: () => {},
     };

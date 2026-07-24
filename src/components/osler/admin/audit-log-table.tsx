@@ -57,7 +57,7 @@ export function AuditLogTable() {
     setLoading(true);
     adminApi.auditLog(page, action === "all" ? undefined : action)
       .then((r) => { setEntries(r.items); setTotal(r.total); })
-      .catch(() => toast({ title: "Failed to load audit log", variant: "destructive" }))
+      .catch(() => toast({ title: t("admin.toast.failedLoadAuditLog"), variant: "destructive" }))
       .finally(() => setLoading(false));
   }, [page, action]); // eslint-disable-line react-hooks/exhaustive-deps
 

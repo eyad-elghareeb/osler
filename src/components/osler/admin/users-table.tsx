@@ -63,7 +63,7 @@ export function UsersTable() {
     setLoading(true);
     adminApi.users(page, debouncedQ)
       .then((r) => { setUsers(r.users); setTotal(r.total); })
-      .catch(() => toast({ title: "Failed to load users", variant: "destructive" }))
+      .catch(() => toast({ title: t("admin.toast.failedLoadUsers"), variant: "destructive" }))
       .finally(() => setLoading(false));
   }, [page, debouncedQ]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -76,7 +76,7 @@ export function UsersTable() {
       setUsers((prev) => prev.map((u) => u.id === updated.id ? updated : u));
       toast({ title: t("admin.users.changeRole"), description: `${user.displayName} → ${t(`admin.users.roles.${role}` as any)}` });
     } catch {
-      toast({ title: "Failed to update role", variant: "destructive" });
+      toast({ title: t("admin.toast.failedUpdateRole"), variant: "destructive" });
     }
   }
 
@@ -89,7 +89,7 @@ export function UsersTable() {
       setTotal((n) => n - 1);
       toast({ title: t("admin.users.deleteUser") });
     } catch {
-      toast({ title: "Failed to delete user", variant: "destructive" });
+      toast({ title: t("admin.toast.failedDeleteUser"), variant: "destructive" });
     } finally {
       setDeleteTarget(null);
     }
@@ -105,7 +105,7 @@ export function UsersTable() {
       setResetTarget(null);
       setNewPassword("");
     } catch {
-      toast({ title: "Failed to reset password", variant: "destructive" });
+      toast({ title: t("admin.toast.failedResetPassword"), variant: "destructive" });
     } finally {
       setResetting(false);
     }
@@ -244,7 +244,7 @@ export function UsersTable() {
               type="text"
               value={newPassword}
               onChange={(e) => setNewPassword(e.target.value)}
-              placeholder="min. 10 characters"
+              placeholder="min. 8 characters"
               className="mt-1.5"
               autoFocus
             />
@@ -252,7 +252,7 @@ export function UsersTable() {
           <AlertDialogFooter>
             <AlertDialogCancel onClick={() => { setNewPassword(""); }}>{t("common.cancel")}</AlertDialogCancel>
             <AlertDialogAction
-              disabled={newPassword.length < 10 || resetting}
+              disabled={newPassword.length < 8 || resetting}
               onClick={confirmReset}
             >
               {resetting ? t("common.loading") : t("admin.users.resetPassword")}

@@ -17,16 +17,14 @@ export function AdminPageFrame({
   children,
 }: AdminPageFrameProps) {
   return (
-    <div className="osler-page">
-      <div className="osler-page__inner py-6 md:py-8">
-        <PageHeader
-          inline={!!inlineIcon}
-          inlineIcon={inlineIcon}
-          title={title}
-          subtitle={subtitle}
-        />
-        {children}
-      </div>
+    <div className="px-4 md:px-6 lg:px-8 py-6 md:py-8 max-w-6xl">
+      <PageHeader
+        inline={!!inlineIcon}
+        inlineIcon={inlineIcon}
+        title={title}
+        subtitle={subtitle}
+      />
+      {children}
     </div>
   );
 }

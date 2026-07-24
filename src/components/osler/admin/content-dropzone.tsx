@@ -76,7 +76,7 @@ export function ContentDropzone({
       onFiles(dropped);
     } catch (err) {
       toast({
-        title: "Failed to read files",
+        title: t("admin.toast.failedReadFiles"),
         description: String(err),
         variant: "destructive",
       });
@@ -154,7 +154,7 @@ export function ContentDropzone({
       <div className={cn("font-semibold", compact ? "text-xs" : "text-sm")}>
         {t("admin.content.dropzone.title")}
       </div>
-      <div className={cn("text-muted-foreground", compact ? "text-[10px]" : "text-xs")}>
+      <div className={cn("text-muted-foreground", compact ? "text-xs" : "text-xs")}>
         {t("admin.content.dropzone.subtitle")}
       </div>
 
@@ -177,7 +177,7 @@ export function ContentDropzone({
           >
             {t("admin.content.dropzone.browse")}
           </Button>
-          <p className="mt-2 text-[10px] text-muted-foreground/70 max-w-xs">
+          <p className="mt-2 text-xs text-muted-foreground/70 max-w-xs">
             {t("admin.content.dropzone.hint")}
           </p>
         </>

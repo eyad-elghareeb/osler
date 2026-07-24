@@ -106,7 +106,7 @@ export function ContentTreePane({
   return (
     <div className={cn("flex h-full flex-col bg-card/40", className)}>
       {/* Header */}
-      <div className="shrink-0 border-b border-border/60 p-2.5 space-y-2">
+      <div className="shrink-0 border-b border-border p-2.5 space-y-2">
         <div className="flex items-center gap-2">
           {kind === "local" ? (
             <HardDrive className="size-3.5 text-muted-foreground" />
@@ -116,7 +116,7 @@ export function ContentTreePane({
           <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
             {kind === "local" ? t("admin.content.tree.local") : t("admin.content.tree.cloud")}
           </span>
-          <span className="text-[10px] text-muted-foreground/60 ml-auto">
+          <span className="text-xs text-muted-foreground/60 ml-auto">
             {t("admin.content.tree.items", { n: leafCount })}
           </span>
         </div>

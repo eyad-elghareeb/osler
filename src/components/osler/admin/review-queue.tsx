@@ -22,7 +22,7 @@ export function ReviewQueue() {
     setLoading(true);
     adminApi.pendingQueue()
       .then((r) => setItems(r.items))
-      .catch(() => toast({ title: "Failed to load queue", variant: "destructive" }))
+      .catch(() => toast({ title: t("admin.toast.failedLoadQueue"), variant: "destructive" }))
       .finally(() => setLoading(false));
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -35,7 +35,7 @@ export function ReviewQueue() {
       setItems((prev) => prev.filter((i) => i.id !== item.id));
       toast({ title: t("admin.review.approve") + ` — ${item.title}` });
     } catch {
-      toast({ title: "Approve failed", variant: "destructive" });
+      toast({ title: t("admin.toast.approveFailed"), variant: "destructive" });
     }
   }
 

@@ -77,7 +77,7 @@ export const en = {
     "login.emailOptional": "Optional, but required for password recovery.",
     "login.displayName": "Display name",
     "login.displayNamePlaceholder": "Your name",
-    "login.passwordSecurePlaceholder": "At least 10 characters",
+    "login.passwordSecurePlaceholder": "At least 8 characters",
     "login.createAccount": "Create account",
     "login.haveAccount": "Already have an account? Sign in",
     "login.forgotPassword": "Forgot password?",
@@ -1258,6 +1258,17 @@ export const en = {
     "admin.content.edit": "Edit",
     "admin.content.untitled": "Untitled",
     "admin.content.rejectedReason": "Rejection reason: {reason}",
+    "admin.content.pendingNotice": "This content is pending review and cannot be edited.",
+    "admin.content.goToReview": "Go to review queue",
+    "admin.content.cannotShowForm": "Cannot show form editor",
+    "admin.content.invalidJsonHint": "The body is not valid JSON. Fix it in Code mode first.",
+    "admin.content.noStructuredForm": "No structured form for this content shape",
+    "admin.content.switchToCode": "Switch to Code mode to edit the raw JSON.",
+    "admin.content.clickToEdit": "Click to open in the full editor.",
+    "admin.content.queuedFiles": "Queued files ({n})",
+    "admin.content.readOnlyPreview": "Read-only preview. Use Upload to create an editable cloud copy.",
+    "admin.content.previewLoading": "Loading preview\u2026",
+    "admin.content.previewUnavailable": "Preview unavailable.",
 
     "admin.review.title": "Review Queue",
     "admin.review.subtitle": "Approve or reject content submissions from contributors.",
@@ -1299,7 +1310,6 @@ export const en = {
 
     // ── Admin shell + settings (revamped) ──────────────────────────────
     "admin.shell.brandAdmin": "Admin",
-    "admin.shell.search": "Search admin…",
     "admin.shell.backToApp": "Back to app",
     "admin.shell.menu": "Menu",
     "admin.shell.navSection.work": "Workspace",
@@ -1325,6 +1335,8 @@ export const en = {
 
     "admin.settings.working.compact": "Compact",
     "admin.settings.working.comfortable": "Comfortable",
+    "admin.settings.working.compactHint": "Denser rows",
+    "admin.settings.working.comfortableHint": "Default spacing",
     "admin.settings.working.desc": "Compact mode tightens padding, font size and row height so you can fit more on screen.",
 
     "admin.settings.behavior.reducedMotion": "Reduced motion",
@@ -1345,6 +1357,25 @@ export const en = {
     "admin.settings.about.storage": "Storage",
     "admin.settings.about.storageLocal": "Local browser storage (per-device)",
     "admin.settings.about.role": "Your role",
+
+    // ── Admin toast messages ──────────────────────────────────────────
+    "admin.toast.failedLoadQueue": "Failed to load queue",
+    "admin.toast.approveFailed": "Approve failed",
+    "admin.toast.failedLoadAuditLog": "Failed to load audit log",
+    "admin.toast.failedLoadContent": "Failed to load content",
+    "admin.toast.failedCreateContent": "Failed to create content",
+    "admin.toast.failedLoadDiff": "Failed to load diff",
+    "admin.toast.rejectFailed": "Reject failed",
+    "admin.toast.contentNotFound": "Content not found",
+    "admin.toast.saveFailed": "Save failed",
+    "admin.toast.submitFailed": "Submit failed",
+    "admin.toast.publishFailed": "Publish failed",
+    "admin.toast.deleteFailed": "Delete failed",
+    "admin.toast.failedReadFiles": "Failed to read files",
+    "admin.toast.failedLoadUsers": "Failed to load users",
+    "admin.toast.failedUpdateRole": "Failed to update role",
+    "admin.toast.failedDeleteUser": "Failed to delete user",
+    "admin.toast.failedResetPassword": "Failed to reset password",
 
     // ── Admin content tree + dropzone (revamped) ───────────────────────
     "admin.content.tree.title": "Content tree",
@@ -1385,6 +1416,8 @@ export const en = {
     "admin.content.editor.addCard": "Add card",
     "admin.content.editor.addStation": "Add station",
     "admin.content.editor.addVideo": "Add video",
+    "admin.content.editor.addPrompt": "Add prompt",
+    "admin.content.editor.prompt": "Prompt {n}",
     "admin.content.editor.remove": "Remove",
     "admin.content.editor.moveUp": "Move up",
     "admin.content.editor.moveDown": "Move down",

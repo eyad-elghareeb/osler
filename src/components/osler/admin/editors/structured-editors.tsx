@@ -23,6 +23,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { ChevronUp, ChevronDown, Plus, Trash2 } from "lucide-react";
+import { MarkdownEditor } from "./markdown-editor";
 
 // ── Shared types ───────────────────────────────────────────────────────────
 
@@ -53,7 +54,7 @@ function Field({
         <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
           {label}
         </label>
-        {hint && <span className="text-[10px] text-muted-foreground/70">{hint}</span>}
+        {hint && <span className="text-xs text-muted-foreground/70">{hint}</span>}
       </div>
       {children}
     </div>
@@ -98,7 +99,7 @@ function ItemRow({
   title: string;
 }) {
   return (
-    <div className="border border-border/60 rounded-lg p-3 space-y-3 bg-card/40">
+    <div className="border border-border rounded-lg p-3 space-y-3 bg-card/40">
       <div className="flex items-center gap-2">
         <Badge variant="outline" className="font-mono">
           {title}
@@ -824,14 +825,219 @@ export function LibraryArticleEditor({ value, onChange, readOnly }: StructuredEd
         <span>·</span>
         <span>{t("admin.content.editor.lineCount", { n: lines })}</span>
       </div>
-      <Textarea
+      <MarkdownEditor
         value={markdown}
-        onChange={(e) => update(e.target.value)}
+        onChange={update}
         readOnly={readOnly}
-        className="flex-1 min-h-[400px] font-mono text-sm resize-none"
-        spellCheck={false}
         placeholder="# Article title\n\nWrite your article in **Markdown**…"
+        className="flex-1 min-h-[400px]"
       />
+    </div>
+  );
+}
+
+// ── Written / Prompt editor ─────────────────────────────────────────────────
+//
+// Shape: { prompts: [{ id, prompt, modelAnswer, explanation, rubric, wordLimit, tags, children }] }
+
+export function WrittenEditor({ value, onChange, readOnly }: StructuredEditorProps) {
+  const { t } = useI18n();
+  const prompts: any[] = Array.isArray(value?.prompts) ? value.prompts : [];
+
+  function update(next: any[]) {
+    onChange({ ...value, prompts: next });
+  }
+
+  function addPrompt() {
+    update([
+      ...prompts,
+      {
+        id: `prompt-${prompts.length + 1}`,
+        prompt: "",
+        modelAnswer: "",
+        explanation: "",
+        rubric: [],
+        wordLimit: 500,
+        tags: [],
+      },
+    ]);
+  }
+
+  function patchPrompt(i: number, patch: any) {
+    update(prompts.map((p, idx) => (idx === i ? { ...p, ...patch } : p)));
+  }
+
+  function removePrompt(i: number) {
+    update(prompts.filter((_, idx) => idx !== i));
+  }
+
+  function movePrompt(i: number, delta: number) {
+    const j = i + delta;
+    if (j < 0 || j >= prompts.length) return;
+    const next = [...prompts];
+    [next[i], next[j]] = [next[j], next[i]];
+    update(next);
+  }
+
+  return (
+    <div className="space-y-3">
+      <ListToolbar onAdd={addPrompt} addLabel={t("admin.content.editor.addPrompt")} readOnly={readOnly} />
+      {prompts.length === 0 ? (
+        <p className="text-sm text-muted-foreground text-center py-6">No prompts yet.</p>
+      ) : (
+        prompts.map((p, i) => (
+          <ItemRow
+            key={i}
+            index={i}
+            total={prompts.length}
+            onMove={(d) => movePrompt(i, d)}
+            onRemove={() => removePrompt(i)}
+            readOnly={readOnly}
+            title={t("admin.content.editor.prompt", { n: i + 1 })}
+          >
+            <Field label="ID">
+              <Input
+                value={p.id ?? ""}
+                onChange={(e) => patchPrompt(i, { id: e.target.value })}
+                readOnly={readOnly}
+                className="font-mono text-xs"
+              />
+            </Field>
+            <Field label="Prompt">
+              <Textarea
+                value={p.prompt ?? ""}
+                onChange={(e) => patchPrompt(i, { prompt: e.target.value })}
+                readOnly={readOnly}
+                rows={3}
+              />
+            </Field>
+            <Field label="Model Answer" hint="Markdown supported">
+              <Textarea
+                value={p.modelAnswer ?? ""}
+                onChange={(e) => patchPrompt(i, { modelAnswer: e.target.value })}
+                readOnly={readOnly}
+                rows={4}
+              />
+            </Field>
+            <Field label="Explanation" hint="Markdown supported">
+              <Textarea
+                value={p.explanation ?? ""}
+                onChange={(e) => patchPrompt(i, { explanation: e.target.value })}
+                readOnly={readOnly}
+                rows={2}
+              />
+            </Field>
+            <Field label="Rubric" hint="One item per line">
+              <Textarea
+                value={Array.isArray(p.rubric) ? p.rubric.join("\n") : ""}
+                onChange={(e) => patchPrompt(i, { rubric: e.target.value.split("\n").filter(Boolean) })}
+                readOnly={readOnly}
+                rows={3}
+                placeholder="One rubric item per line…"
+              />
+            </Field>
+            <div className="flex items-center gap-4">
+              <Field label="Word Limit">
+                <Input
+                  type="number"
+                  value={p.wordLimit ?? 500}
+                  onChange={(e) => patchPrompt(i, { wordLimit: Number(e.target.value) })}
+                  readOnly={readOnly}
+                  className="w-24"
+                />
+              </Field>
+              <StringListField
+                label="Tags"
+                items={p.tags ?? []}
+                onChange={(tags) => patchPrompt(i, { tags })}
+                readOnly={readOnly}
+                placeholder="Tag…"
+              />
+            </div>
+          </ItemRow>
+        ))
+      )}
+    </div>
+  );
+}
+
+// ── Bank / Passage editor ───────────────────────────────────────────────────
+//
+// Shape: { passages: [{ id, content, questions: [...] }] }
+
+export function BankEditor({ value, onChange, readOnly }: StructuredEditorProps) {
+  const { t } = useI18n();
+  const passages: any[] = Array.isArray(value?.passages) ? value.passages : [];
+
+  function update(next: any[]) {
+    onChange({ ...value, passages: next });
+  }
+
+  function addPassage() {
+    update([
+      ...passages,
+      { id: `passage-${passages.length + 1}`, content: "", questions: [] },
+    ]);
+  }
+
+  function patchPassage(i: number, patch: any) {
+    update(passages.map((p, idx) => (idx === i ? { ...p, ...patch } : p)));
+  }
+
+  function removePassage(i: number) {
+    update(passages.filter((_, idx) => idx !== i));
+  }
+
+  function movePassage(i: number, delta: number) {
+    const j = i + delta;
+    if (j < 0 || j >= passages.length) return;
+    const next = [...passages];
+    [next[i], next[j]] = [next[j], next[i]];
+    update(next);
+  }
+
+  return (
+    <div className="space-y-3">
+      <ListToolbar onAdd={addPassage} addLabel="Add passage" readOnly={readOnly} />
+      {passages.length === 0 ? (
+        <p className="text-sm text-muted-foreground text-center py-6">No passages yet.</p>
+      ) : (
+        passages.map((p, i) => (
+          <ItemRow
+            key={i}
+            index={i}
+            total={passages.length}
+            onMove={(d) => movePassage(i, d)}
+            onRemove={() => removePassage(i)}
+            readOnly={readOnly}
+            title={`Passage ${i + 1}`}
+          >
+            <Field label="ID">
+              <Input
+                value={p.id ?? ""}
+                onChange={(e) => patchPassage(i, { id: e.target.value })}
+                readOnly={readOnly}
+                className="font-mono text-xs"
+              />
+            </Field>
+            <Field label="Passage text">
+              <Textarea
+                value={p.content ?? ""}
+                onChange={(e) => patchPassage(i, { content: e.target.value })}
+                readOnly={readOnly}
+                rows={6}
+              />
+            </Field>
+            <Field label="Questions">
+              <QuizEditor
+                value={{ questions: p.questions ?? [] }}
+                onChange={(v) => patchPassage(i, { questions: v.questions })}
+                readOnly={readOnly}
+              />
+            </Field>
+          </ItemRow>
+        ))
+      )}
     </div>
   );
 }

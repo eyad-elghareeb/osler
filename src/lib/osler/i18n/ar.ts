@@ -78,7 +78,7 @@ export const ar = {
     "login.emailOptional": "اختياري، لكنه مطلوب لاستعادة كلمة المرور.",
     "login.displayName": "الاسم الظاهر",
     "login.displayNamePlaceholder": "اسمك",
-    "login.passwordSecurePlaceholder": "10 أحرف على الأقل",
+    "login.passwordSecurePlaceholder": "8 أحرف على الأقل",
     "login.createAccount": "إنشاء حساب",
     "login.haveAccount": "لديك حساب بالفعل؟ سجّل الدخول",
     "login.forgotPassword": "هل نسيت كلمة المرور؟",
@@ -1253,6 +1253,17 @@ export const ar = {
     "admin.content.edit": "تعديل",
     "admin.content.untitled": "بدون عنوان",
     "admin.content.rejectedReason": "سبب الرفض: {reason}",
+    "admin.content.pendingNotice": "هذا المحتوى قيد المراجعة ولا يمكن تعديله.",
+    "admin.content.goToReview": "الذهاب لقائمة المراجعة",
+    "admin.content.cannotShowForm": "لا يمكن عرض محرر النموذج",
+    "admin.content.invalidJsonHint": "المحتوى ليس JSON صالحاً. أصلحه في وضع الكود أولاً.",
+    "admin.content.noStructuredForm": "لا يوجد نموذج مهيكل لهذا الشكل",
+    "admin.content.switchToCode": "انتقل لوضع الكود لتعديل JSON الخام.",
+    "admin.content.clickToEdit": "انقر للفتح في المحرر الكامل.",
+    "admin.content.queuedFiles": "ملفات في قائمة الانتظار ({n})",
+    "admin.content.readOnlyPreview": "معاينة للقراءة فقط. استخدم الرفع لإنشاء نسخة سحابية قابلة للتعديل.",
+    "admin.content.previewLoading": "جارٍ تحميل المعاينة\u2026",
+    "admin.content.previewUnavailable": "المعاينة غير متاحة.",
 
     "admin.review.title": "قائمة المراجعة",
     "admin.review.subtitle": "اعتمد أو ارفض مقترحات المحتوى من المساهمين.",
@@ -1294,7 +1305,6 @@ export const ar = {
 
     // ── Admin shell + settings (revamped) ──────────────────────────────
     "admin.shell.brandAdmin": "الإدارة",
-    "admin.shell.search": "بحث في الإدارة…",
     "admin.shell.backToApp": "العودة للتطبيق",
     "admin.shell.menu": "القائمة",
     "admin.shell.navSection.work": "مساحة العمل",
@@ -1320,6 +1330,8 @@ export const ar = {
 
     "admin.settings.working.compact": "مضغوط",
     "admin.settings.working.comfortable": "مريح",
+    "admin.settings.working.compactHint": "صفوف أكثف",
+    "admin.settings.working.comfortableHint": "مسافات افتراضية",
     "admin.settings.working.desc": "الوضع المضغوط يقلّل المسافات وحجم الخط وارتفاع الصفوف لاستيعاب المزيد على الشاشة.",
 
     "admin.settings.behavior.reducedMotion": "تقليل الحركة",
@@ -1340,6 +1352,25 @@ export const ar = {
     "admin.settings.about.storage": "التخزين",
     "admin.settings.about.storageLocal": "تخزين المتصفح المحلي (لكل جهاز)",
     "admin.settings.about.role": "دورك",
+
+    // ── Admin toast messages ──────────────────────────────────────────
+    "admin.toast.failedLoadQueue": "فشل تحميل قائمة المراجعة",
+    "admin.toast.approveFailed": "فشل الاعتماد",
+    "admin.toast.failedLoadAuditLog": "فشل تحميل سجل التدقيق",
+    "admin.toast.failedLoadContent": "فشل تحميل المحتوى",
+    "admin.toast.failedCreateContent": "فشل إنشاء المحتوى",
+    "admin.toast.failedLoadDiff": "فشل تحميل الفروقات",
+    "admin.toast.rejectFailed": "فشل الرفض",
+    "admin.toast.contentNotFound": "المحتوى غير موجود",
+    "admin.toast.saveFailed": "فشل الحفظ",
+    "admin.toast.submitFailed": "فشل الإرسال",
+    "admin.toast.publishFailed": "فشل النشر",
+    "admin.toast.deleteFailed": "فشل الحذف",
+    "admin.toast.failedReadFiles": "فشل قراءة الملفات",
+    "admin.toast.failedLoadUsers": "فشل تحميل المستخدمين",
+    "admin.toast.failedUpdateRole": "فشل تحديث الدور",
+    "admin.toast.failedDeleteUser": "فشل حذف المستخدم",
+    "admin.toast.failedResetPassword": "فشل إعادة تعيين كلمة المرور",
 
     // ── Admin content tree + dropzone (revamped) ───────────────────────
     "admin.content.tree.title": "شجرة المحتوى",
@@ -1380,6 +1411,8 @@ export const ar = {
     "admin.content.editor.addCard": "إضافة بطاقة",
     "admin.content.editor.addStation": "إضافة محطة",
     "admin.content.editor.addVideo": "إضافة فيديو",
+    "admin.content.editor.addPrompt": "إضافة موجه",
+    "admin.content.editor.prompt": "موجه {n}",
     "admin.content.editor.remove": "إزالة",
     "admin.content.editor.moveUp": "تحريك لأعلى",
     "admin.content.editor.moveDown": "تحريك لأسفل",

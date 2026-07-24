@@ -60,7 +60,7 @@ export function JsonCodeEditor({
   return (
     <div className={cn("flex h-full flex-col", className)}>
       {/* Toolbar */}
-      <div className="shrink-0 flex items-center gap-2 px-3 py-1.5 border-b border-border/60 bg-muted/30">
+      <div className="shrink-0 flex items-center gap-2 px-3 py-1.5 border-b border-border bg-muted/30">
         <AlignLeft className="size-3.5 text-muted-foreground" />
         <span className="text-[11px] text-muted-foreground font-mono">
           {lines} lines · {chars} chars

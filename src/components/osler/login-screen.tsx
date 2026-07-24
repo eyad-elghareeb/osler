@@ -397,7 +397,7 @@ export function LoginScreen({ onLogin }: LoginScreenProps) {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder={cloudActive ? t("login.passwordSecurePlaceholder") : t("login.passwordPlaceholder")}
-                  minLength={cloudActive ? 10 : undefined}
+                  minLength={cloudActive ? 8 : undefined}
                   required={cloudActive}
                   className="w-full h-10 ps-3 pe-10 bg-background border border-border rounded-md text-sm outline-none focus:border-primary transition-colors"
                 />
@@ -428,7 +428,7 @@ export function LoginScreen({ onLogin }: LoginScreenProps) {
                   value={passwordConfirm}
                   onChange={(e) => setPasswordConfirm(e.target.value)}
                   placeholder={t("login.passwordSecurePlaceholder")}
-                  minLength={10}
+                  minLength={8}
                   required
                   className="w-full h-10 ps-3 pe-10 bg-background border border-border rounded-md text-sm outline-none focus:border-primary transition-colors"
                 />

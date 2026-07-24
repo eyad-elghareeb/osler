@@ -17,8 +17,6 @@ import { AdminPageFrame } from "@/components/osler/admin/admin-page-frame";
 import { AdminRouteGuard } from "@/components/osler/admin/admin-route-guard";
 import {
   useAdminSettings,
-  type AdminLang,
-  type AdminTheme,
   type AdminWorkingMode,
   type AdminLanding,
 } from "@/components/osler/admin/admin-settings-context";
@@ -48,11 +46,12 @@ import {
 import { toast } from "@/hooks/use-toast";
 
 export default function AdminSettingsPage() {
+  const { t } = useI18n();
   return (
     <AdminRouteGuard>
       <AdminPageFrame
-        title="Settings"
-        subtitle="Personalize the admin panel and configure working preferences."
+        title={t("admin.settings.title")}
+        subtitle={t("admin.settings.subtitle")}
         inlineIcon={SettingsIcon}
       >
         <AdminSettingsContent />
@@ -63,7 +62,7 @@ export default function AdminSettingsPage() {
 
 function AdminSettingsContent() {
   const { t } = useI18n();
-  const { settings, update, reset } = useAdminSettings();
+  const { settings, update, reset, language, theme, setLanguage, toggleTheme } = useAdminSettings();
   const identity = useAdminIdentity();
 
   return (
@@ -79,11 +78,11 @@ function AdminSettingsContent() {
             { id: "en", label: t("admin.settings.language.en"), native: "English", dir: "LTR", mark: "EN" },
             { id: "ar", label: t("admin.settings.language.ar"), native: "العربية", dir: "RTL", mark: "ع" },
           ] as const).map((opt) => {
-            const active = settings.language === opt.id;
+            const active = language === opt.id;
             return (
               <button
                 key={opt.id}
-                onClick={() => update("language", opt.id as AdminLang)}
+                onClick={() => setLanguage(opt.id)}
                 className={cn(
                   "flex items-center gap-3 p-3 rounded-xl border text-start transition-colors",
                   active
@@ -115,14 +114,14 @@ function AdminSettingsContent() {
             );
           })}
         </div>
-        <p className="mt-3 text-xs text-muted-foreground bg-muted/40 border border-border/60 rounded-md px-3 py-2">
+        <p className="mt-3 text-xs text-muted-foreground bg-muted/40 border border-border rounded-md px-3 py-2">
           <strong>ℹ</strong> {t("admin.settings.language.rtlNote")}
         </p>
       </SettingsCard>
 
       {/* ── Theme ────────────────────────────────────────────────────── */}
       <SettingsCard
-        icon={settings.theme === "dark" ? Moon : Sun}
+        icon={theme === "dark" ? Moon : Sun}
         title={t("admin.settings.section.appearance")}
         desc={t("admin.settings.theme.desc")}
       >
@@ -131,11 +130,11 @@ function AdminSettingsContent() {
             { id: "dark", label: t("admin.settings.theme.dark"), Icon: Moon },
             { id: "light", label: t("admin.settings.theme.light"), Icon: Sun },
           ] as const).map((opt) => {
-            const active = settings.theme === opt.id;
+            const active = theme === opt.id;
             return (
               <button
                 key={opt.id}
-                onClick={() => update("theme", opt.id as AdminTheme)}
+                onClick={toggleTheme}
                 className={cn(
                   "flex items-center gap-2 px-4 py-2 rounded-lg border text-sm font-medium transition-colors",
                   active
@@ -159,8 +158,8 @@ function AdminSettingsContent() {
       >
         <div className="grid grid-cols-2 gap-3 max-w-md">
           {([
-            { id: "comfortable", label: t("admin.settings.working.comfortable"), Icon: Sparkles, hint: "Default spacing" },
-            { id: "compact", label: t("admin.settings.working.compact"), Icon: Zap, hint: "Denser rows" },
+            { id: "comfortable", label: t("admin.settings.working.comfortable"), Icon: Sparkles, hint: t("admin.settings.working.comfortableHint") },
+            { id: "compact", label: t("admin.settings.working.compact"), Icon: Zap, hint: t("admin.settings.working.compactHint") },
           ] as const).map((opt) => {
             const active = settings.workingMode === opt.id;
             return (
@@ -293,7 +292,7 @@ function AdminSettingsContent() {
               <AlertDialogAction
                 onClick={() => {
                   reset();
-                  toast({ title: "Settings reset" });
+                  toast({ title: t("admin.settings.danger.reset") });
                 }}
               >
                 {t("admin.settings.danger.reset")}
@@ -368,8 +367,8 @@ function ToggleRow({
 
 function Field({ label, value }: { label: string; value: string }) {
   return (
-    <div className="border border-border/60 rounded-lg px-3 py-2 bg-muted/30">
-      <dt className="text-[10px] uppercase tracking-wider text-muted-foreground">{label}</dt>
+    <div className="border border-border rounded-lg px-3 py-2 bg-muted/30">
+      <dt className="text-xs uppercase tracking-wider text-muted-foreground">{label}</dt>
       <dd className="text-sm font-medium truncate">{value}</dd>
     </div>
   );

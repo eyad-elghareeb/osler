@@ -53,6 +53,8 @@ import {
   OsceEditor,
   VideoEditor,
   LibraryArticleEditor,
+  WrittenEditor,
+  BankEditor,
 } from "@/components/osler/admin/editors/structured-editors";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -93,7 +95,7 @@ export function ContentEditor({ id, capabilities }: ContentEditorProps) {
         setObj(c);
         setBody(c.body ?? "{}");
       })
-      .catch(() => toast({ title: "Content not found", variant: "destructive" }))
+      .catch(() => toast({ title: t("admin.toast.contentNotFound"), variant: "destructive" }))
       .finally(() => setLoading(false));
   }, [id]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -140,7 +142,7 @@ export function ContentEditor({ id, capabilities }: ContentEditorProps) {
       setDirty(false);
       toast({ title: t("admin.content.saved") });
     } catch {
-      toast({ title: "Save failed", variant: "destructive" });
+      toast({ title: t("admin.toast.saveFailed"), variant: "destructive" });
     } finally {
       setSaving(false);
     }
@@ -154,7 +156,7 @@ export function ContentEditor({ id, capabilities }: ContentEditorProps) {
       setObj((o) => (o ? { ...o, status: res.status as any } : o));
       toast({ title: t("admin.content.submitted") });
     } catch {
-      toast({ title: "Submit failed", variant: "destructive" });
+      toast({ title: t("admin.toast.submitFailed"), variant: "destructive" });
     }
   }
 
@@ -166,7 +168,7 @@ export function ContentEditor({ id, capabilities }: ContentEditorProps) {
       setObj((o) => (o ? { ...o, status: res.status as any } : o));
       toast({ title: t("admin.content.published") });
     } catch {
-      toast({ title: "Publish failed", variant: "destructive" });
+      toast({ title: t("admin.toast.publishFailed"), variant: "destructive" });
     }
   }
 
@@ -176,7 +178,7 @@ export function ContentEditor({ id, capabilities }: ContentEditorProps) {
       await adminApi.deleteContent(id);
       router.push("/admin/content");
     } catch {
-      toast({ title: "Delete failed", variant: "destructive" });
+      toast({ title: t("admin.toast.deleteFailed"), variant: "destructive" });
     }
   }
 
@@ -271,7 +273,7 @@ export function ContentEditor({ id, capabilities }: ContentEditorProps) {
       )}
 
       {/* Mode switcher */}
-      <div className="flex items-center gap-2 border-b border-border/60 px-3 sm:px-4 py-1.5 bg-muted/20">
+      <div className="flex items-center gap-2 border-b border-border px-3 sm:px-4 py-1.5 bg-muted/20">
         <ModeButton
           active={mode === "form"}
           onClick={() => setMode("form")}
@@ -342,18 +344,18 @@ export function ContentEditor({ id, capabilities }: ContentEditorProps) {
 
           {settings.showAdvancedFields && (
             <>
-              <div className="border-t border-border/60 pt-2 mt-2">
+              <div className="border-t border-border pt-2 mt-2">
                 <div className="font-semibold uppercase tracking-wider text-muted-foreground mb-1">
                   {t("admin.content.editor.advanced")}
                 </div>
               </div>
               <div>
                 <div className="font-semibold uppercase tracking-wider text-muted-foreground mb-1">ID</div>
-                <span className="font-mono text-[10px] break-all">{obj.id}</span>
+                <span className="font-mono text-xs break-all">{obj.id}</span>
               </div>
               <div>
                 <div className="font-semibold uppercase tracking-wider text-muted-foreground mb-1">R2 key</div>
-                <span className="font-mono text-[10px] break-all">{obj.r2_key_base}</span>
+                <span className="font-mono text-xs break-all">{obj.r2_key_base}</span>
               </div>
               <div>
                 <div className="font-semibold uppercase tracking-wider text-muted-foreground mb-1">Created</div>
@@ -380,9 +382,9 @@ export function ContentEditor({ id, capabilities }: ContentEditorProps) {
           {isPending ? (
             <div className="flex-1 flex items-center justify-center p-6 text-center text-sm text-muted-foreground">
               <div>
-                <p className="mb-2">This content is pending review and cannot be edited.</p>
+                <p className="mb-2">{t("admin.content.pendingNotice")}</p>
                 <Button variant="outline" size="sm" onClick={() => router.push("/admin/review")}>
-                  Go to review queue
+                  {t("admin.content.goToReview")}
                 </Button>
               </div>
             </div>
@@ -397,9 +399,9 @@ export function ContentEditor({ id, capabilities }: ContentEditorProps) {
               ) : parseError ? (
                 <div className="flex flex-col items-center justify-center h-full text-center p-6">
                   <XCircle className="size-8 text-destructive mb-2" />
-                  <p className="text-sm font-medium">Cannot show form editor</p>
+                  <p className="text-sm font-medium">{t("admin.content.cannotShowForm")}</p>
                   <p className="text-xs text-muted-foreground mt-1 mb-3 max-w-sm">
-                    The body is not valid JSON. Fix it in Code mode first.
+                    {t("admin.content.invalidJsonHint")}
                   </p>
                   <Button size="sm" variant="outline" onClick={() => setMode("code")}>
                     <Code2 className="size-3.5 mr-1.5" />
@@ -496,11 +498,12 @@ function isFormSupported(contentType: ContentType, parsed: any): boolean {
   if (!parsed || typeof parsed !== "object") return false;
   return (
     Array.isArray(parsed.questions) ||
+    Array.isArray(parsed.passages) ||
     Array.isArray(parsed.cards) ||
     Array.isArray(parsed.decks) ||
-    Array.isArray(parsed.passages) ||
     Array.isArray(parsed.stations) ||
     Array.isArray(parsed.videos) ||
+    Array.isArray(parsed.prompts) ||
     (parsed.front != null && parsed.back != null)
   );
 }
@@ -516,6 +519,7 @@ function FormEditorSwitch({
   onChange: (next: any) => void;
   readOnly?: boolean;
 }) {
+  const { t } = useI18n();
   // Detect the right editor based on the shape (not just the declared type)
   if (Array.isArray(parsed?.stations)) {
     return <OsceEditor value={parsed} onChange={onChange} readOnly={readOnly} />;
@@ -526,16 +530,22 @@ function FormEditorSwitch({
   if (Array.isArray(parsed?.cards) || Array.isArray(parsed?.decks) || parsed?.front != null) {
     return <FlashcardEditor value={parsed} onChange={onChange} readOnly={readOnly} />;
   }
-  if (Array.isArray(parsed?.questions) || Array.isArray(parsed?.passages)) {
+  if (Array.isArray(parsed?.passages)) {
+    return <BankEditor value={parsed} onChange={onChange} readOnly={readOnly} />;
+  }
+  if (Array.isArray(parsed?.prompts)) {
+    return <WrittenEditor value={parsed} onChange={onChange} readOnly={readOnly} />;
+  }
+  if (Array.isArray(parsed?.questions)) {
     return <QuizEditor value={parsed} onChange={onChange} readOnly={readOnly} />;
   }
   // Fallback: show a hint that no form is available, switch to code
   return (
     <div className="flex flex-col items-center justify-center h-full text-center p-6">
       <FormInput className="size-8 text-muted-foreground mb-2" />
-      <p className="text-sm font-medium">No structured form for this content shape</p>
+      <p className="text-sm font-medium">{t("admin.content.noStructuredForm")}</p>
       <p className="text-xs text-muted-foreground mt-1 max-w-sm">
-        Switch to Code mode to edit the raw JSON.
+        {t("admin.content.switchToCode")}
       </p>
     </div>
   );

@@ -2436,7 +2436,7 @@ function AccountSettingsSection() {
                 type="password"
                 value={newPassword}
                 onChange={(e) => setNewPassword(e.target.value)}
-                minLength={10}
+                minLength={8}
                 required
                 placeholder={t("login.passwordSecurePlaceholder")}
                 className="mt-1 w-full h-9 px-3 bg-background border border-border rounded-md text-sm outline-none focus:border-primary"

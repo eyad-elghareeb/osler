@@ -16,7 +16,7 @@ export function AdminHomeRedirect() {
     // landing page in Settings.
     const fallback =
       identity.user.role === "admin" ? "/admin/dashboard" : "/admin/content";
-    const target = `/admin/${settings.defaultLanding}` || fallback;
+    const target = settings.defaultLanding ? `/admin/${settings.defaultLanding}` : fallback;
     router.replace(target);
   }, [identity, router, settings.defaultLanding]);
 

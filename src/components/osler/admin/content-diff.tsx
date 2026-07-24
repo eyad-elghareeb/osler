@@ -53,7 +53,7 @@ export function ContentDiff({ id }: ContentDiffProps) {
   useEffect(() => {
     Promise.all([adminApi.getContent(id), adminApi.getDiff(id)])
       .then(([content, d]) => { setObj(content); setDiff(d); })
-      .catch(() => toast({ title: "Failed to load diff", variant: "destructive" }))
+      .catch(() => toast({ title: t("admin.toast.failedLoadDiff"), variant: "destructive" }))
       .finally(() => setLoading(false));
   }, [id]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -65,7 +65,7 @@ export function ContentDiff({ id }: ContentDiffProps) {
       toast({ title: t("admin.review.approve") });
       router.push("/admin/review");
     } catch {
-      toast({ title: "Approve failed", variant: "destructive" });
+      toast({ title: t("admin.toast.approveFailed"), variant: "destructive" });
     } finally {
       setBusy(false);
     }
@@ -79,7 +79,7 @@ export function ContentDiff({ id }: ContentDiffProps) {
       toast({ title: t("admin.review.reject") });
       router.push("/admin/review");
     } catch {
-      toast({ title: "Reject failed", variant: "destructive" });
+      toast({ title: t("admin.toast.rejectFailed"), variant: "destructive" });
     } finally {
       setBusy(false);
       setRejectOpen(false);
@@ -101,7 +101,7 @@ export function ContentDiff({ id }: ContentDiffProps) {
           <ArrowLeft className="size-4" />
         </Button>
         <div className="flex-1 min-w-0">
-          <span className="font-semibold text-sm truncate">{obj.title ?? "Untitled"}</span>
+          <span className="font-semibold text-sm truncate">{obj.title ?? t("admin.content.untitled")}</span>
           {obj.creator_username && (
             <span className="ml-2 text-xs text-muted-foreground">
               {t("admin.review.submittedBy", { name: `@${obj.creator_username}` })}
