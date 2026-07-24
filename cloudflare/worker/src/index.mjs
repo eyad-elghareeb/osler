@@ -139,7 +139,7 @@ async function readJson(request) {
 function validUsername(value) { return typeof value === "string" && /^[a-zA-Z0-9_.-]{3,32}$/.test(value); }
 function validEmail(value) { return !value || (typeof value === "string" && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value) && value.length <= 254); }
 function validPassword(value) {
-  if (typeof value !== "string" || value.length < 10 || value.length > 200) return false;
+  if (typeof value !== "string" || value.length < 8 || value.length > 200) return false;
   // Require at least 3 character classes (lowercase, uppercase, digit, symbol).
   // This blocks the most common weak passwords ("password123", "abcabcabc1")
   // while staying forgiving for users with non-Latin keyboards.

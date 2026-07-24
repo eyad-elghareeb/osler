@@ -39,6 +39,9 @@ next-env.d.ts
 prisma/dev.db
 prisma/*.db-journal
 
+# wrangler local state
+.wrangler/
+
 # osler local data
 osler-progress-v1
 osler-ai-chat-v1

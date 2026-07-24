@@ -292,8 +292,8 @@
     }
   },
   "cloud": {
-    "enabled": false,
-    "apiUrl": "",
+    "enabled": true,
+    "apiUrl": "http://localhost:8787",
     "syncQbank": true,
     "syncFlashcards": true
   },
