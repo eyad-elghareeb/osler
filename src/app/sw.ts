@@ -16,8 +16,14 @@ const CONTENT_CACHE = "osler-content-v1";
 
 const runtimeCaching: RuntimeCaching[] = [
   // Content packs: network-first, offline fallback to cache
+  // Matches local /osler-content/ AND remote Worker /v1/content/ endpoints.
+  // The SW cannot access process.env, so we detect remote content by checking
+  // whether the request path starts with /v1/content or /v1/content-manifests.
   {
-    matcher: ({ sameOrigin, url }) => sameOrigin && url.pathname.startsWith("/osler-content/"),
+    matcher: ({ url }) => {
+      const p = url.pathname;
+      return p.startsWith("/osler-content/") || p.startsWith("/v1/content/") || p.startsWith("/v1/content-manifests/");
+    },
     handler: new NetworkFirst({
       cacheName: "osler-content",
       plugins: [

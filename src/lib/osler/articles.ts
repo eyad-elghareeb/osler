@@ -6,10 +6,13 @@ import rehypeRaw from "rehype-raw";
 import rehypeStringify from "rehype-stringify";
 import type { Plugin } from "unified";
 import { loadCategoryTree } from "./content";
+import { contentFileUrl } from "./content-url";
 import type { ContentTreeNode, ContentLang } from "./types";
 
-
-const BASE = "/osler-content/library";
+/** Base URL for library article files. */
+function libraryBaseUrl(): string {
+  return contentFileUrl("library", "");
+}
 
 export type ArticleContentType = "md" | "pdf" | "html";
 
@@ -26,7 +29,7 @@ export function resolveArticleAsset(src: string, articleDir: string): string {
     return src;
   }
   const base = src.includes("/") ? src : `images/${src}`;
-  return `${BASE}/${articleDir}${base}`;
+  return `${libraryBaseUrl()}/${articleDir}${base}`;
 }
 
 export interface ArticleMeta {
@@ -210,7 +213,7 @@ async function loadLeafMeta(node: ContentTreeNode): Promise<ArticleMeta[]> {
       }
 
       if (ext === "html") {
-        const res = await fetch(`${BASE}/${filePath}`, { cache: "no-store" });
+        const res = await fetch(`${libraryBaseUrl()}/${filePath}`, { cache: "no-store" });
         if (!res.ok) return null;
         const text = await res.text();
         // Extract <title> from HTML if present
@@ -225,7 +228,7 @@ async function loadLeafMeta(node: ContentTreeNode): Promise<ArticleMeta[]> {
       }
 
       // Default: markdown
-      const res = await fetch(`${BASE}/${filePath}`, { cache: "no-store" });
+      const res = await fetch(`${libraryBaseUrl()}/${filePath}`, { cache: "no-store" });
       if (!res.ok) return null;
       const text = await res.text();
       const { meta } = parseFrontmatter(text);
@@ -270,14 +273,14 @@ export async function loadArticleContent(filePath: string): Promise<Article | nu
       title: (filePath.split("/").pop() ?? "").replace(/\.pdf$/, "").replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()),
       content: "",
       html: "",
-      fileUrl: `${BASE}/${filePath}`,
+      fileUrl: `${libraryBaseUrl()}/${filePath}`,
       lang: "en",
       contentType: "pdf",
     };
   }
 
   if (ext === "html") {
-    const res = await fetch(`${BASE}/${filePath}`, { cache: "no-store" });
+    const res = await fetch(`${libraryBaseUrl()}/${filePath}`, { cache: "no-store" });
     if (!res.ok) return null;
     const text = await res.text();
     const titleMatch = text.match(/<title[^>]*>([^<]+)<\/title>/i);
@@ -286,14 +289,14 @@ export async function loadArticleContent(filePath: string): Promise<Article | nu
       title: titleMatch?.[1]?.trim() ?? (filePath.split("/").pop() ?? "").replace(/\.html$/, "").replace(/-/g, " "),
       content: text,
       html: text,
-      fileUrl: `${BASE}/${filePath}`,
+      fileUrl: `${libraryBaseUrl()}/${filePath}`,
       lang: "en",
       contentType: "html",
     };
   }
 
   // Default: markdown
-  const res = await fetch(`${BASE}/${filePath}`, { cache: "no-store" });
+  const res = await fetch(`${libraryBaseUrl()}/${filePath}`, { cache: "no-store" });
   if (!res.ok) return null;
   const text = await res.text();
   const { meta, body } = parseFrontmatter(text);

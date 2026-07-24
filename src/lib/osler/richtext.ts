@@ -13,6 +13,8 @@
  * paths starting with `/` are returned untouched.
  */
 
+import { contentFileUrl } from "./content-url";
+
 /** Resolve an asset (image) src against a content pack folder. */
 export function resolveContentAsset(
   src: string,
@@ -25,7 +27,7 @@ export function resolveContentAsset(
   }
   // Bare filename → resolve against the pack's images/ subfolder.
   const base = src.includes("/") ? src : `images/${src}`;
-  return `/osler-content/${category}/${packPath}${base}`;
+  return contentFileUrl(category, `${packPath}${base}`);
 }
 
 /**

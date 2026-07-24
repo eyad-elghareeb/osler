@@ -24,8 +24,7 @@ import type {
   VideoContent,
 } from "./types";
 import { isEngineEnabled, getEngineOverride, enabledEngines } from "./config";
-
-const BASE = "/osler-content";
+import { manifestUrl, contentFileUrl, packBasePath as resolvePackBasePath } from "./content-url";
 
 /* ── Category helpers ─────────────────────────────────────────────── */
 
@@ -48,7 +47,7 @@ function categoryFolder(type: EngineType): string {
  */
 export function packBasePath(node: ContentTreeNode): string {
   const folder = categoryFolder(node.type);
-  return `${BASE}/${folder}/${node.path}`;
+  return resolvePackBasePath(folder, node.path);
 }
 
 /**
@@ -70,7 +69,7 @@ export function nodeUrls(node: ContentTreeNode): string[] {
  */
 export async function loadCategoryTree(type: EngineType): Promise<ContentTreeNode[]> {
   const folder = categoryFolder(type);
-  const res = await fetch(`${BASE}/${folder}/manifest.json`, { cache: "no-store" });
+  const res = await fetch(manifestUrl(folder), { cache: "no-store" });
   if (!res.ok) throw new Error(`Failed to load ${folder}/manifest.json: ${res.status}`);
   const manifest = (await res.json()) as CategoryManifest;
   return manifest.items;
@@ -111,7 +110,7 @@ export async function loadNodeContent(node: ContentTreeNode): Promise<AnyContent
     throw new Error(`No data files in ${node.path}`);
   }
 
-  const base = `${BASE}/${folder}/${node.path}`;
+  const base = contentFileUrl(folder, node.path);
   const results = await Promise.all(
     dataFiles.map(async (file) => {
       const res = await fetch(`${base}${file}`, { cache: "no-store" });
@@ -198,7 +197,7 @@ export async function loadAllContent(): Promise<{
 
   for (const folder of folders) {
     try {
-      const res = await fetch(`${BASE}/${folder}/manifest.json`, { cache: "no-store" });
+      const res = await fetch(manifestUrl(folder), { cache: "no-store" });
       if (!res.ok) continue;
       const manifest = (await res.json()) as CategoryManifest;
 
@@ -251,7 +250,7 @@ export async function loadContentByUid(uid: string): Promise<AnyContent> {
 
   for (const folder of folders) {
     try {
-      const res = await fetch(`${BASE}/${folder}/manifest.json`, { cache: "no-store" });
+      const res = await fetch(manifestUrl(folder), { cache: "no-store" });
       if (!res.ok) continue;
       const manifest = (await res.json()) as CategoryManifest;
       const found = findNodeByUid(manifest.items, uid);

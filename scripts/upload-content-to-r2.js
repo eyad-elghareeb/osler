@@ -1,7 +1,12 @@
 #!/usr/bin/env node
 /**
- * Upload local content packs from public/osler-content/ to the Cloudflare Worker
- * R2-backed admin content API. Creates each pack as a published content object.
+ * Upload local content packs from public/osler-content/ to R2 via the
+ * Cloudflare Worker's admin API. Stores category manifests and individual
+ * data files so the user-facing app can fetch them directly.
+ *
+ * R2 key structure:
+ *   content-manifests/<category>/manifest.json   — category manifest
+ *   content-files/<category>/<path>/<file>        — individual data/image files
  *
  * Usage: node scripts/upload-content-to-r2.js [api_url] [username] [password]
  */
@@ -41,10 +46,14 @@ async function login() {
   console.log(`Logged in as ${data.user.username} (${data.user.role})`);
 }
 
+async function uploadFile(key, content) {
+  return api("POST", "/v1/admin/content/upload-file", { key, body: content });
+}
+
 function readManifest(category) {
   const manifestPath = path.join(CONTENT_DIR, category, "manifest.json");
-  if (!fs.existsSync(manifestPath)) return [];
-  return JSON.parse(fs.readFileSync(manifestPath, "utf-8")).items || [];
+  if (!fs.existsSync(manifestPath)) return null;
+  return JSON.parse(fs.readFileSync(manifestPath, "utf-8"));
 }
 
 function flattenLeaves(nodes, parentLang = "en") {
@@ -64,115 +73,66 @@ function readFile(filePath) {
   return fs.readFileSync(path.join(CONTENT_DIR, filePath), "utf-8");
 }
 
-function mergeJsonFiles(dir, files) {
-  const merged = {};
-  for (const file of files) {
-    const raw = JSON.parse(readFile(path.join(dir, file)));
-    for (const [key, val] of Object.entries(raw)) {
-      if (Array.isArray(val)) {
-        if (!merged[key]) merged[key] = [];
-        merged[key].push(...val);
-      } else if (typeof val === "string") {
-        merged[key] = val;
-      }
-    }
-  }
-  return merged;
-}
-
-function buildContentBody(node, category) {
-  const dir = path.join(category, node.path);
-  const type = node.type;
-
-  if (type === "library") {
-    // Library: each .md file is a separate content object
-    return null; // handled specially
-  }
-
-  const data = mergeJsonFiles(dir, node.files);
-  const body = {
-    meta: { uid: node.uid, title: node.title, lang: node.lang || "en" },
-    type,
-  };
-
-  // Copy array keys from merged data
-  for (const [key, val] of Object.entries(data)) {
-    if (Array.isArray(val)) body[key] = val;
-    else if (typeof val === "string") body[key] = val;
-  }
-
-  return body;
-}
-
-async function uploadPack(title, contentType, body, lang = "en") {
-  const created = await api("POST", "/v1/admin/content", {
-    contentType,
-    title,
-    language: lang,
-    content: typeof body === "string" ? body : JSON.stringify(body),
-  });
-  if (!created?.id) return null;
-
-  // For non-library types, overwrite the draft with the full body
-  if (typeof body !== "string") {
-    await api("PUT", `/v1/admin/content/${created.id}/draft`, JSON.stringify(body), true);
-  }
-
-  // Direct publish (skip review)
-  const published = await api("POST", `/v1/admin/content/${created.id}/publish`);
-  return created.id;
-}
-
-async function processLibrary(node, category) {
-  const dir = path.join(category, node.path);
-  const ids = [];
-
-  for (const file of node.files) {
-    if (!file.endsWith(".md")) continue;
-    const md = readFile(path.join(dir, file));
-    const titleMatch = md.match(/^title:\s*(.+)$/m);
-    const title = titleMatch ? titleMatch[1].replace(/['"]/g, "").trim() : file.replace(".md", "");
-
-    const id = await uploadPack(title, "library", md, node.lang || "en");
-    if (id) ids.push(id);
-  }
-  return ids;
+function readBinary(filePath) {
+  return fs.readFileSync(path.join(CONTENT_DIR, filePath));
 }
 
 async function main() {
   await login();
 
   const categories = ["qbank", "flashcard", "osce", "library", "videos"];
-  let total = 0;
+  let totalFiles = 0;
 
   for (const category of categories) {
-    const items = readManifest(category);
-    if (!items.length) { console.log(`\n📁 ${category}: no items`); continue; }
+    const manifest = readManifest(category);
+    if (!manifest) { console.log(`\n📁 ${category}: no manifest`); continue; }
 
-    const leaves = flattenLeaves(items);
-    console.log(`\n📁 ${category}: ${leaves.length} pack(s)`);
+    console.log(`\n📁 ${category}`);
 
+    // 1. Upload the manifest
+    const manifestKey = `content-manifests/${category}/manifest.json`;
+    await uploadFile(manifestKey, JSON.stringify(manifest, null, 2));
+    console.log(`  ✓ ${manifestKey}`);
+    totalFiles++;
+
+    // 2. Upload individual data files for each leaf node
+    const leaves = flattenLeaves(manifest.items);
     for (const leaf of leaves) {
-      const lang = leaf.lang || "en";
-      let ids = [];
-
-      if (leaf.type === "library") {
-        ids = await processLibrary(leaf, category);
-      } else {
-        const body = buildContentBody(leaf, category);
-        if (!body) continue;
-        const id = await uploadPack(leaf.title, leaf.type, body, lang);
-        if (id) ids.push(id);
+      for (const file of leaf.files ?? []) {
+        const localPath = path.join(category, leaf.path, file);
+        const r2Key = `content-files/${category}/${leaf.path}/${file}`;
+        try {
+          const content = readFile(localPath);
+          await uploadFile(r2Key, content);
+          totalFiles++;
+        } catch (e) {
+          console.error(`  ✗ ${r2Key}: ${e.message}`);
+        }
       }
-
-      if (ids.length) {
-        console.log(`  ✓ ${leaf.title} (${leaf.type}) → ${ids.join(", ")}`);
-        total += ids.length;
+      // Upload images if present
+      for (const img of leaf.images ?? []) {
+        const localPath = path.join(category, leaf.path, "images", img);
+        const r2Key = `content-files/${category}/${leaf.path}images/${img}`;
+        try {
+          const content = readBinary(localPath);
+          // For images, use a raw upload (base64 or just store as-is)
+          // The upload-file endpoint handles text; for binary we need a different approach.
+          // R2 put via the Worker accepts text, so we base64-encode images.
+          const b64 = content.toString("base64");
+          await api("POST", "/v1/admin/content/upload-file", {
+            key: r2Key,
+            body: `data:application/octet-stream;base64,${b64}`,
+          });
+          totalFiles++;
+        } catch (e) {
+          console.error(`  ✗ ${r2Key}: ${e.message}`);
+        }
       }
+      console.log(`  ✓ ${leaf.title} (${leaf.files?.length ?? 0} files)`);
     }
   }
 
-  console.log(`\n✨ Uploaded ${total} content object(s) to R2`);
+  console.log(`\n✨ Uploaded ${totalFiles} file(s) to R2`);
 }
 
 main().catch(console.error);

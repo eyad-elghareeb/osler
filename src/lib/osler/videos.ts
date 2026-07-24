@@ -12,6 +12,7 @@
  */
 
 import { loadCategoryTree, flattenTree } from "./content";
+import { contentFileUrl } from "./content-url";
 import type {
   ContentTreeNode,
   ContentLang,
@@ -19,7 +20,9 @@ import type {
   VideoContent,
 } from "./types";
 
-const BASE = "/osler-content/videos";
+function videoFileUrl(relativePath: string): string {
+  return contentFileUrl("videos", relativePath);
+}
 
 /* ── Tiny cache ─────────────────────────────────────────────────────── */
 
@@ -54,7 +57,7 @@ export async function loadNodeVideos(node: ContentTreeNode): Promise<VideoResour
   const files = node.files ?? [];
   const results = await Promise.all(
     files.map(async (file) => {
-      const res = await fetch(`${BASE}/${node.path}${file}`, { cache: "no-store" });
+      const res = await fetch(videoFileUrl(`${node.path}${file}`), { cache: "no-store" });
       if (!res.ok) return [] as VideoResource[];
       const data = (await res.json()) as { videos?: VideoResource[] };
       return Array.isArray(data.videos) ? data.videos : [];

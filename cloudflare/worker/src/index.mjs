@@ -601,6 +601,34 @@ async function handleAdmin(request, env, session, url, origin) {
   if (path.startsWith("/v1/admin/content")) {
     if (!isAdminOrContent(session)) return json({ error: "Forbidden" }, 403, origin);
 
+    // Bulk upload: store raw files in R2 for the user-facing content API.
+    // POST /v1/admin/content/upload-file { key: "content-files/...", body: "..." }
+    // or { key: "content-manifests/...", body: "..." }
+    // For binary files (images), body can be a data URI: "data:...;base64,..."
+    if (request.method === "POST" && path === "/v1/admin/content/upload-file") {
+      if (!isAdmin(session)) return json({ error: "Forbidden" }, 403, origin);
+      if (!env.CONTENT) return json({ error: "Content storage not configured" }, 503, origin);
+      const body = await readJson(request);
+      const key = typeof body.key === "string" ? body.key.trim() : "";
+      const raw = typeof body.body === "string" ? body.body : "";
+      if (!key || !raw) return json({ error: "key and body required" }, 400, origin);
+      if (key.length > 1024) return json({ error: "key too long" }, 400, origin);
+      const ext = key.split(".").pop()?.toLowerCase() ?? "";
+      let content;
+      let ct;
+      if (raw.startsWith("data:")) {
+        // data URI — decode base64
+        const b64 = raw.split(",")[1] ?? "";
+        content = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+        ct = raw.slice(5, raw.indexOf(";")) || "application/octet-stream";
+      } else {
+        content = raw;
+        ct = ext === "json" ? "application/json" : ext === "md" ? "text/markdown" : ext === "html" ? "text/html" : "application/octet-stream";
+      }
+      await env.CONTENT.put(key, content, { httpMetadata: { contentType: ct } });
+      return json({ ok: true, key }, 200, origin);
+    }
+
     // Pending review queue
     if (request.method === "GET" && path === "/v1/admin/content/pending") {
       if (!isAdmin(session)) return json({ error: "Forbidden" }, 403, origin);
@@ -807,6 +835,47 @@ export default {
       // ── Public health check ──
       if (request.method === "GET" && url.pathname === "/v1/health") {
         return json({ ok: true, googleEnabled: googleReady(env), turnstileEnabled: env.TURNSTILE_ENABLED === "true" }, 200, origin, { cacheControl: "public, max-age=60" });
+      }
+
+      // ── Public content serving (R2-backed) ──
+      // Serves content packs from R2 in the same structure the frontend expects:
+      //   GET /v1/content/:category/manifest.json
+      //   GET /v1/content/:category/:path.../:file
+      if (request.method === "GET" && url.pathname.startsWith("/v1/content/")) {
+        const contentPath = url.pathname.slice("/v1/content/".length);
+        if (!env.CONTENT) return json({ error: "Content storage not configured" }, 503, origin);
+        const r2Key = `content-files/${decodeURIComponent(contentPath)}`;
+        const obj = await env.CONTENT.get(r2Key);
+        if (!obj) return json({ error: "Not found" }, 404, origin);
+        const ext = contentPath.split(".").pop()?.toLowerCase() ?? "";
+        const contentType = ext === "json" ? "application/json" : ext === "md" ? "text/markdown" : ext === "html" ? "text/html" : ext === "pdf" ? "application/pdf" : "application/octet-stream";
+        return new Response(obj.body, {
+          status: 200,
+          headers: securityHeaders({
+            "content-type": contentType,
+            "cache-control": "public, max-age=300",
+            ...cors(origin),
+          }),
+        });
+      }
+
+      // ── Public content manifests (R2-backed) ──
+      // Serves category manifests from R2:
+      //   GET /v1/content-manifests/:category/manifest.json
+      if (request.method === "GET" && url.pathname.startsWith("/v1/content-manifests/")) {
+        const manifestPath = url.pathname.slice("/v1/content-manifests/".length);
+        if (!env.CONTENT) return json({ error: "Content storage not configured" }, 503, origin);
+        const r2Key = `content-manifests/${decodeURIComponent(manifestPath)}`;
+        const obj = await env.CONTENT.get(r2Key);
+        if (!obj) return json({ error: "Not found" }, 404, origin);
+        return new Response(obj.body, {
+          status: 200,
+          headers: securityHeaders({
+            "content-type": "application/json",
+            "cache-control": "public, max-age=60",
+            ...cors(origin),
+          }),
+        });
       }
 
       // ── Google OAuth ──
