@@ -4,9 +4,31 @@
  * When the instance is cloud-enabled (cloud.enabled = true, cloud.apiUrl set),
  * content is served from the Cloudflare Worker's R2-backed endpoints.
  * Otherwise, falls back to the local /osler-content/ directory.
+ *
+ * If the Worker is unreachable (fetch fails), the URL helpers silently fall
+ * back to local paths so the main site keeps working.
  */
 
 import { getConfig } from "./config";
+
+/** Collapse runs of `/` in a URL path (except after `://`) to prevent double-slash R2 key mismatches. */
+function normalizeUrl(url: string): string {
+  const schemeEnd = url.indexOf("://");
+  if (schemeEnd === -1) return url.replace(/\/{2,}/g, "/");
+  const scheme = url.slice(0, schemeEnd + 3);
+  const rest = url.slice(schemeEnd + 3);
+  return scheme + rest.replace(/\/{2,}/g, "/");
+}
+
+/** Resolve the cloud API base URL. Checks env var first, then falls back to config. */
+function resolvedApiUrl(): string | null {
+  if (typeof process !== "undefined" && process.env.NEXT_PUBLIC_CLOUD_API_URL) {
+    return process.env.NEXT_PUBLIC_CLOUD_API_URL.replace(/\/$/, "");
+  }
+  const cfg = getConfig().cloud;
+  if (cfg.enabled && cfg.apiUrl) return cfg.apiUrl.replace(/\/$/, "");
+  return null;
+}
 
 /* ── Local paths (same-origin static files) ─────────────────────── */
 
@@ -36,25 +58,85 @@ function remotePackBasePath(apiUrl: string, category: string, nodePath: string):
   return `${apiUrl}/v1/content/${category}/${nodePath}`;
 }
 
+/* ── Cloud health cache ─────────────────────────────────────────── */
+
+let _cloudReachable: boolean | null = null;
+let _cloudCheckPromise: Promise<boolean> | null = null;
+let _reprobeTimer: ReturnType<typeof setTimeout> | null = null;
+
+/**
+ * Probe the Worker once to check if it's reachable. Caches the result for
+ * 60 seconds so repeated calls don't hammer the network.
+ */
+function isCloudReachable(): boolean {
+  // If we haven't checked yet, or the cache expired, start an async check
+  // but return the cached value (or true for the first call).
+  if (_cloudReachable === null) {
+    // First call: assume reachable if cloud is configured
+    const apiUrl = resolvedApiUrl();
+    if (!apiUrl) return false;
+    _cloudReachable = true;
+    if (!_cloudCheckPromise) _probeCloud(apiUrl);
+    return true;
+  }
+  return _cloudReachable;
+}
+
+function _probeCloud(apiUrl: string): void {
+  _cloudCheckPromise = fetch(`${apiUrl}/v1/health`, {
+    method: "GET",
+    signal: AbortSignal.timeout(5000),
+  })
+    .then((r) => r.ok)
+    .catch(() => false)
+    .then((ok) => {
+      _cloudReachable = ok;
+      _cloudCheckPromise = null;
+      // Re-probe after 60 s or after a forced reset, whichever comes first.
+      if (_reprobeTimer) clearTimeout(_reprobeTimer);
+      _reprobeTimer = setTimeout(() => {
+        _reprobeTimer = null;
+        _cloudReachable = null;
+      }, 60_000);
+      return ok;
+    });
+}
+
 /* ── Public API ─────────────────────────────────────────────────── */
 
 /** Resolve the manifest URL for a given category folder. */
 export function manifestUrl(folder: string): string {
-  const cfg = getConfig().cloud;
-  if (cfg.enabled && cfg.apiUrl) return remoteManifestUrl(cfg.apiUrl, folder);
+  const apiUrl = resolvedApiUrl();
+  if (apiUrl && isCloudReachable()) return normalizeUrl(remoteManifestUrl(apiUrl, folder));
   return localManifestUrl(folder);
 }
 
 /** Resolve a content file URL (data files, images, articles). */
 export function contentFileUrl(category: string, relativePath: string): string {
-  const cfg = getConfig().cloud;
-  if (cfg.enabled && cfg.apiUrl) return remoteContentUrl(cfg.apiUrl, category, relativePath);
+  const apiUrl = resolvedApiUrl();
+  if (apiUrl && isCloudReachable()) return normalizeUrl(remoteContentUrl(apiUrl, category, relativePath));
   return localContentUrl(category, relativePath);
 }
 
 /** Base URL for a content node's folder (used for precache URLs and fetch bases). */
 export function packBasePath(category: string, nodePath: string): string {
-  const cfg = getConfig().cloud;
-  if (cfg.enabled && cfg.apiUrl) return remotePackBasePath(cfg.apiUrl, category, nodePath);
+  const apiUrl = resolvedApiUrl();
+  if (apiUrl && isCloudReachable()) return normalizeUrl(remotePackBasePath(apiUrl, category, nodePath));
   return localPackBasePath(category, nodePath);
+}
+
+/**
+ * Force-reset the cloud reachability cache. Call this after a failed fetch
+ * to immediately fall back to local content without waiting for the cache
+ * to expire. Marks cloud as unreachable and schedules a re-probe after 30 s.
+ */
+export function resetCloudReachable(): void {
+  _cloudReachable = false;
+  _cloudCheckPromise = null;
+  // Schedule a re-probe so the Worker can recover without waiting the full 60 s.
+  if (_reprobeTimer) clearTimeout(_reprobeTimer);
+  _reprobeTimer = setTimeout(() => {
+    _reprobeTimer = null;
+    _cloudReachable = null;
+  }, 30_000);
 }

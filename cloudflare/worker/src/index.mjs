@@ -140,7 +140,7 @@ function validUsername(value) { return typeof value === "string" && /^[a-zA-Z0-9
 function validEmail(value) { return !value || (typeof value === "string" && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value) && value.length <= 254); }
 function validPassword(value) {
   if (typeof value !== "string" || value.length < 8 || value.length > 200) return false;
-  // Require at least 3 character classes (lowercase, uppercase, digit, symbol).
+  // Require at least 2 character classes (lowercase, uppercase, digit, symbol).
   // This blocks the most common weak passwords ("password123", "abcabcabc1")
   // while staying forgiving for users with non-Latin keyboards.
   const classes = [/[a-z]/, /[A-Z]/, /[0-9]/, /[^A-Za-z0-9]/].filter((re) => re.test(value)).length;
@@ -583,7 +583,7 @@ async function handleAdmin(request, env, session, url, origin) {
       if (request.method === "POST") {
         const body = await readJson(request);
         const password = typeof body.password === "string" && validPassword(body.password) ? body.password : null;
-        if (!password) return json({ error: "Password must be at least 10 characters with 2 character classes" }, 400, origin);
+        if (!password) return json({ error: "Password must be at least 8 characters with 2 character classes" }, 400, origin);
         const user = await env.DB.prepare("SELECT * FROM users WHERE id = ?").bind(targetId).first();
         if (!user) return json({ error: "User not found" }, 404, origin);
         const hashed = await passwordHash(password);
@@ -842,7 +842,7 @@ export default {
       //   GET /v1/content/:category/manifest.json
       //   GET /v1/content/:category/:path.../:file
       if (request.method === "GET" && url.pathname.startsWith("/v1/content/")) {
-        const contentPath = url.pathname.slice("/v1/content/".length);
+        const contentPath = url.pathname.slice("/v1/content/".length).replace(/\/{2,}/g, "/");
         if (!env.CONTENT) return json({ error: "Content storage not configured" }, 503, origin);
         const r2Key = `content-files/${decodeURIComponent(contentPath)}`;
         const obj = await env.CONTENT.get(r2Key);
@@ -863,7 +863,7 @@ export default {
       // Serves category manifests from R2:
       //   GET /v1/content-manifests/:category/manifest.json
       if (request.method === "GET" && url.pathname.startsWith("/v1/content-manifests/")) {
-        const manifestPath = url.pathname.slice("/v1/content-manifests/".length);
+        const manifestPath = url.pathname.slice("/v1/content-manifests/".length).replace(/\/{2,}/g, "/");
         if (!env.CONTENT) return json({ error: "Content storage not configured" }, 503, origin);
         const r2Key = `content-manifests/${decodeURIComponent(manifestPath)}`;
         const obj = await env.CONTENT.get(r2Key);
@@ -1017,7 +1017,7 @@ export default {
       }
       if (request.method === "POST" && url.pathname === "/v1/account/password") {
         const body = await readJson(request);
-        if (!validPassword(body.password)) return json({ error: "Password must be at least 10 characters with 2 character classes" }, 400, origin);
+        if (!validPassword(body.password)) return json({ error: "Password must be at least 8 characters with 2 character classes" }, 400, origin);
         if (Number(session.user.has_password ?? 1) === 1 && !await passwordMatches(String(body.currentPassword || ""), session.user.password_salt, session.user.password_hash)) return json({ error: "Current password is incorrect" }, 401, origin);
         const password = await passwordHash(body.password);
         await env.DB.batch([

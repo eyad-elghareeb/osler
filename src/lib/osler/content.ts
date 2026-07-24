@@ -24,7 +24,7 @@ import type {
   VideoContent,
 } from "./types";
 import { isEngineEnabled, getEngineOverride, enabledEngines } from "./config";
-import { manifestUrl, contentFileUrl, packBasePath as resolvePackBasePath } from "./content-url";
+import { manifestUrl, contentFileUrl, packBasePath as resolvePackBasePath, resetCloudReachable } from "./content-url";
 
 /* ── Category helpers ─────────────────────────────────────────────── */
 
@@ -66,10 +66,18 @@ export function nodeUrls(node: ContentTreeNode): string[] {
 
 /**
  * Load the category manifest (tree) for a given engine type.
+ * Falls back to local URLs if the remote Worker is unreachable.
  */
 export async function loadCategoryTree(type: EngineType): Promise<ContentTreeNode[]> {
   const folder = categoryFolder(type);
-  const res = await fetch(manifestUrl(folder), { cache: "no-store" });
+  let url = manifestUrl(folder);
+  let res = await fetch(url, { cache: "no-store" });
+  // If remote failed, reset cloud cache and retry with local URL
+  if (!res.ok && url !== `/osler-content/${folder}/manifest.json`) {
+    resetCloudReachable();
+    url = `/osler-content/${folder}/manifest.json`;
+    res = await fetch(url, { cache: "no-store" });
+  }
   if (!res.ok) throw new Error(`Failed to load ${folder}/manifest.json: ${res.status}`);
   const manifest = (await res.json()) as CategoryManifest;
   return manifest.items;
@@ -101,19 +109,27 @@ function engineTypeForCategory(type: EngineType, node: ContentTreeNode): EngineT
 
 /**
  * Load content from a leaf node's folder by fetching all its .json data files
- * and merging their arrays.
+ * and merging their arrays. Falls back to local URLs if the Worker is unreachable.
  */
 export async function loadNodeContent(node: ContentTreeNode): Promise<AnyContent> {
   const folder = categoryFolder(node.type);
-  const dataFiles = node.files ?? [];
+  const dataFiles = (node.files ?? []).filter((f) => f.endsWith(".json"));
   if (dataFiles.length === 0) {
-    throw new Error(`No data files in ${node.path}`);
+    throw new Error(`No JSON data files in ${node.path}`);
   }
 
   const base = contentFileUrl(folder, node.path);
   const results = await Promise.all(
     dataFiles.map(async (file) => {
-      const res = await fetch(`${base}${file}`, { cache: "no-store" });
+      let res = await fetch(`${base}${file}`, { cache: "no-store" });
+      // If remote failed, reset cloud cache and retry with local URL
+      if (!res.ok) {
+        const localBase = `/osler-content/${folder}/${node.path}`;
+        if (base !== localBase) {
+          resetCloudReachable();
+          res = await fetch(`${localBase}${file}`, { cache: "no-store" });
+        }
+      }
       if (!res.ok) throw new Error(`Failed to load ${base}${file}: ${res.status}`);
       return (await res.json()) as Record<string, unknown>;
     })
@@ -190,14 +206,22 @@ export async function loadAllContent(): Promise<{
   trees: Record<string, ContentTreeNode[]>;
 }> {
   // Filter out disabled engine plugins — only iterate engines enabled in osler.config.
-  const types = enabledEngines();
+  // Library articles use .md files loaded via articles.ts, not JSON — skip them here.
+  const types = enabledEngines().filter((t) => t !== "library");
   const folders = new Set(types.map(categoryFolder));
   const allLeaves: ContentTreeNode[] = [];
   const trees: Record<string, ContentTreeNode[]> = {};
 
   for (const folder of folders) {
     try {
-      const res = await fetch(manifestUrl(folder), { cache: "no-store" });
+      let url = manifestUrl(folder);
+      let res = await fetch(url, { cache: "no-store" });
+      // If remote failed, reset cloud cache and retry with local URL
+      if (!res.ok && url !== `/osler-content/${folder}/manifest.json`) {
+        resetCloudReachable();
+        url = `/osler-content/${folder}/manifest.json`;
+        res = await fetch(url, { cache: "no-store" });
+      }
       if (!res.ok) continue;
       const manifest = (await res.json()) as CategoryManifest;
 
@@ -245,12 +269,20 @@ export async function loadAllContent(): Promise<{
  */
 export async function loadContentByUid(uid: string): Promise<AnyContent> {
   // Only search engines that are enabled in osler.config.
-  const types = enabledEngines();
+  // Library articles use .md files loaded via articles.ts, not JSON — skip them here.
+  const types = enabledEngines().filter((t) => t !== "library");
   const folders = new Set(types.map(categoryFolder));
 
   for (const folder of folders) {
     try {
-      const res = await fetch(manifestUrl(folder), { cache: "no-store" });
+      let url = manifestUrl(folder);
+      let res = await fetch(url, { cache: "no-store" });
+      // If remote failed, reset cloud cache and retry with local URL
+      if (!res.ok && url !== `/osler-content/${folder}/manifest.json`) {
+        resetCloudReachable();
+        url = `/osler-content/${folder}/manifest.json`;
+        res = await fetch(url, { cache: "no-store" });
+      }
       if (!res.ok) continue;
       const manifest = (await res.json()) as CategoryManifest;
       const found = findNodeByUid(manifest.items, uid);
