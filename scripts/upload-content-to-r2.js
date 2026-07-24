@@ -1,14 +1,16 @@
 #!/usr/bin/env node
 /**
- * Upload local content packs from public/osler-content/ to R2 via the
- * Cloudflare Worker's admin API. Stores category manifests and individual
- * data files so the user-facing app can fetch them directly.
+ * Upload / sync local content packs from public/osler-content/ to R2 via the
+ * Cloudflare Worker's admin API, OR copy directly to the local content directory.
  *
  * R2 key structure:
  *   content-manifests/<category>/manifest.json   — category manifest
  *   content-files/<category>/<path>/<file>        — individual data/image files
  *
- * Usage: node scripts/upload-content-to-r2.js [api_url] [username] [password]
+ * Usage:
+ *   node scripts/upload-content-to-r2.js                      # upload to Worker (default)
+ *   node scripts/upload-content-to-r2.js --local               # copy to public/osler-content/
+ *   node scripts/upload-content-to-r2.js [api_url] [user] [pass]  # custom Worker
  */
 
 const fs = require("fs");
@@ -19,7 +21,12 @@ const USERNAME = process.argv[3] || "admin";
 const PASSWORD = process.argv[4] || "123";
 const CONTENT_DIR = path.join(__dirname, "..", "public", "osler-content");
 
+// Check for --local flag
+const IS_LOCAL = process.argv.includes("--local");
+
 let TOKEN = null;
+
+// ── API helpers (remote mode) ────────────────────────────────────────
 
 async function api(method, endpoint, body, raw = false) {
   const headers = { Authorization: `Bearer ${TOKEN}` };
@@ -50,6 +57,8 @@ async function uploadFile(key, content) {
   return api("POST", "/v1/admin/content/upload-file", { key, body: content });
 }
 
+// ── File helpers ──────────────────────────────────────────────────────
+
 function readManifest(category) {
   const manifestPath = path.join(CONTENT_DIR, category, "manifest.json");
   if (!fs.existsSync(manifestPath)) return null;
@@ -77,9 +86,73 @@ function readBinary(filePath) {
   return fs.readFileSync(path.join(CONTENT_DIR, filePath));
 }
 
-async function main() {
-  await login();
+// ── Local sync: copy files directly to public/osler-content/ ───────────
 
+function syncLocal() {
+  const categories = ["qbank", "flashcard", "osce", "library", "videos"];
+  let totalFiles = 0;
+  let warnings = [];
+
+  for (const category of categories) {
+    const manifest = readManifest(category);
+    if (!manifest) {
+      warnings.push(`${category}: no manifest found — run 'npm run generate-manifests' first`);
+      continue;
+    }
+
+    console.log(`\n📁 ${category}`);
+    const leaves = flattenLeaves(manifest.items);
+
+    for (const leaf of leaves) {
+      const leafDir = path.join(CONTENT_DIR, category, leaf.path);
+
+      // Ensure the leaf directory exists
+      if (!fs.existsSync(leafDir)) {
+        fs.mkdirSync(leafDir, { recursive: true });
+      }
+
+      // Copy data files (.json, .md, .pdf, .html)
+      for (const file of leaf.files ?? []) {
+        const srcPath = path.join(CONTENT_DIR, category, leaf.path, file);
+        const dstPath = path.join(leafDir, file);
+        if (!fs.existsSync(srcPath)) {
+          warnings.push(`  Missing: ${category}/${leaf.path}${file}`);
+          continue;
+        }
+        fs.copyFileSync(srcPath, dstPath);
+        totalFiles++;
+      }
+
+      // Copy images
+      for (const img of leaf.images ?? []) {
+        const srcPath = path.join(CONTENT_DIR, category, leaf.path, "images", img);
+        const imgDir = path.join(leafDir, "images");
+        if (!fs.existsSync(imgDir)) {
+          fs.mkdirSync(imgDir, { recursive: true });
+        }
+        const dstPath = path.join(imgDir, img);
+        if (!fs.existsSync(srcPath)) {
+          warnings.push(`  Missing image: ${category}/${leaf.path}images/${img}`);
+          continue;
+        }
+        fs.copyFileSync(srcPath, dstPath);
+        totalFiles++;
+      }
+
+      console.log(`  ✓ ${leaf.title} (${leaf.files?.length ?? 0} files, ${leaf.images?.length ?? 0} images)`);
+    }
+  }
+
+  console.log(`\n✨ Synced ${totalFiles} file(s) locally to ${CONTENT_DIR}`);
+  if (warnings.length > 0) {
+    console.log(`\n⚠️  Warnings (${warnings.length}):`);
+    for (const w of warnings) console.log(`  ${w}`);
+  }
+}
+
+// ── Remote sync: upload files to Worker R2 ────────────────────────────
+
+async function syncRemote() {
   const categories = ["qbank", "flashcard", "osce", "library", "videos"];
   let totalFiles = 0;
 
@@ -112,16 +185,12 @@ async function main() {
       // Upload images if present
       for (const img of leaf.images ?? []) {
         const localPath = path.join(category, leaf.path, "images", img);
-        // `leaf.path` ends with "/" so we can concatenate directly. Use
-        // path.join for clarity on local FS, but keep the slash for the R2 key.
         const imgR2Path = leaf.path.endsWith("/")
           ? `${leaf.path}images/${img}`
           : `${leaf.path}/images/${img}`;
         const r2Key = `content-files/${category}/${imgR2Path}`;
         try {
           const content = readBinary(localPath);
-          // Pick a sensible content-type from the extension so the Worker's
-          // public serving endpoint returns the right Content-Type header.
           const ext = path.extname(img).toLowerCase();
           const mime =
             ext === ".svg" ? "image/svg+xml"
@@ -148,6 +217,38 @@ async function main() {
   }
 
   console.log(`\n✨ Uploaded ${totalFiles} file(s) to R2`);
+}
+
+// ── Ensure manifests exist ────────────────────────────────────────────
+
+function ensureManifests() {
+  const categories = ["qbank", "flashcard", "osce", "library", "videos"];
+  let missing = false;
+  for (const cat of categories) {
+    if (!readManifest(cat)) {
+      missing = true;
+      break;
+    }
+  }
+  if (missing) {
+    console.log("⚠️  Manifests missing. Generating...");
+    require("./generate-content-manifests");
+  }
+}
+
+// ── Main ───────────────────────────────────────────────────────────────
+
+async function main() {
+  ensureManifests();
+
+  if (IS_LOCAL) {
+    console.log("🔧 Local mode: syncing files to public/osler-content/");
+    syncLocal();
+  } else {
+    console.log(`☁️  Remote mode: uploading to ${API}`);
+    await login();
+    await syncRemote();
+  }
 }
 
 main().catch(console.error);

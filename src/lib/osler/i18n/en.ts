@@ -1432,4 +1432,8 @@ export const en = {
     "admin.content.editor.tags": "Tags",
     "admin.content.editor.duration": "Duration (sec)",
     "admin.content.editor.url": "URL",
+
+    "admin.content.editor.articleType": "Article type",
+    "admin.content.editor.pdfDropHint": "Drop a PDF file here or click to upload",
+    "admin.content.editor.uploadPdf": "Upload PDF",
 } as const;

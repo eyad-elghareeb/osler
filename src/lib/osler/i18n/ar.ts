@@ -1427,4 +1427,8 @@ export const ar = {
     "admin.content.editor.tags": "الوسوم",
     "admin.content.editor.duration": "المدة (ثانية)",
     "admin.content.editor.url": "الرابط",
+
+    "admin.content.editor.articleType": "نوع المقال",
+    "admin.content.editor.pdfDropHint": "أسقط ملف PDF هنا أو انقر للرفع",
+    "admin.content.editor.uploadPdf": "رفع PDF",
 } as const;

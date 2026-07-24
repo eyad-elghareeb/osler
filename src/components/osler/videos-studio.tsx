@@ -134,16 +134,23 @@ export function VideosStudio({ initialVideoId, onOpenArticle, onNavigateBack }: 
       return;
     }
     setFolderLoading(true);
-    // Collect all leaf nodes under this node (could be itself or its descendants).
     const leaves = collectLeaves(node);
     Promise.all(leaves.map(loadNodeVideos))
-      .then((arrays) => setFolderVideos(arrays.flat()))
+      .then((arrays) => {
+        const all = arrays.flat();
+        // Apply content-language filter
+        if (contentFilter !== "all") {
+          setFolderVideos(all.filter((v) => (v.lang ?? "en") === contentFilter));
+        } else {
+          setFolderVideos(all);
+        }
+      })
       .catch((e) => {
         console.error("Failed to load folder videos:", e);
         setFolderVideos([]);
       })
       .finally(() => setFolderLoading(false));
-  }, [selectedNodeUid, tree]);
+  }, [selectedNodeUid, tree, contentFilter]);
 
   // Open initial video if provided.
   React.useEffect(() => {

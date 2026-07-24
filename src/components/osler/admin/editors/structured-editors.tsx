@@ -23,8 +23,12 @@ import {
   ImagePlus,
   GripVertical,
   Youtube,
+  FileText,
+  Upload,
+  Eye,
 } from "lucide-react";
 import { useI18n } from "@/components/osler/i18n-provider";
+import { haptic } from "@/lib/osler/native";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -1969,35 +1973,156 @@ export function BankEditor({ value, onChange, readOnly, r2KeyBase }: StructuredE
 
 export function LibraryArticleEditor({ value, onChange, readOnly, r2KeyBase }: StructuredEditorProps) {
   const { t } = useI18n();
-  const markdown: string = typeof value === "string" ? value : (value?.body ?? "");
+  const { toast } = useToast();
 
-  function update(next: string) {
-    if (typeof value === "string") onChange(next);
-    else onChange({ ...value, body: next });
+  // Detect content type from value
+  const rawValue = typeof value === "string" ? value : (value?.body ?? "");
+  const detectedType = typeof value === "object" && value?.contentType
+    ? value.contentType
+    : rawValue.startsWith("data:application/pdf;")
+    ? "pdf"
+    : rawValue.startsWith("<") && !rawValue.startsWith("---")
+    ? "html"
+    : "md";
+
+  const [contentType, setContentType] = React.useState<"md" | "pdf" | "html">(detectedType);
+  const fileRef = React.useRef<HTMLInputElement>(null);
+
+  // Store content type in the value object so content-editor.tsx can read it
+  const currentBody = typeof value === "string" ? rawValue : (value?.body ?? "");
+
+  function update(next: string, ct?: "md" | "pdf" | "html") {
+    const ct2 = ct ?? contentType;
+    if (typeof value === "string") {
+      onChange(ct2 === "md" ? next : { body: next, contentType: ct2 });
+    } else {
+      onChange({ ...value, body: next, contentType: ct2 });
+    }
   }
 
-  const words = markdown.trim() ? markdown.trim().split(/\s+/).length : 0;
-  const chars = markdown.length;
-  const lines = markdown.split("\n").length;
+  async function handlePdfUpload(file: File) {
+    try {
+      const buf = await file.arrayBuffer();
+      const b64 = btoa(String.fromCharCode(...new Uint8Array(buf)));
+      const dataUri = `data:application/pdf;base64,${b64}`;
+      setContentType("pdf");
+      update(dataUri, "pdf");
+      toast({ title: `Loaded ${file.name}` });
+    } catch (err) {
+      toast({ title: `Failed to read PDF: ${String(err)}`, variant: "destructive" });
+    }
+  }
+
+  const words = contentType === "md" && currentBody.trim()
+    ? currentBody.trim().split(/\s+/).length : 0;
+  const chars = currentBody.length;
+  const lines = currentBody.split("\n").length;
 
   return (
     <div className="space-y-2 h-full flex flex-col">
-      <div className="flex items-center gap-2 text-xs text-muted-foreground">
-        <AlignLeft className="size-3.5" />
-        <span>{t("admin.content.editor.wordCount", { n: words })}</span>
-        <span>·</span>
-        <span>{t("admin.content.editor.charCount", { n: chars })}</span>
-        <span>·</span>
-        <span>{t("admin.content.editor.lineCount", { n: lines })}</span>
+      {/* Content type selector */}
+      <div className="flex items-center gap-2 text-xs">
+        <span className="text-muted-foreground font-medium uppercase tracking-wider">{t("admin.content.editor.articleType")}:</span>
+        {(["md", "pdf", "html"] as const).map((ct) => (
+          <button
+            key={ct}
+            type="button"
+            onClick={() => {
+              haptic("selection");
+              setContentType(ct);
+              if (ct === "md" && typeof value === "object" && value?.body) {
+                update(value.body, "md");
+              } else if (ct === "html") {
+                update(currentBody || "<!DOCTYPE html>\n<html>\n<head><title>Article</title></head>\n<body>\n\n</body>\n</html>", "html");
+              }
+            }}
+            disabled={readOnly}
+            className={cn(
+              "px-2.5 py-1 rounded-md text-xs font-medium transition-colors border",
+              contentType === ct
+                ? "bg-primary/10 text-primary border-primary/30"
+                : "text-muted-foreground border-border hover:text-foreground hover:bg-muted/60"
+            )}
+          >
+            {ct === "md" ? ".md" : ct === "pdf" ? ".pdf" : ".html"}
+          </button>
+        ))}
       </div>
-      <MarkdownEditor
-        value={markdown}
-        onChange={update}
-        readOnly={readOnly}
-        r2KeyBase={r2KeyBase}
-        placeholder="# Article title\n\nWrite your article in **Markdown**…"
-        className="flex-1 min-h-[400px]"
-      />
+
+      {contentType === "pdf" ? (
+        <div className="flex-1 flex flex-col items-center justify-center bg-muted/20 rounded-lg border-2 border-dashed border-border p-8">
+          {currentBody.startsWith("data:application/pdf;base64,") ? (
+            <div className="flex flex-col items-center gap-3">
+              <FileText className="size-12 text-orange-500" />
+              <p className="text-sm font-medium">PDF loaded ({Math.round(chars / 1024)} KB base64)</p>
+              <div className="flex gap-2">
+                {!readOnly && (
+                  <Button size="sm" variant="outline" onClick={() => fileRef.current?.click()}>
+                    <Upload className="size-3.5 me-1.5" /> Replace PDF
+                  </Button>
+                )}
+                <Button size="sm" variant="outline" onClick={() => window.open(currentBody, "_blank")}>
+                  <Eye className="size-3.5 me-1.5" /> Preview
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <div className="flex flex-col items-center gap-3">
+              <FileText className="size-12 text-muted-foreground/40" />
+              <p className="text-sm text-muted-foreground">{t("admin.content.editor.pdfDropHint")}</p>
+              <Button size="sm" variant="outline" onClick={() => fileRef.current?.click()} disabled={readOnly}>
+                <Upload className="size-3.5 me-1.5" /> {t("admin.content.editor.uploadPdf")}
+              </Button>
+            </div>
+          )}
+          <input
+            ref={fileRef}
+            type="file"
+            accept="application/pdf"
+            className="hidden"
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              if (f) handlePdfUpload(f);
+              e.target.value = "";
+            }}
+          />
+        </div>
+      ) : contentType === "html" ? (
+        <div className="flex-1 flex flex-col">
+          <div className="flex items-center gap-2 text-xs text-muted-foreground mb-1">
+            <span>{chars} chars</span>
+            <span>·</span>
+            <span>{lines} lines</span>
+          </div>
+          <textarea
+            value={currentBody}
+            onChange={(e) => update(e.target.value, "html")}
+            readOnly={readOnly}
+            className="flex-1 w-full min-h-[400px] p-4 font-mono text-sm bg-background border border-border rounded-lg resize-none focus:outline-none"
+            placeholder="<!DOCTYPE html>\n<html>\n<head><title>Article</title></head>\n<body>\n  ...\n</body>\n</html>"
+            spellCheck={false}
+          />
+        </div>
+      ) : (
+        <>
+          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+            <AlignLeft className="size-3.5" />
+            <span>{t("admin.content.editor.wordCount", { n: words })}</span>
+            <span>·</span>
+            <span>{t("admin.content.editor.charCount", { n: chars })}</span>
+            <span>·</span>
+            <span>{t("admin.content.editor.lineCount", { n: lines })}</span>
+          </div>
+          <MarkdownEditor
+            value={currentBody}
+            onChange={(next) => update(next, "md")}
+            readOnly={readOnly}
+            r2KeyBase={r2KeyBase}
+            placeholder="# Article title\n\nWrite your article in **Markdown**…"
+            className="flex-1 min-h-[400px]"
+          />
+        </>
+      )}
     </div>
   );
 }

@@ -16,6 +16,10 @@ import {
   ShieldCheck,
   ShieldAlert,
   RefreshCw,
+  ExternalLink,
+  Download,
+  FileText,
+  FileType,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
@@ -101,6 +105,7 @@ export function ContentEditor({ id, capabilities }: ContentEditorProps) {
   const [validationErrors, setValidationErrors] = React.useState<string[] | null>(null);
   const [showValidation, setShowValidation] = React.useState(false);
   const [mode, setMode] = React.useState<EditorMode>("form");
+  const [artifactContentType, setArtifactContentType] = React.useState<"md" | "pdf" | "html">("md");
   const debounceRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
 
   React.useEffect(() => {
@@ -119,6 +124,11 @@ export function ContentEditor({ id, capabilities }: ContentEditorProps) {
     if (!obj) return;
     if (obj.content_type === "library") {
       setMode("form");
+      // Detect content type from body
+      const b = obj.body ?? "";
+      if (b.startsWith("data:application/pdf;base64,")) setArtifactContentType("pdf");
+      else if (b.startsWith("<") && !b.startsWith("---")) setArtifactContentType("html");
+      else setArtifactContentType("md");
       return;
     }
     try {
@@ -231,7 +241,18 @@ export function ContentEditor({ id, capabilities }: ContentEditorProps) {
 
   function handleFormChange(next: any) {
     if (isLibrary) {
-      handleBodyChange(typeof next === "string" ? next : next?.body ?? "");
+      // next can be a string (markdown) or { body, contentType }
+      const nextBody = typeof next === "string" ? next : (next?.body ?? "");
+      setBody(nextBody);
+      // Store contentType on the component for publish path logic
+      if (typeof next === "object" && next?.contentType) {
+        setArtifactContentType(next.contentType);
+      } else {
+        // Detect from body
+        if (nextBody.startsWith("data:application/pdf;base64,")) setArtifactContentType("pdf");
+        else if (nextBody.startsWith("<") && !nextBody.startsWith("---")) setArtifactContentType("html");
+        else setArtifactContentType("md");
+      }
     } else {
       handleBodyChange(JSON.stringify(next, null, 2));
     }
@@ -239,12 +260,15 @@ export function ContentEditor({ id, capabilities }: ContentEditorProps) {
 
   // Compute a suggested target path for publishing (used as the default in
   // the publish dialog). Based on the content type and (if available) the
-  // title.
+  // title. For library articles uses the selected artifact content type extension.
   const suggestedPath = (() => {
     if (!obj) return "";
     const slug = (obj.title ?? obj.id).toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
     switch (obj.content_type) {
-      case "library": return `library/${slug}.md`;
+      case "library": {
+        const ext = artifactContentType === "pdf" ? ".pdf" : artifactContentType === "html" ? ".html" : ".md";
+        return `library/${slug}${ext}`;
+      }
       case "flashcard": return `flashcard/${slug}/cards.json`;
       case "osce": return `osce/${slug}/stations.json`;
       case "video": return `videos/${slug}/videos.json`;
@@ -496,8 +520,22 @@ export function ContentEditor({ id, capabilities }: ContentEditorProps) {
             </div>
           ) : mode === "preview" && isLibrary ? (
             <div className="flex-1 overflow-y-auto medos-scroll-y p-6">
-              <article className="osler-prose max-w-3xl mx-auto">
-                <ReactMarkdown remarkPlugins={[remarkGfm]}>{body}</ReactMarkdown>
+              <style>{PREVIEW_MARKDOWN_STYLES}</style>
+              <article className="preview-md max-w-3xl mx-auto">
+                <ReactMarkdown
+                  remarkPlugins={[remarkGfm]}
+                  components={{
+                    code({ inline, className, children, ...props }: any) {
+                      const text = String(children);
+                      if (!inline && className === "language-mermaid") {
+                        return <MermaidPreviewBlock code={text} />;
+                      }
+                      return <code className={className} {...props}>{children}</code>;
+                    },
+                  }}
+                >
+                  {parseFrontmatter(body).body}
+                </ReactMarkdown>
               </article>
             </div>
           ) : (
@@ -579,6 +617,67 @@ export function ContentEditor({ id, capabilities }: ContentEditorProps) {
       </Dialog>
     </div>
   );
+}
+
+// ── Preview helpers ─────────────────────────────────────────────────────────
+
+function parseFrontmatter(md: string): { body: string } {
+  const lines = md.split("\n");
+  if (lines[0]?.trim() !== "---") return { body: md };
+  let end = 1;
+  while (end < lines.length && lines[end]?.trim() !== "---") end++;
+  return { body: lines.slice(end + 1).join("\n").trim() };
+}
+
+const PREVIEW_MARKDOWN_STYLES = `
+  .preview-md h1 { font-size: 1.75rem; font-weight: 700; margin: 1.5rem 0 0.75rem; }
+  .preview-md h2 { font-size: 1.4rem; font-weight: 600; margin: 1.25rem 0 0.5rem; border-bottom: 1px solid oklch(0.87 0 0); padding-bottom: 0.25rem; }
+  .preview-md h3 { font-size: 1.1rem; font-weight: 600; margin: 1rem 0 0.4rem; }
+  .preview-md p { margin: 0.6rem 0; line-height: 1.7; }
+  .preview-md ul, .preview-md ol { padding-left: 1.5rem; margin: 0.5rem 0; }
+  .preview-md li { margin: 0.2rem 0; }
+  .preview-md blockquote { border-left: 3px solid oklch(0.6 0.1 250); background: oklch(0.97 0.01 250); margin: 0.75rem 0; padding: 0.5rem 1rem; border-radius: 0 0.25rem 0.25rem 0; }
+  .preview-md code { font-family: monospace; background: oklch(0.95 0 0); padding: 0.15rem 0.35rem; border-radius: 0.25rem; font-size: 0.85em; }
+  .preview-md pre { background: oklch(0.15 0 0); color: oklch(0.92 0 0); padding: 1rem; border-radius: 0.5rem; overflow-x: auto; margin: 0.75rem 0; }
+  .preview-md pre code { background: transparent; padding: 0; }
+  .preview-md table { border-collapse: collapse; width: 100%; margin: 0.75rem 0; }
+  .preview-md th, .preview-md td { border: 1px solid oklch(0.85 0 0); padding: 0.4rem 0.6rem; text-align: left; font-size: 0.9em; }
+  .preview-md th { background: oklch(0.95 0 0); font-weight: 600; }
+  .preview-md img { max-width: 100%; border-radius: 0.5rem; margin: 0.75rem 0; }
+  .preview-md hr { border: none; border-top: 1px solid oklch(0.85 0 0); margin: 1.5rem 0; }
+  .preview-md a { color: oklch(0.4 0.15 260); text-decoration: underline; }
+  .preview-md [dir=rtl] { text-align: right; }
+`;
+
+function MermaidPreviewBlock({ code }: { code: string }) {
+  const [svg, setSvg] = React.useState<string>("");
+  const [error, setError] = React.useState<string>("");
+  React.useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const mod = await import("mermaid");
+        const m = mod.default;
+        m.initialize({
+          startOnLoad: false,
+          theme: document.documentElement.classList.contains("dark") ? "dark" : "default",
+          securityLevel: "loose",
+        });
+        const id = `preview-md-${Math.random().toString(36).slice(2, 10)}`;
+        const { svg: out } = await m.render(id, code.trim());
+        if (!cancelled) { setSvg(out); setError(""); }
+        document.getElementById(id)?.remove();
+      } catch (err: any) {
+        if (!cancelled) setError(String(err?.message ?? err));
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [code]);
+  if (error) {
+    return <pre className="bg-destructive/10 text-destructive p-2 rounded text-xs">{`Mermaid error: ${error}\n\n${code}`}</pre>;
+  }
+  if (!svg) return <div className="text-xs text-muted-foreground p-4 text-center">Rendering diagram…</div>;
+  return <div dangerouslySetInnerHTML={{ __html: svg }} className="my-4 [&_svg]:max-w-full [&_svg]:h-auto" />;
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────────
