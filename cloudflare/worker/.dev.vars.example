@@ -1,13 +1,52 @@
-# Generate a long random value: openssl rand -base64 48
+# ─────────────────────────────────────────────────────────────────────────────
+# Osler Cloud Worker — Environment Variables & Secrets Reference
+# ─────────────────────────────────────────────────────────────────────────────
+#
+# Copy this file to `.dev.vars` for local development with `wrangler dev`.
+# In production, set the same keys as Worker secrets via
+#   `npx wrangler secret put <NAME>`
+# or via the Cloudflare dashboard. NEVER commit `.dev.vars` to git.
+
+# ─── Required ──────────────────────────────────────────────────────────────
+
+# Web Crypto JWT secret for HMAC-SHA-256 session signing.
+# Generate a long random secret: openssl rand -base64 48
 JWT_SECRET=replace-with-a-long-random-secret
-# Required only when TURNSTILE_ENABLED=true.
+
+# Public origin of the web application allowed for CORS. Must be the exact
+# scheme + host + port the browser uses. Multiple origins are NOT supported;
+# use a single canonical origin.
+ALLOWED_ORIGIN=http://localhost:3000
+
+# Public URL of the Worker (required for Google OAuth callback handoffs).
+WORKER_URL=http://localhost:8787
+
+# ─── Optional: Cloudflare Turnstile (anti-abuse on auth endpoints) ────────
+
+# Set TURNSTILE_ENABLED=true in wrangler.toml [vars] to enable verification.
 TURNSTILE_SECRET_KEY=
-# Optional: enables password-reset emails through Resend's free tier.
+
+# ─── Optional: Resend (transactional email for password reset) ────────────
+
 RESEND_API_KEY=
 EMAIL_FROM=Osler <noreply@example.com>
 # Public URL of the web app used in password-reset links.
 APP_ORIGIN=http://localhost:3000
-# Optional: enables Google sign-in using the Worker OAuth callback.
-WORKER_URL=http://localhost:8787
+
+# ─── Optional: Google OAuth 2.0 (Google Sign-In) ──────────────────────────
+
 GOOGLE_CLIENT_ID=
 GOOGLE_CLIENT_SECRET=
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Notes
+# ─────────────────────────────────────────────────────────────────────────────
+# • All auth endpoints (login, register, reset, google/consume) are rate
+#   limited per IP using an in-memory LRU bucket. For harder guarantees, front
+#   the Worker with Cloudflare's Rate Limiting Rules in the dashboard.
+# • The cron trigger defined in wrangler.toml prunes expired sessions, OAuth
+#   states, password-reset tokens, and audit-log entries older than 1 year.
+# • Per-user session cap is 12 concurrent sessions. Older sessions are
+#   automatically revoked when a 13th is issued.
+# • Audit-log retention is 1 year (365 days). Tune AUDIT_RETENTION_MS in
+#   src/index.mjs if your jurisdiction requires a different retention window.

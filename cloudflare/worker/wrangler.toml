@@ -15,8 +15,16 @@ database_id = "REPLACE_WITH_D1_DATABASE_ID"
 binding = "CONTENT"
 bucket_name = "osler-content"
 
+# Cron triggers — runs the cleanup job (expired sessions, OAuth states,
+# password-reset tokens, audit-log entries older than 1 year). The free tier
+# allows up to 5 cron triggers.
+[triggers]
+crons = ["0 * * * *"]
+
 [vars]
 # Set this to the Pages/custom-domain origin hosting the Osler app.
+# Multiple origins are not supported; set this to the exact origin
+# (scheme + host + port) the browser uses to load your app.
 ALLOWED_ORIGIN = "http://localhost:3000"
 # Set to true after configuring TURNSTILE_SECRET_KEY and publishing its site key.
 TURNSTILE_ENABLED = "false"

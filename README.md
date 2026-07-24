@@ -16,6 +16,7 @@
   <a href="#content-system"><strong>Content</strong></a> ·
   <a href="#configuration-oslerconfigjson"><strong>Config</strong></a> ·
   <a href="SELF-HOSTING.md"><strong>Self-Hosting</strong></a> ·
+  <a href="docs/"><strong>Docs</strong></a> ·
   <a href="#architecture"><strong>Architecture</strong></a>
 </p>
 
@@ -41,9 +42,9 @@
 
 Unified medical study platform combining **Quiz Banks**, **Flashcards**, **OSCE Clinical Cases**, **Video Library**, and an **Article Library** — all in a single, installable PWA with full Arabic RTL support.
 
-> **🔗 Source:** <https://github.com/eyad-elghareeb/osler> · **License:** MIT · **Self-hosting guide:** [`SELF-HOSTING.md`](SELF-HOSTING.md)
+> **🔗 Source:** <https://github.com/eyad-elghareeb/osler> · **License:** MIT · **Self-hosting guide:** [`SELF-HOSTING.md`](SELF-HOSTING.md) · **Full docs:** [`docs/`](docs/)
 >
-> Osler is fully open-source and built for self-hosting. Fork the repo, edit `public/osler.config.json` to white-label the platform, choose which of the 7 engine plugins to include, deploy to your favourite host, and manage everything from the bundled Tauri admin app. See [`SELF-HOSTING.md`](SELF-HOSTING.md) for the complete guide.
+> Osler is fully open-source and built for self-hosting. Fork the repo, edit `public/osler.config.json` to white-label the platform, choose which of the 7 engine plugins to include, deploy to your favourite host, and manage everything from the bundled Tauri admin app. See [`SELF-HOSTING.md`](SELF-HOSTING.md) for the quick guide, or [`docs/`](docs/) for the complete documentation set (hosting, forking, security, admin guide, API reference, troubleshooting, and more).
 
 ---
 
@@ -453,5 +454,8 @@ All native features are wrapped in `src/lib/osler/native/` and feature-detect gr
 <p align="center">
   <a href="https://github.com/eyad-elghareeb/osler">github.com/eyad-elghareeb/osler</a> ·
   <a href="SELF-HOSTING.md">Self-hosting guide</a> ·
+  <a href="docs/">Full documentation</a> ·
+  <a href="docs/security.md">Security</a> ·
+  <a href="CHANGELOG.md">Changelog</a> ·
   <a href="AGENTS.md">Contributor guide</a>
 </p>

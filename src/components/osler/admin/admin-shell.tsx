@@ -5,7 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import {
-  LayoutDashboard, Users, FileText, ClipboardList,
+  LayoutDashboard, Users, FileText, ClipboardList, ScrollText,
   LogOut, Moon, Sun, ShieldOff, AlertTriangle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -190,6 +190,9 @@ export function AdminShell({ children, cfEmail }: AdminShellProps) {
           <NavItem href="/admin/content" icon={FileText} label={t("admin.nav.content")} />
           {isAdmin && (
             <NavItem href="/admin/review" icon={ClipboardList} label={t("admin.nav.review")} badge={pendingCount} />
+          )}
+          {isAdmin && (
+            <NavItem href="/admin/audit" icon={ScrollText} label={t("admin.nav.audit")} />
           )}
           <div className="mt-auto pt-2 border-t border-border">
             <button

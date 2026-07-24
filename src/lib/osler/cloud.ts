@@ -9,7 +9,7 @@ export interface CloudUser {
   id: string;
   username: string;
   displayName: string;
-  role: "student" | "admin";
+  role: "student" | "admin" | "content_admin";
   email: string | null;
   hasPassword: boolean;
 }
