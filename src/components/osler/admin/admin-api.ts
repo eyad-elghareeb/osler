@@ -170,13 +170,104 @@ export const adminApi = {
                                                     req<{ id: string; r2KeyBase: string; status: string }>("/v1/admin/content", "POST", payload),
   saveDraft:       (id: string, body: string)    => req<{ ok: boolean }>(`/v1/admin/content/${id}/draft`, "PUT", body),
   submitForReview: (id: string)                  => req<{ ok: boolean; status: string }>(`/v1/admin/content/${id}/submit`, "POST"),
-  publishDirect:   (id: string)                  => req<{ ok: boolean; status: string }>(`/v1/admin/content/${id}/publish`, "POST"),
+  /** Direct publish with optional hybrid push to student-facing R2 keyspace.
+   *  `targetPath` lets you choose where the content lands inside the category
+   *  folder (e.g. "cardiology/acute-coronary/questions.json"). Pass `hybrid:
+   *  false` to skip the student-facing copy. */
+  publishDirect:   (id: string, opts?: { targetPath?: string; hybrid?: boolean }) =>
+                                                    req<{ ok: boolean; status: string; hybridKeys: string[] }>(`/v1/admin/content/${id}/publish`, "POST", opts ?? {}),
   unpublish:       (id: string)                  => req<{ ok: boolean; status: string }>(`/v1/admin/content/${id}/unpublish`, "POST"),
   deleteContent:   (id: string)                  => req<{ ok: boolean }>(`/v1/admin/content/${id}`, "DELETE"),
+
+  /** Validate a content_object's draft (or supplied body) against the schema. */
+  validateContent: (id: string, body?: string)   => req<{ errors: string[] }>(`/v1/admin/content/${id}/validate`, "POST", body ? { body } : {}),
+  /** Validate arbitrary content+body without a content_object. */
+  validateStandalone: (contentType: ContentType, body: string) =>
+                                                    req<{ errors: string[] }>(`/v1/admin/content/validate`, "POST", { contentType, body }),
+
+  /** Raw R2 file upload — same endpoint used by scripts/upload-content-to-r2.js.
+   *  `key` is the full R2 key (e.g. "content-files/library/cardiology/asthma.md").
+   *  `body` is either text or a data URI ("data:image/png;base64,...") for
+   *  binary assets. */
+  uploadFile:      (key: string, body: string)   => req<{ ok: boolean; key: string }>("/v1/admin/content/upload-file", "POST", { key, body }),
+
+  /** List raw R2 keys under content-files/<prefix>. */
+  listR2Keys:      (prefix: string, cursor?: string) =>
+                                                    req<{ items: Array<{ key: string; size: number; uploaded: string | null }>; cursor: string | null }>(`/v1/admin/content/r2-keys?prefix=${encodeURIComponent(prefix)}${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ""}`),
+  /** Delete an R2 key (only content-files/ and content-manifests/ allowed). */
+  deleteR2Key:     (key: string)                 => req<{ ok: boolean }>(`/v1/admin/content/r2-key?key=${encodeURIComponent(key)}`, "DELETE"),
+  /** Rename (move) an R2 key inside content-files/. */
+  renameR2Key:     (from: string, to: string)    => req<{ ok: boolean; from: string; to: string }>("/v1/admin/content/r2-rename", "POST", { from, to }),
+  /** Create an "empty folder" by writing a `.keep` placeholder. */
+  createR2Folder:  (path: string)                => req<{ ok: boolean; key: string }>("/v1/admin/content/r2-folder", "POST", { path }),
+  /** Rebuild the manifest for one category (or "all"). */
+  regenerateManifest: (category: string)         => req<{ ok: boolean; results: Record<string, string> }>("/v1/admin/content/regenerate-manifest", "POST", { category }),
 
   // Review (admin only)
   pendingQueue:    ()                            => req<{ items: ContentObject[] }>("/v1/admin/content/pending"),
   getDiff:         (id: string)                  => req<{ pending: string | null; published: string | null }>(`/v1/admin/content/${id}/diff`),
-  approveContent:  (id: string)                  => req<{ ok: boolean; status: string }>(`/v1/admin/content/${id}/approve`, "POST"),
+  approveContent:  (id: string, targetPath?: string) =>
+                                                    req<{ ok: boolean; status: string; hybridKeys: string[] }>(`/v1/admin/content/${id}/approve`, "POST", targetPath ? { targetPath } : {}),
   rejectContent:   (id: string, reason: string)  => req<{ ok: boolean; status: string }>(`/v1/admin/content/${id}/reject`, "POST", { reason }),
+};
+
+// ── Gemini key management (per-user, stored in D1) ──────────────────────────
+//
+// These endpoints live on /v1/account/* (not /v1/admin/*) so any signed-in
+// user can save their own key. The browser never sees the key after it's
+// saved — calls to Gemini are proxied through /v1/account/gemini/proxy.
+
+export interface GeminiKeyInfo {
+  apiKey: string | null;
+  model: string | null;
+  maxWait: number | null;
+  hasKey: boolean;
+}
+
+async function authedFetch<T>(path: string, method: string = "GET", body?: unknown): Promise<T> {
+  const enabled = await cloudEnabled();
+  if (!enabled) throw new AdminApiError(503, "Cloud features are disabled");
+  const base = await getApiBase();
+  const session = readCloudSession();
+  const headers: Record<string, string> = { "content-type": "application/json" };
+  if (session?.token) headers["authorization"] = `Bearer ${session.token}`;
+  const init: RequestInit = { method, headers };
+  if (body !== undefined) init.body = typeof body === "string" ? body : JSON.stringify(body);
+  const res = await fetch(`${base}${path}`, init);
+  const data = await res.json().catch(() => ({})) as T & { error?: string };
+  if (!res.ok) throw new AdminApiError(res.status, data.error ?? "Request failed");
+  return data;
+}
+
+export const geminiApi = {
+  get:    ()                          => authedFetch<GeminiKeyInfo>("/v1/account/gemini-key"),
+  save:   (apiKey: string | null, model?: string | null, maxWait?: number | null) =>
+                                      authedFetch<{ ok: boolean; hasKey: boolean }>("/v1/account/gemini-key", "PUT", { apiKey, model, maxWait }),
+  clear:  ()                          => authedFetch<{ ok: boolean }>("/v1/account/gemini-key", "DELETE"),
+  /** Server-side proxy for Gemini API calls — never exposes the key to the
+   *  browser network tab. Returns the raw Gemini response text. `endpoint`
+   *  is "generateContent" | "streamGenerateContent" | "countTokens" | "models"
+   *  (anything else is treated as "models"). */
+  proxy:  async (endpoint: string, body: unknown, model?: string): Promise<{ status: number; text: string; contentType: string }> => {
+    const enabled = await cloudEnabled();
+    if (!enabled) throw new AdminApiError(503, "Cloud features are disabled");
+    const base = await getApiBase();
+    const session = readCloudSession();
+    const headers: Record<string, string> = { "content-type": "application/json" };
+    if (session?.token) headers["authorization"] = `Bearer ${session.token}`;
+    const res = await fetch(`${base}/v1/account/gemini/proxy`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ endpoint, body, model }),
+    });
+    const text = await res.text();
+    if (!res.ok) {
+      let msg = "Gemini proxy request failed";
+      try { const j = JSON.parse(text); msg = j.error ?? msg; } catch {}
+      throw new AdminApiError(res.status, msg);
+    }
+    return { status: res.status, text, contentType: res.headers.get("content-type") ?? "application/json" };
+  },
+  /** Convenience: test that the saved key works by listing models. */
+  test:   ()                          => authedFetch<{ models?: Array<{ name: string }> }>("/v1/account/gemini/proxy", "POST", { endpoint: "models" }),
 };

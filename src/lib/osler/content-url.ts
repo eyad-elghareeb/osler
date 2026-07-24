@@ -140,3 +140,24 @@ export function resetCloudReachable(): void {
     _cloudReachable = null;
   }, 30_000);
 }
+
+/**
+ * Force-recheck the cloud NOW (bypassing the 60 s cache). Use this after an
+ * admin publishes new content via the admin panel — the next content fetch
+ * will hit R2 fresh instead of relying on a stale reachability result.
+ *
+ * Returns a promise that resolves to true if the cloud is reachable, false
+ * otherwise. Also resets `_cloudReachable` to null so the next call to
+ * `manifestUrl()` / `contentFileUrl()` re-probes.
+ */
+export async function forceRecheckCloud(): Promise<boolean> {
+  const apiUrl = resolvedApiUrl();
+  if (!apiUrl) return false;
+  if (_reprobeTimer) { clearTimeout(_reprobeTimer); _reprobeTimer = null; }
+  _cloudReachable = null;
+  _cloudCheckPromise = null;
+  // Reuse the internal probe and await it this time.
+  _probeCloud(apiUrl);
+  await _cloudCheckPromise;
+  return _cloudReachable === true;
+}

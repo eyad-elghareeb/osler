@@ -99,6 +99,9 @@ export async function loginCloudAccount(input: {
 }): Promise<CloudSession> {
   const session = await request<CloudSession>("/v1/auth/login", { method: "POST", body: JSON.stringify(input) });
   saveCloudSession(session);
+  // Best-effort: pull the user's saved Gemini API key from the cloud DB so
+  // they don't have to re-enter it on this device.
+  void syncGeminiKeyFromCloud();
   return session;
 }
 
@@ -111,7 +114,50 @@ export function startGoogleLogin(): void {
 export async function consumeGoogleLogin(ticket: string): Promise<CloudSession> {
   const session = await request<CloudSession>("/v1/auth/google/consume", { method: "POST", body: JSON.stringify({ ticket }) });
   saveCloudSession(session);
+  void syncGeminiKeyFromCloud();
   return session;
+}
+
+/**
+ * Fetch the user's saved Gemini API key from /v1/account/gemini-key and write
+ * it to localStorage so the AI assistant / qbank-studio / osce-studio pick
+ * it up. Silently no-ops if cloud isn't enabled, the session is missing, or
+ * the user has never saved a key.
+ */
+export async function syncGeminiKeyFromCloud(): Promise<void> {
+  if (typeof window === "undefined") return;
+  try {
+    const session = readCloudSession();
+    if (!session?.token) return;
+    const apiUrl = resolvedApiUrl();
+    if (!apiUrl) return;
+    const res = await fetch(`${apiUrl}/v1/account/gemini-key`, {
+      headers: { authorization: `Bearer ${session.token}` },
+    });
+    if (!res.ok) return;
+    const info = await res.json();
+    if (info?.hasKey && info.apiKey) {
+      localStorage.setItem("osler_gemini_api_key", info.apiKey);
+      if (info.model) localStorage.setItem("osler_gemini_model", info.model);
+      if (info.maxWait != null) localStorage.setItem("osler_gemini_max_wait", String(info.maxWait));
+      // Notify any open settings panel that the key changed.
+      window.dispatchEvent(new CustomEvent("osler-gemini-key-synced", { detail: info }));
+    }
+  } catch {
+    // silent
+  }
+}
+
+/** Helper: resolve the cloud API URL the same way admin-api.ts does. */
+function resolvedApiUrl(): string | null {
+  if (typeof process !== "undefined" && process.env.NEXT_PUBLIC_CLOUD_API_URL) {
+    return process.env.NEXT_PUBLIC_CLOUD_API_URL.replace(/\/$/, "");
+  }
+  try {
+    const cfg = getConfig().cloud;
+    if (cfg.enabled && cfg.apiUrl) return cfg.apiUrl.replace(/\/$/, "");
+  } catch {}
+  return null;
 }
 
 export interface CloudAccount {

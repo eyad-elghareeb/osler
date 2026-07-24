@@ -228,7 +228,7 @@ export async function loadAllContent(): Promise<{
       // For multi-type folders (qbank hosts quiz, bank, written), store the
       // same tree under every engine type that maps to this folder so the UI
       // can look up trees[engineType] for any qbank type.
-      const qbankTypes: EngineType[] = ["quiz", "bank", "written"];
+      const qbankTypes: Array<"quiz" | "bank" | "written"> = ["quiz", "bank", "written"];
       if (folder === "qbank") {
         for (const et of qbankTypes) {
           if (types.includes(et)) trees[et] = manifest.items;

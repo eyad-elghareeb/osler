@@ -74,21 +74,7 @@
           "images": [
             "ecg-lead-ii.svg"
           ],
-          "items": [
-            {
-              "uid": "library-demos-image-support-demo",
-              "title": "Image Support Demo",
-              "type": "library",
-              "path": "demos/image-support-demo/",
-              "files": [
-                "image-support-demo.md"
-              ],
-              "images": [
-                "ecg-lead-ii.svg"
-              ],
-              "items": []
-            }
-          ]
+          "items": []
         }
       ]
     },

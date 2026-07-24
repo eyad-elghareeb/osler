@@ -11,6 +11,9 @@ import {
   RotateCcw,
   Info,
   ShieldAlert,
+  Cloud,
+  Key,
+  Loader2,
 } from "lucide-react";
 import { useI18n } from "@/components/osler/i18n-provider";
 import { AdminPageFrame } from "@/components/osler/admin/admin-page-frame";
@@ -24,6 +27,7 @@ import { useAdminIdentity } from "@/components/osler/admin/admin-context";
 import { OslerCard } from "@/components/osler/ui-primitives";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -44,6 +48,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { toast } from "@/hooks/use-toast";
+import { geminiApi } from "@/components/osler/admin/admin-api";
+import { cloudEnabled } from "@/lib/osler/cloud";
 
 export default function AdminSettingsPage() {
   const { t } = useI18n();
@@ -266,6 +272,9 @@ function AdminSettingsContent() {
         </dl>
       </SettingsCard>
 
+      {/* ── AI / Gemini key (account-scoped) ─────────────────────────── */}
+      <GeminiKeySection />
+
       {/* ── Danger zone ──────────────────────────────────────────────── */}
       <SettingsCard
         icon={ShieldAlert}
@@ -371,5 +380,165 @@ function Field({ label, value }: { label: string; value: string }) {
       <dt className="text-xs uppercase tracking-wider text-muted-foreground">{label}</dt>
       <dd className="text-sm font-medium truncate">{value}</dd>
     </div>
+  );
+}
+
+/**
+ * Per-account Gemini API key section. The key is stored in the cloud DB so
+ * admins and content_admins only have to enter it once on any device.
+ */
+function GeminiKeySection() {
+  const { t } = useI18n();
+  const [loading, setLoading] = React.useState(true);
+  const [saving, setSaving] = React.useState(false);
+  const [testing, setTesting] = React.useState(false);
+  const [hasKey, setHasKey] = React.useState(false);
+  const [draftKey, setDraftKey] = React.useState("");
+  const [draftModel, setDraftModel] = React.useState("gemini-2.5-flash");
+  const [cloudOn, setCloudOn] = React.useState(false);
+
+  React.useEffect(() => {
+    (async () => {
+      try {
+        const on = await cloudEnabled();
+        setCloudOn(on);
+        if (!on) { setLoading(false); return; }
+        const info = await geminiApi.get();
+        setHasKey(info.hasKey);
+        if (info.model) setDraftModel(info.model);
+      } catch {
+        // ignore
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, []);
+
+  async function handleSave() {
+    setSaving(true);
+    try {
+      await geminiApi.save(draftKey.trim() || null, draftModel, null);
+      setHasKey(!!draftKey.trim());
+      setDraftKey("");
+      toast({ title: "Gemini key saved", description: "Available on every device you sign in from." });
+    } catch (err) {
+      toast({ title: `Save failed: ${String(err)}`, variant: "destructive" });
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleClear() {
+    if (!confirm("Remove your saved Gemini key from the cloud?")) return;
+    setSaving(true);
+    try {
+      await geminiApi.clear();
+      setHasKey(false);
+      setDraftKey("");
+      // Also clear localStorage so the AI assistant stops using it
+      if (typeof window !== "undefined") {
+        localStorage.removeItem("osler_gemini_api_key");
+      }
+      toast({ title: "Gemini key removed" });
+    } catch (err) {
+      toast({ title: `Clear failed: ${String(err)}`, variant: "destructive" });
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleTest() {
+    setTesting(true);
+    try {
+      // Use the proxy — this tests the saved key without exposing it.
+      await geminiApi.test();
+      toast({ title: "✓ Key is valid" });
+    } catch (err) {
+      toast({ title: `✗ Key test failed: ${String(err)}`, variant: "destructive" });
+    } finally {
+      setTesting(false);
+    }
+  }
+
+  return (
+    <SettingsCard
+      icon={Key}
+      title="Gemini API key (account-scoped)"
+      desc="Saved to your user account — only enter it once. Available on every device you sign in from."
+    >
+      {loading ? (
+        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+          <Loader2 className="size-4 animate-spin" /> Loading…
+        </div>
+      ) : !cloudOn ? (
+        <div className="text-sm text-muted-foreground bg-muted/40 border border-border rounded-md px-3 py-2">
+          Cloud features are not enabled on this Osler instance. Enable cloud in <code>osler.config.json</code> to save your Gemini key server-side.
+        </div>
+      ) : (
+        <div className="space-y-3">
+          <div className="flex items-center gap-2 text-xs">
+            {hasKey ? (
+              <span className="inline-flex items-center gap-1 text-success">
+                <Cloud className="size-3.5" /> A key is saved to your account.
+              </span>
+            ) : (
+              <span className="inline-flex items-center gap-1 text-muted-foreground">
+                <Cloud className="size-3.5" /> No key saved yet.
+              </span>
+            )}
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1.5">
+              {hasKey ? "Replace key (leave blank to keep existing)" : "API key"}
+            </label>
+            <Input
+              type="password"
+              value={draftKey}
+              onChange={(e) => setDraftKey(e.target.value)}
+              placeholder="AIza…"
+              className="font-mono text-xs"
+            />
+            <p className="mt-1 text-xs text-muted-foreground">
+              Get a key from <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener noreferrer" className="underline">Google AI Studio</a>. Stored in the cloud DB; never exposed to the browser network tab.
+            </p>
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1.5">
+              Default model
+            </label>
+            <Select value={draftModel} onValueChange={setDraftModel}>
+              <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="gemini-2.5-flash">Gemini 2.5 Flash</SelectItem>
+                <SelectItem value="gemini-2.5-pro">Gemini 2.5 Pro</SelectItem>
+                <SelectItem value="gemini-2.0-flash">Gemini 2.0 Flash</SelectItem>
+                <SelectItem value="gemini-1.5-flash">Gemini 1.5 Flash (legacy)</SelectItem>
+                <SelectItem value="gemini-1.5-pro">Gemini 1.5 Pro (legacy)</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2 pt-2">
+            <Button size="sm" onClick={handleSave} disabled={saving || (!draftKey.trim() && !hasKey)}>
+              {saving ? <Loader2 className="size-3.5 me-1.5 animate-spin" /> : <Key className="size-3.5 me-1.5" />}
+              {hasKey && !draftKey.trim() ? "Save model" : "Save key"}
+            </Button>
+            {hasKey && (
+              <>
+                <Button size="sm" variant="outline" onClick={handleTest} disabled={testing}>
+                  {testing ? <Loader2 className="size-3.5 me-1.5 animate-spin" /> : <Sparkles className="size-3.5 me-1.5" />}
+                  Test saved key
+                </Button>
+                <Button size="sm" variant="ghost" onClick={handleClear} disabled={saving} className="text-destructive hover:text-destructive">
+                  Remove key
+                </Button>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+    </SettingsCard>
   );
 }

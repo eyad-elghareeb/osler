@@ -112,16 +112,31 @@ async function main() {
       // Upload images if present
       for (const img of leaf.images ?? []) {
         const localPath = path.join(category, leaf.path, "images", img);
-        const r2Key = `content-files/${category}/${leaf.path}images/${img}`;
+        // `leaf.path` ends with "/" so we can concatenate directly. Use
+        // path.join for clarity on local FS, but keep the slash for the R2 key.
+        const imgR2Path = leaf.path.endsWith("/")
+          ? `${leaf.path}images/${img}`
+          : `${leaf.path}/images/${img}`;
+        const r2Key = `content-files/${category}/${imgR2Path}`;
         try {
           const content = readBinary(localPath);
-          // For images, use a raw upload (base64 or just store as-is)
-          // The upload-file endpoint handles text; for binary we need a different approach.
-          // R2 put via the Worker accepts text, so we base64-encode images.
+          // Pick a sensible content-type from the extension so the Worker's
+          // public serving endpoint returns the right Content-Type header.
+          const ext = path.extname(img).toLowerCase();
+          const mime =
+            ext === ".svg" ? "image/svg+xml"
+            : ext === ".png" ? "image/png"
+            : ext === ".jpg" || ext === ".jpeg" ? "image/jpeg"
+            : ext === ".gif" ? "image/gif"
+            : ext === ".webp" ? "image/webp"
+            : ext === ".avif" ? "image/avif"
+            : ext === ".mp3" || ext === ".m4a" ? "audio/mpeg"
+            : ext === ".mp4" ? "video/mp4"
+            : "application/octet-stream";
           const b64 = content.toString("base64");
           await api("POST", "/v1/admin/content/upload-file", {
             key: r2Key,
-            body: `data:application/octet-stream;base64,${b64}`,
+            body: `data:${mime};base64,${b64}`,
           });
           totalFiles++;
         } catch (e) {

@@ -143,7 +143,7 @@ function scanDirectory(dirPath, relativePath, parentType) {
     const childEntries = fs.readdirSync(childPath, { withFileTypes: true })
       .filter((e) => !e.name.startsWith(".") && e.name !== MANIFEST_NAME);
 
-    const grandSubdirs = childEntries.filter((e) => e.isDirectory());
+    const grandSubdirs = childEntries.filter((e) => e.isDirectory() && !ASSET_FOLDERS.has(e.name));
 
     if (grandSubdirs.length > 0) {
       // Branch node — has subfolders, recurse

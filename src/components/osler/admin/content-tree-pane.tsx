@@ -46,6 +46,10 @@ export interface ContentTreeNode {
   sourcePath?: string;
   /** For cloud nodes: the underlying ContentObject (leaf only) */
   cloudObject?: ContentObject;
+  /** For R2-tab nodes: the full R2 key (e.g. "content-files/library/asthma.md"). */
+  r2Key?: string;
+  /** For R2-tab folder nodes: the prefix to list when refreshing. */
+  r2Prefix?: string;
 }
 
 interface ContentTreePaneProps {
@@ -254,6 +258,7 @@ function TreeRow({
       <div
         role="button"
         tabIndex={0}
+        data-node-id={node.id}
         onClick={handleClick}
         onKeyDown={handleKeyDown}
         aria-expanded={isFolder ? expanded : undefined}

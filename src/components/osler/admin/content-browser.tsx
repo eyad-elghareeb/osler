@@ -11,6 +11,15 @@ import {
   HardDrive,
   Upload,
   Loader2,
+  Database,
+  RefreshCw,
+  FolderPlus,
+  FilePlus,
+  Pencil,
+  Trash2,
+  Download,
+  Eye,
+  Sparkles,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -20,6 +29,16 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog";
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuSeparator,
+  ContextMenuTrigger,
+  ContextMenuSub,
+  ContextMenuSubContent,
+  ContextMenuSubTrigger,
+} from "@/components/ui/context-menu";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -64,7 +83,7 @@ interface ContentBrowserProps {
   capabilities: AdminCapabilities;
 }
 
-type Tab = "local" | "cloud";
+type Tab = "local" | "cloud" | "r2";
 
 export function ContentBrowser({ capabilities }: ContentBrowserProps) {
   const { t } = useI18n();
@@ -80,25 +99,33 @@ export function ContentBrowser({ capabilities }: ContentBrowserProps) {
   const [localTree, setLocalTree] = React.useState<ContentTreeNode[]>([]);
   const [localLoading, setLocalLoading] = React.useState(true);
 
+  const [r2Tree, setR2Tree] = React.useState<ContentTreeNode[]>([]);
+  const [r2Loading, setR2Loading] = React.useState(false);
+
   const [selectedNode, setSelectedNode] = React.useState<ContentTreeNode | null>(null);
   const [createOpen, setCreateOpen] = React.useState(false);
   const [uploadOpen, setUploadOpen] = React.useState(false);
+  const [newFileOpen, setNewFileOpen] = React.useState(false);
+  const [newFolderOpen, setNewFolderOpen] = React.useState(false);
+  const [renameOpen, setRenameOpen] = React.useState(false);
+  const [regenerating, setRegenerating] = React.useState(false);
+
+  // For the new-file/new-folder/rename dialogs
+  const [dialogPath, setDialogPath] = React.useState("");
+  const [dialogParent, setDialogParent] = React.useState<string>("");
 
   // ── Load cloud content
   const loadCloud = React.useCallback(() => {
     setCloudLoading(true);
     adminApi
       .listContent(cloudStatus)
-      .then((r) => {
-        setCloudItems(r.items);
-        setR2Missing(false);
-      })
-      .catch((err) => {
+      .then((r) => { setCloudItems(r.items); setR2Missing(false); })
+      .catch((err: any) => {
         if (err?.status === 503) setR2Missing(true);
         else toast({ title: t("admin.toast.failedLoadContent"), variant: "destructive" });
       })
       .finally(() => setCloudLoading(false));
-  }, [cloudStatus, toast]);
+  }, [cloudStatus, toast, t]);
 
   React.useEffect(() => {
     if (tab === "cloud") loadCloud();
@@ -111,9 +138,7 @@ export function ContentBrowser({ capabilities }: ContentBrowserProps) {
       const allTrees: ContentTreeNode[] = [];
       for (const cat of LOCAL_CATEGORIES) {
         try {
-          const res = await fetch(`/osler-content/${cat.folder}/manifest.json`, {
-            cache: "no-store",
-          });
+          const res = await fetch(`/osler-content/${cat.folder}/manifest.json`, { cache: "no-store" });
           if (!res.ok) continue;
           const manifest = await res.json();
           const tree = manifestToTree(manifest, cat.folder, cat.contentType);
@@ -134,6 +159,37 @@ export function ContentBrowser({ capabilities }: ContentBrowserProps) {
   React.useEffect(() => {
     if (tab === "local") loadLocal();
   }, [tab, loadLocal]);
+
+  // ── Load R2 raw keys
+  const loadR2 = React.useCallback(async () => {
+    if (!capabilities.manageUsers) return;
+    setR2Loading(true);
+    try {
+      const allTrees: ContentTreeNode[] = [];
+      for (const cat of LOCAL_CATEGORIES) {
+        try {
+          const res = await adminApi.listR2Keys(cat.folder);
+          const tree = r2KeysToTree(res.items, cat.folder, cat.contentType);
+          allTrees.push({
+            id: `r2-root-${cat.folder}`,
+            name: cat.label,
+            kind: "folder",
+            items: tree,
+            r2Prefix: `content-files/${cat.folder}/`,
+          });
+        } catch (err: any) {
+          if (err?.status === 503) { setR2Missing(true); break; }
+        }
+      }
+      setR2Tree(allTrees);
+    } finally {
+      setR2Loading(false);
+    }
+  }, [capabilities.manageUsers]);
+
+  React.useEffect(() => {
+    if (tab === "r2") loadR2();
+  }, [tab, loadR2]);
 
   // Build the cloud tree (group by content_type)
   const cloudTree = React.useMemo<ContentTreeNode[]>(() => {
@@ -160,9 +216,9 @@ export function ContentBrowser({ capabilities }: ContentBrowserProps) {
           cloudObject: item,
         })),
     }));
-  }, [cloudItems]);
+  }, [cloudItems, t]);
 
-  const tree = tab === "cloud" ? cloudTree : localTree;
+  const tree = tab === "cloud" ? cloudTree : tab === "local" ? localTree : r2Tree;
 
   function handleSelect(node: ContentTreeNode) {
     haptic("selection");
@@ -170,13 +226,99 @@ export function ContentBrowser({ capabilities }: ContentBrowserProps) {
     if (tab === "cloud" && node.cloudObject) {
       router.push(`/admin/content/${node.cloudObject.id}`);
     }
-    // For local files, just show the preview pane (no navigation).
-    // The preview pane shows the file path, type, and a "Use Upload to make
-    // an editable cloud copy" hint.
+  }
+
+  // ── Context menu actions ────────────────────────────────────────────────
+  function openNewFileDialog(parentPath: string) {
+    setDialogParent(parentPath);
+    setDialogPath(parentPath ? `${parentPath}/new-file.json` : "new-file.json");
+    setNewFileOpen(true);
+  }
+  function openNewFolderDialog(parentPath: string) {
+    setDialogParent(parentPath);
+    setDialogPath(parentPath ? `${parentPath}/new-folder` : "new-folder");
+    setNewFolderOpen(true);
+  }
+  function openRenameDialog(node: ContentTreeNode) {
+    setDialogParent(node.r2Key ?? "");
+    setDialogPath(node.r2Key ?? node.name);
+    setRenameOpen(true);
+  }
+
+  async function createNewR2File() {
+    if (!capabilities.manageUsers) return;
+    const key = `content-files/${dialogPath.replace(/^\/+/, "")}`;
+    const isJson = key.endsWith(".json");
+    const body = isJson ? "{}" : "";
+    try {
+      await adminApi.uploadFile(key, body);
+      toast({ title: `Created ${dialogPath}` });
+      setNewFileOpen(false);
+      loadR2();
+    } catch (err) {
+      toast({ title: `Create failed: ${String(err)}`, variant: "destructive" });
+    }
+  }
+
+  async function createNewR2Folder() {
+    if (!capabilities.manageUsers) return;
+    const path = `content-files/${dialogPath.replace(/^\/+/, "")}`;
+    try {
+      await adminApi.createR2Folder(path);
+      toast({ title: `Created folder ${dialogPath}` });
+      setNewFolderOpen(false);
+      loadR2();
+    } catch (err) {
+      toast({ title: `Create folder failed: ${String(err)}`, variant: "destructive" });
+    }
+  }
+
+  async function renameR2Key() {
+    if (!capabilities.manageUsers) return;
+    try {
+      await adminApi.renameR2Key(dialogParent, `content-files/${dialogPath.replace(/^\/+/, "")}`);
+      toast({ title: `Renamed to ${dialogPath}` });
+      setRenameOpen(false);
+      loadR2();
+    } catch (err) {
+      toast({ title: `Rename failed: ${String(err)}`, variant: "destructive" });
+    }
+  }
+
+  async function deleteR2Key(node: ContentTreeNode) {
+    if (!capabilities.manageUsers) return;
+    if (!node.r2Key) return;
+    if (!confirm(`Delete ${node.r2Key}? This cannot be undone.`)) return;
+    try {
+      await adminApi.deleteR2Key(node.r2Key);
+      toast({ title: `Deleted ${node.name}` });
+      loadR2();
+    } catch (err) {
+      toast({ title: `Delete failed: ${String(err)}`, variant: "destructive" });
+    }
+  }
+
+  async function regenerateAllManifests() {
+    if (!capabilities.manageUsers) return;
+    setRegenerating(true);
+    try {
+      const res = await adminApi.regenerateManifest("all");
+      const failed = Object.entries(res.results).filter(([, v]) => !v.startsWith("ok") && v !== "empty");
+      if (failed.length === 0) {
+        toast({ title: "Manifests regenerated", description: Object.entries(res.results).map(([k, v]) => `${k}: ${v}`).join(", ") });
+      } else {
+        toast({ title: `Regenerated with ${failed.length} errors`, variant: "destructive" });
+      }
+      if (tab === "local") loadLocal();
+    } catch (err) {
+      toast({ title: `Regenerate failed: ${String(err)}`, variant: "destructive" });
+    } finally {
+      setRegenerating(false);
+    }
   }
 
   // ── Render: R2 missing
-  if (tab === "cloud" && r2Missing) {
+  if ((tab === "cloud" || tab === "r2") && r2Missing) {
     return (
       <div className="flex flex-col items-center justify-center py-16 text-center">
         <AlertCircle className="mb-3 size-12 text-warning" />
@@ -195,16 +337,25 @@ export function ContentBrowser({ capabilities }: ContentBrowserProps) {
             active={tab === "cloud"}
             onClick={() => setTab("cloud")}
             icon={Cloud}
-            label={t("admin.content.tree.cloud")}
-            desc={t("admin.content.tree.cloudDesc")}
+            label="Cloud Objects"
+            desc="Draft/pending/published content objects (D1 + R2)"
           />
           <TabButton
             active={tab === "local"}
             onClick={() => setTab("local")}
             icon={HardDrive}
-            label={t("admin.content.tree.local")}
-            desc={t("admin.content.tree.localDesc")}
+            label="Local Files"
+            desc="Files in public/osler-content/ (read-only preview)"
           />
+          {capabilities.manageUsers && (
+            <TabButton
+              active={tab === "r2"}
+              onClick={() => setTab("r2")}
+              icon={Database}
+              label="R2 Browser"
+              desc="Raw student-facing R2 content (admin only)"
+            />
+          )}
         </div>
 
         <div className="flex items-center gap-2">
@@ -221,14 +372,46 @@ export function ContentBrowser({ capabilities }: ContentBrowserProps) {
               </SelectContent>
             </Select>
           )}
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setUploadOpen(true)}
-          >
-            <Upload className="mr-1.5 size-3.5" />
-            Upload
-          </Button>
+          {tab === "r2" && capabilities.manageUsers && (
+            <>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => openNewFolderDialog("")}
+              >
+                <FolderPlus className="mr-1.5 size-3.5" />
+                New Folder
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => openNewFileDialog("")}
+              >
+                <FilePlus className="mr-1.5 size-3.5" />
+                New File
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={regenerateAllManifests}
+                disabled={regenerating}
+                title="Rebuild manifest.json for every category"
+              >
+                {regenerating ? <Loader2 className="mr-1.5 size-3.5 animate-spin" /> : <Sparkles className="mr-1.5 size-3.5" />}
+                Regenerate Manifests
+              </Button>
+            </>
+          )}
+          {tab === "cloud" && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setUploadOpen(true)}
+            >
+              <Upload className="mr-1.5 size-3.5" />
+              Upload
+            </Button>
+          )}
           <Button size="sm" onClick={() => setCreateOpen(true)}>
             <Plus className="mr-1.5 size-3.5" />
             {t("admin.content.new")}
@@ -238,20 +421,28 @@ export function ContentBrowser({ capabilities }: ContentBrowserProps) {
 
       {/* Two-pane tree + preview layout */}
       <div className="grid grid-cols-1 lg:grid-cols-[280px_1fr] gap-3 h-[calc(100vh-220px)] min-h-[420px]">
-        {/* Tree pane */}
+        {/* Tree pane — wrapped in a context menu for right-click actions */}
         <div className="border border-border rounded-xl overflow-hidden lg:min-h-0">
           {tab === "cloud" && cloudLoading ? (
             <LoadingState label={t("common.loading")} className="h-full" />
           ) : tab === "local" && localLoading ? (
             <LoadingState label={t("common.loading")} className="h-full" />
+          ) : tab === "r2" && r2Loading ? (
+            <LoadingState label={t("common.loading")} className="h-full" />
           ) : (
-            <ContentTreePane
+            <ContentTreePaneWithContextMenu
               tree={tree}
               selectedId={selectedNode?.id ?? null}
               onSelect={handleSelect}
-              onRefresh={tab === "cloud" ? loadCloud : loadLocal}
-              kind={tab}
-              loading={tab === "cloud" ? cloudLoading : localLoading}
+              onRefresh={tab === "cloud" ? loadCloud : tab === "local" ? loadLocal : loadR2}
+              kind={tab === "cloud" ? "cloud" : "local"}
+              loading={tab === "cloud" ? cloudLoading : tab === "local" ? localLoading : r2Loading}
+              tab={tab}
+              onNewFile={openNewFileDialog}
+              onNewFolder={openNewFolderDialog}
+              onRename={openRenameDialog}
+              onDelete={deleteR2Key}
+              canManage={capabilities.manageUsers}
             />
           )}
         </div>
@@ -264,8 +455,10 @@ export function ContentBrowser({ capabilities }: ContentBrowserProps) {
               title={t("admin.content.empty")}
               description={
                 tab === "cloud"
-                  ? t("admin.content.tree.cloudDesc")
-                  : t("admin.content.tree.localDesc")
+                  ? "Browse and edit content objects (drafts, pending, published)."
+                  : tab === "local"
+                    ? "Read-only preview of local files under public/osler-content/."
+                    : "Raw student-facing R2 files. Right-click to manage."
               }
               className="h-full"
             />
@@ -292,8 +485,247 @@ export function ContentBrowser({ capabilities }: ContentBrowserProps) {
           router.push(`/admin/content/${id}`);
         }}
       />
+
+      {/* New file dialog (R2 tab) */}
+      <Dialog open={newFileOpen} onOpenChange={setNewFileOpen}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>New file</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-2 py-2">
+            <p className="text-xs text-muted-foreground">
+              Path under <code>content-files/</code>. Use a <code>.json</code> or <code>.md</code> extension.
+            </p>
+            <Input
+              value={dialogPath}
+              onChange={(e) => setDialogPath(e.target.value)}
+              placeholder="qbank/cardiology/acute-coronary/questions.json"
+              className="font-mono text-xs"
+              autoFocus
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setNewFileOpen(false)}>Cancel</Button>
+            <Button onClick={createNewR2File} disabled={!dialogPath.trim()}>
+              <FilePlus className="size-3.5 mr-1.5" /> Create
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* New folder dialog (R2 tab) */}
+      <Dialog open={newFolderOpen} onOpenChange={setNewFolderOpen}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>New folder</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-2 py-2">
+            <p className="text-xs text-muted-foreground">
+              Path under <code>content-files/</code>. A placeholder <code>.keep</code> file will be created.
+            </p>
+            <Input
+              value={dialogPath}
+              onChange={(e) => setDialogPath(e.target.value)}
+              placeholder="library/cardiology/new-topic"
+              className="font-mono text-xs"
+              autoFocus
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setNewFolderOpen(false)}>Cancel</Button>
+            <Button onClick={createNewR2Folder} disabled={!dialogPath.trim()}>
+              <FolderPlus className="size-3.5 mr-1.5" /> Create
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Rename dialog (R2 tab) */}
+      <Dialog open={renameOpen} onOpenChange={setRenameOpen}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Rename / move</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-2 py-2">
+            <p className="text-xs text-muted-foreground">
+              New path under <code>content-files/</code>. The original file will be deleted after the copy.
+            </p>
+            <Input
+              value={dialogPath}
+              onChange={(e) => setDialogPath(e.target.value)}
+              className="font-mono text-xs"
+              autoFocus
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setRenameOpen(false)}>Cancel</Button>
+            <Button onClick={renameR2Key} disabled={!dialogPath.trim()}>
+              <Pencil className="size-3.5 mr-1.5" /> Rename
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
+}
+
+// ── Tree pane with context menu wrapper ────────────────────────────────────
+//
+// Wraps ContentTreePane in a ContextMenu so right-clicking on any node opens
+// the relevant actions (new file/folder, rename, delete, download). For cloud
+// nodes, only "Open" and "Delete" are available; for local nodes nothing is
+// available (read-only); for R2 nodes the full CRUD is available.
+
+interface ContentTreePaneWithContextMenuProps {
+  tree: ContentTreeNode[];
+  selectedId: string | null;
+  onSelect: (node: ContentTreeNode) => void;
+  onRefresh?: () => void;
+  kind: "local" | "cloud";
+  loading?: boolean;
+  tab: Tab;
+  onNewFile: (parentPath: string) => void;
+  onNewFolder: (parentPath: string) => void;
+  onRename: (node: ContentTreeNode) => void;
+  onDelete: (node: ContentTreeNode) => void;
+  canManage: boolean;
+}
+
+function ContentTreePaneWithContextMenu(props: ContentTreePaneWithContextMenuProps) {
+  // We can't easily wrap individual rows in ContextMenu (the tree component
+  // owns the row rendering), so we wrap the whole tree pane in a single
+  // ContextMenu that detects which node was right-clicked via data attributes.
+  const [contextNode, setContextNode] = React.useState<ContentTreeNode | null>(null);
+
+  function handleContextMenu(e: React.MouseEvent) {
+    // Find the closest tree row and look up its node by id.
+    const row = (e.target as HTMLElement).closest("[data-node-id]") as HTMLElement | null;
+    if (!row) return;
+    const id = row.dataset.nodeId;
+    if (!id) return;
+    const node = findNodeById(props.tree, id);
+    if (node) setContextNode(node);
+  }
+
+  return (
+    <div className="h-full" onContextMenu={handleContextMenu}>
+      <ContextMenu>
+        <ContextMenuTrigger asChild>
+          <div className="h-full">
+            <ContentTreePane
+              tree={props.tree}
+              selectedId={props.selectedId}
+              onSelect={props.onSelect}
+              onRefresh={props.onRefresh}
+              kind={props.kind}
+              loading={props.loading}
+            />
+          </div>
+        </ContextMenuTrigger>
+        <ContextMenuContent>
+          {props.tab === "cloud" && contextNode?.cloudObject && (
+            <>
+              <ContextMenuItem onClick={() => props.onSelect(contextNode)}>
+                <Eye className="size-3.5 mr-2" /> Open editor
+              </ContextMenuItem>
+              {props.canManage && (
+                <ContextMenuItem onClick={() => props.onDelete(contextNode)}>
+                  <Trash2 className="size-3.5 mr-2 text-destructive" /> Delete
+                </ContextMenuItem>
+              )}
+            </>
+          )}
+          {props.tab === "r2" && props.canManage && contextNode && (
+            <>
+              <ContextMenuItem onClick={() => props.onSelect(contextNode)}>
+                <Eye className="size-3.5 mr-2" /> Preview
+              </ContextMenuItem>
+              <ContextMenuItem
+                onClick={() => {
+                  if (contextNode.r2Key) downloadR2Key(contextNode.r2Key, contextNode.name);
+                }}
+              >
+                <Download className="size-3.5 mr-2" /> Download
+              </ContextMenuItem>
+              <ContextMenuSeparator />
+              <ContextMenuItem onClick={() => props.onRename(contextNode)}>
+                <Pencil className="size-3.5 mr-2" /> Rename / move
+              </ContextMenuItem>
+              <ContextMenuItem onClick={() => props.onDelete(contextNode)}>
+                <Trash2 className="size-3.5 mr-2 text-destructive" /> Delete
+              </ContextMenuItem>
+            </>
+          )}
+          {props.tab === "r2" && props.canManage && (
+            <>
+              <ContextMenuSeparator />
+              <ContextMenuItem onClick={() => props.onNewFile(folderOf(contextNode))}>
+                <FilePlus className="size-3.5 mr-2" /> New file here…
+              </ContextMenuItem>
+              <ContextMenuItem onClick={() => props.onNewFolder(folderOf(contextNode))}>
+                <FolderPlus className="size-3.5 mr-2" /> New folder here…
+              </ContextMenuItem>
+              <ContextMenuSeparator />
+              <ContextMenuItem onClick={() => props.onRefresh?.()}>
+                <RefreshCw className="size-3.5 mr-2" /> Refresh
+              </ContextMenuItem>
+            </>
+          )}
+          {props.tab === "local" && (
+            <ContextMenuItem onClick={() => props.onRefresh?.()}>
+              <RefreshCw className="size-3.5 mr-2" /> Refresh
+            </ContextMenuItem>
+          )}
+        </ContextMenuContent>
+      </ContextMenu>
+    </div>
+  );
+}
+
+function folderOf(node: ContentTreeNode | null): string {
+  if (!node) return "";
+  if (node.kind === "folder") {
+    // Strip the leading "content-files/<category>/" from r2Key if present
+    const k = node.r2Key ?? "";
+    return k.replace(/^content-files\//, "").replace(/\/$/, "");
+  }
+  // File — return parent folder
+  const k = node.r2Key ?? "";
+  const stripped = k.replace(/^content-files\//, "");
+  const idx = stripped.lastIndexOf("/");
+  return idx >= 0 ? stripped.slice(0, idx) : "";
+}
+
+function findNodeById(nodes: ContentTreeNode[], id: string): ContentTreeNode | null {
+  for (const n of nodes) {
+    if (n.id === id) return n;
+    if (n.items) {
+      const found = findNodeById(n.items, id);
+      if (found) return found;
+    }
+  }
+  return null;
+}
+
+async function downloadR2Key(key: string, name: string) {
+  try {
+    // Fetch from the public /v1/content/* endpoint (works without auth for
+    // content-files/ keys).
+    const url = `/api/r2-fetch?key=${encodeURIComponent(key)}`;
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`${res.status}`);
+    const blob = await res.blob();
+    const objUrl = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = objUrl;
+    a.download = name;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(objUrl);
+  } catch (err) {
+    console.error("Download failed:", err);
+  }
 }
 
 // ── Tab button ─────────────────────────────────────────────────────────────
@@ -313,10 +745,7 @@ function TabButton({
 }) {
   return (
     <button
-      onClick={() => {
-        haptic("selection");
-        onClick();
-      }}
+      onClick={() => { haptic("selection"); onClick(); }}
       title={desc}
       className={cn(
         "px-4 py-2 text-sm font-medium border-b-2 transition-colors flex items-center gap-2",
@@ -345,7 +774,7 @@ function PreviewPane({ node, tab }: { node: ContentTreeNode; tab: Tab }) {
     setPreviewLoading(true);
     fetch(node.sourcePath)
       .then((r) => (r.ok ? r.text() : Promise.reject(new Error(`${r.status}`))))
-      .then((text) => setPreviewBody(text.slice(0, 5000))) // cap preview
+      .then((text) => setPreviewBody(text.slice(0, 5000)))
       .catch(() => setPreviewBody(null))
       .finally(() => setPreviewLoading(false));
   }, [node, tab]);
@@ -387,7 +816,7 @@ function PreviewPane({ node, tab }: { node: ContentTreeNode; tab: Tab }) {
         <div className="min-w-0">
           <h3 className="text-base font-semibold truncate">{node.name}</h3>
           <p className="text-xs text-muted-foreground font-mono truncate">
-            {node.sourcePath ?? node.id}
+            {node.sourcePath ?? node.r2Key ?? node.id}
           </p>
         </div>
         {node.cloudObject?.status && (
@@ -439,6 +868,46 @@ function PreviewPane({ node, tab }: { node: ContentTreeNode; tab: Tab }) {
         <p className="text-xs text-muted-foreground shrink-0">
           {t("admin.content.clickToEdit")}
         </p>
+      )}
+
+      {tab === "r2" && (
+        <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
+          <div className="text-xs text-muted-foreground mb-1.5 shrink-0">
+            Raw R2 object. Right-click to manage (rename, delete, download).
+          </div>
+          <R2Preview node={node} />
+        </div>
+      )}
+    </div>
+  );
+}
+
+function R2Preview({ node }: { node: ContentTreeNode }) {
+  const [body, setBody] = React.useState<string | null>(null);
+  const [loading, setLoading] = React.useState(true);
+  React.useEffect(() => {
+    if (!node.r2Key) { setLoading(false); return; }
+    setLoading(true);
+    // Use the public content endpoint to fetch
+    const category = node.r2Key.replace(/^content-files\//, "").split("/")[0];
+    const relativePath = node.r2Key.replace(/^content-files\//, "").slice(category.length + 1);
+    fetch(`/api/r2-fetch?key=${encodeURIComponent(node.r2Key)}`)
+      .then((r) => r.ok ? r.text() : Promise.reject(new Error(`${r.status}`)))
+      .then((text) => setBody(text.slice(0, 8000)))
+      .catch(() => setBody(null))
+      .finally(() => setLoading(false));
+  }, [node.r2Key]);
+  return (
+    <div className="flex-1 min-h-0 overflow-auto medos-scroll-y border border-border rounded-lg bg-background p-3">
+      {loading ? (
+        <div className="text-xs text-muted-foreground text-center py-6">Loading…</div>
+      ) : body == null ? (
+        <div className="text-xs text-muted-foreground text-center py-6">Preview unavailable (binary or missing)</div>
+      ) : (
+        <pre className="text-[11px] font-mono whitespace-pre-wrap break-words text-foreground/90">
+          {body}
+          {body.length >= 8000 && "\n\n… (truncated)"}
+        </pre>
       )}
     </div>
   );
@@ -684,12 +1153,9 @@ function mapNode(
   categoryFolder: string,
   contentType: ContentType,
 ): ContentTreeNode {
-  // `item.path` is the FULL path from the category root (with trailing /),
-  // e.g. "cardiology/heart-failure/" for the Heart Failure folder inside Library.
   const path: string = item.path ?? "";
   const isLeaf = !item.items || item.items.length === 0;
   if (isLeaf) {
-    // Leaf — show the actual files as children of this node.
     const files: ContentTreeNode[] = (item.files ?? []).map((f: string) => ({
       id: `local-${categoryFolder}-${path}${f}`,
       name: f,
@@ -712,4 +1178,70 @@ function mapNode(
     kind: "folder",
     items: (item.items ?? []).map((c: any) => mapNode(c, categoryFolder, contentType)),
   };
+}
+
+// ── R2 keys → ContentTreeNode ──────────────────────────────────────────────
+//
+// Builds a tree from a flat list of R2 keys. Each key is split on `/` to find
+// its parent folder.
+
+function r2KeysToTree(
+  items: Array<{ key: string; size: number; uploaded: string | null }>,
+  categoryFolder: string,
+  _contentType: ContentType,
+): ContentTreeNode[] {
+  const roots: ContentTreeNode[] = [];
+  const folderMap = new Map<string, ContentTreeNode>();
+
+  for (const item of items) {
+    const rel = item.key.replace(/^content-files\//, "");
+    const parts = rel.split("/");
+    const fileName = parts.pop() ?? "";
+    // Skip .keep placeholder files in the tree
+    if (fileName === ".keep") continue;
+    const folderPath = parts.join("/");
+    // Ensure all ancestor folders exist
+    let parent: ContentTreeNode | null = null;
+    let cur = "";
+    for (let i = 0; i < parts.length; i++) {
+      const seg = parts[i];
+      cur = cur ? `${cur}/${seg}` : seg;
+      if (!folderMap.has(cur)) {
+        const folder: ContentTreeNode = {
+          id: `r2-folder-${cur}`,
+          name: seg,
+          kind: "folder",
+          r2Key: `content-files/${cur}`,
+          items: [],
+        };
+        folderMap.set(cur, folder);
+        if (parent) parent.items!.push(folder);
+        else roots.push(folder);
+      }
+      parent = folderMap.get(cur) ?? null;
+    }
+    // Add the file to its parent
+    const fileNode: ContentTreeNode = {
+      id: `r2-file-${rel}`,
+      name: fileName,
+      kind: "file",
+      ext: fileName.split(".").pop() ?? "",
+      size: item.size,
+      r2Key: item.key,
+      sourcePath: item.key,
+    };
+    if (parent) parent.items!.push(fileNode);
+    else roots.push(fileNode);
+  }
+
+  // Sort: folders first, then files; alphabetically within each group.
+  function sortTree(nodes: ContentTreeNode[]): ContentTreeNode[] {
+    nodes.sort((a, b) => {
+      if (a.kind !== b.kind) return a.kind === "folder" ? -1 : 1;
+      return a.name.localeCompare(b.name);
+    });
+    for (const n of nodes) if (n.items) n.items = sortTree(n.items);
+    return nodes;
+  }
+  return sortTree(roots);
 }

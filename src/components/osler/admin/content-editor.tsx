@@ -13,6 +13,9 @@ import {
   CheckCircle2,
   XCircle,
   Loader2,
+  ShieldCheck,
+  ShieldAlert,
+  RefreshCw,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
@@ -34,6 +37,13 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
 import { useI18n } from "@/components/osler/i18n-provider";
 import { useAdminSettings } from "@/components/osler/admin/admin-settings-context";
 import { haptic } from "@/lib/osler/native";
@@ -85,6 +95,11 @@ export function ContentEditor({ id, capabilities }: ContentEditorProps) {
   const [dirty, setDirty] = React.useState(false);
   const [saving, setSaving] = React.useState(false);
   const [deleteOpen, setDeleteOpen] = React.useState(false);
+  const [publishOpen, setPublishOpen] = React.useState(false);
+  const [publishTargetPath, setPublishTargetPath] = React.useState("");
+  const [validating, setValidating] = React.useState(false);
+  const [validationErrors, setValidationErrors] = React.useState<string[] | null>(null);
+  const [showValidation, setShowValidation] = React.useState(false);
   const [mode, setMode] = React.useState<EditorMode>("form");
   const debounceRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -106,14 +121,10 @@ export function ContentEditor({ id, capabilities }: ContentEditorProps) {
       setMode("form");
       return;
     }
-    // For JSON content, try form mode first if it parses.
     try {
       const parsed = JSON.parse(body || "{}");
-      if (isFormSupported(obj.content_type, parsed)) {
-        setMode("form");
-      } else {
-        setMode("code");
-      }
+      if (isFormSupported(obj.content_type, parsed)) setMode("form");
+      else setMode("code");
     } catch {
       setMode("code");
     }
@@ -122,6 +133,7 @@ export function ContentEditor({ id, capabilities }: ContentEditorProps) {
   function handleBodyChange(value: string) {
     setBody(value);
     setDirty(true);
+    if (validationErrors !== null) setValidationErrors(null);
     if (!settings.autoSaveDrafts) return;
     if (debounceRef.current) clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(() => autoSave(value), 2500);
@@ -129,9 +141,7 @@ export function ContentEditor({ id, capabilities }: ContentEditorProps) {
 
   async function autoSave(value: string) {
     if (!obj) return;
-    try {
-      await adminApi.saveDraft(id, value);
-    } catch {}
+    try { await adminApi.saveDraft(id, value); } catch {}
   }
 
   async function saveDraft() {
@@ -160,15 +170,36 @@ export function ContentEditor({ id, capabilities }: ContentEditorProps) {
     }
   }
 
-  async function publishDirect() {
+  async function doPublish(targetPath?: string) {
     haptic("light");
     await adminApi.saveDraft(id, body).catch(() => {});
     try {
-      const res = await adminApi.publishDirect(id);
+      const res = await adminApi.publishDirect(id, targetPath ? { targetPath } : {});
       setObj((o) => (o ? { ...o, status: res.status as any } : o));
-      toast({ title: t("admin.content.published") });
+      toast({
+        title: t("admin.content.published"),
+        description: res.hybridKeys.length
+          ? `Also synced to student content (${res.hybridKeys.length} file${res.hybridKeys.length === 1 ? "" : "s"})`
+          : undefined,
+      });
     } catch {
       toast({ title: t("admin.toast.publishFailed"), variant: "destructive" });
+    }
+  }
+
+  async function runValidation() {
+    if (!obj) return;
+    setValidating(true);
+    setShowValidation(true);
+    try {
+      const res = await adminApi.validateContent(id, body);
+      setValidationErrors(res.errors);
+      if (res.errors.length === 0) toast({ title: "Content is valid" });
+      else toast({ title: `${res.errors.length} validation issue${res.errors.length === 1 ? "" : "s"}`, variant: "destructive" });
+    } catch (err) {
+      toast({ title: `Validation failed: ${String(err)}`, variant: "destructive" });
+    } finally {
+      setValidating(false);
     }
   }
 
@@ -188,7 +219,6 @@ export function ContentEditor({ id, capabilities }: ContentEditorProps) {
   const isPending = obj.status === "pending";
   const isLibrary = obj.content_type === "library";
 
-  // For form mode, parse the JSON body once. If parse fails we fall back to code.
   let parsed: any = null;
   let parseError: string | null = null;
   if (!isLibrary) {
@@ -206,6 +236,24 @@ export function ContentEditor({ id, capabilities }: ContentEditorProps) {
       handleBodyChange(JSON.stringify(next, null, 2));
     }
   }
+
+  // Compute a suggested target path for publishing (used as the default in
+  // the publish dialog). Based on the content type and (if available) the
+  // title.
+  const suggestedPath = (() => {
+    if (!obj) return "";
+    const slug = (obj.title ?? obj.id).toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+    switch (obj.content_type) {
+      case "library": return `library/${slug}.md`;
+      case "flashcard": return `flashcard/${slug}/cards.json`;
+      case "osce": return `osce/${slug}/stations.json`;
+      case "video": return `videos/${slug}/videos.json`;
+      case "bank": return `qbank/${slug}/passages.json`;
+      case "written": return `qbank/${slug}/prompts.json`;
+      case "quiz":
+      default: return `qbank/${slug}/questions.json`;
+    }
+  })();
 
   return (
     <div className="flex h-full flex-col">
@@ -231,12 +279,14 @@ export function ContentEditor({ id, capabilities }: ContentEditorProps) {
         </div>
         <div className="flex items-center gap-1.5">
           {!isPending && (
+            <Button variant="outline" size="sm" onClick={runValidation} disabled={validating} title="Validate content schema">
+              {validating ? <Loader2 className="mr-1.5 size-3.5 animate-spin" /> : <ShieldCheck className="mr-1.5 size-3.5" />}
+              Validate
+            </Button>
+          )}
+          {!isPending && (
             <Button variant="outline" size="sm" onClick={saveDraft} disabled={saving}>
-              {saving ? (
-                <Loader2 className="mr-1.5 size-3.5 animate-spin" />
-              ) : (
-                <Save className="mr-1.5 size-3.5" />
-              )}
+              {saving ? <Loader2 className="mr-1.5 size-3.5 animate-spin" /> : <Save className="mr-1.5 size-3.5" />}
               {t("admin.content.saveDraft")}
             </Button>
           )}
@@ -247,7 +297,7 @@ export function ContentEditor({ id, capabilities }: ContentEditorProps) {
             </Button>
           )}
           {capabilities.publishDirect && !isPending && (
-            <Button size="sm" onClick={publishDirect}>
+            <Button size="sm" onClick={() => { setPublishTargetPath(suggestedPath); setPublishOpen(true); }}>
               <Upload className="mr-1.5 size-3.5" />
               {t("admin.content.publishDirect")}
             </Button>
@@ -269,6 +319,31 @@ export function ContentEditor({ id, capabilities }: ContentEditorProps) {
       {obj.status === "rejected" && obj.rejection_reason && (
         <div className="border-b border-destructive/30 bg-destructive/10 px-4 py-2 text-sm text-destructive">
           {t("admin.content.rejectedReason", { reason: obj.rejection_reason })}
+        </div>
+      )}
+
+      {/* Validation panel */}
+      {showValidation && validationErrors !== null && (
+        <div className={cn(
+          "border-b px-4 py-2 text-sm flex items-center gap-2",
+          validationErrors.length === 0
+            ? "border-success/30 bg-success/10 text-success"
+            : "border-warning/30 bg-warning/10 text-warning"
+        )}>
+          {validationErrors.length === 0 ? (
+            <><ShieldCheck className="size-4" /> Content is valid — all schema checks passed.</>
+          ) : (
+            <details className="flex-1">
+              <summary className="cursor-pointer flex items-center gap-2">
+                <ShieldAlert className="size-4" />
+                {validationErrors.length} validation issue{validationErrors.length === 1 ? "" : "s"} — click to expand
+              </summary>
+              <ul className="mt-1 ml-6 list-disc text-xs space-y-0.5">
+                {validationErrors.map((e, i) => <li key={i}>{e}</li>)}
+              </ul>
+            </details>
+          )}
+          <Button variant="ghost" size="iconSm" onClick={() => setShowValidation(false)}>×</Button>
         </div>
       )}
 
@@ -395,6 +470,7 @@ export function ContentEditor({ id, capabilities }: ContentEditorProps) {
                   value={body}
                   onChange={handleFormChange}
                   readOnly={isPending}
+                  r2KeyBase={obj.r2_key_base}
                 />
               ) : parseError ? (
                 <div className="flex flex-col items-center justify-center h-full text-center p-6">
@@ -414,6 +490,7 @@ export function ContentEditor({ id, capabilities }: ContentEditorProps) {
                   parsed={parsed}
                   onChange={handleFormChange}
                   readOnly={isPending}
+                  r2KeyBase={obj.r2_key_base}
                 />
               )}
             </div>
@@ -456,6 +533,50 @@ export function ContentEditor({ id, capabilities }: ContentEditorProps) {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Publish dialog — lets admin choose the target path */}
+      <Dialog open={publishOpen} onOpenChange={setPublishOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Publish to student content</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 py-2">
+            <p className="text-sm text-muted-foreground">
+              Publishing also pushes the content to the student-facing R2 keyspace
+              (<code className="text-xs">content-files/&lt;category&gt;/&lt;path&gt;</code>) so
+              students see the update immediately. Adjust the target path if needed.
+            </p>
+            <div>
+              <label className="mb-1.5 block text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                Target path inside content-files/
+              </label>
+              <Input
+                value={publishTargetPath}
+                onChange={(e) => setPublishTargetPath(e.target.value)}
+                placeholder={suggestedPath}
+                className="font-mono text-xs"
+              />
+              <p className="mt-1 text-xs text-muted-foreground">
+                Leave blank to use the auto-generated path: <code>{suggestedPath}</code>
+              </p>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setPublishOpen(false)}>
+              {t("common.cancel")}
+            </Button>
+            <Button
+              onClick={() => {
+                setPublishOpen(false);
+                doPublish(publishTargetPath.trim() || undefined);
+              }}
+            >
+              <Upload className="size-3.5 mr-1.5" />
+              Publish
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
@@ -504,6 +625,7 @@ function isFormSupported(contentType: ContentType, parsed: any): boolean {
     Array.isArray(parsed.stations) ||
     Array.isArray(parsed.videos) ||
     Array.isArray(parsed.prompts) ||
+    Array.isArray(parsed.subdecks) ||
     (parsed.front != null && parsed.back != null)
   );
 }
@@ -513,33 +635,35 @@ function FormEditorSwitch({
   parsed,
   onChange,
   readOnly,
+  r2KeyBase,
 }: {
   contentType: ContentType;
   parsed: any;
   onChange: (next: any) => void;
   readOnly?: boolean;
+  r2KeyBase?: string;
 }) {
   const { t } = useI18n();
-  // Detect the right editor based on the shape (not just the declared type)
   if (Array.isArray(parsed?.stations)) {
-    return <OsceEditor value={parsed} onChange={onChange} readOnly={readOnly} />;
+    return <OsceEditor value={parsed} onChange={onChange} readOnly={readOnly} r2KeyBase={r2KeyBase} />;
   }
   if (Array.isArray(parsed?.videos)) {
-    return <VideoEditor value={parsed} onChange={onChange} readOnly={readOnly} />;
+    return <VideoEditor value={parsed} onChange={onChange} readOnly={readOnly} r2KeyBase={r2KeyBase} />;
   }
-  if (Array.isArray(parsed?.cards) || Array.isArray(parsed?.decks) || parsed?.front != null) {
-    return <FlashcardEditor value={parsed} onChange={onChange} readOnly={readOnly} />;
+  if (Array.isArray(parsed?.cards) || Array.isArray(parsed?.decks) || Array.isArray(parsed?.subdecks) || parsed?.front != null) {
+    return <FlashcardEditor value={parsed} onChange={onChange} readOnly={readOnly} r2KeyBase={r2KeyBase} />;
   }
   if (Array.isArray(parsed?.passages)) {
-    return <BankEditor value={parsed} onChange={onChange} readOnly={readOnly} />;
+    // Distinguish bank vs quiz-by-passages: bank passages have `content`,
+    // quiz passages have `stem`. We pass to BankEditor which handles both.
+    return <BankEditor value={parsed} onChange={onChange} readOnly={readOnly} r2KeyBase={r2KeyBase} />;
   }
   if (Array.isArray(parsed?.prompts)) {
-    return <WrittenEditor value={parsed} onChange={onChange} readOnly={readOnly} />;
+    return <WrittenEditor value={parsed} onChange={onChange} readOnly={readOnly} r2KeyBase={r2KeyBase} />;
   }
   if (Array.isArray(parsed?.questions)) {
-    return <QuizEditor value={parsed} onChange={onChange} readOnly={readOnly} />;
+    return <QuizEditor value={parsed} onChange={onChange} readOnly={readOnly} r2KeyBase={r2KeyBase} />;
   }
-  // Fallback: show a hint that no form is available, switch to code
   return (
     <div className="flex flex-col items-center justify-center h-full text-center p-6">
       <FormInput className="size-8 text-muted-foreground mb-2" />

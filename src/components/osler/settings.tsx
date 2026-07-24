@@ -698,6 +698,59 @@ function saveAiForm(state: AiFormState): void {
   localStorage.setItem(STORAGE_KEYS.maxWait, state.maxWait);
 }
 
+/**
+ * Pull the user's saved Gemini key from the cloud DB (if cloud is enabled).
+ * This is the "saved once" path — when a user signs in on a new device, we
+ * fetch the key from /v1/account/gemini-key and write it to localStorage so
+ * the AI assistant / qbank-studio / osce-studio pick it up.
+ *
+ * Best-effort: if the fetch fails we silently fall back to localStorage.
+ */
+async function syncAiFormFromCloud(onUpdate: (next: AiFormState) => void) {
+  if (typeof window === "undefined") return;
+  try {
+    const { cloudEnabled } = await import("@/lib/osler/cloud");
+    if (!(await cloudEnabled())) return;
+    const { geminiApi } = await import("@/components/osler/admin/admin-api");
+    const info = await geminiApi.get();
+    if (info.hasKey && info.apiKey) {
+      // Write to localStorage so the AI assistant etc. pick it up
+      localStorage.setItem(STORAGE_KEYS.apiKey, info.apiKey);
+      if (info.model) localStorage.setItem(STORAGE_KEYS.model, info.model);
+      if (info.maxWait != null) localStorage.setItem(STORAGE_KEYS.maxWait, String(info.maxWait));
+      onUpdate({
+        apiKey: info.apiKey,
+        model: info.model || MODELS[0][0],
+        maxWait: info.maxWait != null ? String(info.maxWait) : "30",
+      });
+    }
+  } catch {
+    // Cloud not configured or session expired — fall back to localStorage.
+  }
+}
+
+/**
+ * Push the user's Gemini key to the cloud DB so it's available on every
+ * device they sign in from. Best-effort — if the push fails we still keep
+ * the localStorage copy.
+ */
+async function syncAiFormToCloud(state: AiFormState) {
+  if (typeof window === "undefined") return;
+  try {
+    const { cloudEnabled } = await import("@/lib/osler/cloud");
+    if (!(await cloudEnabled())) return;
+    const { geminiApi } = await import("@/components/osler/admin/admin-api");
+    const maxWaitNum = Number(state.maxWait);
+    await geminiApi.save(
+      state.apiKey.trim() || null,
+      state.model || null,
+      Number.isFinite(maxWaitNum) ? maxWaitNum : null,
+    );
+  } catch {
+    // Silent fail — localStorage is still the source of truth for the session.
+  }
+}
+
 function validateAiForm(state: AiFormState): Record<string, string> {
   const errors: Record<string, string> = {};
   if (state.apiKey && !/^[A-Za-z0-9_\-.]{20,}$/.test(state.apiKey.trim())) {
@@ -718,6 +771,17 @@ function AiSettingsSection() {
   const [justSaved, setJustSaved] = React.useState(false);
   const [testing, setTesting] = React.useState(false);
   const [testResult, setTestResult] = React.useState<string | null>(null);
+  const [cloudSynced, setCloudSynced] = React.useState(false);
+
+  // On mount: try to pull the saved key from the cloud DB so the user doesn't
+  // have to re-enter it on a new device.
+  React.useEffect(() => {
+    syncAiFormFromCloud((next) => {
+      setSaved(next);
+      setDraft(next);
+      setCloudSynced(true);
+    });
+  }, []);
 
   const isDirty = React.useMemo(
     () => draft.apiKey !== saved.apiKey || draft.model !== saved.model || draft.maxWait !== saved.maxWait,
@@ -737,6 +801,8 @@ function AiSettingsSection() {
     setSaved(draft);
     setJustSaved(true);
     setTimeout(() => setJustSaved(false), 2000);
+    // Async-push to cloud DB (best-effort)
+    syncAiFormToCloud(draft).then(() => setCloudSynced(true));
   };
 
   const handleDiscard = () => {
@@ -752,6 +818,16 @@ function AiSettingsSection() {
     setSaved(next);
     setJustSaved(true);
     setTimeout(() => setJustSaved(false), 2000);
+    // Also clear the cloud copy
+    (async () => {
+      try {
+        const { cloudEnabled } = await import("@/lib/osler/cloud");
+        if (await cloudEnabled()) {
+          const { geminiApi } = await import("@/components/osler/admin/admin-api");
+          await geminiApi.clear();
+        }
+      } catch {}
+    })();
   };
 
   const handleTestKey = async () => {
@@ -786,6 +862,11 @@ function AiSettingsSection() {
       </h2>
       <p className="text-xs text-muted-foreground mb-5">
         {t("settings.ai.subtitle")}
+        {cloudSynced && (
+          <span className="ml-2 inline-flex items-center gap-1 text-success">
+            <Cloud className="size-3" /> Saved to your account
+          </span>
+        )}
       </p>
 
       <div className="space-y-4">
