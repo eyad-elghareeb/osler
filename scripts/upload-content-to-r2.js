@@ -152,6 +152,10 @@ function syncLocal() {
 
 // ── Remote sync: upload files to Worker R2 ────────────────────────────
 
+function normalizeKey(key) {
+  return key.replace(/\/{2,}/g, "/");
+}
+
 async function syncRemote() {
   const categories = ["qbank", "flashcard", "osce", "library", "videos"];
   let totalFiles = 0;
@@ -163,7 +167,7 @@ async function syncRemote() {
     console.log(`\n📁 ${category}`);
 
     // 1. Upload the manifest
-    const manifestKey = `content-manifests/${category}/manifest.json`;
+    const manifestKey = normalizeKey(`content-manifests/${category}/manifest.json`);
     await uploadFile(manifestKey, JSON.stringify(manifest, null, 2));
     console.log(`  ✓ ${manifestKey}`);
     totalFiles++;
@@ -173,7 +177,7 @@ async function syncRemote() {
     for (const leaf of leaves) {
       for (const file of leaf.files ?? []) {
         const localPath = path.join(category, leaf.path, file);
-        const r2Key = `content-files/${category}/${leaf.path}/${file}`;
+        const r2Key = normalizeKey(`content-files/${category}/${leaf.path}/${file}`);
         try {
           const content = readFile(localPath);
           await uploadFile(r2Key, content);
@@ -188,7 +192,7 @@ async function syncRemote() {
         const imgR2Path = leaf.path.endsWith("/")
           ? `${leaf.path}images/${img}`
           : `${leaf.path}/images/${img}`;
-        const r2Key = `content-files/${category}/${imgR2Path}`;
+        const r2Key = normalizeKey(`content-files/${category}/${imgR2Path}`);
         try {
           const content = readBinary(localPath);
           const ext = path.extname(img).toLowerCase();
