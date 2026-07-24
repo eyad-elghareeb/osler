@@ -56,3 +56,7 @@ test-results/
 # python cache
 __pycache__/
 .osler-admin/
+
+# local dev script
+dev.ps1
+
