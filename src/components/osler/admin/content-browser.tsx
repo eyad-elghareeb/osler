@@ -71,13 +71,15 @@ import {
 const CONTENT_TYPES: ContentType[] = ["quiz", "bank", "flashcard", "written", "osce", "library", "video"];
 
 // Categories that have local manifests under /osler-content/<folder>/manifest.json
-const LOCAL_CATEGORIES: { folder: string; label: string; contentType: ContentType }[] = [
-  { folder: "library", label: "Library", contentType: "library" },
-  { folder: "qbank", label: "QBank", contentType: "quiz" },
-  { folder: "flashcard", label: "Flashcards", contentType: "flashcard" },
-  { folder: "osce", label: "OSCE", contentType: "osce" },
-  { folder: "videos", label: "Videos", contentType: "video" },
-];
+function getLocalCategories(t: any): { folder: string; label: string; contentType: ContentType }[] {
+  return [
+    { folder: "library", label: t("admin.content.browser.library"), contentType: "library" },
+    { folder: "qbank", label: t("admin.content.browser.qbank"), contentType: "quiz" },
+    { folder: "flashcard", label: t("admin.content.browser.flashcards"), contentType: "flashcard" },
+    { folder: "osce", label: t("admin.content.browser.osce"), contentType: "osce" },
+    { folder: "videos", label: t("admin.content.browser.videos"), contentType: "video" },
+  ];
+}
 
 interface ContentBrowserProps {
   capabilities: AdminCapabilities;
@@ -136,7 +138,7 @@ export function ContentBrowser({ capabilities }: ContentBrowserProps) {
     setLocalLoading(true);
     try {
       const allTrees: ContentTreeNode[] = [];
-      for (const cat of LOCAL_CATEGORIES) {
+      for (const cat of getLocalCategories(t)) {
         try {
           const res = await fetch(`/osler-content/${cat.folder}/manifest.json`, { cache: "no-store" });
           if (!res.ok) continue;
@@ -166,7 +168,7 @@ export function ContentBrowser({ capabilities }: ContentBrowserProps) {
     setR2Loading(true);
     try {
       const allTrees: ContentTreeNode[] = [];
-      for (const cat of LOCAL_CATEGORIES) {
+      for (const cat of getLocalCategories(t)) {
         try {
           const res = await adminApi.listR2Keys(cat.folder);
           const tree = r2KeysToTree(res.items, cat.folder, cat.contentType);
@@ -252,11 +254,11 @@ export function ContentBrowser({ capabilities }: ContentBrowserProps) {
     const body = isJson ? "{}" : "";
     try {
       await adminApi.uploadFile(key, body);
-      toast({ title: `Created ${dialogPath}` });
+      toast({ title: t("admin.toast.created", { path: dialogPath }) });
       setNewFileOpen(false);
       loadR2();
     } catch (err) {
-      toast({ title: `Create failed: ${String(err)}`, variant: "destructive" });
+      toast({ title: t("admin.toast.createFailed", { error: String(err) }), variant: "destructive" });
     }
   }
 
@@ -265,11 +267,11 @@ export function ContentBrowser({ capabilities }: ContentBrowserProps) {
     const path = `content-files/${dialogPath.replace(/^\/+/, "")}`;
     try {
       await adminApi.createR2Folder(path);
-      toast({ title: `Created folder ${dialogPath}` });
+      toast({ title: t("admin.toast.createdFolder", { path: dialogPath }) });
       setNewFolderOpen(false);
       loadR2();
     } catch (err) {
-      toast({ title: `Create folder failed: ${String(err)}`, variant: "destructive" });
+      toast({ title: t("admin.toast.createFolderFailed", { error: String(err) }), variant: "destructive" });
     }
   }
 
@@ -277,24 +279,24 @@ export function ContentBrowser({ capabilities }: ContentBrowserProps) {
     if (!capabilities.manageUsers) return;
     try {
       await adminApi.renameR2Key(dialogParent, `content-files/${dialogPath.replace(/^\/+/, "")}`);
-      toast({ title: `Renamed to ${dialogPath}` });
+      toast({ title: t("admin.toast.renamed", { path: dialogPath }) });
       setRenameOpen(false);
       loadR2();
     } catch (err) {
-      toast({ title: `Rename failed: ${String(err)}`, variant: "destructive" });
+      toast({ title: t("admin.toast.renameFailed", { error: String(err) }), variant: "destructive" });
     }
   }
 
   async function deleteR2Key(node: ContentTreeNode) {
     if (!capabilities.manageUsers) return;
     if (!node.r2Key) return;
-    if (!confirm(`Delete ${node.r2Key}? This cannot be undone.`)) return;
+    if (!confirm(t("admin.content.confirmDeleteR2", { key: node.r2Key }))) return;
     try {
       await adminApi.deleteR2Key(node.r2Key);
-      toast({ title: `Deleted ${node.name}` });
+      toast({ title: t("admin.toast.deleted", { name: node.name }) });
       loadR2();
     } catch (err) {
-      toast({ title: `Delete failed: ${String(err)}`, variant: "destructive" });
+      toast({ title: t("admin.toast.deleteFailedR2", { error: String(err) }), variant: "destructive" });
     }
   }
 
@@ -305,13 +307,13 @@ export function ContentBrowser({ capabilities }: ContentBrowserProps) {
       const res = await adminApi.regenerateManifest("all");
       const failed = Object.entries(res.results).filter(([, v]) => !v.startsWith("ok") && v !== "empty");
       if (failed.length === 0) {
-        toast({ title: "Manifests regenerated", description: Object.entries(res.results).map(([k, v]) => `${k}: ${v}`).join(", ") });
+        toast({ title: t("admin.toast.manifestsRegenerated"), description: Object.entries(res.results).map(([k, v]) => `${k}: ${v}`).join(", ") });
       } else {
-        toast({ title: `Regenerated with ${failed.length} errors`, variant: "destructive" });
+        toast({ title: t("admin.toast.regeneratedWithErrors", { n: String(failed.length) }), variant: "destructive" });
       }
       if (tab === "local") loadLocal();
     } catch (err) {
-      toast({ title: `Regenerate failed: ${String(err)}`, variant: "destructive" });
+      toast({ title: t("admin.toast.regenerateFailed", { error: String(err) }), variant: "destructive" });
     } finally {
       setRegenerating(false);
     }
@@ -320,11 +322,11 @@ export function ContentBrowser({ capabilities }: ContentBrowserProps) {
   // ── Render: R2 missing
   if ((tab === "cloud" || tab === "r2") && r2Missing) {
     return (
-      <div className="flex flex-col items-center justify-center py-16 text-center">
-        <AlertCircle className="mb-3 size-12 text-warning" />
-        <h2 className="mb-1 text-base font-semibold">{t("admin.content.noR2")}</h2>
-        <p className="max-w-sm text-sm text-muted-foreground">{t("admin.content.noR2Desc")}</p>
-      </div>
+      <EmptyState
+        icon={AlertCircle}
+        title={t("admin.content.noR2")}
+        description={t("admin.content.noR2Desc")}
+      />
     );
   }
 
@@ -337,23 +339,23 @@ export function ContentBrowser({ capabilities }: ContentBrowserProps) {
             active={tab === "cloud"}
             onClick={() => setTab("cloud")}
             icon={Cloud}
-            label="Cloud Objects"
-            desc="Draft/pending/published content objects (D1 + R2)"
+            label={t("admin.content.tab.cloud")}
+            desc={t("admin.content.tab.cloudDesc")}
           />
           <TabButton
             active={tab === "local"}
             onClick={() => setTab("local")}
             icon={HardDrive}
-            label="Local Files"
-            desc="Files in public/osler-content/ (read-only preview)"
+            label={t("admin.content.tab.local")}
+            desc={t("admin.content.tab.localDesc")}
           />
           {capabilities.manageUsers && (
             <TabButton
               active={tab === "r2"}
               onClick={() => setTab("r2")}
               icon={Database}
-              label="R2 Browser"
-              desc="Raw student-facing R2 content (admin only)"
+              label={t("admin.content.tab.r2")}
+              desc={t("admin.content.tab.r2Desc")}
             />
           )}
         </div>
@@ -365,10 +367,10 @@ export function ContentBrowser({ capabilities }: ContentBrowserProps) {
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="published">Published</SelectItem>
-                <SelectItem value="draft">Drafts</SelectItem>
-                <SelectItem value="pending">Pending</SelectItem>
-                <SelectItem value="rejected">Rejected</SelectItem>
+                <SelectItem value="published">{t("admin.content.tab.published")}</SelectItem>
+                <SelectItem value="draft">{t("admin.content.tab.drafts")}</SelectItem>
+                <SelectItem value="pending">{t("admin.content.tab.pending")}</SelectItem>
+                <SelectItem value="rejected">{t("admin.content.tab.rejected")}</SelectItem>
               </SelectContent>
             </Select>
           )}
@@ -379,26 +381,26 @@ export function ContentBrowser({ capabilities }: ContentBrowserProps) {
                 size="sm"
                 onClick={() => openNewFolderDialog("")}
               >
-                <FolderPlus className="mr-1.5 size-3.5" />
-                New Folder
+                <FolderPlus className="me-1.5 size-3.5" />
+                {t("admin.content.newFolder")}
               </Button>
               <Button
                 variant="outline"
                 size="sm"
                 onClick={() => openNewFileDialog("")}
               >
-                <FilePlus className="mr-1.5 size-3.5" />
-                New File
+                <FilePlus className="me-1.5 size-3.5" />
+                {t("admin.content.newFile")}
               </Button>
               <Button
                 variant="outline"
                 size="sm"
                 onClick={regenerateAllManifests}
                 disabled={regenerating}
-                title="Rebuild manifest.json for every category"
+                title={t("admin.content.regenerateManifests")}
               >
-                {regenerating ? <Loader2 className="mr-1.5 size-3.5 animate-spin" /> : <Sparkles className="mr-1.5 size-3.5" />}
-                Regenerate Manifests
+                {regenerating ? <Loader2 className="me-1.5 size-3.5 animate-spin" /> : <Sparkles className="me-1.5 size-3.5" />}
+                {t("admin.content.regenerateManifests")}
               </Button>
             </>
           )}
@@ -408,19 +410,19 @@ export function ContentBrowser({ capabilities }: ContentBrowserProps) {
               size="sm"
               onClick={() => setUploadOpen(true)}
             >
-              <Upload className="mr-1.5 size-3.5" />
-              Upload
+              <Upload className="me-1.5 size-3.5" />
+              {t("admin.content.upload")}
             </Button>
           )}
           <Button size="sm" onClick={() => setCreateOpen(true)}>
-            <Plus className="mr-1.5 size-3.5" />
+            <Plus className="me-1.5 size-3.5" />
             {t("admin.content.new")}
           </Button>
         </div>
       </div>
 
       {/* Two-pane tree + preview layout */}
-      <div className="grid grid-cols-1 lg:grid-cols-[280px_1fr] gap-3 h-[calc(100vh-220px)] min-h-[420px]">
+      <div className="grid grid-cols-1 lg:grid-cols-[280px_1fr] gap-3 min-h-[480px] lg:min-h-0 flex-1">
         {/* Tree pane — wrapped in a context menu for right-click actions */}
         <div className="border border-border rounded-xl overflow-hidden lg:min-h-0">
           {tab === "cloud" && cloudLoading ? (
@@ -448,17 +450,17 @@ export function ContentBrowser({ capabilities }: ContentBrowserProps) {
         </div>
 
         {/* Preview pane */}
-        <div className="border border-border rounded-xl overflow-hidden bg-background">
+        <div className="border border-border rounded-xl overflow-hidden bg-card">
           {!selectedNode ? (
             <EmptyState
               icon={FileText}
               title={t("admin.content.empty")}
               description={
                 tab === "cloud"
-                  ? "Browse and edit content objects (drafts, pending, published)."
+                  ? t("admin.content.previewDescCloud")
                   : tab === "local"
-                    ? "Read-only preview of local files under public/osler-content/."
-                    : "Raw student-facing R2 files. Right-click to manage."
+                    ? t("admin.content.previewDescLocal")
+                    : t("admin.content.previewDescR2")
               }
               className="h-full"
             />
@@ -490,11 +492,11 @@ export function ContentBrowser({ capabilities }: ContentBrowserProps) {
       <Dialog open={newFileOpen} onOpenChange={setNewFileOpen}>
         <DialogContent className="max-w-sm">
           <DialogHeader>
-            <DialogTitle>New file</DialogTitle>
+            <DialogTitle>{t("admin.content.newFileTitle")}</DialogTitle>
           </DialogHeader>
           <div className="space-y-2 py-2">
             <p className="text-xs text-muted-foreground">
-              Path under <code>content-files/</code>. Use a <code>.json</code> or <code>.md</code> extension.
+              {t("admin.content.newFileDesc")}
             </p>
             <Input
               value={dialogPath}
@@ -505,9 +507,9 @@ export function ContentBrowser({ capabilities }: ContentBrowserProps) {
             />
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setNewFileOpen(false)}>Cancel</Button>
+            <Button variant="outline" onClick={() => setNewFileOpen(false)}>{t("common.cancel")}</Button>
             <Button onClick={createNewR2File} disabled={!dialogPath.trim()}>
-              <FilePlus className="size-3.5 mr-1.5" /> Create
+              <FilePlus className="size-3.5 me-1.5" /> {t("admin.content.create")}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -517,11 +519,11 @@ export function ContentBrowser({ capabilities }: ContentBrowserProps) {
       <Dialog open={newFolderOpen} onOpenChange={setNewFolderOpen}>
         <DialogContent className="max-w-sm">
           <DialogHeader>
-            <DialogTitle>New folder</DialogTitle>
+            <DialogTitle>{t("admin.content.newFolderTitle")}</DialogTitle>
           </DialogHeader>
           <div className="space-y-2 py-2">
             <p className="text-xs text-muted-foreground">
-              Path under <code>content-files/</code>. A placeholder <code>.keep</code> file will be created.
+              {t("admin.content.newFolderDesc")}
             </p>
             <Input
               value={dialogPath}
@@ -532,9 +534,9 @@ export function ContentBrowser({ capabilities }: ContentBrowserProps) {
             />
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setNewFolderOpen(false)}>Cancel</Button>
+            <Button variant="outline" onClick={() => setNewFolderOpen(false)}>{t("common.cancel")}</Button>
             <Button onClick={createNewR2Folder} disabled={!dialogPath.trim()}>
-              <FolderPlus className="size-3.5 mr-1.5" /> Create
+              <FolderPlus className="size-3.5 me-1.5" /> {t("admin.content.create")}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -544,11 +546,11 @@ export function ContentBrowser({ capabilities }: ContentBrowserProps) {
       <Dialog open={renameOpen} onOpenChange={setRenameOpen}>
         <DialogContent className="max-w-sm">
           <DialogHeader>
-            <DialogTitle>Rename / move</DialogTitle>
+            <DialogTitle>{t("admin.content.renameTitle")}</DialogTitle>
           </DialogHeader>
           <div className="space-y-2 py-2">
             <p className="text-xs text-muted-foreground">
-              New path under <code>content-files/</code>. The original file will be deleted after the copy.
+              {t("admin.content.renameDesc")}
             </p>
             <Input
               value={dialogPath}
@@ -558,9 +560,9 @@ export function ContentBrowser({ capabilities }: ContentBrowserProps) {
             />
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setRenameOpen(false)}>Cancel</Button>
+            <Button variant="outline" onClick={() => setRenameOpen(false)}>{t("common.cancel")}</Button>
             <Button onClick={renameR2Key} disabled={!dialogPath.trim()}>
-              <Pencil className="size-3.5 mr-1.5" /> Rename
+              <Pencil className="size-3.5 me-1.5" /> {t("admin.content.rename")}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -592,6 +594,7 @@ interface ContentTreePaneWithContextMenuProps {
 }
 
 function ContentTreePaneWithContextMenu(props: ContentTreePaneWithContextMenuProps) {
+  const { t } = useI18n();
   // We can't easily wrap individual rows in ContextMenu (the tree component
   // owns the row rendering), so we wrap the whole tree pane in a single
   // ContextMenu that detects which node was right-clicked via data attributes.
@@ -626,11 +629,11 @@ function ContentTreePaneWithContextMenu(props: ContentTreePaneWithContextMenuPro
           {props.tab === "cloud" && contextNode?.cloudObject && (
             <>
               <ContextMenuItem onClick={() => props.onSelect(contextNode)}>
-                <Eye className="size-3.5 mr-2" /> Open editor
+                <Eye className="size-3.5 me-2" /> {t("admin.content.context.open")}
               </ContextMenuItem>
               {props.canManage && (
                 <ContextMenuItem onClick={() => props.onDelete(contextNode)}>
-                  <Trash2 className="size-3.5 mr-2 text-destructive" /> Delete
+                  <Trash2 className="size-3.5 me-2 text-destructive" /> {t("admin.content.delete")}
                 </ContextMenuItem>
               )}
             </>
@@ -638,21 +641,21 @@ function ContentTreePaneWithContextMenu(props: ContentTreePaneWithContextMenuPro
           {props.tab === "r2" && props.canManage && contextNode && (
             <>
               <ContextMenuItem onClick={() => props.onSelect(contextNode)}>
-                <Eye className="size-3.5 mr-2" /> Preview
+                <Eye className="size-3.5 me-2" /> {t("admin.content.context.preview")}
               </ContextMenuItem>
               <ContextMenuItem
                 onClick={() => {
                   if (contextNode.r2Key) downloadR2Key(contextNode.r2Key, contextNode.name);
                 }}
               >
-                <Download className="size-3.5 mr-2" /> Download
+                <Download className="size-3.5 me-2" /> {t("admin.content.context.download")}
               </ContextMenuItem>
               <ContextMenuSeparator />
               <ContextMenuItem onClick={() => props.onRename(contextNode)}>
-                <Pencil className="size-3.5 mr-2" /> Rename / move
+                <Pencil className="size-3.5 me-2" /> {t("admin.content.context.renameMove")}
               </ContextMenuItem>
               <ContextMenuItem onClick={() => props.onDelete(contextNode)}>
-                <Trash2 className="size-3.5 mr-2 text-destructive" /> Delete
+                <Trash2 className="size-3.5 me-2 text-destructive" /> {t("admin.content.delete")}
               </ContextMenuItem>
             </>
           )}
@@ -660,20 +663,20 @@ function ContentTreePaneWithContextMenu(props: ContentTreePaneWithContextMenuPro
             <>
               <ContextMenuSeparator />
               <ContextMenuItem onClick={() => props.onNewFile(folderOf(contextNode))}>
-                <FilePlus className="size-3.5 mr-2" /> New file here…
+                <FilePlus className="size-3.5 me-2" /> {t("admin.content.context.newFileHere")}
               </ContextMenuItem>
               <ContextMenuItem onClick={() => props.onNewFolder(folderOf(contextNode))}>
-                <FolderPlus className="size-3.5 mr-2" /> New folder here…
+                <FolderPlus className="size-3.5 me-2" /> {t("admin.content.context.newFolderHere")}
               </ContextMenuItem>
               <ContextMenuSeparator />
               <ContextMenuItem onClick={() => props.onRefresh?.()}>
-                <RefreshCw className="size-3.5 mr-2" /> Refresh
+                <RefreshCw className="size-3.5 me-2" /> {t("admin.content.context.refresh")}
               </ContextMenuItem>
             </>
           )}
           {props.tab === "local" && (
             <ContextMenuItem onClick={() => props.onRefresh?.()}>
-              <RefreshCw className="size-3.5 mr-2" /> Refresh
+              <RefreshCw className="size-3.5 me-2" /> {t("admin.content.context.refresh")}
             </ContextMenuItem>
           )}
         </ContextMenuContent>
@@ -785,14 +788,14 @@ function PreviewPane({ node, tab }: { node: ContentTreeNode; tab: Tab }) {
         <div className="flex items-center gap-2 mb-3">
           <h3 className="text-base font-semibold">{node.name}</h3>
           <span className="text-xs text-muted-foreground">
-            {node.items?.length ?? 0} items
+            {t("admin.content.tree.items", { n: String(node.items?.length ?? 0) })}
           </span>
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
           {(node.items ?? []).map((child) => (
             <div
               key={child.id}
-              className="border border-border rounded-lg p-3 text-sm bg-card/40"
+              className="border border-border rounded-xl p-3 text-sm bg-card/60"
             >
               <div className="flex items-center gap-2">
                 <FileText className="size-3.5 text-muted-foreground" />
@@ -845,7 +848,7 @@ function PreviewPane({ node, tab }: { node: ContentTreeNode; tab: Tab }) {
           <div className="text-xs text-muted-foreground mb-1.5 shrink-0">
             {t("admin.content.readOnlyPreview")}
           </div>
-          <div className="flex-1 min-h-0 overflow-auto medos-scroll-y border border-border rounded-lg bg-background p-3">
+          <div className="flex-1 min-h-0 overflow-auto medos-scroll-y border border-border rounded-xl bg-card p-3">
             {previewLoading ? (
               <div className="text-xs text-muted-foreground text-center py-6">
                 {t("admin.content.previewLoading")}
@@ -857,7 +860,7 @@ function PreviewPane({ node, tab }: { node: ContentTreeNode; tab: Tab }) {
             ) : (
               <pre className="text-[11px] font-mono whitespace-pre-wrap break-words text-foreground/90">
                 {previewBody}
-                {previewBody.length >= 5000 && "\n\n… (truncated)"}
+                {previewBody.length >= 5000 && `\n\n… (${t("admin.content.truncated")})`}
               </pre>
             )}
           </div>
@@ -873,7 +876,7 @@ function PreviewPane({ node, tab }: { node: ContentTreeNode; tab: Tab }) {
       {tab === "r2" && (
         <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
           <div className="text-xs text-muted-foreground mb-1.5 shrink-0">
-            Raw R2 object. Right-click to manage (rename, delete, download).
+            {t("admin.content.previewR2Hint")}
           </div>
           <R2Preview node={node} />
         </div>
@@ -883,6 +886,7 @@ function PreviewPane({ node, tab }: { node: ContentTreeNode; tab: Tab }) {
 }
 
 function R2Preview({ node }: { node: ContentTreeNode }) {
+  const { t } = useI18n();
   const [body, setBody] = React.useState<string | null>(null);
   const [loading, setLoading] = React.useState(true);
   React.useEffect(() => {
@@ -898,15 +902,15 @@ function R2Preview({ node }: { node: ContentTreeNode }) {
       .finally(() => setLoading(false));
   }, [node.r2Key]);
   return (
-    <div className="flex-1 min-h-0 overflow-auto medos-scroll-y border border-border rounded-lg bg-background p-3">
+    <div className="flex-1 min-h-0 overflow-auto medos-scroll-y border border-border rounded-xl bg-card p-3">
       {loading ? (
-        <div className="text-xs text-muted-foreground text-center py-6">Loading…</div>
+        <div className="text-xs text-muted-foreground text-center py-6">{t("common.loading")}</div>
       ) : body == null ? (
-        <div className="text-xs text-muted-foreground text-center py-6">Preview unavailable (binary or missing)</div>
+        <div className="text-xs text-muted-foreground text-center py-6">{t("admin.content.previewUnavailableR2")}</div>
       ) : (
         <pre className="text-[11px] font-mono whitespace-pre-wrap break-words text-foreground/90">
           {body}
-          {body.length >= 8000 && "\n\n… (truncated)"}
+          {body.length >= 8000 && `\n\n… (${t("admin.content.truncated")})`}
         </pre>
       )}
     </div>
@@ -915,7 +919,7 @@ function R2Preview({ node }: { node: ContentTreeNode }) {
 
 function MetaRow({ label, value }: { label: string; value: string }) {
   return (
-    <div className="border border-border rounded-lg px-2.5 py-1.5 bg-muted/30">
+    <div className="border border-border rounded-xl px-2.5 py-1.5 bg-muted/30">
       <dt className="text-xs uppercase tracking-wider text-muted-foreground">{label}</dt>
       <dd className="text-xs font-medium truncate">{value}</dd>
     </div>
@@ -1061,7 +1065,7 @@ function UploadDialog({
         if (!firstId) firstId = id;
       } catch (err) {
         toast({
-          title: `Failed to upload ${d.file.name}`,
+          title: t("admin.content.browser.uploadFailed", { name: d.file.name }),
           description: String(err),
           variant: "destructive",
         });
@@ -1093,7 +1097,7 @@ function UploadDialog({
                 {dropped.map((d, i) => (
                   <div
                     key={i}
-                    className="flex items-center gap-2 px-2.5 py-1.5 border border-border rounded-md bg-card/40 text-xs"
+                    className="flex items-center gap-2 px-2.5 py-1.5 border border-border rounded-md bg-card/60 text-xs"
                   >
                     <FileText className="size-3.5 text-muted-foreground shrink-0" />
                     <span className="flex-1 truncate font-mono">{d.file.name}</span>
@@ -1103,7 +1107,7 @@ function UploadDialog({
                     <button
                       onClick={() => setDropped((prev) => prev.filter((_, idx) => idx !== i))}
                       className="text-muted-foreground hover:text-destructive"
-                      aria-label="Remove"
+                      aria-label={t("common.remove")}
                     >
                       ×
                     </button>
@@ -1121,13 +1125,13 @@ function UploadDialog({
           <Button onClick={handleUpload} disabled={uploading || dropped.length === 0}>
             {uploading ? (
               <>
-                <Loader2 className="size-3.5 mr-1.5 animate-spin" />
+                <Loader2 className="size-3.5 me-1.5 animate-spin" />
                 {t("admin.content.dropzone.uploading", { n: dropped.length })}
               </>
             ) : (
               <>
-                <Upload className="size-3.5 mr-1.5" />
-                Upload {dropped.length > 0 ? `(${dropped.length})` : ""}
+                <Upload className="size-3.5 me-1.5" />
+                {t("admin.content.browser.upload")}{dropped.length > 0 ? ` (${dropped.length})` : ""}
               </>
             )}
           </Button>

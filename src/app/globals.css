@@ -2401,13 +2401,13 @@ html.osler-ar body,
 [dir="rtl"] .osler-icon-btn { transform: scaleX(1); }
 
 /* Admin dropzone */
-.admin-dropzone {
+.osler-dropzone {
   border: 2px dashed var(--border);
   border-radius: var(--radius-lg, 12px);
   background: color-mix(in oklch, var(--muted) 40%, transparent);
   transition: border-color 0.15s ease, background 0.15s ease;
 }
-.admin-dropzone--active {
+.osler-dropzone--active {
   border-color: var(--primary);
   background: color-mix(in oklch, var(--primary) 12%, transparent);
 }

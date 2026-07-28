@@ -70,7 +70,7 @@ export function AuditLogTable() {
       {/* Filter bar */}
       <div className="mb-4 flex items-center gap-3">
         <div className="flex items-center gap-2">
-          <label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+          <label className="osler-section-heading mb-0">
             {t("admin.audit.filterBy")}
           </label>
           <Select value={action} onValueChange={(v) => { setAction(v); setPage(1); }}>
@@ -101,19 +101,19 @@ export function AuditLogTable() {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-border bg-muted/40">
-                <th className="px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                <th className="px-4 py-2.5 text-start text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                   {t("admin.audit.col.when")}
                 </th>
-                <th className="px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                <th className="px-4 py-2.5 text-start text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                   {t("admin.audit.col.actor")}
                 </th>
-                <th className="px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                <th className="px-4 py-2.5 text-start text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                   {t("admin.audit.col.action")}
                 </th>
-                <th className="px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                <th className="px-4 py-2.5 text-start text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                   {t("admin.audit.col.target")}
                 </th>
-                <th className="px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                <th className="px-4 py-2.5 text-start text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                   {t("admin.audit.col.detail")}
                 </th>
               </tr>

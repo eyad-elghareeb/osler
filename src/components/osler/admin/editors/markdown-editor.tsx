@@ -19,9 +19,9 @@
  */
 
 import * as React from "react";
-import * as ReactDOM from "react-dom";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+import { useI18n } from "@/components/osler/i18n-provider";
 import {
   Tooltip,
   TooltipContent,
@@ -159,6 +159,7 @@ export function MarkdownEditor({
   const wrapperRef = React.useRef<HTMLDivElement>(null);
   const [preview, setPreview] = React.useState(false);
   const { toast } = useToast();
+  const { t } = useI18n();
   const { openModal, modal: mermaidModal } = useMermaidModal();
   const fileRef = React.useRef<HTMLInputElement>(null);
 
@@ -422,7 +423,7 @@ export function MarkdownEditor({
                       {action.icon}
                     </Button>
                   </TooltipTrigger>
-                  <TooltipContent side="bottom">{action.label}</TooltipContent>
+                  <TooltipContent side="bottom">{t(`admin.markdown.toolbar.${action.label}` as any)}</TooltipContent>
                 </Tooltip>
               </React.Fragment>
             ))}
@@ -442,7 +443,7 @@ export function MarkdownEditor({
                       <ImagePlus className="size-4" />
                     </Button>
                   </TooltipTrigger>
-                  <TooltipContent side="bottom">Upload image</TooltipContent>
+                  <TooltipContent side="bottom">{t("admin.markdown.uploadImage")}</TooltipContent>
                 </Tooltip>
               </>
             )}
@@ -460,7 +461,7 @@ export function MarkdownEditor({
                   {preview ? <Pencil className="size-4" /> : <Eye className="size-4" />}
                 </Button>
               </TooltipTrigger>
-              <TooltipContent side="bottom">{preview ? "Edit" : "Preview"}</TooltipContent>
+              <TooltipContent side="bottom">{preview ? t("admin.markdown.edit") : t("admin.markdown.preview")}</TooltipContent>
             </Tooltip>
           </div>
         )}
@@ -495,7 +496,7 @@ export function MarkdownEditor({
               onKeyUp={handleKeyUp}
               onBlur={() => setTimeout(() => setSlashOpen(false), 100)}
               className="w-full min-h-[400px] p-4 font-mono text-sm bg-transparent resize-none focus:outline-none"
-              placeholder={placeholder ?? "Write your article in **Markdown**…"}
+              placeholder={placeholder ?? t("admin.markdown.placeholder")}
               spellCheck={false}
             />
             {/* Mermaid chip overlays */}
@@ -538,13 +539,13 @@ export function MarkdownEditor({
 
         {/* Status bar */}
         <div className="flex items-center gap-3 px-4 py-1.5 border-t border-border text-[11px] text-muted-foreground">
-          <span>{words} words</span>
+          <span>{t("admin.markdown.words", { n: String(words) })}</span>
           <span>·</span>
-          <span>{chars} chars</span>
+          <span>{t("admin.markdown.chars", { n: String(chars) })}</span>
           <span>·</span>
-          <span>{lines} lines</span>
+          <span>{t("admin.markdown.lines", { n: String(lines) })}</span>
           <span className="flex-1" />
-          <span className="font-mono">Markdown · type / for commands</span>
+          <span className="font-mono">{t("admin.markdown.hint")}</span>
         </div>
 
         {mermaidModal}
@@ -568,13 +569,14 @@ function SlashPalette({
   position: { top: number; left: number };
   query: string;
 }) {
+  const { t } = useI18n();
   if (items.length === 0) {
     return (
       <div
         className="absolute z-50 bg-popover border border-border rounded-lg shadow-xl p-2 text-xs text-muted-foreground"
         style={{ top: position.top, left: position.left }}
       >
-        No commands found
+        {t("admin.markdown.noCommands")}
       </div>
     );
   }
@@ -588,7 +590,7 @@ function SlashPalette({
         if (matched.length === 0) return null;
         return (
           <div key={g.name}>
-            <div className="px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-muted-foreground bg-muted/30 sticky top-0">
+            <div className="px-2 py-1 text-[11px] font-bold uppercase tracking-wider text-muted-foreground bg-muted/30 sticky top-0">
               {g.name}
             </div>
             {matched.map((item) => {
@@ -600,7 +602,7 @@ function SlashPalette({
                   onMouseEnter={() => { /* hover handled via CSS */ }}
                   onClick={() => onSelect(item)}
                   className={cn(
-                    "w-full flex items-center gap-2 px-2 py-1.5 text-xs text-left",
+                    "w-full flex items-center gap-2 px-2 py-1.5 text-xs text-start",
                     idx === selected ? "bg-primary/10 text-primary" : "hover:bg-muted/60",
                   )}
                 >
@@ -631,6 +633,7 @@ function MermaidChip({
   totalLines: number;
   onEdit: () => void;
 }) {
+  const { t } = useI18n();
   // The chip is positioned absolutely within the textarea wrapper. We
   // approximate the y-offset by line-height * startLine.
   const lineHeight = 20; // px, matches `text-sm font-mono` line height
@@ -643,10 +646,10 @@ function MermaidChip({
       onClick={onEdit}
       className="absolute z-10 right-3 inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full bg-primary/15 text-primary border border-primary/30 hover:bg-primary/25 transition-colors"
       style={{ top }}
-      title="Open visual mermaid editor"
+      title={t("admin.markdown.openMermaid")}
     >
       <Workflow className="size-3" />
-      Edit Diagram
+      {t("admin.markdown.editDiagram")}
     </button>
   );
 }
@@ -654,6 +657,7 @@ function MermaidChip({
 // ── Mermaid block (rendered in preview mode) ──────────────────────────────
 
 function MermaidBlock({ code }: { code: string }) {
+  const { t } = useI18n();
   const [svg, setSvg] = React.useState<string>("");
   const [error, setError] = React.useState<string>("");
   React.useEffect(() => {
@@ -679,8 +683,8 @@ function MermaidBlock({ code }: { code: string }) {
   }, [code]);
 
   if (error) {
-    return <pre className="bg-destructive/10 text-destructive p-2 rounded text-xs">{`Mermaid error: ${error}\n\n${code}`}</pre>;
+    return <pre className="bg-destructive/10 text-destructive p-2 rounded text-xs">{t("admin.mermaid.error", { error, code })}</pre>;
   }
-  if (!svg) return <div className="text-xs text-muted-foreground">Loading diagram…</div>;
+  if (!svg) return <div className="text-xs text-muted-foreground">{t("admin.mermaid.loading")}</div>;
   return <div dangerouslySetInnerHTML={{ __html: svg }} className="[&_svg]:max-w-full [&_svg]:h-auto" />;
 }

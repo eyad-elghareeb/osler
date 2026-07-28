@@ -19,7 +19,6 @@ import {
   Settings as SettingsIcon,
   ChevronLeft,
   ChevronRight,
-  PanelLeftClose,
   PanelLeft,
   Home,
 } from "lucide-react";
@@ -38,6 +37,7 @@ import { useI18n } from "@/components/osler/i18n-provider";
 import { readCloudSession, clearCloudSession } from "@/lib/osler/cloud";
 import { haptic } from "@/lib/osler/native";
 import { cn } from "@/lib/utils";
+import { LoadingState } from "@/components/osler/ui-primitives";
 import { AdminLoginPrompt } from "@/components/osler/admin/admin-login-prompt";
 import { AdminProvider } from "@/components/osler/admin/admin-context";
 import {
@@ -155,7 +155,7 @@ function AdminShellInner({ children, cfEmail }: AdminShellProps) {
   if (loading) {
     return (
       <div className="flex h-screen items-center justify-center bg-background">
-        <div className="size-6 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+        <LoadingState />
       </div>
     );
   }
@@ -164,12 +164,12 @@ function AdminShellInner({ children, cfEmail }: AdminShellProps) {
   if (cfEmail === null && process.env.NODE_ENV === "production") {
     return (
       <div className="flex h-screen items-center justify-center bg-background p-6 text-center">
-        <div>
-          <AlertTriangle className="mx-auto mb-3 size-12 text-warning" />
-          <h1 className="mb-2 text-xl font-bold">{t("admin.access.protected")}</h1>
-          <p className="max-w-md text-sm text-muted-foreground">
-            {t("admin.access.protectedDesc")}
-          </p>
+        <div className="flex flex-col items-center gap-3">
+          <div className="osler-empty__icon">
+            <AlertTriangle className="size-6" />
+          </div>
+          <h1 className="osler-empty__title">{t("admin.access.protected")}</h1>
+          <p className="osler-empty__body">{t("admin.access.protectedDesc")}</p>
         </div>
       </div>
     );
@@ -192,7 +192,7 @@ function AdminShellInner({ children, cfEmail }: AdminShellProps) {
             </div>
           </div>
           {cfEmail && (
-            <span className="ml-auto text-xs text-muted-foreground">{cfEmail}</span>
+            <span className="ms-auto text-xs text-muted-foreground">{cfEmail}</span>
           )}
         </header>
         <AdminLoginPrompt onSuccess={setIdentity} />
@@ -204,12 +204,12 @@ function AdminShellInner({ children, cfEmail }: AdminShellProps) {
   if (!canAccess) {
     return (
       <div className="flex h-screen items-center justify-center bg-background p-6 text-center">
-        <div>
-          <ShieldOff className="mx-auto mb-3 size-12 text-destructive" />
-          <h1 className="mb-2 text-xl font-bold">{t("admin.access.denied")}</h1>
-          <p className="mb-4 text-sm text-muted-foreground">
-            {t("admin.access.deniedDesc")}
-          </p>
+        <div className="flex flex-col items-center gap-3">
+          <div className="osler-empty__icon">
+            <ShieldOff className="size-6" />
+          </div>
+          <h1 className="osler-empty__title">{t("admin.access.denied")}</h1>
+          <p className="osler-empty__body">{t("admin.access.deniedDesc")}</p>
           <Button variant="outline" size="sm" onClick={signOut}>
             {t("admin.nav.signOut")}
           </Button>
@@ -259,24 +259,18 @@ function AdminShellInner({ children, cfEmail }: AdminShellProps) {
       {/* Top bar — mirrors main site AppShell header style */}
       <header className="z-40 shrink-0 h-14 border-b border-border bg-background/80 backdrop-blur-md supports-[backdrop-filter]:bg-background/60 safe-pt">
         <div className="h-full px-3 sm:px-4 flex items-center gap-2 sm:gap-3">
-          {/* Sidebar toggle (desktop) */}
+          {/* Sidebar toggle — desktop: collapse/expand; mobile: open slide-in sheet */}
           <button
-            onClick={toggleSidebar}
+            onClick={() => {
+              haptic("selection");
+              if (window.innerWidth >= 768) {
+                toggleSidebar();
+              } else {
+                setMobileNavOpen(true);
+              }
+            }}
             aria-label={t("admin.shell.menu")}
-            className="hidden md:flex osler-icon-btn shrink-0"
-          >
-            {sidebarCollapsed ? (
-              <PanelLeft className="size-4" />
-            ) : (
-              <PanelLeftClose className="size-4" />
-            )}
-          </button>
-
-          {/* Mobile nav trigger */}
-          <button
-            onClick={() => setMobileNavOpen(true)}
-            aria-label={t("admin.shell.menu")}
-            className="md:hidden osler-icon-btn shrink-0"
+            className="osler-icon-btn shrink-0"
           >
             <PanelLeft className="size-4" />
           </button>
@@ -376,7 +370,7 @@ function AdminShellInner({ children, cfEmail }: AdminShellProps) {
         {/* Desktop sidebar */}
         <aside
           className={cn(
-            "hidden md:flex shrink-0 flex-col border-e border-border bg-card/40 transition-[width] duration-200",
+            "hidden md:flex shrink-0 flex-col border-e border-border bg-card/60 transition-[width] duration-200",
             sidebarCollapsed ? "w-[56px]" : "w-60",
           )}
         >

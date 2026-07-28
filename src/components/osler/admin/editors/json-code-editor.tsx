@@ -63,9 +63,9 @@ export function JsonCodeEditor({
       <div className="shrink-0 flex items-center gap-2 px-3 py-1.5 border-b border-border bg-muted/30">
         <AlignLeft className="size-3.5 text-muted-foreground" />
         <span className="text-[11px] text-muted-foreground font-mono">
-          {lines} lines · {chars} chars
+          {t("admin.json.lines", { n: String(lines) })} · {t("admin.json.chars", { n: String(chars) })}
         </span>
-        <div className="ml-auto flex items-center gap-2">
+        <div className="ms-auto flex items-center gap-2">
           {error ? (
             <span className="flex items-center gap-1 text-[11px] text-destructive">
               <XCircle className="size-3.5" />

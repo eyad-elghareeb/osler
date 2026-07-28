@@ -60,12 +60,12 @@ export function AdminLoginPrompt({ onSuccess }: AdminLoginPromptProps) {
       >
         {/* Icon */}
         <div className="mb-6 flex justify-center">
-          <div className="flex size-14 items-center justify-center rounded-full bg-primary/10">
-            <ShieldAlert className="size-7 text-primary" />
+          <div className="osler-empty__icon">
+            <ShieldAlert className="size-6" />
           </div>
         </div>
 
-        <h1 className="mb-1 text-center text-xl font-bold tracking-tight">
+        <h1 className="osler-empty__title mb-1 text-center">
           {t("admin.login.title")}
         </h1>
         <p className="mb-6 text-center text-sm text-muted-foreground">

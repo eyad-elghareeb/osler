@@ -118,13 +118,13 @@ export function UsersTable() {
       {/* Search + count */}
       <div className="mb-4 flex items-center gap-3">
         <div className="relative flex-1 max-w-xs">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
+          <Search className="absolute start-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
           <Input
             id="admin-users-search"
             placeholder={t("admin.users.search")}
             value={q}
             onChange={(e) => setQ(e.target.value)}
-            className="pl-9"
+            className="ps-9"
           />
         </div>
         <span className="text-sm text-muted-foreground">
@@ -148,7 +148,7 @@ export function UsersTable() {
                   t("admin.users.col.joined"),
                   t("admin.users.col.actions"),
                 ].map((col) => (
-                  <th key={col} className="px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  <th key={col} className="px-4 py-2.5 text-start text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                     {col}
                   </th>
                 ))}
@@ -238,13 +238,13 @@ export function UsersTable() {
             </AlertDialogDescription>
           </AlertDialogHeader>
           <div className="py-3">
-            <Label htmlFor="reset-password" className="text-sm font-medium">New password</Label>
+            <Label htmlFor="reset-password" className="text-sm font-medium">{t("admin.users.newPassword")}</Label>
             <Input
               id="reset-password"
               type="text"
               value={newPassword}
               onChange={(e) => setNewPassword(e.target.value)}
-              placeholder="min. 8 characters"
+              placeholder={t("admin.users.passwordPlaceholder")}
               className="mt-1.5"
               autoFocus
             />

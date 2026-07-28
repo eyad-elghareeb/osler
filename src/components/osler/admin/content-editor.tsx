@@ -15,11 +15,6 @@ import {
   Loader2,
   ShieldCheck,
   ShieldAlert,
-  RefreshCw,
-  ExternalLink,
-  Download,
-  FileText,
-  FileType,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
@@ -189,7 +184,7 @@ export function ContentEditor({ id, capabilities }: ContentEditorProps) {
       toast({
         title: t("admin.content.published"),
         description: res.hybridKeys.length
-          ? `Also synced to student content (${res.hybridKeys.length} file${res.hybridKeys.length === 1 ? "" : "s"})`
+          ? t("admin.content.syncedToStudent", { count: res.hybridKeys.length })
           : undefined,
       });
     } catch {
@@ -204,10 +199,10 @@ export function ContentEditor({ id, capabilities }: ContentEditorProps) {
     try {
       const res = await adminApi.validateContent(id, body);
       setValidationErrors(res.errors);
-      if (res.errors.length === 0) toast({ title: "Content is valid" });
-      else toast({ title: `${res.errors.length} validation issue${res.errors.length === 1 ? "" : "s"}`, variant: "destructive" });
+      if (res.errors.length === 0) toast({ title: t("admin.content.valid") });
+      else toast({ title: t("admin.content.validationIssues", { n: String(res.errors.length) }), variant: "destructive" });
     } catch (err) {
-      toast({ title: `Validation failed: ${String(err)}`, variant: "destructive" });
+      toast({ title: t("admin.toast.saveFailed"), variant: "destructive" });
     } finally {
       setValidating(false);
     }
@@ -288,12 +283,12 @@ export function ContentEditor({ id, capabilities }: ContentEditorProps) {
         </Button>
         <div className="flex-1 min-w-0">
           <span className="font-semibold text-sm truncate">{obj.title ?? t("admin.content.untitled")}</span>
-          <span className={cn("ml-2 text-xs font-medium", STATUS_COLOR[obj.status])}>
+          <span className={cn("ms-2 text-xs font-medium", STATUS_COLOR[obj.status])}>
             {t(`admin.content.status.${obj.status}` as any)}
           </span>
           {dirty && (
             <span
-              className="ml-2 inline-flex items-center gap-1 text-xs text-muted-foreground"
+              className="ms-2 inline-flex items-center gap-1 text-xs text-muted-foreground"
               title={t("admin.content.editor.dirty")}
             >
               <span className="size-1.5 rounded-full bg-warning" />
@@ -303,26 +298,26 @@ export function ContentEditor({ id, capabilities }: ContentEditorProps) {
         </div>
         <div className="flex items-center gap-1.5">
           {!isPending && (
-            <Button variant="outline" size="sm" onClick={runValidation} disabled={validating} title="Validate content schema">
-              {validating ? <Loader2 className="mr-1.5 size-3.5 animate-spin" /> : <ShieldCheck className="mr-1.5 size-3.5" />}
-              Validate
+            <Button variant="outline" size="sm" onClick={runValidation} disabled={validating} title={t("admin.content.editor.validate")}>
+              {validating ? <Loader2 className="me-1.5 size-3.5 animate-spin" /> : <ShieldCheck className="me-1.5 size-3.5" />}
+              {t("admin.content.editor.validate")}
             </Button>
           )}
           {!isPending && (
             <Button variant="outline" size="sm" onClick={saveDraft} disabled={saving}>
-              {saving ? <Loader2 className="mr-1.5 size-3.5 animate-spin" /> : <Save className="mr-1.5 size-3.5" />}
+              {saving ? <Loader2 className="me-1.5 size-3.5 animate-spin" /> : <Save className="me-1.5 size-3.5" />}
               {t("admin.content.saveDraft")}
             </Button>
           )}
           {!isPending && (
             <Button variant="outline" size="sm" onClick={submit}>
-              <Send className="mr-1.5 size-3.5" />
+              <Send className="me-1.5 size-3.5" />
               {t("admin.content.submit")}
             </Button>
           )}
           {capabilities.publishDirect && !isPending && (
             <Button size="sm" onClick={() => { setPublishTargetPath(suggestedPath); setPublishOpen(true); }}>
-              <Upload className="mr-1.5 size-3.5" />
+              <Upload className="me-1.5 size-3.5" />
               {t("admin.content.publishDirect")}
             </Button>
           )}
@@ -355,14 +350,14 @@ export function ContentEditor({ id, capabilities }: ContentEditorProps) {
             : "border-warning/30 bg-warning/10 text-warning"
         )}>
           {validationErrors.length === 0 ? (
-            <><ShieldCheck className="size-4" /> Content is valid — all schema checks passed.</>
+            <><ShieldCheck className="size-4" /> {t("admin.content.validDesc")}</>
           ) : (
             <details className="flex-1">
               <summary className="cursor-pointer flex items-center gap-2">
                 <ShieldAlert className="size-4" />
-                {validationErrors.length} validation issue{validationErrors.length === 1 ? "" : "s"} — click to expand
+                {t("admin.content.validationIssues", { n: String(validationErrors.length) })}
               </summary>
-              <ul className="mt-1 ml-6 list-disc text-xs space-y-0.5">
+              <ul className="mt-1 ms-6 list-disc text-xs space-y-0.5">
                 {validationErrors.map((e, i) => <li key={i}>{e}</li>)}
               </ul>
             </details>
@@ -395,7 +390,7 @@ export function ContentEditor({ id, capabilities }: ContentEditorProps) {
           />
         )}
 
-        <div className="ml-auto flex items-center gap-2 text-xs text-muted-foreground">
+        <div className="ms-auto flex items-center gap-2 text-xs text-muted-foreground">
           {parseError ? (
             <span className="flex items-center gap-1 text-destructive">
               <XCircle className="size-3.5" />
@@ -449,26 +444,26 @@ export function ContentEditor({ id, capabilities }: ContentEditorProps) {
                 </div>
               </div>
               <div>
-                <div className="font-semibold uppercase tracking-wider text-muted-foreground mb-1">ID</div>
+                <div className="font-semibold uppercase tracking-wider text-muted-foreground mb-1">{t("admin.content.metadata.id")}</div>
                 <span className="font-mono text-xs break-all">{obj.id}</span>
               </div>
               <div>
-                <div className="font-semibold uppercase tracking-wider text-muted-foreground mb-1">R2 key</div>
+                <div className="font-semibold uppercase tracking-wider text-muted-foreground mb-1">{t("admin.content.metadata.r2Key")}</div>
                 <span className="font-mono text-xs break-all">{obj.r2_key_base}</span>
               </div>
               <div>
-                <div className="font-semibold uppercase tracking-wider text-muted-foreground mb-1">Created</div>
+                <div className="font-semibold uppercase tracking-wider text-muted-foreground mb-1">{t("admin.content.metadata.created")}</div>
                 <span>{new Date(obj.created_at).toLocaleString()}</span>
               </div>
               {obj.submitted_at && (
                 <div>
-                  <div className="font-semibold uppercase tracking-wider text-muted-foreground mb-1">Submitted</div>
+                  <div className="font-semibold uppercase tracking-wider text-muted-foreground mb-1">{t("admin.content.metadata.submitted")}</div>
                   <span>{new Date(obj.submitted_at).toLocaleString()}</span>
                 </div>
               )}
               {obj.reviewed_at && (
                 <div>
-                  <div className="font-semibold uppercase tracking-wider text-muted-foreground mb-1">Reviewed</div>
+                  <div className="font-semibold uppercase tracking-wider text-muted-foreground mb-1">{t("admin.content.metadata.reviewed")}</div>
                   <span>{new Date(obj.reviewed_at).toLocaleString()}</span>
                 </div>
               )}
@@ -504,7 +499,7 @@ export function ContentEditor({ id, capabilities }: ContentEditorProps) {
                     {t("admin.content.invalidJsonHint")}
                   </p>
                   <Button size="sm" variant="outline" onClick={() => setMode("code")}>
-                    <Code2 className="size-3.5 mr-1.5" />
+                    <Code2 className="size-3.5 me-1.5" />
                     {t("admin.content.editor.code")}
                   </Button>
                 </div>
@@ -576,17 +571,15 @@ export function ContentEditor({ id, capabilities }: ContentEditorProps) {
       <Dialog open={publishOpen} onOpenChange={setPublishOpen}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>Publish to student content</DialogTitle>
+            <DialogTitle>{t("admin.content.publishDialogTitle")}</DialogTitle>
           </DialogHeader>
           <div className="space-y-3 py-2">
             <p className="text-sm text-muted-foreground">
-              Publishing also pushes the content to the student-facing R2 keyspace
-              (<code className="text-xs">content-files/&lt;category&gt;/&lt;path&gt;</code>) so
-              students see the update immediately. Adjust the target path if needed.
+              {t("admin.content.publishDialogDesc")}
             </p>
             <div>
               <label className="mb-1.5 block text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                Target path inside content-files/
+                {t("admin.content.publishDialogTargetPath")}
               </label>
               <Input
                 value={publishTargetPath}
@@ -595,7 +588,7 @@ export function ContentEditor({ id, capabilities }: ContentEditorProps) {
                 className="font-mono text-xs"
               />
               <p className="mt-1 text-xs text-muted-foreground">
-                Leave blank to use the auto-generated path: <code>{suggestedPath}</code>
+                {t("admin.content.publishDialogAutoPath")} <code>{suggestedPath}</code>
               </p>
             </div>
           </div>
@@ -609,8 +602,8 @@ export function ContentEditor({ id, capabilities }: ContentEditorProps) {
                 doPublish(publishTargetPath.trim() || undefined);
               }}
             >
-              <Upload className="size-3.5 mr-1.5" />
-              Publish
+              <Upload className="size-3.5 me-1.5" />
+              {t("admin.content.publishButton")}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -634,22 +627,22 @@ const PREVIEW_MARKDOWN_STYLES = `
   .preview-md h2 { font-size: 1.4rem; font-weight: 600; margin: 1.25rem 0 0.5rem; border-bottom: 1px solid oklch(0.87 0 0); padding-bottom: 0.25rem; }
   .preview-md h3 { font-size: 1.1rem; font-weight: 600; margin: 1rem 0 0.4rem; }
   .preview-md p { margin: 0.6rem 0; line-height: 1.7; }
-  .preview-md ul, .preview-md ol { padding-left: 1.5rem; margin: 0.5rem 0; }
+  .preview-md ul, .preview-md ol { padding-inline-start: 1.5rem; margin: 0.5rem 0; }
   .preview-md li { margin: 0.2rem 0; }
-  .preview-md blockquote { border-left: 3px solid oklch(0.6 0.1 250); background: oklch(0.97 0.01 250); margin: 0.75rem 0; padding: 0.5rem 1rem; border-radius: 0 0.25rem 0.25rem 0; }
+  .preview-md blockquote { border-inline-start: 3px solid oklch(0.6 0.1 250); background: oklch(0.97 0.01 250); margin: 0.75rem 0; padding: 0.5rem 1rem; border-radius: 0 0.25rem 0.25rem 0; }
   .preview-md code { font-family: monospace; background: oklch(0.95 0 0); padding: 0.15rem 0.35rem; border-radius: 0.25rem; font-size: 0.85em; }
   .preview-md pre { background: oklch(0.15 0 0); color: oklch(0.92 0 0); padding: 1rem; border-radius: 0.5rem; overflow-x: auto; margin: 0.75rem 0; }
   .preview-md pre code { background: transparent; padding: 0; }
   .preview-md table { border-collapse: collapse; width: 100%; margin: 0.75rem 0; }
-  .preview-md th, .preview-md td { border: 1px solid oklch(0.85 0 0); padding: 0.4rem 0.6rem; text-align: left; font-size: 0.9em; }
+  .preview-md th, .preview-md td { border: 1px solid oklch(0.85 0 0); padding: 0.4rem 0.6rem; text-align: start; font-size: 0.9em; }
   .preview-md th { background: oklch(0.95 0 0); font-weight: 600; }
   .preview-md img { max-width: 100%; border-radius: 0.5rem; margin: 0.75rem 0; }
   .preview-md hr { border: none; border-top: 1px solid oklch(0.85 0 0); margin: 1.5rem 0; }
   .preview-md a { color: oklch(0.4 0.15 260); text-decoration: underline; }
-  .preview-md [dir=rtl] { text-align: right; }
 `;
 
 function MermaidPreviewBlock({ code }: { code: string }) {
+  const { t } = useI18n();
   const [svg, setSvg] = React.useState<string>("");
   const [error, setError] = React.useState<string>("");
   React.useEffect(() => {
@@ -674,9 +667,9 @@ function MermaidPreviewBlock({ code }: { code: string }) {
     return () => { cancelled = true; };
   }, [code]);
   if (error) {
-    return <pre className="bg-destructive/10 text-destructive p-2 rounded text-xs">{`Mermaid error: ${error}\n\n${code}`}</pre>;
+    return <pre className="bg-destructive/10 text-destructive p-2 rounded text-xs">{t("admin.content.mermaidError", { error, code })}</pre>;
   }
-  if (!svg) return <div className="text-xs text-muted-foreground p-4 text-center">Rendering diagram…</div>;
+  if (!svg) return <div className="text-xs text-muted-foreground p-4 text-center">{t("admin.content.renderingDiagram")}</div>;
   return <div dangerouslySetInnerHTML={{ __html: svg }} className="my-4 [&_svg]:max-w-full [&_svg]:h-auto" />;
 }
 

@@ -29,10 +29,12 @@ export function AdminRouteGuard({
   if (!allowed) {
     return (
       <div className="flex h-full items-center justify-center p-6 text-center">
-        <div>
-          <ShieldOff className="mx-auto mb-3 size-12 text-destructive" />
-          <h1 className="mb-2 text-xl font-bold">{t("admin.access.denied")}</h1>
-          <p className="mb-4 text-sm text-muted-foreground">{t("admin.access.deniedDesc")}</p>
+        <div className="flex flex-col items-center gap-3">
+          <div className="osler-empty__icon">
+            <ShieldOff className="size-6" />
+          </div>
+          <h1 className="osler-empty__title">{t("admin.access.denied")}</h1>
+          <p className="osler-empty__body">{t("admin.access.deniedDesc")}</p>
           <Button variant="outline" size="sm" onClick={() => router.push("/admin/content")}>
             {t("admin.nav.content")}
           </Button>

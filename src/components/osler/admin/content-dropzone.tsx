@@ -112,8 +112,8 @@ export function ContentDropzone({
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       className={cn(
-        "admin-dropzone flex flex-col items-center justify-center text-center transition-colors cursor-pointer",
-        dragActive && "admin-dropzone--active",
+        "osler-dropzone flex flex-col items-center justify-center text-center transition-colors cursor-pointer",
+        dragActive && "osler-dropzone--active",
         compact ? "p-4 rounded-lg" : "p-8 rounded-xl",
         className,
       )}

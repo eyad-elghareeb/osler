@@ -20,6 +20,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { useI18n } from "@/components/osler/i18n-provider";
 
 // ── Diagram templates ──────────────────────────────────────────────────────
 
@@ -220,6 +221,7 @@ export interface MermaidEditorModalProps {
 }
 
 export function MermaidEditorModal({ open, initialCode, onSave, onClose }: MermaidEditorModalProps) {
+  const { t } = useI18n();
   const [code, setCode] = React.useState(initialCode || "graph TD\n  A --> B");
   const [svg, setSvg] = React.useState<string>("");
   const [error, setError] = React.useState<string>("");
@@ -296,12 +298,12 @@ export function MermaidEditorModal({ open, initialCode, onSave, onClose }: Merma
         {/* Header */}
         <div className="flex items-center gap-3 px-4 py-3 border-b border-border bg-muted/30">
           <Workflow className="size-5 text-primary" />
-          <span className="font-semibold">Edit Diagram</span>
+          <span className="font-semibold">{t("admin.mermaid.editDiagram")}</span>
           <span className="text-xs px-2 py-0.5 rounded-full bg-primary/10 text-primary border border-primary/30">
             {detectDiagramType(code)}
           </span>
-          <div className="ml-auto">
-            <Button variant="ghost" size="iconSm" onClick={onClose} aria-label="Close">
+          <div className="ms-auto">
+            <Button variant="ghost" size="iconSm" onClick={onClose} aria-label={t("common.close")}>
               <X className="size-4" />
             </Button>
           </div>
@@ -312,7 +314,7 @@ export function MermaidEditorModal({ open, initialCode, onSave, onClose }: Merma
           {/* Sidebar — templates */}
           <div className="overflow-y-auto medos-scroll-y p-3 bg-muted/10">
             <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">
-              Templates
+              {t("admin.mermaid.templates")}
             </div>
             {TEMPLATE_GROUPS.map((g) => (
               <div key={g.group} className="mb-3">
@@ -323,7 +325,7 @@ export function MermaidEditorModal({ open, initialCode, onSave, onClose }: Merma
                       key={t.label}
                       type="button"
                       onClick={() => setCode(t.code.trim())}
-                      className="w-full text-left px-2 py-1.5 rounded text-xs hover:bg-primary/10 hover:text-primary border border-transparent hover:border-primary/30 transition-colors"
+                      className="w-full text-start px-2 py-1.5 rounded text-xs hover:bg-primary/10 hover:text-primary border border-transparent hover:border-primary/30 transition-colors"
                     >
                       {t.label}
                     </button>
@@ -336,7 +338,7 @@ export function MermaidEditorModal({ open, initialCode, onSave, onClose }: Merma
           {/* Center — source */}
           <div className="flex flex-col min-h-0">
             <div className="px-3 py-1.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground border-b border-border bg-muted/10">
-              Mermaid source
+              {t("admin.mermaid.source")}
             </div>
             <textarea
               value={code}
@@ -356,12 +358,12 @@ export function MermaidEditorModal({ open, initialCode, onSave, onClose }: Merma
           {/* Right — preview */}
           <div className="flex flex-col min-h-0">
             <div className="px-3 py-1.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground border-b border-border bg-muted/10">
-              Preview
+              {t("admin.mermaid.preview")}
             </div>
             <div className="flex-1 min-h-0 overflow-auto medos-scroll-y p-4 flex items-center justify-center">
               {loading ? (
                 <div className="text-muted-foreground flex items-center gap-2 text-sm">
-                  <Loader2 className="size-4 animate-spin" /> Rendering…
+                  <Loader2 className="size-4 animate-spin" /> {t("admin.mermaid.rendering")}
                 </div>
               ) : svg ? (
                 <div
@@ -369,7 +371,7 @@ export function MermaidEditorModal({ open, initialCode, onSave, onClose }: Merma
                   dangerouslySetInnerHTML={{ __html: svg }}
                 />
               ) : (
-                <div className="text-muted-foreground text-sm">Fix the source to preview.</div>
+                <div className="text-muted-foreground text-sm">{t("admin.mermaid.fixSource")}</div>
               )}
             </div>
           </div>
@@ -377,11 +379,11 @@ export function MermaidEditorModal({ open, initialCode, onSave, onClose }: Merma
 
         {/* Footer */}
         <div className="flex items-center gap-3 px-4 py-3 border-t border-border bg-muted/30">
-          <span className="text-xs text-muted-foreground">Ctrl+S to save · Esc to cancel</span>
-          <div className="ml-auto flex items-center gap-2">
-            <Button variant="ghost" onClick={onClose}>Cancel</Button>
+          <span className="text-xs text-muted-foreground">{t("admin.mermaid.shortcuts")}</span>
+          <div className="ms-auto flex items-center gap-2">
+            <Button variant="ghost" onClick={onClose}>{t("common.cancel")}</Button>
             <Button onClick={() => { onSave(code.trim()); onClose(); }}>
-              <Check className="size-4 me-1.5" /> Save diagram
+              <Check className="size-4 me-1.5" /> {t("admin.mermaid.saveDiagram")}
             </Button>
           </div>
         </div>

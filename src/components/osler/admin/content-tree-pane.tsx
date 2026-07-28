@@ -108,7 +108,7 @@ export function ContentTreePane({
   }, [kind]);
 
   return (
-    <div className={cn("flex h-full flex-col bg-card/40", className)}>
+    <div className={cn("flex h-full flex-col bg-card/60", className)}>
       {/* Header */}
       <div className="shrink-0 border-b border-border p-2.5 space-y-2">
         <div className="flex items-center gap-2">
@@ -120,7 +120,7 @@ export function ContentTreePane({
           <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
             {kind === "local" ? t("admin.content.tree.local") : t("admin.content.tree.cloud")}
           </span>
-          <span className="text-xs text-muted-foreground/60 ml-auto">
+          <span className="text-xs text-muted-foreground/60 ms-auto">
             {t("admin.content.tree.items", { n: leafCount })}
           </span>
         </div>
@@ -166,8 +166,8 @@ export function ContentTreePane({
               variant="ghost"
               size="iconSm"
               onClick={onRefresh}
-              className="ml-auto"
-              aria-label="Refresh"
+              className="ms-auto"
+              aria-label={t("admin.content.tree.refresh")}
               disabled={loading}
             >
               <RefreshCw className={cn("size-3.5", loading && "animate-spin")} />
@@ -184,7 +184,7 @@ export function ContentTreePane({
           </div>
         ) : filtered.length === 0 ? (
           <div className="p-6 text-center text-xs text-muted-foreground">
-            No matches for “{query}”.
+            {t("admin.content.tree.noMatches", { query })}
           </div>
         ) : (
           filtered.map((node) => (
@@ -295,7 +295,7 @@ function TreeRow({
         {!isFolder && node.cloudObject?.status && (
           <span
             className={cn(
-              "meta rounded-full px-1.5 py-0.5 border text-[9px] uppercase tracking-wider",
+              "meta rounded-full px-1.5 py-0.5 border text-[11px] uppercase tracking-wider",
               STATUS_BADGE[node.cloudObject.status] ?? "",
             )}
           >

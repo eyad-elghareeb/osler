@@ -63,7 +63,7 @@ export function ReviewQueue() {
           {/* Meta */}
           <div className="flex-1 min-w-0">
             <div className="font-semibold text-sm">
-              {item.title ?? <span className="italic text-muted-foreground">Untitled</span>}
+              {item.title ?? <span className="italic text-muted-foreground">{t("admin.review.untitled")}</span>}
             </div>
             <div className="mt-0.5 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
               <span className="rounded bg-muted px-1.5 py-0.5 font-mono">{item.content_type}</span>
@@ -78,15 +78,15 @@ export function ReviewQueue() {
 
           {/* Actions */}
           <div className="flex items-center gap-1.5 shrink-0">
-            <Button variant="outline" size="sm" onClick={() => router.push(`/admin/review/${item.id}`)}>
-              Diff
+            <Button variant="outline" size="sm"               onClick={() => router.push(`/admin/review/${item.id}`)}>
+              {t("admin.review.diff")}
             </Button>
             <Button
               size="sm"
               className="bg-success/20 text-success border border-success/30 hover:bg-success/30"
               onClick={() => approve(item)}
             >
-              <CheckCircle2 className="mr-1.5 size-3.5" />
+              <CheckCircle2 className="me-1.5 size-3.5" />
               {t("admin.review.approve")}
             </Button>
             <Button
@@ -95,7 +95,7 @@ export function ReviewQueue() {
               className="text-destructive border-destructive/30 hover:bg-destructive/10"
               onClick={() => router.push(`/admin/review/${item.id}`)}
             >
-              <XCircle className="mr-1.5 size-3.5" />
+              <XCircle className="me-1.5 size-3.5" />
               {t("admin.review.reject")}
             </Button>
           </div>

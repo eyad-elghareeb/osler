@@ -137,15 +137,16 @@ function ItemRow({
   children: React.ReactNode;
   title: string;
 }) {
+  const { t } = useI18n();
   return (
-    <div className="border border-border rounded-lg p-3 space-y-3 bg-card/40">
+    <div className="border border-border rounded-xl p-3 space-y-3 bg-card/60">
       <div className="flex items-center gap-2">
         <GripVertical className="size-3.5 text-muted-foreground/40" />
         <Badge variant="outline" className="font-mono">
           {title}
         </Badge>
         {!readOnly && (
-          <div className="ml-auto flex items-center gap-0.5">
+          <div className="ms-auto flex items-center gap-0.5">
             <TooltipProvider>
               <Tooltip>
                 <TooltipTrigger asChild>
@@ -158,7 +159,7 @@ function ItemRow({
                     <ChevronUp className="size-3.5" />
                   </Button>
                 </TooltipTrigger>
-                <TooltipContent>Move up</TooltipContent>
+                <TooltipContent>{t("admin.structured.moveUp")}</TooltipContent>
               </Tooltip>
             </TooltipProvider>
             <TooltipProvider>
@@ -173,7 +174,7 @@ function ItemRow({
                     <ChevronDown className="size-3.5" />
                   </Button>
                 </TooltipTrigger>
-                <TooltipContent>Move down</TooltipContent>
+                <TooltipContent>{t("admin.structured.moveDown")}</TooltipContent>
               </Tooltip>
             </TooltipProvider>
             <TooltipProvider>
@@ -188,7 +189,7 @@ function ItemRow({
                     <Trash2 className="size-3.5" />
                   </Button>
                 </TooltipTrigger>
-                <TooltipContent>Remove</TooltipContent>
+                <TooltipContent>{t("common.remove")}</TooltipContent>
               </Tooltip>
             </TooltipProvider>
           </div>
@@ -224,7 +225,7 @@ function TagListField({
   }
   return (
     <Field label={label}>
-      <div className="flex flex-wrap gap-1.5 p-1.5 border border-border rounded-lg bg-background min-h-9">
+      <div className="flex flex-wrap gap-1.5 p-1.5 border border-border rounded-xl bg-background min-h-9">
         {tags.map((tag, i) => (
           <span
             key={`${tag}-${i}`}
@@ -282,6 +283,7 @@ function ImageListField({
   r2KeyBase?: string;
   hint?: string;
 }) {
+  const { t } = useI18n();
   const { toast } = useToast();
   // Normalize: accept string | { src, alt, caption } | array of either
   const arr: Array<{ src: string; alt?: string; caption?: string }> = React.useMemo(() => {
@@ -304,7 +306,7 @@ function ImageListField({
 
   async function handleUpload(file: File) {
     if (!r2KeyBase) {
-      toast({ title: "Cannot upload — content must be saved first", variant: "destructive" });
+      toast({ title: t("admin.structured.cannotUpload"), variant: "destructive" });
       return;
     }
     try {
@@ -514,7 +516,7 @@ export function QuizEditor({ value, onChange, readOnly, r2KeyBase }: StructuredE
     <div className="space-y-3">
       <ListToolbar onAdd={addQuestion} addLabel={t("admin.content.editor.addQuestion")} readOnly={readOnly} />
       {questions.length === 0 ? (
-        <p className="text-sm text-muted-foreground text-center py-6">No questions yet.</p>
+        <p className="text-sm text-muted-foreground text-center py-6">{t("admin.structured.noQuestions")}</p>
       ) : (
         questions.map((q, i) => (
           <ItemRow
@@ -651,7 +653,7 @@ function ChoicesEditor({
                   ? "bg-success border-success text-success-foreground"
                   : "border-border text-transparent hover:border-success/50",
               )}
-              aria-label={correct === i ? "Correct answer" : "Mark as correct"}
+              aria-label={correct === i ? t("admin.structured.correctAnswer") : t("admin.structured.markAsCorrect")}
             >
               {correct === i && <CheckCircle2 className="size-3" />}
             </button>
@@ -803,6 +805,7 @@ function PassagesEditor({ value, onChange, readOnly, r2KeyBase }: StructuredEdit
 // ── Flashcard editor (basic + cloze + subdecks) ────────────────────────────
 
 export function FlashcardEditor({ value, onChange, readOnly, r2KeyBase }: StructuredEditorProps) {
+  const { t } = useI18n();
   if (Array.isArray(value?.decks)) {
     return <SubdecksEditor value={value} onChange={onChange} readOnly={readOnly} r2KeyBase={r2KeyBase} />;
   }
@@ -871,7 +874,7 @@ export function FlashcardEditor({ value, onChange, readOnly, r2KeyBase }: Struct
       <div className="space-y-3">
         <SectionLabel>Subdecks ({subdecks.length})</SectionLabel>
         {subdecks.map((sd, i) => (
-          <div key={i} className="border border-border rounded-lg p-3 space-y-2 bg-card/30">
+          <div key={i} className="border border-border rounded-xl p-3 space-y-2 bg-card/60">
             <div className="flex items-center gap-2">
               <Field label="ID">
                 <Input
@@ -916,7 +919,7 @@ export function FlashcardEditor({ value, onChange, readOnly, r2KeyBase }: Struct
       {/* Cards */}
       <div className="space-y-3">
         <SectionLabel>Cards ({cards.length})</SectionLabel>
-        <ListToolbar onAdd={addCard} addLabel="Add card" readOnly={readOnly} />
+        <ListToolbar onAdd={addCard} addLabel={t("admin.structured.addCard")} readOnly={readOnly} />
         {cards.map((c, i) => {
           const isCloze = (c.type ?? "basic") === "cloze";
           return (
@@ -948,7 +951,7 @@ export function FlashcardEditor({ value, onChange, readOnly, r2KeyBase }: Struct
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="basic">Basic (front / back)</SelectItem>
+                    <SelectItem value="basic">{t("admin.structured.basicFrontBack")}</SelectItem>
                     <SelectItem value="cloze">Cloze ({`{{c1::answer::hint}}`})</SelectItem>
                   </SelectContent>
                 </Select>
@@ -1025,7 +1028,7 @@ export function FlashcardEditor({ value, onChange, readOnly, r2KeyBase }: Struct
                       <SelectValue placeholder="None" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="">None</SelectItem>
+                      <SelectItem value="">{t("common.none")}</SelectItem>
                       {subdecks.map((sd) => (
                         <SelectItem key={sd.id} value={sd.id}>{sd.title || sd.id}</SelectItem>
                       ))}
@@ -1048,12 +1051,13 @@ export function FlashcardEditor({ value, onChange, readOnly, r2KeyBase }: Struct
 }
 
 function SubdecksEditor({ value, onChange, readOnly, r2KeyBase }: StructuredEditorProps) {
+  const { t } = useI18n();
   const decks: any[] = Array.isArray(value?.decks) ? value.decks : [];
   function update(next: any[]) {
     onChange({ ...value, decks: next });
   }
   function addDeck() {
-    update([...decks, { id: `deck-${decks.length + 1}`, name: "New deck", cards: [] }]);
+    update([...decks, { id: `deck-${decks.length + 1}`, name: t("admin.structured.newDeck"), cards: [] }]);
   }
   function patchDeck(i: number, patch: any) {
     update(decks.map((d, idx) => (idx === i ? { ...d, ...patch } : d)));
@@ -1063,7 +1067,7 @@ function SubdecksEditor({ value, onChange, readOnly, r2KeyBase }: StructuredEdit
   }
   return (
     <div className="space-y-3">
-      <ListToolbar onAdd={addDeck} addLabel="Add deck" readOnly={readOnly} />
+      <ListToolbar onAdd={addDeck} addLabel={t("admin.structured.addDeck")} readOnly={readOnly} />
       {decks.map((d, i) => (
         <ItemRow
           key={i}
@@ -1106,6 +1110,7 @@ function SubdecksEditor({ value, onChange, readOnly, r2KeyBase }: StructuredEdit
 // ── OSCE editor (full schema: patient, hiddenProfile, rubric, questions) ───
 
 export function OsceEditor({ value, onChange, readOnly, r2KeyBase }: StructuredEditorProps) {
+  const { t } = useI18n();
   const stations: any[] = Array.isArray(value?.stations) ? value.stations : [];
 
   function update(next: any[]) {
@@ -1147,9 +1152,9 @@ export function OsceEditor({ value, onChange, readOnly, r2KeyBase }: StructuredE
 
   return (
     <div className="space-y-3">
-      <ListToolbar onAdd={addStation} addLabel="Add station" readOnly={readOnly} />
+      <ListToolbar onAdd={addStation} addLabel={t("admin.structured.addStation")} readOnly={readOnly} />
       {stations.length === 0 ? (
-        <p className="text-sm text-muted-foreground text-center py-6">No stations yet.</p>
+        <p className="text-sm text-muted-foreground text-center py-6">{t("admin.structured.noStations")}</p>
       ) : (
         stations.map((s, i) => (
           <ItemRow
@@ -1188,8 +1193,8 @@ export function OsceEditor({ value, onChange, readOnly, r2KeyBase }: StructuredE
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="history">History Taking</SelectItem>
-                    <SelectItem value="data-interp">Data Interpretation</SelectItem>
+                    <SelectItem value="history">{t("admin.structured.historyTaking")}</SelectItem>
+                    <SelectItem value="data-interp">{t("admin.structured.dataInterpretation")}</SelectItem>
                   </SelectContent>
                 </Select>
               </Field>
@@ -1211,9 +1216,9 @@ export function OsceEditor({ value, onChange, readOnly, r2KeyBase }: StructuredE
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="Easy">Easy</SelectItem>
-                    <SelectItem value="Medium">Medium</SelectItem>
-                    <SelectItem value="Hard">Hard</SelectItem>
+                    <SelectItem value="Easy">{t("admin.structured.easy")}</SelectItem>
+                    <SelectItem value="Medium">{t("admin.structured.medium")}</SelectItem>
+                    <SelectItem value="Hard">{t("admin.structured.hard")}</SelectItem>
                   </SelectContent>
                 </Select>
               </Field>
@@ -1236,7 +1241,7 @@ export function OsceEditor({ value, onChange, readOnly, r2KeyBase }: StructuredE
               />
             </Field>
 
-            <SectionLabel>Examiner</SectionLabel>
+            <SectionLabel>{t("admin.structured.examiner")}</SectionLabel>
             <div className="grid grid-cols-2 gap-3">
               <Field label="Name">
                 <Input
@@ -1254,7 +1259,7 @@ export function OsceEditor({ value, onChange, readOnly, r2KeyBase }: StructuredE
               </Field>
             </div>
 
-            <SectionLabel>Patient</SectionLabel>
+            <SectionLabel>{t("admin.structured.patient")}</SectionLabel>
             <div className="grid grid-cols-3 gap-3">
               <Field label="Name">
                 <Input
@@ -1281,8 +1286,8 @@ export function OsceEditor({ value, onChange, readOnly, r2KeyBase }: StructuredE
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="male">Male</SelectItem>
-                    <SelectItem value="female">Female</SelectItem>
+                    <SelectItem value="male">{t("admin.structured.male")}</SelectItem>
+                    <SelectItem value="female">{t("admin.structured.female")}</SelectItem>
                   </SelectContent>
                 </Select>
               </Field>
@@ -1304,7 +1309,7 @@ export function OsceEditor({ value, onChange, readOnly, r2KeyBase }: StructuredE
               />
             </Field>
 
-            <SectionLabel>Hidden Profile</SectionLabel>
+            <SectionLabel>{t("admin.structured.hiddenProfile")}</SectionLabel>
             <Field label="Diagnosis">
               <Textarea
                 value={s.hiddenProfile?.diagnosis ?? ""}
@@ -1341,7 +1346,7 @@ export function OsceEditor({ value, onChange, readOnly, r2KeyBase }: StructuredE
               />
             </Field>
 
-            <SectionLabel>Rubric</SectionLabel>
+            <SectionLabel>{t("admin.structured.rubric")}</SectionLabel>
             <TagListField
               label="Must ask"
               tags={s.rubric?.mustAsk ?? []}
@@ -1355,7 +1360,7 @@ export function OsceEditor({ value, onChange, readOnly, r2KeyBase }: StructuredE
               readOnly={readOnly}
             />
 
-            <SectionLabel>Questions</SectionLabel>
+            <SectionLabel>{t("admin.structured.questions")}</SectionLabel>
             <OsceQuestionsEditor
               questions={s.questions ?? []}
               onChange={(v) => patchStation(i, { questions: v })}
@@ -1389,7 +1394,7 @@ function OsceQuestionsEditor({
   return (
     <div className="space-y-2">
       {questions.map((q, i) => (
-        <div key={i} className="border border-border rounded-lg p-2 space-y-2 bg-card/30">
+        <div key={i} className="border border-border rounded-xl p-2 space-y-2 bg-card/60">
           <div className="flex items-center justify-between">
             <Badge variant="outline" className="font-mono text-xs">Q{i + 1}</Badge>
             {!readOnly && (
@@ -1457,6 +1462,7 @@ function youTubeThumb(id: string): string {
 }
 
 export function VideoEditor({ value, onChange, readOnly, r2KeyBase }: StructuredEditorProps) {
+  const { t } = useI18n();
   const videos: any[] = Array.isArray(value?.videos) ? value.videos : [];
 
   function update(next: any[]) {
@@ -1497,9 +1503,9 @@ export function VideoEditor({ value, onChange, readOnly, r2KeyBase }: Structured
 
   return (
     <div className="space-y-3">
-      <ListToolbar onAdd={addVideo} addLabel="Add video" readOnly={readOnly} />
+      <ListToolbar onAdd={addVideo} addLabel={t("admin.structured.addVideo")} readOnly={readOnly} />
       {videos.length === 0 ? (
-        <p className="text-sm text-muted-foreground text-center py-6">No videos yet.</p>
+        <p className="text-sm text-muted-foreground text-center py-6">{t("admin.structured.noVideos")}</p>
       ) : (
         videos.map((v, i) => {
           const source = v.source ?? { type: "youtube", id: "" };
@@ -1585,7 +1591,7 @@ export function VideoEditor({ value, onChange, readOnly, r2KeyBase }: Structured
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="en">English</SelectItem>
+                      <SelectItem value="en">{t("admin.structured.english")}</SelectItem>
                       <SelectItem value="ar">العربية</SelectItem>
                     </SelectContent>
                   </Select>
@@ -1600,7 +1606,7 @@ export function VideoEditor({ value, onChange, readOnly, r2KeyBase }: Structured
                 </Field>
               </div>
 
-              <SectionLabel>Source</SectionLabel>
+              <SectionLabel>{t("admin.structured.source")}</SectionLabel>
               <Field label="Source type">
                 <Select
                   value={source.type ?? "youtube"}
@@ -1646,14 +1652,14 @@ export function VideoEditor({ value, onChange, readOnly, r2KeyBase }: Structured
                         {/* eslint-disable-next-line @next/next/no-img-element */}
                         <img
                           src={youTubeThumb(ytId)}
-                          alt="Thumbnail preview"
+                          alt={t("admin.structured.thumbnailPreview")}
                           className="h-12 rounded border border-border"
                           onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
                         />
                       </div>
                     ) : (
                       <p className="text-xs text-muted-foreground">
-                        Paste a YouTube link above — the video ID is extracted automatically.
+                        Paste a YouTube link above — {t("admin.structured.youtubeHint")}
                       </p>
                     )}
                   </div>
@@ -1670,14 +1676,14 @@ export function VideoEditor({ value, onChange, readOnly, r2KeyBase }: Structured
                 </Field>
               )}
 
-              <SectionLabel>Chapters (optional)</SectionLabel>
+              <SectionLabel>{t("admin.structured.chaptersOptional")}</SectionLabel>
               <ChaptersEditor
                 chapters={v.chapters ?? []}
                 onChange={(c) => patchVideo(i, { chapters: c })}
                 readOnly={readOnly}
               />
 
-              <SectionLabel>Tags & Related articles</SectionLabel>
+              <SectionLabel>{t("admin.structured.tagsRelated")}</SectionLabel>
               <TagListField
                 label="Tags"
                 tags={v.tags ?? []}
@@ -1761,6 +1767,7 @@ function ChaptersEditor({
 // ── Written editor (with children) ─────────────────────────────────────────
 
 export function WrittenEditor({ value, onChange, readOnly, r2KeyBase }: StructuredEditorProps) {
+  const { t } = useI18n();
   const prompts: any[] = Array.isArray(value?.prompts) ? value.prompts : [];
 
   function update(next: any[]) {
@@ -1797,9 +1804,9 @@ export function WrittenEditor({ value, onChange, readOnly, r2KeyBase }: Structur
 
   return (
     <div className="space-y-3">
-      <ListToolbar onAdd={addPrompt} addLabel="Add prompt" readOnly={readOnly} />
+      <ListToolbar onAdd={addPrompt} addLabel={t("admin.structured.addPrompt")} readOnly={readOnly} />
       {prompts.length === 0 ? (
-        <p className="text-sm text-muted-foreground text-center py-6">No prompts yet.</p>
+        <p className="text-sm text-muted-foreground text-center py-6">{t("admin.structured.noPrompts")}</p>
       ) : (
         prompts.map((p, i) => (
           <ItemRow
@@ -1869,7 +1876,7 @@ export function WrittenEditor({ value, onChange, readOnly, r2KeyBase }: Structur
               />
             </Field>
 
-            <SectionLabel>Children (sub-questions)</SectionLabel>
+            <SectionLabel>{t("admin.structured.childrenSubquestions")}</SectionLabel>
             <WrittenChildrenEditor
               items={p.children ?? []}
               onChange={(c) => patchPrompt(i, { children: c })}
@@ -1904,7 +1911,7 @@ function WrittenChildrenEditor({
   return (
     <div className="space-y-2">
       {children.map((c, i) => (
-        <div key={i} className="border border-border rounded-lg p-2 space-y-2 bg-card/30">
+        <div key={i} className="border border-border rounded-xl p-2 space-y-2 bg-card/60">
           <div className="flex items-center justify-between">
             <Badge variant="outline" className="font-mono text-xs">Child {i + 1}</Badge>
             {!readOnly && (
@@ -2050,10 +2057,10 @@ export function LibraryArticleEditor({ value, onChange, readOnly, r2KeyBase }: S
       </div>
 
       {contentType === "pdf" ? (
-        <div className="flex-1 flex flex-col items-center justify-center bg-muted/20 rounded-lg border-2 border-dashed border-border p-8">
+        <div className="flex-1 flex flex-col items-center justify-center bg-muted/20 rounded-xl border-2 border-dashed border-border p-8">
           {currentBody.startsWith("data:application/pdf;base64,") ? (
             <div className="flex flex-col items-center gap-3">
-              <FileText className="size-12 text-orange-500" />
+              <FileText className="size-12 text-warning" />
               <p className="text-sm font-medium">PDF loaded ({Math.round(chars / 1024)} KB base64)</p>
               <div className="flex gap-2">
                 {!readOnly && (
@@ -2098,7 +2105,7 @@ export function LibraryArticleEditor({ value, onChange, readOnly, r2KeyBase }: S
             value={currentBody}
             onChange={(e) => update(e.target.value, "html")}
             readOnly={readOnly}
-            className="flex-1 w-full min-h-[400px] p-4 font-mono text-sm bg-background border border-border rounded-lg resize-none focus:outline-none"
+            className="flex-1 w-full min-h-[400px] p-4 font-mono text-sm bg-background border border-border rounded-xl resize-none focus:outline-none"
             placeholder="<!DOCTYPE html>\n<html>\n<head><title>Article</title></head>\n<body>\n  ...\n</body>\n</html>"
             spellCheck={false}
           />

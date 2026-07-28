@@ -103,7 +103,7 @@ export function ContentDiff({ id }: ContentDiffProps) {
         <div className="flex-1 min-w-0">
           <span className="font-semibold text-sm truncate">{obj.title ?? t("admin.content.untitled")}</span>
           {obj.creator_username && (
-            <span className="ml-2 text-xs text-muted-foreground">
+            <span className="ms-2 text-xs text-muted-foreground">
               {t("admin.review.submittedBy", { name: `@${obj.creator_username}` })}
             </span>
           )}
@@ -115,7 +115,7 @@ export function ContentDiff({ id }: ContentDiffProps) {
             onClick={approve}
             disabled={busy}
           >
-            <CheckCircle2 className="mr-1.5 size-3.5" />
+            <CheckCircle2 className="me-1.5 size-3.5" />
             {t("admin.review.approve")}
           </Button>
           <Button
@@ -125,7 +125,7 @@ export function ContentDiff({ id }: ContentDiffProps) {
             onClick={() => setRejectOpen(true)}
             disabled={busy}
           >
-            <XCircle className="mr-1.5 size-3.5" />
+            <XCircle className="me-1.5 size-3.5" />
             {t("admin.review.reject")}
           </Button>
         </div>

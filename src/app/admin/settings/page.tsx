@@ -268,7 +268,7 @@ function AdminSettingsContent() {
           <Field label={t("admin.settings.about.version")} value="Osler Admin v0.2.1" />
           <Field label={t("admin.settings.about.role")} value={identity.user.role} />
           <Field label={t("admin.settings.about.storage")} value={t("admin.settings.about.storageLocal")} />
-          <Field label="User" value={`@${identity.user.username}`} />
+          <Field label={t("admin.settings.about.user")} value={`@${identity.user.username}`} />
         </dl>
       </SettingsCard>
 
@@ -420,28 +420,27 @@ function GeminiKeySection() {
       await geminiApi.save(draftKey.trim() || null, draftModel, null);
       setHasKey(!!draftKey.trim());
       setDraftKey("");
-      toast({ title: "Gemini key saved", description: "Available on every device you sign in from." });
+      toast({ title: t("admin.settings.gemini.keySaved2"), description: t("admin.settings.gemini.keySavedDesc") });
     } catch (err) {
-      toast({ title: `Save failed: ${String(err)}`, variant: "destructive" });
+      toast({ title: t("admin.settings.gemini.saveFailed", { error: String(err) }), variant: "destructive" });
     } finally {
       setSaving(false);
     }
   }
 
   async function handleClear() {
-    if (!confirm("Remove your saved Gemini key from the cloud?")) return;
+    if (!confirm(t("admin.settings.gemini.confirmRemove"))) return;
     setSaving(true);
     try {
       await geminiApi.clear();
       setHasKey(false);
       setDraftKey("");
-      // Also clear localStorage so the AI assistant stops using it
       if (typeof window !== "undefined") {
         localStorage.removeItem("osler_gemini_api_key");
       }
-      toast({ title: "Gemini key removed" });
+      toast({ title: t("admin.settings.gemini.keyRemoved") });
     } catch (err) {
-      toast({ title: `Clear failed: ${String(err)}`, variant: "destructive" });
+      toast({ title: t("admin.settings.gemini.clearFailed", { error: String(err) }), variant: "destructive" });
     } finally {
       setSaving(false);
     }
@@ -450,11 +449,10 @@ function GeminiKeySection() {
   async function handleTest() {
     setTesting(true);
     try {
-      // Use the proxy — this tests the saved key without exposing it.
       await geminiApi.test();
-      toast({ title: "✓ Key is valid" });
+      toast({ title: t("admin.settings.gemini.keyValid") });
     } catch (err) {
-      toast({ title: `✗ Key test failed: ${String(err)}`, variant: "destructive" });
+      toast({ title: t("admin.settings.gemini.testFailed", { error: String(err) }), variant: "destructive" });
     } finally {
       setTesting(false);
     }
@@ -463,34 +461,34 @@ function GeminiKeySection() {
   return (
     <SettingsCard
       icon={Key}
-      title="Gemini API key (account-scoped)"
-      desc="Saved to your user account — only enter it once. Available on every device you sign in from."
+      title={t("admin.settings.gemini.title")}
+      desc={t("admin.settings.gemini.desc")}
     >
       {loading ? (
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
-          <Loader2 className="size-4 animate-spin" /> Loading…
+          <Loader2 className="size-4 animate-spin" /> {t("common.loading")}
         </div>
       ) : !cloudOn ? (
         <div className="text-sm text-muted-foreground bg-muted/40 border border-border rounded-md px-3 py-2">
-          Cloud features are not enabled on this Osler instance. Enable cloud in <code>osler.config.json</code> to save your Gemini key server-side.
+          {t("admin.settings.gemini.cloudDisabled")}
         </div>
       ) : (
         <div className="space-y-3">
           <div className="flex items-center gap-2 text-xs">
             {hasKey ? (
               <span className="inline-flex items-center gap-1 text-success">
-                <Cloud className="size-3.5" /> A key is saved to your account.
+                <Cloud className="size-3.5" /> {t("admin.settings.gemini.keySaved")}
               </span>
             ) : (
               <span className="inline-flex items-center gap-1 text-muted-foreground">
-                <Cloud className="size-3.5" /> No key saved yet.
+                <Cloud className="size-3.5" /> {t("admin.settings.gemini.noKey")}
               </span>
             )}
           </div>
 
           <div>
             <label className="block text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1.5">
-              {hasKey ? "Replace key (leave blank to keep existing)" : "API key"}
+              {hasKey ? t("admin.settings.gemini.replaceKey") : t("admin.settings.gemini.apiKey")}
             </label>
             <Input
               type="password"
@@ -500,13 +498,13 @@ function GeminiKeySection() {
               className="font-mono text-xs"
             />
             <p className="mt-1 text-xs text-muted-foreground">
-              Get a key from <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener noreferrer" className="underline">Google AI Studio</a>. Stored in the cloud DB; never exposed to the browser network tab.
+              {t("admin.settings.gemini.getKeyHint")}
             </p>
           </div>
 
           <div>
             <label className="block text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1.5">
-              Default model
+              {t("admin.settings.gemini.defaultModel")}
             </label>
             <Select value={draftModel} onValueChange={setDraftModel}>
               <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
@@ -523,16 +521,16 @@ function GeminiKeySection() {
           <div className="flex flex-wrap items-center gap-2 pt-2">
             <Button size="sm" onClick={handleSave} disabled={saving || (!draftKey.trim() && !hasKey)}>
               {saving ? <Loader2 className="size-3.5 me-1.5 animate-spin" /> : <Key className="size-3.5 me-1.5" />}
-              {hasKey && !draftKey.trim() ? "Save model" : "Save key"}
+              {hasKey && !draftKey.trim() ? t("admin.settings.gemini.saveModel") : t("admin.settings.gemini.saveKey")}
             </Button>
             {hasKey && (
               <>
                 <Button size="sm" variant="outline" onClick={handleTest} disabled={testing}>
                   {testing ? <Loader2 className="size-3.5 me-1.5 animate-spin" /> : <Sparkles className="size-3.5 me-1.5" />}
-                  Test saved key
+                  {t("admin.settings.gemini.testKey")}
                 </Button>
                 <Button size="sm" variant="ghost" onClick={handleClear} disabled={saving} className="text-destructive hover:text-destructive">
-                  Remove key
+                  {t("admin.settings.gemini.removeKey")}
                 </Button>
               </>
             )}
