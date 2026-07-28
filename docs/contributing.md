@@ -102,6 +102,10 @@ nvm use                 # uses Node 22 from .nvmrc
 npm install
 npm run generate-manifests   # build content manifests from public/osler-content/
 npm run dev             # → http://localhost:3000
+
+# Optional: start the Cloudflare Worker backend too
+npm run dev:full        # frontend + worker concurrently
+npm run dev:worker      # worker only on http://localhost:8787
 ```
 
 The first `npm install` takes ~60 seconds. The first `npm run dev` takes ~30 seconds to compile and then hot-reloads on every save.

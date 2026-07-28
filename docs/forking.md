@@ -73,6 +73,10 @@ nvm use                 # uses Node 22 from .nvmrc
 npm install
 npm run generate-manifests
 npm run dev             # → http://localhost:3000
+
+# Optional: start the Cloudflare Worker backend too
+npm run dev:full        # frontend + worker concurrently
+npm run dev:worker      # worker only on http://localhost:8787
 ```
 
 ---

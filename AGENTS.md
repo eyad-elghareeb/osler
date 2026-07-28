@@ -552,6 +552,8 @@ The admin frontend exposes three new views (registered in
 | Command | Purpose |
 |---|---|
 | `npm run dev` | Start dev server on port 3000 |
+| `npm run dev:worker` | Start Cloudflare Worker locally (port 8787) |
+| `npm run dev:full` | Start both frontend + Worker concurrently |
 | `npm run dev:turbo` | Dev with Turbopack |
 | `npm run build` | Production build + standalone output |
 | `npm run start` | Run standalone server (after build) |

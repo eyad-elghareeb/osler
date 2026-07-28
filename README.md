@@ -335,6 +335,8 @@ src/
 npm install                    # Install dependencies
 npm run generate-manifests     # Generate content manifests
 npm run dev                    # Start dev → http://localhost:3000
+npm run dev:full               # Frontend + Cloudflare Worker backend
+npm run dev:worker             # Worker only on http://localhost:8787
 
 npm run build                  # Production build
 npm run lint                   # ESLint

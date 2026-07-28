@@ -54,6 +54,7 @@ After deployment:
 | Script | Description |
 | --- | --- |
 | `npm run dev` | Run the worker locally with `wrangler dev` (defaults to `http://localhost:8787`). |
+| `npm run seed-admin` | Seed an admin user into the local D1 database (`npx tsx seed-admin.ts`). |
 | `npm run deploy` | Deploy to Cloudflare Workers (production). |
 | `npm run db:migrate` | Apply pending D1 migrations to the remote database. |
 | `npm run db:migrate:local` | Apply pending D1 migrations to the local dev database. |
