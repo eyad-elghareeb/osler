@@ -4,6 +4,8 @@
   "private": true,
   "scripts": {
     "dev": "next dev -p 3000",
+    "dev:worker": "npm run dev --prefix cloudflare/worker",
+    "dev:full": "concurrently -n fe,worker -c cyan,yellow \"npm run dev\" \"npm run dev:worker\"",
     "build": "next build && shx cp -r .next/static .next/standalone/.next/ && shx cp -r public .next/standalone/",
     "dev:turbo": "next dev -p 3000 --turbopack",
     "start": "cross-env NODE_ENV=production node .next/standalone/server.js > server.log 2>&1",
@@ -105,6 +107,7 @@
     "@types/qrcode": "^1.5.6",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "concurrently": "^9.2.4",
     "cross-env": "^7.0.3",
     "eslint": "^9",
     "eslint-config-next": "^16.1.1",
