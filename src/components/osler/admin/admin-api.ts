@@ -217,6 +217,16 @@ export const adminApi = {
   /** Rebuild the manifest for one category (or "all"). */
   regenerateManifest: (category: string)         => req<{ ok: boolean; results: Record<string, string> }>("/v1/admin/content/regenerate-manifest", "POST", { category }),
 
+  /** Look up the content_object (if any) that publishes to the given R2 key
+   *  inside content-files/. Returns { found: false } if the key is loose. */
+  lookupByR2Key:   (key: string)                 => req<{ found: boolean; object?: ContentObject }>(`/v1/admin/content/by-r2-key?key=${encodeURIComponent(key)}`),
+
+  /** Promote a loose content-files/.../file.json (or .md) into a managed
+   *  content_object. Returns the new (or existing) object id. Idempotent —
+   *  calling adopt() twice on the same key returns the same id. */
+  adoptR2Key:      (key: string, opts?: { contentType?: ContentType; title?: string; language?: string }) =>
+                                                    req<{ id: string; r2KeyBase: string; status: string; adopted: boolean; alreadyExisted: boolean }>("/v1/admin/content/adopt", "POST", { key, ...opts }),
+
   // Review (admin only)
   pendingQueue:    ()                            => req<{ items: ContentObject[] }>("/v1/admin/content/pending"),
   getDiff:         (id: string)                  => req<{ pending: string | null; published: string | null }>(`/v1/admin/content/${id}/diff`),

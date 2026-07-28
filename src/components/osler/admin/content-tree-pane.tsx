@@ -26,7 +26,7 @@ import type { ContentObject } from "@/components/osler/admin/admin-api";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
-export type ContentTreeKind = "local" | "cloud";
+export type ContentTreeKind = "local" | "cloud" | "unified";
 
 export interface ContentTreeNode {
   /** Stable id for the node (used as React key) */
@@ -50,6 +50,9 @@ export interface ContentTreeNode {
   r2Key?: string;
   /** For R2-tab folder nodes: the prefix to list when refreshing. */
   r2Prefix?: string;
+  /** True when this leaf is a managed content_object (has D1 metadata). Used
+   *  by the unified browser to badge files as "managed" vs "loose". */
+  managed?: boolean;
 }
 
 interface ContentTreePaneProps {
@@ -118,7 +121,11 @@ export function ContentTreePane({
             <Cloud className="size-3.5 text-muted-foreground" />
           )}
           <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-            {kind === "local" ? t("admin.content.tree.local") : t("admin.content.tree.cloud")}
+            {kind === "local"
+              ? t("admin.content.tree.local")
+              : kind === "unified"
+                ? t("admin.content.tree.unified")
+                : t("admin.content.tree.cloud")}
           </span>
           <span className="text-xs text-muted-foreground/60 ms-auto">
             {t("admin.content.tree.items", { n: leafCount })}
@@ -223,6 +230,7 @@ function TreeRow({
   forceExpand,
   expandVersion,
 }: TreeRowProps) {
+  const { t } = useI18n();
   const isFolder = node.kind === "folder";
   const [expanded, setExpanded] = React.useState(false);
 
@@ -291,6 +299,22 @@ function TreeRow({
         )}
         {!isFolder && node.size != null && (
           <span className="meta">{formatSize(node.size)}</span>
+        )}
+        {!isFolder && node.managed && (
+          <span
+            className="meta rounded-full px-1.5 py-0.5 border text-[10px] uppercase tracking-wider bg-primary/10 text-primary border-primary/30"
+            title={t("admin.content.tree.managedBadge")}
+          >
+            {t("admin.content.tree.managedBadge")}
+          </span>
+        )}
+        {!isFolder && node.r2Key && !node.managed && (
+          <span
+            className="meta rounded-full px-1.5 py-0.5 border text-[10px] uppercase tracking-wider bg-muted text-muted-foreground border-border"
+            title={t("admin.content.tree.looseBadge")}
+          >
+            {t("admin.content.tree.looseBadge")}
+          </span>
         )}
         {!isFolder && node.cloudObject?.status && (
           <span

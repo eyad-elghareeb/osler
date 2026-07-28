@@ -15,6 +15,8 @@ import {
   Loader2,
   ShieldCheck,
   ShieldAlert,
+  PackagePlus,
+  AlertTriangle,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
@@ -76,23 +78,31 @@ const STATUS_COLOR: Record<string, string> = {
 };
 
 interface ContentEditorProps {
-  id: string;
+  /** Managed content_object id. Mutually exclusive with `rawR2Key`. */
+  id?: string;
+  /** Raw R2 key (e.g. "content-files/library/asthma.md") to edit in place
+   *  without a backing content_object. When set, the editor loads the body
+   *  from /api/r2-fetch and saves via /v1/admin/content/upload-file. */
+  rawR2Key?: string;
   capabilities: AdminCapabilities;
 }
 
 type EditorMode = "form" | "code" | "preview";
 
-export function ContentEditor({ id, capabilities }: ContentEditorProps) {
+export function ContentEditor({ id, rawR2Key, capabilities }: ContentEditorProps) {
   const { t } = useI18n();
   const { settings } = useAdminSettings();
   const { toast } = useToast();
   const router = useRouter();
+
+  const isRawMode = !id && !!rawR2Key;
 
   const [obj, setObj] = React.useState<ContentObject | null>(null);
   const [loading, setLoading] = React.useState(true);
   const [body, setBody] = React.useState("");
   const [dirty, setDirty] = React.useState(false);
   const [saving, setSaving] = React.useState(false);
+  const [lastSavedAt, setLastSavedAt] = React.useState<number | null>(null);
   const [deleteOpen, setDeleteOpen] = React.useState(false);
   const [publishOpen, setPublishOpen] = React.useState(false);
   const [publishTargetPath, setPublishTargetPath] = React.useState("");
@@ -101,25 +111,62 @@ export function ContentEditor({ id, capabilities }: ContentEditorProps) {
   const [showValidation, setShowValidation] = React.useState(false);
   const [mode, setMode] = React.useState<EditorMode>("form");
   const [artifactContentType, setArtifactContentType] = React.useState<"md" | "pdf" | "html">("md");
+  const [adopting, setAdopting] = React.useState(false);
   const debounceRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // ── Load body ──
   React.useEffect(() => {
-    adminApi
-      .getContent(id)
-      .then((c) => {
-        setObj(c);
-        setBody(c.body ?? "{}");
-      })
-      .catch(() => toast({ title: t("admin.toast.contentNotFound"), variant: "destructive" }))
-      .finally(() => setLoading(false));
-  }, [id]);
+    let cancelled = false;
+    setLoading(true);
+    (async () => {
+      try {
+        if (isRawMode && rawR2Key) {
+          // Raw mode — fetch the body directly from R2 via the proxy.
+          const res = await fetch(`/api/r2-fetch?key=${encodeURIComponent(rawR2Key)}`);
+          if (!res.ok) throw new Error(`${res.status}`);
+          const text = await res.text();
+          if (cancelled) return;
+          setBody(text);
+          // Infer artifact content type from the key extension.
+          if (rawR2Key.endsWith(".md")) setArtifactContentType("md");
+          else if (rawR2Key.endsWith(".pdf") || text.startsWith("data:application/pdf;base64,")) setArtifactContentType("pdf");
+          else if (rawR2Key.endsWith(".html") || (text.startsWith("<") && !text.startsWith("---"))) setArtifactContentType("html");
+          // Default to code mode for raw files (no form mapping unless we
+          // can recognise the shape).
+          try {
+            const parsed = JSON.parse(text);
+            if (Array.isArray(parsed.questions) || Array.isArray(parsed.passages) || Array.isArray(parsed.cards) ||
+                Array.isArray(parsed.stations) || Array.isArray(parsed.videos) || Array.isArray(parsed.prompts)) {
+              setMode("form");
+            } else {
+              setMode("code");
+            }
+          } catch {
+            // Not JSON — if it's markdown, use form (LibraryArticleEditor); otherwise code.
+            if (artifactContentType === "md" || rawR2Key.endsWith(".md")) setMode("form");
+            else setMode("code");
+          }
+        } else if (id) {
+          // Managed mode — fetch the content_object + body from the admin API.
+          const c = await adminApi.getContent(id);
+          if (cancelled) return;
+          setObj(c);
+          setBody(c.body ?? "{}");
+        }
+      } catch {
+        if (!cancelled) toast({ title: t("admin.toast.contentNotFound"), variant: "destructive" });
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [id, rawR2Key, isRawMode, t, toast]);
 
-  // Auto-pick the best initial editor mode for the content type.
+  // Auto-pick the best initial editor mode for managed library content.
   React.useEffect(() => {
-    if (!obj) return;
+    if (isRawMode || !obj) return;
     if (obj.content_type === "library") {
       setMode("form");
-      // Detect content type from body
       const b = obj.body ?? "";
       if (b.startsWith("data:application/pdf;base64,")) setArtifactContentType("pdf");
       else if (b.startsWith("<") && !b.startsWith("---")) setArtifactContentType("html");
@@ -133,28 +180,38 @@ export function ContentEditor({ id, capabilities }: ContentEditorProps) {
     } catch {
       setMode("code");
     }
-  }, [obj]);
+  }, [obj, isRawMode, body]);
 
   function handleBodyChange(value: string) {
     setBody(value);
     setDirty(true);
     if (validationErrors !== null) setValidationErrors(null);
+    if (isRawMode) return; // no autosave in raw mode (would be confusing without explicit save)
     if (!settings.autoSaveDrafts) return;
     if (debounceRef.current) clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(() => autoSave(value), 2500);
   }
 
   async function autoSave(value: string) {
-    if (!obj) return;
-    try { await adminApi.saveDraft(id, value); } catch {}
+    if (!obj || !id) return;
+    try { await adminApi.saveDraft(id, value); setLastSavedAt(Date.now()); } catch {}
   }
 
   async function saveDraft() {
     haptic("light");
     setSaving(true);
     try {
-      await adminApi.saveDraft(id, body);
+      if (isRawMode && rawR2Key) {
+        // Save raw R2 key directly. The upload-file endpoint accepts a text
+        // body or a data URI for binary assets — text is the common case.
+        await adminApi.uploadFile(rawR2Key, body);
+      } else if (id) {
+        await adminApi.saveDraft(id, body);
+      } else {
+        throw new Error("Nothing to save");
+      }
       setDirty(false);
+      setLastSavedAt(Date.now());
       toast({ title: t("admin.content.saved") });
     } catch {
       toast({ title: t("admin.toast.saveFailed"), variant: "destructive" });
@@ -163,12 +220,58 @@ export function ContentEditor({ id, capabilities }: ContentEditorProps) {
     }
   }
 
+  // ── Ctrl/Cmd+S keyboard shortcut ──
+  React.useEffect(() => {
+    function handler(e: KeyboardEvent) {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "s") {
+        e.preventDefault();
+        if (!saving) saveDraft();
+      }
+    }
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [saving, body, isRawMode, rawR2Key, id]);
+
+  // ── Unsaved-changes guard ──
+  React.useEffect(() => {
+    function beforeUnload(e: BeforeUnloadEvent) {
+      if (!dirty) return;
+      e.preventDefault();
+      e.returnValue = "";
+    }
+    window.addEventListener("beforeunload", beforeUnload);
+    return () => window.removeEventListener("beforeunload", beforeUnload);
+  }, [dirty]);
+
+  async function promoteToManaged() {
+    if (!rawR2Key) return;
+    setAdopting(true);
+    try {
+      const res = await adminApi.adoptR2Key(rawR2Key);
+      toast({
+        title: res.alreadyExisted
+          ? t("admin.toast.adoptAlreadyManaged")
+          : t("admin.toast.adopted", { id: res.id.slice(0, 8) }),
+      });
+      // Route to the managed editor — preserve dirty state by saving first.
+      if (dirty) await saveDraft();
+      router.replace(`/admin/content/${res.id}`);
+    } catch (err: any) {
+      toast({ title: t("admin.toast.adoptFailed", { error: String(err?.message ?? err) }), variant: "destructive" });
+    } finally {
+      setAdopting(false);
+    }
+  }
+
   async function submit() {
+    if (!id) return;
     haptic("light");
     await adminApi.saveDraft(id, body).catch(() => {});
     try {
       const res = await adminApi.submitForReview(id);
       setObj((o) => (o ? { ...o, status: res.status as any } : o));
+      setDirty(false);
+      setLastSavedAt(Date.now());
       toast({ title: t("admin.content.submitted") });
     } catch {
       toast({ title: t("admin.toast.submitFailed"), variant: "destructive" });
@@ -176,11 +279,14 @@ export function ContentEditor({ id, capabilities }: ContentEditorProps) {
   }
 
   async function doPublish(targetPath?: string) {
+    if (!id) return;
     haptic("light");
     await adminApi.saveDraft(id, body).catch(() => {});
     try {
       const res = await adminApi.publishDirect(id, targetPath ? { targetPath } : {});
       setObj((o) => (o ? { ...o, status: res.status as any } : o));
+      setDirty(false);
+      setLastSavedAt(Date.now());
       toast({
         title: t("admin.content.published"),
         description: res.hybridKeys.length
@@ -193,15 +299,30 @@ export function ContentEditor({ id, capabilities }: ContentEditorProps) {
   }
 
   async function runValidation() {
-    if (!obj) return;
+    if (!obj && !isRawMode) return;
     setValidating(true);
     setShowValidation(true);
     try {
-      const res = await adminApi.validateContent(id, body);
+      let res: { errors: string[] };
+      if (isRawMode) {
+        // No content_object — use the standalone validator. Infer
+        // contentType from the raw key shape.
+        const ct = inferContentTypeFromR2Key(rawR2Key ?? "", body);
+        if (!ct) {
+          // Library articles can't be validated standalone.
+          res = { errors: [] };
+        } else {
+          res = await adminApi.validateStandalone(ct, body);
+        }
+      } else if (id) {
+        res = await adminApi.validateContent(id, body);
+      } else {
+        res = { errors: [] };
+      }
       setValidationErrors(res.errors);
       if (res.errors.length === 0) toast({ title: t("admin.content.valid") });
       else toast({ title: t("admin.content.validationIssues", { n: String(res.errors.length) }), variant: "destructive" });
-    } catch (err) {
+    } catch {
       toast({ title: t("admin.toast.saveFailed"), variant: "destructive" });
     } finally {
       setValidating(false);
@@ -209,6 +330,7 @@ export function ContentEditor({ id, capabilities }: ContentEditorProps) {
   }
 
   async function deleteContent() {
+    if (!id) return;
     haptic("warning");
     try {
       await adminApi.deleteContent(id);
@@ -219,10 +341,14 @@ export function ContentEditor({ id, capabilities }: ContentEditorProps) {
   }
 
   if (loading) return <LoadingState label={t("common.loading")} />;
-  if (!obj) return null;
+  if (!isRawMode && !obj) return null;
 
-  const isPending = obj.status === "pending";
-  const isLibrary = obj.content_type === "library";
+  const isPending = !isRawMode && obj?.status === "pending";
+  const isLibrary = isRawMode
+    ? (rawR2Key?.endsWith(".md") ?? false)
+      || (rawR2Key?.endsWith(".html") ?? false)
+      || (rawR2Key?.endsWith(".pdf") ?? false)
+    : obj?.content_type === "library";
 
   let parsed: any = null;
   let parseError: string | null = null;
@@ -257,6 +383,7 @@ export function ContentEditor({ id, capabilities }: ContentEditorProps) {
   // the publish dialog). Based on the content type and (if available) the
   // title. For library articles uses the selected artifact content type extension.
   const suggestedPath = (() => {
+    if (isRawMode) return rawR2Key?.replace(/^content-files\//, "") ?? "";
     if (!obj) return "";
     const slug = (obj.title ?? obj.id).toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
     switch (obj.content_type) {
@@ -278,14 +405,26 @@ export function ContentEditor({ id, capabilities }: ContentEditorProps) {
     <div className="flex h-full flex-col">
       {/* Top bar */}
       <div className="flex h-12 shrink-0 items-center gap-2 border-b border-border bg-card/60 px-3 sm:px-4 backdrop-blur-md safe-pt">
-        <Button variant="ghost" size="iconSm" onClick={() => router.back()}>
+        <Button variant="ghost" size="iconSm" onClick={() => {
+          if (dirty && !confirm(t("admin.content.editor.unsavedConfirm"))) return;
+          router.back();
+        }}>
           <ArrowLeft className="size-4" />
         </Button>
         <div className="flex-1 min-w-0">
-          <span className="font-semibold text-sm truncate">{obj.title ?? t("admin.content.untitled")}</span>
-          <span className={cn("ms-2 text-xs font-medium", STATUS_COLOR[obj.status])}>
-            {t(`admin.content.status.${obj.status}` as any)}
+          <span className="font-semibold text-sm truncate">
+            {isRawMode ? (rawR2Key ?? "").replace(/^content-files\//, "") : (obj?.title ?? t("admin.content.untitled"))}
           </span>
+          {isRawMode ? (
+            <span className="ms-2 inline-flex items-center gap-1 text-xs text-warning">
+              <AlertTriangle className="size-3" />
+              {t("admin.content.editor.rawBadge")}
+            </span>
+          ) : (
+            <span className={cn("ms-2 text-xs font-medium", STATUS_COLOR[obj?.status ?? "draft"])}>
+              {t(`admin.content.status.${obj?.status ?? "draft"}` as any)}
+            </span>
+          )}
           {dirty && (
             <span
               className="ms-2 inline-flex items-center gap-1 text-xs text-muted-foreground"
@@ -295,33 +434,61 @@ export function ContentEditor({ id, capabilities }: ContentEditorProps) {
               {t("admin.content.editor.dirty")}
             </span>
           )}
+          {!dirty && lastSavedAt && (
+            <span className="ms-2 inline-flex items-center gap-1 text-xs text-muted-foreground/70">
+              <CheckCircle2 className="size-3" />
+              {t("admin.content.editor.lastSaved", { time: new Date(lastSavedAt).toLocaleTimeString() })}
+            </span>
+          )}
         </div>
         <div className="flex items-center gap-1.5">
-          {!isPending && (
-            <Button variant="outline" size="sm" onClick={runValidation} disabled={validating} title={t("admin.content.editor.validate")}>
-              {validating ? <Loader2 className="me-1.5 size-3.5 animate-spin" /> : <ShieldCheck className="me-1.5 size-3.5" />}
-              {t("admin.content.editor.validate")}
-            </Button>
+          {/* Raw mode: Save + Promote to managed. No submit/publish/delete
+              (those require a backing content_object). */}
+          {isRawMode && (
+            <>
+              <Button variant="outline" size="sm" onClick={runValidation} disabled={validating} title={t("admin.content.editor.validate")}>
+                {validating ? <Loader2 className="me-1.5 size-3.5 animate-spin" /> : <ShieldCheck className="me-1.5 size-3.5" />}
+                {t("admin.content.editor.validate")}
+              </Button>
+              <Button variant="outline" size="sm" onClick={saveDraft} disabled={saving || !dirty}>
+                {saving ? <Loader2 className="me-1.5 size-3.5 animate-spin" /> : <Save className="me-1.5 size-3.5" />}
+                {t("admin.content.saveDraft")}
+              </Button>
+              {capabilities.manageContent && (
+                <Button size="sm" onClick={promoteToManaged} disabled={adopting}>
+                  {adopting ? <Loader2 className="me-1.5 size-3.5 animate-spin" /> : <PackagePlus className="me-1.5 size-3.5" />}
+                  {t("admin.content.editor.promote")}
+                </Button>
+              )}
+            </>
           )}
-          {!isPending && (
-            <Button variant="outline" size="sm" onClick={saveDraft} disabled={saving}>
-              {saving ? <Loader2 className="me-1.5 size-3.5 animate-spin" /> : <Save className="me-1.5 size-3.5" />}
-              {t("admin.content.saveDraft")}
-            </Button>
+          {/* Managed mode: full workflow buttons */}
+          {!isRawMode && !isPending && (
+            <>
+              <Button variant="outline" size="sm" onClick={runValidation} disabled={validating} title={t("admin.content.editor.validate")}>
+                {validating ? <Loader2 className="me-1.5 size-3.5 animate-spin" /> : <ShieldCheck className="me-1.5 size-3.5" />}
+                {t("admin.content.editor.validate")}
+              </Button>
+              <Button variant="outline" size="sm" onClick={saveDraft} disabled={saving}>
+                {saving ? <Loader2 className="me-1.5 size-3.5 animate-spin" /> : <Save className="me-1.5 size-3.5" />}
+                {t("admin.content.saveDraft")}
+              </Button>
+              <Button variant="outline" size="sm" onClick={submit}>
+                <Send className="me-1.5 size-3.5" />
+                {t("admin.content.submit")}
+              </Button>
+              {capabilities.publishDirect && (
+                <Button size="sm" onClick={() => { setPublishTargetPath(suggestedPath); setPublishOpen(true); }}>
+                  <Upload className="me-1.5 size-3.5" />
+                  {t("admin.content.publishDirect")}
+                </Button>
+              )}
+            </>
           )}
-          {!isPending && (
-            <Button variant="outline" size="sm" onClick={submit}>
-              <Send className="me-1.5 size-3.5" />
-              {t("admin.content.submit")}
-            </Button>
+          {!isRawMode && isPending && (
+            <span className="text-xs text-muted-foreground px-2">{t("admin.content.pendingNotice")}</span>
           )}
-          {capabilities.publishDirect && !isPending && (
-            <Button size="sm" onClick={() => { setPublishTargetPath(suggestedPath); setPublishOpen(true); }}>
-              <Upload className="me-1.5 size-3.5" />
-              {t("admin.content.publishDirect")}
-            </Button>
-          )}
-          {capabilities.manageUsers && (
+          {!isRawMode && capabilities.manageUsers && (
             <Button
               variant="ghost"
               size="iconSm"
@@ -334,8 +501,19 @@ export function ContentEditor({ id, capabilities }: ContentEditorProps) {
         </div>
       </div>
 
+      {/* Raw-mode banner */}
+      {isRawMode && (
+        <div className="border-b border-warning/30 bg-warning/10 px-4 py-2 text-xs text-warning flex items-start gap-2">
+          <AlertTriangle className="size-4 shrink-0 mt-0.5" />
+          <div className="flex-1">
+            <p className="font-medium">{t("admin.content.editor.rawBannerTitle")}</p>
+            <p className="text-warning/80 mt-0.5">{t("admin.content.editor.rawBannerDesc")}</p>
+          </div>
+        </div>
+      )}
+
       {/* Rejection notice */}
-      {obj.status === "rejected" && obj.rejection_reason && (
+      {!isRawMode && obj?.status === "rejected" && obj.rejection_reason && (
         <div className="border-b border-destructive/30 bg-destructive/10 px-4 py-2 text-sm text-destructive">
           {t("admin.content.rejectedReason", { reason: obj.rejection_reason })}
         </div>
@@ -407,7 +585,8 @@ export function ContentEditor({ id, capabilities }: ContentEditorProps) {
 
       {/* Editor body */}
       <div className="flex flex-1 min-h-0 overflow-hidden">
-        {/* Metadata sidebar */}
+        {/* Metadata sidebar — managed mode only */}
+        {!isRawMode && obj && (
         <aside className="hidden lg:flex w-56 shrink-0 border-e border-border bg-card/40 p-4 text-xs space-y-3 flex-col overflow-y-auto medos-scroll-y">
           <div>
             <div className="font-semibold uppercase tracking-wider text-muted-foreground mb-1">
@@ -470,6 +649,42 @@ export function ContentEditor({ id, capabilities }: ContentEditorProps) {
             </>
           )}
         </aside>
+        )}
+
+        {/* Metadata sidebar — raw mode */}
+        {isRawMode && (
+        <aside className="hidden lg:flex w-56 shrink-0 border-e border-warning/20 bg-warning/5 p-4 text-xs space-y-3 flex-col overflow-y-auto medos-scroll-y">
+          <div>
+            <div className="font-semibold uppercase tracking-wider text-muted-foreground mb-1">
+              {t("admin.content.editor.rawSidebarTitle")}
+            </div>
+            <p className="text-warning leading-relaxed">{t("admin.content.editor.rawSidebarDesc")}</p>
+          </div>
+          <div className="border-t border-border pt-2 mt-2">
+            <div className="font-semibold uppercase tracking-wider text-muted-foreground mb-1">
+              {t("admin.content.metadata.r2Key")}
+            </div>
+            <span className="font-mono text-xs break-all">{rawR2Key}</span>
+          </div>
+          <div>
+            <div className="font-semibold uppercase tracking-wider text-muted-foreground mb-1">
+              {t("admin.content.editor.rawSize")}
+            </div>
+            <span className="font-mono text-xs">{body.length.toLocaleString()} chars</span>
+          </div>
+          {capabilities.manageContent && (
+            <div className="border-t border-border pt-3 mt-2">
+              <Button size="sm" className="w-full" onClick={promoteToManaged} disabled={adopting}>
+                {adopting ? <Loader2 className="me-1.5 size-3.5 animate-spin" /> : <PackagePlus className="me-1.5 size-3.5" />}
+                {t("admin.content.editor.promote")}
+              </Button>
+              <p className="text-[11px] text-muted-foreground mt-1.5 leading-relaxed">
+                {t("admin.content.editor.promoteHint")}
+              </p>
+            </div>
+          )}
+        </aside>
+        )}
 
         {/* Editor main pane */}
         <div className="flex-1 min-w-0 flex flex-col overflow-hidden">
@@ -489,7 +704,7 @@ export function ContentEditor({ id, capabilities }: ContentEditorProps) {
                   value={body}
                   onChange={handleFormChange}
                   readOnly={isPending}
-                  r2KeyBase={obj.r2_key_base}
+                  r2KeyBase={isRawMode ? rawR2Key : obj?.r2_key_base}
                 />
               ) : parseError ? (
                 <div className="flex flex-col items-center justify-center h-full text-center p-6">
@@ -505,11 +720,11 @@ export function ContentEditor({ id, capabilities }: ContentEditorProps) {
                 </div>
               ) : (
                 <FormEditorSwitch
-                  contentType={obj.content_type}
+                  contentType={obj?.content_type ?? inferContentTypeFromR2Key(rawR2Key ?? "", body) ?? "quiz"}
                   parsed={parsed}
                   onChange={handleFormChange}
                   readOnly={isPending}
-                  r2KeyBase={obj.r2_key_base}
+                  r2KeyBase={obj?.r2_key_base ?? rawR2Key}
                 />
               )}
             </div>
@@ -544,14 +759,15 @@ export function ContentEditor({ id, capabilities }: ContentEditorProps) {
         </div>
       </div>
 
-      {/* Delete dialog */}
+      {/* Delete dialog — managed mode only (raw mode has no delete button) */}
+      {!isRawMode && (
       <AlertDialog open={deleteOpen} onOpenChange={setDeleteOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>{t("admin.content.delete")}</AlertDialogTitle>
             <AlertDialogDescription>
               {t("admin.content.deleteConfirm", {
-                title: obj.title ?? t("admin.content.untitled"),
+                title: obj?.title ?? t("admin.content.untitled"),
               })}
             </AlertDialogDescription>
           </AlertDialogHeader>
@@ -566,6 +782,7 @@ export function ContentEditor({ id, capabilities }: ContentEditorProps) {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+      )}
 
       {/* Publish dialog — lets admin choose the target path */}
       <Dialog open={publishOpen} onOpenChange={setPublishOpen}>
@@ -720,6 +937,24 @@ function isFormSupported(contentType: ContentType, parsed: any): boolean {
     Array.isArray(parsed.subdecks) ||
     (parsed.front != null && parsed.back != null)
   );
+}
+
+/** Best-effort contentType inference for raw R2 keys (used in raw editor mode).
+ *  Returns undefined for library articles (.md, .html, .pdf) — those can't
+ *  be validated standalone, the validator returns no errors for them. */
+function inferContentTypeFromR2Key(key: string, body: string): ContentType | null {
+  if (key.endsWith(".md") || key.endsWith(".html") || key.endsWith(".pdf")) return "library";
+  if (!key.endsWith(".json")) return null;
+  try {
+    const j = JSON.parse(body);
+    if (Array.isArray(j.questions)) return "quiz";
+    if (Array.isArray(j.passages)) return "bank";
+    if (Array.isArray(j.prompts)) return "written";
+    if (Array.isArray(j.cards) || Array.isArray(j.decks) || Array.isArray(j.subdecks)) return "flashcard";
+    if (Array.isArray(j.stations)) return "osce";
+    if (Array.isArray(j.videos)) return "video";
+  } catch {}
+  return null;
 }
 
 function FormEditorSwitch({

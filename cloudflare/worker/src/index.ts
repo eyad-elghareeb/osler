@@ -693,6 +693,27 @@ const CONTENT_TYPE_TO_CATEGORY: Record<string, string> = {
   library: "library", video: "videos",
 };
 
+/** Reverse of CONTENT_TYPE_TO_CATEGORY — for a given R2 content-files/
+ *  category folder, which content_types might publish into it.
+ *  Used by the unified browser's /by-r2-key lookup. */
+const CATEGORY_TYPE_TO_TYPE: Record<string, string[]> = {
+  qbank: ["quiz", "bank", "written"],
+  flashcard: ["flashcard"],
+  osce: ["osce"],
+  library: ["library"],
+  videos: ["video"],
+};
+
+/** Last-resort fallback when adopt() can't infer contentType from the
+ *  file extension or body shape — pick a sensible default per category. */
+const CATEGORY_TO_DEFAULT_TYPE: Record<string, string | undefined> = {
+  qbank: "quiz",
+  flashcard: "flashcard",
+  osce: "osce",
+  library: "library",
+  videos: "video",
+};
+
 async function hybridPublish(env: Env, obj: any, body: string, targetPath?: string | null): Promise<string[]> {
   if (!env.CONTENT) return [];
   const category = CONTENT_TYPE_TO_CATEGORY[obj.content_type] ?? obj.content_type;
@@ -1319,10 +1340,137 @@ async function handleAdmin(request: Request, env: Env, session: Session, url: UR
       await auditLog(env, session.user.id, "create_content", objectId, { title, contentType: body.contentType }, log);
       return json({ id: objectId, r2KeyBase: r2Base, status: "draft" }, 201, origin, log);
     }
+
+    /* ── Lookup content_object by student-facing R2 key (unified browser) ──
+     *
+     * Two ways a managed object can map to a content-files/.../...json key:
+     *   1. The object's hybrid target path (computed at publish time via
+     *      hybridPublish()) matches the requested key exactly.
+     *   2. The object's id appears as the basename of the R2 key (fallback
+     *      used when no explicit targetPath was supplied at publish time).
+     *
+     * Returns 200 + object row, or 404 if no managed object claims the key.
+     */
+    if (request.method === "GET" && path === "/v1/admin/content/by-r2-key") {
+      if (!isAdminOrContent(session)) return json({ error: "Forbidden" }, 403, origin, log);
+      const key = (url.searchParams.get("key") || "").trim();
+      if (!key || !key.startsWith("content-files/")) return json({ error: "key must start with content-files/" }, 400, origin, log);
+      const rel = key.slice("content-files/".length);
+      const slash = rel.indexOf("/");
+      if (slash <= 0) return json({ found: false }, 200, origin, log);
+      const category = rel.slice(0, slash);
+      const fileSegment = rel.slice(slash + 1);
+
+      // Pull all candidate objects whose content_type maps to this category.
+      // Cheap query — content_objects is small.
+      const typeForCat = CATEGORY_TYPE_TO_TYPE[category];
+      if (!typeForCat) return json({ found: false }, 200, origin, log);
+      const rows = await env.DB.prepare(
+        "SELECT co.*, u.username as creator_username FROM content_objects co JOIN users u ON u.id = co.created_by WHERE co.content_type IN (" + typeForCat.map(() => "?").join(",") + ")"
+      ).bind(...typeForCat).all<any>();
+      for (const obj of rows.results || []) {
+        // Reconstruct the hybrid target path that hybridPublish() would
+        // have written for this object — same logic as in hybridPublish().
+        const tail = (obj.r2_key_base || "").split("/").pop();
+        if (!tail) continue;
+        const expected = obj.content_type === "library" ? `${tail}.md` : `${tail}.json`;
+        if (fileSegment === expected) {
+          return json({ found: true, object: obj }, 200, origin, log);
+        }
+      }
+      return json({ found: false }, 200, origin, log);
+    }
+
+    /* ── Adopt a loose R2 file as a managed content_object ──
+     *
+     * Body: { key: "content-files/<category>/<path>", contentType?, title?, language? }
+     *  - contentType is inferred from the file extension / category if absent.
+     *  - title defaults to the filename without extension.
+     *  - language defaults to "en".
+     *
+     * Steps:
+     *   1. Fetch the raw body from the loose key (must exist).
+     *   2. Infer contentType from path + category.
+     *   3. Create a new content_objects row (status=draft).
+     *   4. Copy the body into content/<type>/<uuid>/draft.json.
+     *   5. Leave the original content-files/.../key as-is — it remains the
+     *      student-facing copy. The admin can publish the draft (which will
+     *      overwrite the student copy via hybridPublish) when ready.
+     *
+     * If a managed object already exists for this key, return its id without
+     * making a new one (idempotent).
+     */
+    if (request.method === "POST" && path === "/v1/admin/content/adopt") {
+      if (!isAdminOrContent(session)) return json({ error: "Forbidden" }, 403, origin, log);
+      if (!env.CONTENT) return json({ error: "Content storage not configured" }, 503, origin, log);
+      const body = await readJson(request);
+      const key = typeof body.key === "string" ? body.key.trim() : "";
+      if (!key || !key.startsWith("content-files/")) return json({ error: "key must start with content-files/" }, 400, origin, log);
+      // Pull the raw body
+      const raw = await env.CONTENT.get(key);
+      if (!raw) return json({ error: "R2 key not found" }, 404, origin, log);
+      const text = await raw.text();
+
+      // Idempotency: if there's already a managed object that maps to this
+      // key, return it.
+      const rel = key.slice("content-files/".length);
+      const slash = rel.indexOf("/");
+      if (slash <= 0) return json({ error: "Invalid key shape" }, 400, origin, log);
+      const category = rel.slice(0, slash);
+      const fileSegment = rel.slice(slash + 1);
+      const tail = fileSegment.split("/").pop() ?? fileSegment;
+      const idBase = tail.replace(/\.[^.]+$/, "");
+      const expectedKeyFor = (ct: string, oid: string) => ct === "library" ? `${oid}.md` : `${oid}.json`;
+      const candidateTypes = CATEGORY_TYPE_TO_TYPE[category] || [];
+      for (const ct of candidateTypes) {
+        const row = await env.DB.prepare("SELECT * FROM content_objects WHERE content_type = ? AND r2_key_base LIKE ?").bind(ct, `content/${ct}/%`).all<any>();
+        for (const obj of row.results || []) {
+          if (fileSegment === expectedKeyFor(obj.content_type, obj.id)) {
+            return json({ id: obj.id, r2KeyBase: obj.r2_key_base, status: obj.status, adopted: false, alreadyExisted: true }, 200, origin, log);
+          }
+        }
+      }
+
+      // Infer content_type. Priority: explicit body.contentType → by extension → by category.
+      let contentType: string | undefined = typeof body.contentType === "string" ? body.contentType : undefined;
+      if (!contentType) {
+        if (fileSegment.endsWith(".md") || fileSegment.endsWith(".html") || fileSegment.endsWith(".pdf")) contentType = "library";
+        else if (fileSegment.endsWith(".json")) {
+          // sniff the JSON body for shape hints
+          try {
+            const j = JSON.parse(text);
+            if (Array.isArray(j.questions)) contentType = "quiz";
+            else if (Array.isArray(j.passages)) contentType = "bank";
+            else if (Array.isArray(j.prompts)) contentType = "written";
+            else if (Array.isArray(j.cards) || Array.isArray(j.decks) || Array.isArray(j.subdecks)) contentType = "flashcard";
+            else if (Array.isArray(j.stations)) contentType = "osce";
+            else if (Array.isArray(j.videos)) contentType = "video";
+          } catch {}
+        }
+      }
+      if (!contentType) {
+        // fall back to category → type
+        const byCat = CATEGORY_TO_DEFAULT_TYPE[category];
+        contentType = byCat;
+      }
+      if (!contentType || !["quiz","bank","flashcard","written","osce","library","video"].includes(contentType)) {
+        return json({ error: "Could not infer contentType; pass it explicitly" }, 400, origin, log);
+      }
+
+      const objectId = id();
+      const r2Base = "content/" + contentType + "/" + objectId;
+      const title = (typeof body.title === "string" ? body.title.trim() : "") || idBase.replace(/[-_]+/g, " ").replace(/\b\w/g, (c: string) => c.toUpperCase());
+      const language = (typeof body.language === "string" ? body.language.trim() : "") || "en";
+      await r2Put(env, r2Draft(r2Base), text);
+      await env.DB.prepare("INSERT INTO content_objects (id, r2_key_base, content_type, title, language, status, created_by, created_at, updated_at) VALUES (?, ?, ?, ?, ?, 'draft', ?, ?, ?)").bind(objectId, r2Base, contentType, title.slice(0, 200), language, session.user.id, now(), now()).run();
+      await auditLog(env, session.user.id, "adopt_content", objectId, { key, contentType, title }, log);
+      return json({ id: objectId, r2KeyBase: r2Base, status: "draft", adopted: true, alreadyExisted: false }, 201, origin, log);
+    }
+
     const cim = path.match(/^\/v1\/admin\/content\/([^/]+)(\/(.+))?$/);
     if (cim) {
       const objectId = cim[1]; const action = cim[3] || null;
-      if (["pending","upload-file","r2-keys","r2-key","r2-rename","r2-folder","regenerate-manifest","validate"].includes(objectId)) return json({ error: "Not found" }, 404, origin, log);
+      if (["pending","upload-file","r2-keys","r2-key","r2-rename","r2-folder","regenerate-manifest","validate","by-r2-key","adopt"].includes(objectId)) return json({ error: "Not found" }, 404, origin, log);
       const obj = await env.DB.prepare("SELECT * FROM content_objects WHERE id = ?").bind(objectId).first<any>();
       if (!obj) return json({ error: "Content not found" }, 404, origin, log);
       if (!isAdmin(session) && obj.created_by !== session.user.id && obj.status !== "published") return json({ error: "Forbidden" }, 403, origin, log);
