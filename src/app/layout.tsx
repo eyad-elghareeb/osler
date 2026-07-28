@@ -6,6 +6,7 @@ import { OslerThemeProvider } from "@/components/osler/theme-provider";
 import { OslerI18nProvider } from "@/components/osler/i18n-provider";
 import { AnimationsProvider } from "@/components/osler/animations-provider";
 import { SerwistProvider } from "@/components/osler/serwist-provider";
+import { AnalyticsProvider } from "@/components/osler/analytics-provider";
 import { LANG_INIT_SCRIPT } from "@/lib/osler/i18n";
 import { getConfig } from "@/lib/osler/config";
 
@@ -160,7 +161,9 @@ export default function RootLayout({
         <SerwistProvider>
           <OslerThemeProvider>
             <OslerI18nProvider>
-              <AnimationsProvider>{children}</AnimationsProvider>
+              <AnalyticsProvider>
+                <AnimationsProvider>{children}</AnimationsProvider>
+              </AnalyticsProvider>
             </OslerI18nProvider>
           </OslerThemeProvider>
         </SerwistProvider>

@@ -48,10 +48,37 @@ const RATE_LIMIT_MAX: Record<string, number> = {
   "admin": 60,
   "sync": 30,
   "search": 30,
+  // Analytics: 12 batches/min per IP. At 20 events/batch that's 240 writes/min
+  // = 345K/day worst case — still over the daily cap, but the global cap
+  // (ANALYTICS_DAILY_WRITE_CAP) catches it. 12/min is plenty for real user
+  // sessions (which flush every 20s = 3 batches/min).
+  "analytics": 12,
+  // Per-user analytics limit (same as per-IP). Prevents a single user from
+  // rotating IPs to bypass the per-IP limit. Uses a separate bucket name
+  // so the rateLimit() function doesn't double-count against ip:global.
+  "analytics_user": 12,
 };
 
 const MAX_SESSIONS_PER_USER = 12;
 const AUDIT_RETENTION_MS = 365 * 24 * 60 * 60 * 1000;
+// Analytics events are pruned after 30 days — plenty for trend analysis
+// while keeping D1 row counts comfortably within the Cloudflare free tier.
+const ANALYTICS_RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
+// Per-batch caps for /v1/analytics/events POST — bounds worker CPU time
+// AND D1 row-write quota. Each event = 1 row written. The D1 free tier
+// allows 100,000 rows written per day for the ENTIRE database (auth, sync,
+// content, analytics). The caps below + the daily global cap keep analytics
+// from starving the rest of the app.
+const ANALYTICS_MAX_BATCH = 20;
+const ANALYTICS_MAX_PATH_LEN = 255;
+const ANALYTICS_MAX_DETAIL_BYTES = 512;
+// Global daily write cap for analytics events. When exceeded, new events
+// are rejected with 429 until the next UTC midnight. This protects the D1
+// daily row-write quota (100K/day free tier) from being exhausted by a
+// single determined authenticated user. Cached in-memory per worker
+// instance for 60s to avoid a COUNT(*) on every request.
+const ANALYTICS_DAILY_WRITE_CAP = 50_000;
+const ANALYTICS_DAILY_CAP_CACHE_TTL_MS = 60_000;
 
 let googleKeys: { expiresAt: number; keys: JsonWebKey[] } = { expiresAt: 0, keys: [] };
 
@@ -613,6 +640,7 @@ async function cleanupStale(env: Env, _log?: Logger): Promise<void> {
   const log = _log || createLogger();
   try {
     const cutoff = now() - AUDIT_RETENTION_MS;
+    const analyticsCutoff = now() - ANALYTICS_RETENTION_MS;
     await env.DB.batch([
       env.DB.prepare("PRAGMA foreign_keys = ON;"),
       env.DB.prepare("DELETE FROM oauth_states WHERE expires_at < ?").bind(now()),
@@ -621,6 +649,7 @@ async function cleanupStale(env: Env, _log?: Logger): Promise<void> {
       env.DB.prepare("DELETE FROM email_verify_tokens WHERE expires_at < ?").bind(now()),
       env.DB.prepare("DELETE FROM sessions WHERE expires_at < ? OR revoked_at IS NOT NULL").bind(now()),
       env.DB.prepare("DELETE FROM admin_audit WHERE created_at < ?").bind(cutoff),
+      env.DB.prepare("DELETE FROM analytics_events WHERE created_at < ?").bind(analyticsCutoff),
     ]);
     log.info("cleanupStale completed");
   } catch (error: any) {
@@ -1112,9 +1141,495 @@ async function handleSearch(request: Request, env: Env, session: Session, log: L
   }
   return json(results, 200, "", log);
 }
+
+/* ── Analytics helpers ── */
+
+const ANALYTICS_VALID_EVENT_TYPES = new Set([
+  "page_view", "web_vital", "js_error", "api_call", "route_change",
+]);
+const ANALYTICS_VALID_METRICS = new Set([
+  "LCP", "INP", "CLS", "TTFB", "FCP", "FID",
+]);
+const ANALYTICS_VALID_BROWSERS = new Set([
+  "chrome", "firefox", "safari", "edge", "opera", "samsung", "other",
+]);
+const ANALYTICS_VALID_DEVICES = new Set([
+  "mobile", "tablet", "desktop", "other",
+]);
+const ANALYTICS_VALID_CONNECTIONS = new Set([
+  "4g", "3g", "2g", "slow-2g", "unknown",
+]);
+
+// ── Global daily write cap (DoS protection for D1 quota) ──
+//
+// The D1 free tier allows 100,000 rows written per day for the ENTIRE
+// database. A single authenticated user sending 50 events per batch at
+// 60 batches/min could exhaust this in ~33 minutes, taking down auth,
+// sync, and content management. This cap rejects new events once the
+// daily total reaches ANALYTICS_DAILY_WRITE_CAP (50K), leaving 50K for
+// the rest of the app.
+//
+// Implementation: in-memory cache per worker instance, refreshed every 60s
+// via a COUNT(*) query. Multiple worker instances may each have their own
+// cache, so the effective cap is (N_instances * 60s_worth_of_writes) above
+// the target — acceptable given the 50K margin.
+
+let analyticsDailyCount: { date: string; count: number; checkedAt: number } = {
+  date: "",
+  count: 0,
+  checkedAt: 0,
+};
+
+/** Returns the UTC date string (YYYY-MM-DD) for the given epoch ms. */
+function utcDateString(ts: number): string {
+  return new Date(ts).toISOString().slice(0, 10);
+}
+
+/** Check if the global daily analytics write cap has been exceeded.
+ *  Cached for ANALYTICS_DAILY_CAP_CACHE_TTL_MS to avoid a COUNT(*) per
+ *  request. Returns true if writes are allowed, false if over cap. */
+async function analyticsDailyCapOk(env: Env): Promise<boolean> {
+  const today = utcDateString(now());
+  const t = now();
+  // Cache hit — return cached result.
+  if (
+    analyticsDailyCount.date === today &&
+    t - analyticsDailyCount.checkedAt < ANALYTICS_DAILY_CAP_CACHE_TTL_MS
+  ) {
+    return analyticsDailyCount.count < ANALYTICS_DAILY_WRITE_CAP;
+  }
+  // Cache miss or date changed — query D1 for today's count.
+  // Start of today in UTC millis.
+  const startOfToday = Date.UTC(
+    new Date(t).getUTCFullYear(),
+    new Date(t).getUTCMonth(),
+    new Date(t).getUTCDate(),
+  );
+  try {
+    const row = await env.DB.prepare(
+      "SELECT COUNT(*) AS n FROM analytics_events WHERE created_at >= ?"
+    ).bind(startOfToday).first<{ n: number }>();
+    const count = row?.n ?? 0;
+    analyticsDailyCount = { date: today, count, checkedAt: t };
+    return count < ANALYTICS_DAILY_WRITE_CAP;
+  } catch {
+    // If the COUNT fails (DB error), allow the write — better to risk
+    // exceeding the cap than to block legitimate telemetry. The per-IP
+    // and per-user rate limits still apply.
+    return true;
+  }
+}
+
+// ── PII scrubbing ──
+//
+// Even though we don't collect user ids, the `detail` field of js_error
+// events can contain arbitrary text from `error.message`. If the app throws
+// `new Error("Failed for user john@example.com with token eyJ...")`, that
+// PII would be stored in D1. These regexes redact common PII patterns
+// BEFORE the detail is persisted.
+
+const PII_PATTERNS: Array<{ re: RegExp; replacement: string }> = [
+  // Email addresses
+  { re: /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g, replacement: "[redacted:email]" },
+  // JWT tokens (three base64 segments separated by dots; header starts with
+  // eyJ). The signature segment can be short, so we only require 5+ chars.
+  { re: /eyJ[a-zA-Z0-9_-]{10,}\.[a-zA-Z0-9_-]{10,}\.[a-zA-Z0-9_-]{5,}/g, replacement: "[redacted:jwt]" },
+  // Bearer tokens (catches non-JWT bearer tokens like API keys)
+  { re: /Bearer\s+[a-zA-Z0-9._-]{20,}/gi, replacement: "Bearer [redacted]" },
+  // Long hex strings (API keys, session tokens — 32+ hex chars)
+  { re: /\b[a-f0-9]{32,}\b/gi, replacement: "[redacted:token]" },
+  // Long base64 strings (40+ chars, could be encoded credentials)
+  { re: /\b[A-Za-z0-9+/]{40,}={0,2}\b/g, replacement: "[redacted:b64]" },
+];
+
+function scrubPii(text: string): string {
+  let out = text;
+  for (const { re, replacement } of PII_PATTERNS) {
+    out = out.replace(re, replacement);
+  }
+  return out;
+}
+
+/** Strip query/hash, normalize trailing slash, cap length. Returns null if
+ *  the resulting path is empty or obviously not a path. Also strips control
+ *  characters (0x00-0x1F, 0x7F) that could cause log injection or display
+ *  issues. */
+function sanitizeAnalyticsPath(raw: unknown): string | null {
+  if (typeof raw !== "string") return null;
+  let p = raw.split("?", 1)[0].split("#", 1)[0];
+  // Strip control characters (newline, tab, null byte, etc.) to prevent
+  // log injection and display corruption in the admin dashboard.
+  p = p.replace(/[\x00-\x1f\x7f]/g, "");
+  if (p.length > 512) p = p.slice(0, 512);
+  if (!p.startsWith("/")) p = "/" + p;
+  // Collapse // runs to keep D1 grouping tidy.
+  p = p.replace(/\/{2,}/g, "/");
+  if (p.length > 1 && p.endsWith("/")) p = p.slice(0, -1);
+  if (p.length === 0) return null;
+  return p.slice(0, ANALYTICS_MAX_PATH_LEN);
+}
+
+function sanitizeAnalyticsString(raw: unknown, max: number, allowed?: Set<string>): string | null {
+  if (typeof raw !== "string") return null;
+  const v = raw.slice(0, max);
+  if (allowed && !allowed.has(v)) return null;
+  return v || null;
+}
+
+function sanitizeAnalyticsValue(raw: unknown): number | null {
+  if (typeof raw !== "number" || !isFinite(raw)) return null;
+  // Clamp to a sane range — CLS is unitless and typically < 1, timings are
+  // ms and shouldn't exceed ~5 minutes (a stuck tab). Negative values are
+  // invalid.
+  if (raw < 0 || raw > 5 * 60 * 1000) return null;
+  return raw;
+}
+
+function sanitizeAnalyticsDetail(raw: unknown): string | null {
+  if (raw == null) return null;
+  let json: string;
+  try {
+    json = typeof raw === "string" ? raw : JSON.stringify(raw);
+  } catch {
+    return null;
+  }
+  // Scrub PII (emails, tokens, JWTs) from the detail BEFORE storing.
+  // This catches cases where error.message contains user data.
+  json = scrubPii(json);
+  if (json.length > ANALYTICS_MAX_DETAIL_BYTES) {
+    json = json.slice(0, ANALYTICS_MAX_DETAIL_BYTES);
+  }
+  return json;
+}
+
+/* ── Analytics ingest ──
+ *
+ * POST /v1/analytics/events
+ *   Body: { events: AnalyticsEvent[] }
+ *
+ * Each event:
+ *   { type, path?, metric?, value?, detail?, browser?, device?, connection?, ts? }
+ *
+ * Auth: any signed-in user. We do NOT log user id, IP, or full UA — only
+ * the client-supplied session_id (which the client rotates every 30 min).
+ * This is enough to count distinct sessions without identifying anyone.
+ */
+async function handleAnalyticsIngest(request: Request, env: Env, session: Session, origin: string, log: Logger): Promise<Response> {
+  // Pre-check Content-Length to avoid parsing a huge body that we'll reject
+  // anyway. 20 events * ~1KB each ≈ 20KB; reject anything over 100KB to
+  // leave headroom for JSON overhead.
+  const contentLength = Number(request.headers.get("content-length") || "0");
+  if (contentLength > 100_000) {
+    return json({ error: "Request body too large" }, 413, origin, log);
+  }
+
+  // Global daily write cap — protects D1 free-tier quota (100K rows/day
+  // for the ENTIRE database) from being exhausted by analytics alone.
+  if (!(await analyticsDailyCapOk(env))) {
+    return json({ error: "Analytics daily write cap reached" }, 429, origin, log);
+  }
+
+  const body = await readJson(request);
+  const events = Array.isArray(body?.events) ? body.events : null;
+  if (!events) return json({ error: "Missing events array" }, 400, origin, log);
+  if (events.length > ANALYTICS_MAX_BATCH) {
+    return json({ error: `Too many events (max ${ANALYTICS_MAX_BATCH} per batch)` }, 413, origin, log);
+  }
+  if (events.length === 0) return json({ ok: true, accepted: 0 }, 200, origin, log);
+
+  // Privacy: NEVER fall back to session.sessionId (the D1 sessions.id row id).
+  // That would let an admin JOIN analytics_events → sessions → users and
+  // de-anonymize every event. If the client didn't send a sessionId, we
+  // generate a fresh random one for THIS batch only — it can't be linked
+  // back to a user. The client is expected to send a rotated per-tab id.
+  const clientSessionId = sanitizeAnalyticsString(body?.sessionId, 64) || id();
+  const t = now();
+  const stmts: D1PreparedStatement[] = [];
+  let accepted = 0;
+
+  for (const ev of events) {
+    if (!ev || typeof ev !== "object") continue;
+    const eventType = sanitizeAnalyticsString((ev as any).type, 32, ANALYTICS_VALID_EVENT_TYPES);
+    if (!eventType) continue;
+    const path = sanitizeAnalyticsPath((ev as any).path);
+    // Metric name validation depends on event type:
+    //   - web_vital: must be one of the known metrics (LCP, INP, CLS, TTFB, FCP, FID)
+    //   - api_call:  free-form endpoint label (e.g. "GET /v1/sync"), up to 80 chars
+    //   - others:    not used
+    const metricName = eventType === "api_call"
+      ? sanitizeAnalyticsString((ev as any).metric, 80)
+      : sanitizeAnalyticsString((ev as any).metric, 16, ANALYTICS_VALID_METRICS);
+    const value = sanitizeAnalyticsValue((ev as any).value);
+    const detail = sanitizeAnalyticsDetail((ev as any).detail);
+    const browser = sanitizeAnalyticsString((ev as any).browser, 16, ANALYTICS_VALID_BROWSERS);
+    const device = sanitizeAnalyticsString((ev as any).device, 16, ANALYTICS_VALID_DEVICES);
+    const connection = sanitizeAnalyticsString((ev as any).connection, 16, ANALYTICS_VALID_CONNECTIONS);
+    // Client may send its own ts (epoch ms). We clamp it to the last hour to
+    // prevent backfilling the table from a stale tab.
+    const clientTs = typeof (ev as any).ts === "number" && isFinite((ev as any).ts)
+      ? Math.min(t, Math.max(t - 60 * 60 * 1000, (ev as any).ts as number))
+      : t;
+
+    stmts.push(
+      env.DB.prepare(
+        "INSERT INTO analytics_events (id, session_id, event_type, path, metric_name, value, detail, browser, device, connection, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+      ).bind(id(), clientSessionId, eventType, path, metricName, value, detail, browser, device, connection, clientTs)
+    );
+    accepted += 1;
+  }
+
+  if (stmts.length === 0) return json({ ok: true, accepted: 0 }, 200, origin, log);
+  try {
+    await env.DB.batch(stmts);
+  } catch (error: any) {
+    log.error("analytics ingest failed", { error: error.message, count: stmts.length });
+    return json({ error: "Failed to store analytics events" }, 500, origin, log);
+  }
+  return json({ ok: true, accepted }, 200, origin, log);
+}
+
+/* ── Analytics read (admin only) ──
+ *
+ * Routes:
+ *   GET /v1/admin/analytics/overview?range=24h|7d|30d
+ *   GET /v1/admin/analytics/timeseries?range=24h|7d|30d
+ *   GET /v1/admin/analytics/web-vitals?range=24h|7d|30d
+ *   GET /v1/admin/analytics/top-pages?range=24h|7d|30d&limit=20
+ *   GET /v1/admin/analytics/errors?range=24h|7d|30d&limit=20
+ *   GET /v1/admin/analytics/api-performance?range=24h|7d|30d&limit=20
+ */
+const ANALYTICS_RANGES: Record<string, number> = {
+  "24h": 24 * 60 * 60 * 1000,
+  "7d":  7 * 24 * 60 * 60 * 1000,
+  "30d": 30 * 24 * 60 * 60 * 1000,
+};
+const ANALYTICS_DEFAULT_RANGE = "24h";
+
+function analyticsRangeMs(url: URL): number {
+  const r = url.searchParams.get("range") || ANALYTICS_DEFAULT_RANGE;
+  return ANALYTICS_RANGES[r] ?? ANALYTICS_RANGES[ANALYTICS_DEFAULT_RANGE];
+}
+
+/** Returns the normalized range label ("24h" | "7d" | "30d") actually used
+ *  for the query — never the raw user input. Use this in the response body
+ *  so the client never sees a echoed-back invalid value like "foo". */
+function analyticsRangeLabel(url: URL): string {
+  const r = url.searchParams.get("range") || ANALYTICS_DEFAULT_RANGE;
+  return ANALYTICS_RANGES[r] ? r : ANALYTICS_DEFAULT_RANGE;
+}
+
+/** Compute p50/p75/p95 from a sorted ascending array. */
+function percentile(sortedAsc: number[], p: number): number | null {
+  if (sortedAsc.length === 0) return null;
+  const idx = Math.min(sortedAsc.length - 1, Math.floor((p / 100) * (sortedAsc.length - 1)));
+  return sortedAsc[idx];
+}
+
+async function handleAnalytics(request: Request, env: Env, url: URL, origin: string, log: Logger): Promise<Response | null> {
+  const path = url.pathname;
+
+  /* ── Overview ── */
+  if (request.method === "GET" && path === "/v1/admin/analytics/overview") {
+    const since = now() - analyticsRangeMs(url);
+    const since24h = now() - 24 * 60 * 60 * 1000;
+    const row = await env.DB.prepare(
+      `SELECT
+         COUNT(*) AS total_events,
+         COUNT(DISTINCT session_id) AS total_sessions,
+         SUM(CASE WHEN event_type = 'page_view' THEN 1 ELSE 0 END) AS page_views,
+         SUM(CASE WHEN event_type = 'js_error' THEN 1 ELSE 0 END) AS js_errors,
+         SUM(CASE WHEN event_type = 'web_vital' THEN 1 ELSE 0 END) AS web_vitals,
+         SUM(CASE WHEN event_type = 'api_call' THEN 1 ELSE 0 END) AS api_calls,
+         SUM(CASE WHEN event_type = 'route_change' THEN 1 ELSE 0 END) AS route_changes,
+         MAX(created_at) AS last_event_at
+       FROM analytics_events WHERE created_at >= ?`
+    ).bind(since).first<any>();
+    const row24 = await env.DB.prepare(
+      `SELECT
+         COUNT(*) AS events_24h,
+         COUNT(DISTINCT session_id) AS sessions_24h,
+         SUM(CASE WHEN event_type = 'js_error' THEN 1 ELSE 0 END) AS js_errors_24h
+       FROM analytics_events WHERE created_at >= ?`
+    ).bind(since24h).first<any>();
+    return json({
+      range: analyticsRangeLabel(url),
+      totalEvents:          row?.total_events ?? 0,
+      totalSessions:        row?.total_sessions ?? 0,
+      pageViews:            row?.page_views ?? 0,
+      jsErrors:             row?.js_errors ?? 0,
+      webVitals:            row?.web_vitals ?? 0,
+      apiCalls:             row?.api_calls ?? 0,
+      routeChanges:         row?.route_changes ?? 0,
+      lastEventAt:          row?.last_event_at ?? null,
+      events24h:            row24?.events_24h ?? 0,
+      sessions24h:          row24?.sessions_24h ?? 0,
+      jsErrors24h:          row24?.js_errors_24h ?? 0,
+    }, 200, origin, log);
+  }
+
+  /* ── Timeseries ── */
+  if (request.method === "GET" && path === "/v1/admin/analytics/timeseries") {
+    const range = analyticsRangeLabel(url);
+    const rangeMs = analyticsRangeMs(url);
+    const since = now() - rangeMs;
+    // Bucket: 1h for 24h, 6h for 7d, 1d for 30d. Keeps the chart readable.
+    const bucketMs = range === "24h" ? 60 * 60 * 1000 : range === "7d" ? 6 * 60 * 60 * 1000 : 24 * 60 * 60 * 1000;
+    const rows = await env.DB.prepare(
+      `SELECT
+         (created_at / ?) * ? AS bucket,
+         event_type,
+         COUNT(*) AS count
+       FROM analytics_events
+       WHERE created_at >= ?
+       GROUP BY bucket, event_type
+       ORDER BY bucket ASC`
+    ).bind(bucketMs, bucketMs, since).all<any>();
+    const buckets = new Map<number, Record<string, number>>();
+    for (const r of (rows.results || [])) {
+      const b = Number(r.bucket);
+      if (!buckets.has(b)) buckets.set(b, {});
+      buckets.get(b)![r.event_type] = (buckets.get(b)![r.event_type] ?? 0) + Number(r.count);
+    }
+    // Fill in missing buckets so the chart has continuous x-axis.
+    const series: Array<{ ts: number; page_view: number; web_vital: number; js_error: number; api_call: number; route_change: number }> = [];
+    const startBucket = Math.floor(since / bucketMs) * bucketMs;
+    const endBucket = Math.floor(now() / bucketMs) * bucketMs;
+    for (let b = startBucket; b <= endBucket; b += bucketMs) {
+      const ev = buckets.get(b) ?? {};
+      series.push({
+        ts: b,
+        page_view: ev["page_view"] ?? 0,
+        web_vital: ev["web_vital"] ?? 0,
+        js_error: ev["js_error"] ?? 0,
+        api_call: ev["api_call"] ?? 0,
+        route_change: ev["route_change"] ?? 0,
+      });
+    }
+    return json({ range, bucketMs, series }, 200, origin, log);
+  }
+
+  /* ── Web Vitals ── */
+  if (request.method === "GET" && path === "/v1/admin/analytics/web-vitals") {
+    const since = now() - analyticsRangeMs(url);
+    const rows = await env.DB.prepare(
+      "SELECT metric_name, value FROM analytics_events WHERE event_type = 'web_vital' AND value IS NOT NULL AND created_at >= ? LIMIT 10000"
+    ).bind(since).all<any>();
+    const byMetric: Record<string, number[]> = {};
+    for (const r of (rows.results || [])) {
+      const m = r.metric_name;
+      if (!m) continue;
+      if (!byMetric[m]) byMetric[m] = [];
+      byMetric[m].push(Number(r.value));
+    }
+    const metrics = Object.keys(byMetric).sort().map((name) => {
+      const sorted = byMetric[name].sort((a, b) => a - b);
+      return {
+        name,
+        count: sorted.length,
+        min: sorted.length ? sorted[0] : null,
+        p50: percentile(sorted, 50),
+        p75: percentile(sorted, 75),
+        p95: percentile(sorted, 95),
+        max: sorted.length ? sorted[sorted.length - 1] : null,
+      };
+    });
+    return json({ range: analyticsRangeLabel(url), metrics }, 200, origin, log);
+  }
+
+  /* ── Top pages ── */
+  if (request.method === "GET" && path === "/v1/admin/analytics/top-pages") {
+    const since = now() - analyticsRangeMs(url);
+    const limit = Math.min(100, Math.max(1, Number(url.searchParams.get("limit") || 20)));
+    const rows = await env.DB.prepare(
+      `SELECT path, COUNT(*) AS views, COUNT(DISTINCT session_id) AS unique_sessions, MAX(created_at) AS last_seen
+       FROM analytics_events
+       WHERE event_type = 'page_view' AND path IS NOT NULL AND created_at >= ?
+       GROUP BY path
+       ORDER BY views DESC
+       LIMIT ?`
+    ).bind(since, limit).all<any>();
+    const items = (rows.results || []).map((r: any) => ({
+      path: r.path, views: Number(r.views), uniqueSessions: Number(r.unique_sessions), lastSeen: Number(r.last_seen),
+    }));
+    return json({ range: analyticsRangeLabel(url), items }, 200, origin, log);
+  }
+
+  /* ── Errors ── */
+  if (request.method === "GET" && path === "/v1/admin/analytics/errors") {
+    const since = now() - analyticsRangeMs(url);
+    const limit = Math.min(100, Math.max(1, Number(url.searchParams.get("limit") || 20)));
+    // Group by the error message (extracted from JSON detail). Falls back
+    // to the raw detail text if json_extract returns null.
+    const rows = await env.DB.prepare(
+      `SELECT
+         COALESCE(json_extract(detail, '$.message'), detail, '(unknown)') AS message,
+         COUNT(*) AS count,
+         MIN(created_at) AS first_seen,
+         MAX(created_at) AS last_seen,
+         COUNT(DISTINCT path) AS affected_paths,
+         COUNT(DISTINCT session_id) AS affected_sessions
+       FROM analytics_events
+       WHERE event_type = 'js_error' AND created_at >= ?
+       GROUP BY message
+       ORDER BY last_seen DESC
+       LIMIT ?`
+    ).bind(since, limit).all<any>();
+    const items = (rows.results || []).map((r: any) => ({
+      message: String(r.message).slice(0, 500),
+      count: Number(r.count),
+      firstSeen: Number(r.first_seen),
+      lastSeen: Number(r.last_seen),
+      affectedPaths: Number(r.affected_paths),
+      affectedSessions: Number(r.affected_sessions),
+    }));
+    return json({ range: analyticsRangeLabel(url), items }, 200, origin, log);
+  }
+
+  /* ── API performance ── */
+  if (request.method === "GET" && path === "/v1/admin/analytics/api-performance") {
+    const since = now() - analyticsRangeMs(url);
+    const limit = Math.min(100, Math.max(1, Number(url.searchParams.get("limit") || 20)));
+    // Fetch raw (endpoint, value) pairs and aggregate in JS so we can compute
+    // p50/p95 without N+1 queries.
+    const rows = await env.DB.prepare(
+      "SELECT metric_name AS endpoint, value FROM analytics_events WHERE event_type = 'api_call' AND value IS NOT NULL AND created_at >= ? LIMIT 10000"
+    ).bind(since).all<any>();
+    const byEndpoint: Record<string, number[]> = {};
+    for (const r of (rows.results || [])) {
+      const ep = r.endpoint || "(unknown)";
+      if (!byEndpoint[ep]) byEndpoint[ep] = [];
+      byEndpoint[ep].push(Number(r.value));
+    }
+    const items = Object.entries(byEndpoint)
+      .map(([endpoint, vals]) => {
+        const sorted = vals.sort((a, b) => a - b);
+        return {
+          endpoint,
+          count: sorted.length,
+          p50: percentile(sorted, 50),
+          p95: percentile(sorted, 95),
+          max: sorted.length ? sorted[sorted.length - 1] : null,
+        };
+      })
+      .sort((a, b) => b.count - a.count)
+      .slice(0, limit);
+    return json({ range: analyticsRangeLabel(url), items }, 200, origin, log);
+  }
+
+  return null;
+}
+
 /* ── Admin handler ── */
 async function handleAdmin(request: Request, env: Env, session: Session, url: URL, origin: string, log: Logger): Promise<Response | null> {
   const path = url.pathname;
+
+  /* ── Analytics (admin only) ── */
+  if (path.startsWith("/v1/admin/analytics/")) {
+    if (!isAdmin(session)) return json({ error: "Forbidden" }, 403, origin, log);
+    const r = await handleAnalytics(request, env, url, origin, log);
+    if (r) return r;
+    return json({ error: "Not found" }, 404, origin, log);
+  }
 
   /* ── Identity ── */
   if (request.method === "GET" && path === "/v1/admin/me") {
@@ -1946,6 +2461,17 @@ export default {
       // ── From here on: authenticated routes ──
       const session = await requireUser(request, env);
       if (!session) return json({ error: "Authentication required" }, 401, origin, log);
+
+      // Analytics ingest (any signed-in user — performance metrics only,
+      // no PII). Rate-limited per IP AND per user to prevent a single user
+      // from rotating IPs to bypass the limit.
+      if (request.method === "POST" && url.pathname === "/v1/analytics/events") {
+        if (!rateLimit(ip, "analytics")) return json({ error: "Too many requests" }, 429, origin, log);
+        if (!rateLimit(session.user.id, "analytics_user")) {
+          return json({ error: "Too many requests" }, 429, origin, log);
+        }
+        return handleAnalyticsIngest(request, env, session, origin, log);
+      }
 
       // Admin namespace
       if (url.pathname.startsWith("/v1/admin")) {

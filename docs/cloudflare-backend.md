@@ -129,6 +129,31 @@ All API routes are prefixed with `/v1`. Authenticated requests carry `Authorizat
 | `GET` | `/v1/admin/stats` | Session (`admin`) | Aggregate counts: users, active sessions, content, pending, published, drafts. |
 | `GET` | `/v1/admin/audit?page=&action=` | Session (`admin`) | Paginated audit log (50 entries/page) with optional action filter. |
 
+### Analytics — Performance & Usage Telemetry
+
+Privacy-preserving RUM (Real User Monitoring) collected from the browser. The
+client-side `AnalyticsProvider` captures Core Web Vitals (LCP, INP, CLS, TTFB,
+FCP), route changes, JS errors, and cloud-backend API timings, then POSTs them
+in batches. **No PII is stored** — only a per-tab `session_id` that rotates
+every 30 min, the pathname (query/hash stripped), browser family, device class,
+and effective connection type. Rows are pruned after 30 days by the hourly cron.
+
+| Method | Route | Auth | Description |
+| --- | --- | --- | --- |
+| `POST` | `/v1/analytics/events` | Session (any signed-in user) | Ingest a batch of up to 50 events. Rate-limited 60/min per IP. |
+| `GET` | `/v1/admin/analytics/overview?range=24h\|7d\|30d` | Session (`admin`) | KPI totals + 24h comparison. |
+| `GET` | `/v1/admin/analytics/timeseries?range=` | Session (`admin`) | Event counts bucketed by hour (24h) / 6h (7d) / day (30d). |
+| `GET` | `/v1/admin/analytics/web-vitals?range=` | Session (`admin`) | p50/p75/p95/min/max for each Core Web Vital metric. |
+| `GET` | `/v1/admin/analytics/top-pages?range=&limit=` | Session (`admin`) | Top N paths by views, with unique-session counts. |
+| `GET` | `/v1/admin/analytics/errors?range=&limit=` | Session (`admin`) | JS errors grouped by message, with affected paths/sessions. |
+| `GET` | `/v1/admin/analytics/api-performance?range=&limit=` | Session (`admin`) | p50/p95/count/max for each cloud-backend endpoint. |
+
+The dashboard UI lives at `/admin/analytics` (super-admin only). To opt out of
+collection client-side, set `localStorage.osler_analytics_opt_out = "1"`; the
+provider also respects `navigator.doNotTrack === "1"` automatically. In
+`NODE_ENV !== "production"` collection is disabled unless explicitly forced
+via `localStorage.osler_analytics_force = "1"`.
+
 ### Admin — User Management
 
 | Method | Route | Auth | Description |

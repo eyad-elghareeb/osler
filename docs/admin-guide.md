@@ -350,9 +350,9 @@ The tile colours aren't decorative: amber on Pending Review is your visual cue t
 ### What the dashboard does *not* show
 
 - Per-user activity (use the Users page + Audit Log instead)
-- Content read counts (Osler doesn't track this)
+- Real-user performance & error rates (use the **Analytics** page at `/admin/analytics` — Core Web Vitals, top pages, JS errors, API latency)
 - Storage usage (check R2 in the Cloudflare dashboard)
-- Error rates (check the Worker logs — see [`hosting.md` §11](./hosting.md#11-operating--monitoring))
+- Worker-level error rates (check the Worker logs — see [`hosting.md` §11](./hosting.md#11-operating--monitoring))
 
 ### Refreshing
 

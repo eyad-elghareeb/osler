@@ -21,6 +21,7 @@ import {
   ChevronRight,
   PanelLeft,
   Home,
+  BarChart3,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -239,6 +240,9 @@ function AdminShellInner({ children, cfEmail }: AdminShellProps) {
   const systemItems: NavItemDef[] = [
     ...(isAdmin
       ? [{ href: "/admin/users", icon: Users, labelKey: "admin.nav.users" }]
+      : []),
+    ...(isAdmin
+      ? [{ href: "/admin/analytics", icon: BarChart3, labelKey: "admin.nav.analytics" }]
       : []),
     ...(isAdmin
       ? [{ href: "/admin/audit", icon: ScrollText, labelKey: "admin.nav.audit" }]

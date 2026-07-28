@@ -235,6 +235,114 @@ export const adminApi = {
   rejectContent:   (id: string, reason: string)  => req<{ ok: boolean; status: string }>(`/v1/admin/content/${id}/reject`, "POST", { reason }),
 };
 
+// ── Analytics API (admin only) ──────────────────────────────────────────────
+//
+// Reads the privacy-preserving performance & usage telemetry collected by the
+// AnalyticsProvider and stored in D1 `analytics_events`. See
+// `src/lib/osler/analytics.ts` for the collection contract and
+// `cloudflare/worker/migrations/0012_analytics_events.sql` for the schema.
+
+export type AnalyticsRange = "24h" | "7d" | "30d";
+
+export interface AnalyticsOverview {
+  range: AnalyticsRange;
+  totalEvents: number;
+  totalSessions: number;
+  pageViews: number;
+  jsErrors: number;
+  webVitals: number;
+  apiCalls: number;
+  routeChanges: number;
+  lastEventAt: number | null;
+  events24h: number;
+  sessions24h: number;
+  jsErrors24h: number;
+}
+
+export interface AnalyticsTimeseriesPoint {
+  ts: number;
+  page_view: number;
+  web_vital: number;
+  js_error: number;
+  api_call: number;
+  route_change: number;
+}
+
+export interface AnalyticsTimeseries {
+  range: AnalyticsRange;
+  bucketMs: number;
+  series: AnalyticsTimeseriesPoint[];
+}
+
+export interface AnalyticsWebVitalMetric {
+  name: string;
+  count: number;
+  min: number | null;
+  p50: number | null;
+  p75: number | null;
+  p95: number | null;
+  max: number | null;
+}
+
+export interface AnalyticsWebVitals {
+  range: AnalyticsRange;
+  metrics: AnalyticsWebVitalMetric[];
+}
+
+export interface AnalyticsTopPage {
+  path: string;
+  views: number;
+  uniqueSessions: number;
+  lastSeen: number;
+}
+
+export interface AnalyticsTopPages {
+  range: AnalyticsRange;
+  items: AnalyticsTopPage[];
+}
+
+export interface AnalyticsErrorRow {
+  message: string;
+  count: number;
+  firstSeen: number;
+  lastSeen: number;
+  affectedPaths: number;
+  affectedSessions: number;
+}
+
+export interface AnalyticsErrors {
+  range: AnalyticsRange;
+  items: AnalyticsErrorRow[];
+}
+
+export interface AnalyticsApiPerfRow {
+  endpoint: string;
+  count: number;
+  p50: number | null;
+  p95: number | null;
+  max: number | null;
+}
+
+export interface AnalyticsApiPerformance {
+  range: AnalyticsRange;
+  items: AnalyticsApiPerfRow[];
+}
+
+export const analyticsApi = {
+  overview:        (range: AnalyticsRange = "24h") =>
+                                                    req<AnalyticsOverview>(`/v1/admin/analytics/overview?range=${range}`),
+  timeseries:      (range: AnalyticsRange = "24h") =>
+                                                    req<AnalyticsTimeseries>(`/v1/admin/analytics/timeseries?range=${range}`),
+  webVitals:       (range: AnalyticsRange = "24h") =>
+                                                    req<AnalyticsWebVitals>(`/v1/admin/analytics/web-vitals?range=${range}`),
+  topPages:        (range: AnalyticsRange = "24h", limit = 20) =>
+                                                    req<AnalyticsTopPages>(`/v1/admin/analytics/top-pages?range=${range}&limit=${limit}`),
+  errors:          (range: AnalyticsRange = "24h", limit = 20) =>
+                                                    req<AnalyticsErrors>(`/v1/admin/analytics/errors?range=${range}&limit=${limit}`),
+  apiPerformance:  (range: AnalyticsRange = "24h", limit = 20) =>
+                                                    req<AnalyticsApiPerformance>(`/v1/admin/analytics/api-performance?range=${range}&limit=${limit}`),
+};
+
 // ── Gemini key management (per-user, stored in D1) ──────────────────────────
 //
 // These endpoints live on /v1/account/* (not /v1/admin/*) so any signed-in
