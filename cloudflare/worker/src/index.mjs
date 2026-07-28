@@ -40,7 +40,10 @@ const RATE_LIMIT_MAX = {
   "auth:register": 6,
   "auth:reset": 6,
   "auth:google:consume": 12,
-  "ip:global": 240, // hard cap per IP across all rate-limited routes
+  "ip:global": 240,
+  "content": 240,
+  "admin": 60,
+  "sync": 30,
 };
 
 // Cap concurrent sessions per user. Older sessions are revoked when the cap
@@ -128,10 +131,86 @@ async function passwordMatches(password, salt, expected) {
   return mismatch === 0;
 }
 
+// ─── Field-level encryption (AEAD AES-256-GCM) ─────────────────────────────
+// Used to encrypt sensitive per-user fields like Gemini API keys.
+// Activated by setting GEMINI_ENCRYPTION_KEY (32-byte base64url-encoded).
+// Without it, fields are stored in plaintext (current behavior).
+
+async function deriveFieldKey(rawKey, salt) {
+  const keyBytes = unb64url(rawKey);
+  if (keyBytes.length < 32) throw new Error("GEMINI_ENCRYPTION_KEY must be at least 32 bytes (base64url)");
+  const baseKey = await crypto.subtle.importKey("raw", keyBytes.slice(0, 32), "HKDF", false, ["deriveKey"]);
+  return crypto.subtle.deriveKey(
+    { name: "HKDF", hash: "SHA-256", salt, info: encoder.encode("osler-field-encryption-v1") },
+    baseKey, { name: "AES-GCM", length: 256 }, false, ["encrypt", "decrypt"]
+  );
+}
+
+async function encryptField(plaintext, encryptionKey) {
+  if (!encryptionKey) return plaintext;
+  const salt = crypto.getRandomValues(new Uint8Array(16));
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const key = await deriveFieldKey(encryptionKey, salt);
+  const encoded = encoder.encode(plaintext);
+  const ciphertext = await crypto.subtle.encrypt({ name: "AES-GCM", iv }, key, encoded);
+  const combined = new Uint8Array(1 + salt.length + iv.length + ciphertext.byteLength);
+  combined[0] = 1;
+  combined.set(salt, 1);
+  combined.set(iv, 1 + salt.length);
+  combined.set(new Uint8Array(ciphertext), 1 + salt.length + iv.length);
+  return b64url(combined);
+}
+
+async function decryptField(data, encryptionKey) {
+  if (!encryptionKey) return data;
+  if (!data || typeof data !== "string") return data;
+  let raw;
+  try { raw = unb64url(data); } catch { return data; }
+  if (raw.length < 1 + 16 + 12 + 1) return data;
+  const version = raw[0];
+  if (version !== 1) return data;
+  const salt = raw.slice(1, 1 + 16);
+  const iv = raw.slice(1 + 16, 1 + 16 + 12);
+  const ciphertext = raw.slice(1 + 16 + 12);
+  const key = await deriveFieldKey(encryptionKey, salt);
+  try {
+    const decrypted = await crypto.subtle.decrypt({ name: "AES-GCM", iv }, key, ciphertext);
+    return new TextDecoder().decode(decrypted);
+  } catch {
+    return null;
+  }
+}
+
 async function readJson(request) {
-  const length = Number(request.headers.get("content-length") || 0);
-  if (length > 1_000_000) throw new Error("Request is too large");
-  try { return await request.json(); } catch { throw new Error("Invalid JSON body"); }
+  const text = await request.text();
+  if (text.length > 1_000_000) throw new Error("Request body is too large");
+  try { return safeParseJSON(text, 32); } catch { throw new Error("Invalid JSON body"); }
+}
+
+// Depth-check by scanning the raw JSON string for nesting (fast approximate).
+function jsonDepth(text) {
+  let depth = 0, max = 0, inString = false;
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (inString) {
+      if (ch === '\\') i++;
+      else if (ch === '"') inString = false;
+    } else if (ch === '"') {
+      inString = true;
+    } else if (ch === '{' || ch === '[') {
+      depth++;
+      if (depth > max) max = depth;
+    } else if (ch === '}' || ch === ']') {
+      depth--;
+    }
+  }
+  return max;
+}
+
+// Wrapped JSON.parse with depth enforcement.
+function safeParseJSON(text, maxDepth = 32) {
+  if (jsonDepth(text) > maxDepth) throw new Error("JSON is too deeply nested");
+  return JSON.parse(text);
 }
 
 // ─── Validation ────────────────────────────────────────────────────────────
@@ -215,17 +294,24 @@ async function issueSession(user, env) {
   const expiresAt = now() + SESSION_TTL_MS;
   const payload = b64url(encoder.encode(JSON.stringify({ sub: user.id, sid: sessionId, role: user.role, exp: Math.floor(expiresAt / 1000) })));
   const token = `${payload}.${await hmac(payload, env.JWT_SECRET)}`;
-  // Enforce per-user session cap: revoke the oldest active sessions above the cap.
-  const activeSessions = await env.DB.prepare("SELECT id FROM sessions WHERE user_id = ? AND revoked_at IS NULL AND expires_at > ? ORDER BY created_at ASC").bind(user.id, now()).all();
-  const rows = activeSessions.results || [];
-  if (rows.length >= MAX_SESSIONS_PER_USER) {
-    const toRevoke = rows.slice(0, rows.length - MAX_SESSIONS_PER_USER + 1).map((r) => r.id);
-    if (toRevoke.length) {
-      await env.DB.prepare(`UPDATE sessions SET revoked_at = ? WHERE id IN (${toRevoke.map(() => "?").join(",")})`).bind(now(), ...toRevoke).run();
-    }
+  const tokenHash = await sha256(token);
+
+  // Atomic session cap enforcement via conditional INSERT.
+  // If the cap is reached, no row is inserted (rows_written = 0).
+  const result = await env.DB.prepare(`
+    INSERT INTO sessions (id, user_id, token_hash, expires_at, created_at)
+    SELECT ?, ?, ?, ?, ?
+    WHERE (SELECT COUNT(*) FROM sessions WHERE user_id = ? AND revoked_at IS NULL AND expires_at > ?) < ?
+  `).bind(sessionId, user.id, tokenHash, expiresAt, now(), user.id, now(), MAX_SESSIONS_PER_USER).run();
+
+  // Cap reached — evict the oldest and retry in a single batch transaction.
+  if ((result.meta?.rows_written ?? 1) === 0) {
+    await env.DB.batch([
+      env.DB.prepare("UPDATE sessions SET revoked_at = ? WHERE id IN (SELECT id FROM sessions WHERE user_id = ? AND revoked_at IS NULL AND expires_at > ? ORDER BY created_at ASC LIMIT 1)").bind(now(), user.id, now()),
+      env.DB.prepare("INSERT INTO sessions (id, user_id, token_hash, expires_at, created_at) VALUES (?, ?, ?, ?, ?)").bind(sessionId, user.id, tokenHash, expiresAt, now()),
+    ]);
   }
-  await env.DB.prepare("INSERT INTO sessions (id, user_id, token_hash, expires_at, created_at) VALUES (?, ?, ?, ?, ?)")
-    .bind(sessionId, user.id, await sha256(token), expiresAt, now()).run();
+
   return { token, expiresAt, user: publicUser(user) };
 }
 
@@ -351,6 +437,7 @@ async function cleanupStale(env) {
       env.DB.prepare("DELETE FROM oauth_states WHERE expires_at < ?").bind(now()),
       env.DB.prepare("DELETE FROM auth_handoffs WHERE expires_at < ?").bind(now()),
       env.DB.prepare("DELETE FROM password_reset_tokens WHERE expires_at < ?").bind(now()),
+      env.DB.prepare("DELETE FROM email_verify_tokens WHERE expires_at < ?").bind(now()),
       env.DB.prepare("DELETE FROM sessions WHERE expires_at < ? OR revoked_at IS NOT NULL").bind(now()),
       env.DB.prepare("DELETE FROM admin_audit WHERE created_at < ?").bind(cutoff),
     ]);
@@ -1008,14 +1095,16 @@ async function handleAdmin(request, env, session, url, origin) {
       return json({ items: rows.results || [] }, 200, origin);
     }
 
-    // List content objects (with optional ?q= title search)
+    // List content objects (with optional ?q= title search and pagination)
     if (request.method === "GET" && path === "/v1/admin/content") {
       const status = url.searchParams.get("status") || "published";
       const q = (url.searchParams.get("q") || "").trim();
+      const page = Math.max(1, Number(url.searchParams.get("page") || 1));
+      const limit = Math.min(100, Math.max(1, Number(url.searchParams.get("limit") || 50)));
+      const offset = (page - 1) * limit;
       const validStatuses = new Set(["draft", "pending", "published", "rejected", "all"]);
       const safeStatus = validStatuses.has(status) ? status : "published";
       const like = q ? `%${escapeLike(q)}%` : null;
-      // Build the WHERE clause and params once; reuse for both rows and count queries.
       const where = [];
       const params = [];
       if (isAdmin(session)) {
@@ -1024,7 +1113,6 @@ async function handleAdmin(request, env, session, url, origin) {
           params.push(safeStatus);
         }
       } else {
-        // content_admin sees only their own drafts/pending/rejected + all published.
         if (safeStatus === "published") {
           where.push("co.status = 'published'");
         } else {
@@ -1039,10 +1127,10 @@ async function handleAdmin(request, env, session, url, origin) {
       }
       const whereSql = where.length ? " WHERE " + where.join(" AND ") : "";
       const [rows, total] = await Promise.all([
-        env.DB.prepare(`SELECT co.*, u.username as creator_username FROM content_objects co JOIN users u ON u.id = co.created_by${whereSql} ORDER BY co.updated_at DESC LIMIT 100`).bind(...params).all(),
+        env.DB.prepare(`SELECT co.*, u.username as creator_username FROM content_objects co JOIN users u ON u.id = co.created_by${whereSql} ORDER BY co.updated_at DESC LIMIT ? OFFSET ?`).bind(...params, limit, offset).all(),
         env.DB.prepare(`SELECT COUNT(*) as n FROM content_objects co JOIN users u ON u.id = co.created_by${whereSql}`).bind(...params).first(),
       ]);
-      return json({ items: rows.results || [], total: total?.n ?? 0 }, 200, origin);
+      return json({ items: rows.results || [], total: total?.n ?? 0, page, limit }, 200, origin);
     }
 
     // Create new content object
@@ -1282,11 +1370,12 @@ export default {
         return json({ ok: true, googleEnabled: googleReady(env), turnstileEnabled: env.TURNSTILE_ENABLED === "true" }, 200, origin, { cacheControl: "public, max-age=60" });
       }
 
-      // ── Public content serving (R2-backed) ──
+      // ── Public content serving (R2-backed, rate-limited: 240 req/min per IP) ──
       // Serves content packs from R2 in the same structure the frontend expects:
       //   GET /v1/content/:category/manifest.json
       //   GET /v1/content/:category/:path.../:file
       if (request.method === "GET" && url.pathname.startsWith("/v1/content/")) {
+        if (!rateLimit(ip, "content")) return json({ error: "Too many requests" }, 429, origin);
         const contentPath = url.pathname.slice("/v1/content/".length).replace(/\/{2,}/g, "/");
         if (!env.CONTENT) return json({ error: "Content storage not configured" }, 503, origin);
         // url.pathname is already URL-decoded by URL parser — do NOT call
@@ -1318,11 +1407,12 @@ export default {
         const cacheable = ext !== "json" && ext !== "md";
         return new Response(obj.body, {
           status: 200,
-          headers: securityHeaders({
+          headers: {
             "content-type": contentType,
             "cache-control": cacheable ? "public, max-age=86400, immutable" : "public, max-age=60",
             ...cors(origin),
-          }),
+            ...SECURITY_HEADERS,
+          },
         });
       }
 
@@ -1460,13 +1550,60 @@ export default {
         return json({ ok: true }, 200, origin);
       }
 
+      // ── Email verification ──
+      // POST /v1/auth/verify/request — send verification email (rate-limited)
+      if (request.method === "POST" && url.pathname === "/v1/auth/verify/request") {
+        if (!rateLimit(ip, "auth:register")) return json({ error: "Too many attempts" }, 429, origin);
+        const body = await readJson(request);
+        const email = String(body.email || "").trim().toLowerCase();
+        if (!validEmail(email)) return json({ error: "Invalid email" }, 400, origin);
+        // Always return ok to prevent email enumeration. Only send when the
+        // email exists on an unverified account and Resend is configured.
+        const user = await env.DB.prepare("SELECT * FROM users WHERE email = ? COLLATE NOCASE AND email_verified_at IS NULL").bind(email).first();
+        if (user && env.RESEND_API_KEY && env.EMAIL_FROM && env.APP_ORIGIN) {
+          const existing = await env.DB.prepare("SELECT id FROM email_verify_tokens WHERE user_id = ? AND used_at IS NULL AND expires_at > ?").bind(user.id, now()).first();
+          if (!existing) {
+            const token = `${id()}${id()}`;
+            const expiresAt = now() + RESET_TTL_MS; // 30 min, same as reset tokens
+            await env.DB.prepare("INSERT INTO email_verify_tokens (id, user_id, token_hash, email, expires_at, created_at) VALUES (?, ?, ?, ?, ?, ?)")
+              .bind(id(), user.id, await sha256(token), email, expiresAt, now()).run();
+            const link = `${env.APP_ORIGIN.replace(/\/$/, "")}/?verify=${encodeURIComponent(token)}`;
+            await fetch("https://api.resend.com/emails", {
+              method: "POST",
+              headers: { authorization: `Bearer ${env.RESEND_API_KEY}`, "content-type": "application/json" },
+              body: JSON.stringify({
+                from: env.EMAIL_FROM,
+                to: [user.email],
+                subject: "Verify your Osler email address",
+                html: `<p>Use this link within 30 minutes to verify your email:</p><p><a href="${link}">${link}</a></p><p>If you did not create an Osler account, you can safely ignore this email.</p>`,
+              }),
+            });
+          }
+        }
+        return json({ ok: true }, 200, origin);
+      }
+
+      // POST /v1/auth/verify/confirm — confirm verification token
+      if (request.method === "POST" && url.pathname === "/v1/auth/verify/confirm") {
+        const body = await readJson(request);
+        if (typeof body.token !== "string" || !body.token) return json({ error: "Invalid verification request" }, 400, origin);
+        const row = await env.DB.prepare("SELECT * FROM email_verify_tokens WHERE token_hash = ? AND used_at IS NULL AND expires_at > ?").bind(await sha256(body.token), now()).first();
+        if (!row) return json({ error: "This verification link is invalid or expired" }, 400, origin);
+        await env.DB.batch([
+          env.DB.prepare("UPDATE users SET email_verified_at = ? WHERE id = ?").bind(now(), row.user_id),
+          env.DB.prepare("UPDATE email_verify_tokens SET used_at = ? WHERE id = ?").bind(now(), row.id),
+        ]);
+        return json({ ok: true, verified: true }, 200, origin);
+      }
+
       // ── From here on: authenticated routes ──
       const session = await requireUser(request, env);
       if (!session) return json({ error: "Authentication required" }, 401, origin);
 
-      // Admin namespace — delegate to handleAdmin()
+      // Admin namespace — rate-limited (60 req/min), delegated to handleAdmin()
       if (url.pathname.startsWith("/v1/admin")) {
         if (!isAdminOrContent(session)) return json({ error: "Forbidden" }, 403, origin);
+        if (!rateLimit(ip, "admin")) return json({ error: "Too many requests" }, 429, origin);
         const adminResponse = await handleAdmin(request, env, session, url, origin);
         if (adminResponse) return adminResponse;
         return json({ error: "Not found" }, 404, origin);
@@ -1512,19 +1649,20 @@ export default {
         return json({ ok: true }, 200, origin);
       }
 
-      // ── Gemini API key management ──
+      // ── Gemini API key management (encrypted at rest) ──
       //
-      // Stored per-user in D1 (`users.gemini_api_key`) so the user only has to
-      // enter it once. Browsers fetch the key via GET and the worker proxies
+      // Stored per-user in D1 (`users.gemini_api_key`) encrypted with
+      // AES-256-GCM when GEMINI_ENCRYPTION_KEY is set. The Worker proxies
       // actual Gemini calls through POST /v1/account/gemini/proxy so the key
-      // never leaves the worker.
+      // never leaves the worker or reaches the browser network tab.
       if (request.method === "GET" && url.pathname === "/v1/account/gemini-key") {
         const row = await env.DB.prepare("SELECT gemini_api_key, gemini_model, gemini_max_wait FROM users WHERE id = ?").bind(session.user.id).first();
+        const key = row?.gemini_api_key ? await decryptField(row.gemini_api_key, env.GEMINI_ENCRYPTION_KEY) : null;
         return json({
-          apiKey: row?.gemini_api_key ?? null,
+          apiKey: key,
           model: row?.gemini_model ?? null,
           maxWait: row?.gemini_max_wait ?? null,
-          hasKey: !!row?.gemini_api_key,
+          hasKey: !!key,
         }, 200, origin);
       }
       if (request.method === "PUT" && url.pathname === "/v1/account/gemini-key") {
@@ -1532,11 +1670,11 @@ export default {
         const apiKey = typeof body.apiKey === "string" ? body.apiKey.trim().slice(0, 200) : null;
         const model = typeof body.model === "string" ? body.model.trim().slice(0, 80) : null;
         const maxWait = Number.isFinite(body.maxWait) ? Math.min(120, Math.max(5, body.maxWait)) : null;
-        // Allow clearing by passing null/empty.
         const finalKey = apiKey || null;
         const finalModel = model || null;
+        const storedKey = finalKey ? await encryptField(finalKey, env.GEMINI_ENCRYPTION_KEY) : null;
         await env.DB.prepare("UPDATE users SET gemini_api_key = ?, gemini_model = ?, gemini_max_wait = ?, updated_at = ? WHERE id = ?")
-          .bind(finalKey, finalModel, maxWait, now(), session.user.id).run();
+          .bind(storedKey, finalModel, maxWait, now(), session.user.id).run();
         return json({ ok: true, hasKey: !!finalKey }, 200, origin);
       }
       if (request.method === "DELETE" && url.pathname === "/v1/account/gemini-key") {
@@ -1546,25 +1684,23 @@ export default {
       }
       // POST /v1/account/gemini/proxy { model?, endpoint, body }
       // Server-side proxy for Gemini API calls. Uses the user's stored key.
-      // `endpoint` is one of "generateContent" | "streamGenerateContent" | "models"
-      // (for "models" the URL is just /v1beta/models — body is ignored).
       if (request.method === "POST" && url.pathname === "/v1/account/gemini/proxy") {
         const row = await env.DB.prepare("SELECT gemini_api_key, gemini_model FROM users WHERE id = ?").bind(session.user.id).first();
-        if (!row?.gemini_api_key) return json({ error: "No Gemini API key saved. Add one in Settings." }, 400, origin);
+        const decryptedKey = row?.gemini_api_key ? await decryptField(row.gemini_api_key, env.GEMINI_ENCRYPTION_KEY) : null;
+        if (!decryptedKey) return json({ error: "No Gemini API key saved. Add one in Settings." }, 400, origin);
         const body = await readJson(request);
         const endpoint = typeof body.endpoint === "string" ? body.endpoint : "generateContent";
         const model = (typeof body.model === "string" && body.model.trim()) || row.gemini_model || "gemini-2.5-flash";
         if (!/^[a-zA-Z0-9._-]+$/.test(model)) return json({ error: "Invalid model name" }, 400, origin);
         if (!/^(generateContent|streamGenerateContent|countTokens)$/.test(endpoint)) {
-          // Treat unknown endpoints as a "models" listing.
-          const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${encodeURIComponent(row.gemini_api_key)}`, {
+          const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${encodeURIComponent(decryptedKey)}`, {
             method: "GET",
             headers: { "content-type": "application/json" },
           });
           const text = await r.text();
           return new Response(text, { status: r.status, headers: { "content-type": r.headers.get("content-type") || "application/json", ...cors(origin) } });
         }
-        const url2 = `https://generativelanguage.googleapis.com/v1beta/models/${model}:${endpoint}?key=${encodeURIComponent(row.gemini_api_key)}`;
+        const url2 = `https://generativelanguage.googleapis.com/v1beta/models/${model}:${endpoint}?key=${encodeURIComponent(decryptedKey)}`;
         const r = await fetch(url2, {
           method: "POST",
           headers: { "content-type": "application/json" },
@@ -1582,22 +1718,36 @@ export default {
         });
       }
 
-      // ── Sync ──
+      // ── Sync (rate-limited: 30 req/min per user) ──
       if (request.method === "GET" && url.pathname === "/v1/sync") {
+        if (!rateLimit(ip, "sync")) return json({ error: "Too many requests. Slow down." }, 429, origin);
         return json({ qbank: await getDocument(env, session.user.id, "qbank"), flashcards: await getDocument(env, session.user.id, "flashcards") }, 200, origin);
       }
       if (request.method === "PUT" && url.pathname === "/v1/sync") {
+        if (!rateLimit(ip, "sync")) return json({ error: "Too many requests. Slow down." }, 429, origin);
         const body = await readJson(request); const statements = []; const response = {};
         for (const kind of ["qbank", "flashcards"]) {
           if (!body[kind] || typeof body[kind] !== "object") continue;
           const local = body[kind].records;
           if (!local || typeof local !== "object" || Array.isArray(local)) return json({ error: "Invalid progress document" }, 400, origin);
-          // Use byte length, not string length, so UTF-8 multi-byte characters
-          // don't sneak past the limit and bloat the D1 row past the 1 MiB cap.
-          const bytes = new TextEncoder().encode(JSON.stringify(local)).length;
-          if (bytes > MAX_DOCUMENT_BYTES) return json({ error: "Progress document is too large" }, 400, origin);
           const current = await getDocument(env, session.user.id, kind);
+
+          // Optimistic concurrency: if the client sends the updatedAt it last saw,
+          // verify it hasn't changed since then. The header is optional —
+          // legacy clients without it proceed with last-writer-wins (existing behavior).
+          const ifUnmodifiedSince = request.headers.get("If-Unmodified-Since");
+          if (ifUnmodifiedSince) {
+            const since = Number(ifUnmodifiedSince);
+            if (!isNaN(since) && current.updatedAt > since) {
+              return json({ error: "Conflict: data has been modified since last fetch. Re-sync and retry.", conflict: true, serverUpdatedAt: current.updatedAt }, 409, origin);
+            }
+          }
+
           const records = kind === "qbank" ? mergeQbank(current.records, local) : mergeFlashcards(current.records, local);
+          // Check byte size of the MERGED result, not the incoming payload alone,
+          // so the combined document never exceeds the D1 row limit.
+          const mergedBytes = new TextEncoder().encode(JSON.stringify(records)).length;
+          if (mergedBytes > MAX_DOCUMENT_BYTES) return json({ error: "Progress document is too large after merge" }, 400, origin);
           const updatedAt = now(); response[kind] = { records, updatedAt };
           statements.push(env.DB.prepare("INSERT INTO progress_documents (user_id, kind, payload, updated_at) VALUES (?, ?, ?, ?) ON CONFLICT(user_id, kind) DO UPDATE SET payload = excluded.payload, updated_at = excluded.updated_at").bind(session.user.id, kind, JSON.stringify(records), updatedAt));
         }
@@ -1606,9 +1756,8 @@ export default {
       }
       return json({ error: "Not found" }, 404, origin);
     } catch (error) {
-      console.error(error);
-      const isUserError = error instanceof Error && (error.message.includes("Invalid") || error.message.includes("too large") || error.message.includes("required") || error.message.includes("already in use"));
-      return json({ error: isUserError ? error.message : "Internal server error" }, isUserError ? 400 : 500, origin);
+      console.error("Unhandled error:", error);
+      return json({ error: "Internal server error" }, 500, origin);
     }
   },
 };

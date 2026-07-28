@@ -196,6 +196,14 @@ export async function confirmPasswordReset(token: string, password: string): Pro
   await request("/v1/auth/reset/confirm", { method: "POST", body: JSON.stringify({ token, password }) });
 }
 
+export async function requestEmailVerify(email: string): Promise<void> {
+  await request("/v1/auth/verify/request", { method: "POST", body: JSON.stringify({ email }) });
+}
+
+export async function confirmEmailVerify(token: string): Promise<{ ok: boolean; verified: boolean }> {
+  return request<{ ok: boolean; verified: boolean }>("/v1/auth/verify/confirm", { method: "POST", body: JSON.stringify({ token }) });
+}
+
 export async function logoutCloudAccount(session: CloudSession | null): Promise<void> {
   try {
     if (session) await request("/v1/auth/logout", { method: "POST", body: "{}" }, session.token);
@@ -217,6 +225,7 @@ export function startCloudSync(session: CloudSession): () => void {
   let dirty = true;
   let syncing = false;
   let lastSyncAt = 0;
+  let serverUpdatedAt = 0;
   let timer: ReturnType<typeof setTimeout> | null = null;
 
   const sync = async () => {
@@ -232,15 +241,21 @@ export function startCloudSync(session: CloudSession): () => void {
       await storage.ensureCacheHydrated();
       const config = getConfig();
       const remote = await request<{
-        qbank: { records: Record<string, QuestionRecord> };
-        flashcards: { records: Record<string, FlashcardReviewRecord> };
+        qbank: { records: Record<string, QuestionRecord>; updatedAt: number };
+        flashcards: { records: Record<string, FlashcardReviewRecord>; updatedAt: number };
       }>("/v1/sync", {}, session.token);
       await storage.mergeCloudProgress(
         config.cloud.syncQbank ? remote.qbank.records : undefined,
         config.cloud.syncFlashcards ? remote.flashcards.records : undefined,
       );
+      // Track the latest server updatedAt for optimistic concurrency.
+      serverUpdatedAt = Math.max(
+        remote.qbank?.updatedAt ?? 0,
+        remote.flashcards?.updatedAt ?? 0,
+      );
       const saved = await request("/v1/sync", {
         method: "PUT",
+        headers: serverUpdatedAt > 0 ? { "If-Unmodified-Since": String(serverUpdatedAt) } : {},
         body: JSON.stringify({
           ...(config.cloud.syncQbank ? { qbank: { records: storage.exportProgressRecords() } } : {}),
           ...(config.cloud.syncFlashcards ? { flashcards: { records: flashcardReview.getAll() } } : {}),
@@ -251,9 +266,18 @@ export function startCloudSync(session: CloudSession): () => void {
       lastSyncAt = Date.now();
       window.dispatchEvent(new CustomEvent("osler-cloud-sync-status", { detail: { state: "synced", syncedAt: lastSyncAt } }));
     } catch (error) {
-      if (error instanceof CloudApiError && error.status === 401) {
-        clearCloudSession();
-        window.dispatchEvent(new CustomEvent("osler-cloud-session-expired"));
+      if (error instanceof CloudApiError) {
+        if (error.status === 401) {
+          clearCloudSession();
+          window.dispatchEvent(new CustomEvent("osler-cloud-session-expired"));
+        } else if (error.status === 409) {
+          // Conflict — data changed since last fetch. Re-fetch and retry immediately.
+          serverUpdatedAt = 0;
+          dirty = true;
+          lastSyncAt = 0;
+          void sync();
+          return;
+        }
       }
       window.dispatchEvent(new CustomEvent("osler-cloud-sync-status", { detail: { state: "offline" } }));
     } finally {

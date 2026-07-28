@@ -1,6 +1,7 @@
 name = "osler-cloud"
-main = "src/index.mjs"
+main = "src/index.ts"
 compatibility_date = "2026-07-23"
+compatibility_flags = ["nodejs_compat"]
 workers_dev = true
 
 [[d1_databases]]

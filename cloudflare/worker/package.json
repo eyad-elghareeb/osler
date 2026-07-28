@@ -4,13 +4,20 @@
   "scripts": {
     "dev": "wrangler dev",
     "deploy": "wrangler deploy",
+    "build": "tsc",
     "db:migrate:local": "wrangler d1 migrations apply osler-cloud --local",
     "db:migrate": "wrangler d1 migrations apply osler-cloud --remote",
     "db:list": "wrangler d1 migrations list osler-cloud",
     "tail": "wrangler tail",
-    "secret:list": "wrangler secret list"
+    "secret:list": "wrangler secret list",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "devDependencies": {
+    "@cloudflare/vitest-pool-workers": "^0.8.0",
+    "@cloudflare/workers-types": "^5.20260720.0",
+    "typescript": "^5.8.0",
+    "vitest": "^3.1.0",
     "wrangler": "^4.0.0"
   }
 }

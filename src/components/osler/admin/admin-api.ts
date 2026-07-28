@@ -174,7 +174,7 @@ export const adminApi = {
   revokeUserSessions: (id: string)               => req<{ ok: boolean }>(`/v1/admin/users/${id}/sessions`, "DELETE"),
 
   // Content (admin + content_admin)
-  listContent:     (status: string, q?: string)  => req<{ items: ContentObject[]; total: number }>(`/v1/admin/content?status=${status}${q ? `&q=${encodeURIComponent(q)}` : ""}`),
+  listContent:     (status: string, q?: string, page = 1, limit = 50)  => req<{ items: ContentObject[]; total: number; page: number; limit: number }>(`/v1/admin/content?status=${status}${q ? `&q=${encodeURIComponent(q)}` : ""}&page=${page}&limit=${limit}`),
   getContent:      (id: string)                  => req<ContentObject>(`/v1/admin/content/${id}`),
   createContent:   (payload: { contentType: ContentType; title: string; language: string; content?: string }) =>
                                                     req<{ id: string; r2KeyBase: string; status: string }>("/v1/admin/content", "POST", payload),

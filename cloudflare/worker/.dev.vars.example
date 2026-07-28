@@ -38,6 +38,14 @@ APP_ORIGIN=http://localhost:3000
 GOOGLE_CLIENT_ID=
 GOOGLE_CLIENT_SECRET=
 
+# ─── Optional: Field-level encryption (AES-256-GCM for Gemini keys) ─────────
+
+# 32-byte base64url-encoded key used to encrypt sensitive per-user fields
+# (Gemini API key) at rest in D1. Generate with:
+#   openssl rand -base64 32 | tr '+/' '-_' | tr -d '='
+# Without this key, fields are stored in plaintext.
+GEMINI_ENCRYPTION_KEY=
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Notes
 # ─────────────────────────────────────────────────────────────────────────────
