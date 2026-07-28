@@ -367,7 +367,7 @@ function isAdmin(session) { return session?.user?.role === "admin"; }
 function isAdminOrContent(session) { return ADMIN_ROLES.has(session?.user?.role); }
 
 function adminPublicUser(user) {
-  return { id: user.id, username: user.username, displayName: user.display_name, role: user.role, email: user.email ?? null, createdAt: user.created_at };
+  return { id: user.id, username: user.username, displayName: user.display_name, role: user.role, email: user.email ?? null, createdAt: user.created_at, updatedAt: user.updated_at ?? user.created_at };
 }
 
 async function auditLog(env, actorId, action, targetId, detail) {
@@ -738,9 +738,24 @@ async function handleAdmin(request, env, session, url, origin) {
       return json({ ok: true }, 200, origin);
     }
 
+    // Progress endpoint
+    const progressMatch = path.match(/^\/v1\/admin\/users\/([^/]+)\/progress$/);
+    if (progressMatch && request.method === "GET") {
+      const targetId = progressMatch[1];
+      const [qbankDoc, flashcardDoc] = await Promise.all([
+        getDocument(env, targetId, "qbank"),
+        getDocument(env, targetId, "flashcards"),
+      ]);
+      return json({
+        qbank: { recordCount: Object.keys(qbankDoc.records).length, updatedAt: qbankDoc.updatedAt },
+        flashcards: { recordCount: Object.keys(flashcardDoc.records).length, updatedAt: flashcardDoc.updatedAt },
+      }, 200, origin);
+    }
+
     // Single user (base path only — no sub-routes like /reset-password)
     const userIdMatch = path.match(/^\/v1\/admin\/users\/([^/]+)$/);
     const resetPasswordMatch = path.match(/^\/v1\/admin\/users\/([^/]+)\/reset-password$/);
+    const geminiKeyMatch = path.match(/^\/v1\/admin\/users\/([^/]+)\/gemini-key$/);
     if (userIdMatch) {
       const targetId = userIdMatch[1];
       if (request.method === "GET") {
@@ -752,6 +767,8 @@ async function handleAdmin(request, env, session, url, origin) {
         ]);
         return json({
           ...adminPublicUser(user),
+          hasPassword: !!user.has_password,
+          hasGeminiKey: !!user.gemini_api_key,
           activeSessionCount: sessions?.n ?? 0,
           content: (content.results || []).map((c) => ({
             id: c.id, title: c.title, status: c.status, contentType: c.content_type, updatedAt: c.updated_at,
@@ -813,6 +830,17 @@ async function handleAdmin(request, env, session, url, origin) {
         await auditLog(env, session.user.id, "reset_password", targetId, { username: user.username });
         return json({ ok: true }, 200, origin);
       }
+    }
+
+    // Admin: clear a user's Gemini API key
+    if (geminiKeyMatch && request.method === "DELETE") {
+      const targetId = geminiKeyMatch[1];
+      const user = await env.DB.prepare("SELECT * FROM users WHERE id = ?").bind(targetId).first();
+      if (!user) return json({ error: "User not found" }, 404, origin);
+      if (!user.gemini_api_key) return json({ error: "User has no Gemini API key stored" }, 404, origin);
+      await env.DB.prepare("UPDATE users SET gemini_api_key = NULL, gemini_model = NULL, gemini_max_wait = NULL, updated_at = ? WHERE id = ?").bind(now(), targetId).run();
+      await auditLog(env, session.user.id, "clear_gemini_key", targetId, { username: user.username });
+      return json({ ok: true }, 200, origin);
     }
   }
 
@@ -1189,6 +1217,42 @@ async function handleAdmin(request, env, session, url, origin) {
     }
 
     return json({ error: "Not found" }, 404, origin);
+  }
+
+  /* ── Config management (admin only) ── */
+  // Reads/writes osler.config.json in the R2 bucket under a reserved key so
+  // the admin UI can edit site identity, engine plugins, themes, and defaults.
+  if (path === "/v1/admin/config") {
+    if (!isAdmin(session)) return json({ error: "Forbidden" }, 403, origin);
+    if (!env.CONTENT) return json({ error: "Content storage not configured" }, 503, origin);
+    const configKey = "_osler.config.json";
+    if (request.method === "GET") {
+      const obj = await env.CONTENT.get(configKey);
+      if (!obj) {
+        // No config stored yet — return the default config embedded in the
+        // frontend code as a starting template.
+        return json({
+          site: { name: "Osler", shortName: "Osler", tagline: "Your medical companion", githubRepo: "", organisation: "", supportEmail: "" },
+          engines: {},
+          themes: { default: "light", custom: [] },
+          defaults: { view: "dashboard", language: { ui: "en", content: "all" }, quiz: { count: 10, secPerQuestion: 90, tutor: false, shuffle: true }, ai: { model: "gemini-2.5-flash", enabled: true, temperature: 0.7 }, sync: { method: "webrtc", room: "" } },
+          wizard: { completed: false },
+        }, 200, origin);
+      }
+      const text = await obj.text();
+      try { JSON.parse(text); } catch { return json({ error: "Corrupt config" }, 500, origin); }
+      return new Response(text, {
+        status: 200,
+        headers: securityHeaders({ "content-type": "application/json; charset=utf-8", ...cors(origin) }),
+      });
+    }
+    if (request.method === "PUT") {
+      const body = await readJson(request);
+      const raw = JSON.stringify(body, null, 2);
+      await env.CONTENT.put(configKey, raw, { httpMetadata: { contentType: "application/json" } });
+      await auditLog(env, session.user.id, "update_config", null, { updatedKeys: Object.keys(body) });
+      return json({ ok: true }, 200, origin);
+    }
   }
 
   return null; // not an admin route

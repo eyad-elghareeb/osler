@@ -75,7 +75,6 @@ const ACTIONS: ToolbarAction[] = [
   { icon: <ListOrdered className="size-4" />, label: "Numbered list", prefix: "1. ", suffix: "", placeholder: "List item", block: true },
   { icon: <Quote className="size-4" />, label: "Blockquote", prefix: "> ", suffix: "", placeholder: "Quote", block: true },
   { icon: <LinkIcon className="size-4" />, label: "Link", prefix: "[", suffix: "](url)", placeholder: "link text" },
-  // eslint-disable-next-line jsx-a11y/alt-text -- lucide icon
   { icon: <ImageIcon className="size-4" />, label: "Image", prefix: "![", suffix: "](url)", placeholder: "alt text" },
   { icon: <Table className="size-4" />, label: "Table", prefix: "\n| Header | Header |\n| ------ | ------ |\n| Cell   | Cell   |\n", suffix: "", block: true },
   { icon: <Minus className="size-4" />, label: "Horizontal rule", prefix: "\n---\n", suffix: "", block: true },
@@ -316,7 +315,7 @@ export function MarkdownEditor({
     // Ctrl+B / I / K
     if ((e.metaKey || e.ctrlKey) && e.key === "b") { e.preventDefault(); insertFormatting(ACTIONS[0]); return; }
     if ((e.metaKey || e.ctrlKey) && e.key === "i") { e.preventDefault(); insertFormatting(ACTIONS[1]); return; }
-    if ((e.metaKey || e.ctrlKey) && e.key === "k") { e.preventDefault(); insertFormatting[10]; insertFormatting(ACTIONS[10]); return; }
+    if ((e.metaKey || e.ctrlKey) && e.key === "k") { e.preventDefault(); insertFormatting(ACTIONS[10]); return; }
     // `/` opens the palette
     if (e.key === "/" && !e.ctrlKey && !e.metaKey && !e.altKey) {
       // Defer to let the `/` land

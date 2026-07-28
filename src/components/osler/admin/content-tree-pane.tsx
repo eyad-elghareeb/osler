@@ -230,7 +230,7 @@ function TreeRow({
   React.useEffect(() => {
     if (forceExpand === "expanded") setExpanded(true);
     else if (forceExpand === "collapsed") setExpanded(false);
-  }, [forceExpand, expandVersion]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [forceExpand, expandVersion]);
 
   const active = node.id === selectedId;
 

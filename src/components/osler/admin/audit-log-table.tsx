@@ -1,25 +1,21 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { ScrollText, ChevronLeft, ChevronRight } from "lucide-react";
-import { motion } from "framer-motion";
-import { Button } from "@/components/ui/button";
+import { ScrollText } from "lucide-react";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import { useI18n } from "@/components/osler/i18n-provider";
 import { cn } from "@/lib/utils";
 import { adminApi, type AdminAuditEntry } from "@/components/osler/admin/admin-api";
-import { LoadingState, EmptyState } from "@/components/osler/ui-primitives";
+import { AdminTable } from "@/components/osler/admin/admin-table";
 import { useToast } from "@/hooks/use-toast";
 
 const ACTION_COLORS: Record<string, string> = {
-  // User actions
   change_role:      "bg-primary/15 text-primary border-primary/30",
   delete_user:      "bg-destructive/15 text-destructive border-destructive/30",
   reset_password:   "bg-warning/15 text-warning border-warning/30",
   revoke_sessions:  "bg-warning/15 text-warning border-warning/30",
-  // Content actions
   create_content:   "bg-muted text-muted-foreground border-border",
   submit_content:   "bg-warning/15 text-warning border-warning/30",
   approve:          "bg-success/15 text-success border-success/30",
@@ -59,128 +55,97 @@ export function AuditLogTable() {
       .then((r) => { setEntries(r.items); setTotal(r.total); })
       .catch(() => toast({ title: t("admin.toast.failedLoadAuditLog"), variant: "destructive" }))
       .finally(() => setLoading(false));
-  }, [page, action]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [page, action]);
 
   useEffect(() => { load(); }, [load]);
 
-  const totalPages = Math.ceil(total / 50);
-
   return (
-    <>
-      {/* Filter bar */}
-      <div className="mb-4 flex items-center gap-3">
-        <div className="flex items-center gap-2">
-          <label className="osler-section-heading mb-0">
-            {t("admin.audit.filterBy")}
-          </label>
-          <Select value={action} onValueChange={(v) => { setAction(v); setPage(1); }}>
-            <SelectTrigger id="audit-filter" className="w-56">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {ACTION_FILTERS.map((f) => (
-                <SelectItem key={f.value} value={f.value}>
-                  {t(f.labelKey as any) ?? f.value}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-        <span className="text-sm text-muted-foreground">
+    <div className="space-y-4">
+      <div className="flex items-center gap-3">
+        <Select value={action} onValueChange={(v) => { setAction(v); setPage(1); }}>
+          <SelectTrigger id="audit-filter" className="w-56">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {ACTION_FILTERS.map((f) => (
+              <SelectItem key={f.value} value={f.value}>
+                {t(f.labelKey as any) ?? f.value}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <span className="text-sm text-muted-foreground whitespace-nowrap">
           {t("admin.audit.total", { n: String(total) })}
         </span>
       </div>
 
-      {/* Audit table */}
-      {loading ? (
-        <LoadingState label={t("common.loading")} />
-      ) : entries.length === 0 ? (
-        <EmptyState icon={ScrollText} title={t("common.none")} />
-      ) : (
-        <div className="rounded-xl border border-border overflow-hidden">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-border bg-muted/40">
-                <th className="px-4 py-2.5 text-start text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                  {t("admin.audit.col.when")}
-                </th>
-                <th className="px-4 py-2.5 text-start text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                  {t("admin.audit.col.actor")}
-                </th>
-                <th className="px-4 py-2.5 text-start text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                  {t("admin.audit.col.action")}
-                </th>
-                <th className="px-4 py-2.5 text-start text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                  {t("admin.audit.col.target")}
-                </th>
-                <th className="px-4 py-2.5 text-start text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                  {t("admin.audit.col.detail")}
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {entries.map((entry, i) => (
-                <motion.tr
-                  key={entry.id}
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  transition={{ delay: i * 0.015 }}
-                  className="border-b border-border last:border-0 hover:bg-muted/30 transition-colors"
-                >
-                  <td className="px-4 py-3 text-muted-foreground whitespace-nowrap">
-                    <div>{new Date(entry.createdAt).toLocaleString()}</div>
-                  </td>
-                  <td className="px-4 py-3">
-                    {entry.actorDisplayName ? (
-                      <div>
-                        <div className="font-medium">{entry.actorDisplayName}</div>
-                        {entry.actorUsername && (
-                          <div className="text-xs text-muted-foreground">@{entry.actorUsername}</div>
-                        )}
-                      </div>
-                    ) : (
-                      <span className="text-muted-foreground italic">{t("admin.audit.unknownActor")}</span>
-                    )}
-                  </td>
-                  <td className="px-4 py-3">
-                    <span className={cn(
-                      "inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium font-mono",
-                      ACTION_COLORS[entry.action] ?? "bg-muted text-muted-foreground border-border",
-                    )}>
-                      {entry.action}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3 text-muted-foreground font-mono text-xs">
-                    {entry.targetId ?? "—"}
-                  </td>
-                  <td className="px-4 py-3 text-xs text-muted-foreground">
-                    {entry.detail ? (
-                      <code className="block max-w-md overflow-x-auto rounded bg-muted/60 px-2 py-1 font-mono">
-                        {JSON.stringify(entry.detail)}
-                      </code>
-                    ) : "—"}
-                  </td>
-                </motion.tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-
-      {/* Pagination */}
-      {totalPages > 1 && (
-        <div className="mt-4 flex items-center justify-center gap-2">
-          <Button variant="outline" size="iconSm" onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page === 1}>
-            <ChevronLeft className="size-4" />
-          </Button>
-          <span className="text-sm text-muted-foreground">
-            {page} / {totalPages} ({total} {t("admin.audit.entries")})
-          </span>
-          <Button variant="outline" size="iconSm" onClick={() => setPage((p) => Math.min(totalPages, p + 1))} disabled={page === totalPages}>
-            <ChevronRight className="size-4" />
-          </Button>
-        </div>
-      )}
-    </>
+      <AdminTable
+        columns={[
+          {
+            key: "when",
+            label: t("admin.audit.col.when"),
+            render: (entry) => (
+              <span className="text-muted-foreground whitespace-nowrap text-xs">
+                {new Date(entry.createdAt).toLocaleString()}
+              </span>
+            ),
+          },
+          {
+            key: "actor",
+            label: t("admin.audit.col.actor"),
+            render: (entry) =>
+              entry.actorDisplayName ? (
+                <div>
+                  <div className="font-medium text-sm">{entry.actorDisplayName}</div>
+                  {entry.actorUsername && (
+                    <div className="text-xs text-muted-foreground">@{entry.actorUsername}</div>
+                  )}
+                </div>
+              ) : (
+                <span className="text-muted-foreground italic text-sm">{t("admin.audit.unknownActor")}</span>
+              ),
+          },
+          {
+            key: "action",
+            label: t("admin.audit.col.action"),
+            render: (entry) => (
+              <span className={cn(
+                "inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium font-mono",
+                ACTION_COLORS[entry.action] ?? "bg-muted text-muted-foreground border-border",
+              )}>
+                {entry.action}
+              </span>
+            ),
+          },
+          {
+            key: "target",
+            label: t("admin.audit.col.target"),
+            render: (entry) => (
+              <span className="text-muted-foreground font-mono text-xs">{entry.targetId ?? "—"}</span>
+            ),
+          },
+          {
+            key: "detail",
+            label: t("admin.audit.col.detail"),
+            render: (entry) =>
+              entry.detail ? (
+                <code className="block max-w-[12rem] overflow-x-auto rounded bg-muted/60 px-2 py-1 font-mono text-xs">
+                  {JSON.stringify(entry.detail)}
+                </code>
+              ) : (
+                <span className="text-muted-foreground">—</span>
+              ),
+          },
+        ]}
+        data={entries}
+        total={total}
+        page={page}
+        pageSize={50}
+        loading={loading}
+        emptyIcon={ScrollText}
+        onPageChange={setPage}
+        rowKey={(e) => e.id}
+      />
+    </div>
   );
 }

@@ -23,7 +23,9 @@ import {
   type AdminWorkingMode,
   type AdminLanding,
 } from "@/components/osler/admin/admin-settings-context";
+import { haptic } from "@/lib/osler/native";
 import { useAdminIdentity } from "@/components/osler/admin/admin-context";
+import { useOslerTheme } from "@/components/osler/theme-provider";
 import { OslerCard } from "@/components/osler/ui-primitives";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -39,6 +41,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import {
   Select,
@@ -68,7 +71,8 @@ export default function AdminSettingsPage() {
 
 function AdminSettingsContent() {
   const { t } = useI18n();
-  const { settings, update, reset, language, theme, setLanguage, toggleTheme } = useAdminSettings();
+  const { settings, update, reset, language, theme, setLanguage } = useAdminSettings();
+  const { setTheme } = useOslerTheme();
   const identity = useAdminIdentity();
 
   return (
@@ -140,7 +144,7 @@ function AdminSettingsContent() {
             return (
               <button
                 key={opt.id}
-                onClick={toggleTheme}
+                onClick={() => setTheme(opt.id)}
                 className={cn(
                   "flex items-center gap-2 px-4 py-2 rounded-lg border text-sm font-medium transition-colors",
                   active
@@ -223,9 +227,9 @@ function AdminSettingsContent() {
           />
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
             <div>
-              <label className="block text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1.5">
+              <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                 {t("admin.settings.behavior.pageSize")}
-              </label>
+              </Label>
               <Select
                 value={String(settings.pageSize)}
                 onValueChange={(v) => update("pageSize", Number(v))}
@@ -239,9 +243,9 @@ function AdminSettingsContent() {
               </Select>
             </div>
             <div>
-              <label className="block text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1.5">
+              <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                 {t("admin.settings.behavior.landing")}
-              </label>
+              </Label>
               <Select
                 value={settings.defaultLanding}
                 onValueChange={(v) => update("defaultLanding", v as AdminLanding)}
@@ -300,6 +304,7 @@ function AdminSettingsContent() {
               <AlertDialogCancel>{t("common.cancel")}</AlertDialogCancel>
               <AlertDialogAction
                 onClick={() => {
+                  haptic("warning");
                   reset();
                   toast({ title: t("admin.settings.danger.reset") });
                 }}
@@ -415,6 +420,7 @@ function GeminiKeySection() {
   }, []);
 
   async function handleSave() {
+    haptic("light");
     setSaving(true);
     try {
       await geminiApi.save(draftKey.trim() || null, draftModel, null);
@@ -428,17 +434,17 @@ function GeminiKeySection() {
     }
   }
 
+  const [clearOpen, setClearOpen] = React.useState(false);
+
   async function handleClear() {
-    if (!confirm(t("admin.settings.gemini.confirmRemove"))) return;
+    haptic("warning");
     setSaving(true);
     try {
       await geminiApi.clear();
       setHasKey(false);
       setDraftKey("");
-      if (typeof window !== "undefined") {
-        localStorage.removeItem("osler_gemini_api_key");
-      }
       toast({ title: t("admin.settings.gemini.keyRemoved") });
+      setClearOpen(false);
     } catch (err) {
       toast({ title: t("admin.settings.gemini.clearFailed", { error: String(err) }), variant: "destructive" });
     } finally {
@@ -447,6 +453,7 @@ function GeminiKeySection() {
   }
 
   async function handleTest() {
+    haptic("light");
     setTesting(true);
     try {
       await geminiApi.test();
@@ -487,9 +494,9 @@ function GeminiKeySection() {
           </div>
 
           <div>
-            <label className="block text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1.5">
+            <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
               {hasKey ? t("admin.settings.gemini.replaceKey") : t("admin.settings.gemini.apiKey")}
-            </label>
+            </Label>
             <Input
               type="password"
               value={draftKey}
@@ -503,9 +510,9 @@ function GeminiKeySection() {
           </div>
 
           <div>
-            <label className="block text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1.5">
+            <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
               {t("admin.settings.gemini.defaultModel")}
-            </label>
+            </Label>
             <Select value={draftModel} onValueChange={setDraftModel}>
               <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
               <SelectContent>
@@ -529,9 +536,27 @@ function GeminiKeySection() {
                   {testing ? <Loader2 className="size-3.5 me-1.5 animate-spin" /> : <Sparkles className="size-3.5 me-1.5" />}
                   {t("admin.settings.gemini.testKey")}
                 </Button>
-                <Button size="sm" variant="ghost" onClick={handleClear} disabled={saving} className="text-destructive hover:text-destructive">
-                  {t("admin.settings.gemini.removeKey")}
-                </Button>
+                <AlertDialog open={clearOpen} onOpenChange={setClearOpen}>
+                  <AlertDialogTrigger asChild>
+                    <Button size="sm" variant="ghost" disabled={saving} className="text-destructive hover:text-destructive">
+                      {t("admin.settings.gemini.removeKey")}
+                    </Button>
+                  </AlertDialogTrigger>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>{t("admin.settings.gemini.removeKey")}</AlertDialogTitle>
+                      <AlertDialogDescription>
+                        {t("admin.settings.gemini.confirmRemove")}
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel>{t("common.cancel")}</AlertDialogCancel>
+                      <AlertDialogAction onClick={handleClear} disabled={saving}>
+                        {t("admin.settings.gemini.removeKey")}
+                      </AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
               </>
             )}
           </div>

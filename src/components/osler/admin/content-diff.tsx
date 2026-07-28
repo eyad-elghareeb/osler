@@ -55,7 +55,7 @@ export function ContentDiff({ id }: ContentDiffProps) {
       .then(([content, d]) => { setObj(content); setDiff(d); })
       .catch(() => toast({ title: t("admin.toast.failedLoadDiff"), variant: "destructive" }))
       .finally(() => setLoading(false));
-  }, [id]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [id]);
 
   async function approve() {
     haptic("success");

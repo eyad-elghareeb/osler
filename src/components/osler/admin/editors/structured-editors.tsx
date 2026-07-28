@@ -361,7 +361,6 @@ function ImageListField({
             )}
             {img.src && (
               <div className="col-span-4 -mt-1 mb-1">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
                   src={img.src.startsWith("http") || img.src.startsWith("/") || img.src.startsWith("data:")
                     ? img.src
@@ -1649,7 +1648,6 @@ export function VideoEditor({ value, onChange, readOnly, r2KeyBase }: Structured
                       <div className="flex items-center gap-2 text-xs text-success">
                         <CheckCircle2 className="size-3.5" />
                         <span>ID: {ytId}</span>
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
                         <img
                           src={youTubeThumb(ytId)}
                           alt={t("admin.structured.thumbnailPreview")}

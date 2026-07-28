@@ -112,7 +112,7 @@ export function ContentEditor({ id, capabilities }: ContentEditorProps) {
       })
       .catch(() => toast({ title: t("admin.toast.contentNotFound"), variant: "destructive" }))
       .finally(() => setLoading(false));
-  }, [id]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [id]);
 
   // Auto-pick the best initial editor mode for the content type.
   React.useEffect(() => {
@@ -133,7 +133,7 @@ export function ContentEditor({ id, capabilities }: ContentEditorProps) {
     } catch {
       setMode("code");
     }
-  }, [obj]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [obj]);
 
   function handleBodyChange(value: string) {
     setBody(value);

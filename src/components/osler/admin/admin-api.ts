@@ -12,10 +12,13 @@ export interface AdminUser {
   role: "student" | "admin" | "content_admin";
   email: string | null;
   createdAt: number;
+  updatedAt: number;
 }
 
 /** Extra fields returned only by GET /v1/admin/users/:id. */
 export interface AdminUserDetail extends AdminUser {
+  hasPassword: boolean;
+  hasGeminiKey: boolean;
   activeSessionCount: number;
   content: Array<{
     id: string;
@@ -24,6 +27,11 @@ export interface AdminUserDetail extends AdminUser {
     contentType: ContentType;
     updatedAt: number;
   }>;
+}
+
+export interface UserProgressSummary {
+  qbank: { recordCount: number; updatedAt: number };
+  flashcards: { recordCount: number; updatedAt: number };
 }
 
 export interface AdminCapabilities {
@@ -158,6 +166,8 @@ export const adminApi = {
   updateUser:      (id: string, patch: { role?: string; displayName?: string }) => req<AdminUser>(`/v1/admin/users/${id}`, "PATCH", patch),
   resetUserPassword: (id: string, password: string) => req<{ ok: boolean }>(`/v1/admin/users/${id}/reset-password`, "POST", { password }),
   deleteUser:      (id: string)                  => req<{ ok: boolean }>(`/v1/admin/users/${id}`, "DELETE"),
+  getUserProgress: (id: string)                  => req<UserProgressSummary>(`/v1/admin/users/${id}/progress`),
+  clearUserGeminiKey: (id: string)               => req<{ ok: boolean }>(`/v1/admin/users/${id}/gemini-key`, "DELETE"),
 
   // Session management (admin only)
   userSessions:    (id: string)                  => req<{ sessions: AdminSession[] }>(`/v1/admin/users/${id}/sessions`),
@@ -192,6 +202,10 @@ export const adminApi = {
   uploadFile:      (key: string, body: string)   => req<{ ok: boolean; key: string }>("/v1/admin/content/upload-file", "POST", { key, body }),
 
   /** List raw R2 keys under content-files/<prefix>. */
+  // Config management
+  getConfig:       ()                            => req<Record<string, unknown>>("/v1/admin/config"),
+  updateConfig:    (config: Record<string, unknown>) => req<{ ok: boolean }>("/v1/admin/config", "PUT", config),
+
   listR2Keys:      (prefix: string, cursor?: string) =>
                                                     req<{ items: Array<{ key: string; size: number; uploaded: string | null }>; cursor: string | null }>(`/v1/admin/content/r2-keys?prefix=${encodeURIComponent(prefix)}${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ""}`),
   /** Delete an R2 key (only content-files/ and content-manifests/ allowed). */

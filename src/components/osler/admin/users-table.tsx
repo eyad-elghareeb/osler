@@ -1,7 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Search, ChevronLeft, ChevronRight, KeyRound } from "lucide-react";
+import Link from "next/link";
+import { Search, ChevronLeft, ChevronRight, KeyRound, Eye } from "lucide-react";
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -40,7 +41,7 @@ function RoleBadge({ role }: { role: string }) {
 }
 
 export function UsersTable() {
-  const { t } = useI18n();
+  const { t, rtl } = useI18n();
   const { toast } = useToast();
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [total, setTotal] = useState(0);
@@ -65,7 +66,7 @@ export function UsersTable() {
       .then((r) => { setUsers(r.users); setTotal(r.total); })
       .catch(() => toast({ title: t("admin.toast.failedLoadUsers"), variant: "destructive" }))
       .finally(() => setLoading(false));
-  }, [page, debouncedQ]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [page, debouncedQ]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -141,15 +142,9 @@ export function UsersTable() {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-border bg-muted/40">
-                {[
-                  t("admin.users.col.user"),
-                  t("admin.users.col.role"),
-                  t("admin.users.col.email"),
-                  t("admin.users.col.joined"),
-                  t("admin.users.col.actions"),
-                ].map((col) => (
-                  <th key={col} className="px-4 py-2.5 text-start text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                    {col}
+                {(["user", "role", "email", "joined", "actions"] as const).map((key) => (
+                  <th key={key} className="px-4 py-2.5 text-start text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                    {t(`admin.users.col.${key}` as any)}
                   </th>
                 ))}
               </tr>
@@ -174,6 +169,12 @@ export function UsersTable() {
                   </td>
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-1.5">
+                      <Link href={`/admin/users/${user.id}`}>
+                        <Button variant="ghost" size="sm">
+                          <Eye className="size-3.5 me-1.5" />
+                          {t("admin.users.view")}
+                        </Button>
+                      </Link>
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
                           <Button variant="ghost" size="sm">{t("admin.users.changeRole")}</Button>
@@ -219,11 +220,11 @@ export function UsersTable() {
       {totalPages > 1 && (
         <div className="mt-4 flex items-center justify-center gap-2">
           <Button variant="outline" size="iconSm" onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page === 1}>
-            <ChevronLeft className="size-4" />
+            <ChevronLeft className={cn("size-4", rtl && "rtl-flip-x")} />
           </Button>
           <span className="text-sm text-muted-foreground">{page} / {totalPages}</span>
           <Button variant="outline" size="iconSm" onClick={() => setPage((p) => Math.min(totalPages, p + 1))} disabled={page === totalPages}>
-            <ChevronRight className="size-4" />
+            <ChevronRight className={cn("size-4", rtl && "rtl-flip-x")} />
           </Button>
         </div>
       )}

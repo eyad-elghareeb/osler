@@ -24,7 +24,7 @@ export function ReviewQueue() {
       .then((r) => setItems(r.items))
       .catch(() => toast({ title: t("admin.toast.failedLoadQueue"), variant: "destructive" }))
       .finally(() => setLoading(false));
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => { load(); }, [load]);
 

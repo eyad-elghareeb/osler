@@ -112,6 +112,7 @@ function AdminShellInner({ children, cfEmail }: AdminShellProps) {
               role: "admin",
               email: "admin@local.test",
               createdAt: Date.now(),
+              updatedAt: Date.now(),
             },
             capabilities: {
               manageUsers: true,
@@ -241,6 +242,9 @@ function AdminShellInner({ children, cfEmail }: AdminShellProps) {
       : []),
     ...(isAdmin
       ? [{ href: "/admin/audit", icon: ScrollText, labelKey: "admin.nav.audit" }]
+      : []),
+    ...(isAdmin
+      ? [{ href: "/admin/config", icon: SettingsIcon, labelKey: "admin.nav.config" }]
       : []),
     { href: "/admin/settings", icon: SettingsIcon, labelKey: "admin.settings.title" },
   ];
