@@ -47,12 +47,17 @@ import {
   Pencil,
   ImagePlus,
   Workflow,
+  Loader2,
 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { useMermaidModal } from "./mermaid-editor";
-import { adminApi } from "@/components/osler/admin/admin-api";
 import { useToast } from "@/hooks/use-toast";
+import {
+  uploadImageForEditor,
+  resolveImageForPreview,
+  isImageFile,
+} from "./image-upload";
 
 interface ToolbarAction {
   icon: React.ReactNode;
@@ -144,6 +149,10 @@ export interface MarkdownEditorProps {
    *  button that uploads to `<r2KeyBase>/images/<name>` and inserts the
    *  `![](images/<name>)` reference at the cursor. */
   r2KeyBase?: string;
+  /** Raw R2 key for in-place editing of a content-files/... file. Used to
+   *  resolve image uploads when there's no managed content_object backing
+   *  the editor. */
+  rawR2Key?: string;
 }
 
 export function MarkdownEditor({
@@ -153,6 +162,7 @@ export function MarkdownEditor({
   className,
   placeholder,
   r2KeyBase,
+  rawR2Key,
 }: MarkdownEditorProps) {
   const textareaRef = React.useRef<HTMLTextAreaElement>(null);
   const wrapperRef = React.useRef<HTMLDivElement>(null);
@@ -161,6 +171,11 @@ export function MarkdownEditor({
   const { t } = useI18n();
   const { openModal, modal: mermaidModal } = useMermaidModal();
   const fileRef = React.useRef<HTMLInputElement>(null);
+  const [dragActive, setDragActive] = React.useState(false);
+  const [uploading, setUploading] = React.useState(false);
+  const lastUploadedRef = React.useRef<{ ref: string; key: string; dataUri: string } | null>(null);
+
+  const canUpload = !!(r2KeyBase || rawR2Key);
 
   // ── Slash palette state ──────────────────────────────────────────────
   const [slashOpen, setSlashOpen] = React.useState(false);
@@ -338,24 +353,106 @@ export function MarkdownEditor({
   }
 
   // ── Image upload ──────────────────────────────────────────────────────
-  async function handleImageUpload(file: File) {
-    if (!r2KeyBase) {
-      // No R2 base — just insert a relative reference
-      insertAtCursor(`![${file.name}](images/${file.name})`);
+  //
+  // Supports three input paths:
+  //   1. The toolbar "Upload image" button (file picker).
+  //   2. Dragging image files onto the textarea.
+  //   3. Pasting an image (clipboard, screenshot, copied image) into the
+  //      textarea.
+  //
+  // All three funnel through handleImageUpload(), which:
+  //   · sanitises the filename (lowercase, hyphenated, ASCII-only)
+  //   · adds a short uniqueness suffix so re-uploads don't clobber
+  //   · computes the right R2 key for managed OR raw mode
+  //   · uploads via adminApi.uploadFile
+  //   · inserts `![alt](images/<name>)` at the cursor with the file's
+  //     base name as the alt text
+
+  async function handleImageUpload(file: File): Promise<void> {
+    if (!isImageFile(file)) {
+      toast({ title: t("admin.markdown.notAnImage"), variant: "destructive" });
       return;
     }
-    try {
-      const buf = await file.arrayBuffer();
-      const b64 = btoa(String.fromCharCode(...new Uint8Array(buf)));
-      const ct = file.type || "application/octet-stream";
-      const dataUri = `data:${ct};base64,${b64}`;
-      const key = `${r2KeyBase}/images/${file.name}`;
-      await adminApi.uploadFile(key, dataUri);
-      insertAtCursor(`![${file.name}](images/${file.name})`);
-      toast({ title: `Uploaded ${file.name}` });
-    } catch (err) {
-      toast({ title: `Upload failed: ${String(err)}`, variant: "destructive" });
+    if (!canUpload) {
+      // No R2 destination — just insert a relative reference. The user
+      // will need to upload the file out-of-band.
+      const ref = `images/${file.name}`;
+      insertAtCursor(`![${file.name}](${ref})`);
+      toast({ title: t("admin.markdown.insertedNoUpload") });
+      return;
     }
+    setUploading(true);
+    try {
+      const result = await uploadImageForEditor(file, { r2KeyBase, rawR2Key });
+      lastUploadedRef.current = result;
+      // Use the file's base name as alt text (strip extension + sanitise visually)
+      const altText = file.name.replace(/\.[^.]+$/, "").replace(/[_-]+/g, " ").trim() || "image";
+      insertAtCursor(`![${altText}](${result.ref})`);
+      toast({
+        title: t("admin.markdown.uploaded", { name: file.name }),
+        description: result.key,
+      });
+    } catch (err: any) {
+      const msg = err?.message ?? String(err);
+      toast({ title: t("admin.markdown.uploadFailed"), description: msg, variant: "destructive" });
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  async function handleImageFiles(files: File[] | FileList): Promise<void> {
+    const arr = Array.from(files);
+    if (arr.length === 0) return;
+    const images = arr.filter(isImageFile);
+    if (images.length === 0) {
+      toast({ title: t("admin.markdown.notAnImage"), variant: "destructive" });
+      return;
+    }
+    for (const f of images) {
+      await handleImageUpload(f);
+    }
+  }
+
+  function handleDrop(e: React.DragEvent) {
+    if (readOnly || preview) return;
+    if (!e.dataTransfer?.files || e.dataTransfer.files.length === 0) return;
+    // Only intercept image drops — let other drops (e.g. text) fall through
+    // to the browser default.
+    const arr = Array.from(e.dataTransfer.files);
+    if (!arr.some(isImageFile)) return;
+    e.preventDefault();
+    setDragActive(false);
+    void handleImageFiles(arr);
+  }
+
+  function handleDragOver(e: React.DragEvent) {
+    if (readOnly || preview) return;
+    if (!e.dataTransfer) return;
+    if (!Array.from(e.dataTransfer.types).includes("Files")) return;
+    e.preventDefault();
+    setDragActive(true);
+  }
+
+  function handleDragLeave(e: React.DragEvent) {
+    // Only clear when leaving the wrapper, not when moving between children.
+    if (e.currentTarget === e.target) setDragActive(false);
+  }
+
+  function handlePaste(e: React.ClipboardEvent<HTMLTextAreaElement>) {
+    if (readOnly) return;
+    const items = e.clipboardData?.items;
+    if (!items) return;
+    const images: File[] = [];
+    for (let i = 0; i < items.length; i++) {
+      const it = items[i];
+      if (it.kind === "file" && it.type.startsWith("image/")) {
+        const f = it.getAsFile();
+        if (f) images.push(f);
+      }
+    }
+    if (images.length === 0) return;
+    e.preventDefault(); // stop the browser from inserting a binary blob
+    void handleImageFiles(images);
   }
 
   // ── Mermaid chip overlay ──────────────────────────────────────────────
@@ -427,7 +524,7 @@ export function MarkdownEditor({
               </React.Fragment>
             ))}
             {/* Image upload */}
-            {r2KeyBase && (
+            {canUpload && (
               <>
                 <div className="w-px h-5 bg-border mx-1" />
                 <Tooltip>
@@ -437,9 +534,12 @@ export function MarkdownEditor({
                       variant="ghost"
                       size="iconSm"
                       onClick={() => fileRef.current?.click()}
+                      disabled={uploading}
                       className="text-muted-foreground hover:text-foreground"
                     >
-                      <ImagePlus className="size-4" />
+                      {uploading
+                        ? <Loader2 className="size-4 animate-spin" />
+                        : <ImagePlus className="size-4" />}
                     </Button>
                   </TooltipTrigger>
                   <TooltipContent side="bottom">{t("admin.markdown.uploadImage")}</TooltipContent>
@@ -479,13 +579,36 @@ export function MarkdownEditor({
                   }
                   return <code className={className} {...props}>{children}</code>;
                 },
+                // Resolve relative image refs (images/foo.png, foo.png) to
+                // URLs the admin can preview via the local R2 proxy.
+                img({ src, alt, ...props }: any) {
+                  const resolved = resolveImageForPreview(String(src ?? ""), { r2KeyBase, rawR2Key });
+                  return (
+                    <img
+                      src={resolved}
+                      alt={alt}
+                      {...props}
+                      onError={(e) => {
+                        // Hide broken images rather than showing the browser
+                        // broken-image icon — the user can still see the alt text
+                        // and the markdown source.
+                        (e.currentTarget as HTMLImageElement).style.opacity = "0.3";
+                      }}
+                    />
+                  );
+                },
               }}
             >
               {value}
             </ReactMarkdown>
           </div>
         ) : (
-          <div className="relative">
+          <div
+            className={cn("relative", dragActive && "ring-2 ring-inset ring-primary/60")}
+            onDrop={handleDrop}
+            onDragOver={handleDragOver}
+            onDragLeave={handleDragLeave}
+          >
             <textarea
               ref={textareaRef}
               value={value}
@@ -493,11 +616,21 @@ export function MarkdownEditor({
               readOnly={readOnly}
               onKeyDown={handleKeyDown}
               onKeyUp={handleKeyUp}
+              onPaste={handlePaste}
               onBlur={() => setTimeout(() => setSlashOpen(false), 100)}
               className="w-full min-h-[400px] p-4 font-mono text-sm bg-transparent resize-none focus:outline-none"
               placeholder={placeholder ?? t("admin.markdown.placeholder")}
               spellCheck={false}
             />
+            {/* Drag overlay hint */}
+            {dragActive && (
+              <div className="absolute inset-0 z-10 flex items-center justify-center bg-primary/10 border-2 border-dashed border-primary/60 rounded pointer-events-none">
+                <div className="flex flex-col items-center gap-1 text-primary">
+                  <ImagePlus className="size-6" />
+                  <span className="text-xs font-medium">{t("admin.markdown.dropToUpload")}</span>
+                </div>
+              </div>
+            )}
             {/* Mermaid chip overlays */}
             {mermaidChips.map((chip, i) => (
               <MermaidChip
@@ -512,15 +645,19 @@ export function MarkdownEditor({
           </div>
         )}
 
-        {/* Hidden file input for image uploads */}
+        {/* Hidden file input for image uploads (accepts multiple so the
+            user can pick several at once — they all get inserted at the
+            cursor in order) */}
         <input
           ref={fileRef}
           type="file"
           accept="image/*"
+          multiple
           className="hidden"
           onChange={(e) => {
-            const f = e.target.files?.[0];
-            if (f) handleImageUpload(f);
+            if (e.target.files && e.target.files.length > 0) {
+              void handleImageFiles(e.target.files);
+            }
             e.target.value = "";
           }}
         />

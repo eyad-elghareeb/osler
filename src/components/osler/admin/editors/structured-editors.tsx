@@ -26,6 +26,7 @@ import {
   FileText,
   Upload,
   Eye,
+  Loader2,
 } from "lucide-react";
 import { useI18n } from "@/components/osler/i18n-provider";
 import { haptic } from "@/lib/osler/native";
@@ -49,8 +50,12 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { MarkdownEditor } from "./markdown-editor";
-import { adminApi } from "@/components/osler/admin/admin-api";
 import { useToast } from "@/hooks/use-toast";
+import {
+  uploadImageForEditor,
+  resolveImageForPreview,
+  isImageFile,
+} from "./image-upload";
 
 // ── Shared types ───────────────────────────────────────────────────────────
 
@@ -66,6 +71,10 @@ export interface StructuredEditorProps {
    *  uploads. When provided, the ImageField component shows an "Upload" button
    *  that uploads to `<r2_key_base>/images/<name>` and inserts the reference. */
   r2KeyBase?: string;
+  /** Optional raw R2 key for in-place editing of a content-files/.../file
+   *  without a managed content_object. Used to resolve image uploads when
+   *  `r2KeyBase` is not provided. */
+  rawR2Key?: string;
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────────
@@ -274,6 +283,7 @@ function ImageListField({
   onChange,
   readOnly,
   r2KeyBase,
+  rawR2Key,
   hint,
 }: {
   label: string;
@@ -281,6 +291,7 @@ function ImageListField({
   onChange: (next: any) => void;
   readOnly?: boolean;
   r2KeyBase?: string;
+  rawR2Key?: string;
   hint?: string;
 }) {
   const { t } = useI18n();
@@ -303,29 +314,100 @@ function ImageListField({
   }
 
   const fileRef = React.useRef<HTMLInputElement>(null);
+  const [dragActive, setDragActive] = React.useState(false);
+  const [uploading, setUploading] = React.useState(false);
 
-  async function handleUpload(file: File) {
-    if (!r2KeyBase) {
+  const canUpload = !!(r2KeyBase || rawR2Key);
+
+  async function handleUpload(file: File): Promise<void> {
+    if (!isImageFile(file)) {
+      toast({ title: t("admin.markdown.notAnImage"), variant: "destructive" });
+      return;
+    }
+    if (!canUpload) {
       toast({ title: t("admin.structured.cannotUpload"), variant: "destructive" });
       return;
     }
+    setUploading(true);
     try {
-      const buf = await file.arrayBuffer();
-      const b64 = btoa(String.fromCharCode(...new Uint8Array(buf)));
-      const ct = file.type || "application/octet-stream";
-      const dataUri = `data:${ct};base64,${b64}`;
-      const key = `${r2KeyBase}/images/${file.name}`;
-      await adminApi.uploadFile(key, dataUri);
-      commit([...arr, { src: `images/${file.name}` }]);
-      toast({ title: `Uploaded ${file.name}` });
-    } catch (err) {
-      toast({ title: `Upload failed: ${String(err)}`, variant: "destructive" });
+      const result = await uploadImageForEditor(file, { r2KeyBase, rawR2Key });
+      commit([...arr, { src: result.ref, alt: file.name.replace(/\.[^.]+$/, "") }]);
+      toast({
+        title: t("admin.markdown.uploaded", { name: file.name }),
+        description: result.key,
+      });
+    } catch (err: any) {
+      toast({
+        title: t("admin.markdown.uploadFailed"),
+        description: err?.message ?? String(err),
+        variant: "destructive",
+      });
+    } finally {
+      setUploading(false);
     }
+  }
+
+  async function handleFiles(files: File[] | FileList): Promise<void> {
+    const arr2 = Array.from(files);
+    const imgs = arr2.filter(isImageFile);
+    if (imgs.length === 0) {
+      toast({ title: t("admin.markdown.notAnImage"), variant: "destructive" });
+      return;
+    }
+    for (const f of imgs) await handleUpload(f);
+  }
+
+  function handleDrop(e: React.DragEvent) {
+    if (readOnly) return;
+    if (!e.dataTransfer?.files || e.dataTransfer.files.length === 0) return;
+    const arr2 = Array.from(e.dataTransfer.files);
+    if (!arr2.some(isImageFile)) return;
+    e.preventDefault();
+    setDragActive(false);
+    void handleFiles(arr2);
+  }
+
+  function handleDragOver(e: React.DragEvent) {
+    if (readOnly) return;
+    if (!e.dataTransfer) return;
+    if (!Array.from(e.dataTransfer.types).includes("Files")) return;
+    e.preventDefault();
+    setDragActive(true);
+  }
+
+  function handleDragLeave(e: React.DragEvent) {
+    if (e.currentTarget === e.target) setDragActive(false);
+  }
+
+  function handlePaste(e: React.ClipboardEvent) {
+    if (readOnly) return;
+    const items = e.clipboardData?.items;
+    if (!items) return;
+    const imgs: File[] = [];
+    for (let i = 0; i < items.length; i++) {
+      const it = items[i];
+      if (it.kind === "file" && it.type.startsWith("image/")) {
+        const f = it.getAsFile();
+        if (f) imgs.push(f);
+      }
+    }
+    if (imgs.length === 0) return;
+    e.preventDefault();
+    void handleFiles(imgs);
   }
 
   return (
     <Field label={label} hint={hint}>
-      <div className="space-y-1.5">
+      <div
+        className={cn(
+          "space-y-1.5 relative rounded transition-colors",
+          dragActive && "ring-2 ring-inset ring-primary/60 bg-primary/5",
+        )}
+        onDrop={handleDrop}
+        onDragOver={handleDragOver}
+        onDragLeave={handleDragLeave}
+        onPaste={handlePaste}
+      >
         {arr.map((img, i) => (
           <div key={i} className="grid grid-cols-[1fr_1fr_1fr_auto] gap-1.5 items-start">
             <Input
@@ -362,45 +444,66 @@ function ImageListField({
             {img.src && (
               <div className="col-span-4 -mt-1 mb-1">
                 <img
-                  src={img.src.startsWith("http") || img.src.startsWith("/") || img.src.startsWith("data:")
-                    ? img.src
-                    : img.src}
+                  src={resolveImageForPreview(img.src, { r2KeyBase, rawR2Key })}
                   alt={img.alt ?? ""}
                   className="h-12 rounded border border-border"
-                  onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+                  onError={(e) => {
+                    // Don't hide the whole <img> — show a muted fallback
+                    // rectangle so the user can still see something is there.
+                    const el = e.currentTarget as HTMLImageElement;
+                    el.style.opacity = "0.3";
+                    el.style.background = "oklch(0.92 0 0)";
+                  }}
                 />
               </div>
             )}
           </div>
         ))}
         {!readOnly && (
-          <div className="flex gap-1.5">
+          <div className="flex gap-1.5 flex-wrap items-center">
             <Button size="sm" variant="ghost" onClick={() => commit([...arr, { src: "" }])} className="text-xs">
-              <Plus className="size-3 me-1" /> Add image
+              <Plus className="size-3 me-1" /> {t("admin.structured.addImage")}
             </Button>
-            {r2KeyBase && (
+            {canUpload && (
               <>
                 <Button
                   size="sm"
                   variant="ghost"
                   onClick={() => fileRef.current?.click()}
+                  disabled={uploading}
                   className="text-xs"
                 >
-                  <ImagePlus className="size-3 me-1" /> Upload image
+                  {uploading
+                    ? <Loader2 className="size-3 me-1 animate-spin" />
+                    : <ImagePlus className="size-3 me-1" />}
+                  {t("admin.structured.uploadImage")}
                 </Button>
+                <span className="text-[11px] text-muted-foreground">
+                  {t("admin.structured.dropOrPasteHint")}
+                </span>
                 <input
                   ref={fileRef}
                   type="file"
                   accept="image/*"
+                  multiple
                   className="hidden"
                   onChange={(e) => {
-                    const f = e.target.files?.[0];
-                    if (f) handleUpload(f);
+                    if (e.target.files && e.target.files.length > 0) {
+                      void handleFiles(e.target.files);
+                    }
                     e.target.value = "";
                   }}
                 />
               </>
             )}
+          </div>
+        )}
+        {dragActive && (
+          <div className="absolute inset-0 z-10 flex items-center justify-center bg-primary/10 border-2 border-dashed border-primary/60 rounded pointer-events-none">
+            <div className="flex flex-col items-center gap-1 text-primary">
+              <ImagePlus className="size-5" />
+              <span className="text-[11px] font-medium">{t("admin.markdown.dropToUpload")}</span>
+            </div>
           </div>
         )}
       </div>
@@ -471,11 +574,11 @@ function StringListField({
 //                   choiceImages[], explanationImages, tags[], difficulty }] }
 // Also handles bank-style passages: { passages: [{ id, content, questions: [...] }] }
 
-export function QuizEditor({ value, onChange, readOnly, r2KeyBase }: StructuredEditorProps) {
+export function QuizEditor({ value, onChange, readOnly, r2KeyBase, rawR2Key }: StructuredEditorProps) {
   const { t } = useI18n();
 
   if (Array.isArray(value?.passages)) {
-    return <PassagesEditor value={value} onChange={onChange} readOnly={readOnly} r2KeyBase={r2KeyBase} />;
+    return <PassagesEditor value={value} onChange={onChange} readOnly={readOnly} r2KeyBase={r2KeyBase} rawR2Key={rawR2Key} />;
   }
 
   const questions: any[] = Array.isArray(value?.questions) ? value.questions : [];
@@ -565,6 +668,7 @@ export function QuizEditor({ value, onChange, readOnly, r2KeyBase }: StructuredE
               onChange={(v) => patchQuestion(i, { images: v })}
               readOnly={readOnly}
               r2KeyBase={r2KeyBase}
+              rawR2Key={rawR2Key}
               hint="Reference as ecg.png or images/ecg.png"
             />
             <ChoiceImagesEditor
@@ -573,6 +677,7 @@ export function QuizEditor({ value, onChange, readOnly, r2KeyBase }: StructuredE
               onChange={(v) => patchQuestion(i, { choiceImages: v })}
               readOnly={readOnly}
               r2KeyBase={r2KeyBase}
+              rawR2Key={rawR2Key}
             />
             <ImageListField
               label="Explanation image(s)"
@@ -580,6 +685,7 @@ export function QuizEditor({ value, onChange, readOnly, r2KeyBase }: StructuredE
               onChange={(v) => patchQuestion(i, { explanationImages: v })}
               readOnly={readOnly}
               r2KeyBase={r2KeyBase}
+              rawR2Key={rawR2Key}
             />
             <TagListField
               label="Tags"
@@ -692,12 +798,14 @@ function ChoiceImagesEditor({
   onChange,
   readOnly,
   r2KeyBase,
+  rawR2Key,
 }: {
   choices: any[];
   choiceImages: any[] | undefined;
   onChange: (next: any[]) => void;
   readOnly?: boolean;
   r2KeyBase?: string;
+  rawR2Key?: string;
 }) {
   // Always pad to choices.length
   const arr = React.useMemo(() => {
@@ -722,6 +830,7 @@ function ChoiceImagesEditor({
               }}
               readOnly={readOnly}
               r2KeyBase={r2KeyBase}
+              rawR2Key={rawR2Key}
             />
           </div>
         ))}
@@ -732,7 +841,7 @@ function ChoiceImagesEditor({
 
 // ── Passages editor (quiz mode + bank mode) ────────────────────────────────
 
-function PassagesEditor({ value, onChange, readOnly, r2KeyBase }: StructuredEditorProps) {
+function PassagesEditor({ value, onChange, readOnly, r2KeyBase, rawR2Key }: StructuredEditorProps) {
   const passages: any[] = Array.isArray(value?.passages) ? value.passages : [];
 
   function update(next: any[]) {
@@ -793,6 +902,7 @@ function PassagesEditor({ value, onChange, readOnly, r2KeyBase }: StructuredEdit
               onChange={(v) => patchPassage(i, { questions: v.questions })}
               readOnly={readOnly}
               r2KeyBase={r2KeyBase}
+              rawR2Key={rawR2Key}
             />
           </Field>
         </ItemRow>
@@ -803,10 +913,10 @@ function PassagesEditor({ value, onChange, readOnly, r2KeyBase }: StructuredEdit
 
 // ── Flashcard editor (basic + cloze + subdecks) ────────────────────────────
 
-export function FlashcardEditor({ value, onChange, readOnly, r2KeyBase }: StructuredEditorProps) {
+export function FlashcardEditor({ value, onChange, readOnly, r2KeyBase, rawR2Key }: StructuredEditorProps) {
   const { t } = useI18n();
   if (Array.isArray(value?.decks)) {
-    return <SubdecksEditor value={value} onChange={onChange} readOnly={readOnly} r2KeyBase={r2KeyBase} />;
+    return <SubdecksEditor value={value} onChange={onChange} readOnly={readOnly} r2KeyBase={r2KeyBase} rawR2Key={rawR2Key} />;
   }
 
   if (value?.front != null || value?.back != null) {
@@ -1000,6 +1110,7 @@ export function FlashcardEditor({ value, onChange, readOnly, r2KeyBase }: Struct
                 onChange={(v) => patchCard(i, { image: v })}
                 readOnly={readOnly}
                 r2KeyBase={r2KeyBase}
+                rawR2Key={rawR2Key}
               />
               <ImageListField
                 label="Image (back)"
@@ -1007,6 +1118,7 @@ export function FlashcardEditor({ value, onChange, readOnly, r2KeyBase }: Struct
                 onChange={(v) => patchCard(i, { backImage: v })}
                 readOnly={readOnly}
                 r2KeyBase={r2KeyBase}
+                rawR2Key={rawR2Key}
               />
               <Field label="Audio">
                 <Input
@@ -1049,7 +1161,7 @@ export function FlashcardEditor({ value, onChange, readOnly, r2KeyBase }: Struct
   );
 }
 
-function SubdecksEditor({ value, onChange, readOnly, r2KeyBase }: StructuredEditorProps) {
+function SubdecksEditor({ value, onChange, readOnly, r2KeyBase, rawR2Key }: StructuredEditorProps) {
   const { t } = useI18n();
   const decks: any[] = Array.isArray(value?.decks) ? value.decks : [];
   function update(next: any[]) {
@@ -1098,6 +1210,7 @@ function SubdecksEditor({ value, onChange, readOnly, r2KeyBase }: StructuredEdit
               onChange={(v) => patchDeck(i, { cards: v.cards })}
               readOnly={readOnly}
               r2KeyBase={r2KeyBase}
+              rawR2Key={rawR2Key}
             />
           </Field>
         </ItemRow>
@@ -1108,7 +1221,7 @@ function SubdecksEditor({ value, onChange, readOnly, r2KeyBase }: StructuredEdit
 
 // ── OSCE editor (full schema: patient, hiddenProfile, rubric, questions) ───
 
-export function OsceEditor({ value, onChange, readOnly, r2KeyBase }: StructuredEditorProps) {
+export function OsceEditor({ value, onChange, readOnly, r2KeyBase, rawR2Key }: StructuredEditorProps) {
   const { t } = useI18n();
   const stations: any[] = Array.isArray(value?.stations) ? value.stations : [];
 
@@ -1460,7 +1573,7 @@ function youTubeThumb(id: string): string {
   return id ? `https://i.ytimg.com/vi/${id}/hqdefault.jpg` : "";
 }
 
-export function VideoEditor({ value, onChange, readOnly, r2KeyBase }: StructuredEditorProps) {
+export function VideoEditor({ value, onChange, readOnly, r2KeyBase, rawR2Key }: StructuredEditorProps) {
   const { t } = useI18n();
   const videos: any[] = Array.isArray(value?.videos) ? value.videos : [];
 
@@ -1764,7 +1877,7 @@ function ChaptersEditor({
 
 // ── Written editor (with children) ─────────────────────────────────────────
 
-export function WrittenEditor({ value, onChange, readOnly, r2KeyBase }: StructuredEditorProps) {
+export function WrittenEditor({ value, onChange, readOnly, r2KeyBase, rawR2Key }: StructuredEditorProps) {
   const { t } = useI18n();
   const prompts: any[] = Array.isArray(value?.prompts) ? value.prompts : [];
 
@@ -1968,15 +2081,15 @@ function WrittenChildrenEditor({
 
 // ── Bank editor (alias for PassagesEditor shape) ───────────────────────────
 
-export function BankEditor({ value, onChange, readOnly, r2KeyBase }: StructuredEditorProps) {
+export function BankEditor({ value, onChange, readOnly, r2KeyBase, rawR2Key }: StructuredEditorProps) {
   return (
-    <PassagesEditor value={value} onChange={onChange} readOnly={readOnly} r2KeyBase={r2KeyBase} />
+    <PassagesEditor value={value} onChange={onChange} readOnly={readOnly} r2KeyBase={r2KeyBase} rawR2Key={rawR2Key} />
   );
 }
 
 // ── Library / article editor (markdown) ────────────────────────────────────
 
-export function LibraryArticleEditor({ value, onChange, readOnly, r2KeyBase }: StructuredEditorProps) {
+export function LibraryArticleEditor({ value, onChange, readOnly, r2KeyBase, rawR2Key }: StructuredEditorProps) {
   const { t } = useI18n();
   const { toast } = useToast();
 
@@ -2123,6 +2236,7 @@ export function LibraryArticleEditor({ value, onChange, readOnly, r2KeyBase }: S
             onChange={(next) => update(next, "md")}
             readOnly={readOnly}
             r2KeyBase={r2KeyBase}
+            rawR2Key={rawR2Key}
             placeholder="# Article title\n\nWrite your article in **Markdown**…"
             className="flex-1 min-h-[400px]"
           />

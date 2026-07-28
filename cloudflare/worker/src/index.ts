@@ -730,12 +730,78 @@ async function hybridPublish(env: Env, obj: any, body: string, targetPath?: stri
   const r2Key = `content-files/${category}/${fileSegment}`;
   const ct = obj.content_type === "library" ? "text/markdown" : "application/json";
   await env.CONTENT.put(r2Key, body, { httpMetadata: { contentType: ct } });
+
+  const hybridKeys: string[] = [r2Key];
+
+  // ── Copy images (and any other asset files) from the draft's `images/`
+  //    folder to the published location so they're reachable from the
+  //    student-facing article/quiz. The student-side resolver looks them up
+  //    at `<publishedDir>/images/<name>` (see src/lib/osler/articles.ts and
+  //    src/lib/osler/richtext.ts). Drafts keep their images at
+  //    `<r2_key_base>/images/<name>`, so we list those and copy each one to
+  //    `content-files/<category>/<publishedDir>images/<name>`. We don't
+  //    delete the draft copies — they're needed for re-publishing.
+  try {
+    const publishedDir = fileSegment.includes("/")
+      ? fileSegment.slice(0, fileSegment.lastIndexOf("/") + 1)
+      : "";
+    const draftImagePrefix = `${obj.r2_key_base}/images/`;
+    const publishedImagePrefix = `content-files/${category}/${publishedDir}images/`;
+    // list() returns up to 1000 keys per page — we cap at 5000 to avoid a
+    // pathological hot loop. Real content objects rarely have >50 images.
+    let cursor: string | undefined = undefined;
+    for (let page = 0; page < 5; page++) {
+      const listed: any = await env.CONTENT.list({ prefix: draftImagePrefix, limit: 1000, cursor });
+      const objects: any[] = listed.objects || [];
+      for (const item of objects) {
+        const rel = String(item.key).slice(draftImagePrefix.length);
+        if (!rel || rel.endsWith("/")) continue; // skip folder placeholders
+        const dstKey = publishedImagePrefix + rel;
+        const src = await env.CONTENT.get(item.key);
+        if (!src) continue;
+        const buf = await src.arrayBuffer();
+        const imgCt = guessImageContentType(rel);
+        await env.CONTENT.put(dstKey, buf, { httpMetadata: { contentType: imgCt } });
+        hybridKeys.push(dstKey);
+      }
+      if (!listed.truncated) break;
+      cursor = listed.cursor;
+    }
+  } catch (e) {
+    // Image copy is best-effort — don't fail the publish if it errors.
+    console.error("image copy failed:", e);
+  }
+
   try {
     await regenerateManifestForCategory(env, category);
   } catch (e) {
     console.error("manifest regen failed:", e);
   }
-  return [r2Key];
+  return hybridKeys;
+}
+
+/** Map a file extension to a Content-Type for binary assets uploaded via
+ *  the admin API. Used by hybridPublish() when copying draft images to the
+ *  published keyspace. Mirrors the table in /v1/admin/content/upload-file. */
+function guessImageContentType(filename: string): string {
+  const ext = (filename.split(".").pop() ?? "").toLowerCase();
+  switch (ext) {
+    case "json": return "application/json";
+    case "md": return "text/markdown; charset=utf-8";
+    case "html":
+    case "htm": return "text/html; charset=utf-8";
+    case "svg": return "image/svg+xml";
+    case "png": return "image/png";
+    case "jpg":
+    case "jpeg": return "image/jpeg";
+    case "gif": return "image/gif";
+    case "webp": return "image/webp";
+    case "avif": return "image/avif";
+    case "bmp": return "image/bmp";
+    case "ico": return "image/x-icon";
+    case "pdf": return "application/pdf";
+    default: return "application/octet-stream";
+  }
 }
 
 const ASSET_FOLDERS = new Set(["images", "assets"]);

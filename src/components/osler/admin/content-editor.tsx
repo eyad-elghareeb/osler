@@ -67,6 +67,7 @@ import {
   WrittenEditor,
   BankEditor,
 } from "@/components/osler/admin/editors/structured-editors";
+import { resolveImageForPreview } from "@/components/osler/admin/editors/image-upload";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
@@ -106,6 +107,10 @@ export function ContentEditor({ id, rawR2Key, capabilities }: ContentEditorProps
   const [deleteOpen, setDeleteOpen] = React.useState(false);
   const [publishOpen, setPublishOpen] = React.useState(false);
   const [publishTargetPath, setPublishTargetPath] = React.useState("");
+  // Unsaved-changes-on-back confirmation — replaces the old `confirm()` so
+  // the prompt is a proper modal (dismissible, focus-trapped, keyboard-
+  // accessible) rather than a blocking native dialog.
+  const [unsavedBackOpen, setUnsavedBackOpen] = React.useState(false);
   const [validating, setValidating] = React.useState(false);
   const [validationErrors, setValidationErrors] = React.useState<string[] | null>(null);
   const [showValidation, setShowValidation] = React.useState(false);
@@ -406,7 +411,12 @@ export function ContentEditor({ id, rawR2Key, capabilities }: ContentEditorProps
       {/* Top bar */}
       <div className="flex h-12 shrink-0 items-center gap-2 border-b border-border bg-card/60 px-3 sm:px-4 backdrop-blur-md safe-pt">
         <Button variant="ghost" size="iconSm" onClick={() => {
-          if (dirty && !confirm(t("admin.content.editor.unsavedConfirm"))) return;
+          if (dirty) {
+            // Defer the navigation to the confirmation modal so the user
+            // can still change their mind after seeing the prompt.
+            setUnsavedBackOpen(true);
+            return;
+          }
           router.back();
         }}>
           <ArrowLeft className="size-4" />
@@ -704,7 +714,8 @@ export function ContentEditor({ id, rawR2Key, capabilities }: ContentEditorProps
                   value={body}
                   onChange={handleFormChange}
                   readOnly={isPending}
-                  r2KeyBase={isRawMode ? rawR2Key : obj?.r2_key_base}
+                  r2KeyBase={isRawMode ? undefined : obj?.r2_key_base}
+                  rawR2Key={isRawMode ? rawR2Key : undefined}
                 />
               ) : parseError ? (
                 <div className="flex flex-col items-center justify-center h-full text-center p-6">
@@ -724,7 +735,8 @@ export function ContentEditor({ id, rawR2Key, capabilities }: ContentEditorProps
                   parsed={parsed}
                   onChange={handleFormChange}
                   readOnly={isPending}
-                  r2KeyBase={obj?.r2_key_base ?? rawR2Key}
+                  r2KeyBase={isRawMode ? undefined : obj?.r2_key_base}
+                  rawR2Key={isRawMode ? rawR2Key : undefined}
                 />
               )}
             </div>
@@ -741,6 +753,28 @@ export function ContentEditor({ id, rawR2Key, capabilities }: ContentEditorProps
                         return <MermaidPreviewBlock code={text} />;
                       }
                       return <code className={className} {...props}>{children}</code>;
+                    },
+                    img({ src, alt, ...props }: any) {
+                      // Resolve relative image refs to admin-previewable URLs
+                      // so the user can see their uploaded images inline
+                      // without leaving the editor.
+                      const resolved = resolveImageForPreview(
+                        String(src ?? ""),
+                        {
+                          r2KeyBase: isRawMode ? undefined : obj?.r2_key_base,
+                          rawR2Key: isRawMode ? rawR2Key : undefined,
+                        },
+                      );
+                      return (
+                        <img
+                          src={resolved}
+                          alt={alt}
+                          {...props}
+                          onError={(e) => {
+                            (e.currentTarget as HTMLImageElement).style.opacity = "0.3";
+                          }}
+                        />
+                      );
                     },
                   }}
                 >
@@ -825,6 +859,35 @@ export function ContentEditor({ id, rawR2Key, capabilities }: ContentEditorProps
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Unsaved-changes-on-back confirmation — replaces the old
+          `confirm()` so the prompt is a proper modal that supports
+          backdrop-dismiss, Esc-to-cancel, and tab-trapped focus. */}
+      <AlertDialog open={unsavedBackOpen} onOpenChange={setUnsavedBackOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{t("admin.content.editor.unsavedTitle")}</AlertDialogTitle>
+            <AlertDialogDescription>
+              {t("admin.content.editor.unsavedConfirm")}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>{t("common.cancel")}</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                setUnsavedBackOpen(false);
+                // Mark as not-dirty so the beforeunload guard doesn't
+                // re-prompt on the way out.
+                setDirty(false);
+                router.back();
+              }}
+              className="bg-destructive text-white hover:bg-destructive/90"
+            >
+              {t("admin.content.editor.unsavedDiscard")}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
@@ -963,33 +1026,35 @@ function FormEditorSwitch({
   onChange,
   readOnly,
   r2KeyBase,
+  rawR2Key,
 }: {
   contentType: ContentType;
   parsed: any;
   onChange: (next: any) => void;
   readOnly?: boolean;
   r2KeyBase?: string;
+  rawR2Key?: string;
 }) {
   const { t } = useI18n();
   if (Array.isArray(parsed?.stations)) {
-    return <OsceEditor value={parsed} onChange={onChange} readOnly={readOnly} r2KeyBase={r2KeyBase} />;
+    return <OsceEditor value={parsed} onChange={onChange} readOnly={readOnly} r2KeyBase={r2KeyBase} rawR2Key={rawR2Key} />;
   }
   if (Array.isArray(parsed?.videos)) {
-    return <VideoEditor value={parsed} onChange={onChange} readOnly={readOnly} r2KeyBase={r2KeyBase} />;
+    return <VideoEditor value={parsed} onChange={onChange} readOnly={readOnly} r2KeyBase={r2KeyBase} rawR2Key={rawR2Key} />;
   }
   if (Array.isArray(parsed?.cards) || Array.isArray(parsed?.decks) || Array.isArray(parsed?.subdecks) || parsed?.front != null) {
-    return <FlashcardEditor value={parsed} onChange={onChange} readOnly={readOnly} r2KeyBase={r2KeyBase} />;
+    return <FlashcardEditor value={parsed} onChange={onChange} readOnly={readOnly} r2KeyBase={r2KeyBase} rawR2Key={rawR2Key} />;
   }
   if (Array.isArray(parsed?.passages)) {
     // Distinguish bank vs quiz-by-passages: bank passages have `content`,
     // quiz passages have `stem`. We pass to BankEditor which handles both.
-    return <BankEditor value={parsed} onChange={onChange} readOnly={readOnly} r2KeyBase={r2KeyBase} />;
+    return <BankEditor value={parsed} onChange={onChange} readOnly={readOnly} r2KeyBase={r2KeyBase} rawR2Key={rawR2Key} />;
   }
   if (Array.isArray(parsed?.prompts)) {
-    return <WrittenEditor value={parsed} onChange={onChange} readOnly={readOnly} r2KeyBase={r2KeyBase} />;
+    return <WrittenEditor value={parsed} onChange={onChange} readOnly={readOnly} r2KeyBase={r2KeyBase} rawR2Key={rawR2Key} />;
   }
   if (Array.isArray(parsed?.questions)) {
-    return <QuizEditor value={parsed} onChange={onChange} readOnly={readOnly} r2KeyBase={r2KeyBase} />;
+    return <QuizEditor value={parsed} onChange={onChange} readOnly={readOnly} r2KeyBase={r2KeyBase} rawR2Key={rawR2Key} />;
   }
   return (
     <div className="flex flex-col items-center justify-center h-full text-center p-6">

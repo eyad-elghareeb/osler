@@ -30,6 +30,16 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
   ContextMenu,
   ContextMenuContent,
   ContextMenuItem,
@@ -117,6 +127,11 @@ export function ContentBrowser({ capabilities }: ContentBrowserProps) {
   const [renameOpen, setRenameOpen] = React.useState(false);
   const [adopting, setAdopting] = React.useState(false);
   const [regenerating, setRegenerating] = React.useState(false);
+
+  // Delete-R2-key confirmation modal — replaces the old `confirm()` prompt
+  // for a more native, dismissible experience.
+  const [deleteR2Open, setDeleteR2Open] = React.useState(false);
+  const [deleteR2Node, setDeleteR2Node] = React.useState<ContentTreeNode | null>(null);
 
   // Shared by the new-file/new-folder/rename dialogs
   const [dialogPath, setDialogPath] = React.useState("");
@@ -319,13 +334,25 @@ export function ContentBrowser({ capabilities }: ContentBrowserProps) {
   async function deleteR2Key(node: ContentTreeNode) {
     if (!capabilities.manageUsers) return;
     if (!node.r2Key) return;
-    if (!confirm(t("admin.content.confirmDeleteR2", { key: node.r2Key }))) return;
+    // Open a native-styled AlertDialog instead of the blocking confirm()
+    // so the user can dismiss by clicking the backdrop, pressing Esc, or
+    // tapping Cancel — none of which work with the native browser confirm.
+    setDeleteR2Node(node);
+    setDeleteR2Open(true);
+  }
+
+  async function confirmDeleteR2Key() {
+    const node = deleteR2Node;
+    if (!node?.r2Key) return;
     try {
       await adminApi.deleteR2Key(node.r2Key);
       toast({ title: t("admin.toast.deleted", { name: node.name }) });
       loadUnified();
     } catch (err) {
       toast({ title: t("admin.toast.deleteFailedR2", { error: String(err) }), variant: "destructive" });
+    } finally {
+      setDeleteR2Open(false);
+      setDeleteR2Node(null);
     }
   }
 
@@ -626,6 +653,34 @@ export function ContentBrowser({ capabilities }: ContentBrowserProps) {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Delete R2 key confirmation — replaces the old `confirm()` prompt.
+          Native-styled AlertDialog: dismissible, focus-trapped, keyboard-
+          accessible (Esc to cancel, Enter to confirm). */}
+      <AlertDialog open={deleteR2Open} onOpenChange={setDeleteR2Open}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{t("admin.content.deleteR2Title")}</AlertDialogTitle>
+            <AlertDialogDescription>
+              {t("admin.content.confirmDeleteR2", { key: deleteR2Node?.r2Key ?? "" })}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel
+              onClick={() => { setDeleteR2Open(false); setDeleteR2Node(null); }}
+            >
+              {t("common.cancel")}
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={confirmDeleteR2Key}
+              className="bg-destructive text-white hover:bg-destructive/90"
+            >
+              <Trash2 className="size-3.5 me-1.5" />
+              {t("admin.content.delete")}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
