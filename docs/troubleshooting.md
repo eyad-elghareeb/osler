@@ -329,7 +329,7 @@ cd cloudflare/worker && npm run tail
 
 **Diagnose.** Check whether the user is behind a NAT/VPN with many others. Universities and corporate Wi-Fi often share one public IP.
 
-**Fix.** If the limit is genuinely too low for your audience, edit `RATE_LIMIT_MAX` in `cloudflare/worker/src/index.mjs` and redeploy. For harder guarantees, add a Cloudflare Rate Limiting Rule in the dashboard (it runs before the Worker).
+**Fix.** If the limit is genuinely too low for your audience, edit `RATE_LIMIT_MAX` in `cloudflare/worker/src/index.ts` and redeploy. For harder guarantees, add a Cloudflare Rate Limiting Rule in the dashboard (it runs before the Worker).
 
 ### 2.10 `scheduled` handler never runs
 
@@ -644,7 +644,7 @@ npx wrangler d1 execute osler-cloud --remote --command "SELECT action, COUNT(*) 
 npx wrangler d1 execute osler-cloud --remote --command "SELECT MIN(created_at), MAX(created_at) FROM admin_audit;"
 ```
 
-**Fix.** If `COUNT(*) = 0` and you're sure admins have done mutations, check the `auditLog()` calls in `src/index.mjs` — a custom fork may have removed them. If rows exist but the UI shows none, the filter parameter may be wrong (`/admin/audit?action=...`).
+**Fix.** If `COUNT(*) = 0` and you're sure admins have done mutations, check the `auditLog()` calls in `src/index.ts` — a custom fork may have removed them. If rows exist but the UI shows none, the filter parameter may be wrong (`/admin/audit?action=...`).
 
 ### 5.6 Admin can't demote or delete themselves
 

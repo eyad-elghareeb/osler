@@ -161,7 +161,7 @@ You must **also** publish the corresponding site key in `osler.config.json` → 
 | **Example** | `RESEND_API_KEY=re_abc123...` |
 | **Where to set** | **Secret**: `npx wrangler secret put RESEND_API_KEY`, or `.dev.vars` for local dev. |
 
-> **Resend free tier:** 100 emails/day, 3000/month. Adequate for password resets at a small school. For higher volume, upgrade or swap in a different provider (you'll need to fork the Worker — see `sendResetEmail()` in `src/index.mjs`).
+> **Resend free tier:** 100 emails/day, 3000/month. Adequate for password resets at a small school. For higher volume, upgrade or swap in a different provider (you'll need to fork the Worker — see `sendResetEmail()` in `src/index.ts`).
 
 #### 2.2.4 `EMAIL_FROM`
 
@@ -535,7 +535,7 @@ The full template:
 
 ```toml
 name = "osler-cloud"
-main = "src/index.mjs"
+main = "src/index.ts"
 compatibility_date = "2026-07-23"
 workers_dev = true
 
@@ -563,7 +563,7 @@ WORKER_URL = "http://localhost:8787"
 | Field | Default | Description |
 | --- | --- | --- |
 | `name` | `"osler-cloud"` | Worker name. Determines the default URL (`https://osler-cloud.<your-subdomain>.workers.dev`). |
-| `main` | `"src/index.mjs"` | Entry point. Must export `default { fetch, scheduled }`. |
+| `main` | `"src/index.ts"` | Entry point. Must export `default { fetch, scheduled }`. |
 | `compatibility_date` | `"2026-07-23"` | Workers runtime compatibility date. Pin to the date the Worker was last tested against — newer dates enable newer APIs but may change behavior. |
 | `workers_dev` | `true` | Whether the `*.workers.dev` subdomain URL is enabled. Set to `false` if you only want to expose the Worker via a custom route. |
 
@@ -656,7 +656,7 @@ Deploy with `--env production` or `--env staging`. Note that **secrets are not e
 
 ## 6. Hardcoded constants in the Worker
 
-These constants live in `cloudflare/worker/src/index.mjs` and are **not** configurable via env vars or `wrangler.toml`. To change them, fork the Worker and redeploy.
+These constants live in `cloudflare/worker/src/index.ts` and are **not** configurable via env vars or `wrangler.toml`. To change them, fork the Worker and redeploy.
 
 ### 6.1 Password hashing
 
@@ -709,7 +709,7 @@ When any limit is exceeded, the Worker returns `429 Too Many Requests` with `Cac
 
 ### 6.6 Security headers
 
-The Worker sets the following security headers on every JSON response (see `SECURITY_HEADERS` in `src/index.mjs`):
+The Worker sets the following security headers on every JSON response (see `SECURITY_HEADERS` in `src/index.ts`):
 
 | Header | Value |
 | --- | --- |
@@ -908,7 +908,7 @@ A mismatch produces CORS errors (see [`troubleshooting.md` §2.4](./troubleshoot
 
 ## 9. Validation rules
 
-The Worker enforces several validation rules on user input. These are hardcoded in `src/index.mjs` and apply to **every** code path that touches the relevant field (registration, login, password change, password reset, admin reset).
+The Worker enforces several validation rules on user input. These are hardcoded in `src/index.ts` and apply to **every** code path that touches the relevant field (registration, login, password change, password reset, admin reset).
 
 ### 9.1 Username
 
@@ -964,7 +964,7 @@ function validPassword(value) {
 | Character classes required | **At least 2** of: lowercase (`a-z`), uppercase (`A-Z`), digit (`0-9`), symbol (anything else) |
 | Applied to | Registration, password change, password reset, admin-initiated reset |
 
-> **Note:** The inline comment in `src/index.mjs` mentions "3 character classes" but the actual code enforces `>= 2`. The public docs (and this guide) describe the actual behavior: **2 of 4 classes**.
+> **Note:** The inline comment in `src/index.ts` mentions "3 character classes" but the actual code enforces `>= 2`. The public docs (and this guide) describe the actual behavior: **2 of 4 classes**.
 
 Examples:
 - ✅ `correctHorse9` (lowercase + uppercase + digit = 3 classes)
@@ -1112,4 +1112,4 @@ Any check failing returns `400 invalid_token` and consumes the single-use state 
 
 ---
 
-> **Found an omission?** This document is hand-maintained against `cloudflare/worker/src/index.mjs`, `src/lib/osler/config.ts`, `cloudflare/worker/wrangler.toml`, and the various `.env.example` files. If you add a new env var or config field, update both the code and this doc. Open a PR at <https://github.com/eyad-elghareeb/osler>.
+> **Found an omission?** This document is hand-maintained against `cloudflare/worker/src/index.ts`, `src/lib/osler/config.ts`, `cloudflare/worker/wrangler.toml`, and the various `.env.example` files. If you add a new env var or config field, update both the code and this doc. Open a PR at <https://github.com/eyad-elghareeb/osler>.

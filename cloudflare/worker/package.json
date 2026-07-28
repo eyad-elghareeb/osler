@@ -10,6 +10,7 @@
     "db:list": "wrangler d1 migrations list osler-cloud",
     "tail": "wrangler tail",
     "secret:list": "wrangler secret list",
+    "seed-admin": "npx tsx seed-admin.ts",
     "test": "vitest run",
     "test:watch": "vitest"
   },

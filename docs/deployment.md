@@ -190,7 +190,7 @@ You should see `users`, `sessions`, `oauth_states`, `reset_tokens`, `admin_audit
 
 ```toml
 name = "osler-cloud"
-main = "src/index.mjs"
+main = "src/index.ts"
 compatibility_date = "2024-11-01"
 
 [vars]
@@ -337,7 +337,7 @@ npm run deploy
 >
 > - Use the production URL for testing the cloud backend
 > - Set up a separate preview Worker per branch with its own `ALLOWED_ORIGIN`
-> - Add a comma-separated allow-list by editing the Worker's CORS handler in `src/index.mjs`
+> - Add a comma-separated allow-list by editing the Worker's CORS handler in `src/index.ts`
 
 ### Step 5: Smoke-test
 

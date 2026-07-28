@@ -239,7 +239,7 @@ osler/
 │   └── manifest.webmanifest
 ├── cloudflare/
 │   └── worker/                   ← Cloudflare Worker backend (D1 + R2)
-│       ├── src/index.mjs         ← Worker entry: routes, auth, admin endpoints
+│       ├── src/index.ts         ← Worker entry: routes, auth, admin endpoints
 │       ├── migrations/           ← D1 SQL migrations (forward-only, never edit existing)
 │       ├── wrangler.toml         ← Cloudflare config
 │       └── package.json
@@ -1006,7 +1006,7 @@ If you do speak Arabic, please consider helping review `Needs Arabic review` PRs
 
 ## 10. Adding new admin endpoints
 
-The Osler admin panel lives at `/admin` and is served from the Cloudflare Worker (`cloudflare/worker/src/index.mjs`). All admin endpoints require (a) authentication, (b) admin role check, (c) rate limiting, and (d) an audit log entry.
+The Osler admin panel lives at `/admin` and is served from the Cloudflare Worker (`cloudflare/worker/src/index.ts`). All admin endpoints require (a) authentication, (b) admin role check, (c) rate limiting, and (d) an audit log entry.
 
 ### Worker pattern — 4 layers
 
@@ -1015,7 +1015,7 @@ Every new admin endpoint must implement all four layers. Skipping any of them is
 #### Layer 1: Rate limit
 
 ```js
-// cloudflare/worker/src/index.mjs
+// cloudflare/worker/src/index.ts
 import { rateLimit } from "./rate-limit.js";
 
 export async function handleAdminDeleteUser(request, env, ctx, userId) {
@@ -1067,7 +1067,7 @@ return json({ deleted: userId });
 ### Full example: admin endpoint that updates a content pack's R2 object
 
 ```js
-// cloudflare/worker/src/index.mjs
+// cloudflare/worker/src/index.ts
 
 export async function handleAdminContentPublish(request, env, ctx) {
   // 1. Auth

@@ -1,8 +1,8 @@
 # Osler Cloud Worker — API Reference
 
-This is the complete HTTP API reference for the Osler Cloud Worker backend (`cloudflare/worker/src/index.mjs`). Osler is a local-first medical study platform (QBank, flashcards, OSCE practice, written-question practice, library, videos) with an optional Cloudflare Worker account backend supporting email/password and Google Sign-In, cross-device progress sync, role-based admin, and an R2-backed content workflow.
+This is the complete HTTP API reference for the Osler Cloud Worker backend (`cloudflare/worker/src/index.ts`). Osler is a local-first medical study platform (QBank, flashcards, OSCE practice, written-question practice, library, videos) with an optional Cloudflare Worker account backend supporting email/password and Google Sign-In, cross-device progress sync, role-based admin, and an R2-backed content workflow.
 
-> **Source:** `cloudflare/worker/src/index.mjs`
+> **Source:** `cloudflare/worker/src/index.ts`
 > **Related guides:** [`cloudflare-backend.md`](./cloudflare-backend.md) · [`hosting.md`](./hosting.md) · [`security.md`](./security.md) · [`environment.md`](./environment.md)
 
 ---
@@ -2989,6 +2989,6 @@ If a user reports "my progress was lost", the most common cause is that they had
 
 | Date | Change |
 | --- | --- |
-| Initial | API reference extracted from `cloudflare/worker/src/index.mjs`. Covers all 39 public, authenticated, sync, and admin endpoints. |
+| Initial | API reference extracted from `cloudflare/worker/src/index.ts`. Covers all 39 public, authenticated, sync, and admin endpoints. |
 
 For the changelog of the Worker itself, see [`../CHANGELOG.md`](../CHANGELOG.md). For deployment-related changes (env vars, migrations, R2 binding), see [`cloudflare-backend.md`](./cloudflare-backend.md).

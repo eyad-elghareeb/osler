@@ -295,7 +295,7 @@ If you added custom strings AND upstream added new strings in the same area:
 
 Never edit existing migration files. If upstream adds a new migration (e.g. `0005_*.sql`), it will apply cleanly on top of yours. If you need to add your own migration, use a high prefix like `9001_my_customisation.sql` to avoid conflicts.
 
-### `cloudflare/worker/src/index.mjs`
+### `cloudflare/worker/src/index.ts`
 
 If you've made local changes to the worker (not recommended — better to fork the worker into a separate repo), conflicts will be painful. The recommended approach is to keep your customisations in `osler.config.json` only, and treat the worker as upstream-controlled.
 

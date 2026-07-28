@@ -10,7 +10,7 @@ For the **full HTTP API reference**, see [`api-reference.md`](./api-reference.md
 
 | File | Purpose |
 | --- | --- |
-| `src/index.mjs` | Email/password & Google OAuth authentication, PBKDF2 password hashing, HMAC-signed session tokens with server-side revocation, roles (`student` / `content_admin` / `admin`), password reset, account management, content management (R2-backed draft/pending/published workflow), admin audit log, rate limiting, security headers, and sync API. |
+| `src/index.ts` | Email/password & Google OAuth authentication, PBKDF2 password hashing, HMAC-signed session tokens with server-side revocation, roles (`student` / `content_admin` / `admin`), password reset, account management, content management (R2-backed draft/pending/published workflow), admin audit log, rate limiting, security headers, and sync API. |
 | `migrations/0001_initial.sql` | Base D1 schema for users, sessions, password-reset tokens, and progress documents. |
 | `migrations/0002_accounts_and_google.sql` | Google identity links (`auth_identities`), OAuth state tokens (`oauth_states`), and single-use handoffs (`auth_handoffs`). |
 | `migrations/0003_admin.sql` | R2-backed content objects (`content_objects` with draft/pending/published/rejected workflow) and admin audit log (`admin_audit`). |

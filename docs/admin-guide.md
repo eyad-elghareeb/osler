@@ -1509,7 +1509,7 @@ Content actions: create_content, submit_content, approve, reject,
 | `src/components/osler/admin/audit-log-table.tsx` | Audit log table + filter |
 | `src/components/osler/admin/admin-login-prompt.tsx` | The Osler credential sign-in form |
 | `src/lib/osler/i18n/en.ts` | English strings (search `"admin."` for the admin namespace) |
-| `cloudflare/worker/src/index.mjs` | The backend that serves `/v1/admin/*` |
+| `cloudflare/worker/src/index.ts` | The backend that serves `/v1/admin/*` |
 | `cloudflare/worker/migrations/0003_admin.sql` | Schema for `content_objects` + `admin_audit` |
 
 ---
