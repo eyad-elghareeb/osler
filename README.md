@@ -76,15 +76,17 @@ Unified medical study platform combining **Quiz Banks**, **Flashcards**, **OSCE 
 <details>
 <summary><strong>🧠 QBank Studio</strong> — Unified quiz engine</summary>
 
-All 5 engine types through a single interface:
+The 7 engine types in Osler (`quiz`, `bank`, `flashcard`, `written`, `osce`, `library`, `video`) provide comprehensive coverage. QBank Studio unifies test and practice engines through a single interface:
 
 | Engine | Description |
 |--------|-------------|
 | **Quiz** | Standard MCQ with 5 choices |
-| **Bank** | Passage-based questions |
-| **Flashcard** | Front/back reveal (via Flashcard Studio) |
-| **Written** | Prompt + rubric review + photo mode (camera capture, crop, Gemini OCR) |
-| **OSCE** | Scenario + Red Flags + Differential + Rubric (via OSCE Studio) |
+| **Bank** | Passage-based question sets |
+| **Flashcard** | Front/back & cloze review (via Flashcard Studio) |
+| **Written** | Short-answer prompt + rubric review + photo mode (camera capture, crop, Gemini OCR) |
+| **OSCE** | Clinical stations + patient/hidden profile + rubric (via OSCE Studio) |
+| **Library** | AMBOSS-style medical articles with specialty TOC |
+| **Video** | Video lectures & clinical skills resources with custom player |
 
 Key features: Timed/Tutor modes · Question navigator with state colors · Split-pane explanation with inline images & Markdown · Mixed quiz+written sessions · Written photo mode (camera capture & Gemini transcription) · Session auto-resume banner on Dashboard · Cross-pack pool builder · Results dashboard (score, percentile, distribution) · Tracker & review sessions (wrong/flagged, previous-session review) · Per-pack offline download · Image lightbox
 </details>

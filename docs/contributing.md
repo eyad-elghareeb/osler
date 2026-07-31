@@ -590,15 +590,17 @@ Each content type has a schema defined in `src/lib/osler/types.ts`. The schemas 
 
 ```jsonc
 {
+  "meta": { "uid": "quiz-arrhythmias", "title": "Arrhythmias", "lang": "en" },
+  "type": "quiz",
   "questions": [
     {
       "id": "card-arr-001",
-      "stem": "A 68-year-old male presents with syncope…",
-      "choices": ["A. ...", "B. ...", "C. ...", "D. ...", "E. ..."],
-      "answer": 2,                 // 0-indexed; here, choice C
+      "question": "A 68-year-old male presents with syncope…",
+      "options": ["A. ...", "B. ...", "C. ...", "D. ...", "E. ..."],
+      "correct": 2,                 // 0-indexed; here, option index 2
       "explanation": "The ECG shows…",
       "tags": ["cardiology", "arrhythmia", "ecg"],
-      "images": ["ecg-strip.png"]  // optional; resolves against the pack's images/ subfolder
+      "images": [{ "src": "ecg-strip.png", "alt": "ECG rhythm strip" }]  // optional; resolves against pack's images/ subfolder
     }
   ]
 }
@@ -608,12 +610,21 @@ Each content type has a schema defined in `src/lib/osler/types.ts`. The schemas 
 
 ```jsonc
 {
+  "meta": { "uid": "bank-cardiology", "title": "Cardiology Bank", "lang": "en" },
+  "type": "bank",
   "passages": [
     {
       "id": "pass-001",
-      "passage": "A 55-year-old woman with a history of…",
+      "content": "A 55-year-old woman with a history of…",
       "questions": [
-        { "id": "pass-001-q1", "stem": "Which of the following is the most likely diagnosis?", /* … */ }
+        {
+          "id": "pass-001-q1",
+          "passageId": "pass-001",
+          "question": "Which of the following is the most likely diagnosis?",
+          "options": ["A. ...", "B. ...", "C. ...", "D. ..."],
+          "correct": 0,
+          "explanation": "The patient exhibits classic findings..."
+        }
       ]
     }
   ]
@@ -624,12 +635,15 @@ Each content type has a schema defined in `src/lib/osler/types.ts`. The schemas 
 
 ```jsonc
 {
+  "meta": { "uid": "written-cardiology", "title": "Cardiology Written Prompts", "lang": "en" },
+  "type": "written",
   "prompts": [
     {
       "id": "writ-001",
       "prompt": "Describe the management of acute decompensated heart failure.",
-      "rubric": ["Identifies immediate stabilization (oxygen, IV diuretics)", /* … */],
-      "timeLimitSec": 600
+      "rubric": ["Identifies immediate stabilization (oxygen, IV diuretics)", "Mentions vasodilators if hypertensive"],
+      "modelAnswer": "Initial stabilization involves positioning the patient upright, administering oxygen if hypoxic...",
+      "wordLimit": 500
     }
   ]
 }
@@ -639,6 +653,8 @@ Each content type has a schema defined in `src/lib/osler/types.ts`. The schemas 
 
 ```jsonc
 {
+  "meta": { "uid": "fc-antibacterials", "title": "Antibacterials Flashcards", "lang": "en" },
+  "type": "flashcard",
   "cards": [
     {
       "id": "fc-001",
@@ -649,7 +665,8 @@ Each content type has a schema defined in `src/lib/osler/types.ts`. The schemas 
     {
       "id": "fc-002",
       "type": "cloze",
-      "front": "The {{c1::SA node}} is the natural pacemaker of the heart."
+      "text": "The {{c1::SA node::pacemaker}} is the natural pacemaker of the heart.",
+      "extra": "Located in the right atrium near the opening of the superior vena cava."
     }
   ]
 }
@@ -659,15 +676,33 @@ Each content type has a schema defined in `src/lib/osler/types.ts`. The schemas 
 
 ```jsonc
 {
+  "meta": { "uid": "osce-er-chestpain", "title": "Chest Pain Station", "lang": "en" },
+  "type": "osce",
   "stations": [
     {
       "id": "osce-001",
       "title": "Chest pain in the ER",
-      "scenario": "You are the ED physician. A 55-year-old male presents with crushing substernal chest pain…",
-      "patientProfile": { "age": 55, "sex": "M", "occupation": "Truck driver" },
-      "redFlags": ["Diaphoresis", "Radiation to left arm", "Hypotension"],
-      "differential": ["STEMI", "Aortic dissection", "Pericarditis"],
-      "rubric": ["Takes focused history", "Orders ECG within 10 min", /* … */]
+      "type": "history",
+      "specialty": "Emergency Medicine",
+      "difficulty": "Intermediate",
+      "task": "Take a focused medical history and determine immediate management.",
+      "time": 600,
+      "examiner": { "name": "Dr. Smith", "title": "Attending Physician" },
+      "patient": { "name": "John Doe", "age": 55, "gender": "Male", "avatarSeed": "john-55", "opening": "Doctor, I have severe chest pain..." },
+      "hiddenProfile": {
+        "diagnosis": "Acute Coronary Syndrome",
+        "keySymptoms": ["Crushing substernal chest pain", "Radiation to left arm"],
+        "redFlags": ["Diaphoresis", "Radiation to left arm", "Hypotension"],
+        "pastHistory": ["Hypertension", "Hyperlipidemia"],
+        "vitalSigns": "BP 140/90, HR 95, RR 20, SpO2 96%"
+      },
+      "rubric": {
+        "mustAsk": ["Onset and quality of pain", "Radiation", "Associated symptoms"],
+        "bonus": ["Family history of CAD", "Recent risk factors"]
+      },
+      "questions": [
+        { "question": "What is your primary differential diagnosis?", "answer": "Acute Coronary Syndrome (STEMI / NSTEMI)" }
+      ]
     }
   ]
 }
@@ -700,18 +735,21 @@ The normal aortic valve area is 3–4 cm². AS is defined as a valve area < 1.0 
 
 ```jsonc
 {
+  "meta": { "uid": "videos-heart-sounds", "title": "Heart Sounds Lectures", "lang": "en" },
+  "type": "video",
   "videos": [
     {
       "id": "vid-001",
       "title": "Heart Sounds — Part 1",
-      "source": "youtube",                          // "youtube" | "invidious" | "mp4" | "hls"
-      "videoId": "dQw4w9WgXcQ",                     // YouTube ID, or URL for mp4/hls
+      "source": { "type": "youtube", "id": "dQw4w9WgXcQ" },
+      "specialty": "Cardiology",
+      "topic": "Physical Exam",
       "duration": 642,
       "chapters": [
-        { "title": "S1", "start": 0 },
-        { "title": "S2", "start": 180 }
+        { "title": "S1", "time": 0 },
+        { "title": "S2", "time": 180 }
       ],
-      "relatedArticleId": "cardiology/heart-sounds"
+      "relatedArticles": ["cardiology/heart-sounds"]
     }
   ]
 }
