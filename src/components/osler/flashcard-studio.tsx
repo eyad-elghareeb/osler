@@ -790,8 +790,8 @@ export function FlashcardStudio({
    * NavigationStack. Reading component state directly avoids prop drilling.
    */
   const renderDecksView = () => (
-    <div className="h-full overflow-y-auto medos-scroll medos-tabbar-pad">
-      <div className="max-w-5xl mx-auto px-4 md:px-6 lg:px-8 py-6 md:py-8">
+    <div className="osler-page">
+      <div className="osler-page__inner">
         {/* Header */}
         <div className="osler-page-header">
           <div className="flex items-center gap-2 text-xs text-muted-foreground mb-1">
@@ -1202,8 +1202,8 @@ export function FlashcardStudio({
     return (
       <NavigationStack
         className="h-full"
-        homeClassName="medos-scroll medos-tabbar-pad"
-        subpageClassName="medos-scroll medos-tabbar-pad"
+        homeClassName=""
+        subpageClassName="osler-page"
         rtl={rtl}
         home={renderDecksView()}
         subpage={

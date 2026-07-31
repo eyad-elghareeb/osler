@@ -258,7 +258,6 @@ html::-webkit-scrollbar-thumb:hover {
   @apply h-full overflow-y-auto md:pb-0;
   scrollbar-width: thin;
   scrollbar-color: color-mix(in oklch, var(--ring) 40%, transparent) transparent;
-  /* Mobile bottom-tab-bar spacer — replicates `.medos-tabbar-pad` */
   padding-bottom: env(safe-area-inset-bottom, 0px);
 }
 .osler-page::-webkit-scrollbar { width: 8px; height: 8px; }
@@ -274,8 +273,12 @@ html::-webkit-scrollbar-thumb:hover {
 }
 @media (max-width: 767px) {
   .osler-page {
-    padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 4rem);
+    padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 4.25rem);
   }
+}
+.osler-page.medos-tabbar-pad::after,
+.osler-page .medos-tabbar-pad::after {
+  display: none !important;
 }
 .osler-page__inner {
   @apply max-w-5xl mx-auto px-4 md:px-6 lg:px-8 py-6 md:py-8;

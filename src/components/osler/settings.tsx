@@ -265,13 +265,13 @@ export function Settings({
   if (isMobile) {
     const activeMeta = SECTIONS.find((s) => s.id === section);
     return (
-      <div className="h-full flex flex-col medos-tabbar-pad">
+      <div className="h-full flex flex-col">
         {/* Page stack — NavigationStack handles the home-underneath +
             subpage-overlay layout, drag-to-go-back, and parallax. */}
         <NavigationStack
           className="flex-1 min-h-0"
-          homeClassName="medos-scroll"
-          subpageClassName="medos-scroll"
+          homeClassName="osler-page"
+          subpageClassName="osler-page"
           rtl={rtl}
           home={
             <div className="max-w-2xl mx-auto px-4 py-3">

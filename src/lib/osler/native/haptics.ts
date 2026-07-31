@@ -29,30 +29,32 @@ export type HapticPatternName =
   | "tick"
   | "press";
 
-/** Millisecond patterns. `0` means "no vibration". */
+/** Millisecond patterns. `0` means "no vibration".
+ * Note: Modern Android linear haptic motors require 15ms+ pulse width to
+ * overcome physical inertia. Patterns below 15ms are silently ignored on many devices.
+ */
 export const HAPTIC_PATTERNS: Record<HapticPatternName, number | number[]> = {
-  // Single very short tap — used for hover-equivalent / focus feedback.
-  tick: 8,
-  // Light tap (10ms) — used for general button presses.
-  light: 10,
-  // Medium tap (20ms) — used for primary actions like submit.
-  medium: 20,
-  // Heavy tap (45ms) — used for destructive / important confirmations.
-  heavy: 45,
-  // Press feedback: short double tap, like a mechanical key actuation.
-  press: [12, 18, 8],
-  // Selection change: tiny single tick, like iOS picker.
-  selection: 6,
-  // Success: two short rising taps.
-  success: [10, 40, 18],
-  // Warning: longer single pulse.
-  warning: 35,
+  // Single short tap — focus / hover tick.
+  tick: 15,
+  // Light tap (20ms) — general button presses.
+  light: 20,
+  // Medium tap (35ms) — primary actions / submits.
+  medium: 35,
+  // Heavy tap (60ms) — destructive / important confirmations.
+  heavy: 60,
+  // Press feedback: distinct double tap.
+  press: [20, 30, 15],
+  // Selection change: quick crisp tick.
+  selection: 15,
+  // Success: two rising taps.
+  success: [25, 40, 30],
+  // Warning: double warning pulse.
+  warning: [45, 50, 45],
   // Error: double heavy pulse.
-  error: [40, 60, 40],
+  error: [50, 60, 50],
 };
 
 const HAPTICS_ENABLED_KEY = "osler-haptics-enabled";
-const REDUCED_MOTION_KEY = "osler-haptics-reduced-motion";
 
 let cachedEnabled: boolean | null = null;
 let cachedReducedMotion: boolean | null = null;
@@ -62,9 +64,9 @@ function readEnabled(): boolean {
   if (typeof window === "undefined") return false;
   try {
     const v = window.localStorage.getItem(HAPTICS_ENABLED_KEY);
-    // Default: enabled on touch devices, disabled on desktop.
+    // If not set, default to enabled if the browser supports vibration or touch
     cachedEnabled = v === null
-      ? ("ontouchstart" in window || (navigator.maxTouchPoints || 0) > 0)
+      ? (typeof navigator !== "undefined" && typeof navigator.vibrate === "function")
       : v === "true";
   } catch {
     cachedEnabled = false;
@@ -126,7 +128,7 @@ export function haptic(pattern: HapticPatternName = "light"): void {
   try {
     navigator.vibrate(HAPTIC_PATTERNS[pattern]);
   } catch {
-    /* some browsers throw on cross-origin iframes — ignore */
+    /* some browsers throw on cross-origin iframes or missing focus — ignore */
   }
 }
 

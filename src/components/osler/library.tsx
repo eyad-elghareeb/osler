@@ -729,7 +729,7 @@ function MobileHub({
   }, [displayArticles]);
 
   return (
-    <div className="h-full overflow-y-auto medos-scroll medos-tabbar-pad">
+    <div className="osler-page">
       {/* Filter pills */}
       <div className="sticky top-0 z-10 bg-background border-b border-border px-4 py-3">
         <div className="flex items-center gap-2 max-w-xl mx-auto">
@@ -759,7 +759,7 @@ function MobileHub({
         </div>
       </div>
 
-      <div className="px-4 pb-4 medos-tabbar-pad">
+      <div className="px-4 pb-4">
         {grouped.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-16 text-center">
             <BookOpen className="size-10 text-muted-foreground/30 mb-3" />

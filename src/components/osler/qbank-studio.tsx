@@ -1127,7 +1127,7 @@ function HomeView({
             />
           )}
           {homeTab === "create" && (
-            <div className="h-full overflow-y-auto medos-scroll medos-tabbar-pad">
+            <div className="osler-page">
               <CreateTestTab
                 data={data}
                 testMode={testMode}
@@ -1141,7 +1141,7 @@ function HomeView({
             </div>
           )}
           {homeTab === "previous" && (
-            <div className="h-full overflow-y-auto medos-scroll medos-tabbar-pad">
+            <div className="osler-page">
               <PreviousTestsTab
                 sessions={savedSessions}
                 onDelete={(id) => sessions.delete(id)}
@@ -1150,7 +1150,7 @@ function HomeView({
             </div>
           )}
           {homeTab === "tracker" && (
-            <div className="h-full overflow-y-auto medos-scroll medos-tabbar-pad">
+            <div className="osler-page">
               <TrackerTab
                 data={data}
                 onStartCustomSession={onStartCustomSession}
@@ -2099,8 +2099,8 @@ function ContentTab({
   return (
     <NavigationStack
       className="h-full"
-      homeClassName="medos-scroll medos-tabbar-pad"
-      subpageClassName="medos-scroll medos-tabbar-pad"
+      homeClassName="osler-page"
+      subpageClassName="osler-page"
       rtl={rtl}
       home={decksView}
       subpage={subfolderView}
@@ -6995,7 +6995,7 @@ function ResultsView({
   };
 
   return (
-    <div className="h-[calc(100vh-3.5rem)] overflow-y-auto medos-scroll">
+    <div className="osler-page">
       <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-4">
         <div className="flex items-center justify-between flex-wrap gap-3">
           <div>

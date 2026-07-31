@@ -428,19 +428,15 @@ export function AppShell({
         </div>
       </header>
 
-      {/* Main content — scrolls independently so scrollbar doesn't touch the topbar.
-          `medos-tabbar-pad` adds a bottom spacer on mobile so content never
-          scrolls under the fixed bottom tab bar (the spacer is hidden on md+).
-
+      {/* Main content — viewport container for views.
+          Individual views control their own single scroll container (.osler-page).
           When the browser supports the View Transitions API, we skip the
           framer-motion enter/exit animation entirely — the VT snapshot already
-          crossfades the old and new views, and layering framer-motion on top
-          would double-animate. When VT is unavailable we fall back to the
-          framer-motion fade. */}
-      <main className="flex-1 min-h-0 overflow-y-auto medos-scroll-y medos-tabbar-pad">
+          crossfades the old and new views. */}
+      <main className="flex-1 min-h-0 relative overflow-hidden flex flex-col">
         <LightboxProvider>
           {vtActive ? (
-            <div key={view} className="h-full">
+            <div key={view} className="h-full w-full flex-1 flex flex-col min-h-0">
               {children}
             </div>
           ) : (
@@ -451,7 +447,7 @@ export function AppShell({
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -4 }}
                 transition={{ duration: 0.25 }}
-                className="h-full"
+                className="h-full w-full flex-1 flex flex-col min-h-0"
               >
                 {children}
               </motion.div>
