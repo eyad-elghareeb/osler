@@ -8,12 +8,13 @@ import type { AnyContent, ContentTreeNode } from "@/lib/osler/types";
 import { LoadingState, EmptyState } from "@/components/osler/ui-primitives";
 import { Layers } from "lucide-react";
 import { useOslerRouter } from "@/lib/osler/navigation";
+import { useI18n } from "@/components/osler/i18n-provider";
 
 function nodeFromPack(uid: string, content: AnyContent): ContentTreeNode {
   return {
     uid,
     title: content.meta?.title || uid,
-    type: content.type as any,
+    type: content.type,
     path: "",
     items: [],
     lang: content.meta?.lang,
@@ -24,6 +25,7 @@ export default function FlashcardPackPage({ params }: { params: Promise<{ uid: s
   const { uid } = React.use(params);
   const router = useRouter();
   const { navigate } = useOslerRouter();
+  const { t } = useI18n();
 
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState(false);
@@ -63,16 +65,16 @@ export default function FlashcardPackPage({ params }: { params: Promise<{ uid: s
   }, [uid, router]);
 
   if (loading) {
-    return <LoadingState label="Loading deck…" />;
+    return <LoadingState label={t("loading.flashcardDeck")} />;
   }
 
   if (error || !content || !item) {
     return (
       <EmptyState
         icon={Layers}
-        title="Deck Not Found"
-        description="The requested flashcard deck could not be loaded."
-        actions={<button onClick={() => navigate("flashcards")} className="text-sm font-medium text-primary underline">Back to Flashcards</button>}
+        title={t("empty.flashcard.title")}
+        description={t("empty.flashcard.description")}
+        actions={<button onClick={() => navigate("flashcards")} className="text-sm font-medium text-primary underline">{t("empty.flashcard.back")}</button>}
       />
     );
   }

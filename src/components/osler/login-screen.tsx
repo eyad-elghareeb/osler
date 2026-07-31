@@ -48,9 +48,11 @@ declare global {
 
 interface LoginScreenProps {
   onLogin: (username: string) => void;
+  /** When set, show the corresponding error banner (e.g. Google OAuth failure). */
+  cloudAuthError?: "google";
 }
 
-export function LoginScreen({ onLogin }: LoginScreenProps) {
+export function LoginScreen({ onLogin, cloudAuthError }: LoginScreenProps) {
   const { t, rtl } = useI18n();
   const [username, setUsername] = React.useState("");
   const [password, setPassword] = React.useState("");
@@ -94,11 +96,13 @@ export function LoginScreen({ onLogin }: LoginScreenProps) {
       setResetToken(token);
       setCloudMode("reset");
     }
-    if (params.get("cloudAuthError") === "google") {
+    // Surface the Google OAuth error from either the prop (passed by the
+    // login page, which read it from searchParams) or a stray URL param.
+    if (cloudAuthError === "google" || params.get("cloudAuthError") === "google") {
       setCloudError(t("login.googleError"));
     }
     return () => { cancelled = true; };
-  }, [t]);
+  }, [t, cloudAuthError]);
 
   React.useEffect(() => {
     const sitekey = cloudActive ? getConfig().cloud.turnstileSiteKey : undefined;

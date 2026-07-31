@@ -60,13 +60,37 @@ export async function cloudGoogleEnabled(): Promise<boolean> {
 export function readCloudSession(): CloudSession | null {
   if (typeof window === "undefined") return null;
   try {
-    const value = JSON.parse(sessionStorage.getItem(SESSION_STORAGE_KEY) ?? "null") as CloudSession | null;
-    return value && value.expiresAt > Date.now() ? value : null;
+    const value = JSON.parse(sessionStorage.getItem(SESSION_STORAGE_KEY) ?? "null");
+    if (!value || typeof value !== "object") return null;
+    // Validate the shape — a corrupted/tampered sessionStorage entry must
+    // not be trusted. Callers use `session.token` to call Worker APIs; a
+    // missing/invalid token would send `Bearer undefined` and confuse errors.
+    if (
+      typeof value.token !== "string" || value.token.length === 0 || value.token.length > 2048 ||
+      typeof value.expiresAt !== "number" ||
+      !value.user || typeof value.user !== "object" ||
+      typeof value.user.id !== "string" ||
+      typeof value.user.username !== "string" ||
+      typeof value.user.displayName !== "string" ||
+      typeof value.user.role !== "string"
+    ) {
+      return null;
+    }
+    return value.expiresAt > Date.now() ? (value as CloudSession) : null;
   } catch {
     return null;
   }
 }
 
+/**
+ * Save the cloud session to sessionStorage (per-tab, holds the bearer token)
+ * AND mirror it to the httpOnly cookie via /api/auth/session (cross-tab +
+ * middleware gating). The route verifies the bearer token against the Worker
+ * before issuing the cookie, so this call may fail (401 if the token is
+ * invalid, 403 if cloud is disabled, 5xx on Worker errors). In any of those
+ * cases we clear the local sessionStorage entry so the next restore doesn't
+ * pick up a session that the middleware will reject.
+ */
 export function saveCloudSession(session: CloudSession): void {
   if (typeof window !== "undefined") {
     sessionStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(session));
@@ -74,7 +98,16 @@ export function saveCloudSession(session: CloudSession): void {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ session }),
-    }).catch(() => {});
+    }).then((res) => {
+      if (!res.ok) {
+        // Cookie POST failed — clear the stale session so the next restore
+        // doesn't show the user as logged in without a valid cookie.
+        sessionStorage.removeItem(SESSION_STORAGE_KEY);
+      }
+    }).catch(() => {
+      // Network error — leave the sessionStorage entry; the restore effect
+      // will retry the cookie POST and clear it if it fails again.
+    });
   }
 }
 

@@ -420,6 +420,7 @@ See [`environment.md`](./environment.md) for the complete reference. The short v
 | --- | --- | --- |
 | `NEXT_PUBLIC_CLOUD_API_URL` | If cloud backend enabled | Frontend — Worker URL |
 | `NEXT_PUBLIC_INVIDIOUS_HOST` | Optional | Frontend — alternative YouTube frontend |
+| `OSLER_SESSION_SECRET` | Yes (Frontend, production) | Frontend — HMAC signs the route-gating session cookie |
 | `JWT_SECRET` | Yes (Worker) | Backend — HMAC signing |
 | `ALLOWED_ORIGIN` | Yes (Worker) | Backend — CORS |
 | `WORKER_URL` | For Google Sign-In | Backend — OAuth callback |

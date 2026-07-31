@@ -100,6 +100,7 @@ Run through this checklist **every** time you deploy, whether it's the first dep
 ### Secrets & environment
 
 - [ ] `JWT_SECRET` (Worker) is a fresh, long random string — generate with `openssl rand -base64 48`
+- [ ] `OSLER_SESSION_SECRET` (frontend/Next.js server) is set — otherwise the middleware falls back to `JWT_SECRET` or an insecure dev constant. Generate with `openssl rand -base64 32`
 - [ ] `ALLOWED_ORIGIN` (Worker) matches the exact frontend origin (scheme + host + port) — including `https://`
 - [ ] If Google Sign-In enabled: `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` set as Worker secrets
 - [ ] If password reset enabled: `RESEND_API_KEY`, `EMAIL_FROM`, `APP_ORIGIN` set as Worker secrets

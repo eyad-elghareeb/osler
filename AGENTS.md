@@ -567,23 +567,22 @@ The admin frontend exposes three new views (registered in
 - Deployment via Caddy (port 81, reverse-proxy to localhost:3000)
 - Windows deploy: `scripts/build-deliverable.ps1`
 - Linux deploy: `scripts/build-deliverable.sh`
-- `.env.local` supplies `NEXT_PUBLIC_INVIDIOUS_HOST` (YouTube alt frontend for video player)
+- `.env.local` supplies `NEXT_PUBLIC_INVIDIOUS_HOST` (YouTube alt frontend for video player) and `OSLER_SESSION_SECRET` (HMAC key for the `osler-session` cookie — required in production, see `src/lib/osler/server-session.ts`)
 - No `.env` file required for basic dev — AI assistant Gemini key is configured in-app (Settings > AI Assistant)
 
 ## Architecture
 
 ### Single-page view routing
 
-The app uses a client-side view state (`OslerView` type in `app-shell.tsx`) rather than Next.js pages. All views live under a single route (`/`) and are toggled via the `AppShell` component.
+The app uses real **path-based Next.js App Router routes** (e.g. `/qbank/[uid]`, `/library/[article]`, `/settings/[section]`) rather than query-param view state. All app views live under the `(app)` route group; the studios render in hub or session mode depending on whether a dynamic segment (`uid` / `article` / `video` / `section`) is present.
 
-To support sharing, direct navigation, browser back/forward buttons, and state persistence across screen locks/wakeups or reloads, the state in `src/app/page.tsx` synchronizes with URL query parameters:
-- `view`: The current active `OslerView` (e.g. `?view=library`).
-- `pack`: The UID of the active content pack (`?view=qbank&pack=pack-uid`). Loads asynchronously via `loadContentByUid` on mount/popstate.
-- `article`: The ID of the open library article (`?view=library&article=folder/slug`).
-- `video`: The ID of the open video (`?view=videos&video=id`).
-- `section`: The active Settings panel section (`?view=settings&section=ai`).
+Navigation goes through `useOslerRouter()` / `routeFor()` in `@/lib/osler/navigation.ts`:
 
-State-to-URL synchronization uses `window.history.pushState` and `window.history.replaceState`. A global `popstate` listener synchronizes browser back/forward navigation back into the React states.
+- `VIEW_ORDER` in `navigation.ts` defines the stable view order used to compute slide-transition direction.
+- `useCurrentView()` derives the active `OslerView` from the pathname.
+- `navigate(view, params?)` fires `haptic("selection")`, wraps the `router.push` in `withViewTransition(direction)`, and intentionally does NOT maintain a custom history stack (the browser's real history is the single source of truth).
+
+Server-side, `src/middleware.ts` gates access to protected app routes via the httpOnly `osler-session` cookie (HMAC-signed with `OSLER_SESSION_SECRET` — see `src/lib/osler/server-session.ts`). Unauthenticated requests are redirected to `/login?next=<path>`; the `next` param is validated with `isSafeLocalPath()` to prevent open redirect. See [`docs/routing-migration-plan.md`](docs/routing-migration-plan.md) for the full implementation notes.
 
 Available views: `dashboard`, `learn`, `library`, `qbank`, `flashcards`, `osce`, `videos`, `profile`, `settings`.
 
@@ -626,10 +625,10 @@ Library, Flashcards, OSCE, and Videos are sub-views under the **Learn** hub. The
 
 1. Add view name to `OslerView` type in `app-shell.tsx`
 2. Create component in `src/components/osler/`
-3. Add nav entry in `AppShell` and/or `MobileTabBar` (or add to `LEARN_SUBVIEWS` if it belongs under the Learn hub)
-4. Wire the view in `src/app/page.tsx` with conditional rendering
+3. Create the route page under `src/app/(app)/<view>/` (dynamic segment `[uid]`/`[article]`/`[video]`/`[section]` where appropriate)
+4. Add nav entry in `AppShell` and/or `MobileTabBar` (or add to `LEARN_SUBVIEWS` if it belongs under the Learn hub)
 5. Add keyboard shortcut in `shortcuts.ts`
-6. Add the new view to `VIEW_ORDER` in `app-shell.tsx` so the slide-transition direction heuristic works correctly
+6. Add the new view to `VIEW_ORDER` in `src/lib/osler/navigation.ts` so the slide-transition direction heuristic works correctly
 7. Add i18n keys for every label/string in the new view — both `en` and `ar` in the same commit
 8. Wire `haptic()` calls into the view's primary interactions (button taps, form submits)
 9. If the view has full-screen overlays, use `.safe-screen` / `.safe-pt` / `.safe-pb`

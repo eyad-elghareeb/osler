@@ -5,8 +5,6 @@ import { usePathname, useRouter } from "next/navigation";
 import type { OslerView } from "@/components/osler/app-shell";
 import {
   withViewTransition,
-  pushNavHistory,
-  popNavHistory,
   haptic,
   type ViewTransitionDirection,
 } from "@/lib/osler/native";
@@ -102,6 +100,17 @@ export function routeFor(
 
 /**
  * Hook returning navigation function with haptics and View Transitions support.
+ *
+ * NOTE: We deliberately do NOT push/pop a custom nav history stack here.
+ * The previous implementation called `pushNavHistory(view)` / `popNavHistory()`
+ * alongside `router.push()`, but nothing synced that stack with the browser's
+ * real history (no popstate listener). Browser back/forward would change the
+ * URL via Next's router but leave the custom stack stale, causing the slide
+ * direction heuristic to drift. The `directionFor(currentView, view)` call
+ * below computes the direction from the static VIEW_ORDER, which is correct
+ * for push navigation and a reasonable approximation for back/forward. The
+ * custom stack is still available for components that explicitly manage it
+ * (e.g. NavigationStack), but the router hook no longer touches it.
  */
 export function useOslerRouter() {
   const router = useRouter();
@@ -117,12 +126,6 @@ export function useOslerRouter() {
       withViewTransition(() => {
         router.push(targetPath);
       }, direction);
-
-      if (direction === "backward") {
-        popNavHistory();
-      } else {
-        pushNavHistory(view);
-      }
     },
     [currentView, router]
   );

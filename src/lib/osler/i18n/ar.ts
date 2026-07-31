@@ -1855,4 +1855,24 @@ export const ar = {
     "notFound.title": "الصفحة غير موجودة",
     "notFound.description": "لم يتم العثور على الصفحة أو المورد الذي طلبته.",
     "notFound.backHome": "العودة إلى لوحة التحكم",
+
+    // Loading / empty states for dynamic [uid] pages
+    "loading.qbankPack": "جارٍ تحميل حزمة الأسئلة…",
+    "loading.flashcardDeck": "جارٍ تحميل البطاقات…",
+    "loading.osceScenario": "جارٍ تحميل سيناريو OSCE…",
+    "loading.video": "جارٍ تحميل الفيديو…",
+    "loading.videos": "جارٍ تحميل الفيديوهات…",
+    "loading.redirecting": "جارٍ إعادة التوجيه…",
+
+    "empty.qbank.title": "لم يتم العثور على الحزمة",
+    "empty.qbank.description": "تعذر تحميل حزمة بنك الأسئلة المطلوبة.",
+    "empty.qbank.back": "العودة إلى بنك الأسئلة",
+
+    "empty.flashcard.title": "لم يتم العثور على البطاقات",
+    "empty.flashcard.description": "تعذر تحميل مجموعة البطاقات المطلوبة.",
+    "empty.flashcard.back": "العودة إلى البطاقات",
+
+    "empty.osce.title": "لم يتم العثور على السيناريو",
+    "empty.osce.description": "تعذر تحميل حالة OSCE المطلوبة.",
+    "empty.osce.back": "العودة إلى حالات OSCE",
 } as const;

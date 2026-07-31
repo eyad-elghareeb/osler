@@ -1860,4 +1860,24 @@ export const en = {
     "notFound.title": "Page Not Found",
     "notFound.description": "The page or resource you requested could not be found.",
     "notFound.backHome": "Back to Dashboard",
+
+    // Loading / empty states for dynamic [uid] pages
+    "loading.qbankPack": "Loading QBank pack…",
+    "loading.flashcardDeck": "Loading deck…",
+    "loading.osceScenario": "Loading OSCE scenario…",
+    "loading.video": "Loading video…",
+    "loading.videos": "Loading videos…",
+    "loading.redirecting": "Redirecting…",
+
+    "empty.qbank.title": "Pack Not Found",
+    "empty.qbank.description": "The requested question bank pack could not be loaded.",
+    "empty.qbank.back": "Back to QBank",
+
+    "empty.flashcard.title": "Deck Not Found",
+    "empty.flashcard.description": "The requested flashcard deck could not be loaded.",
+    "empty.flashcard.back": "Back to Flashcards",
+
+    "empty.osce.title": "Scenario Not Found",
+    "empty.osce.description": "The requested OSCE case could not be loaded.",
+    "empty.osce.back": "Back to OSCE Cases",
 } as const;

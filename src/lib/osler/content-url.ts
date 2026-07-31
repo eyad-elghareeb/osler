@@ -67,14 +67,21 @@ let _reprobeTimer: ReturnType<typeof setTimeout> | null = null;
 /**
  * Probe the Worker once to check if it's reachable. Caches the result for
  * 60 seconds so repeated calls don't hammer the network.
+ *
+ * First-call behavior: optimistically returns `true` (so the initial fetch
+ * hits the Worker, which is the common case) AND kicks off an async probe
+ * to confirm. If the probe fails, `resetCloudReachable()` is called by the
+ * fetch-error handler in `content.ts`, which flips `_cloudReachable` to
+ * `false` and triggers a 30 s re-probe. This means:
+ *   - Online + Worker up: 1 fetch to Worker, success. ✓
+ *   - Online + Worker down: 1 fetch to Worker (fails) → 1 fetch to local. ✓
+ *   - Offline: 1 fetch to Worker (fails) → 1 fetch to local (SW-cached). ✓
  */
 function isCloudReachable(): boolean {
-  // If we haven't checked yet, or the cache expired, start an async check
-  // but return the cached value (or true for the first call).
   if (_cloudReachable === null) {
-    // First call: assume reachable if cloud is configured
     const apiUrl = resolvedApiUrl();
     if (!apiUrl) return false;
+    // Optimistically assume reachable; the probe will correct this.
     _cloudReachable = true;
     if (!_cloudCheckPromise) _probeCloud(apiUrl);
     return true;

@@ -8,12 +8,13 @@ import type { AnyContent, ContentTreeNode, OsceContent } from "@/lib/osler/types
 import { LoadingState, EmptyState } from "@/components/osler/ui-primitives";
 import { Stethoscope } from "lucide-react";
 import { useOslerRouter } from "@/lib/osler/navigation";
+import { useI18n } from "@/components/osler/i18n-provider";
 
 function nodeFromPack(uid: string, content: AnyContent): ContentTreeNode {
   return {
     uid,
     title: content.meta?.title || uid,
-    type: content.type as any,
+    type: content.type,
     path: "",
     items: [],
     lang: content.meta?.lang,
@@ -24,6 +25,7 @@ export default function OscePackPage({ params }: { params: Promise<{ uid: string
   const { uid } = React.use(params);
   const router = useRouter();
   const { navigate } = useOslerRouter();
+  const { t } = useI18n();
 
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState(false);
@@ -63,16 +65,16 @@ export default function OscePackPage({ params }: { params: Promise<{ uid: string
   }, [uid, router]);
 
   if (loading) {
-    return <LoadingState label="Loading OSCE scenario…" />;
+    return <LoadingState label={t("loading.osceScenario")} />;
   }
 
   if (error || !content || !item) {
     return (
       <EmptyState
         icon={Stethoscope}
-        title="Scenario Not Found"
-        description="The requested OSCE case could not be loaded."
-        actions={<button onClick={() => navigate("osce")} className="text-sm font-medium text-primary underline">Back to OSCE Cases</button>}
+        title={t("empty.osce.title")}
+        description={t("empty.osce.description")}
+        actions={<button onClick={() => navigate("osce")} className="text-sm font-medium text-primary underline">{t("empty.osce.back")}</button>}
       />
     );
   }

@@ -33,7 +33,7 @@ Osler is a medical education platform. The assets we protect:
 | --- | --- | --- |
 | Student progress (QBank answers, flashcard schedules) | Low–medium | IndexedDB (local) + D1 (cloud sync, optional) |
 | Account credentials (password hash, OAuth tokens) | High | D1 (never plaintext) |
-| Session tokens | High | D1 (hash) + sessionStorage (browser) |
+| Session tokens | High | D1 (hash) + sessionStorage (browser) + httpOnly cookie (signature only) |
 | Content (quizzes, articles) | Low | Public folder (static) + R2 (admin-managed) |
 | Admin audit log | Medium | D1 (`admin_audit` table) |
 | Email addresses | Medium | D1 (`users.email`) |
@@ -43,7 +43,7 @@ Osler is a medical education platform. The assets we protect:
 - **Credential theft** via phishing, MITM, or DB leak → mitigated by PBKDF2 hashing, HSTS, server-side session revocation
 - **Brute-force login** → mitigated by rate limiting + optional Turnstile + PBKDF2 310k iterations
 - **Privilege escalation** (student → admin) → mitigated by role checks on every admin endpoint
-- **CSRF** on state-changing endpoints → mitigated by bearer-token auth in sessionStorage (not cookies) + strict CORS
+- **CSRF** on state-changing endpoints → mitigated by bearer-token auth in sessionStorage (not cookies) + strict CORS. The only cookie Osler sets (`osler-session`) is httpOnly + `SameSite=Lax` and carries no bearer token — it exists solely so the Next.js middleware can gate route access.
 - **XSS in admin content** → mitigated by JSON-only content storage (no HTML rendering on admin side); app-side rendering uses React's default escaping
 - **Username enumeration** → mitigated by uniform error messages on login/reset, but `/v1/auth/username-available` is intentionally public (live validation UX tradeoff)
 - **Email enumeration** via password reset → mitigated by uniform `{ok:true}` response regardless of whether the email exists
@@ -87,6 +87,17 @@ Sessions are stored in `sessionStorage` (not `localStorage` or cookies). This me
 - ✅ Not sent automatically with every request (no CSRF risk from cookies).
 - ✅ Isolated per-tab (multiple admin logins don't conflict).
 - ❌ Lost on tab close (users must re-login). Trade-off for security.
+
+### Route-gating cookie (Next.js middleware)
+
+In addition to the bearer token, the Next.js app sets a single **httpOnly `osler-session` cookie** used by `src/middleware.ts` to decide whether a request can reach protected app routes. This cookie is distinct from the Worker token:
+
+- It carries **no bearer token** — only a signed payload (`{ kind, user|username, expiresAt }`).
+- The value is `<base64url(payload)>.<base64url(hmac-sha256(payload, OSLER_SESSION_SECRET))>` — the middleware verifies the HMAC on every request, so a forged cookie is rejected.
+- It is `httpOnly`, `SameSite=Lax`, and `Secure` in production, so it is never readable by client-side JS and is not a CSRF vector (it gates navigation only — the Worker API still authenticates via the `Authorization` header).
+- `POST /api/auth/session` issues the cookie **only** after verifying the CloudSession bearer token against the Worker (`GET /v1/auth/me`), and refuses local-mode `{ username }` payloads when cloud is enabled. `GET /api/auth/session` returns a redacted view — the bearer `token` is never exposed over HTTP.
+
+The middleware secret resolves from `OSLER_SESSION_SECRET`, then `JWT_SECRET`, then an insecure dev fallback (with a warning logged in production). Set `OSLER_SESSION_SECRET` explicitly — see [`environment.md`](./environment.md#13-osler_session_secret).
 
 ### Session revocation
 
@@ -247,6 +258,8 @@ Every JSON response includes:
 | `Permissions-Policy` | `camera=(), microphone=(), geolocation=(), interest-cohort=()` | Disable unused browser APIs |
 | `Cache-Control` | `no-store` (auth endpoints) | Prevent caching of sensitive responses |
 
+**Exception — public content endpoints:** `GET /v1/content/<category>/<path>` and `GET /v1/content-manifests/<category>/manifest.json` override `Cross-Origin-Resource-Policy` to `cross-origin` so the Pages site (a different origin) can read R2-backed content cross-origin. They also set `Cache-Control: public` (`max-age=86400, immutable` for non-JSON/Markdown assets, `max-age=60` for JSON/Markdown) and are rate-limited like auth routes. See [`api-reference.md`](./api-reference.md) for details.
+
 ### TLS
 
 Cloudflare and Vercel both terminate TLS at their edge with modern cipher suites and HTTP/3 support. Self-hosted deployments should use Caddy (which auto-provisions Let's Encrypt) or nginx with a strong config (Mozilla SSL Configuration Generator, "Intermediate" preset).
@@ -302,7 +315,7 @@ The 310,000-iteration PBKDF2 takes ~50–100ms per hash on a Worker. This is int
 | User profile (username, email, display name) | — | ✅ | — |
 | Password hash + salt | — | ✅ | — |
 | OAuth identity links | — | ✅ | — |
-| Session tokens | sessionStorage | ✅ (hash only) | — |
+| Session tokens | sessionStorage (+ httpOnly signed cookie for route gating) | ✅ (hash only) | — |
 | Content objects (quiz/article/flashcard JSON) | ✅ (cached) | — | ✅ (admin-managed) |
 | Admin audit log | — | ✅ | — |
 
@@ -399,6 +412,7 @@ For production deployments, run through this checklist:
 ### Authentication & access
 
 - [ ] `JWT_SECRET` is a 48+ byte random string (not a memorable password)
+- [ ] `OSLER_SESSION_SECRET` is set on the frontend (Next.js) — otherwise the middleware falls back to `JWT_SECRET` or an insecure dev constant. Generate with `openssl rand -base64 32`. Different from `JWT_SECRET` is fine; the two are unrelated secrets.
 - [ ] `TURNSTILE_ENABLED=true` and `TURNSTILE_SECRET_KEY` configured
 - [ ] First admin user promoted via D1 SQL (not via the API)
 - [ ] Admin panel protected by Cloudflare Access (Zero Trust)

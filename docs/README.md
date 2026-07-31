@@ -25,12 +25,13 @@ This folder contains the complete documentation for the Osler medical study plat
 | [`deployment.md`](./deployment.md) | Operators / DevOps | Per-host deployment runbooks (Cloudflare Pages+Worker, Vercel, VPS, Docker, GitHub Pages, Netlify), CI/CD pipelines, blue/green & canary, rollback procedures. |
 | [`security.md`](./security.md) | Operators / Security teams | Threat model, authentication, RBAC, CORS, security headers, rate limiting, audit logging, hardening checklist, known limitations. |
 | [`admin-guide.md`](./admin-guide.md) | Admins | Walkthrough of every admin page, common workflows, D1 SQL cheatsheet, troubleshooting. |
-| [`api-reference.md`](./api-reference.md) | Developers | Full HTTP API reference for all 39 Worker endpoints with curl examples, request/response schemas, and error handling. |
+| [`api-reference.md`](./api-reference.md) | Developers | Full HTTP API reference for all 41 Worker endpoints with curl examples, request/response schemas, and error handling. |
 | [`cloudflare-backend.md`](./cloudflare-backend.md) | Operators / Developers | Worker backend overview, deployment steps, Google Sign-In config, environment variables, sync behavior. |
 | [`environment.md`](./environment.md) | Operators / Developers | Complete reference for all env vars, `osler.config.json` schema, `wrangler.toml` config, hardcoded constants, validation rules, precedence. |
 | [`troubleshooting.md`](./troubleshooting.md) | Everyone | Symptom → cause → fix for ~80 common issues across build, deploy, auth, admin, sync, PWA, content, performance. |
 | [`tauri-admin.md`](./tauri-admin.md) | Operators | Tauri desktop admin app: build, first-run, setup wizard, config editor, instance generator, content editor, build runner, git ops, deployment providers, troubleshooting. |
 | [`contributing.md`](./contributing.md) | Contributors | Dev setup, coding conventions, i18n rule, git workflow, adding content packs / engine plugins / admin endpoints, releasing. |
+| [`routing-migration-plan.md`](./routing-migration-plan.md) | Developers | Path-based routing + cookie-auth implementation notes, route map, security fixes, and rollback plan. |
 
 ## Related files outside `docs/`
 

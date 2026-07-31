@@ -227,11 +227,16 @@ Every feature is **feature-detected and degrades gracefully** — iOS Safari sil
 
 <pre>
 src/
-├── <a href="src/app">app</a>/                     # Next.js App Router
-│   ├── api/route.ts           # API route
-│   ├── globals.css            # Design tokens + component styles
-│   ├── layout.tsx             # Root layout with theme provider
-│   └── page.tsx               # Entry — view routing + state
+├── <a href="src/app">app</a>/                     # Next.js App Router (path-based routes)
+│   ├── api/                    # API routes (session, r2-fetch)
+│   │   └── auth/session/route.ts  # Issues/verifies the osler-session cookie
+│   ├── (app)/                  # Route group — protected app views
+│   │   ├── page.tsx            # Dashboard entry (/)
+│   │   ├── learn/  qbank/  library/  flashcards/  osce/  videos/  profile/  settings/
+│   │   └── .../[uid]/          # Dynamic pack/article/video routes
+│   ├── login/page.tsx          # Login gate
+│   ├── globals.css             # Design tokens + component styles
+│   └── layout.tsx              # Root layout with theme provider
 ├── <a href="src/components">components</a>/
 │   ├── <a href="src/components/osler">osler</a>/                 # App-specific components
 │   │   ├── app-shell.tsx      # Topbar shell with search, theme, user menu
@@ -417,11 +422,11 @@ The Rust backend (`tauri-admin/src/config.rs`) exposes `read_config`, `write_con
 ## ✦ Architecture
 
 ### View Routing
-Client-side view state (`OslerView` in `app-shell.tsx`) rather than Next.js pages. All views under a single route (`/`), toggled via `AppShell`.
+Path-based Next.js App Router routes (`/qbank/[uid]`, `/library/[article]`, `/settings/[section]`) replace the old query-param view state. `useOslerRouter()` / `routeFor()` in `src/lib/osler/navigation.ts` build the paths and drive haptic + View Transitions slide navigation. A server-side `osler-session` httpOnly cookie (HMAC-signed via `OSLER_SESSION_SECRET`) lets `src/middleware.ts` gate access to protected routes; `/login` redirects unauthenticated users with a validated `next` param.
 
-**Available views:** `dashboard`, `learn`, `library`, `qbank`, `flashcards`, `osce`, `videos`, `profile`, `settings`.
+**Views:** `dashboard`, `learn`, `library`, `qbank`, `flashcards`, `osce`, `videos`, `profile`, `settings` (see `VIEW_ORDER` in `navigation.ts`).
 
-Library, Flashcards, OSCE, and Videos are sub-views under the **Learn** hub — they retain their own `OslerView` values but are no longer top-level nav items. The Learn tab stays highlighted while inside any sub-view (`LEARN_SUBVIEWS` set in `app-shell.tsx`).
+Library, Flashcards, OSCE, and Videos are sub-views under the **Learn** hub — the Learn tab stays highlighted while inside any sub-view (`LEARN_SUBVIEWS` set in `app-shell.tsx`).
 
 ### Unified QBank Studio
 Quiz, Bank, Written → `QBankStudio.tsx` adapts UI per content type. Flashcards and OSCE have dedicated studios.

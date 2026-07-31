@@ -2231,6 +2231,11 @@ export default {
       }
 
       // ── Public content serving (R2-backed, rate-limited: 240 req/min per IP) ──
+      // These endpoints are fetched cross-origin from the Pages site, so the
+      // response must include `Access-Control-Allow-Origin` (via cors(origin))
+      // AND must relax `Cross-Origin-Resource-Policy` to `cross-origin` so
+      // the browser allows the Pages site to read the body. The default
+      // SECURITY_HEADERS has CORP=same-origin, which would block these reads.
       if (request.method === "GET" && url.pathname.startsWith("/v1/content/")) {
         if (!rateLimit(ip, "content")) return json({ error: "Too many requests" }, 429, origin, log);
         const contentPath = url.pathname.slice("/v1/content/".length).replace(/\/{2,}/g, "/");
@@ -2251,10 +2256,15 @@ export default {
           : ext === "css" ? "text/css" : ext === "js" ? "application/javascript"
           : "application/octet-stream";
         const cacheable = ext !== "json" && ext !== "md";
-        return new Response(obj.body, {
-          status: 200,
-          headers: { "content-type": contentType, "cache-control": cacheable ? "public, max-age=86400, immutable" : "public, max-age=60", ...cors(origin), ...SECURITY_HEADERS } as any,
-        });
+        const contentHeaders: Record<string, string> = {
+          "content-type": contentType,
+          "cache-control": cacheable ? "public, max-age=86400, immutable" : "public, max-age=60",
+          ...cors(origin),
+          ...SECURITY_HEADERS,
+          // Override CORP so the Pages site (different origin) can read this.
+          "cross-origin-resource-policy": "cross-origin",
+        };
+        return new Response(obj.body, { status: 200, headers: contentHeaders as any });
       }
 
       // ── Public content manifests (R2-backed) ──
@@ -2264,10 +2274,14 @@ export default {
         const r2Key = `content-manifests/${manifestPath}`;
         const obj = await env.CONTENT.get(r2Key);
         if (!obj) return json({ error: "Not found" }, 404, origin, log);
-        return new Response(obj.body, {
-          status: 200,
-          headers: { "content-type": "application/json", "cache-control": "public, max-age=60", ...cors(origin), ...SECURITY_HEADERS } as any,
-        });
+        const manifestHeaders: Record<string, string> = {
+          "content-type": "application/json",
+          "cache-control": "public, max-age=60",
+          ...cors(origin),
+          ...SECURITY_HEADERS,
+          "cross-origin-resource-policy": "cross-origin",
+        };
+        return new Response(obj.body, { status: 200, headers: manifestHeaders as any });
       }
 
       // ── Google OAuth ──

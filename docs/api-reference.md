@@ -20,6 +20,8 @@ This is the complete HTTP API reference for the Osler Cloud Worker backend (`clo
 2. [Session token lifecycle](#2-session-token-lifecycle)
 3. [Public endpoints](#3-public-endpoints)
    - [GET /v1/health](#get-v1health)
+   - [GET /v1/content/\<category\>/\<path\>](#get-v1contentcategorypath)
+   - [GET /v1/content-manifests/\<category\>/manifest.json](#get-v1content-manifestscategorymanifestjson)
    - [POST /v1/auth/register](#post-v1authregister)
    - [POST /v1/auth/login](#post-v1authlogin)
    - [GET /v1/auth/username-available](#get-v1authusername-available)
@@ -89,7 +91,7 @@ Authorization: Bearer <token>
 
 The token is the `token` field from any session-issuing response (`/v1/auth/register`, `/v1/auth/login`, `/v1/auth/google/consume`, `/v1/account/password`). Tokens are HMAC-SHA-256 signed and validated server-side against the `sessions` table on every authenticated request — see [Session token lifecycle](#2-session-token-lifecycle).
 
-Public endpoints (`/v1/health`, the `/v1/auth/*` family except `logout`, and the Google OAuth `start`/`callback` redirects) do not require a token.
+Public endpoints (`/v1/health`, `/v1/content/*`, `/v1/content-manifests/*`, the `/v1/auth/*` family except `logout`, and the Google OAuth `start`/`callback` redirects) do not require a token.
 
 ### Request & response format
 
@@ -122,7 +124,10 @@ Every JSON response includes the following security headers:
 `Cache-Control` is set to:
 
 - `no-store` — for all authenticated responses, `/v1/auth/username-available`, and all error responses.
-- `public, max-age=60` — only for `GET /v1/health` (the one cacheable endpoint).
+- `public, max-age=60` — for `GET /v1/health` and the public content endpoints' JSON/Markdown responses.
+- `public, max-age=86400, immutable` — for the public content endpoints' non-JSON/Markdown assets (images, PDFs, video, CSS/JS).
+
+**CORP exception:** the public content endpoints (`/v1/content/*`, `/v1/content-manifests/*`) override `Cross-Origin-Resource-Policy` to `cross-origin` (the default is `same-origin`) so the Pages site — a different origin — can read R2-backed content. All other endpoints keep `CORP: same-origin`.
 
 OAuth redirect responses (302s from `/v1/auth/google/start` and `/v1/auth/google/callback`) do not carry the JSON security headers because they are not JSON; they rely on the browser to follow the redirect.
 
@@ -245,6 +250,8 @@ Revoked sessions are not deleted immediately — they are kept until the next cr
 
 The frontend stores session tokens in `sessionStorage` (per-tab) rather than `localStorage` or cookies. This limits token exposure to the tab that created them and ensures they are dropped when the tab closes. See [`security.md`](./security.md) for the full rationale.
 
+Separately, the Next.js app sets an httpOnly `osler-session` cookie (HMAC-signed, no bearer token) so the middleware can gate access to protected app routes. It is issued by `POST /api/auth/session` only after the bearer token is verified against the Worker, and `GET /api/auth/session` returns a redacted view that never includes the token. See [`routing-migration-plan.md`](./routing-migration-plan.md) and [`security.md`](./security.md#route-gating-cookie-nextjs-middleware).
+
 ---
 
 ## 3. Public endpoints
@@ -284,6 +291,72 @@ curl -s https://osler-cloud.example.workers.dev/v1/health
 #### Errors
 
 This endpoint has no expected error responses in normal operation. If `DB` or `JWT_SECRET` are not configured (the Worker is misconfigured), the global pre-check returns `503 {"error":"Worker is not configured"}`.
+
+---
+
+### GET /v1/content/<category>/<path>
+
+Serves a single R2-backed content file to the frontend cross-origin. Used when the app is configured to read content from the cloud backend (via `cloud.apiUrl`) instead of the static `public/osler-content/` folder.
+
+- **Auth**: none
+- **Cache**: `Cache-Control: public, max-age=86400, immutable` for non-JSON/Markdown assets (images, PDFs, video, CSS/JS); `Cache-Control: public, max-age=60` for `.json` and `.md` files.
+- **Rate limit**: `content` bucket — 240 req/min per IP (shared global cap; see [Rate limiting](#rate-limiting)).
+- **CORP**: `Cross-Origin-Resource-Policy: cross-origin` — overrides the `same-origin` default so the Pages site can read the body.
+
+#### Path parameters
+
+| Parameter | Description |
+| --- | --- |
+| `category` | Content category — one of `qbank`, `flashcard`, `osce`, `library`, `videos`. |
+| `path` | Path of the file within the category, e.g. `Cardiology/questions.json` or `Heart/images/diagram.png`. Double slashes are collapsed. |
+
+#### Example request
+
+```bash
+curl -s https://osler-cloud.example.workers.dev/v1/content/qbank/Cardiology/questions.json
+```
+
+#### Example success response (200)
+
+Raw file bytes with the correct `Content-Type` (inferred from the extension, e.g. `application/json`, `image/png`, `application/pdf`) plus the CORS and security headers above.
+
+#### Errors
+
+- `404 {"error":"Not found"}` — the key does not exist in the `content-files/` R2 bucket.
+- `503 {"error":"Content storage not configured"}` — the `CONTENT` R2 binding is missing.
+- `429 {"error":"Too many requests"}` — rate limit exceeded.
+
+---
+
+### GET /v1/content-manifests/<category>/manifest.json
+
+Serves a single generated manifest file from R2. Manifests map a category's folder tree and are produced by the content-publishing workflow; the frontend fetches them to build the content tree.
+
+- **Auth**: none
+- **Cache**: `Cache-Control: public, max-age=60`.
+- **Rate limit**: `content` bucket — 240 req/min per IP (see [Rate limiting](#rate-limiting)).
+- **CORP**: `Cross-Origin-Resource-Policy: cross-origin`.
+
+#### Path parameters
+
+| Parameter | Description |
+| --- | --- |
+| `category` | Content category — one of `qbank`, `flashcard`, `osce`, `library`, `videos`. |
+
+#### Example request
+
+```bash
+curl -s https://osler-cloud.example.workers.dev/v1/content-manifests/qbank/manifest.json
+```
+
+#### Example success response (200)
+
+The category's `manifest.json` (the same shape `npm run generate-manifests` produces for the static folder). Double slashes in the path are collapsed.
+
+#### Errors
+
+- `404 {"error":"Not found"}` — the manifest does not exist in the `content-manifests/` R2 bucket.
+- `503 {"error":"Content storage not configured"}` — the `CONTENT` R2 binding is missing.
 
 ---
 
@@ -2990,5 +3063,6 @@ If a user reports "my progress was lost", the most common cause is that they had
 | Date | Change |
 | --- | --- |
 | Initial | API reference extracted from `cloudflare/worker/src/index.ts`. Covers all 39 public, authenticated, sync, and admin endpoints. |
+| 2026-07-31 | Added the public R2 content endpoints (`GET /v1/content/<category>/<path>` and `GET /v1/content-manifests/<category>/manifest.json`), their `CORP: cross-origin` override, and the httpOnly route-gating cookie note. Covers 41 endpoints. |
 
 For the changelog of the Worker itself, see [`../CHANGELOG.md`](../CHANGELOG.md). For deployment-related changes (env vars, migrations, R2 binding), see [`cloudflare-backend.md`](./cloudflare-backend.md).

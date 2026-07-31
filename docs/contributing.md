@@ -183,9 +183,11 @@ A high-level map of the repo. Linked files are the canonical entry points — re
 ```
 osler/
 ├── src/
-│   ├── app/                      ← Next.js App Router (single route)
+│   ├── app/                      ← Next.js App Router (path-based routes under `(app)`)
+│   │   ├── (app)/                ← Protected views — dashboard, learn, qbank, library, flashcards, osce, videos, profile, settings (+ `[uid]` / `[article]` / `[video]` / `[section]` dynamic routes)
+│   │   ├── login/                ← Login gate with `next` param validation
+│   │   ├── api/                  ← API routes (auth/session issues the osler-session cookie, r2-fetch)
 │   │   ├── layout.tsx            ← Root layout — fonts, theme provider, i18n provider
-│   │   ├── page.tsx              ← View router — syncs OslerView with URL query params
 │   │   ├── globals.css           ← Design tokens (@theme inline) + utility classes
 │   │   └── sw.ts                 ← Service worker (Serwist) — precache + runtime cache
 │   ├── components/
@@ -854,16 +856,21 @@ import { PageHeader } from "@/components/osler/ui-primitives";
 
 ### Step 6: Wire into the app
 
-In `src/app/page.tsx`, add a conditional render branch:
+Create the route page `src/app/(app)/cases/page.tsx` that renders the studio in hub mode (and `src/app/(app)/cases/[uid]/page.tsx` for session mode with a dynamic segment):
 
 ```tsx
-{view === "cases" && <CasesStudio onViewChange={setView} />}
+"use client";
+import { CasesStudio } from "@/components/osler/cases-studio";
+
+export default function CasesPage() {
+  return <CasesStudio />;
+}
 ```
 
-In `src/components/osler/app-shell.tsx`:
+In `src/lib/osler/navigation.ts`:
 
-- Add `"cases"` to the `OslerView` type.
-- Add `"cases"` to the `VIEW_ORDER` array (controls slide-transition direction).
+- Add `"cases"` to the `OslerView` type (in `app-shell.tsx`).
+- Add `"cases"` to `VIEW_ORDER` and to the `useCurrentView()` / `routeFor()` switch (controls slide-transition direction and path building).
 - Add a nav entry — either top-level or as a sub-view of `learn`.
 
 ### Step 7: Wire into the Learn hub

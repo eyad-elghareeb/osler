@@ -286,14 +286,53 @@ export async function loadAllContent(): Promise<{
   return { items, trees };
 }
 
+/**
+ * Session-scoped memo of loaded content packs, keyed by uid.
+ *
+ * Capped at MAX_CACHE_ENTRIES with LRU eviction — when the cache is full,
+ * the least-recently-accessed entry is deleted before inserting a new one.
+ * This prevents unbounded memory growth during long sessions while still
+ * avoiding re-downloads for back/forward navigation.
+ *
+ * NOTE: entries are never silently invalidated. If disk content changes
+ * (admin publishes new content), call `clearContentCache()` or use the
+ * `forceRecheckCloud()` helper in content-url.ts to reset the cloud
+ * reachability cache.
+ */
+const MAX_CACHE_ENTRIES = 50;
 const contentCacheMemo = new Map<string, AnyContent>();
+
+function cacheGet(uid: string): AnyContent | undefined {
+  const value = contentCacheMemo.get(uid);
+  if (value !== undefined) {
+    // Move to end (most recently used) by re-inserting.
+    contentCacheMemo.delete(uid);
+    contentCacheMemo.set(uid, value);
+  }
+  return value;
+}
+
+function cacheSet(uid: string, content: AnyContent): void {
+  if (contentCacheMemo.size >= MAX_CACHE_ENTRIES) {
+    // Evict the oldest entry (first key in insertion order).
+    const oldest = contentCacheMemo.keys().next().value;
+    if (oldest !== undefined) contentCacheMemo.delete(oldest);
+  }
+  contentCacheMemo.set(uid, content);
+}
+
+/** Clear the content cache (call after admin content changes). */
+export function clearContentCache(): void {
+  contentCacheMemo.clear();
+}
 
 /**
  * Load a single content pack by its node uid.
  */
 export async function loadContentByUid(uid: string, engineHint?: EngineType): Promise<AnyContent> {
-  if (contentCacheMemo.has(uid)) {
-    return contentCacheMemo.get(uid)!;
+  const cached = cacheGet(uid);
+  if (cached) {
+    return cached;
   }
 
   // Only search engines that are enabled in osler.config.
@@ -322,7 +361,7 @@ export async function loadContentByUid(uid: string, engineHint?: EngineType): Pr
       const found = findNodeByUid(manifest.items, uid);
       if (found) {
         const content = await loadNodeContent(found);
-        contentCacheMemo.set(uid, content);
+        cacheSet(uid, content);
         return content;
       }
     } catch {

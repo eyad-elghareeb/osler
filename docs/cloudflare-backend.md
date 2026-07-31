@@ -82,12 +82,12 @@ When a user clicks "Continue with Google", the Worker generates a cryptographica
 - **Password Policy**: Minimum 10 characters, must contain at least 2 character classes (lowercase / uppercase / digit / symbol). Same policy enforced on registration, password change, password reset, and admin-initiated reset.
 - **Account Management**: Users can update their display name and email, set/change password, export account data as JSON, and permanently delete their account with password confirmation.
 - **Roles**: `student` (default), `content_admin` (can create and edit their own content but not approve/publish), and `admin` (full access: manage users, approve/reject/publish content, view audit logs, revoke sessions). Admin role allows accessing administrative features.
-- **Sessions**: HMAC-SHA-256 signed session tokens with server-side revocation in D1. Session tokens are kept in `sessionStorage`. Per-user session cap of 12 concurrent sessions; oldest is auto-revoked when the cap is exceeded.
+- **Sessions**: HMAC-SHA-256 signed session tokens with server-side revocation in D1. Session tokens are kept in `sessionStorage`. Per-user session cap of 12 concurrent sessions; oldest is auto-revoked when the cap is exceeded. Separately, the Next.js app sets an httpOnly `osler-session` cookie (HMAC-signed, no bearer token) so its middleware can gate route access — see [`security.md`](./security.md#route-gating-cookie-nextjs-middleware).
 - **Password Recovery**: Supported via optional Resend API key (`RESEND_API_KEY`, `EMAIL_FROM`, `APP_ORIGIN`). Reset links are valid for 30 minutes and single-use.
 - **Rate Limiting**: Auth endpoints (login, register, reset, google/consume, username-available) are rate-limited per IP using an in-memory LRU bucket. Global per-IP cap of 240 requests/min across all rate-limited routes. Returns HTTP 429 when exceeded. For harder guarantees, front the Worker with Cloudflare Rate Limiting Rules in the dashboard.
 - **Audit Log**: Every administrative action (role change, user delete, password reset, session revocation, content create/submit/approve/reject/publish/unpublish/delete) is recorded in `admin_audit`. Retained for 1 year (365 days), pruned by the hourly cron trigger. Viewable at `/admin/audit`.
 - **CORS**: Restricted to a single `ALLOWED_ORIGIN`. Empty Origin (server-to-server / curl) is treated as the allowed origin so the worker can be tested locally; browsers always send Origin.
-- **Security Headers**: Every JSON response includes `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy: strict-origin-when-cross-origin`, `Cross-Origin-Opener-Policy: same-origin`, `Cross-Origin-Resource-Policy: same-origin`, `Strict-Transport-Security: max-age=31536000; includeSubDomains; preload`, `Permissions-Policy: camera=(), microphone=(), geolocation=(), interest-cohort=()`, and `Cache-Control: no-store` for authenticated responses.
+- **Security Headers**: Every JSON response includes `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy: strict-origin-when-cross-origin`, `Cross-Origin-Opener-Policy: same-origin`, `Cross-Origin-Resource-Policy: same-origin`, `Strict-Transport-Security: max-age=31536000; includeSubDomains; preload`, `Permissions-Policy: camera=(), microphone=(), geolocation=(), interest-cohort=()`, and `Cache-Control: no-store` for authenticated responses. **Exception:** the public content endpoints (`/v1/content/*`, `/v1/content-manifests/*`) override `Cross-Origin-Resource-Policy` to `cross-origin` and set `Cache-Control: public` so the Pages site can read R2-backed content cross-origin.
 - **Turnstile**: Optional anti-bot challenge on register/login/reset. Enable by setting `TURNSTILE_ENABLED=true` in `wrangler.toml` and configuring `TURNSTILE_SECRET_KEY` plus `turnstileSiteKey` in `osler.config.json`.
 
 ## API Contract Summary
@@ -99,6 +99,8 @@ All API routes are prefixed with `/v1`. Authenticated requests carry `Authorizat
 | Method | Route | Auth | Description |
 | --- | --- | --- | --- |
 | `GET` | `/v1/health` | Public | System health check and feature capabilities (`googleEnabled`, `turnstileEnabled`). |
+| `GET` | `/v1/content/<category>/<path>` | Public | Serve a single R2-backed content file cross-origin (`CORP: cross-origin`). |
+| `GET` | `/v1/content-manifests/<category>/manifest.json` | Public | Serve a generated category manifest from R2. |
 | `POST` | `/v1/auth/register` | Public + Turnstile | Create new account with email/password. |
 | `POST` | `/v1/auth/login` | Public + Turnstile | Authenticate with username or email. |
 | `GET` | `/v1/auth/username-available` | Public | Live check if username is available. |
