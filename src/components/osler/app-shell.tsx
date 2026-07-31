@@ -53,9 +53,6 @@ import { useIsMobile } from "@/hooks/use-mobile";
 import {
   withViewTransition,
   isViewTransitionsSupported,
-  pushNavHistory,
-  popNavHistory,
-  resetNavHistory,
   haptic,
   type ViewTransitionDirection,
 } from "@/lib/osler/native";
@@ -147,9 +144,10 @@ export function AppShell({ children }: AppShellProps) {
   const [syncStatus, setSyncStatus] = React.useState<"synced" | "syncing" | "offline">("synced");
 
   React.useEffect(() => {
-    if (sessionContextCloudSession) {
-      setCloudSession(sessionContextCloudSession);
-    }
+    // Always sync from the session context — including when it becomes
+    // null (logout/expiry). The previous code only updated when truthy,
+    // which left a stale cloudSession in local state after logout.
+    setCloudSession(sessionContextCloudSession ?? readCloudSession());
   }, [sessionContextCloudSession]);
 
   React.useEffect(() => {
@@ -170,10 +168,6 @@ export function AppShell({ children }: AppShellProps) {
   const [vtActive, setVtActive] = React.useState(false);
   React.useEffect(() => {
     setVtActive(isViewTransitionsSupported());
-  }, []);
-
-  React.useEffect(() => {
-    resetNavHistory(view);
   }, []);
 
   const handleViewChange = React.useCallback(
