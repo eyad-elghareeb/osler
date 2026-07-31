@@ -152,13 +152,11 @@ export function AppShell({
   const [syncStatus, setSyncStatus] = React.useState<"synced" | "syncing" | "offline">("synced");
   const lastViewRef = React.useRef<OslerView>(view);
 
-  // On mount: if the user has a saved cloud session, pull their Gemini API key
-  // from the cloud DB so they don't have to re-enter it on this device.
   React.useEffect(() => {
     if (cloudSession?.token) {
       void syncGeminiKeyFromCloud();
     }
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [cloudSession?.token, syncGeminiKeyFromCloud]);
 
   React.useEffect(() => {
     const onSyncStatus = (e: Event) => {

@@ -351,7 +351,6 @@ export function Library({ initialArticleId, onNavigateBack }: LibraryProps) {
     })();
 
     return () => { cancelled = true; };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [processedArticleHtml, theme]);
 
   // Reliable cross-platform (mouse + touch) auto-highlighting.
