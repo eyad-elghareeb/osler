@@ -130,7 +130,7 @@ export function NavigationStack({
         initial={false}
         animate={{ opacity: hasPages ? 0.65 : 1 }}
         transition={{ type: "spring", stiffness: 380, damping: 36, mass: 0.8 }}
-        className={cn("absolute inset-0 overflow-y-auto", homeClassName)}
+        className={cn("absolute inset-0", homeClassName)}
       >
         {home}
       </motion.div>
@@ -151,7 +151,7 @@ export function NavigationStack({
               transition={{ type: "spring", stiffness: 380, damping: 36, mass: 0.8 }}
               {...(isTop ? dismissProps : {})}
               className={cn(
-                "absolute inset-0 bg-background shadow-2xl overflow-y-auto",
+                "absolute inset-0 bg-background shadow-2xl",
                 subpageClassName,
               )}
             >

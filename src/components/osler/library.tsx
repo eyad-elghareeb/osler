@@ -479,8 +479,8 @@ export function Library({ initialArticleId, onNavigateBack }: LibraryProps) {
   const mobileLayout = isMobile ? (
     <NavigationStack
       className="h-full"
-      homeClassName="medos-scroll"
-      subpageClassName="medos-scroll"
+      homeClassName=""
+      subpageClassName=""
       rtl={rtl}
       home={
         <MobileHub
