@@ -65,6 +65,8 @@ function fmtTime(s: number): string {
 
 /* ── Component ─────────────────────────────────────────────────────── */
 
+import { useOslerRouter } from "@/lib/osler/navigation";
+
 interface VideosStudioProps {
   /** Pre-selected video (used for deep links). */
   initialVideoId?: string;
@@ -74,9 +76,17 @@ interface VideosStudioProps {
   onNavigateBack?: () => void;
 }
 
-export function VideosStudio({ initialVideoId, onOpenArticle, onNavigateBack }: VideosStudioProps) {
+export function VideosStudio({
+  initialVideoId,
+  onOpenArticle: propOnOpenArticle,
+  onNavigateBack: propOnNavigateBack,
+}: VideosStudioProps = {}) {
   const isMobile = useIsMobile();
   const { t, contentFilter, rtl } = useI18n();
+  const { navigate } = useOslerRouter();
+
+  const onNavigateBack = propOnNavigateBack || (() => navigate("learn"));
+  const onOpenArticle = propOnOpenArticle || ((id: string) => navigate("library", { article: id }));
 
   const [tree, setTree] = React.useState<ContentTreeNode[]>([]);
   const [selectedNodeUid, setSelectedNodeUid] = React.useState<string | null>(null);

@@ -286,14 +286,26 @@ export async function loadAllContent(): Promise<{
   return { items, trees };
 }
 
+const contentCacheMemo = new Map<string, AnyContent>();
+
 /**
  * Load a single content pack by its node uid.
  */
-export async function loadContentByUid(uid: string): Promise<AnyContent> {
+export async function loadContentByUid(uid: string, engineHint?: EngineType): Promise<AnyContent> {
+  if (contentCacheMemo.has(uid)) {
+    return contentCacheMemo.get(uid)!;
+  }
+
   // Only search engines that are enabled in osler.config.
   // Library articles use .md files loaded via articles.ts, not JSON — skip them here.
   const types = enabledEngines().filter((t) => t !== "library");
-  const folders = new Set(types.map(categoryFolder));
+  
+  let folders: string[] = [];
+  if (engineHint) {
+    folders = [categoryFolder(engineHint)];
+  } else {
+    folders = Array.from(new Set(types.map(categoryFolder)));
+  }
 
   for (const folder of folders) {
     try {
@@ -309,12 +321,20 @@ export async function loadContentByUid(uid: string): Promise<AnyContent> {
       const manifest = (await res.json()) as CategoryManifest;
       const found = findNodeByUid(manifest.items, uid);
       if (found) {
-        return loadNodeContent(found);
+        const content = await loadNodeContent(found);
+        contentCacheMemo.set(uid, content);
+        return content;
       }
     } catch {
       continue;
     }
   }
+
+  // If engineHint was specified and failed, fall back to searching all folders
+  if (engineHint) {
+    return loadContentByUid(uid);
+  }
+
   throw new Error(`Content not found: ${uid}`);
 }
 

@@ -554,10 +554,12 @@ interface SpeechRecognitionAlternative {
 
 /* ── Component Props ───────────────────────────────────────────────── */
 
+import { useOslerRouter } from "@/lib/osler/navigation";
+
 interface OsceStudioProps {
-  activeItem: ContentTreeNode | null;
-  activeContent: OsceContent | null;
-  onExit: () => void;
+  activeItem?: ContentTreeNode | null;
+  activeContent?: OsceContent | null;
+  onExit?: () => void;
   onOpenPack?: (item: ContentTreeNode) => void;
   /** Called when the user swipes back to navigate to the Learn hub. */
   onNavigateBack?: () => void;
@@ -649,7 +651,17 @@ function getSpeakerGender(c: OsceStation): string {
 
 /* ── OSCE Studio Component ───────────────────────────────────────── */
 
-export function OsceStudio({ activeItem, activeContent, onExit, onOpenPack, onNavigateBack }: OsceStudioProps) {
+export function OsceStudio({
+  activeItem,
+  activeContent,
+  onExit: propOnExit,
+  onOpenPack: propOnOpenPack,
+  onNavigateBack: propOnNavigateBack,
+}: OsceStudioProps = {}) {
+  const { navigate } = useOslerRouter();
+  const onExit = propOnExit || (() => navigate("osce"));
+  const onOpenPack = propOnOpenPack || ((item: ContentTreeNode) => navigate("osce", { uid: item.uid }));
+  const onNavigateBack = propOnNavigateBack || (() => navigate("learn"));
   const isMobile = useIsMobile();
   const { t, rtl, contentFilter } = useI18n();
 

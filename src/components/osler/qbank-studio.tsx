@@ -230,10 +230,12 @@ function ContentImageFigure({
   );
 }
 
+import { useOslerRouter } from "@/lib/osler/navigation";
+
 interface QBankStudioProps {
   activeItem?: ContentTreeNode | null;
   activeContent?: AnyContent | null;
-  onExit: () => void;
+  onExit?: () => void;
   onOpenPack?: (item: ContentTreeNode) => void;
 }
 
@@ -264,28 +266,9 @@ interface SessionData {
   ratings: Record<string, "easy" | "hard" | "unknown">;
   // Strikethroughs: questionIdx → number[] (choice indices)
   strikethroughs: Record<number, number[]>;
-  /**
-   * Tag filters that were active when this session was built (mirrored onto
-   * SavedSession for review/retake). Undefined for legacy single-pack sessions.
-   */
   tagsFilter?: string[];
-  /**
-   * Progress-mode filter that was active when this session was built
-   * ("all" | "wrong" | "flagged"). Mirrored onto SavedSession.
-   */
   onlyMode?: OnlyMode;
-  /**
-   * When true, answering a question correctly during this session marks
-   * its stored progress record as `dismissed=true` so it disappears from
-   * the Tracker's default wrong/flagged view. Driven by the Tracker's
-   * "Remove once answered correctly" toggle.
-   */
   dismissAfterCorrect?: boolean;
-  /**
-   * True when this session is a read-only review of a previously-saved
-   * session. In review mode, no further `recordAnswer` calls are made —
-   * the view just shows what was answered/revealed at save time.
-   */
   isReview?: boolean;
 }
 
@@ -301,14 +284,11 @@ interface SessionQuestionChild {
 interface SessionQuestion {
   id: string;
   stem: string;
-  /** Optional image(s) shown above the stem. */
   images?: ContentImage | ContentImage[];
-  /** Optional image(s) shown above a specific choice, keyed by 0-based index. */
   choiceImages?: (ContentImage | ContentImage[] | undefined)[];
   choices: string[];
-  correct: number; // -1 for non-MCQ
+  correct: number;
   explanation: string;
-  /** Optional image(s) shown below the explanation. */
   explanationImages?: ContentImage | ContentImage[];
   modelAnswer?: string;
   tags?: string[];
@@ -317,27 +297,21 @@ interface SessionQuestion {
   redFlags?: string[];
   differential?: string[];
   children?: SessionQuestionChild[];
-  /**
-   * Originating pack uid for this question (set when building a multi-pack
-   * pool so answers can be recorded against the *real* source pack, not the
-   * synthetic session id). Legacy single-pack sessions fall back to
-   * `session.itemId`.
-   */
   sourceUid?: string;
-  /** Title of the originating pack (for review/retake UI). */
   sourceTitle?: string;
-  /** Content-relative folder path of the originating pack (asset resolution). */
   sourcePath?: string;
-  /** Category folder of the originating pack (asset resolution). */
   sourceCategory?: string;
 }
 
 export function QBankStudio({
   activeItem,
   activeContent,
-  onExit,
-  onOpenPack,
-}: QBankStudioProps) {
+  onExit: propOnExit,
+  onOpenPack: propOnOpenPack,
+}: QBankStudioProps = {}) {
+  const { navigate } = useOslerRouter();
+  const onExit = propOnExit || (() => navigate("qbank"));
+  const onOpenPack = propOnOpenPack || ((item: ContentTreeNode) => navigate("qbank", { uid: item.uid }));
   const [mode, setMode] = React.useState<QuizMode>("home");
   const [session, setSession] = React.useState<SessionData | null>(null);
   const [testMode, setTestMode] = React.useState<TestMode>("tutor");

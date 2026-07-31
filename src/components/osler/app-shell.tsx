@@ -124,39 +124,39 @@ function directionFor(from: OslerView, to: OslerView): ViewTransitionDirection {
   return "forward";
 }
 
+import { useOslerSession } from "@/lib/osler/session-context";
+import { useCurrentView, useOslerRouter } from "@/lib/osler/navigation";
+import { loadContentByUid } from "@/lib/osler/content";
+
 interface AppShellProps {
-  view: OslerView;
-  onViewChange: (v: OslerView) => void;
-  username: string;
-  onLogout: () => void;
-  /** Called when the user picks a result from the global search. */
-  onSearchSelect?: (r: SearchResult) => void;
   children: React.ReactNode;
 }
 
-export function AppShell({
-  view,
-  onViewChange,
-  username,
-  onLogout,
-  onSearchSelect,
-  children,
-}: AppShellProps) {
+export function AppShell({ children }: AppShellProps) {
   const { theme, isDark, toggleTheme } = useOslerTheme();
   const { t, rtl } = useI18n();
   const isMobile = useIsMobile();
   const immersive = useImmersiveMode();
+  const { username, cloudSession: sessionContextCloudSession, logout } = useOslerSession();
+  const view = useCurrentView();
+  const { navigate } = useOslerRouter();
+
   const [searchOpen, setSearchOpen] = React.useState(false);
   const [query, setQuery] = React.useState("");
-  const [cloudSession, setCloudSession] = React.useState<CloudSession | null>(() => readCloudSession());
+  const [cloudSession, setCloudSession] = React.useState<CloudSession | null>(() => sessionContextCloudSession || readCloudSession());
   const [syncStatus, setSyncStatus] = React.useState<"synced" | "syncing" | "offline">("synced");
-  const lastViewRef = React.useRef<OslerView>(view);
+
+  React.useEffect(() => {
+    if (sessionContextCloudSession) {
+      setCloudSession(sessionContextCloudSession);
+    }
+  }, [sessionContextCloudSession]);
 
   React.useEffect(() => {
     if (cloudSession?.token) {
       void syncGeminiKeyFromCloud();
     }
-  }, [cloudSession?.token, syncGeminiKeyFromCloud]);
+  }, [cloudSession?.token]);
 
   React.useEffect(() => {
     const onSyncStatus = (e: Event) => {
@@ -167,56 +167,27 @@ export function AppShell({
     return () => window.removeEventListener("osler-cloud-sync-status", onSyncStatus);
   }, []);
 
-  // Detect View Transitions API support once on mount. The state also
-  // responds to runtime changes (e.g. user toggles reduced-motion).
   const [vtActive, setVtActive] = React.useState(false);
   React.useEffect(() => {
     setVtActive(isViewTransitionsSupported());
   }, []);
 
-  // Initialize nav history on first mount.
   React.useEffect(() => {
     resetNavHistory(view);
-    lastViewRef.current = view;
   }, []);
 
-
-  /**
-   * Wrapper around `onViewChange` that:
-   *   1. Triggers a haptic tick (the user perceives the tap immediately).
-   *   2. Wraps the state update in `document.startViewTransition()` so the
-   *      browser crossfades/slides between the old and new view snapshots.
-   *   3. Falls back to a plain state update when the VT API is unavailable
-   *      or the user prefers reduced motion.
-   */
   const handleViewChange = React.useCallback(
     (next: OslerView) => {
       if (next === view) return;
-      const direction = directionFor(view, next);
-      haptic("selection");
-
-      // We must call onViewChange synchronously inside the VT callback —
-      // React batches the state update and flushes it before the snapshot.
-      withViewTransition(() => {
-        onViewChange(next);
-      }, direction);
-
-      // Track nav history for direction heuristic on the next change.
-      if (direction === "backward") popNavHistory();
-      else pushNavHistory(next);
-      lastViewRef.current = next;
+      navigate(next);
     },
-    [view, onViewChange],
+    [view, navigate],
   );
 
-  // Search debounce — keeps the query state in sync with the panel.
-  // (The actual search runs inside GlobalSearchPanel against the cached
-  // index, so there's no async work to do here.)
   React.useEffect(() => {
     if (!searchOpen) setQuery("");
   }, [searchOpen]);
 
-  // Keyboard: Ctrl/Cmd+K opens search
   React.useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
@@ -229,11 +200,35 @@ export function AppShell({
     return () => window.removeEventListener("keydown", handler);
   }, []);
 
-  const handleSearchSelect = (r: SearchResult) => {
+  const handleSearchSelect = React.useCallback(async (r: SearchResult) => {
     setSearchOpen(false);
     setQuery("");
-    onSearchSelect?.(r);
-  };
+    switch (r.payload.type) {
+      case "article":
+        navigate("library", { article: r.payload.file });
+        return;
+      case "pack": {
+        try {
+          const content = await loadContentByUid(r.payload.uid);
+          if (content.type === "osce") navigate("osce", { uid: r.payload.uid });
+          else if (content.type === "flashcard") navigate("flashcards", { uid: r.payload.uid });
+          else navigate("qbank", { uid: r.payload.uid });
+        } catch (e) {
+          console.error("Search: failed to open pack", e);
+        }
+        return;
+      }
+      case "video":
+        navigate("videos", { video: r.payload.id });
+        return;
+      case "setting":
+        navigate("settings", { section: r.payload.section });
+        return;
+      case "nav":
+        navigate(r.payload.view as OslerView);
+        return;
+    }
+  }, [navigate]);
 
   const searchPlaceholder = t((VIEW_PLACEHOLDER_KEY[view] ?? "search.globalPlaceholder") as StringKey);
 
@@ -386,14 +381,14 @@ export function AppShell({
             <DropdownMenuTrigger asChild>
               <button className="flex items-center gap-2 h-9 px-2 rounded-md hover:bg-muted/60 transition-colors shrink-0">
                 <div className="size-7 rounded-full bg-gradient-to-br from-primary/80 to-primary/40 flex items-center justify-center text-xs font-semibold text-primary-foreground">
-                  {(cloudSession?.user.displayName || username).slice(0, 2).toUpperCase()}
+                  {(cloudSession?.user.displayName || username || "U").slice(0, 2).toUpperCase()}
                 </div>
                 <ChevronDown className="size-3.5 text-muted-foreground hidden sm:block" />
               </button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-56">
               <DropdownMenuLabel className="flex flex-col gap-0.5">
-                <span className="text-sm font-medium">{cloudSession?.user.displayName || username}</span>
+                <span className="text-sm font-medium">{cloudSession?.user.displayName || username || "User"}</span>
                 <span className="text-xs text-muted-foreground font-normal">
                   {cloudSession ? `${cloudSession.user.email || `@${cloudSession.user.username}`} · ${cloudSession.user.role}` : t("nav.localSession")}
                 </span>
@@ -416,7 +411,7 @@ export function AppShell({
 
               <DropdownMenuItem
                 className="cursor-pointer text-destructive focus:text-destructive"
-                onClick={onLogout}
+                onClick={logout}
               >
                 <LogOut className="size-4 me-2" />
                 {t("nav.signOut")}

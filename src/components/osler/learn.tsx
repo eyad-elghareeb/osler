@@ -37,9 +37,11 @@ import { PageHeader } from "./ui-primitives";
  * are filtered out of the grid at render time.
  */
 
+import { useOslerRouter } from "@/lib/osler/navigation";
+
 interface LearnProps {
   /** Navigate to a sub-view (library / flashcards / osce / videos). */
-  onNavigate: (v: OslerView) => void;
+  onNavigate?: (v: OslerView) => void;
 }
 
 interface ModuleCardDef {
@@ -100,8 +102,11 @@ const ALL_MODULES: ModuleCardDef[] = [
   },
 ];
 
-export function Learn({ onNavigate }: LearnProps) {
+export function Learn({ onNavigate: propOnNavigate }: LearnProps = {}) {
   const { t, rtl } = useI18n();
+  const { navigate } = useOslerRouter();
+
+  const onNavigate = propOnNavigate || navigate;
 
   // Filter out modules whose engine plugin is disabled in osler.config.
   const modules = React.useMemo(

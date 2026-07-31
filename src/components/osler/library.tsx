@@ -52,6 +52,8 @@ import { PdfExportDialog, type PdfExportOptions } from "./pdf-export-dialog";
 import { generateArticlePdf, downloadPdf } from "@/lib/osler/pdf";
 import { useSwipeBackDismiss } from "@/hooks/use-swipe-back-dismiss";
 
+import { useOslerRouter } from "@/lib/osler/navigation";
+
 interface LibraryProps {
   initialArticleId?: string;
   /** Called when the user swipes back to navigate to the Learn hub. */
@@ -62,8 +64,11 @@ type SidebarTab = "toc" | "bookmarks";
 
 const BOOKMARKS_KEY = "osler-article-bookmarks";
 
-export function Library({ initialArticleId, onNavigateBack }: LibraryProps) {
+export function Library({ initialArticleId, onNavigateBack: propOnNavigateBack }: LibraryProps = {}) {
   const { rtl, t } = useI18n();
+  const { navigate } = useOslerRouter();
+  const onNavigateBack = propOnNavigateBack || (() => navigate("learn"));
+
   const [tree, setTree] = React.useState<ContentTreeNode[]>([]);
   const [allArticles, setAllArticles] = React.useState<ArticleMeta[]>([]);
   const [activeFile, setActiveFile] = React.useState<string | null>(

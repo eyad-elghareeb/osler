@@ -44,13 +44,14 @@ import { ContentCacheButton } from "./content-cache-button";
 import { ContentLangFilter } from "./qbank-studio";
 import { NavigationStack } from "./navigation-stack";
 import { useSwipeBackDismiss } from "@/hooks/use-swipe-back-dismiss";
+import { useOslerRouter } from "@/lib/osler/navigation";
 
 type ViewMode = "decks" | "subdecks" | "study" | "complete";
 
 interface FlashcardStudioProps {
   activeItem?: ContentTreeNode | null;
   activeContent?: AnyContent | null;
-  onExit: () => void;
+  onExit?: () => void;
   onOpenPack?: (item: ContentTreeNode) => void;
   onNavigateHome?: () => void;
   /** Called when the user swipes back to navigate to the Learn hub. */
@@ -311,11 +312,17 @@ function expandCards(cards: Flashcard[]): StudyCard[] {
 export function FlashcardStudio({
   activeItem,
   activeContent,
-  onExit,
-  onOpenPack,
-  onNavigateHome,
-  onNavigateBack,
-}: FlashcardStudioProps) {
+  onExit: propOnExit,
+  onOpenPack: propOnOpenPack,
+  onNavigateHome: propOnNavigateHome,
+  onNavigateBack: propOnNavigateBack,
+}: FlashcardStudioProps = {}) {
+  const { navigate } = useOslerRouter();
+  const onExit = propOnExit || (() => navigate("flashcards"));
+  const onOpenPack = propOnOpenPack || ((item: ContentTreeNode) => navigate("flashcards", { uid: item.uid }));
+  const onNavigateHome = propOnNavigateHome || (() => navigate("dashboard"));
+  const onNavigateBack = propOnNavigateBack || (() => navigate("learn"));
+
   const { t, rtl } = useI18n();
   const {
     trees,

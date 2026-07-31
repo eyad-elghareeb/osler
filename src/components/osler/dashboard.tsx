@@ -50,9 +50,12 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 
+import { useOslerRouter } from "@/lib/osler/navigation";
+import { useOslerSession } from "@/lib/osler/session-context";
+
 interface DashboardProps {
-  username: string;
-  onViewChange: (v: OslerView) => void;
+  username?: string;
+  onViewChange?: (v: OslerView) => void;
   onOpenPack?: (item: ContentTreeNode, content: AnyContent) => void;
   onOpenArticle?: (id: string) => void;
 }
@@ -68,12 +71,24 @@ const ENGINE_COLORS: Record<EngineType, string> = {
 };
 
 export function Dashboard({
-  username,
-  onViewChange,
-  onOpenPack,
-  onOpenArticle,
+  username: propUsername,
+  onViewChange: propOnViewChange,
+  onOpenPack: propOnOpenPack,
+  onOpenArticle: propOnOpenArticle,
 }: DashboardProps) {
   const { t, rtl } = useI18n();
+  const session = useOslerSession();
+  const { navigate } = useOslerRouter();
+
+  const username = propUsername || session.username || "User";
+  const onViewChange = propOnViewChange || navigate;
+  const onOpenArticle = propOnOpenArticle || ((id: string) => navigate("library", { article: id }));
+  const onOpenPack = propOnOpenPack || ((node: ContentTreeNode) => {
+    if (node.type === "osce") navigate("osce", { uid: node.uid });
+    else if (node.type === "flashcard") navigate("flashcards", { uid: node.uid });
+    else navigate("qbank", { uid: node.uid });
+  });
+
   const [data, setData] = React.useState<{
     items: Array<{ node: ContentTreeNode; content: AnyContent | null }>;
   } | null>(null);

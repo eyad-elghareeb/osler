@@ -68,11 +68,21 @@ export function readCloudSession(): CloudSession | null {
 }
 
 export function saveCloudSession(session: CloudSession): void {
-  if (typeof window !== "undefined") sessionStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(session));
+  if (typeof window !== "undefined") {
+    sessionStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(session));
+    void fetch("/api/auth/session", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ session }),
+    }).catch(() => {});
+  }
 }
 
 export function clearCloudSession(): void {
-  if (typeof window !== "undefined") sessionStorage.removeItem(SESSION_STORAGE_KEY);
+  if (typeof window !== "undefined") {
+    sessionStorage.removeItem(SESSION_STORAGE_KEY);
+    void fetch("/api/auth/session", { method: "DELETE" }).catch(() => {});
+  }
 }
 
 export async function registerCloudAccount(input: {
@@ -108,7 +118,8 @@ export async function loginCloudAccount(input: {
 export function startGoogleLogin(): void {
   if (typeof window === "undefined") return;
   const config = getConfig();
-  window.location.assign(`${config.cloud.apiUrl.replace(/\/$/, "")}/v1/auth/google/start?returnTo=${encodeURIComponent(window.location.origin)}`);
+  const returnUrl = `${window.location.origin}/login`;
+  window.location.assign(`${config.cloud.apiUrl.replace(/\/$/, "")}/v1/auth/google/start?returnTo=${encodeURIComponent(returnUrl)}`);
 }
 
 export async function consumeGoogleLogin(ticket: string): Promise<CloudSession> {

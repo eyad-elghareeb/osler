@@ -14,9 +14,11 @@ import { cn } from "@/lib/utils";
 import { useImmersiveMode } from "./immersive-mode";
 import { haptic } from "@/lib/osler/native";
 
+import { useCurrentView, useOslerRouter } from "@/lib/osler/navigation";
+
 interface MobileTabBarProps {
-  view: OslerView;
-  onViewChange: (v: OslerView) => void;
+  view?: OslerView;
+  onViewChange?: (v: OslerView) => void;
 }
 
 interface TabItem {
@@ -27,12 +29,6 @@ interface TabItem {
     | "nav.learn"
     | "nav.profile";
   icon: React.ComponentType<{ className?: string }>;
-  /**
-   * Returns true if this tab should be rendered as "active" for the given
-   * view. The Learn tab covers all Learn-hub sub-views (library, flashcards,
-   * osce, videos) so it stays highlighted while the user is inside any of
-   * them.
-   */
   isActive?: (view: OslerView) => boolean;
 }
 
@@ -58,12 +54,15 @@ function ProfileIcon({ className }: { className?: string }) {
   );
 }
 
-export function MobileTabBar({ view, onViewChange }: MobileTabBarProps) {
-  // Hide only while an engine view is running an active session (a question,
-  // a studying flashcard, an OSCE scenario). The hub/landing screens of those
-  // views keep the bar. Desktop is unaffected (md:hidden).
+export function MobileTabBar({ view: propView, onViewChange }: MobileTabBarProps) {
   const immersive = useImmersiveMode();
   const { t } = useI18n();
+  const currentView = useCurrentView();
+  const { navigate } = useOslerRouter();
+
+  const activeView = propView ?? currentView;
+  const handleNav = onViewChange ?? navigate;
+
   return (
     <nav
       className={cn(
@@ -75,7 +74,7 @@ export function MobileTabBar({ view, onViewChange }: MobileTabBarProps) {
     >
       {TABS.map((tab) => {
         const Icon = tab.id === "profile" ? ProfileIcon : tab.icon;
-        const active = tab.isActive ? tab.isActive(view) : tab.id === view;
+        const active = tab.isActive ? tab.isActive(activeView) : tab.id === activeView;
         return (
           <button
             key={tab.id}
@@ -85,9 +84,7 @@ export function MobileTabBar({ view, onViewChange }: MobileTabBarProps) {
             aria-label={t(tab.labelKey)}
             onClick={() => {
               if (active) return;
-              // Selection tick — feels like a native iOS tab-bar tap.
-              haptic("selection");
-              onViewChange(tab.id);
+              handleNav(tab.id);
             }}
             className={`medos-tabbar-item medos-no-select ${active ? "active" : ""}`}
           >

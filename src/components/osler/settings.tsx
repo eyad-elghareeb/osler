@@ -131,7 +131,7 @@ const OSCE_STORAGE_KEYS = {
 
 /* ─── Section catalog ─────────────────────────────────────────────── */
 
-type SettingsSection = "account" | "appearance" | "language" | "ai" | "shortcuts" | "downloads" | "sync" | "backup" | "native" | "about" | "danger";
+export type SettingsSection = "account" | "appearance" | "language" | "ai" | "shortcuts" | "downloads" | "sync" | "backup" | "native" | "about" | "danger";
 
 interface SectionMeta {
   id: SettingsSection;

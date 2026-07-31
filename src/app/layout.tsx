@@ -117,6 +117,8 @@ export const viewport = {
   ],
 } as const;
 
+import { OslerSessionProvider } from "@/lib/osler/session-context";
+
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -128,31 +130,12 @@ export default function RootLayout({
         <meta name="theme-color" content="#0a0a0a" media="(prefers-color-scheme: dark)" />
         <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
         <link rel="apple-touch-icon" href="/assets/icons/apple-touch-icon.png" />
-        {/* PWA native-feel meta tags.
-            - `apple-mobile-web-app-capable` + `mobile-web-app-capable` make
-              iOS Safari and Android Chrome launch the PWA in standalone
-              mode (no URL bar, no browser chrome) when added to the home
-              screen.
-            - `apple-mobile-web-app-status-bar-style: black-translucent`
-              lets our background extend under the iOS status bar; the
-              .safe-pt utility compensates for the inset.
-            - `apple-mobile-web-app-title` is the name shown under the
-              home-screen icon on iOS (shorter than the page title).
-            - `mobile-web-app-capable` is the standard equivalent for
-              Android Chrome.
-            Docs: https://whatpwacando.today/viewport */}
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
         <meta name="apple-mobile-web-app-title" content={siteShortName} />
         <meta name="mobile-web-app-title" content={siteShortName} />
-        {/* Disable iOS Safari's telephone link detection — otherwise a
-            sequence of digits in a medical record could get auto-linked
-            as a phone number. */}
         <meta name="format-detection" content="telephone=no" />
-        {/* Set <html lang/dir> from localStorage BEFORE React hydrates so the
-            user's preferred UI language (incl. RTL Arabic) is applied without
-            a flash of the default LTR English layout. */}
         <script dangerouslySetInnerHTML={{ __html: LANG_INIT_SCRIPT }} />
       </head>
       <body
@@ -161,9 +144,11 @@ export default function RootLayout({
         <SerwistProvider>
           <OslerThemeProvider>
             <OslerI18nProvider>
-              <AnalyticsProvider>
-                <AnimationsProvider>{children}</AnimationsProvider>
-              </AnalyticsProvider>
+              <OslerSessionProvider>
+                <AnalyticsProvider>
+                  <AnimationsProvider>{children}</AnimationsProvider>
+                </AnalyticsProvider>
+              </OslerSessionProvider>
             </OslerI18nProvider>
           </OslerThemeProvider>
         </SerwistProvider>

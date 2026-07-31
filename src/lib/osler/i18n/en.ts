@@ -1856,4 +1856,8 @@ export const en = {
     "admin.analytics.apiPerf.col.p50": "p50",
     "admin.analytics.apiPerf.col.p95": "p95",
     "admin.analytics.apiPerf.col.max": "max",
+
+    "notFound.title": "Page Not Found",
+    "notFound.description": "The page or resource you requested could not be found.",
+    "notFound.backHome": "Back to Dashboard",
 } as const;

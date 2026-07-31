@@ -1851,4 +1851,8 @@ export const ar = {
     "admin.analytics.apiPerf.col.p50": "p50",
     "admin.analytics.apiPerf.col.p95": "p95",
     "admin.analytics.apiPerf.col.max": "الأقصى",
+
+    "notFound.title": "الصفحة غير موجودة",
+    "notFound.description": "لم يتم العثور على الصفحة أو المورد الذي طلبته.",
+    "notFound.backHome": "العودة إلى لوحة التحكم",
 } as const;

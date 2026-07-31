@@ -45,14 +45,27 @@ import {
   type StatTileProps,
 } from "./ui-primitives";
 
+import { useOslerRouter } from "@/lib/osler/navigation";
+import { useOslerSession } from "@/lib/osler/session-context";
+
 interface ProfileProps {
-  username: string;
+  username?: string;
   onViewChange?: (v: OslerView) => void;
   onOpenSettingsSection?: (section: "account" | "language" | "ai" | "shortcuts" | "downloads" | "sync" | "backup" | "danger") => void;
 }
 
-export function Profile({ username, onViewChange, onOpenSettingsSection }: ProfileProps) {
+export function Profile({
+  username: propUsername,
+  onViewChange: propOnViewChange,
+  onOpenSettingsSection: propOnOpenSettingsSection,
+}: ProfileProps = {}) {
   const { t } = useI18n();
+  const session = useOslerSession();
+  const { navigate } = useOslerRouter();
+
+  const username = propUsername || session.username || "User";
+  const onViewChange = propOnViewChange || navigate;
+  const onOpenSettingsSection = propOnOpenSettingsSection || ((section: any) => navigate("settings", { section }));
   const [syncOpen, setSyncOpen] = React.useState(false);
   const [data, setData] = React.useState<{
     items: Array<{ node: ContentTreeNode; content: AnyContent | null }>;
