@@ -113,6 +113,9 @@ export async function GET(request: Request) {
       },
     });
   } catch (err) {
-    return NextResponse.json({ error: String(err) }, { status: 500 });
+    // Log the full error server-side; return a generic message to the client
+    // so we don't leak internal URLs, stack traces, or file paths.
+    console.error("[r2-fetch] upstream fetch failed:", err);
+    return NextResponse.json({ error: "Failed to fetch content from upstream" }, { status: 502 });
   }
 }
