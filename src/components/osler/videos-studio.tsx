@@ -461,49 +461,33 @@ function VideoPlayerView({
   const youtubeRef = React.useRef<any>(null);
 
   const [isFullscreen, setIsFullscreen] = React.useState(false);
-  const [showPlaylist, setShowPlaylist] = React.useState(false);
-  const [invidiousMode, setInvidiousMode] = React.useState(false);
-  const [wakeLockActive, setWakeLockActive] = React.useState(false);
-  const [wakeLockUserEnabled, setWakeLockUserEnabled] = React.useState(true);
+  const [invidiousMode, setInvidiousMode] = React.useState<boolean>(Boolean(INVIDIOUS_HOST));
+  const [showFullDescription, setShowFullDescription] = React.useState(false);
 
   const isYouTube = video.source.type === "youtube";
   const videoId = isYouTube ? video.source.id : undefined;
 
-  // ── Screen Wake Lock — keep the screen awake while a video is playing.
-  //    This prevents the OS from auto-locking the screen during long
-  //    lectures. The lock is auto-released when the tab is backgrounded
-  //    and re-acquired on visibility regained (see wake-lock.ts). We
-  //    also release it when the user exits the player view.
-  //    Docs: https://whatpwacando.today/wake-lock/
-  React.useEffect(() => {
-    if (!wakeLockUserEnabled) return;
-    if (!isWakeLockSupported()) return;
-    let cancelled = false;
-    acquireWakeLock(() => wakeLockUserEnabled && !cancelled).then((handle) => {
-      if (cancelled) {
-        handle?.release();
-        return;
+  // ── Jump to section helper ──
+  const handleJumpToSection = (time: number) => {
+    haptic("selection");
+    if (isYouTube && !invidiousMode && youtubeRef.current) {
+      try {
+        if (typeof youtubeRef.current.seekTo === "function") {
+          youtubeRef.current.seekTo(time, true);
+          youtubeRef.current.playVideo();
+        }
+      } catch (e) {
+        console.error("Failed seeking YouTube player:", e);
       }
-      if (handle) setWakeLockActive(true);
-    });
-    return () => {
-      cancelled = true;
-      releaseWakeLock().then(() => setWakeLockActive(false));
-    };
-  }, [wakeLockUserEnabled, videoId, isYouTube, video.source.url]);
-
-  const toggleWakeLock = () => {
-    setWakeLockUserEnabled((v) => {
-      const next = !v;
-      if (next) haptic("success");
-      else haptic("warning");
-      return next;
-    });
+    } else if (plyrRef.current) {
+      plyrRef.current.currentTime = time;
+      void plyrRef.current.play();
+    }
   };
 
   // ── Initialise player: YouTube IFrame API or Plyr ──
   React.useEffect(() => {
-    if (!containerRef.current) return;
+    if (!containerRef.current || invidiousMode) return;
 
     containerRef.current.innerHTML = "";
 
@@ -608,7 +592,7 @@ function VideoPlayerView({
         plyrRef.current = null;
       };
     }
-  }, [isYouTube, videoId, video.source.url]);
+  }, [isYouTube, videoId, video.source.url, invidiousMode]);
 
   // ── Fullscreen tracking ──
   React.useEffect(() => {
@@ -617,7 +601,7 @@ function VideoPlayerView({
     return () => document.removeEventListener("fullscreenchange", handler);
   }, []);
 
-  // ── Keyboard shortcuts (customizable via settings) ──
+  // ── Keyboard shortcuts ──
   useShortcutListener(
     (actionId, _e) => {
       switch (actionId) {
@@ -650,22 +634,17 @@ function VideoPlayerView({
     { ignoreInputs: true },
   );
 
-  function handleInvidious() {
-    if (!videoId || invidiousMode) return;
-    setInvidiousMode(true);
-  }
-
   return (
-    <div className="fixed inset-0 z-50 bg-background flex flex-col safe-screen">
+    <div className="fixed inset-0 z-50 bg-background flex flex-col safe-screen overflow-hidden">
       {/* Top bar */}
-      <header className="h-12 flex items-center px-2 sm:px-4 gap-2 shrink-0 border-b border-border/60 bg-card safe-pt">
+      <header className="h-12 flex items-center px-2 sm:px-4 gap-2 shrink-0 border-b border-border bg-card/80 backdrop-blur-md safe-pt">
         <button
           onClick={() => { haptic('light'); onExit(); }}
           className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors medos-touch-target"
           title={t("videos.backToVideos")}
         >
           <ArrowLeft className={cn("size-4", rtl && "rtl-flip-x")} />
-          <span className="hidden sm:inline">{t("videos.backToVideos")}</span>
+          <span className="hidden sm:inline font-medium">{t("videos.backToVideos")}</span>
         </button>
 
         <div className="h-5 w-px bg-border/60 hidden sm:block" />
@@ -674,7 +653,7 @@ function VideoPlayerView({
           <div className="flex items-center gap-2 text-xs text-muted-foreground">
             {video.specialty && (
               <>
-                <span className="font-medium text-foreground truncate">{video.specialty}</span>
+                <span className="font-semibold text-foreground truncate">{video.specialty}</span>
                 <span className="opacity-50">·</span>
               </>
             )}
@@ -685,7 +664,7 @@ function VideoPlayerView({
         {onPrev && (
           <button
             onClick={() => { haptic('selection'); onPrev(); }}
-            className="size-7 rounded-md flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors"
+            className="size-8 rounded-md flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors"
             title="Previous (P)"
           >
             <ChevronLeft className={cn("size-4", rtl && "rtl-flip-x")} />
@@ -694,257 +673,215 @@ function VideoPlayerView({
         {onNext && (
           <button
             onClick={() => { haptic('selection'); onNext(); }}
-            className="size-7 rounded-md flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors"
+            className="size-8 rounded-md flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors"
             title="Next (N)"
           >
             <ChevronRight className={cn("size-4", rtl && "rtl-flip-x")} />
           </button>
         )}
-        {isYouTube && !invidiousMode && (
+        {isYouTube && INVIDIOUS_HOST && (
           <button
-            onClick={handleInvidious}
-            className="size-7 rounded-md flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors"
-            title="Play via alternative host"
+            onClick={() => {
+              haptic("selection");
+              setInvidiousMode((prev) => !prev);
+            }}
+            className={cn(
+              "px-2.5 h-8 rounded-md text-xs font-medium flex items-center gap-1.5 transition-colors border",
+              invidiousMode
+                ? "bg-primary text-primary-foreground border-primary"
+                : "text-muted-foreground hover:text-foreground hover:bg-muted/60 border-border"
+            )}
+            title={t("videos.switchPlayer")}
           >
             <ExternalLink className="size-3.5" />
-          </button>
-        )}
-        <button
-          onClick={() => setShowPlaylist((s) => !s)}
-          className={cn(
-            "size-7 rounded-md flex items-center justify-center transition-colors",
-            showPlaylist ? "text-primary bg-primary/10" : "text-muted-foreground hover:text-foreground hover:bg-muted/60"
-          )}
-          title={t("videos.playlist")}
-        >
-          <ListVideo className="size-4" />
-        </button>
-        {/* Wake lock toggle — keeps the screen awake while the video plays.
-            Hidden on browsers that don't support the Wake Lock API. */}
-        {isWakeLockSupported() && (
-          <button
-            onClick={toggleWakeLock}
-            className={cn(
-              "size-7 rounded-md flex items-center justify-center transition-colors",
-              wakeLockActive && wakeLockUserEnabled
-                ? "text-amber-500 bg-amber-500/10"
-                : "text-muted-foreground hover:text-foreground hover:bg-muted/60"
-            )}
-            title={
-              wakeLockActive && wakeLockUserEnabled
-                ? `${t("native.wakeLock.title")}: ${t("native.wakeLock.active")}`
-                : `${t("native.wakeLock.title")}: ${t("native.wakeLock.inactive")}`
-            }
-            aria-pressed={wakeLockActive && wakeLockUserEnabled}
-            aria-label={t("native.wakeLock.title")}
-          >
-            <Sun className="size-4" />
+            <span className="hidden md:inline">{invidiousMode ? "Alt Host" : "Standard"}</span>
           </button>
         )}
       </header>
 
-      {/* Body: player + sidebar */}
-      <div className="flex-1 min-h-0 flex">
-        {/* Player area */}
-        <div className="relative flex-1 min-w-0 bg-black">
-          {invidiousMode && videoId ? (
-            <iframe
-              src={`https://${INVIDIOUS_HOST}/embed/${videoId}`}
-              className="absolute inset-0 w-full h-full"
-              style={{ border: "none" }}
-              allow="autoplay; encrypted-media; fullscreen"
-              allowFullScreen
-            />
-          ) : (
-            <div ref={containerRef} className="absolute inset-0" />
-          )}
+      {/* Body: Main stage (Player + Metadata) + Right Sidebar (Up Next Playlist & Chapters) */}
+      <div className="flex-1 min-h-0 flex flex-col lg:flex-row overflow-y-auto lg:overflow-hidden">
+        {/* Main Stage Column */}
+        <div className="flex-1 min-w-0 flex flex-col overflow-y-auto lg:overflow-y-auto p-3 sm:p-4 lg:p-6 space-y-4">
+          {/* Video Player Container */}
+          <div className="relative aspect-video w-full rounded-2xl overflow-hidden bg-black shadow-lg border border-border/40 shrink-0">
+            {invidiousMode && videoId ? (
+              <iframe
+                src={`https://${INVIDIOUS_HOST}/embed/${videoId}`}
+                className="absolute inset-0 w-full h-full"
+                style={{ border: "none" }}
+                allow="autoplay; encrypted-media; fullscreen"
+                allowFullScreen
+              />
+            ) : (
+              <div ref={containerRef} className="absolute inset-0 w-full h-full" />
+            )}
+          </div>
+
+          {/* YouTube-like Metadata Header */}
+          <div className="space-y-3">
+            <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-foreground leading-snug">
+              {video.title}
+            </h1>
+
+            {/* Instructor / Specialty Bar */}
+            <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-border/60">
+              <div className="flex items-center gap-3">
+                <div className="size-10 rounded-full bg-primary/10 border border-primary/20 flex items-center justify-center font-bold text-primary text-sm shrink-0">
+                  {video.instructor ? video.instructor.charAt(0).toUpperCase() : <VideoIcon className="size-5" />}
+                </div>
+                <div>
+                  <div className="text-sm font-semibold text-foreground">
+                    {video.instructor || video.specialty || "Osler Medical"}
+                  </div>
+                  {video.specialty && (
+                    <div className="text-xs text-muted-foreground">{video.specialty}</div>
+                  )}
+                </div>
+              </div>
+
+              {/* Jump to section quick pill row if chapters exist */}
+              {video.chapters && video.chapters.length > 0 && (
+                <div className="flex items-center gap-1.5 overflow-x-auto py-1 max-w-full no-scrollbar">
+                  <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider shrink-0 me-1">
+                    {t("videos.chapters")}:
+                  </span>
+                  {video.chapters.map((ch, i) => (
+                    <button
+                      key={i}
+                      onClick={() => handleJumpToSection(ch.time)}
+                      className="px-2.5 py-1 rounded-full text-xs font-medium bg-muted/80 hover:bg-primary/15 hover:text-primary border border-border/60 transition-colors shrink-0 flex items-center gap-1.5"
+                    >
+                      <Clock className="size-3 text-muted-foreground" />
+                      <span>{ch.title}</span>
+                      <span className="text-[10px] opacity-70 tabular-nums font-mono">
+                        ({fmtTime(ch.time)})
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Description box */}
+            {video.description && (
+              <div className="rounded-xl bg-card border border-border/80 p-4 space-y-2 text-sm leading-relaxed">
+                <div className={cn(!showFullDescription && "line-clamp-3")}>
+                  {video.description}
+                </div>
+                {video.description.length > 120 && (
+                  <button
+                    onClick={() => setShowFullDescription((s) => !s)}
+                    className="text-xs font-semibold text-primary hover:underline"
+                  >
+                    {showFullDescription ? t("videos.showLess") : t("videos.showMore")}
+                  </button>
+                )}
+              </div>
+            )}
+
+            {/* Tags & Related Articles */}
+            <div className="flex flex-wrap items-center gap-2 pt-1">
+              {video.tags?.map((tag) => (
+                <span
+                  key={tag}
+                  className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-muted text-muted-foreground text-xs font-medium"
+                >
+                  <Tag className="size-3" />
+                  {tag}
+                </span>
+              ))}
+
+              {video.relatedArticles && video.relatedArticles.length > 0 && onOpenArticle && (
+                <div className="flex items-center gap-1.5 ms-auto">
+                  {video.relatedArticles.map((id) => (
+                    <button
+                      key={id}
+                      onClick={() => onOpenArticle(id)}
+                      className="px-2.5 py-1 rounded-md bg-primary/10 text-primary text-xs font-semibold hover:bg-primary/20 transition-colors inline-flex items-center gap-1.5"
+                    >
+                      <BookOpen className="size-3.5" />
+                      <span>{id.replace(/\.md$/, "").replace(/-/g, " ")}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
         </div>
 
-        {/* Sidebar: playlist + details */}
-        {showPlaylist && !isFullscreen && (
-          <aside className="hidden md:flex flex-col w-80 shrink-0 border-s border-border bg-card overflow-hidden">
-            <VideoSidebar
-              video={video}
-              playlist={playlist}
-              onSelect={onSelectFromPlaylist}
-              onOpenArticle={onOpenArticle}
-              t={t}
-            />
-          </aside>
-        )}
-      </div>
-
-      {/* Mobile sidebar drawer */}
-      <AnimatePresence>
-        {showPlaylist && !isFullscreen && (
-          <motion.div
-            initial={{ x: "100%" }}
-            animate={{ x: 0 }}
-            exit={{ x: "100%" }}
-            transition={{ type: "spring", damping: 28, stiffness: 280 }}
-            className="md:hidden fixed inset-y-0 end-0 w-80 max-w-[85vw] bg-card border-s border-border z-50 flex flex-col"
-          >
-            <div className="h-12 shrink-0 flex items-center justify-between px-3 border-b border-border">
-              <span className="text-sm font-semibold">{t("videos.playlist")}</span>
-              <button
-                onClick={() => setShowPlaylist(false)}
-                className="size-7 rounded-md flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted/60"
-              >
-                <X className="size-4" />
-              </button>
-            </div>
-            <VideoSidebar
-              video={video}
-              playlist={playlist}
-              onSelect={(v) => {
-                onSelectFromPlaylist(v);
-                setShowPlaylist(false);
-              }}
-              onOpenArticle={onOpenArticle}
-              t={t}
-            />
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </div>
-  );
-}
-
-/* ── Sidebar: playlist + video info ────────────────────────────────── */
-
-interface SidebarProps {
-  video: VideoResource;
-  playlist: VideoResource[];
-  onSelect: (v: VideoResource) => void;
-  onOpenArticle?: (id: string) => void;
-  t: (k: any, p?: any) => string;
-}
-
-function VideoSidebar({ video, playlist, onSelect, onOpenArticle, t }: SidebarProps) {
-  return (
-    <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
-      {/* Video info */}
-      <div className="p-4 border-b border-border">
-        <h2 className="text-base font-bold leading-snug mb-1">{video.title}</h2>
-        {video.instructor && (
-          <p className="text-xs text-muted-foreground mb-2">{video.instructor}</p>
-        )}
-        {video.description && (
-          <p className="text-xs text-muted-foreground leading-relaxed line-clamp-4">
-            {video.description}
-          </p>
-        )}
-        {video.tags && video.tags.length > 0 && (
-          <div className="flex flex-wrap gap-1 mt-2">
-            {video.tags.map((tag) => (
-              <span
-                key={tag}
-                className="inline-flex items-center gap-0.5 text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-muted/60 text-muted-foreground border border-border/60"
-              >
-                <Tag className="size-2" />
-                {tag}
-              </span>
-            ))}
+        {/* Right Sidebar: Up Next Playlist */}
+        <aside className="w-full lg:w-96 shrink-0 border-t lg:border-t-0 lg:border-s border-border bg-card/40 flex flex-col h-auto lg:h-full overflow-hidden">
+          <div className="p-3 sm:p-4 border-b border-border/60 flex items-center justify-between">
+            <h3 className="text-sm font-bold tracking-tight uppercase text-muted-foreground flex items-center gap-2">
+              <ListVideo className="size-4 text-primary" />
+              {t("videos.upNext")}
+            </h3>
+            <span className="text-xs font-mono text-muted-foreground px-2 py-0.5 rounded-full bg-muted">
+              {playlist.length} {t("videos.videosCount", { n: playlist.length })}
+            </span>
           </div>
-        )}
 
-        {/* Related articles */}
-        {video.relatedArticles && video.relatedArticles.length > 0 && onOpenArticle && (
-          <div className="mt-3">
-            <div className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mb-1.5 flex items-center gap-1">
-              <BookOpen className="size-3" />
-              {t("videos.relatedArticles")}
-            </div>
-            <div className="space-y-1">
-              {video.relatedArticles.map((id) => (
-                <button
-                  key={id}
-                  onClick={() => onOpenArticle(id)}
-                  className="w-full text-start px-2 py-1.5 rounded-md text-xs hover:bg-muted/60 transition-colors flex items-center gap-2"
-                >
-                  <BookOpen className="size-3 text-muted-foreground shrink-0" />
-                  <span className="truncate">{id.replace(/\.md$/, "").replace(/-/g, " ")}</span>
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Chapters */}
-        {video.chapters && video.chapters.length > 0 && (
-          <div className="mt-3">
-            <div className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mb-1.5 flex items-center gap-1">
-              <ListVideo className="size-3" />
-              {t("videos.chapters")}
-            </div>
-            <div className="space-y-0.5">
-              {video.chapters.map((ch, i) => (
-                <div
-                  key={i}
-                  className="flex items-center gap-2 px-2 py-1 rounded-md text-xs hover:bg-muted/60 transition-colors"
-                >
-                  <span className="text-[10px] text-muted-foreground tabular-nums w-10 shrink-0">
-                    {fmtTime(ch.time)}
-                  </span>
-                  <span className="truncate">{ch.title}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* Playlist */}
-      {playlist.length > 1 && (
-        <div className="flex-1 min-h-0 overflow-hidden flex flex-col">
-          <div className="px-4 pt-3 pb-1.5 text-[10px] uppercase tracking-wider text-muted-foreground font-semibold flex items-center gap-1">
-            <ListVideo className="size-3" />
-            {t("videos.playlist")}
-            <span className="ms-auto text-muted-foreground/60 tabular-nums">{playlist.length}</span>
-          </div>
-          <div className="flex-1 overflow-y-auto medos-scroll px-2 pb-2">
+          <div className="flex-1 overflow-y-auto p-2 space-y-2">
             {playlist.map((v) => {
               const isActive = v.id === video.id;
               const thumb = resolveThumbnail(v);
               return (
                 <button
                   key={v.id}
-                  onClick={() => onSelect(v)}
+                  onClick={() => {
+                    haptic("light");
+                    onSelectFromPlaylist(v);
+                  }}
                   className={cn(
-                    "w-full text-start flex items-center gap-2 p-2 rounded-md transition-colors group",
-                    isActive ? "bg-primary/10" : "hover:bg-muted/60"
+                    "w-full text-start flex items-start gap-3 p-2 rounded-xl border transition-all duration-150 group",
+                    isActive
+                      ? "bg-primary/10 border-primary/40 shadow-sm"
+                      : "bg-card/60 hover:bg-card border-border/50 hover:border-border"
                   )}
                 >
-                  <div className="relative size-16 shrink-0 rounded overflow-hidden bg-muted">
-                    {thumb && (
-                      <img src={thumb} alt="" className="absolute inset-0 w-full h-full object-cover" loading="lazy" />
-                    )}
-                    {isActive && (
-                      <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
-                        <div className="size-1.5 rounded-full bg-red-500 animate-pulse" />
+                  {/* Thumbnail Box */}
+                  <div className="relative w-32 aspect-video shrink-0 rounded-lg overflow-hidden bg-muted border border-border/40">
+                    {thumb ? (
+                      <img src={thumb} alt="" className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-200" loading="lazy" />
+                    ) : (
+                      <div className="absolute inset-0 flex items-center justify-center text-muted-foreground">
+                        <VideoIcon className="size-6" />
                       </div>
                     )}
+                    {isActive ? (
+                      <div className="absolute inset-0 bg-primary/40 backdrop-blur-[1px] flex items-center justify-center">
+                        <Play className="size-5 text-white fill-white" />
+                      </div>
+                    ) : v.duration != null ? (
+                      <div className="absolute bottom-1 end-1 px-1 py-0.5 rounded text-[10px] font-mono font-medium bg-black/75 text-white">
+                        {formatDuration(v.duration)}
+                      </div>
+                    ) : null}
                   </div>
-                  <div className="flex-1 min-w-0">
-                    <div className={cn("text-xs font-medium line-clamp-2", isActive && "text-primary")}>
+
+                  {/* Video Meta */}
+                  <div className="flex-1 min-w-0 pt-0.5">
+                    <h4 className={cn("text-xs font-semibold line-clamp-2 leading-snug", isActive ? "text-primary" : "text-foreground group-hover:text-primary transition-colors")}>
                       {v.title}
-                    </div>
-                    <div className="text-[10px] text-muted-foreground mt-0.5 flex items-center gap-1">
-                      {v.duration != null && (
-                        <>
-                          <Clock className="size-2.5" />
-                          {formatDuration(v.duration)}
-                        </>
-                      )}
-                      {v.instructor && <span className="truncate">· {v.instructor}</span>}
-                    </div>
+                    </h4>
+                    {v.instructor && (
+                      <p className="text-[11px] text-muted-foreground mt-1 truncate">
+                        {v.instructor}
+                      </p>
+                    )}
+                    {v.specialty && (
+                      <span className="inline-block mt-1 text-[10px] font-medium px-1.5 py-0.5 rounded bg-muted text-muted-foreground">
+                        {v.specialty}
+                      </span>
+                    )}
                   </div>
                 </button>
               );
             })}
           </div>
-        </div>
-      )}
+        </aside>
+      </div>
     </div>
   );
 }

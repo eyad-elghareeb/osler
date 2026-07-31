@@ -596,6 +596,10 @@ export const ar = {
     "videos.upNext": "التالي",
     "videos.playlist": "قائمة التشغيل",
     "videos.overview": "نظرة عامة",
+    "videos.switchPlayer": "تغيير المشغّل",
+    "videos.showMore": "عرض المزيد",
+    "videos.showLess": "عرض أقل",
+    "videos.jumpToSection": "الانتقال إلى قسم",
 
     "profile.title": "الملف الشخصي",
     "profile.stats": "الإحصاءات",

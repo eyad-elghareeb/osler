@@ -596,6 +596,10 @@ export const en = {
     "videos.upNext": "Up next",
     "videos.playlist": "Playlist",
     "videos.overview": "Overview",
+    "videos.switchPlayer": "Switch Player",
+    "videos.showMore": "Show more",
+    "videos.showLess": "Show less",
+    "videos.jumpToSection": "Jump to section",
 
     "profile.title": "Profile",
     "profile.stats": "Statistics",
