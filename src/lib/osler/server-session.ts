@@ -139,13 +139,15 @@ export async function verifySessionCookie(value: string | undefined | null): Pro
     // Validate user fields — defense in depth. The cookie was signed by
     // our own server so the payload can't be tampered with, but a bug in
     // the POST handler could store a malformed object. These checks ensure
-    // the middleware never trusts a malformed session.
+    // the middleware never trusts a malformed session. Per-field length
+    // caps prevent a single bloated field from consuming the 16KB cookie.
     if (
-      typeof s.user.id !== "string" ||
-      typeof s.user.username !== "string" ||
-      typeof s.user.displayName !== "string" ||
-      typeof s.user.role !== "string" ||
-      (s.user.email !== null && typeof s.user.email !== "string")
+      typeof s.user.id !== "string" || s.user.id.length > 128 ||
+      typeof s.user.username !== "string" || s.user.username.length > 80 ||
+      typeof s.user.displayName !== "string" || s.user.displayName.length > 80 ||
+      typeof s.user.role !== "string" || s.user.role.length > 20 ||
+      (s.user.email !== null && typeof s.user.email !== "string") ||
+      (s.user.email !== null && s.user.email.length > 254)
     ) {
       return null;
     }
