@@ -12,6 +12,7 @@
     "preview:pages": "npx wrangler pages dev out --port 3000",
     "deploy:pages": "npx wrangler pages deploy out --project-name osler",
     "deploy:worker": "npm run deploy --prefix cloudflare/worker",
+    "cloudflare:init": "node scripts/cloudflare-init.js",
     "lint": "eslint .",
     "generate-manifests": "node scripts/generate-content-manifests.js",
     "db:push": "echo 'Osler does not use Prisma — skipping db:push'"

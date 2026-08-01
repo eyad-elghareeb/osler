@@ -1,6 +1,11 @@
 # Osler — Cloudflare Free-Tier Deployment Guide
 
-Osler is architected as a **static site + Worker** duo designed to fit entirely within Cloudflare's free tier.
+Osler is architected as a **static site + Worker** duo designed to fit entirely within Cloudflare's free tier. There are exactly **two deployable layers**:
+
+1. **Layer 1 — Static client-side site** (Cloudflare Pages): the entire app is a Next.js `output: "export"` build — pure HTML/JS/CSS, service worker, and content packs. No SSR, no server runtime.
+2. **Layer 2 — Server-side backend** (Cloudflare Worker): a single dependency-free Worker (`cloudflare/worker/src/index.ts`) handles **all** backend concerns — auth (email/password + Google OAuth), sessions, D1 (users, progress sync, audit), R2 (admin content), rate limiting, cron cleanup, and analytics.
+
+The browser loads the static site from Pages, then talks to the Worker over CORS for every dynamic request.
 
 | Component | Hosting | Free-tier limits |
 | --- | --- | --- |
@@ -68,7 +73,39 @@ osler/
 
 ## Build & deploy
 
-### Frontend (Cloudflare Pages)
+### Zero-config: one-command full-stack deploy (recommended)
+
+`scripts/cloudflare-init.js` initializes and deploys **both layers** in a single run. It creates the D1 database and patches its ID into `wrangler.toml`, creates the R2 bucket, generates + sets the `JWT_SECRET` (and any optional secrets from an env file), applies all D1 migrations, deploys the Worker, builds the static site, deploys it to Pages, and wires `cloud.apiUrl` in `public/osler.config.json`. It is idempotent — safe to re-run.
+
+Prerequisite: authenticate once with Cloudflare — `npx wrangler login` (browser flow) or export `CLOUDFLARE_API_TOKEN`.
+
+```bash
+# Minimal: everything auto-generated (random JWT_SECRET, auto-detected Worker URL)
+node scripts/cloudflare-init.js --origin https://osler.your-domain.com
+
+# Full control: fixed Worker URL + optional secrets (Google, Resend, Turnstile)
+node scripts/cloudflare-init.js \
+  --origin https://osler.your-domain.com \
+  --worker-url https://osler-cloud.<account-subdomain>.workers.dev \
+  --project osler \
+  --env-file ./cloudflare-secrets.env
+```
+
+The env file is a plain `NAME=value` list; each name is set as a Worker secret:
+
+```
+GOOGLE_CLIENT_ID=...
+GOOGLE_CLIENT_SECRET=...
+RESEND_API_KEY=...
+TURNSTILE_SECRET_KEY=...
+GEMINI_ENCRYPTION_KEY=...
+```
+
+Flags: `--project` (Pages project name, default `osler`), `--d1` (default `osler-cloud`), `--r2` (default `osler-content`), `--skip-build` (reuse existing `out/`), `--skip-pages` (Worker only), `--skip-worker` (Pages only). After it finishes, promote your first user to admin with the printed SQL.
+
+### Manual deploy
+
+#### Frontend (Cloudflare Pages)
 
 ```bash
 npm install
