@@ -25,7 +25,7 @@ If you're looking for a quick start, see [`hosting.md`](./hosting.md). For the s
 
 ## 1. Frontend (Next.js) environment variables
 
-The frontend is a Next.js 16 standalone app. Variables prefixed `NEXT_PUBLIC_` are inlined into the client bundle at build time, so they're readable by anyone with the deployed JavaScript — never put a secret in a `NEXT_PUBLIC_` variable.
+The frontend is a Next.js static export (`output: "export"`). Variables prefixed `NEXT_PUBLIC_` are inlined into the client bundle at build time, so they're readable by anyone with the deployed JavaScript — never put a secret in a `NEXT_PUBLIC_` variable.
 
 The canonical template lives at `.env.example` in the repo root. Copy it to `.env.local` for local overrides.
 
@@ -64,8 +64,6 @@ These are not exposed as `.env.example` entries but are honoured by Next.js when
 | Variable | Purpose | Default |
 | --- | --- | --- |
 | `NODE_ENV` | Standard Node env. `production` enables optimisations; `development` enables React devtools. | `development` |
-| `PORT` | Port the standalone server listens on. | `3000` |
-| `HOSTNAME` | Hostname the standalone server binds to. Set to `0.0.0.0` in Docker. | `0.0.0.0` (Dockerfile) / `127.0.0.1` (systemd) |
 | `NEXT_TELEMETRY_DISABLED` | Set to `1` to disable Next.js telemetry. | _(unset — telemetry on)_ |
 
 ---
