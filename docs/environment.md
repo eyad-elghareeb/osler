@@ -664,7 +664,7 @@ These constants live in `cloudflare/worker/src/index.ts` and are **not** configu
 
 | Constant | Value | Description |
 | --- | --- | --- |
-| `PASSWORD_ITERATIONS` | `310_000` | PBKDF2-SHA-256 iteration count. NIST-recommended minimum as of 2023. Increasing it makes login slower (per user, per request) but more resistant to brute force. |
+| `PASSWORD_ITERATIONS` | `100_000` | PBKDF2-SHA-256 iteration count. Limited to 100,000 by Cloudflare Workers Web Crypto API. |
 | Salt size | 16 bytes | Random per-user salt, base64url-encoded in `password_salt`. |
 
 > **Changing `PASSWORD_ITERATIONS`:** Existing hashes are stored with the iteration count they were hashed at — the verify path uses `PASSWORD_ITERATIONS` as the iteration count, so changing it would break verification of all existing passwords. To migrate, you'd need to store the iteration count alongside each hash and fork the verify function.
@@ -1058,7 +1058,7 @@ Any check failing returns `400 invalid_token` and consumes the single-use state 
 
 | Constant | Value | Purpose |
 | --- | --- | --- |
-| `PASSWORD_ITERATIONS` | 310,000 | PBKDF2 iterations |
+| `PASSWORD_ITERATIONS` | 100,000 | PBKDF2 iterations |
 | `SESSION_TTL_MS` | 7 days | Session token lifetime |
 | `RESET_TTL_MS` | 30 minutes | Password-reset token lifetime |
 | `OAUTH_TTL_MS` | 10 minutes | OAuth state token lifetime |

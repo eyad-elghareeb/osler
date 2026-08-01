@@ -15,7 +15,6 @@ import {
   Moon,
   Sun,
   ShieldOff,
-  AlertTriangle,
   Settings as SettingsIcon,
   ChevronLeft,
   ChevronRight,
@@ -46,50 +45,6 @@ import {
   useAdminSettings,
 } from "@/components/osler/admin/admin-settings-context";
 import { adminApi, type AdminIdentity } from "@/components/osler/admin/admin-api";
-
-/**
- * Fetch the Cloudflare Access authenticated user email from the Worker.
- *
- * The Worker endpoint `GET /v1/admin/access` reads the
- * `CF-Access-Authenticated-User-Email` request header (set by Cloudflare
- * Zero Trust Access when the Worker is behind an Access policy) and
- * returns `{ email: string | null }`.
- *
- * Returns `null` if:
- *   - The Worker is not behind Cloudflare Access (no header present).
- *   - The Worker is unreachable / cloud is disabled.
- *   - The response is malformed.
- *
- * In production, the AdminShell shows a "protected" screen if this returns
- * null — preventing the admin UI from rendering without the Access gate.
- * In dev mode, null is allowed (the admin can still log in via the
- * AdminLoginPrompt with a real bearer token).
- */
-async function fetchCfAccessEmail(): Promise<string | null> {
-  try {
-    const session = readCloudSession();
-    // If no cloud session, we can't authenticate to /v1/admin/access.
-    // Return null — the "protected" screen will render in production.
-    if (!session?.token) return null;
-    const apiUrl = (typeof process !== "undefined" && process.env.NEXT_PUBLIC_CLOUD_API_URL)
-      ? process.env.NEXT_PUBLIC_CLOUD_API_URL.replace(/\/$/, "")
-      : null;
-    // adminApi.getApiBase is async and reads the config; we use it when
-    // possible, but fall back to the env var for simplicity.
-    const base = apiUrl ?? (await import("@/lib/osler/config").then((m) => m.getConfig())).cloud?.apiUrl.replace(/\/$/, "");
-    if (!base) return null;
-    const res = await fetch(`${base}/v1/admin/access`, {
-      headers: { authorization: `Bearer ${session.token}` },
-      cache: "no-store",
-    });
-    if (!res.ok) return null;
-    const data = await res.json().catch(() => null) as { email?: string | null } | null;
-    if (!data || typeof data.email !== "string") return null;
-    return data.email;
-  } catch {
-    return null;
-  }
-}
 
 interface AdminShellProps {
   children: React.ReactNode;
@@ -127,11 +82,6 @@ function AdminShellInner({ children }: AdminShellProps) {
   const [loading, setLoading] = React.useState(true);
   const [pendingCount, setPendingCount] = React.useState(0);
   const [mobileNavOpen, setMobileNavOpen] = React.useState(false);
-  // CF-Access email — fetched client-side from the Worker endpoint
-  // /v1/admin/access (replaces the old server-side headers() read).
-  // null while loading; the "protected" screen is shown only if the
-  // fetch resolves to null in production AND we're not in dev mode.
-  const [cfEmail, setCfEmail] = React.useState<string | null | undefined>(undefined);
 
   // Try to restore session on mount.
   // In dev mode (NODE_ENV !== production), if no cloud session and no cloud
@@ -141,8 +91,6 @@ function AdminShellInner({ children }: AdminShellProps) {
     const session = readCloudSession();
     if (!session) {
       setLoading(false);
-      // Still probe CF Access so the "protected" screen can render in prod.
-      void fetchCfAccessEmail().then((email) => setCfEmail(email));
       return;
     }
     adminApi
@@ -178,10 +126,6 @@ function AdminShellInner({ children }: AdminShellProps) {
       })
       .finally(() => {
         setLoading(false);
-        // Fetch CF Access email in parallel — don't block the admin shell
-        // from rendering. The "protected" screen is only shown if this
-        // resolves to null in production.
-        void fetchCfAccessEmail().then((email) => setCfEmail(email));
       });
   }, []);
 
@@ -217,23 +161,6 @@ function AdminShellInner({ children }: AdminShellProps) {
     );
   }
 
-  // ── Render: no Cloudflare Access in prod (cfEmail resolved to null).
-  // cfEmail === undefined means "still loading" — don't render the
-  // protected screen in that case, the loading state above handles it.
-  if (cfEmail === null && process.env.NODE_ENV === "production") {
-    return (
-      <div className="flex h-screen items-center justify-center bg-background p-6 text-center">
-        <div className="flex flex-col items-center gap-3">
-          <div className="osler-empty__icon">
-            <AlertTriangle className="size-6" />
-          </div>
-          <h1 className="osler-empty__title">{t("admin.access.protected")}</h1>
-          <p className="osler-empty__body">{t("admin.access.protectedDesc")}</p>
-        </div>
-      </div>
-    );
-  }
-
   // ── Render: not logged in
   if (!identity) {
     return (
@@ -250,9 +177,6 @@ function AdminShellInner({ children }: AdminShellProps) {
               </div>
             </div>
           </div>
-          {cfEmail && (
-            <span className="ms-auto text-xs text-muted-foreground">{cfEmail}</span>
-          )}
         </header>
         <AdminLoginPrompt onSuccess={setIdentity} />
       </div>
@@ -360,13 +284,6 @@ function AdminShellInner({ children }: AdminShellProps) {
 
           {/* Spacer */}
           <div className="flex-1" />
-
-          {/* Cloud session indicator + cf email */}
-          {cfEmail && (
-            <span className="hidden lg:block text-xs text-muted-foreground truncate max-w-[12rem]">
-              {cfEmail}
-            </span>
-          )}
 
           {/* Back to app */}
           <Link

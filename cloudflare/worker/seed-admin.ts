@@ -14,7 +14,7 @@ const __dirname = dirname(__filename);
 
 const username = process.argv[2] || "admin";
 const password = process.argv[3] || "12345678aa";
-const iterations = 310_000;
+const iterations = 100_000;
 
 const salt = randomBytes(16);
 const hash = pbkdf2Sync(password, salt, iterations, 256, "sha256");
