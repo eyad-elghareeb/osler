@@ -30,6 +30,7 @@ server.log
 .env.test.local
 .env.production.local
 cloudflare/worker/.dev.vars
+.dev.vars
 
 # typescript
 *.tsbuildinfo
@@ -41,6 +42,10 @@ prisma/*.db-journal
 
 # wrangler local state
 .wrangler/
+
+# opennext build output
+.open-next/
+cloudflare-env.d.ts
 
 # osler local data
 osler-progress-v1

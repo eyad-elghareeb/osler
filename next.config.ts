@@ -10,3 +10,6 @@ const nextConfig: NextConfig = {
 };
 
 export default withSerwist(nextConfig);
+
+import { initOpenNextCloudflareForDev } from "@opennextjs/cloudflare";
+initOpenNextCloudflareForDev();
