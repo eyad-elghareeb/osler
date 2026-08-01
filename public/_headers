@@ -36,3 +36,21 @@
   Cross-Origin-Opener-Policy: same-origin
   Cross-Origin-Resource-Policy: same-origin
   Strict-Transport-Security: max-age=31536000; includeSubDomains; preload
+
+  # Content Security Policy.
+  #
+  # Notes on the allowances (each is required by the app):
+  #  · script-src 'unsafe-inline'  — Next.js static export injects inline RSC
+  #    hydration scripts; static export has no server to mint nonces.
+  #  · script-src 'unsafe-eval'    — the Mermaid renderer uses the Function
+  #    constructor (library diagrams + admin editor). Dropping mermaid support
+  #    would let you remove it.
+  #  · connect-src *.workers.dev   — the Worker backend (cloud.apiUrl). If you
+  #    put the Worker on a CUSTOM domain, add that origin here.
+  #  · connect-src wss://0.peerjs.com / wss://broker.emqx.io — P2P sync
+  #    (PeerJS signaling + MQTT relay).
+  #  · connect-src generativelanguage.googleapis.com — AI assistant (REST + WS).
+  #  · frame-src https:  — YouTube + Invidious video embeds (Invidious host is
+  #    configurable via NEXT_PUBLIC_INVIDIOUS_HOST, so a scheme source is used).
+  #    Tighten to your fixed hosts once they are stable.
+  Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://challenges.cloudflare.com https://www.youtube.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self' data:; connect-src 'self' https://*.workers.dev https://generativelanguage.googleapis.com wss://generativelanguage.googleapis.com https://challenges.cloudflare.com https://0.peerjs.com wss://0.peerjs.com wss://broker.emqx.io:8084; media-src 'self' blob: https:; frame-src https://www.youtube.com https://www.youtube-nocookie.com https://challenges.cloudflare.com https:; worker-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; upgrade-insecure-requests

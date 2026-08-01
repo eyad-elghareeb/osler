@@ -174,6 +174,45 @@ The admin shell probes `GET /v1/admin/access` on the Worker to read the `CF-Acce
 
 In dev (NODE_ENV !== production) the "protected" screen is skipped so you can preview the admin UI without Access.
 
+## Production hardening
+
+Three recommended follow-ups after the first deploy. The first is already wired into the repo; the other two are dashboard tasks that only an account owner can complete.
+
+### 1. Content-Security-Policy (wired, verify in prod)
+
+`public/_headers` now ships a CSP on every page response. It intentionally allows:
+
+- `script-src 'unsafe-inline'` — required by Next.js static export (inline RSC hydration scripts; there is no server to mint nonces).
+- `script-src 'unsafe-eval'` — required by the Mermaid renderer (library diagrams + admin editor). If you remove mermaid support you can drop it.
+- `connect-src https://*.workers.dev` — the Worker backend. **If you host the Worker on a custom domain, add that origin to `connect-src`.**
+- `connect-src wss://0.peerjs.com` / `wss://broker.emqx.io:8084` — P2P sync (PeerJS signaling + MQTT relay).
+- `connect-src https://generativelanguage.googleapis.com` + `wss://…` — AI assistant.
+- `frame-src https:` — YouTube + Invidious embeds (the Invidious host is configurable, so a scheme source is used). Tighten to your fixed hosts once they're stable.
+
+Verify with a browser console: no CSP violations on a normal browse (login → QBank → a library article with a diagram → a video → sync). The single biggest residual risk is that inline + eval scripts are allowed, so CSP here blocks externally-hosted script injection rather than inline payloads — that is the honest ceiling for a nonce-less static export.
+
+### 2. Turnstile (CAPTCHA on auth)
+
+The plumbing is wired: `public/osler.config.json` → `cloud.turnstileSiteKey` exists (empty) and the client only renders the widget when a real key is present. To enable in production, in this order:
+
+1. Cloudflare Dashboard → Turnstile → Add site → widget for `your-app.pages.dev` (or your custom domain). Copy the **site key** and **secret key**.
+2. Set the Worker secret: `npx wrangler secret put TURNSTILE_SECRET_KEY` (in `cloudflare/worker/`).
+3. Put the site key in `public/osler.config.json`:
+   ```jsonc
+   "cloud": { "...": "...", "turnstileSiteKey": "0x4AAAAAAA..." }
+   ```
+4. Flip the flag in `cloudflare/worker/wrangler.toml`: `TURNSTILE_ENABLED = "true"`.
+5. Redeploy the Worker (`npm run deploy:worker`) and rebuild/redeploy Pages (`npm run build && npm run deploy:pages`).
+
+> ⚠️ Do not flip `TURNSTILE_ENABLED` to `"true"` until `TURNSTILE_SECRET_KEY` is set — with the flag on and no secret, **every** register/login/reset is rejected. Keep the flag off (default) during local dev.
+
+### 3. Cloudflare Rate Limiting + Access (dashboard)
+
+The Worker has a built-in in-memory per-IP limiter (login 12/min, register 6/min, global 240/min, HTTP 429). For harder guarantees:
+
+- **Rate Limiting Rules** (WAF → Rate limiting rules) need a zone, so they apply when the Worker is behind a custom domain on your zone. Add a rule on the Worker's route: e.g. `POST /v1/auth/*` and `POST /v1/account/*` → 20 requests / 10 s, action Block. Free plan includes basic rules.
+- **Cloudflare Access** on `/admin*` (Pages) and `/v1/admin/*` (Worker): see [Optional: Cloudflare Access for `/admin`](#optional-cloudflare-access-for-admin) above. Free Zero Trust includes up to 50 users.
+
 ## Static export details
 
 ### Dynamic routes
