@@ -213,6 +213,23 @@ The Worker has a built-in in-memory per-IP limiter (login 12/min, register 6/min
 - **Rate Limiting Rules** (WAF → Rate limiting rules) need a zone, so they apply when the Worker is behind a custom domain on your zone. Add a rule on the Worker's route: e.g. `POST /v1/auth/*` and `POST /v1/account/*` → 20 requests / 10 s, action Block. Free plan includes basic rules.
 - **Cloudflare Access** on `/admin*` (Pages) and `/v1/admin/*` (Worker): see [Optional: Cloudflare Access for `/admin`](#optional-cloudflare-access-for-admin) above. Free Zero Trust includes up to 50 users.
 
+**Prerequisites (verified against a fresh account, Aug 2026):** a standard `wrangler login` OAuth token has `zone:read` and no Zero Trust scopes — it **cannot** create Rate Limiting rules or Access apps, and Rate Limiting additionally requires a zone (a bare `workers.dev`/`pages.dev` origin has none). To finish these two via the API later, you need:
+
+1. A **zone** (custom domain added in the dashboard, e.g. `osler.example.com` pointing at Pages + the Worker).
+2. An **API token** with at least:
+   - `Zone → WAF → Edit` (Rate Limiting rules)
+   - `Access: Apps and Policies → Edit` (Cloudflare Access; requires Zero Trust to be enabled once)
+3. Then, e.g.:
+   ```bash
+   export CLOUDFLARE_API_TOKEN=<token>
+   # Rate limiting rule on the Worker route (zone_id = your zone)
+   curl -X POST "https://api.cloudflare.com/client/v4/zones/$ZONE_ID/rate_limits" \
+     -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" -H "Content-Type: application/json" \
+     -d '{"match":{"request":{"url":"<worker-origin>/v1/auth/*","methods":["POST"]}},"action":{"mode":"block","timeout":10},"threshold":20,"period":10}'
+   ```
+
+Until those two preconditions exist, the in-memory limiter remains the only rate control — which is acceptable for a free-tier instance.
+
 ## Static export details
 
 ### Dynamic routes
