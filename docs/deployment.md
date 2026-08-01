@@ -131,9 +131,11 @@ Run through this checklist **every** time you deploy, whether it's the first dep
 
 ---
 
-## 3. Cloudflare Pages + Worker runbook
+## 3. Cloudflare Workers + Worker runbook (OpenNext)
 
 This is the **recommended default**: one vendor for frontend, backend, database, and object storage. The free tier covers a small-to-medium medical school easily.
+
+> **Frontend hosting note:** Osler is a Next.js SSR app, so the frontend deploys to a **Cloudflare Worker** via the OpenNext adapter (not static Pages). The repo is pre-configured — see Steps 6–7.
 
 ### Step 1: Provision Cloudflare resources
 
@@ -228,31 +230,35 @@ curl https://osler-cloud.<your-subdomain>.workers.dev/v1/health
 # → {"ok":true,"version":"...","time":...}
 ```
 
-### Step 6: Deploy the frontend to Cloudflare Pages
+### Step 6: Deploy the frontend to Cloudflare (OpenNext)
 
-**Option A — Dashboard (easiest):**
+Osler is a **Next.js SSR app** (cookie-auth middleware, server components, `/api/*` route handlers). It cannot be served as static files on Pages — the build output must run in a Worker via the [OpenNext Cloudflare adapter](https://opennext.js.org/cloudflare). This is pre-configured in the repo:
 
-1. Cloudflare Dashboard → Pages → Create a project → Connect to Git
-2. Pick your fork of `osler`
-3. Framework preset: **Next.js**
-4. Build command: `npm run build`
-5. Build output directory: `.next/standalone` (or accept the auto-detected value)
-6. Environment variables:
-   - `NEXT_PUBLIC_CLOUD_API_URL` = `https://osler-cloud.<your-subdomain>.workers.dev`
-7. Save and Deploy
-
-**Option B — Wrangler CLI:**
+- `open-next.config.ts` — adapter config (currently minimal; add the R2 incremental cache if you enable ISR)
+- `wrangler.jsonc` (repo root) — the frontend Worker (`osler-web`), static assets from `.open-next/assets`, `nodejs_compat` + `global_fetch_strictly_public` flags
+- `public/_headers` — immutable caching for `/_next/static/*`
 
 ```bash
 # From the repo root:
 npm install
-npm run build
-npx wrangler pages deploy .next/standalone --project-name osler
+npm run deploy
+# → opennextjs-cloudflare build && opennextjs-cloudflare deploy
+# → prints https://osler-web.<your-subdomain>.workers.dev
+```
+
+To preview locally in the Workers runtime (not Node):
+
+```bash
+npm run preview
 ```
 
 ### Step 7: Wire the frontend to the Worker
 
-Either set the Pages env var `NEXT_PUBLIC_CLOUD_API_URL` (Step 6 above) **or** edit `public/osler.config.json`:
+The frontend resolves the backend URL from `NEXT_PUBLIC_CLOUD_API_URL` (baked at build time) first, then falls back to `public/osler.config.json` → `cloud.apiUrl`. Pick one:
+
+**Option A — build-time env (recommended for CI):** set `NEXT_PUBLIC_CLOUD_API_URL` to the Worker URL when building, e.g. as a GitHub secret consumed by the CI workflow in §12.
+
+**Option B — config file:** edit `public/osler.config.json`:
 
 ```jsonc
 "cloud": {
@@ -263,7 +269,7 @@ Either set the Pages env var `NEXT_PUBLIC_CLOUD_API_URL` (Step 6 above) **or** e
 }
 ```
 
-If you edit `osler.config.json`, commit and let Pages auto-rebuild on push.
+If you edit `osler.config.json`, commit and let CI rebuild on push.
 
 ### Step 8: Promote your first admin user
 
@@ -1077,27 +1083,16 @@ If any of these fail, see [`troubleshooting.md`](./troubleshooting.md).
 
 Rollbacks are host-specific. The general principle: **preserve the previous working build before deploying the new one**, so rolling back is a config change, not a rebuild.
 
-### Cloudflare Pages
+### Cloudflare Workers
 
 ```bash
-# 1. List recent deployments
-npx wrangler pages deployment list --project-name osler
-
-# 2. Roll back to a previous deployment (instant, no rebuild)
-npx wrangler pages deployment rollback <deployment-id> --project-name osler
-```
-
-Or via dashboard: Pages → your project → Deployments → click the previous working deployment → "Rollback to this deployment".
-
-### Cloudflare Worker
-
-```bash
+# Backend Worker (osler-cloud)
 cd cloudflare/worker
-
-# 1. View previous versions
 npx wrangler deployments list
+npx wrangler rollback <version-id>
 
-# 2. Roll back to a previous version (instant)
+# Frontend Worker (osler-web, OpenNext) — from repo root
+npx wrangler deployments list
 npx wrangler rollback <version-id>
 ```
 
@@ -1173,7 +1168,20 @@ git push origin main
 
 Below are reference GitHub Actions workflows for each host. They are intentionally minimal — extend with caching, Slack notifications, and approval gates as your team needs.
 
-### Cloudflare Pages + Worker — `.github/workflows/deploy-cf.yml`
+### Cloudflare Workers + Worker — `.github/workflows/deploy-cloudflare.yml`
+
+A working workflow ships in the repo (deploys both the backend `osler-cloud` Worker and the OpenNext frontend `osler-web` Worker on every push to `main`). Required GitHub repo secrets:
+
+| Secret | Purpose |
+|---|---|
+| `CLOUDFLARE_API_TOKEN` | API token with **Edit Cloudflare Workers** + **Edit Cloudflare Pages** permissions |
+| `CLOUDFLARE_ACCOUNT_ID` | Your Cloudflare account ID |
+| `CF_JWT_SECRET` | Backend Worker HMAC signing secret (`openssl rand -base64 48`) |
+| `CF_OSLER_SESSION_SECRET` | Frontend Worker session cookie secret (`openssl rand -base64 32`) |
+| `CF_WORKER_URL` | Backend Worker URL, e.g. `https://osler-cloud.<sub>.workers.dev` — also baked as `NEXT_PUBLIC_CLOUD_API_URL` |
+| `CF_ALLOWED_ORIGIN` | Frontend origin, e.g. `https://osler-web.<sub>.workers.dev` |
+
+Reference shape:
 
 ```yaml
 name: Deploy to Cloudflare
@@ -1186,43 +1194,37 @@ on:
 jobs:
   deploy-worker:
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: cloudflare/worker
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with: { node-version: 22, cache: npm }
-      - working-directory: cloudflare/worker
-        run: |
-          npm ci
-          npx wrangler deploy \
-            --env production \
-            --var ALLOWED_ORIGIN:${{ secrets.CF_ALLOWED_ORIGIN }} \
-            --var APP_ORIGIN:${{ secrets.CF_APP_ORIGIN }}
+      - run: npm ci
+      - run: npm run db:migrate
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      - run: npx wrangler deploy --var ALLOWED_ORIGIN:${{ secrets.CF_ALLOWED_ORIGIN }} --var WORKER_URL:${{ secrets.CF_WORKER_URL }}
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
 
-  deploy-pages:
+  deploy-frontend:
     needs: deploy-worker
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      deployments: write
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with: { node-version: 22, cache: npm }
       - run: npm ci
       - run: npm run generate-manifests
-      - run: npm run build
+      - run: npm run deploy
         env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           NEXT_PUBLIC_CLOUD_API_URL: ${{ secrets.CF_WORKER_URL }}
-      - name: Publish to Cloudflare Pages
-        uses: cloudflare/pages-action@v1
-        with:
-          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          projectName: osler
-          directory: .next/standalone
 ```
 
 ### Vercel — `.github/workflows/deploy-vercel.yml`
