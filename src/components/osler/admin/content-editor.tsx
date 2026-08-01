@@ -67,7 +67,7 @@ import {
   WrittenEditor,
   BankEditor,
 } from "@/components/osler/admin/editors/structured-editors";
-import { resolveImageForPreview } from "@/components/osler/admin/editors/image-upload";
+import { resolveImageForPreview, r2KeyToWorkerUrl } from "@/components/osler/admin/editors/image-upload";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
@@ -83,7 +83,8 @@ interface ContentEditorProps {
   id?: string;
   /** Raw R2 key (e.g. "content-files/library/asthma.md") to edit in place
    *  without a backing content_object. When set, the editor loads the body
-   *  from /api/r2-fetch and saves via /v1/admin/content/upload-file. */
+   *  directly from the Worker's /v1/content/* endpoint and saves via
+   *  /v1/admin/content/upload-file. */
   rawR2Key?: string;
   capabilities: AdminCapabilities;
 }
@@ -126,8 +127,11 @@ export function ContentEditor({ id, rawR2Key, capabilities }: ContentEditorProps
     (async () => {
       try {
         if (isRawMode && rawR2Key) {
-          // Raw mode — fetch the body directly from R2 via the proxy.
-          const res = await fetch(`/api/r2-fetch?key=${encodeURIComponent(rawR2Key)}`);
+          // Raw mode — fetch the body directly from the Worker's public
+          // content endpoint (replaces the old /api/r2-fetch Pages proxy).
+          const url = r2KeyToWorkerUrl(rawR2Key);
+          if (!url) throw new Error("Cloud not configured");
+          const res = await fetch(url);
           if (!res.ok) throw new Error(`${res.status}`);
           const text = await res.text();
           if (cancelled) return;

@@ -47,7 +47,7 @@ const eslintConfig = [...nextCoreWebVitals, ...nextTypescript, {
     "no-useless-escape": "off",
   },
 }, {
-  ignores: ["node_modules/**", ".next/**", "out/**", "build/**", "next-env.d.ts", "examples/**", "skills", "workspace/**", "upload/**", "download/**", "mini-services/**", "scripts/**", ".zscripts/**", ".rebase-staging/**", "work/**", "tauri-admin/target/**"]
+  ignores: ["node_modules/**", ".next/**", "out/**", "build/**", "next-env.d.ts", "examples/**", "skills", "workspace/**", "upload/**", "download/**", "mini-services/**", "scripts/**", ".zscripts/**", ".rebase-staging/**", "work/**", "tauri-admin/target/**", "public/sw.js", "public/sw.js.map"]
 }];
 
 export default eslintConfig;

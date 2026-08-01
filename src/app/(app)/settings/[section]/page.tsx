@@ -1,12 +1,6 @@
-"use client";
+import SettingsSectionClient from "./client";
 
-import * as React from "react";
-import { useRouter } from "next/navigation";
-import { Settings, type SettingsSection } from "@/components/osler/settings";
-import { LoadingState } from "@/components/osler/ui-primitives";
-import { useI18n } from "@/components/osler/i18n-provider";
-
-const VALID_SECTIONS: ReadonlySet<string> = new Set([
+const SECTIONS = [
   "account",
   "appearance",
   "language",
@@ -18,31 +12,23 @@ const VALID_SECTIONS: ReadonlySet<string> = new Set([
   "native",
   "about",
   "danger",
-]);
+] as const;
 
-export default function SettingsSectionPage({ params }: { params: Promise<{ section: string }> }) {
-  // Next.js App Router already decodes dynamic route params.
-  const { section } = React.use(params);
-  const router = useRouter();
-  const { t } = useI18n();
-  const [isValid, setIsValid] = React.useState<boolean>(() => VALID_SECTIONS.has(section));
+/**
+ * Static export: enumerate every known settings section so Next.js generates
+ * a static HTML page for each. Unknown sections are caught at runtime by
+ * the redirect-to-/settings effect in the client component.
+ */
+export function generateStaticParams() {
+  return SECTIONS.map((section) => ({ section }));
+}
 
-  // Redirect invalid sections to /settings. Done in an effect (not during
-  // render) to avoid the React warning "Cannot update a component while
-  // rendering a different component" and to ensure the redirect actually
-  // fires after the page has mounted.
-  React.useEffect(() => {
-    if (!VALID_SECTIONS.has(section)) {
-      setIsValid(false);
-      router.replace("/settings");
-    } else {
-      setIsValid(true);
-    }
-  }, [section, router]);
 
-  if (!isValid) {
-    return <LoadingState label={t("loading.redirecting")} />;
-  }
-
-  return <Settings initialSection={section as SettingsSection} />;
+export default async function SettingsSectionPage({
+  params,
+}: {
+  params: Promise<{ section: string }>;
+}) {
+  const { section } = await params;
+  return <SettingsSectionClient section={section} />;
 }

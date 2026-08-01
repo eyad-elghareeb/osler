@@ -562,12 +562,13 @@ The admin frontend exposes three new views (registered in
 
 ## Build Quirks
 
-- `next.config.ts`: `output: "standalone"`, `typescript: { ignoreBuildErrors: true }`, `reactStrictMode: false`
-- Build produces `.next/standalone/` — the `start` script runs `server.js` from that directory
-- Deployment via Caddy (port 81, reverse-proxy to localhost:3000)
+- `next.config.ts`: `output: "export"`, `trailingSlash: true`, `images.unoptimized: true`, `typescript: { ignoreBuildErrors: true }`, `reactStrictMode: false`
+- Build produces `out/` (static export) — the `start` script serves it via `npx serve out -p 3000`
+- The service worker is built separately by `scripts/build-sw.js` (esbuild) into `public/sw.js`, before `next build` runs
+- Deployment via Cloudflare Pages (`npm run deploy:pages`) + Cloudflare Worker (`npm run deploy:worker`); see `docs/cloudflare-static-worker.md`
 - Windows deploy: `scripts/build-deliverable.ps1`
 - Linux deploy: `scripts/build-deliverable.sh`
-- `.env.local` supplies `NEXT_PUBLIC_INVIDIOUS_HOST` (YouTube alt frontend for video player) and `OSLER_SESSION_SECRET` (HMAC key for the `osler-session` cookie — required in production, see `src/lib/osler/server-session.ts`)
+- `.env.local` supplies `NEXT_PUBLIC_INVIDIOUS_HOST` (YouTube alt frontend for video player) and optionally `NEXT_PUBLIC_CLOUD_API_URL` (Worker URL, baked at build time; otherwise read from `public/osler.config.json`)
 - No `.env` file required for basic dev — AI assistant Gemini key is configured in-app (Settings > AI Assistant)
 
 ## Architecture
@@ -582,7 +583,7 @@ Navigation goes through `useOslerRouter()` / `routeFor()` in `@/lib/osler/naviga
 - `useCurrentView()` derives the active `OslerView` from the pathname.
 - `navigate(view, params?)` fires `haptic("selection")`, wraps the `router.push` in `withViewTransition(direction)`, and intentionally does NOT maintain a custom history stack (the browser's real history is the single source of truth).
 
-Server-side, `src/middleware.ts` gates access to protected app routes via the httpOnly `osler-session` cookie (HMAC-signed with `OSLER_SESSION_SECRET` — see `src/lib/osler/server-session.ts`). Unauthenticated requests are redirected to `/login?next=<path>`; the `next` param is validated with `isSafeLocalPath()` to prevent open redirect. See [`docs/routing-migration-plan.md`](docs/routing-migration-plan.md) for the full implementation notes.
+Route gating is enforced **client-side** by `RouteGuard` (`src/components/osler/route-guard.tsx`) — there is no server middleware (static export has no server runtime). Sessions live in `sessionStorage` (bearer token, per-tab) with a username hint in `localStorage`; cross-tab logins/logouts sync via `BroadcastChannel` (see `src/lib/osler/cloud.ts`). Unauthenticated requests redirect to `/login?next=<path>`; the `next` param is validated with `isSafeLocalPath()` to prevent open redirect. See [`docs/cloudflare-static-worker.md`](docs/cloudflare-static-worker.md) for the architecture notes.
 
 Available views: `dashboard`, `learn`, `library`, `qbank`, `flashcards`, `osce`, `videos`, `profile`, `settings`.
 

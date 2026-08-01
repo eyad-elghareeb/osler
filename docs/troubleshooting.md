@@ -1066,9 +1066,9 @@ npx wrangler d1 execute osler-cloud --remote --command \
 **Likely cause.** The build command doesn't install dependencies before building, or you're using the wrong framework preset.
 
 **Fix.** In Cloudflare Pages → Project → Settings → Build & Development:
-- Framework preset: **Next.js**
+- Framework preset: **Next.js** (static export)
 - Build command: `npm run build`
-- Build output directory: `.next` (for the Pages adapter; `.next/standalone` for the self-hosted adapter)
+- Build output directory: `out`
 - Root directory: `/` (or wherever the repo is)
 
 If using `@cloudflare/next-on-pages`, ensure the build command is `npx @cloudflare/next-on-pages@latest`.

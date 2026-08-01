@@ -1,31 +1,39 @@
 /// <reference lib="webworker" />
 
-import { defaultCache } from "@serwist/turbopack/worker";
-import type { PrecacheEntry, RuntimeCaching, SerwistGlobalConfig } from "serwist";
-import { CacheFirst, NetworkFirst, NetworkOnly, Serwist, StaleWhileRevalidate } from "serwist";
+/**
+ * Osler Service Worker
+ *
+ * Built by `scripts/build-sw.js` (esbuild) into `public/sw.js`.
+ *
+ * Architecture notes:
+ *   - We use the `serwist` runtime library (NOT `@serwist/turbopack`,
+ *     which is tightly coupled to Next.js's build pipeline and doesn't
+ *     support `output: "export"`).
+ *   - Precache manifest is empty — we rely on runtime caching only.
+ *     This keeps the SW small and avoids the need for the turbopack
+ *     precache injection.
+ *   - The Osler app is a static export hosted on Cloudflare Pages.
+ *     Cross-origin content (Worker /v1/content/* endpoints) is cached
+ *     network-first so users can download content packs for offline use.
+ */
 
-declare global {
-  interface WorkerGlobalScope extends SerwistGlobalConfig {
-    __SW_MANIFEST: (PrecacheEntry | string)[] | undefined;
-  }
-}
+import type { RuntimeCaching } from "serwist";
+import { NetworkFirst, Serwist } from "serwist";
 
 declare const self: ServiceWorkerGlobalScope;
 
 const CONTENT_CACHE = "osler-content-v1";
 
 const runtimeCaching: RuntimeCaching[] = [
-  // Content packs: network-first, offline fallback to cache
+  // Content packs: network-first, offline fallback to cache.
   // Matches local /osler-content/ AND remote Worker /v1/content/ endpoints.
-  // The SW cannot access process.env, so we detect remote content by checking
-  // whether the request path starts with /v1/content or /v1/content-manifests.
   {
     matcher: ({ url }) => {
       const p = url.pathname;
       return p.startsWith("/osler-content/") || p.startsWith("/v1/content/") || p.startsWith("/v1/content-manifests/");
     },
     handler: new NetworkFirst({
-      cacheName: "osler-content",
+      cacheName: CONTENT_CACHE,
       plugins: [
         {
           cacheWillUpdate: async ({ response }) => {
@@ -36,11 +44,10 @@ const runtimeCaching: RuntimeCaching[] = [
       ],
     }),
   },
-  ...defaultCache,
 ];
 
 const serwist = new Serwist({
-  precacheEntries: self.__SW_MANIFEST,
+  precacheEntries: [],
   precacheOptions: { cleanupOutdatedCaches: true },
   skipWaiting: true,
   clientsClaim: true,

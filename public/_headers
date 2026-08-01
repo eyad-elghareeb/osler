@@ -1,2 +1,38 @@
+# Cloudflare Pages headers.
+#
+# Applied to all responses unless overridden by a more specific block.
+# Static assets under /_next/static/ get long-lived immutable caching
+# because Next.js content-hashes them.
+
+# ── Long-lived immutable cache for hashed static assets ──
 /_next/static/*
-  Cache-Control: public,max-age=31536000,immutable
+  Cache-Control: public, max-age=31536000, immutable
+
+# ── Fonts & icons — long cache, but revalidate occasionally ──
+/fonts/*
+  Cache-Control: public, max-age=2592000
+/assets/*
+  Cache-Control: public, max-age=2592000
+
+# ── Local content packs — short cache, network-first via SW ──
+/osler-content/*
+  Cache-Control: public, max-age=300
+
+# ── Service worker — NEVER cache (always fetch fresh) ──
+/sw.js
+  Cache-Control: no-cache, no-store, must-revalidate
+
+# ── Manifest — short cache ──
+/manifest.webmanifest
+  Cache-Control: public, max-age=300
+  Content-Type: application/manifest+json; charset=utf-8
+
+# ── Security headers (applied to ALL responses) ──
+/*
+  X-Content-Type-Options: nosniff
+  X-Frame-Options: DENY
+  Referrer-Policy: strict-origin-when-cross-origin
+  Permissions-Policy: camera=(), microphone=(), geolocation=(), interest-cohort=()
+  Cross-Origin-Opener-Policy: same-origin
+  Cross-Origin-Resource-Policy: same-origin
+  Strict-Transport-Security: max-age=31536000; includeSubDomains; preload

@@ -1,13 +1,19 @@
-"use client";
+import LibraryArticleClient from "./client";
 
-import * as React from "react";
-import { Library } from "@/components/osler/library";
+/**
+ * Static export: emit one placeholder page so Next.js generates the route
+ * shell. Actual article IDs are resolved client-side. See `public/_redirects`.
+ */
+export function generateStaticParams() {
+  return [{ article: "_" }];
+}
 
-export default function LibraryArticlePage({ params }: { params: Promise<{ article: string }> }) {
-  // Next.js App Router already decodes dynamic route params — do NOT call
-  // decodeURIComponent again, or a literal `%` in an article id will throw
-  // URIError and blank the page.
-  const { article } = React.use(params);
 
-  return <Library initialArticleId={article} />;
+export default async function LibraryArticlePage({
+  params,
+}: {
+  params: Promise<{ article: string }>;
+}) {
+  const { article } = await params;
+  return <LibraryArticleClient article={article} />;
 }

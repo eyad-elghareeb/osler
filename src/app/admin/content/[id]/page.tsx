@@ -1,20 +1,20 @@
-"use client";
+import AdminContentEditorClient from "./client";
 
-import { use } from "react";
-import { useAdminIdentity } from "@/components/osler/admin/admin-context";
-import { ContentEditor } from "@/components/osler/admin/content-editor";
+/**
+ * Static export: emit one placeholder page so Next.js generates the route
+ * shell. Actual content_object IDs (UUIDs from the Worker) are resolved
+ * client-side via the admin API. See `public/_redirects`.
+ */
+export function generateStaticParams() {
+  return [{ id: "_" }];
+}
 
-export default function AdminContentEditorPage({
+
+export default async function AdminContentEditorPage({
   params,
 }: {
   params: Promise<{ id: string }>;
 }) {
-  const { id } = use(params);
-  const identity = useAdminIdentity();
-
-  return (
-    <div className="h-full">
-      <ContentEditor id={id} capabilities={identity.capabilities} />
-    </div>
-  );
+  const { id } = await params;
+  return <AdminContentEditorClient id={id} />;
 }

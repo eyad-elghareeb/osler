@@ -9,7 +9,7 @@ import { useOslerSession } from "@/lib/osler/session-context";
  * Validate that a `next` redirect target is a same-origin relative path.
  * Blocks open-redirect via `?next=https://evil.com` or `?next=//evil.com`.
  * Also rejects `next=/login` to prevent infinite redirect loops.
- * Must match the middleware's `isSafeLocalPath` exactly.
+ * Must match the RouteGuard's `isSafeLocalPath` exactly.
  */
 function isSafeLocalPath(input: string | null | undefined): input is string {
   if (!input || typeof input !== "string") return false;
@@ -28,16 +28,16 @@ function LoginContent() {
   const searchParams = useSearchParams();
   const { login, username, loading } = useOslerSession();
 
-  // Read & validate `next` once. The middleware already validates this when
+  // Read & validate `next` once. The RouteGuard already validates this when
   // redirecting logged-in users away from /login, but we re-validate here so
   // a crafted link can't navigate the user off-site after a manual login.
   const nextRaw = searchParams.get("next") || "/";
   const next = isSafeLocalPath(nextRaw) ? nextRaw : "/";
 
   // Redirect to `next` when the session is established. The `login()`
-  // function in session-context awaits the cookie POST before setting
-  // `username`, so by the time this effect fires the middleware can see
-  // the cookie — no redirect race.
+  // function in session-context updates the React state synchronously
+  // (no cookie roundtrip — the static export has no server), so by the
+  // time this effect fires the RouteGuard already sees the session.
   React.useEffect(() => {
     if (loading) return;
     if (username) {
@@ -47,9 +47,9 @@ function LoginContent() {
 
   const handleLogin = React.useCallback(
     (name: string) => {
-      // Just call login — it awaits the cookie POST, then sets username,
-      // which triggers the effect above to navigate. No router.push here
-      // to avoid racing the cookie POST.
+      // Just call login — it sets the session in React state, which
+      // triggers the effect above to navigate. No router.push here
+      // to avoid racing the state update.
       login(name);
     },
     [login]

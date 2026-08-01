@@ -37,6 +37,7 @@
  */
 
 import { adminApi } from "@/components/osler/admin/admin-api";
+import { resolvedCloudApiUrlSync } from "@/lib/osler/cloud";
 
 /** Sanitise a filename for safe R2 storage.
  *  - lower-case
@@ -142,11 +143,41 @@ export async function uploadImageForEditor(
   return { ref, key: key ?? "", dataUri };
 }
 
+/**
+ * Map an R2 key (e.g. "content-files/library/asthma.md" or
+ * "content/library/abc123/draft.json") to a URL the browser can fetch
+ * directly from the Worker's public content endpoint.
+ *
+ * The old /api/r2-fetch Pages route is gone (static export has no server).
+ * The Worker's `/v1/content/<category>/<path>` and
+ * `/v1/content-manifests/<category>/manifest.json` endpoints are public
+ * and set `Cross-Origin-Resource-Policy: cross-origin` so the Pages site
+ * can read them directly.
+ *
+ * Returns `null` if the Worker URL is not configured (cloud disabled) or
+ * if the key isn't under `content-files/` or `content-manifests/`.
+ */
+export function r2KeyToWorkerUrl(r2Key: string): string | null {
+  const apiUrl = resolvedCloudApiUrlSync();
+  if (!apiUrl) return null;
+  if (r2Key.startsWith("content-files/")) {
+    const rel = r2Key.slice("content-files/".length);
+    const encoded = rel.split("/").map(encodeURIComponent).join("/");
+    return `${apiUrl}/v1/content/${encoded}`;
+  }
+  if (r2Key.startsWith("content-manifests/")) {
+    const rel = r2Key.slice("content-manifests/".length);
+    const encoded = rel.split("/").map(encodeURIComponent).join("/");
+    return `${apiUrl}/v1/content-manifests/${encoded}`;
+  }
+  return null;
+}
+
 /** Resolve a relative `images/foo.png` (or bare `foo.png`) reference to a
  *  URL the admin can preview. In raw mode this is the same R2 key the file
- *  was uploaded to (served via the local /api/r2-fetch proxy). In managed
- *  mode we don't have a published location until publish time, so we use
- *  the draft R2 key (also via the proxy).
+ *  was uploaded to (served directly from the Worker's public content
+ *  endpoint). In managed mode we don't have a published location until
+ *  publish time, so we use the draft R2 key (also via the Worker).
  *
  *  Absolute URLs, `data:` URIs, and `/`-rooted paths pass through unchanged. */
 export function resolveImageForPreview(
@@ -167,5 +198,10 @@ export function resolveImageForPreview(
     if (slash >= 0) r2Key = `${opts.rawR2Key.slice(0, slash + 1)}${base}`;
   }
   if (!r2Key) return src;
-  return `/api/r2-fetch?key=${encodeURIComponent(r2Key)}`;
+  // Draft R2 keys (e.g. "content/library/<id>/images/<name>") aren't under
+  // content-files/, so the Worker's public /v1/content/* won't serve them.
+  // The admin previews those via the dataUri returned by uploadImageForEditor
+  // instead — this function returns the relative ref for the markdown body.
+  const workerUrl = r2KeyToWorkerUrl(r2Key);
+  return workerUrl ?? src;
 }

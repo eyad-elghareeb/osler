@@ -1,7 +1,13 @@
 # Routing Migration Plan — Proper Routes, Cookie Auth, Solid State & URL Handling
 
-> Status: **implemented** — this document describes the corrected, secure
-> implementation that ships in this repo.
+> Status: **superseded** — this document describes the cookie-auth +
+> middleware implementation that shipped in v0.2. In v0.3 the app moved to a
+> **static export** (`output: "export"`): the middleware, `server-session.ts`,
+> and `/api/auth/session` were removed, and route gating is now client-side via
+> `RouteGuard`. The path-based routing decisions below still hold; the
+> cookie-auth sections are retained for historical reference only. See
+> [`cloudflare-static-worker.md`](./cloudflare-static-worker.md) for the
+> current architecture.
 > Stack: Next 16 App Router, React 19, Serwist PWA, IndexedDB-backed
 > `storage` singleton, Cloudflare Worker (D1 + R2) on the free tier.
 > No new dependencies.

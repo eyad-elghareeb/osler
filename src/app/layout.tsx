@@ -118,6 +118,7 @@ export const viewport = {
 } as const;
 
 import { OslerSessionProvider } from "@/lib/osler/session-context";
+import { RouteGuard } from "@/components/osler/route-guard";
 
 export default function RootLayout({
   children,
@@ -145,9 +146,11 @@ export default function RootLayout({
           <OslerThemeProvider>
             <OslerI18nProvider>
               <OslerSessionProvider>
-                <AnalyticsProvider>
-                  <AnimationsProvider>{children}</AnimationsProvider>
-                </AnalyticsProvider>
+                <RouteGuard>
+                  <AnalyticsProvider>
+                    <AnimationsProvider>{children}</AnimationsProvider>
+                  </AnalyticsProvider>
+                </RouteGuard>
               </OslerSessionProvider>
             </OslerI18nProvider>
           </OslerThemeProvider>

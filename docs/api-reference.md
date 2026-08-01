@@ -250,7 +250,7 @@ Revoked sessions are not deleted immediately — they are kept until the next cr
 
 The frontend stores session tokens in `sessionStorage` (per-tab) rather than `localStorage` or cookies. This limits token exposure to the tab that created them and ensures they are dropped when the tab closes. See [`security.md`](./security.md) for the full rationale.
 
-Separately, the Next.js app sets an httpOnly `osler-session` cookie (HMAC-signed, no bearer token) so the middleware can gate access to protected app routes. It is issued by `POST /api/auth/session` only after the bearer token is verified against the Worker, and `GET /api/auth/session` returns a redacted view that never includes the token. See [`routing-migration-plan.md`](./routing-migration-plan.md) and [`security.md`](./security.md#route-gating-cookie-nextjs-middleware).
+Separately, route gating is enforced client-side by `RouteGuard` (see [`security.md`](./security.md#route-gating-client-side-no-middleware)) — there is no httpOnly cookie and no `/api/auth/session` route, since the frontend is a static export with no server runtime.
 
 ---
 

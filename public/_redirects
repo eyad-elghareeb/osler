@@ -1,0 +1,33 @@
+# Cloudflare Pages redirects — SPA fallback for dynamic routes.
+#
+# The Next.js static export emits one placeholder HTML page per dynamic
+# route (e.g. /qbank/_/index.html). These rules serve that placeholder
+# for ANY value in the dynamic segment, so the client-side router can
+# pick up the URL and load the actual content from the Worker.
+#
+# Cloudflare Pages serves real files BEFORE applying redirects, so
+# known paths (e.g. /settings/account/ which has its own index.html)
+# are served directly. Only unmatched paths fall through to these
+# rules.
+#
+# The 200 status (not 301/302) means Cloudflare Pages serves the file
+# content at the requested URL — the browser URL stays the same and the
+# client router takes over.
+
+# App dynamic routes — placeholder shell for any UID/article/video.
+/qbank/*           /qbank/_/index.html           200
+/flashcards/*      /flashcards/_/index.html      200
+/osce/*            /osce/_/index.html            200
+/library/*         /library/_/index.html         200
+/videos/*          /videos/_/index.html          200
+/settings/*        /settings/index.html          200
+
+# Admin dynamic routes — UUIDs not known at build time.
+/admin/users/*     /admin/users/_/index.html     200
+/admin/content/*   /admin/content/_/index.html   200
+/admin/review/*    /admin/review/_/index.html    200
+
+# Catch-all: serve the 404 page for anything else unmatched.
+# Next.js's static export generates /404.html automatically.
+/*    /404.html    404
+

@@ -1640,6 +1640,25 @@ async function handleAdmin(request: Request, env: Env, session: Session, url: UR
     }}, 200, origin, log);
   }
 
+  /* ── Cloudflare Access email (for the admin shell's "protected" gate) ──
+   *
+   * Returns the `CF-Access-Authenticated-User-Email` request header if it's
+   * present (i.e. the Worker is deployed behind a Cloudflare Zero Trust
+   * Access policy). The admin shell uses this to decide whether to render
+   * the admin UI or show a "protected" screen.
+   *
+   * Requires a valid admin/content_admin bearer token (like all /v1/admin/*
+   * endpoints). The header itself is set by Cloudflare Access before the
+   * request reaches the Worker — the Worker just echoes it back.
+   *
+   * Returns: `{ email: string | null }`
+   */
+  if (request.method === "GET" && path === "/v1/admin/access") {
+    const email = request.headers.get("CF-Access-Authenticated-User-Email")
+      ?? request.headers.get("cf-access-authenticated-user-email");
+    return json({ email: email ?? null }, 200, origin, { requestId: log.requestId, cacheControl: "no-store" });
+  }
+
   /* ── Stats ── */
   if (request.method === "GET" && path === "/v1/admin/stats") {
     if (!isAdmin(session)) return json({ error: "Forbidden" }, 403, origin, log);

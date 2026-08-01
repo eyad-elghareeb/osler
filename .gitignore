@@ -43,9 +43,9 @@ prisma/*.db-journal
 # wrangler local state
 .wrangler/
 
-# opennext build output
-.open-next/
-cloudflare-env.d.ts
+# generated files
+public/sw.js
+public/sw.js.map
 
 # osler local data
 osler-progress-v1

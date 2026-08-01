@@ -1,6 +1,6 @@
 # Hosting Osler
 
-Osler is a standard Next.js 16 standalone app plus an optional Cloudflare Worker backend. This guide walks you through **every** hosting option, from one-click Cloudflare deploy to fully self-hosted on a VPS, including Docker, reverse-proxy TLS, environment configuration, custom domains, and post-deploy verification.
+Osler ships as a **static export** (Next.js `output: "export"`) plus an optional **Cloudflare Worker** backend. This guide walks you through **every** hosting option, from one-click Cloudflare deploy to fully self-hosted on a VPS, including Docker, reverse-proxy TLS, environment configuration, custom domains, and post-deploy verification.
 
 > **Source repository:** <https://github.com/eyad-elghareeb/osler>
 > **License:** MIT — see [LICENSE](../LICENSE).
@@ -69,9 +69,11 @@ For self-hosted / Docker:
 
 ---
 
-## 3. Option A: Cloudflare Pages + Worker (recommended)
+## 3. Option A: Cloudflare Pages (static) + Worker (backend) (recommended)
 
 This is the simplest full-stack option and stays within Cloudflare's free tier for most small-to-medium deployments.
+
+**Architecture:** Osler is built as a Next.js static export (`output: "export"` → `out/`). The static site is deployed to Cloudflare Pages (.pages.dev). The optional Worker (in `cloudflare/worker/`) hosts the auth, sync, admin, and content APIs. The Pages site talks to the Worker cross-origin via `cloud.apiUrl` (set in `public/osler.config.json`).
 
 ### Step 1: Deploy the Worker backend
 
@@ -118,7 +120,8 @@ Either via the dashboard (connect your GitHub fork → new project → framework
 ```bash
 npm install
 npm run build
-npx wrangler pages deploy .next/standalone --project-name osler
+# Output: out/  (Next.js static export)
+npx wrangler pages deploy out --project-name osler
 ```
 
 Set the Pages environment variable `NEXT_PUBLIC_CLOUD_API_URL` to your Worker URL, **or** edit `public/osler.config.json`:
@@ -197,26 +200,29 @@ git clone https://github.com/<your-username>/osler.git /opt/osler
 cd /opt/osler
 npm ci
 npm run build
-# Output: .next/standalone/ + .next/static/ + public/
+# Output: out/  (Next.js static export)
 ```
 
-### Step 3: Run the standalone server
+### Step 3: Serve the static export
 
-Create a systemd service at `/etc/systemd/system/osler.service`:
+Osler is a static export — there is no Node server process. Caddy serves the `out/` directory directly:
+
+```bash
+sudo apt install -y caddy
+```
+
+Create a systemd service at `/etc/systemd/system/osler.service` to serve `out/` on port 3000:
 
 ```ini
 [Unit]
-Description=Osler Next.js standalone server
+Description=Osler static export (serve out/)
 After=network.target
 
 [Service]
 Type=simple
 User=osler
 WorkingDirectory=/opt/osler
-Environment=NODE_ENV=production
-Environment=PORT=3000
-Environment=HOSTNAME=127.0.0.1
-ExecStart=/usr/bin/node /opt/osler/.next/standalone/server.js
+ExecStart=/usr/bin/npx --prefix /opt/osler serve /opt/osler/out -l 3000
 Restart=on-failure
 RestartSec=5
 
@@ -239,20 +245,10 @@ sudo systemctl status osler
 ```caddyfile
 your-domain.com {
     encode gzip zstd
+    root * /opt/osler/out
+    file_server
 
-    # Static assets bypass Node for speed
-    @static path /_next/static/* /fonts/* /assets/* /osler-content/*
-    handle @static {
-        root * /opt/osler
-        file_server
-    }
-
-    # Everything else proxied to the Next.js standalone server
-    reverse_proxy 127.0.0.1:3000 {
-        header_up X-Real-IP {remote_host}
-        header_up X-Forwarded-For {remote_host}
-        header_up X-Forwarded-Proto {scheme}
-    }
+    try_files {path} {path}/ /index.html
 
     # Security headers
     header {
@@ -294,7 +290,7 @@ sudo systemctl restart osler
 
 ## 6. Option D: Docker container
 
-A minimal Dockerfile (save as `Dockerfile` in the repo root):
+Osler is a static export, so the production image just needs to serve `out/`. A minimal Dockerfile (save as `Dockerfile` in the repo root):
 
 ```dockerfile
 # syntax=docker/dockerfile:1.7
@@ -305,16 +301,30 @@ RUN npm ci
 COPY . .
 RUN npm run build
 
-FROM node:22-bookworm-slim AS runner
-WORKDIR /app
-ENV NODE_ENV=production
-ENV PORT=3000
-ENV HOSTNAME=0.0.0.0
-COPY --from=builder /app/.next/standalone ./
-COPY --from=builder /app/.next/static ./.next/static
-COPY --from=builder /app/public ./public
-EXPOSE 3000
-CMD ["node", "server.js"]
+FROM nginx:1.27-alpine AS runner
+COPY --from=builder /app/out /usr/share/nginx/html
+COPY nginx.conf /etc/nginx/conf.d/default.conf
+EXPOSE 80
+CMD ["nginx", "-g", "daemon off;"]
+```
+
+An `nginx.conf` with SPA fallback for the dynamic routes (mirrors `public/_redirects` on Cloudflare Pages):
+
+```nginx
+server {
+    listen 80;
+    root /usr/share/nginx/html;
+    index index.html;
+
+    location / {
+        try_files $uri $uri/ $uri/index.html /index.html;
+    }
+
+    location /_next/static/ {
+        expires 1y;
+        add_header Cache-Control "public, immutable";
+    }
+}
 ```
 
 Build and run:
@@ -323,7 +333,7 @@ Build and run:
 docker build -t osler:latest .
 docker run -d \
   --name osler \
-  -p 3000:3000 \
+  -p 3000:80 \
   -e NEXT_PUBLIC_CLOUD_API_URL=https://osler-cloud.example.workers.dev \
   --restart unless-stopped \
   osler:latest
@@ -341,7 +351,7 @@ services:
       NODE_ENV: production
       NEXT_PUBLIC_CLOUD_API_URL: https://osler-cloud.example.workers.dev
     expose:
-      - "3000"
+      - "80"
 
   caddy:
     image: caddy:2
@@ -365,7 +375,7 @@ volumes:
 
 ```caddyfile
 your-domain.com {
-    reverse_proxy osler:3000
+    reverse_proxy osler:80
     encode gzip zstd
 }
 ```
@@ -383,7 +393,7 @@ If you don't need accounts, sync, or admin content management, Osler can run as 
 
 1. Set `cloud.enabled = false` in `public/osler.config.json`.
 2. Build with `npm run build`.
-3. Deploy `.next/` to GitHub Pages or Netlify.
+3. Deploy `out/` to GitHub Pages or Netlify (set the publish directory to `out`).
 
 > **Note**: Osler's video engine, AI assistant, and P2P sync work fine without the Cloudflare backend. Only accounts, cross-device progress sync, and the admin panel are disabled.
 
@@ -420,7 +430,6 @@ See [`environment.md`](./environment.md) for the complete reference. The short v
 | --- | --- | --- |
 | `NEXT_PUBLIC_CLOUD_API_URL` | If cloud backend enabled | Frontend — Worker URL |
 | `NEXT_PUBLIC_INVIDIOUS_HOST` | Optional | Frontend — alternative YouTube frontend |
-| `OSLER_SESSION_SECRET` | Yes (Frontend, production) | Frontend — HMAC signs the route-gating session cookie |
 | `JWT_SECRET` | Yes (Worker) | Backend — HMAC signing |
 | `ALLOWED_ORIGIN` | Yes (Worker) | Backend — CORS |
 | `WORKER_URL` | For Google Sign-In | Backend — OAuth callback |
@@ -487,7 +496,7 @@ npx wrangler r2 object get osler-content/content/library/abc123/published.json /
 
 - **D1**: `npx wrangler d1 export osler-cloud --remote --output=backup.sql`
 - **R2**: Use `r2 object get` per object or a script that walks the prefix tree
-- **VPS / Docker**: back up the entire `/opt/osler/.next/standalone/` directory plus any local SQLite
+- **VPS / Docker**: back up the entire `/opt/osler/out/` directory plus any local SQLite
 
 ### Scheduling cron
 

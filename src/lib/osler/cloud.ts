@@ -2,6 +2,7 @@ import { getConfig, loadConfig } from "@/lib/osler/config";
 import { flashcardReview, storage, type FlashcardReviewRecord, type QuestionRecord } from "@/lib/osler/storage";
 
 const SESSION_STORAGE_KEY = "osler-cloud-session-v1";
+const LOCAL_USERNAME_KEY = "osler-local-username";
 const SYNC_DEBOUNCE_MS = 4_000;
 const MIN_SYNC_INTERVAL_MS = 20_000;
 
@@ -84,39 +85,101 @@ export function readCloudSession(): CloudSession | null {
 
 /**
  * Save the cloud session to sessionStorage (per-tab, holds the bearer token)
- * AND mirror it to the httpOnly cookie via /api/auth/session (cross-tab +
- * middleware gating). The route verifies the bearer token against the Worker
- * before issuing the cookie, so this call may fail (401 if the token is
- * invalid, 403 if cloud is disabled, 5xx on Worker errors). In any of those
- * cases we clear the local sessionStorage entry so the next restore doesn't
- * pick up a session that the middleware will reject.
+ * AND mirror a redacted username hint to localStorage so other tabs on the
+ * same origin can show the user as "logged in" without the bearer token
+ * (those tabs will need to re-authenticate to actually call Worker APIs).
+ *
+ * NOTE: There is no longer an httpOnly cookie issued by a Next.js server
+ * route — the static export has no server. Route gating is enforced purely
+ * client-side by `RouteGuard` (see `src/components/osler/route-guard.tsx`).
+ *
+ * The bearer token NEVER leaves sessionStorage except in the explicit
+ * `Authorization: Bearer` header to the Worker. localStorage only holds the
+ * username hint for the login form + UI display, never the token.
  */
 export function saveCloudSession(session: CloudSession): void {
-  if (typeof window !== "undefined") {
-    sessionStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(session));
-    void fetch("/api/auth/session", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ session }),
-    }).then((res) => {
-      if (!res.ok) {
-        // Cookie POST failed — clear the stale session so the next restore
-        // doesn't show the user as logged in without a valid cookie.
-        sessionStorage.removeItem(SESSION_STORAGE_KEY);
-      }
-    }).catch(() => {
-      // Network error — leave the sessionStorage entry; the restore effect
-      // will retry the cookie POST and clear it if it fails again.
-    });
+  if (typeof window === "undefined") return;
+  sessionStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(session));
+  // Mirror a non-sensitive username hint to localStorage so the login form
+  // can pre-fill on the next visit. The bearer token stays in sessionStorage.
+  try {
+    localStorage.setItem(LOCAL_USERNAME_KEY, session.user.displayName);
+  } catch {
+    // localStorage might be unavailable (private mode); ignore.
+  }
+  // Notify other tabs on the same origin that the session changed.
+  // The storage event fires automatically for localStorage writes, but
+  // sessionStorage writes don't fire it — so we dispatch a custom event
+  // on the same window (intra-tab) and use BroadcastChannel for cross-tab.
+  try {
+    notifySessionChange("login", session.user.displayName);
+  } catch {
+    // BroadcastChannel might be unavailable in old browsers; ignore.
   }
 }
 
 export function clearCloudSession(): void {
-  if (typeof window !== "undefined") {
-    sessionStorage.removeItem(SESSION_STORAGE_KEY);
-    void fetch("/api/auth/session", { method: "DELETE" }).catch(() => {});
+  if (typeof window === "undefined") return;
+  sessionStorage.removeItem(SESSION_STORAGE_KEY);
+  try {
+    localStorage.removeItem(LOCAL_USERNAME_KEY);
+  } catch {
+    // ignore
+  }
+  try {
+    notifySessionChange("logout", null);
+  } catch {
+    // ignore
   }
 }
+
+/** Local-storage username hint for the login form pre-fill + cross-tab UI hint. */
+export function readLocalUsernameHint(): string | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const v = localStorage.getItem(LOCAL_USERNAME_KEY);
+    return v && v.length > 0 && v.length <= 80 ? v : null;
+  } catch {
+    return null;
+  }
+}
+
+// ─── Cross-tab session notifications ─────────────────────────────────────────
+//
+// The static export has no server-side cookie to gate routes. Instead we use
+// a BroadcastChannel so a logout on tab A immediately clears the UI on tab B.
+// The OslerSessionProvider listens for these events and updates its state.
+
+let bc: BroadcastChannel | null = null;
+function getChannel(): BroadcastChannel | null {
+  if (typeof window === "undefined") return null;
+  if (bc) return bc;
+  try {
+    bc = new BroadcastChannel("osler-session");
+    return bc;
+  } catch {
+    return null;
+  }
+}
+
+function notifySessionChange(kind: "login" | "logout", username: string | null): void {
+  const ch = getChannel();
+  if (!ch) return;
+  ch.postMessage({ kind, username, at: Date.now() });
+}
+
+export function subscribeSessionChanges(cb: (kind: "login" | "logout", username: string | null) => void): () => void {
+  const ch = getChannel();
+  if (!ch) return () => {};
+  const handler = (e: MessageEvent) => {
+    if (!e.data || typeof e.data !== "object") return;
+    if (e.data.kind !== "login" && e.data.kind !== "logout") return;
+    cb(e.data.kind, e.data.username ?? null);
+  };
+  ch.addEventListener("message", handler);
+  return () => ch.removeEventListener("message", handler);
+}
+// ─────────────────────────────────────────────────────────────────────────────
 
 export async function registerCloudAccount(input: {
   username: string;
@@ -202,6 +265,16 @@ function resolvedApiUrl(): string | null {
     if (cfg.enabled && cfg.apiUrl) return cfg.apiUrl.replace(/\/$/, "");
   } catch {}
   return null;
+}
+
+/**
+ * Resolve the cloud API URL synchronously (no config reload). Used by the
+ * admin R2 browser / image-upload helpers to fetch R2-backed content
+ * directly from the Worker — replacing the old /api/r2-fetch proxy that
+ * lived in the Pages backend. Returns null if cloud is disabled.
+ */
+export function resolvedCloudApiUrlSync(): string | null {
+  return resolvedApiUrl();
 }
 
 export interface CloudAccount {

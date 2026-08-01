@@ -1,23 +1,19 @@
-"use client";
+import VideosVideoClient from "./client";
 
-import * as React from "react";
-import dynamic from "next/dynamic";
-import { LoadingState } from "@/components/osler/ui-primitives";
-import { useI18n } from "@/components/osler/i18n-provider";
-
-function VideoLoadingFallback() {
-  const { t } = useI18n();
-  return <LoadingState label={t("loading.video")} />;
+/**
+ * Static export: emit one placeholder page so Next.js generates the route
+ * shell. Actual video IDs are resolved client-side. See `public/_redirects`.
+ */
+export function generateStaticParams() {
+  return [{ video: "_" }];
 }
 
-const VideosStudio = dynamic(
-  () => import("@/components/osler/videos-studio").then((m) => ({ default: m.VideosStudio })),
-  { ssr: false, loading: () => <VideoLoadingFallback /> }
-);
 
-export default function VideosVideoPage({ params }: { params: Promise<{ video: string }> }) {
-  // Next.js App Router already decodes dynamic route params.
-  const { video } = React.use(params);
-
-  return <VideosStudio initialVideoId={video} />;
+export default async function VideosVideoPage({
+  params,
+}: {
+  params: Promise<{ video: string }>;
+}) {
+  const { video } = await params;
+  return <VideosVideoClient video={video} />;
 }

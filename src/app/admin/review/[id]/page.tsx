@@ -1,21 +1,20 @@
-"use client";
+import AdminReviewDiffClient from "./client";
 
-import { use } from "react";
-import { AdminRouteGuard } from "@/components/osler/admin/admin-route-guard";
-import { ContentDiff } from "@/components/osler/admin/content-diff";
+/**
+ * Static export: emit one placeholder page so Next.js generates the route
+ * shell. Actual content_object IDs (UUIDs from the Worker) are resolved
+ * client-side via the admin API. See `public/_redirects`.
+ */
+export function generateStaticParams() {
+  return [{ id: "_" }];
+}
 
-export default function AdminReviewDiffPage({
+
+export default async function AdminReviewDiffPage({
   params,
 }: {
   params: Promise<{ id: string }>;
 }) {
-  const { id } = use(params);
-
-  return (
-    <AdminRouteGuard requireSuperAdmin>
-      <div className="h-full">
-        <ContentDiff id={id} />
-      </div>
-    </AdminRouteGuard>
-  );
+  const { id } = await params;
+  return <AdminReviewDiffClient id={id} />;
 }

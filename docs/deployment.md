@@ -31,7 +31,7 @@ If you just want the short version of "which host should I pick?", read [`hostin
 
 ## 1. Deployment decision matrix
 
-Osler is a standard Next.js 16 standalone app plus an **optional** Cloudflare Worker backend (accounts, cross-device sync, admin panel). Pick a host that matches your needs along the axes below.
+Osler ships as a Next.js **static export** (`output: "export"` → `out/`) plus an **optional** Cloudflare Worker backend (accounts, cross-device sync, admin panel). Pick a host that matches your needs along the axes below.
 
 ### Decision matrix
 
@@ -100,7 +100,6 @@ Run through this checklist **every** time you deploy, whether it's the first dep
 ### Secrets & environment
 
 - [ ] `JWT_SECRET` (Worker) is a fresh, long random string — generate with `openssl rand -base64 48`
-- [ ] `OSLER_SESSION_SECRET` (frontend/Next.js server) is set — otherwise the middleware falls back to `JWT_SECRET` or an insecure dev constant. Generate with `openssl rand -base64 32`
 - [ ] `ALLOWED_ORIGIN` (Worker) matches the exact frontend origin (scheme + host + port) — including `https://`
 - [ ] If Google Sign-In enabled: `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` set as Worker secrets
 - [ ] If password reset enabled: `RESEND_API_KEY`, `EMAIL_FROM`, `APP_ORIGIN` set as Worker secrets
@@ -125,17 +124,17 @@ Run through this checklist **every** time you deploy, whether it's the first dep
 ### Backup & rollback plan
 
 - [ ] **Before** the deploy: D1 database exported (`npx wrangler d1 export osler-cloud --remote --output=backup-YYYY-MM-DD.sql`)
-- [ ] If self-hosted: `.next/standalone/` from the previous working build is preserved (e.g. `/opt/osler.prev`)
+- [ ] If self-hosted: `out/` from the previous working build is preserved (e.g. `/opt/osler.prev`)
 - [ ] Previous deploy's git SHA recorded so you can roll back via `git reset --hard <sha>` if needed
 - [ ] Maintenance communication plan ready (status page, Discord/Slack announcement) if this is a high-risk change
 
 ---
 
-## 3. Cloudflare Workers + Worker runbook (OpenNext)
+## 3. Cloudflare Pages + Worker runbook
 
 This is the **recommended default**: one vendor for frontend, backend, database, and object storage. The free tier covers a small-to-medium medical school easily.
 
-> **Frontend hosting note:** Osler is a Next.js SSR app, so the frontend deploys to a **Cloudflare Worker** via the OpenNext adapter (not static Pages). The repo is pre-configured — see Steps 6–7.
+> **Frontend hosting note:** Osler ships as a Next.js **static export** (`output: "export"` → `out/`) deployed to **Cloudflare Pages** (`.pages.dev`). There is no server runtime, middleware, or `/api/*` route handlers. The browser talks directly to the Worker for any dynamic data. The repo is pre-configured — see Steps 6–7.
 
 ### Step 1: Provision Cloudflare resources
 
@@ -230,27 +229,34 @@ curl https://osler-cloud.<your-subdomain>.workers.dev/v1/health
 # → {"ok":true,"version":"...","time":...}
 ```
 
-### Step 6: Deploy the frontend to Cloudflare (OpenNext)
+### Step 6: Deploy the frontend to Cloudflare Pages
 
-Osler is a **Next.js SSR app** (cookie-auth middleware, server components, `/api/*` route handlers). It cannot be served as static files on Pages — the build output must run in a Worker via the [OpenNext Cloudflare adapter](https://opennext.js.org/cloudflare). This is pre-configured in the repo:
+Osler is a **Next.js static export** (`output: "export"` → `out/`). There is no server runtime, no middleware, and no `/api/*` route handlers — the Pages site is pure static HTML/JS that talks directly to the Worker. This is pre-configured in the repo:
 
-- `open-next.config.ts` — adapter config (currently minimal; add the R2 incremental cache if you enable ISR)
-- `wrangler.jsonc` (repo root) — the frontend Worker (`osler-web`), static assets from `.open-next/assets`, `nodejs_compat` + `global_fetch_strictly_public` flags
-- `public/_headers` — immutable caching for `/_next/static/*`
+- `next.config.ts` — `output: "export"`, `trailingSlash: true`, `images.unoptimized: true`
+- `public/_headers` — security + cache headers for static assets, fonts, content, SW, manifest
+- `public/_redirects` — SPA fallback for dynamic routes (`/qbank/<uid>`, `/admin/content/<id>`, etc.)
+- `src/sw.ts` + `scripts/build-sw.js` — the service worker is built separately (esbuild) to `public/sw.js`
 
 ```bash
 # From the repo root:
 npm install
-npm run deploy
-# → opennextjs-cloudflare build && opennextjs-cloudflare deploy
-# → prints https://osler-web.<your-subdomain>.workers.dev
+npm run build
+# → node scripts/build-sw.js && next build
+# → Output: out/  (Next.js static export)
+npm run deploy:pages
+# → wrangler pages deploy out --project-name osler
+# → prints https://osler-web.<your-subdomain>.pages.dev
 ```
 
-To preview locally in the Workers runtime (not Node):
+To preview locally:
 
 ```bash
-npm run preview
+npm run preview:pages
+# → wrangler pages dev out --port 3000
 ```
+
+The full architecture + deployment guide lives in [`cloudflare-static-worker.md`](./cloudflare-static-worker.md).
 
 ### Step 7: Wire the frontend to the Worker
 
@@ -283,14 +289,16 @@ Sign in at `https://your-app.pages.dev/admin`.
 
 ### Step 9: (Recommended) Put the admin panel behind Cloudflare Access
 
-The admin shell reads the `cf-access-authenticated-user-email` header (set by Cloudflare Zero Trust Access) and refuses to render in production if the header is missing.
+The admin shell fetches `GET /v1/admin/access` from the Worker, which reads the `CF-Access-Authenticated-User-Email` header (set by Cloudflare Zero Trust Access) and refuses to render in production if the header is missing.
 
 1. Cloudflare Dashboard → Zero Trust → Access → Applications → Add Application → **Self-hosted**
-2. Application domain: `your-app.pages.dev` (or path `/admin*`)
+2. Add two hostnames to the same Access app:
+   - `your-app.pages.dev` with path `/admin*`
+   - `your-worker.workers.dev` with path `/v1/admin/*`
 3. Identity provider: Email OTP / Google Workspace / Okta / etc.
 4. Save
 
-Visiting `/admin` will now require Cloudflare Access authentication before reaching the Next.js app.
+Visiting `/admin` will now require Cloudflare Access authentication before reaching the app.
 
 ### Step 10: Smoke-test
 
@@ -398,7 +406,7 @@ sudo -u osler bash -c '
   npm run generate-manifests
   npm run build
 '
-# Output: /opt/osler/.next/standalone/ + /opt/osler/.next/static/ + /opt/osler/public/
+# Output: /opt/osler/out/  (Next.js static export)
 ```
 
 ### Step 4: Configure `osler.config.json`
@@ -410,13 +418,15 @@ sudo -u osler nano /opt/osler/public/osler.config.json
 
 If running with the Cloudflare Worker backend, set `cloud.enabled = true` and `cloud.apiUrl = "https://osler-cloud.<your-subdomain>.workers.dev"`. If running fully offline, set `cloud.enabled = false`.
 
-### Step 5: systemd service
+### Step 5: Serve the static export
+
+Osler is a static export — there is no Node server process. Serve the `out/` directory directly with `npx serve` behind a systemd service.
 
 Create `/etc/systemd/system/osler.service`:
 
 ```ini
 [Unit]
-Description=Osler Next.js standalone server
+Description=Osler static export server
 After=network.target
 
 [Service]
@@ -424,11 +434,8 @@ Type=simple
 User=osler
 Group=osler
 WorkingDirectory=/opt/osler
-Environment=NODE_ENV=production
-Environment=PORT=3000
-Environment=HOSTNAME=127.0.0.1
 Environment=NEXT_PUBLIC_CLOUD_API_URL=https://osler-cloud.example.workers.dev
-ExecStart=/home/osler/.nvm/versions/node/v22.*/bin/node /opt/osler/.next/standalone/server.js
+ExecStart=/usr/bin/npx --yes serve /opt/osler/out -l 3000
 Restart=on-failure
 RestartSec=5
 StandardOutput=journal
@@ -466,20 +473,11 @@ Create `/etc/caddy/Caddyfile` (replaces the default):
 ```caddyfile
 your-domain.com {
     encode gzip zstd
+    root * /opt/osler/out
+    file_server
 
-    # Static assets bypass Node for speed
-    @static path /_next/static/* /fonts/* /assets/* /osler-content/* /manifest.webmanifest /sw.js
-    handle @static {
-        root * /opt/osler
-        file_server
-    }
-
-    # Everything else proxied to the Next.js standalone server
-    reverse_proxy 127.0.0.1:3000 {
-        header_up X-Real-IP {remote_host}
-        header_up X-Forwarded-For {remote_host}
-        header_up X-Forwarded-Proto {scheme}
-    }
+    # SPA fallback so client-side routes (/qbank/<uid>, /admin/content/<id>, …) resolve
+    try_files {path} {path}/ /index.html
 
     # Security headers
     header {
@@ -579,27 +577,37 @@ RUN npm run generate-manifests
 RUN npm run build
 
 # --- Runtime stage ---
-FROM node:22-bookworm-slim AS runner
-WORKDIR /app
+FROM nginx:1.27-alpine AS runner
+WORKDIR /usr/share/nginx/html
 
-ENV NODE_ENV=production
-ENV PORT=3000
-ENV HOSTNAME=0.0.0.0
+# Copy static export
+COPY --from=builder --chown=nginx:nginx /app/out ./
+COPY --from=builder --chown=nginx:nginx /app/nginx.conf /etc/nginx/conf.d/default.conf
 
-# Non-root user
-RUN useradd -r -u 1001 -g node node
-USER node
-
-# Copy build output
-COPY --from=builder --chown=node:node /app/.next/standalone ./
-COPY --from=builder --chown=node:node /app/.next/static ./.next/static
-COPY --from=builder --chown=node:node /app/public ./public
-
-EXPOSE 3000
+EXPOSE 80
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-  CMD node -e "fetch('http://localhost:3000/').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+  CMD wget -qO- http://localhost/ || exit 1
 
-CMD ["node", "server.js"]
+CMD ["nginx", "-g", "daemon off;"]
+```
+
+`nginx.conf` (SPA fallback — mirrors `public/_redirects` on Cloudflare Pages):
+
+```nginx
+server {
+    listen 80;
+    root /usr/share/nginx/html;
+    index index.html;
+
+    location / {
+        try_files $uri $uri/ $uri/index.html /index.html;
+    }
+
+    location /_next/static/ {
+        expires 1y;
+        add_header Cache-Control "public, immutable";
+    }
+}
 ```
 
 ### Step 2: Build and run locally
@@ -609,14 +617,14 @@ docker build -t osler:latest .
 
 docker run -d \
   --name osler \
-  -p 3000:3000 \
+  -p 3000:80 \
   -e NEXT_PUBLIC_CLOUD_API_URL=https://osler-cloud.example.workers.dev \
   -e NEXT_PUBLIC_INVIDIOUS_HOST= \
   --restart unless-stopped \
   osler:latest
 
 docker logs -f osler
-# → Server ready on http://0.0.0.0:3000
+# → nginx: ready
 ```
 
 ### Step 3: docker-compose with Caddy as TLS terminator
@@ -629,12 +637,11 @@ services:
     build: .
     restart: unless-stopped
     environment:
-      NODE_ENV: production
       NEXT_PUBLIC_CLOUD_API_URL: https://osler-cloud.example.workers.dev
     expose:
-      - "3000"
+      - "80"
     healthcheck:
-      test: ["CMD", "node", "-e", "fetch('http://localhost:3000/').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      test: ["CMD", "wget", "-qO-", "http://localhost/"]
       interval: 30s
       timeout: 5s
       retries: 3
@@ -662,7 +669,7 @@ volumes:
 
 ```caddyfile
 your-domain.com {
-    reverse_proxy osler:3000
+    reverse_proxy osler:80
     encode gzip zstd
     header {
         Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
@@ -803,7 +810,7 @@ GitHub Pages is **static-only** — there's no Next.js server process, no Cloudf
 
 ### Step 1: Configure Next.js for static export
 
-Osler's `next.config.ts` uses `output: "standalone"` by default. For GitHub Pages, you need `output: "export"` plus a `basePath` matching your repo name (if deploying to `https://<user>.github.io/<repo>`).
+Osler's `next.config.ts` already uses `output: "export"`. For GitHub Pages you only need to add a `basePath` matching your repo name (if deploying to `https://<user>.github.io/<repo>`).
 
 Create `next.config.gh-pages.ts` (do not modify the main `next.config.ts`):
 
@@ -921,7 +928,7 @@ Follow [§3 Steps 1–5](#3-cloudflare-pages--worker-runbook) to deploy the Clou
 3. Build settings:
    - Base directory: (leave empty)
    - Build command: `npm run build`
-   - Publish directory: `.next/standalone` (Netlify auto-detects Next.js; alternatively use the official Next.js runtime plugin)
+   - Publish directory: `out`
 4. Environment variables:
    - `NEXT_PUBLIC_CLOUD_API_URL` = `https://osler-cloud.<your-subdomain>.workers.dev`
    - `NEXT_PUBLIC_INVIDIOUS_HOST` (optional)
@@ -934,15 +941,14 @@ For repeatable builds, commit a `netlify.toml` at the repo root:
 ```toml
 [build]
   command = "npm run build"
-  publish = ".next/standalone"
-
-[[plugins]]
-  package = "@netlify/plugin-nextjs"
+  publish = "out"
 
 [build.environment]
   NODE_VERSION = "22"
   NEXT_PUBLIC_CLOUD_API_URL = "https://osler-cloud.example.workers.dev"
 ```
+
+> Netlify serves the static export directly. Add `/_redirects`-style SPA fallback if you rely on the dynamic routes (`/qbank/<uid>`, etc.); Netlify supports `_redirects` files in the publish directory (see `public/_redirects`).
 
 ### Step 4: Custom domain
 
@@ -1083,18 +1089,16 @@ If any of these fail, see [`troubleshooting.md`](./troubleshooting.md).
 
 Rollbacks are host-specific. The general principle: **preserve the previous working build before deploying the new one**, so rolling back is a config change, not a rebuild.
 
-### Cloudflare Workers
+### Cloudflare
 
 ```bash
 # Backend Worker (osler-cloud)
 cd cloudflare/worker
 npx wrangler deployments list
 npx wrangler rollback <version-id>
-
-# Frontend Worker (osler-web, OpenNext) — from repo root
-npx wrangler deployments list
-npx wrangler rollback <version-id>
 ```
+
+Frontend rollback for Cloudflare Pages is done via the dashboard (Deployments → ⋮ → "Rollback to this deployment") or the Cloudflare API.
 
 ### Vercel
 
@@ -1168,18 +1172,17 @@ git push origin main
 
 Below are reference GitHub Actions workflows for each host. They are intentionally minimal — extend with caching, Slack notifications, and approval gates as your team needs.
 
-### Cloudflare Workers + Worker — `.github/workflows/deploy-cloudflare.yml`
+### Cloudflare Pages + Worker — `.github/workflows/deploy-cloudflare.yml`
 
-A working workflow ships in the repo (deploys both the backend `osler-cloud` Worker and the OpenNext frontend `osler-web` Worker on every push to `main`). Required GitHub repo secrets:
+A working workflow ships in the repo (deploys both the backend `osler-cloud` Worker and the static export `out/` to Cloudflare Pages on every push to `main`). Required GitHub repo secrets:
 
 | Secret | Purpose |
 |---|---|
 | `CLOUDFLARE_API_TOKEN` | API token with **Edit Cloudflare Workers** + **Edit Cloudflare Pages** permissions |
 | `CLOUDFLARE_ACCOUNT_ID` | Your Cloudflare account ID |
 | `CF_JWT_SECRET` | Backend Worker HMAC signing secret (`openssl rand -base64 48`) |
-| `CF_OSLER_SESSION_SECRET` | Frontend Worker session cookie secret (`openssl rand -base64 32`) |
 | `CF_WORKER_URL` | Backend Worker URL, e.g. `https://osler-cloud.<sub>.workers.dev` — also baked as `NEXT_PUBLIC_CLOUD_API_URL` |
-| `CF_ALLOWED_ORIGIN` | Frontend origin, e.g. `https://osler-web.<sub>.workers.dev` |
+| `CF_ALLOWED_ORIGIN` | Frontend origin, e.g. `https://osler-web.<sub>.pages.dev` |
 
 Reference shape:
 
@@ -1220,11 +1223,13 @@ jobs:
         with: { node-version: 22, cache: npm }
       - run: npm ci
       - run: npm run generate-manifests
-      - run: npm run deploy
+      - run: npm run build
+        env:
+          NEXT_PUBLIC_CLOUD_API_URL: ${{ secrets.CF_WORKER_URL }}
+      - run: npx wrangler pages deploy out --project-name osler
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          NEXT_PUBLIC_CLOUD_API_URL: ${{ secrets.CF_WORKER_URL }}
 ```
 
 ### Vercel — `.github/workflows/deploy-vercel.yml`
@@ -1364,7 +1369,7 @@ jobs:
       - name: Deploy to Netlify
         uses: nwtgck/actions-netlify@v3
         with:
-          publish-dir: '.next/standalone'
+          publish-dir: 'out'
           production-deploy: true
         env:
           NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}

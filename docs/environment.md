@@ -55,15 +55,7 @@ The canonical template lives at `.env.example` in the repo root. Copy it to `.en
 
 ### 1.3 `OSLER_SESSION_SECRET`
 
-| | |
-| --- | --- |
-| **Required** | **Yes in production** |
-| **Default** | _(none — falls back to `JWT_SECRET`, then to an insecure dev constant)_ |
-| **Description** | HMAC secret used to sign the `osler-session` httpOnly cookie so the Next.js middleware can verify it wasn't forged. Read server-side only (`src/lib/osler/server-session.ts`); never exposed to the client bundle. If unset, the middleware logs a warning in production and falls back to `JWT_SECRET`, then to a dev-only constant — set it explicitly. |
-| **Example** | `OSLER_SESSION_SECRET=some-32+-char-random-string` |
-| **Where to set** | Root `.env.local` (local dev), or the Pages/Vercel/Dashboard environment variable (production). Generate with `openssl rand -base64 32`. |
-
-> **Rotation:** rotating `OSLER_SESSION_SECRET` signs every user out (cookies no longer verify). Users just sign in again. There is no recovery mechanism for old cookies — by design, secrets are stateless.
+> **Removed in v0.3.** Osler is a static export (`output: "export"`) — there is no server runtime, so there is no `osler-session` cookie, no middleware, and no server-side session secret. Route gating is client-side (`RouteGuard`), and the security boundary is the Worker (bearer token in `sessionStorage`, sent as `Authorization` on every request). This variable is no longer read by the app; any existing value can be ignored/removed.
 
 ### 1.4 Other build-time knobs (not in `.env.example`)
 
@@ -1051,7 +1043,6 @@ Any check failing returns `400 invalid_token` and consumes the single-use state 
 | --- | --- | --- | --- | --- |
 | `NEXT_PUBLIC_INVIDIOUS_HOST` | Frontend | No | `.env.local` / Pages env | `invidious.tiekoetter.com` |
 | `NEXT_PUBLIC_CLOUD_API_URL` | Frontend | If cloud on | `.env.local` / Pages env | _(empty — overridden by `osler.config.json`)_ |
-| `OSLER_SESSION_SECRET` | Frontend (server) | **Yes in prod** | `.env.local` / Pages env | _(falls back to `JWT_SECRET`, then dev constant)_ |
 | `JWT_SECRET` | Worker | **Yes** | `wrangler secret put` | _(none)_ |
 | `ALLOWED_ORIGIN` | Worker | **Yes** | `[vars]` in `wrangler.toml` | `http://localhost:3000` |
 | `WORKER_URL` | Worker | Yes (for OAuth) | `[vars]` in `wrangler.toml` | `http://localhost:8787` |

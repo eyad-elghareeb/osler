@@ -64,6 +64,7 @@ import {
   type ContentType,
   type AdminCapabilities,
 } from "@/components/osler/admin/admin-api";
+import { r2KeyToWorkerUrl } from "@/components/osler/admin/editors/image-upload";
 import { useToast } from "@/hooks/use-toast";
 import {
   ContentTreePane,
@@ -363,7 +364,9 @@ export function ContentBrowser({ capabilities }: ContentBrowserProps) {
     const base = node.r2Key.replace(/\.[^.]+$/, "");
     const copyKey = `${base}-copy${ext ? "." + ext : ""}`;
     try {
-      const res = await fetch(`/api/r2-fetch?key=${encodeURIComponent(node.r2Key)}`);
+      const url = r2KeyToWorkerUrl(node.r2Key);
+      if (!url) throw new Error("Cloud not configured");
+      const res = await fetch(url);
       if (!res.ok) throw new Error(`${res.status}`);
       const body = await res.text();
       await adminApi.uploadFile(copyKey, body);
@@ -858,7 +861,8 @@ function findNodeById(nodes: ContentTreeNode[], id: string): ContentTreeNode | n
 
 async function downloadR2Key(key: string, name: string) {
   try {
-    const url = `/api/r2-fetch?key=${encodeURIComponent(key)}`;
+    const url = r2KeyToWorkerUrl(key);
+    if (!url) throw new Error("Cloud not configured");
     const res = await fetch(url);
     if (!res.ok) throw new Error(`${res.status}`);
     const blob = await res.blob();
@@ -1061,7 +1065,13 @@ function R2Preview({ node }: { node: ContentTreeNode }) {
   React.useEffect(() => {
     if (!node.r2Key) { setLoading(false); return; }
     setLoading(true);
-    fetch(`/api/r2-fetch?key=${encodeURIComponent(node.r2Key)}`)
+    const url = r2KeyToWorkerUrl(node.r2Key);
+    if (!url) {
+      setBody(null);
+      setLoading(false);
+      return;
+    }
+    fetch(url)
       .then((r) => r.ok ? r.text() : Promise.reject(new Error(`${r.status}`)))
       .then((text) => setBody(text.slice(0, 8000)))
       .catch(() => setBody(null))

@@ -54,7 +54,7 @@ jobs:
           npx wrangler deploy $ARGS
 
   deploy-frontend:
-    name: Build & deploy Next.js app (OpenNext)
+    name: Build & deploy static export to Cloudflare Pages
     needs: deploy-worker
     runs-on: ubuntu-latest
     steps:
@@ -71,17 +71,13 @@ jobs:
       - name: Regenerate content manifests
         run: npm run generate-manifests
 
-      - name: Set frontend Worker secret (skipped when not configured)
+      - name: Build static export
         env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          CF_OSLER_SESSION_SECRET: ${{ secrets.CF_OSLER_SESSION_SECRET }}
-        run: |
-          if [ -n "$CF_OSLER_SESSION_SECRET" ]; then echo "$CF_OSLER_SESSION_SECRET" | npx wrangler secret put OSLER_SESSION_SECRET --name osler-web; fi
-
-      - name: Build & deploy to Cloudflare Workers
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           NEXT_PUBLIC_CLOUD_API_URL: ${{ secrets.CF_WORKER_URL }}
-        run: npm run deploy
+        run: npm run build
+
+      - name: Deploy to Cloudflare Pages
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: npm run deploy:pages

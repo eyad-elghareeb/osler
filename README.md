@@ -422,7 +422,7 @@ The Rust backend (`tauri-admin/src/config.rs`) exposes `read_config`, `write_con
 ## ✦ Architecture
 
 ### View Routing
-Path-based Next.js App Router routes (`/qbank/[uid]`, `/library/[article]`, `/settings/[section]`) replace the old query-param view state. `useOslerRouter()` / `routeFor()` in `src/lib/osler/navigation.ts` build the paths and drive haptic + View Transitions slide navigation. A server-side `osler-session` httpOnly cookie (HMAC-signed via `OSLER_SESSION_SECRET`) lets `src/middleware.ts` gate access to protected routes; `/login` redirects unauthenticated users with a validated `next` param.
+Path-based Next.js App Router routes (`/qbank/[uid]`, `/library/[article]`, `/settings/[section]`) replace the old query-param view state. `useOslerRouter()` / `routeFor()` in `src/lib/osler/navigation.ts` build the paths and drive haptic + View Transitions slide navigation. Route gating is client-side: `RouteGuard` (`src/components/osler/route-guard.tsx`) redirects unauthenticated users to `/login?next=<path>` with a validated `next` param. Sessions live in `sessionStorage` (bearer token) with a username hint in `localStorage`; there is no server middleware (static export).
 
 **Views:** `dashboard`, `learn`, `library`, `qbank`, `flashcards`, `osce`, `videos`, `profile`, `settings` (see `VIEW_ORDER` in `navigation.ts`).
 

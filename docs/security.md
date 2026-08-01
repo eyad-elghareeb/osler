@@ -43,7 +43,7 @@ Osler is a medical education platform. The assets we protect:
 - **Credential theft** via phishing, MITM, or DB leak → mitigated by PBKDF2 hashing, HSTS, server-side session revocation
 - **Brute-force login** → mitigated by rate limiting + optional Turnstile + PBKDF2 310k iterations
 - **Privilege escalation** (student → admin) → mitigated by role checks on every admin endpoint
-- **CSRF** on state-changing endpoints → mitigated by bearer-token auth in sessionStorage (not cookies) + strict CORS. The only cookie Osler sets (`osler-session`) is httpOnly + `SameSite=Lax` and carries no bearer token — it exists solely so the Next.js middleware can gate route access.
+- **CSRF** on state-changing endpoints → mitigated by bearer-token auth in sessionStorage (not cookies) + strict CORS. Osler sets no cookies from the app itself — auth uses the `Authorization: Bearer` header on every Worker request, so cross-site requests cannot forge state changes.
 - **XSS in admin content** → mitigated by JSON-only content storage (no HTML rendering on admin side); app-side rendering uses React's default escaping
 - **Username enumeration** → mitigated by uniform error messages on login/reset, but `/v1/auth/username-available` is intentionally public (live validation UX tradeoff)
 - **Email enumeration** via password reset → mitigated by uniform `{ok:true}` response regardless of whether the email exists
@@ -88,16 +88,16 @@ Sessions are stored in `sessionStorage` (not `localStorage` or cookies). This me
 - ✅ Isolated per-tab (multiple admin logins don't conflict).
 - ❌ Lost on tab close (users must re-login). Trade-off for security.
 
-### Route-gating cookie (Next.js middleware)
+### Route gating (client-side, no middleware)
 
-In addition to the bearer token, the Next.js app sets a single **httpOnly `osler-session` cookie** used by `src/middleware.ts` to decide whether a request can reach protected app routes. This cookie is distinct from the Worker token:
+Osler is a **static export** (`output: "export"`) — there is no server runtime, so there is no Next.js middleware and no `osler-session` cookie. Route gating is enforced client-side by `RouteGuard` (`src/components/osler/route-guard.tsx`):
 
-- It carries **no bearer token** — only a signed payload (`{ kind, user|username, expiresAt }`).
-- The value is `<base64url(payload)>.<base64url(hmac-sha256(payload, OSLER_SESSION_SECRET))>` — the middleware verifies the HMAC on every request, so a forged cookie is rejected.
-- It is `httpOnly`, `SameSite=Lax`, and `Secure` in production, so it is never readable by client-side JS and is not a CSRF vector (it gates navigation only — the Worker API still authenticates via the `Authorization` header).
-- `POST /api/auth/session` issues the cookie **only** after verifying the CloudSession bearer token against the Worker (`GET /v1/auth/me`), and refuses local-mode `{ username }` payloads when cloud is enabled. `GET /api/auth/session` returns a redacted view — the bearer `token` is never exposed over HTTP.
+- It uses the session state from `OslerSessionProvider` (bearer token in `sessionStorage` per-tab, username hint in `localStorage`) to decide whether a route is protected.
+- Unauthenticated requests on protected routes are redirected to `/login?next=<path>`; the `next` param is validated with `isSafeLocalPath()` to prevent open redirect.
+- A user navigating directly to a protected URL may briefly see the page chrome render before the redirect fires, but **no actual content is exposed** — every Worker API call requires the bearer `Authorization` header, so unauthenticated requests get 401 from the Worker.
+- Cross-tab logins/logouts sync via `BroadcastChannel` so a logout on one tab clears the UI on all tabs.
 
-The middleware secret resolves from `OSLER_SESSION_SECRET`, then `JWT_SECRET`, then an insecure dev fallback (with a warning logged in production). Set `OSLER_SESSION_SECRET` explicitly — see [`environment.md`](./environment.md#13-osler_session_secret).
+The security boundary is the Worker, not the page shell: the browser holds no server-side secret, and the token never leaves `sessionStorage` except as the `Authorization` header on Worker requests.
 
 ### Session revocation
 
@@ -412,7 +412,7 @@ For production deployments, run through this checklist:
 ### Authentication & access
 
 - [ ] `JWT_SECRET` is a 48+ byte random string (not a memorable password)
-- [ ] `OSLER_SESSION_SECRET` is set on the frontend (Next.js) — otherwise the middleware falls back to `JWT_SECRET` or an insecure dev constant. Generate with `openssl rand -base64 32`. Different from `JWT_SECRET` is fine; the two are unrelated secrets.
+- [ ] The frontend is a static export — no server-side secrets; route gating is client-side (`RouteGuard`) and the security boundary is the Worker (bearer token required on every API call)
 - [ ] `TURNSTILE_ENABLED=true` and `TURNSTILE_SECRET_KEY` configured
 - [ ] First admin user promoted via D1 SQL (not via the API)
 - [ ] Admin panel protected by Cloudflare Access (Zero Trust)
