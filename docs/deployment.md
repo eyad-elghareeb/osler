@@ -236,14 +236,15 @@ Osler is a **Next.js static export** (`output: "export"` → `out/`). There is n
 - `next.config.ts` — `output: "export"`, `trailingSlash: true`, `images.unoptimized: true`
 - `public/_headers` — security + cache headers for static assets, fonts, content, SW, manifest
 - `public/_redirects` — SPA fallback for dynamic routes (`/qbank/<uid>`, `/admin/content/<id>`, etc.)
+- `scripts/copy-spa-placeholders.js` — post-build step that copies dynamic-route placeholder HTML files to `/_spa/<name>/index.html` so Cloudflare Pages can serve them without triggering infinite-loop detection or clean-URL 308 redirects (see `docs/cloudflare-static-worker.md` § Dynamic routes for details)
 - `src/sw.ts` + `scripts/build-sw.js` — the service worker is built separately (esbuild) to `public/sw.js`
 
 ```bash
 # From the repo root:
 npm install
 npm run build
-# → node scripts/build-sw.js && next build
-# → Output: out/  (Next.js static export)
+# → node scripts/build-sw.js && next build && node scripts/copy-spa-placeholders.js
+# → Output: out/  (Next.js static export + /_spa/ placeholder copies)
 npm run deploy:pages
 # → wrangler pages deploy out --project-name osler
 # → prints https://osler-web.<your-subdomain>.pages.dev

@@ -5,29 +5,59 @@
 # for ANY value in the dynamic segment, so the client-side router can
 # pick up the URL and load the actual content from the Worker.
 #
+# IMPORTANT — two redirect-engine quirks that must be avoided
+#
+# 1. Infinite-loop detection
+#    Cloudflare Pages strips `.html` / `/index` from the destination URL
+#    before re-evaluating it against the source pattern. If the destination
+#    path matches the source pattern, Pages flags the rule as an infinite
+#    loop and SILENTLY IGNORES it — every dynamic URL then returns 404.
+#
+# 2. Clean-URL 308 redirects
+#    If the destination is a `name.html` file, Pages 308-redirects to the
+#    clean URL `name` (stripping `.html`), which breaks the `200` rewrite
+#    semantics. Directory-style destinations (`name/index.html`) are
+#    already "clean" and are served directly without a redirect.
+#
+# THE FIX
+#
+# The post-build script `scripts/copy-spa-placeholders.js` copies each
+# placeholder HTML to `/_spa/<name>/index.html` — a top-level directory
+# whose URL does NOT match any source pattern. The rules below point at
+# those directory paths. Run `npm run build` to regenerate the copies
+# after each build.
+#
 # Cloudflare Pages serves real files BEFORE applying redirects, so
-# known paths (e.g. /settings/account/ which has its own index.html)
-# are served directly. Only unmatched paths fall through to these
-# rules.
+# known paths (e.g. /settings/account/ which has its own index.html,
+# or /admin/content/raw/) are served directly. Only unmatched paths
+# fall through to these rules.
 #
 # The 200 status (not 301/302) means Cloudflare Pages serves the file
 # content at the requested URL — the browser URL stays the same and the
 # client router takes over.
 
 # App dynamic routes — placeholder shell for any UID/article/video.
-/qbank/*           /qbank/_/index.html           200
-/flashcards/*      /flashcards/_/index.html      200
-/osce/*            /osce/_/index.html            200
-/library/*         /library/_/index.html         200
-/videos/*          /videos/_/index.html          200
-/settings/*        /settings/index.html          200
+/qbank/*           /_spa/qbank/           200
+/flashcards/*      /_spa/flashcards/      200
+/osce/*            /_spa/osce/            200
+/library/*         /_spa/library/         200
+/videos/*          /_spa/videos/          200
+/settings/*        /_spa/settings/        200
 
 # Admin dynamic routes — UUIDs not known at build time.
-/admin/users/*     /admin/users/_/index.html     200
-/admin/content/*   /admin/content/_/index.html   200
-/admin/review/*    /admin/review/_/index.html    200
+/admin/users/*     /_spa/admin-users/     200
+/admin/content/*   /_spa/admin-content/   200
+/admin/review/*    /_spa/admin-review/    200
 
-# Catch-all: serve the 404 page for anything else unmatched.
-# Next.js's static export generates /404.html automatically.
-/*    /404.html    404
-
+# No catch-all rule.
+#
+# Cloudflare Pages automatically serves /404.html with HTTP 404 for any
+# URL that doesn't match a static file or a redirect rule above. We do
+# NOT add `/*  /404.html  404` here because:
+#   1. `404` is not a valid redirect status code (valid: 200, 301, 302,
+#      303, 307, 308). The rule would be silently ignored.
+#   2. Even with status 200, a catch-all would mask real 404s by serving
+#      the 404 page with HTTP 200, which is bad for SEO and monitoring.
+#
+# Next.js's static export generates /404.html automatically; Pages picks
+# it up for any unmatched request.

@@ -234,21 +234,33 @@ Until those two preconditions exist, the in-memory limiter remains the only rate
 
 ### Dynamic routes
 
-Next.js `output: "export"` requires `generateStaticParams` for dynamic routes. Each dynamic route emits one placeholder page (e.g. `/qbank/_/index.html`), and `public/_redirects` tells Cloudflare Pages to serve that placeholder for ANY UID:
+Next.js `output: "export"` requires `generateStaticParams` for dynamic routes. Each dynamic route emits one placeholder page (e.g. `/qbank/_/index.html`).
+
+A post-build script (`scripts/copy-spa-placeholders.js`) copies each placeholder to a top-level `/_spa/<name>/index.html` path, and `public/_redirects` tells Cloudflare Pages to serve that placeholder for ANY UID:
 
 ```
-/qbank/*           /qbank/_/index.html           200
-/flashcards/*      /flashcards/_/index.html      200
-/osce/*            /osce/_/index.html            200
-/library/*         /library/_/index.html         200
-/videos/*          /videos/_/index.html          200
-/settings/*        /settings/index.html          200
-/admin/users/*     /admin/users/_/index.html     200
-/admin/content/*   /admin/content/_/index.html   200
-/admin/review/*    /admin/review/_/index.html    200
+/qbank/*           /_spa/qbank/           200
+/flashcards/*      /_spa/flashcards/      200
+/osce/*            /_spa/osce/            200
+/library/*         /_spa/library/         200
+/videos/*          /_spa/videos/          200
+/settings/*        /_spa/settings/        200
+/admin/users/*     /_spa/admin-users/     200
+/admin/content/*   /_spa/admin-content/   200
+/admin/review/*    /_spa/admin-review/    200
 ```
 
-Cloudflare Pages serves real files BEFORE applying redirects, so known paths (e.g. `/settings/account/` which has its own `index.html`) are served directly. Only unmatched paths fall through to the placeholder.
+**Why the `/_spa/` copy step exists.** Cloudflare Pages' redirect engine has two quirks that silently break dynamic routes if the placeholder is served from its original path:
+
+1. **Infinite-loop detection.** The engine strips `.html` and `/index` from the destination URL before re-checking it against the source pattern. A rule like `/admin/content/* → /admin/content/_/index.html` gets its destination stripped to `/admin/content/_/`, which still matches the source `/admin/content/*` — so Pages flags the rule as an infinite loop and **silently ignores it**. The dynamic URL then falls through to the catch-all and returns 404.
+
+2. **Clean-URL 308 redirects.** If the destination is a `name.html` file, Pages 308-redirects to the clean URL `name` (stripping `.html`), which breaks the `200` rewrite semantics. Directory-style destinations (`name/index.html`) are already "clean" and are served directly without a redirect.
+
+Copying the placeholders to `/_spa/<name>/index.html` solves both problems: the destination path doesn't match any source pattern (no infinite loop), and the directory-style URL is served directly without a 308 redirect.
+
+Cloudflare Pages serves real files BEFORE applying redirects, so known paths (e.g. `/settings/account/` which has its own `index.html`, or `/admin/content/raw/`) are served directly. Only unmatched paths fall through to the placeholder.
+
+There is intentionally **no catch-all rule**. Cloudflare Pages automatically serves `/404.html` with HTTP 404 for any URL that doesn't match a static file or a redirect rule. Adding `/* /404.html 404` does not work because `404` is not a valid redirect status code (valid: 200, 301, 302, 303, 307, 308) — the rule would be silently ignored.
 
 ### Route guarding (no middleware)
 
@@ -280,6 +292,14 @@ After deploying, run through this checklist:
 - [ ] Login / logout works (sessionStorage + Worker session)
 - [ ] Settings → Sync shows "Synced" status after a few seconds
 - [ ] `/admin` shows login prompt → sign in with admin account → admin shell loads
+- [ ] **Deep-link test (hard refresh, not client-side nav):**
+  - [ ] `https://your-app.pages.dev/admin/content/<any-uuid>` returns 200 (not 404) and loads the admin shell
+  - [ ] `https://your-app.pages.dev/qbank/<any-uid>` returns 200 and loads the QBank studio
+  - [ ] `https://your-app.pages.dev/library/<any-article>` returns 200 and loads the library article viewer
+  - [ ] `https://your-app.pages.dev/admin/users/<any-uuid>` returns 200
+  - [ ] `https://your-app.pages.dev/admin/review/<any-uuid>` returns 200
+- [ ] **Static content test:** `https://your-app.pages.dev/osler-content/library/manifest.json` returns 200 with JSON
+- [ ] **404 test:** `https://your-app.pages.dev/nonexistent-path` returns 404 (the Next.js 404 page renders)
 - [ ] `https://your-app.pages.dev/sw.js` returns the built service worker
 - [ ] `https://your-app.pages.dev/manifest.webmanifest` returns valid JSON
 - [ ] If Turnstile enabled: register/login shows the challenge widget
