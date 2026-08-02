@@ -527,9 +527,16 @@ export function QBankStudio({
     [testMode]
   );
 
-  // Start a session when a content pack is provided
+  // Start a session when a content pack is provided. Bank packs open the
+  // Create Test tab with the pack pre-selected as a source instead — a bank
+  // is configured into a test, not launched directly (mirrors handleNodeClick).
   React.useEffect(() => {
     if (activeItem && activeContent) {
+      if (activeContent.type === "bank") {
+        setPendingCreateTestSourceUid(activeItem.uid);
+        setHomeTab("create");
+        return;
+      }
       const limit = pendingQuestionLimitRef.current;
       pendingQuestionLimitRef.current = 0;
       startSession(activeItem, activeContent, limit || undefined);
