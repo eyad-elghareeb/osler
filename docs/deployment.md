@@ -235,16 +235,16 @@ Osler is a **Next.js static export** (`output: "export"` → `out/`). There is n
 
 - `next.config.ts` — `output: "export"`, `trailingSlash: true`, `images.unoptimized: true`
 - `public/_headers` — security + cache headers for static assets, fonts, content, SW, manifest
-- `public/_redirects` — SPA fallback for dynamic routes (`/qbank/<uid>`, `/admin/content/<id>`, etc.)
-- `scripts/copy-spa-placeholders.js` — post-build step that copies dynamic-route placeholder HTML files to `/_spa/<name>/index.html` so Cloudflare Pages can serve them without triggering infinite-loop detection or clean-URL 308 redirects (see `docs/cloudflare-static-worker.md` § Dynamic routes for details)
 - `src/sw.ts` + `scripts/build-sw.js` — the service worker is built separately (esbuild) to `public/sw.js`
+
+There is **no `public/_redirects`** — the app has no dynamic path-segment routes. Pack/reader/settings/admin detail navigation uses query params (`/qbank?uid=<pack>`, `/admin/content?id=<uuid>`, …) on real static files, so no SPA-fallback rewrite is needed (see `docs/cloudflare-static-worker.md` § Dynamic content).
 
 ```bash
 # From the repo root:
 npm install
 npm run build
-# → node scripts/build-sw.js && next build && node scripts/copy-spa-placeholders.js
-# → Output: out/  (Next.js static export + /_spa/ placeholder copies)
+# → node scripts/build-sw.js && next build
+# → Output: out/  (Next.js static export)
 npm run deploy:pages
 # → wrangler pages deploy out --project-name osler
 # → prints https://osler-web.<your-subdomain>.pages.dev
@@ -592,7 +592,7 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
 CMD ["nginx", "-g", "daemon off;"]
 ```
 
-`nginx.conf` (SPA fallback — mirrors `public/_redirects` on Cloudflare Pages):
+`nginx.conf` (serves the static export — no dynamic path-segment routes, so no rewrite config is needed):
 
 ```nginx
 server {
@@ -949,7 +949,7 @@ For repeatable builds, commit a `netlify.toml` at the repo root:
   NEXT_PUBLIC_CLOUD_API_URL = "https://osler-cloud.example.workers.dev"
 ```
 
-> Netlify serves the static export directly. Add `/_redirects`-style SPA fallback if you rely on the dynamic routes (`/qbank/<uid>`, etc.); Netlify supports `_redirects` files in the publish directory (see `public/_redirects`).
+> Netlify serves the static export directly. The app has no dynamic path-segment routes (navigation uses query params on real static files), so no `_redirects` fallback is needed.
 
 ### Step 4: Custom domain
 

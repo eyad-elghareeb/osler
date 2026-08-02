@@ -169,7 +169,7 @@ export function UsersTable() {
                   </td>
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-1.5">
-                      <Link href={`/admin/users/${user.id}`}>
+                      <Link href={`/admin/users?id=${encodeURIComponent(user.id)}`}>
                         <Button variant="ghost" size="sm">
                           <Eye className="size-3.5 me-1.5" />
                           {t("admin.users.view")}

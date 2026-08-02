@@ -59,7 +59,6 @@ osler/
 │   └── lib/osler/            # Client-side libs (cloud.ts, session-context.tsx, etc.)
 ├── public/                   # Static assets served as-is
 │   ├── _headers              # Cloudflare Pages security + cache headers
-│   ├── _redirects            # SPA fallback for dynamic routes
 │   ├── sw.js                 # Built by scripts/build-sw.js (esbuild)
 │   └── osler.config.json     # Cloud URL + feature flags
 ├── cloudflare/worker/        # Standalone Worker project (separate deploy)
@@ -232,35 +231,31 @@ Until those two preconditions exist, the in-memory limiter remains the only rate
 
 ## Static export details
 
-### Dynamic routes
+### Dynamic content (query-param routing — no dynamic routes)
 
-Next.js `output: "export"` requires `generateStaticParams` for dynamic routes. Each dynamic route emits one placeholder page (e.g. `/qbank/_/index.html`).
+Osler has **no dynamic path-segment routes**. Pack UIDs, article ids, video ids, settings sections, and admin record ids are carried in **query params**, not URL segments:
 
-A post-build script (`scripts/copy-spa-placeholders.js`) copies each placeholder to a top-level `/_spa/<name>/index.html` path, and `public/_redirects` tells Cloudflare Pages to serve that placeholder for ANY UID:
+- `/qbank?uid=<pack>` — QBank hub or pack studio
+- `/flashcards?uid=<deck>` — Flashcard hub or deck studio
+- `/osce?uid=<scenario>` — OSCE hub or scenario studio
+- `/library?article=<file>` — Library hub or article reader
+- `/videos?video=<id>` — Videos hub or player
+- `/settings?section=<name>` — Settings hub or section
+- `/admin/content?id=<uuid>` — admin content hub or editor
+- `/admin/users?id=<uuid>` — admin users hub or user detail
+- `/admin/review?id=<uuid>` — admin review hub or diff viewer
 
-```
-/qbank/*           /_spa/qbank/           200
-/flashcards/*      /_spa/flashcards/      200
-/osce/*            /_spa/osce/            200
-/library/*         /_spa/library/         200
-/videos/*          /_spa/videos/          200
-/settings/*        /_spa/settings/        200
-/admin/users/*     /_spa/admin-users/     200
-/admin/content/*   /_spa/admin-content/   200
-/admin/review/*    /_spa/admin-review/    200
-```
+Every route is a **real static file** (`/qbank/index.html`, `/admin/content/index.html`, …). The page reads its param with `useSearchParams()` (wrapped in `<Suspense>` for clean prerender) and renders either the hub or the content. A deep link like `/admin/content?id=abc` returns the static HTML and the client resolves the id.
 
-**Why the `/_spa/` copy step exists.** Cloudflare Pages' redirect engine has two quirks that silently break dynamic routes if the placeholder is served from its original path:
+**Why this design.** The previous approach used dynamic path segments (`/admin/content/[id]`, `/qbank/[uid]`) with placeholder pages + a `_redirects` SPA-fallback. That was fragile on Cloudflare Pages:
 
-1. **Infinite-loop detection.** The engine strips `.html` and `/index` from the destination URL before re-checking it against the source pattern. A rule like `/admin/content/* → /admin/content/_/index.html` gets its destination stripped to `/admin/content/_/`, which still matches the source `/admin/content/*` — so Pages flags the rule as an infinite loop and **silently ignores it**. The dynamic URL then falls through to the catch-all and returns 404.
+1. Pages **always follows a matching redirect, regardless of whether a real static asset also matches** (per [the official docs](https://developers.cloudflare.com/pages/configuration/redirects/)).
+2. A `*` splat matches the empty string, so `/admin/content/*` also rewrote the real `/admin/content/` hub — and `/admin/content/raw/` — to the `[id]` placeholder, breaking the content-management hub, user management, and every static page nested under a dynamic route.
+3. Named placeholders (`/admin/content/:id`) fix the bare-hub hijack but still require placeholders + copies, and the redirect engine has clean-URL 308 / infinite-loop quirks.
 
-2. **Clean-URL 308 redirects.** If the destination is a `name.html` file, Pages 308-redirects to the clean URL `name` (stripping `.html`), which breaks the `200` rewrite semantics. Directory-style destinations (`name/index.html`) are already "clean" and are served directly without a redirect.
+Query-param routing removes the entire class: no `generateStaticParams`, no placeholder pages, no `/_spa/` copies, no `public/_redirects`. The static export output is exactly what gets deployed.
 
-Copying the placeholders to `/_spa/<name>/index.html` solves both problems: the destination path doesn't match any source pattern (no infinite loop), and the directory-style URL is served directly without a 308 redirect.
-
-Cloudflare Pages serves real files BEFORE applying redirects, so known paths (e.g. `/settings/account/` which has its own `index.html`, or `/admin/content/raw/`) are served directly. Only unmatched paths fall through to the placeholder.
-
-There is intentionally **no catch-all rule**. Cloudflare Pages automatically serves `/404.html` with HTTP 404 for any URL that doesn't match a static file or a redirect rule. Adding `/* /404.html 404` does not work because `404` is not a valid redirect status code (valid: 200, 301, 302, 303, 307, 308) — the rule would be silently ignored.
+There is intentionally **no `_redirects` file and no catch-all rule**. Cloudflare Pages automatically serves `/404.html` with HTTP 404 for any URL that doesn't match a static file. Old-style `/qbank/<uid>` bookmarks from before this change 404 (re-link to `/qbank?uid=<uid>`).
 
 ### Route guarding (no middleware)
 
@@ -293,11 +288,12 @@ After deploying, run through this checklist:
 - [ ] Settings → Sync shows "Synced" status after a few seconds
 - [ ] `/admin` shows login prompt → sign in with admin account → admin shell loads
 - [ ] **Deep-link test (hard refresh, not client-side nav):**
-  - [ ] `https://your-app.pages.dev/admin/content/<any-uuid>` returns 200 (not 404) and loads the admin shell
-  - [ ] `https://your-app.pages.dev/qbank/<any-uid>` returns 200 and loads the QBank studio
-  - [ ] `https://your-app.pages.dev/library/<any-article>` returns 200 and loads the library article viewer
-  - [ ] `https://your-app.pages.dev/admin/users/<any-uuid>` returns 200
-  - [ ] `https://your-app.pages.dev/admin/review/<any-uuid>` returns 200
+  - [ ] `https://your-app.pages.dev/admin/content?id=<any-uuid>` returns 200 and loads the admin shell
+  - [ ] `https://your-app.pages.dev/qbank?uid=<any-uid>` returns 200 and loads the QBank studio
+  - [ ] `https://your-app.pages.dev/library?article=<any-article>` returns 200 and loads the library article viewer
+  - [ ] `https://your-app.pages.dev/admin/users?id=<any-uuid>` returns 200
+  - [ ] `https://your-app.pages.dev/admin/review?id=<any-uuid>` returns 200
+- [ ] **Hub pages load cleanly** — `https://your-app.pages.dev/admin/content/`, `/admin/users/`, `/qbank/`, `/library/`, `/settings/account/` all render their real page (content browser, users table, hubs, section) with no hydration errors. There is no `_redirects` file, so every URL is served as a real static file.
 - [ ] **Static content test:** `https://your-app.pages.dev/osler-content/library/manifest.json` returns 200 with JSON
 - [ ] **404 test:** `https://your-app.pages.dev/nonexistent-path` returns 404 (the Next.js 404 page renders)
 - [ ] `https://your-app.pages.dev/sw.js` returns the built service worker

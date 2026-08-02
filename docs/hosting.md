@@ -308,7 +308,7 @@ EXPOSE 80
 CMD ["nginx", "-g", "daemon off;"]
 ```
 
-An `nginx.conf` with SPA fallback for the dynamic routes (mirrors `public/_redirects` on Cloudflare Pages):
+An `nginx.conf` that serves the static export (the app has no dynamic path-segment routes — pack/reader navigation uses query params on real static files, so no rewrite config is needed):
 
 ```nginx
 server {

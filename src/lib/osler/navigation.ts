@@ -69,6 +69,12 @@ export function useCurrentView(): OslerView {
 
 /**
  * Build a path for a view and optional params (pack uid, article id, video id, settings section).
+ *
+ * Dynamic content (pack uid, article, video, settings section) is carried in
+ * QUERY PARAMS, not path segments. This keeps every route a real static file
+ * (`/qbank`, `/library`, `/admin/content`, …) so the static export needs NO
+ * dynamic-route placeholder pages and NO `_redirects` SPA-fallback rules.
+ * The page reads its param via `useSearchParams()` and renders the content.
  */
 export function routeFor(
   view: OslerView,
@@ -80,19 +86,19 @@ export function routeFor(
     case "learn":
       return "/learn";
     case "library":
-      return params?.article ? `/library/${encodeURIComponent(params.article)}` : "/library";
+      return params?.article ? `/library?article=${encodeURIComponent(params.article)}` : "/library";
     case "qbank":
-      return params?.uid ? `/qbank/${encodeURIComponent(params.uid)}` : "/qbank";
+      return params?.uid ? `/qbank?uid=${encodeURIComponent(params.uid)}` : "/qbank";
     case "flashcards":
-      return params?.uid ? `/flashcards/${encodeURIComponent(params.uid)}` : "/flashcards";
+      return params?.uid ? `/flashcards?uid=${encodeURIComponent(params.uid)}` : "/flashcards";
     case "osce":
-      return params?.uid ? `/osce/${encodeURIComponent(params.uid)}` : "/osce";
+      return params?.uid ? `/osce?uid=${encodeURIComponent(params.uid)}` : "/osce";
     case "videos":
-      return params?.video ? `/videos/${encodeURIComponent(params.video)}` : "/videos";
+      return params?.video ? `/videos?video=${encodeURIComponent(params.video)}` : "/videos";
     case "profile":
       return "/profile";
     case "settings":
-      return params?.section ? `/settings/${encodeURIComponent(params.section)}` : "/settings";
+      return params?.section ? `/settings?section=${encodeURIComponent(params.section)}` : "/settings";
     default:
       return "/";
   }

@@ -78,7 +78,7 @@ export function ReviewQueue() {
 
           {/* Actions */}
           <div className="flex items-center gap-1.5 shrink-0">
-            <Button variant="outline" size="sm"               onClick={() => router.push(`/admin/review/${item.id}`)}>
+            <Button variant="outline" size="sm"               onClick={() => router.push(`/admin/review?id=${encodeURIComponent(item.id)}`)}>
               {t("admin.review.diff")}
             </Button>
             <Button
@@ -93,7 +93,7 @@ export function ReviewQueue() {
               variant="outline"
               size="sm"
               className="text-destructive border-destructive/30 hover:bg-destructive/10"
-              onClick={() => router.push(`/admin/review/${item.id}`)}
+              onClick={() => router.push(`/admin/review?id=${encodeURIComponent(item.id)}`)}
             >
               <XCircle className="me-1.5 size-3.5" />
               {t("admin.review.reject")}

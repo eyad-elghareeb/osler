@@ -264,7 +264,7 @@ export function ContentEditor({ id, rawR2Key, capabilities }: ContentEditorProps
       });
       // Route to the managed editor — preserve dirty state by saving first.
       if (dirty) await saveDraft();
-      router.replace(`/admin/content/${res.id}`);
+      router.replace(`/admin/content?id=${encodeURIComponent(res.id)}`);
     } catch (err: any) {
       toast({ title: t("admin.toast.adoptFailed", { error: String(err?.message ?? err) }), variant: "destructive" });
     } finally {

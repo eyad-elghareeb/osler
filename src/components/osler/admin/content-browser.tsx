@@ -262,12 +262,12 @@ export function ContentBrowser({ capabilities }: ContentBrowserProps) {
     haptic("selection");
     setSelectedNode(node);
     // Route based on what we know about the node:
-    //   - managed leaf → /admin/content/<id>
+    //   - managed leaf → /admin/content?id=<uuid>
     //   - loose R2 leaf → /admin/content/raw?key=...
     //   - local leaf → no-op (read-only preview shown in the preview pane)
     if (tab === "unified") {
       if (node.managed && node.cloudObject) {
-        router.push(`/admin/content/${node.cloudObject.id}`);
+        router.push(`/admin/content?id=${encodeURIComponent(node.cloudObject.id)}`);
       } else if (node.r2Key) {
         router.push(`/admin/content/raw?key=${encodeURIComponent(node.r2Key)}`);
       }
@@ -388,7 +388,7 @@ export function ContentBrowser({ capabilities }: ContentBrowserProps) {
           ? t("admin.toast.adoptAlreadyManaged")
           : t("admin.toast.adopted", { id: res.id.slice(0, 8) }),
       });
-      router.push(`/admin/content/${res.id}`);
+      router.push(`/admin/content?id=${encodeURIComponent(res.id)}`);
     } catch (err: any) {
       toast({ title: t("admin.toast.adoptFailed", { error: String(err?.message ?? err) }), variant: "destructive" });
     } finally {
@@ -563,7 +563,7 @@ export function ContentBrowser({ capabilities }: ContentBrowserProps) {
       <CreateContentDialog
         open={createOpen}
         onClose={() => setCreateOpen(false)}
-        onCreated={(id) => router.push(`/admin/content/${id}`)}
+        onCreated={(id) => router.push(`/admin/content?id=${encodeURIComponent(id)}`)}
       />
 
       {/* Upload dialog */}
@@ -573,7 +573,7 @@ export function ContentBrowser({ capabilities }: ContentBrowserProps) {
         onUploaded={(id) => {
           setUploadOpen(false);
           loadUnified();
-          router.push(`/admin/content/${id}`);
+          router.push(`/admin/content?id=${encodeURIComponent(id)}`);
         }}
       />
 

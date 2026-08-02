@@ -7,7 +7,7 @@
     "dev:worker": "npm run dev --prefix cloudflare/worker",
     "dev:full": "concurrently -n fe,worker -c cyan,yellow \"npm run dev\" \"npm run dev:worker\"",
     "build:sw": "node scripts/build-sw.js",
-    "build": "node scripts/build-sw.js && next build && node scripts/copy-spa-placeholders.js",
+    "build": "node scripts/build-sw.js && next build",
     "start": "npx serve out -p 3000",
     "preview:pages": "npx wrangler pages dev out --port 3000",
     "deploy:pages": "npx wrangler pages deploy out --project-name osler",
