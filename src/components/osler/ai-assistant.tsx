@@ -24,6 +24,7 @@ import {
   SidebarResizeHandle,
 } from "@/hooks/use-resizable-sidebar";
 import { useSwipeBackDismiss } from "@/hooks/use-swipe-back-dismiss";
+import { GEMINI_CLOUD_SYNCED_FLAG } from "@/lib/osler/cloud";
 
 const MODELS = [
   ["gemini-3.6-flash", "Gemini 3.6 Flash (newest, fastest Flash)"],
@@ -217,6 +218,9 @@ export function AiAssistant({
   const saveApiKey = (key: string) => {
     setApiKey(key);
     localStorage.setItem(STORAGE_KEYS.apiKey, key);
+    // A locally-entered key isn't a cloud-synced copy — clear the
+    // reconciliation flag so a future cloud removal doesn't wipe it.
+    localStorage.removeItem(GEMINI_CLOUD_SYNCED_FLAG);
   };
   const saveModel = (m: string) => {
     setModel(m);

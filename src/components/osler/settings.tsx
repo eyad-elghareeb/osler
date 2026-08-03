@@ -92,6 +92,8 @@ import {
   logoutCloudAccount,
   syncCloudNow,
   cloudEnabled,
+  applyGeminiKeyInfo,
+  GEMINI_CLOUD_SYNCED_FLAG,
   CloudApiError,
   type CloudSession,
   type CloudAccount,
@@ -696,6 +698,9 @@ function saveAiForm(state: AiFormState): void {
   localStorage.setItem(STORAGE_KEYS.apiKey, state.apiKey);
   localStorage.setItem(STORAGE_KEYS.model, state.model);
   localStorage.setItem(STORAGE_KEYS.maxWait, state.maxWait);
+  // A locally-edited key is no longer a pristine cloud-synced copy, so the
+  // removal-reconciliation flag no longer applies.
+  localStorage.removeItem(GEMINI_CLOUD_SYNCED_FLAG);
 }
 
 /**
@@ -714,10 +719,9 @@ async function syncAiFormFromCloud(onUpdate: (next: AiFormState) => void) {
     const { geminiApi } = await import("@/components/osler/admin/admin-api");
     const info = await geminiApi.get();
     if (info.hasKey && info.apiKey) {
-      // Write to localStorage so the AI assistant etc. pick it up
-      localStorage.setItem(STORAGE_KEYS.apiKey, info.apiKey);
-      if (info.model) localStorage.setItem(STORAGE_KEYS.model, info.model);
-      if (info.maxWait != null) localStorage.setItem(STORAGE_KEYS.maxWait, String(info.maxWait));
+      // Write to localStorage so the AI assistant etc. pick it up, flagged as
+      // cloud-synced so a future removal can be reconciled across devices.
+      applyGeminiKeyInfo(info);
       onUpdate({
         apiKey: info.apiKey,
         model: info.model || MODELS[0][0],
@@ -740,12 +744,15 @@ async function syncAiFormToCloud(state: AiFormState) {
     const { cloudEnabled } = await import("@/lib/osler/cloud");
     if (!(await cloudEnabled())) return;
     const { geminiApi } = await import("@/components/osler/admin/admin-api");
+    const key = state.apiKey.trim();
     const maxWaitNum = Number(state.maxWait);
-    await geminiApi.save(
-      state.apiKey.trim() || null,
-      state.model || null,
-      Number.isFinite(maxWaitNum) ? maxWaitNum : null,
-    );
+    if (!key) {
+      // Explicitly remove the cloud copy — PUT with null now means "keep",
+      // so clearing an emptied field needs the DELETE endpoint.
+      await geminiApi.clear();
+    } else {
+      await geminiApi.save(key, state.model || null, Number.isFinite(maxWaitNum) ? maxWaitNum : null);
+    }
   } catch {
     // Silent fail — localStorage is still the source of truth for the session.
   }

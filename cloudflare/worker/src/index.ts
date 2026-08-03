@@ -2561,12 +2561,18 @@ export default {
       }
       if (request.method === "PUT" && url.pathname === "/v1/account/gemini-key") {
         const body = await readJson(request);
-        const apiKey = typeof body.apiKey === "string" ? body.apiKey.trim().slice(0, 200) : null;
+        const apiKey = typeof body.apiKey === "string" ? body.apiKey.trim().slice(0, 200) : "";
         const model = typeof body.model === "string" ? body.model.trim().slice(0, 80) : null;
         const maxWait = Number.isFinite(body.maxWait) ? Math.min(120, Math.max(5, body.maxWait)) : null;
+        // A model / max-wait-only save sends no key. That must NOT wipe an
+        // existing saved key — clearing is explicit via the DELETE endpoint.
+        // COALESCE(?, gemini_api_key) keeps the stored key when the bound
+        // value is NULL.
+        const before = await env.DB.prepare("SELECT gemini_api_key FROM users WHERE id = ?").bind(session.user.id).first<any>();
+        const hasKey = apiKey.length > 0 || !!before?.gemini_api_key;
         const storedKey = apiKey ? await encryptField(apiKey, env.GEMINI_ENCRYPTION_KEY) : null;
-        await env.DB.prepare("UPDATE users SET gemini_api_key = ?, gemini_model = ?, gemini_max_wait = ?, updated_at = ? WHERE id = ?").bind(storedKey, model, maxWait, now(), session.user.id).run();
-        return json({ ok: true, hasKey: !!apiKey }, 200, origin, log);
+        await env.DB.prepare("UPDATE users SET gemini_api_key = COALESCE(?, gemini_api_key), gemini_model = ?, gemini_max_wait = ?, updated_at = ? WHERE id = ?").bind(storedKey, model, maxWait, now(), session.user.id).run();
+        return json({ ok: true, hasKey }, 200, origin, log);
       }
       if (request.method === "DELETE" && url.pathname === "/v1/account/gemini-key") {
         await env.DB.prepare("UPDATE users SET gemini_api_key = NULL, gemini_model = NULL, gemini_max_wait = NULL, updated_at = ? WHERE id = ?").bind(now(), session.user.id).run();

@@ -226,10 +226,50 @@ export async function consumeGoogleLogin(ticket: string): Promise<CloudSession> 
 }
 
 /**
+ * Provenance marker: set when the local Gemini key copy was pulled from the
+ * cloud account. Lets a later sync safely remove a stale local copy when the
+ * key is deleted on another device — without touching locally-entered keys.
+ */
+export const GEMINI_CLOUD_SYNCED_FLAG = "osler_gemini_cloud_synced";
+
+const GEMINI_API_KEY = "osler_gemini_api_key";
+const GEMINI_MODEL = "osler_gemini_model";
+const GEMINI_MAX_WAIT = "osler_gemini_max_wait";
+
+/** Write a cloud-pulled Gemini key into localStorage and flag it as
+ *  cloud-synced so a future removal can be reconciled across devices. */
+export function applyGeminiKeyInfo(info: {
+  apiKey: string | null;
+  model?: string | null;
+  maxWait?: number | null;
+}): void {
+  if (typeof window === "undefined") return;
+  if (!info.apiKey) return;
+  localStorage.setItem(GEMINI_API_KEY, info.apiKey);
+  if (info.model) localStorage.setItem(GEMINI_MODEL, info.model);
+  if (info.maxWait != null) localStorage.setItem(GEMINI_MAX_WAIT, String(info.maxWait));
+  localStorage.setItem(GEMINI_CLOUD_SYNCED_FLAG, "1");
+  window.dispatchEvent(new CustomEvent("osler-gemini-key-synced", { detail: info }));
+}
+
+/** Remove the locally-cached Gemini key copy entirely. */
+export function clearGeminiLocalKey(): void {
+  if (typeof window === "undefined") return;
+  localStorage.removeItem(GEMINI_API_KEY);
+  localStorage.removeItem(GEMINI_MODEL);
+  localStorage.removeItem(GEMINI_MAX_WAIT);
+  localStorage.removeItem(GEMINI_CLOUD_SYNCED_FLAG);
+}
+
+/**
  * Fetch the user's saved Gemini API key from /v1/account/gemini-key and write
  * it to localStorage so the AI assistant / qbank-studio / osce-studio pick
  * it up. Silently no-ops if cloud isn't enabled, the session is missing, or
  * the user has never saved a key.
+ *
+ * Reconciliation: when the cloud reports the key was removed, the local copy
+ * is deleted too — but only if it came from a previous cloud sync, so a
+ * locally-entered key is never wiped.
  */
 export async function syncGeminiKeyFromCloud(): Promise<void> {
   if (typeof window === "undefined") return;
@@ -244,11 +284,13 @@ export async function syncGeminiKeyFromCloud(): Promise<void> {
     if (!res.ok) return;
     const info = await res.json();
     if (info?.hasKey && info.apiKey) {
-      localStorage.setItem("osler_gemini_api_key", info.apiKey);
-      if (info.model) localStorage.setItem("osler_gemini_model", info.model);
-      if (info.maxWait != null) localStorage.setItem("osler_gemini_max_wait", String(info.maxWait));
-      // Notify any open settings panel that the key changed.
-      window.dispatchEvent(new CustomEvent("osler-gemini-key-synced", { detail: info }));
+      applyGeminiKeyInfo(info);
+    } else if (info?.hasKey === false) {
+      // Key removed on another device — drop the stale local copy only if it
+      // was cloud-synced before. Never a locally-entered key.
+      if (localStorage.getItem(GEMINI_CLOUD_SYNCED_FLAG) === "1") {
+        clearGeminiLocalKey();
+      }
     }
   } catch {
     // silent

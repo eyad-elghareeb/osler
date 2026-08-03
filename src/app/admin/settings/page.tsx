@@ -423,8 +423,8 @@ function GeminiKeySection() {
     haptic("light");
     setSaving(true);
     try {
-      await geminiApi.save(draftKey.trim() || null, draftModel, null);
-      setHasKey(!!draftKey.trim());
+      const res = await geminiApi.save(draftKey.trim() || null, draftModel, null);
+      setHasKey(res.hasKey);
       setDraftKey("");
       toast({ title: t("admin.settings.gemini.keySaved2"), description: t("admin.settings.gemini.keySavedDesc") });
     } catch (err) {
