@@ -747,6 +747,7 @@ async function hybridPublish(env: Env, obj: any, body: string, targetPath?: stri
   if (!env.CONTENT) return [];
   const category = CONTENT_TYPE_TO_CATEGORY[obj.content_type] ?? obj.content_type;
   const safePath = (targetPath || "").replace(/^\/+|\/+$/g, "");
+  if (safePath.includes("..") || safePath.includes("\\")) throw new Error("Invalid targetPath");
   let fileSegment: string;
   if (safePath && /\.[a-z0-9]+$/i.test(safePath)) {
     fileSegment = safePath;
@@ -1859,6 +1860,7 @@ async function handleAdmin(request: Request, env: Env, session: Session, url: UR
       if (!env.CONTENT) return json({ error: "Content storage not configured" }, 503, origin, log);
       const category = (url.searchParams.get("prefix") || "").trim();
       const scope = (url.searchParams.get("scope") || "content-files") === "content-staging" ? "content-staging" : "content-files";
+      if (category.includes("..") || category.includes("\\")) return json({ error: "Invalid prefix" }, 400, origin, log);
       const listed = await env.CONTENT.list({ prefix: scope + "/" + category, limit: 1000, cursor: url.searchParams.get("cursor") || undefined });
       return json({ items: (listed.objects || []).map((o: any) => ({ key: o.key, size: o.size, uploaded: o.uploaded?.toISOString?.() ?? null })), cursor: listed.truncated ? listed.cursor : null }, 200, origin, log);
     }
@@ -1886,7 +1888,7 @@ async function handleAdmin(request: Request, env: Env, session: Session, url: UR
       if (!isAdmin(session)) return json({ error: "Forbidden" }, 403, origin, log);
       if (!env.CONTENT) return json({ error: "Content storage not configured" }, 503, origin, log);
       const body = await readJson(request);
-      const keys = Array.isArray(body.keys) ? body.keys.filter((k: any): k is string => typeof k === "string" && k.startsWith("content-staging/")) : [];
+      const keys = Array.isArray(body.keys) ? body.keys.filter((k: any): k is string => typeof k === "string" && k.startsWith("content-staging/") && !k.includes("..") && !k.includes("\\")) : [];
       if (!keys.length) return json({ error: "keys required" }, 400, origin, log);
       // Dedupe (a folder's staged children can be collected more than once)
       // and skip folder placeholders that carry no student-facing content.
@@ -1928,10 +1930,10 @@ async function handleAdmin(request: Request, env: Env, session: Session, url: UR
       if (!isAdmin(session)) return json({ error: "Forbidden" }, 403, origin, log);
       if (!env.CONTENT) return json({ error: "Content storage not configured" }, 503, origin, log);
       const body = await readJson(request);
-      const keys = Array.isArray(body.keys) ? body.keys.filter((k: any): k is string => typeof k === "string" && k.startsWith("content-staging/")) : [];
+      const keys: string[] = Array.isArray(body.keys) ? body.keys.filter((k: any): k is string => typeof k === "string" && k.startsWith("content-staging/") && !k.includes("..") && !k.includes("\\")) : [];
       if (!keys.length) return json({ error: "keys required" }, 400, origin, log);
       let deleted = 0;
-      for (const key of keys) {
+      for (const key of [...new Set(keys)]) {
         await env.CONTENT.delete(key);
         deleted += 1;
       }
@@ -1973,6 +1975,8 @@ async function handleAdmin(request: Request, env: Env, session: Session, url: UR
       const body = await readJson(request);
       const cat = typeof body.category === "string" ? body.category.trim() : "";
       if (!cat) return json({ error: "category required" }, 400, origin, log);
+      if (cat !== "all" && !(cat in CATEGORY_TYPE_MAP)) return json({ error: "Invalid category" }, 400, origin, log);
+      if (cat.includes("..") || cat.includes("\\")) return json({ error: "Invalid category" }, 400, origin, log);
       const categories = cat === "all" ? ["qbank","flashcard","osce","library","videos"] : [cat];
       const results: Record<string, string> = {};
       for (const c of categories) { try { results[c] = await regenerateManifestForCategory(env, c) ? "ok" : "empty"; } catch (e: any) { results[c] = "error: " + e.message; } }
@@ -2039,6 +2043,7 @@ async function handleAdmin(request: Request, env: Env, session: Session, url: UR
       if (!isAdminOrContent(session)) return json({ error: "Forbidden" }, 403, origin, log);
       const key = (url.searchParams.get("key") || "").trim();
       if (!key || !key.startsWith("content-files/")) return json({ error: "key must start with content-files/" }, 400, origin, log);
+      if (key.includes("..") || key.includes("\\")) return json({ error: "Invalid key" }, 400, origin, log);
       const rel = key.slice("content-files/".length);
       const slash = rel.indexOf("/");
       if (slash <= 0) return json({ found: false }, 200, origin, log);
@@ -2090,6 +2095,7 @@ async function handleAdmin(request: Request, env: Env, session: Session, url: UR
       const body = await readJson(request);
       const key = typeof body.key === "string" ? body.key.trim() : "";
       if (!key || !key.startsWith("content-files/")) return json({ error: "key must start with content-files/" }, 400, origin, log);
+      if (key.includes("..") || key.includes("\\")) return json({ error: "Invalid key" }, 400, origin, log);
       // Pull the raw body
       const raw = await env.CONTENT.get(key);
       if (!raw) return json({ error: "R2 key not found" }, 404, origin, log);

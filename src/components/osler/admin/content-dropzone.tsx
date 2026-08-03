@@ -328,6 +328,12 @@ async function walkDropEntries(
 export async function uploadStagedFile(d: DroppedFile, destination: string): Promise<string> {
   const dest = destination.replace(/^\/+|\/+$/g, "");
   const rel = (d.relativePath || d.file.name).replace(/^\/+/, "");
+  // Reject traversal / absolute / backslash paths client-side so a bad
+  // destination or nested folder can't smuggle a key outside content-staging/.
+  const badSeg = (s: string) => s.split("/").some((seg) => seg === "..") || s.includes("\\") || s.startsWith("/");
+  if (badSeg(dest) || badSeg(rel)) {
+    throw new Error("Invalid path — cannot contain '..' or '\\'");
+  }
   const key = `content-staging/${dest ? `${dest}/` : ""}${rel}`;
 
   // Validate JSON before it reaches R2 so publishing never surfaces
