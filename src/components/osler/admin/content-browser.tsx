@@ -73,7 +73,9 @@ import {
 import {
   ContentDropzone,
   uploadDroppedFile,
+  uploadDroppedFileRaw,
   type DroppedFile,
+  type DropzoneMode,
 } from "@/components/osler/admin/content-dropzone";
 
 const CONTENT_TYPES: ContentType[] = ["quiz", "bank", "flashcard", "written", "osce", "library", "video"];
@@ -583,6 +585,11 @@ export function ContentBrowser({ capabilities }: ContentBrowserProps) {
           loadUnified();
           router.push(`/admin/content?id=${encodeURIComponent(id)}`);
         }}
+        onRawUploaded={() => {
+          setUploadOpen(false);
+          loadUnified();
+        }}
+        canAdmin={capabilities.manageUsers}
       />
 
       {/* New file dialog (unified tab — R2 keyspace) */}
@@ -1223,13 +1230,20 @@ function UploadDialog({
   open,
   onClose,
   onUploaded,
+  onRawUploaded,
+  canAdmin,
 }: {
   open: boolean;
   onClose: () => void;
   onUploaded: (id: string) => void;
+  onRawUploaded: () => void;
+  canAdmin: boolean;
 }) {
   const { t } = useI18n();
   const { toast } = useToast();
+  const [mode, setMode] = React.useState<DropzoneMode>("managed");
+  const [category, setCategory] = React.useState("qbank");
+  const [subpath, setSubpath] = React.useState("");
   const [dropped, setDropped] = React.useState<DroppedFile[]>([]);
   const [uploading, setUploading] = React.useState(false);
 
@@ -1237,16 +1251,26 @@ function UploadDialog({
     if (!open) setDropped([]);
   }, [open]);
 
+  const categories = getCategories(t);
+  const destination = subpath.trim() ? `${category}/${subpath.trim().replace(/^\/+/, "")}` : category;
+  const destinationLabel = `content-files/${destination}/`;
+
   async function handleUpload() {
     if (dropped.length === 0) return;
+    haptic("light");
     setUploading(true);
     let success = 0;
     let firstId: string | null = null;
     for (const d of dropped) {
       try {
-        const id = await uploadDroppedFile(d);
-        success += 1;
-        if (!firstId) firstId = id;
+        if (mode === "managed") {
+          const id = await uploadDroppedFile(d);
+          success += 1;
+          if (!firstId) firstId = id;
+        } else {
+          await uploadDroppedFileRaw(d, destination);
+          success += 1;
+        }
       } catch (err) {
         toast({
           title: t("admin.content.browser.uploadFailed", { name: d.file.name }),
@@ -1257,8 +1281,15 @@ function UploadDialog({
     }
     setUploading(false);
     if (success > 0) {
-      toast({ title: t("admin.content.dropzone.uploaded", { n: success }) });
-      if (firstId) onUploaded(firstId);
+      if (mode === "raw") {
+        toast({
+          title: t("admin.content.dropzone.rawUploaded", { n: success, dest: destinationLabel }),
+        });
+        onRawUploaded();
+      } else {
+        toast({ title: t("admin.content.dropzone.uploaded", { n: success }) });
+        if (firstId) onUploaded(firstId);
+      }
     }
   }
 
@@ -1269,9 +1300,89 @@ function UploadDialog({
           <DialogTitle>{t("admin.content.dropzone.title")}</DialogTitle>
         </DialogHeader>
         <div className="space-y-3 py-2">
-          <ContentDropzone
-            onFiles={(files) => setDropped((prev) => [...prev, ...files])}
-          />
+          {/* Mode toggle: managed content objects vs raw R2 files */}
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              type="button"
+              onClick={() => { haptic("selection"); setMode("managed"); }}
+              className={cn(
+                "px-3 py-2 rounded-xl border text-xs font-semibold transition-colors text-start",
+                mode === "managed"
+                  ? "bg-primary text-primary-foreground border-primary"
+                  : "bg-muted/60 text-muted-foreground border-border hover:text-foreground",
+              )}
+            >
+              {t("admin.content.upload.modeManaged")}
+            </button>
+            <button
+              type="button"
+              onClick={() => { haptic("selection"); setMode("raw"); }}
+              className={cn(
+                "px-3 py-2 rounded-xl border text-xs font-semibold transition-colors text-start",
+                mode === "raw"
+                  ? "bg-primary text-primary-foreground border-primary"
+                  : "bg-muted/60 text-muted-foreground border-border hover:text-foreground",
+              )}
+            >
+              {t("admin.content.upload.modeRaw")}
+            </button>
+          </div>
+
+          {mode === "managed" ? (
+            <p className="text-xs text-muted-foreground">
+              {t("admin.content.upload.modeManagedDesc")}
+            </p>
+          ) : (
+            <p className="text-xs text-muted-foreground">
+              {t("admin.content.upload.modeRawDesc")}
+            </p>
+          )}
+
+          {mode === "raw" && canAdmin && (
+            <div className="space-y-1.5 border border-border rounded-xl p-3 bg-card/60">
+              <label className="block text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                {t("admin.content.upload.destination")}
+              </label>
+              <div className="flex items-center gap-2">
+                <Select value={category} onValueChange={setCategory}>
+                  <SelectTrigger className="w-32 h-9 shrink-0">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {categories.map((cat) => (
+                      <SelectItem key={cat.folder} value={cat.folder}>
+                        {cat.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <div className="flex items-center flex-1 min-w-0 font-mono text-xs text-muted-foreground">
+                  <span className="shrink-0">content-files/</span>
+                  <Input
+                    value={subpath}
+                    onChange={(e) => setSubpath(e.target.value)}
+                    placeholder="qbank/cardiology/…"
+                    className="flex-1 h-9 font-mono text-xs"
+                  />
+                </div>
+              </div>
+              <p className="text-[11px] text-muted-foreground/80 break-all">
+                {t("admin.content.upload.destinationPreview", { dest: destinationLabel })}
+              </p>
+            </div>
+          )}
+
+          {mode === "raw" && !canAdmin ? (
+            <p className="text-xs text-muted-foreground">
+              {t("admin.content.upload.rawAdminOnly")}
+            </p>
+          ) : (
+            <ContentDropzone
+              mode={mode}
+              onFiles={(files) => setDropped((prev) => [...prev, ...files])}
+            />
+          )}
+
           {dropped.length > 0 && (
             <div className="space-y-1.5">
               <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
@@ -1284,7 +1395,9 @@ function UploadDialog({
                     className="flex items-center gap-2 px-2.5 py-1.5 border border-border rounded-md bg-card/60 text-xs"
                   >
                     <FileText className="size-3.5 text-muted-foreground shrink-0" />
-                    <span className="flex-1 truncate font-mono">{d.file.name}</span>
+                    <span className="flex-1 truncate font-mono">
+                      {mode === "raw" ? `${destinationLabel}${d.relativePath ?? d.file.name}` : d.file.name}
+                    </span>
                     <span className="text-xs uppercase tracking-wider text-muted-foreground">
                       {d.contentType}
                     </span>

@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { UploadCloud, FileText, FileJson, Loader2, X } from "lucide-react";
+import { UploadCloud, FileText, FileJson, Loader2, FolderOpen } from "lucide-react";
 import { useI18n } from "@/components/osler/i18n-provider";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -18,9 +18,19 @@ export interface DroppedFile {
   title: string;
   /** Suggested language ("en" or "ar") — derived from path/filename. */
   language: string;
-  /** File body as text. */
+  /** File body — UTF-8 text for text files, a `data:` URI for binary files. */
   body: string;
+  /** Path relative to the dropped/picked folder root (e.g.
+   *  "cardiology/images/x.png"). Only set in raw mode when the file came
+   *  from a folder; undefined for plain file drops. */
+  relativePath?: string;
 }
+
+/** Upload mode:
+ *  - "managed": each .md/.json file becomes a new draft content_object.
+ *  - "raw": files/folders are uploaded directly to the R2 keyspace under a
+ *    chosen destination, preserving the folder structure. */
+export type DropzoneMode = "managed" | "raw";
 
 interface ContentDropzoneProps {
   /** Called when files are dropped or picked. The parent decides whether to
@@ -29,6 +39,28 @@ interface ContentDropzoneProps {
   /** Compact variant — smaller padding for inline use. */
   compact?: boolean;
   className?: string;
+  /** Upload mode. Defaults to "managed". */
+  mode?: DropzoneMode;
+}
+
+const TEXT_EXT = /\.(md|markdown|json|html?|svg|xml|css|txt)$/i;
+
+function isTextFile(name: string): boolean {
+  return TEXT_EXT.test(name);
+}
+
+/** Read a File into the body representation the upload endpoint expects:
+ *  UTF-8 text for text-ish files, a base64 `data:` URI for everything else. */
+function readAsUploadBody(file: File): Promise<string> {
+  if (isTextFile(file.name)) {
+    return file.text();
+  }
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result));
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(file);
+  });
 }
 
 // ── Component ──────────────────────────────────────────────────────────────
@@ -37,23 +69,28 @@ export function ContentDropzone({
   onFiles,
   compact = false,
   className,
+  mode = "managed",
 }: ContentDropzoneProps) {
   const { t } = useI18n();
   const inputRef = React.useRef<HTMLInputElement>(null);
+  const folderInputRef = React.useRef<HTMLInputElement>(null);
   const [dragActive, setDragActive] = React.useState(false);
   const [busy, setBusy] = React.useState(false);
+  const raw = mode === "raw";
 
-  async function handleFiles(fileList: FileList | File[]) {
+  async function handleFiles(fileList: FileList | File[], relativePaths?: Map<File, string>) {
     const files = Array.from(fileList);
     if (files.length === 0) return;
 
-    // Validate
-    const valid = files.filter((f) => f.name.endsWith(".md") || f.name.endsWith(".json"));
+    // Raw mode accepts any file type (content + images + PDFs + assets) so a
+    // whole content pack folder can be dropped as-is. Managed mode is
+    // restricted to the two content formats the studio editors understand.
+    const valid = raw ? files : files.filter((f) => f.name.endsWith(".md") || f.name.endsWith(".json"));
     if (valid.length === 0) {
       toast({ title: t("admin.content.dropzone.invalid"), variant: "destructive" });
       return;
     }
-    if (valid.length < files.length) {
+    if (valid.length < files.length && !raw) {
       toast({
         title: t("admin.content.dropzone.invalid"),
         variant: "destructive",
@@ -64,13 +101,15 @@ export function ContentDropzone({
     try {
       const dropped: DroppedFile[] = [];
       for (const file of valid) {
-        const body = await file.text();
+        const body = await readAsUploadBody(file);
+        const rel = raw ? relativePaths?.get(file) ?? file.name : undefined;
         dropped.push({
           file,
           contentType: guessContentType(file.name),
           title: file.name.replace(/\.(md|json)$/i, ""),
           language: guessLanguage(file.name) ?? "en",
           body,
+          relativePath: rel,
         });
       }
       onFiles(dropped);
@@ -85,12 +124,18 @@ export function ContentDropzone({
     }
   }
 
-  function handleDrop(e: React.DragEvent) {
+  async function handleDrop(e: React.DragEvent) {
     e.preventDefault();
     e.stopPropagation();
     setDragActive(false);
-    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-      handleFiles(e.dataTransfer.files);
+    if (!e.dataTransfer.files || e.dataTransfer.files.length === 0) return;
+
+    if (raw) {
+      // Walk the drop entries so folder structure (webkitGetAsEntry) survives.
+      const { files: walked, paths } = await walkDropEntries(e.dataTransfer);
+      await handleFiles(walked, paths);
+    } else {
+      await handleFiles(e.dataTransfer.files);
     }
   }
 
@@ -105,6 +150,13 @@ export function ContentDropzone({
     e.stopPropagation();
     setDragActive(false);
   }
+
+  const subtitle = raw
+    ? t("admin.content.dropzone.rawSubtitle")
+    : t("admin.content.dropzone.subtitle");
+  const hint = raw
+    ? t("admin.content.dropzone.rawHint")
+    : t("admin.content.dropzone.hint");
 
   return (
     <div
@@ -130,7 +182,7 @@ export function ContentDropzone({
       <input
         ref={inputRef}
         type="file"
-        accept=".md,.json,.markdown"
+        accept={raw ? undefined : ".md,.json,.markdown"}
         multiple
         className="hidden"
         onChange={(e) => {
@@ -139,6 +191,26 @@ export function ContentDropzone({
           e.target.value = "";
         }}
       />
+      {raw && (
+        <input
+          ref={folderInputRef}
+          type="file"
+          multiple
+          className="hidden"
+          {...({ webkitdirectory: "", directory: "" } as any)}
+          onChange={(e) => {
+            if (e.target.files) {
+              const paths = new Map<File, string>();
+              for (const f of Array.from(e.target.files)) {
+                const rel = (f as any).webkitRelativePath || "";
+                if (rel) paths.set(f, rel);
+              }
+              handleFiles(e.target.files, paths);
+            }
+            e.target.value = "";
+          }}
+        />
+      )}
 
       {busy ? (
         <Loader2 className="size-6 text-primary animate-spin mb-2" />
@@ -155,30 +227,55 @@ export function ContentDropzone({
         {t("admin.content.dropzone.title")}
       </div>
       <div className={cn("text-muted-foreground", compact ? "text-xs" : "text-xs")}>
-        {t("admin.content.dropzone.subtitle")}
+        {subtitle}
       </div>
 
       {!compact && (
         <>
           <div className="flex items-center gap-2 mt-3 text-xs text-muted-foreground">
-            <FileText className="size-3.5" />
-            <span>.md</span>
-            <FileJson className="size-3.5 ms-2" />
-            <span>.json</span>
+            {raw ? (
+              <>
+                <FileText className="size-3.5" />
+                <span>{t("admin.content.dropzone.anyFiles")}</span>
+                <FolderOpen className="size-3.5 ms-2" />
+                <span>{t("admin.content.dropzone.folders")}</span>
+              </>
+            ) : (
+              <>
+                <FileText className="size-3.5" />
+                <span>.md</span>
+                <FileJson className="size-3.5 ms-2" />
+                <span>.json</span>
+              </>
+            )}
           </div>
-          <Button
-            variant="outline"
-            size="sm"
-            className="mt-3"
-            onClick={(e) => {
-              e.stopPropagation();
-              inputRef.current?.click();
-            }}
-          >
-            {t("admin.content.dropzone.browse")}
-          </Button>
+          <div className="flex items-center gap-2 mt-3">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={(e) => {
+                e.stopPropagation();
+                inputRef.current?.click();
+              }}
+            >
+              {t("admin.content.dropzone.browse")}
+            </Button>
+            {raw && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  folderInputRef.current?.click();
+                }}
+              >
+                <FolderOpen className="size-3.5 me-1.5" />
+                {t("admin.content.dropzone.browseFolder")}
+              </Button>
+            )}
+          </div>
           <p className="mt-2 text-xs text-muted-foreground/70 max-w-xs">
-            {t("admin.content.dropzone.hint")}
+            {hint}
           </p>
         </>
       )}
@@ -208,7 +305,64 @@ function guessLanguage(filename: string): string | null {
   return "en";
 }
 
-// ── Upload helper — uploads a DroppedFile as a new content object ──────────
+/** Walk a DataTransfer's entries recursively, preserving folder structure.
+ *  Falls back to the flat file list when webkitGetAsEntry is unavailable. */
+async function walkDropEntries(
+  dt: DataTransfer,
+): Promise<{ files: File[]; paths: Map<File, string> }> {
+  const paths = new Map<File, string>();
+  const items = dt.items;
+  const hasEntries = items && typeof (items as any).webkitGetAsEntry === "function";
+
+  if (!hasEntries) {
+    const files = Array.from(dt.files || []);
+    return { files, paths };
+  }
+
+  const files: File[] = [];
+  const queue: Array<{ entry: any; path: string }> = [];
+  for (let i = 0; i < items.length; i++) {
+    const item = items[i];
+    const entry = item && typeof (item as any).webkitGetAsEntry === "function"
+      ? (item as any).webkitGetAsEntry()
+      : null;
+    if (entry) queue.push({ entry, path: entry.name || "" });
+  }
+
+  while (queue.length > 0) {
+    const { entry, path } = queue.shift()!;
+    if (entry.isFile) {
+      const file: File | null = await new Promise((resolve) => {
+        entry.file((f: File) => resolve(f), () => resolve(null));
+      });
+      if (file) {
+        files.push(file);
+        if (path) paths.set(file, path);
+      }
+    } else if (entry.isDirectory) {
+      const reader = entry.createReader();
+      // readEntries must be called repeatedly until it returns an empty array.
+      let entries: any[] = [];
+      let done = false;
+      while (!done) {
+        const batch: any[] = await new Promise((resolve, reject) => {
+          reader.readEntries((res: any[]) => {
+            if (!res || res.length === 0) done = true;
+            resolve(res || []);
+          }, reject);
+        });
+        entries = entries.concat(batch);
+        if (done) break;
+      }
+      for (const child of entries) {
+        queue.push({ entry: child, path: path ? `${path}/${child.name}` : child.name });
+      }
+    }
+  }
+  return { files, paths };
+}
+
+// ── Upload helpers — upload a DroppedFile as a new content object ──────────
 
 export async function uploadDroppedFile(d: DroppedFile): Promise<string> {
   // Try to parse JSON to validate before upload
@@ -226,4 +380,27 @@ export async function uploadDroppedFile(d: DroppedFile): Promise<string> {
     content: d.body,
   });
   return res.id;
+}
+
+/** Upload a file into the raw R2 keyspace under `destination`, preserving its
+ *  relative folder path (e.g. destination "qbank/cardiology" + relative path
+ *  "images/x.png" → "content-files/qbank/cardiology/images/x.png"). Returns
+ *  the full R2 key that was written. */
+export async function uploadDroppedFileRaw(d: DroppedFile, destination: string): Promise<string> {
+  const dest = destination.replace(/^\/+|\/+$/g, "");
+  const rel = (d.relativePath || d.file.name).replace(/^\/+/, "");
+  const key = `content-files/${dest ? `${dest}/` : ""}${rel}`;
+
+  // Validate JSON before it reaches R2 so the student app never fetches
+  // malformed content.
+  if (/\.json$/i.test(key)) {
+    try {
+      JSON.parse(d.body);
+    } catch (err) {
+      throw new Error(`Invalid JSON in ${rel}: ${String(err)}`);
+    }
+  }
+
+  await adminApi.uploadFile(key, d.body);
+  return key;
 }
