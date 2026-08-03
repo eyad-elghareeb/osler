@@ -111,7 +111,8 @@ export function ContentBrowser({ capabilities }: ContentBrowserProps) {
   const [tab, setTab] = React.useState<Tab>("unified");
 
   // Unified-tree state
-  const [unifiedTree, setUnifiedTree] = React.useState<ContentTreeNode[]>([]);
+  const [unifiedObjects, setUnifiedObjects] = React.useState<ContentObject[]>([]);
+  const [unifiedR2ByCat, setUnifiedR2ByCat] = React.useState<Record<string, Array<{ key: string; size: number; uploaded: string | null }>>>({});
   const [unifiedLoading, setUnifiedLoading] = React.useState(true);
   const [statusFilter, setStatusFilter] = React.useState<string>("all");
   const [r2Missing, setR2Missing] = React.useState(false);
@@ -141,112 +142,119 @@ export function ContentBrowser({ capabilities }: ContentBrowserProps) {
   // ── Load unified tree ────────────────────────────────────────────────────
   //
   // The unified tree is a per-category merge of:
-  //   1. Managed content_objects (filtered by statusFilter if not "all").
-  //      Each becomes a leaf with managed=true and a status badge.
-  //   2. Raw R2 keys under content-files/<category>/. Each becomes a leaf
-  //      with r2Key set. After the merge, we call lookupByR2Key() in
-  //      parallel to flip managed=true on any loose R2 leaf that actually
-  //      belongs to a managed object — those leaves also keep their
-  //      cloudObject reference so the badge + status render correctly.
+  //   1. Managed content_objects — each becomes a leaf with managed=true and
+  //      a status badge (all statuses are fetched, then filtered client-side).
+  //   2. Raw R2 keys under content-files/<category>/. Each becomes a leaf with
+  //      r2Key set. A managed object is matched to its R2 leaf by basename
+  //      (`<objectId>.json` / `<objectId>.md`) inside buildUnifiedTree.
   //
   // The merge is keyed on the r2 key (the canonical student-facing path).
-  // Managed objects whose hybrid target path can't be matched to an existing
-  // R2 key (e.g. they were published with a custom targetPath) are still
-  // appended as managed leaves so admins can find them.
+  // Managed objects with no matching R2 key (e.g. fresh drafts) are appended
+  // as managed leaves so admins can still find them.
   const loadUnified = React.useCallback(async () => {
     setUnifiedLoading(true);
     setR2Missing(false);
     try {
-      const categories = getCategories(t);
-      const roots: ContentTreeNode[] = [];
-
-      // Step 1: fetch all managed objects (all statuses) once.
-      // listContent supports status="all" — use it so we can badge every
-      // leaf with the right status regardless of the filter.
-      const allObjects: ContentObject[] = [];
+      // Step 1: fetch all managed objects (all statuses) once. listContent
+      // supports status="all" so we can badge + filter client-side without
+      // re-fetching on every status-filter change.
+      let allObjects: ContentObject[] = [];
       try {
         const res = await adminApi.listContent("all");
-        allObjects.push(...(res.items || []));
+        allObjects = res.items || [];
       } catch (err: any) {
-        if (err?.status === 503) { setR2Missing(true); setUnifiedTree([]); return; }
+        if (err?.status === 503) { setR2Missing(true); setUnifiedObjects([]); setUnifiedR2ByCat({}); return; }
         throw err;
       }
 
-      // Group managed objects by their R2 category (derived from content_type).
-      const typeToCat: Record<string, string> = {
-        quiz: "qbank", bank: "qbank", written: "qbank",
-        flashcard: "flashcard", osce: "osce",
-        library: "library", video: "videos",
-      };
-      const managedByCat = new Map<string, ContentObject[]>();
-      for (const obj of allObjects) {
-        const cat = typeToCat[obj.content_type] ?? obj.content_type;
-        if (!managedByCat.has(cat)) managedByCat.set(cat, []);
-        managedByCat.get(cat)!.push(obj);
-      }
-
-      // Step 2: for each category, fetch the raw R2 keys and build a merged tree.
-      for (const cat of categories) {
-        const managed = managedByCat.get(cat.folder) ?? [];
-
-        // Try to list the R2 keys. If R2 isn't configured, fall back to a
-        // managed-only tree for this category.
-        let r2Items: Array<{ key: string; size: number; uploaded: string | null }> = [];
-        try {
-          if (capabilities.manageUsers) {
+      // Step 2: list raw R2 keys for every category in parallel. A sequential
+      // loop here turns 5 independent Worker round-trips into a serial
+      // waterfall — the main reason the admin content hub feels slow. AllSettled
+      // lets one failing category (e.g. R2 misconfigured) degrade to a
+      // managed-only tree without failing the others.
+      const r2ByCat: Record<string, Array<{ key: string; size: number; uploaded: string | null }>> = {};
+      if (capabilities.manageUsers) {
+        const results = await Promise.allSettled(
+          getCategories(t).map(async (cat) => {
             const r2 = await adminApi.listR2Keys(cat.folder);
-            r2Items = r2.items || [];
+            return { folder: cat.folder, items: r2.items || [] };
+          }),
+        );
+        for (const r of results) {
+          if (r.status === "fulfilled") {
+            r2ByCat[r.value.folder] = r.value.items;
+          } else if ((r.reason as any)?.status === 503) {
+            setR2Missing(true);
           }
-        } catch (err: any) {
-          if (err?.status === 503) { setR2Missing(true); }
         }
-
-        // Build the merged tree by walking the R2 keyspace first, then
-        // attaching managed objects to their corresponding R2 leaves (or
-        // appending as standalone managed leaves if they have no R2
-        // counterpart yet — i.e. a draft that has never been published).
-        const tree = buildUnifiedTree(cat.folder, cat.contentType, r2Items, managed, statusFilter);
-
-        roots.push({
-          id: `unified-root-${cat.folder}`,
-          name: cat.label,
-          kind: "folder",
-          items: tree,
-        });
       }
 
-      setUnifiedTree(roots);
+      setUnifiedObjects(allObjects);
+      setUnifiedR2ByCat(r2ByCat);
     } catch (err: any) {
       toast({ title: t("admin.toast.failedLoadContent"), variant: "destructive" });
     } finally {
       setUnifiedLoading(false);
     }
-  }, [capabilities.manageUsers, statusFilter, toast, t]);
+  }, [capabilities.manageUsers, toast, t]);
 
   React.useEffect(() => {
     if (tab === "unified") loadUnified();
   }, [tab, loadUnified]);
 
+  // Build the merged tree client-side. The status filter only reshapes the
+  // tree — it never touches the network, so switching filters is instant.
+  const unifiedTree = React.useMemo<ContentTreeNode[]>(() => {
+    const typeToCat: Record<string, string> = {
+      quiz: "qbank", bank: "qbank", written: "qbank",
+      flashcard: "flashcard", osce: "osce",
+      library: "library", video: "videos",
+    };
+    const managedByCat = new Map<string, ContentObject[]>();
+    for (const obj of unifiedObjects) {
+      const cat = typeToCat[obj.content_type] ?? obj.content_type;
+      if (!managedByCat.has(cat)) managedByCat.set(cat, []);
+      managedByCat.get(cat)!.push(obj);
+    }
+
+    const roots: ContentTreeNode[] = [];
+    for (const cat of getCategories(t)) {
+      roots.push({
+        id: `unified-root-${cat.folder}`,
+        name: cat.label,
+        kind: "folder",
+        items: buildUnifiedTree(
+          cat.folder,
+          cat.contentType,
+          unifiedR2ByCat[cat.folder] ?? [],
+          managedByCat.get(cat.folder) ?? [],
+          statusFilter,
+        ),
+      });
+    }
+    return roots;
+  }, [unifiedObjects, unifiedR2ByCat, statusFilter, t]);
+
   // ── Load local content tree (dev-only tab) ────────────────────────────────
   const loadLocal = React.useCallback(async () => {
     setLocalLoading(true);
     try {
-      const allTrees: ContentTreeNode[] = [];
-      for (const cat of getCategories(t)) {
-        try {
+      const results = await Promise.allSettled(
+        getCategories(t).map(async (cat) => {
           const res = await fetch(`/osler-content/${cat.folder}/manifest.json`, { cache: "no-store" });
-          if (!res.ok) continue;
+          if (!res.ok) return null;
           const manifest = await res.json();
-          const tree = manifestToTree(manifest, cat.folder, cat.contentType);
-          allTrees.push({
+          return {
             id: `local-root-${cat.folder}`,
             name: cat.label,
-            kind: "folder",
-            items: tree,
-          });
-        } catch {}
-      }
-      setLocalTree(allTrees);
+            kind: "folder" as const,
+            items: manifestToTree(manifest, cat.folder, cat.contentType),
+          };
+        }),
+      );
+      setLocalTree(
+        results.flatMap((r) => (r.status === "fulfilled" && r.value ? [r.value] : [])),
+      );
     } finally {
       setLocalLoading(false);
     }
