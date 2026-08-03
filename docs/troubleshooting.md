@@ -325,7 +325,7 @@ cd cloudflare/worker && npm run tail
 
 **Symptom.** Real users get `429 Too Many requests` intermittently on login/register/reset.
 
-**Likely cause.** Per-IP rate limit exceeded. Defaults: 12 logins/min, 6 registrations/min, 6 resets/min, 240 total/min across all rate-limited routes per IP (per isolate — Cloudflare may recycle isolates so this is best-effort).
+**Likely cause.** Per-IP rate limit exceeded. Defaults: 12 logins/min, 6 registrations/min, 6 resets/min, 600 total/min across all rate-limited routes per IP (per isolate — Cloudflare may recycle isolates so this is best-effort).
 
 **Diagnose.** Check whether the user is behind a NAT/VPN with many others. Universities and corporate Wi-Fi often share one public IP.
 

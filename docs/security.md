@@ -280,7 +280,7 @@ Auth endpoints are rate-limited per IP using an in-memory LRU bucket:
 | `POST /v1/auth/reset/confirm` | `auth:reset` | 6 requests | 60s |
 | `POST /v1/auth/google/consume` | `auth:google:consume` | 12 requests | 60s |
 | `GET /v1/auth/username-available` | `auth:register` | 6 requests | 60s |
-| (all of the above combined) | `ip:global` | 240 requests | 60s |
+| (all of the above combined) | `ip:global` | 600 requests | 60s |
 
 Returns HTTP 429 with `{error: "Too many attempts. Please try again in a minute."}` when exceeded.
 

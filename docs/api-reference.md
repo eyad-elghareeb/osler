@@ -149,7 +149,8 @@ Auth-sensitive routes are rate-limited per IP using an in-memory LRU. Cloudflare
 | `auth:register` | 6 | 60s | `POST /v1/auth/register`, `GET /v1/auth/username-available` |
 | `auth:reset` | 6 | 60s | `POST /v1/auth/reset/request`, `POST /v1/auth/reset/confirm` |
 | `auth:google:consume` | 12 | 60s | `POST /v1/auth/google/consume` |
-| `ip:global` | 240 | 60s | All rate-limited routes combined |
+| `admin` | 600 | 60s | `POST /v1/admin/*` content management |
+| `ip:global` | 600 | 60s | All rate-limited routes combined |
 
 When any bucket is exceeded, the response is `429 Too Many Requests`:
 
@@ -366,7 +367,7 @@ Create a new student-tier account with username + password (and optionally email
 
 - **Auth**: none
 - **Body**: JSON
-- **Rate limit**: `auth:register` (6/min/IP) + global cap (240/min/IP)
+- **Rate limit**: `auth:register` (6/min/IP) + global cap (600/min/IP)
 - **Turnstile**: optional `turnstileToken` field, verified only when `TURNSTILE_ENABLED=true`
 
 #### Request body schema

@@ -207,7 +207,7 @@ The plumbing is wired: `public/osler.config.json` → `cloud.turnstileSiteKey` e
 
 ### 3. Cloudflare Rate Limiting + Access (dashboard)
 
-The Worker has a built-in in-memory per-IP limiter (login 12/min, register 6/min, global 240/min, HTTP 429). For harder guarantees:
+The Worker has a built-in in-memory per-IP limiter (login 12/min, register 6/min, admin 600/min, global 600/min, HTTP 429). For harder guarantees:
 
 - **Rate Limiting Rules** (WAF → Rate limiting rules) need a zone, so they apply when the Worker is behind a custom domain on your zone. Add a rule on the Worker's route: e.g. `POST /v1/auth/*` and `POST /v1/account/*` → 20 requests / 10 s, action Block. Free plan includes basic rules.
 - **Cloudflare Access** on `/admin*` (Pages) and `/v1/admin/*` (Worker): see [Optional: Cloudflare Access for `/admin`](#optional-cloudflare-access-for-admin) above. Free Zero Trust includes up to 50 users.

@@ -43,9 +43,9 @@ const RATE_LIMIT_MAX: Record<string, number> = {
   "auth:reset": 6,
   "auth:google:consume": 12,
   "biometric": 6,
-  "ip:global": 240,
+  "ip:global": 600,
   "content": 240,
-  "admin": 60,
+  "admin": 600,
   "sync": 30,
   "search": 30,
   // Analytics: 12 batches/min per IP. At 20 events/batch that's 240 writes/min

@@ -704,7 +704,8 @@ The Worker uses per-isolate in-memory LRU buckets for rate limiting. **Per-isola
 | `RATE_LIMIT_MAX["auth:register"]` | `6` | Max registration attempts per IP per window. |
 | `RATE_LIMIT_MAX["auth:reset"]` | `6` | Max password-reset requests per IP per window. |
 | `RATE_LIMIT_MAX["auth:google:consume"]` | `12` | Max Google handoff-consume attempts per IP per window. |
-| `RATE_LIMIT_MAX["ip:global"]` | `240` | Hard cap per IP across **all** rate-limited routes per window. |
+| `RATE_LIMIT_MAX["admin"]` | `600` | Max admin content-management requests per IP per window (admin-role endpoints only). |
+| `RATE_LIMIT_MAX["ip:global"]` | `600` | Hard cap per IP across **all** rate-limited routes per window. |
 | LRU eviction threshold | `2000` entries | When the bucket map exceeds 2000 entries, the 100 oldest are evicted. |
 
 When any limit is exceeded, the Worker returns `429 Too Many Requests` with `Cache-Control: no-store`.
@@ -1071,7 +1072,8 @@ Any check failing returns `400 invalid_token` and consumes the single-use state 
 | `RATE_LIMIT_MAX["auth:register"]` | 6 | Registrations per IP per window |
 | `RATE_LIMIT_MAX["auth:reset"]` | 6 | Resets per IP per window |
 | `RATE_LIMIT_MAX["auth:google:consume"]` | 12 | Google consume per IP per window |
-| `RATE_LIMIT_MAX["ip:global"]` | 240 | Hard per-IP cap across all limited routes |
+| `RATE_LIMIT_MAX["admin"]` | 600 | Admin content-management requests per IP per window |
+| `RATE_LIMIT_MAX["ip:global"]` | 600 | Hard per-IP cap across all limited routes |
 
 ### 10.3 All `osler.config.json` sections at a glance
 

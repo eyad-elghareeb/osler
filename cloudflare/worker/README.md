@@ -93,7 +93,7 @@ curl https://<your-worker-domain>/v1/health
 
 - **Cron trigger**: `[triggers] crons = ["0 * * * *"]` runs hourly to prune expired sessions, OAuth states, handoffs, reset tokens, and audit-log entries older than 1 year.
 - **Session cap**: 12 concurrent sessions per user. The oldest is revoked when a 13th is issued.
-- **Rate limit**: 12 logins / 6 registrations / 6 resets / 12 google-consume per IP per minute; global per-IP cap of 240 across all rate-limited routes. Returns HTTP 429 when exceeded. For harder guarantees, front the Worker with Cloudflare Rate Limiting Rules.
+- **Rate limit**: 12 logins / 6 registrations / 6 resets / 12 google-consume / 600 admin per IP per minute; global per-IP cap of 600 across all rate-limited routes. Returns HTTP 429 when exceeded. For harder guarantees, front the Worker with Cloudflare Rate Limiting Rules.
 - **Audit retention**: 1 year. Tune `AUDIT_RETENTION_MS` in `src/index.ts` if your jurisdiction requires a different window.
 - **R2 not configured**: Admin content endpoints return HTTP 503 with `{error: "Content storage not configured"}` until the R2 bucket binding is added.
 
