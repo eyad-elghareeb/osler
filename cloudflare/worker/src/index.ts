@@ -1843,7 +1843,8 @@ async function handleAdmin(request: Request, env: Env, session: Session, url: UR
       if (!isAdmin(session)) return json({ error: "Forbidden" }, 403, origin, log);
       if (!env.CONTENT) return json({ error: "Content storage not configured" }, 503, origin, log);
       const category = (url.searchParams.get("prefix") || "").trim();
-      const listed = await env.CONTENT.list({ prefix: "content-files/" + category, limit: 1000, cursor: url.searchParams.get("cursor") || undefined });
+      const scope = (url.searchParams.get("scope") || "content-files") === "content-staging" ? "content-staging" : "content-files";
+      const listed = await env.CONTENT.list({ prefix: scope + "/" + category, limit: 1000, cursor: url.searchParams.get("cursor") || undefined });
       return json({ items: (listed.objects || []).map((o: any) => ({ key: o.key, size: o.size, uploaded: o.uploaded?.toISOString?.() ?? null })), cursor: listed.truncated ? listed.cursor : null }, 200, origin, log);
     }
     if (request.method === "DELETE" && path === "/v1/admin/content/r2-key") {
@@ -1851,10 +1852,61 @@ async function handleAdmin(request: Request, env: Env, session: Session, url: UR
       if (!env.CONTENT) return json({ error: "Content storage not configured" }, 503, origin, log);
       const key = (url.searchParams.get("key") || "").trim();
       if (!key) return json({ error: "key required" }, 400, origin, log);
-      if (!key.startsWith("content-files/") && !key.startsWith("content-manifests/")) return json({ error: "Only content-files/ and content-manifests/ keys" }, 400, origin, log);
+      if (!key.startsWith("content-files/") && !key.startsWith("content-manifests/") && !key.startsWith("content-staging/")) return json({ error: "Only content-files/, content-staging/ and content-manifests/ keys" }, 400, origin, log);
       await env.CONTENT.delete(key);
       await auditLog(env, session.user.id, "delete_r2_key", null, { key }, log);
       return json({ ok: true }, 200, origin, log);
+    }
+    if (request.method === "GET" && path === "/v1/admin/content/r2-content") {
+      if (!isAdmin(session)) return json({ error: "Forbidden" }, 403, origin, log);
+      if (!env.CONTENT) return json({ error: "Content storage not configured" }, 503, origin, log);
+      const key = (url.searchParams.get("key") || "").trim();
+      if (!key || (!key.startsWith("content-files/") && !key.startsWith("content-staging/") && !key.startsWith("content-manifests/"))) return json({ error: "Invalid key" }, 400, origin, log);
+      const obj = await env.CONTENT.get(key);
+      if (!obj) return json({ error: "Not found" }, 404, origin, log);
+      const body = await obj.text();
+      return json({ body, contentType: obj.httpMetadata?.contentType ?? "application/octet-stream" }, 200, origin, log);
+    }
+    if (request.method === "POST" && path === "/v1/admin/content/publish-staged") {
+      if (!isAdmin(session)) return json({ error: "Forbidden" }, 403, origin, log);
+      if (!env.CONTENT) return json({ error: "Content storage not configured" }, 503, origin, log);
+      const body = await readJson(request);
+      const keys = Array.isArray(body.keys) ? body.keys.filter((k: any): k is string => typeof k === "string" && k.startsWith("content-staging/")) : [];
+      if (!keys.length) return json({ error: "keys required" }, 400, origin, log);
+      const categories = new Set<string>();
+      const published: string[] = [];
+      for (const key of keys) {
+        const rel = key.slice("content-staging/".length);
+        const src = await env.CONTENT.get(key);
+        if (!src) continue;
+        const buf = await src.arrayBuffer();
+        const ct = guessImageContentType(rel);
+        const dstKey = `content-files/${rel}`;
+        await env.CONTENT.put(dstKey, buf, { httpMetadata: { contentType: ct } });
+        await env.CONTENT.delete(key);
+        published.push(dstKey);
+        const cat = rel.split("/")[0];
+        if (cat) categories.add(cat);
+      }
+      for (const cat of categories) {
+        try { await regenerateManifestForCategory(env, cat); } catch (e) { console.error("manifest regen failed:", e); }
+      }
+      await auditLog(env, session.user.id, "publish_staged", null, { keys: keys.length, published: published.length }, log);
+      return json({ ok: true, published }, 200, origin, log);
+    }
+    if (request.method === "POST" && path === "/v1/admin/content/discard-staged") {
+      if (!isAdmin(session)) return json({ error: "Forbidden" }, 403, origin, log);
+      if (!env.CONTENT) return json({ error: "Content storage not configured" }, 503, origin, log);
+      const body = await readJson(request);
+      const keys = Array.isArray(body.keys) ? body.keys.filter((k: any): k is string => typeof k === "string" && k.startsWith("content-staging/")) : [];
+      if (!keys.length) return json({ error: "keys required" }, 400, origin, log);
+      let deleted = 0;
+      for (const key of keys) {
+        await env.CONTENT.delete(key);
+        deleted += 1;
+      }
+      await auditLog(env, session.user.id, "discard_staged", null, { keys: keys.length, deleted }, log);
+      return json({ ok: true, deleted }, 200, origin, log);
     }
     if (request.method === "POST" && path === "/v1/admin/content/r2-rename") {
       if (!isAdmin(session)) return json({ error: "Forbidden" }, 403, origin, log);

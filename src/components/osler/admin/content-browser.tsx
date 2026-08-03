@@ -72,10 +72,8 @@ import {
 } from "@/components/osler/admin/content-tree-pane";
 import {
   ContentDropzone,
-  uploadDroppedFile,
-  uploadDroppedFileRaw,
+  uploadStagedFile,
   type DroppedFile,
-  type DropzoneMode,
 } from "@/components/osler/admin/content-dropzone";
 
 const CONTENT_TYPES: ContentType[] = ["quiz", "bank", "flashcard", "written", "osce", "library", "video"];
@@ -115,6 +113,7 @@ export function ContentBrowser({ capabilities }: ContentBrowserProps) {
   // Unified-tree state
   const [unifiedObjects, setUnifiedObjects] = React.useState<ContentObject[]>([]);
   const [unifiedR2ByCat, setUnifiedR2ByCat] = React.useState<Record<string, Array<{ key: string; size: number; uploaded: string | null }>>>({});
+  const [unifiedStagedByCat, setUnifiedStagedByCat] = React.useState<Record<string, Array<{ key: string; size: number; uploaded: string | null }>>>({});
   const [unifiedLoading, setUnifiedLoading] = React.useState(true);
   const [statusFilter, setStatusFilter] = React.useState<string>("all");
   const [r2Missing, setR2Missing] = React.useState(false);
@@ -175,16 +174,21 @@ export function ContentBrowser({ capabilities }: ContentBrowserProps) {
       // lets one failing category (e.g. R2 misconfigured) degrade to a
       // managed-only tree without failing the others.
       const r2ByCat: Record<string, Array<{ key: string; size: number; uploaded: string | null }>> = {};
+      const stagedByCat: Record<string, Array<{ key: string; size: number; uploaded: string | null }>> = {};
       if (capabilities.manageUsers) {
         const results = await Promise.allSettled(
           getCategories(t).map(async (cat) => {
-            const r2 = await adminApi.listR2Keys(cat.folder);
-            return { folder: cat.folder, items: r2.items || [] };
+            const [r2, staged] = await Promise.all([
+              adminApi.listR2Keys(cat.folder),
+              adminApi.listR2Keys(cat.folder, undefined, "content-staging"),
+            ]);
+            return { folder: cat.folder, items: r2.items || [], stagedItems: staged.items || [] };
           }),
         );
         for (const r of results) {
           if (r.status === "fulfilled") {
             r2ByCat[r.value.folder] = r.value.items;
+            stagedByCat[r.value.folder] = r.value.stagedItems;
           } else if ((r.reason as any)?.status === 503) {
             setR2Missing(true);
           }
@@ -193,6 +197,7 @@ export function ContentBrowser({ capabilities }: ContentBrowserProps) {
 
       setUnifiedObjects(allObjects);
       setUnifiedR2ByCat(r2ByCat);
+      setUnifiedStagedByCat(stagedByCat);
     } catch (err: any) {
       toast({ title: t("admin.toast.failedLoadContent"), variant: "destructive" });
     } finally {
@@ -229,13 +234,14 @@ export function ContentBrowser({ capabilities }: ContentBrowserProps) {
           cat.folder,
           cat.contentType,
           unifiedR2ByCat[cat.folder] ?? [],
+          unifiedStagedByCat[cat.folder] ?? [],
           managedByCat.get(cat.folder) ?? [],
           statusFilter,
         ),
       });
     }
     return roots;
-  }, [unifiedObjects, unifiedR2ByCat, statusFilter, t]);
+  }, [unifiedObjects, unifiedR2ByCat, unifiedStagedByCat, statusFilter, t]);
 
   // ── Load local content tree (dev-only tab) ────────────────────────────────
   const loadLocal = React.useCallback(async () => {
@@ -406,6 +412,42 @@ export function ContentBrowser({ capabilities }: ContentBrowserProps) {
     }
   }
 
+  /** Collect every staged (content-staging/) key under a node — the node's
+   *  own key if it's a staged file, or all staged descendant keys if it's a
+   *  folder. */
+  function collectStagedKeys(node: ContentTreeNode): string[] {
+    const keys: string[] = [];
+    if (node.r2Key?.startsWith("content-staging/")) keys.push(node.r2Key);
+    for (const child of node.items ?? []) keys.push(...collectStagedKeys(child));
+    return keys;
+  }
+
+  async function publishStaged(node: ContentTreeNode) {
+    if (!capabilities.manageUsers) return;
+    const keys = collectStagedKeys(node);
+    if (keys.length === 0) return;
+    try {
+      const res = await adminApi.publishStaged(keys);
+      toast({ title: t("admin.toast.publishedStaged", { n: res.published.length }) });
+      loadUnified();
+    } catch (err: any) {
+      toast({ title: t("admin.toast.publishStagedFailed", { error: String(err?.message ?? err) }), variant: "destructive" });
+    }
+  }
+
+  async function discardStaged(node: ContentTreeNode) {
+    if (!capabilities.manageUsers) return;
+    const keys = collectStagedKeys(node);
+    if (keys.length === 0) return;
+    try {
+      const res = await adminApi.discardStaged(keys);
+      toast({ title: t("admin.toast.discardedStaged", { n: res.deleted }) });
+      loadUnified();
+    } catch (err: any) {
+      toast({ title: t("admin.toast.discardStagedFailed", { error: String(err?.message ?? err) }), variant: "destructive" });
+    }
+  }
+
   async function regenerateAllManifests() {
     if (!capabilities.manageUsers) return;
     setRegenerating(true);
@@ -544,6 +586,8 @@ export function ContentBrowser({ capabilities }: ContentBrowserProps) {
               onDelete={deleteR2Key}
               onDuplicate={duplicateR2Key}
               onPromote={promoteToManaged}
+              onPublishStaged={publishStaged}
+              onDiscardStaged={discardStaged}
               canManage={capabilities.manageUsers}
               adopting={adopting}
             />
@@ -580,12 +624,7 @@ export function ContentBrowser({ capabilities }: ContentBrowserProps) {
       <UploadDialog
         open={uploadOpen}
         onClose={() => setUploadOpen(false)}
-        onUploaded={(id) => {
-          setUploadOpen(false);
-          loadUnified();
-          router.push(`/admin/content?id=${encodeURIComponent(id)}`);
-        }}
-        onRawUploaded={() => {
+        onStagedUploaded={() => {
           setUploadOpen(false);
           loadUnified();
         }}
@@ -727,6 +766,8 @@ interface ContentTreePaneWithContextMenuProps {
   onDelete: (node: ContentTreeNode) => void;
   onDuplicate: (node: ContentTreeNode) => void;
   onPromote: (node: ContentTreeNode) => void;
+  onPublishStaged: (node: ContentTreeNode) => void;
+  onDiscardStaged: (node: ContentTreeNode) => void;
   canManage: boolean;
   adopting: boolean;
 }
@@ -745,7 +786,19 @@ function ContentTreePaneWithContextMenu(props: ContentTreePaneWithContextMenuPro
   }
 
   const isManagedLeaf = props.tab === "unified" && contextNode?.kind === "file" && contextNode.managed;
-  const isLooseLeaf = props.tab === "unified" && contextNode?.kind === "file" && !!contextNode.r2Key && !contextNode.managed;
+  const isStagedLeaf = props.tab === "unified" && contextNode?.kind === "file" && !!contextNode.staged;
+  const isLooseLeaf = props.tab === "unified" && contextNode?.kind === "file" && !!contextNode.r2Key && !contextNode.managed && !contextNode.staged;
+
+  // Folders may contain a mix of published + staged children. The staged
+  // publish/discard actions are offered when at least one staged key exists
+  // in the subtree.
+  const folderHasStaged = props.tab === "unified" && contextNode?.kind === "folder" &&
+    !!contextNode.items?.some((c) => nodeContainsStaged(c));
+
+  function nodeContainsStaged(n: ContentTreeNode): boolean {
+    if (n.staged) return true;
+    return !!n.items?.some(nodeContainsStaged);
+  }
 
   return (
     <div className="h-full" onContextMenu={handleContextMenu}>
@@ -782,6 +835,27 @@ function ContentTreePaneWithContextMenu(props: ContentTreePaneWithContextMenuPro
                   <ContextMenuSeparator />
                   <ContextMenuItem onClick={() => props.onDelete(contextNode)}>
                     <Trash2 className="size-3.5 me-2 text-destructive" /> {t("admin.content.delete")}
+                  </ContextMenuItem>
+                </>
+              )}
+            </>
+          )}
+
+          {/* Staged R2 leaf — lives in content-staging/, private until the
+              admin publishes it (which moves it into content-files/). */}
+          {isStagedLeaf && (
+            <>
+              <ContextMenuItem onClick={() => props.onSelect(contextNode)}>
+                <Eye className="size-3.5 me-2" /> {t("admin.content.context.editRaw")}
+              </ContextMenuItem>
+              {props.canManage && (
+                <>
+                  <ContextMenuSeparator />
+                  <ContextMenuItem onClick={() => props.onPublishStaged(contextNode)}>
+                    <Sparkles className="size-3.5 me-2" /> {t("admin.content.context.publishStaged")}
+                  </ContextMenuItem>
+                  <ContextMenuItem onClick={() => props.onDiscardStaged(contextNode)}>
+                    <Trash2 className="size-3.5 me-2 text-destructive" /> {t("admin.content.context.discardStaged")}
                   </ContextMenuItem>
                 </>
               )}
@@ -829,6 +903,17 @@ function ContentTreePaneWithContextMenu(props: ContentTreePaneWithContextMenuPro
           {props.tab === "unified" && props.canManage && contextNode?.kind === "folder" && (
             <>
               <ContextMenuSeparator />
+              {folderHasStaged && (
+                <>
+                  <ContextMenuItem onClick={() => props.onPublishStaged(contextNode)}>
+                    <Sparkles className="size-3.5 me-2" /> {t("admin.content.context.publishStaged")}
+                  </ContextMenuItem>
+                  <ContextMenuItem onClick={() => props.onDiscardStaged(contextNode)}>
+                    <Trash2 className="size-3.5 me-2 text-destructive" /> {t("admin.content.context.discardStaged")}
+                  </ContextMenuItem>
+                  <ContextMenuSeparator />
+                </>
+              )}
               <ContextMenuItem onClick={() => props.onNewFile(folderOf(contextNode))}>
                 <FilePlus className="size-3.5 me-2" /> {t("admin.content.context.newFileHere")}
               </ContextMenuItem>
@@ -969,7 +1054,12 @@ function PreviewPane({ node, tab }: { node: ContentTreeNode; tab: Tab }) {
                   {t("admin.content.tree.managedBadge")}
                 </span>
               )}
-              {!child.managed && child.r2Key && (
+              {child.staged && (
+                <span className="mt-1 inline-block text-[10px] uppercase tracking-wider text-info">
+                  {t("admin.content.tree.stagedBadge")}
+                </span>
+              )}
+              {!child.managed && !child.staged && child.r2Key && (
                 <span className="mt-1 inline-block text-[10px] uppercase tracking-wider text-muted-foreground">
                   {t("admin.content.tree.looseBadge")}
                 </span>
@@ -1058,7 +1148,19 @@ function PreviewPane({ node, tab }: { node: ContentTreeNode; tab: Tab }) {
         </p>
       )}
 
-      {tab === "unified" && !node.managed && node.r2Key && (
+      {tab === "unified" && node.staged && node.r2Key && (
+        <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
+          <div className="text-xs text-muted-foreground mb-1.5 shrink-0">
+            {t("admin.content.stagedPreviewHint")}
+          </div>
+          <R2Preview node={node} />
+          <div className="mt-2 shrink-0 text-xs text-muted-foreground/80">
+            {t("admin.content.stagedHint")}
+          </div>
+        </div>
+      )}
+
+      {tab === "unified" && !node.managed && !node.staged && node.r2Key && (
         <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
           <div className="text-xs text-muted-foreground mb-1.5 shrink-0">
             {t("admin.content.previewR2Hint")}
@@ -1080,6 +1182,15 @@ function R2Preview({ node }: { node: ContentTreeNode }) {
   React.useEffect(() => {
     if (!node.r2Key) { setLoading(false); return; }
     setLoading(true);
+    // Staged keys (content-staging/) are private — fetch through the admin
+    // endpoint. Public keys are served straight from the Worker.
+    if (node.r2Key.startsWith("content-staging/")) {
+      adminApi.getR2Content(node.r2Key)
+        .then((res) => setBody(res.body.slice(0, 8000)))
+        .catch(() => setBody(null))
+        .finally(() => setLoading(false));
+      return;
+    }
     const url = r2KeyToWorkerUrl(node.r2Key);
     if (!url) {
       setBody(null);
@@ -1229,19 +1340,16 @@ function CreateContentDialog({
 function UploadDialog({
   open,
   onClose,
-  onUploaded,
-  onRawUploaded,
+  onStagedUploaded,
   canAdmin,
 }: {
   open: boolean;
   onClose: () => void;
-  onUploaded: (id: string) => void;
-  onRawUploaded: () => void;
+  onStagedUploaded: () => void;
   canAdmin: boolean;
 }) {
   const { t } = useI18n();
   const { toast } = useToast();
-  const [mode, setMode] = React.useState<DropzoneMode>("managed");
   const [category, setCategory] = React.useState("qbank");
   const [subpath, setSubpath] = React.useState("");
   const [dropped, setDropped] = React.useState<DroppedFile[]>([]);
@@ -1253,24 +1361,17 @@ function UploadDialog({
 
   const categories = getCategories(t);
   const destination = subpath.trim() ? `${category}/${subpath.trim().replace(/^\/+/, "")}` : category;
-  const destinationLabel = `content-files/${destination}/`;
+  const destinationLabel = `content-staging/${destination}/`;
 
   async function handleUpload() {
     if (dropped.length === 0) return;
     haptic("light");
     setUploading(true);
     let success = 0;
-    let firstId: string | null = null;
     for (const d of dropped) {
       try {
-        if (mode === "managed") {
-          const id = await uploadDroppedFile(d);
-          success += 1;
-          if (!firstId) firstId = id;
-        } else {
-          await uploadDroppedFileRaw(d, destination);
-          success += 1;
-        }
+        await uploadStagedFile(d, destination);
+        success += 1;
       } catch (err) {
         toast({
           title: t("admin.content.browser.uploadFailed", { name: d.file.name }),
@@ -1281,15 +1382,10 @@ function UploadDialog({
     }
     setUploading(false);
     if (success > 0) {
-      if (mode === "raw") {
-        toast({
-          title: t("admin.content.dropzone.rawUploaded", { n: success, dest: destinationLabel }),
-        });
-        onRawUploaded();
-      } else {
-        toast({ title: t("admin.content.dropzone.uploaded", { n: success }) });
-        if (firstId) onUploaded(firstId);
-      }
+      toast({
+        title: t("admin.content.dropzone.stagedUploaded", { n: success, dest: destinationLabel }),
+      });
+      onStagedUploaded();
     }
   }
 
@@ -1300,45 +1396,11 @@ function UploadDialog({
           <DialogTitle>{t("admin.content.dropzone.title")}</DialogTitle>
         </DialogHeader>
         <div className="space-y-3 py-2">
-          {/* Mode toggle: managed content objects vs raw R2 files */}
-          <div className="grid grid-cols-2 gap-2">
-            <button
-              type="button"
-              onClick={() => { haptic("selection"); setMode("managed"); }}
-              className={cn(
-                "px-3 py-2 rounded-xl border text-xs font-semibold transition-colors text-start",
-                mode === "managed"
-                  ? "bg-primary text-primary-foreground border-primary"
-                  : "bg-muted/60 text-muted-foreground border-border hover:text-foreground",
-              )}
-            >
-              {t("admin.content.upload.modeManaged")}
-            </button>
-            <button
-              type="button"
-              onClick={() => { haptic("selection"); setMode("raw"); }}
-              className={cn(
-                "px-3 py-2 rounded-xl border text-xs font-semibold transition-colors text-start",
-                mode === "raw"
-                  ? "bg-primary text-primary-foreground border-primary"
-                  : "bg-muted/60 text-muted-foreground border-border hover:text-foreground",
-              )}
-            >
-              {t("admin.content.upload.modeRaw")}
-            </button>
-          </div>
+          <p className="text-xs text-muted-foreground">
+            {t("admin.content.upload.stagedDesc")}
+          </p>
 
-          {mode === "managed" ? (
-            <p className="text-xs text-muted-foreground">
-              {t("admin.content.upload.modeManagedDesc")}
-            </p>
-          ) : (
-            <p className="text-xs text-muted-foreground">
-              {t("admin.content.upload.modeRawDesc")}
-            </p>
-          )}
-
-          {mode === "raw" && canAdmin && (
+          {canAdmin && (
             <div className="space-y-1.5 border border-border rounded-xl p-3 bg-card/60">
               <label className="block text-xs font-medium uppercase tracking-wider text-muted-foreground">
                 {t("admin.content.upload.destination")}
@@ -1357,7 +1419,7 @@ function UploadDialog({
                   </SelectContent>
                 </Select>
                 <div className="flex items-center flex-1 min-w-0 font-mono text-xs text-muted-foreground">
-                  <span className="shrink-0">content-files/</span>
+                  <span className="shrink-0">content-staging/</span>
                   <Input
                     value={subpath}
                     onChange={(e) => setSubpath(e.target.value)}
@@ -1372,16 +1434,9 @@ function UploadDialog({
             </div>
           )}
 
-          {mode === "raw" && !canAdmin ? (
-            <p className="text-xs text-muted-foreground">
-              {t("admin.content.upload.rawAdminOnly")}
-            </p>
-          ) : (
-            <ContentDropzone
-              mode={mode}
-              onFiles={(files) => setDropped((prev) => [...prev, ...files])}
-            />
-          )}
+          <ContentDropzone
+            onFiles={(files) => setDropped((prev) => [...prev, ...files])}
+          />
 
           {dropped.length > 0 && (
             <div className="space-y-1.5">
@@ -1396,7 +1451,8 @@ function UploadDialog({
                   >
                     <FileText className="size-3.5 text-muted-foreground shrink-0" />
                     <span className="flex-1 truncate font-mono">
-                      {mode === "raw" ? `${destinationLabel}${d.relativePath ?? d.file.name}` : d.file.name}
+                      {destinationLabel}
+                      {d.relativePath ?? d.file.name}
                     </span>
                     <span className="text-xs uppercase tracking-wider text-muted-foreground">
                       {d.contentType}
@@ -1496,6 +1552,7 @@ function buildUnifiedTree(
   categoryFolder: string,
   contentType: ContentType,
   r2Items: Array<{ key: string; size: number; uploaded: string | null }>,
+  stagedItems: Array<{ key: string; size: number; uploaded: string | null }>,
   managed: ContentObject[],
   statusFilter: string,
 ): ContentTreeNode[] {
@@ -1514,18 +1571,15 @@ function buildUnifiedTree(
   const folderMap = new Map<string, ContentTreeNode>();
   const consumedObjectIds = new Set<string>();
 
-  for (const item of r2Items) {
-    const rel = item.key.replace(/^content-files\//, "");
+  // Shared folder-building for a single leaf under content-files/ (published)
+  // or content-staging/ (private). Returns the parent folder node (or null
+  // for a root-level leaf).
+  function placeLeaf(rel: string, fileName: string, leaf: ContentTreeNode): void {
     const parts = rel.split("/");
-    const fileName = parts.pop() ?? "";
-    if (fileName === ".keep") continue;
-    const folderPath = parts.join("/");
-
-    // Build ancestor folders
+    parts.pop();
     let parent: ContentTreeNode | null = null;
     let cur = "";
-    for (let i = 0; i < parts.length; i++) {
-      const seg = parts[i];
+    for (const seg of parts) {
       cur = cur ? `${cur}/${seg}` : seg;
       if (!folderMap.has(cur)) {
         const folder: ContentTreeNode = {
@@ -1541,6 +1595,15 @@ function buildUnifiedTree(
       }
       parent = folderMap.get(cur) ?? null;
     }
+    if (parent) parent.items!.push(leaf);
+    else roots.push(leaf);
+  }
+
+  for (const item of r2Items) {
+    const rel = item.key.replace(/^content-files\//, "");
+    const parts = rel.split("/");
+    const fileName = parts.pop() ?? "";
+    if (fileName === ".keep") continue;
 
     // Match the file against a managed object
     const matched = managedByBasename.get(fileName);
@@ -1559,9 +1622,29 @@ function buildUnifiedTree(
       cloudObject: matched,
     };
     if (matched) consumedObjectIds.add(matched.id);
+    placeLeaf(rel, fileName, fileNode);
+  }
 
-    if (parent) parent.items!.push(fileNode);
-    else roots.push(fileNode);
+  // Staged files (content-staging/) are private uploads awaiting a Publish
+  // action. They share the same folder tree so admins see exactly where each
+  // staged pack will land once published.
+  for (const item of stagedItems) {
+    const rel = item.key.replace(/^content-staging\//, "");
+    const parts = rel.split("/");
+    const fileName = parts.pop() ?? "";
+    if (fileName === ".keep") continue;
+
+    const fileNode: ContentTreeNode = {
+      id: `staged-file-${rel}`,
+      name: fileName,
+      kind: "file",
+      ext: fileName.split(".").pop() ?? "",
+      size: item.size,
+      r2Key: item.key,
+      sourcePath: item.key,
+      staged: true,
+    };
+    placeLeaf(rel, fileName, fileNode);
   }
 
   // Append any managed objects that had no R2 counterpart under a synthetic

@@ -53,6 +53,9 @@ export interface ContentTreeNode {
   /** True when this leaf is a managed content_object (has D1 metadata). Used
    *  by the unified browser to badge files as "managed" vs "loose". */
   managed?: boolean;
+  /** True when this leaf lives under content-staging/ — private, not yet
+   *  published to students. */
+  staged?: boolean;
 }
 
 interface ContentTreePaneProps {
@@ -308,7 +311,15 @@ function TreeRow({
             {t("admin.content.tree.managedBadge")}
           </span>
         )}
-        {!isFolder && node.r2Key && !node.managed && (
+        {!isFolder && node.staged && (
+          <span
+            className="meta rounded-full px-1.5 py-0.5 border text-[10px] uppercase tracking-wider bg-info/15 text-info border-info/30"
+            title={t("admin.content.tree.stagedBadge")}
+          >
+            {t("admin.content.tree.stagedBadge")}
+          </span>
+        )}
+        {!isFolder && node.r2Key && !node.managed && !node.staged && (
           <span
             className="meta rounded-full px-1.5 py-0.5 border text-[10px] uppercase tracking-wider bg-muted text-muted-foreground border-border"
             title={t("admin.content.tree.looseBadge")}

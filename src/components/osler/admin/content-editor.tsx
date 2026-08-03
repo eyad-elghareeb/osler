@@ -120,6 +120,28 @@ export function ContentEditor({ id, rawR2Key, capabilities }: ContentEditorProps
   const [adopting, setAdopting] = React.useState(false);
   const debounceRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  function inferModeFromBody(text: string, key: string) {
+    // Infer artifact content type from the key extension.
+    if (key.endsWith(".md")) setArtifactContentType("md");
+    else if (key.endsWith(".pdf") || text.startsWith("data:application/pdf;base64,")) setArtifactContentType("pdf");
+    else if (key.endsWith(".html") || (text.startsWith("<") && !text.startsWith("---"))) setArtifactContentType("html");
+    // Default to code mode for raw files (no form mapping unless we
+    // can recognise the shape).
+    try {
+      const parsed = JSON.parse(text);
+      if (Array.isArray(parsed.questions) || Array.isArray(parsed.passages) || Array.isArray(parsed.cards) ||
+          Array.isArray(parsed.stations) || Array.isArray(parsed.videos) || Array.isArray(parsed.prompts)) {
+        setMode("form");
+      } else {
+        setMode("code");
+      }
+    } catch {
+      // Not JSON — if it's markdown, use form (LibraryArticleEditor); otherwise code.
+      if (artifactContentType === "md" || key.endsWith(".md")) setMode("form");
+      else setMode("code");
+    }
+  }
+
   // ── Load body ──
   React.useEffect(() => {
     let cancelled = false;
@@ -127,8 +149,18 @@ export function ContentEditor({ id, rawR2Key, capabilities }: ContentEditorProps
     (async () => {
       try {
         if (isRawMode && rawR2Key) {
-          // Raw mode — fetch the body directly from the Worker's public
-          // content endpoint (replaces the old /api/r2-fetch Pages proxy).
+          // Raw mode — fetch the body. Public keys (content-files/) are
+          // served directly by the Worker's public content endpoint; staged
+          // keys (content-staging/) are private and go through the
+          // admin-gated endpoint instead.
+          if (rawR2Key.startsWith("content-staging/")) {
+            const res = await adminApi.getR2Content(rawR2Key);
+            if (cancelled) return;
+            const text = res.body;
+            setBody(text);
+            inferModeFromBody(text, rawR2Key);
+            return;
+          }
           const url = r2KeyToWorkerUrl(rawR2Key);
           if (!url) throw new Error("Cloud not configured");
           const res = await fetch(url);
@@ -136,25 +168,7 @@ export function ContentEditor({ id, rawR2Key, capabilities }: ContentEditorProps
           const text = await res.text();
           if (cancelled) return;
           setBody(text);
-          // Infer artifact content type from the key extension.
-          if (rawR2Key.endsWith(".md")) setArtifactContentType("md");
-          else if (rawR2Key.endsWith(".pdf") || text.startsWith("data:application/pdf;base64,")) setArtifactContentType("pdf");
-          else if (rawR2Key.endsWith(".html") || (text.startsWith("<") && !text.startsWith("---"))) setArtifactContentType("html");
-          // Default to code mode for raw files (no form mapping unless we
-          // can recognise the shape).
-          try {
-            const parsed = JSON.parse(text);
-            if (Array.isArray(parsed.questions) || Array.isArray(parsed.passages) || Array.isArray(parsed.cards) ||
-                Array.isArray(parsed.stations) || Array.isArray(parsed.videos) || Array.isArray(parsed.prompts)) {
-              setMode("form");
-            } else {
-              setMode("code");
-            }
-          } catch {
-            // Not JSON — if it's markdown, use form (LibraryArticleEditor); otherwise code.
-            if (artifactContentType === "md" || rawR2Key.endsWith(".md")) setMode("form");
-            else setMode("code");
-          }
+          inferModeFromBody(text, rawR2Key);
         } else if (id) {
           // Managed mode — fetch the content_object + body from the admin API.
           const c = await adminApi.getContent(id);

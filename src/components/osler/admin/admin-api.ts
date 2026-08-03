@@ -206,10 +206,19 @@ export const adminApi = {
   getConfig:       ()                            => req<Record<string, unknown>>("/v1/admin/config"),
   updateConfig:    (config: Record<string, unknown>) => req<{ ok: boolean }>("/v1/admin/config", "PUT", config),
 
-  listR2Keys:      (prefix: string, cursor?: string) =>
-                                                    req<{ items: Array<{ key: string; size: number; uploaded: string | null }>; cursor: string | null }>(`/v1/admin/content/r2-keys?prefix=${encodeURIComponent(prefix)}${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ""}`),
-  /** Delete an R2 key (only content-files/ and content-manifests/ allowed). */
+  listR2Keys:      (prefix: string, cursor?: string, scope?: "content-files" | "content-staging") =>
+                                                    req<{ items: Array<{ key: string; size: number; uploaded: string | null }>; cursor: string | null }>(`/v1/admin/content/r2-keys?prefix=${encodeURIComponent(prefix)}${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ""}${scope && scope !== "content-files" ? `&scope=${scope}` : ""}`),
+  /** Delete an R2 key (content-files/, content-staging/ and content-manifests/ allowed). */
   deleteR2Key:     (key: string)                 => req<{ ok: boolean }>(`/v1/admin/content/r2-key?key=${encodeURIComponent(key)}`, "DELETE"),
+  /** Move staged keys (content-staging/) into content-files/ so students can
+   *  see them, then rebuild manifests for the affected categories. */
+  publishStaged:   (keys: string[])              => req<{ ok: boolean; published: string[] }>("/v1/admin/content/publish-staged", "POST", { keys }),
+  /** Delete staged keys (content-staging/) without publishing them. */
+  discardStaged:   (keys: string[])              => req<{ ok: boolean; deleted: number }>("/v1/admin/content/discard-staged", "POST", { keys }),
+  /** Fetch the raw body of an R2 key (content-files/, content-staging/ or
+   *  content-manifests/). Admin only — used to preview/edit staged files
+   *  that aren't yet served by the public /v1/content/* endpoint. */
+  getR2Content:    (key: string)                 => req<{ body: string; contentType: string }>(`/v1/admin/content/r2-content?key=${encodeURIComponent(key)}`),
   /** Rename (move) an R2 key inside content-files/. */
   renameR2Key:     (from: string, to: string)    => req<{ ok: boolean; from: string; to: string }>("/v1/admin/content/r2-rename", "POST", { from, to }),
   /** Create an "empty folder" by writing a `.keep` placeholder. */

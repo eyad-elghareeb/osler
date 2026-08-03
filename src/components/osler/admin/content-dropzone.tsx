@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { UploadCloud, FileText, FileJson, Loader2, FolderOpen } from "lucide-react";
+import { UploadCloud, FileText, Loader2, FolderOpen } from "lucide-react";
 import { useI18n } from "@/components/osler/i18n-provider";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -21,16 +21,10 @@ export interface DroppedFile {
   /** File body — UTF-8 text for text files, a `data:` URI for binary files. */
   body: string;
   /** Path relative to the dropped/picked folder root (e.g.
-   *  "cardiology/images/x.png"). Only set in raw mode when the file came
-   *  from a folder; undefined for plain file drops. */
+   *  "cardiology/images/x.png"). Set when the file came from a folder;
+   *  undefined for plain file drops. */
   relativePath?: string;
 }
-
-/** Upload mode:
- *  - "managed": each .md/.json file becomes a new draft content_object.
- *  - "raw": files/folders are uploaded directly to the R2 keyspace under a
- *    chosen destination, preserving the folder structure. */
-export type DropzoneMode = "managed" | "raw";
 
 interface ContentDropzoneProps {
   /** Called when files are dropped or picked. The parent decides whether to
@@ -39,8 +33,6 @@ interface ContentDropzoneProps {
   /** Compact variant — smaller padding for inline use. */
   compact?: boolean;
   className?: string;
-  /** Upload mode. Defaults to "managed". */
-  mode?: DropzoneMode;
 }
 
 const TEXT_EXT = /\.(md|markdown|json|html?|svg|xml|css|txt)$/i;
@@ -69,40 +61,27 @@ export function ContentDropzone({
   onFiles,
   compact = false,
   className,
-  mode = "managed",
 }: ContentDropzoneProps) {
   const { t } = useI18n();
   const inputRef = React.useRef<HTMLInputElement>(null);
   const folderInputRef = React.useRef<HTMLInputElement>(null);
   const [dragActive, setDragActive] = React.useState(false);
   const [busy, setBusy] = React.useState(false);
-  const raw = mode === "raw";
 
   async function handleFiles(fileList: FileList | File[], relativePaths?: Map<File, string>) {
     const files = Array.from(fileList);
     if (files.length === 0) return;
 
-    // Raw mode accepts any file type (content + images + PDFs + assets) so a
-    // whole content pack folder can be dropped as-is. Managed mode is
-    // restricted to the two content formats the studio editors understand.
-    const valid = raw ? files : files.filter((f) => f.name.endsWith(".md") || f.name.endsWith(".json"));
-    if (valid.length === 0) {
-      toast({ title: t("admin.content.dropzone.invalid"), variant: "destructive" });
-      return;
-    }
-    if (valid.length < files.length && !raw) {
-      toast({
-        title: t("admin.content.dropzone.invalid"),
-        variant: "destructive",
-      });
-    }
+    // The merged workflow accepts any file type (content + images + PDFs +
+    // assets) so a whole content pack folder can be dropped as-is.
+    const valid = files;
 
     setBusy(true);
     try {
       const dropped: DroppedFile[] = [];
       for (const file of valid) {
         const body = await readAsUploadBody(file);
-        const rel = raw ? relativePaths?.get(file) ?? file.name : undefined;
+        const rel = relativePaths?.get(file) ?? file.name;
         dropped.push({
           file,
           contentType: guessContentType(file.name),
@@ -130,13 +109,9 @@ export function ContentDropzone({
     setDragActive(false);
     if (!e.dataTransfer.files || e.dataTransfer.files.length === 0) return;
 
-    if (raw) {
-      // Walk the drop entries so folder structure (webkitGetAsEntry) survives.
-      const { files: walked, paths } = await walkDropEntries(e.dataTransfer);
-      await handleFiles(walked, paths);
-    } else {
-      await handleFiles(e.dataTransfer.files);
-    }
+    // Walk the drop entries so folder structure (webkitGetAsEntry) survives.
+    const { files: walked, paths } = await walkDropEntries(e.dataTransfer);
+    await handleFiles(walked, paths);
   }
 
   function handleDragOver(e: React.DragEvent) {
@@ -151,12 +126,8 @@ export function ContentDropzone({
     setDragActive(false);
   }
 
-  const subtitle = raw
-    ? t("admin.content.dropzone.rawSubtitle")
-    : t("admin.content.dropzone.subtitle");
-  const hint = raw
-    ? t("admin.content.dropzone.rawHint")
-    : t("admin.content.dropzone.hint");
+  const subtitle = t("admin.content.dropzone.subtitle");
+  const hint = t("admin.content.dropzone.hint");
 
   return (
     <div
@@ -182,7 +153,6 @@ export function ContentDropzone({
       <input
         ref={inputRef}
         type="file"
-        accept={raw ? undefined : ".md,.json,.markdown"}
         multiple
         className="hidden"
         onChange={(e) => {
@@ -191,26 +161,24 @@ export function ContentDropzone({
           e.target.value = "";
         }}
       />
-      {raw && (
-        <input
-          ref={folderInputRef}
-          type="file"
-          multiple
-          className="hidden"
-          {...({ webkitdirectory: "", directory: "" } as any)}
-          onChange={(e) => {
-            if (e.target.files) {
-              const paths = new Map<File, string>();
-              for (const f of Array.from(e.target.files)) {
-                const rel = (f as any).webkitRelativePath || "";
-                if (rel) paths.set(f, rel);
-              }
-              handleFiles(e.target.files, paths);
+      <input
+        ref={folderInputRef}
+        type="file"
+        multiple
+        className="hidden"
+        {...({ webkitdirectory: "", directory: "" } as any)}
+        onChange={(e) => {
+          if (e.target.files) {
+            const paths = new Map<File, string>();
+            for (const f of Array.from(e.target.files)) {
+              const rel = (f as any).webkitRelativePath || "";
+              if (rel) paths.set(f, rel);
             }
-            e.target.value = "";
-          }}
-        />
-      )}
+            handleFiles(e.target.files, paths);
+          }
+          e.target.value = "";
+        }}
+      />
 
       {busy ? (
         <Loader2 className="size-6 text-primary animate-spin mb-2" />
@@ -233,21 +201,10 @@ export function ContentDropzone({
       {!compact && (
         <>
           <div className="flex items-center gap-2 mt-3 text-xs text-muted-foreground">
-            {raw ? (
-              <>
-                <FileText className="size-3.5" />
-                <span>{t("admin.content.dropzone.anyFiles")}</span>
-                <FolderOpen className="size-3.5 ms-2" />
-                <span>{t("admin.content.dropzone.folders")}</span>
-              </>
-            ) : (
-              <>
-                <FileText className="size-3.5" />
-                <span>.md</span>
-                <FileJson className="size-3.5 ms-2" />
-                <span>.json</span>
-              </>
-            )}
+            <FileText className="size-3.5" />
+            <span>{t("admin.content.dropzone.anyFiles")}</span>
+            <FolderOpen className="size-3.5 ms-2" />
+            <span>{t("admin.content.dropzone.folders")}</span>
           </div>
           <div className="flex items-center gap-2 mt-3">
             <Button
@@ -260,19 +217,17 @@ export function ContentDropzone({
             >
               {t("admin.content.dropzone.browse")}
             </Button>
-            {raw && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  folderInputRef.current?.click();
-                }}
-              >
-                <FolderOpen className="size-3.5 me-1.5" />
-                {t("admin.content.dropzone.browseFolder")}
-              </Button>
-            )}
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={(e) => {
+                e.stopPropagation();
+                folderInputRef.current?.click();
+              }}
+            >
+              <FolderOpen className="size-3.5 me-1.5" />
+              {t("admin.content.dropzone.browseFolder")}
+            </Button>
           </div>
           <p className="mt-2 text-xs text-muted-foreground/70 max-w-xs">
             {hint}
@@ -362,36 +317,20 @@ async function walkDropEntries(
   return { files, paths };
 }
 
-// ── Upload helpers — upload a DroppedFile as a new content object ──────────
+// ── Upload helper — stage a dropped file into content-staging/ ─────────────
 
-export async function uploadDroppedFile(d: DroppedFile): Promise<string> {
-  // Try to parse JSON to validate before upload
-  if (d.contentType !== "library") {
-    try {
-      JSON.parse(d.body);
-    } catch (err) {
-      throw new Error(`Invalid JSON in ${d.file.name}: ${String(err)}`);
-    }
-  }
-  const res = await adminApi.createContent({
-    contentType: d.contentType,
-    title: d.title,
-    language: d.language,
-    content: d.body,
-  });
-  return res.id;
-}
-
-/** Upload a file into the raw R2 keyspace under `destination`, preserving its
- *  relative folder path (e.g. destination "qbank/cardiology" + relative path
- *  "images/x.png" → "content-files/qbank/cardiology/images/x.png"). Returns
- *  the full R2 key that was written. */
-export async function uploadDroppedFileRaw(d: DroppedFile, destination: string): Promise<string> {
+/** Upload a file into the private staging keyspace under `destination`,
+ *  preserving its relative folder path (e.g. destination "qbank/cardiology" +
+ *  relative path "images/x.png" →
+ *  "content-staging/qbank/cardiology/images/x.png"). Staged files are not
+ *  student-visible until a "Publish" action moves them into content-files/.
+ *  Returns the full R2 key that was written. */
+export async function uploadStagedFile(d: DroppedFile, destination: string): Promise<string> {
   const dest = destination.replace(/^\/+|\/+$/g, "");
   const rel = (d.relativePath || d.file.name).replace(/^\/+/, "");
-  const key = `content-files/${dest ? `${dest}/` : ""}${rel}`;
+  const key = `content-staging/${dest ? `${dest}/` : ""}${rel}`;
 
-  // Validate JSON before it reaches R2 so the student app never fetches
+  // Validate JSON before it reaches R2 so publishing never surfaces
   // malformed content.
   if (/\.json$/i.test(key)) {
     try {

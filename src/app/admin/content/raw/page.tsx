@@ -14,7 +14,7 @@ export default function AdminRawContentEditorPage() {
   const params = useSearchParams();
   const key = params.get("key") ?? "";
 
-  if (!key || !key.startsWith("content-files/")) {
+  if (!key || (!key.startsWith("content-files/") && !key.startsWith("content-staging/"))) {
     return (
       <AdminPageFrame title={t("admin.content.title")} subtitle={t("admin.content.rawInvalidKey")}>
         <EmptyState
