@@ -1477,6 +1477,7 @@ export const en = {
     "admin.content.newFolderDesc": "Path under content-files/. A placeholder .keep file will be created.",
     "admin.content.renameTitle": "Rename / move",
     "admin.content.renameDesc": "New path under content-files/. The original file will be deleted after the copy.",
+    "admin.content.invalidPath": "Invalid path",
     // Content browser context menu
     "admin.content.context.open": "Open editor",
     "admin.content.context.preview": "Preview",

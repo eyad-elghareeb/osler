@@ -1952,7 +1952,7 @@ async function handleAdmin(request: Request, env: Env, session: Session, url: UR
       const src = await env.CONTENT.get(from);
       if (!src) return json({ error: "Source key not found" }, 404, origin, log);
       const buf = await src.arrayBuffer();
-      const ct2 = from.endsWith(".json") ? "application/json" : from.endsWith(".md") ? "text/markdown" : "application/octet-stream";
+      const ct2 = guessImageContentType(to);
       await env.CONTENT.put(to, buf, { httpMetadata: { contentType: ct2 } });
       await env.CONTENT.delete(from);
       await auditLog(env, session.user.id, "rename_r2_key", null, { from, to }, log);
@@ -2348,6 +2348,7 @@ export default {
       if (request.method === "GET" && url.pathname.startsWith("/v1/content/")) {
         if (!rateLimit(ip, "content")) return json({ error: "Too many requests" }, 429, origin, log);
         const contentPath = url.pathname.slice("/v1/content/".length).replace(/\/{2,}/g, "/");
+        if (!contentPath || contentPath.includes("..") || contentPath.includes("\\") || contentPath.startsWith("/")) return json({ error: "Not found" }, 404, origin, log);
         if (!env.CONTENT) return json({ error: "Content storage not configured" }, 503, origin, log);
         const r2Key = `content-files/${contentPath}`;
         const obj = await env.CONTENT.get(r2Key);
@@ -2378,8 +2379,14 @@ export default {
 
       // ── Public content manifests (R2-backed) ──
       if (request.method === "GET" && url.pathname.startsWith("/v1/content-manifests/")) {
+        if (!rateLimit(ip, "content")) return json({ error: "Too many requests" }, 429, origin, log);
         const manifestPath = url.pathname.slice("/v1/content-manifests/".length).replace(/\/{2,}/g, "/");
         if (!env.CONTENT) return json({ error: "Content storage not configured" }, 503, origin, log);
+        // Only the known category manifests are public — never let a path
+        // escape the content-manifests keyspace or reach non-manifest keys.
+        const category = manifestPath.split("/")[0];
+        if (!manifestPath || !category || !(category in CATEGORY_TYPE_MAP)) return json({ error: "Not found" }, 404, origin, log);
+        if (manifestPath.includes("..") || manifestPath.includes("\\")) return json({ error: "Not found" }, 404, origin, log);
         const r2Key = `content-manifests/${manifestPath}`;
         const obj = await env.CONTENT.get(r2Key);
         if (!obj) return json({ error: "Not found" }, 404, origin, log);

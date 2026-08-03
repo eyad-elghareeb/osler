@@ -291,6 +291,16 @@ export function ContentBrowser({ capabilities }: ContentBrowserProps) {
   }
 
   // ── Context menu action handlers ────────────────────────────────────────
+  /** Reject traversal / absolute / backslash paths in the dialog field so
+   *  they never reach the worker (which also validates server-side). */
+  const pathError = (raw: string): string | null => {
+    const p = raw.replace(/^\/+/, "");
+    if (!p) return "Required";
+    if (p.split("/").some((seg) => seg === "..") || p.includes("\\") || p.startsWith("/")) {
+      return "Invalid path — cannot contain '..' or '\\'";
+    }
+    return null;
+  };
   function openNewFileDialog(parentPath: string) {
     setDialogParent(parentPath);
     setDialogPath(parentPath ? `${parentPath}/new-file.json` : "new-file.json");
@@ -309,6 +319,8 @@ export function ContentBrowser({ capabilities }: ContentBrowserProps) {
 
   async function createNewR2File() {
     if (!capabilities.manageUsers) return;
+    const pathErr = pathError(dialogPath);
+    if (pathErr) { toast({ title: t("admin.content.invalidPath"), description: pathErr, variant: "destructive" }); return; }
     const key = `content-files/${dialogPath.replace(/^\/+/, "")}`;
     const isJson = key.endsWith(".json");
     const isMd = key.endsWith(".md");
@@ -325,6 +337,8 @@ export function ContentBrowser({ capabilities }: ContentBrowserProps) {
 
   async function createNewR2Folder() {
     if (!capabilities.manageUsers) return;
+    const pathErr = pathError(dialogPath);
+    if (pathErr) { toast({ title: t("admin.content.invalidPath"), description: pathErr, variant: "destructive" }); return; }
     const path = `content-files/${dialogPath.replace(/^\/+/, "")}`;
     try {
       await adminApi.createR2Folder(path);
@@ -338,6 +352,8 @@ export function ContentBrowser({ capabilities }: ContentBrowserProps) {
 
   async function renameR2Key() {
     if (!capabilities.manageUsers) return;
+    const pathErr = pathError(dialogPath);
+    if (pathErr) { toast({ title: t("admin.content.invalidPath"), description: pathErr, variant: "destructive" }); return; }
     try {
       await adminApi.renameR2Key(dialogParent, `content-files/${dialogPath.replace(/^\/+/, "")}`);
       toast({ title: t("admin.toast.renamed", { path: dialogPath }) });

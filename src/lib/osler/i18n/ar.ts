@@ -1472,6 +1472,7 @@ export const ar = {
     "admin.content.newFolderDesc": "المسار ضمن content-files/. سيتم إنشاء ملف .keep صفي.",
     "admin.content.renameTitle": "إعادة تسمية / نقل",
     "admin.content.renameDesc": "المسار الجديد ضمن content-files/. سيتم حذف الملف الأصلي بعد النسخ.",
+    "admin.content.invalidPath": "مسار غير صالح",
     // Content browser context menu
     "admin.content.context.open": "فتح المحرر",
     "admin.content.context.preview": "معاينة",
