@@ -851,9 +851,18 @@ function buildUid(type: string, segments: string[]): string { return [type, ...s
 async function regenerateManifestForCategory(env: Env, category: string): Promise<any> {
   if (!env.CONTENT) return null;
   const prefix = `content-files/${category}/`;
-  const listed = await env.CONTENT.list({ prefix, limit: 1000 });
-  if (!listed || !listed.objects) return null;
-  const keys = listed.objects.map((o: any) => o.key);
+  const keys: string[] = [];
+  // list() returns at most 1000 keys per page — a category with more files
+  // than that would silently drop entries from the manifest if we only
+  // fetched the first page. Page through the keyspace (capped at 10k).
+  let cursor: string | undefined = undefined;
+  for (let page = 0; page < 10; page++) {
+    const listed: any = await env.CONTENT.list({ prefix, limit: 1000, cursor });
+    if (!listed || !listed.objects) return null;
+    keys.push(...listed.objects.map((o: any) => o.key));
+    if (!listed.truncated) break;
+    cursor = listed.cursor;
+  }
   const folders = new Map<string, { files: string[]; images: string[] }>();
   for (const fullKey of keys) {
     const rel = fullKey.slice(prefix.length);
@@ -1829,6 +1838,12 @@ async function handleAdmin(request: Request, env: Env, session: Session, url: UR
       const raw = typeof body.body === "string" ? body.body : "";
       if (!key || !raw) return json({ error: "key and body required" }, 400, origin, log);
       if (key.length > 1024) return json({ error: "key too long" }, 400, origin, log);
+      // Only the content keyspaces are writable, and keys must stay inside
+      // them — reject traversal (`..`), backslash paths, and absolute paths so
+      // a bad/malicious key can't create an object outside content-files/.
+      const isContentKey = key.startsWith("content-files/") || key.startsWith("content-staging/") || key.startsWith("content-manifests/");
+      const isSafePath = !key.includes("..") && !key.includes("\\") && !key.startsWith("/");
+      if (!isContentKey || !isSafePath) return json({ error: "Invalid key" }, 400, origin, log);
       const ext = key.split(".").pop()?.toLowerCase() ?? "";
       let content: any; let ct: string;
       if (raw.startsWith("data:")) {
@@ -1873,25 +1888,40 @@ async function handleAdmin(request: Request, env: Env, session: Session, url: UR
       const body = await readJson(request);
       const keys = Array.isArray(body.keys) ? body.keys.filter((k: any): k is string => typeof k === "string" && k.startsWith("content-staging/")) : [];
       if (!keys.length) return json({ error: "keys required" }, 400, origin, log);
+      // Dedupe (a folder's staged children can be collected more than once)
+      // and skip folder placeholders that carry no student-facing content.
+      const unique = [...new Set(keys)].filter((k): k is string => typeof k === "string" && !k.endsWith("/") && !k.endsWith("/.keep"));
       const categories = new Set<string>();
       const published: string[] = [];
-      for (const key of keys) {
+      let failed = 0;
+      for (const key of unique) {
         const rel = key.slice("content-staging/".length);
-        const src = await env.CONTENT.get(key);
-        if (!src) continue;
-        const buf = await src.arrayBuffer();
-        const ct = guessImageContentType(rel);
-        const dstKey = `content-files/${rel}`;
-        await env.CONTENT.put(dstKey, buf, { httpMetadata: { contentType: ct } });
-        await env.CONTENT.delete(key);
-        published.push(dstKey);
         const cat = rel.split("/")[0];
-        if (cat) categories.add(cat);
+        // Guard against staged keys whose top-level segment isn't a content
+        // category — regenerating a manifest for a bogus category would
+        // create a junk manifest the student app may end up fetching.
+        if (!cat || !(cat in CATEGORY_TYPE_MAP)) { failed += 1; continue; }
+        try {
+          const src = await env.CONTENT.get(key);
+          if (!src) continue;
+          const buf = await src.arrayBuffer();
+          const ct = guessImageContentType(rel);
+          const dstKey = `content-files/${rel}`;
+          await env.CONTENT.put(dstKey, buf, { httpMetadata: { contentType: ct } });
+          await env.CONTENT.delete(key);
+          published.push(dstKey);
+          categories.add(cat);
+        } catch (e) {
+          // A single failed copy must not abort the whole batch — the staged
+          // key stays in place so the admin can retry or discard it.
+          failed += 1;
+          console.error("publish-staged copy failed:", key, e);
+        }
       }
       for (const cat of categories) {
         try { await regenerateManifestForCategory(env, cat); } catch (e) { console.error("manifest regen failed:", e); }
       }
-      await auditLog(env, session.user.id, "publish_staged", null, { keys: keys.length, published: published.length }, log);
+      await auditLog(env, session.user.id, "publish_staged", null, { keys: unique.length, published: published.length, failed }, log);
       return json({ ok: true, published }, 200, origin, log);
     }
     if (request.method === "POST" && path === "/v1/admin/content/discard-staged") {
@@ -1916,6 +1946,7 @@ async function handleAdmin(request: Request, env: Env, session: Session, url: UR
       const to = typeof body.to === "string" ? body.to.trim() : "";
       if (!from || !to) return json({ error: "from and to required" }, 400, origin, log);
       if (!from.startsWith("content-files/") || !to.startsWith("content-files/")) return json({ error: "Only content-files/ keys" }, 400, origin, log);
+      if (from.includes("..") || from.includes("\\") || to.includes("..") || to.includes("\\")) return json({ error: "Invalid key" }, 400, origin, log);
       const src = await env.CONTENT.get(from);
       if (!src) return json({ error: "Source key not found" }, 404, origin, log);
       const buf = await src.arrayBuffer();
@@ -1931,6 +1962,7 @@ async function handleAdmin(request: Request, env: Env, session: Session, url: UR
       const body = await readJson(request);
       const pathArg = typeof body.path === "string" ? body.path.trim().replace(/^\/+|\/+$/g, "") : "";
       if (!pathArg || !pathArg.startsWith("content-files/")) return json({ error: "path must start with content-files/" }, 400, origin, log);
+      if (pathArg.includes("..") || pathArg.includes("\\")) return json({ error: "Invalid path" }, 400, origin, log);
       await env.CONTENT.put(pathArg + "/.keep", "", { httpMetadata: { contentType: "text/plain" } });
       await auditLog(env, session.user.id, "create_r2_folder", null, { path: pathArg }, log);
       return json({ ok: true, key: pathArg + "/.keep" }, 200, origin, log);
@@ -2122,7 +2154,7 @@ async function handleAdmin(request: Request, env: Env, session: Session, url: UR
     const cim = path.match(/^\/v1\/admin\/content\/([^/]+)(\/(.+))?$/);
     if (cim) {
       const objectId = cim[1]; const action = cim[3] || null;
-      if (["pending","upload-file","r2-keys","r2-key","r2-rename","r2-folder","regenerate-manifest","validate","by-r2-key","adopt"].includes(objectId)) return json({ error: "Not found" }, 404, origin, log);
+      if (["pending","upload-file","r2-keys","r2-key","r2-content","r2-rename","r2-folder","regenerate-manifest","validate","by-r2-key","adopt","publish-staged","discard-staged"].includes(objectId)) return json({ error: "Not found" }, 404, origin, log);
       const obj = await env.DB.prepare("SELECT * FROM content_objects WHERE id = ?").bind(objectId).first<any>();
       if (!obj) return json({ error: "Content not found" }, 404, origin, log);
       if (!isAdmin(session) && obj.created_by !== session.user.id && obj.status !== "published") return json({ error: "Forbidden" }, 403, origin, log);

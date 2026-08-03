@@ -164,7 +164,7 @@ export function ContentBrowser({ capabilities }: ContentBrowserProps) {
         const res = await adminApi.listContent("all");
         allObjects = res.items || [];
       } catch (err: any) {
-        if (err?.status === 503) { setR2Missing(true); setUnifiedObjects([]); setUnifiedR2ByCat({}); return; }
+        if (err?.status === 503) { setR2Missing(true); setUnifiedObjects([]); setUnifiedR2ByCat({}); setUnifiedStagedByCat({}); return; }
         throw err;
       }
 
@@ -1091,7 +1091,7 @@ function PreviewPane({ node, tab }: { node: ContentTreeNode; tab: Tab }) {
               {t("admin.content.tree.managedBadge")}
             </span>
           )}
-          {!node.managed && node.r2Key && (
+          {!node.managed && !node.staged && node.r2Key && (
             <span className="inline-flex rounded-full border px-2 py-0.5 text-[11px] font-medium bg-muted text-muted-foreground border-border">
               {t("admin.content.tree.looseBadge")}
             </span>
