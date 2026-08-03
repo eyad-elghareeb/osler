@@ -72,6 +72,7 @@ import {
 } from "@/components/osler/admin/content-tree-pane";
 import {
   ContentDropzone,
+  stagedKeyFor,
   uploadStagedFile,
   type DroppedFile,
 } from "@/components/osler/admin/content-dropzone";
@@ -1383,8 +1384,19 @@ function UploadDialog({
     if (dropped.length === 0) return;
     haptic("light");
     setUploading(true);
+    // Dedupe by target key so re-dropping the same file/folder (or dropping
+    // a folder plus one of its files) never uploads the same staging key
+    // twice — the second write would just clobber the first. An invalid path
+    // (traversal/backslash) falls back to uploading everything; per-file
+    // errors are surfaced by the uploadFailed toast below.
+    let unique = dropped;
+    try {
+      unique = Array.from(
+        new Map(dropped.map((d) => [stagedKeyFor(d, destination), d])).values(),
+      );
+    } catch {}
     let success = 0;
-    for (const d of dropped) {
+    for (const d of unique) {
       try {
         await uploadStagedFile(d, destination);
         success += 1;
@@ -1451,7 +1463,26 @@ function UploadDialog({
           )}
 
           <ContentDropzone
-            onFiles={(files) => setDropped((prev) => [...prev, ...files])}
+            onFiles={(files) => {
+              // Keep the queue free of entries that would land on the same
+              // staging key as one already queued (same path + destination).
+              setDropped((prev) => {
+                try {
+                  const seen = new Set(prev.map((p) => stagedKeyFor(p, destination)));
+                  const fresh = files.filter((f) => {
+                    const k = stagedKeyFor(f, destination);
+                    if (seen.has(k)) return false;
+                    seen.add(k);
+                    return true;
+                  });
+                  return fresh.length > 0 ? [...prev, ...fresh] : prev;
+                } catch {
+                  // Invalid path (traversal/backslash) — queue it as-is and
+                  // let handleUpload surface the per-file error.
+                  return [...prev, ...files];
+                }
+              });
+            }}
           />
 
           {dropped.length > 0 && (
@@ -1572,11 +1603,17 @@ function buildUnifiedTree(
   managed: ContentObject[],
   statusFilter: string,
 ): ContentTreeNode[] {
-  // Map every managed object's expected R2 file basename → object.
-  // Mirrors hybridPublish(): for content_type "library" the file is
-  // `<objectId>.md`, otherwise `<objectId>.json`.
+  // Map every managed object's expected R2 file basename → object, plus an
+  // exact map of the published_r2_key each object last wrote. The basename
+  // map mirrors hybridPublish()'s default path (<objectId>.md/.json); the
+  // published_r2_key map covers custom targetPath publishes so a managed
+  // object is never shown as "loose" (which previously produced a phantom
+  // duplicate under "drafts (managed only)" and let adopt() re-adopt the
+  // same file into a second object).
   const managedByBasename = new Map<string, ContentObject>();
+  const managedByPublishedKey = new Map<string, ContentObject>();
   for (const obj of managed) {
+    if (obj.published_r2_key) managedByPublishedKey.set(obj.published_r2_key, obj);
     const tail = (obj.r2_key_base || "").split("/").pop();
     if (!tail) continue;
     const expected = obj.content_type === "library" ? `${tail}.md` : `${tail}.json`;
@@ -1621,8 +1658,10 @@ function buildUnifiedTree(
     const fileName = parts.pop() ?? "";
     if (fileName === ".keep") continue;
 
-    // Match the file against a managed object
-    const matched = managedByBasename.get(fileName);
+    // Match the file against a managed object. The exact published_r2_key
+    // wins (it's authoritative for custom targetPaths); fall back to the
+    // default basename shape.
+    const matched = managedByPublishedKey.get(item.key) ?? managedByBasename.get(fileName);
     const passesFilter = !matched || statusFilter === "all" || matched.status === statusFilter;
     if (matched && !passesFilter) continue; // hide managed leaves that don't match the status filter
 

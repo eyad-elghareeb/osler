@@ -319,13 +319,11 @@ async function walkDropEntries(
 
 // ── Upload helper — stage a dropped file into content-staging/ ─────────────
 
-/** Upload a file into the private staging keyspace under `destination`,
- *  preserving its relative folder path (e.g. destination "qbank/cardiology" +
- *  relative path "images/x.png" →
- *  "content-staging/qbank/cardiology/images/x.png"). Staged files are not
- *  student-visible until a "Publish" action moves them into content-files/.
- *  Returns the full R2 key that was written. */
-export async function uploadStagedFile(d: DroppedFile, destination: string): Promise<string> {
+/** Compute the full staging key a dropped file will land at, given a
+ *  destination (e.g. "qbank/cardiology"). Mirrors the key build in
+ *  `uploadStagedFile` so the upload dialog can dedupe the queue by the
+ *  exact key a re-drop would overwrite. Throws on invalid paths. */
+export function stagedKeyFor(d: DroppedFile, destination: string): string {
   const dest = destination.replace(/^\/+|\/+$/g, "");
   const rel = (d.relativePath || d.file.name).replace(/^\/+/, "");
   // Reject traversal / absolute / backslash paths client-side so a bad
@@ -334,7 +332,17 @@ export async function uploadStagedFile(d: DroppedFile, destination: string): Pro
   if (badSeg(dest) || badSeg(rel)) {
     throw new Error("Invalid path — cannot contain '..' or '\\'");
   }
-  const key = `content-staging/${dest ? `${dest}/` : ""}${rel}`;
+  return `content-staging/${dest ? `${dest}/` : ""}${rel}`;
+}
+
+/** Upload a file into the private staging keyspace under `destination`,
+ *  preserving its relative folder path (e.g. destination "qbank/cardiology" +
+ *  relative path "images/x.png" →
+ *  "content-staging/qbank/cardiology/images/x.png"). Staged files are not
+ *  student-visible until a "Publish" action moves them into content-files/.
+ *  Returns the full R2 key that was written. */
+export async function uploadStagedFile(d: DroppedFile, destination: string): Promise<string> {
+  const key = stagedKeyFor(d, destination);
 
   // Validate JSON before it reaches R2 so publishing never surfaces
   // malformed content.
@@ -342,7 +350,7 @@ export async function uploadStagedFile(d: DroppedFile, destination: string): Pro
     try {
       JSON.parse(d.body);
     } catch (err) {
-      throw new Error(`Invalid JSON in ${rel}: ${String(err)}`);
+      throw new Error(`Invalid JSON in ${(d.relativePath || d.file.name).replace(/^\/+/, "")}: ${String(err)}`);
     }
   }
 

@@ -761,6 +761,17 @@ async function hybridPublish(env: Env, obj: any, body: string, targetPath?: stri
   const ct = obj.content_type === "library" ? "text/markdown" : "application/json";
   await env.CONTENT.put(r2Key, body, { httpMetadata: { contentType: ct } });
 
+  // Remember the student-facing key so the admin UI and adopt() can match
+  // this object to its published file even when a custom targetPath was used
+  // (the basename match only covers the default "<objectId>.json" shape).
+  // Best-effort: a not-yet-migrated DB (missing the column) must not fail
+  // the publish itself.
+  try {
+    await env.DB.prepare("UPDATE content_objects SET published_r2_key = ? WHERE id = ?").bind(r2Key, obj.id).run();
+  } catch (e) {
+    console.error("published_r2_key update failed:", e);
+  }
+
   const hybridKeys: string[] = [r2Key];
 
   // ── Copy images (and any other asset files) from the draft's `images/`
@@ -2050,6 +2061,13 @@ async function handleAdmin(request: Request, env: Env, session: Session, url: UR
       const category = rel.slice(0, slash);
       const fileSegment = rel.slice(slash + 1);
 
+      // Fast path: an object that published to this exact key (covers custom
+      // targetPath publishes that the basename reconstruction below misses).
+      try {
+        const byPublished = await env.DB.prepare("SELECT co.*, u.username as creator_username FROM content_objects co JOIN users u ON u.id = co.created_by WHERE co.published_r2_key = ?").bind(key).first<any>();
+        if (byPublished) return json({ found: true, object: byPublished }, 200, origin, log);
+      } catch {}
+
       // Pull all candidate objects whose content_type maps to this category.
       // Cheap query — content_objects is small.
       const typeForCat = CATEGORY_TYPE_TO_TYPE[category];
@@ -2102,7 +2120,8 @@ async function handleAdmin(request: Request, env: Env, session: Session, url: UR
       const text = await raw.text();
 
       // Idempotency: if there's already a managed object that maps to this
-      // key, return it.
+      // key, return it. Two paths — the exact published_r2_key (covers
+      // custom targetPath publishes) and the default basename match.
       const rel = key.slice("content-files/".length);
       const slash = rel.indexOf("/");
       if (slash <= 0) return json({ error: "Invalid key shape" }, 400, origin, log);
@@ -2111,6 +2130,12 @@ async function handleAdmin(request: Request, env: Env, session: Session, url: UR
       const tail = fileSegment.split("/").pop() ?? fileSegment;
       const idBase = tail.replace(/\.[^.]+$/, "");
       const expectedKeyFor = (ct: string, oid: string) => ct === "library" ? `${oid}.md` : `${oid}.json`;
+      try {
+        const byPublished = await env.DB.prepare("SELECT * FROM content_objects WHERE published_r2_key = ?").bind(key).first<any>();
+        if (byPublished) {
+          return json({ id: byPublished.id, r2KeyBase: byPublished.r2_key_base, status: byPublished.status, adopted: false, alreadyExisted: true }, 200, origin, log);
+        }
+      } catch {}
       const candidateTypes = CATEGORY_TYPE_TO_TYPE[category] || [];
       for (const ct of candidateTypes) {
         const row = await env.DB.prepare("SELECT * FROM content_objects WHERE content_type = ? AND r2_key_base LIKE ?").bind(ct, `content/${ct}/%`).all<any>();
@@ -2224,6 +2249,11 @@ async function handleAdmin(request: Request, env: Env, session: Session, url: UR
         let targetPath: string | null = null; let doHybrid = true;
         try { const b: any = await request.clone().json(); if (typeof b.targetPath === "string") targetPath = b.targetPath.trim(); if (b.hybrid === false) doHybrid = false; } catch {}
         const hybridKeys = doHybrid ? await hybridPublish(env, obj, draft, targetPath) : [];
+        if (!doHybrid) {
+          // Publishing without a student-facing copy — drop any stale key
+          // from a previous hybrid publish.
+          try { await env.DB.prepare("UPDATE content_objects SET published_r2_key = NULL WHERE id = ?").bind(objectId).run(); } catch {}
+        }
         await env.DB.prepare("UPDATE content_objects SET status = 'published', reviewed_by = ?, reviewed_at = ?, rejection_reason = NULL, updated_at = ? WHERE id = ?").bind(session.user.id, now(), now(), objectId).run();
         await auditLog(env, session.user.id, "publish_direct", objectId, { title: obj.title, hybridKeys }, log);
         return json({ ok: true, status: "published", hybridKeys }, 200, origin, log);
@@ -2252,7 +2282,7 @@ async function handleAdmin(request: Request, env: Env, session: Session, url: UR
       }
       if (request.method === "POST" && action === "unpublish") {
         if (!isAdmin(session)) return json({ error: "Forbidden" }, 403, origin, log);
-        await env.DB.prepare("UPDATE content_objects SET status = 'draft', updated_at = ? WHERE id = ?").bind(now(), objectId).run();
+        await env.DB.prepare("UPDATE content_objects SET status = 'draft', published_r2_key = NULL, updated_at = ? WHERE id = ?").bind(now(), objectId).run();
         await auditLog(env, session.user.id, "unpublish", objectId, { title: obj.title }, log);
         return json({ ok: true, status: "draft" }, 200, origin, log);
       }

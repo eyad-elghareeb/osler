@@ -119,6 +119,12 @@ export function ContentEditor({ id, rawR2Key, capabilities }: ContentEditorProps
   const [artifactContentType, setArtifactContentType] = React.useState<"md" | "pdf" | "html">("md");
   const [adopting, setAdopting] = React.useState(false);
   const debounceRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Latest body, kept in a ref so the debounced autosave and a manual save
+  // always write the most recent content — never a stale snapshot captured
+  // when the timer was scheduled (which could otherwise land AFTER a newer
+  // save and revert the draft).
+  const bodyRef = React.useRef(body);
+  const savingRef = React.useRef(false);
 
   function inferModeFromBody(text: string, key: string) {
     // Infer artifact content type from the key extension.
@@ -157,6 +163,7 @@ export function ContentEditor({ id, rawR2Key, capabilities }: ContentEditorProps
             const res = await adminApi.getR2Content(rawR2Key);
             if (cancelled) return;
             const text = res.body;
+            bodyRef.current = text;
             setBody(text);
             inferModeFromBody(text, rawR2Key);
             return;
@@ -167,6 +174,7 @@ export function ContentEditor({ id, rawR2Key, capabilities }: ContentEditorProps
           if (!res.ok) throw new Error(`${res.status}`);
           const text = await res.text();
           if (cancelled) return;
+          bodyRef.current = text;
           setBody(text);
           inferModeFromBody(text, rawR2Key);
         } else if (id) {
@@ -174,6 +182,7 @@ export function ContentEditor({ id, rawR2Key, capabilities }: ContentEditorProps
           const c = await adminApi.getContent(id);
           if (cancelled) return;
           setObj(c);
+          bodyRef.current = c.body ?? "{}";
           setBody(c.body ?? "{}");
         }
       } catch {
@@ -206,30 +215,39 @@ export function ContentEditor({ id, rawR2Key, capabilities }: ContentEditorProps
   }, [obj, isRawMode, body]);
 
   function handleBodyChange(value: string) {
+    bodyRef.current = value;
     setBody(value);
     setDirty(true);
     if (validationErrors !== null) setValidationErrors(null);
     if (isRawMode) return; // no autosave in raw mode (would be confusing without explicit save)
     if (!settings.autoSaveDrafts) return;
     if (debounceRef.current) clearTimeout(debounceRef.current);
-    debounceRef.current = setTimeout(() => autoSave(value), 2500);
+    debounceRef.current = setTimeout(() => autoSave(), 2500);
   }
 
-  async function autoSave(value: string) {
+  async function autoSave() {
     if (!obj || !id) return;
-    try { await adminApi.saveDraft(id, value); setLastSavedAt(Date.now()); } catch {}
+    if (savingRef.current) return; // a manual save is in flight and writes the latest body
+    if (!dirty) return;            // nothing unsaved — a manual save already persisted it
+    try {
+      await adminApi.saveDraft(id, bodyRef.current);
+      setLastSavedAt(Date.now());
+    } catch {}
   }
 
   async function saveDraft() {
     haptic("light");
+    if (debounceRef.current) { clearTimeout(debounceRef.current); debounceRef.current = null; }
     setSaving(true);
+    savingRef.current = true;
+    const latest = bodyRef.current;
     try {
       if (isRawMode && rawR2Key) {
         // Save raw R2 key directly. The upload-file endpoint accepts a text
         // body or a data URI for binary assets — text is the common case.
-        await adminApi.uploadFile(rawR2Key, body);
+        await adminApi.uploadFile(rawR2Key, latest);
       } else if (id) {
-        await adminApi.saveDraft(id, body);
+        await adminApi.saveDraft(id, latest);
       } else {
         throw new Error("Nothing to save");
       }
@@ -239,6 +257,7 @@ export function ContentEditor({ id, rawR2Key, capabilities }: ContentEditorProps
     } catch {
       toast({ title: t("admin.toast.saveFailed"), variant: "destructive" });
     } finally {
+      savingRef.current = false;
       setSaving(false);
     }
   }
@@ -276,8 +295,11 @@ export function ContentEditor({ id, rawR2Key, capabilities }: ContentEditorProps
           ? t("admin.toast.adoptAlreadyManaged")
           : t("admin.toast.adopted", { id: res.id.slice(0, 8) }),
       });
-      // Route to the managed editor — preserve dirty state by saving first.
-      if (dirty) await saveDraft();
+      // Route to the managed editor. `adopt` reads the last-saved body from
+      // R2, so push any unsaved edits into the (new or existing) managed
+      // draft — otherwise they'd be lost on re-adopt of an already-managed
+      // file, or stale after a fresh adopt.
+      if (dirty) await adminApi.saveDraft(res.id, bodyRef.current).catch(() => {});
       router.replace(`/admin/content?id=${encodeURIComponent(res.id)}`);
     } catch (err: any) {
       toast({ title: t("admin.toast.adoptFailed", { error: String(err?.message ?? err) }), variant: "destructive" });
@@ -289,7 +311,7 @@ export function ContentEditor({ id, rawR2Key, capabilities }: ContentEditorProps
   async function submit() {
     if (!id) return;
     haptic("light");
-    await adminApi.saveDraft(id, body).catch(() => {});
+    await adminApi.saveDraft(id, bodyRef.current).catch(() => {});
     try {
       const res = await adminApi.submitForReview(id);
       setObj((o) => (o ? { ...o, status: res.status as any } : o));
@@ -304,7 +326,7 @@ export function ContentEditor({ id, rawR2Key, capabilities }: ContentEditorProps
   async function doPublish(targetPath?: string) {
     if (!id) return;
     haptic("light");
-    await adminApi.saveDraft(id, body).catch(() => {});
+    await adminApi.saveDraft(id, bodyRef.current).catch(() => {});
     try {
       const res = await adminApi.publishDirect(id, targetPath ? { targetPath } : {});
       setObj((o) => (o ? { ...o, status: res.status as any } : o));
@@ -387,7 +409,10 @@ export function ContentEditor({ id, rawR2Key, capabilities }: ContentEditorProps
     if (isLibrary) {
       // next can be a string (markdown) or { body, contentType }
       const nextBody = typeof next === "string" ? next : (next?.body ?? "");
-      setBody(nextBody);
+      // Route through handleBodyChange so dirty state, autosave, and the
+      // unsaved-changes guard all fire for library edits too (raw mode's
+      // Save button depends on `dirty` being set).
+      handleBodyChange(nextBody);
       // Store contentType on the component for publish path logic
       if (typeof next === "object" && next?.contentType) {
         setArtifactContentType(next.contentType);

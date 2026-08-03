@@ -89,6 +89,10 @@ export type ContentStatus = "draft" | "pending" | "published" | "rejected";
 export interface ContentObject {
   id: string;
   r2_key_base: string;
+  /** Student-facing R2 key this object last published to (e.g.
+   *  "content-files/qbank/cardiology/questions.json"). Set at publish time
+   *  when a hybrid copy was written; null for drafts / non-hybrid publishes. */
+  published_r2_key?: string | null;
   content_type: ContentType;
   title: string | null;
   language: string;
