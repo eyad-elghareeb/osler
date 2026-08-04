@@ -63,7 +63,8 @@ import {
   type ContentType,
   type AdminCapabilities,
 } from "@/components/osler/admin/admin-api";
-import { r2KeyToWorkerUrl } from "@/components/osler/admin/editors/image-upload";
+import { r2KeyToWorkerUrl, isImageR2Key, formatBytes } from "@/components/osler/admin/editors/image-upload";
+import { ImageLightbox } from "@/components/osler/admin/image-lightbox";
 import { useToast } from "@/hooks/use-toast";
 import {
   ContentTreePane,
@@ -1056,23 +1057,42 @@ function PreviewPane({ node }: { node: ContentTreeNode }) {
 function R2Preview({ node }: { node: ContentTreeNode }) {
   const { t } = useI18n();
   const [body, setBody] = React.useState<string | null>(null);
+  const [imageUrl, setImageUrl] = React.useState<string | null>(null);
+  const [lightboxOpen, setLightboxOpen] = React.useState(false);
   const [loading, setLoading] = React.useState(true);
+  const isImage = !!node.r2Key && isImageR2Key(node.r2Key);
   React.useEffect(() => {
     if (!node.r2Key) { setLoading(false); return; }
     setLoading(true);
     // Staged keys (content-staging/) are private — fetch through the admin
     // endpoint. Public keys are served straight from the Worker.
     if (node.r2Key.startsWith("content-staging/")) {
-      adminApi.getR2Content(node.r2Key)
-        .then((res) => setBody(res.body.slice(0, 8000)))
-        .catch(() => setBody(null))
-        .finally(() => setLoading(false));
+      if (isImage) {
+        adminApi.getR2Binary(node.r2Key)
+          .then((blob) => setImageUrl(URL.createObjectURL(blob)))
+          .catch(() => setImageUrl(null))
+          .finally(() => setLoading(false));
+      } else {
+        adminApi.getR2Content(node.r2Key)
+          .then((res) => setBody(res.body.slice(0, 8000)))
+          .catch(() => setBody(null))
+          .finally(() => setLoading(false));
+      }
       return;
     }
     const url = r2KeyToWorkerUrl(node.r2Key);
     if (!url) {
       setBody(null);
+      setImageUrl(null);
       setLoading(false);
+      return;
+    }
+    if (isImage) {
+      fetch(url)
+        .then((r) => r.ok ? r.blob() : Promise.reject(new Error(`${r.status}`)))
+        .then((blob) => setImageUrl(URL.createObjectURL(blob)))
+        .catch(() => setImageUrl(null))
+        .finally(() => setLoading(false));
       return;
     }
     fetch(url)
@@ -1080,7 +1100,59 @@ function R2Preview({ node }: { node: ContentTreeNode }) {
       .then((text) => setBody(text.slice(0, 8000)))
       .catch(() => setBody(null))
       .finally(() => setLoading(false));
-  }, [node.r2Key]);
+  }, [node.r2Key, isImage]);
+  // Clean up object URLs when the preview unmounts or changes.
+  React.useEffect(() => {
+    return () => { if (imageUrl) URL.revokeObjectURL(imageUrl); };
+  }, [imageUrl]);
+
+  if (isImage) {
+    return (
+      <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
+        <div className="flex-1 min-h-0 overflow-auto medos-scroll-y border border-border rounded-xl bg-muted/30 p-3 flex items-center justify-center">
+          {loading ? (
+            <div className="text-xs text-muted-foreground text-center py-6">{t("common.loading")}</div>
+          ) : imageUrl ? (
+            <button
+              type="button"
+              onClick={() => setLightboxOpen(true)}
+              className="group relative block max-h-full"
+              aria-label={t("admin.preview.previewImage")}
+              title={t("admin.preview.previewImage")}
+            >
+              <img
+                src={imageUrl}
+                alt={node.name}
+                className="max-h-[40vh] max-w-full rounded-lg border border-border object-contain"
+                onError={(e) => {
+                  const el = e.currentTarget as HTMLImageElement;
+                  el.style.opacity = "0.3";
+                  el.style.background = "oklch(0.92 0 0)";
+                }}
+              />
+              <span className="absolute inset-0 flex items-center justify-center bg-primary/0 text-primary opacity-0 transition-opacity group-hover:bg-primary/10 group-hover:opacity-100 rounded-lg">
+                <Eye className="size-6" />
+              </span>
+            </button>
+          ) : (
+            <div className="text-xs text-muted-foreground text-center py-6">{t("admin.content.previewUnavailableR2")}</div>
+          )}
+        </div>
+        <div className="mt-1.5 shrink-0 text-[11px] text-muted-foreground">
+          {node.name}{node.size != null ? ` · ${formatBytes(node.size)}` : ""}
+        </div>
+        <ImageLightbox
+          open={lightboxOpen}
+          onOpenChange={setLightboxOpen}
+          src={imageUrl ?? ""}
+          alt={node.name}
+          fileName={node.name}
+          sizeBytes={node.size}
+        />
+      </div>
+    );
+  }
+
   return (
     <div className="flex-1 min-h-0 overflow-auto medos-scroll-y border border-border rounded-xl bg-card p-3">
       {loading ? (

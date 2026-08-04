@@ -57,6 +57,7 @@ import {
   uploadImageForEditor,
   resolveImageForPreview,
   isImageFile,
+  formatBytes,
 } from "./image-upload";
 
 interface ToolbarAction {
@@ -389,7 +390,12 @@ export function MarkdownEditor({
       const altText = file.name.replace(/\.[^.]+$/, "").replace(/[_-]+/g, " ").trim() || "image";
       insertAtCursor(`![${altText}](${result.ref})`);
       toast({
-        title: t("admin.markdown.uploaded", { name: file.name }),
+        title: result.converted
+          ? t("admin.markdown.optimized", {
+              before: formatBytes(result.originalBytes),
+              after: formatBytes(result.optimizedBytes),
+            })
+          : t("admin.markdown.uploaded", { name: file.name }),
         description: result.key,
       });
     } catch (err: any) {

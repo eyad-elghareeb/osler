@@ -1933,6 +1933,22 @@ async function handleAdmin(request: Request, env: Env, session: Session, url: UR
       if (!key || (!key.startsWith("content-files/") && !key.startsWith("content-staging/") && !key.startsWith("content-manifests/"))) return json({ error: "Invalid key" }, 400, origin, log);
       const obj = await env.CONTENT.get(key);
       if (!obj) return json({ error: "Not found" }, 404, origin, log);
+      // `?raw=1` returns the object's bytes as-is (with its real content
+      // type) instead of decoding to text — used by the admin content browser
+      // to preview staged binary assets like images, which would otherwise
+      // come back as corrupted text via the JSON wrapper.
+      if (url.searchParams.get("raw") === "1") {
+        const buf = await obj.arrayBuffer();
+        return new Response(buf, {
+          status: 200,
+          headers: {
+            "content-type": obj.httpMetadata?.contentType ?? "application/octet-stream",
+            "cache-control": "no-store",
+            ...cors(origin),
+            ...SECURITY_HEADERS,
+          } as any,
+        });
+      }
       const body = await obj.text();
       return json({ body, contentType: obj.httpMetadata?.contentType ?? "application/octet-stream" }, 200, origin, log);
     }

@@ -1490,6 +1490,10 @@ export const ar = {
     "admin.content.stagedPreviewHint": "عنصر R2 مخزّن (خاص). انقر بالزر الأيمن للنشر أو التجاهل.",
     "admin.content.rawInvalidKey": "مفتاح خام غير صالح",
     "admin.content.rawInvalidKeyDesc": "يجب أن يشير المعامل ?key= إلى مسار content-files/ أو content-staging/ .",
+    // معاينة الصور في لوحة الإدارة
+    "admin.preview.image": "صورة",
+    "admin.preview.dimensions": "{w} × {h}بكسل",
+    "admin.preview.previewImage": "معاينة الصورة",
     // Content browser toasts
     "admin.toast.created": "تم الإنشاء {path}",
     "admin.toast.createFailed": "فشل الإنشاء: {error}",
@@ -1639,6 +1643,7 @@ export const ar = {
     "admin.markdown.preview": "معاينة",
     "admin.markdown.uploadImage": "رفع صورة",
     "admin.markdown.uploaded": "تم رفع {name}",
+    "admin.markdown.optimized": "تم الضغط إلى WebP: {before} ← {after}",
     "admin.markdown.uploadFailed": "فشل رفع الصورة",
     "admin.markdown.notAnImage": "هذا الملف ليس صورة.",
     "admin.markdown.insertedNoUpload": "تم إدراج مرجع الصورة (احفظ المسودة وارفع الملف يدويًا، أو افتح المحرر من عنصر محتوى مُدار لتفعيل الرفع).",

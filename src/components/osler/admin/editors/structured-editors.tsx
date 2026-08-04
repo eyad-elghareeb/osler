@@ -51,10 +51,12 @@ import {
 } from "@/components/ui/tooltip";
 import { MarkdownEditor } from "./markdown-editor";
 import { useToast } from "@/hooks/use-toast";
+import { ImageLightbox } from "@/components/osler/admin/image-lightbox";
 import {
   uploadImageForEditor,
   resolveImageForPreview,
   isImageFile,
+  formatBytes,
 } from "./image-upload";
 
 // ── Shared types ───────────────────────────────────────────────────────────
@@ -307,6 +309,8 @@ function ImageListField({
     return [];
   }, [images]);
 
+  const [previewIdx, setPreviewIdx] = React.useState<number | null>(null);
+
   function commit(next: Array<{ src: string; alt?: string; caption?: string }>) {
     if (next.length === 0) onChange(undefined);
     else if (next.length === 1) onChange(next[0]);
@@ -333,7 +337,12 @@ function ImageListField({
       const result = await uploadImageForEditor(file, { r2KeyBase, rawR2Key });
       commit([...arr, { src: result.ref, alt: file.name.replace(/\.[^.]+$/, "") }]);
       toast({
-        title: t("admin.markdown.uploaded", { name: file.name }),
+        title: result.converted
+          ? t("admin.markdown.optimized", {
+              before: formatBytes(result.originalBytes),
+              after: formatBytes(result.optimizedBytes),
+            })
+          : t("admin.markdown.uploaded", { name: file.name }),
         description: result.key,
       });
     } catch (err: any) {
@@ -443,18 +452,30 @@ function ImageListField({
             )}
             {img.src && (
               <div className="col-span-4 -mt-1 mb-1">
-                <img
-                  src={resolveImageForPreview(img.src, { r2KeyBase, rawR2Key })}
-                  alt={img.alt ?? ""}
-                  className="h-12 rounded border border-border"
-                  onError={(e) => {
-                    // Don't hide the whole <img> — show a muted fallback
-                    // rectangle so the user can still see something is there.
-                    const el = e.currentTarget as HTMLImageElement;
-                    el.style.opacity = "0.3";
-                    el.style.background = "oklch(0.92 0 0)";
-                  }}
-                />
+                <button
+                  type="button"
+                  onClick={() => setPreviewIdx(i)}
+                  disabled={readOnly}
+                  className="group relative block h-20 w-full overflow-hidden rounded-xl border border-border bg-muted/40"
+                  aria-label={t("admin.preview.previewImage")}
+                  title={t("admin.preview.previewImage")}
+                >
+                  <img
+                    src={resolveImageForPreview(img.src, { r2KeyBase, rawR2Key })}
+                    alt={img.alt ?? ""}
+                    className="h-full w-full object-contain transition-transform group-hover:scale-105"
+                    onError={(e) => {
+                      // Don't hide the whole <img> — show a muted fallback
+                      // rectangle so the user can still see something is there.
+                      const el = e.currentTarget as HTMLImageElement;
+                      el.style.opacity = "0.3";
+                      el.style.background = "oklch(0.92 0 0)";
+                    }}
+                  />
+                  <span className="absolute inset-0 flex items-center justify-center bg-primary/0 text-primary opacity-0 transition-opacity group-hover:bg-primary/10 group-hover:opacity-100">
+                    <Eye className="size-5" />
+                  </span>
+                </button>
               </div>
             )}
           </div>
@@ -507,6 +528,16 @@ function ImageListField({
           </div>
         )}
       </div>
+
+      {previewIdx != null && arr[previewIdx]?.src && (
+        <ImageLightbox
+          open={previewIdx != null}
+          onOpenChange={(open) => { if (!open) setPreviewIdx(null); }}
+          src={resolveImageForPreview(arr[previewIdx].src, { r2KeyBase, rawR2Key })}
+          alt={arr[previewIdx].alt}
+          fileName={arr[previewIdx].src.split("/").pop()}
+        />
+      )}
     </Field>
   );
 }

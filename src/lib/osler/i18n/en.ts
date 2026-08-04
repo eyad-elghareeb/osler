@@ -1495,6 +1495,10 @@ export const en = {
     "admin.content.stagedPreviewHint": "Staged R2 object (private). Right-click to publish or discard.",
     "admin.content.rawInvalidKey": "Invalid raw key",
     "admin.content.rawInvalidKeyDesc": "The ?key= parameter must point to a content-files/ or content-staging/ path.",
+    // Admin image preview lightbox
+    "admin.preview.image": "Image",
+    "admin.preview.dimensions": "{w} × {h}px",
+    "admin.preview.previewImage": "Preview image",
     // Content browser toasts
     "admin.toast.created": "Created {path}",
     "admin.toast.createFailed": "Create failed: {error}",
@@ -1644,6 +1648,7 @@ export const en = {
     "admin.markdown.preview": "Preview",
     "admin.markdown.uploadImage": "Upload image",
     "admin.markdown.uploaded": "Uploaded {name}",
+    "admin.markdown.optimized": "Compressed to WebP: {before} → {after}",
     "admin.markdown.uploadFailed": "Image upload failed",
     "admin.markdown.notAnImage": "That file isn't an image.",
     "admin.markdown.insertedNoUpload": "Inserted image reference (save the draft and upload the file out-of-band, or open the editor from a managed content item to enable uploads).",

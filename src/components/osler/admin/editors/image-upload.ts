@@ -83,6 +83,105 @@ export function fileToDataUri(file: File | Blob): Promise<string> {
   });
 }
 
+/** Human-readable byte size (e.g. "1.2 MB"). */
+export function formatBytes(bytes: number): string {
+  if (!Number.isFinite(bytes) || bytes < 0) return "—";
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+/** True when an R2 key points at an image (used to pick image preview over
+ *  raw text in the admin content browser). */
+const IMAGE_KEY_EXT = /\.(png|jpe?g|webp|avif|gif|bmp|svg|ico)$/i;
+export function isImageR2Key(key: string): boolean {
+  return IMAGE_KEY_EXT.test(key);
+}
+
+// ── Client-side WebP optimization ───────────────────────────────────────────
+//
+// Raster uploads (png/jpg/jpeg/bmp/ico) are re-encoded to WebP in the browser
+// before they leave for R2. WebP is the current best-supported lossy/lossless
+// image format and the browser Canvas API can encode it natively, so no
+// server-side image processing dependency is needed. We target quality 0.92 —
+// visually indistinguishable from the source for photography and preserves
+// alpha — which typically cuts a PNG/BMP by 50-75% and a JPEG by ~30%.
+//
+// We deliberately SKIP:
+//   · SVG — vector, must stay SVG (the student renderer treats it specially)
+//   · GIF / APNG — animation would be flattened into a static frame
+//   · WebP / AVIF — already compressed modern formats
+//
+// We also keep the original whenever the re-encode isn't actually smaller, so
+// the user never ends up with a *larger* file after "optimization".
+
+export interface OptimizedImage {
+  /** The file to upload — either the re-encoded WebP or the original. */
+  file: File;
+  /** True when the image was re-encoded to WebP. */
+  converted: boolean;
+  originalBytes: number;
+  optimizedBytes: number;
+  width: number;
+  height: number;
+}
+
+/** True when a File should be considered for WebP re-encoding. */
+export function shouldOptimizeImage(file: File): boolean {
+  const ext = (file.name.split(".").pop() ?? "").toLowerCase();
+  return ext === "png" || ext === "jpg" || ext === "jpeg" || ext === "bmp" || ext === "ico";
+}
+
+/** Re-encode a raster image to WebP in the browser. Never throws — on any
+ *  failure (unsupported API, oversized canvas, decode error) it returns the
+ *  original file untouched so uploads never break because of optimization. */
+export async function optimizeImageFile(file: File): Promise<OptimizedImage> {
+  const originalBytes = file.size;
+  const fallback: OptimizedImage = {
+    file,
+    converted: false,
+    originalBytes,
+    optimizedBytes: originalBytes,
+    width: 0,
+    height: 0,
+  };
+  if (!shouldOptimizeImage(file) || typeof document === "undefined") return fallback;
+  if (typeof createImageBitmap !== "function") return fallback;
+
+  try {
+    const bitmap = await createImageBitmap(file, { imageOrientation: "from-image" });
+    const { width, height } = bitmap;
+    // Guard against dimensions a canvas can't handle (some engines cap around
+    // 16384px per side). Oversized medical images are rare; keep the original.
+    if (width > 16384 || height > 16384) { bitmap.close(); return fallback; }
+    const canvas = document.createElement("canvas");
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) { bitmap.close(); return fallback; }
+    ctx.drawImage(bitmap, 0, 0);
+    bitmap.close();
+
+    const blob = await new Promise<Blob | null>((resolve) =>
+      canvas.toBlob(resolve, "image/webp", 0.92),
+    );
+    if (!blob || blob.size >= originalBytes) return fallback;
+
+    const base = file.name.replace(/\.[^.]+$/, "");
+    const optimized = new File([blob], `${base}.webp`, { type: "image/webp" });
+    return {
+      file: optimized,
+      converted: true,
+      originalBytes,
+      optimizedBytes: blob.size,
+      width,
+      height,
+    };
+  } catch {
+    return fallback;
+  }
+}
+
 /** Determine whether the given File is an image we accept. */
 export function isImageFile(file: File): boolean {
   if (file.type.startsWith("image/")) return true;
@@ -118,6 +217,24 @@ export function computeImageR2Key(
   return null;
 }
 
+/** Result of an editor image upload. `converted`/`originalBytes`/
+ *  `optimizedBytes`/`width`/`height` let the UI report the WebP compression.
+ *  `key` is empty when there was no R2 destination (caller should fall back
+ *  to a relative reference only). */
+export interface UploadImageResult {
+  /** Relative reference to insert into markdown / image-list (`images/<name>`). */
+  ref: string;
+  /** Full R2 key the file was written to ("" when not uploaded). */
+  key: string;
+  /** Base64 data URI of the actual uploaded bytes (WebP when converted). */
+  dataUri: string;
+  converted: boolean;
+  originalBytes: number;
+  optimizedBytes: number;
+  width: number;
+  height: number;
+}
+
 /** Upload a single image to R2 and return the relative reference (`images/<name>`)
  *  that should be inserted into the markdown body or the image-list `src` field.
  *
@@ -127,20 +244,34 @@ export function computeImageR2Key(
  *  - If `unique` is true (default), a short random suffix is appended to the
  *    filename so concurrent uploads don't overwrite each other.
  *  - The filename is always sanitised (lowercase, hyphenated, ASCII-only).
- */
+ *  - Raster formats (png/jpg/jpeg/bmp/ico) are re-encoded to WebP first when
+ *    `optimize` is true (default) — see `optimizeImageFile`. The returned
+ *    `ref`/`key` point at the optimized `.webp` file. */
 export async function uploadImageForEditor(
   file: File,
-  opts: { r2KeyBase?: string; rawR2Key?: string; unique?: boolean },
-): Promise<{ ref: string; key: string; dataUri: string }> {
+  opts: { r2KeyBase?: string; rawR2Key?: string; unique?: boolean; optimize?: boolean },
+): Promise<UploadImageResult> {
+  const optimize = opts.optimize !== false;
+  const optimized = optimize ? await optimizeImageFile(file) : null;
+  const active = optimized?.converted ? optimized.file : file;
   const unique = opts.unique !== false;
-  const name = unique ? uniqueImageFilename(file.name) : sanitizeImageFilename(file.name);
+  const name = unique ? uniqueImageFilename(active.name) : sanitizeImageFilename(active.name);
   const ref = `images/${name}`;
   const key = computeImageR2Key(name, opts);
-  const dataUri = await fileToDataUri(file);
+  const dataUri = await fileToDataUri(active);
   if (key) {
     await adminApi.uploadFile(key, dataUri);
   }
-  return { ref, key: key ?? "", dataUri };
+  return {
+    ref,
+    key: key ?? "",
+    dataUri,
+    converted: optimized?.converted ?? false,
+    originalBytes: optimized?.originalBytes ?? file.size,
+    optimizedBytes: optimized?.optimizedBytes ?? file.size,
+    width: optimized?.width ?? 0,
+    height: optimized?.height ?? 0,
+  };
 }
 
 /**

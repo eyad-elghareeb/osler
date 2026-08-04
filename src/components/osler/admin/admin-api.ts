@@ -151,6 +151,22 @@ async function req<T>(path: string, method: string = "GET", body?: unknown): Pro
   return data;
 }
 
+/** Like `req`, but returns the raw response as a Blob (binary bodies). */
+async function reqBinary(path: string): Promise<Blob> {
+  const enabled = await cloudEnabled();
+  if (!enabled) throw new AdminApiError(503, "Cloud features are disabled");
+  const base = await getApiBase();
+  const session = readCloudSession();
+  const headers: Record<string, string> = {};
+  if (session?.token) headers["authorization"] = `Bearer ${session.token}`;
+  const res = await fetch(`${base}${path}`, { method: "GET", headers });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({})) as { error?: string };
+    throw new AdminApiError(res.status, data.error ?? "Request failed");
+  }
+  return res.blob();
+}
+
 // ── Public API surface ───────────────────────────────────────────────────────
 
 export const adminApi = {
@@ -223,6 +239,10 @@ export const adminApi = {
    *  content-manifests/). Admin only — used to preview/edit staged files
    *  that aren't yet served by the public /v1/content/* endpoint. */
   getR2Content:    (key: string)                 => req<{ body: string; contentType: string }>(`/v1/admin/content/r2-content?key=${encodeURIComponent(key)}`),
+  /** Fetch an R2 key's bytes as a Blob (uses the worker's `?raw=1` path so
+   *  binary assets like staged images preview correctly instead of being
+   *  decoded to corrupt text). Admin only. */
+  getR2Binary:     (key: string)                 => reqBinary(`/v1/admin/content/r2-content?key=${encodeURIComponent(key)}&raw=1`),
   /** Rename (move) an R2 key inside content-files/. */
   renameR2Key:     (from: string, to: string)    => req<{ ok: boolean; from: string; to: string }>("/v1/admin/content/r2-rename", "POST", { from, to }),
   /** Create an "empty folder" by writing a `.keep` placeholder. */
