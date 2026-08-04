@@ -1326,9 +1326,12 @@ export const en = {
     "admin.settings.subtitle": "Personalize the admin panel and configure working preferences.",
     "admin.settings.section.appearance": "Appearance",
     "admin.settings.section.language": "Language",
-    "admin.settings.section.working": "Working mode",
     "admin.settings.section.behavior": "Behavior",
+    "admin.settings.section.about": "About",
     "admin.settings.section.danger": "Reset",
+    "admin.settings.section.ai": "AI Assistant",
+    "admin.settings.sidebarTitle": "Sections",
+    "admin.settings.backToList": "All settings",
 
     "admin.settings.theme.dark": "Dark",
     "admin.settings.theme.light": "Light",
@@ -1338,12 +1341,6 @@ export const en = {
     "admin.settings.language.ar": "العربية",
     "admin.settings.language.desc": "UI language for the admin panel. RTL is applied automatically for Arabic.",
     "admin.settings.language.rtlNote": "Arabic switches the entire layout to right-to-left.",
-
-    "admin.settings.working.compact": "Compact",
-    "admin.settings.working.comfortable": "Comfortable",
-    "admin.settings.working.compactHint": "Denser rows",
-    "admin.settings.working.comfortableHint": "Default spacing",
-    "admin.settings.working.desc": "Compact mode tightens padding, font size and row height so you can fit more on screen.",
 
     "admin.settings.behavior.reducedMotion": "Reduced motion",
     "admin.settings.behavior.reducedMotionDesc": "Disable framer-motion enter/exit animations across the admin panel.",

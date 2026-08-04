@@ -1,26 +1,27 @@
 "use client";
 
 import * as React from "react";
+import { motion, AnimatePresence } from "framer-motion";
 import {
   Settings as SettingsIcon,
-  Gauge,
+  Palette,
+  Languages,
+  Sparkles,
   RotateCcw,
   Info,
   ShieldAlert,
-  Sparkles,
-  Zap,
+  ArrowLeft,
+  ChevronRight,
 } from "lucide-react";
 import { useI18n } from "@/components/osler/i18n-provider";
-import { AdminPageFrame } from "@/components/osler/admin/admin-page-frame";
 import { AdminRouteGuard } from "@/components/osler/admin/admin-route-guard";
 import {
   useAdminSettings,
-  type AdminWorkingMode,
   type AdminLanding,
 } from "@/components/osler/admin/admin-settings-context";
 import { haptic } from "@/lib/osler/native";
 import { useAdminIdentity } from "@/components/osler/admin/admin-context";
-import { OslerCard } from "@/components/osler/ui-primitives";
+import { OslerCard, PageHeader } from "@/components/osler/ui-primitives";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import {
@@ -49,187 +50,310 @@ import {
   ThemeSettingsSection,
   AiSettingsSection,
 } from "@/components/osler/settings";
+import { NavigationStack } from "@/components/osler/navigation-stack";
+import { useIsMobile } from "@/hooks/use-mobile";
+import type { LucideIcon } from "lucide-react";
+
+interface AdminSectionDef {
+  id: string;
+  labelKey: string;
+  icon: LucideIcon;
+}
+
+const SECTIONS: AdminSectionDef[] = [
+  { id: "appearance", labelKey: "admin.settings.section.appearance", icon: Palette },
+  { id: "language", labelKey: "admin.settings.section.language", icon: Languages },
+  { id: "ai", labelKey: "admin.settings.section.ai", icon: Sparkles },
+  { id: "behavior", labelKey: "admin.settings.section.behavior", icon: RotateCcw },
+  { id: "about", labelKey: "admin.settings.section.about", icon: Info },
+  { id: "danger", labelKey: "admin.settings.section.danger", icon: ShieldAlert },
+];
+
+function renderSection(id: string) {
+  switch (id) {
+    case "appearance":
+      return <ThemeSettingsSection />;
+    case "language":
+      return <LanguageSettingsSection />;
+    case "ai":
+      return <AiSettingsSection />;
+    case "behavior":
+      return <BehaviorSettingsSection />;
+    case "about":
+      return <AboutSettingsSection />;
+    case "danger":
+      return <DangerZoneSection />;
+    default:
+      return null;
+  }
+}
 
 export default function AdminSettingsPage() {
-  const { t } = useI18n();
+  const { t, rtl } = useI18n();
+  const isMobile = useIsMobile();
+
+  const [section, setSection] = React.useState<string>("appearance");
+  const [mobileHome, setMobileHome] = React.useState<boolean>(true);
+
+  const pickSection = (id: string) => {
+    haptic("selection");
+    setSection(id);
+    setMobileHome(false);
+  };
+  const goHome = () => {
+    haptic("selection");
+    setMobileHome(true);
+  };
+
+  const activeMeta = SECTIONS.find((s) => s.id === section);
+
   return (
     <AdminRouteGuard>
-      <AdminPageFrame
-        title={t("admin.settings.title")}
-        subtitle={t("admin.settings.subtitle")}
-        inlineIcon={SettingsIcon}
-      >
-        <AdminSettingsContent />
-      </AdminPageFrame>
+      <div className="osler-page osler-has-scroll">
+        <div className="osler-page__inner--wide">
+          <PageHeader
+            inline
+            inlineIcon={SettingsIcon}
+            title={t("admin.settings.title")}
+            subtitle={t("admin.settings.subtitle")}
+          />
+
+          {isMobile ? (
+            // ── Mobile: iOS-style section list + pushed sub-pages ─────
+            <div className="h-[calc(100vh-9rem)] min-h-[60vh]">
+              <NavigationStack
+                className="h-full"
+                homeClassName="osler-page osler-has-scroll"
+                subpageClassName="osler-page osler-has-scroll"
+                rtl={rtl}
+                home={
+                  <div className="px-1 py-1">
+                    <div className="rounded-lg border border-border overflow-hidden bg-card">
+                      {SECTIONS.map((s, idx) => {
+                        const I = s.icon;
+                        return (
+                          <button
+                            key={s.id}
+                            onClick={() => pickSection(s.id)}
+                            className={cn(
+                              "w-full text-start px-4 py-3 flex items-center gap-3 hover:bg-muted/60 transition-colors",
+                              idx > 0 && "border-t border-border/60",
+                            )}
+                          >
+                            <span className="size-8 rounded-md bg-primary/10 text-primary flex items-center justify-center shrink-0">
+                              <I className="size-4" />
+                            </span>
+                            <span className="flex-1 min-w-0">
+                              <span className="block text-sm font-medium truncate">{t(s.labelKey as any)}</span>
+                            </span>
+                            <ChevronRight className={cn("size-4 text-muted-foreground shrink-0", rtl && "rtl-flip-x")} />
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                }
+                subpage={
+                  mobileHome ? null : (
+                    <div className="px-4 py-4">
+                      <div className="flex items-center gap-2 mb-4">
+                        <button
+                          onClick={goHome}
+                          className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors -ms-1 ps-1"
+                          aria-label={t("settings.backToList")}
+                        >
+                          <ArrowLeft className={cn("size-4", rtl && "rtl-flip-x")} />
+                          <span>{t("admin.settings.backToList")}</span>
+                        </button>
+                      </div>
+                      <h1 className="text-xl md:text-2xl font-bold tracking-tight flex items-center gap-2 mb-4">
+                        {renderIcon(activeMeta)}
+                        {activeMeta ? t(activeMeta.labelKey as any) : t("admin.settings.title")}
+                      </h1>
+                      {renderSection(section)}
+                    </div>
+                  )
+                }
+                onBack={goHome}
+              />
+            </div>
+          ) : (
+            // ── Desktop: sidebar + content pane ───────────────────────
+            <div className="grid grid-cols-1 md:grid-cols-[220px_1fr] lg:grid-cols-[260px_1fr] gap-6">
+              <aside className="md:sticky md:top-0 md:self-start">
+                <div className="osler-section-heading">{t("admin.settings.sidebarTitle")}</div>
+                <nav className="space-y-0.5">
+                  {SECTIONS.map((s) => {
+                    const I = s.icon;
+                    const active = section === s.id;
+                    return (
+                      <button
+                        key={s.id}
+                        onClick={() => pickSection(s.id)}
+                        className={cn(
+                          "relative w-full text-start h-9 px-3 rounded-md text-sm font-medium flex items-center gap-2 transition-colors",
+                          active
+                            ? "text-primary bg-primary/10"
+                            : "text-muted-foreground hover:text-foreground hover:bg-muted/60",
+                        )}
+                      >
+                        <I className="size-4 shrink-0" />
+                        <span className="truncate">{t(s.labelKey as any)}</span>
+                      </button>
+                    );
+                  })}
+                </nav>
+              </aside>
+
+              <div className="min-w-0">
+                <AnimatePresence mode="wait">
+                  <motion.div
+                    key={section}
+                    initial={{ opacity: 0, y: 6 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -6 }}
+                    transition={{ duration: 0.18, ease: [0.32, 0.72, 0, 1] }}
+                  >
+                    {renderSection(section)}
+                  </motion.div>
+                </AnimatePresence>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
     </AdminRouteGuard>
   );
 }
 
-function AdminSettingsContent() {
+function renderIcon(meta?: AdminSectionDef) {
+  if (!meta) return null;
+  const I = meta.icon;
+  return <I className="size-5 text-primary" />;
+}
+
+/* ── Admin-specific sections ───────────────────────────────────────────── */
+
+function BehaviorSettingsSection() {
   const { t } = useI18n();
-  const { settings, update, reset } = useAdminSettings();
+  const { settings, update } = useAdminSettings();
+
+  return (
+    <SettingsCard icon={RotateCcw} title={t("admin.settings.section.behavior")}>
+      <div className="space-y-3">
+        <ToggleRow
+          label={t("admin.settings.behavior.reducedMotion")}
+          desc={t("admin.settings.behavior.reducedMotionDesc")}
+          checked={settings.reducedMotion}
+          onChange={(v) => update("reducedMotion", v)}
+        />
+        <ToggleRow
+          label={t("admin.settings.behavior.autoSave")}
+          desc={t("admin.settings.behavior.autoSaveDesc")}
+          checked={settings.autoSaveDrafts}
+          onChange={(v) => update("autoSaveDrafts", v)}
+        />
+        <ToggleRow
+          label={t("admin.settings.behavior.advanced")}
+          desc={t("admin.settings.behavior.advancedDesc")}
+          checked={settings.showAdvancedFields}
+          onChange={(v) => update("showAdvancedFields", v)}
+        />
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
+          <div>
+            <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              {t("admin.settings.behavior.pageSize")}
+            </Label>
+            <Select
+              value={String(settings.pageSize)}
+              onValueChange={(v) => update("pageSize", Number(v))}
+            >
+              <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {[10, 25, 50, 100].map((n) => (
+                  <SelectItem key={n} value={String(n)}>{n}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div>
+            <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              {t("admin.settings.behavior.landing")}
+            </Label>
+            <Select
+              value={settings.defaultLanding}
+              onValueChange={(v) => update("defaultLanding", v as AdminLanding)}
+            >
+              <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="dashboard">{t("admin.nav.dashboard")}</SelectItem>
+                <SelectItem value="content">{t("admin.nav.content")}</SelectItem>
+                <SelectItem value="review">{t("admin.nav.review")}</SelectItem>
+                <SelectItem value="audit">{t("admin.nav.audit")}</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+      </div>
+    </SettingsCard>
+  );
+}
+
+function AboutSettingsSection() {
+  const { t } = useI18n();
   const identity = useAdminIdentity();
 
   return (
-    <div className="space-y-6 max-w-3xl">
-      {/* ── Appearance / Language / AI — shared with the main app ────── */}
-      <ThemeSettingsSection />
-      <LanguageSettingsSection />
-      <AiSettingsSection />
+    <SettingsCard icon={Info} title={t("admin.settings.about.title")}>
+      <dl className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
+        <Field label={t("admin.settings.about.version")} value="Osler Admin v0.2.1" />
+        <Field label={t("admin.settings.about.role")} value={identity.user.role} />
+        <Field label={t("admin.settings.about.storage")} value={t("admin.settings.about.storageLocal")} />
+        <Field label={t("admin.settings.about.user")} value={`@${identity.user.username}`} />
+      </dl>
+    </SettingsCard>
+  );
+}
 
-      {/* ── Working mode ─────────────────────────────────────────────── */}
-      <SettingsCard
-        icon={Gauge}
-        title={t("admin.settings.section.working")}
-        desc={t("admin.settings.working.desc")}
-      >
-        <div className="grid grid-cols-2 gap-3 max-w-md">
-          {([
-            { id: "comfortable", label: t("admin.settings.working.comfortable"), Icon: Sparkles, hint: t("admin.settings.working.comfortableHint") },
-            { id: "compact", label: t("admin.settings.working.compact"), Icon: Zap, hint: t("admin.settings.working.compactHint") },
-          ] as const).map((opt) => {
-            const active = settings.workingMode === opt.id;
-            return (
-              <button
-                key={opt.id}
-                onClick={() => update("workingMode", opt.id as AdminWorkingMode)}
-                className={cn(
-                  "flex items-start gap-3 p-3 rounded-xl border text-start transition-colors",
-                  active
-                    ? "border-primary bg-primary/10"
-                    : "border-border bg-card hover:bg-muted/60",
-                )}
-              >
-                <div
-                  className={cn(
-                    "size-9 rounded-lg flex items-center justify-center",
-                    active ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground",
-                  )}
-                >
-                  <opt.Icon className="size-4" />
-                </div>
-                <div className="min-w-0">
-                  <div className="text-sm font-semibold">{opt.label}</div>
-                  <div className="text-[11px] text-muted-foreground truncate">{opt.hint}</div>
-                </div>
-              </button>
-            );
-          })}
-        </div>
-      </SettingsCard>
-
-      {/* ── Behavior ─────────────────────────────────────────────────── */}
-      <SettingsCard
-        icon={RotateCcw}
-        title={t("admin.settings.section.behavior")}
-      >
-        <div className="space-y-3">
-          <ToggleRow
-            label={t("admin.settings.behavior.reducedMotion")}
-            desc={t("admin.settings.behavior.reducedMotionDesc")}
-            checked={settings.reducedMotion}
-            onChange={(v) => update("reducedMotion", v)}
-          />
-          <ToggleRow
-            label={t("admin.settings.behavior.autoSave")}
-            desc={t("admin.settings.behavior.autoSaveDesc")}
-            checked={settings.autoSaveDrafts}
-            onChange={(v) => update("autoSaveDrafts", v)}
-          />
-          <ToggleRow
-            label={t("admin.settings.behavior.advanced")}
-            desc={t("admin.settings.behavior.advancedDesc")}
-            checked={settings.showAdvancedFields}
-            onChange={(v) => update("showAdvancedFields", v)}
-          />
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
-            <div>
-              <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                {t("admin.settings.behavior.pageSize")}
-              </Label>
-              <Select
-                value={String(settings.pageSize)}
-                onValueChange={(v) => update("pageSize", Number(v))}
-              >
-                <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {[10, 25, 50, 100].map((n) => (
-                    <SelectItem key={n} value={String(n)}>{n}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                {t("admin.settings.behavior.landing")}
-              </Label>
-              <Select
-                value={settings.defaultLanding}
-                onValueChange={(v) => update("defaultLanding", v as AdminLanding)}
-              >
-                <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="dashboard">{t("admin.nav.dashboard")}</SelectItem>
-                  <SelectItem value="content">{t("admin.nav.content")}</SelectItem>
-                  <SelectItem value="review">{t("admin.nav.review")}</SelectItem>
-                  <SelectItem value="audit">{t("admin.nav.audit")}</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-        </div>
-      </SettingsCard>
-
-      {/* ── About ────────────────────────────────────────────────────── */}
-      <SettingsCard
-        icon={Info}
-        title={t("admin.settings.about.title")}
-      >
-        <dl className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
-          <Field label={t("admin.settings.about.version")} value="Osler Admin v0.2.1" />
-          <Field label={t("admin.settings.about.role")} value={identity.user.role} />
-          <Field label={t("admin.settings.about.storage")} value={t("admin.settings.about.storageLocal")} />
-          <Field label={t("admin.settings.about.user")} value={`@${identity.user.username}`} />
-        </dl>
-      </SettingsCard>
-
-      {/* ── Danger zone ──────────────────────────────────────────────── */}
-      <SettingsCard
-        icon={ShieldAlert}
-        title={t("admin.settings.section.danger")}
-        desc={t("admin.settings.danger.resetDesc")}
-        tone="destructive"
-      >
-        <AlertDialog>
-          <AlertDialogTrigger asChild>
-            <Button variant="outline" size="sm" className="text-destructive border-destructive/30 hover:bg-destructive/10">
-              <RotateCcw className="size-3.5 me-1.5" />
+function DangerZoneSection() {
+  const { t } = useI18n();
+  const { reset } = useAdminSettings();
+  return (
+    <SettingsCard
+      icon={ShieldAlert}
+      title={t("admin.settings.section.danger")}
+      desc={t("admin.settings.danger.resetDesc")}
+      tone="destructive"
+    >
+      <AlertDialog>
+        <AlertDialogTrigger asChild>
+          <Button variant="outline" size="sm" className="text-destructive border-destructive/30 hover:bg-destructive/10">
+            <RotateCcw className="size-3.5 me-1.5" />
+            {t("admin.settings.danger.reset")}
+          </Button>
+        </AlertDialogTrigger>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{t("admin.settings.danger.reset")}</AlertDialogTitle>
+            <AlertDialogDescription>
+              {t("admin.settings.danger.resetConfirm")}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>{t("common.cancel")}</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                haptic("warning");
+                reset();
+                toast({ title: t("admin.settings.danger.reset") });
+              }}
+            >
               {t("admin.settings.danger.reset")}
-            </Button>
-          </AlertDialogTrigger>
-          <AlertDialogContent>
-            <AlertDialogHeader>
-              <AlertDialogTitle>{t("admin.settings.danger.reset")}</AlertDialogTitle>
-              <AlertDialogDescription>
-                {t("admin.settings.danger.resetConfirm")}
-              </AlertDialogDescription>
-            </AlertDialogHeader>
-            <AlertDialogFooter>
-              <AlertDialogCancel>{t("common.cancel")}</AlertDialogCancel>
-              <AlertDialogAction
-                onClick={() => {
-                  haptic("warning");
-                  reset();
-                  toast({ title: t("admin.settings.danger.reset") });
-                }}
-              >
-                {t("admin.settings.danger.reset")}
-              </AlertDialogAction>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
-      </SettingsCard>
-    </div>
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </SettingsCard>
   );
 }
 

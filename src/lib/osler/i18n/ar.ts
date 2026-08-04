@@ -1321,9 +1321,12 @@ export const ar = {
     "admin.settings.subtitle": "خصّص لوحة الإدارة واضبط تفضيلات العمل.",
     "admin.settings.section.appearance": "المظهر",
     "admin.settings.section.language": "اللغة",
-    "admin.settings.section.working": "وضع العمل",
     "admin.settings.section.behavior": "السلوك",
+    "admin.settings.section.about": "حول",
     "admin.settings.section.danger": "إعادة التعيين",
+    "admin.settings.section.ai": "مساعد الذكاء الاصطناعي",
+    "admin.settings.sidebarTitle": "الأقسام",
+    "admin.settings.backToList": "كل الإعدادات",
 
     "admin.settings.theme.dark": "داكن",
     "admin.settings.theme.light": "فاتح",
@@ -1333,12 +1336,6 @@ export const ar = {
     "admin.settings.language.ar": "العربية",
     "admin.settings.language.desc": "لغة واجهة لوحة الإدارة. يتم تطبيق الاتجاه من اليمين لليسار تلقائياً للعربية.",
     "admin.settings.language.rtlNote": "العربية تبدّل التخطيط بالكامل إلى الاتجاه من اليمين لليسار.",
-
-    "admin.settings.working.compact": "مضغوط",
-    "admin.settings.working.comfortable": "مريح",
-    "admin.settings.working.compactHint": "صفوف أكثف",
-    "admin.settings.working.comfortableHint": "مسافات افتراضية",
-    "admin.settings.working.desc": "الوضع المضغوط يقلّل المسافات وحجم الخط وارتفاع الصفوف لاستيعاب المزيد على الشاشة.",
 
     "admin.settings.behavior.reducedMotion": "تقليل الحركة",
     "admin.settings.behavior.reducedMotionDesc": "إيقاف حركات framer-motion عبر لوحة الإدارة.",

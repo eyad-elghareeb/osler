@@ -2380,18 +2380,7 @@ html.osler-ar body,
   .osler-mermaid { border: 1px solid #ccc !important; background: #fff !important; }
 }
 
-/* ── Admin panel: compact + reduced-motion modes ─────────────────────────── */
-
-/* Compact mode: tighter padding, smaller fonts, denser rows */
-.admin-compact .osler-page__inner { padding-top: 1rem; padding-bottom: 1rem; }
-.admin-compact .osler-card--default { padding: 0.625rem; }
-.admin-compact .osler-card--roomy { padding: 0.875rem; }
-.admin-compact .osler-stat-tile { padding: 0.625rem; }
-.admin-compact .osler-stat-tile__value { font-size: 1.5rem; }
-.admin-compact table th,
-.admin-compact table td { padding-top: 0.375rem; padding-bottom: 0.375rem; }
-.admin-compact .admin-row { padding-top: 0.5rem; padding-bottom: 0.5rem; }
-.admin-compact .osler-section-heading { font-size: 0.7rem; }
+/* ── Admin panel: reduced-motion mode ─────────────────────────────────── */
 
 /* Reduced motion: disable framer-motion enter/exit animations */
 .admin-reduced-motion * {

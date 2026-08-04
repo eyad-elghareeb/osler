@@ -8,7 +8,6 @@
  * always share a single source of truth for <html> class/attr state.
  *
  * Settings exposed:
- *  - workingMode: compact | comfortable — controls density
  *  - reducedMotion: boolean — disables framer-motion transitions
  *  - defaultLanding: which admin page to land on after sign-in
  *  - pageSize: how many rows to show in tables (10/25/50)
@@ -21,11 +20,9 @@ import * as React from "react";
 import { useOslerTheme } from "@/components/osler/theme-provider";
 import { useI18n } from "@/components/osler/i18n-provider";
 
-export type AdminWorkingMode = "compact" | "comfortable";
 export type AdminLanding = "dashboard" | "content" | "review" | "audit";
 
 export interface AdminSettings {
-  workingMode: AdminWorkingMode;
   reducedMotion: boolean;
   defaultLanding: AdminLanding;
   pageSize: number;
@@ -35,7 +32,6 @@ export interface AdminSettings {
 }
 
 const DEFAULT_SETTINGS: AdminSettings = {
-  workingMode: "comfortable",
   reducedMotion: false,
   defaultLanding: "content",
   pageSize: 25,
@@ -97,12 +93,11 @@ export function AdminSettingsProvider({ children }: { children: React.ReactNode 
     setHydrated(true);
   }, []);
 
-  // Apply working mode + reduced motion to <html> (theme/language are handled
+  // Apply reduced motion to <html> (theme/language are handled
   // by the main providers — we must NOT touch those here).
   React.useEffect(() => {
     if (!hydrated) return;
     const html = document.documentElement;
-    html.classList.toggle("admin-compact", settings.workingMode === "compact");
     html.classList.toggle("admin-reduced-motion", settings.reducedMotion);
   }, [settings, hydrated]);
 
