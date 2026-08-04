@@ -937,8 +937,12 @@ async function regenerateManifestForCategory(env: Env, category: string): Promis
   const nodes = new Map<string, any>();
   for (const [fp, info] of folders.entries()) {
     const inferredType = parentType || inferTypeFromFileName(info.files) || "quiz";
+    // Uid = <type>-<segments> (no category prefix) — must match the local
+    // manifest generator (scripts/generate-content-manifests.js) and its Rust
+    // port (tauri-admin/src/manifest.rs) so progress/cache keys stay stable
+    // across sources.
     const segments = fp ? fp.split("/") : [];
-    const uid = buildUid(inferredType, [category, ...segments]);
+    const uid = buildUid(inferredType, segments);
     nodes.set(fp, {
       uid,
       title: fp ? fp.split("/").pop()!.replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()) : category,

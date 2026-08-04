@@ -24,7 +24,6 @@ import { cloudEnabled } from "@/lib/osler/cloud";
  */
 const PUBLIC_PATH_PREFIXES = [
   "/_next/",
-  "/osler-content/",
   "/assets/",
   "/admin/",
   "/serwist/",
@@ -82,7 +81,7 @@ function isLoginPath(input: string): boolean {
  *   - On `/login`: if the user IS logged in, redirect to `next` (or `/`).
  *   - On protected routes: if the user is NOT logged in, redirect to
  *     `/login?next=<current-path>`.
- *   - On public routes (`/admin/*`, `/_next/*`, `/osler-content/*`, etc.):
+ *   - On public routes (`/admin/*`, `/_next/*`, etc.):
  *     always pass through. Admin auth is enforced separately by the
  *     AdminShell via a bearer token + role check.
  */
