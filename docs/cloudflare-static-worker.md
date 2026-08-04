@@ -284,7 +284,8 @@ After deploying, run through this checklist:
 - [ ] Visit `https://your-app.pages.dev/` — page loads, no console errors
 - [ ] Visit `https://your-worker.workers.dev/v1/health` — returns `{ok:true, ...}`
 - [ ] Register a test account from the UI
-- [ ] Login / logout works (sessionStorage + Worker session)
+- [ ] Login / logout works (sessionStorage + localStorage mirror + Worker session)
+- [ ] Open the app in a second tab / new window — account stays signed in (mirror restore), no "local only" downgrade
 - [ ] Settings → Sync shows "Synced" status after a few seconds
 - [ ] `/admin` shows login prompt → sign in with admin account → admin shell loads
 - [ ] **Deep-link test (hard refresh, not client-side nav):**

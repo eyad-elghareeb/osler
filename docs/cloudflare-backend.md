@@ -82,7 +82,7 @@ When a user clicks "Continue with Google", the Worker generates a cryptographica
 - **Password Policy**: Minimum 10 characters, must contain at least 2 character classes (lowercase / uppercase / digit / symbol). Same policy enforced on registration, password change, password reset, and admin-initiated reset.
 - **Account Management**: Users can update their display name and email, set/change password, export account data as JSON, and permanently delete their account with password confirmation.
 - **Roles**: `student` (default), `content_admin` (can create and edit their own content but not approve/publish), and `admin` (full access: manage users, approve/reject/publish content, view audit logs, revoke sessions). Admin role allows accessing administrative features.
-- **Sessions**: HMAC-SHA-256 signed session tokens with server-side revocation in D1. Session tokens are kept in `sessionStorage` (per-tab). Per-user session cap of 12 concurrent sessions; oldest is auto-revoked when the cap is exceeded. The frontend is a static export — route gating is client-side (`RouteGuard`), no httpOnly cookie — see [`security.md`](./security.md#route-gating-client-side-no-middleware).
+- **Sessions**: HMAC-SHA-256 signed session tokens with server-side revocation in D1. Session tokens are kept in `sessionStorage` (per-tab fast path) mirrored to `localStorage` (cross-tab / cross-restart persistence), with sliding expiry via `POST /v1/auth/refresh` (rotation; 30-day grace on top of the 7-day token TTL). Per-user session cap of 12 concurrent sessions; oldest is auto-revoked when the cap is exceeded. The frontend is a static export — route gating is client-side (`RouteGuard`), no httpOnly cookie — see [`security.md`](./security.md#route-gating-client-side-no-middleware).
 - **Password Recovery**: Supported via optional Resend API key (`RESEND_API_KEY`, `EMAIL_FROM`, `APP_ORIGIN`). Reset links are valid for 30 minutes and single-use.
 - **Rate Limiting**: Auth endpoints (login, register, reset, google/consume, username-available) are rate-limited per IP using an in-memory LRU bucket, as is admin content management (600/min). Global per-IP cap of 600 requests/min across all rate-limited routes. Returns HTTP 429 when exceeded. For harder guarantees, front the Worker with Cloudflare Rate Limiting Rules in the dashboard.
 - **Audit Log**: Every administrative action (role change, user delete, password reset, session revocation, content create/submit/approve/reject/publish/unpublish/delete) is recorded in `admin_audit`. Retained for 1 year (365 days), pruned by the hourly cron trigger. Viewable at `/admin/audit`.
@@ -108,6 +108,7 @@ All API routes are prefixed with `/v1`. Authenticated requests carry `Authorizat
 | `GET` | `/v1/auth/google/callback` | Public | Google OAuth callback handler (server-side). |
 | `POST` | `/v1/auth/google/consume` | Public | Consume single-use handoff ticket for session. |
 | `POST` | `/v1/auth/logout` | Session | Revoke active session token. |
+| `POST` | `/v1/auth/refresh` | Public | Rotate an expiring/expired session token (sliding expiry). |
 | `GET` | `/v1/auth/me` | Session | Get active user profile, role, and auth providers. |
 | `PATCH` | `/v1/account` | Session | Update display name and email. |
 | `POST` | `/v1/account/password` | Session | Change or set account password. |

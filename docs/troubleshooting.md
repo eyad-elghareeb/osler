@@ -534,14 +534,14 @@ In Google Cloud Console → APIs & Services → Credentials → your OAuth 2.0 C
 
 **Symptom.** User logs in, lands on the dashboard, and is immediately bounced back to the login screen.
 
-**Likely cause.** Browser is blocking `sessionStorage` (e.g. Safari ITP with cross-site tracking prevention, or a privacy extension). The session token is written to `sessionStorage` on login and re-read on the next page load; if storage is cleared between the two, the user is logged out.
+**Likely cause.** The browser is blocking or clearing the session store (e.g. Safari ITP with cross-site tracking prevention, a privacy extension, or private browsing). Since v0.6 the session is written to `sessionStorage` *and* mirrored to `localStorage` (`osler-cloud-session` / `osler-local-session`), so a single storage tier being wiped is survivable — but if **both** are blocked or cleared between login and the next page load, the user is logged out. Safari private mode nukes both between page loads.
 
-**Diagnose.** In DevTools → Application → Session Storage → confirm `osler-session` exists after login. If it disappears on navigation, storage is being cleared.
+**Diagnose.** In DevTools → Application → Session Storage → confirm `osler-cloud-session` (or `osler-local-session`) exists after login, and check Local Storage for the mirror. If both disappear on navigation, storage is being cleared.
 
 **Fix.** Ask the user to:
 - Disable tracking-prevention extensions for the Osler domain.
 - In Safari: Preferences → Privacy → uncheck "Prevent cross-site tracking" or add an exception for the Osler domain.
-- Confirm they're not browsing in private/incognito mode (Safari private mode nukes sessionStorage between page loads).
+- Confirm they're not browsing in private/incognito mode (Safari private mode nukes storage between page loads).
 
 ### 4.8 Login works on desktop but not on iOS Safari
 

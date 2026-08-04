@@ -37,7 +37,6 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { NotesPanel } from "./notes-panel";
 import { SyncModal } from "./sync/sync-modal";
-import { readCloudSession } from "@/lib/osler/cloud";
 import {
   PageHeader,
   SectionHeading,
@@ -114,7 +113,7 @@ export function Profile({
       <div className="osler-page__inner--narrow">
         {/* Profile header */}
         {(() => {
-          const cloudSession = readCloudSession();
+          const cloudSession = session.cloudSession;
           return (
             <motion.div
               initial={{ opacity: 0, y: 8 }}

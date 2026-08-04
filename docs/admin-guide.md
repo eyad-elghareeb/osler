@@ -41,8 +41,9 @@ The admin panel is a Next.js client-side app under `/admin/*`. It talks exclusiv
 │                                                                      │
 │   /admin/*  ── AdminShell ──┐                                        │
 │                             │                                        │
-│   sessionStorage:           │  Bearer <session-token>               │
-│   { token, exp, ... }       │                                        │
+│   sessionStorage +        │  Bearer <session-token>               │
+│   localStorage mirror:    │                                        │
+│   { token, exp, ... }     │                                        │
 │                             ▼                                        │
 └─────────────────────────────┬────────────────────────────────────────┘
                               │  HTTPS + JSON
@@ -195,24 +196,26 @@ This is the end-to-end sequence from "I'm an operator" to "I'm looking at the da
 
 ### Token storage
 
-The Osler session token lives in `sessionStorage` (key `osler-cloud-session`), **not** a cookie. This is deliberate:
+The Osler session token lives in `sessionStorage` (key `osler-cloud-session`) mirrored to `localStorage`, **not** a cookie. This is deliberate:
 
-- It's scoped to the admin tab and vanishes when the tab closes — there's no persistent admin login across browser restarts.
 - It's not sent automatically with every request, so cross-site requests can't ride along on it (CSRF resistance without SameSite gymnastics).
 - The admin API client (`adminApi`) explicitly attaches `Authorization: Bearer <token>` to every call.
+- The localStorage mirror means opening the admin in a new tab or restarting the browser keeps the admin session instead of forcing a fresh sign-in; cross-tab logouts sync via `BroadcastChannel`.
 
-The trade-off: signing out and signing back in is required for every admin session. For a panel that manages user accounts and content, that's the right trade-off.
+The trade-off: a session persists locally after the browser closes, so sign out on shared machines.
 
 ### Session lifecycle
 
 | Event | Effect on sessions |
 | --- | --- |
 | User signs in | A new session row is inserted with a 7-day `expires_at` |
-| User signs out (Sign out button) | Frontend deletes `sessionStorage`; the session row is marked revoked |
+| User signs out (Sign out button) | Frontend deletes `sessionStorage` + the localStorage mirror; the session row is marked revoked |
+| Token near expiry | The client rotates it pre-emptively via `POST /v1/auth/refresh` (sliding expiry) — no re-login needed |
+| Token expired but within 30-day grace | `POST /v1/auth/refresh` still accepts it (revoked + reissued) as long as the D1 row is unrevoked |
 | Admin resets the user's password | **All** of the user's sessions are revoked |
 | Admin changes the user's role | Sessions are *not* automatically revoked; the next API call re-reads role from D1, so elevated/demoted users keep working with their new permissions |
 | Admin revokes sessions | All of the user's sessions are revoked |
-| Token `exp` passes (7 days) | Token rejected; user must sign in again |
+| Token `exp` passes (7 days) and refresh fails | Token rejected; user must sign in again |
 | Hourly cron | Prunes expired/revoked session rows from D1 |
 
 ### `cf-access-authenticated-user-email` is informational
@@ -308,7 +311,7 @@ The theme toggle (sun/moon icon) switches between dark and light. Your preferenc
 
 ### Sign out
 
-The Sign out button clears `sessionStorage`, dropping the Osler session token. The Worker still has the session row in D1, but it will be pruned by cron. To immediately invalidate the session server-side (e.g. if you suspect the token was observed), use a different device, sign in again, and revoke your other sessions from the Users page — though admins typically can't revoke their *own* sessions from the UI (you'd need to reset your own password, which does revoke all sessions).
+The Sign out button clears `sessionStorage` **and** the localStorage mirror (`clearCloudSession()`), dropping the Osler session token. The Worker still has the session row in D1, but it will be pruned by cron. To immediately invalidate the session server-side (e.g. if you suspect the token was observed), use a different device, sign in again, and revoke your other sessions from the Users page — though admins typically can't revoke their *own* sessions from the UI (you'd need to reset your own password, which does revoke all sessions).
 
 ### Loading and error states
 

@@ -33,7 +33,7 @@ Osler is a medical education platform. The assets we protect:
 | --- | --- | --- |
 | Student progress (QBank answers, flashcard schedules) | Low–medium | IndexedDB (local) + D1 (cloud sync, optional) |
 | Account credentials (password hash, OAuth tokens) | High | D1 (never plaintext) |
-| Session tokens | High | D1 (hash) + sessionStorage (browser) + httpOnly cookie (signature only) |
+| Session tokens | High | D1 (hash) + sessionStorage mirrored to localStorage (browser) — no cookies |
 | Content (quizzes, articles) | Low | Public folder (static) + R2 (admin-managed) |
 | Admin audit log | Medium | D1 (`admin_audit` table) |
 | Email addresses | Medium | D1 (`users.email`) |
@@ -81,33 +81,47 @@ A session token is `<base64url(payload)>.<base64url(hmac-sha256(payload, JWT_SEC
 
 ### Session storage (client)
 
-Sessions are stored in `sessionStorage` (not `localStorage` or cookies). This means:
+Sessions are stored in `sessionStorage` **mirrored to `localStorage`** (never cookies). The `sessionStorage` copy is the per-tab fast path; the `localStorage` mirror keeps the account signed in across new tabs and browser restarts. Rationale:
 
-- ✅ Cleared when the browser tab closes (limits exposure window).
 - ✅ Not sent automatically with every request (no CSRF risk from cookies).
-- ✅ Isolated per-tab (multiple admin logins don't conflict).
-- ❌ Lost on tab close (users must re-login). Trade-off for security.
+- ✅ Isolated per-tab sessions can still be shared via the localStorage mirror (`readStoredCloudSession()` reconciles both copies to the one with the later `expiresAt`).
+- ✅ Survives tab close + browser restart — the account no longer silently degrades to a local-only session on a new tab.
+- ✅ Revocable server-side: a rotated/revoked token dies immediately even though a copy persists locally.
+- ⚠️ localStorage persists after the browser closes, so a signed-in shared computer holds the token until sign-out. This is an accepted trade-off: the same-origin JS can read `sessionStorage` just as easily, and the app already stores the Gemini API key in `localStorage`. Sign out on shared machines.
+
+Token lifetime is sliding — see [`POST /v1/auth/refresh`](#session-lifecycle) below.
 
 ### Route gating (client-side, no middleware)
 
 Osler is a **static export** (`output: "export"`) — there is no server runtime, so there is no Next.js middleware and no `osler-session` cookie. Route gating is enforced client-side by `RouteGuard` (`src/components/osler/route-guard.tsx`):
 
-- It uses the session state from `OslerSessionProvider` (bearer token in `sessionStorage` per-tab, username hint in `localStorage`) to decide whether a route is protected.
+- It uses the session state from `OslerSessionProvider` (bearer token in `sessionStorage` + `localStorage`) to decide whether a route is protected.
 - Unauthenticated requests on protected routes are redirected to `/login?next=<path>`; the `next` param is validated with `isSafeLocalPath()` to prevent open redirect.
 - A user navigating directly to a protected URL may briefly see the page chrome render before the redirect fires, but **no actual content is exposed** — every Worker API call requires the bearer `Authorization` header, so unauthenticated requests get 401 from the Worker.
 - Cross-tab logins/logouts sync via `BroadcastChannel` so a logout on one tab clears the UI on all tabs.
+- There is deliberately **no "logged in by name only" half-state**: a user is either fully authenticated (cloud or local guest) or on the login screen. If a stored cloud session is expired/revoked it is rotated via `/v1/auth/refresh`; only a genuinely dead session sends the user back to `/login`.
 
-The security boundary is the Worker, not the page shell: the browser holds no server-side secret, and the token never leaves `sessionStorage` except as the `Authorization` header on Worker requests.
+The security boundary is the Worker, not the page shell: the browser holds no server-side secret, and the token only ever leaves the browser as the `Authorization` header on Worker requests.
 
 ### Session revocation
 
 Sessions can be revoked in three ways:
 
 1. **User-initiated**: `POST /v1/auth/logout` revokes the current session.
-2. **Password change/reset**: All other sessions for the user are revoked (the current session is preserved on password change, revoked on reset).
-3. **Admin-initiated**: `DELETE /v1/admin/users/:id/sessions` revokes all sessions for a user.
+2. **Token rotation**: `POST /v1/auth/refresh` revokes the presented session and issues a fresh one — a refreshed token can never be replayed.
+3. **Password change/reset**: All other sessions for the user are revoked (the current session is preserved on password change, revoked on reset).
+4. **Admin-initiated**: `DELETE /v1/admin/users/:id/sessions` revokes all sessions for a user.
 
 Revoked sessions are deleted by the hourly cron trigger.
+
+### Session refresh (sliding expiry)
+
+`POST /v1/auth/refresh` rotates the current token without a password. Unlike normal authenticated routes, the refresh route does **not** enforce the JWT `exp` claim — it accepts a token whose HMAC signature is still valid as long as the D1 session row is unrevoked and within 30 days of its DB expiry (`SESSION_REFRESH_GRACE_MS`). On success it revokes the old session and issues a brand-new 7-day session. The client calls this:
+
+- on restore, when the persisted session is expired (before falling back to login), and
+- in the cloud sync loop, pre-emptively when the token is within 6 hours of expiry and on a 401.
+
+The result: an active user is never forced to re-enter a password, while an abandoned session dies out within ~30 days of its last refresh.
 
 ### Per-user session cap
 
@@ -315,7 +329,7 @@ The 310,000-iteration PBKDF2 takes ~50–100ms per hash on a Worker. This is int
 | User profile (username, email, display name) | — | ✅ | — |
 | Password hash + salt | — | ✅ | — |
 | OAuth identity links | — | ✅ | — |
-| Session tokens | sessionStorage (+ httpOnly signed cookie for route gating) | ✅ (hash only) | — |
+| Session tokens | sessionStorage + localStorage mirror (no cookie) | ✅ (hash only) | — |
 | Content objects (quiz/article/flashcard JSON) | ✅ (cached) | — | ✅ (admin-managed) |
 | Admin audit log | — | ✅ | — |
 

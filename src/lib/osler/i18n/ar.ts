@@ -96,6 +96,7 @@ export const ar = {
     "login.google": "المتابعة باستخدام Google",
     "login.googleError": "فشل تسجيل الدخول باستخدام Google. يرجى المحاولة مرة أخرى.",
     "login.noEmailWarning": "بدون عنوان بريد إلكتروني، لن تتوفر ميزة استعادة كلمة المرور.",
+    "login.sessionExpired": "انتهت صلاحية جلستك أو تم تسجيل الخروج منها على جهاز آخر. يرجى تسجيل الدخول مرة أخرى لمواصلة مزامنة تقدّمك.",
 
     "settings.section.account": "الحساب",
     "settings.account.title": "الحساب والأمان",

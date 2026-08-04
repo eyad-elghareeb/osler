@@ -32,6 +32,7 @@ This is the complete HTTP API reference for the Osler Cloud Worker backend (`clo
    - [POST /v1/auth/reset/confirm](#post-v1authresetconfirm)
 4. [Authenticated user endpoints](#4-authenticated-user-endpoints)
    - [POST /v1/auth/logout](#post-v1authlogout)
+   - [POST /v1/auth/refresh](#post-v1authrefresh)
    - [GET /v1/auth/me](#get-v1authme)
    - [PATCH /v1/account](#patch-v1account)
    - [POST /v1/account/password](#post-v1accountpassword)
@@ -149,6 +150,7 @@ Auth-sensitive routes are rate-limited per IP using an in-memory LRU. Cloudflare
 | `auth:register` | 6 | 60s | `POST /v1/auth/register`, `GET /v1/auth/username-available` |
 | `auth:reset` | 6 | 60s | `POST /v1/auth/reset/request`, `POST /v1/auth/reset/confirm` |
 | `auth:google:consume` | 12 | 60s | `POST /v1/auth/google/consume` |
+| `auth:refresh` | 30 | 60s | `POST /v1/auth/refresh` |
 | `admin` | 600 | 60s | `POST /v1/admin/*` content management |
 | `ip:global` | 600 | 60s | All rate-limited routes combined |
 
@@ -237,6 +239,7 @@ Sessions are revoked in the following scenarios:
 | Trigger | Effect |
 | --- | --- |
 | `POST /v1/auth/logout` | Current session revoked |
+| `POST /v1/auth/refresh` | Presented session revoked, fresh session issued (rotation) |
 | `POST /v1/account/password` | All OTHER sessions for the user revoked (the current one is preserved and a new one is issued) |
 | `POST /v1/auth/reset/confirm` | ALL sessions for the user revoked |
 | `POST /v1/admin/users/:id/reset-password` | ALL sessions for the target user revoked |
@@ -249,7 +252,7 @@ Revoked sessions are not deleted immediately — they are kept until the next cr
 
 ### Token storage on the client
 
-The frontend stores session tokens in `sessionStorage` (per-tab) rather than `localStorage` or cookies. This limits token exposure to the tab that created them and ensures they are dropped when the tab closes. See [`security.md`](./security.md) for the full rationale.
+The frontend stores session tokens in `sessionStorage` (per-tab fast path) **mirrored to `localStorage`** (cross-tab / cross-restart persistence). This keeps an active account signed in across new tabs and browser restarts instead of silently degrading to a local-only session. Session lifetime is sliding: the client rotates the token via `POST /v1/auth/refresh` before expiry and on 401. See [`security.md`](./security.md#session-storage-client) for the full rationale and trade-offs.
 
 Separately, route gating is enforced client-side by `RouteGuard` (see [`security.md`](./security.md#route-gating-client-side-no-middleware)) — there is no httpOnly cookie and no `/api/auth/session` route, since the frontend is a static export with no server runtime.
 
@@ -842,6 +845,39 @@ curl -s -X POST https://osler-cloud.example.workers.dev/v1/auth/logout \
 #### Errors
 
 No expected error responses. Even unauthenticated calls succeed.
+
+### POST /v1/auth/refresh
+
+Rotate the current session without a password (sliding expiry). Unlike every other authenticated route, this route does **not** enforce the token's JWT `exp` claim — it accepts a token whose HMAC signature is still valid as long as the D1 session row is unrevoked and within 30 days of its DB expiry (`SESSION_REFRESH_GRACE_MS`). On success the presented session is revoked and a brand-new 7-day session is issued, so a rotated token can never be replayed. The frontend uses this to keep active accounts signed in across the 7-day token TTL.
+
+- **Auth**: the expiring/expired bearer token (via the `Authorization` header)
+- **Body**: none (`{}`)
+
+#### Example request
+
+```bash
+curl -s -X POST https://osler-cloud.example.workers.dev/v1/auth/refresh \
+  -H "authorization: Bearer eyJhbGciOiJIUzI1NiJ9...." \
+  -H "content-type: application/json" \
+  -d '{}'
+```
+
+#### Example success response (200 OK)
+
+```json
+{
+  "token": "eyJhbGciOiJIUzI1NiJ9....",
+  "expiresAt": 1754856000000,
+  "user": { "id": "u_123", "username": "jane", "displayName": "Jane", "role": "student", "email": "jane@example.com" }
+}
+```
+
+#### Errors
+
+| Status | Body `error` |
+| --- | --- |
+| `401` | `Session is no longer valid — please sign in again` (revoked, expired beyond grace, bad signature, or unknown user) |
+| `429` | `Too many attempts` (rate limit) |
 
 ---
 

@@ -2,9 +2,18 @@ import { getConfig, loadConfig } from "@/lib/osler/config";
 import { flashcardReview, storage, type FlashcardReviewRecord, type QuestionRecord } from "@/lib/osler/storage";
 
 const SESSION_STORAGE_KEY = "osler-cloud-session-v1";
-const LOCAL_USERNAME_KEY = "osler-local-username";
+/** Set in sessionStorage when a stored cloud session could not be restored
+ *  (revoked / expired beyond the refresh grace). The login screen reads and
+ *  clears it to explain why the user was signed out. */
+export const SESSION_EXPIRED_FLAG = "osler-cloud-session-expired";
 const SYNC_DEBOUNCE_MS = 4_000;
 const MIN_SYNC_INTERVAL_MS = 20_000;
+// Rotate the token through /v1/auth/refresh once it's within this window of
+// its expiry, so an active session never dies mid-use.
+const REFRESH_AHEAD_MS = 6 * 60 * 60 * 1000;
+// Exponential backoff for failed syncs (conflicts, transient 5xx, offline).
+const RETRY_BASE_MS = 1_000;
+const RETRY_MAX_MS = 30_000;
 
 export interface CloudUser {
   id: string;
@@ -58,14 +67,14 @@ export async function cloudGoogleEnabled(): Promise<boolean> {
   return status.googleEnabled;
 }
 
-export function readCloudSession(): CloudSession | null {
-  if (typeof window === "undefined") return null;
+/** Parse + shape-validate a persisted CloudSession JSON blob. A corrupted or
+ *  tampered entry must not be trusted — callers use `session.token` to call
+ *  Worker APIs and a bad value would send `Bearer undefined`. */
+function parseCloudSession(raw: string | null): CloudSession | null {
+  if (!raw) return null;
   try {
-    const value = JSON.parse(sessionStorage.getItem(SESSION_STORAGE_KEY) ?? "null");
+    const value = JSON.parse(raw);
     if (!value || typeof value !== "object") return null;
-    // Validate the shape — a corrupted/tampered sessionStorage entry must
-    // not be trusted. Callers use `session.token` to call Worker APIs; a
-    // missing/invalid token would send `Bearer undefined` and confuse errors.
     if (
       typeof value.token !== "string" || value.token.length === 0 || value.token.length > 2048 ||
       typeof value.expiresAt !== "number" ||
@@ -77,36 +86,62 @@ export function readCloudSession(): CloudSession | null {
     ) {
       return null;
     }
-    return value.expiresAt > Date.now() ? (value as CloudSession) : null;
+    return value as CloudSession;
   } catch {
     return null;
   }
 }
 
 /**
- * Save the cloud session to sessionStorage (per-tab, holds the bearer token)
- * AND mirror a redacted username hint to localStorage so other tabs on the
- * same origin can show the user as "logged in" without the bearer token
- * (those tabs will need to re-authenticate to actually call Worker APIs).
+ * Read the persisted cloud session from either storage tier. `sessionStorage`
+ * is the per-tab fast path; `localStorage` is a cross-tab / cross-restart
+ * mirror that keeps the account signed in across tabs and browser sessions.
+ *
+ * When both copies exist they are reconciled to the one with the later
+ * `expiresAt` (a rotated token supersedes an older one) and the loser copy is
+ * re-synced so the two mirrors never diverge.
+ */
+export function readStoredCloudSession(): CloudSession | null {
+  if (typeof window === "undefined") return null;
+  let fromStorage: CloudSession | null = null;
+  let fromLocal: CloudSession | null = null;
+  try { fromStorage = parseCloudSession(sessionStorage.getItem(SESSION_STORAGE_KEY)); } catch {}
+  try { fromLocal = parseCloudSession(localStorage.getItem(SESSION_STORAGE_KEY)); } catch {}
+  let session: CloudSession | null = null;
+  if (fromStorage && fromLocal) {
+    session = fromStorage.expiresAt >= fromLocal.expiresAt ? fromStorage : fromLocal;
+  } else {
+    session = fromStorage ?? fromLocal;
+  }
+  if (!session) return null;
+  // Re-sync both mirrors so they agree on the winning session.
+  try { sessionStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(session)); } catch {}
+  try { localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(session)); } catch {}
+  return session;
+}
+
+export function readCloudSession(): CloudSession | null {
+  const session = readStoredCloudSession();
+  if (!session || session.expiresAt <= Date.now()) return null;
+  return session;
+}
+
+/**
+ * Save the cloud session to `sessionStorage` (per-tab fast path) AND mirror
+ * it to `localStorage` so the account stays signed in across new tabs and
+ * browser restarts. A redacted username hint is also written for the login
+ * form pre-fill. The bearer token is HMAC-signed, validated server-side
+ * against D1 (revocable), and readable by same-origin JS regardless of which
+ * storage tier holds it — localStorage just gives the session a longer life.
  *
  * NOTE: There is no longer an httpOnly cookie issued by a Next.js server
  * route — the static export has no server. Route gating is enforced purely
  * client-side by `RouteGuard` (see `src/components/osler/route-guard.tsx`).
- *
- * The bearer token NEVER leaves sessionStorage except in the explicit
- * `Authorization: Bearer` header to the Worker. localStorage only holds the
- * username hint for the login form + UI display, never the token.
  */
 export function saveCloudSession(session: CloudSession): void {
   if (typeof window === "undefined") return;
-  sessionStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(session));
-  // Mirror a non-sensitive username hint to localStorage so the login form
-  // can pre-fill on the next visit. The bearer token stays in sessionStorage.
-  try {
-    localStorage.setItem(LOCAL_USERNAME_KEY, session.user.displayName);
-  } catch {
-    // localStorage might be unavailable (private mode); ignore.
-  }
+  try { sessionStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(session)); } catch {}
+  try { localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(session)); } catch {}
   // Notify other tabs on the same origin that the session changed.
   // The storage event fires automatically for localStorage writes, but
   // sessionStorage writes don't fire it — so we dispatch a custom event
@@ -120,27 +155,12 @@ export function saveCloudSession(session: CloudSession): void {
 
 export function clearCloudSession(): void {
   if (typeof window === "undefined") return;
-  sessionStorage.removeItem(SESSION_STORAGE_KEY);
-  try {
-    localStorage.removeItem(LOCAL_USERNAME_KEY);
-  } catch {
-    // ignore
-  }
+  try { sessionStorage.removeItem(SESSION_STORAGE_KEY); } catch {}
+  try { localStorage.removeItem(SESSION_STORAGE_KEY); } catch {}
   try {
     notifySessionChange("logout", null);
   } catch {
     // ignore
-  }
-}
-
-/** Local-storage username hint for the login form pre-fill + cross-tab UI hint. */
-export function readLocalUsernameHint(): string | null {
-  if (typeof window === "undefined") return null;
-  try {
-    const v = localStorage.getItem(LOCAL_USERNAME_KEY);
-    return v && v.length > 0 && v.length <= 80 ? v : null;
-  } catch {
-    return null;
   }
 }
 
@@ -223,6 +243,35 @@ export async function consumeGoogleLogin(ticket: string): Promise<CloudSession> 
   saveCloudSession(session);
   void syncGeminiKeyFromCloud();
   return session;
+}
+
+/**
+ * Rotate the current session through the Worker's /v1/auth/refresh endpoint.
+ * The Worker accepts a still-signed token even after its `exp` claim passes
+ * (within a 30-day grace) and returns a brand-new session; the old one is
+ * revoked server-side. Used on restore when the persisted token is expired
+ * and by the sync loop on 401 — this is what stops a 7-day-old session from
+ * silently degrading the user to a local-only account.
+ *
+ * Returns null on any failure (revoked session, network error, cloud
+ * disabled). The refreshed session is persisted via `saveCloudSession` and
+ * broadcast to other tabs / the session provider via
+ * `osler-cloud-session-refreshed`.
+ */
+export async function refreshCloudSession(session: CloudSession): Promise<CloudSession | null> {
+  try {
+    const next = await request<CloudSession>("/v1/auth/refresh", { method: "POST", body: "{}" }, session.token);
+    if (!next?.token || typeof next.expiresAt !== "number" || !next?.user) return null;
+    saveCloudSession(next);
+    try {
+      window.dispatchEvent(new CustomEvent("osler-cloud-session-refreshed", { detail: { session: next } }));
+    } catch {
+      // ignore
+    }
+    return next;
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -381,28 +430,42 @@ export function syncCloudNow(): void {
 export function startCloudSync(session: CloudSession): () => void {
   stopSync?.();
   let stopped = false;
+  let currentSession = session;
   let dirty = true;
   let syncing = false;
   let lastSyncAt = 0;
   let serverUpdatedAt = 0;
+  let retryCount = 0;
   let timer: ReturnType<typeof setTimeout> | null = null;
 
-  const sync = async () => {
-    if (stopped || syncing || !dirty || !navigator.onLine) return;
+  const runSync = async () => {
+    if (stopped || syncing || !dirty) return;
+    if (!navigator.onLine) {
+      timer = setTimeout(runSync, SYNC_DEBOUNCE_MS);
+      return;
+    }
     const sinceLastSync = Date.now() - lastSyncAt;
     if (sinceLastSync < MIN_SYNC_INTERVAL_MS) {
-      timer = setTimeout(sync, MIN_SYNC_INTERVAL_MS - sinceLastSync);
+      timer = setTimeout(runSync, MIN_SYNC_INTERVAL_MS - sinceLastSync);
       return;
     }
     syncing = true;
     window.dispatchEvent(new CustomEvent("osler-cloud-sync-status", { detail: { state: "syncing" } }));
     try {
       await storage.ensureCacheHydrated();
+
+      // Rotate the token early when it's close to expiry so an active session
+      // never dies mid-sync.
+      if (currentSession.expiresAt - Date.now() < REFRESH_AHEAD_MS) {
+        const refreshed = await refreshCloudSession(currentSession);
+        if (refreshed) currentSession = refreshed;
+      }
+
       const config = getConfig();
       const remote = await request<{
         qbank: { records: Record<string, QuestionRecord>; updatedAt: number };
         flashcards: { records: Record<string, FlashcardReviewRecord>; updatedAt: number };
-      }>("/v1/sync", {}, session.token);
+      }>("/v1/sync", {}, currentSession.token);
       await storage.mergeCloudProgress(
         config.cloud.syncQbank ? remote.qbank.records : undefined,
         config.cloud.syncFlashcards ? remote.flashcards.records : undefined,
@@ -419,44 +482,69 @@ export function startCloudSync(session: CloudSession): () => void {
           ...(config.cloud.syncQbank ? { qbank: { records: storage.exportProgressRecords() } } : {}),
           ...(config.cloud.syncFlashcards ? { flashcards: { records: flashcardReview.getAll() } } : {}),
         }),
-      }, session.token);
+      }, currentSession.token);
       void saved;
       dirty = false;
+      retryCount = 0;
       lastSyncAt = Date.now();
       window.dispatchEvent(new CustomEvent("osler-cloud-sync-status", { detail: { state: "synced", syncedAt: lastSyncAt } }));
     } catch (error) {
       if (error instanceof CloudApiError) {
         if (error.status === 401) {
-          clearCloudSession();
-          window.dispatchEvent(new CustomEvent("osler-cloud-session-expired"));
+          // The token is dead (expired/revoked). Try once to rotate it; if
+          // that fails the session is genuinely gone and we sign the user out
+          // rather than leaving them on a silently-local account.
+          const refreshed = await refreshCloudSession(currentSession);
+          if (refreshed) {
+            currentSession = refreshed;
+            serverUpdatedAt = 0;
+            dirty = true;
+            lastSyncAt = 0;
+          } else {
+            clearCloudSession();
+            window.dispatchEvent(new CustomEvent("osler-cloud-session-expired"));
+            stopped = true;
+          }
         } else if (error.status === 409) {
-          // Conflict — data changed since last fetch. Re-fetch and retry immediately.
+          // Conflict — data changed since we fetched. Re-fetch and retry.
+          // The retry is scheduled in the `finally` block (after `syncing`
+          // flips false) so it actually runs — the old code re-entered sync
+          // while `syncing` was still true and silently dropped the retry.
           serverUpdatedAt = 0;
           dirty = true;
           lastSyncAt = 0;
-          void sync();
-          return;
         }
       }
       window.dispatchEvent(new CustomEvent("osler-cloud-sync-status", { detail: { state: "offline" } }));
     } finally {
       syncing = false;
+      // Self-heal: retry with exponential backoff while still dirty so a
+      // transient failure or conflict doesn't stall sync until the next
+      // progress event.
+      if (dirty && !stopped && navigator.onLine) {
+        if (timer) clearTimeout(timer);
+        const backoff = Math.min(RETRY_BASE_MS * 2 ** retryCount, RETRY_MAX_MS);
+        retryCount += 1;
+        timer = setTimeout(runSync, backoff);
+      }
     }
   };
   const schedule = () => {
     dirty = true;
     if (timer) clearTimeout(timer);
-    timer = setTimeout(sync, SYNC_DEBOUNCE_MS);
+    timer = setTimeout(runSync, SYNC_DEBOUNCE_MS);
   };
   const onOnline = () => schedule();
   window.addEventListener("osler-progress-changed", schedule);
   window.addEventListener("osler-flashcard-changed", schedule);
   window.addEventListener("online", onOnline);
-  void sync();
+  void runSync();
   forceSync = () => {
     dirty = true;
     lastSyncAt = 0;
-    void sync();
+    retryCount = 0;
+    if (timer) clearTimeout(timer);
+    void runSync();
   };
   stopSync = () => {
     stopped = true;

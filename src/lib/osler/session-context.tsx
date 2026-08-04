@@ -7,7 +7,9 @@ import {
   clearCloudSession,
   consumeGoogleLogin,
   readCloudSession,
-  readLocalUsernameHint,
+  readStoredCloudSession,
+  refreshCloudSession,
+  SESSION_EXPIRED_FLAG,
   startCloudSync,
   logoutCloudAccount,
   subscribeSessionChanges,
@@ -33,21 +35,23 @@ const LOCAL_SESSION_KEY = "osler-local-session";
  * ARCHITECTURE (static-export mode):
  *   - No httpOnly cookie. No server-side middleware. No /api/auth/session
  *     route. The static export has no server runtime at all.
- *   - CloudSession (bearer token + user) lives in `sessionStorage` (per-tab).
- *   - A redacted username hint lives in `localStorage` (cross-tab, no token)
- *     so the login form can pre-fill on the next visit.
+ *   - CloudSession (bearer token + user) is stored in `sessionStorage`
+ *     (per-tab fast path) AND mirrored to `localStorage` so the account
+ *     survives new tabs and browser restarts.
+ *   - Cross-tab logout is broadcast via BroadcastChannel (see cloud.ts).
  *   - Route gating is enforced client-side by `RouteGuard` which redirects
  *     unauthenticated users to /login.
- *   - Cross-tab logout is broadcast via BroadcastChannel (see cloud.ts).
  *
  * Restore flow on mount:
- *   1. If cloud is enabled AND there's a valid CloudSession in sessionStorage,
- *      restore it and start sync. The bearer token is per-tab.
- *   2. Otherwise check sessionStorage for a local username (local-mode guest).
- *   3. Otherwise check localStorage for a cross-tab username hint — show the
- *      user as logged-in by name only, but the cloud sync won't start until
- *      they re-authenticate on this tab. This matches the old cookie-based
- *      restore UX without requiring a server.
+ *   1. If cloud is enabled and there's a valid CloudSession, restore it and
+ *      start sync (sessionStorage first, then the localStorage mirror).
+ *   2. If the persisted session is expired, rotate it via /v1/auth/refresh.
+ *      Only a truly dead session falls through to the login screen.
+ *   3. Otherwise check for a local-mode guest session (sessionStorage, then
+ *      localStorage mirror).
+ *   4. Nothing usable → RouteGuard redirects to /login. There is deliberately
+ *      NO "logged in by name only" half-state: a user is either fully
+ *      authenticated (cloud or local) or on the login screen.
  */
 export function OslerSessionProvider({ children }: { children: React.ReactNode }) {
   const [username, setUsername] = React.useState<string | null>(null);
@@ -62,25 +66,21 @@ export function OslerSessionProvider({ children }: { children: React.ReactNode }
 
   /**
    * Persist a local-mode username to sessionStorage (per-tab) + localStorage
-   * (cross-tab hint for the login form pre-fill). Cloud sessions are handled
-   * by `saveCloudSession()` in cloud.ts and are NOT re-persisted here.
+   * (cross-tab mirror). Cloud sessions are handled by `saveCloudSession()` in
+   * cloud.ts and are NOT re-persisted here.
    */
   const persistLocalUsername = React.useCallback((name: string | null) => {
     if (typeof window === "undefined") return;
-    if (name) {
-      sessionStorage.setItem(LOCAL_SESSION_KEY, name);
-      try {
-        localStorage.setItem("osler-local-username", name);
-      } catch {
-        // ignore
+    try {
+      if (name) {
+        sessionStorage.setItem(LOCAL_SESSION_KEY, name);
+        localStorage.setItem(LOCAL_SESSION_KEY, name);
+      } else {
+        sessionStorage.removeItem(LOCAL_SESSION_KEY);
+        localStorage.removeItem(LOCAL_SESSION_KEY);
       }
-    } else {
-      sessionStorage.removeItem(LOCAL_SESSION_KEY);
-      try {
-        localStorage.removeItem("osler-local-username");
-      } catch {
-        // ignore
-      }
+    } catch {
+      // ignore storage failures (private mode)
     }
   }, []);
 
@@ -90,47 +90,63 @@ export function OslerSessionProvider({ children }: { children: React.ReactNode }
     let cancelled = false;
 
     void (async () => {
+      let refreshFailed = false;
       try {
         const isCloud = await cloudEnabled();
 
-        // 1. Cloud session in sessionStorage (fast, per-tab) — has the token.
+        // 1. Valid cloud session — sessionStorage fast path, then the
+        //    localStorage mirror (so a new tab / browser restart keeps the
+        //    account signed in instead of silently degrading to local mode).
         if (isCloud) {
           const cSession = readCloudSession();
           if (!cancelled && cSession) {
-            // Trust the sessionStorage entry for initial render. If it's
-            // stale, the cloud sync loop detects the 401 and fires
+            // Trust the stored session for initial render. If it turns out
+            // stale/revoked, the cloud sync loop detects the 401 and fires
             // `osler-cloud-session-expired`, which logs the user out.
             setCloudSession(cSession);
             setUsername(cSession.user.displayName);
             setLoading(false);
             return;
           }
+
+          // 2. Expired/expiring persisted session — try the sliding refresh
+          //    before giving up. A genuinely revoked token (password change,
+          //    sign-out on another device) falls through to /login — we never
+          //    show a "logged in" shell without a usable token.
+          const stored = readStoredCloudSession();
+          if (!cancelled && stored) {
+            const refreshed = await refreshCloudSession(stored);
+            if (!cancelled && refreshed) {
+              setCloudSession(refreshed);
+              setUsername(refreshed.user.displayName);
+              setLoading(false);
+              return;
+            }
+            refreshFailed = true;
+          }
         }
 
-        // 2. Local username in sessionStorage (fast, per-tab).
-        const storedLocal = sessionStorage.getItem(LOCAL_SESSION_KEY);
+        // 3. Local guest session (no cloud, or no valid cloud session on this
+        //    device). sessionStorage fast path, then the localStorage mirror.
+        const storedLocal = sessionStorage.getItem(LOCAL_SESSION_KEY) ?? localStorage.getItem(LOCAL_SESSION_KEY);
         if (!cancelled && storedLocal) {
           setUsername(storedLocal);
           setLoading(false);
           return;
         }
 
-        // 3. localStorage username hint (cross-tab). We show the user as
-        //    "logged in by name" so the UI doesn't bounce them to /login
-        //    on every cold load. The bearer token isn't available in this
-        //    tab — they'll need to re-authenticate to actually use cloud
-        //    features. RouteGuard treats this as authenticated for display.
-        if (isCloud) {
-          const hint = readLocalUsernameHint();
-          if (!cancelled && hint) {
-            setUsername(hint);
-            setLoading(false);
-            return;
+        // 4. No session at all — leave username null. RouteGuard will
+        //    redirect to /login on protected routes. If a stored cloud
+        //    session was present but couldn't be refreshed, flag it so the
+        //    login screen can explain why (instead of a confusing drop to
+        //    local mode).
+        if (refreshFailed) {
+          try {
+            sessionStorage.setItem(SESSION_EXPIRED_FLAG, "1");
+          } catch {
+            // ignore
           }
         }
-
-        // 4. No session at all — leave username null. RouteGuard will
-        //    redirect to /login on protected routes.
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -180,6 +196,11 @@ export function OslerSessionProvider({ children }: { children: React.ReactNode }
   // Cloud session expiration listener (fired by sync on 401).
   React.useEffect(() => {
     const expire = () => {
+      try {
+        sessionStorage.setItem(SESSION_EXPIRED_FLAG, "1");
+      } catch {
+        // ignore
+      }
       setCloudSession(null);
       setUsername(null);
       persistLocalUsername(null);
@@ -189,22 +210,35 @@ export function OslerSessionProvider({ children }: { children: React.ReactNode }
     return () => window.removeEventListener("osler-cloud-session-expired", expire);
   }, [router, persistLocalUsername]);
 
+  // Token-rotation listener (fired by `refreshCloudSession`). Keeps the
+  // context's session in sync with the rotated credential so the app keeps
+  // using the fresh token everywhere (profile, settings, analytics).
+  React.useEffect(() => {
+    const onRefreshed = (e: Event) => {
+      const session = (e as CustomEvent).detail?.session as CloudSession | undefined;
+      if (session?.token) {
+        setCloudSession(session);
+        setUsername(session.user.displayName);
+      }
+    };
+    window.addEventListener("osler-cloud-session-refreshed", onRefreshed);
+    return () => window.removeEventListener("osler-cloud-session-refreshed", onRefreshed);
+  }, []);
+
   // Cross-tab session change listener (BroadcastChannel).
-  // When another tab logs out, this tab also clears its UI state. The
-  // sessionStorage entry is per-tab so it survives — but the username
-  // hint in localStorage is cleared, which is what we observe here.
+  // When another tab logs out, it clears the shared localStorage session AND
+  // broadcasts `logout`. This tab keeps its per-tab sessionStorage entry so a
+  // logout on another tab doesn't kick this tab out mid-session — the next
+  // sync 401 (revoked server-side) handles this tab's logout.
   React.useEffect(() => {
     const unsub = subscribeSessionChanges((kind, name) => {
       if (kind === "logout") {
         setCloudSession(null);
         setUsername(null);
-        // The sessionStorage entry (with token) for THIS tab is preserved —
-        // a logout on another tab shouldn't kick this tab out mid-session.
-        // The next sync 401 will handle this tab's logout.
       } else if (kind === "login" && name) {
-        // Another tab logged in. We don't have the bearer token here, so
-        // we just surface the username hint for display. The user can
-        // refresh this tab to pick up the real session.
+        // Another tab logged in — the full session was written to the shared
+        // localStorage mirror, so this tab's UI can safely surface the name
+        // (the next readCloudSession / refresh picks up the real token).
         if (!username) setUsername(name);
       }
     });

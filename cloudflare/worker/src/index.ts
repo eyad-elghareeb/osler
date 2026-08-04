@@ -30,6 +30,12 @@ const encoder = new TextEncoder();
 const decoder = new TextDecoder();
 const PASSWORD_ITERATIONS = 100_000;
 const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+// After a session token's JWT `exp` passes, it may still be rotated through
+// /v1/auth/refresh as long as the D1 session row is no older than this grace
+// window. Every successful refresh issues a brand-new 7-day session, so an
+// active user is never forced to re-enter their password; an abandoned
+// session dies out naturally ~GRACE after its last refresh.
+const SESSION_REFRESH_GRACE_MS = 30 * 24 * 60 * 60 * 1000;
 const RESET_TTL_MS = 30 * 60 * 1000;
 const MAX_DOCUMENT_BYTES = 900_000;
 const OAUTH_TTL_MS = 10 * 60 * 1000;
@@ -42,6 +48,7 @@ const RATE_LIMIT_MAX: Record<string, number> = {
   "auth:register": 6,
   "auth:reset": 6,
   "auth:google:consume": 12,
+  "auth:refresh": 30,
   "biometric": 6,
   "ip:global": 600,
   "content": 240,
@@ -455,6 +462,36 @@ async function requireUser(request: Request, env: Env): Promise<SessionRow | nul
   if (!row) return null;
   const { _sid, ...userFields } = row;
   return { sessionId: claims.sid, user: userFields as unknown as UserRow };
+}
+
+/**
+ * Rotate a session through /v1/auth/refresh. Unlike `requireUser`, the JWT
+ * `exp` claim is intentionally NOT enforced here — an expired-but-recent
+ * token may still be swapped for a fresh session as long as:
+ *   * the HMAC signature is valid,
+ *   * the D1 session row still exists and is not revoked,
+ *   * the row is within `SESSION_REFRESH_GRACE_MS` of its DB expiry.
+ *
+ * The presented session is revoked and a brand-new one is issued (rotation),
+ * so a token that has been refreshed once cannot be replayed. Returns null
+ * when the session is genuinely dead (revoked / too old / unknown user).
+ */
+async function refreshSession(request: Request, env: Env): Promise<{ token: string; expiresAt: number; user: any } | null> {
+  const token = request.headers.get("authorization")?.replace(/^Bearer\s+/i, "");
+  if (!token || !env.JWT_SECRET) return null;
+  const [payload, signature] = token.split(".");
+  if (!payload || !signature || signature !== await hmac(payload, env.JWT_SECRET)) return null;
+  let claims: any;
+  try { claims = JSON.parse(decoder.decode(unb64url(payload))); } catch { return null; }
+  if (!claims?.sub || !claims?.sid) return null;
+  const row = await env.DB.prepare(
+    "SELECT id FROM sessions WHERE id = ? AND user_id = ? AND token_hash = ? AND revoked_at IS NULL AND expires_at > ?"
+  ).bind(claims.sid, claims.sub, await sha256(token), now() - SESSION_REFRESH_GRACE_MS).first<{ id: string }>();
+  if (!row) return null;
+  const user = await env.DB.prepare("SELECT * FROM users WHERE id = ?").bind(claims.sub).first<UserRow>();
+  if (!user) return null;
+  await env.DB.prepare("UPDATE sessions SET revoked_at = ? WHERE id = ?").bind(now(), claims.sid).run();
+  return issueSession(user, env);
 }
 
 // ─── Sync merging ────────────────────────────────────────────────────────────
@@ -2511,6 +2548,18 @@ export default {
       if (request.method === "POST" && url.pathname === "/v1/auth/logout") {
         const session = await requireUser(request, env); if (session) await env.DB.prepare("UPDATE sessions SET revoked_at = ? WHERE id = ?").bind(now(), session.sessionId).run();
         return json({ ok: true }, 200, origin, log);
+      }
+
+      // ── Session refresh (sliding expiry) ──
+      // Accepts the current (possibly just-expired) bearer token, validates
+      // the signature + session row, and returns a brand-new session. Lets
+      // the client rotate a token before/after expiry instead of forcing a
+      // full re-login — see refreshSession() for the exact semantics.
+      if (request.method === "POST" && url.pathname === "/v1/auth/refresh") {
+        if (!rateLimit(ip, "auth:refresh")) return json({ error: "Too many attempts" }, 429, origin, log);
+        const refreshed = await refreshSession(request, env);
+        if (!refreshed) return json({ error: "Session is no longer valid — please sign in again" }, 401, origin, log);
+        return json(refreshed, 200, origin, log);
       }
 
       // ── Password reset ──

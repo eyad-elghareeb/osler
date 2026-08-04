@@ -95,6 +95,7 @@ export const en = {
     "login.google": "Continue with Google",
     "login.googleError": "Google sign-in failed. Please try again.",
     "login.noEmailWarning": "Without an email address, password recovery will be unavailable.",
+    "login.sessionExpired": "Your session has expired or was signed out on another device. Please sign in again to continue syncing your progress.",
 
     "settings.section.account": "Account",
     "settings.account.title": "Account & Security",

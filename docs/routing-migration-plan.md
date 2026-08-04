@@ -175,25 +175,35 @@ production.
 
 - `OslerSessionProvider` holds `{ username, cloudSession, loading }`.
 - **Bootstrap order:**
-  1. Cloud session in sessionStorage (fast, per-tab, has the token).
-  2. Local username in sessionStorage.
-  3. `GET /api/auth/session` — returns the redacted view. For cloud
-     sessions this means the user is shown as logged in but cloud sync
-     does NOT start (no token). For local sessions, the username is
-     restored.
-  4. localStorage `osler-local-username` fallback (local mode only).
+  1. Cloud session from `readCloudSession()` — reads sessionStorage
+     mirrored to localStorage and reconciles to the copy with the later
+     `expiresAt`; if it's still valid, restore the account and start sync.
+  2. Expired-but-persisted cloud session → `refreshCloudSession()` (POST
+     `/v1/auth/refresh`, sliding expiry). If refresh succeeds, restore.
+  3. Refresh failed → keep going (no token), check for a local guest
+     session (sessionStorage or the localStorage mirror).
+  4. Local guest session (`osler-local-session`) → restore as local user.
+  5. Nothing usable → set `SESSION_EXPIRED_FLAG` (only when a cloud
+     session genuinely failed to refresh) and stay on `/login`.
 - Cloud sync starts **only** when a real `CloudSession` with a `token`
-  is present (from sessionStorage or a fresh login).
+  is present (restored or freshly logged in). The sync loop rotates the
+  token via `/v1/auth/refresh` before expiry and on 401, and retries
+  conflicts with exponential backoff.
 - Google `?cloudAuth=<ticket>` flow uses `router.replace` (not
   `window.history.replaceState`) so Next's router state stays consistent.
-- Cloud session expiration (401 from sync) clears both sessionStorage and
-  the cookie, then redirects to `/login`.
+- Cloud session expiration (failed refresh) clears both sessionStorage and
+  the localStorage mirror, sets `SESSION_EXPIRED_FLAG`, and redirects to
+  `/login`.
 
 ### `src/lib/osler/cloud.ts` (patched)
 
-- `saveCloudSession()` still writes to sessionStorage + POSTs to
-  `/api/auth/session`. The POST may now return 401 if the Worker rejects
-  the token — in that case the stale sessionStorage entry is cleared.
+- `saveCloudSession()` writes the full session (incl. bearer token) to
+  sessionStorage **and** localStorage, so new tabs and browser restarts
+  stay signed in instead of degrading to a local-only session.
+- `readStoredCloudSession()` reconciles both tiers to the latest
+  `expiresAt` and re-syncs the mirrors.
+- `startCloudSync()` uses a mutable `currentSession` (not a captured
+  one), so rotated tokens are picked up on the next sync tick.
 - All other callers unchanged.
 
 ### `src/app/layout.tsx`

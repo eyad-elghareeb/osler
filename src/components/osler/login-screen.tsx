@@ -27,6 +27,7 @@ import { cn } from "@/lib/utils";
 import { getConfig } from "@/lib/osler/config";
 import {
   CloudApiError,
+  SESSION_EXPIRED_FLAG,
   cloudEnabled,
   cloudGoogleEnabled,
   cloudUsernameAvailable,
@@ -100,6 +101,17 @@ export function LoginScreen({ onLogin, cloudAuthError }: LoginScreenProps) {
     // login page, which read it from searchParams) or a stray URL param.
     if (cloudAuthError === "google" || params.get("cloudAuthError") === "google") {
       setCloudError(t("login.googleError"));
+    }
+    // If a stored cloud session died (revoked / expired beyond the refresh
+    // grace), tell the user why they're back on the login screen instead of
+    // silently dropping them to a local-only account.
+    try {
+      if (sessionStorage.getItem(SESSION_EXPIRED_FLAG)) {
+        sessionStorage.removeItem(SESSION_EXPIRED_FLAG);
+        setCloudError(t("login.sessionExpired"));
+      }
+    } catch {
+      // ignore
     }
     return () => { cancelled = true; };
   }, [t, cloudAuthError]);
