@@ -245,6 +245,15 @@ export const adminApi = {
   getR2Binary:     (key: string)                 => reqBinary(`/v1/admin/content/r2-content?key=${encodeURIComponent(key)}&raw=1`),
   /** Rename (move) an R2 key inside content-files/. */
   renameR2Key:     (from: string, to: string)    => req<{ ok: boolean; from: string; to: string }>("/v1/admin/content/r2-rename", "POST", { from, to }),
+  /** Recursively move every key under a content-files/ (and content-staging/)
+   *  prefix to a new path (same category), then regenerate the manifest.
+   *  `from`/`to` are the folder prefix without the keyspace, e.g.
+   *  "library/cardiology" → "library/cardio". */
+  renameR2Folder:  (from: string, to: string)    => req<{ ok: boolean; moved: number }>("/v1/admin/content/r2-rename-prefix", "POST", { from, to }),
+  /** Recursively delete every key under a content-files/ (and content-staging/)
+   *  prefix, then regenerate the category manifest. `prefix` is the folder
+   *  path without the keyspace, e.g. "library/cardiology". */
+  deleteR2Folder:  (prefix: string)              => req<{ ok: boolean; deleted: number }>("/v1/admin/content/r2-delete-prefix", "POST", { prefix }),
   /** Create an "empty folder" by writing a `.keep` placeholder. */
   createR2Folder:  (path: string)                => req<{ ok: boolean; key: string }>("/v1/admin/content/r2-folder", "POST", { path }),
   /** Rebuild the manifest for one category (or "all"). */

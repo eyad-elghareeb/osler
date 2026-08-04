@@ -1476,6 +1476,8 @@ export const ar = {
     "admin.content.context.duplicate": "تكرار",
     "admin.content.context.publishStaged": "نشر الملفات المخزّنة",
     "admin.content.context.discardStaged": "تجاهل الملفات المخزّنة",
+    "admin.content.context.renameFolder": "إعادة تسمية المجلد…",
+    "admin.content.context.deleteFolder": "حذف المجلد",
     // Content browser preview
     "admin.content.previewDescCloud": "تصفح وتعديل عناصر المحتوى (مسودة، قيد مراجعة، منشور).",
     "admin.content.previewDescR2": "ملفات المحتوى الموجهة للطلاب في R2. انقر بالزر الأيمن للإدارة.",
@@ -1512,6 +1514,8 @@ export const ar = {
     "admin.toast.publishStagedFailed": "فشل النشر: {error}",
     "admin.toast.discardStagedFailed": "فشل التجاهل: {error}",
     "admin.toast.adoptFailed": "فشل الترقية: {error}",
+    "admin.toast.renamedFolder": "تمت إعادة تسمية المجلد إلى {path}",
+    "admin.toast.deletedFolder": "تم حذف المجلد {name} ({n} ملف)",
     // Content editor — raw mode
     "admin.content.editor.rawBadge": "ملف R2 خام",
     "admin.content.editor.rawBannerTitle": "تحرير ملف R2 خام — لا يوجد سجل إصدار",
@@ -1526,6 +1530,8 @@ export const ar = {
     "admin.content.editor.unsavedTitle": "المغادرة دون حفظ؟",
     "admin.content.editor.unsavedDiscard": "تجاهل والعودة",
     "admin.content.deleteR2Title": "حذف الملف",
+    "admin.content.deleteFolderTitle": "حذف المجلد",
+    "admin.content.confirmDeleteFolder": "حذف {key} وكل ما بداخله؟ لا يمكن التراجع عن هذا الإجراء.",
     // Content editor metadata
     "admin.content.metadata.id": "المعرّف",
     "admin.content.metadata.r2Key": "مفتاح R2",
@@ -1577,6 +1583,15 @@ export const ar = {
     // Review
     "admin.review.untitled": "بدون عنوان",
     "admin.review.diff": "مقارنة",
+    "admin.review.pendingTitle": "مقترحات المحتوى",
+    "admin.review.emptyDesc": "ستظهر مقترحات المحتوى الجديدة والملفات المخزّنة هنا.",
+    "admin.review.stagedTitle": "الملفات المخزّنة",
+    "admin.review.stagedEmpty": "لا توجد ملفات مخزّنة",
+    "admin.review.stagedEmptyDesc": "تظهر هنا الملفات المرفوعة إلى منطقة التخزين المؤقت (content-staging/) حتى تُنشر للطلاب.",
+    "admin.review.stagedRoot": "(جذر الفئة)",
+    "admin.review.stagedFilesCount": "{n} ملف · {size}",
+    "admin.review.publish": "نشر",
+    "admin.review.discard": "تجاهل",
 
     // ── محررات المحتوى المهيكل ──────────────────────────────────────────
     "admin.structured.addCard": "إضافة بطاقة",

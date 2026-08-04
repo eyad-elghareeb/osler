@@ -239,6 +239,16 @@ async function readJson(request: Request): Promise<any> {
   try { return safeParseJSON(text, 32); } catch { throw new Error("Invalid JSON body"); }
 }
 
+/** Like readJson but for large payloads — used by the file-upload endpoint
+ *  where base64-encoded binary assets (PDFs, images, audio) routinely exceed
+ *  the 1 MB default cap. Bounded by `maxBytes` so the Worker never buffers
+ *  unbounded input. */
+async function readJsonLarge(request: Request, maxBytes = 30_000_000): Promise<any> {
+  const text = await request.text();
+  if (text.length > maxBytes) throw new Error("Request body is too large");
+  try { return safeParseJSON(text, 32); } catch { throw new Error("Invalid JSON body"); }
+}
+
 function jsonDepth(text: string): number {
   let depth = 0, max = 0, inString = false;
   for (let i = 0; i < text.length; i++) {
@@ -1886,7 +1896,10 @@ async function handleAdmin(request: Request, env: Env, session: Session, url: UR
     if (request.method === "POST" && path === "/v1/admin/content/upload-file") {
       if (!isAdmin(session)) return json({ error: "Forbidden" }, 403, origin, log);
       if (!env.CONTENT) return json({ error: "Content storage not configured" }, 503, origin, log);
-      const body = await readJson(request);
+      // readJsonLarge (not readJson): base64 data-URI bodies for binary files
+      // (PDFs, images, audio) far exceed the 1 MB cap that readJson enforces,
+      // and hitting that cap previously surfaced as a 500 instead of a 400.
+      const body = await readJsonLarge(request);
       const key = typeof body.key === "string" ? body.key.trim() : "";
       const raw = typeof body.body === "string" ? body.body : "";
       if (!key || !raw) return json({ error: "key and body required" }, 400, origin, log);
@@ -1900,8 +1913,17 @@ async function handleAdmin(request: Request, env: Env, session: Session, url: UR
       const ext = key.split(".").pop()?.toLowerCase() ?? "";
       let content: any; let ct: string;
       if (raw.startsWith("data:")) {
-        const b64 = raw.split(",")[1] ?? "";
-        content = Uint8Array.from(atob(b64), (c: string) => c.charCodeAt(0));
+        // Strip any line-wrapping whitespace — atob throws on newlines, and
+        // pasted or script-generated base64 is not guaranteed to be single-line.
+        const b64 = (raw.split(",")[1] ?? "").replace(/\s+/g, "");
+        // Fill the Uint8Array with a plain loop instead of
+        // Uint8Array.from(atob(...), charCodeAt) — the iterator+callback form
+        // allocates a second large array and is CPU-heavy enough to trip the
+        // free-plan CPU time limit on multi-megabyte uploads.
+        const binary = atob(b64);
+        const bytes = new Uint8Array(binary.length);
+        for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+        content = bytes;
         ct = raw.slice(5, raw.indexOf(";")) || "application/octet-stream";
       } else { content = raw; ct = ext === "json" ? "application/json" : ext === "md" ? "text/markdown; charset=utf-8" : ext === "html" || ext === "htm" ? "text/html; charset=utf-8" : ext === "svg" ? "image/svg+xml" : ext === "png" ? "image/png" : ext === "jpg" || ext === "jpeg" ? "image/jpeg" : ext === "gif" ? "image/gif" : ext === "webp" ? "image/webp" : ext === "avif" ? "image/avif" : ext === "pdf" ? "application/pdf" : "application/octet-stream"; }
       await env.CONTENT.put(key, content, { httpMetadata: { contentType: ct } });
@@ -2036,6 +2058,78 @@ async function handleAdmin(request: Request, env: Env, session: Session, url: UR
       await env.CONTENT.put(pathArg + "/.keep", "", { httpMetadata: { contentType: "text/plain" } });
       await auditLog(env, session.user.id, "create_r2_folder", null, { path: pathArg }, log);
       return json({ ok: true, key: pathArg + "/.keep" }, 200, origin, log);
+    }
+    /* ── Recursive R2 folder operations ──
+     *
+     * Folders are just key prefixes, so "delete folder" / "rename folder"
+     * list every key under a prefix (in BOTH content-files/ and
+     * content-staging/) and operate on each. The category manifest is
+     * regenerated afterwards so the student app stops serving removed keys
+     * and picks up the new paths.
+     */
+    const listUnderPrefix = async (prefix: string): Promise<string[]> => {
+      if (!env.CONTENT) return [];
+      const keys: string[] = [];
+      let cursor: string | undefined = undefined;
+      for (let page = 0; page < 10; page++) {
+        const listed: any = await env.CONTENT.list({ prefix, limit: 1000, cursor });
+        if (!listed || !listed.objects) break;
+        keys.push(...listed.objects.map((o: any) => o.key));
+        if (!listed.truncated) break;
+        cursor = listed.cursor;
+      }
+      return keys;
+    };
+    if (request.method === "POST" && path === "/v1/admin/content/r2-delete-prefix") {
+      if (!isAdmin(session)) return json({ error: "Forbidden" }, 403, origin, log);
+      if (!env.CONTENT) return json({ error: "Content storage not configured" }, 503, origin, log);
+      const body = await readJson(request);
+      const prefix = typeof body.prefix === "string" ? body.prefix.trim().replace(/^\/+|\/+$/g, "") : "";
+      if (!prefix || prefix.includes("..") || prefix.includes("\\")) return json({ error: "Invalid prefix" }, 400, origin, log);
+      const cat = prefix.split("/")[0];
+      if (!cat || !(cat in CATEGORY_TYPE_MAP)) return json({ error: "Invalid prefix" }, 400, origin, log);
+      let deleted = 0;
+      for (const scope of ["content-files", "content-staging"]) {
+        for (const key of await listUnderPrefix(`${scope}/${prefix}/`)) {
+          await env.CONTENT.delete(key);
+          deleted += 1;
+        }
+      }
+      try { await regenerateManifestForCategory(env, cat); } catch (e) { console.error("manifest regen failed:", e); }
+      await auditLog(env, session.user.id, "delete_r2_folder", null, { prefix, deleted }, log);
+      return json({ ok: true, deleted }, 200, origin, log);
+    }
+    if (request.method === "POST" && path === "/v1/admin/content/r2-rename-prefix") {
+      if (!isAdmin(session)) return json({ error: "Forbidden" }, 403, origin, log);
+      if (!env.CONTENT) return json({ error: "Content storage not configured" }, 503, origin, log);
+      const body = await readJson(request);
+      const from = typeof body.from === "string" ? body.from.trim().replace(/^\/+|\/+$/g, "") : "";
+      const to = typeof body.to === "string" ? body.to.trim().replace(/^\/+|\/+$/g, "") : "";
+      if (!from || !to) return json({ error: "from and to required" }, 400, origin, log);
+      if (from === to) return json({ ok: true, moved: 0 }, 200, origin, log);
+      if (from.includes("..") || from.includes("\\") || to.includes("..") || to.includes("\\")) return json({ error: "Invalid key" }, 400, origin, log);
+      const cat = from.split("/")[0];
+      if (!cat || !(cat in CATEGORY_TYPE_MAP)) return json({ error: "Invalid prefix" }, 400, origin, log);
+      const toCat = to.split("/")[0];
+      if (toCat !== cat) return json({ error: "Cannot move across categories" }, 400, origin, log);
+      let moved = 0;
+      for (const scope of ["content-files", "content-staging"]) {
+        const prefix = `${scope}/${from}/`;
+        for (const key of await listUnderPrefix(prefix)) {
+          const rel = key.slice(prefix.length);
+          if (!rel) continue;
+          const dstKey = `${scope}/${to}/${rel}`;
+          const src = await env.CONTENT.get(key);
+          if (!src) continue;
+          const buf = await src.arrayBuffer();
+          await env.CONTENT.put(dstKey, buf, { httpMetadata: { contentType: guessImageContentType(dstKey) } });
+          await env.CONTENT.delete(key);
+          moved += 1;
+        }
+      }
+      try { await regenerateManifestForCategory(env, cat); } catch (e) { console.error("manifest regen failed:", e); }
+      await auditLog(env, session.user.id, "rename_r2_folder", null, { from, to, moved }, log);
+      return json({ ok: true, moved }, 200, origin, log);
     }
     if (request.method === "POST" && path === "/v1/admin/content/regenerate-manifest") {
       if (!isAdmin(session)) return json({ error: "Forbidden" }, 403, origin, log);
@@ -2242,7 +2336,7 @@ async function handleAdmin(request: Request, env: Env, session: Session, url: UR
     const cim = path.match(/^\/v1\/admin\/content\/([^/]+)(\/(.+))?$/);
     if (cim) {
       const objectId = cim[1]; const action = cim[3] || null;
-      if (["pending","upload-file","r2-keys","r2-key","r2-content","r2-rename","r2-folder","regenerate-manifest","validate","by-r2-key","adopt","publish-staged","discard-staged"].includes(objectId)) return json({ error: "Not found" }, 404, origin, log);
+      if (["pending","upload-file","r2-keys","r2-key","r2-content","r2-rename","r2-rename-prefix","r2-delete-prefix","r2-folder","regenerate-manifest","validate","by-r2-key","adopt","publish-staged","discard-staged"].includes(objectId)) return json({ error: "Not found" }, 404, origin, log);
       const obj = await env.DB.prepare("SELECT * FROM content_objects WHERE id = ?").bind(objectId).first<any>();
       if (!obj) return json({ error: "Content not found" }, 404, origin, log);
       if (!isAdmin(session) && obj.created_by !== session.user.id && obj.status !== "published") return json({ error: "Forbidden" }, 403, origin, log);

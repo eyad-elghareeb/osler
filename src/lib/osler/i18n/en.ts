@@ -1481,6 +1481,8 @@ export const en = {
     "admin.content.context.duplicate": "Duplicate",
     "admin.content.context.publishStaged": "Publish staged files",
     "admin.content.context.discardStaged": "Discard staged files",
+    "admin.content.context.renameFolder": "Rename folder…",
+    "admin.content.context.deleteFolder": "Delete folder",
     // Content browser preview
     "admin.content.previewDescCloud": "Browse and edit content objects (drafts, pending, published).",
     "admin.content.previewDescR2": "Raw student-facing R2 files. Right-click to manage.",
@@ -1517,6 +1519,8 @@ export const en = {
     "admin.toast.publishStagedFailed": "Publish failed: {error}",
     "admin.toast.discardStagedFailed": "Discard failed: {error}",
     "admin.toast.adoptFailed": "Promote failed: {error}",
+    "admin.toast.renamedFolder": "Renamed folder to {path}",
+    "admin.toast.deletedFolder": "Deleted folder {name} ({n} file(s))",
     // Content editor — raw mode
     "admin.content.editor.rawBadge": "Raw R2 file",
     "admin.content.editor.rawBannerTitle": "Editing a raw R2 file — no version history",
@@ -1531,6 +1535,8 @@ export const en = {
     "admin.content.editor.unsavedTitle": "Leave without saving?",
     "admin.content.editor.unsavedDiscard": "Discard & go back",
     "admin.content.deleteR2Title": "Delete file",
+    "admin.content.deleteFolderTitle": "Delete folder",
+    "admin.content.confirmDeleteFolder": "Delete {key} and everything inside it? This cannot be undone.",
     // Content editor metadata
     "admin.content.metadata.id": "ID",
     "admin.content.metadata.r2Key": "R2 key",
@@ -1582,6 +1588,15 @@ export const en = {
     // Review
     "admin.review.untitled": "Untitled",
     "admin.review.diff": "Diff",
+    "admin.review.pendingTitle": "Content submissions",
+    "admin.review.emptyDesc": "New content submissions and staged uploads will appear here.",
+    "admin.review.stagedTitle": "Staged uploads",
+    "admin.review.stagedEmpty": "No staged uploads",
+    "admin.review.stagedEmptyDesc": "Files uploaded to the staging area (content-staging/) appear here until they're published to students.",
+    "admin.review.stagedRoot": "(category root)",
+    "admin.review.stagedFilesCount": "{n} file(s) · {size}",
+    "admin.review.publish": "Publish",
+    "admin.review.discard": "Discard",
 
     // ── Structured editors ────────────────────────────────────────────────
     "admin.structured.addCard": "Add card",

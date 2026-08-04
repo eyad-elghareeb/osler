@@ -130,6 +130,9 @@ export function ContentBrowser({ capabilities }: ContentBrowserProps) {
   // Shared by the new-file/new-folder/rename dialogs
   const [dialogPath, setDialogPath] = React.useState("");
   const [dialogParent, setDialogParent] = React.useState<string>("");
+  // True when the open rename dialog targets a folder (recursive prefix move)
+  // rather than a single file.
+  const [renameIsFolder, setRenameIsFolder] = React.useState(false);
 
   // ── Load unified tree ────────────────────────────────────────────────────
   //
@@ -273,6 +276,7 @@ export function ContentBrowser({ capabilities }: ContentBrowserProps) {
   function openRenameDialog(node: ContentTreeNode) {
     setDialogParent(node.r2Key ?? "");
     setDialogPath(node.r2Key ?? node.name);
+    setRenameIsFolder(node.kind === "folder");
     setRenameOpen(true);
   }
 
@@ -313,9 +317,15 @@ export function ContentBrowser({ capabilities }: ContentBrowserProps) {
     if (!capabilities.manageUsers) return;
     const pathErr = pathError(dialogPath);
     if (pathErr) { toast({ title: t("admin.content.invalidPath"), description: pathErr, variant: "destructive" }); return; }
+    const to = `content-files/${dialogPath.replace(/^\/+/, "")}`;
     try {
-      await adminApi.renameR2Key(dialogParent, `content-files/${dialogPath.replace(/^\/+/, "")}`);
-      toast({ title: t("admin.toast.renamed", { path: dialogPath }) });
+      if (renameIsFolder) {
+        await adminApi.renameR2Folder(dialogParent, to);
+        toast({ title: t("admin.toast.renamedFolder", { path: dialogPath }) });
+      } else {
+        await adminApi.renameR2Key(dialogParent, to);
+        toast({ title: t("admin.toast.renamed", { path: dialogPath }) });
+      }
       setRenameOpen(false);
       loadUnified();
     } catch (err) {
@@ -335,10 +345,17 @@ export function ContentBrowser({ capabilities }: ContentBrowserProps) {
 
   async function confirmDeleteR2Key() {
     const node = deleteR2Node;
-    if (!node?.r2Key) return;
+    if (!node) return;
     try {
-      await adminApi.deleteR2Key(node.r2Key);
-      toast({ title: t("admin.toast.deleted", { name: node.name }) });
+      if (node.kind === "folder") {
+        const prefix = folderPrefixOf(node);
+        const res = await adminApi.deleteR2Folder(prefix);
+        toast({ title: t("admin.toast.deletedFolder", { name: node.name, n: String(res.deleted) }) });
+      } else {
+        if (!node.r2Key) return;
+        await adminApi.deleteR2Key(node.r2Key);
+        toast({ title: t("admin.toast.deleted", { name: node.name }) });
+      }
       loadUnified();
     } catch (err) {
       toast({ title: t("admin.toast.deleteFailedR2", { error: String(err) }), variant: "destructive" });
@@ -668,9 +685,15 @@ export function ContentBrowser({ capabilities }: ContentBrowserProps) {
       <AlertDialog open={deleteR2Open} onOpenChange={setDeleteR2Open}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>{t("admin.content.deleteR2Title")}</AlertDialogTitle>
+            <AlertDialogTitle>
+              {deleteR2Node?.kind === "folder"
+                ? t("admin.content.deleteFolderTitle")
+                : t("admin.content.deleteR2Title")}
+            </AlertDialogTitle>
             <AlertDialogDescription>
-              {t("admin.content.confirmDeleteR2", { key: deleteR2Node?.r2Key ?? "" })}
+              {deleteR2Node?.kind === "folder"
+                ? t("admin.content.confirmDeleteFolder", { key: folderPrefixOf(deleteR2Node) })
+                : t("admin.content.confirmDeleteR2", { key: deleteR2Node?.r2Key ?? "" })}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -869,6 +892,17 @@ function ContentTreePaneWithContextMenu(props: ContentTreePaneWithContextMenuPro
               <ContextMenuItem onClick={() => props.onNewFolder(folderOf(contextNode))}>
                 <FolderPlus className="size-3.5 me-2" /> {t("admin.content.context.newFolderHere")}
               </ContextMenuItem>
+              {folderIsDeletable(contextNode) && (
+                <>
+                  <ContextMenuSeparator />
+                  <ContextMenuItem onClick={() => props.onRename(contextNode)}>
+                    <Pencil className="size-3.5 me-2" /> {t("admin.content.context.renameFolder")}
+                  </ContextMenuItem>
+                  <ContextMenuItem onClick={() => props.onDelete(contextNode)}>
+                    <Trash2 className="size-3.5 me-2 text-destructive" /> {t("admin.content.context.deleteFolder")}
+                  </ContextMenuItem>
+                </>
+              )}
             </>
           )}
 
@@ -895,6 +929,23 @@ function folderOf(node: ContentTreeNode | null): string {
   const stripped = k.replace(/^content-files\//, "");
   const idx = stripped.lastIndexOf("/");
   return idx >= 0 ? stripped.slice(0, idx) : "";
+}
+
+/** R2 prefix for a folder node (e.g. "content-files/library/cardiology" →
+ *  "library/cardiology"). Used for recursive folder delete/rename. */
+function folderPrefixOf(node: ContentTreeNode): string {
+  return (node.r2Key ?? "").replace(/^content-files\//, "").replace(/\/$/, "");
+}
+
+/** Folders that can be recursively deleted/renamed. Excludes the synthetic
+ *  "drafts (managed only)" bucket (its r2Key is the whole category folder —
+ *  deleting it would wipe every published file) and root category nodes
+ *  (no r2Key). */
+function folderIsDeletable(node: ContentTreeNode): boolean {
+  if (node.kind !== "folder") return false;
+  if (!node.r2Key) return false;
+  if (node.id.endsWith("__drafts__")) return false;
+  return true;
 }
 
 function findNodeById(nodes: ContentTreeNode[], id: string): ContentTreeNode | null {
