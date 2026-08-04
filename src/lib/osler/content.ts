@@ -25,7 +25,7 @@ import type {
   FlashcardSubdeck,
   VideoContent,
 } from "./types";
-import { isEngineEnabled, getEngineOverride, enabledEngines } from "./config";
+import { isEngineEnabled, getEngineOverride, enabledEngines, loadConfig } from "./config";
 import { manifestUrl, contentFileUrl, packBasePath as resolvePackBasePath } from "./content-url";
 
 /* ── Category helpers ─────────────────────────────────────────────── */
@@ -48,7 +48,7 @@ function categoryFolder(type: EngineType): string {
  * Base URL for a content node's folder (used to build precache URLs).
  */
 export function packBasePath(node: ContentTreeNode): string {
-  const folder = categoryFolder(node.type);
+  const folder = categoryFolder(node.type || inferTypeFromFiles(node.files ?? []));
   return resolvePackBasePath(folder, node.path);
 }
 
@@ -73,6 +73,9 @@ export function nodeUrls(node: ContentTreeNode): string[] {
  * against the other source.
  */
 export async function loadCategoryTree(type: EngineType): Promise<ContentTreeNode[]> {
+  // Wait for osler.config so URL resolution uses the real cloud setting, not
+  // the DEFAULT_CONFIG returned by getConfig() before the async load finishes.
+  await loadConfig();
   const folder = categoryFolder(type);
   const res = await fetch(manifestUrl(folder), { cache: "no-store" });
   if (!res.ok) throw new Error(`Failed to load ${folder}/manifest.json: ${res.status}`);
@@ -106,10 +109,6 @@ export function flattenTree(nodes: ContentTreeNode[]): ContentTreeNode[] {
 
 /* ── Content loading from leaf folders ───────────────────────────── */
 
-function engineTypeForCategory(type: EngineType, node: ContentTreeNode): EngineType {
-  return node.type;
-}
-
 /** Infer engine type from a node's data file names when node.type is missing. */
 const FILE_TYPE_KEYS: Record<string, EngineType> = {
   questions: "quiz", passages: "bank", prompts: "written",
@@ -130,6 +129,7 @@ function inferTypeFromFiles(files: string[]): EngineType {
  * (R2-backed on cloud instances, local otherwise) — no cross-source fallback.
  */
 export async function loadNodeContent(node: ContentTreeNode): Promise<AnyContent> {
+  await loadConfig();
   const effectiveType = node.type || inferTypeFromFiles(node.files ?? []);
   const folder = categoryFolder(effectiveType);
   if (!folder) throw new Error(`Cannot resolve folder for node type: ${node.type}`);
@@ -217,6 +217,7 @@ export async function loadAllContent(): Promise<{
   items: Array<{ node: ContentTreeNode; content: AnyContent | null }>;
   trees: Record<string, ContentTreeNode[]>;
 }> {
+  await loadConfig();
   // Filter out disabled engine plugins — only iterate engines enabled in osler.config.
   // Library articles use .md files loaded via articles.ts, not JSON — skip them here.
   const types = enabledEngines().filter((t) => t !== "library");
@@ -317,6 +318,7 @@ export async function loadContentByUid(uid: string, engineHint?: EngineType): Pr
     return cached;
   }
 
+  await loadConfig();
   // Only search engines that are enabled in osler.config.
   // Library articles use .md files loaded via articles.ts, not JSON — skip them here.
   const types = enabledEngines().filter((t) => t !== "library");

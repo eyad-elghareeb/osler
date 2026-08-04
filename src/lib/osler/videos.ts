@@ -13,6 +13,7 @@
 
 import { loadCategoryTree, flattenTree } from "./content";
 import { contentFileUrl } from "./content-url";
+import { loadConfig } from "./config";
 import type {
   ContentTreeNode,
   ContentLang,
@@ -51,6 +52,7 @@ export async function listVideoLeafNodes(): Promise<ContentTreeNode[]> {
  * Returns the merged list — safe to call multiple times (cached per-leaf).
  */
 export async function loadNodeVideos(node: ContentTreeNode): Promise<VideoResource[]> {
+  await loadConfig();
   if (leafVideoCache.has(node.uid)) {
     return leafVideoCache.get(node.uid)!;
   }
