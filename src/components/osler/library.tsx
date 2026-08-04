@@ -32,6 +32,7 @@ import {
   type ArticleMeta,
   type Article,
 } from "@/lib/osler/articles";
+import { contentFileUrl } from "@/lib/osler/content-url";
 import type { ContentTreeNode } from "@/lib/osler/types";
 import { cn } from "@/lib/utils";
 import { useIsMobile } from "@/hooks/use-mobile";
@@ -831,7 +832,7 @@ function MobileHub({
                           )}
                         </div>
                       </div>
-                      <ContentCacheButton packId={`library:${a.file}`} urls={[`/osler-content/library/${a.file}`]} />
+                      <ContentCacheButton packId={`library:${a.file}`} urls={[contentFileUrl("library", a.file)]} />
                       <button
                         onClick={(e) => {
                           e.stopPropagation();

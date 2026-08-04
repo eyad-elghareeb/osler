@@ -29,7 +29,7 @@ import {
   Play,
   type LucideIcon,
 } from "lucide-react";
-import { loadAllContent } from "@/lib/osler/content";
+import { loadAllContent, packBasePath } from "@/lib/osler/content";
 import type {
   AnyContent,
   ContentTreeNode,
@@ -1335,7 +1335,7 @@ export function OsceStudio({
                   const stationCount = content.stations?.length || 0;
                   const tags = content.meta.tags?.slice(0, 4) || [];
                   // Per-pack content URLs for the offline download button.
-                  const packBase = `/osler-content/osce/${node.path}`;
+                  const packBase = packBasePath(node);
                   const packUrls = (node.files ?? []).map((f) => `${packBase}${f}`);
                   for (const img of node.images ?? []) packUrls.push(`${packBase}images/${img}`);
                   return (

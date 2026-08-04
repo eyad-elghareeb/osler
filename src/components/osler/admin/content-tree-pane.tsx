@@ -10,7 +10,6 @@ import {
   ChevronDown,
   ChevronUp,
   Cloud,
-  HardDrive,
 } from "lucide-react";
 import { useI18n } from "@/components/osler/i18n-provider";
 import { cn } from "@/lib/utils";
@@ -26,7 +25,7 @@ import type { ContentObject } from "@/components/osler/admin/admin-api";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
-export type ContentTreeKind = "local" | "cloud" | "unified";
+export type ContentTreeKind = "cloud" | "unified";
 
 export interface ContentTreeNode {
   /** Stable id for the node (used as React key) */
@@ -41,8 +40,8 @@ export interface ContentTreeNode {
   size?: number;
   /** Children for folder nodes */
   items?: ContentTreeNode[];
-  /** Original source path (for local files: path under /public/osler-content/;
-   *  for cloud objects: the content object id) */
+  /** Original source path: for cloud objects the content object id; for
+   *  R2 files the R2 key. */
   sourcePath?: string;
   /** For cloud nodes: the underlying ContentObject (leaf only) */
   cloudObject?: ContentObject;
@@ -118,17 +117,11 @@ export function ContentTreePane({
       {/* Header */}
       <div className="shrink-0 border-b border-border p-2.5 space-y-2">
         <div className="flex items-center gap-2">
-          {kind === "local" ? (
-            <HardDrive className="size-3.5 text-muted-foreground" />
-          ) : (
-            <Cloud className="size-3.5 text-muted-foreground" />
-          )}
+          <Cloud className="size-3.5 text-muted-foreground" />
           <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-            {kind === "local"
-              ? t("admin.content.tree.local")
-              : kind === "unified"
-                ? t("admin.content.tree.unified")
-                : t("admin.content.tree.cloud")}
+            {kind === "unified"
+              ? t("admin.content.tree.unified")
+              : t("admin.content.tree.cloud")}
           </span>
           <span className="text-xs text-muted-foreground/60 ms-auto">
             {t("admin.content.tree.items", { n: leafCount })}

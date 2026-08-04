@@ -6,7 +6,6 @@ import {
   Plus,
   FileText,
   AlertCircle,
-  HardDrive,
   Upload,
   Loader2,
   RefreshCw,
@@ -95,21 +94,15 @@ interface ContentBrowserProps {
   capabilities: AdminCapabilities;
 }
 
-/** Tabs:
- *  - "unified" (default): merges managed content_objects with raw R2 keys
- *    into one tree per category. Each leaf is badged "managed" or "loose".
- *  - "local": read-only preview of files under /public/osler-content/ (useful
- *    only in self-hosted dev environments where the Next.js server is the
- *    content origin).
- */
-type Tab = "unified" | "local";
+/** The content browser is cloud-only: it merges managed content_objects with
+ *  raw R2 keys into one tree per category. Each leaf is badged "managed" or
+ *  "loose". Non-cloud instances have no admin route, so there is no local
+ *  files tab. */
 
 export function ContentBrowser({ capabilities }: ContentBrowserProps) {
   const { t } = useI18n();
   const { toast } = useToast();
   const router = useRouter();
-
-  const [tab, setTab] = React.useState<Tab>("unified");
 
   // Unified-tree state
   const [unifiedObjects, setUnifiedObjects] = React.useState<ContentObject[]>([]);
@@ -118,10 +111,6 @@ export function ContentBrowser({ capabilities }: ContentBrowserProps) {
   const [unifiedLoading, setUnifiedLoading] = React.useState(true);
   const [statusFilter, setStatusFilter] = React.useState<string>("all");
   const [r2Missing, setR2Missing] = React.useState(false);
-
-  // Local-tree state
-  const [localTree, setLocalTree] = React.useState<ContentTreeNode[]>([]);
-  const [localLoading, setLocalLoading] = React.useState(true);
 
   const [selectedNode, setSelectedNode] = React.useState<ContentTreeNode | null>(null);
   const [createOpen, setCreateOpen] = React.useState(false);
@@ -207,8 +196,8 @@ export function ContentBrowser({ capabilities }: ContentBrowserProps) {
   }, [capabilities.manageUsers, toast, t]);
 
   React.useEffect(() => {
-    if (tab === "unified") loadUnified();
-  }, [tab, loadUnified]);
+    loadUnified();
+  }, [loadUnified]);
 
   // Build the merged tree client-side. The status filter only reshapes the
   // tree — it never touches the network, so switching filters is instant.
@@ -244,36 +233,7 @@ export function ContentBrowser({ capabilities }: ContentBrowserProps) {
     return roots;
   }, [unifiedObjects, unifiedR2ByCat, unifiedStagedByCat, statusFilter, t]);
 
-  // ── Load local content tree (dev-only tab) ────────────────────────────────
-  const loadLocal = React.useCallback(async () => {
-    setLocalLoading(true);
-    try {
-      const results = await Promise.allSettled(
-        getCategories(t).map(async (cat) => {
-          const res = await fetch(`/osler-content/${cat.folder}/manifest.json`, { cache: "no-store" });
-          if (!res.ok) return null;
-          const manifest = await res.json();
-          return {
-            id: `local-root-${cat.folder}`,
-            name: cat.label,
-            kind: "folder" as const,
-            items: manifestToTree(manifest, cat.folder, cat.contentType),
-          };
-        }),
-      );
-      setLocalTree(
-        results.flatMap((r) => (r.status === "fulfilled" && r.value ? [r.value] : [])),
-      );
-    } finally {
-      setLocalLoading(false);
-    }
-  }, [t]);
-
-  React.useEffect(() => {
-    if (tab === "local") loadLocal();
-  }, [tab, loadLocal]);
-
-  const tree = tab === "unified" ? unifiedTree : localTree;
+  const tree = unifiedTree;
 
   function handleSelect(node: ContentTreeNode) {
     haptic("selection");
@@ -281,13 +241,10 @@ export function ContentBrowser({ capabilities }: ContentBrowserProps) {
     // Route based on what we know about the node:
     //   - managed leaf → /admin/content?id=<uuid>
     //   - loose R2 leaf → /admin/content/raw?key=...
-    //   - local leaf → no-op (read-only preview shown in the preview pane)
-    if (tab === "unified") {
-      if (node.managed && node.cloudObject) {
-        router.push(`/admin/content?id=${encodeURIComponent(node.cloudObject.id)}`);
-      } else if (node.r2Key) {
-        router.push(`/admin/content/raw?key=${encodeURIComponent(node.r2Key)}`);
-      }
+    if (node.managed && node.cloudObject) {
+      router.push(`/admin/content?id=${encodeURIComponent(node.cloudObject.id)}`);
+    } else if (node.r2Key) {
+      router.push(`/admin/content/raw?key=${encodeURIComponent(node.r2Key)}`);
     }
   }
 
@@ -476,7 +433,6 @@ export function ContentBrowser({ capabilities }: ContentBrowserProps) {
       } else {
         toast({ title: t("admin.toast.regeneratedWithErrors", { n: String(failed.length) }), variant: "destructive" });
       }
-      if (tab === "local") loadLocal();
     } catch (err) {
       toast({ title: t("admin.toast.regenerateFailed", { error: String(err) }), variant: "destructive" });
     } finally {
@@ -485,7 +441,7 @@ export function ContentBrowser({ capabilities }: ContentBrowserProps) {
   }
 
   // ── Render: R2 not configured
-  if (tab === "unified" && r2Missing && unifiedTree.length === 0) {
+  if (r2Missing && unifiedTree.length === 0) {
     return (
       <EmptyState
         icon={AlertCircle}
@@ -497,41 +453,27 @@ export function ContentBrowser({ capabilities }: ContentBrowserProps) {
 
   return (
     <div className="space-y-4">
-      {/* Tab switcher + actions */}
+      {/* Header + actions */}
       <div className="flex flex-wrap items-center gap-2">
-        <div className="flex gap-1 border-b border-border flex-1 min-w-[260px]">
-          <TabButton
-            active={tab === "unified"}
-            onClick={() => setTab("unified")}
-            icon={CloudCog}
-            label={t("admin.content.tab.unified")}
-            desc={t("admin.content.tab.unifiedDesc")}
-          />
-          <TabButton
-            active={tab === "local"}
-            onClick={() => setTab("local")}
-            icon={HardDrive}
-            label={t("admin.content.tab.local")}
-            desc={t("admin.content.tab.localDesc")}
-          />
+        <div className="flex items-center gap-2 flex-1 min-w-[260px] py-2">
+          <CloudCog className="size-4 text-muted-foreground" />
+          <span className="text-sm font-medium">{t("admin.content.tab.unified")}</span>
         </div>
 
         <div className="flex items-center gap-2">
-          {tab === "unified" && (
-            <Select value={statusFilter} onValueChange={setStatusFilter}>
-              <SelectTrigger className="w-32 h-9">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">{t("admin.content.tab.all")}</SelectItem>
-                <SelectItem value="published">{t("admin.content.tab.published")}</SelectItem>
-                <SelectItem value="draft">{t("admin.content.tab.drafts")}</SelectItem>
-                <SelectItem value="pending">{t("admin.content.tab.pending")}</SelectItem>
-                <SelectItem value="rejected">{t("admin.content.tab.rejected")}</SelectItem>
-              </SelectContent>
-            </Select>
-          )}
-          {tab === "unified" && capabilities.manageUsers && (
+          <Select value={statusFilter} onValueChange={setStatusFilter}>
+            <SelectTrigger className="w-32 h-9">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">{t("admin.content.tab.all")}</SelectItem>
+              <SelectItem value="published">{t("admin.content.tab.published")}</SelectItem>
+              <SelectItem value="draft">{t("admin.content.tab.drafts")}</SelectItem>
+              <SelectItem value="pending">{t("admin.content.tab.pending")}</SelectItem>
+              <SelectItem value="rejected">{t("admin.content.tab.rejected")}</SelectItem>
+            </SelectContent>
+          </Select>
+          {capabilities.manageUsers && (
             <>
               <Button
                 variant="outline"
@@ -563,16 +505,14 @@ export function ContentBrowser({ capabilities }: ContentBrowserProps) {
               </Button>
             </>
           )}
-          {tab === "unified" && (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setUploadOpen(true)}
-            >
-              <Upload className="me-1.5 size-3.5" />
-              {t("admin.content.upload")}
-            </Button>
-          )}
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setUploadOpen(true)}
+          >
+            <Upload className="me-1.5 size-3.5" />
+            {t("admin.content.upload")}
+          </Button>
           <Button size="sm" onClick={() => setCreateOpen(true)}>
             <Plus className="me-1.5 size-3.5" />
             {t("admin.content.new")}
@@ -584,19 +524,16 @@ export function ContentBrowser({ capabilities }: ContentBrowserProps) {
       <div className="grid grid-cols-1 lg:grid-cols-[280px_1fr] gap-3 min-h-[480px] lg:min-h-0 flex-1">
         {/* Tree pane — wrapped in a context menu for right-click actions */}
         <div className="border border-border rounded-xl overflow-hidden lg:min-h-0">
-          {tab === "unified" && unifiedLoading ? (
-            <LoadingState label={t("common.loading")} className="h-full" />
-          ) : tab === "local" && localLoading ? (
+          {unifiedLoading ? (
             <LoadingState label={t("common.loading")} className="h-full" />
           ) : (
             <ContentTreePaneWithContextMenu
               tree={tree}
               selectedId={selectedNode?.id ?? null}
               onSelect={handleSelect}
-              onRefresh={tab === "unified" ? loadUnified : loadLocal}
-              kind={tab === "unified" ? "unified" : "local"}
-              loading={tab === "unified" ? unifiedLoading : localLoading}
-              tab={tab}
+              onRefresh={loadUnified}
+              kind="unified"
+              loading={unifiedLoading}
               onNewFile={openNewFileDialog}
               onNewFolder={openNewFolderDialog}
               onRename={openRenameDialog}
@@ -617,15 +554,11 @@ export function ContentBrowser({ capabilities }: ContentBrowserProps) {
             <EmptyState
               icon={FileText}
               title={t("admin.content.empty")}
-              description={
-                tab === "unified"
-                  ? t("admin.content.previewDescUnified")
-                  : t("admin.content.previewDescLocal")
-              }
+              description={t("admin.content.previewDescUnified")}
               className="h-full"
             />
           ) : (
-            <PreviewPane node={selectedNode} tab={tab} />
+            <PreviewPane node={selectedNode} />
           )}
         </div>
       </div>
@@ -767,16 +700,14 @@ export function ContentBrowser({ capabilities }: ContentBrowserProps) {
 //   - loose R2 leaf: Open editor (raw mode), Promote to managed, Rename,
 //     Duplicate, Delete, Download
 //   - folder (R2): New file here, New folder here
-//   - local leaf/folder: Refresh only (read-only)
 
 interface ContentTreePaneWithContextMenuProps {
   tree: ContentTreeNode[];
   selectedId: string | null;
   onSelect: (node: ContentTreeNode) => void;
   onRefresh?: () => void;
-  kind: "local" | "unified";
+  kind: "unified";
   loading?: boolean;
-  tab: Tab;
   onNewFile: (parentPath: string) => void;
   onNewFolder: (parentPath: string) => void;
   onRename: (node: ContentTreeNode) => void;
@@ -802,14 +733,14 @@ function ContentTreePaneWithContextMenu(props: ContentTreePaneWithContextMenuPro
     if (node) setContextNode(node);
   }
 
-  const isManagedLeaf = props.tab === "unified" && contextNode?.kind === "file" && contextNode.managed;
-  const isStagedLeaf = props.tab === "unified" && contextNode?.kind === "file" && !!contextNode.staged;
-  const isLooseLeaf = props.tab === "unified" && contextNode?.kind === "file" && !!contextNode.r2Key && !contextNode.managed && !contextNode.staged;
+  const isManagedLeaf = contextNode?.kind === "file" && contextNode.managed;
+  const isStagedLeaf = contextNode?.kind === "file" && !!contextNode.staged;
+  const isLooseLeaf = contextNode?.kind === "file" && !!contextNode.r2Key && !contextNode.managed && !contextNode.staged;
 
   // Folders may contain a mix of published + staged children. The staged
   // publish/discard actions are offered when at least one staged key exists
   // in the subtree.
-  const folderHasStaged = props.tab === "unified" && contextNode?.kind === "folder" &&
+  const folderHasStaged = contextNode?.kind === "folder" &&
     !!contextNode.items?.some((c) => nodeContainsStaged(c));
 
   function nodeContainsStaged(n: ContentTreeNode): boolean {
@@ -917,7 +848,7 @@ function ContentTreePaneWithContextMenu(props: ContentTreePaneWithContextMenuPro
           )}
 
           {/* Folder in R2 keyspace */}
-          {props.tab === "unified" && props.canManage && contextNode?.kind === "folder" && (
+          {props.canManage && contextNode?.kind === "folder" && (
             <>
               <ContextMenuSeparator />
               {folderHasStaged && (
@@ -941,7 +872,7 @@ function ContentTreePaneWithContextMenu(props: ContentTreePaneWithContextMenuPro
           )}
 
           {/* Always-on actions */}
-          {props.tab === "unified" && props.canManage && (
+          {props.canManage && (
             <ContextMenuSeparator />
           )}
           <ContextMenuItem onClick={() => props.onRefresh?.()}>
@@ -996,56 +927,10 @@ async function downloadR2Key(key: string, name: string) {
   }
 }
 
-// ── Tab button ─────────────────────────────────────────────────────────────
-
-function TabButton({
-  active,
-  onClick,
-  icon: Icon,
-  label,
-  desc,
-}: {
-  active: boolean;
-  onClick: () => void;
-  icon: React.ElementType;
-  label: string;
-  desc?: string;
-}) {
-  return (
-    <button
-      onClick={() => { haptic("selection"); onClick(); }}
-      title={desc}
-      className={cn(
-        "px-4 py-2 text-sm font-medium border-b-2 transition-colors flex items-center gap-2",
-        active
-          ? "border-primary text-primary"
-          : "border-transparent text-muted-foreground hover:text-foreground",
-      )}
-    >
-      <Icon className="size-3.5" />
-      {label}
-    </button>
-  );
-}
-
 // ── Preview pane ───────────────────────────────────────────────────────────
 
-function PreviewPane({ node, tab }: { node: ContentTreeNode; tab: Tab }) {
+function PreviewPane({ node }: { node: ContentTreeNode }) {
   const { t } = useI18n();
-  const [previewBody, setPreviewBody] = React.useState<string | null>(null);
-  const [previewLoading, setPreviewLoading] = React.useState(false);
-
-  // For local files, fetch the content for preview.
-  React.useEffect(() => {
-    setPreviewBody(null);
-    if (tab !== "local" || !node.sourcePath || node.kind !== "file") return;
-    setPreviewLoading(true);
-    fetch(node.sourcePath)
-      .then((r) => (r.ok ? r.text() : Promise.reject(new Error(`${r.status}`))))
-      .then((text) => setPreviewBody(text.slice(0, 5000)))
-      .catch(() => setPreviewBody(null))
-      .finally(() => setPreviewLoading(false));
-  }, [node, tab]);
 
   if (node.kind === "folder") {
     return (
@@ -1135,37 +1020,13 @@ function PreviewPane({ node, tab }: { node: ContentTreeNode; tab: Tab }) {
         </dl>
       )}
 
-      {tab === "local" && (
-        <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
-          <div className="text-xs text-muted-foreground mb-1.5 shrink-0">
-            {t("admin.content.readOnlyPreview")}
-          </div>
-          <div className="flex-1 min-h-0 overflow-auto medos-scroll-y border border-border rounded-xl bg-card p-3">
-            {previewLoading ? (
-              <div className="text-xs text-muted-foreground text-center py-6">
-                {t("admin.content.previewLoading")}
-              </div>
-            ) : previewBody == null ? (
-              <div className="text-xs text-muted-foreground text-center py-6">
-                {t("admin.content.previewUnavailable")}
-              </div>
-            ) : (
-              <pre className="text-[11px] font-mono whitespace-pre-wrap break-words text-foreground/90">
-                {previewBody}
-                {previewBody.length >= 5000 && `\n\n… (${t("admin.content.truncated")})`}
-              </pre>
-            )}
-          </div>
-        </div>
-      )}
-
-      {tab === "unified" && node.managed && (
+      {node.managed && (
         <p className="text-xs text-muted-foreground shrink-0">
           {t("admin.content.clickToEdit")}
         </p>
       )}
 
-      {tab === "unified" && node.staged && node.r2Key && (
+      {node.staged && node.r2Key && (
         <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
           <div className="text-xs text-muted-foreground mb-1.5 shrink-0">
             {t("admin.content.stagedPreviewHint")}
@@ -1177,7 +1038,7 @@ function PreviewPane({ node, tab }: { node: ContentTreeNode; tab: Tab }) {
         </div>
       )}
 
-      {tab === "unified" && !node.managed && !node.staged && node.r2Key && (
+      {!node.managed && !node.staged && node.r2Key && (
         <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
           <div className="text-xs text-muted-foreground mb-1.5 shrink-0">
             {t("admin.content.previewR2Hint")}
@@ -1539,49 +1400,6 @@ function UploadDialog({
       </DialogContent>
     </Dialog>
   );
-}
-
-// ── Local manifest → ContentTreeNode ───────────────────────────────────────
-
-function manifestToTree(
-  manifest: { items?: any[] },
-  categoryFolder: string,
-  contentType: ContentType,
-): ContentTreeNode[] {
-  if (!Array.isArray(manifest.items)) return [];
-  return manifest.items.map((item) => mapNode(item, categoryFolder, contentType));
-}
-
-function mapNode(
-  item: any,
-  categoryFolder: string,
-  contentType: ContentType,
-): ContentTreeNode {
-  const path: string = item.path ?? "";
-  const isLeaf = !item.items || item.items.length === 0;
-  if (isLeaf) {
-    const files: ContentTreeNode[] = (item.files ?? []).map((f: string) => ({
-      id: `local-${categoryFolder}-${path}${f}`,
-      name: f,
-      kind: "file" as const,
-      ext: f.split(".").pop() ?? "",
-      sourcePath: `/osler-content/${categoryFolder}/${path}${f}`,
-    }));
-    return {
-      id: `local-${categoryFolder}-${path}`,
-      name: item.title ?? path,
-      kind: files.length > 0 ? "folder" : "file",
-      ext: files.length === 0 ? "md" : undefined,
-      sourcePath: files.length === 0 ? `/osler-content/${categoryFolder}/${path}` : undefined,
-      items: files,
-    };
-  }
-  return {
-    id: `local-${categoryFolder}-${path}`,
-    name: item.title ?? path,
-    kind: "folder",
-    items: (item.items ?? []).map((c: any) => mapNode(c, categoryFolder, contentType)),
-  };
 }
 
 // ── Unified tree builder ──────────────────────────────────────────────────

@@ -22,7 +22,8 @@ import {
   X as XIcon,
   GraduationCap,
 } from "lucide-react";
-import { ENGINE_META } from "@/lib/osler/content";
+import { ENGINE_META, packBasePath } from "@/lib/osler/content";
+import { contentFileUrl } from "@/lib/osler/content-url";
 import type {
   FlashcardContent,
   FlashcardSubdeck,
@@ -109,7 +110,7 @@ function resolveAsset(src: string, packPath: string): string {
   // Bare filename → resolve against the pack's images/ subfolder (the
   // content-asset convention shared with QBank/OSCE via resolveContentAsset).
   const base = src.includes("/") ? src : `images/${src}`;
-  return `/osler-content/flashcard/${packPath}${base}`;
+  return contentFileUrl("flashcard", `${packPath}${base}`);
 }
 
 /** Normalize the `image` / `backImage` field (single or array) to an array. */
@@ -864,7 +865,7 @@ export function FlashcardStudio({
               // For branch nodes (folders), include all leaf descendant files.
               // Computed inline (cheap) to avoid hook-in-loop violations.
               const collectPackUrls = (n: ContentTreeNode): string[] => {
-                const ownBase = `/osler-content/flashcard/${n.path}`;
+                const ownBase = packBasePath(n);
                 const own = (n.files ?? []).map((f) => `${ownBase}${f}`);
                 for (const img of n.images ?? []) own.push(`${ownBase}images/${img}`);
                 if (n.items.length === 0) return own;

@@ -28,6 +28,7 @@ import {
   resolveThumbnail,
   formatDuration,
 } from "@/lib/osler/videos";
+import { packBasePath } from "@/lib/osler/content";
 import type { VideoResource, ContentTreeNode } from "@/lib/osler/types";
 import { cn } from "@/lib/utils";
 import { useIsMobile } from "@/hooks/use-mobile";
@@ -232,7 +233,7 @@ export function VideosStudio({
 
   // Per-pack content URLs (for the offline download button).
   function collectPackUrls(node: ContentTreeNode): string[] {
-    const ownBase = `/osler-content/videos/${node.path}`;
+    const ownBase = packBasePath(node);
     const own = (node.files ?? []).map((f) => `${ownBase}${f}`);
     for (const img of node.images ?? []) own.push(`${ownBase}images/${img}`);
     if (node.items.length === 0) return own;

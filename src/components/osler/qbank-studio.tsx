@@ -53,7 +53,7 @@ import {
   Download,
   PackageOpen,
 } from "lucide-react";
-import { loadAllContent, loadContentByUid, ENGINE_META, flattenTree } from "@/lib/osler/content";
+import { loadAllContent, loadContentByUid, ENGINE_META, flattenTree, packBasePath } from "@/lib/osler/content";
 import { toast } from "@/hooks/use-toast";
 import {
   contentToQuestions as poolContentToQuestions,
@@ -1511,21 +1511,14 @@ function PackCard({
   const isAr = (content.meta.lang ?? node.lang) === "ar";
 
   // Build the list of content URLs for this pack (used by the download button).
-  // Mirrors the URL pattern in lib/osler/content.ts → loadNodeContent().
-  const categoryFolder =
-    node.type === "flashcard"
-      ? "flashcard"
-      : node.type === "osce"
-        ? "osce"
-        : node.type === "library"
-          ? "library"
-          : "qbank";
+  // Resolved through packBasePath so cloud instances precache R2 URLs and
+  // non-cloud instances precache the local /osler-content/ paths.
   const packUrls = React.useMemo(() => {
-    const base = `/osler-content/${categoryFolder}/${node.path}`;
+    const base = packBasePath(node);
     const urls = (node.files ?? []).map((f) => `${base}${f}`);
     for (const img of node.images ?? []) urls.push(`${base}images/${img}`);
     return urls;
-  }, [categoryFolder, node.path, node.files, node.images]);
+  }, [node]);
 
   return (
     <div

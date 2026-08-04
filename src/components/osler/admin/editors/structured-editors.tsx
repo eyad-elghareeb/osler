@@ -1802,7 +1802,7 @@ export function VideoEditor({ value, onChange, readOnly, r2KeyBase, rawR2Key }: 
                 readOnly={readOnly}
               />
               <TagListField
-                label="Related articles (paths under public/osler-content/library/)"
+                label="Related articles (article keys)"
                 tags={v.relatedArticles ?? []}
                 onChange={(t) => patchVideo(i, { relatedArticles: t })}
                 readOnly={readOnly}
