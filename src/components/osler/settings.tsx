@@ -408,7 +408,7 @@ export function Settings({
 
 /* ─── Theme / Appearance section ─────────────────────────────────────── */
 
-function ThemeSettingsSection() {
+export function ThemeSettingsSection() {
   const { t } = useI18n();
   const { theme, setThemeId, availableThemes } = useOslerTheme();
 
@@ -533,7 +533,7 @@ function ThemeSettingsSection() {
 
 /* ─── Language section ─────────────────────────────────────────────── */
 
-function LanguageSettingsSection() {
+export function LanguageSettingsSection() {
   const { t, lang, setLang, contentFilter, setContentFilter, rtl } = useI18n();
 
   const uiLangOptions: Array<{ id: UiLang; label: string; native: string; dir: "ltr" | "rtl" }> = UI_LANGS.map(
@@ -770,7 +770,7 @@ function validateAiForm(state: AiFormState): Record<string, string> {
   return errors;
 }
 
-function AiSettingsSection() {
+export function AiSettingsSection() {
   const { t } = useI18n();
   const [saved, setSaved] = React.useState<AiFormState>(() => loadAiForm());
   const [draft, setDraft] = React.useState<AiFormState>(() => saved);
