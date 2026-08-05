@@ -346,7 +346,7 @@ function GridView({ items, selectedIds, onSelectSingle, onToggle, onSelectRange,
               else onSelectSingle(idx, node);
             }}
             onDoubleClick={() => (node.kind === "folder" ? onOpenFolder : onOpen)(node)}
-            onDropOnFolder={node.kind === "folder" ? onDropOnFolder : undefined}
+            onDropOnFolder={node.kind === "folder" && !node.id.endsWith("__drafts__") ? onDropOnFolder : undefined}
           />
         ))}
       </div>
@@ -479,7 +479,7 @@ function ListView({ items, selectedIds, onSelectSingle, onToggle, onSelectRange,
               else onSelectSingle(idx, node);
             }}
             onDoubleClick={() => (node.kind === "folder" ? onOpenFolder : onOpen)(node)}
-            onDropOnFolder={node.kind === "folder" ? onDropOnFolder : undefined}
+            onDropOnFolder={node.kind === "folder" && !node.id.endsWith("__drafts__") ? onDropOnFolder : undefined}
           />
         ))}
       </div>

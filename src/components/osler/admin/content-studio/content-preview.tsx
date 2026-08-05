@@ -29,10 +29,12 @@ import {
   Clock,
   UserRound,
   Tag,
+  ChevronDown,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useI18n } from "@/components/osler/i18n-provider";
 import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
 import { resolveImageForPreview } from "@/components/osler/admin/editors/image-upload";
 import { PREVIEW_MARKDOWN_STYLES } from "@/components/osler/admin/content-editor";
 import type { ContentTreeNode } from "@/components/osler/admin/content-tree-pane";
@@ -132,10 +134,40 @@ function PreviewHeader({ icon: Icon, title }: { icon: LucideIcon; title: string 
   );
 }
 
-function MoreCount({ shown, total }: { shown: number; total: number }) {
+/** Toggle that expands a truncated preview to show every item. */
+function ShowAllToggle({
+  total,
+  shown,
+  expanded,
+  onToggle,
+}: {
+  total: number;
+  shown: number;
+  expanded: boolean;
+  onToggle: () => void;
+}) {
   const { t } = useI18n();
   if (total <= shown) return null;
-  return <p className="text-xs text-muted-foreground">{t("admin.studio.preview.more", { n: total - shown })}</p>;
+  return (
+    <Button
+      size="xs"
+      variant="outline"
+      onClick={onToggle}
+      className={cn("w-full justify-center", expanded && "text-muted-foreground")}
+    >
+      <ChevronDown className={cn("size-3 transition-transform", expanded && "rotate-180")} />
+      {expanded
+        ? t("admin.studio.preview.showLess")
+        : t("admin.studio.preview.showAll", { n: total })}
+    </Button>
+  );
+}
+
+/** Shared "show a slice, expandable to everything" state. */
+function useReveal(total: number) {
+  const [expanded, setExpanded] = React.useState(false);
+  const shown = expanded ? total : Math.min(PREVIEW_LIMIT, total);
+  return { expanded, shown, toggle: () => setExpanded((v) => !v) };
 }
 
 function MetaPill({ label }: { label: string }) {
@@ -152,10 +184,11 @@ function QuizPreview({ data, r2Key }: { data: any; r2Key?: string }) {
   const { t } = useI18n();
   const qs = Array.isArray(data?.questions) ? data.questions : [];
   const letters = ["A", "B", "C", "D", "E", "F", "G", "H"];
+  const reveal = useReveal(qs.length);
   return (
     <div className="space-y-3">
       <PreviewHeader icon={ListChecks} title={t("admin.studio.preview.questions", { n: qs.length })} />
-      {qs.slice(0, PREVIEW_LIMIT).map((q: any, i: number) => (
+      {qs.slice(0, reveal.shown).map((q: any, i: number) => (
         <div key={q?.id ?? i} className="rounded-lg border border-border bg-card p-2.5">
           <div className="mb-1.5">
             <span className="me-1 text-xs font-semibold text-muted-foreground">{i + 1}.</span>
@@ -197,7 +230,7 @@ function QuizPreview({ data, r2Key }: { data: any; r2Key?: string }) {
           )}
         </div>
       ))}
-      <MoreCount shown={PREVIEW_LIMIT} total={qs.length} />
+      <ShowAllToggle total={qs.length} shown={reveal.shown} expanded={reveal.expanded} onToggle={reveal.toggle} />
     </div>
   );
 }
@@ -205,29 +238,80 @@ function QuizPreview({ data, r2Key }: { data: any; r2Key?: string }) {
 function BankPreview({ data, r2Key }: { data: any; r2Key?: string }) {
   const { t } = useI18n();
   const passages = Array.isArray(data?.passages) ? data.passages : [];
+  const reveal = useReveal(passages.length);
   return (
     <div className="space-y-3">
       <PreviewHeader icon={BookOpenText} title={t("admin.studio.preview.passages", { n: passages.length })} />
-      {passages.slice(0, PREVIEW_LIMIT).map((p: any, i: number) => (
-        <div key={p?.id ?? i} className="rounded-lg border border-border bg-card p-2.5">
-          <p className="mb-1 text-xs font-semibold text-muted-foreground">
-            {t("admin.studio.preview.passage", { n: i + 1 })}
-          </p>
-          <div className="text-sm"><MarkdownBody md={p?.content ?? ""} r2Key={r2Key} /></div>
-          <PreviewImages images={p?.images} r2Key={r2Key} />
-          {(p?.questions ?? []).length > 0 && (
-            <div className="mt-2 space-y-1 border-t border-border pt-1.5">
-              {(p.questions ?? []).slice(0, 3).map((q: any, qi: number) => (
-                <p key={q?.id ?? qi} className="text-xs text-muted-foreground">
-                  <span className="me-1 text-primary">{q?.correct != null ? `✔ ${q.correct + 1}.` : `${qi + 1}.`}</span>
-                  {q?.question}
-                </p>
-              ))}
-            </div>
-          )}
-        </div>
+      {passages.slice(0, reveal.shown).map((p: any, i: number) => (
+        <BankPassage key={p?.id ?? i} passage={p} index={i} r2Key={r2Key} />
       ))}
-      <MoreCount shown={PREVIEW_LIMIT} total={passages.length} />
+      <ShowAllToggle total={passages.length} shown={reveal.shown} expanded={reveal.expanded} onToggle={reveal.toggle} />
+    </div>
+  );
+}
+
+function BankPassage({ passage, index, r2Key }: { passage: any; index: number; r2Key?: string }) {
+  const { t } = useI18n();
+  const letters = ["A", "B", "C", "D", "E", "F", "G", "H"];
+  const pQs = Array.isArray(passage?.questions) ? passage.questions : [];
+  const pReveal = useReveal(pQs.length);
+  return (
+    <div className="rounded-lg border border-border bg-card p-2.5">
+      <p className="mb-1 text-xs font-semibold text-muted-foreground">
+        {t("admin.studio.preview.passage", { n: index + 1 })}
+      </p>
+      <div className="text-sm"><MarkdownBody md={passage?.content ?? ""} r2Key={r2Key} /></div>
+      <PreviewImages images={passage?.images} r2Key={r2Key} />
+      {pQs.length > 0 && (
+        <div className="mt-2 space-y-2 border-t border-border pt-2">
+          <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+            {t("admin.studio.preview.questions", { n: pQs.length })}
+          </p>
+          {pQs.slice(0, pReveal.shown).map((q: any, qi: number) => (
+            <div key={q?.id ?? qi} className="rounded-md border border-border bg-muted/30 p-2">
+              <p className="mb-1.5 text-xs font-semibold">
+                <span className="me-1 text-muted-foreground">{qi + 1}.</span>
+                <MarkdownBody md={q?.question ?? ""} r2Key={r2Key} />
+              </p>
+              <PreviewImages images={q?.images} r2Key={r2Key} />
+              <ul className="space-y-0.5">
+                {(q?.options ?? []).map((opt: string, oi: number) => {
+                  const correct = oi === q?.correct;
+                  return (
+                    <li
+                      key={oi}
+                      className={cn(
+                        "flex gap-1.5 rounded-md px-1.5 py-0.5 text-xs",
+                        correct && "bg-success/10 text-success",
+                      )}
+                    >
+                      {correct ? (
+                        <CheckCircle2 className="mt-0.5 size-3 shrink-0" />
+                      ) : (
+                        <span className="mt-0.5 w-3 shrink-0 text-center text-[10px] text-muted-foreground">
+                          {letters[oi] ?? oi + 1}
+                        </span>
+                      )}
+                      <span className="min-w-0"><MarkdownBody md={opt} r2Key={r2Key} /></span>
+                    </li>
+                  );
+                })}
+              </ul>
+              {q?.explanation && (
+                <details className="mt-1">
+                  <summary className="cursor-pointer text-[11px] font-medium text-primary">
+                    {t("admin.studio.preview.explanation")}
+                  </summary>
+                  <div className="mt-1 text-xs text-muted-foreground">
+                    <MarkdownBody md={q.explanation} r2Key={r2Key} />
+                  </div>
+                </details>
+              )}
+            </div>
+          ))}
+          <ShowAllToggle total={pQs.length} shown={pReveal.shown} expanded={pReveal.expanded} onToggle={pReveal.toggle} />
+        </div>
+      )}
     </div>
   );
 }
@@ -236,6 +320,7 @@ function FlashcardPreview({ data }: { data: any }) {
   const { t } = useI18n();
   const cards = Array.isArray(data?.cards) ? data.cards : [];
   const subdecks = Array.isArray(data?.subdecks) ? data.subdecks.length : 0;
+  const reveal = useReveal(cards.length);
 
   // Anki cloze syntax {{c1::term::hint}} → visible "term".
   const unCloze = (text: string) =>
@@ -249,7 +334,7 @@ function FlashcardPreview({ data }: { data: any }) {
           ? `${t("admin.studio.preview.cards", { n: cards.length })} · ${t("admin.studio.preview.subdecks", { n: subdecks })}`
           : t("admin.studio.preview.cards", { n: cards.length })}
       />
-      {cards.slice(0, PREVIEW_LIMIT).map((c: any, i: number) => {
+      {cards.slice(0, reveal.shown).map((c: any, i: number) => {
         const isCloze = c?.type === "cloze" || !!c?.text;
         return (
           <div key={c?.id ?? i} className="rounded-lg border border-border bg-card p-2.5">
@@ -276,7 +361,7 @@ function FlashcardPreview({ data }: { data: any }) {
           </div>
         );
       })}
-      <MoreCount shown={PREVIEW_LIMIT} total={cards.length} />
+      <ShowAllToggle total={cards.length} shown={reveal.shown} expanded={reveal.expanded} onToggle={reveal.toggle} />
     </div>
   );
 }
@@ -284,10 +369,11 @@ function FlashcardPreview({ data }: { data: any }) {
 function WrittenPreview({ data }: { data: any }) {
   const { t } = useI18n();
   const prompts = Array.isArray(data?.prompts) ? data.prompts : [];
+  const reveal = useReveal(prompts.length);
   return (
     <div className="space-y-3">
       <PreviewHeader icon={PenLine} title={t("admin.studio.preview.prompts", { n: prompts.length })} />
-      {prompts.slice(0, PREVIEW_LIMIT).map((p: any, i: number) => (
+      {prompts.slice(0, reveal.shown).map((p: any, i: number) => (
         <div key={p?.id ?? i} className="rounded-lg border border-border bg-card p-2.5">
           <div className="mb-1.5 flex flex-wrap items-center gap-1.5">
             <span className="text-[11px] font-semibold text-muted-foreground">#{i + 1}</span>
@@ -311,7 +397,7 @@ function WrittenPreview({ data }: { data: any }) {
           )}
         </div>
       ))}
-      <MoreCount shown={PREVIEW_LIMIT} total={prompts.length} />
+      <ShowAllToggle total={prompts.length} shown={reveal.shown} expanded={reveal.expanded} onToggle={reveal.toggle} />
     </div>
   );
 }
@@ -319,10 +405,11 @@ function WrittenPreview({ data }: { data: any }) {
 function OscePreview({ data, r2Key }: { data: any; r2Key?: string }) {
   const { t } = useI18n();
   const stations = Array.isArray(data?.stations) ? data.stations : [];
+  const reveal = useReveal(stations.length);
   return (
     <div className="space-y-3">
       <PreviewHeader icon={Stethoscope} title={t("admin.studio.preview.stations", { n: stations.length })} />
-      {stations.slice(0, PREVIEW_LIMIT).map((s: any, i: number) => (
+      {stations.slice(0, reveal.shown).map((s: any, i: number) => (
         <div key={s?.id ?? i} className="rounded-lg border border-border bg-card p-2.5">
           <div className="mb-1 flex flex-wrap items-center gap-1.5">
             <span className="text-sm font-semibold">{s?.title ?? s?.id ?? `#${i + 1}`}</span>
@@ -351,7 +438,7 @@ function OscePreview({ data, r2Key }: { data: any; r2Key?: string }) {
           )}
         </div>
       ))}
-      <MoreCount shown={PREVIEW_LIMIT} total={stations.length} />
+      <ShowAllToggle total={stations.length} shown={reveal.shown} expanded={reveal.expanded} onToggle={reveal.toggle} />
     </div>
   );
 }
@@ -359,10 +446,11 @@ function OscePreview({ data, r2Key }: { data: any; r2Key?: string }) {
 function VideoPreview({ data }: { data: any }) {
   const { t } = useI18n();
   const videos = Array.isArray(data?.videos) ? data.videos : [];
+  const reveal = useReveal(videos.length);
   return (
     <div className="space-y-3">
       <PreviewHeader icon={Video} title={t("admin.studio.preview.videos", { n: videos.length })} />
-      {videos.slice(0, PREVIEW_LIMIT).map((v: any, i: number) => (
+      {videos.slice(0, reveal.shown).map((v: any, i: number) => (
         <div key={v?.id ?? i} className="rounded-lg border border-border bg-card p-2.5">
           <div className="mb-1 flex flex-wrap items-center gap-1.5">
             <span className="min-w-0 flex-1 truncate text-sm font-semibold">{v?.title ?? v?.id ?? `#${i + 1}`}</span>
@@ -381,7 +469,7 @@ function VideoPreview({ data }: { data: any }) {
           )}
         </div>
       ))}
-      <MoreCount shown={PREVIEW_LIMIT} total={videos.length} />
+      <ShowAllToggle total={videos.length} shown={reveal.shown} expanded={reveal.expanded} onToggle={reveal.toggle} />
     </div>
   );
 }

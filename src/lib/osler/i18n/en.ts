@@ -1785,6 +1785,8 @@ export const en = {
     "admin.studio.dropOnFolder": "Drop to stage into {name}",
     "admin.studio.uploadProgress": "Staging {done}/{total}…",
     "admin.studio.preview.more": "+{n} more",
+    "admin.studio.preview.showAll": "Show all {n}",
+    "admin.studio.preview.showLess": "Show less",
     "admin.studio.preview.questions": "{n} questions",
     "admin.studio.preview.explanation": "Explanation",
     "admin.studio.preview.passages": "{n} passages",

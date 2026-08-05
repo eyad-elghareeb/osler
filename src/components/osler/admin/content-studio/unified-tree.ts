@@ -133,7 +133,11 @@ export function buildUnifiedTree(
       id: `r2-folder-${categoryFolder}-__drafts__`,
       name: `${categoryLabel} · drafts (managed only)`,
       kind: "folder",
-      r2Key: `content-files/${categoryFolder}`,
+      // Synthetic path — the drafts folder has no real R2 counterpart. Using
+      // a distinct "__drafts__" segment (instead of the category root key)
+      // lets the explorer navigate into it via the normal folderPathOf /
+      // findFolderNode machinery.
+      r2Key: `content-files/${categoryFolder}/__drafts__`,
       items: visibleOrphans
         .slice()
         .sort((a, b) => b.updated_at - a.updated_at)

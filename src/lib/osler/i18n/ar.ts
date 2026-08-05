@@ -1780,6 +1780,8 @@ export const ar = {
     "admin.studio.dropOnFolder": "أفلِت للتجهيز في {name}",
     "admin.studio.uploadProgress": "جارٍ التجهيز {done}/{total}…",
     "admin.studio.preview.more": "+{n} إضافي",
+    "admin.studio.preview.showAll": "عرض الكل ({n})",
+    "admin.studio.preview.showLess": "عرض أقل",
     "admin.studio.preview.questions": "{n} سؤال",
     "admin.studio.preview.explanation": "الشرح",
     "admin.studio.preview.passages": "{n} مقطع",

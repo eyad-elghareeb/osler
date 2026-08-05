@@ -379,7 +379,7 @@ export function ContentStudio({ capabilities }: ContentStudioProps) {
     if (!capabilities.manageUsers) return;
     haptic("light");
     const dest = (targetPath || activeFolder || "").trim();
-    if (!dest) {
+    if (!dest || dest.split("/").includes("__drafts__")) {
       setUploadOpen(true);
       return;
     }
@@ -461,6 +461,9 @@ export function ContentStudio({ capabilities }: ContentStudioProps) {
 
   const breadcrumbs = currentCategory
     ? pathToBreadcrumbs(currentCategory.folder, t(currentCategory.labelKey as any), currentPathWithinCat)
+        .map((crumb) => (crumb.path === "__drafts__"
+          ? { ...crumb, label: t("admin.studio.draftsFolder") }
+          : crumb))
     : [{ path: "", label: t("admin.studio.breadcrumbRoot") }];
 
   // ── Render ────────────────────────────────────────────────────────────
@@ -489,8 +492,8 @@ export function ContentStudio({ capabilities }: ContentStudioProps) {
         onRefresh={loadUnified}
         loading={unifiedLoading}
         canManage={capabilities.manageUsers}
-        onNewFile={() => actions.openNewFileDialog(currentPathWithinCat)}
-        onNewFolder={() => actions.openNewFolderDialog(currentPathWithinCat)}
+        onNewFile={() => actions.openNewFileDialog(currentPathWithinCat === "__drafts__" ? "" : currentPathWithinCat)}
+        onNewFolder={() => actions.openNewFolderDialog(currentPathWithinCat === "__drafts__" ? "" : currentPathWithinCat)}
         onUpload={() => setUploadOpen(true)}
         onNewContent={() => setCreateOpen(true)}
         onRegenerateManifests={actions.regenerateManifests}

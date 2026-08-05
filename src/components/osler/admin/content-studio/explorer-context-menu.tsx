@@ -169,6 +169,7 @@ export function ExplorerContextMenu({ node, canManage, actions }: ExplorerContex
   // ── Folder ────────────────────────────────────────────────────────────
   if (isFolder && canManage) {
     const folderPath = folderPathOf(node);
+    const isDrafts = node.id.endsWith("__drafts__");
     return (
       <>
         {folderHasStaged && (
@@ -182,14 +183,20 @@ export function ExplorerContextMenu({ node, canManage, actions }: ExplorerContex
             <ContextMenuSeparator />
           </>
         )}
-        <ContextMenuItem onClick={() => actions.onNewFile(folderPath)}>
-          <FilePlus className="size-3.5 me-2" /> {t("admin.content.context.newFileHere")}
-        </ContextMenuItem>
-        <ContextMenuItem onClick={() => actions.onNewFolder(folderPath)}>
-          <FolderPlus className="size-3.5 me-2" /> {t("admin.content.context.newFolderHere")}
-        </ContextMenuItem>
+        {/* The drafts folder is synthetic (no real R2 path) — creating a
+            file/folder inside it would write to a fake __drafts__ key. */}
+        {!isDrafts && (
+          <>
+            <ContextMenuItem onClick={() => actions.onNewFile(folderPath)}>
+              <FilePlus className="size-3.5 me-2" /> {t("admin.content.context.newFileHere")}
+            </ContextMenuItem>
+            <ContextMenuItem onClick={() => actions.onNewFolder(folderPath)}>
+              <FolderPlus className="size-3.5 me-2" /> {t("admin.content.context.newFolderHere")}
+            </ContextMenuItem>
+          </>
+        )}
         {/* Only non-root, non-drafts folders can be renamed/deleted */}
-        {!node.id.endsWith("__drafts__") && node.r2Key && (
+        {!isDrafts && node.r2Key && (
           <>
             <ContextMenuSeparator />
             <ContextMenuItem onClick={() => actions.onRename(node)}>

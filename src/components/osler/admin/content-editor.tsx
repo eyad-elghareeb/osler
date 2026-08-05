@@ -946,22 +946,23 @@ function parseFrontmatter(md: string): { body: string } {
 }
 
 export const PREVIEW_MARKDOWN_STYLES = `
-  .preview-md h1 { font-size: 1.75rem; font-weight: 700; margin: 1.5rem 0 0.75rem; }
-  .preview-md h2 { font-size: 1.4rem; font-weight: 600; margin: 1.25rem 0 0.5rem; border-bottom: 1px solid oklch(0.87 0 0); padding-bottom: 0.25rem; }
-  .preview-md h3 { font-size: 1.1rem; font-weight: 600; margin: 1rem 0 0.4rem; }
+  .preview-md { color: var(--foreground); font-size: 0.9rem; line-height: 1.65; }
+  .preview-md h1 { font-size: 1.75rem; font-weight: 700; margin: 1.5rem 0 0.75rem; color: var(--foreground); }
+  .preview-md h2 { font-size: 1.4rem; font-weight: 600; margin: 1.25rem 0 0.5rem; border-bottom: 1px solid var(--border); padding-bottom: 0.25rem; color: var(--foreground); }
+  .preview-md h3 { font-size: 1.1rem; font-weight: 600; margin: 1rem 0 0.4rem; color: var(--foreground); }
   .preview-md p { margin: 0.6rem 0; line-height: 1.7; }
   .preview-md ul, .preview-md ol { padding-inline-start: 1.5rem; margin: 0.5rem 0; }
   .preview-md li { margin: 0.2rem 0; }
-  .preview-md blockquote { border-inline-start: 3px solid oklch(0.6 0.1 250); background: oklch(0.97 0.01 250); margin: 0.75rem 0; padding: 0.5rem 1rem; border-radius: 0 0.25rem 0.25rem 0; }
-  .preview-md code { font-family: monospace; background: oklch(0.95 0 0); padding: 0.15rem 0.35rem; border-radius: 0.25rem; font-size: 0.85em; }
-  .preview-md pre { background: oklch(0.15 0 0); color: oklch(0.92 0 0); padding: 1rem; border-radius: 0.5rem; overflow-x: auto; margin: 0.75rem 0; }
+  .preview-md blockquote { border-inline-start: 3px solid var(--info); background: color-mix(in oklch, var(--info) 10%, transparent); margin: 0.75rem 0; padding: 0.5rem 1rem; border-radius: 0 0.25rem 0.25rem 0; }
+  .preview-md code { font-family: var(--font-geist-mono), ui-monospace, monospace; background: var(--muted); color: var(--foreground); padding: 0.15rem 0.35rem; border-radius: 0.25rem; font-size: 0.85em; }
+  .preview-md pre { background: var(--muted); color: var(--foreground); padding: 1rem; border-radius: 0.5rem; overflow-x: auto; margin: 0.75rem 0; }
   .preview-md pre code { background: transparent; padding: 0; }
   .preview-md table { border-collapse: collapse; width: 100%; margin: 0.75rem 0; }
-  .preview-md th, .preview-md td { border: 1px solid oklch(0.85 0 0); padding: 0.4rem 0.6rem; text-align: start; font-size: 0.9em; }
-  .preview-md th { background: oklch(0.95 0 0); font-weight: 600; }
+  .preview-md th, .preview-md td { border: 1px solid var(--border); padding: 0.4rem 0.6rem; text-align: start; font-size: 0.9em; color: var(--foreground); }
+  .preview-md th { background: var(--muted); font-weight: 600; color: var(--foreground); }
   .preview-md img { max-width: 100%; border-radius: 0.5rem; margin: 0.75rem 0; }
-  .preview-md hr { border: none; border-top: 1px solid oklch(0.85 0 0); margin: 1.5rem 0; }
-  .preview-md a { color: oklch(0.4 0.15 260); text-decoration: underline; }
+  .preview-md hr { border: none; border-top: 1px solid var(--border); margin: 1.5rem 0; }
+  .preview-md a { color: var(--primary); text-decoration: underline; }
 `;
 
 function MermaidPreviewBlock({ code }: { code: string }) {
