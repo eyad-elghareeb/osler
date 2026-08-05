@@ -56,6 +56,7 @@ import {
   type ValidationState,
   type ViewMode,
   type R2Item,
+  type UploadProgress,
 } from "./types";
 import { buildUnifiedTree, countLeaves } from "./unified-tree";
 import { CategoryRail } from "./category-rail";
@@ -69,6 +70,12 @@ import {
   CreateContentDialog,
   UploadDialog,
 } from "./dialogs";
+import {
+  filesToDropped,
+  stagedKeyFor,
+  uploadStagedFile,
+  type DroppedFile,
+} from "@/components/osler/admin/content-dropzone";
 import { useContentActions } from "./use-content-actions";
 
 // ── Main component ──────────────────────────────────────────────────────────
@@ -120,6 +127,8 @@ export function ContentStudio({ capabilities }: ContentStudioProps) {
   // ── Dialog state (create / upload) ────────────────────────────────────
   const [createOpen, setCreateOpen] = React.useState(false);
   const [uploadOpen, setUploadOpen] = React.useState(false);
+  // Live progress of a direct-staging drag-and-drop upload.
+  const [uploadJob, setUploadJob] = React.useState<UploadProgress | null>(null);
 
   // ── Load unified tree ─────────────────────────────────────────────────
   const loadUnified = React.useCallback(async () => {
@@ -355,10 +364,71 @@ export function ContentStudio({ capabilities }: ContentStudioProps) {
       router.push(`/admin/content/raw?key=${encodeURIComponent(node.r2Key)}`);
     }
   }
-  function handleDropFiles(_files: File[]) {
+  /**
+   * Seamless drag-and-drop into an open folder: files dropped on the explorer
+   * (or on a folder tile) are staged directly into content-staging/<target>/
+   * with an inline progress overlay, then the tree reloads and the explorer
+   * navigates into the resolved folder so the files appear right where they
+   * landed. Falls back to the upload dialog when no folder resolved.
+   */
+  async function handleDropFiles(
+    files: File[],
+    paths: Map<File, string>,
+    targetPath?: string,
+  ) {
     if (!capabilities.manageUsers) return;
     haptic("light");
-    setUploadOpen(true);
+    const dest = (targetPath || activeFolder || "").trim();
+    if (!dest) {
+      setUploadOpen(true);
+      return;
+    }
+
+    let dropped: DroppedFile[];
+    try {
+      dropped = await filesToDropped(files, paths);
+    } catch {
+      toast({ title: t("admin.toast.failedReadFiles"), variant: "destructive" });
+      return;
+    }
+    // Deduplicate by the exact staging key a re-drop would overwrite.
+    const seen = new Set<string>();
+    const unique = dropped.filter((d) => {
+      try {
+        const k = stagedKeyFor(d, dest);
+        if (seen.has(k)) return false;
+        seen.add(k);
+        return true;
+      } catch {
+        return false;
+      }
+    });
+    if (unique.length === 0) return;
+
+    setUploadJob({ done: 0, total: unique.length, dest });
+    let done = 0;
+    let failed = 0;
+    for (const d of unique) {
+      try {
+        await uploadStagedFile(d, dest);
+        done += 1;
+      } catch {
+        failed += 1;
+      }
+      setUploadJob({ done, total: unique.length, dest });
+    }
+    setUploadJob(null);
+
+    if (failed === 0) {
+      toast({ title: t("admin.studio.dropStaged", { n: done, dest: `content-staging/${dest}/` }) });
+    } else if (done > 0) {
+      toast({ title: t("admin.studio.dropStagedPartial", { ok: done, total: unique.length, fail: failed }), variant: "destructive" });
+    } else {
+      toast({ title: t("admin.studio.dropFailed"), variant: "destructive" });
+    }
+
+    if (dest !== activeFolder) navigateTo(dest);
+    loadUnified();
   }
 
   // ── Context menu actions (wire the hook into the explorer's shape) ────
@@ -477,6 +547,8 @@ export function ContentStudio({ capabilities }: ContentStudioProps) {
                   loading={unifiedLoading}
                   canManage={capabilities.manageUsers}
                   onDropFiles={handleDropFiles}
+                  dropTargetPath={activeFolder}
+                  uploadJob={uploadJob}
                   contextActions={contextActions}
                 />
               )}

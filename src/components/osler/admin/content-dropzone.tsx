@@ -74,24 +74,9 @@ export function ContentDropzone({
 
     // The merged workflow accepts any file type (content + images + PDFs +
     // assets) so a whole content pack folder can be dropped as-is.
-    const valid = files;
-
     setBusy(true);
     try {
-      const dropped: DroppedFile[] = [];
-      for (const file of valid) {
-        const body = await readAsUploadBody(file);
-        const rel = relativePaths?.get(file) ?? file.name;
-        dropped.push({
-          file,
-          contentType: guessContentType(file.name),
-          title: file.name.replace(/\.(md|json)$/i, ""),
-          language: guessLanguage(file.name) ?? "en",
-          body,
-          relativePath: rel,
-        });
-      }
-      onFiles(dropped);
+      onFiles(await filesToDropped(files, relativePaths));
     } catch (err) {
       toast({
         title: t("admin.toast.failedReadFiles"),
@@ -240,6 +225,30 @@ export function ContentDropzone({
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 
+/** Read a list of Files into `DroppedFile[]` — content-type guess, title,
+ *  language, upload-ready body, and the relative path inside a dropped
+ *  folder. Shared by the dropzone and the Content Studio's direct-staging
+ *  drop flow so both agree on how a file becomes a DroppedFile. */
+export async function filesToDropped(
+  files: File[],
+  relativePaths?: Map<File, string>,
+): Promise<DroppedFile[]> {
+  const dropped: DroppedFile[] = [];
+  for (const file of files) {
+    const body = await readAsUploadBody(file);
+    const rel = relativePaths?.get(file) ?? file.name;
+    dropped.push({
+      file,
+      contentType: guessContentType(file.name),
+      title: file.name.replace(/\.(md|json)$/i, ""),
+      language: guessLanguage(file.name) ?? "en",
+      body,
+      relativePath: rel,
+    });
+  }
+  return dropped;
+}
+
 function guessContentType(filename: string): ContentType {
   const lower = filename.toLowerCase();
   if (lower.endsWith(".md")) return "library";
@@ -262,7 +271,7 @@ function guessLanguage(filename: string): string | null {
 
 /** Walk a DataTransfer's entries recursively, preserving folder structure.
  *  Falls back to the flat file list when webkitGetAsEntry is unavailable. */
-async function walkDropEntries(
+export async function walkDropEntries(
   dt: DataTransfer,
 ): Promise<{ files: File[]; paths: Map<File, string> }> {
   const paths = new Map<File, string>();

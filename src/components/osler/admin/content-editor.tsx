@@ -945,7 +945,7 @@ function parseFrontmatter(md: string): { body: string } {
   return { body: lines.slice(end + 1).join("\n").trim() };
 }
 
-const PREVIEW_MARKDOWN_STYLES = `
+export const PREVIEW_MARKDOWN_STYLES = `
   .preview-md h1 { font-size: 1.75rem; font-weight: 700; margin: 1.5rem 0 0.75rem; }
   .preview-md h2 { font-size: 1.4rem; font-weight: 600; margin: 1.25rem 0 0.5rem; border-bottom: 1px solid oklch(0.87 0 0); padding-bottom: 0.25rem; }
   .preview-md h3 { font-size: 1.1rem; font-weight: 600; margin: 1rem 0 0.4rem; }

@@ -34,7 +34,8 @@ import {
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
 import type { ContentTreeNode } from "@/components/osler/admin/content-tree-pane";
-import { STATUS_BADGE, formatSize, formatRelativeTime, findNodeInTree, type ViewMode } from "./types";
+import { walkDropEntries } from "@/components/osler/admin/content-dropzone";
+import { STATUS_BADGE, formatSize, formatRelativeTime, findNodeInTree, folderPathOf, type ViewMode, type UploadProgress } from "./types";
 import { ExplorerContextMenu } from "./explorer-context-menu";
 import { TreeView } from "./tree-view";
 import { NodeIcon, NodeBadges, folderIconCls, folderTileCls, folderRowCls } from "./ui";
@@ -54,7 +55,14 @@ export interface FileExplorerProps {
   viewMode: ViewMode;
   loading?: boolean;
   canManage: boolean;
-  onDropFiles?: (files: File[]) => void;
+  /** Files dropped into the explorer's empty area. `targetPath` is the folder
+   *  they resolved to (the currently open folder, or a category when dropped
+   *  on a category tile). When undefined, the parent opens its upload dialog. */
+  onDropFiles?: (files: File[], paths: Map<File, string>, targetPath?: string) => void;
+  /** Full path of the folder currently open (used to resolve container drops). */
+  dropTargetPath?: string;
+  /** Live progress of a direct-staging upload, rendered as an overlay. */
+  uploadJob?: UploadProgress | null;
   contextActions: ContextMenuActions;
   className?: string;
 }
@@ -79,7 +87,7 @@ export interface ContextMenuActions {
 
 export function FileExplorer({
   items, treeRoots, query, selectedIds, onSelectionChange, onOpen, onOpenFolder,
-  viewMode, loading, canManage, onDropFiles,
+  viewMode, loading, canManage, onDropFiles, dropTargetPath, uploadJob,
   contextActions, className,
 }: FileExplorerProps) {
   const { t } = useI18n();
@@ -156,13 +164,28 @@ export function FileExplorer({
   function handleDragLeave(e: React.DragEvent) {
     if (!containerRef.current?.contains(e.relatedTarget as Node)) setDragOver(false);
   }
-  function handleDrop(e: React.DragEvent) {
+  async function handleDrop(e: React.DragEvent) {
     if (!onDropFiles) return;
-    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-      e.preventDefault();
-      onDropFiles(Array.from(e.dataTransfer.files));
-      setDragOver(false);
-    }
+    if (!e.dataTransfer.types.includes("Files")) return;
+    e.preventDefault();
+    // Walk entries so a dropped folder keeps its internal structure.
+    const { files, paths } = await walkDropEntries(e.dataTransfer);
+    if (files.length > 0) onDropFiles(files, paths, dropTargetPath || undefined);
+    setDragOver(false);
+  }
+
+  /** Shared collection helper for drops that land directly on a folder tile:
+   *  resolves to that folder's path so the parent stages into it even when a
+   *  different folder is open. */
+  async function collectDropOnFolder(
+    e: React.DragEvent,
+    folderNode: ContentTreeNode,
+  ): Promise<void> {
+    if (!onDropFiles) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const { files, paths } = await walkDropEntries(e.dataTransfer);
+    if (files.length > 0) onDropFiles(files, paths, folderPathOf(folderNode));
   }
 
   // ── Container-level right-click handler ────────────────────────────────
@@ -189,6 +212,32 @@ export function FileExplorer({
     ),
   };
 
+  // ── Direct-staging upload overlay ──────────────────────────────────────
+  const uploadOverlay = uploadJob ? (
+    <div className="pointer-events-none absolute inset-x-3 bottom-3 z-30">
+      <div className="rounded-lg border border-border bg-card/95 p-2.5 shadow-lg backdrop-blur">
+        <div className="flex items-center gap-2 text-xs">
+          <Loader2 className="size-3.5 animate-spin text-primary" />
+          <span className="min-w-0 flex-1 truncate">
+            {t("admin.studio.uploadProgress", {
+              done: String(uploadJob.done),
+              total: String(uploadJob.total),
+            })}
+          </span>
+          <span className="font-mono text-[10px] text-muted-foreground truncate">
+            {uploadJob.dest}
+          </span>
+        </div>
+        <div className="mt-1.5 h-1 overflow-hidden rounded-full bg-muted">
+          <div
+            className="h-full rounded-full bg-primary transition-all duration-200"
+            style={{ width: `${(uploadJob.done / Math.max(1, uploadJob.total)) * 100}%` }}
+          />
+        </div>
+      </div>
+    </div>
+  ) : null;
+
   // ── Render: empty state ────────────────────────────────────────────────
   if (items.length === 0 && !loading) {
     return (
@@ -199,6 +248,7 @@ export function FileExplorer({
           <p className="osler-empty__body text-xs">{t("admin.studio.emptyDesc")}</p>
         </div>
         {dragOver && <p className="text-xs font-medium text-primary">{t("admin.studio.dropToUpload")}</p>}
+        {uploadOverlay}
       </div>
     );
   }
@@ -233,6 +283,7 @@ export function FileExplorer({
               onSelectRange={selectRange}
               onOpenFolder={onOpenFolder}
               onOpen={onOpen}
+              onDropOnFolder={onDropFiles ? collectDropOnFolder : undefined}
             />
           ) : (
             <ListView
@@ -243,6 +294,7 @@ export function FileExplorer({
               onSelectRange={selectRange}
               onOpenFolder={onOpenFolder}
               onOpen={onOpen}
+              onDropOnFolder={onDropFiles ? collectDropOnFolder : undefined}
             />
           )}
 
@@ -251,6 +303,7 @@ export function FileExplorer({
               <Loader2 className="size-5 animate-spin text-primary" />
             </div>
           )}
+          {uploadOverlay}
         </div>
       </ContextMenuTrigger>
       <ContextMenuContent>
@@ -270,9 +323,11 @@ interface ItemViewProps {
   onSelectRange: (idx: number) => void;
   onOpenFolder: (node: ContentTreeNode) => void;
   onOpen: (node: ContentTreeNode) => void;
+  /** Called when files are dropped on a folder tile — stages into that folder. */
+  onDropOnFolder?: (e: React.DragEvent, node: ContentTreeNode) => void;
 }
 
-function GridView({ items, selectedIds, onSelectSingle, onToggle, onSelectRange, onOpenFolder, onOpen }: ItemViewProps) {
+function GridView({ items, selectedIds, onSelectSingle, onToggle, onSelectRange, onOpenFolder, onOpen, onDropOnFolder }: ItemViewProps) {
   return (
     <div className="flex-1 overflow-y-auto medos-scroll-y p-2.5">
       <div
@@ -291,6 +346,7 @@ function GridView({ items, selectedIds, onSelectSingle, onToggle, onSelectRange,
               else onSelectSingle(idx, node);
             }}
             onDoubleClick={() => (node.kind === "folder" ? onOpenFolder : onOpen)(node)}
+            onDropOnFolder={node.kind === "folder" ? onDropOnFolder : undefined}
           />
         ))}
       </div>
@@ -299,15 +355,33 @@ function GridView({ items, selectedIds, onSelectSingle, onToggle, onSelectRange,
 }
 
 function GridTile({
-  node, selected, onClick, onDoubleClick,
+  node, selected, onClick, onDoubleClick, onDropOnFolder,
 }: {
   node: ContentTreeNode;
   selected: boolean;
   onClick: (e: React.MouseEvent) => void;
   onDoubleClick: () => void;
+  onDropOnFolder?: (e: React.DragEvent, node: ContentTreeNode) => void;
 }) {
+  const { t } = useI18n();
   const isFolder = node.kind === "folder";
   const status = node.cloudObject?.status;
+  const [dropActive, setDropActive] = React.useState(false);
+
+  function handleTileDragOver(e: React.DragEvent) {
+    if (!onDropOnFolder || !e.dataTransfer.types.includes("Files")) return;
+    e.preventDefault();
+    e.stopPropagation();
+    e.dataTransfer.dropEffect = "copy";
+    setDropActive(true);
+  }
+  function handleTileDragLeave() { setDropActive(false); }
+  function handleTileDrop(e: React.DragEvent) {
+    if (!onDropOnFolder) return;
+    setDropActive(false);
+    void onDropOnFolder(e, node);
+  }
+
   return (
     <button
       type="button"
@@ -315,6 +389,9 @@ function GridTile({
       data-node-id={node.id}
       onClick={onClick}
       onDoubleClick={onDoubleClick}
+      onDragOver={handleTileDragOver}
+      onDragLeave={handleTileDragLeave}
+      onDrop={handleTileDrop}
       aria-selected={selected}
       className={cn(
         "group relative flex aspect-[4/3] flex-col items-center gap-1 rounded-lg border p-2 text-center transition-all",
@@ -322,8 +399,18 @@ function GridTile({
         selected
           ? "border-primary/50 bg-primary/10 ring-1 ring-primary/30"
           : "border-border bg-card hover:bg-muted/40",
+        dropActive && "border-primary ring-2 ring-primary/50",
       )}
     >
+      {/* Drop target overlay */}
+      {dropActive && (
+        <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center rounded-lg bg-primary/10">
+          <span className="max-w-[90%] truncate rounded bg-primary px-2 py-0.5 text-[10px] font-semibold text-primary-foreground">
+            {t("admin.studio.dropOnFolder", { name: node.name })}
+          </span>
+        </div>
+      )}
+
       {/* Badges — top-right, compact */}
       <div className="absolute end-1 top-1">
         <NodeBadges node={node} variant="compact" />
@@ -366,7 +453,7 @@ function GridTile({
 
 // ── List view ───────────────────────────────────────────────────────────────
 
-function ListView({ items, selectedIds, onSelectSingle, onToggle, onSelectRange, onOpenFolder, onOpen }: ItemViewProps) {
+function ListView({ items, selectedIds, onSelectSingle, onToggle, onSelectRange, onOpenFolder, onOpen, onDropOnFolder }: ItemViewProps) {
   const { t } = useI18n();
   return (
     <div className="flex-1 overflow-y-auto medos-scroll-y">
@@ -392,6 +479,7 @@ function ListView({ items, selectedIds, onSelectSingle, onToggle, onSelectRange,
               else onSelectSingle(idx, node);
             }}
             onDoubleClick={() => (node.kind === "folder" ? onOpenFolder : onOpen)(node)}
+            onDropOnFolder={node.kind === "folder" ? onDropOnFolder : undefined}
           />
         ))}
       </div>
@@ -400,15 +488,32 @@ function ListView({ items, selectedIds, onSelectSingle, onToggle, onSelectRange,
 }
 
 function ListRow({
-  node, selected, onClick, onDoubleClick,
+  node, selected, onClick, onDoubleClick, onDropOnFolder,
 }: {
   node: ContentTreeNode;
   selected: boolean;
   onClick: (e: React.MouseEvent) => void;
   onDoubleClick: () => void;
+  onDropOnFolder?: (e: React.DragEvent, node: ContentTreeNode) => void;
 }) {
   const { t } = useI18n();
   const status = node.cloudObject?.status;
+  const [dropActive, setDropActive] = React.useState(false);
+
+  function handleRowDragOver(e: React.DragEvent) {
+    if (!onDropOnFolder || !e.dataTransfer.types.includes("Files")) return;
+    e.preventDefault();
+    e.stopPropagation();
+    e.dataTransfer.dropEffect = "copy";
+    setDropActive(true);
+  }
+  function handleRowDragLeave() { setDropActive(false); }
+  function handleRowDrop(e: React.DragEvent) {
+    if (!onDropOnFolder) return;
+    setDropActive(false);
+    void onDropOnFolder(e, node);
+  }
+
   return (
     <button
       type="button"
@@ -416,13 +521,26 @@ function ListRow({
       data-node-id={node.id}
       onClick={onClick}
       onDoubleClick={onDoubleClick}
+      onDragOver={handleRowDragOver}
+      onDragLeave={handleRowDragLeave}
+      onDrop={handleRowDrop}
       aria-selected={selected}
       className={cn(
         "grid w-full grid-cols-[minmax(0,1fr)_110px_70px_100px_110px] items-center gap-2 border-b border-border/60 px-3 py-1.5 text-start text-xs transition-colors",
         "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/40",
         selected ? "bg-primary/10" : "hover:bg-muted/40",
+        dropActive && "bg-primary/5 ring-1 ring-inset ring-primary/40",
       )}
     >
+      {/* Drop target label — shown as an overlay chip on the row */}
+      {dropActive && (
+        <span className="col-span-5 inline-flex max-w-full items-center gap-1 overflow-hidden">
+          <span className="max-w-full truncate rounded bg-primary px-1.5 py-0.5 text-[10px] font-semibold text-primary-foreground">
+            {t("admin.studio.dropOnFolder", { name: node.name })}
+          </span>
+        </span>
+      )}
+
       {/* Name + icon */}
       <div className="flex min-w-0 items-center gap-2">
         <NodeIcon

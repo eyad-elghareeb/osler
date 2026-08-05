@@ -266,6 +266,17 @@ export function nodeContainsStaged(n: ContentTreeNode): boolean {
 
 export type ValidationState = "unknown" | "valid" | "invalid" | "checking";
 
+// ── Direct-staging upload progress (drag-and-drop into a folder) ──────────
+
+export interface UploadProgress {
+  /** Files finished (successfully or not) so far. */
+  done: number;
+  /** Total files being staged. */
+  total: number;
+  /** Full folder path they're landing in, e.g. "library/cardiology". */
+  dest: string;
+}
+
 // ── Format helpers (re-exported so studio files don't import content-tree-pane) ──
 
 export function formatSize(bytes: number): string {

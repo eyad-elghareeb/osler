@@ -42,6 +42,11 @@ import {
   folderTileCls,
   folderRowCls,
 } from "./ui";
+import {
+  MarkdownBody,
+  RenderedContentPreview,
+  inferContentType,
+} from "./content-preview";
 
 // ── Types ───────────────────────────────────────────────────────────────────
 
@@ -321,20 +326,28 @@ function FolderDetail({ node, canManage }: { node: ContentTreeNode; canManage: b
 
 // ── R2 preview ──────────────────────────────────────────────────────────────
 
+const MAX_PREVIEW_CHARS = 500_000;
+
 function R2Preview({ node }: { node: ContentTreeNode }) {
   const { t } = useI18n();
   const [body, setBody] = React.useState<string | null>(null);
+  const [truncated, setTruncated] = React.useState(false);
   const [imageUrl, setImageUrl] = React.useState<string | null>(null);
   const [lightboxOpen, setLightboxOpen] = React.useState(false);
   const [loading, setLoading] = React.useState(true);
   const isImage = !!node.r2Key && isImageR2Key(node.r2Key);
+  const isMarkdown = !isImage && (node.r2Key?.endsWith(".md") ?? false);
 
   React.useEffect(() => {
     if (!node.r2Key) { setLoading(false); return; }
     setLoading(true);
+    setTruncated(false);
 
     const fetchText = (p: Promise<string>) =>
-      p.then((text) => setBody(text.slice(0, 6000)))
+      p.then((text) => {
+        if (text.length > MAX_PREVIEW_CHARS) { setTruncated(true); return; }
+        setBody(text);
+      })
         .catch(() => setBody(null))
         .finally(() => setLoading(false));
     const fetchImage = (p: Promise<Blob>) =>
@@ -400,11 +413,32 @@ function R2Preview({ node }: { node: ContentTreeNode }) {
     );
   }
 
+  // Rendered preview: markdown articles + typed JSON packs. Falls back to a
+  // raw text view when the body isn't parseable / renderable.
+  const parsed = body == null ? null : (() => {
+    if (isMarkdown) return null;
+    try { return JSON.parse(body); } catch { return null; }
+  })();
+  const contentType = node.cloudObject?.content_type ?? null;
+  const effectiveType = contentType ?? (parsed ? inferContentType(parsed) : null);
+  const renderable = isMarkdown || (parsed && effectiveType);
+  const lang = parsed?.meta?.lang ?? node.cloudObject?.language;
+
   return (
     <div className="flex h-full flex-col overflow-hidden">
-      <div className="flex-1 min-h-0 overflow-auto medos-scroll-y p-2.5">
+      <div dir={lang === "ar" ? "rtl" : "ltr"} className="flex-1 min-h-0 overflow-auto medos-scroll-y p-2.5">
         {loading ? (
           <div className="text-[11px] text-muted-foreground text-center py-6">{t("common.loading")}</div>
+        ) : renderable && body != null ? (
+          isMarkdown
+            ? <MarkdownBody md={body} r2Key={node.r2Key} />
+            : parsed && effectiveType
+              ? <RenderedContentPreview node={node} contentType={effectiveType} parsed={parsed} />
+              : null
+        ) : truncated ? (
+          <div className="text-[11px] text-muted-foreground text-center py-6">
+            {t("admin.studio.preview.tooLarge")}
+          </div>
         ) : body == null ? (
           <div className="text-[11px] text-muted-foreground text-center py-6">
             {t("admin.content.previewUnavailableR2")}
@@ -412,7 +446,6 @@ function R2Preview({ node }: { node: ContentTreeNode }) {
         ) : (
           <pre className="whitespace-pre-wrap break-words font-mono text-[10px] text-foreground/90">
             {body}
-            {body.length >= 6000 && `\n\n… (${t("admin.content.truncated")})`}
           </pre>
         )}
       </div>
