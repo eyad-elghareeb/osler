@@ -3,17 +3,22 @@
 import * as React from "react";
 import { Suspense } from "react";
 import { useSearchParams } from "next/navigation";
-import { FileText } from "lucide-react";
 import { useI18n } from "@/components/osler/i18n-provider";
-import { AdminPageFrame } from "@/components/osler/admin/admin-page-frame";
 import { useAdminIdentity } from "@/components/osler/admin/admin-context";
-import { ContentBrowser } from "@/components/osler/admin/content-browser";
 import { ContentEditor } from "@/components/osler/admin/content-editor";
+import { ContentStudio } from "@/components/osler/admin/content-studio/content-studio";
 
 /**
- * Admin content hub + editor, driven by `?id=<content-uuid>`.
+ * Admin content hub + editor, driven by `?id=<content-uuid>` or
+ * `?key=<r2-key>`.
+ *
  * Static export friendly: no dynamic route, no `_redirects` fallback needed.
- * `useSearchParams` is wrapped in `<Suspense>` so the page prerenders cleanly.
+ * `useSearchParams` is wrapped in `<Suspense>` so the page prerenders
+ * cleanly.
+ *
+ * The hub now renders the new Content Studio — a file-explorer-style
+ * workspace that fills the full admin content area. When `?id=` is set,
+ * the in-place content editor takes over instead.
  */
 export default function AdminContentPage() {
   return (
@@ -24,7 +29,6 @@ export default function AdminContentPage() {
 }
 
 function AdminContentView() {
-  const { t } = useI18n();
   const identity = useAdminIdentity();
   const params = useSearchParams();
   const id = params.get("id");
@@ -37,13 +41,11 @@ function AdminContentView() {
     );
   }
 
+  // The studio has its own header + three-column layout — bypass the
+  // AdminPageFrame so it can use the full window area.
   return (
-    <AdminPageFrame
-      title={t("admin.content.title")}
-      subtitle={t("admin.content.subtitle")}
-      inlineIcon={FileText}
-    >
-      <ContentBrowser capabilities={identity.capabilities} />
-    </AdminPageFrame>
+    <div className="h-full min-h-0">
+      <ContentStudio capabilities={identity.capabilities} />
+    </div>
   );
 }

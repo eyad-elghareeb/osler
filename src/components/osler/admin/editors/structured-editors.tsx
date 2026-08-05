@@ -91,12 +91,12 @@ function Field({
   children: React.ReactNode;
 }) {
   return (
-    <div className="space-y-1.5">
+    <div className="space-y-1">
       <div className="flex items-baseline gap-2">
-        <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+        <label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
           {label}
         </label>
-        {hint && <span className="text-xs text-muted-foreground/70">{hint}</span>}
+        {hint && <span className="text-[10px] text-muted-foreground/70">{hint}</span>}
       </div>
       {children}
     </div>
@@ -105,7 +105,7 @@ function Field({
 
 function SectionLabel({ children }: { children: React.ReactNode }) {
   return (
-    <div className="mt-1 mb-1 text-xs font-bold uppercase tracking-wider text-primary/80 border-b border-primary/20 pb-1">
+    <div className="mt-1 mb-1 text-[11px] font-bold uppercase tracking-wider text-primary/70 border-b border-primary/15 pb-1">
       {children}
     </div>
   );
@@ -122,9 +122,9 @@ function ListToolbar({
 }) {
   if (readOnly) return null;
   return (
-    <div className="flex justify-end mb-2">
-      <Button size="sm" variant="outline" onClick={onAdd}>
-        <Plus className="size-3.5 me-1" />
+    <div className="flex justify-end mb-1.5">
+      <Button size="xs" variant="outline" onClick={onAdd}>
+        <Plus className="size-3 me-1" />
         {addLabel}
       </Button>
     </div>
@@ -150,10 +150,10 @@ function ItemRow({
 }) {
   const { t } = useI18n();
   return (
-    <div className="border border-border rounded-xl p-3 space-y-3 bg-card/60">
-      <div className="flex items-center gap-2">
-        <GripVertical className="size-3.5 text-muted-foreground/40" />
-        <Badge variant="outline" className="font-mono">
+    <div className="border border-border rounded-lg p-2.5 space-y-2.5 bg-card/60">
+      <div className="flex items-center gap-1.5">
+        <GripVertical className="size-3 text-muted-foreground/40" />
+        <Badge variant="outline" className="font-mono text-[10px] px-1.5 py-0">
           {title}
         </Badge>
         {!readOnly && (
@@ -162,12 +162,12 @@ function ItemRow({
               <Tooltip>
                 <TooltipTrigger asChild>
                   <Button
-                    size="iconSm"
+                    size="iconXs"
                     variant="ghost"
                     onClick={() => onMove(-1)}
                     disabled={index === 0}
                   >
-                    <ChevronUp className="size-3.5" />
+                    <ChevronUp className="size-3" />
                   </Button>
                 </TooltipTrigger>
                 <TooltipContent>{t("admin.structured.moveUp")}</TooltipContent>
@@ -177,12 +177,12 @@ function ItemRow({
               <Tooltip>
                 <TooltipTrigger asChild>
                   <Button
-                    size="iconSm"
+                    size="iconXs"
                     variant="ghost"
                     onClick={() => onMove(1)}
                     disabled={index === total - 1}
                   >
-                    <ChevronDown className="size-3.5" />
+                    <ChevronDown className="size-3" />
                   </Button>
                 </TooltipTrigger>
                 <TooltipContent>{t("admin.structured.moveDown")}</TooltipContent>
@@ -192,12 +192,12 @@ function ItemRow({
               <Tooltip>
                 <TooltipTrigger asChild>
                   <Button
-                    size="iconSm"
+                    size="iconXs"
                     variant="ghost"
                     className="text-destructive hover:text-destructive"
                     onClick={onRemove}
                   >
-                    <Trash2 className="size-3.5" />
+                    <Trash2 className="size-3" />
                   </Button>
                 </TooltipTrigger>
                 <TooltipContent>{t("common.remove")}</TooltipContent>

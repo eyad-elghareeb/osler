@@ -452,8 +452,8 @@ export function ContentEditor({ id, rawR2Key, capabilities }: ContentEditorProps
   return (
     <div className="flex h-full flex-col">
       {/* Top bar */}
-      <div className="flex h-12 shrink-0 items-center gap-2 border-b border-border bg-card/60 px-3 sm:px-4 backdrop-blur-md safe-pt">
-        <Button variant="ghost" size="iconSm" onClick={() => {
+      <div className="flex h-11 shrink-0 items-center gap-1.5 border-b border-border bg-card/60 px-3 sm:px-4 backdrop-blur-md safe-pt">
+        <Button variant="ghost" size="iconXs" onClick={() => {
           if (dirty) {
             // Defer the navigation to the confirmation modal so the user
             // can still change their mind after seeing the prompt.
@@ -462,7 +462,7 @@ export function ContentEditor({ id, rawR2Key, capabilities }: ContentEditorProps
           }
           router.back();
         }}>
-          <ArrowLeft className="size-4" />
+          <ArrowLeft className="size-3.5" />
         </Button>
         <div className="flex-1 min-w-0">
           <span className="font-semibold text-sm truncate">
@@ -494,22 +494,22 @@ export function ContentEditor({ id, rawR2Key, capabilities }: ContentEditorProps
             </span>
           )}
         </div>
-        <div className="flex items-center gap-1.5">
+        <div className="flex items-center gap-1">
           {/* Raw mode: Save + Promote to managed. No submit/publish/delete
               (those require a backing content_object). */}
           {isRawMode && (
             <>
-              <Button variant="outline" size="sm" onClick={runValidation} disabled={validating} title={t("admin.content.editor.validate")}>
-                {validating ? <Loader2 className="me-1.5 size-3.5 animate-spin" /> : <ShieldCheck className="me-1.5 size-3.5" />}
+              <Button variant="outline" size="xs" onClick={runValidation} disabled={validating} title={t("admin.content.editor.validate")}>
+                {validating ? <Loader2 className="me-1 size-3 animate-spin" /> : <ShieldCheck className="me-1 size-3" />}
                 {t("admin.content.editor.validate")}
               </Button>
-              <Button variant="outline" size="sm" onClick={saveDraft} disabled={saving || !dirty}>
-                {saving ? <Loader2 className="me-1.5 size-3.5 animate-spin" /> : <Save className="me-1.5 size-3.5" />}
+              <Button variant="outline" size="xs" onClick={saveDraft} disabled={saving || !dirty}>
+                {saving ? <Loader2 className="me-1 size-3 animate-spin" /> : <Save className="me-1 size-3" />}
                 {t("admin.content.saveDraft")}
               </Button>
               {capabilities.manageContent && (
-                <Button size="sm" onClick={promoteToManaged} disabled={adopting}>
-                  {adopting ? <Loader2 className="me-1.5 size-3.5 animate-spin" /> : <PackagePlus className="me-1.5 size-3.5" />}
+                <Button size="xs" onClick={promoteToManaged} disabled={adopting}>
+                  {adopting ? <Loader2 className="me-1 size-3 animate-spin" /> : <PackagePlus className="me-1 size-3" />}
                   {t("admin.content.editor.promote")}
                 </Button>
               )}
@@ -518,21 +518,21 @@ export function ContentEditor({ id, rawR2Key, capabilities }: ContentEditorProps
           {/* Managed mode: full workflow buttons */}
           {!isRawMode && !isPending && (
             <>
-              <Button variant="outline" size="sm" onClick={runValidation} disabled={validating} title={t("admin.content.editor.validate")}>
-                {validating ? <Loader2 className="me-1.5 size-3.5 animate-spin" /> : <ShieldCheck className="me-1.5 size-3.5" />}
+              <Button variant="outline" size="xs" onClick={runValidation} disabled={validating} title={t("admin.content.editor.validate")}>
+                {validating ? <Loader2 className="me-1 size-3 animate-spin" /> : <ShieldCheck className="me-1 size-3" />}
                 {t("admin.content.editor.validate")}
               </Button>
-              <Button variant="outline" size="sm" onClick={saveDraft} disabled={saving}>
-                {saving ? <Loader2 className="me-1.5 size-3.5 animate-spin" /> : <Save className="me-1.5 size-3.5" />}
+              <Button variant="outline" size="xs" onClick={saveDraft} disabled={saving}>
+                {saving ? <Loader2 className="me-1 size-3 animate-spin" /> : <Save className="me-1 size-3" />}
                 {t("admin.content.saveDraft")}
               </Button>
-              <Button variant="outline" size="sm" onClick={submit}>
-                <Send className="me-1.5 size-3.5" />
+              <Button variant="outline" size="xs" onClick={submit}>
+                <Send className="me-1 size-3" />
                 {t("admin.content.submit")}
               </Button>
               {capabilities.publishDirect && (
-                <Button size="sm" onClick={() => { setPublishTargetPath(suggestedPath); setPublishOpen(true); }}>
-                  <Upload className="me-1.5 size-3.5" />
+                <Button size="xs" onClick={() => { setPublishTargetPath(suggestedPath); setPublishOpen(true); }}>
+                  <Upload className="me-1 size-3" />
                   {t("admin.content.publishDirect")}
                 </Button>
               )}
@@ -544,11 +544,11 @@ export function ContentEditor({ id, rawR2Key, capabilities }: ContentEditorProps
           {!isRawMode && capabilities.manageUsers && (
             <Button
               variant="ghost"
-              size="iconSm"
+              size="iconXs"
               className="text-destructive hover:text-destructive"
               onClick={() => setDeleteOpen(true)}
             >
-              <Trash2 className="size-4" />
+              <Trash2 className="size-3.5" />
             </Button>
           )}
         </div>
