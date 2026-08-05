@@ -207,7 +207,9 @@ export function findFolderNode(tree: ContentTreeNode[], categoryFolder: string, 
   }
   const root = tree.find((n) => n.id === `unified-root-${categoryFolder}`);
   if (!root) return null;
-  return findInTree(root, path);
+  // Folder nodes store their full key (content-files/<category>/<sub>…), so
+  // match against the category-prefixed path, not the category-relative one.
+  return findInTree(root, `${categoryFolder}/${path}`);
 }
 
 function findInTree(node: ContentTreeNode, path: string): ContentTreeNode | null {
