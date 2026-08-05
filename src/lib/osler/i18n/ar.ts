@@ -1653,6 +1653,7 @@ export const ar = {
     "admin.markdown.openMermaid": "فتح محرر Mermaid",
     "admin.markdown.placeholder": "اكتب مقالك بصيغة Markdown…",
     "admin.markdown.preview": "معاينة",
+    "admin.markdown.split": "عرض مقسّم",
     "admin.markdown.uploadImage": "رفع صورة",
     "admin.markdown.uploaded": "تم رفع {name}",
     "admin.markdown.optimized": "تم الضغط إلى WebP: {before} ← {after}",

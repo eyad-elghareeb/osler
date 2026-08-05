@@ -2269,7 +2269,7 @@ export function LibraryArticleEditor({ value, onChange, readOnly, r2KeyBase, raw
             r2KeyBase={r2KeyBase}
             rawR2Key={rawR2Key}
             placeholder="# Article title\n\nWrite your article in **Markdown**…"
-            className="flex-1 min-h-[400px]"
+            className="flex-1 min-h-0"
           />
         </>
       )}

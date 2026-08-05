@@ -45,6 +45,7 @@ import {
   Minus,
   Eye,
   Pencil,
+  Columns2,
   ImagePlus,
   Workflow,
   Loader2,
@@ -167,7 +168,7 @@ export function MarkdownEditor({
 }: MarkdownEditorProps) {
   const textareaRef = React.useRef<HTMLTextAreaElement>(null);
   const wrapperRef = React.useRef<HTMLDivElement>(null);
-  const [preview, setPreview] = React.useState(false);
+  const [view, setView] = React.useState<"edit" | "preview" | "split">("edit");
   const { toast } = useToast();
   const { t } = useI18n();
   const { openModal, modal: mermaidModal } = useMermaidModal();
@@ -420,7 +421,7 @@ export function MarkdownEditor({
   }
 
   function handleDrop(e: React.DragEvent) {
-    if (readOnly || preview) return;
+    if (readOnly || view === "preview") return;
     if (!e.dataTransfer?.files || e.dataTransfer.files.length === 0) return;
     // Only intercept image drops — let other drops (e.g. text) fall through
     // to the browser default.
@@ -432,7 +433,7 @@ export function MarkdownEditor({
   }
 
   function handleDragOver(e: React.DragEvent) {
-    if (readOnly || preview) return;
+    if (readOnly || view === "preview") return;
     if (!e.dataTransfer) return;
     if (!Array.from(e.dataTransfer.types).includes("Files")) return;
     e.preventDefault();
@@ -468,7 +469,7 @@ export function MarkdownEditor({
   // the chip opens the MermaidEditorModal.
   const [mermaidChips, setMermaidChips] = React.useState<Array<{ startLine: number; endLine: number; code: string }>>([]);
   React.useEffect(() => {
-    if (preview) return;
+    if (view === "preview") return;
     const lines = value.split("\n");
     const chips: Array<{ startLine: number; endLine: number; code: string }> = [];
     for (let i = 0; i < lines.length; i++) {
@@ -485,7 +486,7 @@ export function MarkdownEditor({
       }
     }
     setMermaidChips(chips);
-  }, [value, preview]);
+  }, [value, view]);
 
   function replaceMermaidBlock(startLine: number, endLine: number, newCode: string) {
     const lines = value.split("\n");
@@ -502,9 +503,48 @@ export function MarkdownEditor({
   const chars = value.length;
   const lines = value.split("\n").length;
 
+  // Rendered markdown preview (shared between preview + split views).
+  const renderedPreview = (
+    <div className="min-h-0 flex-1 overflow-y-auto medos-scroll-y p-4 prose prose-sm dark:prose-invert max-w-none osler-prose">
+      <ReactMarkdown
+        remarkPlugins={[remarkGfm]}
+        components={{
+          // Render mermaid code blocks as inline SVG via the mermaid dep
+          code({ inline, className, children, ...props }: any) {
+            const text = String(children);
+            if (!inline && className === "language-mermaid") {
+              return <MermaidBlock code={text} />;
+            }
+            return <code className={className} {...props}>{children}</code>;
+          },
+          // Resolve relative image refs (images/foo.png, foo.png) to
+          // URLs the admin can preview via the local R2 proxy.
+          img({ src, alt, ...props }: any) {
+            const resolved = resolveImageForPreview(String(src ?? ""), { r2KeyBase, rawR2Key });
+            return (
+              <img
+                src={resolved}
+                alt={alt}
+                {...props}
+                onError={(e) => {
+                  // Hide broken images rather than showing the browser
+                  // broken-image icon — the user can still see the alt text
+                  // and the markdown source.
+                  (e.currentTarget as HTMLImageElement).style.opacity = "0.3";
+                }}
+              />
+            );
+          },
+        }}
+      >
+        {value}
+      </ReactMarkdown>
+    </div>
+  );
+
   return (
     <TooltipProvider delayDuration={300}>
-      <div ref={wrapperRef} className={cn("border border-border rounded-lg overflow-hidden bg-background relative", className)}>
+      <div ref={wrapperRef} className={cn("border border-border rounded-lg overflow-hidden bg-background relative flex flex-col h-full", className)}>
         {/* Toolbar */}
         {!readOnly && (
           <div className="flex items-center gap-0.5 px-2 py-1.5 border-b border-border bg-muted/30 flex-wrap">
@@ -554,63 +594,79 @@ export function MarkdownEditor({
             )}
             <div className="flex-1" />
             <div className="w-px h-5 bg-border mx-1" />
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  type="button"
-                  variant={preview ? "secondary" : "ghost"}
-                  size="iconSm"
-                  onClick={() => setPreview(!preview)}
-                  className="text-muted-foreground hover:text-foreground"
-                >
-                  {preview ? <Pencil className="size-4" /> : <Eye className="size-4" />}
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent side="bottom">{preview ? t("admin.markdown.edit") : t("admin.markdown.preview")}</TooltipContent>
-            </Tooltip>
+            {([
+              { key: "edit", icon: <Pencil className="size-4" />, label: t("admin.markdown.edit") },
+              { key: "split", icon: <Columns2 className="size-4" />, label: t("admin.markdown.split") },
+              { key: "preview", icon: <Eye className="size-4" />, label: t("admin.markdown.preview") },
+            ] as const).map(({ key, icon, label }) => (
+              <Tooltip key={key}>
+                <TooltipTrigger asChild>
+                  <Button
+                    type="button"
+                    variant={view === key ? "secondary" : "ghost"}
+                    size="iconSm"
+                    onClick={() => setView(key)}
+                    className="text-muted-foreground hover:text-foreground"
+                  >
+                    {icon}
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="bottom">{label}</TooltipContent>
+              </Tooltip>
+            ))}
           </div>
         )}
 
-        {/* Editor / Preview */}
-        {preview ? (
-          <div className="p-4 min-h-[400px] prose prose-sm dark:prose-invert max-w-none osler-prose">
-            <ReactMarkdown
-              remarkPlugins={[remarkGfm]}
-              components={{
-                // Render mermaid code blocks as inline SVG via the mermaid dep
-                code({ inline, className, children, ...props }: any) {
-                  const text = String(children);
-                  if (!inline && className === "language-mermaid") {
-                    return <MermaidBlock code={text} />;
-                  }
-                  return <code className={className} {...props}>{children}</code>;
-                },
-                // Resolve relative image refs (images/foo.png, foo.png) to
-                // URLs the admin can preview via the local R2 proxy.
-                img({ src, alt, ...props }: any) {
-                  const resolved = resolveImageForPreview(String(src ?? ""), { r2KeyBase, rawR2Key });
-                  return (
-                    <img
-                      src={resolved}
-                      alt={alt}
-                      {...props}
-                      onError={(e) => {
-                        // Hide broken images rather than showing the browser
-                        // broken-image icon — the user can still see the alt text
-                        // and the markdown source.
-                        (e.currentTarget as HTMLImageElement).style.opacity = "0.3";
-                      }}
-                    />
-                  );
-                },
-              }}
+        {/* Editor / Preview / Split */}
+        {view === "preview" ? (
+          renderedPreview
+        ) : view === "split" ? (
+          <div className="flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-2 divide-y lg:divide-y-0 lg:divide-x divide-border">
+            <div
+              className={cn("relative min-h-0", dragActive && "ring-2 ring-inset ring-primary/60")}
+              onDrop={handleDrop}
+              onDragOver={handleDragOver}
+              onDragLeave={handleDragLeave}
             >
-              {value}
-            </ReactMarkdown>
+              <textarea
+                ref={textareaRef}
+                value={value}
+                onChange={(e) => onChange(e.target.value)}
+                readOnly={readOnly}
+                onKeyDown={handleKeyDown}
+                onKeyUp={handleKeyUp}
+                onPaste={handlePaste}
+                onBlur={() => setTimeout(() => setSlashOpen(false), 100)}
+                className="w-full h-full min-h-[200px] p-4 font-mono text-sm bg-transparent resize-none focus:outline-none"
+                placeholder={placeholder ?? t("admin.markdown.placeholder")}
+                spellCheck={false}
+              />
+              {/* Drag overlay hint */}
+              {dragActive && (
+                <div className="absolute inset-0 z-10 flex items-center justify-center bg-primary/10 border-2 border-dashed border-primary/60 rounded pointer-events-none">
+                  <div className="flex flex-col items-center gap-1 text-primary">
+                    <ImagePlus className="size-6" />
+                    <span className="text-xs font-medium">{t("admin.markdown.dropToUpload")}</span>
+                  </div>
+                </div>
+              )}
+              {/* Mermaid chip overlays */}
+              {mermaidChips.map((chip, i) => (
+                <MermaidChip
+                  key={i}
+                  chip={chip}
+                  totalLines={lines}
+                  onEdit={() => {
+                    openModal(chip.code, (newCode) => replaceMermaidBlock(chip.startLine, chip.endLine, newCode));
+                  }}
+                />
+              ))}
+            </div>
+            {renderedPreview}
           </div>
         ) : (
           <div
-            className={cn("relative", dragActive && "ring-2 ring-inset ring-primary/60")}
+            className={cn("relative flex-1 min-h-0", dragActive && "ring-2 ring-inset ring-primary/60")}
             onDrop={handleDrop}
             onDragOver={handleDragOver}
             onDragLeave={handleDragLeave}
@@ -624,7 +680,7 @@ export function MarkdownEditor({
               onKeyUp={handleKeyUp}
               onPaste={handlePaste}
               onBlur={() => setTimeout(() => setSlashOpen(false), 100)}
-              className="w-full min-h-[400px] p-4 font-mono text-sm bg-transparent resize-none focus:outline-none"
+              className="w-full h-full min-h-[200px] p-4 font-mono text-sm bg-transparent resize-none focus:outline-none"
               placeholder={placeholder ?? t("admin.markdown.placeholder")}
               spellCheck={false}
             />

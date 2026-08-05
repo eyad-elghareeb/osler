@@ -1658,6 +1658,7 @@ export const en = {
     "admin.markdown.openMermaid": "Open Mermaid editor",
     "admin.markdown.placeholder": "Write your article in Markdown…",
     "admin.markdown.preview": "Preview",
+    "admin.markdown.split": "Split view",
     "admin.markdown.uploadImage": "Upload image",
     "admin.markdown.uploaded": "Uploaded {name}",
     "admin.markdown.optimized": "Compressed to WebP: {before} → {after}",

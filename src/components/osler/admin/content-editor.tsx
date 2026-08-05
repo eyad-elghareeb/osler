@@ -751,7 +751,10 @@ export function ContentEditor({ id, rawR2Key, capabilities }: ContentEditorProps
               </div>
             </div>
           ) : mode === "form" ? (
-            <div className="flex-1 overflow-y-auto medos-scroll-y p-3 sm:p-4">
+            <div className={cn(
+              "flex-1",
+              isLibrary ? "min-h-0 p-3 sm:p-4 flex flex-col overflow-hidden" : "overflow-y-auto medos-scroll-y p-3 sm:p-4"
+            )}>
               {isLibrary ? (
                 <LibraryArticleEditor
                   value={body}
