@@ -48,6 +48,15 @@ export function buildUnifiedTree(
   const folderMap = new Map<string, ContentTreeNode>();
   const consumedObjectIds = new Set<string>();
 
+  // R2 keys are listed per-category and carry the category prefix
+  // (content-files/library/...). The studio already wraps the tree under a
+  // unified-root-<category> node, so strip the prefix here — otherwise every
+  // category would get a redundant nested "<category>" folder that collides
+  // with the root's own path and makes folder navigation a no-op.
+  const catPrefix = `${categoryFolder}/`;
+  const stripCat = (rel: string): string =>
+    rel.startsWith(catPrefix) ? rel.slice(catPrefix.length) : rel;
+
   function placeLeaf(rel: string, leaf: ContentTreeNode): void {
     const parts = rel.split("/");
     parts.pop();
@@ -60,7 +69,7 @@ export function buildUnifiedTree(
           id: `r2-folder-${cur}`,
           name: seg,
           kind: "folder",
-          r2Key: `content-files/${cur}`,
+          r2Key: `content-files/${categoryFolder}${cur ? "/" + cur : ""}`,
           items: [],
         };
         folderMap.set(cur, folder);
@@ -74,7 +83,7 @@ export function buildUnifiedTree(
   }
 
   for (const item of r2Items) {
-    const rel = item.key.replace(/^content-files\//, "");
+    const rel = stripCat(item.key.replace(/^content-files\//, ""));
     const parts = rel.split("/");
     const fileName = parts.pop() ?? "";
     if (fileName === ".keep") continue;
@@ -99,7 +108,7 @@ export function buildUnifiedTree(
   }
 
   for (const item of stagedItems) {
-    const rel = item.key.replace(/^content-staging\//, "");
+    const rel = stripCat(item.key.replace(/^content-staging\//, ""));
     const parts = rel.split("/");
     const fileName = parts.pop() ?? "";
     if (fileName === ".keep") continue;
