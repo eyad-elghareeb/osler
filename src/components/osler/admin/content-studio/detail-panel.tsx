@@ -217,9 +217,17 @@ function SingleDetail(props: DetailPanelProps & { node: ContentTreeNode }) {
         </div>
       )}
 
-      {/* Body preview (for loose/staged R2 files) */}
-      {!node.managed && node.r2Key && (
+      {/* Body preview (managed + loose/staged R2 files) */}
+      {node.r2Key && (
         <div className="min-h-0 flex-1 overflow-hidden border-b border-border">
+          <div className="flex items-center justify-between px-3 pt-2.5 pb-1">
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+              {t("admin.studio.content")}
+            </p>
+            {node.cloudObject && (
+              <p className="text-[10px] text-muted-foreground">{t("admin.studio.previewHint")}</p>
+            )}
+          </div>
           <R2Preview node={node} />
         </div>
       )}
@@ -230,7 +238,7 @@ function SingleDetail(props: DetailPanelProps & { node: ContentTreeNode }) {
           {t("admin.studio.quickActions")}
         </p>
         <div className="grid grid-cols-2 gap-1.5">
-          <Button size="xs" onClick={() => onOpen(node)}>
+          <Button size="xs" className="col-span-2" onClick={() => onOpen(node)}>
             <Eye className="me-1 size-3" /> {t("admin.studio.openEditor")}
           </Button>
           <Button size="xs" variant="outline" onClick={() => onConvert(node)}>

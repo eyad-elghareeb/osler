@@ -34,19 +34,24 @@ import {
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
 import type { ContentTreeNode } from "@/components/osler/admin/content-tree-pane";
-import { STATUS_BADGE, formatSize, formatRelativeTime } from "./types";
+import { STATUS_BADGE, formatSize, formatRelativeTime, findNodeInTree, type ViewMode } from "./types";
 import { ExplorerContextMenu } from "./explorer-context-menu";
+import { TreeView } from "./tree-view";
 import { NodeIcon, NodeBadges, folderIconCls, folderTileCls, folderRowCls } from "./ui";
 
 // ── Types ───────────────────────────────────────────────────────────────────
 
 export interface FileExplorerProps {
   items: ContentTreeNode[];
+  /** Full category trees, used by tree view mode to render every level. */
+  treeRoots: ContentTreeNode[];
+  /** Shared toolbar search query, forwarded to the tree view. */
+  query: string;
   selectedIds: Set<string>;
   onSelectionChange: (ids: Set<string>) => void;
   onOpen: (node: ContentTreeNode) => void;
   onOpenFolder: (node: ContentTreeNode) => void;
-  viewMode: "grid" | "list";
+  viewMode: ViewMode;
   loading?: boolean;
   canManage: boolean;
   onDropFiles?: (files: File[]) => void;
@@ -73,7 +78,7 @@ export interface ContextMenuActions {
 // ── Component ───────────────────────────────────────────────────────────────
 
 export function FileExplorer({
-  items, selectedIds, onSelectionChange, onOpen, onOpenFolder,
+  items, treeRoots, query, selectedIds, onSelectionChange, onOpen, onOpenFolder,
   viewMode, loading, canManage, onDropFiles,
   contextActions, className,
 }: FileExplorerProps) {
@@ -166,7 +171,7 @@ export function FileExplorer({
     if (!row) { setContextNode(null); return; }
     const id = row.dataset.nodeId;
     if (!id) return;
-    const node = items.find((n) => n.id === id);
+    const node = items.find((n) => n.id === id) ?? findNodeInTree(treeRoots, id);
     if (node) setContextNode(node);
   }
 
@@ -208,7 +213,18 @@ export function FileExplorer({
           role="listbox"
           aria-multiselectable
         >
-          {viewMode === "grid" ? (
+          {viewMode === "tree" ? (
+            <TreeView
+              roots={treeRoots}
+              selectedIds={selectedIds}
+              onSelect={(node) => {
+                anchorRef.current = -1;
+                onSelectionChange(new Set([node.id]));
+              }}
+              onOpen={onOpen}
+              query={query}
+            />
+          ) : viewMode === "grid" ? (
             <GridView
               items={items}
               selectedIds={selectedIds}
@@ -290,6 +306,7 @@ function GridTile({
   onClick: (e: React.MouseEvent) => void;
   onDoubleClick: () => void;
 }) {
+  const isFolder = node.kind === "folder";
   const status = node.cloudObject?.status;
   return (
     <button
@@ -300,7 +317,7 @@ function GridTile({
       onDoubleClick={onDoubleClick}
       aria-selected={selected}
       className={cn(
-        "group relative flex aspect-[4/5] flex-col items-center gap-1.5 rounded-lg border p-2.5 text-center transition-all",
+        "group relative flex aspect-[4/3] flex-col items-center gap-1 rounded-lg border p-2 text-center transition-all",
         "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
         selected
           ? "border-primary/50 bg-primary/10 ring-1 ring-primary/30"
@@ -315,26 +332,31 @@ function GridTile({
       {/* Icon */}
       <div
         className={cn(
-          "mt-2.5 flex size-12 shrink-0 items-center justify-center rounded-lg border",
-          node.kind === "folder"
-            ? cn(folderTileCls, folderIconCls)
-            : "bg-primary/5 border-primary/20 text-primary",
+          "flex shrink-0 items-center justify-center rounded-md border",
+          isFolder
+            ? cn("size-8", folderTileCls, folderIconCls)
+            : "mt-1 size-10 bg-primary/5 border-primary/20 text-primary",
         )}
       >
-        <NodeIcon node={node} className="size-6" />
+        <NodeIcon node={node} className={cn(isFolder ? "size-4" : "size-5")} />
       </div>
 
       {/* Name */}
-      <span className="line-clamp-2 w-full break-words text-[11px] font-medium leading-tight">
+      <span
+        className={cn(
+          "w-full break-words font-medium leading-tight",
+          isFolder ? "line-clamp-1 text-[11px]" : "line-clamp-2 text-[11px]",
+        )}
+      >
         {node.name}
       </span>
 
       {/* Footer */}
       <div className="mt-auto flex w-full items-center justify-center gap-1 text-[9px] text-muted-foreground">
-        {!status && node.size != null && node.size > 0 && (
+        {!isFolder && !status && node.size != null && node.size > 0 && (
           <span className="tabular-nums">{formatSize(node.size)}</span>
         )}
-        {node.kind === "folder" && node.items && node.items.length > 0 && (
+        {isFolder && node.items && node.items.length > 0 && (
           <span className="tabular-nums">{node.items.length}</span>
         )}
       </div>

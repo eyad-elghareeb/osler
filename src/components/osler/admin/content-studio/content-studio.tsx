@@ -52,6 +52,7 @@ import {
   parentPath,
   pathToBreadcrumbs,
   findFolderNode,
+  findNodeInTree,
   type ValidationState,
   type ViewMode,
   type R2Item,
@@ -249,9 +250,19 @@ export function ContentStudio({ capabilities }: ContentStudioProps) {
   }, [unifiedTree]);
 
   const selectedNodes = React.useMemo(
-    () => currentFolderItems.filter((n) => selectedIds.has(n.id)),
-    [currentFolderItems, selectedIds],
+    () => selectedIds.size === 0
+      ? []
+      : Array.from(selectedIds).map((id) => findNodeInTree(unifiedTree, id)).filter((n): n is ContentTreeNode => n != null),
+    [unifiedTree, selectedIds],
   );
+
+  // Tree view mode renders the full category hierarchy (not just the current
+  // folder's children). At the root level it shows every category; once a
+  // category is active it narrows to that category's tree.
+  const treeViewRoots = React.useMemo(() => {
+    if (!currentCategory) return unifiedTree;
+    return unifiedTree.filter((n) => n.id === `unified-root-${currentCategory.folder}`);
+  }, [unifiedTree, currentCategory]);
 
   // ── Auto-validate managed objects (automation) ────────────────────────
   React.useEffect(() => {
@@ -456,6 +467,8 @@ export function ContentStudio({ capabilities }: ContentStudioProps) {
               ) : (
                 <FileExplorer
                   items={filteredItems}
+                  treeRoots={treeViewRoots}
+                  query={search}
                   selectedIds={selectedIds}
                   onSelectionChange={setSelectedIds}
                   onOpen={handleOpen}

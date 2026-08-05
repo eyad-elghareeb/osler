@@ -111,7 +111,7 @@ export function folderToContentType(folder: string): ContentType | null {
 
 // ── View modes ──────────────────────────────────────────────────────────────
 
-export type ViewMode = "grid" | "list";
+export type ViewMode = "grid" | "list" | "tree";
 
 // ── Accent color classes (Tailwind 4 tokens, kept here so they're static) ──
 
@@ -214,6 +214,16 @@ function findInTree(node: ContentTreeNode, path: string): ContentTreeNode | null
   if (folderPathOf(node) === path) return node;
   for (const child of node.items ?? []) {
     const found = findInTree(child, path);
+    if (found) return found;
+  }
+  return null;
+}
+
+/** Find a node anywhere in a forest of trees by its stable id. */
+export function findNodeInTree(nodes: ContentTreeNode[], id: string): ContentTreeNode | null {
+  for (const n of nodes) {
+    if (n.id === id) return n;
+    const found = findNodeInTree(n.items ?? [], id);
     if (found) return found;
   }
   return null;

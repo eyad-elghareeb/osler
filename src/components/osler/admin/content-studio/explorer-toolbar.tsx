@@ -19,7 +19,7 @@
 import * as React from "react";
 import {
   ChevronLeft, ChevronRight, ArrowUp, RefreshCw, Search,
-  LayoutGrid, List as ListIcon, FolderPlus, FilePlus, Upload,
+  LayoutGrid, List as ListIcon, ListTree, FolderPlus, FilePlus, Upload,
   Plus, Sparkles, Loader2, Home, PanelLeft, PanelRight, MoreHorizontal,
 } from "lucide-react";
 import { useI18n } from "@/components/osler/i18n-provider";
@@ -38,7 +38,7 @@ import {
 import type { Breadcrumb } from "./types";
 import { IconActionButton } from "./ui";
 
-export type ViewMode = "grid" | "list";
+export type ViewMode = "grid" | "list" | "tree";
 export type StatusFilter = "all" | "draft" | "pending" | "published" | "rejected";
 
 export interface ExplorerToolbarProps {
@@ -163,10 +163,28 @@ export function ExplorerToolbar(props: ExplorerToolbarProps) {
             <TooltipTrigger asChild>
               <button
                 type="button"
+                onClick={() => onViewModeChange("tree")}
+                aria-pressed={viewMode === "tree"}
+                className={cn(
+                  "flex h-7 w-7 items-center justify-center rounded-s-md transition-colors",
+                  viewMode === "tree" ? "bg-primary/10 text-primary" : "text-muted-foreground hover:bg-muted",
+                )}
+              >
+                <ListTree className="size-3" />
+              </button>
+            </TooltipTrigger>
+            <TooltipContent>{t("admin.studio.view.tree")}</TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                type="button"
                 onClick={() => onViewModeChange("grid")}
                 aria-pressed={viewMode === "grid"}
                 className={cn(
-                  "flex h-7 w-7 items-center justify-center rounded-s-md transition-colors",
+                  "flex h-7 w-7 items-center justify-center transition-colors",
                   viewMode === "grid" ? "bg-primary/10 text-primary" : "text-muted-foreground hover:bg-muted",
                 )}
               >
