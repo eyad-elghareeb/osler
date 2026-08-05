@@ -36,7 +36,7 @@ import { useI18n } from "@/components/osler/i18n-provider";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { resolveImageForPreview } from "@/components/osler/admin/editors/image-upload";
-import { PREVIEW_MARKDOWN_STYLES } from "@/components/osler/admin/content-editor";
+import { PREVIEW_MARKDOWN_STYLES } from "@/components/osler/admin/editors/markdown-preview";
 import type { ContentTreeNode } from "@/components/osler/admin/content-tree-pane";
 import type { ContentType } from "@/components/osler/admin/admin-api";
 

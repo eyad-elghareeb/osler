@@ -50,16 +50,14 @@ import {
   Workflow,
   Loader2,
 } from "lucide-react";
-import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
 import { useMermaidModal } from "./mermaid-editor";
 import { useToast } from "@/hooks/use-toast";
 import {
   uploadImageForEditor,
-  resolveImageForPreview,
   isImageFile,
   formatBytes,
 } from "./image-upload";
+import { MarkdownPreview } from "./markdown-preview";
 
 interface ToolbarAction {
   icon: React.ReactNode;
@@ -246,20 +244,48 @@ export function MarkdownEditor({
   }
 
   // ── Slash palette logic ──────────────────────────────────────────────
+  // Measure the caret's pixel coordinates with a hidden mirror div that
+  // mirrors the textarea's font, padding, width and wrapping.
+  function measureCaret(ta: HTMLTextAreaElement): { top: number; left: number } {
+    const wrap = wrapperRef.current;
+    if (!wrap) return { top: 0, left: 0 };
+    const mirror = document.createElement("div");
+    const style = window.getComputedStyle(ta);
+    mirror.style.cssText = [
+      "position:absolute",
+      "top:0",
+      "left:-9999px",
+      "visibility:hidden",
+      `width:${ta.clientWidth}px`,
+      `font:${style.font}`,
+      `line-height:${style.lineHeight}`,
+      `letter-spacing:${style.letterSpacing}`,
+      `padding:${style.padding}`,
+      "white-space:pre-wrap",
+      "word-wrap:break-word",
+    ].join(";");
+    mirror.textContent = value.slice(0, ta.selectionStart);
+    const marker = document.createElement("span");
+    marker.textContent = "\u200b";
+    mirror.appendChild(marker);
+    document.body.appendChild(mirror);
+    const taRect = ta.getBoundingClientRect();
+    const wrapRect = wrap.getBoundingClientRect();
+    const caretTop = marker.offsetTop;
+    const caretLeft = marker.offsetLeft;
+    document.body.removeChild(mirror);
+
+    const scrollTop = ta.scrollTop;
+    return {
+      top: taRect.top - wrapRect.top - scrollTop + caretTop + 20,
+      left: Math.max(8, taRect.left - wrapRect.left - scrollTop + caretLeft),
+    };
+  }
+
   function openSlashPalette() {
     const ta = textareaRef.current;
     if (!ta) return;
-    // Compute approximate cursor position relative to the textarea wrapper.
-    // We use the textarea's bounding rect + a rough line/col estimate.
-    const rect = ta.getBoundingClientRect();
-    const wrapRect = wrapperRef.current?.getBoundingClientRect();
-    if (!wrapRect) return;
-    // Approximate cursor coordinates using a mirror div technique is heavy;
-    // for simplicity, anchor the palette to the bottom-left of the textarea.
-    setSlashPos({
-      top: rect.bottom - wrapRect.top - 100,  // approx cursor line
-      left: Math.max(8, rect.left - wrapRect.left + 30),
-    });
+    setSlashPos(measureCaret(ta));
     slashAnchorRef.current = { line: ta.selectionStart, ch: ta.selectionEnd };
     setSlashQuery("");
     setSlashSelected(0);
@@ -349,6 +375,8 @@ export function MarkdownEditor({
     const m = before.match(/\/(\w*)$/);
     if (m) {
       setSlashQuery(m[1]);
+      // Re-anchor to the moving caret so the palette stays at the cursor.
+      setSlashPos(measureCaret(ta));
     } else {
       closeSlashPalette();
     }
@@ -504,41 +532,11 @@ export function MarkdownEditor({
   const lines = value.split("\n").length;
 
   // Rendered markdown preview (shared between preview + split views).
+  // Uses the same `.preview-md` recipe as the content editor so every
+  // surface renders identically.
   const renderedPreview = (
-    <div className="min-h-0 flex-1 overflow-y-auto medos-scroll-y p-4 prose prose-sm dark:prose-invert max-w-none osler-prose">
-      <ReactMarkdown
-        remarkPlugins={[remarkGfm]}
-        components={{
-          // Render mermaid code blocks as inline SVG via the mermaid dep
-          code({ inline, className, children, ...props }: any) {
-            const text = String(children);
-            if (!inline && className === "language-mermaid") {
-              return <MermaidBlock code={text} />;
-            }
-            return <code className={className} {...props}>{children}</code>;
-          },
-          // Resolve relative image refs (images/foo.png, foo.png) to
-          // URLs the admin can preview via the local R2 proxy.
-          img({ src, alt, ...props }: any) {
-            const resolved = resolveImageForPreview(String(src ?? ""), { r2KeyBase, rawR2Key });
-            return (
-              <img
-                src={resolved}
-                alt={alt}
-                {...props}
-                onError={(e) => {
-                  // Hide broken images rather than showing the browser
-                  // broken-image icon — the user can still see the alt text
-                  // and the markdown source.
-                  (e.currentTarget as HTMLImageElement).style.opacity = "0.3";
-                }}
-              />
-            );
-          },
-        }}
-      >
-        {value}
-      </ReactMarkdown>
+    <div className="min-h-0 flex-1 overflow-y-auto medos-scroll-y p-4">
+      <MarkdownPreview body={value} r2KeyBase={r2KeyBase} rawR2Key={rawR2Key} />
     </div>
   );
 
@@ -852,37 +850,3 @@ function MermaidChip({
   );
 }
 
-// ── Mermaid block (rendered in preview mode) ──────────────────────────────
-
-function MermaidBlock({ code }: { code: string }) {
-  const { t } = useI18n();
-  const [svg, setSvg] = React.useState<string>("");
-  const [error, setError] = React.useState<string>("");
-  React.useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const mod = await import("mermaid");
-        const m = mod.default;
-        m.initialize({
-          startOnLoad: false,
-          theme: document.documentElement.classList.contains("dark") ? "dark" : "default",
-          securityLevel: "loose",
-        });
-        const id = `mermaid-md-${Math.random().toString(36).slice(2, 10)}`;
-        const { svg: out } = await m.render(id, code.trim());
-        if (!cancelled) { setSvg(out); setError(""); }
-        document.getElementById(id)?.remove();
-      } catch (err: any) {
-        if (!cancelled) setError(String(err?.message ?? err));
-      }
-    })();
-    return () => { cancelled = true; };
-  }, [code]);
-
-  if (error) {
-    return <pre className="bg-destructive/10 text-destructive p-2 rounded text-xs">{t("admin.mermaid.error", { error, code })}</pre>;
-  }
-  if (!svg) return <div className="text-xs text-muted-foreground">{t("admin.mermaid.loading")}</div>;
-  return <div dangerouslySetInnerHTML={{ __html: svg }} className="[&_svg]:max-w-full [&_svg]:h-auto" />;
-}
