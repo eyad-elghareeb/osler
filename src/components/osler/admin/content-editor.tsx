@@ -963,6 +963,18 @@ export const PREVIEW_MARKDOWN_STYLES = `
   .preview-md img { max-width: 100%; border-radius: 0.5rem; margin: 0.75rem 0; }
   .preview-md hr { border: none; border-top: 1px solid var(--border); margin: 1.5rem 0; }
   .preview-md a { color: var(--primary); text-decoration: underline; }
+  .preview-md--compact { font-size: 0.82rem; line-height: 1.5; }
+  .preview-md--compact h1 { font-size: 1.05rem; margin: 0.5rem 0 0.3rem; }
+  .preview-md--compact h2 { font-size: 0.95rem; margin: 0.4rem 0 0.25rem; }
+  .preview-md--compact h3 { font-size: 0.88rem; margin: 0.35rem 0 0.2rem; }
+  .preview-md--compact p { margin: 0.25rem 0; }
+  .preview-md--compact ul, .preview-md--compact ol { margin: 0.25rem 0; }
+  .preview-md--compact li { margin: 0.1rem 0; }
+  .preview-md--compact blockquote { margin: 0.35rem 0; padding: 0.3rem 0.6rem; }
+  .preview-md--compact pre { padding: 0.6rem; margin: 0.35rem 0; }
+  .preview-md--compact code { font-size: 0.8em; }
+  .preview-md--compact th, .preview-md--compact td { padding: 0.25rem 0.4rem; font-size: 0.82em; }
+  .preview-md--compact img { margin: 0.35rem 0; }
 `;
 
 function MermaidPreviewBlock({ code }: { code: string }) {

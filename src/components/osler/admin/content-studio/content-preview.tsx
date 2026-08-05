@@ -11,8 +11,8 @@
  *    rich-text fields re-rendered as markdown, and pack images resolved
  *    against the file's own folder.
  *
- * Every preview truncates to the first few items and shows a "+n more" count
- * so even large packs stay snappy in the side panel.
+ * Every preview truncates to the first few items with a "show all" toggle so
+ * even large packs stay snappy in the side panel.
  */
 
 import * as React from "react";
@@ -61,9 +61,9 @@ export function inferContentType(parsed: unknown): ContentType | null {
 
 /** Render a markdown string (frontmatter stripped) with images resolved
  *  against the file's own folder. */
-export function MarkdownBody({ md, r2Key }: { md: string; r2Key?: string }) {
+export function MarkdownBody({ md, r2Key, compact }: { md: string; r2Key?: string; compact?: boolean }) {
   return (
-    <div className="preview-md min-w-0">
+    <div className={cn("preview-md min-w-0", compact && "preview-md--compact")}>
       <style>{PREVIEW_MARKDOWN_STYLES}</style>
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
@@ -108,13 +108,13 @@ function PreviewImages({
   const items = arr.filter((img) => img?.src);
   if (items.length === 0) return null;
   return (
-    <div className="my-1.5 flex flex-wrap gap-1.5">
+    <div className="my-1 flex flex-wrap gap-1">
       {items.map((img, i) => (
         <figure key={i} className="max-w-[45%]">
           <img
             src={resolveImageForPreview(img.src!, { rawR2Key: r2Key })}
             alt={img.alt ?? ""}
-            className="max-h-28 rounded-md border border-border object-contain"
+            className="max-h-24 rounded border border-border object-contain"
           />
           {img.caption && (
             <figcaption className="mt-0.5 text-[10px] text-muted-foreground">{img.caption}</figcaption>
@@ -127,7 +127,7 @@ function PreviewImages({
 
 function PreviewHeader({ icon: Icon, title }: { icon: LucideIcon; title: string }) {
   return (
-    <div className="mb-1.5 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+    <div className="mb-1 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
       <Icon className="size-3 shrink-0" />
       <span className="truncate">{title}</span>
     </div>
@@ -186,45 +186,45 @@ function QuizPreview({ data, r2Key }: { data: any; r2Key?: string }) {
   const letters = ["A", "B", "C", "D", "E", "F", "G", "H"];
   const reveal = useReveal(qs.length);
   return (
-    <div className="space-y-3">
+    <div className="space-y-1.5">
       <PreviewHeader icon={ListChecks} title={t("admin.studio.preview.questions", { n: qs.length })} />
       {qs.slice(0, reveal.shown).map((q: any, i: number) => (
-        <div key={q?.id ?? i} className="rounded-lg border border-border bg-card p-2.5">
-          <div className="mb-1.5">
-            <span className="me-1 text-xs font-semibold text-muted-foreground">{i + 1}.</span>
-            <span className="text-sm font-semibold"><MarkdownBody md={q?.question ?? ""} r2Key={r2Key} /></span>
+        <div key={q?.id ?? i} className="rounded-md border border-border bg-card p-1.5">
+          <div className="mb-1">
+            <span className="me-1 text-[11px] font-semibold text-muted-foreground">{i + 1}.</span>
+            <span className="text-xs font-semibold"><MarkdownBody compact md={q?.question ?? ""} r2Key={r2Key} /></span>
           </div>
           <PreviewImages images={q?.images} r2Key={r2Key} />
-          <ul className="space-y-0.5">
+          <ul className="space-y-px">
             {(q?.options ?? []).map((opt: string, oi: number) => {
               const correct = oi === q?.correct;
               return (
                 <li
                   key={oi}
                   className={cn(
-                    "flex gap-1.5 rounded-md px-1.5 py-0.5 text-xs",
+                    "flex gap-1 rounded px-1 py-px text-[11px]",
                     correct && "bg-success/10 text-success",
                   )}
                 >
                   {correct ? (
-                    <CheckCircle2 className="mt-0.5 size-3 shrink-0" />
+                    <CheckCircle2 className="mt-px size-2.5 shrink-0" />
                   ) : (
-                    <span className="mt-0.5 w-3 shrink-0 text-center text-[10px] text-muted-foreground">
+                    <span className="mt-px w-2.5 shrink-0 text-center text-[10px] text-muted-foreground">
                       {letters[oi] ?? oi + 1}
                     </span>
                   )}
-                  <span className="min-w-0"><MarkdownBody md={opt} r2Key={r2Key} /></span>
+                  <span className="min-w-0"><MarkdownBody compact md={opt} r2Key={r2Key} /></span>
                 </li>
               );
             })}
           </ul>
           {q?.explanation && (
-            <details className="mt-1.5">
+            <details className="mt-1">
               <summary className="cursor-pointer text-[11px] font-medium text-primary">
                 {t("admin.studio.preview.explanation")}
               </summary>
-              <div className="mt-1 text-xs text-muted-foreground">
-                <MarkdownBody md={q.explanation} r2Key={r2Key} />
+              <div className="mt-0.5 text-[11px] text-muted-foreground">
+                <MarkdownBody compact md={q.explanation} r2Key={r2Key} />
               </div>
             </details>
           )}
@@ -240,7 +240,7 @@ function BankPreview({ data, r2Key }: { data: any; r2Key?: string }) {
   const passages = Array.isArray(data?.passages) ? data.passages : [];
   const reveal = useReveal(passages.length);
   return (
-    <div className="space-y-3">
+    <div className="space-y-1.5">
       <PreviewHeader icon={BookOpenText} title={t("admin.studio.preview.passages", { n: passages.length })} />
       {passages.slice(0, reveal.shown).map((p: any, i: number) => (
         <BankPassage key={p?.id ?? i} passage={p} index={i} r2Key={r2Key} />
@@ -256,43 +256,43 @@ function BankPassage({ passage, index, r2Key }: { passage: any; index: number; r
   const pQs = Array.isArray(passage?.questions) ? passage.questions : [];
   const pReveal = useReveal(pQs.length);
   return (
-    <div className="rounded-lg border border-border bg-card p-2.5">
-      <p className="mb-1 text-xs font-semibold text-muted-foreground">
+    <div className="rounded-md border border-border bg-card p-1.5">
+      <p className="mb-0.5 text-[11px] font-semibold text-muted-foreground">
         {t("admin.studio.preview.passage", { n: index + 1 })}
       </p>
-      <div className="text-sm"><MarkdownBody md={passage?.content ?? ""} r2Key={r2Key} /></div>
+      <div className="text-xs"><MarkdownBody compact md={passage?.content ?? ""} r2Key={r2Key} /></div>
       <PreviewImages images={passage?.images} r2Key={r2Key} />
       {pQs.length > 0 && (
-        <div className="mt-2 space-y-2 border-t border-border pt-2">
+        <div className="mt-1.5 space-y-1.5 border-t border-border pt-1.5">
           <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
             {t("admin.studio.preview.questions", { n: pQs.length })}
           </p>
           {pQs.slice(0, pReveal.shown).map((q: any, qi: number) => (
-            <div key={q?.id ?? qi} className="rounded-md border border-border bg-muted/30 p-2">
-              <p className="mb-1.5 text-xs font-semibold">
+            <div key={q?.id ?? qi} className="rounded border border-border bg-muted/30 p-1.5">
+              <p className="mb-1 text-xs font-semibold">
                 <span className="me-1 text-muted-foreground">{qi + 1}.</span>
-                <MarkdownBody md={q?.question ?? ""} r2Key={r2Key} />
+                <MarkdownBody compact md={q?.question ?? ""} r2Key={r2Key} />
               </p>
               <PreviewImages images={q?.images} r2Key={r2Key} />
-              <ul className="space-y-0.5">
+              <ul className="space-y-px">
                 {(q?.options ?? []).map((opt: string, oi: number) => {
                   const correct = oi === q?.correct;
                   return (
                     <li
                       key={oi}
                       className={cn(
-                        "flex gap-1.5 rounded-md px-1.5 py-0.5 text-xs",
+                        "flex gap-1 rounded px-1 py-px text-[11px]",
                         correct && "bg-success/10 text-success",
                       )}
                     >
                       {correct ? (
-                        <CheckCircle2 className="mt-0.5 size-3 shrink-0" />
+                        <CheckCircle2 className="mt-px size-2.5 shrink-0" />
                       ) : (
-                        <span className="mt-0.5 w-3 shrink-0 text-center text-[10px] text-muted-foreground">
+                        <span className="mt-px w-2.5 shrink-0 text-center text-[10px] text-muted-foreground">
                           {letters[oi] ?? oi + 1}
                         </span>
                       )}
-                      <span className="min-w-0"><MarkdownBody md={opt} r2Key={r2Key} /></span>
+                      <span className="min-w-0"><MarkdownBody compact md={opt} r2Key={r2Key} /></span>
                     </li>
                   );
                 })}
@@ -302,8 +302,8 @@ function BankPassage({ passage, index, r2Key }: { passage: any; index: number; r
                   <summary className="cursor-pointer text-[11px] font-medium text-primary">
                     {t("admin.studio.preview.explanation")}
                   </summary>
-                  <div className="mt-1 text-xs text-muted-foreground">
-                    <MarkdownBody md={q.explanation} r2Key={r2Key} />
+                  <div className="mt-0.5 text-[11px] text-muted-foreground">
+                    <MarkdownBody compact md={q.explanation} r2Key={r2Key} />
                   </div>
                 </details>
               )}
@@ -327,7 +327,7 @@ function FlashcardPreview({ data }: { data: any }) {
     text.replace(/\{\{[^:]*?::([^:}]+)(?:::[^}]*)?\}\}/g, "$1");
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-1.5">
       <PreviewHeader
         icon={Brain}
         title={subdecks > 0
@@ -337,22 +337,22 @@ function FlashcardPreview({ data }: { data: any }) {
       {cards.slice(0, reveal.shown).map((c: any, i: number) => {
         const isCloze = c?.type === "cloze" || !!c?.text;
         return (
-          <div key={c?.id ?? i} className="rounded-lg border border-border bg-card p-2.5">
-            <span className="mb-1 block text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+          <div key={c?.id ?? i} className="rounded-md border border-border bg-card p-1.5">
+            <span className="mb-0.5 block text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
               {t(isCloze ? "admin.studio.preview.cloze" : "admin.studio.preview.basic")} #{i + 1}
             </span>
             {isCloze ? (
-              <p className="text-sm"><MarkdownBody md={unCloze(c?.text ?? "")} r2Key={undefined} /></p>
+              <p className="text-xs"><MarkdownBody compact md={unCloze(c?.text ?? "")} r2Key={undefined} /></p>
             ) : (
               <>
-                <p className="mb-0.5 text-xs font-medium text-muted-foreground">{t("admin.studio.preview.front")}</p>
-                <p className="text-sm"><MarkdownBody md={c?.front ?? ""} r2Key={undefined} /></p>
-                <p className="mb-0.5 mt-2 text-xs font-medium text-muted-foreground">{t("admin.studio.preview.back")}</p>
-                <p className="text-sm"><MarkdownBody md={c?.back ?? ""} r2Key={undefined} /></p>
+                <p className="mb-0.5 text-[11px] font-medium text-muted-foreground">{t("admin.studio.preview.front")}</p>
+                <p className="text-xs"><MarkdownBody compact md={c?.front ?? ""} r2Key={undefined} /></p>
+                <p className="mb-0.5 mt-1.5 text-[11px] font-medium text-muted-foreground">{t("admin.studio.preview.back")}</p>
+                <p className="text-xs"><MarkdownBody compact md={c?.back ?? ""} r2Key={undefined} /></p>
               </>
             )}
             {(c?.tags ?? []).length > 0 && (
-              <div className="mt-1.5 flex flex-wrap gap-1">
+              <div className="mt-1 flex flex-wrap gap-1">
                 {c.tags.slice(0, 4).map((tag: string, ti: number) => (
                   <MetaPill key={ti} label={tag} />
                 ))}
@@ -371,24 +371,24 @@ function WrittenPreview({ data }: { data: any }) {
   const prompts = Array.isArray(data?.prompts) ? data.prompts : [];
   const reveal = useReveal(prompts.length);
   return (
-    <div className="space-y-3">
+    <div className="space-y-1.5">
       <PreviewHeader icon={PenLine} title={t("admin.studio.preview.prompts", { n: prompts.length })} />
       {prompts.slice(0, reveal.shown).map((p: any, i: number) => (
-        <div key={p?.id ?? i} className="rounded-lg border border-border bg-card p-2.5">
-          <div className="mb-1.5 flex flex-wrap items-center gap-1.5">
+        <div key={p?.id ?? i} className="rounded-md border border-border bg-card p-1.5">
+          <div className="mb-1 flex flex-wrap items-center gap-1">
             <span className="text-[11px] font-semibold text-muted-foreground">#{i + 1}</span>
             {p?.wordLimit ? <MetaPill label={t("admin.studio.preview.wordLimit", { n: p.wordLimit })} /> : null}
             {(p?.tags ?? []).slice(0, 3).map((tag: string, ti: number) => (
               <MetaPill key={ti} label={tag} />
             ))}
           </div>
-          <p className="text-sm"><MarkdownBody md={p?.prompt ?? ""} r2Key={undefined} /></p>
+          <p className="text-xs"><MarkdownBody compact md={p?.prompt ?? ""} r2Key={undefined} /></p>
           {Array.isArray(p?.rubric) && p.rubric.length > 0 && (
-            <div className="mt-1.5 border-t border-border pt-1.5">
+            <div className="mt-1 border-t border-border pt-1">
               <p className="mb-0.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
                 {t("admin.studio.preview.rubric")}
               </p>
-              <ul className="list-inside list-disc space-y-0.5 text-xs text-muted-foreground">
+              <ul className="list-inside list-disc space-y-px text-[11px] text-muted-foreground">
                 {p.rubric.slice(0, 4).map((r: string, ri: number) => (
                   <li key={ri}>{r}</li>
                 ))}
@@ -407,12 +407,12 @@ function OscePreview({ data, r2Key }: { data: any; r2Key?: string }) {
   const stations = Array.isArray(data?.stations) ? data.stations : [];
   const reveal = useReveal(stations.length);
   return (
-    <div className="space-y-3">
+    <div className="space-y-1.5">
       <PreviewHeader icon={Stethoscope} title={t("admin.studio.preview.stations", { n: stations.length })} />
       {stations.slice(0, reveal.shown).map((s: any, i: number) => (
-        <div key={s?.id ?? i} className="rounded-lg border border-border bg-card p-2.5">
-          <div className="mb-1 flex flex-wrap items-center gap-1.5">
-            <span className="text-sm font-semibold">{s?.title ?? s?.id ?? `#${i + 1}`}</span>
+        <div key={s?.id ?? i} className="rounded-md border border-border bg-card p-1.5">
+          <div className="mb-1 flex flex-wrap items-center gap-1">
+            <span className="text-xs font-semibold">{s?.title ?? s?.id ?? `#${i + 1}`}</span>
             {s?.type ? <MetaPill label={s.type} /> : null}
             {s?.specialty ? <MetaPill label={s.specialty} /> : null}
             {typeof s?.difficulty === "string" ? <MetaPill label={s.difficulty} /> : null}
@@ -428,9 +428,9 @@ function OscePreview({ data, r2Key }: { data: any; r2Key?: string }) {
               <span className="flex items-center gap-1"><UserRound className="size-3" />{s.patient.name}</span>
             )}
           </div>
-          <div className="text-sm text-muted-foreground"><MarkdownBody md={s?.task ?? ""} r2Key={r2Key} /></div>
+          <div className="text-xs text-muted-foreground"><MarkdownBody compact md={s?.task ?? ""} r2Key={r2Key} /></div>
           {(s?.questions ?? []).length > 0 && (
-            <ul className="mt-1.5 list-inside list-decimal space-y-0.5 border-t border-border pt-1.5 text-xs">
+            <ul className="mt-1 list-inside list-decimal space-y-px border-t border-border pt-1 text-[11px]">
               {(s.questions ?? []).slice(0, 4).map((q: any, qi: number) => (
                 <li key={qi}>{q?.question}</li>
               ))}
@@ -448,12 +448,12 @@ function VideoPreview({ data }: { data: any }) {
   const videos = Array.isArray(data?.videos) ? data.videos : [];
   const reveal = useReveal(videos.length);
   return (
-    <div className="space-y-3">
+    <div className="space-y-1.5">
       <PreviewHeader icon={Video} title={t("admin.studio.preview.videos", { n: videos.length })} />
       {videos.slice(0, reveal.shown).map((v: any, i: number) => (
-        <div key={v?.id ?? i} className="rounded-lg border border-border bg-card p-2.5">
-          <div className="mb-1 flex flex-wrap items-center gap-1.5">
-            <span className="min-w-0 flex-1 truncate text-sm font-semibold">{v?.title ?? v?.id ?? `#${i + 1}`}</span>
+        <div key={v?.id ?? i} className="rounded-md border border-border bg-card p-1.5">
+          <div className="mb-1 flex flex-wrap items-center gap-1">
+            <span className="min-w-0 flex-1 truncate text-xs font-semibold">{v?.title ?? v?.id ?? `#${i + 1}`}</span>
             {v?.source?.type ? <MetaPill label={v.source.type} /> : null}
           </div>
           <div className="flex flex-wrap gap-3 text-[11px] text-muted-foreground">
@@ -465,7 +465,7 @@ function VideoPreview({ data }: { data: any }) {
             )}
           </div>
           {v?.description && (
-            <p className="mt-1 text-xs text-muted-foreground line-clamp-2"><MarkdownBody md={v.description} r2Key={undefined} /></p>
+            <p className="mt-0.5 text-[11px] text-muted-foreground line-clamp-2"><MarkdownBody compact md={v.description} r2Key={undefined} /></p>
           )}
         </div>
       ))}
@@ -509,6 +509,6 @@ export function RenderedContentPreview({
   })();
 
   if (!body) return null;
-  return <div dir={dir} className="space-y-3">{body}</div>;
+  return <div dir={dir} className="space-y-1.5">{body}</div>;
 }
 
