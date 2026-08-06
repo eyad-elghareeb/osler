@@ -42,9 +42,11 @@ function isTextFile(name: string): boolean {
 }
 
 /** Read a File into the body representation the upload endpoint expects:
- *  UTF-8 text for text-ish files, a base64 `data:` URI for everything else. */
+ *  UTF-8 text for text-ish files, a base64 `data:` URI for everything else.
+ *  Uses `File.text()` when available and falls back to FileReader so older
+ *  browsers (Safari < 14.1) never throw "text is not a function". */
 function readAsUploadBody(file: File): Promise<string> {
-  if (isTextFile(file.name)) {
+  if (isTextFile(file.name) && typeof file.text === "function") {
     return file.text();
   }
   return new Promise((resolve, reject) => {
@@ -228,23 +230,38 @@ export function ContentDropzone({
 /** Read a list of Files into `DroppedFile[]` — content-type guess, title,
  *  language, upload-ready body, and the relative path inside a dropped
  *  folder. Shared by the dropzone and the Content Studio's direct-staging
- *  drop flow so both agree on how a file becomes a DroppedFile. */
+ *  drop flow so both agree on how a file becomes a DroppedFile.
+ *
+ *  Unreadable files (locked, corrupted, or huge binaries that exhaust
+ *  FileReader) are skipped so one bad file can't abort a whole folder upload;
+ *  only a drop where *every* file is unreadable rejects. */
 export async function filesToDropped(
   files: File[],
   relativePaths?: Map<File, string>,
 ): Promise<DroppedFile[]> {
   const dropped: DroppedFile[] = [];
+  const failed: string[] = [];
   for (const file of files) {
-    const body = await readAsUploadBody(file);
-    const rel = relativePaths?.get(file) ?? file.name;
-    dropped.push({
-      file,
-      contentType: guessContentType(file.name),
-      title: file.name.replace(/\.(md|json)$/i, ""),
-      language: guessLanguage(file.name) ?? "en",
-      body,
-      relativePath: rel,
-    });
+    try {
+      const body = await readAsUploadBody(file);
+      const rel = relativePaths?.get(file) ?? file.name;
+      dropped.push({
+        file,
+        contentType: guessContentType(file.name),
+        title: file.name.replace(/\.(md|json)$/i, ""),
+        language: guessLanguage(file.name) ?? "en",
+        body,
+        relativePath: rel,
+      });
+    } catch {
+      failed.push(file.name);
+    }
+  }
+  if (failed.length > 0) {
+    console.warn("Skipped unreadable dropped files:", failed);
+  }
+  if (dropped.length === 0 && failed.length > 0) {
+    throw new Error("Could not read any dropped file");
   }
   return dropped;
 }
@@ -270,16 +287,30 @@ function guessLanguage(filename: string): string | null {
 }
 
 /** Walk a DataTransfer's entries recursively, preserving folder structure.
- *  Falls back to the flat file list when webkitGetAsEntry is unavailable. */
+ *  Directory entries live on each DataTransferItem (not the item list), so
+ *  entry support is detected via the first item. When entries are available
+ *  they are walked recursively (Chromium, Firefox, Safari); otherwise the flat
+ *  `dt.files` list is used and the folder structure is recovered from each
+ *  file's `webkitRelativePath`. Directory-read errors degrade to whatever was
+ *  collected so far rather than rejecting the whole drop. */
 export async function walkDropEntries(
   dt: DataTransfer,
 ): Promise<{ files: File[]; paths: Map<File, string> }> {
   const paths = new Map<File, string>();
   const items = dt.items;
-  const hasEntries = items && typeof (items as any).webkitGetAsEntry === "function";
+  const firstItem = items && items.length > 0 ? items[0] : null;
+  const hasEntries = !!(
+    firstItem && typeof (firstItem as any).webkitGetAsEntry === "function"
+  );
 
   if (!hasEntries) {
     const files = Array.from(dt.files || []);
+    // dt.files flattens directory drops; webkitRelativePath keeps the folder
+    // structure (e.g. "cardiology/images/x.png") when the browser provides it.
+    for (const f of files) {
+      const rel = (f as any).webkitRelativePath || "";
+      if (rel) paths.set(f, rel);
+    }
     return { files, paths };
   }
 
@@ -306,16 +337,21 @@ export async function walkDropEntries(
     } else if (entry.isDirectory) {
       const reader = entry.createReader();
       // readEntries must be called repeatedly until it returns an empty array.
-      let entries: any[] = [];
+      const entries: any[] = [];
       let done = false;
       while (!done) {
-        const batch: any[] = await new Promise((resolve, reject) => {
-          reader.readEntries((res: any[]) => {
-            if (!res || res.length === 0) done = true;
-            resolve(res || []);
-          }, reject);
-        });
-        entries = entries.concat(batch);
+        try {
+          const batch: any[] = await new Promise((resolve, reject) => {
+            reader.readEntries((res: any[]) => {
+              if (!res || res.length === 0) done = true;
+              resolve(res || []);
+            }, reject);
+          });
+          entries.push(...batch);
+        } catch {
+          done = true;
+          break;
+        }
         if (done) break;
       }
       for (const child of entries) {
