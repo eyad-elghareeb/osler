@@ -28,7 +28,7 @@
 
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
-import { mergeQbank, mergeFlashcards, gzipString, gunzipBytes, base64ToBytes } from "./sync-docs";
+import { SYNC_KINDS, mergeKind, gzipString, gunzipBytes, base64ToBytes } from "./sync-docs";
 const PASSWORD_ITERATIONS = 100_000;
 const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 // After a session token's JWT `exp` passes, it may still be rotated through
@@ -38,11 +38,20 @@ const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 // session dies out naturally ~GRACE after its last refresh.
 const SESSION_REFRESH_GRACE_MS = 30 * 24 * 60 * 60 * 1000;
 const RESET_TTL_MS = 30 * 60 * 1000;
-// Max raw-JSON size of a merged sync document. Stored gzip-compressed in D1
-// (~8x smaller), so a 4MB raw document only occupies ~500KB of DB space.
-const MAX_DOCUMENT_BYTES = 4_000_000;
+// Hard ceiling for a single merged sync document's raw JSON. D1 caps each
+// string/BLOB/row at 2MB, so a doc can never exceed that. Payload is stored
+// gzip-compressed (~5-8x smaller for progress data), so a 2MB raw doc only
+// occupies ~300-500KB on disk.
+const MAX_DOCUMENT_BYTES = 2_000_000;
+// Stored payload (base64 gzip) budget for a single doc — leaves headroom under
+// D1's 2MB row limit for the other columns (user_id, kind, timestamps).
+const MAX_STORED_PAYLOAD_BYTES = 1_800_000;
+// Per-user total raw storage budget across all sync kinds (15MB). Seven kinds
+// each capped at 2MB sum to 14MB of reachable storage, so 15MB is the budget
+// the UI advertises and the per-kind caps are the practical ceiling.
+const MAX_USER_STORAGE_BYTES = 15_360_000;
 // Cap on the decompressed size of an incoming gzip request body (sync PUTs).
-const MAX_GZIP_BODY_BYTES = 8_000_000;
+const MAX_GZIP_BODY_BYTES = 16_000_000;
 const OAUTH_TTL_MS = 10 * 60 * 1000;
 const HANDOFF_TTL_MS = 5 * 60 * 1000;
 
@@ -387,7 +396,7 @@ function cors(origin: string): Record<string, string> {
   return {
     "access-control-allow-origin": origin,
     "access-control-allow-methods": "GET, POST, PUT, PATCH, DELETE, OPTIONS",
-    "access-control-allow-headers": "authorization, content-type, content-encoding, x-sync-since-qbank, x-sync-since-flashcards",
+    "access-control-allow-headers": "authorization, content-type, content-encoding, x-sync-since-qbank, x-sync-since-flashcards, x-sync-since-sessions, x-sync-since-notes, x-sync-since-highlights, x-sync-since-articleHighlights, x-sync-since-bookmarks",
     "access-control-max-age": "86400",
     vary: "Origin",
   };
@@ -539,6 +548,12 @@ async function getDocument(env: Env, userId: string, kind: string): Promise<{ re
     const json = row.compressed ? await gunzipBytes(base64ToBytes(row.payload)) : row.payload;
     return { records: JSON.parse(json), updatedAt: row.updated_at };
   } catch { return { records: {}, updatedAt: 0 }; }
+}
+
+async function getAllDocuments(env: Env, userId: string): Promise<Record<string, { records: Record<string, any>; updatedAt: number }>> {
+  const docs: Record<string, { records: Record<string, any>; updatedAt: number }> = {};
+  for (const kind of SYNC_KINDS) docs[kind] = await getDocument(env, userId, kind);
+  return docs;
 }
 
 // ─── Google OAuth ────────────────────────────────────────────────────────────
@@ -1850,10 +1865,10 @@ async function handleAdmin(request: Request, env: Env, session: Session, url: UR
     const progressMatch = path.match(/^\/v1\/admin\/users\/([^/]+)\/progress$/);
     if (progressMatch && request.method === "GET") {
       const targetId = progressMatch[1];
-      const [qbankDoc, flashcardDoc] = await Promise.all([
-        getDocument(env, targetId, "qbank"), getDocument(env, targetId, "flashcards"),
-      ]);
-      return json({ qbank: { recordCount: Object.keys(qbankDoc.records).length, updatedAt: qbankDoc.updatedAt }, flashcards: { recordCount: Object.keys(flashcardDoc.records).length, updatedAt: flashcardDoc.updatedAt } }, 200, origin, log);
+      const docs = await getAllDocuments(env, targetId);
+      const summary: Record<string, { recordCount: number; updatedAt: number }> = {};
+      for (const kind of SYNC_KINDS) summary[kind] = { recordCount: Object.keys(docs[kind].records).length, updatedAt: docs[kind].updatedAt };
+      return json(summary, 200, origin, log);
     }
     const userIdMatch = path.match(/^\/v1\/admin\/users\/([^/]+)$/);
     const resetPasswordMatch = path.match(/^\/v1\/admin\/users\/([^/]+)\/reset-password$/);
@@ -2862,7 +2877,7 @@ export default {
         ]);
         return json(await issueSession(await env.DB.prepare("SELECT * FROM users WHERE id = ?").bind(session.user.id).first<any>(), env), 200, origin, log);
       }
-      if (request.method === "GET" && url.pathname === "/v1/account/export") return json({ account: await accountPayload(env, session.user), progress: { qbank: await getDocument(env, session.user.id, "qbank"), flashcards: await getDocument(env, session.user.id, "flashcards") }, exportedAt: now() }, 200, origin, log);
+      if (request.method === "GET" && url.pathname === "/v1/account/export") return json({ account: await accountPayload(env, session.user), progress: await getAllDocuments(env, session.user.id), exportedAt: now() }, 200, origin, log);
       if (request.method === "DELETE" && url.pathname === "/v1/account") {
         const body = await readJson(request);
         if (body.confirm !== "DELETE") return json({ error: "Type DELETE to confirm account deletion" }, 400, origin, log);
@@ -2926,13 +2941,22 @@ export default {
       // ── Sync ──
       if (request.method === "GET" && url.pathname === "/v1/sync") {
         if (!rateLimit(ip, "sync")) return json({ error: "Too many requests" }, 429, origin, log);
-        return json({ qbank: await getDocument(env, session.user.id, "qbank"), flashcards: await getDocument(env, session.user.id, "flashcards") }, 200, origin, log);
+        return json(await getAllDocuments(env, session.user.id), 200, origin, log);
       }
       if (request.method === "PUT" && url.pathname === "/v1/sync") {
         if (!rateLimit(ip, "sync")) return json({ error: "Too many requests" }, 429, origin, log);
         const body = await readJsonBody(request, MAX_GZIP_BODY_BYTES); const statements: any[] = []; const response: Record<string, any> = {};
-        for (const kind of ["qbank", "flashcards"]) {
-          if (!body[kind] || typeof body[kind] !== "object") continue;
+        const bodyKinds = new Set<string>();
+        for (const kind of SYNC_KINDS) if (body[kind] && typeof body[kind] === "object") bodyKinds.add(kind);
+        // Per-user storage budget: start from the raw bytes of stored docs NOT
+        // being rewritten in this request, then add each merged doc's size.
+        const sizeRows = await env.DB.prepare("SELECT kind, raw_bytes FROM progress_documents WHERE user_id = ?").bind(session.user.id).all<{ kind: string; raw_bytes: number }>();
+        let projectedBytes = (sizeRows.results || []).reduce((sum, row) => {
+          const kind = row?.kind ?? "";
+          return sum + (bodyKinds.has(kind) ? 0 : (Number(row?.raw_bytes) || 0));
+        }, 0);
+        for (const kind of SYNC_KINDS) {
+          if (!bodyKinds.has(kind)) continue;
           const local = body[kind].records;
           if (!local || typeof local !== "object" || Array.isArray(local)) return json({ error: "Invalid progress document" }, 400, origin, log);
           const current = await getDocument(env, session.user.id, kind);
@@ -2944,16 +2968,26 @@ export default {
             const since = Number(sinceRaw);
             if (!isNaN(since) && current.updatedAt > since) return json({ error: "Conflict: data has been modified since last fetch", conflict: true, serverUpdatedAt: current.updatedAt, kind }, 409, origin, log);
           }
-          const merged = kind === "qbank" ? mergeQbank(current.records, local) : mergeFlashcards(current.records, local);
+          const merged = mergeKind(current.records, local, kind);
           // Skip the write entirely when nothing changed — avoids burning a D1
           // write (and bumping updated_at) on every no-op push.
           if (!merged.changed) { response[kind] = { records: current.records, updatedAt: current.updatedAt }; continue; }
           const mergedBytes = encoder.encode(merged.json).length;
           if (mergedBytes > MAX_DOCUMENT_BYTES) return json({ error: "Progress document is too large after merge" }, 400, origin, log);
+          // Guard the STORED size too: base64 gzip of a 2MB raw doc stays far
+          // under D1's 2MB row limit for compressible progress data, but this
+          // check guarantees it even for incompressible (e.g. already-encoded)
+          // content that gzip can't shrink.
+          const compressedB64 = await gzipString(merged.json);
+          const storedBytes = encoder.encode(compressedB64).length;
+          if (storedBytes > MAX_STORED_PAYLOAD_BYTES) return json({ error: "Progress document is too large to store" }, 400, origin, log);
+          projectedBytes += mergedBytes;
+          if (projectedBytes > MAX_USER_STORAGE_BYTES) return json({ error: "Sync storage limit exceeded (15MB per user). Remove old progress to free space.", limit: MAX_USER_STORAGE_BYTES }, 413, origin, log);
           const updatedAt = now(); response[kind] = { records: merged.records, updatedAt };
-          // Store gzip-compressed to save D1 space (~8x) and support far more
-          // progress per user than the old 900KB raw cap allowed.
-          statements.push(env.DB.prepare("INSERT INTO progress_documents (user_id, kind, payload, compressed, updated_at) VALUES (?, ?, ?, 1, ?) ON CONFLICT(user_id, kind) DO UPDATE SET payload = excluded.payload, compressed = 1, updated_at = excluded.updated_at").bind(session.user.id, kind, await gzipString(merged.json), updatedAt));
+          // Store gzip-compressed to save D1 space (~5-8x) and support far more
+          // progress per user; raw_bytes tracks the uncompressed JSON so the
+          // per-user budget is enforced on real content, not compressed size.
+          statements.push(env.DB.prepare("INSERT INTO progress_documents (user_id, kind, payload, compressed, raw_bytes, updated_at) VALUES (?, ?, ?, 1, ?, ?) ON CONFLICT(user_id, kind) DO UPDATE SET payload = excluded.payload, compressed = 1, raw_bytes = excluded.raw_bytes, updated_at = excluded.updated_at").bind(session.user.id, kind, compressedB64, mergedBytes, updatedAt));
         }
         if (statements.length) await env.DB.batch(statements);
         return json(response, 200, origin, log);

@@ -198,6 +198,7 @@ export function Library({ initialArticleId, onNavigateBack: propOnNavigateBack }
       else next.add(filePath);
       if (typeof window !== "undefined") {
         localStorage.setItem(BOOKMARKS_KEY, JSON.stringify(Array.from(next)));
+        window.dispatchEvent(new CustomEvent("osler-bookmarks-changed"));
       }
       return next;
     });

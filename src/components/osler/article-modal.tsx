@@ -81,6 +81,7 @@ export function FloatingArticleModal({
       else next.add(activeId);
       if (typeof window !== "undefined") {
         localStorage.setItem(BOOKMARKS_KEY, JSON.stringify(Array.from(next)));
+        window.dispatchEvent(new CustomEvent("osler-bookmarks-changed"));
       }
       return next;
     });

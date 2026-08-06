@@ -8,6 +8,9 @@ import type { EngineType } from "./types";
 const DB_NAME = "osler-db-v1";
 const DB_VERSION = 4;
 
+/** localStorage key holding the set of bookmarked library article paths. */
+export const ARTICLE_BOOKMARKS_KEY = "osler-article-bookmarks";
+
 /* ── IndexedDB helpers ──────────────────────────────────────────────── */
 
 let dbInstance: IDBDatabase | null = null;
@@ -223,6 +226,33 @@ function clearCached(storeName: string): void {
 function dispatchChange(event: string) {
   if (typeof window === "undefined") return;
   window.dispatchEvent(new CustomEvent(event));
+}
+
+/* ── Merge helpers (shared by cloud snapshot merge) ─────────────────── */
+
+function sessionVersion(s: SavedSession): number {
+  return (s?.completedAt ?? s?.startedAt ?? 0) as number;
+}
+
+function itemVersion(item: any): number {
+  const raw = item?.createdAt ?? item?.updatedAt;
+  const n = typeof raw === "number" ? raw : Date.parse(String(raw ?? ""));
+  return Number.isFinite(n) ? n : 0;
+}
+
+/** Union of two item lists by id — later version wins, ties go to incoming.
+ *  Monotonic (only adds/replaces), so it converges across devices. */
+function mergeItemArraysById<T>(current: T[], incoming: T[], version: (item: T) => number): T[] {
+  const byId = new Map<string, T>();
+  for (const item of current) if (item && typeof item === "object" && "id" in item) byId.set((item as any).id, item);
+  for (const item of incoming) {
+    if (!item || typeof item !== "object" || !("id" in item)) continue;
+    const existing = byId.get((item as any).id);
+    if (!existing) byId.set((item as any).id, item);
+    else if (version(item) > version(existing)) byId.set((item as any).id, item);
+    else if (version(item) === version(existing)) byId.set((item as any).id, item);
+  }
+  return Array.from(byId.values());
 }
 
 /* ── Types ──────────────────────────────────────────────────────────── */
@@ -539,6 +569,125 @@ export const storage = {
     }
   },
 
+  /**
+   * Serialize every syncable kind into a { kind: { records } } snapshot that
+   * mirrors the worker's SYNC_KINDS. Cloud sync pushes this whole snapshot so
+   * qbank progress, sessions, notes, highlights and bookmarks all travel.
+   */
+  exportSyncSnapshot(): Record<string, { records: Record<string, unknown> }> {
+    const snapshot: Record<string, { records: Record<string, unknown> }> = {};
+    snapshot.qbank = { records: storage.exportProgressRecords() as unknown as Record<string, unknown> };
+    snapshot.flashcards = { records: flashcardReview.getAll() as unknown as Record<string, unknown> };
+    const sessionRecords: Record<string, unknown> = {};
+    for (const s of sessions.list()) {
+      if (s.id === "__active__") continue;
+      sessionRecords[s.id] = s;
+    }
+    snapshot.sessions = { records: sessionRecords };
+    const noteRecords: Record<string, unknown> = {};
+    for (const n of notes.listSync()) noteRecords[n.id] = n;
+    snapshot.notes = { records: noteRecords };
+    const highlightRecords: Record<string, unknown> = {};
+    for (const [k, v] of memoryCache) {
+      if (k.startsWith("highlights:")) {
+        const key = k.replace("highlights:", "");
+        if (Array.isArray(v)) highlightRecords[key] = v;
+      }
+    }
+    snapshot.highlights = { records: highlightRecords };
+    snapshot.articleHighlights = { records: storage.exportArticleHighlights() as unknown as Record<string, unknown> };
+    const bookmarkRecords: Record<string, unknown> = {};
+    if (typeof window !== "undefined") {
+      try {
+        const raw = localStorage.getItem(ARTICLE_BOOKMARKS_KEY);
+        if (raw) {
+          const list = JSON.parse(raw);
+          if (Array.isArray(list)) for (const path of list) if (typeof path === "string") bookmarkRecords[path] = 1;
+        }
+      } catch {}
+    }
+    snapshot.bookmarks = { records: bookmarkRecords };
+    return snapshot;
+  },
+
+  /**
+   * Merge a full cloud snapshot (all kinds) into local storage, newest-wins.
+   * Item-array kinds (highlights) and bookmarks merge by union so no device's
+   * additions are ever lost.
+   */
+  async mergeCloudSnapshot(snapshot: Record<string, { records?: Record<string, any> }>): Promise<void> {
+    await storage.mergeCloudProgress(
+      snapshot.qbank?.records as Record<string, QuestionRecord> | undefined,
+      snapshot.flashcards?.records as Record<string, FlashcardReviewRecord> | undefined,
+    );
+
+    const sessionRecords = snapshot.sessions?.records;
+    if (sessionRecords && typeof sessionRecords === "object") {
+      const entries = Object.entries(sessionRecords)
+        .filter(([id, incoming]) => {
+          if (id === "__active__") return false;
+          const local = getCached<SavedSession>("sessions", sessionKey(id));
+          return !!incoming && typeof incoming === "object" && (!local || sessionVersion(incoming as SavedSession) > sessionVersion(local));
+        })
+        .map(([id, value]) => ({ key: sessionKey(id), value }));
+      if (entries.length) {
+        await idbPutBatch("sessions", entries);
+        entries.forEach((e) => setCached("sessions", e.key, e.value));
+        dispatchChange("osler-sessions-changed");
+      }
+    }
+
+    const noteRecords = snapshot.notes?.records;
+    if (noteRecords && typeof noteRecords === "object") {
+      const current = notesCache ?? await ensureNotesCache();
+      const incoming = Object.values(noteRecords).filter((n): n is NoteRecord =>
+        !!n && typeof n === "object" && typeof n.id === "string");
+      const merged = mergeItemArraysById(current, incoming, (n) => n.updatedAt);
+      if (merged.length !== current.length || merged.some((n, i) => n !== current[i])) {
+        for (const note of merged) await idbPutNote(note);
+        notesCache = merged;
+        notifyNotesChanged();
+      }
+    }
+
+    for (const kind of ["highlights", "articleHighlights"] as const) {
+      const docs = snapshot[kind]?.records;
+      if (!docs || typeof docs !== "object") continue;
+      let changed = false;
+      for (const [key, incoming] of Object.entries(docs)) {
+        if (!Array.isArray(incoming)) continue;
+        const current = getCached<HighlightItem[]>(kind, key) ?? [];
+        const merged = mergeItemArraysById(current, incoming, (h) => itemVersion(h));
+        if (merged.length !== current.length || merged.some((it, i) => it !== current[i])) {
+          changed = true;
+          setCached(kind, key, merged);
+          await idbPut(kind, key, merged);
+        }
+      }
+      if (changed) dispatchChange(kind === "highlights" ? "osler-highlights-changed" : "osler-article-highlights-changed");
+    }
+
+    const bookmarkRecords = snapshot.bookmarks?.records;
+    if (bookmarkRecords && typeof bookmarkRecords === "object" && typeof window !== "undefined") {
+      try {
+        const raw = localStorage.getItem(ARTICLE_BOOKMARKS_KEY);
+        const current = raw ? (JSON.parse(raw) as string[]).filter((p) => typeof p === "string") : [];
+        const set = new Set(current);
+        let changed = false;
+        for (const path of Object.keys(bookmarkRecords)) {
+          if (!set.has(path)) {
+            set.add(path);
+            changed = true;
+          }
+        }
+        if (changed) {
+          localStorage.setItem(ARTICLE_BOOKMARKS_KEY, JSON.stringify(Array.from(set)));
+          window.dispatchEvent(new CustomEvent("osler-bookmarks-changed"));
+        }
+      } catch {}
+    }
+  },
+
   /** Serialize all article highlights (articleId -> HighlightItem[]) for backup/sync. */
   exportArticleHighlights(): Record<string, HighlightItem[]> {
     const result: Record<string, HighlightItem[]> = {};
@@ -726,6 +875,7 @@ export const highlights = {
     const key = highlightsKey(packUid, questionIdx);
     setCached("highlights", key, updated);
     idbPut("highlights", key, updated).catch(console.warn);
+    dispatchChange("osler-highlights-changed");
   },
 
   remove(packUid: string, questionIdx: number, id: string) {
@@ -734,12 +884,14 @@ export const highlights = {
     const key = highlightsKey(packUid, questionIdx);
     setCached("highlights", key, updated);
     idbPut("highlights", key, updated).catch(console.warn);
+    dispatchChange("osler-highlights-changed");
   },
 
   clear(packUid: string, questionIdx: number) {
     const key = highlightsKey(packUid, questionIdx);
     deleteCached("highlights", key);
     idbDelete("highlights", key).catch(console.warn);
+    dispatchChange("osler-highlights-changed");
   },
 
   clearAll(packUid: string) {
@@ -753,6 +905,7 @@ export const highlights = {
       memoryCache.delete(k);
       idbDelete("highlights", rawKey).catch(console.warn);
     }
+    dispatchChange("osler-highlights-changed");
   },
 };
 
@@ -766,11 +919,13 @@ export const articleHighlights = {
   save(articleId: string, items: HighlightItem[]) {
     setCached("articleHighlights", articleId, items);
     idbPut("articleHighlights", articleId, items).catch(console.warn);
+    dispatchChange("osler-article-highlights-changed");
   },
 
   clear(articleId: string) {
     deleteCached("articleHighlights", articleId);
     idbDelete("articleHighlights", articleId).catch(console.warn);
+    dispatchChange("osler-article-highlights-changed");
   },
 };
 

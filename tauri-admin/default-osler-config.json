@@ -31,7 +31,8 @@
     "enabled": false,
     "apiUrl": "",
     "syncQbank": true,
-    "syncFlashcards": true
+    "syncFlashcards": true,
+    "syncContent": true
   },
   "wizard": { "completed": false, "version": 1 }
 }

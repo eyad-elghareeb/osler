@@ -1,5 +1,5 @@
 import { getConfig, loadConfig } from "@/lib/osler/config";
-import { flashcardReview, storage, type FlashcardReviewRecord, type QuestionRecord } from "@/lib/osler/storage";
+import { storage } from "@/lib/osler/storage";
 
 const SESSION_STORAGE_KEY = "osler-cloud-session-v1";
 /** Set in sessionStorage when a stored cloud session could not be restored
@@ -462,16 +462,15 @@ export function startCloudSync(session: CloudSession): () => void {
   let stopped = false;
   let currentSession = session;
   let dirty = true;
-  // Set by schedule() whenever a progress change lands while a sync is in
-  // flight. Without it, `dirty = false` after a successful PUT would swallow
-  // that mid-sync change and it would never reach the cloud.
+  // Set by schedule() whenever a data change lands while a sync is in flight.
+  // Without it, `dirty = false` after a successful PUT would swallow that
+  // mid-sync change and it would never reach the cloud.
   let dirtyDuringSync = false;
   let syncing = false;
   let lastSyncAt = 0;
   // Per-kind server snapshots so a qbank write doesn't 409 the flashcards
   // write (and vice versa) — each kind compares against its own updatedAt.
-  let qbankServerUpdatedAt = 0;
-  let flashcardServerUpdatedAt = 0;
+  const serverUpdatedAt: Record<string, number> = {};
   let retryCount = 0;
   let timer: ReturnType<typeof setTimeout> | null = null;
   let pullTimer: ReturnType<typeof setInterval> | null = null;
@@ -503,31 +502,43 @@ export function startCloudSync(session: CloudSession): () => void {
       }
 
       const config = getConfig();
-      const remote = await request<{
-        qbank: { records: Record<string, QuestionRecord>; updatedAt: number };
-        flashcards: { records: Record<string, FlashcardReviewRecord>; updatedAt: number };
-      }>("/v1/sync", {}, currentSession.token);
-      await storage.mergeCloudProgress(
-        config.cloud.syncQbank ? remote.qbank.records : undefined,
-        config.cloud.syncFlashcards ? remote.flashcards.records : undefined,
-      );
+      const remote = await request<Record<string, { records: Record<string, unknown>; updatedAt: number }>>("/v1/sync", {}, currentSession.token);
+      // Respect the per-kind config gates before merging (and later pushing).
+      if (!config.cloud.syncQbank) delete remote.qbank;
+      if (!config.cloud.syncFlashcards) delete remote.flashcards;
+      if (!config.cloud.syncContent) {
+        delete remote.sessions;
+        delete remote.notes;
+        delete remote.highlights;
+        delete remote.articleHighlights;
+        delete remote.bookmarks;
+      }
+      await storage.mergeCloudSnapshot(remote);
       // Track the per-kind server snapshots for optimistic concurrency.
-      qbankServerUpdatedAt = remote.qbank?.updatedAt ?? 0;
-      flashcardServerUpdatedAt = remote.flashcards?.updatedAt ?? 0;
+      for (const kind of Object.keys(remote)) {
+        serverUpdatedAt[kind] = remote[kind]?.updatedAt ?? 0;
+      }
 
       if (hadPendingChanges) {
         const headers: Record<string, string> = {};
-        if (config.cloud.syncQbank && qbankServerUpdatedAt > 0) headers["x-sync-since-qbank"] = String(qbankServerUpdatedAt);
-        if (config.cloud.syncFlashcards && flashcardServerUpdatedAt > 0) headers["x-sync-since-flashcards"] = String(flashcardServerUpdatedAt);
-        const saved = await request("/v1/sync", {
+        for (const kind of Object.keys(remote)) {
+          if (serverUpdatedAt[kind] > 0) headers[`x-sync-since-${kind}`] = String(serverUpdatedAt[kind]);
+        }
+        const payload = storage.exportSyncSnapshot();
+        if (!config.cloud.syncQbank) delete payload.qbank;
+        if (!config.cloud.syncFlashcards) delete payload.flashcards;
+        if (!config.cloud.syncContent) {
+          delete payload.sessions;
+          delete payload.notes;
+          delete payload.highlights;
+          delete payload.articleHighlights;
+          delete payload.bookmarks;
+        }
+        await request("/v1/sync", {
           method: "PUT",
           headers,
-          body: JSON.stringify({
-            ...(config.cloud.syncQbank ? { qbank: { records: storage.exportProgressRecords() } } : {}),
-            ...(config.cloud.syncFlashcards ? { flashcards: { records: flashcardReview.getAll() } } : {}),
-          }),
+          body: JSON.stringify(payload),
         }, currentSession.token);
-        void saved;
         lastSyncAt = Date.now();
         window.dispatchEvent(new CustomEvent("osler-cloud-sync-status", { detail: { state: "synced", syncedAt: lastSyncAt } }));
       } else {
@@ -553,8 +564,7 @@ export function startCloudSync(session: CloudSession): () => void {
           const refreshed = await refreshCloudSession(currentSession);
           if (refreshed) {
             currentSession = refreshed;
-            qbankServerUpdatedAt = 0;
-            flashcardServerUpdatedAt = 0;
+            for (const kind of Object.keys(serverUpdatedAt)) serverUpdatedAt[kind] = 0;
             dirty = true;
             lastSyncAt = 0;
           } else {
@@ -567,8 +577,7 @@ export function startCloudSync(session: CloudSession): () => void {
           // The retry is scheduled in the `finally` block (after `syncing`
           // flips false) so it actually runs — the old code re-entered sync
           // while `syncing` was still true and silently dropped the retry.
-          qbankServerUpdatedAt = 0;
-          flashcardServerUpdatedAt = 0;
+          for (const kind of Object.keys(serverUpdatedAt)) serverUpdatedAt[kind] = 0;
           dirty = true;
           lastSyncAt = 0;
         }
@@ -599,8 +608,18 @@ export function startCloudSync(session: CloudSession): () => void {
   const onVisible = () => {
     if (document.visibilityState === "visible" && !syncing) void runSync(true);
   };
-  window.addEventListener("osler-progress-changed", schedule);
-  window.addEventListener("osler-flashcard-changed", schedule);
+  // Every changeable content type schedules a push, so sessions, notes,
+  // highlights and bookmarks sync just like qbank/flashcard progress.
+  const syncEvents = [
+    "osler-progress-changed",
+    "osler-flashcard-changed",
+    "osler-sessions-changed",
+    "osler-notes-changed",
+    "osler-highlights-changed",
+    "osler-article-highlights-changed",
+    "osler-bookmarks-changed",
+  ];
+  for (const event of syncEvents) window.addEventListener(event, schedule);
   window.addEventListener("online", onOnline);
   document.addEventListener("visibilitychange", onVisible);
   pullTimer = setInterval(() => void runSync(true), SYNC_PULL_INTERVAL_MS);
@@ -616,8 +635,7 @@ export function startCloudSync(session: CloudSession): () => void {
     stopped = true;
     if (timer) clearTimeout(timer);
     if (pullTimer) clearInterval(pullTimer);
-    window.removeEventListener("osler-progress-changed", schedule);
-    window.removeEventListener("osler-flashcard-changed", schedule);
+    for (const event of syncEvents) window.removeEventListener(event, schedule);
     window.removeEventListener("online", onOnline);
     document.removeEventListener("visibilitychange", onVisible);
     forceSync = null;

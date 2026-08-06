@@ -167,6 +167,9 @@ export interface CloudConfig {
   /** Sync only the requested learning data, keeping D1 writes small. */
   syncQbank: boolean;
   syncFlashcards: boolean;
+  /** Sync the remaining content types (sessions, notes, highlights,
+   *  article highlights, bookmarks) alongside qbank/flashcards. */
+  syncContent: boolean;
 }
 
 /** First-time wizard state. */
@@ -519,6 +522,7 @@ export const DEFAULT_CONFIG: OslerConfig = {
     apiUrl: "",
     syncQbank: true,
     syncFlashcards: true,
+    syncContent: true,
   },
   wizard: {
     completed: false,
