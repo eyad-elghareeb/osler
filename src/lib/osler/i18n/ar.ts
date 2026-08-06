@@ -1359,6 +1359,8 @@ export const ar = {
     // ── Admin toast messages ──────────────────────────────────────────
     "admin.toast.failedLoadQueue": "فشل تحميل قائمة المراجعة",
     "admin.toast.approveFailed": "فشل الاعتماد",
+    "admin.toast.approvedSelected": "تم اعتماد {n} مقترح",
+    "admin.toast.rejectedSelected": "تم رفض {n} مقترح",
     "admin.toast.failedLoadAuditLog": "فشل تحميل سجل التدقيق",
     "admin.toast.failedLoadContent": "فشل تحميل المحتوى",
     "admin.toast.failedCreateContent": "فشل إنشاء المحتوى",
@@ -1592,6 +1594,17 @@ export const ar = {
     "admin.review.stagedFilesCount": "{n} ملف · {size}",
     "admin.review.publish": "نشر",
     "admin.review.discard": "تجاهل",
+    "admin.review.selectAll": "تحديد الكل",
+    "admin.review.selectedCount": "{n} محدد",
+    "admin.review.approveSelected": "اعتماد المحدد",
+    "admin.review.rejectSelected": "رفض المحدد",
+    "admin.review.approveAll": "اعتماد الكل",
+    "admin.review.rejectAll": "رفض الكل",
+    "admin.review.publishSelected": "نشر المحدد",
+    "admin.review.discardSelected": "تجاهل المحدد",
+    "admin.review.publishAll": "نشر الكل",
+    "admin.review.discardAll": "تجاهل الكل",
+    "admin.review.confirmBulkReject": "رفض {n} مقترح؟",
 
     // ── محررات المحتوى المهيكل ──────────────────────────────────────────
     "admin.structured.addCard": "إضافة بطاقة",

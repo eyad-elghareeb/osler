@@ -1364,6 +1364,8 @@ export const en = {
     // ── Admin toast messages ──────────────────────────────────────────
     "admin.toast.failedLoadQueue": "Failed to load queue",
     "admin.toast.approveFailed": "Approve failed",
+    "admin.toast.approvedSelected": "Approved {n} submission(s)",
+    "admin.toast.rejectedSelected": "Rejected {n} submission(s)",
     "admin.toast.failedLoadAuditLog": "Failed to load audit log",
     "admin.toast.failedLoadContent": "Failed to load content",
     "admin.toast.failedCreateContent": "Failed to create content",
@@ -1597,6 +1599,17 @@ export const en = {
     "admin.review.stagedFilesCount": "{n} file(s) · {size}",
     "admin.review.publish": "Publish",
     "admin.review.discard": "Discard",
+    "admin.review.selectAll": "Select all",
+    "admin.review.selectedCount": "{n} selected",
+    "admin.review.approveSelected": "Approve selected",
+    "admin.review.rejectSelected": "Reject selected",
+    "admin.review.approveAll": "Approve all",
+    "admin.review.rejectAll": "Reject all",
+    "admin.review.publishSelected": "Publish selected",
+    "admin.review.discardSelected": "Discard selected",
+    "admin.review.publishAll": "Publish all",
+    "admin.review.discardAll": "Discard all",
+    "admin.review.confirmBulkReject": "Reject {n} submission(s)?",
 
     // ── Structured editors ────────────────────────────────────────────────
     "admin.structured.addCard": "Add card",
