@@ -963,6 +963,31 @@ async function regenerateManifestForCategory(env: Env, category: string): Promis
       items: [],
     });
   }
+  // Synthesize branch nodes for pure grouping folders. `folders` only records
+  // paths that directly contain data files, so an intermediate folder like
+  // "medical-board-review" (subfolders only, no direct JSON) would otherwise
+  // have no node and its children would flatten to the category root. The
+  // local generator (scripts/generate-content-manifests.js) and its Rust port
+  // (tauri-admin/src/manifest.rs) both emit branch nodes whenever a folder has
+  // subfolders — mirror that here so an R2 upload of a nested pack preserves
+  // the parent deck.
+  for (const fp of [...nodes.keys()]) {
+    const parts = fp.split("/");
+    for (let depth = 1; depth < parts.length; depth++) {
+      const branchPath = parts.slice(0, depth).join("/");
+      if (nodes.has(branchPath)) continue;
+      const branchType = parentType || inferTypeFromFileName(folders.get(branchPath)?.files || []) || "quiz";
+      nodes.set(branchPath, {
+        uid: buildUid(branchType, parts.slice(0, depth)),
+        title: parts[depth - 1].replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()),
+        type: branchType,
+        path: `${branchPath}/`,
+        files: [],
+        images: [],
+        items: [],
+      });
+    }
+  }
   const roots: any[] = [];
   for (const [fp, node] of nodes.entries()) {
     if (!fp) { roots.push(node); continue; }
