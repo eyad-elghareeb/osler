@@ -540,6 +540,11 @@ export function startCloudSync(session: CloudSession): () => void {
       dirty = dirtyDuringSync;
       retryCount = 0;
     } catch (error) {
+      // Only a real network-level failure (offline mid-request, DNS, CORS
+      // preflight) is "offline". A CloudApiError means the server answered —
+      // 401/409 retry below, anything else self-heals in the `finally` block,
+      // so the UI should keep showing the retrying state rather than a false
+      // "Offline mode" badge.
       if (error instanceof CloudApiError) {
         if (error.status === 401) {
           // The token is dead (expired/revoked). Try once to rotate it; if
@@ -567,8 +572,9 @@ export function startCloudSync(session: CloudSession): () => void {
           dirty = true;
           lastSyncAt = 0;
         }
+      } else {
+        window.dispatchEvent(new CustomEvent("osler-cloud-sync-status", { detail: { state: "offline" } }));
       }
-      window.dispatchEvent(new CustomEvent("osler-cloud-sync-status", { detail: { state: "offline" } }));
     } finally {
       syncing = false;
       // Self-heal: retry with exponential backoff while still dirty so a

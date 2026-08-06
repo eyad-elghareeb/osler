@@ -387,7 +387,7 @@ function cors(origin: string): Record<string, string> {
   return {
     "access-control-allow-origin": origin,
     "access-control-allow-methods": "GET, POST, PUT, PATCH, DELETE, OPTIONS",
-    "access-control-allow-headers": "authorization, content-type, content-encoding",
+    "access-control-allow-headers": "authorization, content-type, content-encoding, x-sync-since-qbank, x-sync-since-flashcards",
     "access-control-max-age": "86400",
     vary: "Origin",
   };
