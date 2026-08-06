@@ -35,10 +35,12 @@ export interface TreeViewProps {
   onOpen: (node: ContentTreeNode) => void;
   /** Shared toolbar search query — filters + auto-expands matching subtrees. */
   query: string;
+  /** Called when files are dropped on a folder row — stages into that folder. */
+  onDropOnFolder?: (e: React.DragEvent, node: ContentTreeNode) => void;
   className?: string;
 }
 
-export function TreeView({ roots, selectedIds, onSelect, onOpen, query, className }: TreeViewProps) {
+export function TreeView({ roots, selectedIds, onSelect, onOpen, query, onDropOnFolder, className }: TreeViewProps) {
   const { t } = useI18n();
   const [expanded, setExpanded] = React.useState<Set<string>>(new Set());
 
@@ -90,6 +92,7 @@ export function TreeView({ roots, selectedIds, onSelect, onOpen, query, classNam
           onToggle={toggle}
           onSelect={onSelect}
           onOpen={onOpen}
+          onDropOnFolder={onDropOnFolder}
         />
       ))}
     </div>
@@ -107,13 +110,17 @@ interface TreeRowProps {
   onToggle: (id: string) => void;
   onSelect: (node: ContentTreeNode) => void;
   onOpen: (node: ContentTreeNode) => void;
+  onDropOnFolder?: (e: React.DragEvent, node: ContentTreeNode) => void;
 }
 
-function TreeRow({ node, depth, expanded, selectedIds, searching, onToggle, onSelect, onOpen }: TreeRowProps) {
+function TreeRow({ node, depth, expanded, selectedIds, searching, onToggle, onSelect, onOpen, onDropOnFolder }: TreeRowProps) {
+  const { t } = useI18n();
   const isFolder = node.kind === "folder";
   const isExpanded = isFolder && (searching || expanded.has(node.id));
   const selected = selectedIds.has(node.id);
   const children = node.items ?? [];
+  const [dropActive, setDropActive] = React.useState(false);
+  const canDropFolder = isFolder && onDropOnFolder && !node.id.endsWith("__drafts__");
 
   function handleClick() {
     if (isFolder) onToggle(node.id);
@@ -127,6 +134,22 @@ function TreeRow({ node, depth, expanded, selectedIds, searching, onToggle, onSe
     }
   }
 
+  function handleDragOver(e: React.DragEvent) {
+    if (!canDropFolder || !e.dataTransfer.types.includes("Files")) return;
+    e.preventDefault();
+    e.stopPropagation();
+    e.dataTransfer.dropEffect = "copy";
+    setDropActive(true);
+  }
+  function handleDragLeave(e: React.DragEvent) {
+    if (!e.currentTarget.contains(e.relatedTarget as Node)) setDropActive(false);
+  }
+  function handleDrop(e: React.DragEvent) {
+    if (!canDropFolder) return;
+    setDropActive(false);
+    void onDropOnFolder!(e, node);
+  }
+
   return (
     <div>
       <div
@@ -136,15 +159,28 @@ function TreeRow({ node, depth, expanded, selectedIds, searching, onToggle, onSe
         onClick={handleClick}
         onDoubleClick={() => !isFolder && onOpen(node)}
         onKeyDown={handleKeyDown}
+        onDragOver={handleDragOver}
+        onDragLeave={handleDragLeave}
+        onDrop={handleDrop}
         aria-expanded={isFolder ? isExpanded : undefined}
         aria-selected={isFolder ? undefined : selected}
         className={cn(
-          "group flex items-center gap-1.5 rounded-md px-1.5 py-1 text-xs transition-colors",
+          "group relative flex items-center gap-1.5 rounded-md px-1.5 py-1 text-xs transition-colors",
           "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
           selected ? "bg-primary/10 text-primary" : "hover:bg-muted/60",
+          dropActive && "bg-primary/5 ring-2 ring-inset ring-primary/40",
         )}
         style={{ paddingInlineStart: `${6 + depth * 14}px` }}
       >
+        {/* Drop target overlay */}
+        {dropActive && (
+          <span className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center rounded-md bg-primary/10">
+            <span className="max-w-[90%] truncate rounded bg-primary px-2 py-0.5 text-[10px] font-semibold text-primary-foreground">
+              {t("admin.studio.dropOnFolder", { name: node.name })}
+            </span>
+          </span>
+        )}
+
         {isFolder ? (
           <ChevronRight className={cn("size-3.5 shrink-0 text-muted-foreground transition-transform", isExpanded && "rotate-90")} />
         ) : (
@@ -176,6 +212,7 @@ function TreeRow({ node, depth, expanded, selectedIds, searching, onToggle, onSe
               onToggle={onToggle}
               onSelect={onSelect}
               onOpen={onOpen}
+              onDropOnFolder={onDropOnFolder}
             />
           ))}
         </div>

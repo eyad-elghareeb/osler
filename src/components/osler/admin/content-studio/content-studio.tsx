@@ -525,6 +525,7 @@ export function ContentStudio({ capabilities }: ContentStudioProps) {
                   onSelect={navigateTo}
                   counts={counts}
                   totalCount={counts.__total ?? 0}
+                  onDropFiles={handleDropFiles}
                 />
               </aside>
             </ResizablePanel>

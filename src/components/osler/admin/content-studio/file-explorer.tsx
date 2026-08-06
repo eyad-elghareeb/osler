@@ -273,6 +273,7 @@ export function FileExplorer({
               }}
               onOpen={onOpen}
               query={query}
+              onDropOnFolder={onDropFiles ? collectDropOnFolder : undefined}
             />
           ) : viewMode === "grid" ? (
             <GridView

@@ -27,17 +27,20 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { CATEGORIES, ACCENT_CLASSES, type CategoryDef } from "./types";
+import { walkDropEntries } from "@/components/osler/admin/content-dropzone";
 
 interface CategoryRailProps {
   activeFolder: string | null;
   onSelect: (folder: string) => void;
   counts: Record<string, number>;
   totalCount: number;
+  /** Files/folders dropped on a category tile — staged into that category's root. */
+  onDropFiles?: (files: File[], paths: Map<File, string>, targetPath: string) => void;
   className?: string;
 }
 
 export function CategoryRail({
-  activeFolder, onSelect, counts, totalCount, className,
+  activeFolder, onSelect, counts, totalCount, onDropFiles, className,
 }: CategoryRailProps) {
   const { t } = useI18n();
 
@@ -72,6 +75,9 @@ export function CategoryRail({
           description={t(cat.descKey as any)}
           count={counts[cat.folder] ?? 0}
           accent={cat.accent}
+          dropTarget={onDropFiles ? cat.folder : undefined}
+          dropLabel={t("admin.studio.dropOnFolder", { name: t(cat.labelKey as any) })}
+          onDropFiles={onDropFiles}
         />
       ))}
     </nav>
@@ -88,12 +94,35 @@ interface CategoryTileProps {
   description: string;
   count: number;
   accent: CategoryDef["accent"];
+  /** Category folder a drop lands in (e.g. "qbank"). Omit to disable drops. */
+  dropTarget?: string;
+  dropLabel?: string;
+  onDropFiles?: (files: File[], paths: Map<File, string>, targetPath: string) => void;
 }
 
 function CategoryTile({
-  active, onClick, icon: Icon, label, description, count, accent,
+  active, onClick, icon: Icon, label, description, count, accent, dropTarget, dropLabel, onDropFiles,
 }: CategoryTileProps) {
+  const { t } = useI18n();
   const cls = ACCENT_CLASSES[accent];
+  const [dropActive, setDropActive] = React.useState(false);
+
+  function handleDragOver(e: React.DragEvent) {
+    if (!onDropFiles || !dropTarget || !e.dataTransfer.types.includes("Files")) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "copy";
+    setDropActive(true);
+  }
+  function handleDragLeave() { setDropActive(false); }
+  async function handleDrop(e: React.DragEvent) {
+    if (!onDropFiles || !dropTarget) return;
+    e.preventDefault();
+    setDropActive(false);
+    // Walk entries so a dropped folder keeps its internal structure.
+    const { files, paths } = await walkDropEntries(e.dataTransfer);
+    if (files.length > 0) onDropFiles(files, paths, dropTarget);
+  }
+
   return (
     <TooltipProvider>
       <Tooltip>
@@ -101,6 +130,9 @@ function CategoryTile({
           <button
             type="button"
             onClick={onClick}
+            onDragOver={handleDragOver}
+            onDragLeave={handleDragLeave}
+            onDrop={handleDrop}
             aria-pressed={active}
             className={cn(
               "group relative flex w-full items-center gap-2 rounded-md border p-1.5 text-start transition-all",
@@ -108,8 +140,18 @@ function CategoryTile({
               cls.tile,
               active && cls.tileActive,
               active ? `ring-1 ${cls.ring}` : "ring-0",
+              dropActive && "ring-2 ring-primary/50",
             )}
           >
+            {/* Drop target overlay */}
+            {dropActive && (
+              <span className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center rounded-md bg-primary/10">
+                <span className="max-w-[90%] truncate rounded bg-primary px-2 py-0.5 text-[10px] font-semibold text-primary-foreground">
+                  {dropLabel}
+                </span>
+              </span>
+            )}
+
             {/* Icon block */}
             {Icon ? (
               <div
