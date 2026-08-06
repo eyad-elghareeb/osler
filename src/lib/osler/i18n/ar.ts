@@ -176,7 +176,6 @@ export const ar = {
       "اعمل جلسة مذاكرة من الاختبارات والبنوك والأسئلة المقالية ومحطات OSCE والبطاقات.",
     "qbank.home.tabContent": "المحتوى",
     "qbank.home.tabCreate": "إنشاء",
-    "qbank.home.tabPrevious": "السابقة",
     "qbank.home.tabTracker": "التتبّع",
     "qbank.home.empty": "لا توجد حزم محتوى بعد.",
     "qbank.home.start": "ابدأ",
@@ -424,6 +423,11 @@ export const ar = {
     "qbank.tracker.sourcePack": "الحزمة",
     "qbank.tracker.lastAttempt": "آخر محاولة",
     "qbank.tracker.viewQuestion": "عرض السؤال",
+    "qbank.tracker.sessions": "الجلسات الأخيرة",
+    "qbank.tracker.sessionsCount": "{n} جلسات",
+    "qbank.tracker.noSessions": "لا توجد اختبارات بعد",
+    "qbank.tracker.noSessionsDesc": "أكمل اختبارًا لتراه هنا. تُحفظ جميع الاختبارات تلقائيًا لتتمكن من مراجعتها أو إعادة حلها في أي وقت.",
+    "qbank.tracker.deleteSession": "حذف الجلسة",
 
     /* ── Review / retake ─────────────────────────────────────────────── */
     "qbank.review.title": "مراجعة الجلسة",
@@ -944,8 +948,6 @@ export const ar = {
     "qbank.home.selectAll": "اختيار الكل",
     "qbank.home.noItems": "لا توجد عناصر متاحة.",
     "qbank.home.tagsTopics": "الوسوم (المواضيع)",
-    "qbank.home.noPreviousTests": "لا توجد اختبارات سابقة",
-    "qbank.home.noPreviousTestsDesc": "أكمل اختبارًا لتراه هنا. تُحفظ جميع الاختبارات تلقائيًا.",
     "qbank.home.questionNavigator": "متصفّح الأسئلة",
     "qbank.home.answered": "تمت الإجابة {n}/{total}",
     "qbank.home.flagged": "{n} معلَّم",

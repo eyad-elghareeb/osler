@@ -48,6 +48,8 @@ import {
   SlidersHorizontal,
   ArrowLeft,
   ArrowUpDown,
+  BarChart3,
+  Target,
   Camera,
   RefreshCw,
   Download,
@@ -136,7 +138,7 @@ import { haptic } from "@/lib/osler/native";
 import { gradeWithAI, createManualEvaluation, transcribePhoto } from "@/lib/osler/grading";
 import { useI18n } from "./i18n-provider";
 import { NavigationStack } from "./navigation-stack";
-import { PageHeader } from "./ui-primitives";
+import { PageHeader, SectionHeading, StatTile, EmptyState, LoadingState } from "./ui-primitives";
 import { FolderTreeNav } from "./folder-tree-nav";
 import type { StringKey } from "@/lib/osler/i18n";
 import { loadUiLang } from "@/lib/osler/i18n";
@@ -241,7 +243,7 @@ interface QBankStudioProps {
 
 type QuizMode = "home" | "quiz" | "results" | "review";
 type TestMode = "tutor" | "timed";
-type HomeTab = "content" | "create" | "previous" | "tracker";
+type HomeTab = "content" | "create" | "tracker";
 
 interface SessionData {
   itemId: string;
@@ -1071,7 +1073,6 @@ function HomeView({
             {[
               { id: "content" as const, label: t("qbank.home.tabContent"), icon: Grid3x3 },
               { id: "create" as const, label: t("qbank.home.tabCreate"), icon: Plus },
-              { id: "previous" as const, label: t("qbank.home.tabPrevious"), icon: History },
               { id: "tracker" as const, label: t("qbank.home.tabTracker"), icon: Activity },
             ].map((t) => {
               const Icon = t.icon;
@@ -1097,7 +1098,7 @@ function HomeView({
 
         {/* Content zone — flex-1 min-h-0. Scrolling happens inside each
             tab's own content (NavigationStack home/subpage layers for the
-            Content tab; overflow-y-auto wrappers for Create/Previous). */}
+            Content tab; overflow-y-auto wrappers for Create/Tracker). */}
         <div className="flex-1 min-h-0 max-w-7xl mx-auto w-full px-4 md:px-6 lg:px-8 py-4 sm:py-6">
           {homeTab === "content" && (
             <ContentTab
@@ -1121,19 +1122,12 @@ function HomeView({
               />
             </div>
           )}
-          {homeTab === "previous" && (
-            <div className="osler-page">
-              <PreviousTestsTab
-                sessions={savedSessions}
-                onDelete={(id) => sessions.delete(id)}
-                onStartCustomSession={onStartCustomSession}
-              />
-            </div>
-          )}
           {homeTab === "tracker" && (
             <div className="osler-page">
               <TrackerTab
                 data={data}
+                sessions={savedSessions}
+                onDelete={(id) => sessions.delete(id)}
                 onStartCustomSession={onStartCustomSession}
               />
             </div>
@@ -2927,26 +2921,30 @@ function ModeCard({
   );
 }
 
-function PreviousTestsTab({
+/* ─────────────────────────────────────────────────────────────────────────
+ * TRACKER TAB — Overall / per-folder insight, recent sessions, and a
+ * wrong & flagged review browser. "Previous tests" lives here now.
+ * ───────────────────────────────────────────────────────────────────────── */
+function TrackerTab({
+  data,
   sessions: sessionList,
   onDelete,
   onStartCustomSession,
 }: {
+  data: { items: PackEntry[]; trees: Record<string, ContentTreeNode[]> } | null;
   sessions: SavedSession[];
   onDelete: (id: string) => void;
-  /**
-   * P3-1/P3-2: review a past session (read-only) or retake just its wrong
-   * questions. Both build a pool from the session's questionRefs/sourceUids.
-   */
+  /** Review a past session (read-only) or retake just its wrong questions.
+   *  Both build a pool from the session's questionRefs/sourceUids. */
   onStartCustomSession?: (
     pool: PoolQuestion[],
     meta: {
       title: string;
       engine: EngineType;
       mode?: TestMode;
-      onlyMode?: OnlyMode;
-      isReview?: boolean;
       dismissAfterCorrect?: boolean;
+      isReview?: boolean;
+      onlyMode?: OnlyMode;
       savedDrafts?: Record<string, WrittenDraft>;
       savedRubricState?: Record<string, boolean[]>;
       savedAnswers?: Record<number, number>;
@@ -2954,322 +2952,6 @@ function PreviousTestsTab({
       savedFlagged?: Record<number, boolean>;
       savedRatings?: Record<string, "easy" | "hard" | "unknown">;
       savedCurrent?: number;
-    }
-  ) => void;
-}) {
-  const { t } = useI18n();
-  const [pdfDialogOpen, setPdfDialogOpen] = React.useState(false);
-  const [pdfTargetId, setPdfTargetId] = React.useState<string | null>(null);
-  const [busy, setBusy] = React.useState<string | null>(null);
-  const [error, setError] = React.useState<string | null>(null);
-
-  /**
-   * Build a PoolQuestion[] for a saved session by:
-   *   1. loading each distinct sourceUid via loadContentByUid
-   *   2. flattening each into PoolQuestion[] via contentToQuestions
-   *   3. filtering to just the ids listed in session.questionRefs (in order)
-   *
-   * If `wrongOnly` is true, further filter to ids whose stored progress
-   * record is incorrect (using storage.getRecord).
-   *
-   * Falls back gracefully for legacy sessions without questionRefs:
-   * loads the single packUid via loadContentByUid and uses all questions.
-   */
-  const buildPoolForSession = React.useCallback(
-    async (s: SavedSession, wrongOnly: boolean): Promise<PoolQuestion[]> => {
-      const refs = s.questionRefs;
-      // Group refs by sourceUid so we load each pack only once.
-      const bySource = new Map<string, string[]>();
-      if (refs && refs.length > 0) {
-        for (const r of refs) {
-          const list = bySource.get(r.sourceUid) ?? [];
-          list.push(r.id);
-          bySource.set(r.sourceUid, list);
-        }
-      } else {
-        // Legacy session — best-effort fallback.
-        bySource.set(s.packUid, []);
-      }
-
-      const pool: PoolQuestion[] = [];
-      for (const [sourceUid, ids] of bySource.entries()) {
-        try {
-          const content = await loadContentByUid(sourceUid);
-          const stamped = poolContentToQuestions(content, sourceUid, content.meta.title);
-          if (ids.length === 0) {
-            // Legacy fallback — keep all questions.
-            pool.push(...stamped);
-          } else {
-            // Keep only the ids listed in questionRefs, in order.
-            const byId = new Map(stamped.map((q) => [q.id, q]));
-            for (const id of ids) {
-              const q = byId.get(id);
-              if (q) pool.push(q);
-            }
-          }
-        } catch (e) {
-          console.warn(`Failed to load source ${sourceUid}:`, e);
-        }
-      }
-
-      if (wrongOnly) {
-        return filterPoolByProgress(pool, "wrong");
-      }
-      return pool;
-    },
-    [],
-  );
-
-  const handleReview = React.useCallback(
-    async (s: SavedSession) => {
-      if (!onStartCustomSession) return;
-      setBusy(s.id);
-      setError(null);
-      try {
-        const pool = await buildPoolForSession(s, false);
-        if (pool.length === 0) {
-          setError(t("qbank.review.noQuestions"));
-          return;
-        }
-        // Convert answers/revealed/flagged from string-keyed (JSON) to number-keyed
-        const savedAnswers: Record<number, number> = {};
-        const savedRevealed: Record<number, boolean> = {};
-        const savedFlagged: Record<number, boolean> = {};
-        for (const [k, v] of Object.entries(s.answers)) savedAnswers[+k] = v;
-        for (const [k, v] of Object.entries(s.revealed)) savedRevealed[+k] = v;
-        for (const [k, v] of Object.entries(s.flagged)) savedFlagged[+k] = v;
-        onStartCustomSession(pool, {
-          title: s.packTitle,
-          engine: s.engine,
-          mode: s.mode,
-          isReview: true,
-          savedDrafts: s.writtenDrafts,
-          savedRubricState: s.rubricState,
-          savedAnswers,
-          savedRevealed,
-          savedFlagged,
-          savedRatings: s.ratings,
-          savedCurrent: s.current,
-        });
-      } finally {
-        setBusy(null);
-      }
-    },
-    [buildPoolForSession, onStartCustomSession, t],
-  );
-
-  const handleRetakeWrong = React.useCallback(
-    async (s: SavedSession) => {
-      if (!onStartCustomSession) return;
-      setBusy(s.id + "-retake");
-      setError(null);
-      try {
-        const pool = await buildPoolForSession(s, true);
-        if (pool.length === 0) {
-          setError(t("qbank.review.noQuestions"));
-          return;
-        }
-        onStartCustomSession(pool, {
-          title: `${s.packTitle} — ${t("qbank.review.retakeWrong")}`,
-          engine: s.engine,
-          mode: s.mode,
-          onlyMode: "wrong",
-          savedDrafts: s.writtenDrafts,
-          savedRubricState: s.rubricState,
-        });
-      } finally {
-        setBusy(null);
-      }
-    },
-    [buildPoolForSession, onStartCustomSession, t],
-  );
-
-  const handleExport = React.useCallback(async (s: SavedSession, opts: PdfExportOptions) => {
-    const totalTimeSec = Math.floor(((s.completedAt ?? Date.now()) - s.startedAt) / 1000);
-    const avgTimeSec = s.answeredCount ? Math.round(totalTimeSec / s.answeredCount) : 0;
-    const pct = s.totalQuestions ? Math.round((s.correctCount / s.totalQuestions) * 100) : 0;
-    const pool = await buildPoolForSession(s, false);
-    const questions: FullQuestion[] = pool.map((q) => ({
-      stem: q.stem,
-      choices: q.choices,
-      correct: q.correct,
-      explanation: q.explanation,
-      modelAnswer: q.modelAnswer,
-      isWritten: q.correct < 0,
-      difficulty: q.difficulty,
-      tags: q.tags,
-      rubric: q.rubric,
-    }));
-    const doc = generateResultsPdf({
-      packTitle: s.packTitle,
-      mode: s.mode,
-      score: {
-        pct,
-        correct: s.correctCount,
-        total: s.totalQuestions,
-        answered: s.answeredCount,
-        incorrect: s.incorrectCount,
-        flagged: s.flaggedCount,
-        percentile: Math.min(99, Math.max(1, Math.round(pct * 0.9 + 5))),
-        totalTime: formatTime(totalTimeSec),
-        avgTime: formatTime(avgTimeSec),
-      },
-      questions,
-      userAnswers: s.answers,
-      revealed: s.revealed,
-      flagged: s.flagged,
-      opts,
-    });
-    downloadPdf(doc, `${s.packTitle} — Results`);
-    toast({ title: t("pdf.pdfReady"), description: t("pdf.pdfReadyDesc") });
-  }, [buildPoolForSession, t]);
-
-  if (sessionList.length === 0) {
-    return (
-      <div className="qbank-card text-center py-12">
-        <History className="size-10 text-muted-foreground mx-auto mb-3" />
-        <h3 className="text-base font-semibold mb-1">{t("qbank.home.noPreviousTests")}</h3>
-        <p className="text-sm text-muted-foreground">
-          {t("qbank.home.noPreviousTestsDesc")}
-        </p>
-      </div>
-    );
-  }
-
-  return (
-    <div className="space-y-3">
-      {error && (
-        <div className="qbank-card text-sm text-destructive bg-destructive/5 px-4 py-3">
-          {error}
-        </div>
-      )}
-      {sessionList.map((s) => {
-        const total = s.totalQuestions;
-        const pct = total ? Math.round((s.correctCount / total) * 100) : 0;
-        return (
-          <div
-            key={s.id}
-            className="qbank-card flex items-center gap-4"
-          >
-            <div
-              className={cn(
-                "size-12 rounded-xl flex items-center justify-center shrink-0 text-sm font-bold",
-                pct >= 70
-                  ? "bg-blue-500/15 text-blue-500"
-                  : pct >= 50
-                  ? "bg-amber-500/15 text-amber-500"
-                  : "bg-red-500/15 text-red-500"
-              )}
-            >
-              {pct}%
-            </div>
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2 mb-0.5 flex-wrap">
-                <span className="text-sm font-semibold truncate">{s.packTitle}</span>
-                <Badge variant="secondary" className="text-[10px] capitalize">
-                  {s.engine}
-                </Badge>
-                <Badge variant="outline" className="text-[10px] capitalize">
-                  {s.mode}
-                </Badge>
-              </div>
-              <div className="flex items-center gap-3 text-[11px] text-muted-foreground">
-                <span>{s.correctCount}/{total} correct</span>
-                <span>·</span>
-                <span>{s.answeredCount} answered</span>
-                <span>·</span>
-                <span>{s.flaggedCount} flagged</span>
-                <span>·</span>
-                <span>{new Date(s.startedAt).toLocaleDateString()}</span>
-              </div>
-            </div>
-            {/* P3-1: Review (read-only) */}
-            {onStartCustomSession && (
-              <button
-                onClick={() => handleReview(s)}
-                disabled={busy !== null}
-                className="size-8 rounded-md hover:bg-primary/10 hover:text-primary flex items-center justify-center shrink-0 transition-colors disabled:opacity-40"
-                title={t("qbank.review.openReview")}
-              >
-                {busy === s.id ? (
-                  <Loader2 className="size-4 animate-spin" />
-                ) : (
-                  <Eye className="size-4" />
-                )}
-              </button>
-            )}
-            {/* P3-2: Retake wrong-only */}
-            {onStartCustomSession && (
-              <button
-                onClick={() => handleRetakeWrong(s)}
-                disabled={busy !== null || s.incorrectCount === 0}
-                className="size-8 rounded-md hover:bg-primary/10 hover:text-primary flex items-center justify-center shrink-0 transition-colors disabled:opacity-40"
-                title={t("qbank.review.retakeWrong")}
-              >
-                {busy === s.id + "-retake" ? (
-                  <Loader2 className="size-4 animate-spin" />
-                ) : (
-                  <RotateCcw className="size-4" />
-                )}
-              </button>
-            )}
-            {/* Export PDF */}
-            <button
-              onClick={() => {
-                setPdfTargetId(s.id);
-                setPdfDialogOpen(true);
-              }}
-              className="size-8 rounded-md hover:text-primary hover:bg-primary/10 flex items-center justify-center shrink-0 transition-colors"
-              title={t("pdf.exportResults")}
-            >
-              <FileText className="size-4" />
-            </button>
-            <button
-              onClick={() => onDelete(s.id)}
-              className="size-8 rounded-md hover:bg-destructive/10 hover:text-destructive flex items-center justify-center shrink-0 transition-colors"
-              title="Delete session"
-            >
-              <Trash2 className="size-4" />
-            </button>
-          </div>
-        );
-      })}
-      {/* PDF export dialog for selected session */}
-      <PdfExportDialog
-        open={pdfDialogOpen}
-        onOpenChange={(open) => { setPdfDialogOpen(open); if (!open) setPdfTargetId(null); }}
-        defaultTitle={pdfTargetId ? sessionList.find(s => s.id === pdfTargetId)?.packTitle ?? "Session" : "Session"}
-        variant="quiz"
-        onExport={(opts) => {
-          const s = sessionList.find(s => s.id === pdfTargetId);
-          if (s) handleExport(s, opts);
-        }}
-      />
-    </div>
-  );
-}
-
-
-
-/* ─────────────────────────────────────────────────────────────────────────
- * TRACKER TAB — Overall / per-folder insight + wrong & flagged browser
- * ───────────────────────────────────────────────────────────────────────── */
-function TrackerTab({
-  data,
-  onStartCustomSession,
-}: {
-  data: { items: PackEntry[]; trees: Record<string, ContentTreeNode[]> } | null;
-  onStartCustomSession?: (
-    pool: PoolQuestion[],
-    meta: {
-      title: string;
-      engine: EngineType;
-      mode?: TestMode;
-      dismissAfterCorrect?: boolean;
-      isReview?: boolean;
-      onlyMode?: OnlyMode;
-      savedDrafts?: Record<string, WrittenDraft>;
-      savedRubricState?: Record<string, boolean[]>;
     }
   ) => void;
 }) {
@@ -3292,6 +2974,12 @@ function TrackerTab({
   const [showDismissed, setShowDismissed] = React.useState(false);
   // Expanded pack uid → resolves question text lazily on row-expand.
   const [expandedRecords, setExpandedRecords] = React.useState<Set<string>>(new Set());
+
+  // Past-session PDF export + busy/error state for replay actions.
+  const [sessionPdfOpen, setSessionPdfOpen] = React.useState(false);
+  const [sessionPdfTargetId, setSessionPdfTargetId] = React.useState<string | null>(null);
+  const [busy, setBusy] = React.useState<string | null>(null);
+  const [sessionError, setSessionError] = React.useState<string | null>(null);
 
   // Build a uid → content map for resolving question text on expand.
   const contentByUid = React.useMemo(() => {
@@ -3459,6 +3147,160 @@ function TrackerTab({
     });
   };
 
+  /**
+   * Build a PoolQuestion[] for a saved session by loading each distinct
+   * sourceUid via loadContentByUid, flattening it into PoolQuestion[] and
+   * filtering to just the ids listed in session.questionRefs (in order).
+   * If `wrongOnly`, further filter to ids whose stored progress record is
+   * incorrect. Falls back gracefully for legacy sessions without questionRefs.
+   */
+  const buildPoolForSession = React.useCallback(
+    async (s: SavedSession, wrongOnly: boolean): Promise<PoolQuestion[]> => {
+      const refs = s.questionRefs;
+      const bySource = new Map<string, string[]>();
+      if (refs && refs.length > 0) {
+        for (const r of refs) {
+          const list = bySource.get(r.sourceUid) ?? [];
+          list.push(r.id);
+          bySource.set(r.sourceUid, list);
+        }
+      } else {
+        bySource.set(s.packUid, []);
+      }
+
+      const pool: PoolQuestion[] = [];
+      for (const [sourceUid, ids] of bySource.entries()) {
+        try {
+          const content = await loadContentByUid(sourceUid);
+          const stamped = poolContentToQuestions(content, sourceUid, content.meta.title);
+          if (ids.length === 0) {
+            pool.push(...stamped);
+          } else {
+            const byId = new Map(stamped.map((q) => [q.id, q]));
+            for (const id of ids) {
+              const q = byId.get(id);
+              if (q) pool.push(q);
+            }
+          }
+        } catch (e) {
+          console.warn(`Failed to load source ${sourceUid}:`, e);
+        }
+      }
+
+      if (wrongOnly) {
+        return filterPoolByProgress(pool, "wrong");
+      }
+      return pool;
+    },
+    [],
+  );
+
+  const handleReviewSession = React.useCallback(
+    async (s: SavedSession) => {
+      if (!onStartCustomSession) return;
+      setBusy(s.id);
+      setSessionError(null);
+      try {
+        const pool = await buildPoolForSession(s, false);
+        if (pool.length === 0) {
+          setSessionError(t("qbank.review.noQuestions"));
+          return;
+        }
+        const savedAnswers: Record<number, number> = {};
+        const savedRevealed: Record<number, boolean> = {};
+        const savedFlagged: Record<number, boolean> = {};
+        for (const [k, v] of Object.entries(s.answers)) savedAnswers[+k] = v;
+        for (const [k, v] of Object.entries(s.revealed)) savedRevealed[+k] = v;
+        for (const [k, v] of Object.entries(s.flagged)) savedFlagged[+k] = v;
+        onStartCustomSession(pool, {
+          title: s.packTitle,
+          engine: s.engine,
+          mode: s.mode,
+          isReview: true,
+          savedDrafts: s.writtenDrafts,
+          savedRubricState: s.rubricState,
+          savedAnswers,
+          savedRevealed,
+          savedFlagged,
+          savedRatings: s.ratings,
+          savedCurrent: s.current,
+        });
+      } finally {
+        setBusy(null);
+      }
+    },
+    [buildPoolForSession, onStartCustomSession, t],
+  );
+
+  const handleRetakeWrongSession = React.useCallback(
+    async (s: SavedSession) => {
+      if (!onStartCustomSession) return;
+      setBusy(s.id + "-retake");
+      setSessionError(null);
+      try {
+        const pool = await buildPoolForSession(s, true);
+        if (pool.length === 0) {
+          setSessionError(t("qbank.review.noQuestions"));
+          return;
+        }
+        onStartCustomSession(pool, {
+          title: `${s.packTitle} — ${t("qbank.review.retakeWrong")}`,
+          engine: s.engine,
+          mode: s.mode,
+          onlyMode: "wrong",
+          savedDrafts: s.writtenDrafts,
+          savedRubricState: s.rubricState,
+        });
+      } finally {
+        setBusy(null);
+      }
+    },
+    [buildPoolForSession, onStartCustomSession, t],
+  );
+
+  const handleExportSession = React.useCallback(
+    async (s: SavedSession, opts: PdfExportOptions) => {
+      const totalTimeSec = Math.floor(((s.completedAt ?? Date.now()) - s.startedAt) / 1000);
+      const avgTimeSec = s.answeredCount ? Math.round(totalTimeSec / s.answeredCount) : 0;
+      const pct = s.totalQuestions ? Math.round((s.correctCount / s.totalQuestions) * 100) : 0;
+      const pool = await buildPoolForSession(s, false);
+      const questions: FullQuestion[] = pool.map((q) => ({
+        stem: q.stem,
+        choices: q.choices,
+        correct: q.correct,
+        explanation: q.explanation,
+        modelAnswer: q.modelAnswer,
+        isWritten: q.correct < 0,
+        difficulty: q.difficulty,
+        tags: q.tags,
+        rubric: q.rubric,
+      }));
+      const doc = generateResultsPdf({
+        packTitle: s.packTitle,
+        mode: s.mode,
+        score: {
+          pct,
+          correct: s.correctCount,
+          total: s.totalQuestions,
+          answered: s.answeredCount,
+          incorrect: s.incorrectCount,
+          flagged: s.flaggedCount,
+          percentile: Math.min(99, Math.max(1, Math.round(pct * 0.9 + 5))),
+          totalTime: formatTime(totalTimeSec),
+          avgTime: formatTime(avgTimeSec),
+        },
+        questions,
+        userAnswers: s.answers,
+        revealed: s.revealed,
+        flagged: s.flagged,
+        opts,
+      });
+      downloadPdf(doc, `${s.packTitle} — Results`);
+      toast({ title: t("pdf.pdfReady"), description: t("pdf.pdfReadyDesc") });
+    },
+    [buildPoolForSession, t],
+  );
+
   const [trackerPdfOpen, setTrackerPdfOpen] = React.useState(false);
 
   // Build folder stats list for tracker PDF export
@@ -3507,11 +3349,7 @@ function TrackerTab({
   }, [overall, folderStatsList, t]);
 
   if (!data) {
-    return (
-      <div className="flex items-center justify-center py-16">
-        <Loader2 className="size-6 animate-spin text-muted-foreground" />
-      </div>
-    );
+    return <LoadingState label={t("qbank.tracker.loading")} />;
   }
 
   return (
@@ -3529,51 +3367,156 @@ function TrackerTab({
             onClick={() => setTrackerPdfOpen(true)}
             className="rounded-xl shrink-0"
           >
-            <FileText className="size-4 mr-1.5" /> {t("pdf.exportReport")}
+            <FileText className="size-4 me-1.5" /> {t("pdf.exportReport")}
           </Button>
         )}
       </div>
 
-      {/* P5-2: Overview */}
+      {/* Overview */}
       <div>
-        <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground mb-3">
-          {t("qbank.tracker.overview")}
-        </h3>
+        <SectionHeading icon={BarChart3}>{t("qbank.tracker.overview")}</SectionHeading>
         {overall.attempted === 0 ? (
-          <div className="qbank-card text-center py-10 text-sm text-muted-foreground">
-            {t("qbank.tracker.noRecords")}
-          </div>
+          <EmptyState icon={Activity} title={t("qbank.tracker.noRecords")} />
         ) : (
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-            <div className="qbank-card">
-              <div className="text-xs text-muted-foreground">{t("qbank.tracker.attempted")}</div>
-              <div className="text-2xl font-bold tabular-nums">{overall.attempted}</div>
-            </div>
-            <div className="qbank-card">
-              <div className="text-xs text-muted-foreground">{t("qbank.tracker.correctLabel")}</div>
-              <div className="text-2xl font-bold tabular-nums text-success">{overall.correct}</div>
-            </div>
-            <div className="qbank-card">
-              <div className="text-xs text-muted-foreground">{t("qbank.tracker.wrongLabel")}</div>
-              <div className="text-2xl font-bold tabular-nums text-destructive">{overall.wrong}</div>
-            </div>
-            <div className="qbank-card">
-              <div className="text-xs text-muted-foreground">{t("qbank.tracker.accuracy")}</div>
-              <div className="text-2xl font-bold tabular-nums">{overall.accuracy}%</div>
-            </div>
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+            <StatTile label={t("qbank.tracker.attempted")} value={overall.attempted} icon={ListChecks} color="primary" />
+            <StatTile label={t("qbank.tracker.correctLabel")} value={overall.correct} icon={CheckCircle2} color="success" />
+            <StatTile label={t("qbank.tracker.wrongLabel")} value={overall.wrong} icon={X} color="destructive" />
+            <StatTile label={t("qbank.tracker.accuracy")} value={`${overall.accuracy}%`} icon={Target} color="warning" />
           </div>
         )}
       </div>
 
-      {/* P5-3: By folder — single qbank tree, folder hierarchy */}
+      {/* Recent sessions — merged from the old Previous Tests tab */}
       <div>
-        <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground mb-3">
-          {t("qbank.tracker.byFolder")}
-        </h3>
+        <SectionHeading
+          icon={History}
+          actions={
+            sessionList.length > 0 ? (
+              <span className="text-xs text-muted-foreground tabular-nums">
+                {t("qbank.tracker.sessionsCount", { n: sessionList.length })}
+              </span>
+            ) : undefined
+          }
+        >
+          {t("qbank.tracker.sessions")}
+        </SectionHeading>
+        {sessionList.length === 0 ? (
+          <EmptyState
+            icon={History}
+            title={t("qbank.tracker.noSessions")}
+            description={t("qbank.tracker.noSessionsDesc")}
+          />
+        ) : (
+          <div className="space-y-3">
+            {sessionError && (
+              <div className="osler-card--default text-sm text-destructive bg-destructive/5">
+                {sessionError}
+              </div>
+            )}
+            {sessionList.map((s) => {
+              const total = s.totalQuestions;
+              const pct = total ? Math.round((s.correctCount / total) * 100) : 0;
+              const durationSec = Math.floor(((s.completedAt ?? Date.now()) - s.startedAt) / 1000);
+              return (
+                <div key={s.id} className="osler-card--default flex items-center gap-4">
+                  <div
+                    className={cn(
+                      "size-12 rounded-xl flex items-center justify-center shrink-0 text-sm font-bold tabular-nums",
+                      pct >= 70
+                        ? "bg-success/15 text-success"
+                        : pct >= 50
+                          ? "bg-warning/15 text-warning"
+                          : "bg-destructive/15 text-destructive",
+                    )}
+                  >
+                    {pct}%
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-1 flex-wrap">
+                      <span className="text-sm font-semibold truncate">{s.packTitle}</span>
+                      <Badge variant="secondary" className="text-[10px] capitalize">
+                        {ENGINE_META[s.engine]?.label ?? s.engine}
+                      </Badge>
+                      <Badge variant="outline" className="text-[10px] capitalize">
+                        {s.mode === "timed" ? t("qbank.home.timed") : t("qbank.home.tutor")}
+                      </Badge>
+                    </div>
+                    <div className="flex items-center gap-x-3 gap-y-1 text-[11px] text-muted-foreground flex-wrap">
+                      <span className="tabular-nums">
+                        {s.correctCount}/{total} {t("qbank.tracker.correctLabel").toLowerCase()}
+                      </span>
+                      <span aria-hidden>·</span>
+                      <span className="tabular-nums">{s.answeredCount} {t("qbank.tracker.attempted").toLowerCase()}</span>
+                      <span aria-hidden>·</span>
+                      <span className="tabular-nums">{s.flaggedCount} {t("qbank.tracker.flaggedLabel").toLowerCase()}</span>
+                      <span aria-hidden>·</span>
+                      <span className="flex items-center gap-1 tabular-nums">
+                        <Clock className="size-3" />
+                        {formatTime(durationSec)}
+                      </span>
+                      <span aria-hidden>·</span>
+                      <span>{new Date(s.startedAt).toLocaleDateString()}</span>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-1 shrink-0">
+                    {onStartCustomSession && (
+                      <Button
+                        variant="ghost"
+                        size="iconSm"
+                        onClick={() => handleReviewSession(s)}
+                        disabled={busy !== null}
+                        title={t("qbank.review.openReview")}
+                      >
+                        {busy === s.id ? <Loader2 className="size-4 animate-spin" /> : <Eye className="size-4" />}
+                      </Button>
+                    )}
+                    {onStartCustomSession && (
+                      <Button
+                        variant="ghost"
+                        size="iconSm"
+                        onClick={() => handleRetakeWrongSession(s)}
+                        disabled={busy !== null || s.incorrectCount === 0}
+                        title={t("qbank.review.retakeWrong")}
+                      >
+                        {busy === s.id + "-retake" ? <Loader2 className="size-4 animate-spin" /> : <RotateCcw className="size-4" />}
+                      </Button>
+                    )}
+                    <Button
+                      variant="ghost"
+                      size="iconSm"
+                      onClick={() => {
+                        setSessionPdfTargetId(s.id);
+                        setSessionPdfOpen(true);
+                      }}
+                      title={t("pdf.exportResults")}
+                    >
+                      <FileText className="size-4" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="iconSm"
+                      onClick={() => onDelete(s.id)}
+                      className="hover:text-destructive"
+                      title={t("qbank.tracker.deleteSession")}
+                    >
+                      <Trash2 className="size-4" />
+                    </Button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* By folder — single qbank tree, folder hierarchy */}
+      <div>
+        <SectionHeading icon={Folder}>{t("qbank.tracker.byFolder")}</SectionHeading>
         {(() => {
           const qbankTree = data.trees.quiz ?? data.trees.bank ?? data.trees.written ?? [];
           if (qbankTree.length === 0) {
-            return <div className="qbank-card text-center py-10 text-sm text-muted-foreground">{t("qbank.tracker.noRecords")}</div>;
+            return <EmptyState icon={Folder} title={t("qbank.tracker.noRecords")} />;
           }
           return (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
@@ -3586,11 +3529,11 @@ function TrackerTab({
                 const isBranch = node.items.length > 0;
                 const NodeIcon = isBranch ? Folder : (ENGINE_ICONS[nodeType] ?? ListChecks);
                 return (
-                  <div key={node.uid} className="qbank-card">
+                  <div key={node.uid} className="osler-card--default">
                     <div className="flex items-center gap-3 mb-2">
                       <div
                         className="size-9 rounded-lg flex items-center justify-center shrink-0"
-                        style={{ backgroundColor: `${meta.color}/15`, color: meta.color }}
+                        style={{ backgroundColor: `color-mix(in oklch, ${meta.color} 15%, transparent)`, color: meta.color }}
                       >
                         <NodeIcon className="size-4" />
                       </div>
@@ -3616,7 +3559,7 @@ function TrackerTab({
                         className="h-full rounded-full transition-all duration-300"
                         style={{
                           width: `${acc}%`,
-                          backgroundColor: acc >= 70 ? "oklch(0.65 0.17 155)" : acc >= 50 ? "oklch(0.75 0.15 80)" : "oklch(0.6 0.2 25)",
+                          backgroundColor: acc >= 70 ? "var(--success)" : acc >= 50 ? "var(--warning)" : "var(--destructive)",
                         }}
                       />
                     </div>
@@ -3628,40 +3571,38 @@ function TrackerTab({
         })()}
       </div>
 
-      {/* P5-4 + P5-5: Wrong & Flagged browser + Start review */}
+      {/* Wrong & Flagged browser + Start review */}
       <div>
-        <div className="flex items-center justify-between mb-3">
-          <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
-            {t("qbank.tracker.wrongAndFlagged")}
-          </h3>
-          <div className="flex items-center gap-3">
-            <button
-              onClick={() => setShowDismissed((s) => !s)}
-              className="text-xs text-muted-foreground hover:text-foreground transition-colors"
-            >
-              {showDismissed ? t("qbank.tracker.hideDismissed") : t("qbank.tracker.showDismissed")}
-            </button>
-            {visibleRecords.length > 0 && (
+        <SectionHeading
+          icon={Flag}
+          actions={
+            <div className="flex items-center gap-3">
               <button
-                onClick={toggleAllVisible}
-                className="text-xs text-primary hover:underline"
+                onClick={() => setShowDismissed((s) => !s)}
+                className="text-xs text-muted-foreground hover:text-foreground transition-colors"
               >
-                {selectedKeys.size === visibleRecords.length
-                  ? t("qbank.tracker.selectAll")
-                  : t("qbank.tracker.selectAll")}
+                {showDismissed ? t("qbank.tracker.hideDismissed") : t("qbank.tracker.showDismissed")}
               </button>
-            )}
-          </div>
-        </div>
+              {visibleRecords.length > 0 && (
+                <button
+                  onClick={toggleAllVisible}
+                  className="text-xs text-primary hover:underline"
+                >
+                  {t("qbank.tracker.selectAll")}
+                </button>
+              )}
+            </div>
+          }
+        >
+          {t("qbank.tracker.wrongAndFlagged")}
+        </SectionHeading>
 
         {visibleRecords.length === 0 ? (
-          <div className="qbank-card text-center py-10 text-sm text-muted-foreground">
-            {t("qbank.tracker.noRecords")}
-          </div>
+          <EmptyState icon={Flag} title={t("qbank.tracker.noRecords")} />
         ) : (
           <>
             {/* Review-session toolbar */}
-            <div className="qbank-card flex flex-wrap items-center gap-3 mb-3">
+            <div className="osler-card--default flex flex-wrap items-center gap-3 mb-3">
               <span className="text-xs text-muted-foreground tabular-nums">
                 {t("qbank.tracker.selected", { n: selectedKeys.size })}
               </span>
@@ -3692,7 +3633,7 @@ function TrackerTab({
                 const q = isExpanded ? resolveQuestion(r.uid, r.qid) : null;
                 const packTitle = packTitleFor(r.uid);
                 return (
-                  <div key={r.key} className="qbank-card">
+                  <div key={r.key} className="osler-card--default">
                     <div className="flex items-center gap-3">
                       <input
                         type="checkbox"
@@ -3721,8 +3662,8 @@ function TrackerTab({
                             {r.correct ? t("qbank.tracker.correctLabel") : t("qbank.tracker.wrongLabel")}
                           </Badge>
                           {r.flagged && (
-                            <Badge variant="outline" className="text-[10px] border-amber-500/30 text-amber-500">
-                              <Flag className="size-2.5 mr-1" />
+                            <Badge variant="outline" className="text-[10px] border-warning/30 text-warning">
+                              <Flag className="size-2.5 me-1" />
                               {t("qbank.tracker.flaggedLabel")}
                             </Badge>
                           )}
@@ -3781,6 +3722,20 @@ function TrackerTab({
         defaultTitle="Tracker Report"
         variant="dashboard"
         onExport={handleExportTrackerPdf}
+      />
+
+      <PdfExportDialog
+        open={sessionPdfOpen}
+        onOpenChange={(open) => {
+          setSessionPdfOpen(open);
+          if (!open) setSessionPdfTargetId(null);
+        }}
+        defaultTitle={sessionPdfTargetId ? sessionList.find((s) => s.id === sessionPdfTargetId)?.packTitle ?? "Session" : "Session"}
+        variant="quiz"
+        onExport={(opts) => {
+          const s = sessionList.find((s) => s.id === sessionPdfTargetId);
+          if (s) handleExportSession(s, opts);
+        }}
       />
     </div>
   );

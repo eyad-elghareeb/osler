@@ -176,7 +176,6 @@ export const en = {
       "Build a study session from quizzes, banks, written prompts, OSCE stations, and flashcards.",
     "qbank.home.tabContent": "Content",
     "qbank.home.tabCreate": "Create",
-    "qbank.home.tabPrevious": "Previous",
     "qbank.home.tabTracker": "Tracker",
     "qbank.home.empty": "No content packs available yet.",
     "qbank.home.start": "Start",
@@ -424,6 +423,11 @@ export const en = {
     "qbank.tracker.sourcePack": "Pack",
     "qbank.tracker.lastAttempt": "Last attempt",
     "qbank.tracker.viewQuestion": "View question",
+    "qbank.tracker.sessions": "Recent sessions",
+    "qbank.tracker.sessionsCount": "{n} sessions",
+    "qbank.tracker.noSessions": "No tests yet",
+    "qbank.tracker.noSessionsDesc": "Complete a test to see it here. Every test is saved automatically so you can review or retake it anytime.",
+    "qbank.tracker.deleteSession": "Delete session",
 
     /* ── Review / retake ─────────────────────────────────────────────── */
     "qbank.review.title": "Review session",
@@ -949,8 +953,6 @@ export const en = {
     "qbank.home.selectAll": "Select all",
     "qbank.home.noItems": "No items available.",
     "qbank.home.tagsTopics": "Tags (Topics)",
-    "qbank.home.noPreviousTests": "No previous tests",
-    "qbank.home.noPreviousTestsDesc": "Complete a test to see it here. All tests are saved automatically.",
     "qbank.home.questionNavigator": "Question Navigator",
     "qbank.home.answered": "{n}/{total} answered",
     "qbank.home.flagged": "{n} flagged",
