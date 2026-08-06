@@ -28,6 +28,7 @@
 
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
+import { mergeQbank, mergeFlashcards, gzipString, gunzipBytes, base64ToBytes } from "./sync-docs";
 const PASSWORD_ITERATIONS = 100_000;
 const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 // After a session token's JWT `exp` passes, it may still be rotated through
@@ -37,7 +38,11 @@ const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 // session dies out naturally ~GRACE after its last refresh.
 const SESSION_REFRESH_GRACE_MS = 30 * 24 * 60 * 60 * 1000;
 const RESET_TTL_MS = 30 * 60 * 1000;
-const MAX_DOCUMENT_BYTES = 900_000;
+// Max raw-JSON size of a merged sync document. Stored gzip-compressed in D1
+// (~8x smaller), so a 4MB raw document only occupies ~500KB of DB space.
+const MAX_DOCUMENT_BYTES = 4_000_000;
+// Cap on the decompressed size of an incoming gzip request body (sync PUTs).
+const MAX_GZIP_BODY_BYTES = 8_000_000;
 const OAUTH_TTL_MS = 10 * 60 * 1000;
 const HANDOFF_TTL_MS = 5 * 60 * 1000;
 
@@ -233,9 +238,30 @@ async function decryptField(data: string | null | undefined, encryptionKey?: str
   }
 }
 
-async function readJson(request: Request): Promise<any> {
+/** Read a request body as text, transparently decompressing gzip bodies
+ *  (sent by the sync client when the payload is large enough to be worth it).
+ *  `maxTextBytes` bounds the DECOMPRESSED size. */
+async function requestBodyText(request: Request, maxTextBytes: number): Promise<string> {
+  const encoding = request.headers.get("content-encoding") ?? "";
+  if (encoding.includes("gzip")) {
+    const buf = await request.arrayBuffer();
+    const text = await gunzipBytes(new Uint8Array(buf));
+    if (text.length > maxTextBytes) throw new Error("Request body is too large");
+    return text;
+  }
   const text = await request.text();
-  if (text.length > 1_000_000) throw new Error("Request body is too large");
+  if (text.length > maxTextBytes) throw new Error("Request body is too large");
+  return text;
+}
+
+async function readJson(request: Request): Promise<any> {
+  return readJsonBody(request, 1_000_000);
+}
+
+/** Like readJson but with an explicit decompressed-size cap. Used by the sync
+ *  PUT where gzip'd progress snapshots can legitimately exceed 1MB raw. */
+async function readJsonBody(request: Request, maxBytes: number): Promise<any> {
+  const text = await requestBodyText(request, maxBytes);
   try { return safeParseJSON(text, 32); } catch { throw new Error("Invalid JSON body"); }
 }
 
@@ -244,8 +270,7 @@ async function readJson(request: Request): Promise<any> {
  *  the 1 MB default cap. Bounded by `maxBytes` so the Worker never buffers
  *  unbounded input. */
 async function readJsonLarge(request: Request, maxBytes = 30_000_000): Promise<any> {
-  const text = await request.text();
-  if (text.length > maxBytes) throw new Error("Request body is too large");
+  const text = await requestBodyText(request, maxBytes);
   try { return safeParseJSON(text, 32); } catch { throw new Error("Invalid JSON body"); }
 }
 
@@ -362,7 +387,7 @@ function cors(origin: string): Record<string, string> {
   return {
     "access-control-allow-origin": origin,
     "access-control-allow-methods": "GET, POST, PUT, PATCH, DELETE, OPTIONS",
-    "access-control-allow-headers": "authorization, content-type",
+    "access-control-allow-headers": "authorization, content-type, content-encoding",
     "access-control-max-age": "86400",
     vary: "Origin",
   };
@@ -505,29 +530,15 @@ async function refreshSession(request: Request, env: Env): Promise<{ token: stri
 }
 
 // ─── Sync merging ────────────────────────────────────────────────────────────
-
-function mergeQbank(remote: Record<string, any>, local: Record<string, any>): Record<string, any> {
-  const out = { ...remote };
-  for (const [key, value] of Object.entries(local || {})) {
-    if (!value || typeof value !== "object") continue;
-    if (!out[key] || Number(value.timestamp || 0) >= Number(out[key]?.timestamp || 0)) out[key] = value;
-  }
-  return out;
-}
-
-function mergeFlashcards(remote: Record<string, any>, local: Record<string, any>): Record<string, any> {
-  const out = { ...remote };
-  for (const [key, value] of Object.entries(local || {})) {
-    if (!value || typeof value !== "object") continue;
-    if (!out[key] || Number(value.lastReviewed || 0) >= Number(out[key]?.lastReviewed || 0)) out[key] = value;
-  }
-  return out;
-}
+// mergeQbank / mergeFlashcards now live in ./sync-docs (pure, unit-tested).
 
 async function getDocument(env: Env, userId: string, kind: string): Promise<{ records: Record<string, any>; updatedAt: number }> {
-  const row = await env.DB.prepare("SELECT payload, updated_at FROM progress_documents WHERE user_id = ? AND kind = ?").bind(userId, kind).first<{ payload: string; updated_at: number }>();
-  if (!row) return { records: {}, updatedAt: 0 };
-  try { return { records: JSON.parse(row.payload), updatedAt: row.updated_at }; } catch { return { records: {}, updatedAt: 0 }; }
+  const row = await env.DB.prepare("SELECT payload, compressed, updated_at FROM progress_documents WHERE user_id = ? AND kind = ?").bind(userId, kind).first<{ payload: string; compressed: number; updated_at: number }>();
+  if (!row || !row.payload) return { records: {}, updatedAt: 0 };
+  try {
+    const json = row.compressed ? await gunzipBytes(base64ToBytes(row.payload)) : row.payload;
+    return { records: JSON.parse(json), updatedAt: row.updated_at };
+  } catch { return { records: {}, updatedAt: 0 }; }
 }
 
 // ─── Google OAuth ────────────────────────────────────────────────────────────
@@ -2919,22 +2930,30 @@ export default {
       }
       if (request.method === "PUT" && url.pathname === "/v1/sync") {
         if (!rateLimit(ip, "sync")) return json({ error: "Too many requests" }, 429, origin, log);
-        const body = await readJson(request); const statements: any[] = []; const response: Record<string, any> = {};
+        const body = await readJsonBody(request, MAX_GZIP_BODY_BYTES); const statements: any[] = []; const response: Record<string, any> = {};
         for (const kind of ["qbank", "flashcards"]) {
           if (!body[kind] || typeof body[kind] !== "object") continue;
           const local = body[kind].records;
           if (!local || typeof local !== "object" || Array.isArray(local)) return json({ error: "Invalid progress document" }, 400, origin, log);
           const current = await getDocument(env, session.user.id, kind);
-          const ifUnmodifiedSince = request.headers.get("If-Unmodified-Since");
-          if (ifUnmodifiedSince) {
-            const since = Number(ifUnmodifiedSince);
-            if (!isNaN(since) && current.updatedAt > since) return json({ error: "Conflict: data has been modified since last fetch", conflict: true, serverUpdatedAt: current.updatedAt }, 409, origin, log);
+          // Per-kind optimistic concurrency: each document compares against
+          // the updatedAt snapshot the client saw for THAT kind, so a qbank
+          // change doesn't spuriously 409 the flashcards write (and vice versa).
+          const sinceRaw = request.headers.get(`x-sync-since-${kind}`) ?? request.headers.get("If-Unmodified-Since");
+          if (sinceRaw) {
+            const since = Number(sinceRaw);
+            if (!isNaN(since) && current.updatedAt > since) return json({ error: "Conflict: data has been modified since last fetch", conflict: true, serverUpdatedAt: current.updatedAt, kind }, 409, origin, log);
           }
-          const records = kind === "qbank" ? mergeQbank(current.records, local) : mergeFlashcards(current.records, local);
-          const mergedBytes = new TextEncoder().encode(JSON.stringify(records)).length;
+          const merged = kind === "qbank" ? mergeQbank(current.records, local) : mergeFlashcards(current.records, local);
+          // Skip the write entirely when nothing changed — avoids burning a D1
+          // write (and bumping updated_at) on every no-op push.
+          if (!merged.changed) { response[kind] = { records: current.records, updatedAt: current.updatedAt }; continue; }
+          const mergedBytes = encoder.encode(merged.json).length;
           if (mergedBytes > MAX_DOCUMENT_BYTES) return json({ error: "Progress document is too large after merge" }, 400, origin, log);
-          const updatedAt = now(); response[kind] = { records, updatedAt };
-          statements.push(env.DB.prepare("INSERT INTO progress_documents (user_id, kind, payload, updated_at) VALUES (?, ?, ?, ?) ON CONFLICT(user_id, kind) DO UPDATE SET payload = excluded.payload, updated_at = excluded.updated_at").bind(session.user.id, kind, JSON.stringify(records), updatedAt));
+          const updatedAt = now(); response[kind] = { records: merged.records, updatedAt };
+          // Store gzip-compressed to save D1 space (~8x) and support far more
+          // progress per user than the old 900KB raw cap allowed.
+          statements.push(env.DB.prepare("INSERT INTO progress_documents (user_id, kind, payload, compressed, updated_at) VALUES (?, ?, ?, 1, ?) ON CONFLICT(user_id, kind) DO UPDATE SET payload = excluded.payload, compressed = 1, updated_at = excluded.updated_at").bind(session.user.id, kind, await gzipString(merged.json), updatedAt));
         }
         if (statements.length) await env.DB.batch(statements);
         return json(response, 200, origin, log);

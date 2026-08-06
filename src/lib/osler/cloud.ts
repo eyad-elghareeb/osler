@@ -8,12 +8,17 @@ const SESSION_STORAGE_KEY = "osler-cloud-session-v1";
 export const SESSION_EXPIRED_FLAG = "osler-cloud-session-expired";
 const SYNC_DEBOUNCE_MS = 4_000;
 const MIN_SYNC_INTERVAL_MS = 20_000;
+// Idle devices still pull the latest remote progress every minute so changes
+// made on another device converge here without waiting for a local edit.
+const SYNC_PULL_INTERVAL_MS = 60_000;
 // Rotate the token through /v1/auth/refresh once it's within this window of
 // its expiry, so an active session never dies mid-use.
 const REFRESH_AHEAD_MS = 6 * 60 * 60 * 1000;
 // Exponential backoff for failed syncs (conflicts, transient 5xx, offline).
 const RETRY_BASE_MS = 1_000;
 const RETRY_MAX_MS = 30_000;
+// Only gzip request bodies that actually benefit from it (large sync snapshots).
+const GZIP_BODY_THRESHOLD = 4 * 1024;
 
 export interface CloudUser {
   id: string;
@@ -42,20 +47,45 @@ async function cloudConfig() {
   return config.cloud;
 }
 
+/** gzip a JSON request body when it's large enough to be worth it. Falls back
+ *  to the raw string when CompressionStream is unavailable or compression
+ *  wouldn't shrink the payload. */
+async function maybeGzipBody(body: string): Promise<{ body: BodyInit; encoding: string | null }> {
+  if (body.length < GZIP_BODY_THRESHOLD || typeof CompressionStream === "undefined") return { body, encoding: null };
+  try {
+    const bytes = new TextEncoder().encode(body);
+    const stream = new Blob([bytes]).stream().pipeThrough(new CompressionStream("gzip"));
+    const compressed = new Uint8Array(await new Response(stream).arrayBuffer());
+    if (compressed.byteLength >= body.length) return { body, encoding: null };
+    return { body: compressed, encoding: "gzip" };
+  } catch {
+    return { body, encoding: null };
+  }
+}
+
 async function request<T>(path: string, init: RequestInit = {}, token?: string): Promise<T> {
   const config = await cloudConfig();
   if (!config) throw new CloudApiError(503, "Cloud accounts are unavailable");
+  let body = init.body;
+  let encoding: string | null = null;
+  if (typeof init.body === "string") {
+    const gzipped = await maybeGzipBody(init.body);
+    body = gzipped.body;
+    encoding = gzipped.encoding;
+  }
   const response = await fetch(`${config.apiUrl.replace(/\/$/, "")}${path}`, {
     ...init,
+    body,
     headers: {
       "content-type": "application/json",
+      ...(encoding ? { "content-encoding": encoding } : {}),
       ...(token ? { authorization: `Bearer ${token}` } : {}),
       ...init.headers,
     },
   });
-  const body = await response.json().catch(() => ({})) as T & { error?: string };
-  if (!response.ok) throw new CloudApiError(response.status, body.error || "Cloud request failed");
-  return body;
+  const bodyJson = await response.json().catch(() => ({})) as T & { error?: string };
+  if (!response.ok) throw new CloudApiError(response.status, bodyJson.error || "Cloud request failed");
+  return bodyJson;
 }
 
 export async function cloudEnabled(): Promise<boolean> {
@@ -432,24 +462,35 @@ export function startCloudSync(session: CloudSession): () => void {
   let stopped = false;
   let currentSession = session;
   let dirty = true;
+  // Set by schedule() whenever a progress change lands while a sync is in
+  // flight. Without it, `dirty = false` after a successful PUT would swallow
+  // that mid-sync change and it would never reach the cloud.
+  let dirtyDuringSync = false;
   let syncing = false;
   let lastSyncAt = 0;
-  let serverUpdatedAt = 0;
+  // Per-kind server snapshots so a qbank write doesn't 409 the flashcards
+  // write (and vice versa) — each kind compares against its own updatedAt.
+  let qbankServerUpdatedAt = 0;
+  let flashcardServerUpdatedAt = 0;
   let retryCount = 0;
   let timer: ReturnType<typeof setTimeout> | null = null;
+  let pullTimer: ReturnType<typeof setInterval> | null = null;
 
-  const runSync = async () => {
-    if (stopped || syncing || !dirty) return;
+  const runSync = async (pullOnly = false) => {
+    if (stopped || syncing) return;
+    if (!pullOnly && !dirty) return;
     if (!navigator.onLine) {
-      timer = setTimeout(runSync, SYNC_DEBOUNCE_MS);
+      timer = setTimeout(() => void runSync(pullOnly), SYNC_DEBOUNCE_MS);
       return;
     }
     const sinceLastSync = Date.now() - lastSyncAt;
     if (sinceLastSync < MIN_SYNC_INTERVAL_MS) {
-      timer = setTimeout(runSync, MIN_SYNC_INTERVAL_MS - sinceLastSync);
+      timer = setTimeout(() => void runSync(pullOnly), MIN_SYNC_INTERVAL_MS - sinceLastSync);
       return;
     }
     syncing = true;
+    dirtyDuringSync = false;
+    const hadPendingChanges = dirty;
     window.dispatchEvent(new CustomEvent("osler-cloud-sync-status", { detail: { state: "syncing" } }));
     try {
       await storage.ensureCacheHydrated();
@@ -470,24 +511,34 @@ export function startCloudSync(session: CloudSession): () => void {
         config.cloud.syncQbank ? remote.qbank.records : undefined,
         config.cloud.syncFlashcards ? remote.flashcards.records : undefined,
       );
-      // Track the latest server updatedAt for optimistic concurrency.
-      serverUpdatedAt = Math.max(
-        remote.qbank?.updatedAt ?? 0,
-        remote.flashcards?.updatedAt ?? 0,
-      );
-      const saved = await request("/v1/sync", {
-        method: "PUT",
-        headers: serverUpdatedAt > 0 ? { "If-Unmodified-Since": String(serverUpdatedAt) } : {},
-        body: JSON.stringify({
-          ...(config.cloud.syncQbank ? { qbank: { records: storage.exportProgressRecords() } } : {}),
-          ...(config.cloud.syncFlashcards ? { flashcards: { records: flashcardReview.getAll() } } : {}),
-        }),
-      }, currentSession.token);
-      void saved;
-      dirty = false;
+      // Track the per-kind server snapshots for optimistic concurrency.
+      qbankServerUpdatedAt = remote.qbank?.updatedAt ?? 0;
+      flashcardServerUpdatedAt = remote.flashcards?.updatedAt ?? 0;
+
+      if (hadPendingChanges) {
+        const headers: Record<string, string> = {};
+        if (config.cloud.syncQbank && qbankServerUpdatedAt > 0) headers["x-sync-since-qbank"] = String(qbankServerUpdatedAt);
+        if (config.cloud.syncFlashcards && flashcardServerUpdatedAt > 0) headers["x-sync-since-flashcards"] = String(flashcardServerUpdatedAt);
+        const saved = await request("/v1/sync", {
+          method: "PUT",
+          headers,
+          body: JSON.stringify({
+            ...(config.cloud.syncQbank ? { qbank: { records: storage.exportProgressRecords() } } : {}),
+            ...(config.cloud.syncFlashcards ? { flashcards: { records: flashcardReview.getAll() } } : {}),
+          }),
+        }, currentSession.token);
+        void saved;
+        lastSyncAt = Date.now();
+        window.dispatchEvent(new CustomEvent("osler-cloud-sync-status", { detail: { state: "synced", syncedAt: lastSyncAt } }));
+      } else {
+        // Pull-only: nothing to push. `dirty = dirtyDuringSync` below absorbs
+        // any change that landed while the pull was in flight (the merge's own
+        // change events also go through schedule()).
+        lastSyncAt = Date.now();
+      }
+      // If a change arrived mid-sync, keep dirty so the follow-up run pushes it.
+      dirty = dirtyDuringSync;
       retryCount = 0;
-      lastSyncAt = Date.now();
-      window.dispatchEvent(new CustomEvent("osler-cloud-sync-status", { detail: { state: "synced", syncedAt: lastSyncAt } }));
     } catch (error) {
       if (error instanceof CloudApiError) {
         if (error.status === 401) {
@@ -497,7 +548,8 @@ export function startCloudSync(session: CloudSession): () => void {
           const refreshed = await refreshCloudSession(currentSession);
           if (refreshed) {
             currentSession = refreshed;
-            serverUpdatedAt = 0;
+            qbankServerUpdatedAt = 0;
+            flashcardServerUpdatedAt = 0;
             dirty = true;
             lastSyncAt = 0;
           } else {
@@ -510,7 +562,8 @@ export function startCloudSync(session: CloudSession): () => void {
           // The retry is scheduled in the `finally` block (after `syncing`
           // flips false) so it actually runs — the old code re-entered sync
           // while `syncing` was still true and silently dropped the retry.
-          serverUpdatedAt = 0;
+          qbankServerUpdatedAt = 0;
+          flashcardServerUpdatedAt = 0;
           dirty = true;
           lastSyncAt = 0;
         }
@@ -525,19 +578,26 @@ export function startCloudSync(session: CloudSession): () => void {
         if (timer) clearTimeout(timer);
         const backoff = Math.min(RETRY_BASE_MS * 2 ** retryCount, RETRY_MAX_MS);
         retryCount += 1;
-        timer = setTimeout(runSync, backoff);
+        timer = setTimeout(() => void runSync(), backoff);
       }
     }
   };
   const schedule = () => {
     dirty = true;
+    dirtyDuringSync = true;
     if (timer) clearTimeout(timer);
-    timer = setTimeout(runSync, SYNC_DEBOUNCE_MS);
+    timer = setTimeout(() => void runSync(), SYNC_DEBOUNCE_MS);
   };
   const onOnline = () => schedule();
+  // Returning to the app is a good time to fetch whatever changed elsewhere.
+  const onVisible = () => {
+    if (document.visibilityState === "visible" && !syncing) void runSync(true);
+  };
   window.addEventListener("osler-progress-changed", schedule);
   window.addEventListener("osler-flashcard-changed", schedule);
   window.addEventListener("online", onOnline);
+  document.addEventListener("visibilitychange", onVisible);
+  pullTimer = setInterval(() => void runSync(true), SYNC_PULL_INTERVAL_MS);
   void runSync();
   forceSync = () => {
     dirty = true;
@@ -549,9 +609,11 @@ export function startCloudSync(session: CloudSession): () => void {
   stopSync = () => {
     stopped = true;
     if (timer) clearTimeout(timer);
+    if (pullTimer) clearInterval(pullTimer);
     window.removeEventListener("osler-progress-changed", schedule);
     window.removeEventListener("osler-flashcard-changed", schedule);
     window.removeEventListener("online", onOnline);
+    document.removeEventListener("visibilitychange", onVisible);
     forceSync = null;
   };
   return stopSync;
