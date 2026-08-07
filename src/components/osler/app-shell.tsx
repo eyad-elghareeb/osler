@@ -343,7 +343,7 @@ export function AppShell({ children }: AppShellProps) {
           {/* Cloud Sync Status Indicator */}
           {cloudSession && (
             <button
-              onClick={() => handleViewChange("settings")}
+              onClick={() => navigate("settings", { section: "account" })}
               aria-label={t("settings.account.syncTitle")}
               title={syncStatus === "synced" ? t("settings.account.syncSynced") : syncStatus === "syncing" ? t("settings.account.syncSyncing") : t("settings.account.syncOffline")}
               className="hidden sm:flex items-center gap-1.5 h-8 px-2 rounded-md border border-border/60 bg-muted/40 hover:bg-muted/60 transition-colors shrink-0"
