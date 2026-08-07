@@ -11,6 +11,22 @@ const DB_VERSION = 4;
 /** localStorage key holding the set of bookmarked library article paths. */
 export const ARTICLE_BOOKMARKS_KEY = "osler-article-bookmarks";
 
+/** Every content kind synced to the cloud, mirroring the worker's SYNC_KINDS.
+ *  The GET response also carries a `quota` field, which callers must skip when
+ *  iterating kinds. */
+export const SYNC_KINDS = [
+  "qbank",
+  "flashcards",
+  "sessions",
+  "notes",
+  "highlights",
+  "articleHighlights",
+  "writtenDrafts",
+  "bookmarks",
+] as const;
+
+export type SyncKind = (typeof SYNC_KINDS)[number];
+
 /* ── IndexedDB helpers ──────────────────────────────────────────────── */
 
 let dbInstance: IDBDatabase | null = null;
@@ -253,6 +269,23 @@ function mergeItemArraysById<T>(current: T[], incoming: T[], version: (item: T) 
     else if (version(item) === version(existing)) byId.set((item as any).id, item);
   }
   return Array.from(byId.values());
+}
+
+/** Deep dict merge (e.g. writtenDrafts: Record<pack, Record<question, draft>>).
+ *  Incoming wins per leaf — no timestamps exist on the data. Idempotent. */
+function mergeDictDeep(current: Record<string, any>, incoming: Record<string, any>, depth = 0): { records: Record<string, any>; changed: boolean } {
+  if (depth > 4) return { records: { ...current, ...incoming }, changed: JSON.stringify(current) !== JSON.stringify({ ...current, ...incoming }) };
+  const out: Record<string, any> = { ...current };
+  let changed = false;
+  for (const [k, v] of Object.entries(incoming || {})) {
+    if (v && typeof v === "object" && !Array.isArray(v) && out[k] && typeof out[k] === "object" && !Array.isArray(out[k])) {
+      const sub = mergeDictDeep(out[k], v, depth + 1);
+      if (sub.changed) { out[k] = sub.records; changed = true; }
+    } else {
+      if (JSON.stringify(out[k]) !== JSON.stringify(v)) { out[k] = v; changed = true; }
+    }
+  }
+  return { records: out, changed };
 }
 
 /* ── Types ──────────────────────────────────────────────────────────── */
@@ -607,6 +640,13 @@ export const storage = {
       } catch {}
     }
     snapshot.bookmarks = { records: bookmarkRecords };
+    const writtenDraftRecords: Record<string, unknown> = {};
+    for (const [k, v] of memoryCache) {
+      if (k.startsWith("writtenDrafts:")) {
+        writtenDraftRecords[k.replace("writtenDrafts:", "")] = v;
+      }
+    }
+    snapshot.writtenDrafts = { records: writtenDraftRecords };
     return snapshot;
   },
 
@@ -685,6 +725,23 @@ export const storage = {
           window.dispatchEvent(new CustomEvent("osler-bookmarks-changed"));
         }
       } catch {}
+    }
+
+    // writtenDrafts: deep-dict merge per pack per question, incoming-wins at leaf
+    const wdRecords = snapshot.writtenDrafts?.records;
+    if (wdRecords && typeof wdRecords === "object") {
+      let changed = false;
+      for (const [packUid, incomingPack] of Object.entries(wdRecords)) {
+        if (!incomingPack || typeof incomingPack !== "object" || Array.isArray(incomingPack)) continue;
+        const current = getCached<Record<string, any>>("writtenDrafts", packUid) ?? {};
+        const merged = mergeDictDeep(current, incomingPack as Record<string, any>);
+        if (merged.changed) {
+          changed = true;
+          setCached("writtenDrafts", packUid, merged.records);
+          await idbPut("writtenDrafts", packUid, merged.records);
+        }
+      }
+      if (changed) dispatchChange("osler-written-drafts-changed");
     }
   },
 
@@ -1011,12 +1068,14 @@ export const writtenDrafts = {
     const key = writtenDraftsKey(packUid);
     setCached("writtenDrafts", key, drafts);
     idbPut("writtenDrafts", key, drafts).catch(console.warn);
+    dispatchChange("osler-written-drafts-changed");
   },
 
   clear(packUid: string) {
     const key = writtenDraftsKey(packUid);
     deleteCached("writtenDrafts", key);
     idbDelete("writtenDrafts", key).catch(console.warn);
+    dispatchChange("osler-written-drafts-changed");
   },
 };
 

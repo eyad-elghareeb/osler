@@ -13,6 +13,7 @@ export const SYNC_KINDS = [
   "notes",
   "highlights",
   "articleHighlights",
+  "writtenDrafts",
   "bookmarks",
 ] as const;
 
@@ -109,10 +110,32 @@ function mergeUnion(remote: Record<string, any>, local: Record<string, any>): Me
   return { records: out, changed: json !== JSON.stringify(remote), json };
 }
 
+/** Deep dict merge for nested key-value data (e.g. writtenDrafts:
+ *  `Record<packUid, Record<questionIdx, WrittenDraft>>`). Incoming wins per
+ *  leaf value (no timestamps available), so repeated sync of the same data
+ *  converges. A device that writes a newer draft after another device synced
+ *  an older one will overwrite — acceptable trade-off without version fields. */
+function mergeDictDeep(remote: Record<string, any>, local: Record<string, any>, depth = 0): MergeResult {
+  if (depth > 4) return mergeUnion(remote, local);
+  const out: Record<string, any> = { ...remote };
+  let changed = false;
+  for (const [k, v] of Object.entries(local || {})) {
+    if (v && typeof v === "object" && !Array.isArray(v) && out[k] && typeof out[k] === "object" && !Array.isArray(out[k])) {
+      const sub = mergeDictDeep(out[k], v, depth + 1);
+      if (sub.changed) { out[k] = sub.records; changed = true; }
+    } else {
+      if (JSON.stringify(out[k]) !== JSON.stringify(v)) { out[k] = v; changed = true; }
+    }
+  }
+  const json = JSON.stringify(out);
+  return { records: out, changed, json };
+}
+
 export function mergeKind(remote: Record<string, any>, local: Record<string, any>, kind: SyncKind): MergeResult {
   const cfg = TIMESTAMP_KIND[kind];
   if (cfg) return mergeBy(remote, local, cfg);
   if (kind === "bookmarks") return mergeUnion(remote, local);
+  if (kind === "writtenDrafts") return mergeDictDeep(remote, local);
   return mergeItemArrays(remote, local);
 }
 

@@ -1,5 +1,5 @@
 import { getConfig, loadConfig } from "@/lib/osler/config";
-import { storage } from "@/lib/osler/storage";
+import { storage, SYNC_KINDS } from "@/lib/osler/storage";
 
 const SESSION_STORAGE_KEY = "osler-cloud-session-v1";
 /** Set in sessionStorage when a stored cloud session could not be restored
@@ -453,6 +453,14 @@ export async function logoutCloudAccount(session: CloudSession | null): Promise<
 let stopSync: (() => void) | null = null;
 let forceSync: (() => void) | null = null;
 
+/** Last known cloud storage usage (reported by the worker's GET /v1/sync). */
+let syncQuota: { usedBytes: number; limitBytes: number } | null = null;
+
+/** Read the last-reported cloud storage quota, or null before first sync. */
+export function getSyncQuota(): { usedBytes: number; limitBytes: number } | null {
+  return syncQuota;
+}
+
 export function syncCloudNow(): void {
   forceSync?.();
 }
@@ -502,7 +510,12 @@ export function startCloudSync(session: CloudSession): () => void {
       }
 
       const config = getConfig();
-      const remote = await request<Record<string, { records: Record<string, unknown>; updatedAt: number }>>("/v1/sync", {}, currentSession.token);
+      const remote = await request<Record<string, { records: Record<string, unknown>; updatedAt: number } & { usedBytes?: number; limitBytes?: number }>>("/v1/sync", {}, currentSession.token);
+      // Track quota usage reported by the worker (usedBytes / limitBytes).
+      if (typeof remote.quota?.usedBytes === "number" && typeof remote.quota?.limitBytes === "number") {
+        syncQuota = { usedBytes: remote.quota.usedBytes, limitBytes: remote.quota.limitBytes };
+        window.dispatchEvent(new CustomEvent("osler-cloud-sync-quota", { detail: syncQuota }));
+      }
       // Respect the per-kind config gates before merging (and later pushing).
       if (!config.cloud.syncQbank) delete remote.qbank;
       if (!config.cloud.syncFlashcards) delete remote.flashcards;
@@ -511,17 +524,18 @@ export function startCloudSync(session: CloudSession): () => void {
         delete remote.notes;
         delete remote.highlights;
         delete remote.articleHighlights;
+        delete remote.writtenDrafts;
         delete remote.bookmarks;
       }
       await storage.mergeCloudSnapshot(remote);
       // Track the per-kind server snapshots for optimistic concurrency.
-      for (const kind of Object.keys(remote)) {
-        serverUpdatedAt[kind] = remote[kind]?.updatedAt ?? 0;
+      for (const kind of SYNC_KINDS) {
+        if (remote[kind]) serverUpdatedAt[kind] = remote[kind]?.updatedAt ?? 0;
       }
 
       if (hadPendingChanges) {
         const headers: Record<string, string> = {};
-        for (const kind of Object.keys(remote)) {
+        for (const kind of SYNC_KINDS) {
           if (serverUpdatedAt[kind] > 0) headers[`x-sync-since-${kind}`] = String(serverUpdatedAt[kind]);
         }
         const payload = storage.exportSyncSnapshot();
@@ -532,6 +546,7 @@ export function startCloudSync(session: CloudSession): () => void {
           delete payload.notes;
           delete payload.highlights;
           delete payload.articleHighlights;
+          delete payload.writtenDrafts;
           delete payload.bookmarks;
         }
         await request("/v1/sync", {
@@ -609,7 +624,8 @@ export function startCloudSync(session: CloudSession): () => void {
     if (document.visibilityState === "visible" && !syncing) void runSync(true);
   };
   // Every changeable content type schedules a push, so sessions, notes,
-  // highlights and bookmarks sync just like qbank/flashcard progress.
+  // highlights, written drafts and bookmarks sync just like qbank/flashcard
+  // progress.
   const syncEvents = [
     "osler-progress-changed",
     "osler-flashcard-changed",
@@ -617,6 +633,7 @@ export function startCloudSync(session: CloudSession): () => void {
     "osler-notes-changed",
     "osler-highlights-changed",
     "osler-article-highlights-changed",
+    "osler-written-drafts-changed",
     "osler-bookmarks-changed",
   ];
   for (const event of syncEvents) window.addEventListener(event, schedule);

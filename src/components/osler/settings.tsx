@@ -91,6 +91,7 @@ import {
   deleteCloudAccount,
   logoutCloudAccount,
   syncCloudNow,
+  getSyncQuota,
   cloudEnabled,
   applyGeminiKeyInfo,
   GEMINI_CLOUD_SYNCED_FLAG,
@@ -100,6 +101,11 @@ import {
 } from "@/lib/osler/cloud";
 
 /* ─── Models & storage keys (shared with ai-assistant.tsx) ──────────── */
+
+/** Format a byte count as a MB number with one decimal (quota bar). */
+function formatQuotaMB(bytes: number): string {
+  return `${(bytes / (1024 * 1024)).toFixed(1)}`;
+}
 
 const MODELS = [
   ["gemini-3.6-flash", "Gemini 3.6 Flash (newest, fastest Flash)"],
@@ -2176,6 +2182,7 @@ function AccountSettingsSection() {
   const [cloudActive, setCloudActive] = React.useState(false);
   const [syncState, setSyncState] = React.useState<"synced" | "syncing" | "offline">("synced");
   const [lastSyncedAt, setLastSyncedAt] = React.useState<number | null>(null);
+  const [quota, setQuota] = React.useState<{ usedBytes: number; limitBytes: number } | null>(null);
 
   // Profile Form state
   const [displayName, setDisplayName] = React.useState("");
@@ -2225,11 +2232,21 @@ function AccountSettingsSection() {
       if (detail?.state) setSyncState(detail.state);
       if (detail?.syncedAt) setLastSyncedAt(detail.syncedAt);
     };
+    const onSyncQuota = (e: Event) => {
+      const detail = (e as CustomEvent).detail;
+      if (detail && typeof detail.usedBytes === "number" && typeof detail.limitBytes === "number") {
+        setQuota(detail);
+      }
+    };
 
     window.addEventListener("osler-cloud-sync-status", onSyncStatus);
+    window.addEventListener("osler-cloud-sync-quota", onSyncQuota);
+    const currentQuota = getSyncQuota();
+    if (currentQuota) setQuota(currentQuota);
     return () => {
       cancelled = true;
       window.removeEventListener("osler-cloud-sync-status", onSyncStatus);
+      window.removeEventListener("osler-cloud-sync-quota", onSyncQuota);
     };
   }, [session]);
 
@@ -2372,6 +2389,8 @@ function AccountSettingsSection() {
     );
   }
 
+  const quotaPct = quota && quota.limitBytes > 0 ? Math.round((quota.usedBytes / quota.limitBytes) * 100) : 0;
+
   return (
     <div className="space-y-6">
       {/* Account Overview Header */}
@@ -2435,6 +2454,20 @@ function AccountSettingsSection() {
             {t("settings.account.syncNow")}
           </Button>
         </div>
+        {quota && quota.limitBytes > 0 && (
+          <div className="mt-3.5">
+            <div className="flex items-center justify-between text-[11px] text-muted-foreground mb-1.5">
+              <span>{t("settings.account.quotaTitle")}</span>
+              <span>{t("settings.account.quotaUsed", { used: formatQuotaMB(quota.usedBytes), limit: formatQuotaMB(quota.limitBytes) })}</span>
+            </div>
+            <div className="h-1.5 rounded-full bg-muted overflow-hidden">
+              <div
+                className={cn("h-full rounded-full", quotaPct >= 90 ? "bg-destructive" : quotaPct >= 70 ? "bg-warning" : "bg-success")}
+                style={{ width: `${Math.min(100, quotaPct)}%` }}
+              />
+            </div>
+          </div>
+        )}
       </Card>
 
       {/* Profile Details Form */}

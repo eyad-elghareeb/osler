@@ -119,7 +119,26 @@ describe("mergeKind — bookmarks", () => {
 
 describe("SYNC_KINDS", () => {
   it("covers every kind merged by the worker", () => {
-    expect(SYNC_KINDS).toEqual(["qbank", "flashcards", "sessions", "notes", "highlights", "articleHighlights", "bookmarks"]);
+    expect(SYNC_KINDS).toEqual(["qbank", "flashcards", "sessions", "notes", "highlights", "articleHighlights", "writtenDrafts", "bookmarks"]);
+  });
+});
+
+describe("mergeKind — writtenDrafts", () => {
+  it("deep-merges a pack's draft map per question key, incoming wins on tie", () => {
+    const remote = { "pack1": { "q0": { text: "old", rubricChecked: [true], submitted: false }, "q1": { text: "keep", rubricChecked: [], submitted: true } } };
+    const local = { "pack1": { "q0": { text: "new", rubricChecked: [true], submitted: true } }, "pack2": { "q0": { text: "other", rubricChecked: [], submitted: false } } };
+    const r = mergeKind(remote, local, "writtenDrafts");
+    expect(r.records).toEqual({
+      "pack1": { "q0": { text: "new", rubricChecked: [true], submitted: true }, "q1": { text: "keep", rubricChecked: [], submitted: true } },
+      "pack2": { "q0": { text: "other", rubricChecked: [], submitted: false } },
+    });
+    expect(r.changed).toBe(true);
+  });
+
+  it("reports no change on a no-op re-push", () => {
+    const doc = { "pack1": { "q0": { text: "a", rubricChecked: [], submitted: true } } };
+    const r = mergeKind(doc, doc, "writtenDrafts");
+    expect(r.changed).toBe(false);
   });
 });
 

@@ -396,7 +396,7 @@ function cors(origin: string): Record<string, string> {
   return {
     "access-control-allow-origin": origin,
     "access-control-allow-methods": "GET, POST, PUT, PATCH, DELETE, OPTIONS",
-    "access-control-allow-headers": "authorization, content-type, content-encoding, x-sync-since-qbank, x-sync-since-flashcards, x-sync-since-sessions, x-sync-since-notes, x-sync-since-highlights, x-sync-since-articleHighlights, x-sync-since-bookmarks",
+    "access-control-allow-headers": "authorization, content-type, content-encoding, x-sync-since-qbank, x-sync-since-flashcards, x-sync-since-sessions, x-sync-since-notes, x-sync-since-highlights, x-sync-since-articleHighlights, x-sync-since-writtenDrafts, x-sync-since-bookmarks",
     "access-control-max-age": "86400",
     vary: "Origin",
   };
@@ -2941,7 +2941,9 @@ export default {
       // ── Sync ──
       if (request.method === "GET" && url.pathname === "/v1/sync") {
         if (!rateLimit(ip, "sync")) return json({ error: "Too many requests" }, 429, origin, log);
-        return json(await getAllDocuments(env, session.user.id), 200, origin, log);
+        const docs = await getAllDocuments(env, session.user.id);
+        const sizeRow = await env.DB.prepare("SELECT COALESCE(SUM(raw_bytes),0) as total FROM progress_documents WHERE user_id = ?").bind(session.user.id).first<{ total: number }>();
+        return json({ ...docs, quota: { usedBytes: Number(sizeRow?.total ?? 0), limitBytes: MAX_USER_STORAGE_BYTES } }, 200, origin, log);
       }
       if (request.method === "PUT" && url.pathname === "/v1/sync") {
         if (!rateLimit(ip, "sync")) return json({ error: "Too many requests" }, 429, origin, log);

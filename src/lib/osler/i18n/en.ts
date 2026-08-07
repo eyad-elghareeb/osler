@@ -126,6 +126,8 @@ export const en = {
     "settings.account.syncOffline": "Offline mode",
     "settings.account.lastSynced": "Last synced: {time}",
     "settings.account.syncNow": "Sync Now",
+    "settings.account.quotaTitle": "Cloud storage used",
+    "settings.account.quotaUsed": "{used} MB of {limit} MB",
     "settings.account.exportData": "Export Account Data",
     "settings.account.exportDesc": "Download a full JSON backup of your account profile, QBank progress, and flashcards.",
     "settings.account.exportButton": "Export Data (JSON)",

@@ -127,6 +127,8 @@ export const ar = {
     "settings.account.syncOffline": "وضع عدم الاتصال",
     "settings.account.lastSynced": "آخر مزامنة: {time}",
     "settings.account.syncNow": "مزامنة الآن",
+    "settings.account.quotaTitle": "التخزين السحابي المستخدم",
+    "settings.account.quotaUsed": "{used} م.ب من {limit} م.ب",
     "settings.account.exportData": "تصدير بيانات الحساب",
     "settings.account.exportDesc": "تنزيل نسخة احتياطية كاملة بتنسيق JSON لملفك الشخصي، تقدّم بنك الأسئلة، والبطاقات.",
     "settings.account.exportButton": "تصدير البيانات (JSON)",
