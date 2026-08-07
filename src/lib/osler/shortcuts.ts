@@ -1,9 +1,11 @@
+import type { StringKey } from "@/lib/osler/i18n";
+
 export type ShortcutScope = "global" | "qbank" | "flashcard" | "reader" | "videos";
 
 export interface ShortcutAction {
   id: string;
-  label: string;
-  description: string;
+  labelKey: StringKey;
+  descriptionKey: StringKey;
   scope: ShortcutScope;
   defaultBinding: string;
 }
@@ -13,51 +15,61 @@ export interface ShortcutBinding {
   binding: string;
 }
 
+function action(id: string, scope: ShortcutScope, defaultBinding: string): ShortcutAction {
+  return {
+    id,
+    labelKey: `shortcuts.action.${id}` as StringKey,
+    descriptionKey: `shortcuts.action.${id}.desc` as StringKey,
+    scope,
+    defaultBinding,
+  };
+}
+
 export const SHORTCUT_ACTIONS: readonly ShortcutAction[] = [
-  { id: "global.search", label: "Open search", description: "Toggle the global article / topic search palette.", scope: "global", defaultBinding: "mod+k" },
-  { id: "global.theme", label: "Toggle theme", description: "Switch between light and dark mode.", scope: "global", defaultBinding: "mod+j" },
-  { id: "global.dashboard", label: "Go to Dashboard", description: "Jump to the dashboard view.", scope: "global", defaultBinding: "g d" },
-  { id: "global.library", label: "Go to Library", description: "Jump to the article library.", scope: "global", defaultBinding: "g l" },
-  { id: "global.qbank", label: "Go to Q-Bank Studio", description: "Jump to the Q-Bank studio.", scope: "global", defaultBinding: "g q" },
-  { id: "global.flashcards", label: "Go to Flashcards", description: "Jump to the flashcard decks.", scope: "global", defaultBinding: "g f" },
-  { id: "global.settings", label: "Go to Settings", description: "Jump to the settings page.", scope: "global", defaultBinding: "g s" },
-  { id: "global.profile", label: "Go to Profile", description: "Jump to the user profile page.", scope: "global", defaultBinding: "g p" },
-  { id: "qbank.next", label: "Next question", description: "Move to the next question.", scope: "qbank", defaultBinding: "arrowright" },
-  { id: "qbank.prev", label: "Previous question", description: "Move to the previous question.", scope: "qbank", defaultBinding: "arrowleft" },
-  { id: "qbank.submit", label: "Submit answer", description: "Submit the currently selected answer (tutor mode).", scope: "qbank", defaultBinding: "mod+enter" },
-  { id: "qbank.flag", label: "Flag / unflag", description: "Toggle the flag on the current question.", scope: "qbank", defaultBinding: "f" },
-  { id: "qbank.retry", label: "Retry question", description: "Reset and retry the current question.", scope: "qbank", defaultBinding: "r" },
-  { id: "qbank.answer1", label: "Select choice A", description: "Select answer choice 1 (A).", scope: "qbank", defaultBinding: "1" },
-  { id: "qbank.answer2", label: "Select choice B", description: "Select answer choice 2 (B).", scope: "qbank", defaultBinding: "2" },
-  { id: "qbank.answer3", label: "Select choice C", description: "Select answer choice 3 (C).", scope: "qbank", defaultBinding: "3" },
-  { id: "qbank.answer4", label: "Select choice D", description: "Select answer choice 4 (D).", scope: "qbank", defaultBinding: "4" },
-  { id: "qbank.answer5", label: "Select choice E", description: "Select answer choice 5 (E).", scope: "qbank", defaultBinding: "5" },
-  { id: "qbank.calculator", label: "Toggle calculator", description: "Open or close the calculator panel.", scope: "qbank", defaultBinding: "mod+b" },
-  { id: "qbank.labValues", label: "Toggle lab values", description: "Open or close the lab values sidebar.", scope: "qbank", defaultBinding: "mod+l" },
-  { id: "qbank.aiAssistant", label: "Toggle AI assistant", description: "Open or close the AI study assistant.", scope: "qbank", defaultBinding: "mod+i" },
-  { id: "qbank.pause", label: "Pause / resume timed test", description: "Pause or resume the timer.", scope: "qbank", defaultBinding: "space" },
-  { id: "qbank.endTest", label: "End test early", description: "End the current test and go to results.", scope: "qbank", defaultBinding: "mod+shift+e" },
-  { id: "qbank.goHome", label: "Back to QBank home", description: "Leave the current question and return home.", scope: "qbank", defaultBinding: "escape" },
-  { id: "flashcard.flip", label: "Flip card", description: "Flip the current flashcard.", scope: "flashcard", defaultBinding: "space" },
-  { id: "flashcard.again", label: "Rate Again", description: "Mark card as Again.", scope: "flashcard", defaultBinding: "1" },
-  { id: "flashcard.hard", label: "Rate Hard", description: "Mark card as Hard.", scope: "flashcard", defaultBinding: "2" },
-  { id: "flashcard.good", label: "Rate Good", description: "Mark card as Good.", scope: "flashcard", defaultBinding: "3" },
-  { id: "flashcard.easy", label: "Rate Easy", description: "Mark card as Easy.", scope: "flashcard", defaultBinding: "4" },
-  { id: "flashcard.next", label: "Next card", description: "Skip to next card without rating.", scope: "flashcard", defaultBinding: "arrowright" },
-  { id: "flashcard.prev", label: "Previous card", description: "Go back to previous card.", scope: "flashcard", defaultBinding: "arrowleft" },
-  { id: "flashcard.exit", label: "Exit study", description: "Exit the study session.", scope: "flashcard", defaultBinding: "escape" },
-  { id: "flashcard.restart", label: "Restart deck", description: "Restart the current deck from the beginning.", scope: "flashcard", defaultBinding: "r" },
-  { id: "reader.close", label: "Close article / modal", description: "Close the article modal.", scope: "reader", defaultBinding: "escape" },
-  { id: "reader.bookmark", label: "Bookmark article", description: "Toggle the bookmark on the current article.", scope: "reader", defaultBinding: "mod+d" },
-  { id: "reader.zoomIn", label: "Zoom in", description: "Increase article text zoom.", scope: "reader", defaultBinding: "mod+=" },
-  { id: "reader.zoomOut", label: "Zoom out", description: "Decrease article text zoom.", scope: "reader", defaultBinding: "mod+-" },
-  { id: "reader.zoomReset", label: "Reset zoom", description: "Reset article text zoom to 100%.", scope: "reader", defaultBinding: "mod+0" },
-  { id: "videos.next", label: "Next video", description: "Skip to the next video in the playlist.", scope: "videos", defaultBinding: "n" },
-  { id: "videos.prev", label: "Previous video", description: "Go back to the previous video in the playlist.", scope: "videos", defaultBinding: "p" },
-  { id: "videos.fullscreen", label: "Toggle fullscreen", description: "Enter or exit fullscreen mode.", scope: "videos", defaultBinding: "f" },
-  { id: "videos.mute", label: "Toggle mute", description: "Mute or unmute the video.", scope: "videos", defaultBinding: "m" },
-  { id: "videos.exit", label: "Exit player", description: "Close the video player and return to the hub.", scope: "videos", defaultBinding: "escape" },
-] as const;
+  action("global.search", "global", "mod+k"),
+  action("global.theme", "global", "mod+j"),
+  action("global.dashboard", "global", "g d"),
+  action("global.library", "global", "g l"),
+  action("global.qbank", "global", "g q"),
+  action("global.flashcards", "global", "g f"),
+  action("global.settings", "global", "g s"),
+  action("global.profile", "global", "g p"),
+  action("qbank.next", "qbank", "arrowright"),
+  action("qbank.prev", "qbank", "arrowleft"),
+  action("qbank.submit", "qbank", "mod+enter"),
+  action("qbank.flag", "qbank", "f"),
+  action("qbank.retry", "qbank", "r"),
+  action("qbank.answer1", "qbank", "1"),
+  action("qbank.answer2", "qbank", "2"),
+  action("qbank.answer3", "qbank", "3"),
+  action("qbank.answer4", "qbank", "4"),
+  action("qbank.answer5", "qbank", "5"),
+  action("qbank.calculator", "qbank", "mod+b"),
+  action("qbank.labValues", "qbank", "mod+l"),
+  action("qbank.aiAssistant", "qbank", "mod+i"),
+  action("qbank.pause", "qbank", "space"),
+  action("qbank.endTest", "qbank", "mod+shift+e"),
+  action("qbank.goHome", "qbank", "escape"),
+  action("flashcard.flip", "flashcard", "space"),
+  action("flashcard.again", "flashcard", "1"),
+  action("flashcard.hard", "flashcard", "2"),
+  action("flashcard.good", "flashcard", "3"),
+  action("flashcard.easy", "flashcard", "4"),
+  action("flashcard.next", "flashcard", "arrowright"),
+  action("flashcard.prev", "flashcard", "arrowleft"),
+  action("flashcard.exit", "flashcard", "escape"),
+  action("flashcard.restart", "flashcard", "r"),
+  action("reader.close", "reader", "escape"),
+  action("reader.bookmark", "reader", "mod+d"),
+  action("reader.zoomIn", "reader", "mod+="),
+  action("reader.zoomOut", "reader", "mod+-"),
+  action("reader.zoomReset", "reader", "mod+0"),
+  action("videos.next", "videos", "n"),
+  action("videos.prev", "videos", "p"),
+  action("videos.fullscreen", "videos", "f"),
+  action("videos.mute", "videos", "m"),
+  action("videos.exit", "videos", "escape"),
+];
 
 const STORAGE_KEY = "osler_shortcuts_v1";
 

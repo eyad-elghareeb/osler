@@ -757,14 +757,17 @@ async function syncAiFormToCloud(state: AiFormState) {
   }
 }
 
-function validateAiForm(state: AiFormState): Record<string, string> {
+function validateAiForm(
+  state: AiFormState,
+  t: (key: StringKey, params?: Record<string, string | number>) => string,
+): Record<string, string> {
   const errors: Record<string, string> = {};
   if (state.apiKey && !/^[A-Za-z0-9_\-.]{20,}$/.test(state.apiKey.trim())) {
-    errors.apiKey = "API keys are usually 30+ characters of letters, digits, hyphens, underscores, or periods.";
+    errors.apiKey = t("settings.ai.keyLengthError");
   }
   const mw = Number(state.maxWait);
   if (!Number.isFinite(mw) || mw < 5 || mw > 300) {
-    errors.maxWait = "Max wait must be between 5 and 300 seconds.";
+    errors.maxWait = t("settings.ai.maxWaitError");
   }
   return errors;
 }
@@ -800,7 +803,7 @@ export function AiSettingsSection() {
   };
 
   const handleSave = () => {
-    const errs = validateAiForm(draft);
+    const errs = validateAiForm(draft, t);
     setErrors(errs);
     if (Object.keys(errs).length > 0) return;
     saveAiForm(draft);
@@ -838,7 +841,7 @@ export function AiSettingsSection() {
 
   const handleTestKey = async () => {
     if (!draft.apiKey.trim()) {
-      setTestResult("No key entered.");
+      setTestResult(t("settings.ai.noKeyEntered"));
       return;
     }
     setTesting(true);
@@ -849,12 +852,12 @@ export function AiSettingsSection() {
       });
       const data = await res.json();
       if (data?.models?.length) {
-        setTestResult(`✓ Valid key (${data.models.length} models available).`);
+        setTestResult(t("settings.ai.keyValid", { n: data.models.length }));
       } else {
-        setTestResult("✗ Unexpected response. Check the key.");
+        setTestResult(t("settings.ai.unexpectedResponse"));
       }
     } catch {
-      setTestResult("✗ Connection failed. Check key or network.");
+      setTestResult(t("settings.ai.connectionFailed"));
     } finally {
       setTesting(false);
     }
@@ -870,7 +873,7 @@ export function AiSettingsSection() {
         {t("settings.ai.subtitle")}
         {cloudSynced && (
           <span className="ml-2 inline-flex items-center gap-1 text-success">
-            <Cloud className="size-3" /> Saved to your account
+            <Cloud className="size-3" /> {t("settings.ai.savedToAccount")}
           </span>
         )}
       </p>
@@ -1093,13 +1096,16 @@ function ShortcutsSettingsSection() {
                         const conflicts = findConflicts(draft, a.id, currentBinding);
                         const isDefault = currentBinding === a.defaultBinding;
                         const conflictNames = conflicts
-                          .map((c) => SHORTCUT_ACTIONS.find((x) => x.id === c)?.label ?? c)
+                          .map((c) => {
+                            const act = SHORTCUT_ACTIONS.find((x) => x.id === c);
+                            return act ? t(act.labelKey) : c;
+                          })
                           .join(", ");
                         return (
                           <tr key={a.id} className={idx > 0 ? "border-t border-border/60" : ""}>
                             <td className="py-2.5 px-3 align-middle w-1/2">
-                              <div className="text-sm font-medium">{a.label}</div>
-                              <div className="text-[11px] text-muted-foreground">{a.description}</div>
+                              <div className="text-sm font-medium">{t(a.labelKey)}</div>
+                              <div className="text-[11px] text-muted-foreground">{t(a.descriptionKey)}</div>
                               {conflicts.length > 0 && (
                                 <div className="text-[11px] text-amber-500 mt-1">
                                   ⚠ {t("settings.shortcuts.conflictsWith", { names: conflictNames })}
@@ -1114,11 +1120,11 @@ function ShortcutsSettingsSection() {
                               />
                               {!isDefault && currentBinding && (
                                 <div className="text-[10px] text-muted-foreground mt-1">
-                                  Default: <span className="font-mono">{describeBinding(a.defaultBinding)}</span>
+                                  {t("settings.shortcuts.default")}: <span className="font-mono">{describeBinding(a.defaultBinding)}</span>
                                 </div>
                               )}
                               {!currentBinding && (
-                                <div className="text-[10px] text-muted-foreground mt-1">Disabled</div>
+                                <div className="text-[10px] text-muted-foreground mt-1">{t("settings.shortcuts.disabled")}</div>
                               )}
                             </td>
                           </tr>
@@ -1541,7 +1547,7 @@ function DownloadsSettingsSection() {
                       key={et}
                       active={typeFilter === et}
                       onClick={() => setTypeFilter(et)}
-                      label={getEngineMeta(et).label}
+                      label={t(`engine.${et}` as any)}
                     />
                   ))}
                 </div>
@@ -1567,7 +1573,7 @@ function DownloadsSettingsSection() {
                         />
                         <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                           {t("settings.downloads.typeLabel", {
-                            label: getEngineMeta(et).label,
+                            label: t(`engine.${et}` as any),
                             n: countLeaves({ uid: "", title: "", type: et, path: "", items: trees[et] ?? [] }),
                           })}
                         </span>
@@ -2107,7 +2113,7 @@ function AboutSettingsSection() {
           {t("settings.about.activeTheme", { name: availableThemes.find((x) => x.id === activeTheme)?.name ?? activeTheme })}
         </div>
         <div className="text-xs text-muted-foreground">
-          {availableThemes.length} {t("settings.theme.title").toLowerCase()}s available — customize in Appearance.
+          {t("settings.about.themesCount", { n: availableThemes.length })}
         </div>
       </Card>
 
@@ -2547,7 +2553,7 @@ function AccountSettingsSection() {
 
               <div>
                 <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">
-                  Type DELETE to confirm
+                  {t("settings.account.typeDelete")}
                 </label>
                 <input
                   type="text"

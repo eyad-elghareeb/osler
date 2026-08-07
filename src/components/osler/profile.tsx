@@ -46,6 +46,7 @@ import { loadAllContent, ENGINE_META } from "@/lib/osler/content";
 import type { AnyContent, ContentTreeNode } from "@/lib/osler/types";
 import type { OslerView } from "./app-shell";
 import { useI18n } from "./i18n-provider";
+import type { StringKey } from "@/lib/osler/i18n";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -76,7 +77,7 @@ export function Profile({
   const session = useOslerSession();
   const { navigate } = useOslerRouter();
 
-  const username = propUsername || session.username || "User";
+  const username = propUsername || session.username || t("profile.user");
   const onViewChange = propOnViewChange || navigate;
   const onOpenSettingsSection = propOnOpenSettingsSection || ((section: any) => navigate("settings", { section }));
   const [syncOpen, setSyncOpen] = React.useState(false);
@@ -184,7 +185,11 @@ export function Profile({
                   {cloudSession && (
                     <Badge variant="outline" className="text-[10px] bg-primary/10 text-primary border-primary/30">
                       <Cloud className="size-3 me-1" />
-                      {cloudSession.user.role}
+                      {cloudSession.user.role === "admin"
+                        ? t("settings.account.admin")
+                        : cloudSession.user.role === "student"
+                          ? t("settings.account.student")
+                          : t("admin.users.roles.content_admin")}
                     </Badge>
                   )}
                 </div>
@@ -195,10 +200,10 @@ export function Profile({
               <div className="hidden sm:flex flex-col items-end gap-1">
                 <Badge variant="secondary" className="text-[10px]">
                   <Flame className="size-3 me-1" />
-                  {progress.length > 0 ? "Active learner" : "New here"}
+                  {progress.length > 0 ? t("profile.activeLearner") : t("profile.newHere")}
                 </Badge>
                 <span className="text-[10px] text-muted-foreground">
-                  {attemptedTotal} questions answered
+                  {t("profile.questionsAnswered", { n: attemptedTotal })}
                 </span>
               </div>
               {onViewChange && (
@@ -251,7 +256,7 @@ export function Profile({
             color="success"
           />
           <StatTile
-            label="Wrong"
+            label={t("profile.wrongLabel")}
             value={wrongTotal}
             icon={TrendingUp}
             color="destructive"
@@ -265,7 +270,7 @@ export function Profile({
         </div>
 
         {/* Engine breakdown */}
-        <SectionHeading>Performance by Engine</SectionHeading>
+        <SectionHeading>{t("profile.performanceByEngine")}</SectionHeading>
         {Object.keys(engineStats).length === 0 ? (
           <div className="osler-card--default text-center text-sm text-muted-foreground mb-6 py-8">
             {t("profile.noSessions")}
@@ -424,16 +429,19 @@ function Achievement({
 
 /* ── Profile Notes Section ───────────────────────────────────────────── */
 
-function timeAgo(ts: number): string {
+function timeAgo(
+  ts: number,
+  t: (key: StringKey, params?: Record<string, string | number>) => string,
+): string {
   const diff = Date.now() - ts;
   const sec = Math.floor(diff / 1000);
-  if (sec < 60) return "just now";
+  if (sec < 60) return t("dash.timeAgo.justNow");
   const min = Math.floor(sec / 60);
-  if (min < 60) return `${min}m ago`;
+  if (min < 60) return t("dash.timeAgo.minutes", { n: min });
   const hr = Math.floor(min / 60);
-  if (hr < 24) return `${hr}h ago`;
+  if (hr < 24) return t("dash.timeAgo.hours", { n: hr });
   const day = Math.floor(hr / 24);
-  if (day < 7) return `${day}d ago`;
+  if (day < 7) return t("dash.timeAgo.days", { n: day });
   return new Date(ts).toLocaleDateString();
 }
 
@@ -533,7 +541,7 @@ function ProfileNotesSection({
             <span>{allNotes.length} {t("qbank.notes.title").toLowerCase()}</span>
             <span>
               {allNotes.length > 0
-                ? timeAgo(Math.max(...allNotes.map((n) => n.updatedAt)))
+                ? timeAgo(Math.max(...allNotes.map((n) => n.updatedAt)), t)
                 : "—"}
             </span>
           </div>
@@ -594,7 +602,7 @@ function ProfileNoteCard({
           </h4>
           <div className="flex items-center gap-0.5 text-[10px] text-muted-foreground shrink-0">
             <Clock className="size-3" />
-            <span>{timeAgo(note.updatedAt)}</span>
+            <span>{timeAgo(note.updatedAt, t)}</span>
           </div>
         </div>
         {preview && (
