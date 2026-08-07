@@ -617,6 +617,30 @@ export const ar = {
     "profile.totalCorrect": "إجمالي الصحيحة",
     "profile.avgAccuracy": "متوسط الدقة",
     "profile.packsTouched": "الحزم المدروسة",
+    "profile.ach.firstSteps.title": "الخطوات الأولى",
+    "profile.ach.firstSteps.desc": "أجب عن أول سؤال",
+    "profile.ach.sharpShooter.title": "قنّاص",
+    "profile.ach.sharpShooter.desc": "أجب بشكل صحيح عن 10 أسئلة",
+    "profile.ach.onFire.title": "متصاعد",
+    "profile.ach.onFire.desc": "حقق دقة 80% مع 20 سؤالاً أو أكثر",
+    "profile.ach.consistent.title": "منتظم",
+    "profile.ach.consistent.desc": "ابدأ 3 حزم محتوى مختلفة",
+    "profile.ach.determined.title": "عازم",
+    "profile.ach.determined.desc": "حاول الإجابة عن 50 سؤالاً",
+    "profile.ach.marathon.title": "ماراثون",
+    "profile.ach.marathon.desc": "حاول الإجابة عن 100 سؤال",
+    "profile.ach.centuryClub.title": "نادي المئة",
+    "profile.ach.centuryClub.desc": "حاول الإجابة عن 250 سؤالاً",
+    "profile.ach.unstoppable.title": "لا يُوقَف",
+    "profile.ach.unstoppable.desc": "حاول الإجابة عن 500 سؤال",
+    "profile.ach.perfectionist.title": "مثالي",
+    "profile.ach.perfectionist.desc": "حقق دقة 90% مع 50 سؤالاً أو أكثر",
+    "profile.ach.sessionRunner.title": "عدّاء الجلسات",
+    "profile.ach.sessionRunner.desc": "أكمل 5 جلسات تدريبية",
+    "profile.ach.flashcardFanatic.title": "مهووس البطاقات",
+    "profile.ach.flashcardFanatic.desc": "راجع 50 بطاقة تعليمية",
+    "profile.ach.noteTaker.title": "مدوّن الملاحظات",
+    "profile.ach.noteTaker.desc": "أنشئ 5 ملاحظات",
 
     "settings.title": "الإعدادات",
     "settings.subtitle":
@@ -926,6 +950,12 @@ export const ar = {
     "sync.qr.connectingTo": "جارٍ الاتصال بـ {name}…",
     "sync.qr.startTransportHint":
       "ابدأ الاكتشاف بالأعلى لإنشاء رمز QR الخاص بنظيرك.",
+    "sync.qr.peerLinkIdle": "ابدأ الاكتشاف بالأعلى لإنشاء رمز QR الخاص بك.",
+
+    "sync.cloud.unavailable": "حسابات السحابة غير مفعّلة لهذه النسخة.",
+    "sync.cloud.signInTitle": "سجّل الدخول لتفعيل المزامنة السحابية",
+    "sync.cloud.signInDesc": "أنشئ حسابًا أو سجّل الدخول إلى حساب سحابي لنسخ تقدمك وإنجازاتك وإعداداتك احتياطيًا عبر جميع أجهزتك.",
+    "sync.cloud.signIn": "تسجيل الدخول",
 
     "sync.network.activeConnections": "الاتصالات النشطة ({n})",
 

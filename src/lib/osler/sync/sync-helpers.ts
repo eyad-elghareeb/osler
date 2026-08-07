@@ -29,6 +29,12 @@ export async function buildExportPayload(): Promise<SyncPayload> {
     data["osler_notes"] = notes;
   }
 
+  // Achievements (id → { id, unlockedAt })
+  const achievements = (await import("@/lib/osler/storage")).achievements.getAll();
+  if (Object.keys(achievements).length > 0) {
+    data["osler_achievements"] = achievements;
+  }
+
   // Article highlights (per-article keys)
   const articleHighlights = storage.exportArticleHighlights();
   for (const [articleId, items] of Object.entries(articleHighlights)) {

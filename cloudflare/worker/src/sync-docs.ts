@@ -15,6 +15,7 @@ export const SYNC_KINDS = [
   "articleHighlights",
   "writtenDrafts",
   "bookmarks",
+  "achievements",
 ] as const;
 
 export type SyncKind = (typeof SYNC_KINDS)[number];
@@ -35,6 +36,7 @@ const TIMESTAMP_KIND: Record<string, { field: string; fallback?: string }> = {
   flashcards: { field: "lastReviewed" },
   sessions: { field: "completedAt", fallback: "startedAt" },
   notes: { field: "updatedAt" },
+  achievements: { field: "unlockedAt" },
 };
 
 function itemTime(value: any, cfg: { field: string; fallback?: string }): number {

@@ -157,9 +157,16 @@ export function PeerLinkQrPanel({
           <div className="size-[140px] sm:size-[160px] rounded-xl bg-white p-2 shadow-sm flex items-center justify-center">
             {qrUrl ? (
               <img src={qrUrl} alt="My Peer QR" className="size-full" />
-            ) : (
+            ) : peerId ? (
               <div className="size-full flex items-center justify-center">
                 <Loader2 className="size-6 animate-spin text-muted-foreground" />
+              </div>
+            ) : (
+              <div className="size-full flex flex-col items-center justify-center gap-1.5 px-2">
+                <QrCode className="size-7 text-muted-foreground/50" />
+                <span className="text-[10px] text-muted-foreground text-center leading-tight">
+                  {t("sync.qr.peerLinkIdle")}
+                </span>
               </div>
             )}
           </div>

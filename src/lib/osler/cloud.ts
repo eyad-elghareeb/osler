@@ -635,6 +635,7 @@ export function startCloudSync(session: CloudSession): () => void {
     "osler-article-highlights-changed",
     "osler-written-drafts-changed",
     "osler-bookmarks-changed",
+    "osler-achievements-changed",
   ];
   for (const event of syncEvents) window.addEventListener(event, schedule);
   window.addEventListener("online", onOnline);

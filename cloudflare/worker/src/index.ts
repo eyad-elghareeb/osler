@@ -46,9 +46,9 @@ const MAX_DOCUMENT_BYTES = 2_000_000;
 // Stored payload (base64 gzip) budget for a single doc — leaves headroom under
 // D1's 2MB row limit for the other columns (user_id, kind, timestamps).
 const MAX_STORED_PAYLOAD_BYTES = 1_800_000;
-// Per-user total raw storage budget across all sync kinds (15MB). Seven kinds
-// each capped at 2MB sum to 14MB of reachable storage, so 15MB is the budget
-// the UI advertises and the per-kind caps are the practical ceiling.
+// Per-user total raw storage budget across all sync kinds (15MB). The kinds
+// each capped at 2MB sum to more than that, so 15MB is the budget the UI
+// advertises and the per-kind caps are the practical ceiling.
 const MAX_USER_STORAGE_BYTES = 15_360_000;
 // Cap on the decompressed size of an incoming gzip request body (sync PUTs).
 const MAX_GZIP_BODY_BYTES = 16_000_000;

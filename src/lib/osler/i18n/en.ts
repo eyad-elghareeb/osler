@@ -617,6 +617,30 @@ export const en = {
     "profile.totalCorrect": "Total correct",
     "profile.avgAccuracy": "Average accuracy",
     "profile.packsTouched": "Packs studied",
+    "profile.ach.firstSteps.title": "First Steps",
+    "profile.ach.firstSteps.desc": "Answer your first question",
+    "profile.ach.sharpShooter.title": "Sharp Shooter",
+    "profile.ach.sharpShooter.desc": "Get 10 questions correct",
+    "profile.ach.onFire.title": "On Fire",
+    "profile.ach.onFire.desc": "Reach 80% accuracy with 20+ questions",
+    "profile.ach.consistent.title": "Consistent",
+    "profile.ach.consistent.desc": "Start 3 different content packs",
+    "profile.ach.determined.title": "Determined",
+    "profile.ach.determined.desc": "Attempt 50 questions",
+    "profile.ach.marathon.title": "Marathon",
+    "profile.ach.marathon.desc": "Attempt 100 questions",
+    "profile.ach.centuryClub.title": "Century Club",
+    "profile.ach.centuryClub.desc": "Attempt 250 questions",
+    "profile.ach.unstoppable.title": "Unstoppable",
+    "profile.ach.unstoppable.desc": "Attempt 500 questions",
+    "profile.ach.perfectionist.title": "Perfectionist",
+    "profile.ach.perfectionist.desc": "Reach 90% accuracy with 50+ questions",
+    "profile.ach.sessionRunner.title": "Session Runner",
+    "profile.ach.sessionRunner.desc": "Complete 5 practice sessions",
+    "profile.ach.flashcardFanatic.title": "Flashcard Fanatic",
+    "profile.ach.flashcardFanatic.desc": "Review 50 flashcards",
+    "profile.ach.noteTaker.title": "Note Taker",
+    "profile.ach.noteTaker.desc": "Create 5 notes",
 
     "settings.title": "Settings",
     "settings.subtitle":
@@ -931,6 +955,12 @@ export const en = {
     "sync.qr.connectingTo": "Connecting to {name}\u2026",
     "sync.qr.startTransportHint":
       "Start discovery above to generate your peer QR code.",
+    "sync.qr.peerLinkIdle": "Start discovery above to generate your QR code.",
+
+    "sync.cloud.unavailable": "Cloud accounts are not configured for this instance.",
+    "sync.cloud.signInTitle": "Sign in to enable cloud sync",
+    "sync.cloud.signInDesc": "Create or sign in to a Cloud account to back up your progress, achievements, and settings across all devices.",
+    "sync.cloud.signIn": "Sign in",
 
     "sync.network.activeConnections": "Active Connections ({n})",
 

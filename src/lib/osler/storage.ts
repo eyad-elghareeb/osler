@@ -4,9 +4,10 @@
  */
 
 import type { EngineType } from "./types";
+import type { AchievementRecord } from "./achievements";
 
 const DB_NAME = "osler-db-v1";
-const DB_VERSION = 4;
+const DB_VERSION = 5;
 
 /** localStorage key holding the set of bookmarked library article paths. */
 export const ARTICLE_BOOKMARKS_KEY = "osler-article-bookmarks";
@@ -23,6 +24,7 @@ export const SYNC_KINDS = [
   "articleHighlights",
   "writtenDrafts",
   "bookmarks",
+  "achievements",
 ] as const;
 
 export type SyncKind = (typeof SYNC_KINDS)[number];
@@ -73,6 +75,10 @@ function openDB(): Promise<IDBDatabase> {
       }
       if (!db.objectStoreNames.contains("settings")) {
         db.createObjectStore("settings", { keyPath: "key" });
+      }
+      // v5: achievements store — persisted unlock records, synced like progress.
+      if (!db.objectStoreNames.contains("achievements")) {
+        db.createObjectStore("achievements", { keyPath: "key" });
       }
       // v2: notes store — markdown notes with optional pack/question context.
       if (!db.objectStoreNames.contains("notes")) {
@@ -647,6 +653,7 @@ export const storage = {
       }
     }
     snapshot.writtenDrafts = { records: writtenDraftRecords };
+    snapshot.achievements = { records: achievements.getAll() as unknown as Record<string, unknown> };
     return snapshot;
   },
 
@@ -743,6 +750,22 @@ export const storage = {
       }
       if (changed) dispatchChange("osler-written-drafts-changed");
     }
+
+    // achievements: union by id, newest unlockedAt wins.
+    const achRecords = snapshot.achievements?.records;
+    if (achRecords && typeof achRecords === "object") {
+      const entries = Object.entries(achRecords)
+        .filter(([id, incoming]) => {
+          const local = getCached<AchievementRecord>("achievements", id);
+          return !!incoming && typeof incoming === "object" && (!local || (incoming.unlockedAt ?? 0) > (local.unlockedAt ?? 0));
+        })
+        .map(([key, value]) => ({ key, value }));
+      if (entries.length) {
+        await idbPutBatch("achievements", entries);
+        entries.forEach((e) => setCached("achievements", e.key, e.value));
+        dispatchChange("osler-achievements-changed");
+      }
+    }
   },
 
   /** Serialize all article highlights (articleId -> HighlightItem[]) for backup/sync. */
@@ -831,6 +854,27 @@ export const storage = {
       }
       notesCache = await idbGetAllNotes();
       notifyNotesChanged();
+    }
+
+    // 5. Achievements (id → { id, unlockedAt })
+    const achArr = data["osler_achievements"] as Record<string, AchievementRecord> | AchievementRecord[] | undefined;
+    if (achArr) {
+      const entries = Array.isArray(achArr)
+        ? achArr.filter((r) => r && typeof r === "object" && typeof r.id === "string")
+        : Object.entries(achArr)
+            .filter(([, v]) => v && typeof v === "object" && typeof v.id === "string")
+            .map(([, value]) => value as AchievementRecord);
+      for (const rec of entries) {
+        const local = getCached<AchievementRecord>("achievements", rec.id);
+        if (!local || rec.unlockedAt > local.unlockedAt) {
+          setCached("achievements", rec.id, rec);
+        }
+      }
+      const batch = Object.entries(achievements.getAll()).map(([key, value]) => ({ key, value }));
+      if (batch.length > 0) {
+        await idbPutBatch("achievements", batch);
+        dispatchChange("osler-achievements-changed");
+      }
     }
   },
 };
@@ -1290,6 +1334,48 @@ export const settings = {
   async getBool(key: string): Promise<boolean> {
     const val = await settings.get(key);
     return val === "true";
+  },
+};
+
+/* ── Achievements (persisted unlock records, synced like progress) ───── */
+
+export const achievements = {
+  get(id: string): AchievementRecord | null {
+    return getCached<AchievementRecord>("achievements", id);
+  },
+
+  /** All unlocked achievements as `id → record`. */
+  getAll(): Record<string, AchievementRecord> {
+    const result: Record<string, AchievementRecord> = {};
+    for (const [k, v] of memoryCache) {
+      if (k.startsWith("achievements:")) {
+        result[k.replace("achievements:", "")] = v as AchievementRecord;
+      }
+    }
+    return result;
+  },
+
+  isUnlocked(id: string): boolean {
+    return !!getCached<AchievementRecord>("achievements", id);
+  },
+
+  unlock(id: string, unlockedAt = Date.now()) {
+    if (achievements.isUnlocked(id)) return;
+    const record: AchievementRecord = { id, unlockedAt };
+    setCached("achievements", id, record);
+    idbPut("achievements", id, record).catch(console.warn);
+    dispatchChange("osler-achievements-changed");
+  },
+
+  subscribe(cb: () => void): () => void {
+    if (typeof window === "undefined") return () => {};
+    const handler = () => cb();
+    window.addEventListener("osler-achievements-changed", handler);
+    window.addEventListener("storage", handler);
+    return () => {
+      window.removeEventListener("osler-achievements-changed", handler);
+      window.removeEventListener("storage", handler);
+    };
   },
 };
 

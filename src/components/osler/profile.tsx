@@ -11,6 +11,11 @@ import {
   Calendar,
   Zap,
   Flame,
+  Star,
+  ShieldCheck,
+  Medal,
+  CheckCircle2,
+  BookOpen,
   Settings as SettingsIcon,
   Cog,
   NotebookPen,
@@ -18,16 +23,25 @@ import {
   Trash2,
   Folder,
   ExternalLink,
-  Pencil,
-  Eye,
-  Tag,
-  Check,
-  ArrowLeft,
   Wifi,
   Cloud,
   User,
 } from "lucide-react";
-import { storage, notes as notesStore, type NoteRecord } from "@/lib/osler/storage";
+import {
+  storage,
+  notes as notesStore,
+  achievements as achievementsStore,
+  sessions,
+  flashcardReview,
+  type NoteRecord,
+} from "@/lib/osler/storage";
+import {
+  ACHIEVEMENTS,
+  evaluateAchievements,
+  type AchievementIconKey,
+  type AchievementRecord,
+  type AchievementStats,
+} from "@/lib/osler/achievements";
 import { loadAllContent, ENGINE_META } from "@/lib/osler/content";
 import type { AnyContent, ContentTreeNode } from "@/lib/osler/types";
 import type { OslerView } from "./app-shell";
@@ -70,6 +84,7 @@ export function Profile({
     items: Array<{ node: ContentTreeNode; content: AnyContent | null }>;
   } | null>(null);
   const [progress, setProgress] = React.useState(storage.allProgress());
+  const [unlockedAchievements, setUnlockedAchievements] = React.useState<Record<string, AchievementRecord>>({});
   const [, force] = React.useReducer((x) => x + 1, 0);
 
   React.useEffect(() => {
@@ -81,9 +96,20 @@ export function Profile({
     update();
     const unsub = storage.subscribe(update);
     const unsubHydrated = storage.onHydrated(update);
+    const unsubAch = achievementsStore.subscribe(() => {
+      setUnlockedAchievements(achievementsStore.getAll());
+      force();
+    });
+    const unsubSessions = sessions.subscribe(() => force());
+    const unsubFlash = flashcardReview.subscribe(() => force());
+    const unsubNotes = notesStore.subscribe(() => force());
     return () => {
       unsub();
       unsubHydrated();
+      unsubAch();
+      unsubSessions();
+      unsubFlash();
+      unsubNotes();
     };
   }, []);
 
@@ -107,6 +133,33 @@ export function Profile({
     });
     return stats;
   }, [progress, data]);
+
+  const sessionsCompleted = sessions.list().filter((s) => !!s.completedAt).length;
+  const flashcardsReviewed = Object.values(flashcardReview.getAll()).reduce(
+    (sum, r) => sum + (r.reviewCount ?? 0),
+    0,
+  );
+  const notesCount = notesStore.listSync().length;
+
+  const achievementStats: AchievementStats = {
+    attempted: attemptedTotal,
+    correct: correctTotal,
+    accuracy,
+    packsStarted: progress.length,
+    sessionsCompleted,
+    flashcardsReviewed,
+    notesCount,
+  };
+  const earned = evaluateAchievements(achievementStats);
+  const earnedKey = earned.join(",");
+  // Persist newly-earned achievements so the unlock record survives refresh
+  // and travels through cloud / P2P sync (idempotent — unlock() no-ops when
+  // already unlocked, so re-running on re-render is safe).
+  React.useEffect(() => {
+    if (!earnedKey) return;
+    for (const id of earnedKey.split(",")) achievementsStore.unlock(id);
+  }, [earnedKey]);
+  const unlockedIds = new Set<string>([...Object.keys(unlockedAchievements), ...earned]);
 
   return (
     <div className="osler-page">
@@ -257,45 +310,26 @@ export function Profile({
         {/* Notes */}
         <ProfileNotesSection onViewChange={onViewChange} />
 
-        {/* Achievement stubs */}
-        <SectionHeading>Achievements</SectionHeading>
+        {/* Achievements */}
+        <SectionHeading
+          actions={
+            <span className="text-xs text-muted-foreground">
+              {unlockedIds.size}/{ACHIEVEMENTS.length} {t("profile.achievements").toLowerCase()}
+            </span>
+          }
+        >
+          {t("profile.achievements")}
+        </SectionHeading>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
-          <Achievement
-            icon={Target}
-            title="First Steps"
-            description="Answer your first question"
-            unlocked={attemptedTotal >= 1}
-          />
-          <Achievement
-            icon={Award}
-            title="Sharp Shooter"
-            description="Get 10 questions correct"
-            unlocked={correctTotal >= 10}
-          />
-          <Achievement
-            icon={Zap}
-            title="On Fire"
-            description="Reach 80% accuracy with 20+ questions"
-            unlocked={attemptedTotal >= 20 && accuracy >= 80}
-          />
-          <Achievement
-            icon={Calendar}
-            title="Consistent"
-            description="Start 3 different content packs"
-            unlocked={progress.length >= 3}
-          />
-          <Achievement
-            icon={TrendingUp}
-            title="Determined"
-            description="Attempt 50 questions"
-            unlocked={attemptedTotal >= 50}
-          />
-          <Achievement
-            icon={Flame}
-            title="Marathon"
-            description="Attempt 100 questions"
-            unlocked={attemptedTotal >= 100}
-          />
+          {ACHIEVEMENTS.map((a) => (
+            <Achievement
+              key={a.id}
+              icon={ACHIEVEMENT_ICONS[a.icon]}
+              title={t(a.titleKey)}
+              description={t(a.descKey)}
+              unlocked={unlockedIds.has(a.id)}
+            />
+          ))}
         </div>
       </div>
 
@@ -331,6 +365,24 @@ function StatTile({
     />
   );
 }
+
+const ACHIEVEMENT_ICONS: Record<
+  AchievementIconKey,
+  React.ComponentType<{ className?: string }>
+> = {
+  target: Target,
+  award: Award,
+  zap: Zap,
+  calendar: Calendar,
+  trending: TrendingUp,
+  flame: Flame,
+  star: Star,
+  shield: ShieldCheck,
+  medal: Medal,
+  session: CheckCircle2,
+  flashcard: BookOpen,
+  notes: NotebookPen,
+};
 
 function Achievement({
   icon: Icon,

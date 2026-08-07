@@ -119,7 +119,25 @@ describe("mergeKind — bookmarks", () => {
 
 describe("SYNC_KINDS", () => {
   it("covers every kind merged by the worker", () => {
-    expect(SYNC_KINDS).toEqual(["qbank", "flashcards", "sessions", "notes", "highlights", "articleHighlights", "writtenDrafts", "bookmarks"]);
+    expect(SYNC_KINDS).toEqual(["qbank", "flashcards", "sessions", "notes", "highlights", "articleHighlights", "writtenDrafts", "bookmarks", "achievements"]);
+  });
+});
+
+describe("mergeKind — achievements", () => {
+  it("merges on unlockedAt, keeping the later unlock", () => {
+    const remote = { "first-steps": { id: "first-steps", unlockedAt: 100 } };
+    const local = { "first-steps": { id: "first-steps", unlockedAt: 200 }, "marathon": { id: "marathon", unlockedAt: 300 } };
+    const r = mergeKind(remote, local, "achievements");
+    expect(r.records["first-steps"].unlockedAt).toBe(200);
+    expect(r.records["marathon"].unlockedAt).toBe(300);
+    expect(r.changed).toBe(true);
+  });
+
+  it("ignores older unlocks and reports no change on a no-op re-push", () => {
+    const doc = { "first-steps": { id: "first-steps", unlockedAt: 100 } };
+    const r = mergeKind(doc, doc, "achievements");
+    expect(r.records["first-steps"].unlockedAt).toBe(100);
+    expect(r.changed).toBe(false);
   });
 });
 
