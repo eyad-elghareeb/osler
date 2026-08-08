@@ -53,10 +53,12 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { NotesPanel } from "./notes-panel";
 import { SyncModal } from "./sync/sync-modal";
+import { haptic } from "@/lib/osler/native";
 import {
   PageHeader,
   SectionHeading,
   StatTile as SharedStatTile,
+  OslerCard,
   type StatTileProps,
 } from "./ui-primitives";
 
@@ -271,6 +273,9 @@ export function Profile({
           />
         </div>
 
+        {/* Detailed Streak & Consistency Section */}
+        <ProfileStreakSection />
+
         {/* Engine breakdown */}
         <SectionHeading>{t("profile.performanceByEngine")}</SectionHeading>
         {Object.keys(engineStats).length === 0 ? (
@@ -348,6 +353,241 @@ export function Profile({
           onOpenSettingsSection?.("sync");
         }}
       />
+    </div>
+  );
+}
+
+/* ── Profile Streak & Detailed Consistency Section ───────────────────── */
+
+function ProfileStreakSection() {
+  const { t } = useI18n();
+  const [horizon, setHorizon] = React.useState<30 | 60>(30);
+  const [streakData, setStreakData] = React.useState(() => streak.compute());
+  const [activity, setActivity] = React.useState(() => streak.dailyActivity(horizon));
+  const [hovered, setHovered] = React.useState<number | null>(null);
+
+  React.useEffect(() => {
+    const update = () => {
+      setStreakData(streak.compute());
+      setActivity(streak.dailyActivity(horizon));
+    };
+    update();
+    const unsub = streak.subscribe(update);
+    return unsub;
+  }, [horizon]);
+
+  const activeDaysCount = activity.filter((a) => a.count > 0).length;
+  const totalQuestions = activity.reduce((sum, a) => sum + a.count, 0);
+  const avgDaily = activeDaysCount ? Math.round(totalQuestions / activeDaysCount) : 0;
+  const peakDay = Math.max(...activity.map((a) => a.count), 0);
+  const today = new Date().toISOString().slice(0, 10);
+
+  const chartW = 560;
+  const chartH = 110;
+  const barGap = horizon === 30 ? 4 : 2;
+  const barW = Math.max(4, Math.floor((chartW - barGap * (horizon - 1)) / horizon));
+  const maxCount = Math.max(peakDay, 1);
+
+  return (
+    <div className="mb-6">
+      <SectionHeading
+        icon={Flame}
+        actions={
+          <div className="flex items-center gap-1 bg-muted/60 p-0.5 rounded-lg border border-border">
+            <button
+              type="button"
+              onClick={() => { haptic("selection"); setHorizon(30); }}
+              className={cn(
+                "px-2.5 py-0.5 text-xs font-semibold rounded-md transition-colors cursor-pointer",
+                horizon === 30 ? "bg-primary text-primary-foreground shadow-xs" : "text-muted-foreground hover:text-foreground"
+              )}
+            >
+              {t("profile.streak.days30")}
+            </button>
+            <button
+              type="button"
+              onClick={() => { haptic("selection"); setHorizon(60); }}
+              className={cn(
+                "px-2.5 py-0.5 text-xs font-semibold rounded-md transition-colors cursor-pointer",
+                horizon === 60 ? "bg-primary text-primary-foreground shadow-xs" : "text-muted-foreground hover:text-foreground"
+              )}
+            >
+              {t("profile.streak.days60")}
+            </button>
+          </div>
+        }
+      >
+        {t("profile.streak.title")}
+      </SectionHeading>
+
+      <OslerCard padding="roomy">
+        {/* Top metrics summary bar */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
+          <div className="bg-muted/30 border border-border/60 rounded-xl p-3 text-start">
+            <div className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5 mb-1">
+              <Flame className="size-3.5 text-warning" />
+              <span>{t("dash.streak.title")}</span>
+            </div>
+            <div className="text-2xl font-extrabold tabular-nums flex items-baseline gap-1">
+              <span>{streakData.current}</span>
+              <span className="text-xs font-normal text-muted-foreground">/ {streakData.longest} {t("dash.streak.longest", { n: "" }).replace("Longest:", "").trim()}</span>
+            </div>
+          </div>
+
+          <div className="bg-muted/30 border border-border/60 rounded-xl p-3 text-start">
+            <div className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5 mb-1">
+              <Calendar className="size-3.5 text-primary" />
+              <span>{t("profile.streak.activeRatio")}</span>
+            </div>
+            <div className="text-2xl font-extrabold tabular-nums flex items-baseline gap-1">
+              <span>{activeDaysCount}</span>
+              <span className="text-xs font-normal text-muted-foreground">/ {horizon}d ({Math.round((activeDaysCount / horizon) * 100)}%)</span>
+            </div>
+          </div>
+
+          <div className="bg-muted/30 border border-border/60 rounded-xl p-3 text-start">
+            <div className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5 mb-1">
+              <Activity className="size-3.5 text-success" />
+              <span>{t("profile.streak.avgDaily")}</span>
+            </div>
+            <div className="text-2xl font-extrabold tabular-nums">
+              {avgDaily}
+            </div>
+          </div>
+
+          <div className="bg-muted/30 border border-border/60 rounded-xl p-3 text-start">
+            <div className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5 mb-1">
+              <TrendingUp className="size-3.5 text-info" />
+              <span>{t("profile.streak.peakDay")}</span>
+            </div>
+            <div className="text-2xl font-extrabold tabular-nums">
+              {peakDay}
+            </div>
+          </div>
+        </div>
+
+        {/* Detailed SVG Graph */}
+        <div className="relative select-none w-full">
+          <svg
+            viewBox={`0 0 ${chartW} ${chartH}`}
+            className="w-full overflow-visible"
+            style={{ height: chartH }}
+            aria-label="Study activity timeline graph"
+          >
+            <defs>
+              <linearGradient id="profile-bar-active" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor="var(--primary)" stopOpacity="0.95" />
+                <stop offset="100%" stopColor="var(--primary)" stopOpacity="0.3" />
+              </linearGradient>
+              <linearGradient id="profile-bar-today" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor="var(--warning)" stopOpacity="1" />
+                <stop offset="100%" stopColor="var(--warning)" stopOpacity="0.5" />
+              </linearGradient>
+              <linearGradient id="profile-bar-empty" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor="var(--muted-foreground)" stopOpacity="0.15" />
+                <stop offset="100%" stopColor="var(--muted-foreground)" stopOpacity="0.05" />
+              </linearGradient>
+            </defs>
+
+            {/* Horizontal guideline */}
+            <line
+              x1={0}
+              y1={chartH / 2}
+              x2={chartW}
+              y2={chartH / 2}
+              stroke="var(--border)"
+              strokeDasharray="4 4"
+              strokeOpacity={0.4}
+            />
+
+            {activity.map((d, i) => {
+              const x = i * (barW + barGap);
+              const isToday = d.date === today;
+              const isEmpty = d.count === 0;
+              const barH = isEmpty
+                ? 4
+                : Math.max(10, Math.round((d.count / maxCount) * (chartH - 12)));
+              const y = chartH - barH;
+              const fill = isToday
+                ? "url(#profile-bar-today)"
+                : isEmpty
+                ? "url(#profile-bar-empty)"
+                : "url(#profile-bar-active)";
+              const isHovered = hovered === i;
+
+              return (
+                <g key={d.date}>
+                  <rect
+                    x={x}
+                    y={y}
+                    width={barW}
+                    height={barH}
+                    rx={Math.min(3, barW / 2)}
+                    fill={fill}
+                    opacity={isHovered ? 1 : 0.85}
+                    style={{ transition: "opacity 0.15s, height 0.3s" }}
+                  />
+                  <rect
+                    x={x}
+                    y={0}
+                    width={barW}
+                    height={chartH}
+                    fill="transparent"
+                    onMouseEnter={() => { haptic("selection"); setHovered(i); }}
+                    onMouseLeave={() => setHovered(null)}
+                    className="cursor-pointer"
+                  />
+                </g>
+              );
+            })}
+          </svg>
+
+          {/* Interactive Tooltip */}
+          <AnimatePresence>
+            {hovered !== null && activity[hovered] && (
+              <motion.div
+                key={hovered}
+                initial={{ opacity: 0, y: 4, scale: 0.95 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, y: 4, scale: 0.95 }}
+                transition={{ duration: 0.12 }}
+                className="absolute -top-11 z-20 pointer-events-none -translate-x-1/2"
+                style={{
+                  left: `${Math.max(8, Math.min(92, ((hovered + 0.5) / horizon) * 100))}%`,
+                }}
+              >
+                <div className="bg-popover border border-border text-popover-foreground rounded-lg px-2.5 py-1 text-[11px] font-medium shadow-lg whitespace-nowrap flex items-center gap-1.5">
+                  <span className="text-foreground">
+                    {activity[hovered].date === today
+                      ? t("dash.streak.today")
+                      : new Date(activity[hovered].date + "T00:00:00Z").toLocaleDateString(undefined, {
+                          month: "short",
+                          day: "numeric",
+                        })}
+                  </span>
+                  <span className="text-muted-foreground">·</span>
+                  <span className="text-primary font-bold">
+                    {t("dash.streak.questions", { n: activity[hovered].count })}
+                  </span>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          {/* Timeline Date Footer */}
+          <div className="flex justify-between items-center text-[10px] text-muted-foreground/70 mt-2 font-medium">
+            <span>
+              {activity[0]?.date ? new Date(activity[0].date + "T00:00:00Z").toLocaleDateString(undefined, { month: "short", day: "numeric" }) : ""}
+            </span>
+            <span>
+              {activity[Math.floor(activity.length / 2)]?.date ? new Date(activity[Math.floor(activity.length / 2)].date + "T00:00:00Z").toLocaleDateString(undefined, { month: "short", day: "numeric" }) : ""}
+            </span>
+            <span className="font-semibold text-warning">
+              {t("dash.streak.today")}
+            </span>
+          </div>
+        </div>
+      </OslerCard>
     </div>
   );
 }

@@ -182,6 +182,13 @@ export const ar = {
     "dash.streak.activity": "نشاط 14 يوم",
     "dash.streak.dayLabel": "سلسلة {n} يوم",
 
+    "profile.streak.title": "الاستمرارية ورصيد الأيام المتتالية",
+    "profile.streak.days30": "30 يومًا",
+    "profile.streak.days60": "60 يومًا",
+    "profile.streak.activeRatio": "الأيام النشطة",
+    "profile.streak.avgDaily": "المتوسط / اليوم النشط",
+    "profile.streak.peakDay": "أعلى نشاط",
+
     "qbank.home.title": "استوديو بنك الأسئلة",
     "qbank.home.subtitle":
       "اعمل جلسة مذاكرة من الاختبارات والبنوك والأسئلة المقالية ومحطات OSCE والبطاقات.",

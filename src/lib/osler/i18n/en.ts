@@ -182,6 +182,13 @@ export const en = {
     "dash.streak.activity": "14-Day Activity",
     "dash.streak.dayLabel": "{n} day streak",
 
+    "profile.streak.title": "Consistency & Study Streak",
+    "profile.streak.days30": "30 Days",
+    "profile.streak.days60": "60 Days",
+    "profile.streak.activeRatio": "Active Days",
+    "profile.streak.avgDaily": "Avg / Active Day",
+    "profile.streak.peakDay": "Peak Daily",
+
     "qbank.home.title": "Q-Bank Studio",
     "qbank.home.subtitle":
       "Build a study session from quizzes, banks, written prompts, OSCE stations, and flashcards.",
