@@ -1060,9 +1060,10 @@ function HomeView({
     <div className="flex h-full overflow-hidden bg-background">
       <div className="flex-1 min-w-0 flex flex-col overflow-hidden">
         {/* Page header */}
-        <div className="px-4 md:px-6 lg:px-8 w-full max-w-7xl mx-auto pt-6 md:pt-8 pb-4">
+        <div className="px-4 md:px-6 lg:px-8 w-full max-w-7xl mx-auto pt-3 md:pt-4 pb-2">
           <PageHeader
-            eyebrowIcon={ClipboardCheck}
+            inline
+            inlineIcon={ClipboardCheck}
             title={t("qbank.home.title")}
             subtitle={t("qbank.home.subtitle")}
           />
@@ -1504,9 +1505,6 @@ function PackCard({
       : 0;
   const isAr = (content.meta.lang ?? node.lang) === "ar";
 
-  // Build the list of content URLs for this pack (used by the download button).
-  // Resolved through packBasePath so cloud instances precache R2 URLs and
-  // non-cloud instances precache the local /osler-content/ paths.
   const packUrls = React.useMemo(() => {
     const base = packBasePath(node);
     const urls = (node.files ?? []).map((f) => `${base}${f}`);
@@ -1514,11 +1512,16 @@ function PackCard({
     return urls;
   }, [node]);
 
+  const handleCardClick = () => {
+    haptic("light");
+    onOpenPack?.(node);
+  };
+
   return (
     <div
       role="button"
       tabIndex={0}
-      onClick={() => onOpenPack?.(node)}
+      onClick={handleCardClick}
       onContextMenu={(e) => {
         if (onContextMenu) {
           e.preventDefault();
@@ -1528,58 +1531,73 @@ function PackCard({
       onKeyDown={(e) => {
         if (e.key === "Enter" || e.key === " ") {
           e.preventDefault();
-          onOpenPack?.(node);
+          handleCardClick();
         }
       }}
       className={cn(
-        "medos-fade-in text-start bg-card border border-border rounded-xl p-5 hover:border-primary/40 hover:shadow-md hover:bg-primary/[0.02] transition-colors group flex flex-col gap-3 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
+        "medos-fade-in text-start bg-card border border-border rounded-2xl p-5 sm:p-6 hover:border-primary/40 hover:shadow-lg transition-all active:scale-[0.98] group flex flex-col justify-between gap-4 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
         isAr && "osler-content-ar",
       )}
       dir={isAr ? "rtl" : undefined}
       lang={isAr ? "ar" : undefined}
       style={{ animationDelay: `${index * 0.03}s` }}
     >
-      <div className="flex items-center gap-3">
+      <div className="flex items-start gap-3.5">
         <div
-          className="size-11 rounded-xl flex items-center justify-center shrink-0"
+          className="size-12 sm:size-14 rounded-2xl flex items-center justify-center shrink-0 shadow-sm"
           style={{ backgroundColor: `${meta.color}/15`, color: meta.color }}
         >
-          <Icon className="size-5" />
+          <Icon className="size-6 sm:size-7" />
         </div>
         <div className="min-w-0 flex-1">
-          <h3 className="font-semibold truncate text-foreground">{node.title}</h3>
-          <p className="text-xs text-muted-foreground">
+          <div className="flex items-center gap-2 mb-1">
+            <h3 className="font-bold text-base sm:text-lg truncate text-foreground leading-snug">{node.title}</h3>
+            {isAr && (
+              <span className="text-[10px] px-1.5 py-0.5 rounded bg-primary/15 text-primary font-semibold shrink-0">
+                {t("lang.badge.ar")}
+              </span>
+            )}
+          </div>
+          <p className="text-xs sm:text-sm text-muted-foreground font-medium">
             {t("qbank.home.questions", { n: count })}
           </p>
         </div>
-        {isAr && (
-          <span className="text-[10px] px-1.5 py-0.5 rounded bg-primary/15 text-primary font-semibold shrink-0">
-            {t("lang.badge.ar")}
-          </span>
-        )}
-        {/* Per-pack download button — precache this pack's content for offline use. */}
         <ContentCacheButton packId={node.uid} urls={packUrls} />
-        <ChevronRight className={cn("size-4 text-muted-foreground/40 group-hover:text-muted-foreground transition-colors shrink-0", rtl && "rtl-flip-x")} />
       </div>
-      <p className="text-xs text-muted-foreground/70 line-clamp-2">
+
+      <p className="text-xs sm:text-sm text-muted-foreground/80 line-clamp-2 leading-relaxed">
         {content.meta.description}
       </p>
-      {packProgress.attempted > 0 ? (
-        <>
-          <div className="flex items-center gap-2 text-[11px]">
-            <span className="text-success font-medium tabular-nums">{accuracy}%</span>
-            <span className="text-muted-foreground">{t("dash.accuracy")}</span>
+
+      <div className="pt-2 border-t border-border/40 flex items-center justify-between gap-3">
+        {packProgress.attempted > 0 ? (
+          <div className="flex-1 min-w-0 space-y-1">
+            <div className="flex items-center justify-between text-xs">
+              <span className="text-muted-foreground text-[11px] font-medium">{t("dash.accuracy")}</span>
+              <span className="text-success font-bold tabular-nums">{accuracy}%</span>
+            </div>
+            <div className="h-1.5 rounded-full bg-muted/50 overflow-hidden">
+              <div
+                className="h-full rounded-full bg-success transition-all duration-300"
+                style={{ width: `${accuracy}%` }}
+              />
+            </div>
           </div>
-          <div className="h-1.5 rounded-full bg-muted/40 overflow-hidden">
-            <div
-              className="h-full rounded-full bg-success transition-all duration-300"
-              style={{ width: `${accuracy}%` }}
-            />
-          </div>
-        </>
-      ) : (
-        <span className="text-[11px] text-muted-foreground/50">{t("qbank.home.start")}</span>
-      )}
+        ) : (
+          <span className="text-xs text-muted-foreground/60 font-medium">
+            {t("qbank.home.start")}
+          </span>
+        )}
+
+        <Button
+          size="sm"
+          variant="secondary"
+          className="rounded-xl px-4 text-xs font-bold group-hover:bg-primary group-hover:text-primary-foreground transition-colors shrink-0"
+        >
+          <span>{t("qbank.home.start")}</span>
+          <ChevronRight className={cn("size-3.5 ms-1 transition-transform group-hover:translate-x-0.5", rtl && "rtl-flip-x")} />
+        </Button>
+      </div>
     </div>
   );
 }
@@ -4216,18 +4234,13 @@ function QuizView({
     const qWrittenPassed = qWrittenVerdict === "pass" || (qWrittenVerdict === null && qWrittenDraft.evaluation?.passed === true);
 
     return (
-      <div className="h-full overflow-y-auto medos-scroll pr-1 -mr-1 pb-6" style={{ touchAction: "none" }}>
-        {/* Question header */}
-        <div className="flex flex-wrap items-center justify-between gap-2 pb-3 mb-4 border-b border-border/40">
-          <div className="flex items-center gap-2 text-xs text-muted-foreground">
-            <Badge variant="outline" className="text-[10px] font-medium rounded-md">{engineLabel}</Badge>
-            <span className="opacity-50">·</span>
-            <span className="capitalize">{question.difficulty ?? t("qbank.session.standard")}</span>
+      <div className="h-full overflow-y-auto medos-scroll pr-1 -mr-1 pb-4" style={{ touchAction: "none" }}>
+        {/* Optional subtle difficulty indicator */}
+        {question.difficulty && question.difficulty !== "standard" && (
+          <div className="mb-2 text-[11px] font-medium text-muted-foreground uppercase tracking-wider">
+            {question.difficulty}
           </div>
-          <div className="text-xs text-muted-foreground">
-            {t("qbank.session.questionId", { id: question.id })}
-          </div>
-        </div>
+        )}
 
         {/* Stem images */}
         {imageListOf(question.images).length > 0 && (
