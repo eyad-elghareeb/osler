@@ -609,51 +609,74 @@ export const storage = {
   },
 
   /**
-   * Serialize every syncable kind into a { kind: { records } } snapshot that
-   * mirrors the worker's SYNC_KINDS. Cloud sync pushes this whole snapshot so
-   * qbank progress, sessions, notes, highlights and bookmarks all travel.
+   * Serialize syncable kinds into a { kind: { records } } snapshot that
+   * mirrors the worker's SYNC_KINDS. Pass optional `kinds` array/Set to
+   * export only specific dirty kinds to save payload size and server work.
    */
-  exportSyncSnapshot(): Record<string, { records: Record<string, unknown> }> {
+  exportSyncSnapshot(kinds?: SyncKind[] | Set<SyncKind>): Record<string, { records: Record<string, unknown> }> {
     const snapshot: Record<string, { records: Record<string, unknown> }> = {};
-    snapshot.qbank = { records: storage.exportProgressRecords() as unknown as Record<string, unknown> };
-    snapshot.flashcards = { records: flashcardReview.getAll() as unknown as Record<string, unknown> };
-    const sessionRecords: Record<string, unknown> = {};
-    for (const s of sessions.list()) {
-      if (s.id === "__active__") continue;
-      sessionRecords[s.id] = s;
+    const shouldExport = (kind: SyncKind) => {
+      if (!kinds) return true;
+      return Array.isArray(kinds) ? kinds.includes(kind) : kinds.has(kind);
+    };
+
+    if (shouldExport("qbank")) {
+      snapshot.qbank = { records: storage.exportProgressRecords() as unknown as Record<string, unknown> };
     }
-    snapshot.sessions = { records: sessionRecords };
-    const noteRecords: Record<string, unknown> = {};
-    for (const n of notes.listSync()) noteRecords[n.id] = n;
-    snapshot.notes = { records: noteRecords };
-    const highlightRecords: Record<string, unknown> = {};
-    for (const [k, v] of memoryCache) {
-      if (k.startsWith("highlights:")) {
-        const key = k.replace("highlights:", "");
-        if (Array.isArray(v)) highlightRecords[key] = v;
+    if (shouldExport("flashcards")) {
+      snapshot.flashcards = { records: flashcardReview.getAll() as unknown as Record<string, unknown> };
+    }
+    if (shouldExport("sessions")) {
+      const sessionRecords: Record<string, unknown> = {};
+      for (const s of sessions.list()) {
+        if (s.id === "__active__") continue;
+        sessionRecords[s.id] = s;
       }
+      snapshot.sessions = { records: sessionRecords };
     }
-    snapshot.highlights = { records: highlightRecords };
-    snapshot.articleHighlights = { records: storage.exportArticleHighlights() as unknown as Record<string, unknown> };
-    const bookmarkRecords: Record<string, unknown> = {};
-    if (typeof window !== "undefined") {
-      try {
-        const raw = localStorage.getItem(ARTICLE_BOOKMARKS_KEY);
-        if (raw) {
-          const list = JSON.parse(raw);
-          if (Array.isArray(list)) for (const path of list) if (typeof path === "string") bookmarkRecords[path] = 1;
+    if (shouldExport("notes")) {
+      const noteRecords: Record<string, unknown> = {};
+      for (const n of notes.listSync()) noteRecords[n.id] = n;
+      snapshot.notes = { records: noteRecords };
+    }
+    if (shouldExport("highlights")) {
+      const highlightRecords: Record<string, unknown> = {};
+      for (const [k, v] of memoryCache) {
+        if (k.startsWith("highlights:")) {
+          const key = k.replace("highlights:", "");
+          if (Array.isArray(v)) highlightRecords[key] = v;
         }
-      } catch {}
-    }
-    snapshot.bookmarks = { records: bookmarkRecords };
-    const writtenDraftRecords: Record<string, unknown> = {};
-    for (const [k, v] of memoryCache) {
-      if (k.startsWith("writtenDrafts:")) {
-        writtenDraftRecords[k.replace("writtenDrafts:", "")] = v;
       }
+      snapshot.highlights = { records: highlightRecords };
     }
-    snapshot.writtenDrafts = { records: writtenDraftRecords };
-    snapshot.achievements = { records: achievements.getAll() as unknown as Record<string, unknown> };
+    if (shouldExport("articleHighlights")) {
+      snapshot.articleHighlights = { records: storage.exportArticleHighlights() as unknown as Record<string, unknown> };
+    }
+    if (shouldExport("bookmarks")) {
+      const bookmarkRecords: Record<string, unknown> = {};
+      if (typeof window !== "undefined") {
+        try {
+          const raw = localStorage.getItem(ARTICLE_BOOKMARKS_KEY);
+          if (raw) {
+            const list = JSON.parse(raw);
+            if (Array.isArray(list)) for (const path of list) if (typeof path === "string") bookmarkRecords[path] = 1;
+          }
+        } catch {}
+      }
+      snapshot.bookmarks = { records: bookmarkRecords };
+    }
+    if (shouldExport("writtenDrafts")) {
+      const writtenDraftRecords: Record<string, unknown> = {};
+      for (const [k, v] of memoryCache) {
+        if (k.startsWith("writtenDrafts:")) {
+          writtenDraftRecords[k.replace("writtenDrafts:", "")] = v;
+        }
+      }
+      snapshot.writtenDrafts = { records: writtenDraftRecords };
+    }
+    if (shouldExport("achievements")) {
+      snapshot.achievements = { records: achievements.getAll() as unknown as Record<string, unknown> };
+    }
     return snapshot;
   },
 

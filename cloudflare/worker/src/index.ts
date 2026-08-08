@@ -556,6 +556,29 @@ async function getAllDocuments(env: Env, userId: string): Promise<Record<string,
   return docs;
 }
 
+async function getSelectedDocuments(env: Env, userId: string, kinds: string[]): Promise<Record<string, { records: Record<string, any>; updatedAt: number }>> {
+  const docs: Record<string, { records: Record<string, any>; updatedAt: number }> = {};
+  const validKinds = new Set<string>(SYNC_KINDS);
+  for (const kind of kinds) {
+    if (validKinds.has(kind)) docs[kind] = await getDocument(env, userId, kind);
+  }
+  return docs;
+}
+
+async function getSyncHead(env: Env, userId: string): Promise<{ timestamps: Record<string, number>; usedBytes: number }> {
+  const rows = await env.DB.prepare("SELECT kind, updated_at, raw_bytes FROM progress_documents WHERE user_id = ?").bind(userId).all<{ kind: string; updated_at: number; raw_bytes: number }>();
+  const timestamps: Record<string, number> = {};
+  for (const k of SYNC_KINDS) timestamps[k] = 0;
+  let usedBytes = 0;
+  for (const row of rows.results || []) {
+    if (row.kind && typeof row.updated_at === "number") {
+      timestamps[row.kind] = row.updated_at;
+    }
+    usedBytes += Number(row.raw_bytes || 0);
+  }
+  return { timestamps, usedBytes };
+}
+
 // ─── Google OAuth ────────────────────────────────────────────────────────────
 
 function googleReady(env: Env): boolean {
@@ -2941,7 +2964,15 @@ export default {
       // ── Sync ──
       if (request.method === "GET" && url.pathname === "/v1/sync") {
         if (!rateLimit(ip, "sync")) return json({ error: "Too many requests" }, 429, origin, log);
-        const docs = await getAllDocuments(env, session.user.id);
+        const isHead = url.searchParams.get("head") === "true" || url.searchParams.get("head") === "1";
+        if (isHead) {
+          const { timestamps, usedBytes } = await getSyncHead(env, session.user.id);
+          return json({ timestamps, quota: { usedBytes, limitBytes: MAX_USER_STORAGE_BYTES } }, 200, origin, log);
+        }
+        const requestedKinds = url.searchParams.get("kinds")?.split(",").map(k => k.trim()).filter(Boolean);
+        const docs = requestedKinds && requestedKinds.length > 0
+          ? await getSelectedDocuments(env, session.user.id, requestedKinds)
+          : await getAllDocuments(env, session.user.id);
         const sizeRow = await env.DB.prepare("SELECT COALESCE(SUM(raw_bytes),0) as total FROM progress_documents WHERE user_id = ?").bind(session.user.id).first<{ total: number }>();
         return json({ ...docs, quota: { usedBytes: Number(sizeRow?.total ?? 0), limitBytes: MAX_USER_STORAGE_BYTES } }, 200, origin, log);
       }

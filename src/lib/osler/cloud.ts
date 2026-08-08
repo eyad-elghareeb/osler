@@ -1,5 +1,5 @@
 import { getConfig, loadConfig } from "@/lib/osler/config";
-import { storage, SYNC_KINDS } from "@/lib/osler/storage";
+import { storage, SYNC_KINDS, type SyncKind } from "@/lib/osler/storage";
 
 const SESSION_STORAGE_KEY = "osler-cloud-session-v1";
 /** Set in sessionStorage when a stored cloud session could not be restored
@@ -10,7 +10,7 @@ const SYNC_DEBOUNCE_MS = 4_000;
 const MIN_SYNC_INTERVAL_MS = 20_000;
 // Idle devices still pull the latest remote progress every minute so changes
 // made on another device converge here without waiting for a local edit.
-const SYNC_PULL_INTERVAL_MS = 60_000;
+const SYNC_PULL_INTERVAL_MS = 120_000;
 // Rotate the token through /v1/auth/refresh once it's within this window of
 // its expiry, so an active session never dies mid-use.
 const REFRESH_AHEAD_MS = 6 * 60 * 60 * 1000;
@@ -456,7 +456,18 @@ let forceSync: (() => void) | null = null;
 /** Last known cloud storage usage (reported by the worker's GET /v1/sync). */
 let syncQuota: { usedBytes: number; limitBytes: number } | null = null;
 
-/** Read the last-reported cloud storage quota, or null before first sync. */
+const EVENT_TO_KIND: Record<string, SyncKind> = {
+  "osler-progress-changed": "qbank",
+  "osler-flashcard-changed": "flashcards",
+  "osler-sessions-changed": "sessions",
+  "osler-notes-changed": "notes",
+  "osler-highlights-changed": "highlights",
+  "osler-article-highlights-changed": "articleHighlights",
+  "osler-written-drafts-changed": "writtenDrafts",
+  "osler-bookmarks-changed": "bookmarks",
+  "osler-achievements-changed": "achievements",
+};
+
 export function getSyncQuota(): { usedBytes: number; limitBytes: number } | null {
   return syncQuota;
 }
@@ -469,15 +480,10 @@ export function startCloudSync(session: CloudSession): () => void {
   stopSync?.();
   let stopped = false;
   let currentSession = session;
-  let dirty = true;
-  // Set by schedule() whenever a data change lands while a sync is in flight.
-  // Without it, `dirty = false` after a successful PUT would swallow that
-  // mid-sync change and it would never reach the cloud.
-  let dirtyDuringSync = false;
+  const dirtyKinds = new Set<SyncKind>();
+  const dirtyKindsDuringSync = new Set<SyncKind>();
   let syncing = false;
   let lastSyncAt = 0;
-  // Per-kind server snapshots so a qbank write doesn't 409 the flashcards
-  // write (and vice versa) — each kind compares against its own updatedAt.
   const serverUpdatedAt: Record<string, number> = {};
   let retryCount = 0;
   let timer: ReturnType<typeof setTimeout> | null = null;
@@ -485,7 +491,7 @@ export function startCloudSync(session: CloudSession): () => void {
 
   const runSync = async (pullOnly = false) => {
     if (stopped || syncing) return;
-    if (!pullOnly && !dirty) return;
+    if (!pullOnly && dirtyKinds.size === 0) return;
     if (!navigator.onLine) {
       timer = setTimeout(() => void runSync(pullOnly), SYNC_DEBOUNCE_MS);
       return;
@@ -496,91 +502,113 @@ export function startCloudSync(session: CloudSession): () => void {
       return;
     }
     syncing = true;
-    dirtyDuringSync = false;
-    const hadPendingChanges = dirty;
+    dirtyKindsDuringSync.clear();
+    const kindsToPush = new Set(dirtyKinds);
     window.dispatchEvent(new CustomEvent("osler-cloud-sync-status", { detail: { state: "syncing" } }));
     try {
       await storage.ensureCacheHydrated();
 
-      // Rotate the token early when it's close to expiry so an active session
-      // never dies mid-sync.
       if (currentSession.expiresAt - Date.now() < REFRESH_AHEAD_MS) {
         const refreshed = await refreshCloudSession(currentSession);
         if (refreshed) currentSession = refreshed;
       }
 
       const config = getConfig();
-      const remote = await request<Record<string, { records: Record<string, unknown>; updatedAt: number } & { usedBytes?: number; limitBytes?: number }>>("/v1/sync", {}, currentSession.token);
-      // Track quota usage reported by the worker (usedBytes / limitBytes).
-      if (typeof remote.quota?.usedBytes === "number" && typeof remote.quota?.limitBytes === "number") {
-        syncQuota = { usedBytes: remote.quota.usedBytes, limitBytes: remote.quota.limitBytes };
+
+      // 1. Lightweight HEAD check to inspect server timestamps and quota
+      const head = await request<{
+        timestamps?: Record<string, number>;
+        quota?: { usedBytes: number; limitBytes: number };
+      }>("/v1/sync?head=true", {}, currentSession.token);
+
+      if (typeof head.quota?.usedBytes === "number" && typeof head.quota?.limitBytes === "number") {
+        syncQuota = { usedBytes: head.quota.usedBytes, limitBytes: head.quota.limitBytes };
         window.dispatchEvent(new CustomEvent("osler-cloud-sync-quota", { detail: syncQuota }));
       }
-      // Respect the per-kind config gates before merging (and later pushing).
-      if (!config.cloud.syncQbank) delete remote.qbank;
-      if (!config.cloud.syncFlashcards) delete remote.flashcards;
-      if (!config.cloud.syncContent) {
-        delete remote.sessions;
-        delete remote.notes;
-        delete remote.highlights;
-        delete remote.articleHighlights;
-        delete remote.writtenDrafts;
-        delete remote.bookmarks;
-      }
-      await storage.mergeCloudSnapshot(remote);
-      // Track the per-kind server snapshots for optimistic concurrency.
+
+      const remoteTimestamps = head.timestamps || {};
+      const kindsToPull: SyncKind[] = [];
       for (const kind of SYNC_KINDS) {
-        if (remote[kind]) serverUpdatedAt[kind] = remote[kind]?.updatedAt ?? 0;
+        const remoteTime = remoteTimestamps[kind] ?? 0;
+        const localServerTime = serverUpdatedAt[kind] ?? 0;
+        if (remoteTime > localServerTime) {
+          if (kind === "qbank" && !config.cloud.syncQbank) continue;
+          if (kind === "flashcards" && !config.cloud.syncFlashcards) continue;
+          if (kind !== "qbank" && kind !== "flashcards" && !config.cloud.syncContent) continue;
+          kindsToPull.push(kind as SyncKind);
+        }
       }
 
-      if (hadPendingChanges) {
-        const headers: Record<string, string> = {};
-        for (const kind of SYNC_KINDS) {
-          if (serverUpdatedAt[kind] > 0) headers[`x-sync-since-${kind}`] = String(serverUpdatedAt[kind]);
-        }
-        const payload = storage.exportSyncSnapshot();
-        if (!config.cloud.syncQbank) delete payload.qbank;
-        if (!config.cloud.syncFlashcards) delete payload.flashcards;
+      // 2. Pull only outdated kinds (if any)
+      if (kindsToPull.length > 0) {
+        const remote = await request<Record<string, { records: Record<string, unknown>; updatedAt: number }>>(`/v1/sync?kinds=${kindsToPull.join(",")}`, {}, currentSession.token);
+        if (!config.cloud.syncQbank) delete remote.qbank;
+        if (!config.cloud.syncFlashcards) delete remote.flashcards;
         if (!config.cloud.syncContent) {
-          delete payload.sessions;
-          delete payload.notes;
-          delete payload.highlights;
-          delete payload.articleHighlights;
-          delete payload.writtenDrafts;
-          delete payload.bookmarks;
+          delete remote.sessions;
+          delete remote.notes;
+          delete remote.highlights;
+          delete remote.articleHighlights;
+          delete remote.writtenDrafts;
+          delete remote.bookmarks;
         }
-        await request("/v1/sync", {
-          method: "PUT",
-          headers,
-          body: JSON.stringify(payload),
-        }, currentSession.token);
-        lastSyncAt = Date.now();
-        window.dispatchEvent(new CustomEvent("osler-cloud-sync-status", { detail: { state: "synced", syncedAt: lastSyncAt } }));
+        await storage.mergeCloudSnapshot(remote);
+        for (const kind of SYNC_KINDS) {
+          if (remote[kind]) serverUpdatedAt[kind] = remote[kind]?.updatedAt ?? remoteTimestamps[kind] ?? 0;
+        }
       } else {
-        // Pull-only: nothing to push. `dirty = dirtyDuringSync` below absorbs
-        // any change that landed while the pull was in flight (the merge's own
-        // change events also go through schedule()).
+        for (const kind of SYNC_KINDS) {
+          if (remoteTimestamps[kind] != null) serverUpdatedAt[kind] = remoteTimestamps[kind];
+        }
+      }
+
+      // 3. Selective Push
+      if (kindsToPush.size > 0) {
+        const activeKindsToPush: SyncKind[] = [];
+        for (const kind of kindsToPush) {
+          if (kind === "qbank" && !config.cloud.syncQbank) continue;
+          if (kind === "flashcards" && !config.cloud.syncFlashcards) continue;
+          if (kind !== "qbank" && kind !== "flashcards" && !config.cloud.syncContent) continue;
+          activeKindsToPush.push(kind);
+        }
+
+        if (activeKindsToPush.length > 0) {
+          const headers: Record<string, string> = {};
+          for (const kind of activeKindsToPush) {
+            if (serverUpdatedAt[kind] > 0) headers[`x-sync-since-${kind}`] = String(serverUpdatedAt[kind]);
+          }
+          const payload = storage.exportSyncSnapshot(activeKindsToPush);
+          const pushedResult = await request<Record<string, { records: Record<string, unknown>; updatedAt: number }>>("/v1/sync", {
+            method: "PUT",
+            headers,
+            body: JSON.stringify(payload),
+          }, currentSession.token);
+
+          for (const kind of activeKindsToPush) {
+            if (pushedResult[kind]?.updatedAt) {
+              serverUpdatedAt[kind] = pushedResult[kind].updatedAt;
+            }
+            dirtyKinds.delete(kind);
+          }
+          lastSyncAt = Date.now();
+          window.dispatchEvent(new CustomEvent("osler-cloud-sync-status", { detail: { state: "synced", syncedAt: lastSyncAt } }));
+        }
+      } else {
         lastSyncAt = Date.now();
       }
-      // If a change arrived mid-sync, keep dirty so the follow-up run pushes it.
-      dirty = dirtyDuringSync;
+
+      for (const kind of dirtyKindsDuringSync) {
+        dirtyKinds.add(kind);
+      }
       retryCount = 0;
     } catch (error) {
-      // Only a real network-level failure (offline mid-request, DNS, CORS
-      // preflight) is "offline". A CloudApiError means the server answered —
-      // 401/409 retry below, anything else self-heals in the `finally` block,
-      // so the UI should keep showing the retrying state rather than a false
-      // "Offline mode" badge.
       if (error instanceof CloudApiError) {
         if (error.status === 401) {
-          // The token is dead (expired/revoked). Try once to rotate it; if
-          // that fails the session is genuinely gone and we sign the user out
-          // rather than leaving them on a silently-local account.
           const refreshed = await refreshCloudSession(currentSession);
           if (refreshed) {
             currentSession = refreshed;
             for (const kind of Object.keys(serverUpdatedAt)) serverUpdatedAt[kind] = 0;
-            dirty = true;
+            for (const kind of SYNC_KINDS) dirtyKinds.add(kind as SyncKind);
             lastSyncAt = 0;
           } else {
             clearCloudSession();
@@ -588,12 +616,8 @@ export function startCloudSync(session: CloudSession): () => void {
             stopped = true;
           }
         } else if (error.status === 409) {
-          // Conflict — data changed since we fetched. Re-fetch and retry.
-          // The retry is scheduled in the `finally` block (after `syncing`
-          // flips false) so it actually runs — the old code re-entered sync
-          // while `syncing` was still true and silently dropped the retry.
           for (const kind of Object.keys(serverUpdatedAt)) serverUpdatedAt[kind] = 0;
-          dirty = true;
+          for (const kind of SYNC_KINDS) dirtyKinds.add(kind as SyncKind);
           lastSyncAt = 0;
         }
       } else {
@@ -601,10 +625,7 @@ export function startCloudSync(session: CloudSession): () => void {
       }
     } finally {
       syncing = false;
-      // Self-heal: retry with exponential backoff while still dirty so a
-      // transient failure or conflict doesn't stall sync until the next
-      // progress event.
-      if (dirty && !stopped && navigator.onLine) {
+      if (dirtyKinds.size > 0 && !stopped && navigator.onLine) {
         if (timer) clearTimeout(timer);
         const backoff = Math.min(RETRY_BASE_MS * 2 ** retryCount, RETRY_MAX_MS);
         retryCount += 1;
@@ -612,20 +633,44 @@ export function startCloudSync(session: CloudSession): () => void {
       }
     }
   };
-  const schedule = () => {
-    dirty = true;
-    dirtyDuringSync = true;
+
+  const schedule = (e?: Event) => {
+    if (e && e.type in EVENT_TO_KIND) {
+      const kind = EVENT_TO_KIND[e.type];
+      dirtyKinds.add(kind);
+      dirtyKindsDuringSync.add(kind);
+    } else {
+      for (const kind of SYNC_KINDS) {
+        dirtyKinds.add(kind as SyncKind);
+        dirtyKindsDuringSync.add(kind as SyncKind);
+      }
+    }
     if (timer) clearTimeout(timer);
     timer = setTimeout(() => void runSync(), SYNC_DEBOUNCE_MS);
   };
+
   const onOnline = () => schedule();
-  // Returning to the app is a good time to fetch whatever changed elsewhere.
-  const onVisible = () => {
-    if (document.visibilityState === "visible" && !syncing) void runSync(true);
+
+  const startPolling = () => {
+    if (pullTimer) clearInterval(pullTimer);
+    pullTimer = setInterval(() => void runSync(true), SYNC_PULL_INTERVAL_MS);
   };
-  // Every changeable content type schedules a push, so sessions, notes,
-  // highlights, written drafts and bookmarks sync just like qbank/flashcard
-  // progress.
+  const stopPolling = () => {
+    if (pullTimer) {
+      clearInterval(pullTimer);
+      pullTimer = null;
+    }
+  };
+
+  const onVisible = () => {
+    if (document.visibilityState === "visible") {
+      startPolling();
+      if (!syncing) void runSync(true);
+    } else {
+      stopPolling();
+    }
+  };
+
   const syncEvents = [
     "osler-progress-changed",
     "osler-flashcard-changed",
@@ -640,19 +685,24 @@ export function startCloudSync(session: CloudSession): () => void {
   for (const event of syncEvents) window.addEventListener(event, schedule);
   window.addEventListener("online", onOnline);
   document.addEventListener("visibilitychange", onVisible);
-  pullTimer = setInterval(() => void runSync(true), SYNC_PULL_INTERVAL_MS);
-  void runSync();
+
+  if (typeof document !== "undefined" && document.visibilityState === "visible") {
+    startPolling();
+  }
+  void runSync(true);
+
   forceSync = () => {
-    dirty = true;
+    for (const kind of SYNC_KINDS) dirtyKinds.add(kind as SyncKind);
     lastSyncAt = 0;
     retryCount = 0;
     if (timer) clearTimeout(timer);
     void runSync();
   };
+
   stopSync = () => {
     stopped = true;
     if (timer) clearTimeout(timer);
-    if (pullTimer) clearInterval(pullTimer);
+    stopPolling();
     for (const event of syncEvents) window.removeEventListener(event, schedule);
     window.removeEventListener("online", onOnline);
     document.removeEventListener("visibilitychange", onVisible);
