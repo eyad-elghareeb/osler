@@ -1673,6 +1673,161 @@ export const quizSettings = {
   },
 };
 
+/* ── Streak (daily consecutive-day tracking) ─────────────────────────── */
+
+/**
+ * Returns the UTC date string (YYYY-MM-DD) for a given timestamp.
+ * All streak logic is anchored to UTC midnight to be timezone-agnostic.
+ */
+function toUtcDay(ts: number): string {
+  const d = new Date(ts);
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}-${String(d.getUTCDate()).padStart(2, "0")}`;
+}
+
+function todayUtc(): string {
+  return toUtcDay(Date.now());
+}
+
+/** Build the union of all days on which ≥1 question was answered. */
+function collectActiveDaysFromCache(): Set<string> {
+  const days = new Set<string>();
+  for (const [k, v] of memoryCache) {
+    if (k.startsWith("progress:")) {
+      const r = v as QuestionRecord;
+      if (r?.timestamp) days.add(toUtcDay(r.timestamp));
+    } else if (k.startsWith("flashcardReviews:")) {
+      const r = v as FlashcardReviewRecord;
+      if (r?.lastReviewed) days.add(toUtcDay(r.lastReviewed));
+    }
+  }
+  return days;
+}
+
+export interface StreakData {
+  /** Current consecutive-day streak count (with 24h grace window). */
+  current: number;
+  /** All-time longest streak. */
+  longest: number;
+  /** Set of YYYY-MM-DD strings on which the user was active. */
+  activeDays: Set<string>;
+  /** Whether the user has been active today (or in the last 24h). */
+  activeToday: boolean;
+}
+
+export interface DailyActivity {
+  /** YYYY-MM-DD */
+  date: string;
+  /** Questions answered on this date. */
+  count: number;
+}
+
+export const streak = {
+  /**
+   * Compute streak metrics from the in-memory cache.
+   *
+   * Grace window: a gap of exactly 1 missed day is tolerated when computing
+   * the current streak — the user has until midnight of the day AFTER a miss
+   * to study before the streak breaks (equivalent to a ~24-48h window).
+   *
+   * Concretely: when walking backwards we allow one "skip" in the chain.
+   * The skip token is consumed the first time we see a missing day, and the
+   * chain breaks on the second consecutive miss.
+   */
+  compute(): StreakData {
+    const activeDays = collectActiveDaysFromCache();
+    const today = todayUtc();
+    const activeToday = activeDays.has(today);
+
+    if (activeDays.size === 0) return { current: 0, longest: 0, activeDays, activeToday: false };
+
+    // Sort all active days ascending.
+    const sorted = Array.from(activeDays).sort();
+
+    // ── Compute longest streak (no grace window for all-time best) ──────
+    let longest = 1;
+    let run = 1;
+    for (let i = 1; i < sorted.length; i++) {
+      const prev = new Date(sorted[i - 1] + "T00:00:00Z");
+      const curr = new Date(sorted[i] + "T00:00:00Z");
+      const diffDays = Math.round((curr.getTime() - prev.getTime()) / 86_400_000);
+      if (diffDays === 1) {
+        run++;
+        longest = Math.max(longest, run);
+      } else {
+        run = 1;
+      }
+    }
+
+    // ── Compute current streak (with 1-day grace window) ────────────────
+    // Walk backwards from today. We allow the chain to skip exactly one
+    // missing day (the grace skip). The starting cursor is "today" —
+    // if the user hasn't studied today the grace window covers that gap.
+    let current = 0;
+    let graceUsed = !activeToday; // if not active today, grace is pre-consumed
+    let cursorMs = new Date(today + "T00:00:00Z").getTime();
+
+    for (let i = 0; i < 366; i++) {
+      const dayStr = toUtcDay(cursorMs);
+      if (activeDays.has(dayStr)) {
+        current++;
+        cursorMs -= 86_400_000;
+      } else if (!graceUsed) {
+        // consume the grace skip — don't increment, just step back one more day
+        graceUsed = true;
+        cursorMs -= 86_400_000;
+      } else {
+        break;
+      }
+    }
+
+    return { current, longest, activeDays, activeToday };
+  },
+
+  /**
+   * Return per-day question counts for the last `days` calendar days
+   * (including today), sorted oldest → newest.
+   */
+  dailyActivity(days: number): DailyActivity[] {
+    const counts = new Map<string, number>();
+    // Seed all days with 0 so the chart always has a full range.
+    for (let i = days - 1; i >= 0; i--) {
+      counts.set(toUtcDay(Date.now() - i * 86_400_000), 0);
+    }
+    for (const [k, v] of memoryCache) {
+      if (k.startsWith("progress:")) {
+        const r = v as QuestionRecord;
+        if (r?.timestamp) {
+          const day = toUtcDay(r.timestamp);
+          if (counts.has(day)) counts.set(day, (counts.get(day) ?? 0) + 1);
+        }
+      } else if (k.startsWith("flashcardReviews:")) {
+        const r = v as FlashcardReviewRecord;
+        if (r?.lastReviewed) {
+          const day = toUtcDay(r.lastReviewed);
+          if (counts.has(day)) counts.set(day, (counts.get(day) ?? 0) + 1);
+        }
+      }
+    }
+    return Array.from(counts.entries())
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([date, count]) => ({ date, count }));
+  },
+
+  /** Subscribe to any data changes that may affect streak (progress + flashcards). */
+  subscribe(cb: () => void): () => void {
+    if (typeof window === "undefined") return () => {};
+    const handler = () => cb();
+    window.addEventListener("osler-progress-changed", handler);
+    window.addEventListener("osler-flashcard-changed", handler);
+    window.addEventListener("osler-hydrated", handler);
+    return () => {
+      window.removeEventListener("osler-progress-changed", handler);
+      window.removeEventListener("osler-flashcard-changed", handler);
+      window.removeEventListener("osler-hydrated", handler);
+    };
+  },
+};
+
 // Run migration on load
 if (typeof window !== "undefined") {
   openDB().then(() => {

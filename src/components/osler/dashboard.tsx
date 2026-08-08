@@ -50,6 +50,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 
+import { StreakCard } from "./streak-card";
 import { useOslerRouter } from "@/lib/osler/navigation";
 import { useOslerSession } from "@/lib/osler/session-context";
 
@@ -358,7 +359,7 @@ export function Dashboard({
         ) : null}
 
         {/* Stat cards */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-8">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
           <StatTile
             label={t("dash.packsStarted")}
             value={stats.packs}
@@ -388,6 +389,9 @@ export function Dashboard({
             onClick={() => onViewChange("profile")}
           />
         </div>
+
+        {/* Streak & Consistency Graph */}
+        <StreakCard />
 
         {/* Quick actions */}
         <SectionHeading>{t("dash.quickActions")}</SectionHeading>

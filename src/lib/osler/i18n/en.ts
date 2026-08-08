@@ -174,6 +174,14 @@ export const en = {
     "dash.sessionProgress": "Question {n} of {total}",
     "dash.resumePrompt": "You have an unfinished session. Would you like to resume or dismiss it?",
 
+    "dash.streak.title": "Day Streak",
+    "dash.streak.longest": "Longest: {n} days",
+    "dash.streak.keepGoing": "Study today to keep your streak!",
+    "dash.streak.today": "Today",
+    "dash.streak.questions": "{n} questions",
+    "dash.streak.activity": "14-Day Activity",
+    "dash.streak.dayLabel": "{n} day streak",
+
     "qbank.home.title": "Q-Bank Studio",
     "qbank.home.subtitle":
       "Build a study session from quizzes, banks, written prompts, OSCE stations, and flashcards.",
@@ -648,6 +656,12 @@ export const en = {
     "profile.ach.flashcardFanatic.desc": "Review 50 flashcards",
     "profile.ach.noteTaker.title": "Note Taker",
     "profile.ach.noteTaker.desc": "Create 5 notes",
+    "profile.ach.streak3.title": "On a Roll",
+    "profile.ach.streak3.desc": "Maintain a 3-day study streak",
+    "profile.ach.streak7.title": "Week Warrior",
+    "profile.ach.streak7.desc": "Maintain a 7-day study streak",
+    "profile.ach.streak30.title": "Ironclad",
+    "profile.ach.streak30.desc": "Maintain a 30-day study streak",
 
     "settings.title": "Settings",
     "settings.subtitle":

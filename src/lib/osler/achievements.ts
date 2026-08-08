@@ -16,6 +16,8 @@ export interface AchievementStats {
   sessionsCompleted: number;
   flashcardsReviewed: number;
   notesCount: number;
+  /** Current consecutive-day streak (with 24h grace window). */
+  currentStreak: number;
 }
 
 /** A persisted, syncable achievement unlock record. */
@@ -132,6 +134,27 @@ export const ACHIEVEMENTS: AchievementDef[] = [
     descKey: "profile.ach.noteTaker.desc",
     icon: "notes",
     check: (s) => s.notesCount >= 5,
+  },
+  {
+    id: "streak-3",
+    titleKey: "profile.ach.streak3.title",
+    descKey: "profile.ach.streak3.desc",
+    icon: "flame",
+    check: (s) => s.currentStreak >= 3,
+  },
+  {
+    id: "streak-7",
+    titleKey: "profile.ach.streak7.title",
+    descKey: "profile.ach.streak7.desc",
+    icon: "flame",
+    check: (s) => s.currentStreak >= 7,
+  },
+  {
+    id: "streak-30",
+    titleKey: "profile.ach.streak30.title",
+    descKey: "profile.ach.streak30.desc",
+    icon: "flame",
+    check: (s) => s.currentStreak >= 30,
   },
 ];
 

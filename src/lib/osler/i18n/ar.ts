@@ -174,6 +174,14 @@ export const ar = {
     "dash.resumeSession": "استئناف الجلسة",
     "dash.sessionProgress": "السؤال {n} من {total}",
 
+    "dash.streak.title": "أيام متتالية",
+    "dash.streak.longest": "الأطول: {n} يوم",
+    "dash.streak.keepGoing": "ذاكر اليوم لتحافظ على سلسلتك!",
+    "dash.streak.today": "اليوم",
+    "dash.streak.questions": "{n} سؤال",
+    "dash.streak.activity": "نشاط 14 يوم",
+    "dash.streak.dayLabel": "سلسلة {n} يوم",
+
     "qbank.home.title": "استوديو بنك الأسئلة",
     "qbank.home.subtitle":
       "اعمل جلسة مذاكرة من الاختبارات والبنوك والأسئلة المقالية ومحطات OSCE والبطاقات.",
@@ -648,6 +656,12 @@ export const ar = {
     "profile.ach.flashcardFanatic.desc": "راجع 50 بطاقة تعليمية",
     "profile.ach.noteTaker.title": "مدوّن الملاحظات",
     "profile.ach.noteTaker.desc": "أنشئ 5 ملاحظات",
+    "profile.ach.streak3.title": "في الطريق الصحيح",
+    "profile.ach.streak3.desc": "حافظ على سلسلة مذاكرة 3 أيام",
+    "profile.ach.streak7.title": "محارب الأسبوع",
+    "profile.ach.streak7.desc": "حافظ على سلسلة مذاكرة 7 أيام",
+    "profile.ach.streak30.title": "فولاذي",
+    "profile.ach.streak30.desc": "حافظ على سلسلة مذاكرة 30 يومًا",
 
     "settings.title": "الإعدادات",
     "settings.subtitle":

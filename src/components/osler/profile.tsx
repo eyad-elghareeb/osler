@@ -33,6 +33,7 @@ import {
   achievements as achievementsStore,
   sessions,
   flashcardReview,
+  streak,
   type NoteRecord,
 } from "@/lib/osler/storage";
 import {
@@ -150,6 +151,7 @@ export function Profile({
     sessionsCompleted,
     flashcardsReviewed,
     notesCount,
+    currentStreak: streak.compute().current,
   };
   const earned = evaluateAchievements(achievementStats);
   const earnedKey = earned.join(",");
