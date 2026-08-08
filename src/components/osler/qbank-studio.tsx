@@ -1742,23 +1742,6 @@ function ContentTab({
     [],
   );
 
-  // Aggregate stats across all content
-  const totalStats = React.useMemo(() => {
-    let packs = 0;
-    let questions = 0;
-    let attempted = 0;
-    let correct = 0;
-    for (const { node, content } of data?.items ?? []) {
-      if (!content) continue;
-      packs += 1;
-      questions += countQuestions(content);
-      const p = storage.packProgress(node.uid);
-      attempted += p.attempted;
-      correct += p.correct;
-    }
-    return { packs, questions, attempted, correct };
-  }, [data]);
-
   const handleNodeClick = React.useCallback(
     (node: ContentTreeNode) => {
       if (node.items.length > 0) {
@@ -1799,40 +1782,10 @@ function ContentTab({
   }
 
   const selectedFolder = selectedFolderIdx !== null ? filteredRootTree[selectedFolderIdx] : null;
-  const accuracy = totalStats.attempted > 0
-    ? Math.round((totalStats.correct / totalStats.attempted) * 100)
-    : 0;
 
   // ── DECKS VIEW (root-level pack/folder grid) ──────────────────────────
   const decksView = (
     <div className="max-w-5xl mx-auto px-4 md:px-6 lg:px-8 py-6 md:py-8">
-      {/* Stat bar */}
-      <div className="grid grid-cols-3 gap-3 mb-6">
-        <div className="osler-stat-tile--compact">
-          <div className="flex items-center gap-2 text-xs text-muted-foreground mb-1">
-            <Grid3x3 className="size-3.5" />
-            {t("dash.packsStarted")}
-          </div>
-          <div className="osler-stat-tile__value">{totalStats.packs}</div>
-        </div>
-        <div className="osler-stat-tile--compact">
-          <div className="flex items-center gap-2 text-xs text-muted-foreground mb-1">
-            <ListChecks className="size-3.5" />
-            {t("dash.attemptedLabel")}
-          </div>
-          <div className="osler-stat-tile__value">{totalStats.questions}</div>
-        </div>
-        <div className="osler-stat-tile--compact">
-          <div className="flex items-center gap-2 text-xs text-muted-foreground mb-1">
-            <Activity className="size-3.5" />
-            {t("dash.accuracy")}
-          </div>
-          <div className="osler-stat-tile__value">
-            {totalStats.attempted > 0 ? `${accuracy}%` : "—"}
-          </div>
-        </div>
-      </div>
-
       <ContentLangFilter />
 
       {/* Pack / folder grid */}
