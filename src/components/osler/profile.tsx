@@ -388,6 +388,9 @@ function ProfileStreakSection() {
   const barW = Math.max(4, Math.floor((chartW - barGap * (horizon - 1)) / horizon));
   const maxCount = Math.max(peakDay, 1);
 
+  const profileXCenterPct = hovered !== null ? ((hovered * (barW + barGap) + barW / 2) / chartW) * 100 : 0;
+  const profileTooltipLeft = Math.max(8, Math.min(92, profileXCenterPct));
+
   return (
     <div className="mb-6">
       <SectionHeading
@@ -468,80 +471,6 @@ function ProfileStreakSection() {
 
         {/* Detailed SVG Graph */}
         <div className="relative select-none w-full">
-          <svg
-            viewBox={`0 0 ${chartW} ${chartH}`}
-            className="w-full overflow-visible"
-            style={{ height: chartH }}
-            aria-label="Study activity timeline graph"
-          >
-            <defs>
-              <linearGradient id="profile-bar-active" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor="var(--primary)" stopOpacity="0.95" />
-                <stop offset="100%" stopColor="var(--primary)" stopOpacity="0.3" />
-              </linearGradient>
-              <linearGradient id="profile-bar-today" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor="var(--warning)" stopOpacity="1" />
-                <stop offset="100%" stopColor="var(--warning)" stopOpacity="0.5" />
-              </linearGradient>
-              <linearGradient id="profile-bar-empty" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor="var(--muted-foreground)" stopOpacity="0.15" />
-                <stop offset="100%" stopColor="var(--muted-foreground)" stopOpacity="0.05" />
-              </linearGradient>
-            </defs>
-
-            {/* Horizontal guideline */}
-            <line
-              x1={0}
-              y1={chartH / 2}
-              x2={chartW}
-              y2={chartH / 2}
-              stroke="var(--border)"
-              strokeDasharray="4 4"
-              strokeOpacity={0.4}
-            />
-
-            {activity.map((d, i) => {
-              const x = i * (barW + barGap);
-              const isToday = d.date === today;
-              const isEmpty = d.count === 0;
-              const barH = isEmpty
-                ? 4
-                : Math.max(10, Math.round((d.count / maxCount) * (chartH - 12)));
-              const y = chartH - barH;
-              const fill = isToday
-                ? "url(#profile-bar-today)"
-                : isEmpty
-                ? "url(#profile-bar-empty)"
-                : "url(#profile-bar-active)";
-              const isHovered = hovered === i;
-
-              return (
-                <g key={d.date}>
-                  <rect
-                    x={x}
-                    y={y}
-                    width={barW}
-                    height={barH}
-                    rx={Math.min(3, barW / 2)}
-                    fill={fill}
-                    opacity={isHovered ? 1 : 0.85}
-                    style={{ transition: "opacity 0.15s, height 0.3s" }}
-                  />
-                  <rect
-                    x={x}
-                    y={0}
-                    width={barW}
-                    height={chartH}
-                    fill="transparent"
-                    onMouseEnter={() => { haptic("selection"); setHovered(i); }}
-                    onMouseLeave={() => setHovered(null)}
-                    className="cursor-pointer"
-                  />
-                </g>
-              );
-            })}
-          </svg>
-
           {/* Interactive Tooltip */}
           <AnimatePresence>
             {hovered !== null && activity[hovered] && (
@@ -553,7 +482,7 @@ function ProfileStreakSection() {
                 transition={{ duration: 0.12 }}
                 className="absolute -top-11 z-20 pointer-events-none -translate-x-1/2"
                 style={{
-                  left: `${Math.max(8, Math.min(92, ((hovered + 0.5) / horizon) * 100))}%`,
+                  left: `${profileTooltipLeft}%`,
                 }}
               >
                 <div className="bg-popover border border-border text-popover-foreground rounded-lg px-2.5 py-1 text-[11px] font-medium shadow-lg whitespace-nowrap flex items-center gap-1.5">
@@ -569,6 +498,7 @@ function ProfileStreakSection() {
                   <span className="text-primary font-bold">
                     {t("dash.streak.questions", { n: activity[hovered].count })}
                   </span>
+                  <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-popover" />
                 </div>
               </motion.div>
             )}

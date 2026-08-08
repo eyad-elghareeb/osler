@@ -25,6 +25,9 @@ function ActivityBarChart({ activity, today }: { activity: DailyActivity[]; toda
   const chartH = barRegionH + labelRegionH;
   const barW = Math.floor((chartW - BAR_GAP * (CHART_DAYS - 1)) / CHART_DAYS);
 
+  const xCenterPct = hovered !== null ? ((hovered * (barW + BAR_GAP) + barW / 2) / chartW) * 100 : 0;
+  const tooltipLeftPct = Math.max(12, Math.min(88, xCenterPct));
+
   return (
     <div className="relative select-none w-full">
       {/* Tooltip Popup */}
@@ -38,7 +41,7 @@ function ActivityBarChart({ activity, today }: { activity: DailyActivity[]; toda
             transition={{ duration: 0.12 }}
             className="absolute -top-12 z-30 pointer-events-none -translate-x-1/2"
             style={{
-              left: `${((hovered + 0.5) / CHART_DAYS) * 100}%`,
+              left: `${tooltipLeftPct}%`,
             }}
           >
             <div className="relative bg-popover border border-border text-popover-foreground rounded-lg px-2.5 py-1.5 text-xs font-medium shadow-xl whitespace-nowrap flex items-center gap-1.5">
