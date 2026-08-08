@@ -46,6 +46,7 @@ import {
   Video as VideoIcon,
   Search,
   SlidersHorizontal,
+  Languages,
   ArrowLeft,
   ArrowUpDown,
   BarChart3,
@@ -1070,31 +1071,34 @@ function HomeView({
         </div>
         {/* Tab bar — fixed below header */}
         <div className="shrink-0 border-b border-border px-4 md:px-6 lg:px-8 w-full max-w-7xl mx-auto">
-          <nav className="-mb-px flex gap-0 justify-center">
-            {[
-              { id: "content" as const, label: t("qbank.home.tabContent"), icon: Grid3x3 },
-              { id: "create" as const, label: t("qbank.home.tabCreate"), icon: Plus },
-              { id: "tracker" as const, label: t("qbank.home.tabTracker"), icon: Activity },
-            ].map((t) => {
-              const Icon = t.icon;
-              const active = homeTab === t.id;
-              return (
-                <button
-                  key={t.id}
-                  onClick={() => onHomeTabChange(t.id)}
-                  className={cn(
-                    "relative flex items-center gap-2 px-5 py-3 text-sm font-medium transition-colors",
-                    active
-                      ? "border-b-2 border-primary text-primary"
-                      : "border-b-2 border-transparent text-muted-foreground hover:text-foreground"
-                  )}
-                >
-                  <Icon className="size-4" />
-                  {t.label}
-                </button>
-              );
-            })}
-          </nav>
+          <div className="-mb-px flex items-center">
+            <nav className="flex gap-0 flex-1">
+              {[
+                { id: "content" as const, label: t("qbank.home.tabContent"), icon: Grid3x3 },
+                { id: "create" as const, label: t("qbank.home.tabCreate"), icon: Plus },
+                { id: "tracker" as const, label: t("qbank.home.tabTracker"), icon: Activity },
+              ].map((tab) => {
+                const Icon = tab.icon;
+                const active = homeTab === tab.id;
+                return (
+                  <button
+                    key={tab.id}
+                    onClick={() => onHomeTabChange(tab.id)}
+                    className={cn(
+                      "relative flex items-center gap-2 px-5 py-3 text-sm font-medium transition-colors",
+                      active
+                        ? "border-b-2 border-primary text-primary"
+                        : "border-b-2 border-transparent text-muted-foreground hover:text-foreground"
+                    )}
+                  >
+                    <Icon className="size-4" />
+                    {tab.label}
+                  </button>
+                );
+              })}
+            </nav>
+            {homeTab === "content" && <ContentLangFilterPopover />}
+          </div>
         </div>
 
         {/* Content zone — flex-1 min-h-0. Scrolling happens inside each
@@ -1535,110 +1539,103 @@ function PackCard({
         }
       }}
       className={cn(
-        "medos-fade-in text-start bg-card border border-border rounded-2xl p-5 sm:p-6 hover:border-primary/40 hover:shadow-lg transition-all active:scale-[0.98] group flex flex-col justify-between gap-4 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
+        "medos-fade-in text-start bg-card border border-border rounded-xl p-4 hover:border-primary/40 hover:shadow-md transition-all active:scale-[0.98] group flex items-center gap-3.5 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
         isAr && "osler-content-ar",
       )}
       dir={isAr ? "rtl" : undefined}
       lang={isAr ? "ar" : undefined}
       style={{ animationDelay: `${index * 0.03}s` }}
     >
-      <div className="flex items-start gap-3.5">
-        <div
-          className="size-12 sm:size-14 rounded-2xl flex items-center justify-center shrink-0 shadow-sm"
-          style={{ backgroundColor: `${meta.color}/15`, color: meta.color }}
-        >
-          <Icon className="size-6 sm:size-7" />
-        </div>
-        <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2 mb-1">
-            <h3 className="font-bold text-base sm:text-lg truncate text-foreground leading-snug">{node.title}</h3>
-            {isAr && (
-              <span className="text-[10px] px-1.5 py-0.5 rounded bg-primary/15 text-primary font-semibold shrink-0">
-                {t("lang.badge.ar")}
-              </span>
-            )}
-          </div>
-          <p className="text-xs sm:text-sm text-muted-foreground font-medium">
-            {t("qbank.home.questions", { n: count })}
-          </p>
-        </div>
-        <ContentCacheButton packId={node.uid} urls={packUrls} />
+      <div
+        className="size-11 rounded-xl flex items-center justify-center shrink-0"
+        style={{ backgroundColor: `${meta.color}/15`, color: meta.color }}
+      >
+        <Icon className="size-5" />
       </div>
-
-      <p className="text-xs sm:text-sm text-muted-foreground/80 line-clamp-2 leading-relaxed">
-        {content.meta.description}
-      </p>
-
-      <div className="pt-2 border-t border-border/40 flex items-center justify-between gap-3">
-        {packProgress.attempted > 0 ? (
-          <div className="flex-1 min-w-0 space-y-1">
-            <div className="flex items-center justify-between text-xs">
-              <span className="text-muted-foreground text-[11px] font-medium">{t("dash.accuracy")}</span>
-              <span className="text-success font-bold tabular-nums">{accuracy}%</span>
-            </div>
-            <div className="h-1.5 rounded-full bg-muted/50 overflow-hidden">
-              <div
-                className="h-full rounded-full bg-success transition-all duration-300"
-                style={{ width: `${accuracy}%` }}
-              />
-            </div>
-          </div>
-        ) : (
-          <span className="text-xs text-muted-foreground/60 font-medium">
-            {t("qbank.home.start")}
-          </span>
-        )}
-
-        <Button
-          size="sm"
-          variant="secondary"
-          className="rounded-xl px-4 text-xs font-bold group-hover:bg-primary group-hover:text-primary-foreground transition-colors shrink-0"
-        >
-          <span>{t("qbank.home.start")}</span>
-          <ChevronRight className={cn("size-3.5 ms-1 transition-transform group-hover:translate-x-0.5", rtl && "rtl-flip-x")} />
-        </Button>
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-2">
+          <h3 className="font-semibold text-sm truncate text-foreground">{node.title}</h3>
+          {isAr && (
+            <span className="text-[10px] px-1 py-0.5 rounded bg-primary/15 text-primary font-semibold shrink-0">
+              {t("lang.badge.ar")}
+            </span>
+          )}
+        </div>
+        <p className="text-xs text-muted-foreground mt-0.5">
+          {t("qbank.home.questions", { n: count })}
+          {packProgress.attempted > 0 && (
+            <span className="ms-2 text-success font-medium tabular-nums">{accuracy}%</span>
+          )}
+        </p>
+      </div>
+      <div className="flex items-center gap-2 shrink-0">
+        <ContentCacheButton packId={node.uid} urls={packUrls} />
+        <ChevronRight className={cn("size-4 text-muted-foreground/40 group-hover:text-primary transition-colors", rtl && "rtl-flip-x")} />
       </div>
     </div>
   );
 }
 
 /**
- * Inline content-language filter — mirrors the global setting from the i18n
- * provider, with three pills: All / English / Arabic. Clicking a pill
- * immediately updates the persisted preference so the filter is consistent
- * across Library, QBank, Flashcards, and OSCE.
+ * Compact language filter popover — lives in the tab bar on the trailing edge.
+ * Only rendered when the Content tab is active.
  */
-export function ContentLangFilter() {
+export function ContentLangFilterPopover() {
   const { t, contentFilter, setContentFilter } = useI18n();
   const pills: Array<{ id: "all" | "en" | "ar"; label: string }> = [
     { id: "all", label: t("settings.language.contentLangAll") },
     { id: "en", label: t("settings.language.enName") },
     { id: "ar", label: t("settings.language.arName") },
   ];
+  const isFiltered = contentFilter !== "all";
   return (
-    <div className="flex items-center gap-2 mb-5 flex-wrap">
-      <span className="text-[11px] uppercase tracking-wider text-muted-foreground me-1">
-        {t("qbank.home.filterLang")}:
-      </span>
-      {pills.map((p) => (
+    <Popover>
+      <PopoverTrigger asChild>
         <button
-          key={p.id}
-          onClick={() => setContentFilter(p.id)}
           className={cn(
-            "px-3 py-1 rounded-full text-xs font-medium transition-colors",
-            contentFilter === p.id
-              ? "bg-primary text-primary-foreground"
-              : "bg-muted/60 text-muted-foreground hover:text-foreground",
-            p.id === "ar" && contentFilter !== p.id && "osler-content-ar",
+            "mb-px flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors",
+            isFiltered
+              ? "bg-primary/10 text-primary border border-primary/30"
+              : "text-muted-foreground hover:text-foreground hover:bg-muted/60",
           )}
-          dir={p.id === "ar" ? "rtl" : undefined}
+          aria-label={t("qbank.home.filterLang")}
         >
-          {p.label}
+          <Languages className="size-3.5" />
+          {isFiltered && (
+            <span className="hidden sm:inline">
+              {pills.find((p) => p.id === contentFilter)?.label}
+            </span>
+          )}
         </button>
-      ))}
-    </div>
+      </PopoverTrigger>
+      <PopoverContent align="end" className="w-44 p-2">
+        <p className="text-[11px] uppercase tracking-wider text-muted-foreground px-2 pb-1.5">
+          {t("qbank.home.filterLang")}
+        </p>
+        <div className="flex flex-col gap-0.5">
+          {pills.map((p) => (
+            <button
+              key={p.id}
+              onClick={() => { haptic("selection"); setContentFilter(p.id); }}
+              className={cn(
+                "w-full text-start px-2 py-1.5 rounded-md text-sm transition-colors",
+                contentFilter === p.id
+                  ? "bg-primary/10 text-primary font-medium"
+                  : "text-foreground hover:bg-muted/60",
+              )}
+              dir={p.id === "ar" ? "rtl" : undefined}
+            >
+              {p.label}
+            </button>
+          ))}
+        </div>
+      </PopoverContent>
+    </Popover>
   );
 }
+
+/** Backward-compat alias — flashcard, osce, and videos studios import this name. */
+export { ContentLangFilterPopover as ContentLangFilter };
 
 function ContentTab({
   data,
@@ -1786,7 +1783,6 @@ function ContentTab({
   // ── DECKS VIEW (root-level pack/folder grid) ──────────────────────────
   const decksView = (
     <div className="max-w-5xl mx-auto px-4 md:px-6 lg:px-8 py-6 md:py-8">
-      <ContentLangFilter />
 
       {/* Pack / folder grid */}
       {filteredRootTree.length === 0 ? (
@@ -1820,43 +1816,23 @@ function ContentTab({
                       setSelectedFolderIdx(idx);
                     }
                   }}
-                  className="medos-fade-in text-start bg-card border border-border rounded-xl p-5 hover:border-primary/40 hover:shadow-md hover:bg-primary/[0.02] transition-colors group cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+                  className="medos-fade-in text-start bg-card border border-border rounded-xl p-4 hover:border-primary/40 hover:shadow-md transition-all group flex items-center gap-3.5 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
                   style={{ animationDelay: `${idx * 0.04}s` }}
                 >
-                  <div className="flex items-center gap-3 mb-3">
-                    <div
-                      className="size-11 rounded-xl flex items-center justify-center shrink-0"
-                      style={{ backgroundColor: `${meta.color}/15`, color: meta.color }}
-                    >
-                      <Folder className="size-5" />
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <h3 className="font-semibold truncate">{node.title}</h3>
-                      <p className="text-xs text-muted-foreground">
-                        {t("qbank.home.packs", { n: fs.packs })}
-                      </p>
-                    </div>
-                    <ChevronRight className="size-4 text-muted-foreground/40 group-hover:text-muted-foreground transition-colors shrink-0" />
+                  <div
+                    className="size-11 rounded-xl flex items-center justify-center shrink-0"
+                    style={{ backgroundColor: `${meta.color}/15`, color: meta.color }}
+                  >
+                    <Folder className="size-5" />
                   </div>
-                  <p className="text-xs text-muted-foreground/70 line-clamp-2 mb-3">
-                    {t("qbank.home.questions", { n: fs.questions })}
-                  </p>
-                  {fs.attempted > 0 ? (
-                    <>
-                      <div className="flex items-center gap-2 text-xs">
-                        <span className="text-success font-medium tabular-nums">{acc}%</span>
-                        <span className="text-muted-foreground">{t("dash.accuracy")}</span>
-                      </div>
-                      <div className="mt-2 h-1.5 rounded-full bg-muted/40 overflow-hidden">
-                        <div
-                          className="h-full rounded-full bg-success transition-all duration-300"
-                          style={{ width: `${acc}%` }}
-                        />
-                      </div>
-                    </>
-                  ) : (
-                    <span className="text-xs text-muted-foreground/50">{t("qbank.home.start")}</span>
-                  )}
+                  <div className="min-w-0 flex-1">
+                    <h3 className="font-semibold text-sm truncate">{node.title}</h3>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      {t("qbank.home.packs", { n: fs.packs })} · {t("qbank.home.questions", { n: fs.questions })}
+                      {fs.attempted > 0 && <span className="ms-2 text-success font-medium tabular-nums">{acc}%</span>}
+                    </p>
+                  </div>
+                  <ChevronRight className="size-4 text-muted-foreground/40 group-hover:text-primary transition-colors shrink-0" />
                 </div>
               );
             }
@@ -1908,8 +1884,6 @@ function ContentTab({
             )}
           </p>
         </div>
-
-        <ContentLangFilter />
 
         {/* Search */}
         <div className="relative mb-4">
@@ -1981,44 +1955,24 @@ function ContentTab({
                     onKeyDown={(e) => {
                       if (e.key === "Enter" || e.key === " ") e.preventDefault();
                     }}
-                    className="medos-fade-in text-start bg-card border border-border rounded-xl p-5 hover:border-primary/40 hover:shadow-md hover:bg-primary/[0.02] transition-colors group cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+                    className="medos-fade-in text-start bg-card border border-border rounded-xl p-4 hover:border-primary/40 hover:shadow-md transition-all group flex items-center gap-3.5 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
                     style={{ animationDelay: `${idx * 0.04}s` }}
                   >
-                    <div className="flex items-center gap-3 mb-3">
-                      <div
-                        className="size-11 rounded-xl flex items-center justify-center shrink-0"
-                        style={{ backgroundColor: `${childMeta.color}/15`, color: childMeta.color }}
-                      >
-                        <Folder className="size-5" />
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <h3 className="font-semibold truncate">{child.title}</h3>
-                        <p className="text-xs text-muted-foreground">
-                          {t("qbank.home.packs", { n: cfs.packs })}
-                        </p>
-                      </div>
-                      <ChevronRight className="size-4 text-muted-foreground/40 group-hover:text-muted-foreground transition-colors shrink-0" />
-                    </div>
-                    <p className="text-xs text-muted-foreground/70 line-clamp-2 mb-3">
-                      {t("qbank.home.questions", { n: cfs.questions })}
-                    </p>
-                    {cfs.attempted > 0 ? (
-                      <>
-                        <div className="flex items-center gap-2 text-xs">
-                          <span className="text-success font-medium tabular-nums">{cacc}%</span>
-                          <span className="text-muted-foreground">{t("dash.accuracy")}</span>
-                        </div>
-                        <div className="mt-2 h-1.5 rounded-full bg-muted/40 overflow-hidden">
-                          <div
-                            className="h-full rounded-full bg-success transition-all duration-300"
-                            style={{ width: `${cacc}%` }}
-                          />
-                        </div>
-                      </>
-                    ) : (
-                      <span className="text-xs text-muted-foreground/50">{t("qbank.home.start")}</span>
-                    )}
+                  <div
+                    className="size-11 rounded-xl flex items-center justify-center shrink-0"
+                    style={{ backgroundColor: `${childMeta.color}/15`, color: childMeta.color }}
+                  >
+                    <Folder className="size-5" />
                   </div>
+                  <div className="min-w-0 flex-1">
+                    <h3 className="font-semibold text-sm truncate">{child.title}</h3>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      {t("qbank.home.packs", { n: cfs.packs })} · {t("qbank.home.questions", { n: cfs.questions })}
+                      {cfs.attempted > 0 && <span className="ms-2 text-success font-medium tabular-nums">{cacc}%</span>}
+                    </p>
+                  </div>
+                  <ChevronRight className="size-4 text-muted-foreground/40 group-hover:text-primary transition-colors shrink-0" />
+                </div>
                 );
               }
 
