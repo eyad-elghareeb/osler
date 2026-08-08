@@ -396,7 +396,7 @@ function cors(origin: string): Record<string, string> {
   return {
     "access-control-allow-origin": origin,
     "access-control-allow-methods": "GET, POST, PUT, PATCH, DELETE, OPTIONS",
-    "access-control-allow-headers": "authorization, content-type, content-encoding, x-sync-since-qbank, x-sync-since-flashcards, x-sync-since-sessions, x-sync-since-notes, x-sync-since-highlights, x-sync-since-articleHighlights, x-sync-since-writtenDrafts, x-sync-since-bookmarks",
+    "access-control-allow-headers": "authorization, content-type, content-encoding, if-unmodified-since, x-sync-since-qbank, x-sync-since-flashcards, x-sync-since-sessions, x-sync-since-notes, x-sync-since-highlights, x-sync-since-articleHighlights, x-sync-since-writtenDrafts, x-sync-since-bookmarks, x-sync-since-achievements, x-sync-since-*",
     "access-control-max-age": "86400",
     vary: "Origin",
   };
