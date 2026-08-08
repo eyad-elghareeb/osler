@@ -1071,8 +1071,9 @@ function HomeView({
         </div>
         {/* Tab bar — fixed below header */}
         <div className="shrink-0 border-b border-border px-4 md:px-6 lg:px-8 w-full max-w-7xl mx-auto">
-          <div className="-mb-px flex items-center">
-            <nav className="flex gap-0 flex-1">
+          <div className="relative -mb-px flex items-center">
+            {/* Centered tabs */}
+            <nav className="absolute inset-x-0 flex justify-center pointer-events-none">
               {[
                 { id: "content" as const, label: t("qbank.home.tabContent"), icon: Grid3x3 },
                 { id: "create" as const, label: t("qbank.home.tabCreate"), icon: Plus },
@@ -1085,7 +1086,7 @@ function HomeView({
                     key={tab.id}
                     onClick={() => onHomeTabChange(tab.id)}
                     className={cn(
-                      "relative flex items-center gap-2 px-5 py-3 text-sm font-medium transition-colors",
+                      "pointer-events-auto relative flex items-center gap-2 px-5 py-3 text-sm font-medium transition-colors",
                       active
                         ? "border-b-2 border-primary text-primary"
                         : "border-b-2 border-transparent text-muted-foreground hover:text-foreground"
@@ -1097,7 +1098,10 @@ function HomeView({
                 );
               })}
             </nav>
-            {homeTab === "content" && <ContentLangFilterPopover />}
+            {/* Trailing filter button — pushes to the end without affecting tab centering */}
+            <div className="ms-auto">
+              {homeTab === "content" && <ContentLangFilterPopover />}
+            </div>
           </div>
         </div>
 
@@ -1539,7 +1543,7 @@ function PackCard({
         }
       }}
       className={cn(
-        "medos-fade-in text-start bg-card border border-border rounded-xl p-4 hover:border-primary/40 hover:shadow-md transition-all active:scale-[0.98] group flex items-center gap-3.5 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
+        "medos-fade-in text-start bg-card border border-border rounded-2xl p-5 hover:border-primary/40 hover:shadow-lg transition-all active:scale-[0.98] group flex items-center gap-4 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
         isAr && "osler-content-ar",
       )}
       dir={isAr ? "rtl" : undefined}
@@ -1547,30 +1551,30 @@ function PackCard({
       style={{ animationDelay: `${index * 0.03}s` }}
     >
       <div
-        className="size-11 rounded-xl flex items-center justify-center shrink-0"
+        className="size-14 rounded-2xl flex items-center justify-center shrink-0"
         style={{ backgroundColor: `${meta.color}/15`, color: meta.color }}
       >
-        <Icon className="size-5" />
+        <Icon className="size-7" />
       </div>
       <div className="min-w-0 flex-1">
-        <div className="flex items-center gap-2">
-          <h3 className="font-semibold text-sm truncate text-foreground">{node.title}</h3>
+        <div className="flex items-center gap-2 mb-0.5">
+          <h3 className="font-bold text-base truncate text-foreground">{node.title}</h3>
           {isAr && (
-            <span className="text-[10px] px-1 py-0.5 rounded bg-primary/15 text-primary font-semibold shrink-0">
+            <span className="text-[10px] px-1.5 py-0.5 rounded bg-primary/15 text-primary font-semibold shrink-0">
               {t("lang.badge.ar")}
             </span>
           )}
         </div>
-        <p className="text-xs text-muted-foreground mt-0.5">
+        <p className="text-sm text-muted-foreground">
           {t("qbank.home.questions", { n: count })}
           {packProgress.attempted > 0 && (
-            <span className="ms-2 text-success font-medium tabular-nums">{accuracy}%</span>
+            <span className="ms-2 text-success font-semibold tabular-nums">{accuracy}%</span>
           )}
         </p>
       </div>
       <div className="flex items-center gap-2 shrink-0">
         <ContentCacheButton packId={node.uid} urls={packUrls} />
-        <ChevronRight className={cn("size-4 text-muted-foreground/40 group-hover:text-primary transition-colors", rtl && "rtl-flip-x")} />
+        <ChevronRight className={cn("size-5 text-muted-foreground/40 group-hover:text-primary transition-colors", rtl && "rtl-flip-x")} />
       </div>
     </div>
   );
