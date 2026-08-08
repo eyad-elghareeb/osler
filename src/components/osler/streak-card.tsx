@@ -2,11 +2,12 @@
 
 import * as React from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Flame, TrendingUp } from "lucide-react";
+import { Flame, TrendingUp, CalendarCheck } from "lucide-react";
 import { streak, type StreakData, type DailyActivity } from "@/lib/osler/storage";
 import { useI18n } from "@/components/osler/i18n-provider";
 import { cn } from "@/lib/utils";
 import { haptic } from "@/lib/osler/native";
+import { OslerCard } from "./ui-primitives";
 
 /* ── Bar chart ────────────────────────────────────────────────────────── */
 
@@ -19,11 +20,11 @@ function ActivityBarChart({ activity, today }: { activity: DailyActivity[]; toda
 
   const maxCount = Math.max(...activity.map((d) => d.count), 1);
   const chartW = 280;
-  const chartH = 80;
+  const chartH = 76;
   const barW = Math.floor((chartW - BAR_GAP * (CHART_DAYS - 1)) / CHART_DAYS);
 
   return (
-    <div className="relative select-none">
+    <div className="relative select-none w-full">
       <svg
         viewBox={`0 0 ${chartW} ${chartH}`}
         className="w-full overflow-visible"
@@ -32,16 +33,16 @@ function ActivityBarChart({ activity, today }: { activity: DailyActivity[]; toda
       >
         <defs>
           <linearGradient id="bar-gradient-active" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="oklch(var(--primary) / 0.9)" />
-            <stop offset="100%" stopColor="oklch(var(--primary) / 0.4)" />
+            <stop offset="0%" stopColor="var(--primary)" stopOpacity="0.9" />
+            <stop offset="100%" stopColor="var(--primary)" stopOpacity="0.3" />
           </linearGradient>
           <linearGradient id="bar-gradient-today" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="oklch(var(--success) / 1)" />
-            <stop offset="100%" stopColor="oklch(var(--success) / 0.5)" />
+            <stop offset="0%" stopColor="var(--warning)" stopOpacity="1" />
+            <stop offset="100%" stopColor="var(--warning)" stopOpacity="0.5" />
           </linearGradient>
           <linearGradient id="bar-gradient-empty" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="oklch(var(--muted-foreground) / 0.12)" />
-            <stop offset="100%" stopColor="oklch(var(--muted-foreground) / 0.06)" />
+            <stop offset="0%" stopColor="var(--muted-foreground)" stopOpacity="0.2" />
+            <stop offset="100%" stopColor="var(--muted-foreground)" stopOpacity="0.06" />
           </linearGradient>
         </defs>
 
@@ -51,7 +52,7 @@ function ActivityBarChart({ activity, today }: { activity: DailyActivity[]; toda
           const isEmpty = d.count === 0;
           const barH = isEmpty
             ? 4
-            : Math.max(6, Math.round((d.count / maxCount) * (chartH - 8)));
+            : Math.max(8, Math.round((d.count / maxCount) * (chartH - 10)));
           const y = chartH - barH;
           const fill = isToday
             ? "url(#bar-gradient-today)"
@@ -81,7 +82,7 @@ function ActivityBarChart({ activity, today }: { activity: DailyActivity[]; toda
                 fill="transparent"
                 onMouseEnter={() => { haptic("selection"); setHovered(i); }}
                 onMouseLeave={() => setHovered(null)}
-                className="cursor-default"
+                className="cursor-pointer"
               />
             </g>
           );
@@ -93,30 +94,36 @@ function ActivityBarChart({ activity, today }: { activity: DailyActivity[]; toda
         {hovered !== null && activity[hovered] && (
           <motion.div
             key={hovered}
-            initial={{ opacity: 0, y: 4 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: 4 }}
+            initial={{ opacity: 0, y: 4, scale: 0.95 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 4, scale: 0.95 }}
             transition={{ duration: 0.12 }}
-            className="absolute -top-10 z-10 pointer-events-none"
-            style={{ left: `${(hovered / CHART_DAYS) * 100}%` }}
+            className="absolute -top-11 z-20 pointer-events-none -translate-x-1/2"
+            style={{
+              left: `${Math.max(10, Math.min(90, ((hovered + 0.5) / CHART_DAYS) * 100))}%`,
+            }}
           >
-            <div className="bg-popover border border-border text-popover-foreground rounded-lg px-2 py-1 text-[11px] font-medium shadow-md whitespace-nowrap">
-              {activity[hovered].date === today
-                ? t("dash.streak.today")
-                : new Date(activity[hovered].date + "T00:00:00Z").toLocaleDateString(undefined, {
-                    month: "short",
-                    day: "numeric",
-                  })}
-              <span className="mx-1 text-muted-foreground">·</span>
-              {t("dash.streak.questions", { n: activity[hovered].count })}
+            <div className="bg-popover border border-border text-popover-foreground rounded-lg px-2.5 py-1 text-[11px] font-medium shadow-lg whitespace-nowrap flex items-center gap-1.5">
+              <span className="text-foreground">
+                {activity[hovered].date === today
+                  ? t("dash.streak.today")
+                  : new Date(activity[hovered].date + "T00:00:00Z").toLocaleDateString(undefined, {
+                      month: "short",
+                      day: "numeric",
+                    })}
+              </span>
+              <span className="text-muted-foreground">·</span>
+              <span className="text-primary font-semibold">
+                {t("dash.streak.questions", { n: activity[hovered].count })}
+              </span>
             </div>
           </motion.div>
         )}
       </AnimatePresence>
 
-      {/* Day labels: show Mon/Wed/Fri/Sun to avoid clutter */}
-      <div className="flex mt-1" style={{ gap: BAR_GAP }}>
-        {activity.map((d, i) => {
+      {/* Day labels */}
+      <div className="flex mt-1.5" style={{ gap: BAR_GAP }}>
+        {activity.map((d) => {
           const date = new Date(d.date + "T00:00:00Z");
           const dow = date.getUTCDay(); // 0=Sun, 1=Mon...
           const showLabel = dow === 1 || dow === 3 || dow === 5 || dow === 0;
@@ -125,12 +132,12 @@ function ActivityBarChart({ activity, today }: { activity: DailyActivity[]; toda
             <div
               key={d.date}
               className="text-center shrink-0 overflow-hidden"
-              style={{ width: barW, fontSize: "9px" }}
+              style={{ width: barW, fontSize: "10px" }}
             >
               {isToday ? (
-                <span className="text-success font-semibold">·</span>
+                <span className="text-warning font-bold">●</span>
               ) : showLabel ? (
-                <span className="text-muted-foreground/60">
+                <span className="text-muted-foreground/70 font-medium">
                   {date.toLocaleDateString(undefined, { weekday: "narrow" })}
                 </span>
               ) : null}
@@ -146,26 +153,26 @@ function ActivityBarChart({ activity, today }: { activity: DailyActivity[]; toda
 
 function FlameCounter({ count, active }: { count: number; active: boolean }) {
   return (
-    <div className="flex items-center gap-2">
+    <div className="flex items-center gap-3">
       <motion.div
         animate={
           active
-            ? { scale: [1, 1.12, 1], rotate: [-4, 4, -4, 0] }
+            ? { scale: [1, 1.08, 1], rotate: [-3, 3, -3, 0] }
             : { scale: 1, rotate: 0 }
         }
         transition={
           active
-            ? { duration: 1.6, repeat: Infinity, repeatDelay: 3, ease: "easeInOut" }
+            ? { duration: 1.8, repeat: Infinity, repeatDelay: 2.5, ease: "easeInOut" }
             : {}
         }
         className={cn(
-          "size-12 rounded-2xl flex items-center justify-center shrink-0 shadow-sm",
+          "size-13 rounded-2xl flex items-center justify-center shrink-0 border transition-all duration-300",
           active
-            ? "bg-warning/15 text-warning"
-            : "bg-muted text-muted-foreground/40"
+            ? "bg-warning/15 border-warning/40 text-warning shadow-[0_0_20px_oklch(var(--warning)/0.25)]"
+            : "bg-muted/40 border-border text-muted-foreground/40"
         )}
       >
-        <Flame className="size-6" />
+        <Flame className={cn("size-6", active && "fill-warning/20")} />
       </motion.div>
 
       <div>
@@ -175,7 +182,7 @@ function FlameCounter({ count, active }: { count: number; active: boolean }) {
           animate={{ scale: 1, opacity: 1 }}
           transition={{ type: "spring", stiffness: 300, damping: 20 }}
           className={cn(
-            "text-4xl font-bold tabular-nums leading-none",
+            "text-4xl font-extrabold tabular-nums leading-none tracking-tight",
             active ? "text-foreground" : "text-muted-foreground/40"
           )}
         >
@@ -200,7 +207,6 @@ export function StreakCard() {
       setData(streak.compute());
       setActivity(streak.dailyActivity(CHART_DAYS));
     };
-    // Also recompute when IDB hydration completes
     const unsub = streak.subscribe(refresh);
     return unsub;
   }, []);
@@ -208,19 +214,20 @@ export function StreakCard() {
   const today = new Date().toISOString().slice(0, 10);
 
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 6 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.3, delay: 0.08 }}
-      className="osler-card--roomy mb-6 overflow-hidden"
-    >
+    <OslerCard padding="roomy" className="mb-6 overflow-hidden">
       {/* Top row: flame + streak count / longest */}
       <div className="flex items-start justify-between gap-4 flex-wrap mb-5">
-        <div className="flex items-start gap-4 flex-wrap">
-          <FlameCounter count={data.current} active={data.activeToday} />
-          <div className="flex flex-col justify-center gap-1 pt-1">
-            <div className="text-base font-semibold text-foreground leading-tight">
-              {t("dash.streak.title")}
+        <div className="flex items-start gap-4 flex-wrap text-start">
+          <FlameCounter count={data.current} active={data.activeToday || data.current > 0} />
+          <div className="flex flex-col justify-center gap-1 pt-0.5">
+            <div className="text-base font-bold text-foreground leading-tight flex items-center gap-1.5">
+              <span>{t("dash.streak.title")}</span>
+              {data.activeToday && (
+                <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-success bg-success/15 px-2 py-0.5 rounded-full border border-success/30">
+                  <CalendarCheck className="size-3" />
+                  {t("dash.streak.today")}
+                </span>
+              )}
             </div>
             <div className="text-xs text-muted-foreground">
               {t("dash.streak.longest", { n: data.longest })}
@@ -239,14 +246,15 @@ export function StreakCard() {
         </div>
 
         {/* Activity label */}
-        <div className="flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-wider text-muted-foreground self-center">
-          <TrendingUp className="size-3.5" />
+        <div className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground self-center">
+          <TrendingUp className="size-3.5 text-primary" />
           {t("dash.streak.activity")}
         </div>
       </div>
 
       {/* Bar chart */}
       <ActivityBarChart activity={activity} today={today} />
-    </motion.div>
+    </OslerCard>
   );
 }
+
