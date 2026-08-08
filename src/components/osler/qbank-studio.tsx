@@ -1070,12 +1070,12 @@ function HomeView({
           />
         </div>
         {/* Tab bar — fixed below header */}
-        <div className="shrink-0 border-b border-border px-4 md:px-6 lg:px-8 w-full max-w-7xl mx-auto">
-          {/* 3-col grid: [spacer | centered tabs | filter] — tabs stay
-              geometrically centered regardless of whether the filter button
-              is present; the underline aligns with the container border. */}
-          <div className="-mb-px grid grid-cols-[1fr_auto_1fr] items-end">
-            {/* left spacer (mirrors filter button width on the right) */}
+        <div className="shrink-0 border-b border-border w-full max-w-7xl mx-auto px-4 md:px-6 lg:px-8">
+          {/* 3-col grid: [spacer | centered tabs | filter]
+              The 1fr cols balance each other so the auto center is always
+              geometrically centred. items-end aligns the border-b-2 underline
+              of active tabs flush with the container's border-b. */}
+          <div className="-mb-px grid grid-cols-[1fr_auto_1fr]">
             <div />
             <nav className="flex">
               {[
@@ -1102,17 +1102,15 @@ function HomeView({
                 );
               })}
             </nav>
-            {/* trailing filter button — right col */}
-            <div className="flex justify-end items-center pb-1">
+            <div className="flex justify-end items-center py-3">
               {homeTab === "content" && <ContentLangFilterPopover />}
             </div>
           </div>
         </div>
 
-        {/* Content zone — flex-1 min-h-0. Scrolling happens inside each
-            tab's own content (NavigationStack home/subpage layers for the
-            Content tab; overflow-y-auto wrappers for Create/Tracker). */}
-        <div className="flex-1 min-h-0 max-w-7xl mx-auto w-full px-4 md:px-6 lg:px-8 py-4 sm:py-6">
+        {/* Content zone — fills remaining height; each tab owns its own
+            padding and scroll so we don't double-apply horizontal padding. */}
+        <div className="flex-1 min-h-0 overflow-hidden">
           {homeTab === "content" && (
             <ContentTab
               data={data}
@@ -1123,26 +1121,30 @@ function HomeView({
           )}
           {homeTab === "create" && (
             <div className="osler-page">
-              <CreateTestTab
-                data={data}
-                testMode={testMode}
-                onTestModeChange={onTestModeChange}
-                onOpenPack={onOpenPack}
-                onSetQuestionLimit={onSetQuestionLimit}
-                initialSourceUid={pendingCreateTestSourceUid}
-                onConsumeInitialSource={onClearPendingCreateTestSource}
-                onStartCustomSession={onStartCustomSession}
-              />
+              <div className="osler-page__inner">
+                <CreateTestTab
+                  data={data}
+                  testMode={testMode}
+                  onTestModeChange={onTestModeChange}
+                  onOpenPack={onOpenPack}
+                  onSetQuestionLimit={onSetQuestionLimit}
+                  initialSourceUid={pendingCreateTestSourceUid}
+                  onConsumeInitialSource={onClearPendingCreateTestSource}
+                  onStartCustomSession={onStartCustomSession}
+                />
+              </div>
             </div>
           )}
           {homeTab === "tracker" && (
             <div className="osler-page">
-              <TrackerTab
-                data={data}
-                sessions={savedSessions}
-                onDelete={(id) => sessions.delete(id)}
-                onStartCustomSession={onStartCustomSession}
-              />
+              <div className="osler-page__inner">
+                <TrackerTab
+                  data={data}
+                  sessions={savedSessions}
+                  onDelete={(id) => sessions.delete(id)}
+                  onStartCustomSession={onStartCustomSession}
+                />
+              </div>
             </div>
           )}
         </div>
