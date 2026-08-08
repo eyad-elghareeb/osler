@@ -4120,10 +4120,8 @@ function QuizView({
   }, [mobileTutorTab, mobileTabsActive, carouselWidth, swipeX]);
 
   // Live drag-follow during horizontal swipe gesture.
-  const handleSwipeProgress = React.useCallback((dx: number, dy: number) => {
+  const handleSwipeProgress = React.useCallback((dx: number) => {
     if (!mobileTabsActive || carouselWidth === 0) return;
-    // Only drive the carousel for clearly horizontal gestures.
-    if (Math.abs(dx) <= Math.abs(dy) * 1.2) return;
     const base = mobileTutorTab === "question" ? 0 : -carouselWidth;
     let x = base + dx;
     // Rubber-band at edges.

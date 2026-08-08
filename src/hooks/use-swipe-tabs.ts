@@ -94,16 +94,21 @@ export function useSwipeTabs<TabId extends string>(
   options: UseSwipeTabsOptions<TabId>
 ): UseSwipeTabsResult {
   const {
-    tabs, activeTab, onTabChange, rtl = false, disabled = false,
-    threshold = 64, maxDriftRatio = 0.6,
-    onSwipeProgress, onSwipeEnd,
+    tabs,
+    activeTab,
+    onTabChange,
+    rtl = false,
+    disabled = false,
+    threshold = 40,
+    maxDriftRatio = 0.6,
+    onSwipeProgress,
+    onSwipeEnd,
   } = options;
 
-  // Kept in a ref so the swipe handlers below always see the latest tab
-  // list / active tab / callback without needing to re-attach listeners
-  // (useSwipe only re-runs its effect when `disabled` changes).
-  const stateRef = React.useRef({ tabs, activeTab, onTabChange, rtl });
-  stateRef.current = { tabs, activeTab, onTabChange, rtl };
+  const tabSwipeRef = React.useRef<HTMLDivElement | null>(null);
+
+  const stateRef = React.useRef({ tabs, activeTab, onTabChange, rtl, threshold, maxDriftRatio });
+  stateRef.current = { tabs, activeTab, onTabChange, rtl, threshold, maxDriftRatio };
 
   const cbRef = React.useRef({ onSwipeProgress, onSwipeEnd });
   cbRef.current = { onSwipeProgress, onSwipeEnd };
@@ -120,22 +125,101 @@ export function useSwipeTabs<TabId extends string>(
     return true;
   }, []);
 
-  const tabSwipeRef = useSwipe<HTMLDivElement>({
-    threshold,
-    maxDriftRatio,
-    disabled,
-    onSwipeProgress: (dx, dy) => cbRef.current.onSwipeProgress?.(dx, dy),
-    onSwipeLeft: () => {
-      const moved = goByOffset(stateRef.current.rtl ? -1 : 1);
-      // At the edge: gesture committed but no tab to go to — spring back.
-      if (!moved) cbRef.current.onSwipeEnd?.();
-    },
-    onSwipeRight: () => {
-      const moved = goByOffset(stateRef.current.rtl ? 1 : -1);
-      if (!moved) cbRef.current.onSwipeEnd?.();
-    },
-    onSwipeCancel: () => cbRef.current.onSwipeEnd?.(),
-  });
+  React.useEffect(() => {
+    const el = tabSwipeRef.current;
+    if (!el || disabled) return;
+
+    let startX = 0;
+    let startY = 0;
+    let startT = 0;
+    let axis: "horizontal" | "vertical" | null = null;
+    let tracking = false;
+    let startPointerId = -1;
+
+    const onDown = (e: PointerEvent) => {
+      if (e.pointerType === "mouse" && e.button !== 0) return;
+      const target = e.target as HTMLElement | null;
+      if (target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable)) {
+        return;
+      }
+      tracking = true;
+      startX = e.clientX;
+      startY = e.clientY;
+      startT = Date.now();
+      startPointerId = e.pointerId;
+      axis = null;
+    };
+
+    const onMove = (e: PointerEvent) => {
+      if (!tracking || e.pointerId !== startPointerId) return;
+      const dx = e.clientX - startX;
+      const dy = e.clientY - startY;
+      const absX = Math.abs(dx);
+      const absY = Math.abs(dy);
+
+      if (axis === null) {
+        if (Math.hypot(dx, dy) > 6) {
+          if (absX > absY * (1 / (stateRef.current.maxDriftRatio ?? 0.6))) {
+            axis = "horizontal";
+          } else {
+            axis = "vertical";
+          }
+        }
+      }
+
+      if (axis === "horizontal") {
+        cbRef.current.onSwipeProgress?.(dx, dy);
+        if (e.cancelable) {
+          e.preventDefault();
+        }
+      }
+    };
+
+    const onUp = (e: PointerEvent) => {
+      if (!tracking || e.pointerId !== startPointerId) return;
+      tracking = false;
+      const dx = e.clientX - startX;
+      const dy = e.clientY - startY;
+      const dt = Math.max(1, Date.now() - startT);
+      const absX = Math.abs(dx);
+      const vx = absX / dt;
+
+      if (axis === "horizontal") {
+        const th = stateRef.current.threshold ?? 40;
+        const isFlick = vx > 0.25 && absX > 15;
+        if (absX >= th || isFlick) {
+          const isLeft = dx < 0;
+          const offset = isLeft ? (stateRef.current.rtl ? -1 : 1) : (stateRef.current.rtl ? 1 : -1);
+          const moved = goByOffset(offset);
+          if (!moved) cbRef.current.onSwipeEnd?.();
+        } else {
+          cbRef.current.onSwipeEnd?.();
+        }
+      } else {
+        cbRef.current.onSwipeEnd?.();
+      }
+    };
+
+    const onCancel = () => {
+      if (!tracking) return;
+      tracking = false;
+      if (axis === "horizontal") {
+        cbRef.current.onSwipeEnd?.();
+      }
+    };
+
+    el.addEventListener("pointerdown", onDown, { passive: true });
+    el.addEventListener("pointermove", onMove, { passive: false });
+    el.addEventListener("pointerup", onUp, { passive: true });
+    el.addEventListener("pointercancel", onCancel, { passive: true });
+
+    return () => {
+      el.removeEventListener("pointerdown", onDown);
+      el.removeEventListener("pointermove", onMove);
+      el.removeEventListener("pointerup", onUp);
+      el.removeEventListener("pointercancel", onCancel);
+    };
+  }, [disabled, goByOffset]);
 
   return { tabSwipeRef };
 }
