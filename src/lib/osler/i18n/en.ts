@@ -188,6 +188,7 @@ export const en = {
     "profile.streak.activeRatio": "Active Days",
     "profile.streak.avgDaily": "Avg / Active Day",
     "profile.streak.peakDay": "Peak Daily",
+    "profile.streak.best": "Best {n} days",
 
     "qbank.home.title": "Q-Bank Studio",
     "qbank.home.subtitle":

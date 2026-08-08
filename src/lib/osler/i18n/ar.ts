@@ -188,6 +188,7 @@ export const ar = {
     "profile.streak.activeRatio": "الأيام النشطة",
     "profile.streak.avgDaily": "المتوسط / اليوم النشط",
     "profile.streak.peakDay": "أعلى نشاط",
+    "profile.streak.best": "الأفضل {n} يوم",
 
     "qbank.home.title": "استوديو بنك الأسئلة",
     "qbank.home.subtitle":

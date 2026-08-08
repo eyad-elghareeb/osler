@@ -6,7 +6,7 @@ import { Flame, TrendingUp, CalendarCheck } from "lucide-react";
 import { streak, type StreakData, type DailyActivity } from "@/lib/osler/storage";
 import { useI18n } from "@/components/osler/i18n-provider";
 import { cn } from "@/lib/utils";
-import { haptic } from "@/lib/osler/native";
+import { useChartTooltip } from "@/hooks/use-chart-tooltip";
 import { OslerCard } from "./ui-primitives";
 
 /* ── Bar chart ────────────────────────────────────────────────────────── */
@@ -15,7 +15,6 @@ const CHART_DAYS = 14;
 const BAR_GAP = 4;
 
 function ActivityBarChart({ activity, today }: { activity: DailyActivity[]; today: string }) {
-  const [hovered, setHovered] = React.useState<number | null>(null);
   const { t } = useI18n();
 
   const maxCount = Math.max(...activity.map((d) => d.count), 1);
@@ -25,23 +24,28 @@ function ActivityBarChart({ activity, today }: { activity: DailyActivity[]; toda
   const chartH = barRegionH + labelRegionH;
   const barW = Math.floor((chartW - BAR_GAP * (CHART_DAYS - 1)) / CHART_DAYS);
 
-  const xCenterPct = hovered !== null ? ((hovered * (barW + BAR_GAP) + barW / 2) / chartW) * 100 : 0;
-  const tooltipLeftPct = Math.max(12, Math.min(88, xCenterPct));
+  const { wrapRef, svgRef, tipRef, hovered, left, show, hide } = useChartTooltip({
+    chartW,
+    chartH,
+    barW,
+    barGap: BAR_GAP,
+  });
 
   return (
-    <div className="relative select-none w-full">
+    <div className="relative select-none w-full" ref={wrapRef}>
       {/* Tooltip Popup */}
       <AnimatePresence>
         {hovered !== null && activity[hovered] && (
           <motion.div
             key={hovered}
+            ref={tipRef}
             initial={{ opacity: 0, y: 4, scale: 0.95 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 4, scale: 0.95 }}
             transition={{ duration: 0.12 }}
             className="absolute -top-12 z-30 pointer-events-none -translate-x-1/2"
             style={{
-              left: `${tooltipLeftPct}%`,
+              left: `${left}px`,
             }}
           >
             <div className="relative bg-popover border border-border text-popover-foreground rounded-lg px-2.5 py-1.5 text-xs font-medium shadow-xl whitespace-nowrap flex items-center gap-1.5">
@@ -66,6 +70,7 @@ function ActivityBarChart({ activity, today }: { activity: DailyActivity[]; toda
       </AnimatePresence>
 
       <svg
+        ref={svgRef}
         viewBox={`0 0 ${chartW} ${chartH}`}
         className="w-full overflow-visible"
         style={{ height: chartH }}
@@ -140,8 +145,8 @@ function ActivityBarChart({ activity, today }: { activity: DailyActivity[]; toda
                 width={barW}
                 height={chartH}
                 fill="transparent"
-                onMouseEnter={() => { haptic("selection"); setHovered(i); }}
-                onMouseLeave={() => setHovered(null)}
+                onMouseEnter={() => show(i)}
+                onMouseLeave={hide}
                 className="cursor-pointer"
               />
             </g>

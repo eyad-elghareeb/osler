@@ -64,6 +64,7 @@ import {
 
 import { useOslerRouter } from "@/lib/osler/navigation";
 import { useOslerSession } from "@/lib/osler/session-context";
+import { useChartTooltip } from "@/hooks/use-chart-tooltip";
 
 interface ProfileProps {
   username?: string;
@@ -364,7 +365,6 @@ function ProfileStreakSection() {
   const [horizon, setHorizon] = React.useState<30 | 60>(30);
   const [streakData, setStreakData] = React.useState(() => streak.compute());
   const [activity, setActivity] = React.useState(() => streak.dailyActivity(horizon));
-  const [hovered, setHovered] = React.useState<number | null>(null);
 
   React.useEffect(() => {
     const update = () => {
@@ -388,8 +388,12 @@ function ProfileStreakSection() {
   const barW = Math.max(4, Math.floor((chartW - barGap * (horizon - 1)) / horizon));
   const maxCount = Math.max(peakDay, 1);
 
-  const profileXCenterPct = hovered !== null ? ((hovered * (barW + barGap) + barW / 2) / chartW) * 100 : 0;
-  const profileTooltipLeft = Math.max(8, Math.min(92, profileXCenterPct));
+  const { wrapRef, svgRef, tipRef, hovered, left, show, hide } = useChartTooltip({
+    chartW,
+    chartH,
+    barW,
+    barGap,
+  });
 
   return (
     <div className="mb-6">
@@ -426,18 +430,20 @@ function ProfileStreakSection() {
       <OslerCard padding="roomy">
         {/* Top metrics summary bar */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
-          <div className="bg-muted/30 border border-border/60 rounded-xl p-3 text-start">
+          <div className="bg-card border border-border rounded-xl p-3 text-start">
             <div className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5 mb-1">
               <Flame className="size-3.5 text-warning" />
               <span>{t("dash.streak.title")}</span>
             </div>
             <div className="text-2xl font-extrabold tabular-nums flex items-baseline gap-1">
               <span>{streakData.current}</span>
-              <span className="text-xs font-normal text-muted-foreground">/ {streakData.longest} {t("dash.streak.longest", { n: "" }).replace("Longest:", "").trim()}</span>
+              <span className="text-xs font-normal text-muted-foreground">
+                / {t("profile.streak.best", { n: streakData.longest })}
+              </span>
             </div>
           </div>
 
-          <div className="bg-muted/30 border border-border/60 rounded-xl p-3 text-start">
+          <div className="bg-card border border-border rounded-xl p-3 text-start">
             <div className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5 mb-1">
               <Calendar className="size-3.5 text-primary" />
               <span>{t("profile.streak.activeRatio")}</span>
@@ -448,7 +454,7 @@ function ProfileStreakSection() {
             </div>
           </div>
 
-          <div className="bg-muted/30 border border-border/60 rounded-xl p-3 text-start">
+          <div className="bg-card border border-border rounded-xl p-3 text-start">
             <div className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5 mb-1">
               <Activity className="size-3.5 text-success" />
               <span>{t("profile.streak.avgDaily")}</span>
@@ -458,7 +464,7 @@ function ProfileStreakSection() {
             </div>
           </div>
 
-          <div className="bg-muted/30 border border-border/60 rounded-xl p-3 text-start">
+          <div className="bg-card border border-border rounded-xl p-3 text-start">
             <div className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5 mb-1">
               <TrendingUp className="size-3.5 text-info" />
               <span>{t("profile.streak.peakDay")}</span>
@@ -470,19 +476,95 @@ function ProfileStreakSection() {
         </div>
 
         {/* Detailed SVG Graph */}
-        <div className="relative select-none w-full">
+        <div className="relative select-none w-full" ref={wrapRef}>
+          <svg
+            ref={svgRef}
+            viewBox={`0 0 ${chartW} ${chartH}`}
+            className="w-full overflow-visible"
+            style={{ height: chartH }}
+            aria-label="Study activity timeline graph"
+          >
+            <defs>
+              <linearGradient id="profile-bar-active" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor="var(--primary)" stopOpacity="0.95" />
+                <stop offset="100%" stopColor="var(--primary)" stopOpacity="0.3" />
+              </linearGradient>
+              <linearGradient id="profile-bar-today" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor="var(--warning)" stopOpacity="1" />
+                <stop offset="100%" stopColor="var(--warning)" stopOpacity="0.5" />
+              </linearGradient>
+              <linearGradient id="profile-bar-empty" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor="var(--muted-foreground)" stopOpacity="0.15" />
+                <stop offset="100%" stopColor="var(--muted-foreground)" stopOpacity="0.05" />
+              </linearGradient>
+            </defs>
+
+            {/* Horizontal guideline */}
+            <line
+              x1={0}
+              y1={chartH / 2}
+              x2={chartW}
+              y2={chartH / 2}
+              stroke="var(--border)"
+              strokeDasharray="4 4"
+              strokeOpacity={0.4}
+            />
+
+            {activity.map((d, i) => {
+              const x = i * (barW + barGap);
+              const isToday = d.date === today;
+              const isEmpty = d.count === 0;
+              const barH = isEmpty
+                ? 4
+                : Math.max(10, Math.round((d.count / maxCount) * (chartH - 12)));
+              const y = chartH - barH;
+              const fill = isToday
+                ? "url(#profile-bar-today)"
+                : isEmpty
+                ? "url(#profile-bar-empty)"
+                : "url(#profile-bar-active)";
+              const isHovered = hovered === i;
+
+              return (
+                <g key={d.date}>
+                  <rect
+                    x={x}
+                    y={y}
+                    width={barW}
+                    height={barH}
+                    rx={Math.min(3, barW / 2)}
+                    fill={fill}
+                    opacity={isHovered ? 1 : 0.85}
+                    style={{ transition: "opacity 0.15s, height 0.3s" }}
+                  />
+                  <rect
+                    x={x}
+                    y={0}
+                    width={barW}
+                    height={chartH}
+                    fill="transparent"
+                    onMouseEnter={() => show(i)}
+                    onMouseLeave={hide}
+                    className="cursor-pointer"
+                  />
+                </g>
+              );
+            })}
+          </svg>
+
           {/* Interactive Tooltip */}
           <AnimatePresence>
             {hovered !== null && activity[hovered] && (
               <motion.div
                 key={hovered}
+                ref={tipRef}
                 initial={{ opacity: 0, y: 4, scale: 0.95 }}
                 animate={{ opacity: 1, y: 0, scale: 1 }}
                 exit={{ opacity: 0, y: 4, scale: 0.95 }}
                 transition={{ duration: 0.12 }}
                 className="absolute -top-11 z-20 pointer-events-none -translate-x-1/2"
                 style={{
-                  left: `${profileTooltipLeft}%`,
+                  left: `${left}px`,
                 }}
               >
                 <div className="bg-popover border border-border text-popover-foreground rounded-lg px-2.5 py-1 text-[11px] font-medium shadow-lg whitespace-nowrap flex items-center gap-1.5">
