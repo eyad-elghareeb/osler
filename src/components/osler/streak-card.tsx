@@ -12,7 +12,7 @@ import { OslerCard } from "./ui-primitives";
 /* ── Bar chart ────────────────────────────────────────────────────────── */
 
 const CHART_DAYS = 14;
-const BAR_GAP = 3;
+const BAR_GAP = 4;
 
 function ActivityBarChart({ activity, today }: { activity: DailyActivity[]; today: string }) {
   const [hovered, setHovered] = React.useState<number | null>(null);
@@ -20,11 +20,48 @@ function ActivityBarChart({ activity, today }: { activity: DailyActivity[]; toda
 
   const maxCount = Math.max(...activity.map((d) => d.count), 1);
   const chartW = 280;
-  const chartH = 76;
+  const barRegionH = 70;
+  const labelRegionH = 20;
+  const chartH = barRegionH + labelRegionH;
   const barW = Math.floor((chartW - BAR_GAP * (CHART_DAYS - 1)) / CHART_DAYS);
 
   return (
     <div className="relative select-none w-full">
+      {/* Tooltip Popup */}
+      <AnimatePresence>
+        {hovered !== null && activity[hovered] && (
+          <motion.div
+            key={hovered}
+            initial={{ opacity: 0, y: 4, scale: 0.95 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 4, scale: 0.95 }}
+            transition={{ duration: 0.12 }}
+            className="absolute -top-12 z-30 pointer-events-none -translate-x-1/2"
+            style={{
+              left: `${((hovered + 0.5) / CHART_DAYS) * 100}%`,
+            }}
+          >
+            <div className="relative bg-popover border border-border text-popover-foreground rounded-lg px-2.5 py-1.5 text-xs font-medium shadow-xl whitespace-nowrap flex items-center gap-1.5">
+              <span className="text-foreground font-semibold">
+                {activity[hovered].date === today
+                  ? `${t("dash.streak.today")} (${new Date(activity[hovered].date + "T00:00:00Z").toLocaleDateString(undefined, { weekday: "short" })})`
+                  : new Date(activity[hovered].date + "T00:00:00Z").toLocaleDateString(undefined, {
+                      weekday: "short",
+                      month: "short",
+                      day: "numeric",
+                    })}
+              </span>
+              <span className="text-muted-foreground">·</span>
+              <span className="text-primary font-bold">
+                {t("dash.streak.questions", { n: activity[hovered].count })}
+              </span>
+              {/* Tooltip arrow down */}
+              <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-popover" />
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       <svg
         viewBox={`0 0 ${chartW} ${chartH}`}
         className="w-full overflow-visible"
@@ -33,8 +70,8 @@ function ActivityBarChart({ activity, today }: { activity: DailyActivity[]; toda
       >
         <defs>
           <linearGradient id="bar-gradient-active" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="var(--primary)" stopOpacity="0.9" />
-            <stop offset="100%" stopColor="var(--primary)" stopOpacity="0.3" />
+            <stop offset="0%" stopColor="var(--primary)" stopOpacity="0.95" />
+            <stop offset="100%" stopColor="var(--primary)" stopOpacity="0.35" />
           </linearGradient>
           <linearGradient id="bar-gradient-today" x1="0" y1="0" x2="0" y2="1">
             <stop offset="0%" stopColor="var(--warning)" stopOpacity="1" />
@@ -52,17 +89,21 @@ function ActivityBarChart({ activity, today }: { activity: DailyActivity[]; toda
           const isEmpty = d.count === 0;
           const barH = isEmpty
             ? 4
-            : Math.max(8, Math.round((d.count / maxCount) * (chartH - 10)));
-          const y = chartH - barH;
+            : Math.max(8, Math.round((d.count / maxCount) * (barRegionH - 8)));
+          const y = barRegionH - barH;
           const fill = isToday
             ? "url(#bar-gradient-today)"
             : isEmpty
             ? "url(#bar-gradient-empty)"
             : "url(#bar-gradient-active)";
           const isHovered = hovered === i;
+          const date = new Date(d.date + "T00:00:00Z");
+          const dow = date.getUTCDay();
+          const showLabel = dow === 1 || dow === 3 || dow === 5 || dow === 0 || isToday;
 
           return (
             <g key={d.date}>
+              {/* Bar rect */}
               <rect
                 x={x}
                 y={y}
@@ -73,7 +114,23 @@ function ActivityBarChart({ activity, today }: { activity: DailyActivity[]; toda
                 opacity={isHovered ? 1 : 0.85}
                 style={{ transition: "opacity 0.15s, height 0.3s" }}
               />
-              {/* invisible hit target */}
+
+              {/* Day label inside SVG for 100% exact alignment under bar */}
+              {showLabel && (
+                <text
+                  x={x + barW / 2}
+                  y={barRegionH + 14}
+                  textAnchor="middle"
+                  fontSize="10"
+                  fontWeight={isToday ? "700" : "500"}
+                  fill={isToday ? "var(--warning)" : "var(--muted-foreground)"}
+                  opacity={isToday ? 1 : 0.7}
+                >
+                  {isToday ? "●" : date.toLocaleDateString(undefined, { weekday: "narrow" })}
+                </text>
+              )}
+
+              {/* Invisible hit target */}
               <rect
                 x={x}
                 y={0}
@@ -88,63 +145,6 @@ function ActivityBarChart({ activity, today }: { activity: DailyActivity[]; toda
           );
         })}
       </svg>
-
-      {/* Tooltip */}
-      <AnimatePresence>
-        {hovered !== null && activity[hovered] && (
-          <motion.div
-            key={hovered}
-            initial={{ opacity: 0, y: 4, scale: 0.95 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: 4, scale: 0.95 }}
-            transition={{ duration: 0.12 }}
-            className="absolute -top-11 z-20 pointer-events-none -translate-x-1/2"
-            style={{
-              left: `${Math.max(10, Math.min(90, ((hovered + 0.5) / CHART_DAYS) * 100))}%`,
-            }}
-          >
-            <div className="bg-popover border border-border text-popover-foreground rounded-lg px-2.5 py-1 text-[11px] font-medium shadow-lg whitespace-nowrap flex items-center gap-1.5">
-              <span className="text-foreground">
-                {activity[hovered].date === today
-                  ? t("dash.streak.today")
-                  : new Date(activity[hovered].date + "T00:00:00Z").toLocaleDateString(undefined, {
-                      month: "short",
-                      day: "numeric",
-                    })}
-              </span>
-              <span className="text-muted-foreground">·</span>
-              <span className="text-primary font-semibold">
-                {t("dash.streak.questions", { n: activity[hovered].count })}
-              </span>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* Day labels */}
-      <div className="flex mt-1.5" style={{ gap: BAR_GAP }}>
-        {activity.map((d) => {
-          const date = new Date(d.date + "T00:00:00Z");
-          const dow = date.getUTCDay(); // 0=Sun, 1=Mon...
-          const showLabel = dow === 1 || dow === 3 || dow === 5 || dow === 0;
-          const isToday = d.date === today;
-          return (
-            <div
-              key={d.date}
-              className="text-center shrink-0 overflow-hidden"
-              style={{ width: barW, fontSize: "10px" }}
-            >
-              {isToday ? (
-                <span className="text-warning font-bold">●</span>
-              ) : showLabel ? (
-                <span className="text-muted-foreground/70 font-medium">
-                  {date.toLocaleDateString(undefined, { weekday: "narrow" })}
-                </span>
-              ) : null}
-            </div>
-          );
-        })}
-      </div>
     </div>
   );
 }
