@@ -1580,7 +1580,7 @@ function PackCard({
       )}
 
       {/* Footer: completion bar or start prompt */}
-      <div className="flex items-center justify-between gap-3 pt-1 border-t border-border/40">
+      <div className="flex items-center justify-between gap-3">
         {packProgress.attempted > 0 ? (
           <>
             <div className="flex-1 min-w-0">
