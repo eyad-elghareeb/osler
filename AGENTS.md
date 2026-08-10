@@ -358,7 +358,6 @@ The shared primitives below were added to raise the craft of the existing app wi
 - `.osler-segmented` + `.osler-segmented__item` + `.osler-segmented__thumb` — SegmentedControl track and thumb.
 - `.osler-form-field` + `__label` / `__description` / `__error` / `__hint` — FormField rhythm.
 - `.osler-metric-bar` + `__fill` — MetricBar track.
-- `.osler-accent-start` — 3px inline-start accent stripe for emphasizing a single card per viewport.
 - `.osler-surface-hero` — slightly elevated card with a subtle primary-tinted radial gradient sheen. Reserved for the dashboard "continue learning" hero.
 - `.osler-chart-card` + `__header` / `__title` / `__subtitle` / `__body` — ChartCard layout.
 
@@ -399,9 +398,9 @@ The following individual components were stepped up by adopting patterns from th
 | `<LoadingState>` | Subtle fade + 4px lift on mount. | Motion Primitives | `@/components/osler/ui-primitives.tsx` |
 | `<AnimatedDisclosure>` | Inline header button that toggles a smooth height + opacity transition on the body, with a rotating chevron. Use for Settings sections, QBank explanation panels, and any expandable content where Accordion (one-of-many) is too restrictive. | Motion Primitives | `@/components/osler/ui-primitives.tsx` |
 | Login screen | Ambient primary glow + staggered brand-header entrance (icon spring → title fade → subtitle fade) + premium input focus rings (`border-border-strong` + `focus:ring-2 focus:ring-primary/20`) + form card `shadow-e1`. | Motion Primitives + Origin UI | `@/components/osler/login-screen.tsx` |
-| Dashboard `QuickAction` | Cult UI progressive card pattern: hover-reveal 3px inline-start accent stripe that grows from 50% to 100% scale-y, icon container scales 1.05× on hover, arrow nudges 0.5× inline-end. Reads as "this card is alive" without parallax or glow. | Cult UI | `@/components/osler/dashboard.tsx` |
+| Dashboard `QuickAction` | Cult UI progressive card pattern: icon container scales 1.05× on hover, arrow nudges 0.5× inline-end. Reads as "this card is alive" without parallax or glow. | Cult UI | `@/components/osler/dashboard.tsx` |
 | Dashboard featured + recent pack cards | Same progressive hover treatment: `hover:shadow-e2` lift + `whileTap` 0.99 scale + `group-hover:text-primary` on titles. | Cult UI | `@/components/osler/dashboard.tsx` |
-| Global search panel | 21st.dev-inspired command palette: shimmer loading rows (3 placeholder rows match result-group height so the panel doesn't jump), animated inline-start active indicator (`layoutId` shared-layout transition between rows), keyboard nav preserved. | 21st.dev | `@/components/osler/global-search-panel.tsx` |
+| Global search panel | 21st.dev-inspired command palette: shimmer loading rows (3 placeholder rows match result-group height so the panel doesn't jump), keyboard nav preserved. Active row uses a flat `bg-primary/10` tint. | 21st.dev | `@/components/osler/global-search-panel.tsx` |
 | QBank explanation card | Motion Primitives entrance: fade + 6px lift when the explanation reveals. Status header uses `bg-success-soft` / `bg-destructive-soft` instead of `bg-success/10` for a perceptually consistent pair with the foreground color. | Motion Primitives | `@/components/osler/qbank-studio.tsx` |
 | Settings → About section | `<AnimatedDisclosure>` wraps the "Plugins" and "GitHub" subsections so they collapse by default (informational), reducing visual noise on the About page. | Motion Primitives | `@/components/osler/settings.tsx` |
 | `<HubSkeleton>` | Premium loading state for hub views. Mirrors the real layout (header → hero → stats → cards) so the transition to populated content is seamless. Replaces centered spinners in Dashboard, QBank hub, OSCE, Videos. | 21st.dev + Osler | `@/components/osler/ui-primitives.tsx` |
@@ -412,7 +411,7 @@ The following individual components were stepped up by adopting patterns from th
 | Library article loading | Shimmer paragraph skeleton (title + meta + 10 lines) replaces the centered spinner while article content fetches. | 21st.dev | `@/components/osler/library.tsx` |
 | Admin `StatsOverview` | Skeleton stat tiles while the stats fetch is in flight; each populated tile shows a `MetricBar` relating its value to the max across the row. | 21st.dev + Osler | `@/components/osler/admin/stats-overview.tsx` |
 | Admin `AdminTable` | Shimmer row loading — 6 placeholder rows that mirror the real table layout (header + N rows × columns). | 21st.dev | `@/components/osler/admin/admin-table.tsx` |
-| Admin sidebar nav | Motion Primitives shared-layout active indicator — a 3px accent bar + tinted background slides between nav items as the user navigates (`layoutId`). Premium brand block uses `bg-primary-soft` + `shadow-e1`. | Motion Primitives | `@/components/osler/admin/admin-shell.tsx` |
+| Admin sidebar nav | Motion Primitives shared-layout active indicator — a tinted background slides between nav items as the user navigates (`layoutId`). Premium brand block uses `bg-primary-soft` + `shadow-e1`. | Motion Primitives | `@/components/osler/admin/admin-shell.tsx` |
 | Admin content dropzone | Kibo UI-inspired premium dropzone: dashed border on a muted tint with a subtle inner highlight; on drag-over the border turns solid primary, the surface scales 1.005×, and a soft primary glow appears. Icon container uses `bg-primary-soft` and scales 1.1× on drag-active. | Kibo UI | `@/components/osler/admin/content-dropzone.tsx`, `globals.css` |
 | Admin analytics charts | All 5 analytics panels (timeseries, web-vitals, top-pages, api-performance, errors) wrapped with `<ChartCard>` + `<ChartTooltip>` + `<ChartEmpty>` + `<ChartLoading>` + `<ChartLegend>`. Series colors read from `chartSeries(index)` so they're theme-aware. Rating badges use semantic soft-tint tokens. | Osler (pre-Tremor wrapper) | `@/components/osler/admin/analytics/*.tsx` |
 | Admin dashboard loading | `<HubSkeleton>` wrapped in `<Suspense>` as the fallback while `StatsOverview` mounts — the dashboard never shows a bare spinner. | 21st.dev | `@/app/admin/dashboard/page.tsx` |
@@ -451,8 +450,8 @@ The UI language selector and the content-language filter both derive their optio
 
 - Every adopted component composes the existing `@/components/ui` primitives, `cn()`, Lucide icons, and Osler semantic tokens. No new global state mechanism, no second icon set, no parallel theme.
 - Every animation stays ≤0.3s and respects `prefers-reduced-motion` via the `AnimationsProvider` wrapper and the `[data-animations="off"]` CSS escape hatch.
-- Hover-only affordances always enhance — never replace — comprehension. The QuickAction accent stripe, the search active indicator, and the disclosure chevron all have keyboard-focus equivalents (`focus-visible:ring-2 focus-visible:ring-primary/40`).
-- RTL is preserved: the QuickAction accent stripe and the search active indicator both use `inset-inline-start` / `left`/`right` switching via the `rtl` flag from `useI18n()`.
+- Hover-only affordances always enhance — never replace — comprehension. The disclosure chevron and interactive cards have keyboard-focus equivalents (`focus-visible:ring-2 focus-visible:ring-primary/40`).
+- RTL is preserved via Tailwind logical properties (`ms-`/`me-`/`inline-start`/`inline-end`) and the `rtl` flag from `useI18n()`.
 
 
 

@@ -310,7 +310,7 @@ export function Dashboard({
             initial={{ opacity: 0, y: 6 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.3, delay: 0.05 }}
-            className="osler-surface-hero osler-accent-start mb-6 p-5 md:p-6"
+            className="osler-surface-hero mb-6 p-5 md:p-6"
           >
             <div className="flex items-start justify-between gap-4 flex-wrap">
               <div className="flex-1 min-w-0">
@@ -594,16 +594,8 @@ function QuickAction({
       variants={fadeUp}
       whileHover={{ y: -2 }}
       whileTap={{ scale: 0.99 }}
-      className="text-start osler-card--default group relative overflow-hidden flex items-center gap-3 hover:border-primary/40 hover:shadow-e2 transition-all"
+      className="text-start osler-card--default group flex items-center gap-3 hover:border-primary/40 hover:shadow-e2 transition-all"
     >
-      {/* Hover-reveal accent stripe — Cult UI progressive card pattern.
-       * Sits at the inline-start edge and grows from 0 to full height on
-       * hover, drawing the eye to the primary affordance. */}
-      <span
-        aria-hidden
-        className="absolute inset-y-0 inline-start-0 w-[3px] bg-primary opacity-0 scale-y-50 transition-all duration-200 group-hover:opacity-100 group-hover:scale-y-100"
-        style={{ [rtl ? "right" : "left"]: 0 } as React.CSSProperties}
-      />
       <div className="w-10 h-10 rounded-lg bg-primary-soft text-primary flex items-center justify-center shrink-0 transition-transform duration-200 group-hover:scale-105">
         <Icon className="size-5" />
       </div>

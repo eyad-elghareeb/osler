@@ -231,23 +231,6 @@ export function GlobalSearchPanel({
                               isActive ? "bg-primary/10 text-foreground" : "hover:bg-muted/60",
                             )}
                           >
-                            {/* Active indicator — animated inline-start accent.
-                             * 21st.dev command-palette pattern: a 2px bar
-                             * slides in from the inline-start edge when the
-                             * row is active, replacing the static "↵" hint. */}
-                            <AnimatePresence>
-                              {isActive && (
-                                <motion.span
-                                  layoutId="search-active-indicator"
-                                  className="absolute inset-y-1.5 inline-start-0 w-[2px] rounded-full bg-primary"
-                                  initial={{ opacity: 0, scaleY: 0.4 }}
-                                  animate={{ opacity: 1, scaleY: 1 }}
-                                  exit={{ opacity: 0, scaleY: 0.4 }}
-                                  transition={{ duration: 0.18, ease: [0.32, 0.72, 0, 1] }}
-                                  style={{ [rtl ? "right" : "left"]: 0 } as React.CSSProperties}
-                                />
-                              )}
-                            </AnimatePresence>
                             <span className="size-7 rounded-md bg-muted/60 flex items-center justify-center shrink-0">
                               <Icon className="size-3.5 text-muted-foreground" />
                             </span>

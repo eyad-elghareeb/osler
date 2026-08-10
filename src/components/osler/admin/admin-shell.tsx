@@ -562,7 +562,7 @@ function SidebarLink({
   collapsed: boolean;
   onNavigate?: () => void;
 }) {
-  const { t, rtl } = useI18n();
+  const { t } = useI18n();
   const Icon = item.icon;
   const label = t(item.labelKey as any);
   return (
@@ -581,19 +581,9 @@ function SidebarLink({
           : "text-muted-foreground hover:bg-accent hover:text-foreground",
       )}
     >
-      {/* Active indicator — animated inline-start accent bar.
-       * Uses `layoutId` so the bar slides between nav items as the user
-       * navigates (Motion Primitives shared-layout pattern). The tinted
-       * background behind the icon + label is a separate element so the
-       * bar and the tint can animate independently. */}
-      {active && !collapsed && (
-        <motion.span
-          layoutId="admin-nav-active-bar"
-          className="absolute inset-y-1.5 inline-start-0 w-[3px] rounded-full bg-primary"
-          transition={{ type: "spring", stiffness: 380, damping: 30 }}
-          style={{ [rtl ? "right" : "left"]: 0 } as React.CSSProperties}
-        />
-      )}
+      {/* Active indicator — tinted background behind icon + label.
+       * Uses `layoutId` so the tint slides between nav items as the user
+       * navigates (Motion Primitives shared-layout pattern). */}
       {active && (
         <motion.span
           layoutId={collapsed ? "admin-nav-active-tint-collapsed" : "admin-nav-active-tint"}

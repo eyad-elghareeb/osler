@@ -539,22 +539,6 @@ button.osler-stat-tile--compact:hover {
   background-color: var(--primary);
 }
 
-/* Accent border — a 2px left accent for emphasizing a single card in a grid.
- * Use sparingly: one accent per viewport per the design-library-roadmap. */
-.osler-accent-start {
-  @apply relative;
-}
-.osler-accent-start::before {
-  content: "";
-  position: absolute;
-  inset-inline-start: 0;
-  inset-block: 0;
-  width: 3px;
-  background: var(--primary);
-  border-start-start-radius: inherit;
-  border-end-start-radius: inherit;
-}
-
 /* Premium surface — slightly elevated card with a subtle gradient sheen.
  * Reserved for hero / continue-learning cards; one per viewport. */
 .osler-surface-hero {

@@ -128,8 +128,10 @@ Each adopted pattern deviates from its source in ways that keep it on Osler's de
 - **Skeleton shimmer** (21st.dev): the source typically uses Tailwind's `animate-pulse` on a flat tinted block. Osler's version sweeps a soft `linear-gradient` highlight across the surface via a custom `osler-shimmer` keyframe, reading as "content arriving" rather than a flat pulse. Honours `prefers-reduced-motion` and the user's animations toggle by falling back to a flat tint.
 - **EmptyState staggered entrance** (Motion Primitives): the source typically animates children with a single `staggerChildren` container. Osler's version uses per-element variants so the icon springs in (scale + y) while the title / body / actions fade up — the icon gets a spring while text gets a tween, matching each element's perceptual weight.
 - **AnimatedDisclosure** (Motion Primitives): the source uses `height: auto` animation via `motion.div` with `AnimatePresence`. Osler's version adds a rotating chevron (90° on open) and a divider between header and body so it composes cleanly on top of the `.osler-card--default` recipe without a separate card wrapper.
-- **QuickAction progressive card** (Cult UI): the source typically uses a `group-hover` scale + glow. Osler's version replaces the glow with a 3px inline-start accent stripe that grows from 50% to 100% `scale-y` — same "this card is alive" affordance without competing with the icon container's `bg-primary-soft` tint. Stripe position switches with `rtl` so it always sits on the reading-start edge.
-- **Global search active indicator** (21st.dev): the source typically uses a static `↵` hint or a flat background tint. Osler's version uses a Framer Motion `layoutId` shared-layout transition so the 2px accent bar slides between rows as the user arrows up/down — same affordance as macOS Spotlight / VS Code command palette, but composed on Osler tokens.
+- **QuickAction progressive card** (Cult UI): the source typically uses a `group-hover` scale + glow. Osler's version keeps the icon-container scale and arrow nudge but drops the glow so the hover reads as a subtle lift — the icon container's `bg-primary-soft` tint carries the color without an accent stripe (the inline-start accent stripe was removed — see the reversal note below).
+- **Global search active row** (21st.dev): the source typically uses a static `↵` hint or a flat background tint. Osler's version uses a flat `bg-primary/10` tint on the active row — the `↵` hint stays as the keyboard affordance. The animated `layoutId` accent bar was removed (see the reversal note below).
+
+**Reversal — inline-start accent stripes removed**: the 3px inline-start accent stripe (dashboard continue-learning hero, QuickAction hover, admin sidebar active bar) and the search-row `layoutId` accent bar were removed after review — they read as an unwanted vertical border on buttons/tabs. Active rows now rely on flat tints (`bg-primary/10`) and the `.osler-accent-start` utility was deleted from `globals.css`.
 - **Login ambient glow** (Magic UI / Cult UI): the source patterns often use animated gradient beams or marquee effects for hero sections. Osler's version uses a single static radial gradient at 14% primary tint — reads as a polished ambient light without motion that would distract from the form. Reserved for the login screen only; not used on study surfaces per the roadmap's "separate product UI from marketing expression" rule.
 
 ## Component adoptions shipped
@@ -141,15 +143,15 @@ The following individual components were stepped up by adopting patterns from th
 - **EmptyState + LoadingState** (Motion Primitives) — staggered entrance choreography.
 - **AnimatedDisclosure** (Motion Primitives) — smooth height + opacity disclosure with rotating chevron.
 - **Login screen** (Motion Primitives + Origin UI) — ambient glow, staggered brand header, premium input focus rings.
-- **Dashboard QuickAction + featured + recent pack cards** (Cult UI) — progressive card hover with accent stripe + icon scale + arrow nudge.
-- **Global search panel** (21st.dev) — shimmer loading rows + animated active indicator.
+- **Dashboard QuickAction + featured + recent pack cards** (Cult UI) — progressive card hover with icon scale + arrow nudge.
+- **Global search panel** (21st.dev) — shimmer loading rows; active row uses a flat `bg-primary/10` tint.
 - **QBank explanation card** (Motion Primitives) — entrance animation + semantic soft-tint status header.
 - **Settings → About section** (Motion Primitives) — `AnimatedDisclosure` wraps informational subsections.
 - **Dashboard / QBank / OSCE / Videos hub loading** (21st.dev) — `<HubSkeleton>` replaces centered spinners; Videos folder-loading uses a shimmer video-card grid.
 - **Library article loading** (21st.dev) — shimmer paragraph skeleton while article content fetches.
 - **Admin StatsOverview** (21st.dev + Osler) — skeleton stat tiles while fetching; `MetricBar` on each populated tile shows relative scale.
 - **Admin AdminTable** (21st.dev) — shimmer row loading that mirrors the real table layout.
-- **Admin sidebar nav** (Motion Primitives) — shared-layout active indicator that slides between nav items; premium brand block.
+- **Admin sidebar nav** (Motion Primitives) — shared-layout tinted active background that slides between nav items; premium brand block.
 - **Admin content dropzone** (Kibo UI) — premium dashed-border dropzone with drag-over scale + primary glow + icon-container scale.
 - **Admin analytics charts** (Osler pre-Tremor wrapper) — all 5 panels (timeseries, web-vitals, top-pages, api-performance, errors) wrapped with `<ChartCard>` + `<ChartTooltip>` + `<ChartEmpty>` + `<ChartLoading>` + `<ChartLegend>`. Series colors read from `chartSeries(index)`.
 - **Admin dashboard loading** (21st.dev) — `<HubSkeleton>` in `<Suspense>` while `StatsOverview` mounts.
