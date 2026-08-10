@@ -4823,11 +4823,19 @@ function QuizView({
           <ListChecks className="size-4" />
         </button>
 
-        <div className="flex-1 flex items-center justify-center min-w-0">
-          <div className="flex items-center gap-2">
-            <div className="text-sm font-semibold tracking-wide truncate">
+        <div
+          className="flex-1 min-w-0 overflow-hidden flex items-center justify-center"
+          role="status"
+          aria-live="polite"
+          aria-label={t("qbank.session.question", { n: session.current + 1, total: session.questions.length })}
+        >
+          <div className="min-w-0 flex items-center gap-2">
+            <span className="hidden sm:block text-sm font-semibold tracking-wide truncate">
               {t("qbank.session.question", { n: session.current + 1, total: session.questions.length })}
-            </div>
+            </span>
+            <span className="sm:hidden text-xs font-semibold tabular-nums whitespace-nowrap" aria-hidden="true">
+              {session.current + 1}/{session.questions.length}
+            </span>
             {readonly && (
               <span className="hidden sm:inline-flex text-[10px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded-full bg-primary-foreground/15 text-primary-foreground/80">
                 {t("qbank.review.title")}
@@ -7175,4 +7183,3 @@ function saveSession(s: SessionData) {
   };
   sessions.save(saved);
 }
-

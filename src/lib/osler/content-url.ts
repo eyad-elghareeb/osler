@@ -1,13 +1,9 @@
 /**
  * Resolves the content base URL based on cloud config.
  *
- * Content has a single source of truth, decided at the instance level:
- *   - Cloud-enabled instance (cloud.enabled = true with an apiUrl, or
- *     NEXT_PUBLIC_CLOUD_API_URL set at build time) → content is served
- *     STRICTLY from the Cloudflare Worker's R2-backed endpoints. There is
- *     never a fallback to the local /osler-content/ directory.
- *   - Non-cloud instance → content is served STRICTLY from the local
- *     /osler-content/ directory. No remote URL is ever produced.
+ * Cloud-enabled instances prefer the Cloudflare Worker's R2-backed endpoints,
+ * while bundled /osler-content/ paths remain available as an offline-safe
+ * fallback. Non-cloud instances use the bundled paths directly.
  */
 
 import { getConfig } from "./config";
@@ -37,15 +33,15 @@ function resolvedApiUrl(): string | null {
 
 /* ── Local paths (same-origin static files) ─────────────────────── */
 
-function localManifestUrl(folder: string): string {
+export function localManifestUrl(folder: string): string {
   return `/osler-content/${folder}/manifest.json`;
 }
 
-function localContentUrl(category: string, relativePath: string): string {
+export function localContentUrl(category: string, relativePath: string): string {
   return `/osler-content/${category}/${relativePath}`;
 }
 
-function localPackBasePath(category: string, nodePath: string): string {
+export function localPackBasePath(category: string, nodePath: string): string {
   return `/osler-content/${category}/${nodePath}`;
 }
 
@@ -66,8 +62,9 @@ function remotePackBasePath(apiUrl: string, category: string, nodePath: string):
 /* ── Public API ─────────────────────────────────────────────────── */
 
 /**
- * Resolve the manifest URL for a given category folder. Cloud-enabled
- * instances always get the Worker URL; non-cloud instances the local path.
+ * Resolve the preferred manifest URL for a given category folder. Cloud-enabled
+ * instances get the Worker URL first; callers may use localManifestUrl() when
+ * the remote source is unavailable.
  */
 export function manifestUrl(folder: string): string {
   const apiUrl = resolvedApiUrl();
@@ -75,7 +72,7 @@ export function manifestUrl(folder: string): string {
   return localManifestUrl(folder);
 }
 
-/** Resolve a content file URL (data files, images, articles). */
+/** Resolve a preferred content file URL (data files, images, articles). */
 export function contentFileUrl(category: string, relativePath: string): string {
   const apiUrl = resolvedApiUrl();
   if (apiUrl) return normalizeUrl(remoteContentUrl(apiUrl, category, relativePath));
