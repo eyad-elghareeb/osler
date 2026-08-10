@@ -1838,18 +1838,13 @@ function ContentTab({
               const fs = folderStats(node);
               const acc = fs.attempted > 0 ? Math.round((fs.correct / fs.attempted) * 100) : 0;
               return (
-                <div
+                <Button
+                  type="button"
+                  variant="ghost"
+                  aria-label={node.title}
                   key={node.uid}
-                  role="button"
-                  tabIndex={0}
                   onClick={() => setSelectedFolderIdx(idx)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" || e.key === " ") {
-                      e.preventDefault();
-                      setSelectedFolderIdx(idx);
-                    }
-                  }}
-                  className="medos-fade-in text-start bg-card border border-border rounded-xl p-4 hover:border-primary/40 hover:shadow-md transition-all group flex items-center gap-3.5 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+                  className="medos-fade-in h-auto w-full min-w-0 justify-start text-start bg-card border border-border rounded-xl p-4 hover:border-primary/40 hover:shadow-md hover:bg-card transition-all group flex items-center gap-3.5 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
                   style={{ animationDelay: `${idx * 0.04}s` }}
                 >
                   <div
@@ -1866,7 +1861,7 @@ function ContentTab({
                     </p>
                   </div>
                   <ChevronRight className="size-4 text-muted-foreground/40 group-hover:text-primary transition-colors shrink-0" />
-                </div>
+                </Button>
               );
             }
 
@@ -1966,10 +1961,11 @@ function ContentTab({
                 const cfs = folderStats(child);
                 const cacc = cfs.attempted > 0 ? Math.round((cfs.correct / cfs.attempted) * 100) : 0;
                 return (
-                  <div
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    aria-label={child.title}
                     key={child.uid}
-                    role="button"
-                    tabIndex={0}
                     onClick={() => {
                       // For nested branches: start a merged session with all leaf packs
                       if (onPickForCreateTest) {
@@ -1985,10 +1981,7 @@ function ContentTab({
                         if (firstLeaf) onOpenPack?.(firstLeaf);
                       }
                     }}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter" || e.key === " ") e.preventDefault();
-                    }}
-                    className="medos-fade-in text-start bg-card border border-border rounded-xl p-4 hover:border-primary/40 hover:shadow-md transition-all group flex items-center gap-3.5 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+                    className="medos-fade-in h-auto w-full min-w-0 justify-start text-start bg-card border border-border rounded-xl p-4 hover:border-primary/40 hover:shadow-md hover:bg-card transition-all group flex items-center gap-3.5 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
                     style={{ animationDelay: `${idx * 0.04}s` }}
                   >
                   <div
@@ -2005,7 +1998,7 @@ function ContentTab({
                     </p>
                   </div>
                   <ChevronRight className="size-4 text-muted-foreground/40 group-hover:text-primary transition-colors shrink-0" />
-                </div>
+                  </Button>
                 );
               }
 

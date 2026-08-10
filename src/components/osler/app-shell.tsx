@@ -243,6 +243,7 @@ export function AppShell({ children }: AppShellProps) {
           {/* Logo */}
           <button
             onClick={() => handleViewChange("dashboard")}
+            aria-label={t("app.name")}
             className="flex items-center gap-2.5 me-1 sm:me-3 shrink-0"
           >
             <div className="size-8 rounded-lg bg-primary/15 border border-primary/30 flex items-center justify-center">
@@ -359,7 +360,7 @@ export function AppShell({ children }: AppShellProps) {
           {/* Theme toggle */}
           <button
             onClick={toggleTheme}
-            aria-label="Toggle theme"
+            aria-label={isDark ? t("theme.toggleToLight") : t("theme.toggleToDark")}
             title={isDark ? t("theme.toggleToLight") : t("theme.toggleToDark")}
             className="osler-icon-btn shrink-0"
           >
@@ -373,7 +374,10 @@ export function AppShell({ children }: AppShellProps) {
           {/* User menu */}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <button className="flex items-center gap-2 h-9 px-2 rounded-md hover:bg-muted/60 transition-colors shrink-0">
+              <button
+                aria-label={t("nav.profile")}
+                className="flex items-center gap-2 h-9 px-2 rounded-md hover:bg-muted/60 transition-colors shrink-0"
+              >
                 <div className="size-7 rounded-full bg-gradient-to-br from-primary/80 to-primary/40 flex items-center justify-center text-xs font-semibold text-primary-foreground">
                   {(cloudSession?.user.displayName || username || "U").slice(0, 2).toUpperCase()}
                 </div>
