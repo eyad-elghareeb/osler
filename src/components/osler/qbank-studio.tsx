@@ -4804,14 +4804,14 @@ function QuizView({
         <div className="hidden sm:flex items-center gap-2 text-xs opacity-90">
           <span className="font-medium">{activeItem.title}</span>
           <span className="opacity-50">·</span>
-          <span className="capitalize">{session.mode} Mode</span>
+          <span>{session.mode === "timed" ? t("qbank.session.timedMode") : t("qbank.session.tutorMode")}</span>
         </div>
 
         <button
           onClick={onToggleNavMobile}
           className="md:hidden size-8 rounded-lg bg-primary-foreground/15 hover:bg-primary-foreground/25 flex items-center justify-center me-1 shrink-0"
-          title="Question navigator"
-          aria-label="Question navigator"
+          title={t("qbank.home.questionNavigator")}
+          aria-label={t("qbank.home.questionNavigator")}
         >
           <ListChecks className="size-4" />
         </button>
@@ -4845,8 +4845,8 @@ function QuizView({
               ? "bg-primary-foreground/30 ring-1 ring-inset ring-primary-foreground/40"
               : "bg-primary-foreground/15 hover:bg-primary-foreground/25"
           }`}
-          title="Quiz settings"
-          aria-label="Quiz settings"
+          title={t("qbank.settings.title")}
+          aria-label={t("qbank.settings.title")}
           aria-pressed={quizSettingsOpen}
         >
           <Sliders className="size-3.5" />
@@ -4865,8 +4865,8 @@ function QuizView({
             <button
               onClick={onTogglePause}
               className="size-7 rounded-lg bg-primary-foreground/15 hover:bg-primary-foreground/25 flex items-center justify-center transition-colors shrink-0"
-              title={isPausedOrLocked ? "Resume" : "Pause"}
-              aria-label={isPausedOrLocked ? "Resume" : "Pause"}
+              title={isPausedOrLocked ? t("qbank.session.resume") : t("qbank.session.pause")}
+              aria-label={isPausedOrLocked ? t("qbank.session.resume") : t("qbank.session.pause")}
             >
               {isPausedOrLocked ? <Play className="size-3.5" /> : <Pause className="size-3.5" />}
             </button>
@@ -4899,8 +4899,8 @@ function QuizView({
                   ? "bg-primary-foreground/30 ring-1 ring-inset ring-primary-foreground/40"
                   : "bg-primary-foreground/15 hover:bg-primary-foreground/25"
               }`}
-              title="Notes"
-              aria-label="Notes"
+              title={t("qbank.notes.title")}
+              aria-label={t("qbank.notes.title")}
               aria-pressed={notesOpen}
             >
               <NotebookPen className="size-3.5" />
@@ -4928,8 +4928,8 @@ function QuizView({
                 className="bg-card border border-border rounded-2xl shadow-2xl w-[90vw] max-w-xl max-h-[70vh] overflow-hidden"
               >
                 <div className="px-4 py-3 border-b border-border flex items-center justify-between bg-primary text-primary-foreground">
-                  <span className="text-sm font-semibold">Question Navigator</span>
-                  <button onClick={onToggleNavMobile} className="size-7 rounded-lg hover:bg-primary-foreground/15 flex items-center justify-center">
+                  <span className="text-sm font-semibold">{t("qbank.home.questionNavigator")}</span>
+                  <button onClick={onToggleNavMobile} aria-label={t("common.close")} className="size-7 rounded-lg hover:bg-primary-foreground/15 flex items-center justify-center">
                     <X className="size-4" />
                   </button>
                 </div>
@@ -4945,8 +4945,8 @@ function QuizView({
                   />
                 </div>
                 <div className="px-4 py-2.5 border-t border-border flex items-center justify-between text-xs text-muted-foreground">
-                  <span>{answeredCount}/{session.questions.length} answered</span>
-                  <span>{flaggedCount} flagged</span>
+                  <span>{t("qbank.home.answered", { n: answeredCount, total: session.questions.length })}</span>
+                  <span>{t("qbank.home.flagged", { n: flaggedCount })}</span>
                 </div>
               </motion.div>
             </motion.div>
@@ -4995,12 +4995,12 @@ function QuizView({
                   <div className="size-16 rounded-full bg-warning/15 border-2 border-warning/30 flex items-center justify-center mx-auto mb-4">
                     <Pause className="size-7 text-warning" />
                   </div>
-                  <h3 className="text-xl font-semibold text-foreground">Test Paused</h3>
+                  <h3 className="text-xl font-semibold text-foreground">{t("qbank.home.testPaused")}</h3>
                   <p className="text-sm text-muted-foreground mt-2 mb-6">
-                    The timer is stopped. Click Resume to continue your test.
+                    {t("qbank.home.testPausedDesc")}
                   </p>
                   <Button onClick={onTogglePause} variant="default" className="rounded-xl">
-                    <Play className="size-4 mr-2" /> Resume Test
+                    <Play className="size-4 mr-2" /> {t("qbank.home.resumeTest")}
                   </Button>
                 </div>
               </motion.div>
@@ -7044,7 +7044,7 @@ function ResultsView({
         open={pdfDialogOpen}
         onOpenChange={setPdfDialogOpen}
         defaultTitle={item.title}
-        defaultSubtitle={`${session.mode === "timed" ? "Timed" : "Tutor"} Mode`}
+        defaultSubtitle={session.mode === "timed" ? t("qbank.session.timedMode") : t("qbank.session.tutorMode")}
         variant="quiz"
         onExport={handleExportPdf}
       />
