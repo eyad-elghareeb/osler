@@ -38,6 +38,7 @@ import { useShortcutBindings } from "@/hooks/use-shortcuts";
 import { VerticalSnapGallery } from "./vertical-snap-gallery";
 
 import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
 import { haptic } from "@/lib/osler/native";
 import { setImmersiveMode } from "./immersive-mode";
 import { useI18n } from "./i18n-provider";
@@ -1302,7 +1303,7 @@ export function FlashcardStudio({
                     )}
                     {dueCount > 0 && (
                       <div className="flex items-center gap-1.5">
-                        <span className="inline-flex items-center gap-1 text-xs font-medium text-emerald-500 bg-emerald-500/10 px-2 py-0.5 rounded-full">
+                        <span className="inline-flex items-center gap-1 text-xs font-medium text-warning bg-warning/10 px-2 py-0.5 rounded-full">
                           <Clock className="size-3" />
                           {t("flash.dueCount", { count: dueCount })}
                         </span>
@@ -1348,19 +1349,19 @@ function RateButton({
   onRate: (r: "again" | "hard" | "good" | "easy") => void;
 }) {
   const colorMap = {
-    red: "border-red-500/40 hover:border-red-500 hover:bg-red-500/10 text-red-500",
-    orange:
-      "border-orange-500/40 hover:border-orange-500 hover:bg-orange-500/10 text-orange-500",
-    emerald:
-      "border-emerald-500/40 hover:border-emerald-500 hover:bg-emerald-500/10 text-emerald-500",
-    blue: "border-blue-500/40 hover:border-blue-500 hover:bg-blue-500/10 text-blue-500",
+    red: "border-destructive/40 hover:border-destructive hover:bg-destructive/10 text-destructive",
+    orange: "border-warning/40 hover:border-warning hover:bg-warning/10 text-warning",
+    emerald: "border-success/40 hover:border-success hover:bg-success/10 text-success",
+    blue: "border-info/40 hover:border-info hover:bg-info/10 text-info",
   };
 
   return (
-    <button
+    <Button
+      type="button"
+      variant="outline"
       onClick={() => onRate(rating)}
       className={cn(
-        "flex flex-col items-center gap-0.5 px-1.5 py-2 rounded-xl border-2 transition-all",
+        "h-auto w-full flex-col gap-0.5 px-1.5 py-2 rounded-xl border-2 transition-all",
         colorMap[color],
       )}
     >
@@ -1368,6 +1369,6 @@ function RateButton({
       <span className="text-xs font-semibold">{label}</span>
       <span className="text-[9px] opacity-70">{description}</span>
       <kbd className="text-[8px] px-1 py-0.5 rounded border border-current/20 opacity-50">{shortcut}</kbd>
-    </button>
+    </Button>
   );
 }
