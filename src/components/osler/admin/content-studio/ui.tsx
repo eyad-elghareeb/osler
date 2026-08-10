@@ -83,8 +83,8 @@ export function NodeBadges({
   const { t } = useI18n();
   const status = node.cloudObject?.status;
   const sizeCls = variant === "compact"
-    ? "px-1 py-px text-[9px]"
-    : "px-1.5 py-0.5 text-[10px]";
+    ? "px-1 py-px text-xs"
+    : "px-1.5 py-0.5 text-xs";
 
   return (
     <div className="flex flex-wrap items-center gap-1">
@@ -132,7 +132,7 @@ export function ValidationBadge({ state }: { state: ValidationState }) {
   }
   if (state === "checking") {
     return (
-      <span className="inline-flex items-center gap-0.5 rounded-full border border-border bg-muted px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+        <span className="inline-flex items-center gap-0.5 rounded-full border border-border bg-muted px-1.5 py-0.5 text-xs font-medium uppercase tracking-wider text-muted-foreground">
         <Loader2 className="size-2.5 animate-spin" /> {t("admin.studio.autoValidating")}
       </span>
     );
@@ -145,7 +145,7 @@ export function ValidationBadge({ state }: { state: ValidationState }) {
 export function MetaRow({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-md border border-border bg-muted/30 px-2.5 py-1.5">
-      <dt className="text-[10px] uppercase tracking-wider text-muted-foreground">{label}</dt>
+      <dt className="text-xs uppercase tracking-wider text-muted-foreground">{label}</dt>
       <dd className="truncate text-xs font-medium">{value}</dd>
     </div>
   );

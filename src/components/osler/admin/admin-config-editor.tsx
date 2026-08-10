@@ -91,7 +91,7 @@ export function AdminConfigEditor() {
         toast({ title: t("admin.config.loadFailed"), variant: "destructive" });
       })
       .finally(() => setLoading(false));
-  }, []);
+  }, [t, toast]);
 
   function updateConfig(path: string, value: unknown) {
     setConfig((prev) => {
@@ -124,7 +124,7 @@ export function AdminConfigEditor() {
         payload = JSON.parse(raw) as Record<string, unknown>;
         setRawError(null);
       } catch {
-        setRawError("Invalid JSON");
+        setRawError(t("admin.config.raw.invalidJson"));
         toast({ title: t("admin.config.saveFailed"), variant: "destructive" });
         return;
       }
@@ -134,8 +134,10 @@ export function AdminConfigEditor() {
     setSaving(true);
     try {
       await adminApi.updateConfig(payload);
+      haptic("success");
       toast({ title: t("admin.config.saved") });
     } catch {
+      haptic("error");
       toast({ title: t("admin.config.saveFailed"), variant: "destructive" });
     } finally {
       setSaving(false);
@@ -160,11 +162,16 @@ export function AdminConfigEditor() {
         {tabItems.map((item) => {
           const Icon = item.icon;
           return (
-            <button
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
               key={item.id}
               onClick={() => { haptic("selection"); setTab(item.id); }}
+              role="tab"
+              aria-selected={tab === item.id}
               className={cn(
-                "flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors",
+                "font-medium",
                 tab === item.id
                   ? "bg-primary/10 border border-primary/30 text-primary"
                   : "text-muted-foreground hover:text-foreground border border-transparent",
@@ -172,7 +179,7 @@ export function AdminConfigEditor() {
             >
               <Icon className="size-4" />
               <span className="hidden sm:inline">{t(item.labelKey as any)}</span>
-            </button>
+            </Button>
           );
         })}
         <div className="ms-auto">
@@ -233,7 +240,14 @@ function EnginesPanel({ config, update, t }: { config: ConfigData; update: (id: 
           <div key={id} className="rounded-xl border border-border bg-card p-5 md:p-6 space-y-4">
             <div className="flex items-center justify-between gap-3">
               <div className="flex items-center gap-3">
-                <div className="size-9 rounded-lg flex items-center justify-center text-sm font-semibold" style={{ backgroundColor: `${meta?.color ?? "oklch(0.6 0.1 250)"}20`, color: meta?.color }}>
+                <div
+                  className="flex size-9 items-center justify-center rounded-xl border border-primary/20 bg-primary/10 text-sm font-semibold text-primary"
+                  style={meta?.color ? {
+                    backgroundColor: `color-mix(in oklch, ${meta.color} 12%, transparent)`,
+                    borderColor: `color-mix(in oklch, ${meta.color} 30%, transparent)`,
+                    color: meta.color,
+                  } : undefined}
+                >
                   {meta?.label ?? id}
                 </div>
                 <div>
@@ -270,6 +284,7 @@ function ThemesPanel({ config, update, t }: { config: ConfigData; update: (path:
   function addCustom() {
     const id = `custom-${Date.now()}`;
     const newTheme = { id, name: "New Theme", variant: "light" as const, primary: "", background: "", foreground: "", accent: "", border: "", destructive: "" };
+    haptic("light");
     update("themes.custom", [...config.themes.custom, newTheme]);
   }
 
@@ -317,14 +332,17 @@ function ThemesPanel({ config, update, t }: { config: ConfigData; update: (path:
         ) : (
           <div className="space-y-4">
             {config.themes.custom.map((theme, i) => (
-              <div key={theme.id} className="rounded-lg border border-border p-4 space-y-3 relative">
-                <button
+              <div key={theme.id} className="relative space-y-3 rounded-xl border border-border p-4">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="iconSm"
                   onClick={() => removeCustom(i)}
-                  className="absolute top-3 end-3 text-muted-foreground hover:text-destructive transition-colors"
-                  aria-label="Remove"
+                  className="absolute end-3 top-3 text-muted-foreground hover:text-destructive"
+                  aria-label={t("common.remove")}
                 >
                   <Trash2 className="size-4" />
-                </button>
+                </Button>
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                   <FormField label={t("admin.config.themes.field.name")} hint="" value={theme.name} onChange={(v) => updateCustom(i, "name", v)} />
                   <DefaultSelect
@@ -410,7 +428,7 @@ function RawPanel({
 }) {
   function handleChange(v: string) {
     setRaw(v);
-    try { JSON.parse(v); setRawError(null); } catch { setRawError("Invalid JSON"); }
+    try { JSON.parse(v); setRawError(null); } catch { setRawError(t("admin.config.raw.invalidJson")); }
   }
 
   return (

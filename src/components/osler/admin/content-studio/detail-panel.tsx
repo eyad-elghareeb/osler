@@ -118,15 +118,15 @@ function BatchSummary({
   return (
     <div className="flex h-full flex-col gap-3">
       <div className="flex items-center gap-2">
-        <div className="flex size-8 items-center justify-center rounded-lg border bg-primary/10 border-primary/30 text-primary">
+        <div className="flex size-8 items-center justify-center rounded-xl border border-primary/30 bg-primary/10 text-primary">
           <Layers className="size-3.5" />
         </div>
         <div>
           <p className="text-sm font-semibold">{t("admin.studio.selected", { n: String(nodes.length) })}</p>
-          <p className="text-[11px] text-muted-foreground">
-            {fileCount} files · {folderCount} folders
-            {managedCount > 0 && ` · ${managedCount} managed`}
-            {stagedCount > 0 && ` · ${stagedCount} staged`}
+          <p className="text-xs text-muted-foreground">
+            {t("admin.studio.filesCount", { n: String(fileCount) })} · {t("admin.studio.foldersCount", { n: String(folderCount) })}
+            {managedCount > 0 && ` · ${t("admin.studio.managedCount", { n: String(managedCount) })}`}
+            {stagedCount > 0 && ` · ${t("admin.studio.stagedCount", { n: String(stagedCount) })}`}
           </p>
         </div>
       </div>
@@ -136,7 +136,7 @@ function BatchSummary({
         {nodes.slice(0, 8).map((n) => (
           <span
             key={n.id}
-            className="inline-flex max-w-[130px] items-center gap-1 rounded-md border border-border bg-muted/40 px-1.5 py-0.5 text-[10px]"
+            className="inline-flex max-w-[130px] items-center gap-1 rounded-lg border border-border bg-muted/40 px-1.5 py-0.5 text-xs"
           >
             {n.kind === "folder" ? (
               <FolderOpen className={cn("size-2.5 shrink-0 fill-current/15", folderRowCls)} />
@@ -147,13 +147,13 @@ function BatchSummary({
           </span>
         ))}
         {nodes.length > 8 && (
-          <span className="text-[10px] text-muted-foreground">+{nodes.length - 8} more</span>
+          <span className="text-xs text-muted-foreground">{t("admin.studio.moreItems", { n: String(nodes.length - 8) })}</span>
         )}
       </div>
 
       {/* Batch actions */}
       <div className="mt-1 flex flex-col gap-1">
-        <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+        <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
           {t("admin.studio.batchActions")}
         </p>
         {hasStaged && canManage && (
@@ -199,7 +199,7 @@ function SingleDetail(props: DetailPanelProps & { node: ContentTreeNode }) {
           <FileTypeIcon node={node} className="size-11" />
           <div className="min-w-0 flex-1">
             <h3 className="truncate text-sm font-semibold">{node.name}</h3>
-            <p className="truncate font-mono text-[10px] text-muted-foreground">
+            <p className="truncate font-mono text-xs text-muted-foreground">
               {node.sourcePath ?? node.r2Key ?? node.id}
             </p>
             <div className="mt-1.5 flex flex-wrap items-center gap-1">
@@ -226,11 +226,11 @@ function SingleDetail(props: DetailPanelProps & { node: ContentTreeNode }) {
       {node.r2Key && (
         <div className="min-h-0 flex-1 overflow-hidden border-b border-border">
           <div className="flex items-center justify-between px-3 pt-2.5 pb-1">
-            <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+            <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
               {t("admin.studio.content")}
             </p>
             {node.cloudObject && (
-              <p className="text-[10px] text-muted-foreground">{t("admin.studio.previewHint")}</p>
+              <p className="text-xs text-muted-foreground">{t("admin.studio.previewHint")}</p>
             )}
           </div>
           <R2Preview node={node} />
@@ -239,7 +239,7 @@ function SingleDetail(props: DetailPanelProps & { node: ContentTreeNode }) {
 
       {/* Quick actions */}
       <div className="shrink-0 space-y-1.5 p-3.5">
-        <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+        <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
           {t("admin.studio.quickActions")}
         </p>
         <div className="grid grid-cols-2 gap-1.5">
@@ -305,7 +305,7 @@ function FolderDetail({ node, canManage }: { node: ContentTreeNode; canManage: b
         </div>
         <div className="min-w-0 flex-1">
           <h3 className="truncate text-sm font-semibold">{node.name}</h3>
-          <p className="truncate font-mono text-[10px] text-muted-foreground">
+          <p className="truncate font-mono text-xs text-muted-foreground">
             {node.r2Key ?? node.id}
           </p>
         </div>
@@ -378,7 +378,7 @@ function R2Preview({ node }: { node: ContentTreeNode }) {
       <div className="flex h-full flex-col overflow-hidden">
         <div className="flex-1 min-h-0 overflow-auto medos-scroll-y p-2.5">
           {loading ? (
-            <div className="text-[11px] text-muted-foreground text-center py-6">{t("common.loading")}</div>
+            <div className="text-xs text-muted-foreground text-center py-6">{t("common.loading")}</div>
           ) : imageUrl ? (
             <button
               type="button"
@@ -389,16 +389,16 @@ function R2Preview({ node }: { node: ContentTreeNode }) {
               <img
                 src={imageUrl}
                 alt={node.name}
-                className="mx-auto max-h-[35vh] max-w-full rounded-lg border border-border object-contain"
+                className="mx-auto max-h-[35vh] max-w-full rounded-xl border border-border object-contain"
               />
             </button>
           ) : (
-            <div className="text-[11px] text-muted-foreground text-center py-6">
+            <div className="text-xs text-muted-foreground text-center py-6">
               {t("admin.content.previewUnavailableR2")}
             </div>
           )}
         </div>
-        <div className="shrink-0 border-t border-border px-2.5 py-1 text-[10px] text-muted-foreground">
+        <div className="shrink-0 border-t border-border px-2.5 py-1 text-xs text-muted-foreground">
           {node.name}{node.size != null ? ` · ${formatBytes(node.size)}` : ""}
         </div>
         <ImageLightbox
@@ -428,7 +428,7 @@ function R2Preview({ node }: { node: ContentTreeNode }) {
     <div className="flex h-full flex-col overflow-hidden">
       <div dir={lang === "ar" ? "rtl" : "ltr"} className="flex-1 min-h-0 overflow-auto medos-scroll-y p-2.5">
         {loading ? (
-          <div className="text-[11px] text-muted-foreground text-center py-6">{t("common.loading")}</div>
+          <div className="text-xs text-muted-foreground text-center py-6">{t("common.loading")}</div>
         ) : renderable && body != null ? (
           isMarkdown
             ? <MarkdownBody md={body} r2Key={node.r2Key} />
@@ -436,15 +436,15 @@ function R2Preview({ node }: { node: ContentTreeNode }) {
               ? <RenderedContentPreview node={node} contentType={effectiveType} parsed={parsed} />
               : null
         ) : truncated ? (
-          <div className="text-[11px] text-muted-foreground text-center py-6">
+          <div className="text-xs text-muted-foreground text-center py-6">
             {t("admin.studio.preview.tooLarge")}
           </div>
         ) : body == null ? (
-          <div className="text-[11px] text-muted-foreground text-center py-6">
+          <div className="text-xs text-muted-foreground text-center py-6">
             {t("admin.content.previewUnavailableR2")}
           </div>
         ) : (
-          <pre className="whitespace-pre-wrap break-words font-mono text-[10px] text-foreground/90">
+          <pre className="whitespace-pre-wrap break-words font-mono text-xs text-foreground/90">
             {body}
           </pre>
         )}

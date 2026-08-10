@@ -18,6 +18,7 @@
 import * as React from "react";
 import { Loader2, Repeat2, AlertTriangle, CheckCircle2, ArrowRight } from "lucide-react";
 import { useI18n } from "@/components/osler/i18n-provider";
+import { haptic } from "@/lib/osler/native";
 import { cn } from "@/lib/utils";
 import {
   Dialog,
@@ -147,6 +148,7 @@ export function ConvertDialog({ open, onOpenChange, node, onConverted }: Convert
   async function handleConfirm() {
     if (!selected || !sourceType || !converted || !node) return;
     setConverting(true);
+    haptic("light");
     try {
       const title = (node.cloudObject?.title ?? node.name).replace(/\.[^.]+$/, "") + ` (${selected.target})`;
       const language = node.cloudObject?.language ?? "en";
@@ -160,10 +162,12 @@ export function ConvertDialog({ open, onOpenChange, node, onConverted }: Convert
         title: t("admin.studio.convertSuccess", { from: sourceType, to: selected.target }),
         description: converted.summary,
       });
+      haptic("success");
       onOpenChange(false);
       if (onConverted) onConverted(createRes.id);
       else router.push(`/admin/content?id=${encodeURIComponent(createRes.id)}`);
     } catch (err: any) {
+      haptic("error");
       toast({
         title: t("admin.studio.convertFailed", { error: String(err?.message ?? err) }),
         variant: "destructive",
@@ -209,18 +213,24 @@ export function ConvertDialog({ open, onOpenChange, node, onConverted }: Convert
               {t("common.loading")}
             </div>
           ) : options.length === 0 ? (
-            <p className="rounded-md border border-border bg-muted/30 p-4 text-center text-sm text-muted-foreground">
-              No conversions available for this content type.
+            <p className="rounded-xl border border-border bg-muted/30 p-4 text-center text-sm text-muted-foreground">
+              {t("admin.studio.convertNoOptions")}
             </p>
           ) : (
             <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
               {options.map((opt) => (
-                <button
+                <Button
                   key={opt.target}
                   type="button"
-                  onClick={() => setSelected(opt)}
+                  variant="ghost"
+                  size="default"
+                  onClick={() => {
+                    haptic("selection");
+                    setSelected(opt);
+                  }}
+                  aria-pressed={selected?.target === opt.target}
                   className={cn(
-                    "flex flex-col items-start gap-1 rounded-lg border p-3 text-start transition-all",
+                    "h-auto w-full items-start justify-start rounded-xl border p-3 text-start",
                     "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
                     selected?.target === opt.target
                       ? "border-primary/50 bg-primary/10 ring-1 ring-primary/30"
@@ -230,17 +240,17 @@ export function ConvertDialog({ open, onOpenChange, node, onConverted }: Convert
                   <div className="flex w-full items-center justify-between">
                     <span className="text-sm font-semibold">{opt.label}</span>
                     {opt.lossless ? (
-                      <span className="inline-flex items-center gap-0.5 rounded-full border border-emerald-500/30 bg-emerald-500/15 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wider text-emerald-700 dark:text-emerald-300">
+                      <span className="inline-flex items-center gap-0.5 rounded-full border border-success/30 bg-success/15 px-1.5 py-0.5 text-xs font-medium uppercase tracking-wider text-success">
                         <CheckCircle2 className="size-2.5" /> {t("admin.studio.convertLossless")}
                       </span>
                     ) : (
-                      <span className="inline-flex items-center gap-0.5 rounded-full border border-amber-500/30 bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wider text-amber-700 dark:text-amber-300">
+                      <span className="inline-flex items-center gap-0.5 rounded-full border border-warning/30 bg-warning/15 px-1.5 py-0.5 text-xs font-medium uppercase tracking-wider text-warning">
                         <AlertTriangle className="size-2.5" /> {t("admin.studio.convertLossy")}
                       </span>
                     )}
                   </div>
                   <p className="text-xs text-muted-foreground">{opt.description}</p>
-                </button>
+                </Button>
               ))}
             </div>
           )}
@@ -252,7 +262,7 @@ export function ConvertDialog({ open, onOpenChange, node, onConverted }: Convert
                 <p className="text-xs font-medium text-foreground">{converted.summary}</p>
                 {converted.itemCount != null && (
                   <p className="mt-0.5 text-[11px] text-muted-foreground">
-                    {converted.itemCount} item(s) produced
+                    {t("admin.studio.convertItemsProduced", { n: String(converted.itemCount) })}
                   </p>
                 )}
               </div>
@@ -262,7 +272,7 @@ export function ConvertDialog({ open, onOpenChange, node, onConverted }: Convert
                 </summary>
                 <pre className="mt-2 max-h-60 overflow-auto medos-scroll-y rounded-md border border-border bg-card p-2 text-[11px] font-mono whitespace-pre-wrap break-words">
                   {converted.body.slice(0, 4000)}
-                  {converted.body.length > 4000 && `\n\n… (${converted.body.length - 4000} more chars)`}
+                  {converted.body.length > 4000 && `\n\n${t("admin.studio.convertMoreChars", { n: String(converted.body.length - 4000) })}`}
                 </pre>
               </details>
             </div>

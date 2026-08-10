@@ -28,6 +28,8 @@ import * as React from "react";
 import { Inbox, Loader2 } from "lucide-react";
 import { useI18n } from "@/components/osler/i18n-provider";
 import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
+import { haptic } from "@/lib/osler/native";
 import {
   ContextMenu,
   ContextMenuContent,
@@ -384,29 +386,29 @@ function GridTile({
   }
 
   return (
-    <button
+    <Button
       type="button"
       role="option"
       data-node-id={node.id}
-      onClick={onClick}
-      onDoubleClick={onDoubleClick}
       onDragOver={handleTileDragOver}
       onDragLeave={handleTileDragLeave}
       onDrop={handleTileDrop}
       aria-selected={selected}
+      onClick={(e) => { haptic("selection"); onClick(e); }}
+      onDoubleClick={() => { haptic("light"); onDoubleClick(); }}
       className={cn(
-        "group relative flex aspect-[4/3] flex-col items-center gap-1 rounded-lg border p-2 text-center transition-all",
+        "group relative flex h-auto w-full aspect-[4/3] flex-col items-center gap-1 rounded-xl border p-2 text-center transition-all",
         "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
         selected
           ? "border-primary/50 bg-primary/10 ring-1 ring-primary/30"
-          : "border-border bg-card hover:bg-muted/40",
+          : "border-border bg-card hover:bg-muted/40 hover:shadow-sm",
         dropActive && "border-primary ring-2 ring-primary/50",
       )}
     >
       {/* Drop target overlay */}
       {dropActive && (
-        <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center rounded-lg bg-primary/10">
-          <span className="max-w-[90%] truncate rounded bg-primary px-2 py-0.5 text-[10px] font-semibold text-primary-foreground">
+        <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center rounded-xl bg-primary/10">
+          <span className="max-w-[90%] truncate rounded bg-primary px-2 py-0.5 text-xs font-semibold text-primary-foreground">
             {t("admin.studio.dropOnFolder", { name: node.name })}
           </span>
         </div>
@@ -433,14 +435,14 @@ function GridTile({
       <span
         className={cn(
           "w-full break-words font-medium leading-tight",
-          isFolder ? "line-clamp-1 text-[11px]" : "line-clamp-2 text-[11px]",
+          isFolder ? "line-clamp-1 text-xs" : "line-clamp-2 text-xs",
         )}
       >
         {node.name}
       </span>
 
       {/* Footer */}
-      <div className="mt-auto flex w-full items-center justify-center gap-1 text-[9px] text-muted-foreground">
+      <div className="mt-auto flex w-full items-center justify-center gap-1 text-xs text-muted-foreground">
         {!isFolder && !status && node.size != null && node.size > 0 && (
           <span className="tabular-nums">{formatSize(node.size)}</span>
         )}
@@ -448,7 +450,7 @@ function GridTile({
           <span className="tabular-nums">{node.items.length}</span>
         )}
       </div>
-    </button>
+    </Button>
   );
 }
 
@@ -459,7 +461,7 @@ function ListView({ items, selectedIds, onSelectSingle, onToggle, onSelectRange,
   return (
     <div className="flex-1 overflow-y-auto medos-scroll-y">
       {/* Header row */}
-      <div className="sticky top-0 z-10 grid grid-cols-[minmax(0,1fr)_110px_70px_100px_110px] items-center gap-2 border-b border-border bg-background/95 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground backdrop-blur">
+      <div className="sticky top-0 z-10 grid grid-cols-[minmax(0,1fr)_110px_70px_100px_110px] items-center gap-2 border-b border-border bg-background/95 px-3 py-1.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground backdrop-blur">
         <span>{t("admin.studio.columnName")}</span>
         <span>{t("admin.studio.columnStatus")}</span>
         <span className="text-end">{t("admin.studio.columnSize")}</span>
@@ -516,18 +518,18 @@ function ListRow({
   }
 
   return (
-    <button
+    <Button
       type="button"
       role="option"
       data-node-id={node.id}
-      onClick={onClick}
-      onDoubleClick={onDoubleClick}
       onDragOver={handleRowDragOver}
       onDragLeave={handleRowDragLeave}
       onDrop={handleRowDrop}
       aria-selected={selected}
+      onClick={(e) => { haptic("selection"); onClick(e); }}
+      onDoubleClick={() => { haptic("light"); onDoubleClick(); }}
       className={cn(
-        "grid w-full grid-cols-[minmax(0,1fr)_110px_70px_100px_110px] items-center gap-2 border-b border-border/60 px-3 py-1.5 text-start text-xs transition-colors",
+        "grid h-auto w-full grid-cols-[minmax(0,1fr)_110px_70px_100px_110px] items-center gap-2 rounded-none border-b border-border px-3 py-1.5 text-start text-xs transition-colors",
         "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/40",
         selected ? "bg-primary/10" : "hover:bg-muted/40",
         dropActive && "bg-primary/5 ring-1 ring-inset ring-primary/40",
@@ -536,7 +538,7 @@ function ListRow({
       {/* Drop target label — shown as an overlay chip on the row */}
       {dropActive && (
         <span className="col-span-5 inline-flex max-w-full items-center gap-1 overflow-hidden">
-          <span className="max-w-full truncate rounded bg-primary px-1.5 py-0.5 text-[10px] font-semibold text-primary-foreground">
+          <span className="max-w-full truncate rounded bg-primary px-1.5 py-0.5 text-xs font-semibold text-primary-foreground">
             {t("admin.studio.dropOnFolder", { name: node.name })}
           </span>
         </span>
@@ -558,28 +560,28 @@ function ListRow({
       {/* Status */}
       <div>
         {status ? (
-          <span className={cn("rounded-full border px-1 py-px text-[9px] uppercase tracking-wider", STATUS_BADGE[status])}>
+          <span className={cn("rounded-full border px-1 py-px text-xs uppercase tracking-wider", STATUS_BADGE[status])}>
             {t(`admin.studio.row${status.charAt(0).toUpperCase() + status.slice(1)}` as any)}
           </span>
         ) : (
-          <span className="text-[10px] text-muted-foreground">—</span>
+          <span className="text-xs text-muted-foreground">—</span>
         )}
       </div>
 
       {/* Size */}
-      <div className="text-end text-[10px] tabular-nums text-muted-foreground">
+      <div className="text-end text-xs tabular-nums text-muted-foreground">
         {node.size != null && node.size > 0 ? formatSize(node.size) : "—"}
       </div>
 
       {/* Type */}
-      <div className="text-[10px] text-muted-foreground">
+      <div className="text-xs text-muted-foreground">
         {node.kind === "folder" ? t("admin.studio.folder") : node.cloudObject?.content_type ?? node.ext ?? "—"}
       </div>
 
       {/* Updated */}
-      <div className="text-[10px] text-muted-foreground">
+      <div className="text-xs text-muted-foreground">
         {node.cloudObject?.updated_at ? formatRelativeTime(node.cloudObject.updated_at) : "—"}
       </div>
-    </button>
+    </Button>
   );
 }
