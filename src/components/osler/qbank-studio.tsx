@@ -3768,7 +3768,7 @@ function QBankTimer({
     <div
       className={cn(
         "flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-sm font-mono tabular-nums",
-        danger ? "bg-red-500/100 text-white" : "bg-primary-foreground/15"
+        danger ? "bg-destructive text-destructive-foreground" : "bg-primary-foreground/15"
       )}
     >
       <Clock className="size-3.5" />
@@ -4215,9 +4215,9 @@ function QuizView({
               <div className="mb-3 flex items-center gap-4 text-xs text-muted-foreground bg-muted/30 rounded-lg px-3 py-2 border border-border">
                 <div className="flex items-center gap-1.5">
                   {qSelected === question.correct ? (
-                    <><Check className="size-3.5 text-blue-500" /><span className="text-blue-500 font-semibold">{t("qbank.session.correct")}</span></>
+                    <><Check className="size-3.5 text-success" /><span className="text-success font-semibold">{t("qbank.session.correct")}</span></>
                   ) : (
-                    <><X className="size-3.5 text-red-500" /><span className="text-red-500 font-semibold">{t("qbank.session.incorrect")}</span></>
+                    <><X className="size-3.5 text-destructive" /><span className="text-destructive font-semibold">{t("qbank.session.incorrect")}</span></>
                   )}
                 </div>
                 <div className="flex items-center gap-1.5">
@@ -4238,12 +4238,12 @@ function QuizView({
 
               if (showResult) {
                 if (isCorrect) {
-                  stateClass = "border-blue-600 bg-blue-500/10";
-                  letterBg = "bg-blue-500/100 text-white border-blue-600";
+                  stateClass = "border-success bg-success/10";
+                  letterBg = "bg-success text-success-foreground border-success";
                   letterContent = <Check className="size-4" />;
                 } else if (isSelected && !isCorrect) {
-                  stateClass = "border-red-500 bg-red-500/10";
-                  letterBg = "bg-red-500/100 text-white border-red-500";
+                  stateClass = "border-destructive bg-destructive/10";
+                  letterBg = "bg-destructive text-destructive-foreground border-destructive";
                   letterContent = <X className="size-4" />;
                 } else {
                   stateClass = "border-border bg-card opacity-60";
@@ -4405,8 +4405,8 @@ function QuizView({
                 onClick={() => onRate(question.id, "hard")}
                 className={`px-3 py-2 rounded-lg text-sm font-medium border-2 transition-all ${
                   qRating === "hard"
-                    ? "border-red-500 bg-red-500/10 text-red-500"
-                    : "border-border hover:border-red-500/40"
+                    ? "border-destructive bg-destructive/10 text-destructive"
+                    : "border-border hover:border-destructive/40"
                 }`}
               >
                 <X className="size-4 mx-auto mb-1" />
@@ -4416,8 +4416,8 @@ function QuizView({
                 onClick={() => onRate(question.id, "unknown")}
                 className={`px-3 py-2 rounded-lg text-sm font-medium border-2 transition-all ${
                   qRating === "unknown"
-                    ? "border-amber-500 bg-amber-500/10 text-amber-500"
-                    : "border-border hover:border-amber-500/40"
+                    ? "border-warning bg-warning/10 text-warning"
+                    : "border-border hover:border-warning/40"
                 }`}
               >
                 <Eye className="size-4 mx-auto mb-1" />
@@ -4427,8 +4427,8 @@ function QuizView({
                 onClick={() => onRate(question.id, "easy")}
                 className={`px-3 py-2 rounded-lg text-sm font-medium border-2 transition-all ${
                   qRating === "easy"
-                    ? "border-emerald-500 bg-emerald-500/10 text-emerald-500"
-                    : "border-border hover:border-emerald-500/40"
+                    ? "border-success bg-success/10 text-success"
+                    : "border-border hover:border-success/40"
                 }`}
               >
                 <Check className="size-4 mx-auto mb-1" />
@@ -4972,9 +4972,9 @@ function QuizView({
               const isIncorrect = ans !== undefined && !isCorrect;
               let bg = "bg-sidebar text-muted-foreground border-transparent";
               if (isCurrent) bg = "ring-2 ring-primary bg-sidebar-accent text-foreground";
-              else if (isFlagged) bg = "bg-amber-500/20 text-amber-400 border-amber-500/30";
-              else if (isRevealed && isCorrect) bg = "bg-blue-500/20 text-blue-300";
-              else if (isRevealed && isIncorrect) bg = "bg-red-500/20 text-red-300";
+              else if (isFlagged) bg = "bg-warning/20 text-warning border-warning/30";
+              else if (isRevealed && isCorrect) bg = "bg-success/20 text-success";
+              else if (isRevealed && isIncorrect) bg = "bg-destructive/20 text-destructive";
               else if (ans !== undefined) bg = "bg-primary/25 text-primary";
               return (
                 <button
@@ -4999,8 +4999,8 @@ function QuizView({
                 className="absolute inset-0 z-30 bg-background/95 flex items-center justify-center"
               >
                 <div className="text-center max-w-md">
-                  <div className="size-16 rounded-full bg-amber-500/15 border-2 border-amber-500/30 flex items-center justify-center mx-auto mb-4">
-                    <Pause className="size-7 text-amber-400" />
+                  <div className="size-16 rounded-full bg-warning/15 border-2 border-warning/30 flex items-center justify-center mx-auto mb-4">
+                    <Pause className="size-7 text-warning" />
                   </div>
                   <h3 className="text-xl font-semibold text-foreground">Test Paused</h3>
                   <p className="text-sm text-muted-foreground mt-2 mb-6">
@@ -5273,10 +5273,10 @@ function QuizView({
 
                 <Button
                   variant="outline" size="sm" onClick={onToggleFlag}
-                  className={`h-9 rounded-lg ${session.flagged[session.current] ? "border-amber-400 bg-amber-500/10 text-amber-300 hover:bg-amber-500/15" : ""}`}
+                  className={`h-9 rounded-lg ${session.flagged[session.current] ? "border-warning bg-warning/10 text-warning hover:bg-warning/15" : ""}`}
                   title={session.flagged[session.current] ? t("qbank.session.unflagQuestion") : t("qbank.session.flagForReview")}
                 >
-                  <Flag className={`size-4 ${session.flagged[session.current] ? "fill-amber-500 text-amber-500" : ""}`} />
+                  <Flag className={`size-4 ${session.flagged[session.current] ? "fill-warning text-warning" : ""}`} />
                   <span className="hidden sm:inline ml-1">{session.flagged[session.current] ? t("qbank.session.flagged") : t("qbank.session.flag")}</span>
                 </Button>
 
@@ -5335,10 +5335,10 @@ function QuizView({
                 <Button
                   variant="outline" size="icon"
                   onClick={onToggleFlag}
-                  className={`size-10 rounded-lg shrink-0 medos-touch-target ${session.flagged[session.current] ? "border-amber-400 bg-amber-500/10 text-amber-300" : ""}`}
+                  className={`size-10 rounded-lg shrink-0 medos-touch-target ${session.flagged[session.current] ? "border-warning bg-warning/10 text-warning" : ""}`}
                   title={session.flagged[session.current] ? t("qbank.session.unflagShort") : t("qbank.session.flag")}
                 >
-                  <Flag className={`size-4 ${session.flagged[session.current] ? "fill-amber-500 text-amber-500" : ""}`} />
+                  <Flag className={`size-4 ${session.flagged[session.current] ? "fill-warning text-warning" : ""}`} />
                 </Button>
 
                 {/* Tools dropdown for mobile */}
@@ -5524,8 +5524,8 @@ function WrittenEvaluationCard({
           className={cn(
             "size-14 rounded-full flex items-center justify-center text-lg font-bold border-[3px] shrink-0",
             passed
-              ? "border-emerald-500 bg-emerald-500/10 text-emerald-500"
-              : "border-red-500 bg-red-500/10 text-red-500",
+              ? "border-success bg-success/10 text-success"
+              : "border-destructive bg-destructive/10 text-destructive",
           )}
         >
           {evaluation.score !== null ? evaluation.score : "—"}
@@ -5541,7 +5541,7 @@ function WrittenEvaluationCard({
         <div className="space-y-1.5">
           {evaluation.strengths.map((s, i) => (
             <div key={i} className="flex items-start gap-2 text-sm">
-              <Check className="size-4 text-emerald-500 shrink-0 mt-0.5" />
+              <Check className="size-4 text-success shrink-0 mt-0.5" />
               <span>{s}</span>
             </div>
           ))}
@@ -5553,7 +5553,7 @@ function WrittenEvaluationCard({
         <div className="space-y-1.5">
           {evaluation.gaps.map((g, i) => (
             <div key={i} className="flex items-start gap-2 text-sm">
-              <span className="size-1.5 rounded-full bg-red-400 shrink-0 mt-2" />
+              <span className="size-1.5 rounded-full bg-destructive shrink-0 mt-2" />
               <span className="text-muted-foreground">{g}</span>
             </div>
           ))}
@@ -5576,8 +5576,8 @@ function WrittenEvaluationCard({
             className={cn(
               "flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-sm font-semibold border-2 transition-all",
               passed
-                ? "border-emerald-500 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
-                : "border-border hover:border-emerald-500/40 hover:bg-emerald-500/5",
+                ? "border-success bg-success/10 text-success"
+                : "border-border hover:border-success/40 hover:bg-success/5",
             )}
           >
             <Check className="size-4" />
@@ -5589,8 +5589,8 @@ function WrittenEvaluationCard({
             className={cn(
               "flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-sm font-semibold border-2 transition-all",
               !passed
-                ? "border-red-500 bg-red-500/10 text-red-500"
-                : "border-border hover:border-red-500/40 hover:bg-red-500/5",
+                ? "border-destructive bg-destructive/10 text-destructive"
+                : "border-border hover:border-destructive/40 hover:bg-destructive/5",
             )}
           >
             <X className="size-4" />
@@ -6201,7 +6201,7 @@ function WrittenEngineView({
       <div className="space-y-4">
         <div>
           <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2 flex items-center gap-1.5">
-            <span className="size-2 rounded-full bg-amber-500" />
+            <span className="size-2 rounded-full bg-warning" />
             {t("qbank.written.yourResponse")}
           </h4>
           <div className="text-sm whitespace-pre-wrap leading-relaxed text-foreground bg-muted/30 rounded-lg p-4 min-h-[80px] max-h-[400px] overflow-y-auto">
@@ -6289,10 +6289,10 @@ function WrittenEvaluationPanel({
   const children = question.children ?? [];
   if (!draft.evaluation) return null;
   return (
-    <div className={`rounded-xl border-2 overflow-hidden ${passed ? "border-emerald-600" : "border-red-500"}`}>
+    <div className={`rounded-xl border-2 overflow-hidden ${passed ? "border-success" : "border-destructive"}`}>
       {/* ── Header bar (like MCQ correct/incorrect header) ────────── */}
-      <div className={`px-4 py-3 flex items-center gap-3 ${passed ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400" : "bg-red-500/10 text-red-500"}`}>
-        <div className={`size-9 rounded-full flex items-center justify-center shrink-0 border-[3px] font-bold text-sm ${passed ? "border-emerald-500 bg-emerald-500/10 text-emerald-500" : "border-red-500 bg-red-500/10 text-red-500"}`}>
+      <div className={`px-4 py-3 flex items-center gap-3 ${passed ? "bg-success/10 text-success" : "bg-destructive/10 text-destructive"}`}>
+        <div className={`size-9 rounded-full flex items-center justify-center shrink-0 border-[3px] font-bold text-sm ${passed ? "border-success bg-success/10 text-success" : "border-destructive bg-destructive/10 text-destructive"}`}>
           {draft.evaluation.score !== null ? draft.evaluation.score : "—"}
         </div>
         <div className="flex-1 min-w-0">
@@ -6307,7 +6307,7 @@ function WrittenEvaluationPanel({
           <div className="space-y-1">
             {draft.evaluation.strengths.map((s, i) => (
               <div key={i} className="flex items-start gap-2 text-sm">
-                <Check className="size-4 text-emerald-500 shrink-0 mt-0.5" />
+                <Check className="size-4 text-success shrink-0 mt-0.5" />
                 <span>{s}</span>
               </div>
             ))}
@@ -6317,7 +6317,7 @@ function WrittenEvaluationPanel({
           <div className="space-y-1">
             {draft.evaluation.gaps.map((g, i) => (
               <div key={i} className="flex items-start gap-2 text-sm">
-                <span className="size-1.5 rounded-full bg-red-400 shrink-0 mt-2" />
+                <span className="size-1.5 rounded-full bg-destructive shrink-0 mt-2" />
                 <span className="text-muted-foreground">{g}</span>
               </div>
             ))}
@@ -6347,12 +6347,12 @@ function WrittenEvaluationPanel({
                 className={cn(
                   "w-full flex items-start gap-2.5 px-3 py-2 rounded-md text-left text-sm transition-colors",
                   checked
-                    ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
+                    ? "bg-success/10 text-success"
                     : "hover:bg-muted",
                 )}
               >
                 {checked ? (
-                  <CheckCircle2 className="size-4 text-emerald-500 shrink-0 mt-0.5" />
+                  <CheckCircle2 className="size-4 text-success shrink-0 mt-0.5" />
                 ) : (
                   <Circle className="size-4 text-muted-foreground shrink-0 mt-0.5" />
                 )}
@@ -6392,8 +6392,8 @@ function WrittenEvaluationPanel({
             className={cn(
               "flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-sm font-semibold border-2 transition-all",
               passed
-                ? "border-emerald-500 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
-                : "border-border hover:border-emerald-500/40 hover:bg-emerald-500/5",
+                ? "border-success bg-success/10 text-success"
+                : "border-border hover:border-success/40 hover:bg-success/5",
             )}
           >
             <Check className="size-4" />
@@ -6405,8 +6405,8 @@ function WrittenEvaluationPanel({
             className={cn(
               "flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-sm font-semibold border-2 transition-all",
               !passed
-                ? "border-red-500 bg-red-500/10 text-red-500"
-                : "border-border hover:border-red-500/40 hover:bg-red-500/5",
+                ? "border-destructive bg-destructive/10 text-destructive"
+                : "border-border hover:border-destructive/40 hover:bg-destructive/5",
             )}
           >
             <X className="size-4" />
@@ -6480,15 +6480,15 @@ function OsceEngineView({
 
       {/* Red Flags */}
       {question.redFlags && question.redFlags.length > 0 && (
-        <div className="bg-red-500/8 border border-red-500/25 border-l-4 border-l-red-500 rounded-lg p-4">
-          <h4 className="flex items-center gap-2 text-sm font-semibold mb-2 text-red-500">
+        <div className="bg-destructive/10 border border-destructive/25 rounded-xl p-4">
+          <h4 className="flex items-center gap-2 text-sm font-semibold mb-2 text-destructive">
             <AlertTriangle className="size-4" />
             Red Flags
           </h4>
           <ul className="space-y-1">
             {question.redFlags.map((flag, i) => (
               <li key={i} className="text-sm flex items-start gap-2">
-                <span className="text-red-500 mt-1">•</span>
+                <span className="text-destructive mt-1">•</span>
                 <span className="leading-relaxed">{flag}</span>
               </li>
             ))}
@@ -6549,13 +6549,13 @@ function OsceEngineView({
                   className={cn(
                     "w-full flex items-start gap-2.5 px-3 py-2 rounded-md text-left text-sm transition-colors",
                     checked
-                      ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
+                      ? "bg-success/10 text-success"
                       : "hover:bg-muted",
                     submitted && "cursor-default opacity-70"
                   )}
                 >
                   {checked ? (
-                    <CheckCircle2 className="size-4 text-emerald-500 shrink-0 mt-0.5" />
+                    <CheckCircle2 className="size-4 text-success shrink-0 mt-0.5" />
                   ) : (
                     <Circle className="size-4 text-muted-foreground shrink-0 mt-0.5" />
                   )}
@@ -6607,8 +6607,8 @@ function NavigatorPanel(p: NavigatorPanelProps) {
             const isIncorrect = ans !== undefined && !isCorrect;
 
             let cellClass = "bg-sidebar text-muted-foreground border-sidebar-border hover:bg-sidebar-accent";
-            if (isRevealed && isCorrect) cellClass = "bg-blue-500/20 text-blue-300 border-blue-500/30 hover:bg-blue-500/30";
-            else if (isRevealed && isIncorrect) cellClass = "bg-red-500/20 text-red-300 border-red-500/30 hover:bg-red-500/30";
+            if (isRevealed && isCorrect) cellClass = "bg-success/20 text-success border-success/30 hover:bg-success/30";
+            else if (isRevealed && isIncorrect) cellClass = "bg-destructive/20 text-destructive border-destructive/30 hover:bg-destructive/30";
             else if (ans !== undefined) cellClass = "bg-primary/25 text-primary border-primary/40 hover:bg-primary/35";
 
             return (
@@ -6621,7 +6621,7 @@ function NavigatorPanel(p: NavigatorPanelProps) {
                 title={`Q${i + 1}${ans !== undefined ? (isRevealed ? (isCorrect ? " ✓" : " ✗") : " •") : ""}${isFlagged ? " ⚑" : ""}`}
               >
                 {i + 1}
-                {isFlagged && <span className="absolute -top-0.5 -right-0.5 size-2 rounded-full bg-amber-400 border border-sidebar" />}
+                {isFlagged && <span className="absolute -top-0.5 -right-0.5 size-2 rounded-full bg-warning border border-sidebar" />}
               </button>
             );
           })}
@@ -6633,11 +6633,11 @@ function NavigatorPanel(p: NavigatorPanelProps) {
           <span className="flex items-center gap-1"><span className="size-2.5 rounded bg-primary/25 border border-primary/40" /> Ans</span>
           {p.session.mode === "tutor" && (
             <>
-              <span className="flex items-center gap-1"><span className="size-2.5 rounded bg-blue-500/20 border border-blue-500/30" /> Corr</span>
-              <span className="flex items-center gap-1"><span className="size-2.5 rounded bg-red-500/20 border border-red-500/30" /> Inc</span>
+              <span className="flex items-center gap-1"><span className="size-2.5 rounded bg-success/20 border border-success/30" /> Corr</span>
+              <span className="flex items-center gap-1"><span className="size-2.5 rounded bg-destructive/20 border border-destructive/30" /> Inc</span>
             </>
           )}
-          <span className="flex items-center gap-1"><span className="size-2.5 rounded-full bg-amber-400" /> Flag</span>
+          <span className="flex items-center gap-1"><span className="size-2.5 rounded-full bg-warning" /> Flag</span>
         </div>
       </div>
 
@@ -6683,9 +6683,9 @@ function ExplanationCard({
   const base = item ? questionAssetBase(q, item) : { category: "qbank", path: "" };
   if (nonMcq) {
     return (
-      <div className="rounded-xl border-2 border-blue-600 overflow-hidden">
-        <div className="px-4 py-3 flex items-center gap-3 bg-blue-500/10 text-blue-300">
-          <div className="size-9 rounded-full flex items-center justify-center shrink-0 bg-blue-500/100 text-white">
+      <div className="rounded-xl border-2 border-success overflow-hidden">
+        <div className="px-4 py-3 flex items-center gap-3 bg-success/10 text-success">
+          <div className="size-9 rounded-full flex items-center justify-center shrink-0 bg-success text-success-foreground">
             <Sparkles className="size-5" />
           </div>
           <div className="flex-1 min-w-0">
@@ -6738,9 +6738,9 @@ function ExplanationCard({
   const selectedLetter = selected !== undefined ? choiceLetter(selected, lang) : "—";
 
   return (
-    <div className={`rounded-xl border-2 overflow-hidden ${isCorrect ? "border-blue-600" : "border-red-500"}`}>
-      <div className={`px-4 py-3 flex items-center gap-3 ${isCorrect ? "bg-blue-500/10 text-blue-300" : "bg-red-500/10 text-red-300"}`}>
-        <div className={`size-9 rounded-full flex items-center justify-center shrink-0 ${isCorrect ? "bg-blue-500/100 text-white" : "bg-red-500/100 text-white"}`}>
+    <div className={`rounded-xl border-2 overflow-hidden ${isCorrect ? "border-success" : "border-destructive"}`}>
+      <div className={`px-4 py-3 flex items-center gap-3 ${isCorrect ? "bg-success/10 text-success" : "bg-destructive/10 text-destructive"}`}>
+        <div className={`size-9 rounded-full flex items-center justify-center shrink-0 ${isCorrect ? "bg-success text-success-foreground" : "bg-destructive text-destructive-foreground"}`}>
           {isCorrect ? <Check className="size-5" /> : <X className="size-5" />}
         </div>
         <div className="flex-1 min-w-0">
@@ -6917,10 +6917,10 @@ function ResultsView({
                   className={cn(
                     "text-5xl font-bold tabular-nums",
                     pct >= 70
-                      ? "text-blue-500"
+                      ? "text-success"
                       : pct >= 50
-                      ? "text-amber-500"
-                      : "text-red-500"
+                      ? "text-warning"
+                      : "text-destructive"
                   )}
                 >
                   {pct}%
@@ -6958,11 +6958,11 @@ function ResultsView({
           <h3 className="text-sm font-semibold mb-3">Score Distribution</h3>
           <div className="flex h-3 rounded-full overflow-hidden bg-muted">
             <div
-              className="bg-blue-500"
+              className="bg-success"
               style={{ width: `${(totalCorrect / total) * 100}%` }}
             />
             <div
-              className="bg-red-500"
+              className="bg-destructive"
               style={{ width: `${(incorrectCount / total) * 100}%` }}
             />
             <div
@@ -6972,10 +6972,10 @@ function ResultsView({
           </div>
           <div className="mt-2 flex items-center gap-4 text-xs text-muted-foreground flex-wrap">
             <span className="flex items-center gap-1.5">
-              <span className="size-2.5 rounded-full bg-blue-500" /> Correct
+              <span className="size-2.5 rounded-full bg-success" /> Correct
             </span>
             <span className="flex items-center gap-1.5">
-              <span className="size-2.5 rounded-full bg-red-500" /> Incorrect
+              <span className="size-2.5 rounded-full bg-destructive" /> Incorrect
             </span>
             <span className="flex items-center gap-1.5">
               <span className="size-2.5 rounded-full bg-muted-foreground/30" /> Unanswered
@@ -7012,9 +7012,9 @@ function ResultsView({
                       className={cn(
                         "w-7 h-7 rounded-full flex items-center justify-center text-xs font-semibold shrink-0",
                         isCorrect
-                          ? "bg-blue-500/15 text-blue-500"
+                          ? "bg-success/15 text-success"
                           : submittedQ
-                          ? "bg-red-500/15 text-red-500"
+                          ? "bg-destructive/15 text-destructive"
                           : "bg-muted text-muted-foreground"
                       )}
                     >
