@@ -21,7 +21,7 @@ import {
   RotateCcw,
   X,
 } from "lucide-react";
-import { loadAllContent, ENGINE_META } from "@/lib/osler/content";
+import { loadAllContent, getEngineMeta } from "@/lib/osler/content";
 import type { AnyContent, ContentTreeNode, EngineType } from "@/lib/osler/types";
 import { storage, sessions } from "@/lib/osler/storage";
 import { listAllArticles, loadArticleContent } from "@/lib/osler/articles";
@@ -60,16 +60,6 @@ interface DashboardProps {
   onOpenPack?: (item: ContentTreeNode, content: AnyContent) => void;
   onOpenArticle?: (id: string) => void;
 }
-
-const ENGINE_COLORS: Record<EngineType, string> = {
-  quiz: "oklch(0.62 0.16 250)",
-  bank: "oklch(0.58 0.14 245)",
-  flashcard: "oklch(0.7 0.18 145)",
-  written: "oklch(0.78 0.16 80)",
-  osce: "oklch(0.7 0.2 16)",
-  library: "oklch(0.65 0.15 280)",
-  video: "oklch(0.68 0.18 195)",
-};
 
 export function Dashboard({
   username: propUsername,
@@ -507,8 +497,8 @@ export function Dashboard({
                     <div
                       className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0"
                       style={{
-                        background: `color-mix(in oklch, ${ENGINE_COLORS[node.type]} 15%, transparent)`,
-                        color: ENGINE_COLORS[node.type],
+                        background: `color-mix(in oklch, ${getEngineMeta(node.type).color} 15%, transparent)`,
+                        color: getEngineMeta(node.type).color,
                       }}
                     >
                       <Activity className="size-4" />

@@ -86,6 +86,12 @@ export interface CustomThemeConfig {
   mutedForeground?: string;
   /** Destructive color (oklch). */
   destructive?: string;
+  /** Positive status color (oklch). */
+  success?: string;
+  /** Caution status color (oklch). */
+  warning?: string;
+  /** Informational status color (oklch). */
+  info?: string;
   /** Border color (oklch). */
   border?: string;
   /** Input border color (oklch). */

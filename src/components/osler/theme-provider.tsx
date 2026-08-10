@@ -86,6 +86,9 @@ function injectCustomThemeStyles(customThemes: CustomThemeConfig[]) {
     if (t.muted) vars.push(`--muted: ${t.muted};`);
     if (t.mutedForeground) vars.push(`--muted-foreground: ${t.mutedForeground};`);
     if (t.destructive) vars.push(`--destructive: ${t.destructive};`);
+    if (t.success) vars.push(`--success: ${t.success};`);
+    if (t.warning) vars.push(`--warning: ${t.warning};`);
+    if (t.info) vars.push(`--info: ${t.info};`);
     if (t.border) vars.push(`--border: ${t.border};`);
     if (t.input) vars.push(`--input: ${t.input};`);
     if (t.ring) vars.push(`--ring: ${t.ring};`);
