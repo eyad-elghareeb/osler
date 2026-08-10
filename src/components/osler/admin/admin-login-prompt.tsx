@@ -5,12 +5,13 @@ import { motion } from "framer-motion";
 import { ShieldAlert } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { useI18n } from "@/components/osler/i18n-provider";
 import { loginCloudAccount, saveCloudSession } from "@/lib/osler/cloud";
 import { haptic } from "@/lib/osler/native";
 import type { AdminIdentity } from "@/components/osler/admin/admin-api";
 import { adminApi, AdminApiError } from "@/components/osler/admin/admin-api";
-import { cn } from "@/lib/utils";
+import { OslerCard } from "@/components/osler/ui-primitives";
 
 interface AdminLoginPromptProps {
   onSuccess: (identity: AdminIdentity) => void;
@@ -56,55 +57,48 @@ export function AdminLoginPrompt({ onSuccess }: AdminLoginPromptProps) {
         initial={{ opacity: 0, y: 16 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.25 }}
-        className="w-full max-w-sm"
+        className="w-full max-w-md"
       >
-        {/* Icon */}
-        <div className="mb-6 flex justify-center">
-          <div className="osler-empty__icon">
-            <ShieldAlert className="size-6" />
+        <OslerCard padding="roomy">
+          <div className="mb-6 flex items-start gap-3">
+            <div className="flex size-10 shrink-0 items-center justify-center rounded-xl border border-primary/30 bg-primary/10 text-primary">
+              <ShieldAlert className="size-5" />
+            </div>
+            <div className="min-w-0">
+              <h1 className="text-xl font-bold tracking-tight">{t("admin.login.title")}</h1>
+              <p className="mt-1 text-sm text-muted-foreground">{t("admin.login.subtitle")}</p>
+            </div>
           </div>
-        </div>
 
-        <h1 className="osler-empty__title mb-1 text-center">
-          {t("admin.login.title")}
-        </h1>
-        <p className="mb-6 text-center text-sm text-muted-foreground">
-          {t("admin.login.subtitle")}
-        </p>
-
-        <form onSubmit={handleSubmit} className="space-y-3">
-          <div>
-            <label className="mb-1.5 block text-xs font-medium text-muted-foreground uppercase tracking-wider">
-              {t("admin.login.identifier")}
-            </label>
-            <Input
-              id="admin-identifier"
-              type="text"
-              autoComplete="username"
-              autoFocus
-              value={identifier}
-              onChange={(e) => setIdentifier(e.target.value)}
-              disabled={busy}
-              required
-            />
-          </div>
-          <div>
-            <label className="mb-1.5 block text-xs font-medium text-muted-foreground uppercase tracking-wider">
-              {t("admin.login.password")}
-            </label>
-            <Input
-              id="admin-password"
-              type="password"
-              autoComplete="current-password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              disabled={busy}
-              required
-            />
-          </div>
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div className="space-y-1.5">
+              <Label htmlFor="admin-identifier">{t("admin.login.identifier")}</Label>
+              <Input
+                id="admin-identifier"
+                type="text"
+                autoComplete="username"
+                autoFocus
+                value={identifier}
+                onChange={(e) => setIdentifier(e.target.value)}
+                disabled={busy}
+                required
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="admin-password">{t("admin.login.password")}</Label>
+              <Input
+                id="admin-password"
+                type="password"
+                autoComplete="current-password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                disabled={busy}
+                required
+              />
+            </div>
 
           {error && (
-            <p className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+            <p role="alert" className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
               {error}
             </p>
           )}
@@ -118,7 +112,8 @@ export function AdminLoginPrompt({ onSuccess }: AdminLoginPromptProps) {
           >
             {busy ? t("common.loading") : t("admin.login.submit")}
           </Button>
-        </form>
+          </form>
+        </OslerCard>
       </motion.div>
     </div>
   );

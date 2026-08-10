@@ -24,6 +24,7 @@ import {
 } from "lucide-react";
 import { useI18n } from "@/components/osler/i18n-provider";
 import { cn } from "@/lib/utils";
+import { haptic } from "@/lib/osler/native";
 import { Button } from "@/components/ui/button";
 import {
   Tooltip,
@@ -62,9 +63,9 @@ const IMG_EXTS = new Set(["png", "jpg", "jpeg", "svg", "gif", "webp"]);
 // `folderTileCls`   — applied to the icon's container (bg + border)
 // `folderRowCls`    — applied to inline list-row icons (text color only)
 
-export const folderIconCls = "text-amber-600/70 dark:text-amber-400/70";
-export const folderTileCls = "bg-amber-500/5 border-amber-500/20";
-export const folderRowCls = "text-amber-600/70 dark:text-amber-400/70";
+export const folderIconCls = "text-warning/80";
+export const folderTileCls = "bg-warning/5 border-warning/20";
+export const folderRowCls = "text-warning/80";
 
 // ── NodeBadges — the row of small "managed / staged / raw / status" pills ──
 //
@@ -117,14 +118,14 @@ export function ValidationBadge({ state }: { state: ValidationState }) {
   const { t } = useI18n();
   if (state === "valid") {
     return (
-      <span className="inline-flex items-center gap-0.5 rounded-full border border-emerald-500/30 bg-emerald-500/15 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wider text-emerald-700 dark:text-emerald-300">
+      <span className="inline-flex items-center gap-0.5 rounded-full border border-success/30 bg-success/15 px-1.5 py-0.5 text-xs font-medium uppercase tracking-wider text-success">
         <CheckCircle2 className="size-2.5" /> {t("admin.studio.valid")}
       </span>
     );
   }
   if (state === "invalid") {
     return (
-      <span className="inline-flex items-center gap-0.5 rounded-full border border-rose-500/30 bg-rose-500/15 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wider text-rose-700 dark:text-rose-300">
+      <span className="inline-flex items-center gap-0.5 rounded-full border border-destructive/30 bg-destructive/15 px-1.5 py-0.5 text-xs font-medium uppercase tracking-wider text-destructive">
         <XCircle className="size-2.5" /> {t("admin.studio.invalid")}
       </span>
     );
@@ -182,7 +183,10 @@ export function IconActionButton({
             size={size}
             variant={variant}
             disabled={disabled}
-            onClick={onClick}
+            onClick={() => {
+              haptic("light");
+              onClick();
+            }}
             aria-label={label}
             className={className}
           >

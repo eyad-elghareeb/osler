@@ -18,8 +18,11 @@
  */
 
 import * as React from "react";
+import { LayoutGrid } from "lucide-react";
 import { useI18n } from "@/components/osler/i18n-provider";
+import { haptic } from "@/lib/osler/native";
 import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
 import {
   Tooltip,
   TooltipContent,
@@ -127,9 +130,14 @@ function CategoryTile({
     <TooltipProvider>
       <Tooltip>
         <TooltipTrigger asChild>
-          <button
+          <Button
             type="button"
-            onClick={onClick}
+            variant="ghost"
+            size="default"
+            onClick={() => {
+              haptic("selection");
+              onClick();
+            }}
             onDragOver={handleDragOver}
             onDragLeave={handleDragLeave}
             onDrop={handleDrop}
@@ -163,8 +171,8 @@ function CategoryTile({
                 <Icon className="size-3.5" />
               </div>
             ) : (
-              <div className="flex size-7 shrink-0 items-center justify-center rounded-md border bg-background/60 border-border text-[9px] font-bold uppercase tracking-wider text-muted-foreground">
-                All
+              <div className="flex size-7 shrink-0 items-center justify-center rounded-md border border-border bg-background/60 text-muted-foreground">
+                <LayoutGrid className="size-3.5" />
               </div>
             )}
 
@@ -180,7 +188,7 @@ function CategoryTile({
                 {count}
               </span>
             </div>
-          </button>
+          </Button>
         </TooltipTrigger>
         <TooltipContent side="right" className="max-w-[220px]">
           <p className="font-medium">{label}</p>

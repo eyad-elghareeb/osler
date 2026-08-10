@@ -39,7 +39,7 @@ export interface CategoryDef {
   contentType: ContentType;
   /** Icon component for the category tile. */
   icon: LucideIcon;
-  /** Tailwind color accent for the category tile + badges. */
+  /** Semantic accent family for the category tile + badges. */
   accent: "violet" | "amber" | "rose" | "emerald" | "sky" | "slate";
 }
 
@@ -123,46 +123,46 @@ export const ACCENT_CLASSES: Record<CategoryDef["accent"], {
   ring: string;       // focus ring color
 }> = {
   violet: {
-    tile: "bg-violet-500/5 hover:bg-violet-500/10 border-violet-500/20",
-    tileActive: "bg-violet-500/15 border-violet-500/40 text-violet-700 dark:text-violet-300",
-    badge: "bg-violet-500/15 text-violet-700 dark:text-violet-300 border-violet-500/30",
-    dot: "bg-violet-500",
-    ring: "ring-violet-500/40",
+    tile: "bg-primary/5 hover:bg-primary/10 border-primary/20",
+    tileActive: "bg-primary/15 border-primary/40 text-primary",
+    badge: "bg-primary/15 text-primary border-primary/30",
+    dot: "bg-primary",
+    ring: "ring-primary/40",
   },
   amber: {
-    tile: "bg-amber-500/5 hover:bg-amber-500/10 border-amber-500/20",
-    tileActive: "bg-amber-500/15 border-amber-500/40 text-amber-700 dark:text-amber-300",
-    badge: "bg-amber-500/15 text-amber-700 dark:text-amber-300 border-amber-500/30",
-    dot: "bg-amber-500",
-    ring: "ring-amber-500/40",
+    tile: "bg-warning/5 hover:bg-warning/10 border-warning/20",
+    tileActive: "bg-warning/15 border-warning/40 text-warning",
+    badge: "bg-warning/15 text-warning border-warning/30",
+    dot: "bg-warning",
+    ring: "ring-warning/40",
   },
   rose: {
-    tile: "bg-rose-500/5 hover:bg-rose-500/10 border-rose-500/20",
-    tileActive: "bg-rose-500/15 border-rose-500/40 text-rose-700 dark:text-rose-300",
-    badge: "bg-rose-500/15 text-rose-700 dark:text-rose-300 border-rose-500/30",
-    dot: "bg-rose-500",
-    ring: "ring-rose-500/40",
+    tile: "bg-destructive/5 hover:bg-destructive/10 border-destructive/20",
+    tileActive: "bg-destructive/15 border-destructive/40 text-destructive",
+    badge: "bg-destructive/15 text-destructive border-destructive/30",
+    dot: "bg-destructive",
+    ring: "ring-destructive/40",
   },
   emerald: {
-    tile: "bg-emerald-500/5 hover:bg-emerald-500/10 border-emerald-500/20",
-    tileActive: "bg-emerald-500/15 border-emerald-500/40 text-emerald-700 dark:text-emerald-300",
-    badge: "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-500/30",
-    dot: "bg-emerald-500",
-    ring: "ring-emerald-500/40",
+    tile: "bg-success/5 hover:bg-success/10 border-success/20",
+    tileActive: "bg-success/15 border-success/40 text-success",
+    badge: "bg-success/15 text-success border-success/30",
+    dot: "bg-success",
+    ring: "ring-success/40",
   },
   sky: {
-    tile: "bg-sky-500/5 hover:bg-sky-500/10 border-sky-500/20",
-    tileActive: "bg-sky-500/15 border-sky-500/40 text-sky-700 dark:text-sky-300",
-    badge: "bg-sky-500/15 text-sky-700 dark:text-sky-300 border-sky-500/30",
-    dot: "bg-sky-500",
-    ring: "ring-sky-500/40",
+    tile: "bg-info/5 hover:bg-info/10 border-info/20",
+    tileActive: "bg-info/15 border-info/40 text-info",
+    badge: "bg-info/15 text-info border-info/30",
+    dot: "bg-info",
+    ring: "ring-info/40",
   },
   slate: {
-    tile: "bg-slate-500/5 hover:bg-slate-500/10 border-slate-500/20",
-    tileActive: "bg-slate-500/15 border-slate-500/40 text-slate-700 dark:text-slate-300",
-    badge: "bg-slate-500/15 text-slate-700 dark:text-slate-300 border-slate-500/30",
-    dot: "bg-slate-500",
-    ring: "ring-slate-500/40",
+    tile: "bg-muted hover:bg-muted/80 border-border",
+    tileActive: "bg-muted border-border text-foreground",
+    badge: "bg-muted text-muted-foreground border-border",
+    dot: "bg-muted-foreground",
+    ring: "ring-border",
   },
 };
 
@@ -170,9 +170,9 @@ export const ACCENT_CLASSES: Record<CategoryDef["accent"], {
 
 export const STATUS_BADGE: Record<string, string> = {
   draft: "bg-muted text-muted-foreground border-border",
-  pending: "bg-amber-500/15 text-amber-700 dark:text-amber-300 border-amber-500/30",
-  published: "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-500/30",
-  rejected: "bg-rose-500/15 text-rose-700 dark:text-rose-300 border-rose-500/30",
+  pending: "bg-warning/15 text-warning border-warning/30",
+  published: "bg-success/15 text-success border-success/30",
+  rejected: "bg-destructive/15 text-destructive border-destructive/30",
 };
 
 // ── Breadcrumb helpers ──────────────────────────────────────────────────────

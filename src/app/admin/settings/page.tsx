@@ -120,7 +120,7 @@ export default function AdminSettingsPage() {
 
           {isMobile ? (
             // ── Mobile: iOS-style section list + pushed sub-pages ─────
-            <div className="h-[calc(100vh-9rem)] min-h-[60vh]">
+            <div className="h-full min-h-[60vh]">
               <NavigationStack
                 className="h-full"
                 homeClassName="osler-page osler-has-scroll"
@@ -128,15 +128,18 @@ export default function AdminSettingsPage() {
                 rtl={rtl}
                 home={
                   <div className="px-1 py-1">
-                    <div className="rounded-lg border border-border overflow-hidden bg-card">
+                    <div className="overflow-hidden rounded-xl border border-border bg-card">
                       {SECTIONS.map((s, idx) => {
                         const I = s.icon;
                         return (
-                          <button
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="default"
                             key={s.id}
                             onClick={() => pickSection(s.id)}
                             className={cn(
-                              "w-full text-start px-4 py-3 flex items-center gap-3 hover:bg-muted/60 transition-colors",
+                              "h-auto w-full justify-start rounded-none px-4 py-3 text-start",
                               idx > 0 && "border-t border-border/60",
                             )}
                           >
@@ -147,7 +150,7 @@ export default function AdminSettingsPage() {
                               <span className="block text-sm font-medium truncate">{t(s.labelKey as any)}</span>
                             </span>
                             <ChevronRight className={cn("size-4 text-muted-foreground shrink-0", rtl && "rtl-flip-x")} />
-                          </button>
+                          </Button>
                         );
                       })}
                     </div>
@@ -157,14 +160,17 @@ export default function AdminSettingsPage() {
                   mobileHome ? null : (
                     <div className="px-4 py-4">
                       <div className="flex items-center gap-2 mb-4">
-                        <button
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
                           onClick={goHome}
-                          className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors -ms-1 ps-1"
+                          className="-ms-1 ps-1 text-muted-foreground hover:text-foreground"
                           aria-label={t("settings.backToList")}
                         >
                           <ArrowLeft className={cn("size-4", rtl && "rtl-flip-x")} />
                           <span>{t("admin.settings.backToList")}</span>
-                        </button>
+                        </Button>
                       </div>
                       <h1 className="text-xl md:text-2xl font-bold tracking-tight flex items-center gap-2 mb-4">
                         {renderIcon(activeMeta)}
@@ -187,19 +193,22 @@ export default function AdminSettingsPage() {
                     const I = s.icon;
                     const active = section === s.id;
                     return (
-                      <button
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
                         key={s.id}
                         onClick={() => pickSection(s.id)}
                         className={cn(
-                          "relative w-full text-start h-9 px-3 rounded-md text-sm font-medium flex items-center gap-2 transition-colors",
+                          "relative h-9 w-full justify-start text-start font-medium",
                           active
-                            ? "text-primary bg-primary/10"
+                            ? "border border-primary/30 bg-primary/10 text-primary"
                             : "text-muted-foreground hover:text-foreground hover:bg-muted/60",
                         )}
                       >
                         <I className="size-4 shrink-0" />
                         <span className="truncate">{t(s.labelKey as any)}</span>
-                      </button>
+                      </Button>
                     );
                   })}
                 </nav>

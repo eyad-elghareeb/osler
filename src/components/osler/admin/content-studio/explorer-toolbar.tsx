@@ -23,6 +23,7 @@ import {
   Plus, Sparkles, Loader2, Home, PanelLeft, PanelRight, MoreHorizontal,
 } from "lucide-react";
 import { useI18n } from "@/components/osler/i18n-provider";
+import { haptic } from "@/lib/osler/native";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -87,26 +88,26 @@ export function ExplorerToolbar(props: ExplorerToolbarProps) {
   } = props;
 
   return (
-    <div className={cn("flex flex-wrap items-center gap-1 border-b border-border bg-card/40 px-2 py-1.5", className)}>
+    <div className={cn("flex flex-wrap items-center gap-1.5 border-b border-border bg-card/40 px-3 py-2", className)}>
       {/* Side-panel toggles */}
       <IconActionButton
         icon={PanelLeft}
         label={t("admin.studio.allCategories")}
-        size="iconXs"
+        size="iconSm"
         onClick={onToggleRail}
         className={railOpen ? "text-primary" : "text-muted-foreground"}
       />
 
       {/* Nav buttons */}
       <div className="flex items-center gap-0.5">
-        <IconActionButton icon={ChevronLeft} label={t("admin.studio.back")} disabled={!canGoBack} onClick={onBack} size="iconXs" />
-        <IconActionButton icon={ArrowUp} label={t("admin.studio.up")} disabled={!canGoUp} onClick={onUp} size="iconXs" />
-        <IconActionButton icon={ChevronRight} label={t("admin.studio.forward")} disabled={!canGoForward} onClick={onForward} size="iconXs" />
+        <IconActionButton icon={ChevronLeft} label={t("admin.studio.back")} disabled={!canGoBack} onClick={onBack} size="iconSm" />
+        <IconActionButton icon={ArrowUp} label={t("admin.studio.up")} disabled={!canGoUp} onClick={onUp} size="iconSm" />
+        <IconActionButton icon={ChevronRight} label={t("admin.studio.forward")} disabled={!canGoForward} onClick={onForward} size="iconSm" />
       </div>
 
       {/* Breadcrumbs */}
       <nav
-        aria-label="Breadcrumb"
+        aria-label={t("admin.studio.breadcrumbRoot")}
         className="flex min-w-0 flex-1 items-center gap-0.5 overflow-x-auto medos-scroll-x"
       >
         {breadcrumbs.map((crumb, i) => {
@@ -115,17 +116,19 @@ export function ExplorerToolbar(props: ExplorerToolbarProps) {
             <React.Fragment key={crumb.path + i}>
               {i > 0 && <ChevronRight className="size-2.5 shrink-0 text-muted-foreground/60" />}
               {i === 0 && <Home className="size-3 shrink-0 text-muted-foreground/70" />}
-              <button
+              <Button
                 type="button"
+                variant="ghost"
+                size="xs"
                 onClick={() => !isLast && onBreadcrumbClick(crumb.path)}
                 disabled={isLast}
                 className={cn(
-                  "shrink-0 rounded px-1 py-0.5 text-[11px] font-medium transition-colors",
+                  "h-7 shrink-0 rounded px-1 text-xs font-medium",
                   isLast ? "text-foreground" : "text-muted-foreground hover:bg-muted hover:text-foreground",
                 )}
               >
                 {crumb.label}
-              </button>
+              </Button>
             </React.Fragment>
           );
         })}
@@ -138,13 +141,13 @@ export function ExplorerToolbar(props: ExplorerToolbarProps) {
           value={search}
           onChange={(e) => onSearchChange(e.target.value)}
           placeholder={t("admin.studio.search")}
-          className="h-7 ps-6 text-xs"
+          className="h-8 ps-7 text-sm"
         />
       </div>
 
       {/* Status filter */}
       <Select value={statusFilter} onValueChange={(v) => onStatusFilterChange(v as StatusFilter)}>
-        <SelectTrigger className="h-7 w-28 shrink-0 text-xs">
+        <SelectTrigger className="h-8 w-32 shrink-0 text-sm">
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
@@ -161,17 +164,22 @@ export function ExplorerToolbar(props: ExplorerToolbarProps) {
         <TooltipProvider>
           <Tooltip>
             <TooltipTrigger asChild>
-              <button
+              <Button
                 type="button"
-                onClick={() => onViewModeChange("tree")}
+                variant="ghost"
+                size="iconSm"
+                onClick={() => {
+                  haptic("selection");
+                  onViewModeChange("tree");
+                }}
                 aria-pressed={viewMode === "tree"}
                 className={cn(
-                  "flex h-7 w-7 items-center justify-center rounded-s-md transition-colors",
+                  "flex h-8 w-8 items-center justify-center rounded-s-md transition-colors",
                   viewMode === "tree" ? "bg-primary/10 text-primary" : "text-muted-foreground hover:bg-muted",
                 )}
               >
                 <ListTree className="size-3" />
-              </button>
+              </Button>
             </TooltipTrigger>
             <TooltipContent>{t("admin.studio.view.tree")}</TooltipContent>
           </Tooltip>
@@ -179,17 +187,22 @@ export function ExplorerToolbar(props: ExplorerToolbarProps) {
         <TooltipProvider>
           <Tooltip>
             <TooltipTrigger asChild>
-              <button
+              <Button
                 type="button"
-                onClick={() => onViewModeChange("grid")}
+                variant="ghost"
+                size="iconSm"
+                onClick={() => {
+                  haptic("selection");
+                  onViewModeChange("grid");
+                }}
                 aria-pressed={viewMode === "grid"}
                 className={cn(
-                  "flex h-7 w-7 items-center justify-center transition-colors",
+                  "flex h-8 w-8 items-center justify-center transition-colors",
                   viewMode === "grid" ? "bg-primary/10 text-primary" : "text-muted-foreground hover:bg-muted",
                 )}
               >
                 <LayoutGrid className="size-3" />
-              </button>
+              </Button>
             </TooltipTrigger>
             <TooltipContent>{t("admin.studio.view.grid")}</TooltipContent>
           </Tooltip>
@@ -197,17 +210,22 @@ export function ExplorerToolbar(props: ExplorerToolbarProps) {
         <TooltipProvider>
           <Tooltip>
             <TooltipTrigger asChild>
-              <button
+              <Button
                 type="button"
-                onClick={() => onViewModeChange("list")}
+                variant="ghost"
+                size="iconSm"
+                onClick={() => {
+                  haptic("selection");
+                  onViewModeChange("list");
+                }}
                 aria-pressed={viewMode === "list"}
                 className={cn(
-                  "flex h-7 w-7 items-center justify-center rounded-e-md transition-colors",
+                  "flex h-8 w-8 items-center justify-center rounded-e-md transition-colors",
                   viewMode === "list" ? "bg-primary/10 text-primary" : "text-muted-foreground hover:bg-muted",
                 )}
               >
                 <ListIcon className="size-3" />
-              </button>
+              </Button>
             </TooltipTrigger>
             <TooltipContent>{t("admin.studio.view.list")}</TooltipContent>
           </Tooltip>
@@ -220,7 +238,7 @@ export function ExplorerToolbar(props: ExplorerToolbarProps) {
         label={t("admin.studio.refresh")}
         disabled={loading}
         onClick={onRefresh}
-        size="iconXs"
+        size="iconSm"
         className={cn(loading && "[&_svg]:animate-spin")}
       />
 
@@ -228,7 +246,7 @@ export function ExplorerToolbar(props: ExplorerToolbarProps) {
       {canManage && (
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button size="iconXs" variant="ghost" aria-label={t("admin.studio.moreActions")}>
+            <Button size="iconSm" variant="ghost" aria-label={t("admin.studio.moreActions")}>
               <MoreHorizontal className="size-3.5" />
             </Button>
           </DropdownMenuTrigger>
@@ -253,17 +271,17 @@ export function ExplorerToolbar(props: ExplorerToolbarProps) {
 
       {/* Primary actions */}
       <div className="flex items-center gap-1">
-        <Button size="xs" variant="outline" onClick={onUpload}>
+        <Button size="sm" variant="outline" onClick={onUpload}>
           <Upload className="size-3" />
           <span className="hidden sm:inline">{t("admin.studio.upload")}</span>
         </Button>
         {canManage && (
           <>
-            <Button size="xs" variant="outline" onClick={onNewFolder}>
+            <Button size="sm" variant="outline" onClick={onNewFolder}>
               <FolderPlus className="size-3" />
               <span className="hidden sm:inline">{t("admin.studio.newFolder")}</span>
             </Button>
-            <Button size="xs" onClick={onNewContent}>
+            <Button size="sm" onClick={onNewContent}>
               <Plus className="size-3" />
               <span className="hidden sm:inline">{t("admin.studio.newContent")}</span>
             </Button>
@@ -275,7 +293,7 @@ export function ExplorerToolbar(props: ExplorerToolbarProps) {
       <IconActionButton
         icon={PanelRight}
         label={t("admin.studio.noSelection")}
-        size="iconXs"
+        size="iconSm"
         onClick={onToggleDetail}
         className={detailOpen ? "text-primary" : "text-muted-foreground"}
       />

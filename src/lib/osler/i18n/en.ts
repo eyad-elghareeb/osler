@@ -1377,6 +1377,8 @@ export const en = {
     "admin.stats.sessions": "Active Sessions",
     "admin.stats.content": "Published Content",
     "admin.stats.pending": "Pending Review",
+    "admin.stats.loadFailed": "Dashboard data unavailable",
+    "admin.stats.loadFailedDesc": "We could not load the latest admin statistics. Try again shortly.",
 
     "admin.users.title": "Users",
     "admin.users.subtitle": "Manage all registered accounts.",

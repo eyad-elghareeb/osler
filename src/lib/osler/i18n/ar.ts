@@ -1372,6 +1372,8 @@ export const ar = {
     "admin.stats.sessions": "الجلسات النشطة",
     "admin.stats.content": "المحتوى المنشور",
     "admin.stats.pending": "في انتظار المراجعة",
+    "admin.stats.loadFailed": "بيانات لوحة التحكم غير متاحة",
+    "admin.stats.loadFailedDesc": "تعذر تحميل أحدث إحصاءات الإدارة. حاول مرة أخرى بعد قليل.",
 
     "admin.users.title": "المستخدمون",
     "admin.users.subtitle": "إدارة جميع الحسابات المسجلة.",

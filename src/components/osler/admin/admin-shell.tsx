@@ -16,8 +16,8 @@ import {
   Sun,
   ShieldOff,
   Settings as SettingsIcon,
-  ChevronLeft,
-  ChevronRight,
+  SlidersHorizontal,
+  ChevronDown,
   PanelLeft,
   Home,
   BarChart3,
@@ -144,6 +144,11 @@ function AdminShellInner({ children }: AdminShellProps) {
     setIdentity(null);
   }, []);
 
+  const handleThemeToggle = React.useCallback(() => {
+    haptic("selection");
+    toggleTheme();
+  }, [toggleTheme]);
+
   const toggleSidebar = React.useCallback(() => {
     update("sidebarCollapsed", !settings.sidebarCollapsed);
   }, [settings.sidebarCollapsed, update]);
@@ -229,7 +234,7 @@ function AdminShellInner({ children }: AdminShellProps) {
       ? [{ href: "/admin/audit", icon: ScrollText, labelKey: "admin.nav.audit" }]
       : []),
     ...(isAdmin
-      ? [{ href: "/admin/config", icon: SettingsIcon, labelKey: "admin.nav.config" }]
+      ? [{ href: "/admin/config", icon: SlidersHorizontal, labelKey: "admin.nav.config" }]
       : []),
     { href: "/admin/settings", icon: SettingsIcon, labelKey: "admin.settings.title" },
   ];
@@ -246,10 +251,13 @@ function AdminShellInner({ children }: AdminShellProps) {
       )}
     >
       {/* Top bar — mirrors main site AppShell header style */}
-      <header className="z-40 shrink-0 h-14 border-b border-border bg-background/80 backdrop-blur-md supports-[backdrop-filter]:bg-background/60 safe-pt">
+      <header className="z-40 shrink-0 h-14 border-b border-border/60 bg-background/80 backdrop-blur-md supports-[backdrop-filter]:bg-background/60 safe-pt">
         <div className="h-full px-3 sm:px-4 flex items-center gap-2 sm:gap-3">
           {/* Sidebar toggle — desktop: collapse/expand; mobile: open slide-in sheet */}
-          <button
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
             onClick={() => {
               haptic("selection");
               if (window.innerWidth >= 768) {
@@ -259,10 +267,10 @@ function AdminShellInner({ children }: AdminShellProps) {
               }
             }}
             aria-label={t("admin.shell.menu")}
-            className="osler-icon-btn shrink-0"
+            className="shrink-0"
           >
             <PanelLeft className="size-4" />
-          </button>
+          </Button>
 
           {/* Logo — same recipe as main AppShell */}
           <Link
@@ -286,39 +294,54 @@ function AdminShellInner({ children }: AdminShellProps) {
           <div className="flex-1" />
 
           {/* Back to app */}
-          <Link
+          <Button
+            asChild
+            variant="ghost"
+            size="icon"
+            className="hidden sm:flex shrink-0"
+          >
+            <Link
             href="/"
-            className="hidden sm:flex osler-icon-btn shrink-0"
             aria-label={t("admin.shell.backToApp")}
             title={t("admin.shell.backToApp")}
-          >
-            <Home className="size-4" />
-          </Link>
+            >
+              <Home className="size-4" />
+            </Link>
+          </Button>
 
           {/* Theme toggle */}
-          <button
-            onClick={toggleTheme}
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            onClick={handleThemeToggle}
             aria-label={t("admin.settings.theme.desc")}
-            className="osler-icon-btn shrink-0"
+            className="shrink-0"
           >
             {theme === "dark" ? (
               <Sun className="size-4" />
             ) : (
               <Moon className="size-4" />
             )}
-          </button>
+          </Button>
 
           {/* User menu — same recipe as main AppShell */}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <button className="flex items-center gap-2 h-9 px-2 rounded-md hover:bg-muted/60 transition-colors shrink-0">
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-9 shrink-0 px-2"
+                aria-label={identity.user.displayName}
+              >
                 <div className="size-7 rounded-full bg-gradient-to-br from-primary/80 to-primary/40 flex items-center justify-center text-xs font-semibold text-primary-foreground">
                   {identity.user.displayName.slice(0, 2).toUpperCase()}
                 </div>
                 <span className="hidden sm:block text-sm font-medium max-w-[8rem] truncate">
                   {identity.user.displayName}
                 </span>
-              </button>
+                <ChevronDown className="hidden size-3.5 text-muted-foreground sm:block" />
+              </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-56">
               <DropdownMenuLabel className="flex flex-col gap-0.5">
@@ -385,7 +408,7 @@ function AdminShellInner({ children }: AdminShellProps) {
                       {t("admin.shell.brandAdmin")}
                     </div>
                     <div className="text-xs text-muted-foreground">
-                      {t("admin.shell.brandAdmin")}
+                      {t("admin.shell.tagline")}
                     </div>
                   </div>
                 </div>
@@ -489,20 +512,23 @@ function SidebarNav({
       ))}
 
       <div className="mt-auto pt-2 border-t border-border">
-        <button
+        <Button
+          type="button"
+          variant="ghost"
+          size={collapsed ? "icon" : "sm"}
           onClick={() => {
             onNavigate?.();
             onSignOut();
           }}
           className={cn(
-            "flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-sm text-muted-foreground hover:bg-accent hover:text-destructive transition-colors",
-            collapsed && "justify-center px-0",
+            "w-full justify-start text-muted-foreground hover:text-destructive",
+            collapsed && "justify-center",
           )}
           title={signOutLabel}
         >
           <LogOut className="size-4 shrink-0" />
           {!collapsed && <span>{signOutLabel}</span>}
-        </button>
+        </Button>
       </div>
     </div>
   );

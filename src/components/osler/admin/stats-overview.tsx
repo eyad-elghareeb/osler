@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { Users, Activity, FileText, ClipboardList } from "lucide-react";
 import { useI18n } from "@/components/osler/i18n-provider";
-import { StatTile } from "@/components/osler/ui-primitives";
+import { EmptyState, StatTile } from "@/components/osler/ui-primitives";
 import { adminApi, type AdminStats } from "@/components/osler/admin/admin-api";
 
 export function StatsOverview() {
@@ -18,6 +18,16 @@ export function StatsOverview() {
   }, []);
 
   const v = (key: keyof AdminStats) => stats ? String(stats[key]) : "…";
+
+  if (error) {
+    return (
+      <EmptyState
+        icon={Activity}
+        title={t("admin.stats.loadFailed")}
+        description={t("admin.stats.loadFailedDesc")}
+      />
+    );
+  }
 
   return (
     <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
