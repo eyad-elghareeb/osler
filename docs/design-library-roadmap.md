@@ -116,6 +116,18 @@ For each proposed component:
 | P2 | Public marketing kit | Build a separate, restrained library of landing-page sections and one optional hero accent. | Shadcnblocks + Magic UI + Cult UI | Not started. Triggered by a future public Osler site. |
 | P2 | Curated component review | Maintain an allow-list of locally adapted components from external registries. | 21st.dev, all sources | Ongoing. This document is the allow-list. |
 
+## Number animation hook
+
+A `useCountUp` hook at `@/hooks/use-count-up.ts` provides a smooth count-up animation for numeric stat values:
+
+```tsx
+const { ref, display } = useCountUp(42);                     // basic
+const { ref, display } = useCountUp(1250, { observe: true }); // animate on scroll-in
+const { ref, display } = useCountUp(98.5, { decimals: 1, suffix: "%" });
+```
+
+Honors `prefers-reduced-motion` by snapping to the final value immediately. Uses an easeOutQuart curve over 500ms by default. The `observe` option uses IntersectionObserver to only animate when the element scrolls into view.
+
 ## Local deviations from source patterns
 
 Each adopted pattern deviates from its source in ways that keep it on Osler's design foundations. Recorded here so future component intake can verify the deviation is still intentional.
@@ -133,6 +145,34 @@ Each adopted pattern deviates from its source in ways that keep it on Osler's de
 
 **Reversal — inline-start accent stripes removed**: the 3px inline-start accent stripe (dashboard continue-learning hero, QuickAction hover, admin sidebar active bar) and the search-row `layoutId` accent bar were removed after review — they read as an unwanted vertical border on buttons/tabs. Active rows now rely on flat tints (`bg-primary/10`) and the `.osler-accent-start` utility was deleted from `globals.css`.
 - **Login ambient glow** (Magic UI / Cult UI): the source patterns often use animated gradient beams or marquee effects for hero sections. Osler's version uses a single static radial gradient at 14% primary tint — reads as a polished ambient light without motion that would distract from the form. Reserved for the login screen only; not used on study surfaces per the roadmap's "separate product UI from marketing expression" rule.
+
+## Editorial typography system
+
+Osler now ships with a dedicated editorial typography stack for English long-form content, layered on top of the existing Geist Sans UI font:
+
+| Font | Role | Where it lives |
+|---|---|---|
+| **Newsreader** | Editorial serif — body text in Library articles | `--font-serif` → `.library-article` body |
+| **Playfair Display** | Display serif — headings, pull quotes, brand moments | `--font-display` → `.library-article` and `.uworld-prose` h1–h3 |
+| **JetBrains Mono** | Code — inline code, code blocks, technical content | `--font-code` → `code`, `pre`, `.osler-explanation code` |
+
+All three are loaded via `next/font/google` (self-hosted, zero layout shift). The editorial fonts apply only to content surfaces — UI chrome (buttons, labels, nav, stat tiles) stays on Geist Sans.
+
+**Typography refinements shipped:**
+
+- `hanging-punctuation: first` on `blockquote` — optically crisp quote edges
+- `text-wrap: balance` on all h1–h3 — no single-word orphans on wrap
+- Lead paragraph (`1.05rem` first paragraph) — hooks the reader
+- `.pullquote` — centered editorial break with display-serif + large opening mark
+- Refined inline code — JetBrains Mono + subtle border + muted tint
+- `font-variation-settings: "wght" 550` on `strong` — subtle weight bump instead of harsh 700
+
+**Visual utility classes shipped:**
+
+- `.osler-section-divider` — hairline divider with optional floating label
+- `.osler-gradient-text` — primary-to-accent gradient fill for brand moments
+- `.osler-table` — refined table typography with `tabular-nums` on `.numeric` cells
+- `.osler-noise` — subtle SVG noise texture overlay (3% opacity) for hero surfaces
 
 ## Component adoptions shipped
 

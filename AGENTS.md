@@ -98,6 +98,24 @@ The Osler design system lives in three places:
 | `--info` | deep cyan | bright cyan | Informational accents (used sparingly) |
 | `--chart-1..5` | brand palette | brand palette | Per-engine accent colors in pack cards / charts |
 
+### Font tokens
+
+| Token | Value | Use it for |
+|---|---|---|
+| `--font-sans` | Geist Sans | UI body text, buttons, labels |
+| `--font-mono` | Geist Mono | Generic monospace (legacy, prefer `--font-code`) |
+| `--font-serif` | Newsreader | Library article body text (editorial serif) |
+| `--font-display` | Playfair Display | Headings in prose, pull quotes, brand moments |
+| `--font-code` | JetBrains Mono | Code blocks, inline code, technical content |
+
+**Rules:**
+
+- Use `font-[var(--font-display)]` (or the `--font-display` CSS variable directly) for headings inside `.library-article` and `.uworld-prose` — never Geist Sans for editorial headings.
+- Use `font-[var(--font-serif)]` for long-form body text (Library articles). Short UI text stays on Geist Sans.
+- Use `font-[var(--font-code)]` for all code — never raw `ui-monospace` or the system monospace fallback.
+- All five fonts are loaded via `next/font/google` (self-hosted, zero layout shift). Never add a `<link>` to Google fonts.
+- Custom themes cannot override font families — they're structural, not stylistic.
+
 **Rules:**
 
 - **Never** use `text-emerald-500`, `text-green-500`, `text-amber-500`, `text-orange-500`, `text-red-500`, or any other Tailwind palette color in components. Use `text-success`, `text-warning`, `text-destructive`, or `text-info` instead. Tailwind v4 auto-generates these from the `--color-*` tokens in the `@theme inline` block.
@@ -297,15 +315,40 @@ Three near-identical typography systems existed (`.medos-article`, `.uworld-pros
 
 When adding new rich-text rendering (e.g. AI chat messages, notes), reuse `.uworld-prose` rather than introducing a fourth system.
 
+### Editorial typography refinements
+
+The following typographic patterns are applied globally to `.uworld-prose` and `.library-article`:
+
+| Pattern | Effect | Where applied |
+|---|---|---|
+| `hanging-punctuation: first` | Opening quote mark hangs into the margin for optically crisp edges | `blockquote` |
+| `text-wrap: balance` | Even word distribution on wrap, prevents single-word orphans | All headings (h1–h3) |
+| Lead paragraph | First paragraph slightly larger (`1.05rem`) to hook the reader | `> p:first-of-type` |
+| Pull quote | Centered, display-serif, large opening mark — editorial break without decorative border | `.pullquote` |
+| Refined inline code | JetBrains Mono + subtle border + muted tint — reads as distinct typographic element | `code` |
+| Refined strong | `font-variation-settings: "wght" 550` — subtle weight bump instead of harsh 700 | `strong` |
+
+### Visual utility classes
+
+| Class | Purpose | When to use |
+|---|---|---|
+| `.osler-section-divider` | Hairline divider with optional floating label | Between major content blocks in dense views |
+| `.osler-gradient-text` | Primary-to-accent gradient fill | Brand moments — one per viewport (login wordmark, dashboard eyebrow) |
+| `.osler-table` | Refined table typography with `tabular-nums` on `.numeric` cells | Data-dense views (admin, QBank results) |
+| `.osler-noise` | Subtle SVG noise texture overlay (3% opacity) | Hero surfaces for tactile, premium feel |
+
 ### Typography hierarchy summary
 
 | Element | Recipe |
 |---|---|
 | Page title (h1) | `text-2xl md:text-3xl font-bold tracking-tight` (or `text-xl md:text-2xl` in inline header) |
+| Editorial h1–h3 | `font-[var(--font-display)] font-bold` (Playfair Display) |
+| Editorial body | `font-[var(--font-serif)]` (Newsreader) |
 | Section heading (h2) | `text-sm font-semibold uppercase tracking-wider text-muted-foreground` |
 | Card title (h3) | `text-sm font-semibold` or `text-base font-semibold` |
 | Card subtitle / metadata | `text-xs text-muted-foreground` |
 | Body text | `text-sm` (default) |
+| Code | `font-[var(--font-code)]` (JetBrains Mono) |
 | Caption / micro label | `text-[11px]` (use sparingly — prefer `text-xs`) |
 | Stat value | `text-2xl font-bold tabular-nums` (or `text-xl` in compact stat tiles) |
 
@@ -464,7 +507,7 @@ The UI language selector and the content-language filter both derive their optio
 - `src/components/osler/` — app-specific components (including `pdf-export-dialog.tsx` for PDF customization)
 - `src/components/ui/` — shadcn/ui primitives (49 files, do not add custom logic here)
 - `src/lib/osler/` — business logic, types, data loading, storage, grading, PDF engine (`pdf.ts`, `arabic.ts`, `pdf-fonts.ts`)
-- `src/hooks/` — shared React hooks: `useContentTree`, `useArticleHighlighter`, `useGestures`, `useContentCache`, `useQuizSettings`, `useResizableSidebar`, `useDisableBlur`, `useShortcuts` (`useShortcutBindings` / `useShortcutListener` / `useShortcutSequenceReset`), `useSwipeBackDismiss`, `useSwipeTabs`, `useSwipeGallery`, `useToast`, `usePlatform`, `useMobile`, `useNative`
+- `src/hooks/` — shared React hooks: `useContentTree`, `useArticleHighlighter`, `useGestures`, `useContentCache`, `useQuizSettings`, `useResizableSidebar`, `useDisableBlur`, `useShortcuts` (`useShortcutBindings` / `useShortcutListener` / `useShortcutSequenceReset`), `useSwipeBackDismiss`, `useSwipeTabs`, `useSwipeGallery`, `useToast`, `usePlatform`, `useMobile`, `useNative`, `useCountUp`
 - `public/osler-content/` — folder-based content (see Content system)
 - `scripts/` — manifest generator and build helpers
 - `tauri-admin/` — separate Tauri desktop admin panel (Rust)

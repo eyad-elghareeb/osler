@@ -8,6 +8,9 @@
   --color-foreground: var(--foreground);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
+  --font-serif: var(--font-newsreader);
+  --font-display: var(--font-playfair);
+  --font-code: var(--font-jetbrains-mono);
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -778,8 +781,10 @@ button.osler-stat-tile--compact:hover {
 }
 .uworld-prose h1, .uworld-prose h2, .uworld-prose h3 {
   color: var(--foreground);
-  font-weight: 600;
+  font-family: var(--font-display, var(--font-serif));
+  font-weight: 700;
   margin: 1rem 0 0.5rem;
+  text-wrap: balance;
 }
 .uworld-prose h1 { font-size: 1.3rem; }
 .uworld-prose h2 { font-size: 1.15rem; }
@@ -2087,6 +2092,7 @@ html[dir="rtl"] {
   max-width: 920px;
   margin: 0 auto;
   color: var(--foreground);
+  font-family: var(--font-serif);
   font-size: 0.95rem;
   line-height: 1.7;
 }
@@ -2102,23 +2108,29 @@ html[dir="rtl"] {
   opacity: 0.85;
 }
 .library-article h1 {
+  font-family: var(--font-display, var(--font-serif));
   font-size: 1.85rem;
   font-weight: 700;
   margin: 0 0 0.5rem 0;
   letter-spacing: -0.01em;
+  text-wrap: balance;
 }
 .library-article h2 {
+  font-family: var(--font-display, var(--font-serif));
   font-size: 1.35rem;
-  font-weight: 600;
+  font-weight: 700;
   margin: 1.75rem 0 0.75rem;
   padding-bottom: 0.35rem;
   border-bottom: 1px solid var(--border);
+  text-wrap: balance;
 }
 .library-article h3 {
+  font-family: var(--font-display, var(--font-serif));
   font-size: 1.1rem;
-  font-weight: 600;
+  font-weight: 700;
   margin: 1.4rem 0 0.5rem;
   color: var(--primary);
+  text-wrap: balance;
 }
 .library-article p { margin: 0.65rem 0; }
 .library-article ul, .library-article ol {
@@ -2641,5 +2653,171 @@ html.osler-ar body,
   font-size: 0.8125rem; line-height: 1.5;
   tab-size: 2; resize: none;
   background: var(--background); color: var(--foreground);
+}
+
+/* ───────────────────────────────────────────────────────────────────────
+ * Editorial typography refinements
+ *
+ * Premium typographic touches that raise the reading experience across
+ * Library articles, QBank prose, and long-form content. These build on
+ * the existing `.uworld-prose` and `.library-article` systems.
+ * ─────────────────────────────────────────────────────────────────────── */
+
+/* --- Hanging punctuation for blockquotes — optically crisp edge --- */
+.uworld-prose blockquote,
+.library-article blockquote {
+  hanging-punctuation: first;
+}
+
+/* --- text-balance on all headings — even word distribution on wrap --- */
+.osler-page-header__title,
+.osler-section-heading,
+.uworld-prose h1, .uworld-prose h2, .uworld-prose h3,
+.library-article h1, .library-article h2, .library-article h3,
+.medos-article h1, .medos-article h2, .medos-article h3 {
+  text-wrap: balance;
+}
+
+/* --- Lead paragraph — slightly larger opening text to hook the reader --- */
+.uworld-prose > p:first-of-type,
+.library-article > p:first-of-type {
+  font-size: 1.05rem;
+  line-height: 1.6;
+  color: var(--foreground);
+}
+
+/* --- Pull quote variant — editorial break, no decorative border --- */
+.uworld-prose .pullquote,
+.library-article .pullquote,
+.medos-article .pullquote {
+  font-family: var(--font-display, var(--font-serif));
+  font-size: 1.25rem;
+  line-height: 1.5;
+  font-weight: 400;
+  font-style: italic;
+  text-align: center;
+  color: var(--foreground);
+  margin: 2rem auto;
+  max-width: 80%;
+  position: relative;
+}
+.uworld-prose .pullquote::before,
+.library-article .pullquote::before,
+.medos-article .pullquote::before {
+  content: "\201C";
+  display: block;
+  font-size: 3rem;
+  font-weight: 700;
+  color: var(--primary);
+  opacity: 0.3;
+  line-height: 0.5;
+  margin-bottom: 0.5rem;
+}
+
+/* --- Refined inline code — distinct typographic element --- */
+.uworld-prose code,
+.ai-chat-msg code,
+.library-article code {
+  font-family: var(--font-code, var(--font-mono), ui-monospace, monospace);
+  font-size: 0.825em;
+  background: color-mix(in oklch, var(--muted) 80%, transparent);
+  border: 1px solid color-mix(in oklch, var(--border) 60%, transparent);
+  padding: 0.1rem 0.35rem;
+  border-radius: 4px;
+}
+
+/* --- Refined strong — subtle weight bump instead of harsh 700 --- */
+.uworld-prose strong,
+.library-article strong,
+.osler-explanation strong {
+  font-variation-settings: "wght" 550;
+  font-weight: 550;
+}
+
+/* ───────────────────────────────────────────────────────────────────────
+ * Visual design utilities
+ *
+ * Shared patterns for section dividers, gradient text, refined tables,
+ * and noise textures.
+ * ──────────────────────────────────────────────────────────────────────═ */
+
+/* --- Section divider with optional floating label --- */
+.osler-section-divider {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin: 2rem 0 1.5rem;
+}
+.osler-section-divider::before,
+.osler-section-divider::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--border);
+}
+.osler-section-divider__label {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted-foreground);
+  white-space: nowrap;
+  padding: 0 0.25rem;
+}
+
+/* --- Gradient text — reserved for brand moments, one per viewport --- */
+.osler-gradient-text {
+  background: linear-gradient(135deg, var(--primary) 0%, var(--accent) 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* --- Refined table typography --- */
+.osler-table {
+  width: 100%;
+  font-size: 0.875rem;
+  border-collapse: collapse;
+}
+.osler-table th {
+  font-weight: 600;
+  text-align: start;
+  padding: 0.625rem 0.875rem;
+  border-bottom: 1px solid var(--border);
+  color: var(--muted-foreground);
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.osler-table td {
+  padding: 0.625rem 0.875rem;
+  border-bottom: 1px solid color-mix(in oklch, var(--border) 50%, transparent);
+  color: var(--foreground);
+}
+.osler-table td.numeric {
+  font-variant-numeric: tabular-nums;
+  text-align: end;
+}
+.osler-table tr:last-child td {
+  border-bottom: none;
+}
+
+/* --- Noise texture overlay — subtle grain for hero surfaces --- */
+.osler-noise {
+  position: relative;
+}
+.osler-noise::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  opacity: 0.03;
+  pointer-events: none;
+  border-radius: inherit;
+  background-image: url('data:image/svg+xml,%3Csvg viewBox="0 0 256 256" xmlns="http://www.w3.org/2000/svg"%3E%3Cfilter id="n"%3E%3CfeTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="4" stitchTiles="stitch"/%3E%3C/filter%3E%3Crect width="100%25" height="100%25" filter="url(%23n)"/%3E%3C/svg%3E');
+  background-size: 128px 128px;
+}
+.dark .osler-noise::after {
+  opacity: 0.04;
+  filter: invert(1);
 }
 
