@@ -31,6 +31,7 @@ This folder contains the complete documentation for the Osler medical study plat
 | [`troubleshooting.md`](./troubleshooting.md) | Everyone | Symptom → cause → fix for ~80 common issues across build, deploy, auth, admin, sync, PWA, content, performance. |
 | [`tauri-admin.md`](./tauri-admin.md) | Operators | Tauri desktop admin app: build, first-run, setup wizard, config editor, instance generator, content editor, build runner, git ops, deployment providers, troubleshooting. |
 | [`contributing.md`](./contributing.md) | Contributors | Dev setup, coding conventions, i18n rule, git workflow, adding content packs / engine plugins / admin endpoints, releasing. |
+| [`design-library-roadmap.md`](./design-library-roadmap.md) | Designers / Contributors | Decision framework and integration rules for bringing curated motion, form, analytics, and marketing components into Osler without fragmenting its design system. |
 | [`routing-migration-plan.md`](./routing-migration-plan.md) | Developers | Path-based routing + cookie-auth implementation notes, route map, security fixes, and rollback plan. |
 
 ## Related files outside `docs/`
