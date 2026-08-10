@@ -875,7 +875,7 @@ export function AiSettingsSection() {
           <label className="text-xs font-semibold text-muted-foreground flex items-center justify-between">
             <span>{t("settings.ai.apiKey")}</span>
             {draft.apiKey !== saved.apiKey && (
-              <span className="text-[10px] text-amber-500 font-normal">{t("settings.ai.unsaved")}</span>
+              <span className="text-[10px] text-warning font-normal">{t("settings.ai.unsaved")}</span>
             )}
           </label>
           <input
@@ -930,7 +930,7 @@ export function AiSettingsSection() {
 
         {/* Test result */}
         {testResult && (
-          <p className={`text-xs ${testResult.startsWith("✓") ? "text-green-500" : "text-destructive"}`}>
+          <p className={cn("text-xs", testResult.startsWith("✓") ? "text-success" : "text-destructive")}>
             {testResult}
           </p>
         )}
@@ -1098,7 +1098,7 @@ function ShortcutsSettingsSection() {
                               <div className="text-sm font-medium">{t(a.labelKey)}</div>
                               <div className="text-[11px] text-muted-foreground">{t(a.descriptionKey)}</div>
                               {conflicts.length > 0 && (
-                                <div className="text-[11px] text-amber-500 mt-1">
+                                <div className="text-[11px] text-warning mt-1">
                                   ⚠ {t("settings.shortcuts.conflictsWith", { names: conflictNames })}
                                 </div>
                               )}
@@ -1862,7 +1862,7 @@ function NativeSettingsSection() {
               </p>
             ) : biometricEnrolled ? (
               <div className="space-y-2">
-                <div className="flex items-center gap-2 text-xs text-green-600 dark:text-green-400">
+                <div className="flex items-center gap-2 text-xs text-success">
                   <Check className="size-3.5" />
                   <span>{t("native.biometric.enrolled", { user: "user" })}</span>
                 </div>
@@ -1908,7 +1908,7 @@ function NativeSettingsSection() {
               <span
                 className={cn(
                   "size-2 rounded-full",
-                  isWakeLockSupported() ? "bg-green-500" : "bg-muted-foreground",
+                  isWakeLockSupported() ? "bg-success" : "bg-muted-foreground",
                 )}
               />
               <span className="text-muted-foreground">
