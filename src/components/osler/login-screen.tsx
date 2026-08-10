@@ -348,29 +348,33 @@ export function LoginScreen({ onLogin, cloudAuthError }: LoginScreenProps) {
         >
           {cloudMode === "register" && (
             <div>
-              <label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+              <label htmlFor="display-name" className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
                 {t("login.displayName")}
               </label>
               <input
+                id="display-name"
                 type="text"
                 value={displayName}
                 onChange={(e) => setDisplayName(e.target.value)}
                 placeholder={t("login.displayNamePlaceholder")}
+                autoComplete="name"
                 className="mt-1.5 w-full h-10 px-3 bg-background border border-border rounded-md text-sm outline-none focus:border-primary transition-colors"
               />
             </div>
           )}
 
           <div>
-            <label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+            <label htmlFor="username" className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
               {cloudActive ? t("login.identifier") : t("login.username")}
             </label>
             <input
+              id="username"
               type="text"
               value={username}
               onChange={(e) => { setUsername(e.target.value); setUsernameStatus("idle"); }}
               onBlur={checkUsername}
               placeholder={cloudActive ? t("login.identifierPlaceholder") : t("login.usernamePlaceholder")}
+              autoComplete="username"
               autoFocus
               className="mt-1.5 w-full h-10 px-3 bg-background border border-border rounded-md text-sm outline-none focus:border-primary transition-colors"
             />
@@ -383,14 +387,16 @@ export function LoginScreen({ onLogin, cloudAuthError }: LoginScreenProps) {
 
           {cloudActive && (cloudMode === "register" || cloudMode === "reset") && !resetToken && (
             <div>
-              <label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+              <label htmlFor="email" className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
                 {t("login.email")}
               </label>
               <input
+                id="email"
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder={t("login.emailPlaceholder")}
+                autoComplete="email"
                 required={cloudMode === "reset"}
                 className="mt-1.5 w-full h-10 px-3 bg-background border border-border rounded-md text-sm outline-none focus:border-primary transition-colors"
               />
@@ -404,15 +410,17 @@ export function LoginScreen({ onLogin, cloudAuthError }: LoginScreenProps) {
 
           {cloudMode !== "reset" || !!resetToken ? (
             <div>
-              <label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+              <label htmlFor="password" className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
                 {t("login.password")}
               </label>
               <div className="relative mt-1.5">
                 <input
+                  id="password"
                   type={showPassword ? "text" : "password"}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder={cloudActive ? t("login.passwordSecurePlaceholder") : t("login.passwordPlaceholder")}
+                  autoComplete={cloudMode === "login" ? "current-password" : "new-password"}
                   minLength={cloudActive ? 8 : undefined}
                   required={cloudActive}
                   className="w-full h-10 ps-3 pe-10 bg-background border border-border rounded-md text-sm outline-none focus:border-primary transition-colors"
@@ -424,7 +432,7 @@ export function LoginScreen({ onLogin, cloudAuthError }: LoginScreenProps) {
                     setShowPassword((v) => !v);
                   }}
                   className="absolute inset-y-0 end-0 pe-3 flex items-center text-muted-foreground hover:text-foreground transition-colors"
-                  aria-label={showPassword ? "Hide password" : "Show password"}
+                  aria-label={showPassword ? t("login.hidePassword") : t("login.showPassword")}
                 >
                   {showPassword ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
                 </button>
@@ -435,15 +443,17 @@ export function LoginScreen({ onLogin, cloudAuthError }: LoginScreenProps) {
 
           {cloudActive && cloudMode === "register" && (
             <div>
-              <label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+              <label htmlFor="password-confirm" className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
                 {t("login.confirmPassword")}
               </label>
               <div className="relative mt-1.5">
                 <input
+                  id="password-confirm"
                   type={showPasswordConfirm ? "text" : "password"}
                   value={passwordConfirm}
                   onChange={(e) => setPasswordConfirm(e.target.value)}
                   placeholder={t("login.passwordSecurePlaceholder")}
+                  autoComplete="new-password"
                   minLength={8}
                   required
                   className="w-full h-10 ps-3 pe-10 bg-background border border-border rounded-md text-sm outline-none focus:border-primary transition-colors"
@@ -455,7 +465,7 @@ export function LoginScreen({ onLogin, cloudAuthError }: LoginScreenProps) {
                     setShowPasswordConfirm((v) => !v);
                   }}
                   className="absolute inset-y-0 end-0 pe-3 flex items-center text-muted-foreground hover:text-foreground transition-colors"
-                  aria-label={showPasswordConfirm ? "Hide password" : "Show password"}
+                  aria-label={showPasswordConfirm ? t("login.hidePassword") : t("login.showPassword")}
                 >
                   {showPasswordConfirm ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
                 </button>

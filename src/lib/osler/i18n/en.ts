@@ -65,6 +65,8 @@ export const en = {
     "login.subtitle": "Medical study platform — quizzes, banks, flashcards, OSCE",
     "login.username": "Username",
     "login.password": "Password",
+    "login.showPassword": "Show password",
+    "login.hidePassword": "Hide password",
     "login.usernamePlaceholder": "Your name",
     "login.passwordPlaceholder": "Any value (demo mode)",
     "login.demoNote": "Demo mode — no real authentication. All progress is stored locally.",

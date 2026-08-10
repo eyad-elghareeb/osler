@@ -65,6 +65,8 @@ export const ar = {
     "login.subtitle": "منصة المذاكرة الطبية — اختبارات، بنوك أسئلة، بطاقات تعليمية، ومحطات OSCE",
     "login.username": "اسم المستخدم",
     "login.password": "كلمة المرور",
+    "login.showPassword": "إظهار كلمة المرور",
+    "login.hidePassword": "إخفاء كلمة المرور",
     "login.usernamePlaceholder": "اسمك",
     "login.passwordPlaceholder": "أي قيمة (وضع تجريبي)",
     "login.demoNote":
