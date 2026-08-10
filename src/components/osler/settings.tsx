@@ -407,71 +407,93 @@ export function Settings({
 
 /* ─── Theme / Appearance section ─────────────────────────────────────── */
 
+type ThemeOption = { id: string; name: string; variant: "dark" | "light" };
+
+interface ThemeFamily {
+  id: string;
+  name: string;
+  variants: ThemeOption[];
+}
+
 export function ThemeSettingsSection() {
   const { t } = useI18n();
   const { theme, setThemeId, availableThemes } = useOslerTheme();
 
-  const builtinThemes = availableThemes.filter((th) => th.id === "dark" || th.id === "light");
-  const customThemes = availableThemes.filter((th) => th.id !== "dark" && th.id !== "light");
+  const themeFamilies = React.useMemo<ThemeFamily[]>(() => {
+    const families = new Map<string, ThemeFamily>();
+    for (const option of availableThemes) {
+      const id = option.id === "dark" || option.id === "light"
+        ? "osler-default"
+        : option.id.replace(/-(dark|light)$/i, "");
+      const current = families.get(id);
+      if (current) {
+        current.variants.push(option);
+      } else {
+        families.set(id, {
+          id,
+          name: id === "osler-default" ? t("app.name") : option.name.replace(/\s+(dark|light)$/i, ""),
+          variants: [option],
+        });
+      }
+    }
+    return Array.from(families.values()).map((family) => ({
+      ...family,
+      variants: [...family.variants].sort((a, b) => (a.variant === "dark" ? -1 : 1) - (b.variant === "dark" ? -1 : 1)),
+    }));
+  }, [availableThemes, t]);
 
-  const swatchColors: Record<string, string[]> = Object.fromEntries(
-    availableThemes.map((th) => [
-      th.id,
-      ["var(--background)", "var(--primary)", "var(--accent)", "var(--foreground)"],
-    ]),
+  const builtinFamilies = themeFamilies.filter((family) => family.id === "osler-default");
+  const customFamilies = themeFamilies.filter((family) => family.id !== "osler-default");
+  const swatchColors = ["var(--background)", "var(--primary)", "var(--accent)", "var(--foreground)"];
+  const activeFamily = themeFamilies.find((family) => family.variants.some((option) => option.id === theme));
+  const activeOption = activeFamily?.variants.find((option) => option.id === theme);
+  const variantLabel = (variant: "dark" | "light") =>
+    variant === "dark" ? t("settings.theme.darkVariant") : t("settings.theme.lightVariant");
+
+  const renderThemeFamily = (family: ThemeFamily) => (
+    <div key={family.id} className="rounded-xl border border-border bg-card p-3">
+      <div className="flex items-center justify-between gap-2 mb-3">
+        <span className="text-sm font-semibold truncate">{family.name}</span>
+        {activeFamily?.id === family.id && activeOption && (
+          <span className="text-[11px] text-muted-foreground shrink-0">{variantLabel(activeOption.variant)}</span>
+        )}
+      </div>
+      <div className="grid grid-cols-2 gap-2" role="group" aria-label={family.name}>
+        {family.variants.map((option) => {
+          const active = option.id === theme;
+          const themeScope = option.id === "dark" || option.id === "light" ? option.id : `theme-${option.id}`;
+          return (
+            <Button
+              key={option.id}
+              type="button"
+              variant={active ? "default" : "outline"}
+              aria-label={`${t("settings.theme.selectTheme")}: ${family.name} (${variantLabel(option.variant)})`}
+              aria-pressed={active}
+              onClick={() => { haptic("light"); setThemeId(option.id); }}
+              className={cn(
+                "h-auto min-w-0 flex-col items-stretch gap-2 p-2.5 rounded-lg",
+                !active && "bg-background",
+              )}
+            >
+              <span className="flex items-center gap-1.5">
+                {swatchColors.map((color) => (
+                  <span
+                    key={color}
+                    className={cn("size-4 rounded-full border border-border shadow-sm", themeScope)}
+                    style={{ backgroundColor: color }}
+                  />
+                ))}
+              </span>
+              <span className="flex items-center justify-between gap-2 text-xs font-medium">
+                <span>{variantLabel(option.variant)}</span>
+                {active && <Check className="size-3.5 shrink-0" />}
+              </span>
+            </Button>
+          );
+        })}
+      </div>
+    </div>
   );
-
-  const renderThemeCard = (th: { id: string; name: string; variant: "dark" | "light" }) => {
-    const active = th.id === theme;
-    const colors = swatchColors[th.id] ?? ["var(--background)", "var(--primary)", "var(--accent)", "var(--foreground)"];
-    const themeScope = th.id === "dark" || th.id === "light" ? th.id : `theme-${th.id}`;
-    return (
-      <Button
-        key={th.id}
-        type="button"
-        variant="ghost"
-        aria-label={`${t("settings.theme.selectTheme")}: ${th.name}`}
-        aria-pressed={active}
-        onClick={() => { haptic("light"); setThemeId(th.id); }}
-        className={cn(
-          "relative h-auto w-full justify-start text-start p-3 rounded-xl border-2 transition-all group",
-          active
-            ? "border-primary ring-2 ring-primary/20 bg-primary/5"
-            : "border-border hover:border-primary/40 bg-card hover:bg-card/80",
-        )}
-      >
-        {/* Color swatches */}
-        <div className="flex items-center gap-1.5 mb-2.5">
-          {colors.map((c, i) => (
-            <div
-              key={i}
-              className={cn("size-6 rounded-full border border-border shadow-sm", themeScope)}
-              style={{ backgroundColor: c }}
-            />
-          ))}
-        </div>
-
-        {/* Theme name + variant badge */}
-        <div className="flex items-center gap-2">
-          <span className="text-sm font-semibold truncate">{th.name}</span>
-          <span className={cn(
-            "text-[10px] px-1.5 py-0.5 rounded-full font-medium shrink-0 bg-muted text-muted-foreground",
-          )}>
-            {th.variant === "dark" ? t("settings.theme.darkVariant") : t("settings.theme.lightVariant")}
-          </span>
-        </div>
-
-        {/* Active indicator */}
-        {active && (
-          <div className="absolute top-2 end-2">
-            <div className="size-5 rounded-full bg-primary flex items-center justify-center">
-              <Check className="size-3 text-primary-foreground" />
-            </div>
-          </div>
-        )}
-      </Button>
-    );
-  };
 
   return (
     <div className="space-y-6">
@@ -483,7 +505,7 @@ export function ThemeSettingsSection() {
         <p className="text-xs text-muted-foreground mb-5">
           {t("settings.theme.currentTheme")}:{" "}
           <span className="font-medium text-foreground">
-            {availableThemes.find((x) => x.id === theme)?.name ?? theme}
+            {activeFamily && activeOption ? `${activeFamily.name} · ${variantLabel(activeOption.variant)}` : theme}
           </span>
         </p>
 
@@ -497,12 +519,12 @@ export function ThemeSettingsSection() {
               {t("settings.theme.builtinDesc")}
             </p>
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2.5">
-              {builtinThemes.map(renderThemeCard)}
+              {builtinFamilies.map(renderThemeFamily)}
             </div>
           </div>
 
           {/* Custom themes */}
-          {customThemes.length > 0 && (
+          {customFamilies.length > 0 && (
             <div className="pt-4 border-t border-border">
               <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">
                 {t("settings.theme.customTitle")}
@@ -511,7 +533,7 @@ export function ThemeSettingsSection() {
                 {t("settings.theme.customDesc")}
               </p>
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2.5">
-                {customThemes.map(renderThemeCard)}
+                {customFamilies.map(renderThemeFamily)}
               </div>
             </div>
           )}

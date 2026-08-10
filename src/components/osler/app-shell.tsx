@@ -357,20 +357,6 @@ export function AppShell({ children }: AppShellProps) {
           {/* PWA install */}
           <PwaInstallButton />
 
-          {/* Theme toggle */}
-          <button
-            onClick={toggleTheme}
-            aria-label={isDark ? t("theme.toggleToLight") : t("theme.toggleToDark")}
-            title={isDark ? t("theme.toggleToLight") : t("theme.toggleToDark")}
-            className="osler-icon-btn shrink-0"
-          >
-            {isDark ? (
-              <Sun className="size-4" />
-            ) : (
-              <Moon className="size-4" />
-            )}
-          </button>
-
           {/* User menu */}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
@@ -405,6 +391,13 @@ export function AppShell({ children }: AppShellProps) {
               >
                 <SettingsIcon className="size-4 me-2" />
                 {t("nav.settings")}
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                className="cursor-pointer"
+                onClick={() => { haptic("selection"); toggleTheme(); }}
+              >
+                {isDark ? <Sun className="size-4 me-2" /> : <Moon className="size-4 me-2" />}
+                {isDark ? t("theme.toggleToLight") : t("theme.toggleToDark")}
               </DropdownMenuItem>
 
               <DropdownMenuItem
