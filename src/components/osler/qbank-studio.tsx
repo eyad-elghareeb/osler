@@ -1933,7 +1933,7 @@ function ContentTab({
                 "absolute top-1/2 -translate-y-1/2 size-6 rounded-full hover:bg-muted flex items-center justify-center text-muted-foreground",
                 rtl ? "left-2" : "right-2",
               )}
-              aria-label="Clear search"
+              aria-label={t("qbank.home.clearSearch")}
             >
               <X className="size-3.5" />
             </button>
@@ -2322,14 +2322,14 @@ function CreateTestTab({
               onClick={() => onTestModeChange("timed")}
               icon={TimerIcon}
               label={t("qbank.home.timed")}
-              description="Simulates actual exam conditions. The test must be completed in the allotted time."
+              description={t("qbank.home.timedDesc")}
             />
             <ModeCard
               active={testMode === "tutor"}
               onClick={() => onTestModeChange("tutor")}
               icon={Sparkles}
               label={t("qbank.home.tutor")}
-              description="Get immediate feedback and explanations after each question."
+              description={t("qbank.home.tutorDesc")}
             />
           </div>
         </div>
@@ -2522,7 +2522,7 @@ function CreateTestTab({
                     <button
                       onClick={() => toggleSource(node.uid)}
                       className="hover:bg-primary/20 rounded-full size-4 flex items-center justify-center"
-                      aria-label="Remove"
+                      aria-label={t("common.remove")}
                     >
                       <X className="size-3" />
                     </button>
@@ -2599,7 +2599,7 @@ function CreateTestTab({
                 onClick={() => setCountInput(String(Math.max(1, desiredCount - 1)))}
                 disabled={desiredCount <= 1}
                 className="size-9 rounded-xl border border-border bg-card hover:bg-muted/60 flex items-center justify-center disabled:opacity-40 disabled:cursor-not-allowed"
-                aria-label="Decrement"
+                aria-label={t("qbank.home.decrementCount")}
               >
                 <ChevronDown className="size-4 rotate-90" />
               </button>
@@ -2619,7 +2619,7 @@ function CreateTestTab({
                 onClick={() => setCountInput(String(Math.min(totalAvailable || 1, desiredCount + 1)))}
                 disabled={desiredCount >= totalAvailable || totalAvailable === 0}
                 className="size-9 rounded-xl border border-border bg-card hover:bg-muted/60 flex items-center justify-center disabled:opacity-40 disabled:cursor-not-allowed"
-                aria-label="Increment"
+                aria-label={t("qbank.home.incrementCount")}
               >
                 <ChevronRight className="size-4" />
               </button>
@@ -6579,12 +6579,13 @@ interface NavigatorPanelProps {
 }
 
 function NavigatorPanel(p: NavigatorPanelProps) {
+  const { t } = useI18n();
   const total = p.session.questions.length;
   return (
     <div className="flex flex-col h-full">
       {/* NBME-style compact header */}
       <div className="px-3 py-2.5 border-b border-sidebar-border flex items-center justify-between">
-        <span className="text-[11px] font-semibold uppercase tracking-wider text-foreground">Navigator</span>
+        <span className="text-[11px] font-semibold uppercase tracking-wider text-foreground">{t("qbank.home.questionNavigator")}</span>
         <span className="text-[11px] text-muted-foreground tabular-nums">{p.answeredCount}/{total}</span>
       </div>
 
@@ -6611,7 +6612,7 @@ function NavigatorPanel(p: NavigatorPanelProps) {
                 className={`relative aspect-square rounded-md text-[11px] font-semibold border transition-all ${cellClass} ${
                   isCurrent ? "ring-2 ring-primary ring-offset-1 ring-offset-sidebar" : ""
                 }`}
-                title={`Q${i + 1}${ans !== undefined ? (isRevealed ? (isCorrect ? " ✓" : " ✗") : " •") : ""}${isFlagged ? " ⚑" : ""}`}
+                title={t("qbank.session.question", { n: i + 1, total })}
               >
                 {i + 1}
                 {isFlagged && <span className="absolute -top-0.5 -right-0.5 size-2 rounded-full bg-warning border border-sidebar" />}
@@ -6622,15 +6623,15 @@ function NavigatorPanel(p: NavigatorPanelProps) {
 
         {/* Compact inline legend */}
         <div className="mt-4 pt-3 border-t border-sidebar-border flex flex-wrap gap-2.5 text-[10px] text-muted-foreground">
-          <span className="flex items-center gap-1"><span className="size-2.5 rounded bg-sidebar border border-sidebar-border" /> Unans</span>
-          <span className="flex items-center gap-1"><span className="size-2.5 rounded bg-primary/25 border border-primary/40" /> Ans</span>
+          <span className="flex items-center gap-1"><span className="size-2.5 rounded bg-sidebar border border-sidebar-border" /> {t("qbank.home.unanswered")}</span>
+          <span className="flex items-center gap-1"><span className="size-2.5 rounded bg-primary/25 border border-primary/40" /> {t("qbank.home.answeredLabel")}</span>
           {p.session.mode === "tutor" && (
             <>
-              <span className="flex items-center gap-1"><span className="size-2.5 rounded bg-success/20 border border-success/30" /> Corr</span>
-              <span className="flex items-center gap-1"><span className="size-2.5 rounded bg-destructive/20 border border-destructive/30" /> Inc</span>
+              <span className="flex items-center gap-1"><span className="size-2.5 rounded bg-success/20 border border-success/30" /> {t("qbank.home.correct")}</span>
+              <span className="flex items-center gap-1"><span className="size-2.5 rounded bg-destructive/20 border border-destructive/30" /> {t("qbank.home.incorrect")}</span>
             </>
           )}
-          <span className="flex items-center gap-1"><span className="size-2.5 rounded-full bg-warning" /> Flag</span>
+          <span className="flex items-center gap-1"><span className="size-2.5 rounded-full bg-warning" /> {t("qbank.session.flag")}</span>
         </div>
       </div>
 
@@ -6638,7 +6639,7 @@ function NavigatorPanel(p: NavigatorPanelProps) {
       {!p.readonly && (
         <div className="p-2 border-t border-sidebar-border">
           <Button variant="ghost" size="sm" onClick={p.onEndTest} className="w-full h-8 text-xs rounded-md text-destructive hover:text-destructive hover:bg-destructive/10">
-            End Test
+            {t("qbank.session.endTest")}
           </Button>
         </div>
       )}
@@ -6880,10 +6881,10 @@ function ResultsView({
       <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-4">
         <div className="flex items-center justify-between flex-wrap gap-3">
           <div>
-            <h1 className="text-2xl font-semibold text-foreground">Test Results</h1>
+            <h1 className="text-2xl font-semibold text-foreground">{t("qbank.home.testResults")}</h1>
             <p className="text-sm text-muted-foreground mt-1">
-              {item.title} · {total} questions ·{" "}
-              {session.mode === "timed" ? "Timed" : "Tutor"} mode
+              {item.title} · {t("qbank.home.questions", { n: total })} ·{" "}
+              {session.mode === "timed" ? t("qbank.session.timedMode") : t("qbank.session.tutorMode")}
             </p>
           </div>
           <div className="flex gap-2">
@@ -6891,10 +6892,10 @@ function ResultsView({
               <FileText className="size-4 mr-1.5" /> {t("pdf.exportResults")}
             </Button>
             <Button variant="outline" onClick={onRestart} className="rounded-xl">
-              <RotateCcw className="size-4 mr-1.5" /> Restart
+              <RotateCcw className="size-4 mr-1.5" /> {t("qbank.home.restart")}
             </Button>
             <Button variant="outline" onClick={onGoHome} className="rounded-xl">
-              <Home className="size-4 mr-1.5" /> Back to QBank
+              <Home className="size-4 mr-1.5" /> {t("qbank.home.backToQBank")}
             </Button>
           </div>
         </div>
@@ -6903,7 +6904,7 @@ function ResultsView({
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-center">
             <div className="text-center lg:border-r lg:border-border lg:pr-6">
               <div className="text-xs uppercase tracking-wider text-muted-foreground mb-1">
-                Your Score
+                {t("qbank.home.yourScore")}
               </div>
               <div className="flex items-baseline justify-center gap-1">
                 <span
@@ -6920,35 +6921,35 @@ function ResultsView({
                 </span>
               </div>
               <div className="text-xs text-muted-foreground mt-1">
-                {totalCorrect} of {total} correct
+                {t("qbank.home.correctOf", { correct: totalCorrect, total })}
               </div>
             </div>
 
             <div className="text-center lg:border-r lg:border-border lg:pr-6">
               <div className="text-xs uppercase tracking-wider text-muted-foreground mb-1">
-                Percentile Rank
+                {t("qbank.home.percentileRank")}
               </div>
               <div className="text-5xl font-bold tabular-nums text-primary">
                 {percentile}
-                <span className="text-2xl font-normal text-muted-foreground">th</span>
+                <span className="text-2xl font-normal text-muted-foreground">{t("qbank.home.percentileSuffix")}</span>
               </div>
               <div className="text-xs text-muted-foreground mt-1">
-                You scored higher than {percentile}% of users.
+                {t("qbank.home.scoredHigher", { n: percentile })}
               </div>
             </div>
 
             <div className="space-y-2 text-sm">
-              <SummaryRow label="Answered" value={`${answeredCount}/${total}`} />
-              <SummaryRow label="Incorrect" value={`${incorrectCount}`} />
-              <SummaryRow label="Flagged" value={`${flaggedCount}`} />
-              <SummaryRow label="Total Time" value={formatTime(totalTimeSec)} />
-              <SummaryRow label="Avg / Question" value={formatTime(avgTimeSec)} />
+              <SummaryRow label={t("qbank.home.answeredLabel")} value={`${answeredCount}/${total}`} />
+              <SummaryRow label={t("qbank.home.incorrectLabel")} value={`${incorrectCount}`} />
+              <SummaryRow label={t("qbank.home.flaggedLabel")} value={`${flaggedCount}`} />
+              <SummaryRow label={t("qbank.home.totalTime")} value={formatTime(totalTimeSec)} />
+              <SummaryRow label={t("qbank.home.avgPerQuestion")} value={formatTime(avgTimeSec)} />
             </div>
           </div>
         </div>
 
         <div className="qbank-card">
-          <h3 className="text-sm font-semibold mb-3">Score Distribution</h3>
+          <h3 className="text-sm font-semibold mb-3">{t("qbank.home.scoreDistribution")}</h3>
           <div className="flex h-3 rounded-full overflow-hidden bg-muted">
             <div
               className="bg-success"
@@ -6965,20 +6966,20 @@ function ResultsView({
           </div>
           <div className="mt-2 flex items-center gap-4 text-xs text-muted-foreground flex-wrap">
             <span className="flex items-center gap-1.5">
-              <span className="size-2.5 rounded-full bg-success" /> Correct
+              <span className="size-2.5 rounded-full bg-success" /> {t("qbank.home.correct")}
             </span>
             <span className="flex items-center gap-1.5">
-              <span className="size-2.5 rounded-full bg-destructive" /> Incorrect
+              <span className="size-2.5 rounded-full bg-destructive" /> {t("qbank.home.incorrect")}
             </span>
             <span className="flex items-center gap-1.5">
-              <span className="size-2.5 rounded-full bg-muted-foreground/30" /> Unanswered
+              <span className="size-2.5 rounded-full bg-muted-foreground/30" /> {t("qbank.home.unanswered")}
             </span>
           </div>
         </div>
 
         <div className="qbank-card">
           <h3 className="text-base font-semibold mb-3 flex items-center gap-2">
-            <ListChecks className="size-4 text-primary" /> Question Review
+            <ListChecks className="size-4 text-primary" /> {t("qbank.home.questionReview")}
           </h3>
           <div className="space-y-2">
             {session.questions.map((q, i) => {
