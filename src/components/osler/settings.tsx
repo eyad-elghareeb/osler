@@ -414,33 +414,27 @@ export function ThemeSettingsSection() {
   const builtinThemes = availableThemes.filter((th) => th.id === "dark" || th.id === "light");
   const customThemes = availableThemes.filter((th) => th.id !== "dark" && th.id !== "light");
 
-  const swatchColors: Record<string, string[]> = {};
-  for (const th of availableThemes) {
-    const cfg = getConfig();
-    const custom = cfg.themes.custom.find((c) => c.id === th.id);
-    if (custom) {
-      swatchColors[th.id] = [
-        custom.background ?? (th.variant === "dark" ? "oklch(0.14 0.018 260)" : "oklch(0.99 0.005 240)"),
-        custom.primary ?? (th.variant === "dark" ? "oklch(0.58 0.14 245)" : "oklch(0.38 0.09 255)"),
-        custom.accent ?? (th.variant === "dark" ? "oklch(0.45 0.12 250)" : "oklch(0.7 0.12 240)"),
-        custom.foreground ?? (th.variant === "dark" ? "oklch(0.96 0.005 240)" : "oklch(0.18 0.02 250)"),
-      ];
-    } else {
-      swatchColors[th.id] = th.variant === "dark"
-        ? ["oklch(0.14 0.018 260)", "oklch(0.58 0.14 245)", "oklch(0.45 0.12 250)", "oklch(0.96 0.005 240)"]
-        : ["oklch(0.99 0.005 240)", "oklch(0.38 0.09 255)", "oklch(0.7 0.12 240)", "oklch(0.18 0.02 250)"];
-    }
-  }
+  const swatchColors: Record<string, string[]> = Object.fromEntries(
+    availableThemes.map((th) => [
+      th.id,
+      ["var(--background)", "var(--primary)", "var(--accent)", "var(--foreground)"],
+    ]),
+  );
 
   const renderThemeCard = (th: { id: string; name: string; variant: "dark" | "light" }) => {
     const active = th.id === theme;
-    const colors = swatchColors[th.id] ?? ["oklch(0.5 0 0)", "oklch(0.5 0.14 245)", "oklch(0.5 0.12 250)", "oklch(0.5 0 0)"];
+    const colors = swatchColors[th.id] ?? ["var(--background)", "var(--primary)", "var(--accent)", "var(--foreground)"];
+    const themeScope = th.id === "dark" || th.id === "light" ? th.id : `theme-${th.id}`;
     return (
-      <button
+      <Button
         key={th.id}
+        type="button"
+        variant="ghost"
+        aria-label={`${t("settings.theme.selectTheme")}: ${th.name}`}
+        aria-pressed={active}
         onClick={() => { haptic("light"); setThemeId(th.id); }}
         className={cn(
-          "relative text-start p-3 rounded-xl border-2 transition-all group",
+          "relative h-auto w-full justify-start text-start p-3 rounded-xl border-2 transition-all group",
           active
             ? "border-primary ring-2 ring-primary/20 bg-primary/5"
             : "border-border hover:border-primary/40 bg-card hover:bg-card/80",
@@ -451,7 +445,7 @@ export function ThemeSettingsSection() {
           {colors.map((c, i) => (
             <div
               key={i}
-              className="size-6 rounded-full border border-black/10 shadow-sm"
+              className={cn("size-6 rounded-full border border-border shadow-sm", themeScope)}
               style={{ backgroundColor: c }}
             />
           ))}
@@ -461,10 +455,7 @@ export function ThemeSettingsSection() {
         <div className="flex items-center gap-2">
           <span className="text-sm font-semibold truncate">{th.name}</span>
           <span className={cn(
-            "text-[10px] px-1.5 py-0.5 rounded-full font-medium shrink-0",
-            th.variant === "dark"
-              ? "bg-zinc-700 text-zinc-200"
-              : "bg-zinc-200 text-zinc-700",
+            "text-[10px] px-1.5 py-0.5 rounded-full font-medium shrink-0 bg-muted text-muted-foreground",
           )}>
             {th.variant === "dark" ? t("settings.theme.darkVariant") : t("settings.theme.lightVariant")}
           </span>
@@ -478,7 +469,7 @@ export function ThemeSettingsSection() {
             </div>
           </div>
         )}
-      </button>
+      </Button>
     );
   };
 
@@ -512,7 +503,7 @@ export function ThemeSettingsSection() {
 
           {/* Custom themes */}
           {customThemes.length > 0 && (
-            <div className="pt-4 border-t border-border/60">
+            <div className="pt-4 border-t border-border">
               <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">
                 {t("settings.theme.customTitle")}
               </h3>
@@ -2603,4 +2594,3 @@ function AccountSettingsSection() {
     </div>
   );
 }
-
