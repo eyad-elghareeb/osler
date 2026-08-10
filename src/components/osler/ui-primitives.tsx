@@ -4,8 +4,9 @@
  * Osler shared UI primitives — the canonical building blocks for hub views.
  *
  * These components encode the design rules documented in `AGENTS.md →
- * Design System`. Always prefer these over re-rolling the same Tailwind
- * string in every component.
+ * Design System` and the adoption playbook in `docs/design-library-roadmap.md`.
+ * Always prefer these over re-rolling the same Tailwind string in every
+ * component.
  *
  * Components exposed:
  *   - <PageHeader>           eyebrow + title + subtitle (block or inline)
@@ -14,6 +15,10 @@
  *   - <LoadingState>         centered spinner + optional caption
  *   - <StatTile>             label + big value + optional icon, semantic colors
  *   - <Card> / <InteractiveCard>  thin wrappers that pin the canonical card recipe
+ *   - <SegmentedControl>     Origin/Coss UI pattern — animated option toggle
+ *   - <FormField>            Origin UI grouped field — label + control + hint/error
+ *   - <MetricBar>            compact labelled progress bar
+ *   - <ChartCard>            wrapper for Recharts/TanStack chart surfaces
  *
  * Why a separate file: every hub view (Dashboard, Learn, QBank, Flashcards,
  * OSCE, Videos, Profile, Settings) used to hand-roll its own version of
@@ -22,8 +27,10 @@
  */
 
 import * as React from "react";
-import { Loader2, type LucideIcon } from "lucide-react";
+import { Loader2, ChevronRight, type LucideIcon } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/lib/utils";
+import { Skeleton } from "@/components/ui/skeleton";
 
 /* ─── PageHeader ─────────────────────────────────────────────────────── */
 
@@ -150,16 +157,63 @@ interface EmptyStateProps {
 
 export function EmptyState({ icon: Icon, title, description, actions, className }: EmptyStateProps) {
   return (
-    <div className={cn("osler-empty", className)}>
+    <motion.div
+      className={cn("osler-empty", className)}
+      initial="hidden"
+      animate="visible"
+      variants={{
+        hidden: {},
+        visible: { transition: { staggerChildren: 0.06, delayChildren: 0.04 } },
+      }}
+    >
       {Icon && (
-        <div className="osler-empty__icon">
+        <motion.div
+          className="osler-empty__icon"
+          variants={{
+            hidden: { opacity: 0, scale: 0.85, y: 4 },
+            visible: {
+              opacity: 1,
+              scale: 1,
+              y: 0,
+              transition: { type: "spring", stiffness: 280, damping: 22 },
+            },
+          }}
+        >
           <Icon className="size-6" />
-        </div>
+        </motion.div>
       )}
-      <h3 className="osler-empty__title">{title}</h3>
-      {description && <p className="osler-empty__body">{description}</p>}
-      {actions && <div className="flex items-center gap-2 mt-2">{actions}</div>}
-    </div>
+      <motion.h3
+        className="osler-empty__title"
+        variants={{
+          hidden: { opacity: 0, y: 4 },
+          visible: { opacity: 1, y: 0, transition: { duration: 0.22, ease: [0.32, 0.72, 0, 1] } },
+        }}
+      >
+        {title}
+      </motion.h3>
+      {description && (
+        <motion.p
+          className="osler-empty__body"
+          variants={{
+            hidden: { opacity: 0, y: 4 },
+            visible: { opacity: 1, y: 0, transition: { duration: 0.22, ease: [0.32, 0.72, 0, 1] } },
+          }}
+        >
+          {description}
+        </motion.p>
+      )}
+      {actions && (
+        <motion.div
+          className="flex items-center gap-2 mt-2"
+          variants={{
+            hidden: { opacity: 0, y: 4 },
+            visible: { opacity: 1, y: 0, transition: { duration: 0.22, ease: [0.32, 0.72, 0, 1] } },
+          }}
+        >
+          {actions}
+        </motion.div>
+      )}
+    </motion.div>
   );
 }
 
@@ -176,10 +230,15 @@ interface LoadingStateProps {
 export function LoadingState({ label, size = "md", className }: LoadingStateProps) {
   const sz = size === "sm" ? "size-5" : size === "lg" ? "size-7" : "size-6";
   return (
-    <div className={cn("osler-loading", className)}>
+    <motion.div
+      className={cn("osler-loading", className)}
+      initial={{ opacity: 0, y: 4 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.22, ease: [0.32, 0.72, 0, 1] }}
+    >
       <Loader2 className={cn(sz, "animate-spin text-muted-foreground")} />
       {label && <span className="text-sm text-muted-foreground">{label}</span>}
-    </div>
+    </motion.div>
   );
 }
 
@@ -222,7 +281,7 @@ export function StatTile({
       className={cn(
         "text-left",
         compact ? "osler-stat-tile--compact" : "osler-stat-tile",
-        onClick && "hover:border-primary/40 transition-colors cursor-pointer",
+        onClick && "cursor-pointer transition-all",
         className,
       )}
     >
@@ -279,5 +338,442 @@ export function InteractiveCard({
       style={animationDelay !== undefined ? { animationDelay: `${animationDelay}ms` } : undefined}
       {...props}
     />
+  );
+}
+
+/* ─── SegmentedControl ────────────────────────────────────────────────
+ * Origin/Coss UI pattern, adapted to Osler tokens. A compact option
+ * toggle with a sliding thumb driven by Framer Motion `layout`. Use for
+ * 2–4 mutually exclusive options in Settings, QBank setup, and Profile.
+ * Pattern source: docs/design-library-roadmap.md § "Upgrade form ergonomics"
+ */
+
+export interface SegmentedOption<T extends string = string> {
+  /** Unique value for this option. */
+  value: T;
+  /** Visible label. */
+  label: React.ReactNode;
+  /** Optional icon rendered before the label. */
+  icon?: LucideIcon;
+  /** Disable this option. */
+  disabled?: boolean;
+}
+
+interface SegmentedControlProps<T extends string = string> {
+  /** Available options. */
+  options: SegmentedOption<T>[];
+  /** Currently selected value. */
+  value: T;
+  /** Called when the user picks an option. */
+  onChange: (value: T) => void;
+  /** Optional accessible label for the group. */
+  label?: string;
+  /** Stretch to fill the parent width. */
+  fullWidth?: boolean;
+  className?: string;
+}
+
+export function SegmentedControl<T extends string = string>({
+  options,
+  value,
+  onChange,
+  label,
+  fullWidth = false,
+  className,
+}: SegmentedControlProps<T>) {
+  return (
+    <div
+      role="radiogroup"
+      aria-label={label}
+      className={cn("osler-segmented relative", fullWidth && "w-full", className)}
+    >
+      {options.map((opt) => {
+        const selected = opt.value === value;
+        const Icon = opt.icon;
+        return (
+          <button
+            key={opt.value}
+            type="button"
+            role="radio"
+            aria-checked={selected}
+            disabled={opt.disabled}
+            onClick={() => !opt.disabled && onChange(opt.value)}
+            className={cn(
+              "osler-segmented__item relative z-10",
+              fullWidth && "flex-1",
+            )}
+          >
+            {selected && (
+              <motion.span
+                layoutId={`seg-thumb-${label ?? "anon"}`}
+                className="osler-segmented__thumb"
+                transition={{ type: "spring", stiffness: 380, damping: 30 }}
+              />
+            )}
+            {Icon && <Icon className="size-3.5" />}
+            <span>{opt.label}</span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+/* ─── FormField ───────────────────────────────────────────────────────
+ * Origin UI grouped field pattern. Wraps a label + control + optional
+ * description / error / hint with consistent vertical rhythm. The inner
+ * control can be any input / select / textarea — FormField just provides
+ * the layout and a `htmlFor` link.
+ *
+ * Pattern source: docs/design-library-roadmap.md § "Upgrade form ergonomics"
+ */
+
+interface FormFieldProps {
+  /** `id` of the input control this label is for. Required for a11y. */
+  htmlFor?: string;
+  /** Visible label text. */
+  label: React.ReactNode;
+  /** Optional lucide icon rendered before the label. */
+  icon?: LucideIcon;
+  /** Optional muted description shown between label and control. */
+  description?: React.ReactNode;
+  /** When set, the field is marked invalid and the message is shown. */
+  error?: React.ReactNode;
+  /** Optional muted hint shown below the control (e.g. "12 characters minimum"). */
+  hint?: React.ReactNode;
+  /** Mark the label with a required asterisk. */
+  required?: boolean;
+  /** The control element. */
+  children: React.ReactNode;
+  className?: string;
+}
+
+export function FormField({
+  htmlFor,
+  label,
+  icon: Icon,
+  description,
+  error,
+  hint,
+  required = false,
+  children,
+  className,
+}: FormFieldProps) {
+  return (
+    <div className={cn("osler-form-field", className)}>
+      <label htmlFor={htmlFor} className="osler-form-field__label">
+        {Icon && <Icon className="size-3.5 text-muted-foreground" />}
+        <span>{label}</span>
+        {required && <span className="text-destructive">*</span>}
+      </label>
+      {description && <p className="osler-form-field__description">{description}</p>}
+      {children}
+      {error ? (
+        <p className="osler-form-field__error">{error}</p>
+      ) : hint ? (
+        <p className="osler-form-field__hint">{hint}</p>
+      ) : null}
+    </div>
+  );
+}
+
+/* ─── MetricBar ───────────────────────────────────────────────────────
+ * Compact labelled progress bar. Use inside StatTile-like surfaces to
+ * show a percentage or ratio without taking the room of a full chart.
+ */
+
+interface MetricBarProps {
+  /** Current value (0..max). */
+  value: number;
+  /** Max value. Defaults to 100. */
+  max?: number;
+  /** Semantic color for the fill. Defaults to primary. */
+  color?: "primary" | "success" | "warning" | "destructive" | "info";
+  /** Optional accessible label. */
+  label?: string;
+  className?: string;
+}
+
+const METRIC_BAR_COLOR: Record<NonNullable<MetricBarProps["color"]>, string> = {
+  primary: "bg-primary",
+  success: "bg-success",
+  warning: "bg-warning",
+  destructive: "bg-destructive",
+  info: "bg-info",
+};
+
+export function MetricBar({
+  value,
+  max = 100,
+  color = "primary",
+  label,
+  className,
+}: MetricBarProps) {
+  const pct = max > 0 ? Math.min(100, Math.max(0, (value / max) * 100)) : 0;
+  return (
+    <div
+      role="progressbar"
+      aria-valuenow={value}
+      aria-valuemin={0}
+      aria-valuemax={max}
+      aria-label={label}
+      className={cn("osler-metric-bar", className)}
+    >
+      <div
+        className={cn("osler-metric-bar__fill", METRIC_BAR_COLOR[color])}
+        style={{ width: `${pct}%` }}
+      />
+    </div>
+  );
+}
+
+/* ─── ChartCard ───────────────────────────────────────────────────────
+ * Shared analytics surface — see analytics-primitives.tsx for the full
+ * chart vocabulary (ChartContainer, ChartTooltip, ChartEmpty, etc.).
+ * ChartCard is the lightweight wrapper for embedding a chart + title
+ * + optional actions in any hub view.
+ */
+
+interface ChartCardProps extends Omit<React.HTMLAttributes<HTMLDivElement>, "title"> {
+  title?: React.ReactNode;
+  subtitle?: React.ReactNode;
+  actions?: React.ReactNode;
+  /** Compact variant — smaller padding for dense dashboards. */
+  compact?: boolean;
+}
+
+export function ChartCard({
+  title,
+  subtitle,
+  actions,
+  compact = false,
+  className,
+  children,
+  ...props
+}: ChartCardProps) {
+  return (
+    <div
+      className={cn("osler-chart-card", compact && "p-3", className)}
+      {...props}
+    >
+      {(title || actions) && (
+        <div className="osler-chart-card__header">
+          <div className="min-w-0">
+            {title && <h3 className="osler-chart-card__title truncate">{title}</h3>}
+            {subtitle && <p className="osler-chart-card__subtitle truncate">{subtitle}</p>}
+          </div>
+          {actions && <div className="flex items-center gap-1.5 shrink-0">{actions}</div>}
+        </div>
+      )}
+      <div className="osler-chart-card__body">{children}</div>
+    </div>
+  );
+}
+
+/* ─── AnimatedDisclosure (Motion Primitives pattern) ──────────────────
+ * Adapts the Motion Primitives "disclosure" pattern: an inline header
+ * button that toggles a smooth height + opacity transition on the body.
+ * Use for Settings sections, QBank explanation panels, and any
+ * expandable content where Accordion (which is one-of-many) is too
+ * restrictive.
+ *
+ * Pattern source: `docs/design-library-roadmap.md` § "Establish an
+ * interaction layer" — disclosure is listed as a high-value first
+ * candidate.
+ */
+
+interface AnimatedDisclosureProps {
+  /** Visible label for the trigger. */
+  label: React.ReactNode;
+  /** Optional icon rendered before the label. */
+  icon?: LucideIcon;
+  /** Controlled open state. When omitted, the component is uncontrolled. */
+  open?: boolean;
+  /** Initial open state for uncontrolled usage. Defaults to false. */
+  defaultOpen?: boolean;
+  /** Called when the open state changes. */
+  onOpenChange?: (open: boolean) => void;
+  /** Optional right-aligned actions rendered in the header (e.g. a "Edit" button). */
+  actions?: React.ReactNode;
+  /** The expandable content. */
+  children: React.ReactNode;
+  className?: string;
+}
+
+export function AnimatedDisclosure({
+  label,
+  icon: Icon,
+  open: controlledOpen,
+  defaultOpen = false,
+  onOpenChange,
+  actions,
+  children,
+  className,
+}: AnimatedDisclosureProps) {
+  const [internalOpen, setInternalOpen] = React.useState(defaultOpen);
+  const isControlled = controlledOpen !== undefined;
+  const open = isControlled ? controlledOpen : internalOpen;
+
+  const toggle = React.useCallback(() => {
+    const next = !open;
+    if (!isControlled) setInternalOpen(next);
+    onOpenChange?.(next);
+  }, [open, isControlled, onOpenChange]);
+
+  return (
+    <div className={cn("osler-card--default", className)}>
+      <div className="flex items-center gap-2">
+        <button
+          type="button"
+          onClick={toggle}
+          aria-expanded={open}
+          className="flex items-center gap-2 flex-1 min-w-0 text-start focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 rounded-md"
+        >
+          {Icon && <Icon className="size-4 text-muted-foreground shrink-0" />}
+          <span className="text-sm font-semibold truncate">{label}</span>
+          <motion.span
+            animate={{ rotate: open ? 90 : 0 }}
+            transition={{ duration: 0.2, ease: [0.32, 0.72, 0, 1] }}
+            className="ms-auto text-muted-foreground shrink-0"
+            aria-hidden
+          >
+            <ChevronRight className="size-4" />
+          </motion.span>
+        </button>
+        {actions && <div className="flex items-center gap-1 shrink-0">{actions}</div>}
+      </div>
+      <AnimatePresence initial={false}>
+        {open && (
+          <motion.div
+            key="content"
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: "auto" }}
+            exit={{ opacity: 0, height: 0 }}
+            transition={{ duration: 0.25, ease: [0.32, 0.72, 0, 1] }}
+            className="overflow-hidden"
+          >
+            <div className="mt-3 pt-3 border-t border-border">{children}</div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
+
+/* ─── SkeletonText / SkeletonCard (21st.dev-inspired) ─────────────────
+ * Composed skeleton patterns for the most common loading layouts:
+ * a paragraph of varied-width lines, and a card with header + body.
+ * Saves every view from re-rolling the same skeleton recipe.
+ */
+
+interface SkeletonTextProps {
+  /** Number of lines. Defaults to 3. */
+  lines?: number;
+  className?: string;
+}
+
+export function SkeletonText({ lines = 3, className }: SkeletonTextProps) {
+  return (
+    <div className={cn("flex flex-col gap-2", className)}>
+      {Array.from({ length: lines }).map((_, i) => (
+        <Skeleton
+          key={i}
+          className="h-3"
+          style={{ width: i === lines - 1 ? "60%" : "100%" }}
+        />
+      ))}
+    </div>
+  );
+}
+
+interface SkeletonCardProps {
+  /** Show the header icon + title placeholder. Defaults to true. */
+  header?: boolean;
+  /** Number of body lines. Defaults to 3. Set to 0 for header-only. */
+  lines?: number;
+  className?: string;
+}
+
+export function SkeletonCard({ header = true, lines = 3, className }: SkeletonCardProps) {
+  return (
+    <div className={cn("osler-card--default", className)}>
+      {header && (
+        <div className="flex items-center gap-2 mb-3">
+          <Skeleton className="size-8 rounded-lg" />
+          <div className="flex flex-col gap-1.5 flex-1">
+            <Skeleton className="h-3 w-1/3" />
+            <Skeleton className="h-2.5 w-1/2" />
+          </div>
+        </div>
+      )}
+      {lines > 0 && <SkeletonText lines={lines} />}
+    </div>
+  );
+}
+
+/* ─── HubSkeleton ─────────────────────────────────────────────────────
+ * Premium loading state for hub views (Dashboard, Learn, QBank, etc.).
+ * Replaces the centered spinner with a structural skeleton that mirrors
+ * the real layout: page header, stat tile row, section heading, and a
+ * grid of skeleton cards. Reads as "content arriving" instead of "loading".
+ *
+ * Pattern source: 21st.dev-inspired shimmer + the Osler hub layout
+ * structure documented in `AGENTS.md → Page layout`.
+ */
+
+interface HubSkeletonProps {
+  /** Number of stat tiles in the top row. Defaults to 4. */
+  statCount?: number;
+  /** Number of cards in the main grid. Defaults to 3. */
+  cardCount?: number;
+  /** Show a hero card above the stats row (e.g. "continue learning"). */
+  hero?: boolean;
+  /** Page header eyebrow + title skeleton. Defaults to true. */
+  header?: boolean;
+  className?: string;
+}
+
+export function HubSkeleton({
+  statCount = 4,
+  cardCount = 3,
+  hero = false,
+  header = true,
+  className,
+}: HubSkeletonProps) {
+  return (
+    <div className={cn("osler-page", className)}>
+      <div className="osler-page__inner--wide">
+        {header && (
+          <div className="mb-6 md:mb-8">
+            <Skeleton className="h-3 w-24 mb-2" />
+            <Skeleton className="h-8 w-64 mb-2" />
+            <Skeleton className="h-4 w-96 max-w-full" />
+          </div>
+        )}
+        {hero && (
+          <Skeleton className="h-32 w-full rounded-xl mb-6" />
+        )}
+        <div
+          className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6"
+          style={{ gridTemplateColumns: `repeat(${Math.min(statCount, 4)}, minmax(0, 1fr))` }}
+        >
+          {Array.from({ length: statCount }).map((_, i) => (
+            <div key={i} className="osler-stat-tile">
+              <div className="flex items-center justify-between mb-2">
+                <Skeleton className="h-3 w-16" />
+                <Skeleton className="size-4 rounded" />
+              </div>
+              <Skeleton className="h-7 w-20" />
+            </div>
+          ))}
+        </div>
+        <Skeleton className="h-4 w-32 mb-3" />
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+          {Array.from({ length: cardCount }).map((_, i) => (
+            <SkeletonCard key={i} lines={3} />
+          ))}
+        </div>
+      </div>
+    </div>
   );
 }

@@ -4,8 +4,7 @@ import * as React from "react";
 import { Suspense } from "react";
 import dynamic from "next/dynamic";
 import { useSearchParams } from "next/navigation";
-import { LoadingState } from "@/components/osler/ui-primitives";
-import { useI18n } from "@/components/osler/i18n-provider";
+import { HubSkeleton } from "@/components/osler/ui-primitives";
 
 /**
  * Videos hub + player, driven by `?video=<id>`.
@@ -20,14 +19,9 @@ export default function VideosPage() {
   );
 }
 
-function VideosLoadingFallback() {
-  const { t } = useI18n();
-  return <LoadingState label={t("loading.videos")} />;
-}
-
 const VideosStudio = dynamic(
   () => import("@/components/osler/videos-studio").then((m) => ({ default: m.VideosStudio })),
-  { ssr: false, loading: () => <VideosLoadingFallback /> }
+  { ssr: false, loading: () => <HubSkeleton statCount={0} cardCount={6} /> }
 );
 
 function VideosView() {

@@ -88,7 +88,7 @@ export function ExplorerToolbar(props: ExplorerToolbarProps) {
   } = props;
 
   return (
-    <div className={cn("flex flex-wrap items-center gap-1.5 border-b border-border bg-card/40 px-3 py-2", className)}>
+    <div className={cn("flex flex-wrap items-center gap-1.5 border-b border-border bg-card px-3 py-2", className)}>
       {/* Side-panel toggles */}
       <IconActionButton
         icon={PanelLeft}

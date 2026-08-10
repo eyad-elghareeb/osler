@@ -5,9 +5,10 @@ import { Search, ChevronLeft, ChevronRight, type LucideIcon } from "lucide-react
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import { useI18n } from "@/components/osler/i18n-provider";
-import { LoadingState, EmptyState } from "@/components/osler/ui-primitives";
+import { EmptyState } from "@/components/osler/ui-primitives";
 
 interface Column<T> {
   key: string;
@@ -77,7 +78,46 @@ export function AdminTable<T>({
       )}
 
       {loading ? (
-        <LoadingState label={t("admin.table.loading")} />
+        /* Shimmer row loading — mirrors the real table layout (header +
+         * N rows × columns) so the transition to populated content is
+         * seamless. 21st.dev-inspired skeleton pattern. */
+        <div className="rounded-xl border border-border overflow-hidden">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-border bg-muted/40">
+                {columns.map((col) => (
+                  <th
+                    key={col.key}
+                    className={cn(
+                      "px-4 py-2.5 text-start text-xs font-semibold uppercase tracking-wider text-muted-foreground whitespace-nowrap",
+                      col.hideOnMobile && "hidden sm:table-cell",
+                      col.className,
+                    )}
+                  >
+                    {col.label}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {Array.from({ length: 6 }).map((_, i) => (
+                <tr key={i} className="border-b border-border last:border-0">
+                  {columns.map((col, ci) => (
+                    <td
+                      key={ci}
+                      className={cn(
+                        "px-4 py-3",
+                        col.hideOnMobile && "hidden sm:table-cell",
+                      )}
+                    >
+                      <Skeleton className={cn("h-4", ci === 0 ? "w-32" : "w-20")} />
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       ) : data.length === 0 ? (
         <EmptyState
           icon={emptyIcon ?? Search}

@@ -709,6 +709,7 @@ export const en = {
     "settings.language.contentLangDesc":
       "Filter the content packs shown in Q-Bank, Flashcards, and Library. Content packs always render in the language they were authored in — this filter only hides/shows them.",
     "settings.language.contentLangAll": "Show all languages",
+    "settings.language.contentLangOnly": "{name} content only",
     "settings.language.contentLangEn": "English content only",
     "settings.language.contentLangAr": "Arabic content only",
     "settings.language.rtlNote":

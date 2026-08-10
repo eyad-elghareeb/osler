@@ -222,7 +222,7 @@ export function PeerLinkQrPanel({
                 className={cn(
                   "flex items-center gap-2 text-xs p-2 rounded-lg border mt-3",
                   scanResult.success
-                    ? "bg-green-500/10 border-green-500/30 text-green-600 dark:text-green-400"
+                    ? "bg-success-soft border-success/30 text-success"
                     : "bg-destructive/10 border-destructive/30 text-destructive",
                 )}
               >
@@ -254,7 +254,7 @@ export function PeerLinkQrPanel({
             exit={{ opacity: 0, height: 0 }}
             className="overflow-hidden"
           >
-            <div className="mt-3 pt-3 border-t border-border/60">
+            <div className="mt-3 pt-3 border-t border-border">
               <div className="relative mx-auto max-w-[280px] rounded-xl overflow-hidden border border-border bg-black">
                 <video
                   ref={videoRef}

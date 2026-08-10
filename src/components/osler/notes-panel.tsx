@@ -433,7 +433,7 @@ export function NotesPanel({
   const inner = (
     <div className="flex flex-col h-full bg-card text-foreground">
       {/* Header */}
-      <div className="flex items-center gap-3 px-4 md:px-6 py-3 border-b border-border bg-card/40 shrink-0">
+      <div className="flex items-center gap-3 px-4 md:px-6 py-3 border-b border-border bg-card shrink-0">
         <div className="size-9 rounded-full bg-primary/15 text-primary flex items-center justify-center">
           <NotebookPen className="size-4" />
         </div>
@@ -787,7 +787,7 @@ function NoteCard({
           </div>
         )}
       </div>
-      <div className="flex items-center justify-end gap-1 mt-2 pt-2 border-t border-border/40 opacity-0 group-hover:opacity-100 transition-opacity">
+      <div className="flex items-center justify-end gap-1 mt-2 pt-2 border-t border-border opacity-0 group-hover:opacity-100 transition-opacity">
         {onOpenInQBank && (
           <button
             onClick={onOpenInQBank}

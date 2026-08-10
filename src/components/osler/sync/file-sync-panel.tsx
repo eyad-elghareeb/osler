@@ -111,7 +111,7 @@ export function FileSyncPanel() {
           className={cn(
             "flex items-center gap-2 text-xs p-3 rounded-lg border",
             fileResult.success
-              ? "bg-green-500/10 border-green-500/30 text-green-600 dark:text-green-400"
+              ? "bg-success-soft border-success/30 text-success"
               : "bg-destructive/10 border-destructive/30 text-destructive",
           )}
         >

@@ -331,7 +331,7 @@ export function AiAssistant({
   const content = (
     <div className="flex flex-col h-full">
       {/* Header */}
-      <div className="flex items-center gap-3 px-4 md:px-6 py-3 border-b border-border bg-card/40 shrink-0">
+      <div className="flex items-center gap-3 px-4 md:px-6 py-3 border-b border-border bg-card shrink-0">
         <div className="w-9 h-9 rounded-full bg-primary/15 text-primary flex items-center justify-center">
           <Bot className="size-5" />
         </div>
@@ -499,7 +499,7 @@ export function AiAssistant({
           e.preventDefault();
           send(input);
         }}
-        className="border-t border-border bg-card/40 p-3 md:p-4 shrink-0"
+        className="border-t border-border bg-card p-3 md:p-4 shrink-0"
       >
         <div className="flex items-end gap-2">
           <textarea

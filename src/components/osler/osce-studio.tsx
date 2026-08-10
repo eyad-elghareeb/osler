@@ -47,6 +47,7 @@ import { useIsMobile } from "@/hooks/use-mobile";
 import { useLightbox } from "./lightbox-provider";
 import { setImmersiveMode } from "./immersive-mode";
 import { useI18n } from "./i18n-provider";
+import { HubSkeleton } from "./ui-primitives";
 import { ContentCacheButton } from "./content-cache-button";
 import { ContentLangFilter } from "./qbank-studio";
 import { useSwipeBackDismiss } from "@/hooks/use-swipe-back-dismiss";
@@ -124,10 +125,10 @@ function timerState(s: number): "ok" | "warn" | "danger" {
 function diffClass(d: string): string {
   const l = d.toLowerCase();
   return l.includes("found") || l === "easy"
-    ? "border-emerald-500/30 text-emerald-500 bg-emerald-500/10"
+    ? "border-success/30 text-success bg-success-soft"
     : l.includes("adv") || l === "hard"
-    ? "border-red-500/30 text-red-500 bg-red-500/10"
-    : "border-amber-500/30 text-amber-500 bg-amber-500/10";
+    ? "border-destructive/30 text-destructive bg-destructive-soft"
+    : "border-warning/30 text-warning bg-warning-soft";
 }
 
 function userTurnCount(transcript: TranscriptEntry[]): number {
@@ -1356,7 +1357,7 @@ export function OsceStudio({
                           }
                         }}
                         className={cn(
-                          "w-full text-start group relative overflow-hidden bg-card border border-border/60 rounded-xl p-5 hover:border-primary/40 hover:shadow-md transition-all duration-200 active:scale-[0.99] cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
+                          "w-full text-start group relative overflow-hidden bg-card border border-border rounded-xl p-5 hover:border-primary/40 hover:shadow-md transition-all duration-200 active:scale-[0.99] cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
                           (node.lang ?? content.meta.lang) === "ar" && "osler-content-ar",
                         )}
                         dir={(node.lang ?? content.meta.lang) === "ar" ? "rtl" : undefined}
@@ -1392,7 +1393,7 @@ export function OsceStudio({
                             {tags.map((tag) => (
                               <span
                                 key={tag}
-                                className="inline-flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded-full bg-muted/60 text-muted-foreground border border-border/60"
+                                className="inline-flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded-full bg-muted/60 text-muted-foreground border border-border"
                               >
                                 <Tag className="size-2.5" />
                                 {tag}
@@ -1456,7 +1457,7 @@ export function OsceStudio({
             </button>
 
             {/* Header */}
-            <div className="relative overflow-hidden bg-card border border-border/60 rounded-xl p-5 md:p-6 mb-5">
+            <div className="relative overflow-hidden bg-card border border-border rounded-xl p-5 md:p-6 mb-5">
               <div className="absolute top-0 left-0 right-0 h-0.5 bg-gradient-to-r from-primary/60 to-transparent" />
               <div className="flex items-start gap-4">
                 <div className="size-12 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-center shrink-0">
@@ -1479,7 +1480,7 @@ export function OsceStudio({
 
             {/* Patient info */}
             {!isDataInterp && (
-              <div className="bg-card border border-border/60 rounded-xl p-4 mb-4">
+              <div className="bg-card border border-border rounded-xl p-4 mb-4">
                 <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium mb-2">Patient</p>
                 <div className="flex items-center gap-3">
                   <div className="size-10 rounded-full bg-primary/10 border border-primary/20 flex items-center justify-center text-primary font-bold text-sm shrink-0">
@@ -1494,14 +1495,14 @@ export function OsceStudio({
             )}
 
             {/* Task */}
-            <div className="bg-card border border-border/60 rounded-xl p-4 mb-4">
+            <div className="bg-card border border-border rounded-xl p-4 mb-4">
               <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium mb-2">{t("osce.session.yourTask")}</p>
               <p className="text-sm leading-relaxed">{activeCase.task}</p>
             </div>
 
             {/* Data (if data-interp) */}
             {isDataInterp && activeCase.dataPresented?.scenario && (
-              <div className="bg-card border border-border/60 rounded-xl p-4 mb-4">
+              <div className="bg-card border border-border rounded-xl p-4 mb-4">
                 <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium mb-2">{t("osce.session.clinicalScenario")}</p>
                 <p className="text-sm leading-relaxed">{activeCase.dataPresented.scenario}</p>
               </div>
@@ -1519,7 +1520,7 @@ export function OsceStudio({
                 { icon: Activity, val: String(MAX_TURNS), label: t("osce.session.maxTurns") },
                 { icon: BarChart3, val: "AI", label: t("osce.session.examiner") },
               ].map(({ icon: Icon, val, label }) => (
-                <div key={label} className="bg-card border border-border/60 rounded-xl p-3 text-center">
+                <div key={label} className="bg-card border border-border rounded-xl p-3 text-center">
                   <Icon className="size-4 text-primary mx-auto mb-1" />
                   <div className="text-sm font-bold tabular-nums">{val}</div>
                   <div className="text-[10px] text-muted-foreground mt-0.5">{label}</div>
@@ -1529,7 +1530,7 @@ export function OsceStudio({
 
             {/* Station navigation (if multiple) */}
             {stations.length > 1 && (
-              <div className="bg-card border border-border/60 rounded-xl p-4 mb-4">
+              <div className="bg-card border border-border rounded-xl p-4 mb-4">
                 <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium mb-3">
                   {t("osce.session.stations", { n: stations.length })}
                 </p>
@@ -1547,7 +1548,7 @@ export function OsceStudio({
                         "h-8 px-3 rounded-md text-xs font-medium border transition-colors",
                         i === activeIdx
                           ? "bg-primary/10 border-primary/30 text-primary"
-                          : "border-border/60 text-muted-foreground hover:border-primary/30 hover:text-foreground"
+                          : "border-border text-muted-foreground hover:border-primary/30 hover:text-foreground"
                       )}
                     >
                       {i + 1}. {s.title}
@@ -1679,7 +1680,7 @@ export function OsceStudio({
     return (
       <motion.div className="fixed inset-0 z-50 bg-background flex flex-col overflow-hidden" {...conversationDismiss}>
         {/* Header */}
-        <header className="flex items-center gap-2 px-3 py-2 bg-card/80 border-b border-border/60 shrink-0 backdrop-blur-sm">
+        <header className="flex items-center gap-2 px-3 py-2 bg-card/60 backdrop-blur-md border-b border-border shrink-0">
           <button
             onClick={() => { stopTimer(); setPhase("lobby"); }}
             className="size-8 rounded-md hover:bg-muted/60 flex items-center justify-center shrink-0 transition-colors"
@@ -1694,14 +1695,14 @@ export function OsceStudio({
             <div className="text-[10px] text-muted-foreground truncate">{activeCase.specialty}</div>
           </div>
           {/* Timer */}
-          <div className="flex items-center gap-1 shrink-0 px-2 py-1 rounded-md bg-muted/40 border border-border/60">
+          <div className="flex items-center gap-1 shrink-0 px-2 py-1 rounded-md bg-muted/40 border border-border">
             <Clock className="size-3 text-muted-foreground" />
             <span
               className={cn(
                 "text-sm font-bold tabular-nums",
-                timerState(timerRemaining) === "ok" && "text-emerald-500",
-                timerState(timerRemaining) === "warn" && "text-amber-500",
-                timerState(timerRemaining) === "danger" && "text-red-500 animate-pulse"
+                timerState(timerRemaining) === "ok" && "text-success",
+                timerState(timerRemaining) === "warn" && "text-warning",
+                timerState(timerRemaining) === "danger" && "text-destructive animate-pulse"
               )}
             >
               {formatTime(timerRemaining)}
@@ -1714,9 +1715,9 @@ export function OsceStudio({
           <div
             className={cn(
               "h-full transition-all duration-1000",
-              timerState(timerRemaining) === "ok" && "bg-emerald-500",
-              timerState(timerRemaining) === "warn" && "bg-amber-500",
-              timerState(timerRemaining) === "danger" && "bg-red-500"
+              timerState(timerRemaining) === "ok" && "bg-success",
+              timerState(timerRemaining) === "warn" && "bg-warning",
+              timerState(timerRemaining) === "danger" && "bg-destructive"
             )}
             style={{ width: (timerRemaining / stationDuration) * 100 + "%" }}
           />
@@ -1729,7 +1730,7 @@ export function OsceStudio({
               initial={{ opacity: 0, height: 0 }}
               animate={{ opacity: 1, height: "auto" }}
               exit={{ opacity: 0, height: 0 }}
-              className="bg-red-500/10 border-b border-red-500/20 text-red-500 text-xs font-medium text-center py-1.5 shrink-0"
+              className="bg-destructive-soft border-b border-destructive/20 text-destructive text-xs font-medium text-center py-1.5 shrink-0"
             >
               Time expired — submit for examiner feedback
             </motion.div>
@@ -1741,11 +1742,11 @@ export function OsceStudio({
           {/* Sidebar (desktop) */}
           {!isMobile && (
             <aside
-              className="bg-card/40 border-r border-border/60 flex flex-col gap-3 p-3 overflow-y-auto shrink-0"
+              className="bg-card border-r border-border flex flex-col gap-3 p-3 overflow-y-auto shrink-0"
               style={{ width: SIDEBAR_WIDTH }}
             >
               {/* Patient card */}
-              <div className="bg-card border border-border/60 rounded-lg p-3">
+              <div className="bg-card border border-border rounded-lg p-3">
                 <div className="flex items-center gap-2.5">
                   <div className="size-8 rounded-full bg-primary/10 border border-primary/20 flex items-center justify-center text-primary font-semibold text-xs shrink-0">
                     {isDataInterp
@@ -1766,7 +1767,7 @@ export function OsceStudio({
               </div>
 
               {/* Progress */}
-              <div className="bg-card border border-border/60 rounded-lg p-3 space-y-2">
+              <div className="bg-card border border-border rounded-lg p-3 space-y-2">
                   <div className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground">{t("osce.home.progress")}</div>
                 <div className="flex justify-between text-[11px]">
                   <span className="text-muted-foreground">Questions</span>
@@ -1786,7 +1787,7 @@ export function OsceStudio({
 
               {/* Consultation map */}
               {!isDataInterp && (
-                <div className="bg-card border border-border/60 rounded-lg p-3">
+                <div className="bg-card border border-border rounded-lg p-3">
                   <div className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground mb-2">{t("osce.session.consultationMap")}</div>
                   <div className="flex flex-col gap-0.5">
                     {MAP_STEPS.map(([label, desc], i) => (
@@ -1794,7 +1795,7 @@ export function OsceStudio({
                         key={i}
                         className={cn(
                           "flex items-center gap-1.5 text-[11px] px-1.5 py-1 rounded-md transition-all",
-                          i < mapStep && "text-emerald-500",
+                          i < mapStep && "text-success",
                           i === mapStep && "text-foreground font-semibold bg-primary/10",
                           i > mapStep && "text-muted-foreground"
                         )}
@@ -1802,7 +1803,7 @@ export function OsceStudio({
                         <div
                           className={cn(
                             "size-1.5 rounded-full shrink-0",
-                            i < mapStep ? "bg-emerald-500" : i === mapStep ? "bg-primary" : "bg-border"
+                            i < mapStep ? "bg-success" : i === mapStep ? "bg-primary" : "bg-border"
                           )}
                         />
                         <span>{label}</span>
@@ -1814,7 +1815,7 @@ export function OsceStudio({
 
               {/* Quick prompts */}
               {!isDataInterp && (
-                <div className="bg-card border border-border/60 rounded-lg p-3">
+                <div className="bg-card border border-border rounded-lg p-3">
                   <div className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground mb-2">{t("osce.session.quickPrompts")}</div>
                   <div className="flex flex-col gap-1">
                     {[
@@ -1893,7 +1894,7 @@ export function OsceStudio({
                       className={cn(
                         "px-3.5 py-2.5 rounded-2xl text-sm leading-relaxed",
                         isModel
-                          ? "bg-card border border-border/60 text-foreground rounded-tl-sm"
+                          ? "bg-card border border-border text-foreground rounded-tl-sm"
                           : "bg-primary/10 border border-primary/20 text-foreground rounded-tr-sm"
                       )}
                       dangerouslySetInnerHTML={{ __html: md(m.text) }}
@@ -1915,7 +1916,7 @@ export function OsceStudio({
                       <Stethoscope className="size-2.5" />
                       {isDataInterp ? activeCase.examiner?.name || "Examiner" : speakerName}
                     </div>
-                    <div className="bg-card border border-border/60 rounded-2xl rounded-tl-sm px-4 py-2.5 inline-flex items-center gap-2">
+                    <div className="bg-card border border-border rounded-2xl rounded-tl-sm px-4 py-2.5 inline-flex items-center gap-2">
                       <div className="flex gap-1">
                         <span className="size-1.5 rounded-full bg-primary/50 animate-bounce" style={{ animationDelay: "0s" }} />
                         <span className="size-1.5 rounded-full bg-primary/50 animate-bounce" style={{ animationDelay: "0.15s" }} />
@@ -1962,7 +1963,7 @@ export function OsceStudio({
             </AnimatePresence>
 
             {/* Input area */}
-            <div className="border-t border-border/60 bg-card/80 shrink-0 p-3">
+            <div className="border-t border-border bg-card/60 backdrop-blur-md shrink-0 p-3">
               {/* Voice status */}
               {voiceOn && (
                 <div className="flex items-center gap-2 mb-2 px-1">
@@ -1970,7 +1971,7 @@ export function OsceStudio({
                     className={cn(
                       "size-1.5 rounded-full",
                       voicePhase === "speaking" ? "bg-sky-500 animate-pulse" :
-                      voicePhase === "listening" ? "bg-red-500 animate-pulse" :
+                      voicePhase === "listening" ? "bg-destructive animate-pulse" :
                       "bg-muted-foreground"
                     )}
                   />
@@ -1989,8 +1990,8 @@ export function OsceStudio({
                   className={cn(
                     "size-10 rounded-lg border flex items-center justify-center shrink-0 transition-all",
                     voiceOn
-                      ? "bg-red-500/10 border-red-500/30 text-red-500 hover:bg-red-500/20"
-                      : "border-border/60 bg-muted/40 text-muted-foreground hover:border-primary/40 hover:text-primary hover:bg-primary/5"
+                      ? "bg-destructive-soft border-destructive/30 text-destructive hover:bg-destructive/20"
+                      : "border-border bg-muted/40 text-muted-foreground hover:border-primary/40 hover:text-primary hover:bg-primary/5"
                   )}
                   title={voiceOn ? "Disable voice" : "Enable voice"}
                 >
@@ -2009,7 +2010,7 @@ export function OsceStudio({
                   }}
                   placeholder={isDataInterp ? "Answer the examiner's question…" : "Ask the patient a question…"}
                   rows={1}
-                  className="flex-1 resize-none min-h-[40px] max-h-[120px] px-3 py-2 rounded-lg border border-border/60 bg-background text-sm outline-none focus:border-primary/60 focus:ring-2 focus:ring-primary/10 transition-all placeholder:text-muted-foreground"
+                  className="flex-1 resize-none min-h-[40px] max-h-[120px] px-3 py-2 rounded-lg border border-border bg-background text-sm outline-none focus:border-primary/60 focus:ring-2 focus:ring-primary/10 transition-all placeholder:text-muted-foreground"
                   style={{ height: "auto", minHeight: "40px" }}
                   onInput={(e) => {
                     const el = e.currentTarget;
@@ -2033,10 +2034,10 @@ export function OsceStudio({
                   className={cn(
                     "text-[10px] font-semibold px-2 py-0.5 rounded-full border tabular-nums",
                     turnCount >= WARN_TURNS
-                      ? "border-red-500/30 text-red-500 bg-red-500/10"
+                      ? "border-destructive/30 text-destructive bg-destructive-soft"
                       : turnCount >= Math.floor(WARN_TURNS * 0.7)
-                      ? "border-amber-500/30 text-amber-500 bg-amber-500/10"
-                      : "border-border/60 text-muted-foreground"
+                      ? "border-warning/30 text-warning bg-warning-soft"
+                      : "border-border text-muted-foreground"
                   )}
                 >
                   {turnCount}/{MAX_TURNS}
@@ -2046,7 +2047,7 @@ export function OsceStudio({
                   <button
                     onClick={handleSubmit}
                     disabled={sending || thinking || !transcript.length}
-                    className="flex-1 h-7 px-3 rounded-md border border-border/60 text-[11px] font-medium text-muted-foreground hover:border-primary/40 hover:text-primary transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                    className="flex-1 h-7 px-3 rounded-md border border-border text-[11px] font-medium text-muted-foreground hover:border-primary/40 hover:text-primary transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
                   >
                     {t("osce.session.submitFeedback")}
                   </button>
@@ -2057,14 +2058,14 @@ export function OsceStudio({
                     <button
                       onClick={handleSubmit}
                       disabled={sending || thinking || !transcript.length}
-                      className="h-7 px-3 rounded-md border border-border/60 text-[11px] font-medium text-muted-foreground hover:border-primary/40 hover:text-primary transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                      className="h-7 px-3 rounded-md border border-border text-[11px] font-medium text-muted-foreground hover:border-primary/40 hover:text-primary transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
                     >
                       {t("osce.session.submitFeedback")}
                     </button>
                   )}
                   <button
                     onClick={() => setResetModalOpen(true)}
-                    className="h-7 px-2.5 rounded-md border border-border/60 text-[11px] text-muted-foreground hover:border-red-500/40 hover:text-red-500 transition-colors flex items-center gap-1"
+                    className="h-7 px-2.5 rounded-md border border-border text-[11px] text-muted-foreground hover:border-destructive/40 hover:text-destructive transition-colors flex items-center gap-1"
                   >
                     <RotateCcw className="size-3" />
                     Reset
@@ -2090,7 +2091,7 @@ export function OsceStudio({
                 animate={{ opacity: 1, scale: 1, y: 0 }}
                 exit={{ opacity: 0, scale: 0.95, y: 12 }}
                 transition={{ type: "spring", stiffness: 380, damping: 30 }}
-                className="bg-card border border-border/60 rounded-xl p-6 max-w-sm w-full shadow-lg"
+                className="bg-card border border-border rounded-xl p-6 max-w-sm w-full shadow-lg"
                 onClick={(e) => e.stopPropagation()}
               >
                 <h3 className="text-base font-semibold mb-1">Reset Consultation?</h3>
@@ -2100,7 +2101,7 @@ export function OsceStudio({
                 <div className="flex gap-2 justify-end">
                   <button
                     onClick={() => setResetModalOpen(false)}
-                    className="h-9 px-4 rounded-lg border border-border/60 text-sm font-medium hover:bg-muted/60 transition-colors"
+                    className="h-9 px-4 rounded-lg border border-border text-sm font-medium hover:bg-muted/60 transition-colors"
                   >
                     Cancel
                   </button>
@@ -2183,7 +2184,7 @@ export function OsceStudio({
             </button>
 
             {/* Score banner */}
-            <div className="relative overflow-hidden bg-card border border-border/60 rounded-xl p-5 md:p-6">
+            <div className="relative overflow-hidden bg-card border border-border rounded-xl p-5 md:p-6">
               <div
                 className="absolute top-0 left-0 right-0 h-0.5"
                 style={{
@@ -2205,8 +2206,8 @@ export function OsceStudio({
                     <span className={cn(
                       "text-xs font-semibold px-2 py-0.5 rounded-full border",
                       result.passed
-                        ? "border-emerald-500/30 text-emerald-500 bg-emerald-500/10"
-                        : "border-red-500/30 text-red-500 bg-red-500/10"
+                        ? "border-success/30 text-success bg-success-soft"
+                        : "border-destructive/30 text-destructive bg-destructive-soft"
                     )}>
                       {result.passed ? "Passed" : "Not Passed"}
                     </span>
@@ -2219,12 +2220,12 @@ export function OsceStudio({
             {/* Stats row */}
             <div className="grid grid-cols-4 gap-3">
               {[
-                { val: timeUsedPct + "%", label: "Time Used", color: "text-emerald-500" },
+                { val: timeUsedPct + "%", label: "Time Used", color: "text-success" },
                 { val: String(turnCount), label: "Turns", color: "text-primary" },
-                { val: String(result.asked.length), label: "Covered", color: "text-emerald-500" },
-                { val: String(result.missed.length), label: "Missed", color: "text-red-500" },
+                { val: String(result.asked.length), label: "Covered", color: "text-success" },
+                { val: String(result.missed.length), label: "Missed", color: "text-destructive" },
               ].map((s) => (
-                <div key={s.label} className="bg-card border border-border/60 rounded-xl p-3 text-center">
+                <div key={s.label} className="bg-card border border-border rounded-xl p-3 text-center">
                   <div className={cn("text-base font-bold tabular-nums", s.color)}>{s.val}</div>
                   <div className="text-[10px] text-muted-foreground mt-0.5">{s.label}</div>
                 </div>
@@ -2232,7 +2233,7 @@ export function OsceStudio({
             </div>
 
             {/* Domain scores */}
-            <div className="bg-card border border-border/60 rounded-xl p-4">
+            <div className="bg-card border border-border rounded-xl p-4">
               <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-bold mb-3 flex items-center gap-1.5">
                 <Activity className="size-3" /> Domain Scores
               </p>
@@ -2247,9 +2248,9 @@ export function OsceStudio({
                         <span className="text-xs font-medium">{dd.l}</span>
                         <span className={cn(
                           "text-xs font-bold tabular-nums",
-                          q === "good" && "text-emerald-500",
-                          q === "avg" && "text-amber-500",
-                          q === "low" && "text-red-500"
+                          q === "good" && "text-success",
+                          q === "avg" && "text-warning",
+                          q === "low" && "text-destructive"
                         )}>
                           {v}/{dd.m}
                         </span>
@@ -2258,9 +2259,9 @@ export function OsceStudio({
                         <div
                           className={cn(
                             "h-full rounded-full transition-all",
-                            q === "good" && "bg-emerald-500",
-                            q === "avg" && "bg-amber-500",
-                            q === "low" && "bg-red-500"
+                            q === "good" && "bg-success",
+                            q === "avg" && "bg-warning",
+                            q === "low" && "bg-destructive"
                           )}
                           style={{ width: pct + "%" }}
                         />
@@ -2272,7 +2273,7 @@ export function OsceStudio({
             </div>
 
             {/* Feedback */}
-            <div className="bg-card border border-border/60 rounded-xl p-4">
+            <div className="bg-card border border-border rounded-xl p-4">
               <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-bold mb-2 flex items-center gap-1.5">
                 <Lightbulb className="size-3" /> Examiner Feedback
               </p>
@@ -2286,30 +2287,30 @@ export function OsceStudio({
             </div>
 
             {/* Criteria review */}
-            <div className="bg-card border border-border/60 rounded-xl p-4">
+            <div className="bg-card border border-border rounded-xl p-4">
               <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-bold mb-3 flex items-center gap-1.5">
                 <AlignLeft className="size-3" /> Criteria Review
               </p>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <h4 className="text-[10px] font-bold uppercase tracking-wider text-emerald-500 mb-2">
+                  <h4 className="text-[10px] font-bold uppercase tracking-wider text-success mb-2">
                     Covered ({result.asked.length})
                   </h4>
                   <div className="space-y-1">
                     {(result.asked.length ? result.asked : ["(none matched)"]).map((x, i) => (
-                      <div key={i} className="flex items-start gap-2 text-xs px-2 py-1.5 rounded-md bg-emerald-500/8 border border-emerald-500/20 text-emerald-500">
+                      <div key={i} className="flex items-start gap-2 text-xs px-2 py-1.5 rounded-md bg-success-soft border border-success/20 text-success">
                         <Check className="size-3 mt-0.5 shrink-0" /> {x}
                       </div>
                     ))}
                   </div>
                 </div>
                 <div>
-                  <h4 className="text-[10px] font-bold uppercase tracking-wider text-red-500 mb-2">
+                  <h4 className="text-[10px] font-bold uppercase tracking-wider text-destructive mb-2">
                     Missed ({result.missed.length})
                   </h4>
                   <div className="space-y-1">
                     {(result.missed.length ? result.missed : ["(nothing missed — excellent!)"]).map((x, i) => (
-                      <div key={i} className="flex items-start gap-2 text-xs px-2 py-1.5 rounded-md bg-red-500/8 border border-red-500/20 text-red-500">
+                      <div key={i} className="flex items-start gap-2 text-xs px-2 py-1.5 rounded-md bg-destructive-soft border border-destructive/20 text-destructive">
                         <X className="size-3 mt-0.5 shrink-0" /> {x}
                       </div>
                     ))}
@@ -2320,7 +2321,7 @@ export function OsceStudio({
 
             {/* Achievements */}
             {badges.length > 0 && (
-              <div className="bg-card border border-border/60 rounded-xl p-4">
+              <div className="bg-card border border-border rounded-xl p-4">
                 <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-bold mb-3">
                   Achievements
                 </p>
@@ -2330,8 +2331,8 @@ export function OsceStudio({
                       key={i}
                       className={cn(
                         "flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold border",
-                        b.color === "gold" && "border-amber-500/30 bg-amber-500/10 text-amber-500",
-                        b.color === "green" && "border-emerald-500/30 bg-emerald-500/10 text-emerald-500",
+                        b.color === "gold" && "border-warning/30 bg-warning-soft text-warning",
+                        b.color === "green" && "border-success/30 bg-success-soft text-success",
                         b.color === "blue" && "border-sky-500/30 bg-sky-500/10 text-sky-500",
                         b.color === "purple" && "border-purple-500/30 bg-purple-500/10 text-purple-500"
                       )}
@@ -2352,7 +2353,7 @@ export function OsceStudio({
                   setResult(null);
                   setPhase("conversation");
                 }}
-                className="h-10 px-4 rounded-lg border border-border/60 text-sm font-medium hover:bg-muted/60 transition-colors flex items-center gap-2"
+                className="h-10 px-4 rounded-lg border border-border text-sm font-medium hover:bg-muted/60 transition-colors flex items-center gap-2"
               >
                 <ChevronLeft className="size-3.5" /> Back to Consultation
               </button>
@@ -2373,7 +2374,7 @@ export function OsceStudio({
               </button>
               <button
                 onClick={() => setPhase("select")}
-                className="h-10 px-4 rounded-lg border border-border/60 text-sm font-medium hover:bg-muted/60 transition-colors flex items-center gap-2"
+                className="h-10 px-4 rounded-lg border border-border text-sm font-medium hover:bg-muted/60 transition-colors flex items-center gap-2"
               >
                 <Home className="size-3.5" /> All Scenarios
               </button>
@@ -2384,11 +2385,9 @@ export function OsceStudio({
     );
   }
 
-  /* Fallback loading */
+  /* Fallback loading — premium skeleton that mirrors the OSCE hub layout. */
   return (
-    <div className="flex items-center justify-center h-full">
-      <Loader2 className="size-6 animate-spin text-muted-foreground" />
-    </div>
+    <HubSkeleton statCount={3} cardCount={4} />
   );
 }
 
@@ -2401,14 +2400,14 @@ function DataTablesRenderer({ tables }: { tables?: OsceDataTable[] }) {
     <div>
       <button
         onClick={() => setOpen(!open)}
-        className="w-full px-3 py-2 rounded-lg border border-border/60 bg-card text-xs font-medium flex items-center justify-between hover:border-primary/40 transition-colors"
+        className="w-full px-3 py-2 rounded-lg border border-border bg-card text-xs font-medium flex items-center justify-between hover:border-primary/40 transition-colors"
       >
         Lab Data <ChevronRight className={cn("size-3.5 transition-transform", open && "rotate-90")} />
       </button>
       {open && (
         <div className="mt-2 space-y-2">
           {tables.map((t, i) => (
-            <div key={i} className="bg-muted/20 border border-border/60 rounded-lg p-3 overflow-x-auto">
+            <div key={i} className="bg-muted/20 border border-border rounded-lg p-3 overflow-x-auto">
               {t.title && (
                 <div className="text-[10px] font-bold text-primary uppercase tracking-wider mb-1.5">{t.title}</div>
               )}
@@ -2417,7 +2416,7 @@ function DataTablesRenderer({ tables }: { tables?: OsceDataTable[] }) {
                   <thead>
                     <tr>
                       {t.headers.map((h, hi) => (
-                        <th key={hi} className="text-left px-2 py-1 font-bold text-muted-foreground border-b border-border/40 text-[9px] uppercase tracking-wider">
+                        <th key={hi} className="text-left px-2 py-1 font-bold text-muted-foreground border-b border-border text-[9px] uppercase tracking-wider">
                           {h}
                         </th>
                       ))}
@@ -2454,7 +2453,7 @@ function DataImagesRenderer({ images }: { images?: OsceDataImage[] }) {
     <div>
       <button
         onClick={() => setOpen(!open)}
-        className="w-full px-3 py-2 rounded-lg border border-border/60 bg-card text-xs font-medium flex items-center justify-between hover:border-primary/40 transition-colors"
+        className="w-full px-3 py-2 rounded-lg border border-border bg-card text-xs font-medium flex items-center justify-between hover:border-primary/40 transition-colors"
       >
         Clinical Images ({images.length})
         <ChevronRight className={cn("size-3.5 transition-transform", open && "rotate-90")} />
@@ -2465,7 +2464,7 @@ function DataImagesRenderer({ images }: { images?: OsceDataImage[] }) {
             const src = im.src || im.url || "";
             if (!src) return null;
             return (
-              <div key={i} className="bg-muted/20 border border-border/60 rounded-lg overflow-hidden">
+              <div key={i} className="bg-muted/20 border border-border rounded-lg overflow-hidden">
                 {im.title && (
                   <div className="text-[10px] font-bold text-primary uppercase tracking-wider px-3 pt-3">{im.title}</div>
                 )}

@@ -140,7 +140,7 @@ export default function AdminSettingsPage() {
                             onClick={() => pickSection(s.id)}
                             className={cn(
                               "h-auto w-full justify-start rounded-none px-4 py-3 text-start",
-                              idx > 0 && "border-t border-border/60",
+                              idx > 0 && "border-t border-border",
                             )}
                           >
                             <span className="size-8 rounded-md bg-primary/10 text-primary flex items-center justify-center shrink-0">

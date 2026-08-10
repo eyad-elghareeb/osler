@@ -158,7 +158,7 @@ export function LabValuesSidebar({ open, onClose }: { open?: boolean; onClose: (
           {labs.map((lab) => (
             <div
               key={lab.name}
-              className="rounded-lg border border-border/60 bg-card px-3 py-2 hover:border-primary/30 transition-colors"
+              className="rounded-lg border border-border bg-card px-3 py-2 hover:border-primary/30 transition-colors"
             >
               <div className="flex items-center justify-between gap-2">
                 <span className="text-xs font-medium text-foreground">

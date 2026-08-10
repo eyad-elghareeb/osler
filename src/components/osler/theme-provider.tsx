@@ -130,7 +130,19 @@ export function OslerThemeProvider({ children }: { children: React.ReactNode }) 
     loadConfig().then((cfg) => {
       setCustomThemes(cfg.themes.custom);
       injectCustomThemeStyles(cfg.themes.custom);
-      const resolved = stored ?? cfg.themes.default ?? "dark";
+      // Validate the stored theme id against the available themes. If the
+      // user had previously selected a theme that was since removed from
+      // the config (e.g. "navy-clinic" after the theme cleanup), fall
+      // back to the configured default instead of leaving them on a
+      // theme class with no matching CSS.
+      const availableIds = new Set<string>(["dark", "light", ...cfg.themes.custom.map((t) => t.id)]);
+      const valid = stored && availableIds.has(stored);
+      const resolved = (valid ? stored : null) ?? cfg.themes.default ?? "dark";
+      // If we fell back, persist the resolved id so we don't re-evaluate
+      // the stale stored value on every mount.
+      if (stored && !valid && typeof window !== "undefined") {
+        localStorage.setItem("osler-theme", resolved);
+      }
       setThemeState(resolved);
       applyThemeClass(resolved, cfg.themes.custom);
     });

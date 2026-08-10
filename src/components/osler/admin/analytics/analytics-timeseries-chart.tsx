@@ -5,8 +5,15 @@ import {
   Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from "recharts";
 import { useI18n } from "@/components/osler/i18n-provider";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Skeleton } from "@/components/ui/skeleton";
+import { ChartCard } from "@/components/osler/ui-primitives";
+import {
+  ChartContainer,
+  ChartTooltip,
+  ChartEmpty,
+  ChartLoading,
+  ChartLegend,
+  chartSeries,
+} from "@/components/osler/analytics-primitives";
 import type { AnalyticsTimeseries } from "@/components/osler/admin/admin-api";
 
 interface AnalyticsTimeseriesPanelProps {
@@ -14,16 +21,19 @@ interface AnalyticsTimeseriesPanelProps {
   loading: boolean;
 }
 
+// Series keys map to chartSeries(index) so colors read from --chart-1..5
+// semantic tokens (theme-aware). Index keeps the legend swatch in sync
+// with the area fill.
 const SERIES: Array<{
   key: "page_view" | "web_vital" | "js_error" | "api_call" | "route_change";
-  color: string;
+  index: number;
   labelKey: string;
 }> = [
-  { key: "page_view",   color: "var(--chart-1)", labelKey: "admin.analytics.series.pageView" },
-  { key: "api_call",    color: "var(--chart-2)", labelKey: "admin.analytics.series.apiCall" },
-  { key: "web_vital",   color: "var(--chart-3)", labelKey: "admin.analytics.series.webVital" },
-  { key: "route_change",color: "var(--chart-4)", labelKey: "admin.analytics.series.routeChange" },
-  { key: "js_error",    color: "var(--chart-5)", labelKey: "admin.analytics.series.jsError" },
+  { key: "page_view",    index: 0, labelKey: "admin.analytics.series.pageView" },
+  { key: "api_call",     index: 1, labelKey: "admin.analytics.series.apiCall" },
+  { key: "web_vital",    index: 2, labelKey: "admin.analytics.series.webVital" },
+  { key: "route_change", index: 3, labelKey: "admin.analytics.series.routeChange" },
+  { key: "js_error",     index: 4, labelKey: "admin.analytics.series.jsError" },
 ];
 
 export function AnalyticsTimeseriesPanel({ data, loading }: AnalyticsTimeseriesPanelProps) {
@@ -38,32 +48,38 @@ export function AnalyticsTimeseriesPanel({ data, loading }: AnalyticsTimeseriesP
   };
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2 text-base">
+    <ChartCard
+      title={
+        <span className="flex items-center gap-2">
           <TrendingUp className="size-4 text-primary" />
           {t("admin.analytics.timeseries.title")}
-        </CardTitle>
-        <CardDescription>{t("admin.analytics.timeseries.desc")}</CardDescription>
-      </CardHeader>
-      <CardContent>
-        {loading ? (
-          <Skeleton className="h-[280px] w-full rounded-lg" />
-        ) : !data || data.series.length === 0 ? (
-          <div className="h-[280px] flex items-center justify-center text-sm text-muted-foreground">
-            {t("admin.analytics.noData")}
-          </div>
-        ) : (
-          <div className="h-[280px] w-full">
+        </span>
+      }
+      subtitle={t("admin.analytics.timeseries.desc")}
+    >
+      {loading ? (
+        <ChartLoading />
+      ) : !data || data.series.length === 0 ? (
+        <ChartEmpty
+          icon={TrendingUp}
+          title={t("admin.analytics.noData")}
+          description={t("admin.analytics.timeseries.desc")}
+        />
+      ) : (
+        <>
+          <ChartContainer height={280}>
             <ResponsiveContainer width="100%" height="100%">
               <AreaChart data={data.series} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
                 <defs>
-                  {SERIES.map((s) => (
-                    <linearGradient key={s.key} id={`grad-${s.key}`} x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%"  stopColor={s.color} stopOpacity={0.35} />
-                      <stop offset="95%" stopColor={s.color} stopOpacity={0} />
-                    </linearGradient>
-                  ))}
+                  {SERIES.map((s) => {
+                    const color = chartSeries(s.index);
+                    return (
+                      <linearGradient key={s.key} id={`grad-${s.key}`} x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%"  stopColor={color} stopOpacity={0.35} />
+                        <stop offset="95%" stopColor={color} stopOpacity={0} />
+                      </linearGradient>
+                    );
+                  })}
                 </defs>
                 <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" strokeOpacity={0.4} />
                 <XAxis
@@ -80,14 +96,7 @@ export function AnalyticsTimeseriesPanel({ data, loading }: AnalyticsTimeseriesP
                   width={32}
                 />
                 <Tooltip
-                  contentStyle={{
-                    backgroundColor: "var(--background)",
-                    border: "1px solid var(--border)",
-                    borderRadius: 8,
-                    fontSize: 12,
-                  }}
-                  labelStyle={{ color: "var(--muted-foreground)", marginBottom: 4 }}
-                  labelFormatter={(label) => formatX(Number(label))}
+                  content={<ChartTooltip labelFormatter={(label) => formatX(Number(label))} />}
                 />
                 {SERIES.map((s) => (
                   <Area
@@ -95,7 +104,7 @@ export function AnalyticsTimeseriesPanel({ data, loading }: AnalyticsTimeseriesP
                     type="monotone"
                     dataKey={s.key}
                     name={t(s.labelKey as any)}
-                    stroke={s.color}
+                    stroke={chartSeries(s.index)}
                     strokeWidth={1.5}
                     fill={`url(#grad-${s.key})`}
                     isAnimationActive={false}
@@ -103,19 +112,16 @@ export function AnalyticsTimeseriesPanel({ data, loading }: AnalyticsTimeseriesP
                 ))}
               </AreaChart>
             </ResponsiveContainer>
-          </div>
-        )}
-        {!loading && data && (
-          <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs">
-            {SERIES.map((s) => (
-              <span key={s.key} className="flex items-center gap-1.5">
-                <span className="size-2 rounded-sm" style={{ backgroundColor: s.color }} />
-                <span className="text-muted-foreground">{t(s.labelKey as any)}</span>
-              </span>
-            ))}
-          </div>
-        )}
-      </CardContent>
-    </Card>
+          </ChartContainer>
+          <ChartLegend
+            className="mt-3"
+            items={SERIES.map((s) => ({
+              label: t(s.labelKey as any),
+              index: s.index,
+            }))}
+          />
+        </>
+      )}
+    </ChartCard>
   );
 }

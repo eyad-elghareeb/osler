@@ -251,7 +251,7 @@ function AdminShellInner({ children }: AdminShellProps) {
       )}
     >
       {/* Top bar — mirrors main site AppShell header style */}
-      <header className="z-40 shrink-0 h-14 border-b border-border/60 bg-background/80 backdrop-blur-md supports-[backdrop-filter]:bg-background/60 safe-pt">
+      <header className="z-40 shrink-0 h-14 border-b border-border bg-background/80 backdrop-blur-md supports-[backdrop-filter]:bg-background/60 safe-pt">
         <div className="h-full px-3 sm:px-4 flex items-center gap-2 sm:gap-3">
           {/* Sidebar toggle — desktop: collapse/expand; mobile: open slide-in sheet */}
           <Button
@@ -272,12 +272,12 @@ function AdminShellInner({ children }: AdminShellProps) {
             <PanelLeft className="size-4" />
           </Button>
 
-          {/* Logo — same recipe as main AppShell */}
+          {/* Logo — premium recipe: primary-soft tint + subtle elevation */}
           <Link
             href="/admin"
             className="flex items-center gap-2.5 me-1 sm:me-3 shrink-0"
           >
-            <div className="size-8 rounded-lg bg-primary/15 border border-primary/30 flex items-center justify-center">
+            <div className="size-8 rounded-lg bg-primary-soft border border-primary/30 flex items-center justify-center shadow-e1">
               <Activity className="size-4 text-primary" />
             </div>
             <div className="hidden sm:block leading-tight text-start">
@@ -562,7 +562,7 @@ function SidebarLink({
   collapsed: boolean;
   onNavigate?: () => void;
 }) {
-  const { t } = useI18n();
+  const { t, rtl } = useI18n();
   const Icon = item.icon;
   const label = t(item.labelKey as any);
   return (
@@ -574,17 +574,37 @@ function SidebarLink({
       }}
       title={collapsed ? label : undefined}
       className={cn(
-        "relative flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
+        "group relative flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
         collapsed && "justify-center px-0",
         active
-          ? "bg-primary/10 border border-primary/30 text-primary"
-          : "border border-transparent text-muted-foreground hover:bg-accent hover:text-foreground",
+          ? "text-primary"
+          : "text-muted-foreground hover:bg-accent hover:text-foreground",
       )}
     >
-      <Icon className="size-4 shrink-0" />
-      {!collapsed && <span className="flex-1 truncate">{label}</span>}
+      {/* Active indicator — animated inline-start accent bar.
+       * Uses `layoutId` so the bar slides between nav items as the user
+       * navigates (Motion Primitives shared-layout pattern). The tinted
+       * background behind the icon + label is a separate element so the
+       * bar and the tint can animate independently. */}
+      {active && !collapsed && (
+        <motion.span
+          layoutId="admin-nav-active-bar"
+          className="absolute inset-y-1.5 inline-start-0 w-[3px] rounded-full bg-primary"
+          transition={{ type: "spring", stiffness: 380, damping: 30 }}
+          style={{ [rtl ? "right" : "left"]: 0 } as React.CSSProperties}
+        />
+      )}
+      {active && (
+        <motion.span
+          layoutId={collapsed ? "admin-nav-active-tint-collapsed" : "admin-nav-active-tint"}
+          className="absolute inset-0 rounded-lg bg-primary/10 border border-primary/20"
+          transition={{ type: "spring", stiffness: 380, damping: 30 }}
+        />
+      )}
+      <Icon className="size-4 shrink-0 relative" />
+      {!collapsed && <span className="flex-1 truncate relative">{label}</span>}
       {!collapsed && item.badge != null && item.badge > 0 && (
-        <Badge variant="destructive" className="h-5 min-w-5 px-1 text-xs">
+        <Badge variant="destructive" className="h-5 min-w-5 px-1 text-xs relative">
           {item.badge > 99 ? "99+" : item.badge}
         </Badge>
       )}

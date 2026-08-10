@@ -559,7 +559,7 @@ export function ContentStudio({ capabilities }: ContentStudioProps) {
             </div>
 
             {/* Status bar */}
-            <div className="flex shrink-0 items-center gap-2 border-t border-border bg-card/40 px-3 py-1 text-[11px] text-muted-foreground">
+            <div className="flex shrink-0 items-center gap-2 border-t border-border bg-card px-3 py-1 text-[11px] text-muted-foreground">
               <span>{t("admin.studio.statusBar.items", { n: String(filteredItems.length) })}</span>
               {selectedIds.size > 0 && (
                 <>

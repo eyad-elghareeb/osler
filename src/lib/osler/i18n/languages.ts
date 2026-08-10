@@ -2,9 +2,18 @@
  * Osler UI language metadata.
  *
  * Each entry describes one supported UI language. To add a new language:
- *   1. Create `src/lib/osler/i18n/<code>.ts` exporting a `const <code> = { ... }`.
+ *   1. Create `src/lib/osler/i18n/<code>.ts` exporting a `const <code> = { ... }`
+ *      that mirrors the shape of `en.ts` (every key in `en.ts` must be present).
  *   2. Add an entry to `LANGUAGES` below.
  *   3. Import + register it in `src/lib/osler/i18n/index.ts` (one import, one line in STRINGS).
+ *
+ * That's it — the Settings → Language selector and the content-language filter
+ * both derive their options from `LANGUAGES`, so no other file needs editing.
+ *
+ * Optional: add a `settings.language.contentLang<Code>` key to `en.ts` and
+ * `ar.ts` for a custom content-filter label. If absent, the filter falls back
+ * to the generic `settings.language.contentLangOnly` template with the
+ * language's English name interpolated.
  *
  * `UiLang` is derived from `LANGUAGES`, so adding the metadata entry is what
  * makes TypeScript accept the new code as a valid `UiLang`.

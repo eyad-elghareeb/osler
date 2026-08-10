@@ -36,6 +36,7 @@ import {
   SectionHeading,
   StatTile as SharedStatTile,
   type StatTileProps,
+  HubSkeleton,
 } from "./ui-primitives";
 import { toast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
@@ -236,6 +237,14 @@ export function Dashboard({
   return (
     <div className="osler-page">
       <div className="osler-page__inner--wide">
+        {/* Loading skeleton — shown while content + stats hydrate.
+         * Mirrors the real layout (header → hero → stats → cards) so the
+         * transition to populated content is seamless. */}
+        {!data && (
+          <HubSkeleton hero statCount={4} cardCount={3} />
+        )}
+        {data && (
+        <>
         {/* Hero */}
         <motion.div
           initial={{ opacity: 0, y: 8 }}
@@ -301,7 +310,7 @@ export function Dashboard({
             initial={{ opacity: 0, y: 6 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.3, delay: 0.05 }}
-            className="relative overflow-hidden osler-card--roomy mb-6"
+            className="osler-surface-hero osler-accent-start mb-6 p-5 md:p-6"
           >
             <div className="flex items-start justify-between gap-4 flex-wrap">
               <div className="flex-1 min-w-0">
@@ -333,17 +342,17 @@ export function Dashboard({
                   </span>
                 </div>
               </div>
-              <button
-                type="button"
+              <Button
+                size="lg"
                 onClick={() =>
                   continuePack.content &&
                   onOpenPack?.(continuePack.node, continuePack.content)
                 }
-                className="inline-flex items-center gap-1.5 px-4 h-10 rounded-md bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors shrink-0"
+                className="shrink-0"
               >
                 {t("common.resume")}
                 <ArrowRight className={cn("size-4", rtl && "rtl-flip-x")} />
-              </button>
+              </Button>
             </div>
           </motion.div>
         ) : null}
@@ -426,14 +435,15 @@ export function Dashboard({
         {/* Featured articles */}
         <SectionHeading
           actions={
-            <button
-              type="button"
+            <Button
+              variant="link"
+              size="sm"
               onClick={() => onViewChange("library")}
-              className="text-xs text-primary hover:underline flex items-center gap-1"
+              className="text-xs h-auto p-0"
             >
               {t("common.viewAll")}
               <ArrowRight className={cn("size-3", rtl && "rtl-flip-x")} />
-            </button>
+            </Button>
           }
         >
           {t("dash.featuredArticles")}
@@ -450,8 +460,9 @@ export function Dashboard({
               type="button"
               variants={fadeUp}
               whileHover={{ y: -2 }}
+              whileTap={{ scale: 0.99 }}
               onClick={() => onOpenArticle?.(a.file)}
-              className="text-start osler-card--default hover:border-primary/40 hover:bg-primary/5 transition-colors"
+              className="text-start osler-card--default group hover:border-primary/40 hover:shadow-e2 transition-all"
             >
               <div className="flex items-center gap-2 mb-2 text-xs text-muted-foreground">
                 <BookOpen className="size-3.5" />
@@ -462,7 +473,7 @@ export function Dashboard({
                   {a.readTimeMin} min
                 </span>
               </div>
-              <h3 className="text-sm font-semibold mb-1 line-clamp-2">
+              <h3 className="text-sm font-semibold mb-1 line-clamp-2 group-hover:text-primary transition-colors">
                 {a.title}
               </h3>
               <p className="text-xs text-muted-foreground line-clamp-2">
@@ -490,8 +501,9 @@ export function Dashboard({
                   type="button"
                   variants={fadeUp}
                   whileHover={{ y: -2 }}
+                  whileTap={{ scale: 0.99 }}
                   onClick={() => content && onOpenPack?.(node, content)}
-                  className="text-start osler-card--default hover:border-primary/40 transition-colors"
+                  className="text-start osler-card--default group hover:border-primary/40 hover:shadow-e2 transition-all"
                 >
                   <div className="flex items-start gap-3">
                     <div
@@ -529,6 +541,8 @@ export function Dashboard({
             </motion.div>
           </>
         ) : null}
+        </>
+        )}
       </div>
 
     </div>
@@ -579,16 +593,30 @@ function QuickAction({
       onClick={onClick}
       variants={fadeUp}
       whileHover={{ y: -2 }}
-      className="text-start osler-card--default flex items-center gap-3 hover:border-primary/40 transition-colors"
+      whileTap={{ scale: 0.99 }}
+      className="text-start osler-card--default group relative overflow-hidden flex items-center gap-3 hover:border-primary/40 hover:shadow-e2 transition-all"
     >
-      <div className="w-10 h-10 rounded-lg bg-primary/15 text-primary flex items-center justify-center shrink-0">
+      {/* Hover-reveal accent stripe — Cult UI progressive card pattern.
+       * Sits at the inline-start edge and grows from 0 to full height on
+       * hover, drawing the eye to the primary affordance. */}
+      <span
+        aria-hidden
+        className="absolute inset-y-0 inline-start-0 w-[3px] bg-primary opacity-0 scale-y-50 transition-all duration-200 group-hover:opacity-100 group-hover:scale-y-100"
+        style={{ [rtl ? "right" : "left"]: 0 } as React.CSSProperties}
+      />
+      <div className="w-10 h-10 rounded-lg bg-primary-soft text-primary flex items-center justify-center shrink-0 transition-transform duration-200 group-hover:scale-105">
         <Icon className="size-5" />
       </div>
       <div className="flex-1 min-w-0">
         <div className="text-sm font-semibold">{title}</div>
         <div className="text-xs text-muted-foreground">{subtitle}</div>
       </div>
-      <ArrowRight className={cn("size-4 text-muted-foreground shrink-0", rtl && "rtl-flip-x")} />
+      <ArrowRight
+        className={cn(
+          "size-4 text-muted-foreground shrink-0 transition-transform duration-200 group-hover:translate-x-0.5",
+          rtl && "rtl-flip-x",
+        )}
+      />
     </motion.button>
   );
 }

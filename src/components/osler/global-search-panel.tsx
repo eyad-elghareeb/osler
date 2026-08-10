@@ -40,6 +40,7 @@ import { useI18n } from "./i18n-provider";
 import type { StringKey } from "@/lib/osler/i18n";
 import { cn } from "@/lib/utils";
 import { haptic } from "@/lib/osler/native";
+import { Skeleton } from "@/components/ui/skeleton";
 
 interface GlobalSearchPanelProps {
   /** Controlled query — parent persists it across open/close. */
@@ -149,7 +150,7 @@ export function GlobalSearchPanel({
 
   return (
     <div className="flex flex-col">
-      <div className={cn("border-b border-border/60", padCls)}>
+      <div className={cn("border-b border-border", padCls)}>
         <div className="flex items-center gap-2">
           <SearchIcon className="size-4 text-muted-foreground shrink-0" />
           <input
@@ -161,7 +162,7 @@ export function GlobalSearchPanel({
             aria-label={placeholder}
             className="flex-1 bg-transparent outline-none text-sm placeholder:text-muted-foreground min-w-0"
           />
-          <kbd className="text-[10px] px-1.5 py-0.5 rounded border border-border/60 text-muted-foreground shrink-0">
+          <kbd className="text-[10px] px-1.5 py-0.5 rounded border border-border text-muted-foreground shrink-0">
             ESC
           </kbd>
         </div>
@@ -169,8 +170,20 @@ export function GlobalSearchPanel({
 
       <div ref={listRef} className="max-h-[60vh] min-h-[120px] overflow-y-auto medos-scroll p-2">
         {loading ? (
-          <div className="px-3 py-6 text-center text-sm text-muted-foreground">
-            {t("search.searching")}
+          /* 21st.dev-inspired shimmer rows — reads as "results arriving"
+           * rather than a flat "Loading…" string. Three placeholder rows
+           * match the typical result-group height so the panel doesn't
+           * jump when real results land. */
+          <div className="space-y-2 p-1">
+            {[0, 1, 2].map((i) => (
+              <div key={i} className="flex items-center gap-3 px-2 py-2 rounded-md">
+                <Skeleton className="size-7 rounded-md shrink-0" />
+                <div className="flex-1 flex flex-col gap-1.5">
+                  <Skeleton className="h-3.5 w-1/2" />
+                  <Skeleton className="h-2.5 w-1/3" />
+                </div>
+              </div>
+            ))}
           </div>
         ) : !query ? (
           <div className="px-3 py-6 text-center text-sm text-muted-foreground">
@@ -214,10 +227,27 @@ export function GlobalSearchPanel({
                             }}
                             onMouseEnter={() => setActiveIdx(idx)}
                             className={cn(
-                              "w-full text-start px-2 py-2 rounded-md transition-colors flex items-center gap-3",
+                              "relative w-full text-start px-2 py-2 rounded-md transition-colors flex items-center gap-3",
                               isActive ? "bg-primary/10 text-foreground" : "hover:bg-muted/60",
                             )}
                           >
+                            {/* Active indicator — animated inline-start accent.
+                             * 21st.dev command-palette pattern: a 2px bar
+                             * slides in from the inline-start edge when the
+                             * row is active, replacing the static "↵" hint. */}
+                            <AnimatePresence>
+                              {isActive && (
+                                <motion.span
+                                  layoutId="search-active-indicator"
+                                  className="absolute inset-y-1.5 inline-start-0 w-[2px] rounded-full bg-primary"
+                                  initial={{ opacity: 0, scaleY: 0.4 }}
+                                  animate={{ opacity: 1, scaleY: 1 }}
+                                  exit={{ opacity: 0, scaleY: 0.4 }}
+                                  transition={{ duration: 0.18, ease: [0.32, 0.72, 0, 1] }}
+                                  style={{ [rtl ? "right" : "left"]: 0 } as React.CSSProperties}
+                                />
+                              )}
+                            </AnimatePresence>
                             <span className="size-7 rounded-md bg-muted/60 flex items-center justify-center shrink-0">
                               <Icon className="size-3.5 text-muted-foreground" />
                             </span>
@@ -250,14 +280,14 @@ export function GlobalSearchPanel({
       </div>
 
       {flat.length > 0 && (
-        <div className="border-t border-border/60 px-3 py-1.5 text-[10px] text-muted-foreground flex items-center gap-3">
+        <div className="border-t border-border px-3 py-1.5 text-[10px] text-muted-foreground flex items-center gap-3">
           <span className="flex items-center gap-1">
-            <kbd className="px-1 py-0.5 rounded border border-border/60">↑</kbd>
-            <kbd className="px-1 py-0.5 rounded border border-border/60">↓</kbd>
+            <kbd className="px-1 py-0.5 rounded border border-border">↑</kbd>
+            <kbd className="px-1 py-0.5 rounded border border-border">↓</kbd>
             {t("common.previous")} / {t("common.next")}
           </span>
           <span className="flex items-center gap-1">
-            <kbd className="px-1 py-0.5 rounded border border-border/60">↵</kbd>
+            <kbd className="px-1 py-0.5 rounded border border-border">↵</kbd>
             {t("common.confirm")}
           </span>
           <span className="ms-auto">{t("search.countResults", { n: flat.length })}</span>

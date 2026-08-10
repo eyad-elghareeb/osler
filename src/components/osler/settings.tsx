@@ -39,9 +39,11 @@ import {
   Database,
   ShieldCheck,
   Loader2,
+  Puzzle,
 } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { AnimatedDisclosure } from "@/components/osler/ui-primitives";
 import { storage } from "@/lib/osler/storage";
 import { SyncSettingsSection } from "./sync/sync-settings-section";
 import { CloudSyncStatusCard } from "./sync/cloud-sync-status";
@@ -279,7 +281,7 @@ export function Settings({
               <div className="text-[10px] uppercase tracking-wider text-muted-foreground px-1 mb-2">
                 {t("settings.mobileHomeSubtitle")}
               </div>
-              <div className="rounded-lg border border-border/60 overflow-hidden bg-card">
+              <div className="rounded-lg border border-border overflow-hidden bg-card">
                 {SECTIONS.map((s, idx) => {
                   const I = s.icon;
                   return (
@@ -288,7 +290,7 @@ export function Settings({
                       onClick={() => pickSection(s.id)}
                       className={cn(
                         "w-full text-start px-4 py-3 flex items-center gap-3 hover:bg-muted/60 transition-colors",
-                        idx > 0 && "border-t border-border/60",
+                        idx > 0 && "border-t border-border",
                       )}
                     >
                       <span className="size-8 rounded-md bg-primary/10 text-primary flex items-center justify-center shrink-0">
@@ -444,11 +446,66 @@ export function ThemeSettingsSection() {
 
   const builtinFamilies = themeFamilies.filter((family) => family.id === "osler-default");
   const customFamilies = themeFamilies.filter((family) => family.id !== "osler-default");
-  const swatchColors = ["var(--background)", "var(--primary)", "var(--accent)", "var(--foreground)"];
   const activeFamily = themeFamilies.find((family) => family.variants.some((option) => option.id === theme));
   const activeOption = activeFamily?.variants.find((option) => option.id === theme);
   const variantLabel = (variant: "dark" | "light") =>
     variant === "dark" ? t("settings.theme.darkVariant") : t("settings.theme.lightVariant");
+
+  /**
+   * Mini app-surface preview — a richer alternative to flat color dots.
+   * Renders a scaled-down mock of an app surface: background → card →
+   * primary accent bar → muted text line → secondary tint. Reads as
+   * "this is what the theme looks like" instead of "these are its colors".
+   *
+   * The preview is scoped to the theme's CSS class (`.dark`, `.light`,
+   * or `.theme-<id>`) so the CSS variables resolve to the theme's actual
+   * values. A 1px border separates the preview from the button chrome.
+   */
+  const renderThemePreview = (themeScope: string) => (
+    <div
+      className={cn(
+        "w-full h-12 rounded-md border border-border overflow-hidden flex flex-col gap-1 p-1.5",
+        themeScope,
+      )}
+      style={{ backgroundColor: "var(--background)" }}
+      aria-hidden
+    >
+      {/* Card surface row — represents a card on the background */}
+      <div
+        className="h-3 rounded-sm flex items-center px-1 gap-1"
+        style={{ backgroundColor: "var(--card)", border: "1px solid var(--border)" }}
+      >
+        {/* Primary accent dot */}
+        <span
+          className="size-1.5 rounded-full shrink-0"
+          style={{ backgroundColor: "var(--primary)" }}
+        />
+        {/* Muted text line */}
+        <span
+          className="h-0.5 rounded-full flex-1 max-w-[40%]"
+          style={{ backgroundColor: "var(--muted-foreground)", opacity: 0.5 }}
+        />
+      </div>
+      {/* Bottom row — primary bar + secondary tint */}
+      <div className="flex items-center gap-1 h-3">
+        <span
+          className="h-2.5 rounded-sm flex-[3]"
+          style={{ backgroundColor: "var(--primary)" }}
+        />
+        <span
+          className="h-2.5 rounded-sm flex-1"
+          style={{
+            backgroundColor: "var(--primary)",
+            opacity: 0.25,
+          }}
+        />
+        <span
+          className="h-2.5 rounded-sm flex-1"
+          style={{ backgroundColor: "var(--accent)" }}
+        />
+      </div>
+    </div>
+  );
 
   const renderThemeFamily = (family: ThemeFamily) => (
     <div key={family.id} className="rounded-xl border border-border bg-card p-3">
@@ -475,15 +532,7 @@ export function ThemeSettingsSection() {
                 !active && "bg-background",
               )}
             >
-              <span className="flex items-center gap-1.5">
-                {swatchColors.map((color) => (
-                  <span
-                    key={color}
-                    className={cn("size-4 rounded-full border border-border shadow-sm", themeScope)}
-                    style={{ backgroundColor: color }}
-                  />
-                ))}
-              </span>
+              {renderThemePreview(themeScope)}
               <span className="flex items-center justify-between gap-2 text-xs font-medium">
                 <span>{variantLabel(option.variant)}</span>
                 {active && <Check className="size-3.5 shrink-0" />}
@@ -557,10 +606,23 @@ export function LanguageSettingsSection() {
     }),
   );
 
+  // Content-language filter options are derived entirely from `LANGUAGES`
+  // so adding a new language is a one-file edit (languages.ts). The label
+  // falls back to a generic `contentLangOnly` template keyed by the
+  // language's English name, with a per-language override key
+  // (`contentLangEn`, `contentLangAr`, …) when it exists.
   const contentFilterOptions: Array<{ id: ContentLangFilter; label: string }> = [
     { id: "all", label: t("settings.language.contentLangAll") },
-    { id: "en", label: t("settings.language.contentLangEn") },
-    { id: "ar", label: t("settings.language.contentLangAr") },
+    ...UI_LANGS.map((code) => {
+      // Build the per-language override key (e.g. "en" → "contentLangEn").
+      // If the override exists in the i18n table, use it; otherwise fall
+      // back to the generic `contentLangOnly` template with the language's
+      // English name interpolated.
+      const overrideKey = `settings.language.contentLang${code.toUpperCase().slice(0, 1)}${code.slice(1)}` as StringKey;
+      const generic = t("settings.language.contentLangOnly", { name: LANGUAGES[code].name });
+      const override = t(overrideKey);
+      return { id: code, label: override === overrideKey ? generic : override };
+    }),
   ];
 
   return (
@@ -599,7 +661,11 @@ export function LanguageSettingsSection() {
                       active ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground",
                     )}
                   >
-                    {opt.id === "ar" ? <span className="text-sm font-bold">ع</span> : <Globe className="size-4" />}
+                    {/* Show the first letter of the native name for non-Latin
+                     * scripts; use a globe icon for Latin-script languages. */}
+                    {/^[\u0000-\u007F]+$/.test(opt.native)
+                      ? <Globe className="size-4" />
+                      : <span className="text-sm font-bold">{opt.native.charAt(0)}</span>}
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="text-sm font-semibold">{opt.label}</div>
@@ -625,6 +691,10 @@ export function LanguageSettingsSection() {
           <div className="flex flex-wrap gap-2">
             {contentFilterOptions.map((opt) => {
               const active = contentFilter === opt.id;
+              // Look up the language direction for RTL pills. `opt.id` is
+              // either "all" (no dir) or a UiLang code.
+              const langDir = opt.id === "all" ? undefined : LANGUAGES[opt.id as UiLang]?.dir;
+              const isRtl = langDir === "rtl";
               return (
                 <button
                   key={opt.id}
@@ -634,9 +704,9 @@ export function LanguageSettingsSection() {
                     active
                       ? "bg-primary text-primary-foreground border-primary"
                       : "bg-card text-muted-foreground border-border hover:text-foreground hover:border-primary/40",
-                    opt.id === "ar" && !active && "osler-content-ar",
+                    isRtl && !active && "osler-content-ar",
                   )}
-                  dir={opt.id === "ar" ? "rtl" : undefined}
+                  dir={isRtl ? "rtl" : undefined}
                 >
                   {opt.label}
                 </button>
@@ -646,7 +716,7 @@ export function LanguageSettingsSection() {
         </div>
 
         {/* RTL note */}
-        <div className="mt-6 p-3 rounded-lg bg-muted/30 border border-border/60 flex items-start gap-2 text-xs text-muted-foreground">
+        <div className="mt-6 p-3 rounded-lg bg-muted/30 border border-border flex items-start gap-2 text-xs text-muted-foreground">
           <Sparkles className="size-3.5 mt-0.5 shrink-0 text-primary" />
           <span>{t("settings.language.rtlNote")}</span>
         </div>
@@ -958,7 +1028,7 @@ export function AiSettingsSection() {
         )}
 
         {/* ── OSCE Voice Settings ── */}
-        <div className="pt-4 border-t border-border/60">
+        <div className="pt-4 border-t border-border">
           <h3 className="text-sm font-semibold flex items-center gap-2 mb-1">
             <Sparkles className="size-4 text-primary" />
             {t("settings.ai.osceVoice")}
@@ -1005,7 +1075,7 @@ export function AiSettingsSection() {
         </div>
 
         {/* Action bar */}
-        <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-border/60">
+        <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-border">
           <Button size="sm" variant="default" onClick={handleSave} disabled={!isDirty} className="h-8 text-xs">
             {justSaved ? (
               <><Check className="size-3 me-1" /> {t("common.saved")}</>
@@ -1101,7 +1171,7 @@ function ShortcutsSettingsSection() {
                   <h3 className="text-sm font-semibold">{meta.label}</h3>
                   <p className="text-[11px] text-muted-foreground">{meta.description}</p>
                 </div>
-                <div className="rounded-lg border border-border/60 overflow-hidden">
+                <div className="rounded-lg border border-border overflow-hidden">
                   <table className="w-full">
                     <tbody>
                       {actions.map((a, idx) => {
@@ -1115,7 +1185,7 @@ function ShortcutsSettingsSection() {
                           })
                           .join(", ");
                         return (
-                          <tr key={a.id} className={idx > 0 ? "border-t border-border/60" : ""}>
+                          <tr key={a.id} className={idx > 0 ? "border-t border-border" : ""}>
                             <td className="py-2.5 px-3 align-middle w-1/2">
                               <div className="text-sm font-medium">{t(a.labelKey)}</div>
                               <div className="text-[11px] text-muted-foreground">{t(a.descriptionKey)}</div>
@@ -1151,7 +1221,7 @@ function ShortcutsSettingsSection() {
           })}
         </div>
 
-        <div className="flex flex-wrap items-center gap-2 pt-4 mt-5 border-t border-border/60">
+        <div className="flex flex-wrap items-center gap-2 pt-4 mt-5 border-t border-border">
           <Button size="sm" variant="default" onClick={handleSave} disabled={!isDirty} className="h-8 text-xs">
             {justSaved ? (
               <><Check className="size-3 me-1" /> {t("common.saved")}</>
@@ -2130,37 +2200,37 @@ function AboutSettingsSection() {
         </div>
       </Card>
 
-      <Card className="p-4 space-y-3">
-        <div className="flex items-center justify-between gap-2">
-          <div className="text-xs uppercase tracking-wider text-muted-foreground">
-            {t("settings.about.plugins")}
-          </div>
+      <AnimatedDisclosure
+        label={t("settings.about.plugins")}
+        icon={Puzzle}
+        defaultOpen
+        actions={
           <span className="text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded-full border border-border bg-muted/40 text-muted-foreground">
             {t("settings.about.adminControlled")}
           </span>
-        </div>
+        }
+      >
         <div className="flex flex-wrap gap-1.5">
           {enabledPlugins.map((id) => (
-            <span key={id} className="text-xs px-2 py-1 rounded-full border border-primary/30 bg-primary/10 text-primary">
+            <span key={id} className="text-xs px-2 py-1 rounded-full border border-primary/30 bg-primary-soft text-primary">
               {id}
             </span>
           ))}
         </div>
         {disabledPlugins.length > 0 && (
-          <div className="text-xs text-muted-foreground">
+          <div className="text-xs text-muted-foreground mt-2">
             {t("settings.about.disabled", { n: disabledPlugins.length })}: {disabledPlugins.join(", ")}
           </div>
         )}
-        <div className="text-xs text-muted-foreground">
+        <div className="text-xs text-muted-foreground mt-2">
           {t("settings.about.pluginsNote")}
         </div>
-      </Card>
+      </AnimatedDisclosure>
 
-      <Card className="p-4 space-y-3">
-        <div className="flex items-center gap-2 text-xs uppercase tracking-wider text-muted-foreground">
-          <Github className="size-3.5" />
-          {t("settings.about.github")}
-        </div>
+      <AnimatedDisclosure
+        label={t("settings.about.github")}
+        icon={Github}
+      >
         <a
           href={repo}
           target="_blank"
@@ -2170,10 +2240,10 @@ function AboutSettingsSection() {
           {repo}
           <ExternalLink className="size-3" />
         </a>
-        <div className="text-xs text-muted-foreground">
+        <div className="text-xs text-muted-foreground mt-2">
           {t("settings.about.githubDesc")}
         </div>
-      </Card>
+      </AnimatedDisclosure>
 
       <Card className="p-4">
         <div className="text-xs text-muted-foreground">

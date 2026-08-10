@@ -94,8 +94,8 @@ export function NetworkSyncPanel() {
   const statusColor = {
     idle: "text-muted-foreground",
     discovering: "text-primary",
-    connecting: "text-amber-500",
-    connected: "text-green-500",
+    connecting: "text-warning",
+    connected: "text-success",
     error: "text-destructive",
   }[status];
 
@@ -193,7 +193,7 @@ export function NetworkSyncPanel() {
               return (
                 <div
                   key={device.id}
-                  className="flex items-center justify-between p-3 rounded-lg border border-border/60 bg-card hover:border-primary/40 transition-colors"
+                  className="flex items-center justify-between p-3 rounded-lg border border-border bg-card hover:border-primary/40 transition-colors"
                 >
                   <div className="flex items-center gap-3 min-w-0">
                     <div className="size-8 rounded-full bg-primary/10 text-primary flex items-center justify-center shrink-0 text-xs font-bold">
@@ -232,23 +232,23 @@ export function NetworkSyncPanel() {
       {connections.length > 0 && (
         <Card className="p-4">
           <h4 className="text-xs font-semibold text-muted-foreground mb-3 flex items-center gap-2">
-            <Check className="size-3.5 text-green-500" />
+            <Check className="size-3.5 text-success" />
             {t("sync.network.activeConnections", { n: connections.length })}
           </h4>
           <div className="space-y-2">
             {connections.map((c) => (
               <div
                 key={c.peerId}
-                className="flex items-center justify-between p-2.5 rounded-lg border border-border/60 bg-card"
+                className="flex items-center justify-between p-2.5 rounded-lg border border-border bg-card"
               >
                 <div className="flex items-center gap-2 min-w-0">
                   <div
                     className={cn(
                       "size-2 rounded-full shrink-0",
                       c.status === "connected"
-                        ? "bg-green-500"
+                        ? "bg-success"
                         : c.status === "connecting"
-                          ? "bg-amber-500"
+                          ? "bg-warning"
                           : "bg-muted-foreground",
                     )}
                   />

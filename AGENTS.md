@@ -335,11 +335,126 @@ When adding new rich-text rendering (e.g. AI chat messages, notes), reuse `.uwor
 
 These items are documented as known drift and may be cleaned up incrementally. Do not block new work on them, but fix them when you touch the relevant file:
 
-- The QBank session UI (active quiz mode) still uses `text-emerald-500` / `text-amber-500` / `text-red-500` for correct/wrong/flagged indicators. These should eventually migrate to `text-success` / `text-warning` / `text-destructive`.
-- The Flashcard study top bar uses `border-border/60` instead of `border-border`. Migrate when next editing `flashcard-studio.tsx`.
-- The OSCE session sidebar uses `bg-card/40` and `border-border/60`. Migrate when next editing `osce-studio.tsx`.
+- ~~The QBank session UI (active quiz mode) still uses `text-emerald-500` / `text-amber-500` / `text-red-500` for correct/wrong/flagged indicators. These should eventually migrate to `text-success` / `text-warning` / `text-destructive`.~~ **Resolved** — palette colors migrated to semantic tokens across QBank, OSCE, sync panels, library, and article modal.
+- ~~The Flashcard study top bar uses `border-border/60` instead of `border-border`. Migrate when next editing `flashcard-studio.tsx`.~~ **Resolved** — `flashcard-studio.tsx` now uses `border-border bg-card/60 backdrop-blur-md` per the in-session top bar recipe.
+- ~~The OSCE session sidebar uses `bg-card/40` and `border-border/60`. Migrate when next editing `osce-studio.tsx`.~~ **Resolved** — `osce-studio.tsx` migrated to `bg-card` / `bg-card/60 backdrop-blur-md` and semantic status tokens.
 - ~28 unused custom CSS classes are defined in `globals.css` (`.osler-card` system, `.osler-engine-*` layout, `.osler-stat` system, `.qbank-topbar*`, `.qbank-nav-strip*`, `.qbank-choice*`, `.uworld-tree-checkbox`, `.uworld-grid-bg`, `.uworld-pulse`, `.library-toc*`, `.medos-grid-bg`, `.medos-pulse`, `.medos-h-dvh`). Delete them when the namespace consolidation work is scheduled.
-- The `ENGINE_COLORS` map in `dashboard.tsx` duplicates colors that already live in `ENGINE_META` in `@/lib/osler/content`. Refactor to read from `ENGINE_META` instead.
+- ~~The `ENGINE_COLORS` map in `dashboard.tsx` duplicates colors that already live in `ENGINE_META` in `@/lib/osler/content`. Refactor to read from `ENGINE_META` instead.~~ **Resolved** — `ENGINE_COLORS` removed; the dashboard reads from `getEngineMeta()` directly.
+
+### Premium primitives (added per `docs/design-library-roadmap.md`)
+
+The shared primitives below were added to raise the craft of the existing app without introducing a parallel theme, icon set, or animation system. Each one composes the existing shadcn / Osler tokens and is documented in detail at `docs/design-library-roadmap.md`.
+
+| Primitive | Home | Purpose | Pattern source |
+|---|---|---|---|
+| `<SegmentedControl>` | `ui-primitives.tsx` | Compact 2–4 option toggle with a sliding thumb driven by Framer Motion `layout`. Use for Settings, QBank setup, Profile filters. | Origin / Coss UI |
+| `<FormField>` | `ui-primitives.tsx` | Grouped label + control + description / error / hint with consistent vertical rhythm. Composes any input / select / textarea. | Origin UI |
+| `<MetricBar>` | `ui-primitives.tsx` | Compact labelled progress bar for stat tiles and dashboard mini-charts. Reads semantic colors. | Osler |
+| `<ChartCard>` | `ui-primitives.tsx` | Lightweight chart wrapper with title + actions header. Pairs with the analytics primitives below. | Osler |
+| `<ChartContainer>` / `<ChartTooltip>` / `<ChartEmpty>` / `<ChartLoading>` / `<ChartError>` / `<ChartLegend>` / `chartSeries` | `analytics-primitives.tsx` | Shared analytics vocabulary for Recharts: themed tooltip, empty / loading / error states, semantic series colors, accessible legend. | Osler (pre-Tremor wrapper) |
+
+**CSS utility classes** added in `globals.css`:
+
+- `.osler-segmented` + `.osler-segmented__item` + `.osler-segmented__thumb` — SegmentedControl track and thumb.
+- `.osler-form-field` + `__label` / `__description` / `__error` / `__hint` — FormField rhythm.
+- `.osler-metric-bar` + `__fill` — MetricBar track.
+- `.osler-accent-start` — 3px inline-start accent stripe for emphasizing a single card per viewport.
+- `.osler-surface-hero` — slightly elevated card with a subtle primary-tinted radial gradient sheen. Reserved for the dashboard "continue learning" hero.
+- `.osler-chart-card` + `__header` / `__title` / `__subtitle` / `__body` — ChartCard layout.
+
+**Design tokens** added in `globals.css` (mapped in `@theme inline` so Tailwind auto-generates utilities):
+
+- `--shadow-e1` / `--shadow-e2` / `--shadow-e3` / `--shadow-e4` — premium elevation scale. Use via `shadow-e1`, `shadow-e2`, etc.
+- `--shadow-glow` — soft brand glow for a single focal element per viewport.
+- `--border-strong` — slightly stronger border for raised surfaces. Use via `border-border-strong`.
+- `--primary-hover` — primary color at hover state. Use via `bg-primary-hover`.
+- `--primary-soft` / `--success-soft` / `--warning-soft` / `--destructive-soft` / `--info-soft` — semantic soft tints for badges, callouts, and accent backgrounds. Use via `bg-primary-soft`, `bg-success-soft`, etc.
+- `--radius-2xl` — extra-large radius for hero surfaces.
+
+**Motion recipes** added in `@/lib/osler/motion.ts` (Motion Primitives-inspired, all ≤0.3s):
+
+- `listItemEnter` — subtle fade + 4px lift for card grids.
+- `tabIndicator` — spring for shared-layout tab thumbs.
+- `disclosureVariants` — height + opacity for accordion / expandable panels.
+- `feedbackPulse` — single soft ring for acknowledging primary actions.
+- `pressFeedback` — 0.97 scale on tap.
+- `stackedPanelEnter(edge)` — directional enter/exit for sheets, drawers, stacked modals.
+
+**Button enhancements** in `@/components/ui/button.tsx`:
+
+- `default` variant now uses `shadow-e1` at rest, `shadow-e2` on hover, and `active:translate-y-px` for tactile feedback.
+- `outline` variant uses `border-border-strong` for crisper edges and `hover:border-primary/40` for clear affordance.
+- New `loading` prop injects a `Loader2` spinner and force-disables the button. Use on async submits.
+- `data-loading="true"` attribute set when loading, for CSS targeting if needed.
+
+### Component adoptions (per `docs/design-library-roadmap.md` § "A deliberate adoption order")
+
+The following individual components were stepped up by adopting patterns from the roadmap's source libraries. Each adoption composes the existing shadcn / Osler tokens — no parallel theme, icon set, or animation system was introduced.
+
+| Surface | Pattern adopted | Source | Where it lives |
+|---|---|---|---|
+| `<Skeleton>` | Shimmer sweep placeholder (gradient highlight that sweeps across the surface, reads as "content arriving" rather than a flat pulse). Honours `prefers-reduced-motion` and the user's animations toggle. | 21st.dev | `@/components/ui/skeleton.tsx` |
+| `<SkeletonText>` / `<SkeletonCard>` | Composed skeleton patterns for the most common loading layouts (paragraph of varied-width lines; card with header + body). Saves every view from re-rolling the same skeleton recipe. | 21st.dev | `@/components/osler/ui-primitives.tsx` |
+| `<EmptyState>` | Motion Primitives staggered entrance — icon springs in, title + body + actions fade up in sequence. Reduced-motion safe via the `AnimationsProvider` wrapper. | Motion Primitives | `@/components/osler/ui-primitives.tsx` |
+| `<LoadingState>` | Subtle fade + 4px lift on mount. | Motion Primitives | `@/components/osler/ui-primitives.tsx` |
+| `<AnimatedDisclosure>` | Inline header button that toggles a smooth height + opacity transition on the body, with a rotating chevron. Use for Settings sections, QBank explanation panels, and any expandable content where Accordion (one-of-many) is too restrictive. | Motion Primitives | `@/components/osler/ui-primitives.tsx` |
+| Login screen | Ambient primary glow + staggered brand-header entrance (icon spring → title fade → subtitle fade) + premium input focus rings (`border-border-strong` + `focus:ring-2 focus:ring-primary/20`) + form card `shadow-e1`. | Motion Primitives + Origin UI | `@/components/osler/login-screen.tsx` |
+| Dashboard `QuickAction` | Cult UI progressive card pattern: hover-reveal 3px inline-start accent stripe that grows from 50% to 100% scale-y, icon container scales 1.05× on hover, arrow nudges 0.5× inline-end. Reads as "this card is alive" without parallax or glow. | Cult UI | `@/components/osler/dashboard.tsx` |
+| Dashboard featured + recent pack cards | Same progressive hover treatment: `hover:shadow-e2` lift + `whileTap` 0.99 scale + `group-hover:text-primary` on titles. | Cult UI | `@/components/osler/dashboard.tsx` |
+| Global search panel | 21st.dev-inspired command palette: shimmer loading rows (3 placeholder rows match result-group height so the panel doesn't jump), animated inline-start active indicator (`layoutId` shared-layout transition between rows), keyboard nav preserved. | 21st.dev | `@/components/osler/global-search-panel.tsx` |
+| QBank explanation card | Motion Primitives entrance: fade + 6px lift when the explanation reveals. Status header uses `bg-success-soft` / `bg-destructive-soft` instead of `bg-success/10` for a perceptually consistent pair with the foreground color. | Motion Primitives | `@/components/osler/qbank-studio.tsx` |
+| Settings → About section | `<AnimatedDisclosure>` wraps the "Plugins" and "GitHub" subsections so they collapse by default (informational), reducing visual noise on the About page. | Motion Primitives | `@/components/osler/settings.tsx` |
+| `<HubSkeleton>` | Premium loading state for hub views. Mirrors the real layout (header → hero → stats → cards) so the transition to populated content is seamless. Replaces centered spinners in Dashboard, QBank hub, OSCE, Videos. | 21st.dev + Osler | `@/components/osler/ui-primitives.tsx` |
+| Dashboard loading | `<HubSkeleton hero statCount={4} cardCount={3}>` while content + stats hydrate. | 21st.dev | `@/components/osler/dashboard.tsx` |
+| QBank hub + create-test loading | `<HubSkeleton>` replaces the centered spinner. | 21st.dev | `@/components/osler/qbank-studio.tsx` |
+| OSCE hub loading | `<HubSkeleton>` replaces the centered spinner. | 21st.dev | `@/components/osler/osce-studio.tsx` |
+| Videos hub loading | `<HubSkeleton>` for the dynamic import fallback; shimmer video-card grid for the folder-loading state. | 21st.dev | `@/app/(app)/videos/page.tsx`, `@/components/osler/videos-studio.tsx` |
+| Library article loading | Shimmer paragraph skeleton (title + meta + 10 lines) replaces the centered spinner while article content fetches. | 21st.dev | `@/components/osler/library.tsx` |
+| Admin `StatsOverview` | Skeleton stat tiles while the stats fetch is in flight; each populated tile shows a `MetricBar` relating its value to the max across the row. | 21st.dev + Osler | `@/components/osler/admin/stats-overview.tsx` |
+| Admin `AdminTable` | Shimmer row loading — 6 placeholder rows that mirror the real table layout (header + N rows × columns). | 21st.dev | `@/components/osler/admin/admin-table.tsx` |
+| Admin sidebar nav | Motion Primitives shared-layout active indicator — a 3px accent bar + tinted background slides between nav items as the user navigates (`layoutId`). Premium brand block uses `bg-primary-soft` + `shadow-e1`. | Motion Primitives | `@/components/osler/admin/admin-shell.tsx` |
+| Admin content dropzone | Kibo UI-inspired premium dropzone: dashed border on a muted tint with a subtle inner highlight; on drag-over the border turns solid primary, the surface scales 1.005×, and a soft primary glow appears. Icon container uses `bg-primary-soft` and scales 1.1× on drag-active. | Kibo UI | `@/components/osler/admin/content-dropzone.tsx`, `globals.css` |
+| Admin analytics charts | All 5 analytics panels (timeseries, web-vitals, top-pages, api-performance, errors) wrapped with `<ChartCard>` + `<ChartTooltip>` + `<ChartEmpty>` + `<ChartLoading>` + `<ChartLegend>`. Series colors read from `chartSeries(index)` so they're theme-aware. Rating badges use semantic soft-tint tokens. | Osler (pre-Tremor wrapper) | `@/components/osler/admin/analytics/*.tsx` |
+| Admin dashboard loading | `<HubSkeleton>` wrapped in `<Suspense>` as the fallback while `StatsOverview` mounts — the dashboard never shows a bare spinner. | 21st.dev | `@/app/admin/dashboard/page.tsx` |
+| Theme preview | Mini app-surface preview replaces flat color dots in Settings → Appearance. Renders a scaled-down mock (background → card with primary dot + muted text → primary bar + secondary tint + accent) scoped to the theme's CSS class. | Osler | `@/components/osler/settings.tsx` |
+
+### Theming system
+
+Osler ships with **6 curated theme families** (12 variants total): the built-in Dark + Light, plus **5 custom families** each with a distinct primary hue — no two families share the same color identity:
+
+- **Forest Rounds** (dark + light) — green primary, nature-themed.
+- **Crimson ED** (dark + light) — red primary, emergency-medicine-themed.
+- **Midnight** (dark + light) — violet primary, deep indigo dark. Calmest dark.
+- **Slate** (dark + light) — neutral gray, lowest chroma. Distraction-free study.
+- **Warm Sand** (light + dark) — terracotta primary, warm light. Easiest on eyes.
+
+**Removed during cleanup** (documented in `config.ts`):
+- Navy Clinic (dark + light) — near-duplicate of the built-in Dark + Light themes.
+- Cream Journal (light) — byte-identical to Navy Clinic Light.
+- Cream Journal Dark — orphaned after Cream Journal Light was removed.
+
+Each theme is calibrated for AA contrast on its respective background and uses the semantic soft-tint tokens so status callouts read consistently across themes. Themes live in `src/lib/osler/config.ts` under `themes.custom`; the `OslerThemeProvider` injects them at runtime via a `<style>` block. **Stale theme validation**: if a user had previously selected a theme that was since removed (e.g. "navy-clinic"), the provider falls back to the configured default and persists the resolved id — so theme removal never leaves the user on a theme class with no matching CSS. To add another theme, append to the `custom` array — the theme picker in Settings → Appearance picks it up automatically.
+
+**Theme preview** (Settings → Appearance): each theme variant button now shows a mini app-surface preview instead of flat color dots. The preview renders a scaled-down mock of an app surface (background → card with primary accent dot + muted text line → primary bar + secondary tint + accent), scoped to the theme's CSS class so the CSS variables resolve to the theme's actual values. Reads as "this is what the theme looks like" instead of "these are its colors".
+
+### Language selector (data-driven)
+
+The Settings → Language section is now fully data-driven from `LANGUAGES` in `src/lib/osler/i18n/languages.ts`. **Adding a new language is a one-file edit** (well, three files, but no settings code changes):
+
+1. Create `src/lib/osler/i18n/<code>.ts` mirroring `en.ts`.
+2. Add an entry to `LANGUAGES` in `languages.ts`.
+3. Import + register it in `src/lib/osler/i18n/index.ts`.
+
+The UI language selector and the content-language filter both derive their options from `LANGUAGES` automatically. The content-filter label falls back to a generic `settings.language.contentLangOnly` template (`{name} content only`) when a per-language override key (`contentLangEn`, `contentLangAr`, …) is absent — so a new language gets a sensible default label without any i18n work. The language icon (globe vs. first-letter-of-native-name) is auto-detected from whether the native name uses Latin script.
+
+**Adoption rules followed** (per `docs/design-library-roadmap.md` § "Non-negotiable integration contract"):
+
+- Every adopted component composes the existing `@/components/ui` primitives, `cn()`, Lucide icons, and Osler semantic tokens. No new global state mechanism, no second icon set, no parallel theme.
+- Every animation stays ≤0.3s and respects `prefers-reduced-motion` via the `AnimationsProvider` wrapper and the `[data-animations="off"]` CSS escape hatch.
+- Hover-only affordances always enhance — never replace — comprehension. The QuickAction accent stripe, the search active indicator, and the disclosure chevron all have keyboard-focus equivalents (`focus-visible:ring-2 focus-visible:ring-primary/40`).
+- RTL is preserved: the QuickAction accent stripe and the search active indicator both use `inset-inline-start` / `left`/`right` switching via the `rtl` flag from `useI18n()`.
+
+
 
 ---
 

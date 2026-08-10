@@ -633,7 +633,7 @@ export function ContentEditor({ id, rawR2Key, capabilities }: ContentEditorProps
       <div className="flex flex-1 min-h-0 overflow-hidden">
         {/* Metadata sidebar — managed mode only */}
         {!isRawMode && obj && (
-        <aside className="hidden lg:flex w-56 shrink-0 border-e border-border bg-card/40 p-4 text-xs space-y-3 flex-col overflow-y-auto medos-scroll-y">
+        <aside className="hidden lg:flex w-56 shrink-0 border-e border-border bg-card p-4 text-xs space-y-3 flex-col overflow-y-auto medos-scroll-y">
           <div>
             <div className="font-semibold uppercase tracking-wider text-muted-foreground mb-1">
               {t("admin.content.col.type")}

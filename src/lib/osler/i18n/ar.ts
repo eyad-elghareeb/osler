@@ -709,6 +709,7 @@ export const ar = {
     "settings.language.contentLangDesc":
       "يُفلتر الحزم الظاهرة في بنك الأسئلة والبطاقات والمكتبة. تُعرض الحزم دائمًا باللغة التي أُنشئت بها — هذا الفلتر يُخفيها أو يُظهرها فقط.",
     "settings.language.contentLangAll": "إظهار كل اللغات",
+    "settings.language.contentLangOnly": "محتوى {name} فقط",
     "settings.language.contentLangEn": "محتوى إنجليزي فقط",
     "settings.language.contentLangAr": "محتوى عربي فقط",
     "settings.language.rtlNote":

@@ -49,7 +49,7 @@ export function NetworkInfoBadge() {
   // Browser doesn't implement Network Information API (e.g. iOS Safari).
   if (!info.available) {
     return (
-      <div className="rounded-lg border border-dashed border-border/60 bg-muted/30 px-3 py-2 text-[11px] text-muted-foreground">
+      <div className="rounded-lg border border-dashed border-border bg-muted/30 px-3 py-2 text-[11px] text-muted-foreground">
         {t("native.network.unavailable")}
       </div>
     );
@@ -65,16 +65,16 @@ export function NetworkInfoBadge() {
         "rounded-lg border px-3 py-2.5 space-y-2",
         info.online
           ? goodForSync
-            ? "border-green-500/30 bg-green-500/5"
-            : "border-amber-500/30 bg-amber-500/5"
-          : "border-destructive/30 bg-destructive/5",
+            ? "border-success/30 bg-success-soft"
+            : "border-warning/30 bg-warning-soft"
+          : "border-destructive/30 bg-destructive-soft",
       )}
     >
       {/* Top row: type + effective type */}
       <div className="flex items-center gap-3 text-xs">
         <span className="flex items-center gap-1.5 font-medium">
           {info.online ? (
-            <Wifi className={cn("size-3.5", goodForSync ? "text-green-500" : "text-amber-500")} />
+            <Wifi className={cn("size-3.5", goodForSync ? "text-success" : "text-warning")} />
           ) : (
             <WifiOff className="size-3.5 text-destructive" />
           )}
@@ -91,7 +91,7 @@ export function NetworkInfoBadge() {
         )}
 
         {info.saveData && (
-          <span className="ms-auto flex items-center gap-1 text-amber-500 text-[10px] font-medium">
+          <span className="ms-auto flex items-center gap-1 text-warning text-[10px] font-medium">
             <Save className="size-3" />
             {t("native.network.saveData")}
           </span>
@@ -135,7 +135,7 @@ export function NetworkInfoBadge() {
             initial={{ opacity: 0, height: 0 }}
             animate={{ opacity: 1, height: "auto" }}
             exit={{ opacity: 0, height: 0 }}
-            className="flex items-start gap-1.5 text-[10px] text-amber-600 dark:text-amber-400"
+            className="flex items-start gap-1.5 text-[10px] text-warning"
           >
             <AlertTriangle className="size-3 shrink-0 mt-0.5" />
             <span>{t("native.network.syncPoor")}</span>
@@ -146,7 +146,7 @@ export function NetworkInfoBadge() {
             initial={{ opacity: 0, height: 0 }}
             animate={{ opacity: 1, height: "auto" }}
             exit={{ opacity: 0, height: 0 }}
-            className="flex items-start gap-1.5 text-[10px] text-amber-600 dark:text-amber-400"
+            className="flex items-start gap-1.5 text-[10px] text-warning"
           >
             <AlertTriangle className="size-3 shrink-0 mt-0.5" />
             <span>{t("native.network.saveDataOn")}</span>

@@ -2,8 +2,8 @@
 
 import { AlertTriangle } from "lucide-react";
 import { useI18n } from "@/components/osler/i18n-provider";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Skeleton } from "@/components/ui/skeleton";
+import { ChartCard } from "@/components/osler/ui-primitives";
+import { ChartEmpty, ChartLoading } from "@/components/osler/analytics-primitives";
 import { Badge } from "@/components/ui/badge";
 import type { AnalyticsErrors } from "@/components/osler/admin/admin-api";
 
@@ -24,53 +24,55 @@ export function AnalyticsErrorsPanel({ data, loading }: AnalyticsErrorsPanelProp
   const { t } = useI18n();
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2 text-base">
+    <ChartCard
+      title={
+        <span className="flex items-center gap-2">
           <AlertTriangle className="size-4 text-destructive" />
           {t("admin.analytics.errors.title")}
-        </CardTitle>
-        <CardDescription>{t("admin.analytics.errors.desc")}</CardDescription>
-      </CardHeader>
-      <CardContent>
-        {loading ? (
-          <Skeleton className="h-[280px] w-full rounded-lg" />
-        ) : !data || data.items.length === 0 ? (
-          <div className="h-[280px] flex items-center justify-center text-sm text-muted-foreground">
-            {t("admin.analytics.errors.none")}
-          </div>
-        ) : (
-          <ul className="space-y-3">
-            {data.items.map((e, i) => (
-              <li key={`${e.message.slice(0, 60)}-${i}`} className="rounded-lg border border-border p-3">
-                <div className="flex items-start justify-between gap-3 mb-2">
-                  <code className="text-xs font-mono break-all leading-snug flex-1">
-                    {e.message}
-                  </code>
-                  <Badge
-                    variant={e.count > 10 ? "destructive" : "secondary"}
-                    className="shrink-0 font-mono tabular-nums"
-                  >
-                    ×{e.count}
-                  </Badge>
-                </div>
-                <div className="flex items-center gap-3 text-xs text-muted-foreground">
-                  <span>
-                    {t("admin.analytics.errors.lastSeen", { when: timeAgo(e.lastSeen) })}
-                  </span>
-                  <span>·</span>
-                  <span>
-                    {t("admin.analytics.errors.affected", {
-                      paths: e.affectedPaths,
-                      sessions: e.affectedSessions,
-                    })}
-                  </span>
-                </div>
-              </li>
-            ))}
-          </ul>
-        )}
-      </CardContent>
-    </Card>
+        </span>
+      }
+      subtitle={t("admin.analytics.errors.desc")}
+    >
+      {loading ? (
+        <ChartLoading />
+      ) : !data || data.items.length === 0 ? (
+        <ChartEmpty
+          icon={AlertTriangle}
+          title={t("admin.analytics.errors.none")}
+          description={t("admin.analytics.errors.desc")}
+        />
+      ) : (
+        <ul className="space-y-3">
+          {data.items.map((e, i) => (
+            <li key={`${e.message.slice(0, 60)}-${i}`} className="rounded-lg border border-border p-3">
+              <div className="flex items-start justify-between gap-3 mb-2">
+                <code className="text-xs font-mono break-all leading-snug flex-1">
+                  {e.message}
+                </code>
+                <Badge
+                  variant={e.count > 10 ? "destructive" : "secondary"}
+                  className="shrink-0 font-mono tabular-nums"
+                >
+                  ×{e.count}
+                </Badge>
+              </div>
+              <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                <span>
+                  {t("admin.analytics.errors.lastSeen", { when: timeAgo(e.lastSeen) })}
+                </span>
+                <span>·</span>
+                <span>
+                  {t("admin.analytics.errors.affected", {
+                    paths: e.affectedPaths,
+                    sessions: e.affectedSessions,
+                  })}
+                </span>
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+    </ChartCard>
   );
 }
+

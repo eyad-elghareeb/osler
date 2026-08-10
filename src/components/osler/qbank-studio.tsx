@@ -139,7 +139,7 @@ import { haptic } from "@/lib/osler/native";
 import { gradeWithAI, createManualEvaluation, transcribePhoto } from "@/lib/osler/grading";
 import { useI18n } from "./i18n-provider";
 import { NavigationStack } from "./navigation-stack";
-import { PageHeader, SectionHeading, StatTile, EmptyState, LoadingState } from "./ui-primitives";
+import { PageHeader, SectionHeading, StatTile, EmptyState, LoadingState, HubSkeleton } from "./ui-primitives";
 import { FolderTreeNav } from "./folder-tree-nav";
 import type { StringKey } from "@/lib/osler/i18n";
 import { loadUiLang } from "@/lib/osler/i18n";
@@ -1791,9 +1791,7 @@ function ContentTab({
 
   if (!data) {
     return (
-      <div className="flex items-center justify-center py-16">
-        <Loader2 className="size-6 animate-spin text-muted-foreground" />
-      </div>
+      <HubSkeleton statCount={3} cardCount={6} />
     );
   }
 
@@ -2303,9 +2301,7 @@ function CreateTestTab({
 
   if (!data) {
     return (
-      <div className="flex items-center justify-center py-16">
-        <Loader2 className="size-6 animate-spin text-muted-foreground" />
-      </div>
+      <HubSkeleton statCount={0} cardCount={4} />
     );
   }
 
@@ -4439,10 +4435,10 @@ function QuizView({
             spoiling the next question's answer. Uses per-question state
             (qSubmitted, qSelected, qHighlights, qWrittenDraft) so it's
             accurate for any question index.
-            Spacing: mt-3 (tight, not mt-6), border-t border-border/40
+            Spacing: mt-3 (tight, not mt-6), border-t border-border
             (soft separator), py-3 sm:py-4 (compact on mobile). */}
         {interactive && qSubmitted && !useSplitExplanation && (
-          <div className="mt-3 border-t border-border/40 bg-muted/20 py-3 sm:py-4 px-4 sm:px-6 lg:px-8 -mr-1 rounded-lg">
+          <div className="mt-3 border-t border-border bg-muted/20 py-3 sm:py-4 px-4 sm:px-6 lg:px-8 -mr-1 rounded-lg">
             <div className={contentAlignClass}>
               {qIsWritten ? (
                 <WrittenEvaluationPanel
@@ -4489,7 +4485,7 @@ function QuizView({
         {/* Non-MCQ explanation panel — exam mode (not tutor).
             Shown inline in continuous mode for non-MCQ questions. */}
         {interactive && qSubmitted && !qIsMCQ && session.mode !== "tutor" && !useSplitExplanation && (
-          <div className="mt-3 border-t border-border/40 bg-muted/20 py-3 sm:py-4 px-4 sm:px-6 lg:px-8 -mr-1 rounded-lg">
+          <div className="mt-3 border-t border-border bg-muted/20 py-3 sm:py-4 px-4 sm:px-6 lg:px-8 -mr-1 rounded-lg">
             <div className={contentAlignClass}>
               {qIsWritten ? (
                 <WrittenEvaluationPanel
@@ -5242,7 +5238,7 @@ function QuizView({
                                 onOpenArticle(a.file);
                                 setArticleSearchOpen(false);
                               }}
-                              className="w-full text-left text-sm px-4 py-2.5 hover:bg-muted transition-colors flex items-center gap-2 border-b border-border/40 last:border-0"
+                              className="w-full text-left text-sm px-4 py-2.5 hover:bg-muted transition-colors flex items-center gap-2 border-b border-border last:border-0"
                             >
                               <FileText className="size-3.5 shrink-0 text-muted-foreground" />
                               <span className="truncate">{a.title}</span>
@@ -5383,7 +5379,7 @@ function QuizView({
                               onOpenArticle(a.file);
                               setArticleSearchOpen(false);
                             }}
-                            className="w-full text-left text-sm px-4 py-2.5 hover:bg-muted transition-colors flex items-center gap-2 border-b border-border/40 last:border-0"
+                            className="w-full text-left text-sm px-4 py-2.5 hover:bg-muted transition-colors flex items-center gap-2 border-b border-border last:border-0"
                           >
                             <FileText className="size-3.5 shrink-0 text-muted-foreground" />
                             <span className="truncate">{a.title}</span>
@@ -6295,7 +6291,7 @@ function WrittenEvaluationPanel({
       </div>
 
       {/* ── Strengths, gaps, feedback ────────────────────────────── */}
-      <div className="bg-card px-5 py-3 space-y-3 border-b border-border/60">
+      <div className="bg-card px-5 py-3 space-y-3 border-b border-border">
         {draft.evaluation.strengths.length > 0 && (
           <div className="space-y-1">
             {draft.evaluation.strengths.map((s, i) => (
@@ -6325,7 +6321,7 @@ function WrittenEvaluationPanel({
 
       {/* ── Rubric (manual grading only) ─────────────────────────── */}
       {isManual && question.rubric && question.rubric.length > 0 && (
-        <div className="bg-card px-5 py-3 space-y-2 border-b border-border/60">
+        <div className="bg-card px-5 py-3 space-y-2 border-b border-border">
           <h4 className="text-xs font-semibold flex items-center gap-2">
             <ListChecks className="size-3.5 text-primary" />
             {t("qbank.written.selfGradingRubric")}
@@ -6378,7 +6374,7 @@ function WrittenEvaluationPanel({
 
       {/* ── Pass/Fail override ───────────────────────────────────── */}
       {onPassFail && (
-        <div className="bg-card px-5 py-3 border-t border-border/60 flex gap-3">
+        <div className="bg-card px-5 py-3 border-t border-border flex gap-3">
           <button
             type="button"
             onClick={() => onPassFail("pass")}
@@ -6410,7 +6406,7 @@ function WrittenEvaluationPanel({
 
       {/* ── Children evaluations ─────────────────────────────────── */}
       {children.length > 0 && (
-        <div className="bg-card px-5 py-3 border-t border-border/60 space-y-4">
+        <div className="bg-card px-5 py-3 border-t border-border space-y-4">
           <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
             {t("qbank.written.partEvaluations")}
           </h4>
@@ -6677,8 +6673,13 @@ function ExplanationCard({
   const base = item ? questionAssetBase(q, item) : { category: "qbank", path: "" };
   if (nonMcq) {
     return (
-      <div className="rounded-xl border-2 border-success overflow-hidden">
-        <div className="px-4 py-3 flex items-center gap-3 bg-success/10 text-success">
+      <motion.div
+        initial={{ opacity: 0, y: 6 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.25, ease: [0.32, 0.72, 0, 1] }}
+        className="rounded-xl border-2 border-success overflow-hidden"
+      >
+        <div className="px-4 py-3 flex items-center gap-3 bg-success-soft text-success">
           <div className="size-9 rounded-full flex items-center justify-center shrink-0 bg-success text-success-foreground">
             <Sparkles className="size-5" />
           </div>
@@ -6723,7 +6724,7 @@ function ExplanationCard({
             </div>
           )}
         </div>
-      </div>
+      </motion.div>
     );
   }
 
@@ -6732,8 +6733,13 @@ function ExplanationCard({
   const selectedLetter = selected !== undefined ? choiceLetter(selected, lang) : "—";
 
   return (
-    <div className={`rounded-xl border-2 overflow-hidden ${isCorrect ? "border-success" : "border-destructive"}`}>
-      <div className={`px-4 py-3 flex items-center gap-3 ${isCorrect ? "bg-success/10 text-success" : "bg-destructive/10 text-destructive"}`}>
+    <motion.div
+      initial={{ opacity: 0, y: 6 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.25, ease: [0.32, 0.72, 0, 1] }}
+      className={`rounded-xl border-2 overflow-hidden ${isCorrect ? "border-success" : "border-destructive"}`}
+    >
+      <div className={`px-4 py-3 flex items-center gap-3 ${isCorrect ? "bg-success-soft text-success" : "bg-destructive-soft text-destructive"}`}>
         <div className={`size-9 rounded-full flex items-center justify-center shrink-0 ${isCorrect ? "bg-success text-success-foreground" : "bg-destructive text-destructive-foreground"}`}>
           {isCorrect ? <Check className="size-5" /> : <X className="size-5" />}
         </div>
@@ -6784,7 +6790,7 @@ function ExplanationCard({
           </div>
         )}
       </div>
-    </div>
+    </motion.div>
   );
 }
 

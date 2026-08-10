@@ -56,7 +56,7 @@ export function SyncModal({
             {...dismissProps}
           >
             {/* Header */}
-            <div className="flex items-center gap-3 px-4 py-3 border-b border-border/60 shrink-0">
+            <div className="flex items-center gap-3 px-4 py-3 border-b border-border shrink-0">
               <div className="size-8 rounded-lg bg-primary/10 text-primary flex items-center justify-center shrink-0">
                 <Wifi className="size-4" />
               </div>
@@ -79,7 +79,7 @@ export function SyncModal({
             </div>
 
             {/* Footer */}
-            <div className="flex items-center justify-between gap-2 px-4 py-3 border-t border-border/60 shrink-0">
+            <div className="flex items-center justify-between gap-2 px-4 py-3 border-t border-border shrink-0">
               <Button size="sm" variant="outline" className="h-8 text-xs" onClick={handleOpenSettings}>
                 <Settings2 className="size-3.5 me-1.5" />
                 {t("settings.section.sync.open")}

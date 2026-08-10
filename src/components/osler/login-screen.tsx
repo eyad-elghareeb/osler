@@ -283,27 +283,76 @@ export function LoginScreen({ onLogin, cloudAuthError }: LoginScreenProps) {
   };
 
   return (
-    <div className="min-h-dvh flex items-center justify-center p-4 bg-background safe-py">
+    <div className="min-h-dvh flex items-center justify-center p-4 bg-background safe-py relative overflow-hidden">
+      {/* Ambient primary glow — one focal element per viewport per the
+       * design-library-roadmap. Sits behind the card, never competes with
+       * the form's text contrast. */}
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-0 opacity-60"
+        style={{
+          background:
+            "radial-gradient(60% 50% at 50% 35%, color-mix(in oklch, var(--primary) 14%, transparent), transparent 70%)",
+        }}
+      />
       <motion.div
         initial={{ opacity: 0, y: 12 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.35 }}
-        className="w-full max-w-md"
+        transition={{ duration: 0.35, ease: [0.32, 0.72, 0, 1] }}
+        className="w-full max-w-md relative"
       >
-        <div className="text-center mb-8">
+        {/* Brand header — Motion Primitives staggered entrance */}
+        <motion.div
+          className="text-center mb-8"
+          initial="hidden"
+          animate="visible"
+          variants={{
+            hidden: {},
+            visible: { transition: { staggerChildren: 0.08, delayChildren: 0.05 } },
+          }}
+        >
           <motion.div
-            initial={{ scale: 0.8, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            transition={{ delay: 0.1, type: "spring", stiffness: 200 }}
-            className="w-16 h-16 rounded-2xl bg-primary flex items-center justify-center text-primary-foreground mx-auto mb-4 shadow-md"
+            variants={{
+              hidden: { scale: 0.8, opacity: 0, y: 6 },
+              visible: {
+                scale: 1,
+                opacity: 1,
+                y: 0,
+                transition: { type: "spring", stiffness: 240, damping: 18 },
+              },
+            }}
+            className="w-16 h-16 rounded-2xl bg-primary flex items-center justify-center text-primary-foreground mx-auto mb-4 shadow-e2 relative overflow-hidden"
           >
-            <Activity className="size-8" />
+            {/* Subtle inner highlight — reads as a polished glass tile */}
+            <span
+              aria-hidden
+              className="absolute inset-0 opacity-40"
+              style={{
+                background:
+                  "linear-gradient(160deg, color-mix(in oklch, var(--primary-foreground) 25%, transparent), transparent 55%)",
+              }}
+            />
+            <Activity className="size-8 relative" />
           </motion.div>
-          <h1 className="text-2xl md:text-3xl font-bold tracking-tight">{t("login.title")}</h1>
-          <p className="text-sm text-muted-foreground mt-1 max-w-md mx-auto">
+          <motion.h1
+            variants={{
+              hidden: { opacity: 0, y: 6 },
+              visible: { opacity: 1, y: 0, transition: { duration: 0.25, ease: [0.32, 0.72, 0, 1] } },
+            }}
+            className="text-2xl md:text-3xl font-bold tracking-tight"
+          >
+            {t("login.title")}
+          </motion.h1>
+          <motion.p
+            variants={{
+              hidden: { opacity: 0, y: 6 },
+              visible: { opacity: 1, y: 0, transition: { duration: 0.25, ease: [0.32, 0.72, 0, 1] } },
+            }}
+            className="text-sm text-muted-foreground mt-1 max-w-md mx-auto"
+          >
             {t("login.subtitle")}
-          </p>
-        </div>
+          </motion.p>
+        </motion.div>
 
         {/* Biometric quick-unlock — shown above the form when a credential
             is already enrolled on this device. Looks like a native "Sign
@@ -312,7 +361,7 @@ export function LoginScreen({ onLogin, cloudAuthError }: LoginScreenProps) {
           <motion.div
             initial={{ opacity: 0, y: -8 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.15 }}
+            transition={{ delay: 0.15, duration: 0.25, ease: [0.32, 0.72, 0, 1] }}
             className="mb-3"
           >
             <Button
@@ -344,7 +393,7 @@ export function LoginScreen({ onLogin, cloudAuthError }: LoginScreenProps) {
 
         <form
           onSubmit={submit}
-          className="bg-card border border-border rounded-xl p-6 space-y-4"
+          className="bg-card border border-border rounded-xl p-6 space-y-4 shadow-e1"
         >
           {cloudMode === "register" && (
             <div>
@@ -358,7 +407,7 @@ export function LoginScreen({ onLogin, cloudAuthError }: LoginScreenProps) {
                 onChange={(e) => setDisplayName(e.target.value)}
                 placeholder={t("login.displayNamePlaceholder")}
                 autoComplete="name"
-                className="mt-1.5 w-full h-10 px-3 bg-background border border-border rounded-md text-sm outline-none focus:border-primary transition-colors"
+                className="w-full h-10 px-3 bg-background border border-border-strong rounded-md text-sm outline-none transition-all focus:border-primary focus:ring-2 focus:ring-primary/20"
               />
             </div>
           )}
@@ -376,7 +425,7 @@ export function LoginScreen({ onLogin, cloudAuthError }: LoginScreenProps) {
               placeholder={cloudActive ? t("login.identifierPlaceholder") : t("login.usernamePlaceholder")}
               autoComplete="username"
               autoFocus
-              className="mt-1.5 w-full h-10 px-3 bg-background border border-border rounded-md text-sm outline-none focus:border-primary transition-colors"
+              className="w-full h-10 px-3 bg-background border border-border-strong rounded-md text-sm outline-none transition-all focus:border-primary focus:ring-2 focus:ring-primary/20"
             />
             {cloudActive && cloudMode === "register" && usernameStatus !== "idle" && (
               <p className={cn("text-xs mt-1", usernameStatus === "available" ? "text-success" : usernameStatus === "taken" ? "text-destructive" : "text-muted-foreground")}>
@@ -398,7 +447,7 @@ export function LoginScreen({ onLogin, cloudAuthError }: LoginScreenProps) {
                 placeholder={t("login.emailPlaceholder")}
                 autoComplete="email"
                 required={cloudMode === "reset"}
-                className="mt-1.5 w-full h-10 px-3 bg-background border border-border rounded-md text-sm outline-none focus:border-primary transition-colors"
+                className="w-full h-10 px-3 bg-background border border-border-strong rounded-md text-sm outline-none transition-all focus:border-primary focus:ring-2 focus:ring-primary/20"
               />
               {cloudMode === "register" && (
                 <p className="text-xs text-muted-foreground mt-1">
@@ -423,7 +472,7 @@ export function LoginScreen({ onLogin, cloudAuthError }: LoginScreenProps) {
                   autoComplete={cloudMode === "login" ? "current-password" : "new-password"}
                   minLength={cloudActive ? 8 : undefined}
                   required={cloudActive}
-                  className="w-full h-10 ps-3 pe-10 bg-background border border-border rounded-md text-sm outline-none focus:border-primary transition-colors"
+                  className="w-full h-10 ps-3 pe-10 bg-background border border-border-strong rounded-md text-sm outline-none transition-all focus:border-primary focus:ring-2 focus:ring-primary/20"
                 />
                 <button
                   type="button"
@@ -456,7 +505,7 @@ export function LoginScreen({ onLogin, cloudAuthError }: LoginScreenProps) {
                   autoComplete="new-password"
                   minLength={8}
                   required
-                  className="w-full h-10 ps-3 pe-10 bg-background border border-border rounded-md text-sm outline-none focus:border-primary transition-colors"
+                  className="w-full h-10 ps-3 pe-10 bg-background border border-border-strong rounded-md text-sm outline-none transition-all focus:border-primary focus:ring-2 focus:ring-primary/20"
                 />
                 <button
                   type="button"
@@ -535,7 +584,7 @@ export function LoginScreen({ onLogin, cloudAuthError }: LoginScreenProps) {
               If a credential is already enrolled, this becomes a "disable"
               button so the user can revoke it from the login screen. */}
           {biometricSupported && (
-            <div className="pt-2 border-t border-border/60">
+            <div className="pt-2 border-t border-border">
               <AnimatePresence mode="wait">
                 {availability?.enrolled ? (
                   <motion.div

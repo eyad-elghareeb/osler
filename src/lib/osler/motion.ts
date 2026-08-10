@@ -133,6 +133,83 @@ export const staggerContainerSlow: Variants = {
   },
 };
 
+/* ───────────────────────── Motion-Primitives-inspired recipes ────────
+ * Adapted from Motion Primitives patterns (motion-primitives.com) per
+ * `docs/design-library-roadmap.md` § "Establish an interaction layer".
+ * Every duration is ≤0.3s and every pattern respects reduced-motion via
+ * the `AnimationsProvider` wrapping the tree in `<MotionConfig
+ * reducedMotion="always">` when the user opts out.
+ */
+
+/** List item enter — subtle fade + 4px lift. Use for grids of cards.
+ * Smaller than `fadeUp` so a 6-card grid feels like a single sweep. */
+export const listItemEnter: Variants = {
+  hidden: { opacity: 0, y: 4 },
+  visible: { opacity: 1, y: 0 },
+};
+
+/** Tab indicator — used by `<SegmentedControl>` and pill tabs.
+ * Pair with `layoutId` on the moving element so Framer animates the
+ * shared-layout transition between two positions. */
+export const tabIndicator: Transition = {
+  type: "spring",
+  stiffness: 380,
+  damping: 30,
+};
+
+/** Disclosure / accordion open — animates height + opacity together.
+ * Apply to the inner content wrapper of an expandable section. */
+export const disclosureVariants: Variants = {
+  hidden: { opacity: 0, height: 0 },
+  visible: {
+    opacity: 1,
+    height: "auto",
+    transition: { duration: 0.25, ease: [0.32, 0.72, 0, 1] },
+  },
+  exit: {
+    opacity: 0,
+    height: 0,
+    transition: { duration: 0.2, ease: [0.32, 0.72, 0, 1] },
+  },
+};
+
+/** Feedback pulse — a single soft ring used to acknowledge a primary
+ * action (e.g. flashcard rating, save). Apply to a motion.div with
+ * `initial="rest"` and trigger via `animate="pulse"` on tap. */
+export const feedbackPulse: Variants = {
+  rest: { boxShadow: "0 0 0 0 color-mix(in oklch, var(--primary) 0%, transparent)" },
+  pulse: {
+    boxShadow: [
+      "0 0 0 0 color-mix(in oklch, var(--primary) 45%, transparent)",
+      "0 0 0 8px color-mix(in oklch, var(--primary) 0%, transparent)",
+    ],
+    transition: { duration: 0.45, ease: "easeOut" },
+  },
+};
+
+/** Press feedback — a 0.97 scale on tap, restored on release.
+ * Use on `motion.button` with `whileTap="press"`. */
+export const pressFeedback: Variants = {
+  rest: { scale: 1 },
+  press: { scale: 0.97, transition: { duration: 0.08, ease: "easeOut" } },
+};
+
+/** Stacked panel enter — used by `<AnimatePresence>` for sheets, drawers,
+ * and stacked modals that slide in from a consistent edge. */
+export function stackedPanelEnter(edge: "start" | "end" | "bottom" | "top" = "bottom") {
+  const dir =
+    edge === "bottom" ? { y: 16 } :
+    edge === "top" ? { y: -16 } :
+    edge === "start" ? { x: -16 } :
+    { x: 16 };
+  return {
+    initial: { opacity: 0, ...dir },
+    animate: { opacity: 1, x: 0, y: 0 },
+    exit: { opacity: 0, ...dir, transition: { duration: 0.18 } },
+    transition: { duration: 0.25, ease: [0.32, 0.72, 0, 1] as const },
+  };
+}
+
 /**
  * Page-level enter — used by AppShell's main content area when the View
  * Transitions API is unavailable. Keeps the feel of a native push nav.

@@ -597,7 +597,7 @@ export function FlashcardStudio({
       return (
         <div className="relative w-full h-full overflow-hidden rounded-xl border border-border shadow-lg bg-card">
           <div className="absolute inset-0 flex flex-col">
-            <div className="shrink-0 px-4 sm:px-6 pt-4 sm:pt-5 pb-2 border-b border-border/40">
+            <div className="shrink-0 px-4 sm:px-6 pt-4 sm:pt-5 pb-2 border-b border-border">
               <div className="text-[10px] uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
                 <Sparkles className="size-3" />
                 {t("flash.cloze")}
@@ -610,7 +610,7 @@ export function FlashcardStudio({
                 dangerouslySetInnerHTML={{ __html: html }}
               />
               {isFlipped && card.extra && (
-                <div className="mt-5 pt-4 border-t border-border/40 w-full max-w-2xl">
+                <div className="mt-5 pt-4 border-t border-border w-full max-w-2xl">
                   <div
                     className="text-sm leading-relaxed text-muted-foreground uworld-prose text-center"
                     dangerouslySetInnerHTML={{ __html: renderCardMarkdown(card.extra) }}
@@ -634,7 +634,7 @@ export function FlashcardStudio({
       <div className="relative w-full h-full overflow-hidden rounded-xl border border-border shadow-lg">
         {/* Back layer — full-card answer with a small question echo at top. */}
         <div className="absolute inset-0 flex flex-col bg-card rounded-xl">
-          <div className="shrink-0 px-4 sm:px-6 pt-4 sm:pt-5 pb-2 border-b border-border/40">
+          <div className="shrink-0 px-4 sm:px-6 pt-4 sm:pt-5 pb-2 border-b border-border">
             <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1 flex items-center gap-1.5">
               <Lightbulb className="size-3" />
               {t("flash.question")}
@@ -1025,7 +1025,7 @@ export function FlashcardStudio({
     return (
       <div className="fixed inset-0 z-50 bg-background flex flex-col safe-screen">
         {/* Top bar */}
-        <header className="h-12 flex items-center px-2 sm:px-4 gap-2 shrink-0 border-b border-border/60 bg-card safe-pt">
+        <header className="h-12 flex items-center px-2 sm:px-4 gap-2 shrink-0 border-b border-border bg-card/60 backdrop-blur-md safe-pt">
           <button
             onClick={closeStudy}
             className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors medos-touch-target"

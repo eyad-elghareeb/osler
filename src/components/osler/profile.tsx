@@ -894,7 +894,7 @@ function ProfileNoteCard({
           </div>
         )}
       </div>
-      <div className="flex items-center justify-end gap-1 mt-2 pt-2 border-t border-border/40 opacity-0 group-hover:opacity-100 transition-opacity">
+      <div className="flex items-center justify-end gap-1 mt-2 pt-2 border-t border-border opacity-0 group-hover:opacity-100 transition-opacity">
         {onOpenInQBank && (
           <button
             onClick={(e) => {

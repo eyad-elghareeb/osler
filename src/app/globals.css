@@ -39,27 +39,54 @@
   --color-card: var(--card);
   --color-success: var(--success);
   --color-success-foreground: var(--success-foreground);
+  --color-success-soft: var(--success-soft);
   --color-warning: var(--warning);
   --color-warning-foreground: var(--warning-foreground);
+  --color-warning-soft: var(--warning-soft);
   --color-info: var(--info);
   --color-info-foreground: var(--info-foreground);
+  --color-info-soft: var(--info-soft);
+  --color-destructive-soft: var(--destructive-soft);
+  --color-primary-soft: var(--primary-soft);
+  --color-primary-hover: var(--primary-hover);
+  --color-border-strong: var(--border-strong);
+  /* Premium elevation scale — soft, layered shadows that read as depth
+   * rather than hard drop shadows. Use `shadow-e1` for resting cards,
+   * `shadow-e2` for hover/raised cards, `shadow-e3` for popovers/dialogs.
+   * Defined as Tailwind theme tokens so `shadow-e1` etc. just work. */
+  --shadow-e1: 0 1px 2px 0 oklch(0 0 0 / 0.04), 0 1px 1px -1px oklch(0 0 0 / 0.04);
+  --shadow-e2: 0 2px 4px -1px oklch(0 0 0 / 0.06), 0 4px 8px -2px oklch(0 0 0 / 0.05);
+  --shadow-e3: 0 8px 16px -4px oklch(0 0 0 / 0.10), 0 4px 6px -2px oklch(0 0 0 / 0.05);
+  --shadow-e4: 0 16px 32px -8px oklch(0 0 0 / 0.14), 0 8px 16px -4px oklch(0 0 0 / 0.06);
+  /* Soft brand glow — reserved for a single focal element per viewport.
+   * See `docs/design-library-roadmap.md` § Borders, depth, and visual focus. */
+  --shadow-glow: 0 0 0 1px color-mix(in oklch, var(--primary) 30%, transparent),
+    0 8px 24px -6px color-mix(in oklch, var(--primary) 40%, transparent);
+  /* Premium border tokens — surfaces with a hint of inner light for depth.
+   * Use via `border-border` (default) or `border-border-strong` (raised). */
+  --border-strong: oklch(1 0 0 / 14%);
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) + 4px);
+  --radius-2xl: calc(var(--radius) + 8px);
 }
 
-/* Osler — Default = Dark (Navy + Light Blue) */
+/* Osler — Default = Dark (Navy + Light Blue)
+ * Premium dark palette: deep navy with a subtle blue chroma for warmth,
+ * elevated cards lifted a half-step above the background, and a refined
+ * primary that holds its saturation on small UI accents. */
 :root {
   --radius: 0.625rem;
   --background: oklch(0.14 0.018 260);
   --foreground: oklch(0.96 0.005 240);
   --card: oklch(0.19 0.022 260);
   --card-foreground: oklch(0.96 0.005 240);
-  --popover: oklch(0.19 0.022 260);
+  --popover: oklch(0.21 0.024 260);
   --popover-foreground: oklch(0.96 0.005 240);
-  --primary: oklch(0.58 0.14 245);
+  --primary: oklch(0.6 0.15 245);
   --primary-foreground: oklch(0.99 0 0);
+  --primary-hover: oklch(0.55 0.16 245);
   --secondary: oklch(0.26 0.025 260);
   --secondary-foreground: oklch(0.96 0.005 240);
   --muted: oklch(0.24 0.02 260);
@@ -68,8 +95,9 @@
   --accent-foreground: oklch(0.96 0.005 240);
   --destructive: oklch(0.68 0.21 22);
   --border: oklch(1 0 0 / 8%);
+  --border-strong: oklch(1 0 0 / 14%);
   --input: oklch(1 0 0 / 10%);
-  --ring: oklch(0.58 0.14 245);
+  --ring: oklch(0.6 0.15 245);
   --chart-1: oklch(0.58 0.14 245);
   --chart-2: oklch(0.65 0.18 145);
   --chart-3: oklch(0.55 0.12 260);
@@ -82,17 +110,27 @@
   --sidebar-accent: oklch(0.26 0.025 260);
   --sidebar-accent-foreground: oklch(0.96 0.005 240);
   --sidebar-border: oklch(1 0 0 / 6%);
-  --sidebar-ring: oklch(0.58 0.14 245);
+  --sidebar-ring: oklch(0.6 0.15 245);
   /* Semantic status colors — used in place of `text-emerald-500` / `text-amber-500` / `text-red-500`. */
-  --success: oklch(0.7 0.18 145);
+  --success: oklch(0.72 0.17 145);
   --success-foreground: oklch(0.14 0.018 260);
-  --warning: oklch(0.78 0.16 80);
+  --warning: oklch(0.8 0.15 80);
   --warning-foreground: oklch(0.18 0.02 250);
-  --info: oklch(0.68 0.18 195);
+  --info: oklch(0.7 0.17 220);
   --info-foreground: oklch(0.14 0.018 260);
+  /* Soft surface tints — used for status accents on cards/badges.
+   * Pairs with --success / --warning / --destructive / --info so light
+   * tints stay perceptually consistent with their foreground color. */
+  --success-soft: oklch(0.72 0.17 145 / 0.14);
+  --warning-soft: oklch(0.8 0.15 80 / 0.16);
+  --destructive-soft: oklch(0.68 0.21 22 / 0.14);
+  --info-soft: oklch(0.7 0.17 220 / 0.14);
+  --primary-soft: oklch(0.6 0.15 245 / 0.12);
 }
 
-/* Light theme (optional toggle) */
+/* Light theme (optional toggle) — calibrated for premium contrast on white.
+ * Surfaces: card sits pure white, popover is a hair brighter than card to
+ * read as elevated, borders are stronger than dark theme for crisp edges. */
 .light {
   --background: oklch(0.99 0.005 240);
   --foreground: oklch(0.18 0.02 250);
@@ -100,8 +138,9 @@
   --card-foreground: oklch(0.18 0.02 250);
   --popover: oklch(1 0 0);
   --popover-foreground: oklch(0.18 0.02 250);
-  --primary: oklch(0.38 0.09 255);
+  --primary: oklch(0.4 0.1 255);
   --primary-foreground: oklch(0.99 0 0);
+  --primary-hover: oklch(0.34 0.11 255);
   --secondary: oklch(0.95 0.01 240);
   --secondary-foreground: oklch(0.2 0.02 250);
   --muted: oklch(0.95 0.01 240);
@@ -110,8 +149,9 @@
   --accent-foreground: oklch(0.2 0.02 250);
   --destructive: oklch(0.58 0.24 27);
   --border: oklch(0.9 0.01 240);
+  --border-strong: oklch(0.82 0.012 240);
   --input: oklch(0.9 0.01 240);
-  --ring: oklch(0.38 0.09 255);
+  --ring: oklch(0.4 0.1 255);
   --chart-1: oklch(0.38 0.09 255);
   --chart-2: oklch(0.6 0.15 145);
   --chart-3: oklch(0.5 0.18 250);
@@ -124,7 +164,7 @@
   --sidebar-accent: oklch(0.92 0.025 240);
   --sidebar-accent-foreground: oklch(0.2 0.02 250);
   --sidebar-border: oklch(0.9 0.01 240);
-  --sidebar-ring: oklch(0.38 0.09 255);
+  --sidebar-ring: oklch(0.4 0.1 255);
   /* Semantic status colors — light theme uses deeper chroma for AA contrast on white. */
   --success: oklch(0.55 0.15 145);
   --success-foreground: oklch(0.99 0 0);
@@ -132,6 +172,12 @@
   --warning-foreground: oklch(0.99 0 0);
   --info: oklch(0.5 0.16 220);
   --info-foreground: oklch(0.99 0 0);
+  /* Soft surface tints — light theme uses stronger opacity to read on white. */
+  --success-soft: oklch(0.55 0.15 145 / 0.16);
+  --warning-soft: oklch(0.6 0.16 70 / 0.18);
+  --destructive-soft: oklch(0.58 0.24 27 / 0.14);
+  --info-soft: oklch(0.5 0.16 220 / 0.14);
+  --primary-soft: oklch(0.4 0.1 255 / 0.10);
 }
 
 @layer base {
@@ -218,6 +264,39 @@ html::-webkit-scrollbar-thumb:hover {
 }
 .medos-fade-in {
   animation: medos-fade-in 0.25s ease-out both;
+}
+
+/* ─── Shimmer skeleton (21st.dev-inspired) ─────────────────────────────
+ * A premium loading placeholder that sweeps a soft highlight across the
+ * surface, reading as "content arriving" rather than a flat pulse.
+ * Honours reduced-motion: the sweep animation is disabled and the
+ * skeleton falls back to a flat tinted surface. */
+@keyframes osler-shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+.osler-skeleton {
+  background-color: var(--muted);
+  background-image: linear-gradient(
+    90deg,
+    transparent 0%,
+    color-mix(in oklch, var(--foreground) 6%, transparent) 50%,
+    transparent 100%
+  );
+  background-size: 200% 100%;
+  background-repeat: no-repeat;
+  animation: osler-shimmer 1.6s ease-in-out infinite;
+  border-radius: var(--radius-md);
+}
+@media (prefers-reduced-motion: reduce) {
+  .osler-skeleton {
+    animation: none;
+    background-image: none;
+  }
+}
+[data-animations="off"] .osler-skeleton {
+  animation: none;
+  background-image: none;
 }
 
 /* ───────────────────────────────────────────────────────────────────────
@@ -321,27 +400,42 @@ html::-webkit-scrollbar-thumb:hover {
 }
 
 /* Card patterns — pick exactly one of `compact` / `default` / `roomy`.
- * All cards share the same radius, border color, and hover treatment. */
+ * All cards share the same radius, border color, and hover treatment.
+ * Premium recipe: subtle elevation (shadow-e1) at rest, refined hover
+ * border + shadow-e2 lift on interactive cards. */
 .osler-card {
-  @apply bg-card border border-border rounded-xl transition-colors;
+  @apply bg-card border border-border rounded-xl transition-all;
+  box-shadow: var(--shadow-e1);
 }
 .osler-card--compact {
-  @apply bg-card border border-border rounded-xl p-3 transition-colors;
+  @apply bg-card border border-border rounded-xl p-3 transition-all;
+  box-shadow: var(--shadow-e1);
 }
 .osler-card--default {
-  @apply bg-card border border-border rounded-xl p-4 transition-colors;
+  @apply bg-card border border-border rounded-xl p-4 transition-all;
+  box-shadow: var(--shadow-e1);
 }
 .osler-card--roomy {
-  @apply bg-card border border-border rounded-xl p-5 md:p-6 transition-colors;
+  @apply bg-card border border-border rounded-xl p-5 md:p-6 transition-all;
+  box-shadow: var(--shadow-e1);
 }
-/* Interactive card — clickable pack / module / quick action. */
+/* Interactive card — clickable pack / module / quick action.
+ * Premium hover: border leans into primary, shadow lifts to e2, and a
+ * subtle 1px translate-y communicates affordance without parallax. */
 .osler-card--interactive {
-  @apply bg-card border border-border rounded-xl p-5 md:p-6 transition-all hover:border-primary/40 hover:shadow-md cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40;
+  @apply bg-card border border-border rounded-xl p-5 md:p-6 transition-all hover:border-primary/40 hover:shadow-e2 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40;
+  box-shadow: var(--shadow-e1);
+}
+.osler-card--interactive:hover {
+  transform: translateY(-1px);
 }
 
-/* Stat tile — label + big value, used in Dashboard, Profile, QBank/Flashcard hubs. */
+/* Stat tile — label + big value, used in Dashboard, Profile, QBank/Flashcard hubs.
+ * Premium recipe: subtle elevation + a hair stronger border on the top edge
+ * so the value reads as the focal point. */
 .osler-stat-tile {
-  @apply bg-card border border-border rounded-xl p-4 transition-colors;
+  @apply bg-card border border-border rounded-xl p-4 transition-all;
+  box-shadow: var(--shadow-e1);
 }
 .osler-stat-tile__label {
   @apply text-[11px] font-medium uppercase tracking-wider text-muted-foreground;
@@ -352,9 +446,17 @@ html::-webkit-scrollbar-thumb:hover {
 /* Compact variant for 3-column dense grids (QBank / Flashcard hub stat bars). */
 .osler-stat-tile--compact {
   @apply bg-card border border-border rounded-xl p-3.5;
+  box-shadow: var(--shadow-e1);
 }
 .osler-stat-tile--compact .osler-stat-tile__value {
   @apply text-xl;
+}
+/* Clickable stat tile — refined hover lift. */
+button.osler-stat-tile:hover,
+button.osler-stat-tile--compact:hover {
+  border-color: color-mix(in oklch, var(--primary) 40%, transparent);
+  box-shadow: var(--shadow-e2);
+  transform: translateY(-1px);
 }
 
 /* Empty state — centered icon + title + body. */
@@ -382,6 +484,107 @@ html::-webkit-scrollbar-thumb:hover {
 }
 .osler-icon-btn {
   @apply size-9 rounded-md flex items-center justify-center transition-colors hover:bg-muted/60 text-muted-foreground hover:text-foreground;
+}
+
+/* ─── Premium primitives (design-library-roadmap.md P0/P1) ─────────────── */
+
+/* Segmented control — Origin/Coss UI pattern adapted to Osler tokens.
+ * Used for compact option toggles in Settings, QBank setup, and Profile.
+ * The active segment slides via Framer Motion `layout` in the primitive;
+ * the CSS just provides the track + resting segment styles. */
+.osler-segmented {
+  @apply inline-flex items-center gap-1 p-1 rounded-lg bg-muted/60 border border-border;
+}
+.osler-segmented__item {
+  @apply inline-flex items-center justify-center gap-1.5 h-7 px-3 rounded-md text-xs font-medium text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 cursor-pointer select-none;
+}
+.osler-segmented__item[aria-checked="true"] {
+  @apply text-foreground;
+}
+.osler-segmented__item:disabled {
+  @apply opacity-50 cursor-not-allowed;
+}
+.osler-segmented__thumb {
+  @apply absolute inset-y-1 rounded-md bg-card border border-border-strong pointer-events-none;
+  box-shadow: var(--shadow-e1);
+}
+
+/* Form field — Origin UI grouped field pattern.
+ * Composes Label + Input + description + validation message with consistent
+ * vertical rhythm. The wrapper just sets spacing; the inner primitives
+ * handle their own styling. */
+.osler-form-field {
+  @apply flex flex-col gap-1.5;
+}
+.osler-form-field__label {
+  @apply text-sm font-medium text-foreground flex items-center gap-1.5;
+}
+.osler-form-field__description {
+  @apply text-xs text-muted-foreground;
+}
+.osler-form-field__error {
+  @apply text-xs text-destructive flex items-center gap-1.5;
+}
+.osler-form-field__hint {
+  @apply text-xs text-muted-foreground;
+}
+
+/* Metric bar — compact labelled progress for stat cards / dashboards.
+ * Premium recipe: 4px tall track with a 1px inner highlight on the fill. */
+.osler-metric-bar {
+  @apply h-1 w-full rounded-full bg-muted overflow-hidden;
+}
+.osler-metric-bar__fill {
+  @apply h-full rounded-full transition-all duration-300 ease-out;
+  background-color: var(--primary);
+}
+
+/* Accent border — a 2px left accent for emphasizing a single card in a grid.
+ * Use sparingly: one accent per viewport per the design-library-roadmap. */
+.osler-accent-start {
+  @apply relative;
+}
+.osler-accent-start::before {
+  content: "";
+  position: absolute;
+  inset-inline-start: 0;
+  inset-block: 0;
+  width: 3px;
+  background: var(--primary);
+  border-start-start-radius: inherit;
+  border-end-start-radius: inherit;
+}
+
+/* Premium surface — slightly elevated card with a subtle gradient sheen.
+ * Reserved for hero / continue-learning cards; one per viewport. */
+.osler-surface-hero {
+  @apply bg-card border border-border rounded-xl relative overflow-hidden;
+  box-shadow: var(--shadow-e2);
+  background-image:
+    radial-gradient(
+      ellipse at top inline-end,
+      color-mix(in oklch, var(--primary) 8%, transparent),
+      transparent 60%
+    );
+}
+
+/* Chart card — wrapper for Recharts/TanStack charts.
+ * Pins the canonical card recipe + a header slot for title + actions. */
+.osler-chart-card {
+  @apply bg-card border border-border rounded-xl p-4 md:p-5;
+  box-shadow: var(--shadow-e1);
+}
+.osler-chart-card__header {
+  @apply flex items-center justify-between gap-2 mb-3;
+}
+.osler-chart-card__title {
+  @apply text-sm font-semibold;
+}
+.osler-chart-card__subtitle {
+  @apply text-xs text-muted-foreground;
+}
+.osler-chart-card__body {
+  @apply relative;
 }
 
 /* Status accent utilities — `text-success` / `bg-success/10` etc. are
@@ -2392,16 +2595,38 @@ html.osler-ar body,
 /* RTL adjustments for admin sidebar (chevrons flip etc.) */
 [dir="rtl"] .osler-icon-btn { transform: scaleX(1); }
 
-/* Admin dropzone */
+/* Admin dropzone — Kibo UI-inspired premium pattern.
+ * Resting: dashed border on a muted tint with a subtle inner highlight.
+ * Active (file dragged over): primary-tinted background, solid primary
+ * border, scale 1.005 lift, and a soft primary glow — reads as "drop here"
+ * without parallax or distracting motion. */
 .osler-dropzone {
-  border: 2px dashed var(--border);
+  position: relative;
+  border: 2px dashed color-mix(in oklch, var(--border) 80%, var(--primary) 20%);
   border-radius: var(--radius-lg, 12px);
   background: color-mix(in oklch, var(--muted) 40%, transparent);
-  transition: border-color 0.15s ease, background 0.15s ease;
+  transition: border-color 0.2s ease, background 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease;
+}
+/* Subtle inner highlight — reads as a polished inset surface. */
+.osler-dropzone::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  background: linear-gradient(
+    180deg,
+    color-mix(in oklch, var(--foreground) 4%, transparent),
+    transparent 40%
+  );
+  opacity: 0.6;
 }
 .osler-dropzone--active {
   border-color: var(--primary);
+  border-style: solid;
   background: color-mix(in oklch, var(--primary) 12%, transparent);
+  transform: scale(1.005);
+  box-shadow: var(--shadow-e2), 0 0 0 4px color-mix(in oklch, var(--primary) 12%, transparent);
 }
 
 /* Admin tree row — file-tree look like the tauri-admin content view */

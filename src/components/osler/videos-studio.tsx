@@ -31,6 +31,7 @@ import {
 import { packBasePath } from "@/lib/osler/content";
 import type { VideoResource, ContentTreeNode } from "@/lib/osler/types";
 import { cn } from "@/lib/utils";
+import { Skeleton } from "@/components/ui/skeleton";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { setImmersiveMode } from "./immersive-mode";
 import { useShortcutListener } from "@/hooks/use-shortcuts";
@@ -336,9 +337,14 @@ export function VideosStudio({
 
             {/* Video grid */}
             {folderLoading ? (
-              <div className="osler-loading">
-                <Loader2 className="size-6 animate-spin text-primary" />
-                <span className="text-sm">{t("videos.loading")}</span>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                {Array.from({ length: 6 }).map((_, i) => (
+                  <div key={i} className="osler-card--default">
+                    <Skeleton className="aspect-video w-full rounded-lg mb-3" />
+                    <Skeleton className="h-4 w-3/4 mb-2" />
+                    <Skeleton className="h-3 w-1/2" />
+                  </div>
+                ))}
               </div>
             ) : folderVideos.length === 0 ? (
               <div className="osler-empty">
@@ -424,7 +430,7 @@ export function VideosStudio({
                             {video.tags.slice(0, 3).map((tag) => (
                               <span
                                 key={tag}
-                                className="inline-flex items-center gap-0.5 text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-muted/60 text-muted-foreground border border-border/60"
+                                className="inline-flex items-center gap-0.5 text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-muted/60 text-muted-foreground border border-border"
                               >
                                 <Tag className="size-2" />
                                 {tag}
@@ -648,7 +654,7 @@ function VideoPlayerView({
   return (
     <div className="fixed inset-0 z-50 bg-background flex flex-col safe-screen overflow-hidden">
       {/* Top bar */}
-      <header className="h-12 flex items-center px-2 sm:px-4 gap-2 shrink-0 border-b border-border bg-card/80 backdrop-blur-md safe-pt">
+      <header className="h-12 flex items-center px-2 sm:px-4 gap-2 shrink-0 border-b border-border bg-card/60 backdrop-blur-md safe-pt">
         <button
           onClick={() => { haptic('light'); onExit(); }}
           className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors medos-touch-target"
@@ -715,7 +721,7 @@ function VideoPlayerView({
         {/* Main Stage Column */}
         <div className="flex-1 min-w-0 flex flex-col overflow-y-auto lg:overflow-y-auto p-3 sm:p-4 lg:p-6 space-y-4">
           {/* Video Player Container */}
-          <div className="relative aspect-video w-full rounded-2xl overflow-hidden bg-black shadow-lg border border-border/40 shrink-0">
+          <div className="relative aspect-video w-full rounded-2xl overflow-hidden bg-black shadow-lg border border-border shrink-0">
             {invidiousMode && videoId ? (
               <iframe
                 src={`https://${INVIDIOUS_HOST}/embed/${videoId}`}
@@ -736,7 +742,7 @@ function VideoPlayerView({
             </h1>
 
             {/* Instructor / Specialty Bar */}
-            <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-border/60">
+            <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-border">
               <div className="flex items-center gap-3">
                 <div className="size-10 rounded-full bg-primary/10 border border-primary/20 flex items-center justify-center font-bold text-primary text-sm shrink-0">
                   {video.instructor ? video.instructor.charAt(0).toUpperCase() : <VideoIcon className="size-5" />}
@@ -761,7 +767,7 @@ function VideoPlayerView({
                     <button
                       key={i}
                       onClick={() => handleJumpToSection(ch.time)}
-                      className="px-2.5 py-1 rounded-full text-xs font-medium bg-muted/80 hover:bg-primary/15 hover:text-primary border border-border/60 transition-colors shrink-0 flex items-center gap-1.5"
+                      className="px-2.5 py-1 rounded-full text-xs font-medium bg-muted/80 hover:bg-primary/15 hover:text-primary border border-border transition-colors shrink-0 flex items-center gap-1.5"
                     >
                       <Clock className="size-3 text-muted-foreground" />
                       <span>{ch.title}</span>
@@ -822,8 +828,8 @@ function VideoPlayerView({
         </div>
 
         {/* Right Sidebar: Up Next Playlist */}
-        <aside className="w-full lg:w-96 shrink-0 border-t lg:border-t-0 lg:border-s border-border bg-card/40 flex flex-col h-auto lg:h-full overflow-hidden">
-          <div className="p-3 sm:p-4 border-b border-border/60 flex items-center justify-between">
+        <aside className="w-full lg:w-96 shrink-0 border-t lg:border-t-0 lg:border-s border-border bg-card flex flex-col h-auto lg:h-full overflow-hidden">
+          <div className="p-3 sm:p-4 border-b border-border flex items-center justify-between">
             <h3 className="text-sm font-bold tracking-tight uppercase text-muted-foreground flex items-center gap-2">
               <ListVideo className="size-4 text-primary" />
               {t("videos.upNext")}
@@ -852,7 +858,7 @@ function VideoPlayerView({
                   )}
                 >
                   {/* Thumbnail Box */}
-                  <div className="relative w-32 aspect-video shrink-0 rounded-lg overflow-hidden bg-muted border border-border/40">
+                  <div className="relative w-32 aspect-video shrink-0 rounded-lg overflow-hidden bg-muted border border-border">
                     {thumb ? (
                       <img src={thumb} alt="" className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-200" loading="lazy" />
                     ) : (

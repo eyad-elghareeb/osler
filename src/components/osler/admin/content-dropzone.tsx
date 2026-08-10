@@ -168,14 +168,24 @@ export function ContentDropzone({
       />
 
       {busy ? (
-        <Loader2 className="size-6 text-primary animate-spin mb-2" />
+        <div className={cn("rounded-full flex items-center justify-center mb-3 bg-primary-soft border border-primary/30", compact ? "size-10" : "size-14")}>
+          <Loader2 className="size-5 text-primary animate-spin" />
+        </div>
       ) : (
-        <UploadCloud
+        <div
           className={cn(
-            "text-primary mb-2",
-            compact ? "size-5" : "size-7",
+            "rounded-full flex items-center justify-center mb-3 bg-primary-soft border border-primary/30 transition-transform duration-200",
+            compact ? "size-10" : "size-14",
+            dragActive && "scale-110",
           )}
-        />
+        >
+          <UploadCloud
+            className={cn(
+              "text-primary transition-transform duration-200",
+              compact ? "size-5" : "size-7",
+            )}
+          />
+        </div>
       )}
 
       <div className={cn("font-semibold", compact ? "text-xs" : "text-sm")}>

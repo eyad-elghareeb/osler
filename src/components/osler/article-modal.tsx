@@ -156,7 +156,7 @@ export function FloatingArticleModal({
             }
           >
             {/* Header */}
-            <header className="shrink-0 border-b border-border bg-card/40 backdrop-blur-sm px-4 py-2.5 flex items-center gap-3">
+            <header className="shrink-0 border-b border-border bg-card backdrop-blur-sm px-4 py-2.5 flex items-center gap-3">
               <button
                 onClick={() => setShowSidebar((s) => !s)}
                 className="size-8 rounded-md hover:bg-muted flex items-center justify-center shrink-0"
@@ -289,7 +289,7 @@ function PdfViewer({ url, title }: { url: string; title: string }) {
   if (isPhone) {
     return (
       <div className="flex-1 flex flex-col items-center justify-center px-6 py-12 gap-6 bg-muted/20">
-        <div className="w-20 h-20 rounded-2xl bg-orange-500/10 text-orange-500 flex items-center justify-center">
+        <div className="w-20 h-20 rounded-2xl bg-warning-soft text-warning flex items-center justify-center">
           <FileText className="size-10" />
         </div>
         <div className="text-center max-w-xs">
@@ -321,9 +321,9 @@ function PdfViewer({ url, title }: { url: string; title: string }) {
 
   return (
     <div className="flex-1 flex flex-col">
-      <div className="flex items-center justify-between px-6 py-2.5 border-b border-border/40 bg-card/50 shrink-0">
+      <div className="flex items-center justify-between px-6 py-2.5 border-b border-border bg-card/60 backdrop-blur-md shrink-0">
         <div className="flex items-center gap-2 text-xs text-muted-foreground">
-          <FileText className="size-3.5 text-orange-500" />
+          <FileText className="size-3.5 text-warning" />
           <span className="font-medium">{t("library.pdfViewer")}</span>
         </div>
         <div className="flex items-center gap-2">

@@ -238,7 +238,7 @@ export function AppShell({ children }: AppShellProps) {
 
   return (
     <div className="h-screen md:h-screen h-[100dvh] flex flex-col bg-background overflow-hidden">
-      <header className={cn("z-40 shrink-0 h-14 border-b border-border/60 bg-background/80 backdrop-blur-md supports-[backdrop-filter]:bg-background/60 safe-pt", isMobile && immersive && "hidden")}>
+      <header className={cn("z-40 shrink-0 h-14 border-b border-border bg-background/80 backdrop-blur-md supports-[backdrop-filter]:bg-background/60 safe-pt", isMobile && immersive && "hidden")}>
         <div className="h-full px-3 sm:px-4 flex items-center gap-2 sm:gap-3">
           {/* Logo */}
           <button
@@ -289,12 +289,12 @@ export function AppShell({ children }: AppShellProps) {
           <div className="flex-1 flex justify-center px-2">
             <Popover open={searchOpen && !isMobile} onOpenChange={(o) => setSearchOpen(o)}>
               <PopoverTrigger asChild>
-                <button className="hidden lg:flex items-center gap-2 h-9 px-3 w-full max-w-md rounded-md border border-border/60 bg-muted/40 hover:bg-muted/60 transition-colors text-sm text-muted-foreground">
+                <button className="hidden lg:flex items-center gap-2 h-9 px-3 w-full max-w-md rounded-md border border-border bg-muted/40 hover:bg-muted/60 transition-colors text-sm text-muted-foreground">
                   <Search className="size-3.5" />
                   <span className="flex-1 text-start truncate">
                     {searchPlaceholder}
                   </span>
-                  <kbd className="hidden lg:inline-flex items-center gap-0.5 text-[10px] px-1.5 py-0.5 rounded border border-border/60 bg-background/60 font-mono">
+                  <kbd className="hidden lg:inline-flex items-center gap-0.5 text-[10px] px-1.5 py-0.5 rounded border border-border bg-background/60 font-mono">
                     Ctrl+K
                   </kbd>
                 </button>
@@ -315,7 +315,7 @@ export function AppShell({ children }: AppShellProps) {
 
             <button
               onClick={() => setSearchOpen(true)}
-              className="lg:hidden flex items-center gap-2 h-9 px-3 rounded-md border border-border/60 bg-muted/40 hover:bg-muted/60 transition-colors text-sm text-muted-foreground flex-1 max-w-md"
+              className="lg:hidden flex items-center gap-2 h-9 px-3 rounded-md border border-border bg-muted/40 hover:bg-muted/60 transition-colors text-sm text-muted-foreground flex-1 max-w-md"
             >
               <Search className="size-3.5" />
               <span className="flex-1 text-start truncate">{t("common.search")}…</span>
@@ -347,7 +347,7 @@ export function AppShell({ children }: AppShellProps) {
               onClick={() => navigate("settings", { section: "account" })}
               aria-label={t("settings.account.syncTitle")}
               title={syncStatus === "synced" ? t("settings.account.syncSynced") : syncStatus === "syncing" ? t("settings.account.syncSyncing") : t("settings.account.syncOffline")}
-              className="hidden sm:flex items-center gap-1.5 h-8 px-2 rounded-md border border-border/60 bg-muted/40 hover:bg-muted/60 transition-colors shrink-0"
+              className="hidden sm:flex items-center gap-1.5 h-8 px-2 rounded-md border border-border bg-muted/40 hover:bg-muted/60 transition-colors shrink-0"
             >
               <span className={cn("size-2 rounded-full shrink-0", syncStatus === "synced" ? "bg-success animate-pulse" : syncStatus === "syncing" ? "bg-warning animate-spin" : "bg-muted")} />
               <Cloud className="size-3.5 text-muted-foreground" />

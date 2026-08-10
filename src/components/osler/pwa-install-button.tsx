@@ -122,7 +122,7 @@ export function PwaInstallButton({ className }: { className?: string }) {
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 6, scale: 0.96 }}
             transition={{ duration: 0.18 }}
-            className="absolute right-0 top-11 z-50 w-64 rounded-lg border border-border/60 bg-popover p-3 text-xs shadow-lg"
+            className="absolute right-0 top-11 z-50 w-64 rounded-lg border border-border bg-popover p-3 text-xs shadow-lg"
           >
             <div className="mb-2 flex items-center justify-between">
               <span className="font-medium">{t("pwa.installOsler")}</span>
@@ -154,7 +154,7 @@ export function PwaInstallButton({ className }: { className?: string }) {
                  <span className="text-foreground">{t("pwa.addToHomeScreen")}</span>.
               </p>
             )}
-            <label className="mt-3 flex items-center gap-1.5 cursor-pointer border-t border-border/40 pt-2">
+            <label className="mt-3 flex items-center gap-1.5 cursor-pointer border-t border-border pt-2">
               <input
                 type="checkbox"
                 className="size-3.5 accent-foreground"

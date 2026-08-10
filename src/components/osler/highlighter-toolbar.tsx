@@ -130,7 +130,7 @@ export function HighlighterToolbar({
         isMobile && "gap-1.5 p-2",
         tone === "header"
           ? "border border-primary-foreground/15 bg-primary-foreground/10 backdrop-blur-md"
-          : "border border-border/60 bg-card",
+          : "border border-border bg-card",
       )}
     >
       {HIGHLIGHT_COLOR_KEYS.map((key) => {

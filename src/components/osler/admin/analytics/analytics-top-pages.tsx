@@ -2,8 +2,9 @@
 
 import { Eye } from "lucide-react";
 import { useI18n } from "@/components/osler/i18n-provider";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Skeleton } from "@/components/ui/skeleton";
+import { ChartCard } from "@/components/osler/ui-primitives";
+import { ChartEmpty, ChartLoading } from "@/components/osler/analytics-primitives";
+import { MetricBar } from "@/components/osler/ui-primitives";
 import type { AnalyticsTopPages } from "@/components/osler/admin/admin-api";
 
 interface AnalyticsTopPagesPanelProps {
@@ -17,52 +18,57 @@ export function AnalyticsTopPagesPanel({ data, loading }: AnalyticsTopPagesPanel
   const max = data?.items?.[0]?.views ?? 1;
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2 text-base">
+    <ChartCard
+      title={
+        <span className="flex items-center gap-2">
           <Eye className="size-4 text-primary" />
           {t("admin.analytics.topPages.title")}
-        </CardTitle>
-        <CardDescription>{t("admin.analytics.topPages.desc")}</CardDescription>
-      </CardHeader>
-      <CardContent>
-        {loading ? (
-          <Skeleton className="h-[280px] w-full rounded-lg" />
-        ) : !data || data.items.length === 0 ? (
-          <div className="h-[280px] flex items-center justify-center text-sm text-muted-foreground">
-            {t("admin.analytics.noData")}
-          </div>
-        ) : (
-          <ul className="space-y-2">
-            {data.items.map((p, i) => (
-              <li key={p.path} className="space-y-1">
-                <div className="flex items-center justify-between gap-3 text-sm">
-                  <div className="flex items-center gap-2 min-w-0">
-                    <span className="text-xs text-muted-foreground font-mono w-6 shrink-0 text-end">
-                      {i + 1}.
-                    </span>
-                    <code className="font-mono text-xs truncate">{p.path}</code>
-                  </div>
-                  <div className="flex items-center gap-3 shrink-0">
-                    <span className="text-xs text-muted-foreground">
-                      {t("admin.analytics.topPages.unique", { n: p.uniqueSessions.toLocaleString() })}
-                    </span>
-                    <span className="font-mono font-medium tabular-nums">
-                      {p.views.toLocaleString()}
-                    </span>
-                  </div>
+        </span>
+      }
+      subtitle={t("admin.analytics.topPages.desc")}
+    >
+      {loading ? (
+        <ChartLoading />
+      ) : !data || data.items.length === 0 ? (
+        <ChartEmpty
+          icon={Eye}
+          title={t("admin.analytics.noData")}
+          description={t("admin.analytics.topPages.desc")}
+        />
+      ) : (
+        <ul className="space-y-2">
+          {data.items.map((p, i) => (
+            <li key={p.path} className="space-y-1">
+              <div className="flex items-center justify-between gap-3 text-sm">
+                <div className="flex items-center gap-2 min-w-0">
+                  <span className="text-xs text-muted-foreground font-mono w-6 shrink-0 text-end">
+                    {i + 1}.
+                  </span>
+                  <code className="font-mono text-xs truncate">{p.path}</code>
                 </div>
-                <div className="h-1.5 rounded-full bg-muted/60 overflow-hidden ms-8">
-                  <div
-                    className="h-full bg-primary/60 rounded-full"
-                    style={{ width: `${(p.views / max) * 100}%` }}
-                  />
+                <div className="flex items-center gap-3 shrink-0">
+                  <span className="text-xs text-muted-foreground">
+                    {t("admin.analytics.topPages.unique", { n: p.uniqueSessions.toLocaleString() })}
+                  </span>
+                  <span className="font-mono font-medium tabular-nums">
+                    {p.views.toLocaleString()}
+                  </span>
                 </div>
-              </li>
-            ))}
-          </ul>
-        )}
-      </CardContent>
-    </Card>
+              </div>
+              {/* Per-row metric bar — replaces the hand-rolled progress
+               * track with the shared MetricBar primitive. Reads the
+               * row's view count relative to the top page. */}
+              <MetricBar
+                value={p.views}
+                max={max}
+                color="primary"
+                label={`${p.path} views`}
+                className="ms-8"
+              />
+            </li>
+          ))}
+        </ul>
+      )}
+    </ChartCard>
   );
 }

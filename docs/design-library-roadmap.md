@@ -107,14 +107,77 @@ For each proposed component:
 
 ## Suggested backlog
 
-| Priority | Initiative | Outcome | Candidate source |
-| --- | --- | --- | --- |
-| P0 | Motion audit and shared recipes | Replace the remaining ad-hoc CSS entrance animations with purposeful, reduced-motion-safe Framer Motion patterns. | Motion Primitives |
-| P0 | Form field refinement | Standardize grouped fields, validation feedback, and focused controls in Settings and QBank setup. | Origin/Coss UI patterns |
-| P1 | Analytics primitives | Introduce accessible chart/table wrappers driven by Osler semantic tokens. | Existing Recharts + TanStack Table; evaluate Tremor later |
-| P1 | Content upload experience | Improve the admin content-upload path with a robust, touch-friendly dropzone and image review. | Kibo UI patterns |
-| P2 | Public marketing kit | Build a separate, restrained library of landing-page sections and one optional hero accent. | Shadcnblocks + Magic UI + Cult UI |
-| P2 | Curated component review | Maintain an allow-list of locally adapted components from external registries. | 21st.dev, all sources |
+| Priority | Initiative | Outcome | Candidate source | Status |
+| --- | --- | --- | --- | --- |
+| P0 | Motion audit and shared recipes | Replace the remaining ad-hoc CSS entrance animations with purposeful, reduced-motion-safe Framer Motion patterns. | Motion Primitives | **In progress** — `motion.ts` extended with `listItemEnter`, `tabIndicator`, `disclosureVariants`, `feedbackPulse`, `pressFeedback`, `stackedPanelEnter`. Ad-hoc `medos-fade-in` CSS keyframes retained for one-shot mount fades that don't need `AnimatePresence`; new components should prefer the Framer Motion recipes. |
+| P0 | Form field refinement | Standardize grouped fields, validation feedback, and focused controls in Settings and QBank setup. | Origin/Coss UI patterns | **Partial** — `<FormField>` primitive added to `ui-primitives.tsx` with label + description + error + hint rhythm. `<SegmentedControl>` added for compact option toggles. Migration of existing Settings / QBank setup forms to the new primitives is incremental — adopt on next edit of each form. |
+| P1 | Analytics primitives | Introduce accessible chart/table wrappers driven by Osler semantic tokens. | Existing Recharts + TanStack Table; evaluate Tremor later | **Done** — `analytics-primitives.tsx` ships `<ChartContainer>`, `<ChartTooltip>`, `<ChartEmpty>`, `<ChartLoading>`, `<ChartError>`, `<ChartLegend>`, and `chartSeries()`. All colors read from `--chart-1..5` semantic tokens. Tremor not adopted; the wrapper covers the immediate Dashboard / Profile / QBank-results / admin analytics needs. |
+| P1 | Content upload experience | Improve the admin content-upload path with a robust, touch-friendly dropzone and image review. | Kibo UI patterns | Not started. Triggered by a future content-upload feature brief. |
+| P2 | Public marketing kit | Build a separate, restrained library of landing-page sections and one optional hero accent. | Shadcnblocks + Magic UI + Cult UI | Not started. Triggered by a future public Osler site. |
+| P2 | Curated component review | Maintain an allow-list of locally adapted components from external registries. | 21st.dev, all sources | Ongoing. This document is the allow-list. |
+
+## Local deviations from source patterns
+
+Each adopted pattern deviates from its source in ways that keep it on Osler's design foundations. Recorded here so future component intake can verify the deviation is still intentional.
+
+- **SegmentedControl** (Origin/Coss UI): the source uses Base UI's `Tabs` primitive under the hood. Osler's version stays on a plain `<button role="radio">` set so it composes the existing Radix/shadcn stack without a new dependency. The sliding thumb uses Framer Motion `layoutId` instead of Base UI's internal animation.
+- **FormField** (Origin UI): the source ships its own `Label` and `Input` derivatives. Osler's version is layout-only — it composes the existing `@/components/ui/label` and `@/components/ui/input` so the canonical a11y behavior and form-state wiring stay in one place.
+- **ChartTooltip** (Osler): not sourced from a registry — written from scratch to match the existing dashboard tooltip styling while adding accessible semantics (`role="tooltip"`, semantic series colors, themed backdrop blur).
+- **Soft tint tokens** (`--success-soft` etc.): not in the source patterns. Added so status callouts on cards read as a perceptually consistent pair with their foreground color across dark and light themes. The Tailwind v4 `@theme inline` mapping auto-generates `bg-success-soft` etc. utilities.
+- **Elevation scale** (`--shadow-e1..e4`): not in the source patterns. Added so cards, popovers, and dialogs share a single depth vocabulary instead of ad-hoc `shadow-sm` / `shadow-md` / `shadow-lg` choices that drift over time.
+- **Skeleton shimmer** (21st.dev): the source typically uses Tailwind's `animate-pulse` on a flat tinted block. Osler's version sweeps a soft `linear-gradient` highlight across the surface via a custom `osler-shimmer` keyframe, reading as "content arriving" rather than a flat pulse. Honours `prefers-reduced-motion` and the user's animations toggle by falling back to a flat tint.
+- **EmptyState staggered entrance** (Motion Primitives): the source typically animates children with a single `staggerChildren` container. Osler's version uses per-element variants so the icon springs in (scale + y) while the title / body / actions fade up — the icon gets a spring while text gets a tween, matching each element's perceptual weight.
+- **AnimatedDisclosure** (Motion Primitives): the source uses `height: auto` animation via `motion.div` with `AnimatePresence`. Osler's version adds a rotating chevron (90° on open) and a divider between header and body so it composes cleanly on top of the `.osler-card--default` recipe without a separate card wrapper.
+- **QuickAction progressive card** (Cult UI): the source typically uses a `group-hover` scale + glow. Osler's version replaces the glow with a 3px inline-start accent stripe that grows from 50% to 100% `scale-y` — same "this card is alive" affordance without competing with the icon container's `bg-primary-soft` tint. Stripe position switches with `rtl` so it always sits on the reading-start edge.
+- **Global search active indicator** (21st.dev): the source typically uses a static `↵` hint or a flat background tint. Osler's version uses a Framer Motion `layoutId` shared-layout transition so the 2px accent bar slides between rows as the user arrows up/down — same affordance as macOS Spotlight / VS Code command palette, but composed on Osler tokens.
+- **Login ambient glow** (Magic UI / Cult UI): the source patterns often use animated gradient beams or marquee effects for hero sections. Osler's version uses a single static radial gradient at 14% primary tint — reads as a polished ambient light without motion that would distract from the form. Reserved for the login screen only; not used on study surfaces per the roadmap's "separate product UI from marketing expression" rule.
+
+## Component adoptions shipped
+
+The following individual components were stepped up by adopting patterns from the source libraries. Each adoption is documented in `AGENTS.md → Component adoptions` with the file location and the specific pattern applied.
+
+- **Skeleton + SkeletonText + SkeletonCard** (21st.dev) — shimmer placeholder + composed patterns for paragraph and card layouts.
+- **HubSkeleton** (21st.dev + Osler) — premium loading state for hub views; mirrors the real layout (header → hero → stats → cards).
+- **EmptyState + LoadingState** (Motion Primitives) — staggered entrance choreography.
+- **AnimatedDisclosure** (Motion Primitives) — smooth height + opacity disclosure with rotating chevron.
+- **Login screen** (Motion Primitives + Origin UI) — ambient glow, staggered brand header, premium input focus rings.
+- **Dashboard QuickAction + featured + recent pack cards** (Cult UI) — progressive card hover with accent stripe + icon scale + arrow nudge.
+- **Global search panel** (21st.dev) — shimmer loading rows + animated active indicator.
+- **QBank explanation card** (Motion Primitives) — entrance animation + semantic soft-tint status header.
+- **Settings → About section** (Motion Primitives) — `AnimatedDisclosure` wraps informational subsections.
+- **Dashboard / QBank / OSCE / Videos hub loading** (21st.dev) — `<HubSkeleton>` replaces centered spinners; Videos folder-loading uses a shimmer video-card grid.
+- **Library article loading** (21st.dev) — shimmer paragraph skeleton while article content fetches.
+- **Admin StatsOverview** (21st.dev + Osler) — skeleton stat tiles while fetching; `MetricBar` on each populated tile shows relative scale.
+- **Admin AdminTable** (21st.dev) — shimmer row loading that mirrors the real table layout.
+- **Admin sidebar nav** (Motion Primitives) — shared-layout active indicator that slides between nav items; premium brand block.
+- **Admin content dropzone** (Kibo UI) — premium dashed-border dropzone with drag-over scale + primary glow + icon-container scale.
+- **Admin analytics charts** (Osler pre-Tremor wrapper) — all 5 panels (timeseries, web-vitals, top-pages, api-performance, errors) wrapped with `<ChartCard>` + `<ChartTooltip>` + `<ChartEmpty>` + `<ChartLoading>` + `<ChartLegend>`. Series colors read from `chartSeries(index)`.
+- **Admin dashboard loading** (21st.dev) — `<HubSkeleton>` in `<Suspense>` while `StatsOverview` mounts.
+- **Theme preview** (Osler) — mini app-surface preview replaces flat color dots in Settings → Appearance.
+
+## Theming system — curated
+
+The theme catalog was consolidated from 9 families (18 variants) down to **6 curated families** (12 variants). Each remaining family has a distinct primary hue — no two share the same color identity:
+
+- **Built-in Dark + Light** (osler-default) — the navy palette.
+- **Forest Rounds** (dark + light) — green.
+- **Crimson ED** (dark + light) — red.
+- **Midnight** (dark + light) — violet.
+- **Slate** (dark + light) — neutral gray.
+- **Warm Sand** (light + dark) — terracotta.
+
+**Removed** (documented in `config.ts`):
+- Navy Clinic (dark + light) — near-duplicate of the built-in Dark + Light.
+- Cream Journal (light) — byte-identical to Navy Clinic Light.
+- Cream Journal Dark — orphaned after Cream Journal Light was removed.
+
+**Stale theme validation**: `OslerThemeProvider` now validates the stored theme id against the available themes on mount. If a user had previously selected a removed theme (e.g. "navy-clinic"), the provider falls back to the configured default and persists the resolved id — so theme removal never leaves the user on a theme class with no matching CSS.
+
+**Theme preview**: each theme variant button in Settings → Appearance now shows a mini app-surface preview (background → card with primary accent dot + muted text line → primary bar + secondary tint + accent) instead of flat color dots. The preview is scoped to the theme's CSS class so CSS variables resolve to the theme's actual values.
+
+## Language selector (data-driven)
+
+The Settings → Language section now derives both the UI language selector and the content-language filter from `LANGUAGES` in `src/lib/osler/i18n/languages.ts`. Adding a new language is a one-file edit (plus the i18n string table + registration). The content-filter label falls back to a generic `contentLangOnly` template when a per-language override key is absent, and the language icon is auto-detected from the native-name script.
 
 ## What not to do
 
