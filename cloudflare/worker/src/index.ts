@@ -421,7 +421,7 @@ function clientIp(request: Request): string {
 // ─── Rate limiting ───────────────────────────────────────────────────────────
 
 function rateLimit(ip: string, bucket: string): boolean {
-  const ipKey = "ip:global";
+  const ipKey = `ip:global:${ip}`;
   const bucketKey = `${bucket}:${ip}`;
   const t = now();
   let ipEntry = RATE_LIMIT_BUCKETS.get(ipKey);
@@ -2595,14 +2595,13 @@ export default {
         return json({ ok: true, googleEnabled: googleReady(env), turnstileEnabled: env.TURNSTILE_ENABLED === "true" }, 200, origin, { requestId: log.requestId, cacheControl: "public, max-age=60" });
       }
 
-      // ── Public content serving (R2-backed, rate-limited: 240 req/min per IP) ──
+      // ── Public content serving (R2-backed and CDN-cacheable) ──
       // These endpoints are fetched cross-origin from the Pages site, so the
       // response must include `Access-Control-Allow-Origin` (via cors(origin))
       // AND must relax `Cross-Origin-Resource-Policy` to `cross-origin` so
       // the browser allows the Pages site to read the body. The default
       // SECURITY_HEADERS has CORP=same-origin, which would block these reads.
       if (request.method === "GET" && url.pathname.startsWith("/v1/content/")) {
-        if (!rateLimit(ip, "content")) return json({ error: "Too many requests" }, 429, origin, log);
         const contentPath = url.pathname.slice("/v1/content/".length).replace(/\/{2,}/g, "/");
         if (!contentPath || contentPath.includes("..") || contentPath.includes("\\") || contentPath.startsWith("/")) return json({ error: "Not found" }, 404, origin, log);
         if (!env.CONTENT) return json({ error: "Content storage not configured" }, 503, origin, log);
@@ -2624,7 +2623,7 @@ export default {
         const cacheable = ext !== "json" && ext !== "md";
         const contentHeaders: Record<string, string> = {
           "content-type": contentType,
-          "cache-control": cacheable ? "public, max-age=86400, immutable" : "public, max-age=60",
+          "cache-control": cacheable ? "public, max-age=86400, immutable" : "public, max-age=300, s-maxage=3600, stale-while-revalidate=86400",
           ...cors(origin),
           ...SECURITY_HEADERS,
           // Override CORP so the Pages site (different origin) can read this.
@@ -2635,7 +2634,6 @@ export default {
 
       // ── Public content manifests (R2-backed) ──
       if (request.method === "GET" && url.pathname.startsWith("/v1/content-manifests/")) {
-        if (!rateLimit(ip, "content")) return json({ error: "Too many requests" }, 429, origin, log);
         const manifestPath = url.pathname.slice("/v1/content-manifests/".length).replace(/\/{2,}/g, "/");
         if (!env.CONTENT) return json({ error: "Content storage not configured" }, 503, origin, log);
         // Only the known category manifests are public — never let a path
@@ -2648,7 +2646,7 @@ export default {
         if (!obj) return json({ error: "Not found" }, 404, origin, log);
         const manifestHeaders: Record<string, string> = {
           "content-type": "application/json",
-          "cache-control": "public, max-age=60",
+          "cache-control": "public, max-age=300, s-maxage=3600, stale-while-revalidate=86400",
           ...cors(origin),
           ...SECURITY_HEADERS,
           "cross-origin-resource-policy": "cross-origin",
@@ -2874,7 +2872,6 @@ export default {
       // Admin namespace
       if (url.pathname.startsWith("/v1/admin")) {
         if (!isAdminOrContent(session)) return json({ error: "Forbidden" }, 403, origin, log);
-        if (!rateLimit(ip, "admin")) return json({ error: "Too many requests" }, 429, origin, log);
         const adminResponse = await handleAdmin(request, env, session, url, origin, log);
         if (adminResponse) return adminResponse;
         return json({ error: "Not found" }, 404, origin, log);

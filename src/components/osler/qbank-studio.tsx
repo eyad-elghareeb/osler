@@ -56,7 +56,7 @@ import {
   Download,
   PackageOpen,
 } from "lucide-react";
-import { loadAllContent, loadContentByUid, loadNodeByUid, ENGINE_META, flattenTree, packBasePath } from "@/lib/osler/content";
+import { loadCategoryTree, loadContentByUid, loadNodeByUid, ENGINE_META, flattenTree, packBasePath } from "@/lib/osler/content";
 import { toast } from "@/hooks/use-toast";
 import {
   contentToQuestions as poolContentToQuestions,
@@ -1100,20 +1100,34 @@ function HomeView({
   }, []);
 
   React.useEffect(() => {
-    loadAllContent()
-      .then((result) => {
+    loadCategoryTree("quiz")
+      .then((tree) => {
+        const leaves = flattenTree(tree).filter(
+          (node) => node.type === "quiz" || node.type === "bank" || node.type === "written",
+        );
         setData({
-          items: result.items.filter(
-            (entry) =>
-              entry.node.type === "quiz" ||
-              entry.node.type === "bank" ||
-              entry.node.type === "written"
-          ),
-          trees: result.trees,
+          items: leaves.map((node) => ({ node, content: null })),
+          trees: { quiz: tree, bank: tree, written: tree },
         });
       })
       .catch(console.error);
   }, []);
+
+  const loadPack = React.useCallback(async (node: ContentTreeNode): Promise<AnyContent | null> => {
+    const cached = data?.items.find((entry) => entry.node.uid === node.uid)?.content;
+    if (cached) return cached;
+    try {
+      const content = await loadContentByUid(node.uid, node.type as EngineType);
+      setData((current) => current && {
+        ...current,
+        items: current.items.map((entry) => entry.node.uid === node.uid ? { ...entry, content } : entry),
+      });
+      return content;
+    } catch (error) {
+      console.error(`Failed to load ${node.path}:`, error);
+      return null;
+    }
+  }, [data]);
 
   React.useEffect(() => {
     const update = () => setSavedSessions(sessions.list());
@@ -1185,6 +1199,7 @@ function HomeView({
           {homeTab === "content" && (
             <ContentTab
               data={data}
+              onLoadPack={loadPack}
               onOpenPack={onOpenPack}
               onPickForCreateTest={onPickForCreateTest}
               onContextMenu={handleContextMenu}
@@ -1195,6 +1210,7 @@ function HomeView({
               <div className="osler-page__inner">
                 <CreateTestTab
                   data={data}
+                  onLoadPack={loadPack}
                   testMode={testMode}
                   onTestModeChange={onTestModeChange}
                   onOpenPack={onOpenPack}
@@ -1570,21 +1586,23 @@ function PackCard({
   node,
   content,
   index,
+  onLoadPack,
   onOpenPack,
   onContextMenu,
 }: {
   node: ContentTreeNode;
-  content: AnyContent;
+  content: AnyContent | null | undefined;
   index: number;
+  onLoadPack: (node: ContentTreeNode) => Promise<AnyContent | null>;
   onOpenPack?: (item: ContentTreeNode) => void;
   onContextMenu?: (e: React.MouseEvent, item: ContentTreeNode) => void;
 }) {
   const { t, rtl } = useI18n();
   const meta = ENGINE_META[node.type as EngineType];
   const Icon = ENGINE_ICONS[node.type as EngineType] ?? ListChecks;
-  const count = countQuestions(content);
+  const count = content ? countQuestions(content) : 0;
   const packProgress = storage.packProgress(node.uid);
-  const isAr = (content.meta.lang ?? node.lang) === "ar";
+  const isAr = (content?.meta.lang ?? node.lang) === "ar";
 
   const packUrls = React.useMemo(() => {
     const base = packBasePath(node);
@@ -1593,9 +1611,9 @@ function PackCard({
     return urls;
   }, [node]);
 
-  const handleCardClick = () => {
+  const handleCardClick = async () => {
     haptic("light");
-    onOpenPack?.(node);
+    if (content || await onLoadPack(node)) onOpenPack?.(node);
   };
 
   return (
@@ -1646,7 +1664,7 @@ function PackCard({
       </div>
 
       {/* Description */}
-      {content.meta.description && (
+      {content?.meta.description && (
         <p className="text-xs text-muted-foreground/80 line-clamp-2 leading-relaxed">
           {content.meta.description}
         </p>
@@ -1743,18 +1761,20 @@ export { ContentLangFilterPopover as ContentLangFilter };
 
 function ContentTab({
   data,
+  onLoadPack,
   onOpenPack,
   onPickForCreateTest,
   onContextMenu,
 }: {
   data: { items: PackEntry[]; trees: Record<string, ContentTreeNode[]> } | null;
+  onLoadPack: (node: ContentTreeNode) => Promise<AnyContent | null>;
   onOpenPack?: (item: ContentTreeNode) => void;
   /** P1-2: leaf pack click hands off to Create Test instead of starting a quiz. */
   onPickForCreateTest?: (node: ContentTreeNode) => void;
   onContextMenu?: (e: React.MouseEvent, item: ContentTreeNode) => void;
 }) {
   const { t, rtl, contentFilter } = useI18n();
-  const [selectedFolderIdx, setSelectedFolderIdx] = React.useState<number | null>(null);
+  const [selectedFolders, setSelectedFolders] = React.useState<ContentTreeNode[]>([]);
   const [search, setSearch] = React.useState("");
 
   // Build a uid → content map for O(1) lookup when computing per-folder stats.
@@ -1846,8 +1866,7 @@ function ContentTab({
   const handleNodeClick = React.useCallback(
     (node: ContentTreeNode) => {
       if (node.items.length > 0) {
-        const idx = filteredRootTree.findIndex((n) => n.uid === node.uid);
-        if (idx >= 0) setSelectedFolderIdx(idx);
+        setSelectedFolders((folders) => [...folders, node]);
       } else if (node.type === "quiz") {
         // Quiz packs are small — start directly.
         onOpenPack?.(node);
@@ -1880,7 +1899,7 @@ function ContentTab({
     );
   }
 
-  const selectedFolder = selectedFolderIdx !== null ? filteredRootTree[selectedFolderIdx] : null;
+  const selectedFolder = selectedFolders.at(-1) ?? null;
 
   // ── DECKS VIEW (root-level pack/folder grid) ──────────────────────────
   const decksView = (
@@ -1912,7 +1931,7 @@ function ContentTab({
                   variant="ghost"
                   aria-label={node.title}
                   key={node.uid}
-                  onClick={() => setSelectedFolderIdx(idx)}
+                  onClick={() => setSelectedFolders([node])}
                   className="medos-fade-in h-auto w-full min-w-0 justify-start text-start bg-card border border-border rounded-xl p-4 hover:border-primary/40 hover:shadow-md hover:bg-card transition-all group flex items-center gap-3.5 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
                   style={{ animationDelay: `${idx * 0.04}s` }}
                 >
@@ -1935,7 +1954,7 @@ function ContentTab({
             }
 
             // Leaf — render as a pack card (same pattern as flashcard leaf)
-            return <PackCard key={node.uid} node={node} content={contentByUid.get(node.uid)!} index={idx} onOpenPack={handleNodeClick} onContextMenu={onContextMenu} />;
+            return <PackCard key={node.uid} node={node} content={contentByUid.get(node.uid)} index={idx} onLoadPack={onLoadPack} onOpenPack={handleNodeClick} onContextMenu={onContextMenu} />;
           })}
         </div>
       )}
@@ -1957,7 +1976,7 @@ function ContentTab({
         {/* Header with back button */}
         <div className="mb-6">
           <button
-            onClick={() => { setSelectedFolderIdx(null); setSearch(""); }}
+            onClick={() => { setSelectedFolders((folders) => folders.slice(0, -1)); setSearch(""); }}
             className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors mb-3"
           >
             <ArrowLeft className={cn("size-3.5", rtl && "rtl-flip-x")} />
@@ -2035,21 +2054,7 @@ function ContentTab({
                     variant="ghost"
                     aria-label={child.title}
                     key={child.uid}
-                    onClick={() => {
-                      // For nested branches: start a merged session with all leaf packs
-                      if (onPickForCreateTest) {
-                        const leaves = collectLeafUids(child);
-                        for (const uid of leaves) {
-                          const leafNode = findNodeByUid(qbankTree, uid);
-                          if (leafNode) onPickForCreateTest(leafNode);
-                        }
-                      } else {
-                        // Open first leaf
-                        const leaves = collectLeafUids(child);
-                        const firstLeaf = findNodeByUid(qbankTree, leaves[0]);
-                        if (firstLeaf) onOpenPack?.(firstLeaf);
-                      }
-                    }}
+                    onClick={() => setSelectedFolders((folders) => [...folders, child])}
                     className="medos-fade-in h-auto w-full min-w-0 justify-start text-start bg-card border border-border rounded-xl p-4 hover:border-primary/40 hover:shadow-md hover:bg-card transition-all group flex items-center gap-3.5 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
                     style={{ animationDelay: `${idx * 0.04}s` }}
                   >
@@ -2073,8 +2078,7 @@ function ContentTab({
 
               // Leaf child — pack card
               const childContent = contentByUid.get(child.uid);
-              if (!childContent) return null;
-              return <PackCard key={child.uid} node={child} content={childContent} index={idx} onOpenPack={handleNodeClick} />;
+              return <PackCard key={child.uid} node={child} content={childContent} index={idx} onLoadPack={onLoadPack} onOpenPack={handleNodeClick} />;
             })}
           </div>
         )}
@@ -2092,7 +2096,7 @@ function ContentTab({
       rtl={rtl}
       home={decksView}
       subpage={subfolderView}
-      onBack={() => { setSelectedFolderIdx(null); setSearch(""); }}
+      onBack={() => { setSelectedFolders((folders) => folders.slice(0, -1)); setSearch(""); }}
     />
   );
 }
@@ -2128,6 +2132,7 @@ function collectAllUids(nodes: ContentTreeNode[]): string[] {
  * ───────────────────────────────────────────────────────────────────────── */
 function CreateTestTab({
   data,
+  onLoadPack,
   testMode,
   onTestModeChange,
   onOpenPack,
@@ -2137,6 +2142,7 @@ function CreateTestTab({
   onStartCustomSession,
 }: {
   data: { items: PackEntry[]; trees: Record<string, ContentTreeNode[]> } | null;
+  onLoadPack: (node: ContentTreeNode) => Promise<AnyContent | null>;
   testMode: TestMode;
   onTestModeChange: (m: TestMode) => void;
   onOpenPack?: (item: ContentTreeNode) => void;
@@ -2174,7 +2180,7 @@ function CreateTestTab({
   // Tree search (mirrors the Content tab pattern).
   const [search, setSearch] = React.useState("");
   // Folder navigation for source picker (flashcard-style deck browser).
-  const [selectedFolderIdx, setSelectedFolderIdx] = React.useState<number | null>(null);
+  const [selectedFolders, setSelectedFolders] = React.useState<ContentTreeNode[]>([]);
   // Ref for scrolling a pre-selected source into view.
   const preselectScrollRef = React.useRef<HTMLElement | null>(null);
 
@@ -2231,6 +2237,8 @@ function CreateTestTab({
       prev.includes(initialSourceUid) ? prev : [...prev, initialSourceUid],
     );
     // Defer the scroll until after the DOM updates.
+    const node = findNodeByUid(qbankTree, initialSourceUid);
+    if (node) void onLoadPack(node);
     requestAnimationFrame(() => {
       preselectScrollRef.current?.scrollIntoView({
         behavior: "smooth",
@@ -2238,7 +2246,7 @@ function CreateTestTab({
       });
     });
     onConsumeInitialSource?.();
-  }, [initialSourceUid, onConsumeInitialSource]);
+  }, [initialSourceUid, onConsumeInitialSource, onLoadPack, qbankTree]);
 
   // Selected pack entries (resolved from uids).
   const selectedEntries = React.useMemo(
@@ -2313,9 +2321,10 @@ function CreateTestTab({
 
   // Toggle a leaf source on/off, allowing mcq+written mixing.
   const toggleSource = React.useCallback(
-    (uid: string) => {
+    async (uid: string) => {
       const entry = entryByUid.get(uid);
       if (!entry) return;
+      if (!entry.content && !await onLoadPack(entry.node)) return;
       const engine = entry.node.type as EngineType;
       const newFamily = poolFamilyForEngine(engine);
       if (!newFamily) return;
@@ -2337,7 +2346,7 @@ function CreateTestTab({
         return [...prev, uid];
       });
     },
-    [entryByUid],
+    [entryByUid, onLoadPack],
   );
 
   // Build & start a custom session.
@@ -2411,7 +2420,7 @@ function CreateTestTab({
               <input
                 type="text"
                 value={search}
-                onChange={(e) => { setSearch(e.target.value); setSelectedFolderIdx(null); }}
+                onChange={(e) => { setSearch(e.target.value); setSelectedFolders([]); }}
                 placeholder={t("qbank.home.search")}
                 className={cn(
                   "w-full h-9 rounded-xl border border-border bg-card text-sm px-9 focus:outline-none focus:ring-2 focus:ring-primary/30",
@@ -2422,18 +2431,18 @@ function CreateTestTab({
 
             {/* Folder hierarchy browser */}
             <div className="rounded-xl border border-border bg-card max-h-80 overflow-y-auto medos-scroll">
-              {selectedFolderIdx !== null ? (
+              {selectedFolders.length > 0 ? (
                 /* Subfolder view — children of the selected folder */
                 <div className="p-3">
                   <button
-                    onClick={() => { setSelectedFolderIdx(null); setSearch(""); }}
+                    onClick={() => { setSelectedFolders((folders) => folders.slice(0, -1)); setSearch(""); }}
                     className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors mb-3"
                   >
                     <ArrowLeft className={cn("size-3.5", rtl && "rtl-flip-x")} />
                     {t("qbank.home.allPacks")}
                   </button>
                   <div className="grid grid-cols-1 gap-2">
-                    {filteredTree[selectedFolderIdx]?.items
+                    {selectedFolders.at(-1)?.items
                       .filter((child) => {
                         const qbankTypes = new Set(["quiz", "bank", "written"]);
                         return qbankTypes.has(child.type);
@@ -2477,12 +2486,10 @@ function CreateTestTab({
                             </button>
                           );
                         }
-                        // Nested branch — show as a card that merges all its leaves
-                        const entry = entryByUid.get(child.uid);
-                        const fs = entry?.content ? countQuestions(entry.content) : 0;
                         return (
-                          <div
+                          <button
                             key={child.uid}
+                            onClick={() => setSelectedFolders((folders) => [...folders, child])}
                             className="flex items-center gap-3 p-3 rounded-xl border border-border"
                           >
                             <div
@@ -2495,7 +2502,7 @@ function CreateTestTab({
                               <h4 className="text-sm font-medium truncate">{child.title}</h4>
                               <p className="text-[11px] text-muted-foreground">{child.items.length} {t("qbank.home.packs", { n: child.items.length }).split(" ").slice(1).join(" ")}</p>
                             </div>
-                          </div>
+                          </button>
                         );
                       })}
                   </div>
@@ -2519,7 +2526,7 @@ function CreateTestTab({
                         return (
                           <button
                             key={node.uid}
-                            onClick={() => setSelectedFolderIdx(idx)}
+                            onClick={() => setSelectedFolders([node])}
                             className="flex items-center gap-3 p-3 rounded-xl border border-border hover:border-primary/30 hover:bg-primary/[0.02] transition-colors text-start group"
                           >
                             <div
