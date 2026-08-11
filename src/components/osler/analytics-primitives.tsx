@@ -360,7 +360,7 @@ const SPARK_TONE_COLOR: Record<"success" | "destructive" | "neutral", string> = 
   neutral: "var(--chart-1)",
 };
 
-function defaultSparkDelta(first: number, last: number): string {
+export function defaultSparkDelta(first: number, last: number): string {
   const diff = last - first;
   const sign = diff > 0 ? "+" : diff < 0 ? "\u2212" : "";
   return `${sign}${Math.abs(diff).toFixed(diff % 1 === 0 ? 0 : 1)}`;

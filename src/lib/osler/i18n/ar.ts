@@ -639,7 +639,6 @@ export const ar = {
     "profile.newHere": "جديد هنا",
     "profile.questionsAnswered": "{n} سؤال تمت الإجابة عنه",
     "profile.wrongLabel": "خطأ",
-    "profile.performanceByEngine": "الأداء حسب المحرك",
 
     /* ── Profile Performance Insights ────────────────────────────────── */
     "profile.insights.title": "مؤشّرات الأداء",
@@ -670,7 +669,6 @@ export const ar = {
     "profile.stats": "الإحصاءات",
     "profile.achievements": "الإنجازات",
     "profile.recentSessions": "الجلسات الأخيرة",
-    "profile.noSessions": "لا جلسات بعد — ابدأ واحدة من استوديو بنك الأسئلة.",
     "profile.totalAttempted": "إجمالي المحاولات",
     "profile.totalCorrect": "إجمالي الصحيحة",
     "profile.avgAccuracy": "متوسط الدقة",

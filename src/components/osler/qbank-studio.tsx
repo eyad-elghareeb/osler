@@ -140,7 +140,7 @@ import { gradeWithAI, createManualEvaluation, transcribePhoto } from "@/lib/osle
 import { useI18n } from "./i18n-provider";
 import { NavigationStack } from "./navigation-stack";
 import { PageHeader, SectionHeading, StatTile, EmptyState, LoadingState, HubSkeleton } from "./ui-primitives";
-import { SparkTrend } from "./analytics-primitives";
+import { SparkTrend, defaultSparkDelta } from "./analytics-primitives";
 import { FolderTreeNav } from "./folder-tree-nav";
 import type { StringKey } from "@/lib/osler/i18n";
 import { loadUiLang } from "@/lib/osler/i18n";
@@ -3440,7 +3440,12 @@ function TrackerTab({
               color="warning"
               trend={
                 accuracyTrend.length >= 2 ? (
-                  <SparkTrend data={accuracyTrend} tone="auto" showDelta />
+                  <SparkTrend
+                    data={accuracyTrend}
+                    tone="auto"
+                    showDelta
+                    deltaFormatter={(first, last) => `${defaultSparkDelta(first, last)}%`}
+                  />
                 ) : undefined
               }
             />
@@ -3913,21 +3918,6 @@ function QBankTimer({
   );
 }
 
-// Self-ticking elapsed-time readout (tutor "time spent"). Isolated so the
-// surrounding view doesn't re-render every second.
-function ElapsedTime({ startedAt }: { startedAt: number }) {
-  const [now, setNow] = React.useState(() => Date.now());
-  React.useEffect(() => {
-    const id = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(id);
-  }, []);
-  return (
-    <span className="font-mono tabular-nums">
-      {formatTime(Math.floor((now - startedAt) / 1000))}
-    </span>
-  );
-}
-
 function QuizView({
   session,
   activeItem: activeItemProp,
@@ -4299,6 +4289,7 @@ function QuizView({
     };
     const qRating = session.ratings[question.id];
     const qRubricState = session.rubricState[question.id] ?? (question.rubric ? question.rubric.map(() => false) : []);
+    const qTimeMs = session.questionTimes?.[question.id] ?? null;
 
     // Per-question written verdict (for the inline explanation in continuous mode).
     const qWrittenVerdict: "pass" | "fail" | null =
@@ -4358,7 +4349,11 @@ function QuizView({
                 </div>
                 <div className="flex items-center gap-1.5">
                   <Timer className="size-3.5" />
-                  <ElapsedTime startedAt={session.startedAt} />
+                  {qTimeMs != null ? (
+                    <span className="font-mono tabular-nums">{formatMs(qTimeMs)}</span>
+                  ) : (
+                    <span className="font-mono tabular-nums opacity-60">—</span>
+                  )}
                   <span className="opacity-60">{t("qbank.session.timeSpent")}</span>
                 </div>
               </div>

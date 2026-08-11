@@ -49,8 +49,6 @@ import {
   type AchievementRecord,
   type AchievementStats,
 } from "@/lib/osler/achievements";
-import { loadAllContent, ENGINE_META } from "@/lib/osler/content";
-import type { AnyContent, ContentTreeNode } from "@/lib/osler/types";
 import { summarizeMetrics, weakestTopics, type MetricsSummary } from "@/lib/osler/metrics";
 import type { OslerView } from "./app-shell";
 import { useI18n } from "./i18n-provider";
@@ -58,7 +56,6 @@ import type { StringKey } from "@/lib/osler/i18n";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Skeleton } from "@/components/ui/skeleton";
 import { NotesPanel } from "./notes-panel";
 import { SyncModal } from "./sync/sync-modal";
 import { haptic } from "@/lib/osler/native";
@@ -94,16 +91,9 @@ export function Profile({
   const onViewChange = propOnViewChange || navigate;
   const onOpenSettingsSection = propOnOpenSettingsSection || ((section: any) => navigate("settings", { section }));
   const [syncOpen, setSyncOpen] = React.useState(false);
-  const [data, setData] = React.useState<{
-    items: Array<{ node: ContentTreeNode; content: AnyContent | null }>;
-  } | null>(null);
   const [progress, setProgress] = React.useState(storage.allProgress());
   const [unlockedAchievements, setUnlockedAchievements] = React.useState<Record<string, AchievementRecord>>({});
   const [, force] = React.useReducer((x) => x + 1, 0);
-
-  React.useEffect(() => {
-    loadAllContent().then(setData).catch(console.error);
-  }, []);
 
   React.useEffect(() => {
     const update = () => setProgress(storage.allProgress());
@@ -159,20 +149,6 @@ export function Profile({
     // session completes — using it as the recompute trigger avoids a
     // second subscription just for this derived series.
   }, [progress]);
-
-  // Engine breakdown
-  const engineStats = React.useMemo(() => {
-    const stats: Record<string, { attempted: number; correct: number }> = {};
-    progress.forEach((p) => {
-      const item = data?.items.find((x) => x.node.uid === p.uid);
-      if (!item) return;
-      const eng = item.node.type;
-      if (!stats[eng]) stats[eng] = { attempted: 0, correct: 0 };
-      stats[eng].attempted += p.attempted;
-      stats[eng].correct += p.correct;
-    });
-    return stats;
-  }, [progress, data]);
 
   const sessionsCompleted = sessions.list().filter((s) => !!s.completedAt).length;
   const flashcardsReviewed = Object.values(flashcardReview.getAll()).reduce(
@@ -316,67 +292,6 @@ export function Profile({
 
         {/* Detailed Streak & Consistency Section */}
         <ProfileStreakSection />
-
-        {/* Engine breakdown */}
-        <SectionHeading>{t("profile.performanceByEngine")}</SectionHeading>
-        {data === null ? (
-          // `engineStats` is derived by cross-referencing `progress` (available
-          // synchronously from local storage) against `data.items` (async
-          // content metadata). Before `data` resolves, engineStats is
-          // incorrectly empty even for a user with real attempts — this
-          // skeleton prevents a false "no sessions" flash. See
-          // design-library-roadmap.md.
-          <div className="space-y-3 mb-6" aria-hidden="true">
-            {Array.from({ length: 2 }).map((_, i) => (
-              <div key={i} className="osler-card--default">
-                <div className="flex items-center justify-between mb-2">
-                  <Skeleton className="h-4 w-24" />
-                  <Skeleton className="h-4 w-16" />
-                </div>
-                <Skeleton className="h-2 w-full rounded-full" />
-              </div>
-            ))}
-          </div>
-        ) : Object.keys(engineStats).length === 0 ? (
-          <div className="osler-card--default text-center text-sm text-muted-foreground mb-6 py-8">
-            {t("profile.noSessions")}
-          </div>
-        ) : (
-          <div className="space-y-3 mb-6">
-            {Object.entries(engineStats).map(([eng, stat]) => {
-              const pct = stat.attempted
-                ? Math.round((stat.correct / stat.attempted) * 100)
-                : 0;
-              return (
-                <div
-                  key={eng}
-                  className="osler-card--default"
-                >
-                  <div className="flex items-center justify-between mb-2">
-                    <div className="flex items-center gap-2">
-                      <Activity className="size-4 text-primary" />
-                      <span className="text-sm font-medium capitalize">
-                        {t(`engine.${eng}` as any)}
-                      </span>
-                    </div>
-                    <span className="text-sm tabular-nums">
-                      <span className="font-semibold">{pct}%</span>
-                      <span className="text-xs text-muted-foreground ms-2">
-                        {stat.correct}/{stat.attempted}
-                      </span>
-                    </span>
-                  </div>
-                  <div className="h-2 rounded-full bg-muted overflow-hidden">
-                    <div
-                      className="h-full bg-primary transition-all"
-                      style={{ width: `${pct}%` }}
-                    />
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
 
         {/* Performance Insights */}
         <PerformanceInsights metrics={metrics} />

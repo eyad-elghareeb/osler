@@ -308,7 +308,7 @@ export function StatTile({
         <span className="osler-stat-tile__label">{label}</span>
         {Icon && <Icon className={cn("size-4", STAT_TILE_COLOR[color])} />}
       </div>
-      <div className="flex items-end justify-between gap-2">
+      <div className="flex flex-wrap items-end justify-between gap-2">
         <div className="osler-stat-tile__value">{value}</div>
         {trend && <div className="shrink-0 pb-0.5">{trend}</div>}
       </div>

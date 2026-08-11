@@ -639,7 +639,6 @@ export const en = {
     "profile.newHere": "New here",
     "profile.questionsAnswered": "{n} questions answered",
     "profile.wrongLabel": "Wrong",
-    "profile.performanceByEngine": "Performance by Engine",
 
     /* ── Profile Performance Insights ────────────────────────────────── */
     "profile.insights.title": "Performance Insights",
@@ -670,7 +669,6 @@ export const en = {
     "profile.stats": "Statistics",
     "profile.achievements": "Achievements",
     "profile.recentSessions": "Recent sessions",
-    "profile.noSessions": "No sessions yet — start one from Q-Bank Studio.",
     "profile.totalAttempted": "Total attempted",
     "profile.totalCorrect": "Total correct",
     "profile.avgAccuracy": "Average accuracy",
