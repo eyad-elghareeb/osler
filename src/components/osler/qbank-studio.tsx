@@ -56,7 +56,7 @@ import {
   Download,
   PackageOpen,
 } from "lucide-react";
-import { loadAllContent, loadContentByUid, ENGINE_META, flattenTree, packBasePath } from "@/lib/osler/content";
+import { loadAllContent, loadContentByUid, loadNodeByUid, ENGINE_META, flattenTree, packBasePath } from "@/lib/osler/content";
 import { toast } from "@/hooks/use-toast";
 import {
   contentToQuestions as poolContentToQuestions,
@@ -2939,6 +2939,17 @@ function TrackerTab({
     return map;
   }, [data]);
 
+  // Build a uid → node map so rebuilt review pools can stamp the origin node
+  // (sourcePath/sourceCategory) for question image resolution.
+  const nodeByUid = React.useMemo(() => {
+    const map = new Map<string, ContentTreeNode>();
+    if (!data) return map;
+    for (const { node } of data.items) {
+      map.set(node.uid, node);
+    }
+    return map;
+  }, [data]);
+
   // P5-2: overall progress.
   const overall = React.useMemo(() => {
     const all = storage.allProgress();
@@ -3032,10 +3043,10 @@ function TrackerTab({
     (uid: string, qid: string): PoolQuestion | null => {
       const content = contentByUid.get(uid);
       if (!content) return null;
-      const pool = poolContentToQuestions(content, uid, content.meta.title);
+      const pool = poolContentToQuestions(content, uid, content.meta.title, nodeByUid.get(uid));
       return pool.find((q) => q.id === qid) ?? null;
     },
-    [contentByUid],
+    [contentByUid, nodeByUid],
   );
 
   // Resolve pack title for a uid.
@@ -3063,7 +3074,7 @@ function TrackerTab({
     for (const [uid, qids] of bySource.entries()) {
       const content = contentByUid.get(uid);
       if (!content) continue;
-      const stamped = poolContentToQuestions(content, uid, content.meta.title);
+      const stamped = poolContentToQuestions(content, uid, content.meta.title, nodeByUid.get(uid));
       const byId = new Map(stamped.map((q) => [q.id, q]));
       for (const qid of qids) {
         const q = byId.get(qid);
@@ -3131,7 +3142,16 @@ function TrackerTab({
       for (const [sourceUid, ids] of bySource.entries()) {
         try {
           const content = await loadContentByUid(sourceUid);
-          const stamped = poolContentToQuestions(content, sourceUid, content.meta.title);
+          // Resolve the originating node so sourcePath/sourceCategory get
+          // stamped onto the rebuilt questions — without them, question images
+          // can't be resolved when reviewing an old session (no item context).
+          let node: ContentTreeNode | undefined;
+          try {
+            node = await loadNodeByUid(sourceUid, content.type as EngineType);
+          } catch {
+            node = undefined;
+          }
+          const stamped = poolContentToQuestions(content, sourceUid, content.meta.title, node);
           if (ids.length === 0) {
             pool.push(...stamped);
           } else {

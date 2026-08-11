@@ -336,25 +336,51 @@ function cacheSet(uid: string, content: AnyContent): void {
   contentCacheMemo.set(uid, content);
 }
 
+/**
+ * Session-scoped memo of content nodes, keyed by uid. Lets callers that load
+ * a pack by uid (e.g. rebuilding a saved session's pool) also resolve the
+ * node's path/category for asset URLs without a second manifest fetch.
+ */
+const nodeCacheMemo = new Map<string, ContentTreeNode>();
+
+function nodeCacheGet(uid: string): ContentTreeNode | undefined {
+  const value = nodeCacheMemo.get(uid);
+  if (value !== undefined) {
+    nodeCacheMemo.delete(uid);
+    nodeCacheMemo.set(uid, value);
+  }
+  return value;
+}
+
+function nodeCacheSet(uid: string, node: ContentTreeNode): void {
+  if (nodeCacheMemo.size >= MAX_CACHE_ENTRIES) {
+    const oldest = nodeCacheMemo.keys().next().value;
+    if (oldest !== undefined) nodeCacheMemo.delete(oldest);
+  }
+  nodeCacheMemo.set(uid, node);
+}
+
 /** Clear the content cache (call after admin content changes). */
 export function clearContentCache(): void {
   contentCacheMemo.clear();
+  nodeCacheMemo.clear();
 }
 
 /**
- * Load a single content pack by its node uid.
+ * Locate a content node by uid across every enabled engine's category
+ * manifest. Returns the node so callers can resolve its folder path and
+ * category for asset URLs (question images, flashcard images, etc.) when
+ * rebuilding content they don't otherwise have a handle to — e.g. reopening
+ * a saved quiz session. Falls back to an unbounded search when an
+ * `engineHint` misses, mirroring `loadContentByUid`.
  */
-export async function loadContentByUid(uid: string, engineHint?: EngineType): Promise<AnyContent> {
-  const cached = cacheGet(uid);
-  if (cached) {
-    return cached;
-  }
-
+export async function loadNodeByUid(uid: string, engineHint?: EngineType): Promise<ContentTreeNode> {
   await loadConfig();
-  // Only search engines that are enabled in osler.config.
-  // Library articles use .md files loaded via articles.ts, not JSON — skip them here.
+  const cached = nodeCacheGet(uid);
+  if (cached) return cached;
+
   const types = enabledEngines().filter((t) => t !== "library");
-  
+
   let folders: string[] = [];
   if (engineHint) {
     folders = [categoryFolder(engineHint)];
@@ -369,21 +395,31 @@ export async function loadContentByUid(uid: string, engineHint?: EngineType): Pr
       const manifest = (await res.json()) as CategoryManifest;
       const found = findNodeByUid(manifest.items, uid);
       if (found) {
-        const content = await loadNodeContent(found);
-        cacheSet(uid, content);
-        return content;
+        nodeCacheSet(uid, found);
+        return found;
       }
     } catch {
       continue;
     }
   }
 
-  // If engineHint was specified and failed, fall back to searching all folders
   if (engineHint) {
-    return loadContentByUid(uid);
+    return loadNodeByUid(uid);
   }
 
   throw new Error(`Content not found: ${uid}`);
+}
+
+export async function loadContentByUid(uid: string, engineHint?: EngineType): Promise<AnyContent> {
+  const cached = cacheGet(uid);
+  if (cached) {
+    return cached;
+  }
+
+  const node = await loadNodeByUid(uid, engineHint);
+  const content = await loadNodeContent(node);
+  cacheSet(uid, content);
+  return content;
 }
 
 /**
