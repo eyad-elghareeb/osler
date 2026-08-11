@@ -450,6 +450,14 @@ export const ar = {
     "qbank.tracker.noSessionsDesc": "أكمل اختبارًا لتراه هنا. تُحفظ جميع الاختبارات تلقائيًا لتتمكن من مراجعتها أو إعادة حلها في أي وقت.",
     "qbank.tracker.deleteSession": "حذف الجلسة",
 
+    /* ── Tracker preview sheet ───────────────────────────────────────── */
+    "qbank.preview.selectQuestion": "اختر السؤال للمراجعة",
+    "qbank.preview.selectAll": "تحديد الكل",
+    "qbank.preview.questions": "{n} أسئلة",
+    "qbank.preview.explanation": "الشرح",
+    "qbank.preview.modelAnswer": "الإجابة النموذجية",
+    "qbank.preview.noContent": "لم يعد هذا السؤال متاحًا.",
+
     /* ── Tracker pacing / first-try metrics ─────────────────────────── */
     "qbank.tracker.avgTime": "متوسط / سؤال",
     "qbank.tracker.firstAttempt": "أول محاولة",

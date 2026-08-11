@@ -142,6 +142,8 @@ import { NavigationStack } from "./navigation-stack";
 import { PageHeader, SectionHeading, StatTile, EmptyState, LoadingState, HubSkeleton } from "./ui-primitives";
 import { SparkTrend, defaultSparkDelta } from "./analytics-primitives";
 import { FolderTreeNav } from "./folder-tree-nav";
+import { TrackerTree, type TrackerTreeNode } from "./tracker-tree";
+import { TrackerPreviewSheet, type TrackerPreviewItem } from "./tracker-preview";
 import type { StringKey } from "@/lib/osler/i18n";
 import { loadUiLang } from "@/lib/osler/i18n";
 import { generateResultsPdf, generateDashboardPdf, generateQuizCompilationPdf, downloadPdf, type FullQuestion, type PdfExportConfig } from "@/lib/osler/pdf";
@@ -2972,7 +2974,7 @@ function TrackerTab({
     }
   ) => void;
 }) {
-  const { t, rtl } = useI18n();
+  const { t } = useI18n();
   const [, force] = React.useReducer((x) => x + 1, 0);
   React.useEffect(() => {
     const unsub = storage.subscribe(force);
@@ -2989,8 +2991,8 @@ function TrackerTab({
   const [dismissAfterCorrect, setDismissAfterCorrect] = React.useState(false);
   // Show dismissed records in the wrong & flagged list (P5-6).
   const [showDismissed, setShowDismissed] = React.useState(false);
-  // Expanded pack uid → resolves question text lazily on row-expand.
-  const [expandedRecords, setExpandedRecords] = React.useState<Set<string>>(new Set());
+  // Pack currently open in the tracker preview sheet.
+  const [previewUid, setPreviewUid] = React.useState<string | null>(null);
 
   // Past-session PDF export + busy/error state for replay actions.
   const [sessionPdfOpen, setSessionPdfOpen] = React.useState(false);
@@ -3124,24 +3126,156 @@ function TrackerTab({
     ? [...wrongAndFlagged, ...dismissedRecords]
     : wrongAndFlagged;
 
-  // Resolve a question's text/stem/explanation lazily on row-expand.
-  const resolveQuestion = React.useCallback(
-    (uid: string, qid: string): PoolQuestion | null => {
+  // Group visible records by their pack uid so the tree can aggregate counts
+  // and only render packs that actually have wrong/flagged questions.
+  const recordsByUid = React.useMemo(() => {
+    const map = new Map<string, Array<QuestionRecord & { key: string }>>();
+    for (const rec of visibleRecords) {
+      const list = map.get(rec.uid);
+      if (list) list.push(rec);
+      else map.set(rec.uid, [rec]);
+    }
+    return map;
+  }, [visibleRecords]);
+
+  // Lazily resolve a pack's wrong/flagged records into briefable questions.
+  // Cached per uid (keyed on the uid) and cleared whenever the record set
+  // changes, so dismissals / new answers never render stale content.
+  const resolveCache = React.useRef(new Map<string, TrackerPreviewItem[]>());
+  const resolveItems = React.useCallback(
+    (uid: string): TrackerPreviewItem[] => {
+      const cached = resolveCache.current.get(uid);
+      if (cached) return cached;
+      const records = recordsByUid.get(uid) ?? [];
+      const items: TrackerPreviewItem[] = records.map((r) => ({ key: r.key, record: r, question: null }));
       const content = contentByUid.get(uid);
-      if (!content) return null;
-      const pool = poolContentToQuestions(content, uid, content.meta.title, nodeByUid.get(uid));
-      return pool.find((q) => q.id === qid) ?? null;
+      if (content && items.length > 0) {
+        const pool = poolContentToQuestions(content, uid, content.meta.title, nodeByUid.get(uid));
+        const byId = new Map(pool.map((q) => [q.id, q]));
+        for (const it of items) it.question = byId.get(it.record.qid) ?? null;
+      }
+      resolveCache.current.set(uid, items);
+      return items;
     },
-    [contentByUid, nodeByUid],
+    [recordsByUid, contentByUid, nodeByUid],
   );
 
-  // Resolve pack title for a uid.
-  const packTitleFor = React.useCallback(
-    (uid: string): string => {
+  // Invalidate the resolver cache when the record set changes.
+  React.useEffect(() => {
+    resolveCache.current.clear();
+  }, [visibleRecords]);
+
+  // Prune the content hierarchy down to branches/packs that have wrong or
+  // flagged records, mirroring the real folder structure in the tree.
+  const trackerTree = React.useMemo(() => {
+    if (!data) return [] as TrackerTreeNode[];
+    const qbankTree = data.trees.quiz ?? data.trees.bank ?? data.trees.written ?? [];
+    const transform = (nodes: ContentTreeNode[]): TrackerTreeNode[] => {
+      const out: TrackerTreeNode[] = [];
+      for (const node of nodes) {
+        if (node.items.length === 0) {
+          const records = recordsByUid.get(node.uid);
+          if (!records || records.length === 0) continue;
+          out.push({
+            uid: node.uid,
+            title: node.title,
+            type: node.type,
+            isPack: true,
+            wrong: records.reduce((n, r) => n + (r.correct ? 0 : 1), 0),
+            flagged: records.reduce((n, r) => n + (r.flagged ? 1 : 0), 0),
+            children: [],
+          });
+        } else {
+          const children = transform(node.items);
+          if (children.length === 0) continue;
+          out.push({
+            uid: node.uid,
+            title: node.title,
+            type: node.type,
+            isPack: false,
+            wrong: children.reduce((n, c) => n + c.wrong, 0),
+            flagged: children.reduce((n, c) => n + c.flagged, 0),
+            children,
+          });
+        }
+      }
+      return out;
+    };
+    return transform(qbankTree);
+  }, [recordsByUid, data]);
+
+  // Expand every branch on first mount so the tracker reads like the full
+  // folder structure instead of a collapsed outline.
+  const defaultExpanded = React.useMemo(() => {
+    const out: string[] = [];
+    const walk = (list: TrackerTreeNode[]) => {
+      for (const n of list) {
+        if (!n.isPack) {
+          out.push(n.uid);
+          walk(n.children);
+        }
+      }
+    };
+    walk(trackerTree);
+    return out;
+  }, [trackerTree]);
+
+  // Preview-sheet data: the resolved pack + its entry in the content list.
+  const previewPack = React.useMemo(() => {
+    if (!previewUid || !data) return null;
+    const entry = data.items.find((e) => e.node.uid === previewUid);
+    if (!entry) return null;
+    return {
+      uid: entry.node.uid,
+      title: entry.node.title,
+      type: entry.node.type,
+      lang: contentByUid.get(entry.node.uid)?.meta.lang,
+    };
+  }, [previewUid, data, contentByUid]);
+  const previewItems = previewUid ? resolveItems(previewUid) : [];
+
+  // Start a brief tutor review of exactly the questions in a pack.
+  const handleStartPackReview = React.useCallback(
+    (uid: string) => {
+      if (!onStartCustomSession) return;
+      const items = resolveItems(uid);
+      const pool = items
+        .map((it) => it.question)
+        .filter((q): q is PoolQuestion => q !== null);
+      if (pool.length === 0) return;
       const entry = data?.items.find((e) => e.node.uid === uid);
-      return entry?.node.title ?? uid;
+      onStartCustomSession(pool, {
+        title: `${pool.length} ${t("qbank.tracker.startReview")}`,
+        engine: (entry?.node.type as EngineType) ?? pool[0].sourceUid
+          ? (contentByUid.get(pool[0].sourceUid!)?.type as EngineType) ?? "quiz"
+          : "quiz",
+        mode: "tutor",
+        dismissAfterCorrect,
+      });
+      setPreviewUid(null);
+      setSelectedKeys(new Set());
+      haptic("success");
     },
-    [data],
+    [onStartCustomSession, resolveItems, data, contentByUid, dismissAfterCorrect, t],
+  );
+
+  // Select / deselect every question in the previewed pack.
+  const handleTogglePackSelection = React.useCallback(
+    (uid: string) => {
+      const keys = resolveItems(uid).map((it) => it.key);
+      if (keys.length === 0) return;
+      setSelectedKeys((prev) => {
+        const allSelected = keys.every((k) => prev.has(k));
+        const next = new Set(prev);
+        for (const k of keys) {
+          if (allSelected) next.delete(k);
+          else next.add(k);
+        }
+        return next;
+      });
+      haptic("selection");
+    },
+    [resolveItems],
   );
 
   // P5-5: build a review pool from selected records.
@@ -3191,15 +3325,6 @@ function TrackerTab({
     setSelectedKeys((prev) => {
       if (prev.size === visibleRecords.length) return new Set();
       return new Set(visibleRecords.map((r) => r.key));
-    });
-  };
-
-  const toggleExpand = (key: string) => {
-    setExpandedRecords((prev) => {
-      const next = new Set(prev);
-      if (next.has(key)) next.delete(key);
-      else next.add(key);
-      return next;
     });
   };
 
@@ -3721,112 +3846,30 @@ function TrackerTab({
               </Button>
             </div>
 
-            {/* Records list */}
-            <div className="space-y-2">
-              {visibleRecords.map((r) => {
-                const isSelected = selectedKeys.has(r.key);
-                const isExpanded = expandedRecords.has(r.key);
-                const q = isExpanded ? resolveQuestion(r.uid, r.qid) : null;
-                const packTitle = packTitleFor(r.uid);
-                return (
-                  <div key={r.key} className="osler-card--default">
-                    <div className="flex items-center gap-3">
-                      <input
-                        type="checkbox"
-                        checked={isSelected}
-                        onChange={() => toggleSelected(r.key)}
-                        className="size-3.5 rounded accent-primary shrink-0"
-                      />
-                      <button
-                        onClick={() => toggleExpand(r.key)}
-                        className="flex-1 min-w-0 text-start"
-                      >
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <span className="text-sm font-medium truncate">{packTitle}</span>
-                          {r.dismissed && (
-                            <Badge variant="outline" className="text-[10px]">
-                              {t("qbank.tracker.dismissed")}
-                            </Badge>
-                          )}
-                          <Badge
-                            variant="outline"
-                            className={cn(
-                              "text-[10px]",
-                              r.correct ? "border-success/30 text-success" : "border-destructive/30 text-destructive",
-                            )}
-                          >
-                            {r.correct ? t("qbank.tracker.correctLabel") : t("qbank.tracker.wrongLabel")}
-                          </Badge>
-                          {r.flagged && (
-                            <Badge variant="outline" className="text-[10px] border-warning/30 text-warning">
-                              <Flag className="size-2.5 me-1" />
-                              {t("qbank.tracker.flaggedLabel")}
-                            </Badge>
-                          )}
-                        </div>
-                        <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-muted-foreground mt-0.5">
-                          <span>
-                            {t("qbank.tracker.lastAttempt")}: {new Date(r.timestamp).toLocaleString()}
-                          </span>
-                          {(r.timeMs ?? 0) > 0 && (
-                            <>
-                              <span aria-hidden>·</span>
-                              <span className="flex items-center gap-1 tabular-nums">
-                                <Timer className="size-3" />
-                                {formatMs(r.timeMs ?? 0)}
-                              </span>
-                            </>
-                          )}
-                          {(r.attempts ?? 0) > 1 && (
-                            <>
-                              <span aria-hidden>·</span>
-                              <span className="tabular-nums">
-                                {t("qbank.tracker.attemptsCount", { n: r.attempts ?? 0 })}
-                              </span>
-                            </>
-                          )}
-                        </div>
-                      </button>
-                      <ChevronRight
-                        className={cn(
-                          "size-4 text-muted-foreground transition-transform shrink-0",
-                          isExpanded && "rotate-90",
-                          rtl && "rtl-flip-x",
-                        )}
-                      />
-                    </div>
-                    {isExpanded && q && (
-                      <div className="mt-3 pt-3 border-t border-border text-sm space-y-2">
-                        <div className="font-medium uworld-prose" dir="auto" dangerouslySetInnerHTML={{ __html: renderQuestionText(q.stem, q) }} />
-                        {q.choices.length > 0 && (
-                          <div className="space-y-1">
-                            {q.choices.map((choice, i) => (
-                              <div
-                                key={i}
-                                dir="auto"
-                                className={cn(
-                                  "px-2 py-1 rounded text-xs",
-                                  i === q.correct && "bg-success/10 text-success font-medium",
-                                  i === r.selected && i !== q.correct && "bg-destructive/10 text-destructive line-through",
-                                )}
-                              >
-                                <span className="font-medium me-2">{choiceLetter(i, contentByUid.get(r.uid)?.meta.lang)}</span>
-                                {choice}
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                        {q.explanation && (
-                          <div className="text-xs text-muted-foreground bg-muted/40 px-3 py-2 rounded-lg">
-                            {q.explanation}
-                          </div>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
+            {/* Wrong & Flagged browser — grouped by the content hierarchy */}
+            <TrackerTree
+              nodes={trackerTree}
+              label={t("qbank.tracker.wrongAndFlagged")}
+              defaultExpanded={defaultExpanded}
+              selectedUid={previewUid}
+              onOpenPack={(node) => {
+                setPreviewUid(node.uid);
+                haptic("selection");
+              }}
+            />
+
+            <TrackerPreviewSheet
+              open={previewPack !== null}
+              onOpenChange={(open) => {
+                if (!open) setPreviewUid(null);
+              }}
+              pack={previewPack}
+              items={previewItems}
+              selectedKeys={selectedKeys}
+              onToggleRecord={toggleSelected}
+              onToggleAll={() => previewUid && handleTogglePackSelection(previewUid)}
+              onStartReview={() => previewUid && handleStartPackReview(previewUid)}
+            />
           </>
         )}
       </div>

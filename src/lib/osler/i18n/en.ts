@@ -450,6 +450,14 @@ export const en = {
     "qbank.tracker.noSessionsDesc": "Complete a test to see it here. Every test is saved automatically so you can review or retake it anytime.",
     "qbank.tracker.deleteSession": "Delete session",
 
+    /* ── Tracker preview sheet ───────────────────────────────────────── */
+    "qbank.preview.selectQuestion": "Select question for review",
+    "qbank.preview.selectAll": "Select all",
+    "qbank.preview.questions": "{n} questions",
+    "qbank.preview.explanation": "Explanation",
+    "qbank.preview.modelAnswer": "Model answer",
+    "qbank.preview.noContent": "This question is no longer available.",
+
     /* ── Tracker pacing / first-try metrics ─────────────────────────── */
     "qbank.tracker.avgTime": "Avg / question",
     "qbank.tracker.firstAttempt": "First-try",
