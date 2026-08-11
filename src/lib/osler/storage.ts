@@ -398,6 +398,8 @@ export interface SavedSession {
   flagged: Record<number, boolean>;
   current: number;
   examTimeRemaining: number;
+  /** Absolute wall-clock expiry (ms) for timed exams, pause-adjusted, so a resumed session keeps its remaining time. */
+  timeEndsAt?: number;
   writtenDrafts?: Record<string, WrittenDraft>;
   rubricState?: Record<string, boolean[]>;
   ratings?: Record<string, "easy" | "hard" | "unknown">;

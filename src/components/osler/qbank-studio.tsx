@@ -261,6 +261,8 @@ interface SessionData {
   completedAt?: number;
   examTimeRemaining: number;
   examPaused: boolean;
+  /** Absolute wall-clock expiry (ms) for timed exams, pause-adjusted. Survives hard refresh so a resumed countdown doesn't restart. */
+  timeEndsAt?: number;
   sessionId: string;
   // Written drafts: questionId → { text, rubricChecked, submitted }
   writtenDrafts: Record<string, WrittenDraft>;
@@ -350,9 +352,21 @@ export function QBankStudio({
       pauseStartRef.current = Date.now();
     } else if (pauseStartRef.current != null) {
       const paused = Date.now() - pauseStartRef.current;
+      const pauseStart = pauseStartRef.current;
       pauseStartRef.current = null;
-      const timer = qTimersRef.current[session.current];
-      if (timer) timer.pausedMs += paused;
+      // Credit the pause to every timer that already existed when it began,
+      // so navigating while paused never misattributes the paused interval to
+      // a question that was opened afterwards.
+      for (const timer of Object.values(qTimersRef.current)) {
+        if (timer.start <= pauseStart) timer.pausedMs += paused;
+      }
+      // Advance the timed-exam deadline by the paused interval too, so the
+      // stored absolute expiry keeps matching the live countdown.
+      if (session.timeEndsAt != null) {
+        setSession((s) =>
+          s && s.timeEndsAt != null ? { ...s, timeEndsAt: s.timeEndsAt + paused } : s
+        );
+      }
     }
   }, [session?.examPaused]);
 
@@ -501,6 +515,7 @@ export function QBankStudio({
         current: meta.savedCurrent ?? 0,
         startedAt: Date.now(),
         examTimeRemaining: totalTime,
+        timeEndsAt: (meta.mode ?? testMode) === "timed" ? Date.now() + totalTime * 1000 : undefined,
         examPaused: false,
         sessionId,
         writtenDrafts: meta.savedDrafts ?? {},
@@ -565,6 +580,7 @@ export function QBankStudio({
         current: 0,
         startedAt: Date.now(),
         examTimeRemaining: totalTime,
+        timeEndsAt: testMode === "timed" ? Date.now() + totalTime * 1000 : undefined,
         examPaused: false,
         sessionId,
         writtenDrafts: drafts,
@@ -3849,25 +3865,21 @@ function TrackerTab({
 function QBankTimer({
   mode,
   startedAt,
-  initialRemaining,
-  paused,
+  timeEndsAt,
   onExpire,
 }: {
   mode: TestMode;
   startedAt: number;
-  initialRemaining: number;
-  paused: boolean;
+  timeEndsAt?: number;
   onExpire: () => void;
 }) {
   const [now, setNow] = React.useState(() => Date.now());
-  const [remaining, setRemaining] = React.useState(initialRemaining);
+  const [remaining, setRemaining] = React.useState(() =>
+    timeEndsAt != null ? Math.max(0, Math.ceil((timeEndsAt - Date.now()) / 1000)) : 0
+  );
   const onExpireRef = React.useRef(onExpire);
   onExpireRef.current = onExpire;
-
-  // Wall-clock anchor: the absolute timestamp when the timer expires.
-  // Pauses push this into the future so no time is lost to sleep/throttle.
-  const endTimeRef = React.useRef(Date.now() + initialRemaining * 1000);
-  const pauseStartRef = React.useRef<number | null>(null);
+  const firedRef = React.useRef(false);
 
   // 1s tick — drives the tutor-mode elapsed clock.
   React.useEffect(() => {
@@ -3875,31 +3887,22 @@ function QBankTimer({
     return () => clearInterval(id);
   }, []);
 
-  // Track pauses — push endTime forward by the paused duration so the
-  // user doesn't lose time to background throttling or screen sleep.
+  // Timed countdown — derived from the absolute wall-clock expiry stored on
+  // the session, so refresh/resume and pause handling stay in the studio.
   React.useEffect(() => {
-    if (mode !== "timed") return;
-    if (paused) {
-      pauseStartRef.current = Date.now();
-    } else if (pauseStartRef.current !== null) {
-      endTimeRef.current += Date.now() - pauseStartRef.current;
-      pauseStartRef.current = null;
-    }
-  }, [paused, mode]);
-
-  // Timed countdown — derived from wall clock so throttled intervals
-  // after sleep/background still compute the correct remaining time.
-  React.useEffect(() => {
-    if (mode !== "timed") return;
+    if (mode !== "timed" || timeEndsAt == null) return;
     const tick = () => {
-      const r = Math.max(0, Math.ceil((endTimeRef.current - Date.now()) / 1000));
+      const r = Math.max(0, Math.ceil((timeEndsAt - Date.now()) / 1000));
       setRemaining(r);
-      if (r <= 0) onExpireRef.current();
+      if (r <= 0 && !firedRef.current) {
+        firedRef.current = true;
+        onExpireRef.current();
+      }
     };
     tick();
     const id = setInterval(tick, 1000);
     return () => clearInterval(id);
-  }, [mode]);
+  }, [mode, timeEndsAt]);
 
   const display =
     mode === "timed" ? remaining : Math.floor((now - startedAt) / 1000);
@@ -4996,8 +4999,7 @@ function QuizView({
               key={session.startedAt}
               mode={session.mode}
               startedAt={session.startedAt}
-              initialRemaining={session.examTimeRemaining}
-              paused={session.examPaused}
+              timeEndsAt={session.timeEndsAt}
               onExpire={onTimeUp}
             />
             <button
@@ -7323,6 +7325,7 @@ function saveSession(s: SessionData) {
     flagged: s.flagged,
     current: s.current,
     examTimeRemaining: s.examTimeRemaining,
+    timeEndsAt: s.timeEndsAt,
     writtenDrafts: s.writtenDrafts,
     rubricState: s.rubricState,
     ratings: s.ratings,
