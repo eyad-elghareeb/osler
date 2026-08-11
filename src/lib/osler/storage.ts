@@ -311,6 +311,28 @@ export interface QuestionRecord {
    * "show dismissed" toggle.
    */
   dismissed?: boolean;
+  /**
+   * Total number of times this question was answered (on this device).
+   * Accumulated in `recordAnswer`; max-merged across devices on sync.
+   */
+  attempts?: number;
+  /** Total number of times this question was answered correctly. */
+  correctCount?: number;
+  /**
+   * Whether the very first answer was correct. Frozen on the first answer,
+   * never overwritten — this is the single source for "first-try accuracy".
+   */
+  firstAttemptCorrect?: boolean;
+  /** Timestamp of the very first answer (used to reconcile across devices). */
+  firstAttemptAt?: number;
+  /** Duration (ms) of the most recent answer, pause-adjusted. */
+  timeMs?: number;
+  /** Rolling average duration (ms) across attempts on this device. */
+  avgTimeMs?: number;
+  /** Topic tags denormalized onto the record at first answer. */
+  tags?: string[];
+  /** Difficulty denormalized onto the record at first answer. */
+  difficulty?: string;
 }
 
 export interface PackProgress {
@@ -380,6 +402,12 @@ export interface SavedSession {
   rubricState?: Record<string, boolean[]>;
   ratings?: Record<string, "easy" | "hard" | "unknown">;
   /**
+   * Per-question duration map (question id → pause-adjusted ms) captured
+   * during the live session, so a replayed/completed session can surface
+   * pacing without relying on the progress records.
+   */
+  questionTimes?: Record<string, number>;
+  /**
    * Ordered list of {id, sourceUid} pairs parallel to the session's
    * questions array — lets a saved session be reopened in review mode
    * without needing to keep the full SessionQuestion[] in storage.
@@ -397,26 +425,92 @@ export interface SavedSession {
 
 /* ── Progress (question-level) ──────────────────────────────────────── */
 
+/**
+ * Combine a newer (higher-timestamp) incoming record with the local one
+ * without letting either device clobber the other's accumulated counters.
+ * The incoming record wins on the stateful fields (correct/selected/times),
+ * while attempts/correctCount take the max, first-attempt facts come from
+ * whichever record holds the earliest first attempt, and sticky flags
+ * (flagged/dismissed) are OR-merged.
+ */
+function mergeQuestionRecord(
+  local: QuestionRecord | null | undefined,
+  incoming: QuestionRecord
+): QuestionRecord {
+  if (!local) return incoming;
+  const incomingFirst = incoming.firstAttemptAt ?? Number.POSITIVE_INFINITY;
+  const localFirst = local.firstAttemptAt ?? Number.POSITIVE_INFINITY;
+  const firstFromIncoming = incomingFirst < localFirst;
+  return {
+    ...incoming,
+    attempts: Math.max(local.attempts ?? 0, incoming.attempts ?? 0),
+    correctCount: Math.max(local.correctCount ?? 0, incoming.correctCount ?? 0),
+    firstAttemptCorrect: firstFromIncoming
+      ? incoming.firstAttemptCorrect ?? local.firstAttemptCorrect
+      : local.firstAttemptCorrect ?? incoming.firstAttemptCorrect,
+    firstAttemptAt: firstFromIncoming
+      ? incoming.firstAttemptAt ?? local.firstAttemptAt
+      : local.firstAttemptAt ?? incoming.firstAttemptAt,
+    timeMs: incoming.timeMs ?? local.timeMs,
+    avgTimeMs: incoming.avgTimeMs ?? local.avgTimeMs,
+    tags: incoming.tags ?? local.tags,
+    difficulty: incoming.difficulty ?? local.difficulty,
+    flagged: local.flagged || incoming.flagged,
+    dismissed: incoming.dismissed ?? local.dismissed,
+  };
+}
+
 export const storage = {
   recordAnswer(
     uid: string,
     qid: string,
     engine: EngineType,
-    selected: number | undefined,
-    correct: boolean,
-    flagged: boolean,
-    dismissed?: boolean
+    options: {
+      selected?: number;
+      correct: boolean;
+      flagged?: boolean;
+      dismissed?: boolean;
+      /** Duration of this answer in ms (pause-adjusted). */
+      timeMs?: number;
+      /** Topic tags to denormalize onto the record on its first answer. */
+      tags?: string[];
+      difficulty?: string;
+    }
   ) {
+    const { selected, correct, flagged = false, dismissed, timeMs, tags, difficulty } = options;
     const key = `${uid}:${qid}`;
     // Preserve existing dismissed flag if caller doesn't explicitly pass one
     // (so a wrong answer during a "remove on correct" review doesn't accidentally
     // re-show a previously dismissed question).
     const existing = getCached<QuestionRecord>("progress", key);
     const finalDismissed = dismissed ?? existing?.dismissed ?? false;
+
+    const prevAttempts = existing?.attempts ?? 0;
+    const attempts = prevAttempts + 1;
+    const correctCount = (existing?.correctCount ?? 0) + (correct ? 1 : 0);
+    const isFirst = prevAttempts === 0;
+    const avgTimeMs =
+      timeMs != null
+        ? Math.round(((existing?.avgTimeMs ?? 0) * prevAttempts + timeMs) / attempts)
+        : existing?.avgTimeMs;
+
     const record: QuestionRecord = {
-      uid, qid, engine, selected, correct, flagged,
+      uid,
+      qid,
+      engine,
+      selected,
+      correct,
+      flagged,
       dismissed: finalDismissed,
       timestamp: Date.now(),
+      attempts,
+      correctCount,
+      firstAttemptCorrect: isFirst ? correct : existing?.firstAttemptCorrect,
+      firstAttemptAt: existing?.firstAttemptAt ?? Date.now(),
+      timeMs,
+      avgTimeMs,
+      tags: existing?.tags ?? tags,
+      difficulty: existing?.difficulty ?? difficulty,
     };
     setCached("progress", key, record);
     idbPut("progress", key, record).catch(console.warn);
@@ -499,6 +593,21 @@ export const storage = {
       if (!k.startsWith("progress:")) continue;
       const r = v as QuestionRecord;
       if (set.has(r.uid)) out.push(r);
+    }
+    return out;
+  },
+
+  /**
+   * Return every progress record (across all packs). Used by the metrics
+   * engine for cross-content analytics (first-try accuracy, pacing, weakness
+   * by topic). Cheap: reads the in-memory cache, which is always hydrated
+   * before the app UI renders.
+   */
+  allRecords(): QuestionRecord[] {
+    const out: QuestionRecord[] = [];
+    for (const [k, v] of memoryCache) {
+      if (!k.startsWith("progress:")) continue;
+      out.push(v as QuestionRecord);
     }
     return out;
   },
@@ -587,10 +696,12 @@ export const storage = {
     progress: Record<string, QuestionRecord> | undefined,
     flashcards: Record<string, FlashcardReviewRecord> | undefined,
   ): Promise<void> {
-    const progressEntries = Object.entries(progress ?? {}).filter(([key, incoming]) => {
-      const local = getCached<QuestionRecord>("progress", key);
-      return !!incoming && (!local || incoming.timestamp > local.timestamp);
-    }).map(([key, value]) => ({ key, value }));
+    const progressEntries = Object.entries(progress ?? {})
+      .filter(([key, incoming]) => {
+        const local = getCached<QuestionRecord>("progress", key);
+        return !!incoming && (!local || incoming.timestamp > local.timestamp);
+      })
+      .map(([key, value]) => ({ key, value: mergeQuestionRecord(getCached<QuestionRecord>("progress", key), value) }));
     if (progressEntries.length) {
       await idbPutBatch("progress", progressEntries);
       progressEntries.forEach((entry) => setCached("progress", entry.key, entry.value));

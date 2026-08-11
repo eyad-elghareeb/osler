@@ -274,6 +274,8 @@ interface SessionData {
   onlyMode?: OnlyMode;
   dismissAfterCorrect?: boolean;
   isReview?: boolean;
+  /** Pause-adjusted wall-clock duration (ms) per question id, captured at reveal. */
+  questionTimes?: Record<string, number>;
 }
 
 interface SessionQuestionChild {
@@ -324,6 +326,49 @@ export function QBankStudio({
   const pendingQuestionLimitRef = React.useRef(0);
   const { t } = useI18n();
   const { openLightbox } = useLightbox();
+
+  // ── Per-question timing (pause-adjusted) ─────────────────────────
+  // Each unanswered question gets a timer { start, pausedMs } in a ref so
+  // re-renders don't disturb it. When the answer is revealed, the elapsed
+  // time (minus paused intervals) is stamped onto session.questionTimes and
+  // passed through to storage.recordAnswer for the analytics layer.
+  const qTimersRef = React.useRef<Record<number, { start: number; pausedMs: number }>>({});
+  const pauseStartRef = React.useRef<number | null>(null);
+
+  // Seed a timer whenever we land on a new, unanswered question.
+  React.useEffect(() => {
+    if (!session) return;
+    const idx = session.current;
+    if (session.revealed[idx]) return;
+    qTimersRef.current[idx] ??= { start: Date.now(), pausedMs: 0 };
+  }, [session?.current, session?.revealed, session?.isReview]);
+
+  // Track pause intervals so paused time never counts toward a question.
+  React.useEffect(() => {
+    if (!session) return;
+    if (session.examPaused) {
+      pauseStartRef.current = Date.now();
+    } else if (pauseStartRef.current != null) {
+      const paused = Date.now() - pauseStartRef.current;
+      pauseStartRef.current = null;
+      const timer = qTimersRef.current[session.current];
+      if (timer) timer.pausedMs += paused;
+    }
+  }, [session?.examPaused]);
+
+  const getQuestionTimeMs = (idx: number): number | undefined => {
+    const timer = qTimersRef.current[idx];
+    if (!timer) return undefined;
+    const elapsed = Date.now() - timer.start - timer.pausedMs;
+    return elapsed > 0 ? Math.round(elapsed) : undefined;
+  };
+
+  const stampQuestionTime = (idx: number, q: SessionQuestion): number | undefined => {
+    const timeMs = getQuestionTimeMs(idx);
+    if (timeMs == null) return undefined;
+    setSession((s) => (s ? { ...s, questionTimes: { ...s.questionTimes, [q.id]: timeMs } } : s));
+    return timeMs;
+  };
 
   // ── Auto-persist active session to IndexedDB ─────────────────────
   // Prevents data loss on hard refresh (Ctrl+Shift+R, Cmd+Shift+R, etc.)
@@ -439,7 +484,7 @@ export function QBankStudio({
   );
 
   const startCustomSession = React.useCallback(
-    (pool: PoolQuestion[], meta: { title: string; engine: EngineType; mode?: TestMode; dismissAfterCorrect?: boolean; tagsFilter?: string[]; onlyMode?: OnlyMode; isReview?: boolean; savedDrafts?: Record<string, WrittenDraft>; savedRubricState?: Record<string, boolean[]>; savedAnswers?: Record<number, number>; savedRevealed?: Record<number, boolean>; savedFlagged?: Record<number, boolean>; savedRatings?: Record<string, "easy" | "hard" | "unknown">; savedCurrent?: number }) => {
+    (pool: PoolQuestion[], meta: { title: string; engine: EngineType; mode?: TestMode; dismissAfterCorrect?: boolean; tagsFilter?: string[]; onlyMode?: OnlyMode; isReview?: boolean; savedDrafts?: Record<string, WrittenDraft>; savedRubricState?: Record<string, boolean[]>; savedAnswers?: Record<number, number>; savedRevealed?: Record<number, boolean>; savedFlagged?: Record<number, boolean>; savedRatings?: Record<string, "easy" | "hard" | "unknown">; savedQuestionTimes?: Record<string, number>; savedCurrent?: number }) => {
       if (pool.length === 0) return;
       const sessionId = `custom-${Date.now()}`;
       const totalTime = pool.length * 60;
@@ -461,6 +506,7 @@ export function QBankStudio({
         writtenDrafts: meta.savedDrafts ?? {},
         rubricState: meta.savedRubricState ?? {},
         ratings: meta.savedRatings ?? {},
+        questionTimes: meta.savedQuestionTimes ?? {},
         strikethroughs: {},
         tagsFilter: meta.tagsFilter,
         onlyMode: meta.onlyMode,
@@ -524,6 +570,7 @@ export function QBankStudio({
         writtenDrafts: drafts,
         rubricState: {},
         ratings: {},
+        questionTimes: {},
         strikethroughs: {},
       });
       setMode("quiz");
@@ -624,15 +671,15 @@ export function QBankStudio({
     const shouldDismiss = !!session.dismissAfterCorrect && correct;
     // Per-question engine detection for mixed sessions.
     const qEngine = q.correct >= 0 ? "quiz" : (q.rubric?.length ? "written" : session.engine);
-    storage.recordAnswer(
-      uid,
-      q.id,
-      qEngine,
+    storage.recordAnswer(uid, q.id, qEngine, {
       selected,
       correct,
-      !!session.flagged[idx],
-      shouldDismiss,
-    );
+      flagged: !!session.flagged[idx],
+      dismissed: shouldDismiss,
+      timeMs: stampQuestionTime(idx, q),
+      tags: q.tags,
+      difficulty: q.difficulty,
+    });
     force();
   };
 
@@ -681,15 +728,15 @@ export function QBankStudio({
               // P2-5: route through sourceUid if present (merged/custom sessions).
               const uid = q.sourceUid ?? activeItem?.uid ?? session.itemId;
               const shouldDismiss = !!session.dismissAfterCorrect && correct;
-              storage.recordAnswer(
-                uid,
-                q.id,
-                session.engine,
-                idx,
+              storage.recordAnswer(uid, q.id, session.engine, {
+                selected: idx,
                 correct,
-                !!session.flagged[session.current],
-                shouldDismiss,
-              );
+                flagged: !!session.flagged[session.current],
+                dismissed: shouldDismiss,
+                timeMs: stampQuestionTime(session.current, q),
+                tags: q.tags,
+                difficulty: q.difficulty,
+              });
               force();
             }
           }}
@@ -726,15 +773,15 @@ export function QBankStudio({
               const uid = q.sourceUid ?? activeItem?.uid ?? session.itemId;
               const shouldDismiss = !!session.dismissAfterCorrect && correct;
               const qEngine = q.rubric?.length ? "written" : session.engine;
-              storage.recordAnswer(
-                uid,
-                q.id,
-                qEngine,
-                undefined,
+              storage.recordAnswer(uid, q.id, qEngine, {
+                selected: undefined,
                 correct,
-                !!session.flagged[session.current],
-                shouldDismiss,
-              );
+                flagged: !!session.flagged[session.current],
+                dismissed: shouldDismiss,
+                timeMs: stampQuestionTime(session.current, q),
+                tags: q.tags,
+                difficulty: q.difficulty,
+              });
               force();
             }
           }}
@@ -785,15 +832,16 @@ export function QBankStudio({
               const correct = rating === "easy";
               const uid = q.sourceUid ?? activeItem?.uid ?? session.itemId;
               const shouldDismiss = !!session.dismissAfterCorrect && correct;
-              storage.recordAnswer(
-                uid,
-                qid,
-                session.engine,
-                undefined,
+              const qIdx = session.questions.findIndex((x) => x.id === qid);
+              storage.recordAnswer(uid, qid, session.engine, {
+                selected: undefined,
                 correct,
-                !!session.flagged[session.current],
-                shouldDismiss,
-              );
+                flagged: !!session.flagged[session.current],
+                dismissed: shouldDismiss,
+                timeMs: stampQuestionTime(qIdx, q),
+                tags: q.tags,
+                difficulty: q.difficulty,
+              });
             }
             force();
           }}
@@ -851,6 +899,9 @@ export function QBankStudio({
                 writtenDrafts: newDrafts,
               };
             });
+            // Restart the per-question timer so the retried attempt isn't
+            // measured from the original (already-answered) reading.
+            delete qTimersRef.current[session.current];
           }}
           onGoHome={requestExit}
           onFinish={endSession}
@@ -1007,6 +1058,7 @@ function HomeView({
       savedRevealed?: Record<number, boolean>;
       savedFlagged?: Record<number, boolean>;
       savedRatings?: Record<string, "easy" | "hard" | "unknown">;
+      savedQuestionTimes?: Record<string, number>;
       savedCurrent?: number;
     }
   ) => void;
@@ -2899,6 +2951,7 @@ function TrackerTab({
       savedRevealed?: Record<number, boolean>;
       savedFlagged?: Record<number, boolean>;
       savedRatings?: Record<string, "easy" | "hard" | "unknown">;
+      savedQuestionTimes?: Record<string, number>;
       savedCurrent?: number;
     }
   ) => void;
@@ -2965,6 +3018,23 @@ function TrackerTab({
     }
     return { attempted, correct, wrong, flagged, accuracy: attempted > 0 ? Math.round((correct / attempted) * 100) : 0 };
   }, [data, force]);
+
+  // P5-9: per-question pacing + first-try accuracy across every record.
+  // avgTime uses each record's latest attempt duration (timeMs) — the truest
+  // read of how the user answers *now*. firstTry uses the frozen
+  // firstAttemptCorrect flag so repeats never dilute the first-try metric.
+  const timingStats = React.useMemo(() => {
+    const records = storage.allRecords();
+    const timed = records.filter((r) => (r.timeMs ?? 0) > 0);
+    const avgTimeMs = timed.length
+      ? Math.round(timed.reduce((sum, r) => sum + (r.timeMs ?? 0), 0) / timed.length)
+      : 0;
+    const withFirstTry = records.filter((r) => r.firstAttemptCorrect != null);
+    const firstTryAcc = withFirstTry.length
+      ? Math.round((withFirstTry.filter((r) => r.firstAttemptCorrect).length / withFirstTry.length) * 100)
+      : 0;
+    return { avgTimeMs, firstTryAcc, timedCount: timed.length };
+  }, [force]);
 
   // Per-session accuracy, oldest → newest, for the last 10 completed
   // sessions in this tracker — feeds the accuracy tile's <SparkTrend>.
@@ -3202,6 +3272,7 @@ function TrackerTab({
           savedRevealed,
           savedFlagged,
           savedRatings: s.ratings,
+          savedQuestionTimes: s.questionTimes,
           savedCurrent: s.current,
         });
       } finally {
@@ -3357,11 +3428,12 @@ function TrackerTab({
         {overall.attempted === 0 ? (
           <EmptyState icon={Activity} title={t("qbank.tracker.noRecords")} />
         ) : (
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-            <StatTile label={t("qbank.tracker.attempted")} value={overall.attempted} icon={ListChecks} color="primary" />
-            <StatTile label={t("qbank.tracker.correctLabel")} value={overall.correct} icon={CheckCircle2} color="success" />
-            <StatTile label={t("qbank.tracker.wrongLabel")} value={overall.wrong} icon={X} color="destructive" />
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+            <StatTile compact label={t("qbank.tracker.attempted")} value={overall.attempted} icon={ListChecks} color="primary" />
+            <StatTile compact label={t("qbank.tracker.correctLabel")} value={overall.correct} icon={CheckCircle2} color="success" />
+            <StatTile compact label={t("qbank.tracker.wrongLabel")} value={overall.wrong} icon={X} color="destructive" />
             <StatTile
+              compact
               label={t("qbank.tracker.accuracy")}
               value={`${overall.accuracy}%`}
               icon={Target}
@@ -3371,6 +3443,20 @@ function TrackerTab({
                   <SparkTrend data={accuracyTrend} tone="auto" showDelta />
                 ) : undefined
               }
+            />
+            <StatTile
+              compact
+              label={t("qbank.tracker.avgTime")}
+              value={timingStats.avgTimeMs > 0 ? formatMs(timingStats.avgTimeMs) : "—"}
+              icon={Timer}
+              color="info"
+            />
+            <StatTile
+              compact
+              label={t("qbank.tracker.firstAttempt")}
+              value={timingStats.firstTryAcc > 0 ? `${timingStats.firstTryAcc}%` : "—"}
+              icon={Target}
+              color="info"
             />
           </div>
         )}
@@ -3657,8 +3743,27 @@ function TrackerTab({
                             </Badge>
                           )}
                         </div>
-                        <div className="text-[11px] text-muted-foreground mt-0.5">
-                          {t("qbank.tracker.lastAttempt")}: {new Date(r.timestamp).toLocaleString()}
+                        <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-muted-foreground mt-0.5">
+                          <span>
+                            {t("qbank.tracker.lastAttempt")}: {new Date(r.timestamp).toLocaleString()}
+                          </span>
+                          {(r.timeMs ?? 0) > 0 && (
+                            <>
+                              <span aria-hidden>·</span>
+                              <span className="flex items-center gap-1 tabular-nums">
+                                <Timer className="size-3" />
+                                {formatMs(r.timeMs ?? 0)}
+                              </span>
+                            </>
+                          )}
+                          {(r.attempts ?? 0) > 1 && (
+                            <>
+                              <span aria-hidden>·</span>
+                              <span className="tabular-nums">
+                                {t("qbank.tracker.attemptsCount", { n: r.attempts ?? 0 })}
+                              </span>
+                            </>
+                          )}
                         </div>
                       </button>
                       <ChevronRight
@@ -7145,6 +7250,14 @@ function formatTime(sec: number): string {
   return `${m.toString().padStart(2, "0")}:${s.toString().padStart(2, "0")}`;
 }
 
+/** Compact duration for a single question — "42s" or "1m 12s". */
+function formatMs(ms: number): string {
+  const total = Math.max(0, Math.round(ms / 1000));
+  const m = Math.floor(total / 60);
+  const s = total % 60;
+  return m > 0 ? `${m}m ${s}s` : `${s}s`;
+}
+
 function countQuestions(content: AnyContent): number {
   return poolCountQuestions(content);
 }
@@ -7218,6 +7331,7 @@ function saveSession(s: SessionData) {
     writtenDrafts: s.writtenDrafts,
     rubricState: s.rubricState,
     ratings: s.ratings,
+    questionTimes: s.questionTimes,
     questionRefs,
     sources,
     tagsFilter: s.tagsFilter,

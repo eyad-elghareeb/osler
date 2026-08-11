@@ -26,6 +26,12 @@ import {
   Wifi,
   Cloud,
   User,
+  LineChart,
+  Timer,
+  Repeat2,
+  Gauge,
+  TrendingDown,
+  AlertTriangle,
 } from "lucide-react";
 import {
   storage,
@@ -45,6 +51,7 @@ import {
 } from "@/lib/osler/achievements";
 import { loadAllContent, ENGINE_META } from "@/lib/osler/content";
 import type { AnyContent, ContentTreeNode } from "@/lib/osler/types";
+import { summarizeMetrics, weakestTopics, type MetricsSummary } from "@/lib/osler/metrics";
 import type { OslerView } from "./app-shell";
 import { useI18n } from "./i18n-provider";
 import type { StringKey } from "@/lib/osler/i18n";
@@ -126,6 +133,15 @@ export function Profile({
   const accuracy = attemptedTotal
     ? Math.round((correctTotal / attemptedTotal) * 100)
     : 0;
+
+  // Performance Insights — derived from per-question records (which carry
+  // timeMs / attempts / firstAttemptCorrect). `progress` changes on every
+  // storage write, so keying the memo off it keeps the section live without
+  // a second subscription.
+  const metrics = React.useMemo(
+    () => summarizeMetrics(storage.allRecords()),
+    [progress],
+  );
 
   // Per-session accuracy, oldest → newest, for the last 10 completed
   // sessions — real data from `sessions.list()`, not a fabricated series.
@@ -362,6 +378,9 @@ export function Profile({
           </div>
         )}
 
+        {/* Performance Insights */}
+        <PerformanceInsights metrics={metrics} />
+
         {/* Notes */}
         <ProfileNotesSection onViewChange={onViewChange} />
 
@@ -401,6 +420,259 @@ export function Profile({
 }
 
 /* ── Profile Streak & Detailed Consistency Section ───────────────────── */
+
+function formatDurationShort(ms: number): string {
+  const total = Math.max(0, Math.round(ms / 1000));
+  const m = Math.floor(total / 60);
+  const s = total % 60;
+  return m > 0 ? `${m}m ${s}s` : `${s}s`;
+}
+
+function formatStudyTime(ms: number): string {
+  const totalMin = Math.max(0, Math.round(ms / 60000));
+  if (totalMin < 60) return `${totalMin}m`;
+  const h = Math.floor(totalMin / 60);
+  const m = totalMin % 60;
+  return m > 0 ? `${h}h ${m}m` : `${h}h`;
+}
+
+const CALLOUT_TONES = {
+  success: "border-success/30 bg-success/5 text-success",
+  warning: "border-warning/30 bg-warning/5 text-warning",
+  destructive: "border-destructive/30 bg-destructive/5 text-destructive",
+  info: "border-info/30 bg-info/5 text-info",
+} as const;
+
+type CalloutTone = keyof typeof CALLOUT_TONES;
+
+function PerformanceInsights({ metrics }: { metrics: MetricsSummary }) {
+  const { t } = useI18n();
+
+  const weak = React.useMemo(
+    () => weakestTopics(metrics.topicStats),
+    [metrics.topicStats],
+  );
+
+  const callout = React.useMemo(() => {
+    const m = metrics;
+    if (m.totalAttempted === 0) return null;
+    const sec = m.avgTimeMs != null ? Math.round(m.avgTimeMs / 1000) : null;
+    if (m.overallAccuracy != null && m.overallAccuracy < 60) {
+      return {
+        tone: "warning" as CalloutTone,
+        title: t("profile.insights.focusTitle"),
+        body: t("profile.insights.focusBody", { n: m.overallAccuracy }),
+      };
+    }
+    if (
+      m.repeatCount >= 3 &&
+      m.repeatGain != null &&
+      m.repeatGain > 0 &&
+      m.repeatFirstAcc != null &&
+      m.repeatLastAcc != null
+    ) {
+      return {
+        tone: "success" as CalloutTone,
+        title: t("profile.insights.reviewTitle"),
+        body: t("profile.insights.reviewBody", { first: m.repeatFirstAcc, last: m.repeatLastAcc }),
+      };
+    }
+    if (sec != null && m.overallAccuracy != null) {
+      if (m.avgTimeMs != null && m.avgTimeMs > 120000 && m.overallAccuracy < 60) {
+        return {
+          tone: "destructive" as CalloutTone,
+          title: t("profile.insights.overthinkingTitle"),
+          body: t("profile.insights.overthinkingBody", { n: sec }),
+        };
+      }
+      if (m.avgTimeMs != null && m.avgTimeMs < 30000 && m.overallAccuracy < 60) {
+        return {
+          tone: "warning" as CalloutTone,
+          title: t("profile.insights.rushedTitle"),
+          body: t("profile.insights.rushedBody", { n: sec }),
+        };
+      }
+      if (m.avgTimeMs != null && m.avgTimeMs > 120000) {
+        return {
+          tone: "info" as CalloutTone,
+          title: t("profile.insights.pacingTitle"),
+          body: t("profile.insights.pacingBody", { n: sec }),
+        };
+      }
+    }
+    return {
+      tone: "success" as CalloutTone,
+      title: t("profile.insights.strongTitle"),
+      body: t("profile.insights.strongBody"),
+    };
+  }, [metrics, t]);
+
+  const maxDayMinutes = Math.max(...metrics.byDay.map((d) => d.minutes), 1);
+
+  return (
+    <div className="mb-6">
+      <SectionHeading icon={LineChart}>{t("profile.insights.title")}</SectionHeading>
+
+      {metrics.totalAttempted === 0 ? (
+        <div className="osler-card--default text-center text-sm text-muted-foreground py-8">
+          {t("profile.insights.empty")}
+        </div>
+      ) : (
+        <div className="space-y-4">
+          {callout && (
+            <div className={cn("osler-card--default flex items-start gap-3 border", CALLOUT_TONES[callout.tone])}>
+              <AlertTriangle className="size-4 mt-0.5 shrink-0" />
+              <div className="min-w-0">
+                <p className="text-sm font-semibold">{callout.title}</p>
+                <p className="text-xs text-muted-foreground mt-0.5">{callout.body}</p>
+              </div>
+            </div>
+          )}
+
+          {/* Metric tiles */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <StatTile
+              label={t("profile.insights.firstTry")}
+              value={metrics.firstTryAccuracy != null ? `${metrics.firstTryAccuracy}%` : "—"}
+              icon={Gauge}
+              color="primary"
+            />
+            <StatTile
+              label={t("profile.insights.avgTime")}
+              value={metrics.avgTimeMs != null ? formatDurationShort(metrics.avgTimeMs) : "—"}
+              icon={Timer}
+              color="info"
+            />
+            <StatTile
+              label={t("profile.insights.reviewGain")}
+              value={
+                metrics.repeatGain != null
+                  ? `${metrics.repeatGain > 0 ? "+" : ""}${metrics.repeatGain}%`
+                  : "—"
+              }
+              icon={Repeat2}
+              color={
+                metrics.repeatGain == null
+                  ? "info"
+                  : metrics.repeatGain >= 0
+                    ? "success"
+                    : "destructive"
+              }
+            />
+            <StatTile
+              label={t("profile.insights.studyTime")}
+              value={metrics.totalStudyMs > 0 ? formatStudyTime(metrics.totalStudyMs) : "—"}
+              icon={Clock}
+              color="warning"
+            />
+          </div>
+
+          {/* Weakest topics + difficulty */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <OslerCard padding="default">
+              <h4 className="text-sm font-semibold mb-1">{t("profile.insights.weakTopics")}</h4>
+              <p className="text-xs text-muted-foreground mb-3">
+                {t("profile.insights.weakTopicsHint", { n: 3 })}
+              </p>
+              {weak.length === 0 ? (
+                <p className="text-sm text-muted-foreground py-4 text-center">
+                  {t("profile.insights.noWeakTopics")}
+                </p>
+              ) : (
+                <div className="space-y-2.5">
+                  {weak.map((s) => (
+                    <div key={s.label}>
+                      <div className="flex items-center justify-between text-xs mb-1">
+                        <span className="font-medium truncate me-2">{s.label}</span>
+                        <span
+                          className={cn(
+                            "tabular-nums font-semibold shrink-0",
+                            s.accuracy != null && s.accuracy < 50 ? "text-destructive" : "text-warning",
+                          )}
+                        >
+                          {s.accuracy}%
+                        </span>
+                      </div>
+                      <div className="h-1.5 rounded-full bg-muted/40 overflow-hidden">
+                        <div
+                          className="h-full rounded-full bg-warning transition-all"
+                          style={{ width: `${s.accuracy ?? 0}%` }}
+                        />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </OslerCard>
+
+            <OslerCard padding="default">
+              <h4 className="text-sm font-semibold mb-1">{t("profile.insights.byDifficulty")}</h4>
+              <p className="text-xs text-muted-foreground mb-3">
+                {t("profile.insights.byDifficultyHint")}
+              </p>
+              {metrics.difficultyStats.length === 0 ? (
+                <p className="text-sm text-muted-foreground py-4 text-center">
+                  {t("profile.insights.noDifficulty")}
+                </p>
+              ) : (
+                <div className="space-y-2.5">
+                  {metrics.difficultyStats.map((s) => (
+                    <div key={s.label}>
+                      <div className="flex items-center justify-between text-xs mb-1">
+                        <span className="font-medium capitalize me-2">{s.label}</span>
+                        <span className="tabular-nums text-muted-foreground shrink-0">
+                          {s.correct}/{s.attempts}
+                        </span>
+                      </div>
+                      <div className="h-1.5 rounded-full bg-muted/40 overflow-hidden">
+                        <div
+                          className={cn(
+                            "h-full rounded-full transition-all",
+                            (s.accuracy ?? 0) >= 70 ? "bg-success" : (s.accuracy ?? 0) >= 50 ? "bg-warning" : "bg-destructive",
+                          )}
+                          style={{ width: `${s.accuracy ?? 0}%` }}
+                        />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </OslerCard>
+          </div>
+
+          {/* Daily study time */}
+          <OslerCard padding="default">
+            <div className="flex items-center justify-between mb-3">
+              <h4 className="text-sm font-semibold">{t("profile.insights.studyChart")}</h4>
+              <span className="text-xs text-muted-foreground tabular-nums">
+                {formatStudyTime(metrics.totalStudyMs)}
+              </span>
+            </div>
+            <div className="flex items-end gap-1 h-24" role="img" aria-label={t("profile.insights.studyChart")}>
+              {metrics.byDay.map((d) => (
+                <div
+                  key={d.date}
+                  className="flex-1 flex flex-col items-center gap-1"
+                  title={`${d.date} · ${d.minutes}m`}
+                >
+                  <div
+                    className={cn(
+                      "w-full rounded-sm transition-all",
+                      d.minutes > 0 ? "bg-primary/70" : "bg-muted/40",
+                    )}
+                    style={{
+                      height: `${d.minutes > 0 ? Math.max(8, Math.round((d.minutes / maxDayMinutes) * 100)) : 3}%`,
+                    }}
+                  />
+                </div>
+              ))}
+            </div>
+          </OslerCard>
+        </div>
+      )}
+    </div>
+  );
+}
 
 function ProfileStreakSection() {
   const { t } = useI18n();
