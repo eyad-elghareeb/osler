@@ -190,10 +190,45 @@
   body {
     @apply bg-background text-foreground;
     font-feature-settings: "rlig" 1, "calt" 1, "ss01" 1;
+    /* Rendering-quality baseline — applies to every glyph in the app via
+     * inheritance, not just prose. `optimizeLegibility` engages proper
+     * kerning/ligature shaping (matters most for Geist Sans, used for
+     * every UI label); the smoothing pair is the standard pairing for
+     * crisp text on both WebKit and Firefox/macOS; `font-optical-sizing`
+     * is a correctness declaration — a no-op on static font files, but
+     * lets any variable-font axis (present or future) render at the
+     * right optical size for its rendered size instead of a fixed cut. */
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    font-optical-sizing: auto;
   }
   html, body {
     overflow: hidden;
     height: 100%;
+  }
+
+  /* Heading wrap quality, app-wide. `text-wrap: balance` only changes how
+   * a heading *wraps* — it's a no-op for headings that fit on one line —
+   * so this is safe to apply broadly rather than only to the curated
+   * prose/PageHeader classes further down this file. Native headings and
+   * every shadcn Dialog/AlertDialog/Sheet/Drawer/Card/Alert title share
+   * a `data-slot="…-title"` attribute, so one attribute selector covers
+   * all of them without touching each component. */
+  h1, h2, h3, h4,
+  [data-slot$="-title"] {
+    text-wrap: balance;
+  }
+
+  /* Paragraph wrap quality, app-wide. `text-wrap: pretty` reduces orphans
+   * (a single short word stranded on the last line) in any multi-line
+   * paragraph — dialog/alert descriptions, empty-state bodies, settings
+   * blurbs, card descriptions — not just Library/QBank long-form prose.
+   * Slightly slower to lay out than the default, so it's scoped to
+   * paragraph-shaped text rather than every element in the DOM. */
+  p,
+  [data-slot$="-description"] {
+    text-wrap: pretty;
   }
 }
 
@@ -926,7 +961,7 @@ button.osler-stat-tile--compact:hover {
   margin: 0.25rem 0;
   opacity: 0.85;
 }
-.ai-chat-msg a { color: var(--primary); text-decoration: underline; }
+.ai-chat-msg a { color: var(--primary); text-decoration: underline; text-underline-offset: 2px; }
 
 /* ═══════════════════════════════════════════════════════════════════════════
  * Mobile / Tauri-mobile responsive layer
@@ -2669,7 +2704,10 @@ html.osler-ar body,
   hanging-punctuation: first;
 }
 
-/* --- text-balance on all headings — even word distribution on wrap --- */
+/* --- text-balance on all headings — even word distribution on wrap ---
+ * `h1, h2, h3, h4` are now covered app-wide by the `@layer base` rule
+ * near the top of this file; this list stays for `.osler-section-heading`
+ * (not always a native heading tag) as a defensive, low-cost duplicate. */
 .osler-page-header__title,
 .osler-section-heading,
 .uworld-prose h1, .uworld-prose h2, .uworld-prose h3,

@@ -38,6 +38,7 @@ import { useShortcutListener } from "@/hooks/use-shortcuts";
 import { useI18n } from "./i18n-provider";
 import { ContentLangFilter } from "./qbank-studio";
 import { FolderTreeNav } from "./folder-tree-nav";
+import { HubSkeleton, EmptyState } from "./ui-primitives";
 import { ContentCacheButton } from "./content-cache-button";
 import {
   acquireWakeLock,
@@ -91,6 +92,11 @@ export function VideosStudio({
   const onOpenArticle = propOnOpenArticle || ((id: string) => navigate("library", { article: id }));
 
   const [tree, setTree] = React.useState<ContentTreeNode[]>([]);
+  // Tracks the initial tree/video-list fetch only (not per-folder loads,
+  // which already have their own `folderLoading` shimmer grid) — without
+  // this the hub previously rendered as if it were genuinely empty for a
+  // frame before data arrived. See design-library-roadmap.md.
+  const [treeLoading, setTreeLoading] = React.useState(true);
   const [selectedNodeUid, setSelectedNodeUid] = React.useState<string | null>(null);
   const [folderVideos, setFolderVideos] = React.useState<VideoResource[]>([]);
   const [folderLoading, setFolderLoading] = React.useState(false);
@@ -130,6 +136,8 @@ export function VideosStudio({
         if (firstLeaf) setSelectedNodeUid(firstLeaf.uid);
       } catch (e) {
         console.error("Failed to load videos tree:", e);
+      } finally {
+        setTreeLoading(false);
       }
     })();
   }, []);
@@ -227,6 +235,11 @@ export function VideosStudio({
         onOpenArticle={onOpenArticle}
       />
     );
+  }
+
+  /* ── Render: Hub loading skeleton (initial tree fetch only) ── */
+  if (treeLoading) {
+    return <HubSkeleton statCount={0} cardCount={6} />;
   }
 
   /* ── Render: Hub view ── */
@@ -347,16 +360,7 @@ export function VideosStudio({
                 ))}
               </div>
             ) : folderVideos.length === 0 ? (
-              <div className="osler-empty">
-                <div className="osler-empty__icon">
-                  <VideoIcon className="size-6" />
-                </div>
-                <div>
-                  <p className="osler-empty__title">
-                    {t("videos.empty")}
-                  </p>
-                </div>
-              </div>
+              <EmptyState icon={VideoIcon} title={t("videos.empty")} />
             ) : (
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                 {folderVideos.map((video, idx) => {

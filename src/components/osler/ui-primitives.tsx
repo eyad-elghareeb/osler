@@ -17,6 +17,8 @@
  *   - <Card> / <InteractiveCard>  thin wrappers that pin the canonical card recipe
  *   - <SegmentedControl>     Origin/Coss UI pattern — animated option toggle
  *   - <FormField>            Origin UI grouped field — label + control + hint/error
+ *   - <Combobox>             Coss UI pattern — searchable select on existing Popover+Command
+ *   - <PopoverForm>          Cult UI pattern — single/two-field inline form, no full dialog
  *   - <MetricBar>            compact labelled progress bar
  *   - <ChartCard>            wrapper for Recharts/TanStack chart surfaces
  *
@@ -27,7 +29,16 @@
  */
 
 import * as React from "react";
-import { Loader2, ChevronRight, type LucideIcon } from "lucide-react";
+import { Loader2, ChevronRight, Check, ChevronsUpDown, type LucideIcon } from "lucide-react";
+import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
+import {
+  Command,
+  CommandInput,
+  CommandList,
+  CommandEmpty,
+  CommandGroup,
+  CommandItem,
+} from "@/components/ui/command";
 import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/lib/utils";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -252,6 +263,13 @@ export interface StatTileProps {
   color?: "primary" | "success" | "warning" | "destructive" | "info";
   /** Compact variant — use in 3-column dense grids (QBank/Flashcard hubs). */
   compact?: boolean;
+  /**
+   * Optional trend indicator rendered beside the value — typically a
+   * `<SparkTrend>` from `analytics-primitives.tsx`. Omit entirely rather
+   * than passing one for a tile that has no time-series backing it; this
+   * is additive polish, not a required part of the tile.
+   */
+  trend?: React.ReactNode;
   onClick?: () => void;
   className?: string;
 }
@@ -270,6 +288,7 @@ export function StatTile({
   icon: Icon,
   color = "primary",
   compact = false,
+  trend,
   onClick,
   className,
 }: StatTileProps) {
@@ -289,7 +308,10 @@ export function StatTile({
         <span className="osler-stat-tile__label">{label}</span>
         {Icon && <Icon className={cn("size-4", STAT_TILE_COLOR[color])} />}
       </div>
-      <div className="osler-stat-tile__value">{value}</div>
+      <div className="flex items-end justify-between gap-2">
+        <div className="osler-stat-tile__value">{value}</div>
+        {trend && <div className="shrink-0 pb-0.5">{trend}</div>}
+      </div>
     </Container>
   );
 }
@@ -474,6 +496,224 @@ export function FormField({
         <p className="osler-form-field__hint">{hint}</p>
       ) : null}
     </div>
+  );
+}
+
+/* ─── Combobox ────────────────────────────────────────────────────────
+ * Searchable single-select. Pattern reference: Coss UI's `Combobox`
+ * (`docs/design-library-roadmap.md` § "Next-wave candidate additions").
+ * Coss UI's own version is built on Base UI; per the roadmap's guardrail
+ * to port the pattern rather than the dependency, this composes Osler's
+ * *existing* Radix-based `Popover` + `Command` (cmdk) primitives instead
+ * — no new dependency, same interaction shape (type-to-filter, keyboard
+ * nav, empty state).
+ *
+ * Use this over a plain `<select>` once a list is long enough, or its
+ * option labels long enough, that scanning beats native `<select>` UX —
+ * e.g. the AI-assistant model picker. For a handful of short, stable
+ * options (2–4 items), a `<SegmentedControl>` or plain popover list is
+ * still the right, lighter-weight choice.
+ */
+
+export interface ComboboxOption {
+  value: string;
+  label: string;
+  /** Optional secondary line shown under the label, e.g. a model description. */
+  description?: string;
+}
+
+interface ComboboxProps {
+  options: ComboboxOption[];
+  value: string;
+  onChange: (value: string) => void;
+  placeholder?: string;
+  searchPlaceholder?: string;
+  emptyText?: string;
+  /** Accessible label for the trigger button. */
+  "aria-label"?: string;
+  className?: string;
+  disabled?: boolean;
+}
+
+export function Combobox({
+  options,
+  value,
+  onChange,
+  placeholder = "Select…",
+  searchPlaceholder = "Search…",
+  emptyText = "No results found.",
+  className,
+  disabled,
+  ...rest
+}: ComboboxProps) {
+  const [open, setOpen] = React.useState(false);
+  const selected = options.find((o) => o.value === value);
+  const listId = React.useId();
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          role="combobox"
+          aria-expanded={open}
+          aria-controls={listId}
+          aria-label={rest["aria-label"]}
+          disabled={disabled}
+          className={cn(
+            "w-full h-9 rounded-lg border border-border bg-card px-3 text-sm",
+            "flex items-center justify-between gap-2 transition-colors",
+            "hover:border-primary/40 focus:outline-none focus-visible:border-primary",
+            "disabled:opacity-50 disabled:pointer-events-none",
+            className,
+          )}
+        >
+          <span className={cn("truncate text-start", !selected && "text-muted-foreground")}>
+            {selected ? selected.label : placeholder}
+          </span>
+          <ChevronsUpDown className="size-3.5 text-muted-foreground shrink-0" />
+        </button>
+      </PopoverTrigger>
+      <PopoverContent className="p-0 w-[--radix-popover-trigger-width]" align="start">
+        <Command>
+          <CommandInput placeholder={searchPlaceholder} className="text-sm" />
+          <CommandList id={listId}>
+            <CommandEmpty className="py-4 text-center text-xs text-muted-foreground">
+              {emptyText}
+            </CommandEmpty>
+            <CommandGroup>
+              {options.map((opt) => (
+                <CommandItem
+                  key={opt.value}
+                  value={`${opt.label} ${opt.description ?? ""}`}
+                  onSelect={() => {
+                    onChange(opt.value);
+                    setOpen(false);
+                  }}
+                  className="flex items-start gap-2"
+                >
+                  <Check
+                    className={cn(
+                      "size-3.5 mt-0.5 shrink-0",
+                      opt.value === value ? "opacity-100 text-primary" : "opacity-0",
+                    )}
+                  />
+                  <span className="min-w-0">
+                    <span className="block truncate">{opt.label}</span>
+                    {opt.description && (
+                      <span className="block truncate text-xs text-muted-foreground">
+                        {opt.description}
+                      </span>
+                    )}
+                  </span>
+                </CommandItem>
+              ))}
+            </CommandGroup>
+          </CommandList>
+        </Command>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+/* ─── PopoverForm ─────────────────────────────────────────────────────
+ * Cult UI's "Popover Form" pattern — a single/two-field create/edit form
+ * that lives inside a Popover instead of a full modal Dialog. Reserved
+ * for genuinely small forms (per the roadmap guardrail: 1–2 fields max;
+ * escalate to a real Dialog past that, since a Popover has no true focus
+ * trap or backdrop and shouldn't carry a large form's weight).
+ *
+ * Good fit: "New folder", "New file", quick single-field rename — actions
+ * currently anchored to a stable toolbar button. Not a fit for anything
+ * triggered from a context menu without a persistent anchor element, or
+ * for multi-field forms — those stay as Dialogs.
+ *
+ * Pattern source: docs/design-library-roadmap.md § "Next-wave candidate
+ * additions" (Cult UI). Built on Osler's existing Popover primitive, no
+ * new dependency.
+ */
+
+interface PopoverFormProps {
+  /** Trigger element — typically the existing toolbar button. Rendered with `asChild`. */
+  trigger: React.ReactNode;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  title: React.ReactNode;
+  description?: React.ReactNode;
+  onSubmit: () => void;
+  submitLabel: React.ReactNode;
+  submitIcon?: LucideIcon;
+  submitDisabled?: boolean;
+  submitPending?: boolean;
+  cancelLabel?: React.ReactNode;
+  /** Form field(s) — keep to 1–2 for this pattern; use a Dialog beyond that. */
+  children: React.ReactNode;
+  align?: "start" | "center" | "end";
+  className?: string;
+}
+
+export function PopoverForm({
+  trigger,
+  open,
+  onOpenChange,
+  title,
+  description,
+  onSubmit,
+  submitLabel,
+  submitIcon: SubmitIcon,
+  submitDisabled = false,
+  submitPending = false,
+  cancelLabel = "Cancel",
+  children,
+  align = "start",
+  className,
+}: PopoverFormProps) {
+  return (
+    <Popover open={open} onOpenChange={onOpenChange}>
+      <PopoverTrigger asChild>{trigger}</PopoverTrigger>
+      <PopoverContent align={align} className={cn("w-80 p-4", className)}>
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (!submitDisabled && !submitPending) onSubmit();
+          }}
+          className="space-y-3"
+        >
+          <div>
+            <h3 className="text-sm font-semibold">{title}</h3>
+            {description && (
+              <p className="text-xs text-muted-foreground mt-0.5">{description}</p>
+            )}
+          </div>
+          {children}
+          <div className="flex items-center justify-end gap-2 pt-1">
+            <button
+              type="button"
+              onClick={() => onOpenChange(false)}
+              className="h-8 px-3 rounded-md text-xs font-medium text-muted-foreground hover:bg-muted/60 transition-colors"
+            >
+              {cancelLabel}
+            </button>
+            <button
+              type="submit"
+              disabled={submitDisabled || submitPending}
+              className={cn(
+                "h-8 px-3 rounded-md text-xs font-medium inline-flex items-center gap-1.5",
+                "bg-primary text-primary-foreground hover:bg-primary/90 transition-colors",
+                "disabled:opacity-50 disabled:pointer-events-none",
+              )}
+            >
+              {submitPending ? (
+                <Loader2 className="size-3.5 animate-spin" />
+              ) : (
+                SubmitIcon && <SubmitIcon className="size-3.5" />
+              )}
+              {submitLabel}
+            </button>
+          </div>
+        </form>
+      </PopoverContent>
+    </Popover>
   );
 }
 

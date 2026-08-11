@@ -23,6 +23,7 @@
  *   - <ChartLoading>        centered spinner + optional label
  *   - <ChartError>          centered error state with optional retry
  *   - <ChartLegend>         accessible legend with semantic series colors
+ *   - <SparkTrend>          small inline trend line for a stat tile
  *   - chartSeries           semantic series color lookup by index
  *   - useChartHeight        helper for responsive chart heights
  *
@@ -37,6 +38,13 @@
 
 import * as React from "react";
 import { AlertCircle, Inbox, Loader2, type LucideIcon } from "lucide-react";
+import {
+  ResponsiveContainer as RechartsResponsiveContainer,
+  AreaChart as RechartsAreaChart,
+  Area as RechartsArea,
+  LineChart as RechartsLineChart,
+  Line as RechartsLine,
+} from "recharts";
 import { cn } from "@/lib/utils";
 
 /* ─── Series colors ──────────────────────────────────────────────────── */
@@ -308,3 +316,125 @@ export function ChartLegend({ items, className }: ChartLegendProps) {
     </div>
   );
 }
+
+/* ─── SparkTrend ─────────────────────────────────────────────────────── */
+
+/**
+ * Small inline trend line for a stat tile — no axes, no legend, no grid,
+ * just the shape of the last N data points plus an optional delta badge.
+ *
+ * Pattern reference: Tremor's `SparkAreaChart` / `SparkLineChart`
+ * (`docs/design-library-roadmap.md` § "Next-wave candidate additions").
+ * Re-implemented locally on the existing Recharts dependency rather than
+ * installing `@tremor/react` — this is the "small shared chart layer" the
+ * roadmap prefers over a second charting runtime. Colors always come from
+ * `chartSeries()` / the semantic success/destructive tokens, never a
+ * hardcoded hex, so it holds up across all 6 theme families.
+ *
+ * Usage inside a `<StatTile>`:
+ *   <StatTile label="Accuracy" value="82%" icon={Zap}
+ *     trend={<SparkTrend data={last7DaysAccuracy} />} />
+ */
+interface SparkTrendProps {
+  /** Ordered series of numeric values, oldest first. Needs 2+ points to draw a line. */
+  data: number[];
+  /** Variant: filled area (default) or a bare line. */
+  variant?: "area" | "line";
+  /**
+   * Semantic tone. "auto" picks success/destructive by comparing the last
+   * value to the first; "neutral" always uses the primary chart color.
+   */
+  tone?: "auto" | "success" | "destructive" | "neutral";
+  /** Show the trailing delta as a small "+12%" / "−4%" badge beside the sparkline. */
+  showDelta?: boolean;
+  /** Format the delta value. Defaults to a signed percent-point difference. */
+  deltaFormatter?: (first: number, last: number) => string;
+  width?: number;
+  height?: number;
+  className?: string;
+}
+
+const SPARK_TONE_COLOR: Record<"success" | "destructive" | "neutral", string> = {
+  success: "var(--success)",
+  destructive: "var(--destructive)",
+  neutral: "var(--chart-1)",
+};
+
+function defaultSparkDelta(first: number, last: number): string {
+  const diff = last - first;
+  const sign = diff > 0 ? "+" : diff < 0 ? "\u2212" : "";
+  return `${sign}${Math.abs(diff).toFixed(diff % 1 === 0 ? 0 : 1)}`;
+}
+
+export function SparkTrend({
+  data,
+  variant = "area",
+  tone = "auto",
+  showDelta = false,
+  deltaFormatter = defaultSparkDelta,
+  width = 72,
+  height = 28,
+  className,
+}: SparkTrendProps) {
+  const points = React.useMemo(
+    () => data.filter((v) => typeof v === "number" && Number.isFinite(v)),
+    [data],
+  );
+  const gradientId = React.useId();
+
+  if (points.length < 2) return null;
+
+  const first = points[0];
+  const last = points[points.length - 1];
+  const resolvedTone: "success" | "destructive" | "neutral" =
+    tone === "auto" ? (last >= first ? "success" : "destructive") : tone === "neutral" ? "neutral" : tone;
+  const color = SPARK_TONE_COLOR[resolvedTone];
+  const chartData = points.map((value, i) => ({ i, value }));
+
+  return (
+    <div className={cn("inline-flex items-center gap-1.5", className)}>
+      <div style={{ width, height }} aria-hidden="true">
+        <RechartsResponsiveContainer width="100%" height="100%">
+          {variant === "area" ? (
+            <RechartsAreaChart data={chartData} margin={{ top: 2, right: 1, bottom: 2, left: 1 }}>
+              <defs>
+                <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor={color} stopOpacity={0.35} />
+                  <stop offset="100%" stopColor={color} stopOpacity={0} />
+                </linearGradient>
+              </defs>
+              <RechartsArea
+                type="monotone"
+                dataKey="value"
+                stroke={color}
+                strokeWidth={1.5}
+                fill={`url(#${gradientId})`}
+                isAnimationActive={false}
+              />
+            </RechartsAreaChart>
+          ) : (
+            <RechartsLineChart data={chartData} margin={{ top: 2, right: 1, bottom: 2, left: 1 }}>
+              <RechartsLine
+                type="monotone"
+                dataKey="value"
+                stroke={color}
+                strokeWidth={1.5}
+                dot={false}
+                isAnimationActive={false}
+              />
+            </RechartsLineChart>
+          )}
+        </RechartsResponsiveContainer>
+      </div>
+      {showDelta && (
+        <span
+          className="text-[11px] font-medium tabular-nums shrink-0"
+          style={{ color }}
+        >
+          {deltaFormatter(first, last)}
+        </span>
+      )}
+    </div>
+  );
+}
+

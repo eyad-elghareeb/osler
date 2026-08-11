@@ -25,6 +25,7 @@ import {
 } from "@/hooks/use-resizable-sidebar";
 import { useSwipeBackDismiss } from "@/hooks/use-swipe-back-dismiss";
 import { GEMINI_CLOUD_SYNCED_FLAG } from "@/lib/osler/cloud";
+import { Combobox } from "@/components/osler/ui-primitives";
 
 const MODELS = [
   ["gemini-3.6-flash", "Gemini 3.6 Flash (newest, fastest Flash)"],
@@ -400,15 +401,22 @@ export function AiAssistant({
               </div>
               <div className="space-y-1.5">
                 <label className="text-xs font-semibold text-muted-foreground">{t("ai.model")}</label>
-                <select
+                <Combobox
+                  aria-label={t("ai.model")}
                   value={model}
-                  onChange={(e) => saveModel(e.target.value)}
-                  className="w-full h-8 rounded-lg border border-border bg-card px-3 text-xs outline-none focus:border-primary"
-                >
-                  {MODELS.map(([id, label]) => (
-                    <option key={id} value={id}>{label}</option>
-                  ))}
-                </select>
+                  onChange={saveModel}
+                  options={MODELS.map(([id, label]) => {
+                    // Labels are authored as "Name (description)" — split
+                    // once so the Combobox can show the description as a
+                    // muted secondary line instead of one long string.
+                    const match = label.match(/^(.*?)\s*\((.*)\)$/);
+                    return match
+                      ? { value: id, label: match[1], description: match[2] }
+                      : { value: id, label };
+                  })}
+                  placeholder={t("ai.model")}
+                  searchPlaceholder={t("common.search")}
+                />
               </div>
               <div className="space-y-1.5">
                 <label className="text-xs font-semibold text-muted-foreground">{t("ai.maxWait")}</label>

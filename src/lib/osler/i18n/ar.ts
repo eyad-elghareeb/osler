@@ -479,6 +479,7 @@ export const ar = {
     "flash.home.title": "البطاقات التعليمية",
     "flash.home.subtitle": "رزم بالتكرار المتباعد عبر جميع التخصصات.",
     "flash.home.empty": "لا توجد رزم بطاقات متاحة.",
+    "flash.home.emptyDesc": "ستظهر رزم البطاقات هنا بمجرد إضافة المحتوى. تحقق لاحقًا أو جرّب فلتر لغة محتوى مختلف.",
     "flash.home.study": "ذاكر",
     "flash.home.cards": "{n} بطاقة",
     "flash.home.due": "مستحقة",
@@ -1666,6 +1667,9 @@ export const ar = {
     "admin.preview.image": "صورة",
     "admin.preview.dimensions": "{w} × {h}بكسل",
     "admin.preview.previewImage": "معاينة الصورة",
+    "admin.preview.zoomIn": "تكبير",
+    "admin.preview.zoomOut": "تصغير",
+    "admin.preview.zoomReset": "إعادة ضبط التكبير",
     // Content browser toasts
     "admin.toast.created": "تم الإنشاء {path}",
     "admin.toast.createFailed": "فشل الإنشاء: {error}",

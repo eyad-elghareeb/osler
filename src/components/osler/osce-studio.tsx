@@ -591,6 +591,25 @@ function buildAchievements(result: ExamResult, timeUsedPct: number, turnCount: n
 
 /* ── Confetti ──────────────────────────────────────────────────────── */
 
+/**
+ * Canvas 2D `fillStyle` can't resolve CSS custom properties on its own, so
+ * confetti previously used a hardcoded hex palette that never matched the
+ * active theme (Forest Rounds, Crimson ED, Midnight, etc. all looked
+ * identical). Reading the resolved `--chart-1..5` + `--primary` values at
+ * trigger time keeps this celebratory, single-focal-moment effect on the
+ * same semantic tokens as everything else — see the roadmap's "Tokens and
+ * themes" contract.
+ */
+function getConfettiColors(): string[] {
+  const fallback = ["#f0a500", "#38bdf8", "#2ea043", "#8b5cf6", "#da3633", "#ffffff"];
+  if (typeof window === "undefined") return fallback;
+  const root = getComputedStyle(document.documentElement);
+  const tokens = ["--chart-1", "--chart-2", "--chart-3", "--chart-4", "--chart-5", "--primary"]
+    .map((name) => root.getPropertyValue(name).trim())
+    .filter(Boolean);
+  return tokens.length > 0 ? tokens : fallback;
+}
+
 function launchConfetti() {
   if (typeof window === "undefined") return;
   const canvas = document.createElement("canvas");
@@ -600,7 +619,7 @@ function launchConfetti() {
   canvas.height = window.innerHeight;
   document.body.appendChild(canvas);
   const ctx = canvas.getContext("2d")!;
-  const colors = ["#f0a500", "#38bdf8", "#2ea043", "#8b5cf6", "#da3633", "#fff"];
+  const colors = getConfettiColors();
   const particles = Array.from({ length: 120 }, () => ({
     x: Math.random() * canvas.width,
     y: Math.random() * -canvas.height * 0.5,

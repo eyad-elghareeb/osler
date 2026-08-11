@@ -196,6 +196,9 @@ export function Settings({
   // also track whether we're on the home list (`mobileHome`) — when true
   // the home list is shown and `section` is the *next* section to open.
   const [section, setSection] = React.useState<SettingsSection>(initialSection);
+  // +1 = new section is below the previous one in SECTIONS order (content
+  // slides up-in from below), -1 = above (slides down-in from above).
+  const [sectionDirection, setSectionDirection] = React.useState<1 | -1>(1);
   // On mobile, the home list is the landing page (the "main settings page").
   // We always start there unless the caller explicitly requests a non-default
   // section via initialSection.
@@ -248,6 +251,18 @@ export function Settings({
 
   const pickSection = (id: SettingsSection) => {
     haptic("selection");
+    // Direction-aware transition (Cult UI "Direction Aware Tabs" pattern —
+    // see design-library-roadmap.md § "Next-wave candidate additions").
+    // Settings' section switcher is a vertical sidebar, not a horizontal
+    // tab strip, so "direction" here means down/up through SECTIONS'
+    // order rather than left/right — the content pane slides toward
+    // wherever the newly picked section sits relative to the current one,
+    // which reads as spatial continuity instead of a generic fade.
+    const fromIdx = SECTIONS.findIndex((s) => s.id === section);
+    const toIdx = SECTIONS.findIndex((s) => s.id === id);
+    if (fromIdx !== -1 && toIdx !== -1 && toIdx !== fromIdx) {
+      setSectionDirection(toIdx > fromIdx ? 1 : -1);
+    }
     setSection(id);
     setMobileHome(false);
   };
@@ -388,12 +403,18 @@ export function Settings({
 
             {/* Content pane */}
             <div className="min-w-0">
-              <AnimatePresence mode="wait">
+              <AnimatePresence mode="wait" custom={sectionDirection}>
                 <motion.div
                   key={section}
-                  initial={{ opacity: 0, y: 6 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -6 }}
+                  custom={sectionDirection}
+                  variants={{
+                    enter: (dir: 1 | -1) => ({ opacity: 0, y: 10 * dir }),
+                    center: { opacity: 1, y: 0 },
+                    exit: (dir: 1 | -1) => ({ opacity: 0, y: -10 * dir }),
+                  }}
+                  initial="enter"
+                  animate="center"
+                  exit="exit"
                   transition={{ duration: 0.18, ease: [0.32, 0.72, 0, 1] }}
                 >
                   {renderSection(section)}

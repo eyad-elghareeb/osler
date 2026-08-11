@@ -51,6 +51,7 @@ import type { StringKey } from "@/lib/osler/i18n";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
 import { NotesPanel } from "./notes-panel";
 import { SyncModal } from "./sync/sync-modal";
 import { haptic } from "@/lib/osler/native";
@@ -65,6 +66,7 @@ import {
 import { useOslerRouter } from "@/lib/osler/navigation";
 import { useOslerSession } from "@/lib/osler/session-context";
 import { useChartTooltip } from "@/hooks/use-chart-tooltip";
+import { SparkTrend } from "./analytics-primitives";
 
 interface ProfileProps {
   username?: string;
@@ -124,6 +126,23 @@ export function Profile({
   const accuracy = attemptedTotal
     ? Math.round((correctTotal / attemptedTotal) * 100)
     : 0;
+
+  // Per-session accuracy, oldest → newest, for the last 10 completed
+  // sessions — real data from `sessions.list()`, not a fabricated series.
+  // Feeds the accuracy stat tile's `<SparkTrend>`. Needs 2+ completed
+  // sessions with attempts to draw a line; `SparkTrend` itself no-ops
+  // below that, so no extra guard is needed here.
+  const accuracyTrend = React.useMemo(() => {
+    return sessions
+      .list()
+      .filter((s) => !!s.completedAt && s.answeredCount > 0)
+      .sort((a, b) => (a.completedAt ?? 0) - (b.completedAt ?? 0))
+      .slice(-10)
+      .map((s) => Math.round((s.correctCount / s.answeredCount) * 100));
+    // `progress` changes whenever storage updates, which is also when a
+    // session completes — using it as the recompute trigger avoids a
+    // second subscription just for this derived series.
+  }, [progress]);
 
   // Engine breakdown
   const engineStats = React.useMemo(() => {
@@ -271,6 +290,11 @@ export function Profile({
             value={`${accuracy}%`}
             icon={Zap}
             color="warning"
+            trend={
+              accuracyTrend.length >= 2 ? (
+                <SparkTrend data={accuracyTrend} tone="auto" showDelta />
+              ) : undefined
+            }
           />
         </div>
 
@@ -279,7 +303,25 @@ export function Profile({
 
         {/* Engine breakdown */}
         <SectionHeading>{t("profile.performanceByEngine")}</SectionHeading>
-        {Object.keys(engineStats).length === 0 ? (
+        {data === null ? (
+          // `engineStats` is derived by cross-referencing `progress` (available
+          // synchronously from local storage) against `data.items` (async
+          // content metadata). Before `data` resolves, engineStats is
+          // incorrectly empty even for a user with real attempts — this
+          // skeleton prevents a false "no sessions" flash. See
+          // design-library-roadmap.md.
+          <div className="space-y-3 mb-6" aria-hidden="true">
+            {Array.from({ length: 2 }).map((_, i) => (
+              <div key={i} className="osler-card--default">
+                <div className="flex items-center justify-between mb-2">
+                  <Skeleton className="h-4 w-24" />
+                  <Skeleton className="h-4 w-16" />
+                </div>
+                <Skeleton className="h-2 w-full rounded-full" />
+              </div>
+            ))}
+          </div>
+        ) : Object.keys(engineStats).length === 0 ? (
           <div className="osler-card--default text-center text-sm text-muted-foreground mb-6 py-8">
             {t("profile.noSessions")}
           </div>
@@ -609,11 +651,13 @@ function StatTile({
   value,
   icon: Icon,
   color = "primary",
+  trend,
 }: {
   label: string;
   value: string | number;
   icon: React.ComponentType<{ className?: string }>;
   color?: StatTileProps["color"];
+  trend?: React.ReactNode;
 }) {
   return (
     <SharedStatTile
@@ -621,6 +665,7 @@ function StatTile({
       value={value}
       icon={Icon as any}
       color={color}
+      trend={trend}
     />
   );
 }

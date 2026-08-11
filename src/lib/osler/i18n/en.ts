@@ -479,6 +479,7 @@ export const en = {
     "flash.home.title": "Flashcards",
     "flash.home.subtitle": "Spaced-repetition decks across all specialties.",
     "flash.home.empty": "No flashcard decks available.",
+    "flash.home.emptyDesc": "Flashcard decks will appear here once content is added. Check back soon or try a different content-language filter.",
     "flash.home.study": "Study",
     "flash.home.cards": "{n} cards",
     "flash.home.due": "Due",
@@ -1671,6 +1672,9 @@ export const en = {
     "admin.preview.image": "Image",
     "admin.preview.dimensions": "{w} × {h}px",
     "admin.preview.previewImage": "Preview image",
+    "admin.preview.zoomIn": "Zoom in",
+    "admin.preview.zoomOut": "Zoom out",
+    "admin.preview.zoomReset": "Reset zoom",
     // Content browser toasts
     "admin.toast.created": "Created {path}",
     "admin.toast.createFailed": "Create failed: {error}",

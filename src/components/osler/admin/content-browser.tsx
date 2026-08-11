@@ -56,7 +56,7 @@ import {
 import { useI18n } from "@/components/osler/i18n-provider";
 import { haptic } from "@/lib/osler/native";
 import { cn } from "@/lib/utils";
-import { EmptyState, LoadingState } from "@/components/osler/ui-primitives";
+import { EmptyState, LoadingState, PopoverForm } from "@/components/osler/ui-primitives";
 import {
   adminApi,
   type ContentObject,
@@ -493,24 +493,66 @@ export function ContentBrowser({ capabilities }: ContentBrowserProps) {
           </Select>
           {capabilities.manageUsers && (
             <>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => openNewFolderDialog("")}
-                title={t("admin.content.newFolder")}
+              <PopoverForm
+                trigger={
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => openNewFolderDialog("")}
+                    title={t("admin.content.newFolder")}
+                  >
+                    <FolderPlus className="me-1.5 size-3.5" />
+                    {t("admin.content.newFolder")}
+                  </Button>
+                }
+                open={newFolderOpen}
+                onOpenChange={setNewFolderOpen}
+                title={t("admin.content.newFolderTitle")}
+                description={t("admin.content.newFolderDesc")}
+                onSubmit={createNewR2Folder}
+                submitLabel={t("admin.content.create")}
+                submitIcon={FolderPlus}
+                submitDisabled={!dialogPath.trim()}
+                cancelLabel={t("common.cancel")}
               >
-                <FolderPlus className="me-1.5 size-3.5" />
-                {t("admin.content.newFolder")}
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => openNewFileDialog("")}
-                title={t("admin.content.newFile")}
+                <Input
+                  value={dialogPath}
+                  onChange={(e) => setDialogPath(e.target.value)}
+                  placeholder="library/cardiology/new-topic"
+                  className="font-mono text-xs"
+                  autoFocus
+                />
+              </PopoverForm>
+              <PopoverForm
+                trigger={
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => openNewFileDialog("")}
+                    title={t("admin.content.newFile")}
+                  >
+                    <FilePlus className="me-1.5 size-3.5" />
+                    {t("admin.content.newFile")}
+                  </Button>
+                }
+                open={newFileOpen}
+                onOpenChange={setNewFileOpen}
+                title={t("admin.content.newFileTitle")}
+                description={t("admin.content.newFileDesc")}
+                onSubmit={createNewR2File}
+                submitLabel={t("admin.content.create")}
+                submitIcon={FilePlus}
+                submitDisabled={!dialogPath.trim()}
+                cancelLabel={t("common.cancel")}
               >
-                <FilePlus className="me-1.5 size-3.5" />
-                {t("admin.content.newFile")}
-              </Button>
+                <Input
+                  value={dialogPath}
+                  onChange={(e) => setDialogPath(e.target.value)}
+                  placeholder="qbank/cardiology/acute-coronary/questions.json"
+                  className="font-mono text-xs"
+                  autoFocus
+                />
+              </PopoverForm>
               <Button
                 variant="outline"
                 size="sm"
@@ -599,59 +641,9 @@ export function ContentBrowser({ capabilities }: ContentBrowserProps) {
         canAdmin={capabilities.manageUsers}
       />
 
-      {/* New file dialog (unified tab — R2 keyspace) */}
-      <Dialog open={newFileOpen} onOpenChange={setNewFileOpen}>
-        <DialogContent className="max-w-sm">
-          <DialogHeader>
-            <DialogTitle>{t("admin.content.newFileTitle")}</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-2 py-2">
-            <p className="text-xs text-muted-foreground">
-              {t("admin.content.newFileDesc")}
-            </p>
-            <Input
-              value={dialogPath}
-              onChange={(e) => setDialogPath(e.target.value)}
-              placeholder="qbank/cardiology/acute-coronary/questions.json"
-              className="font-mono text-xs"
-              autoFocus
-            />
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setNewFileOpen(false)}>{t("common.cancel")}</Button>
-            <Button onClick={createNewR2File} disabled={!dialogPath.trim()}>
-              <FilePlus className="size-3.5 me-1.5" /> {t("admin.content.create")}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* New folder dialog (unified tab — R2 keyspace) */}
-      <Dialog open={newFolderOpen} onOpenChange={setNewFolderOpen}>
-        <DialogContent className="max-w-sm">
-          <DialogHeader>
-            <DialogTitle>{t("admin.content.newFolderTitle")}</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-2 py-2">
-            <p className="text-xs text-muted-foreground">
-              {t("admin.content.newFolderDesc")}
-            </p>
-            <Input
-              value={dialogPath}
-              onChange={(e) => setDialogPath(e.target.value)}
-              placeholder="library/cardiology/new-topic"
-              className="font-mono text-xs"
-              autoFocus
-            />
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setNewFolderOpen(false)}>{t("common.cancel")}</Button>
-            <Button onClick={createNewR2Folder} disabled={!dialogPath.trim()}>
-              <FolderPlus className="size-3.5 me-1.5" /> {t("admin.content.create")}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      {/* New file / New folder: converted to inline PopoverForm above
+          (anchored to their stable toolbar buttons) — see the roadmap's
+          "Popover Form" pattern in ui-primitives.tsx. */}
 
       {/* Rename dialog (unified tab — R2 keyspace) */}
       <Dialog open={renameOpen} onOpenChange={setRenameOpen}>

@@ -43,6 +43,7 @@ import { haptic } from "@/lib/osler/native";
 import { setImmersiveMode } from "./immersive-mode";
 import { useI18n } from "./i18n-provider";
 import { ContentCacheButton } from "./content-cache-button";
+import { EmptyState } from "./ui-primitives";
 import { ContentLangFilter } from "./qbank-studio";
 import { NavigationStack } from "./navigation-stack";
 import { useSwipeBackDismiss } from "@/hooks/use-swipe-back-dismiss";
@@ -844,15 +845,11 @@ export function FlashcardStudio({
 
         {/* Deck grid */}
         {tree.length === 0 ? (
-          <div className="osler-empty">
-            <div className="osler-empty__icon">
-              <Layers className="size-6" />
-            </div>
-            <h3 className="osler-empty__title">{t("flash.home.empty")}</h3>
-            <p className="osler-empty__body">
-              {t("flash.home.empty")}
-            </p>
-          </div>
+          <EmptyState
+            icon={Layers}
+            title={t("flash.home.empty")}
+            description={t("flash.home.emptyDesc")}
+          />
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {tree.map((node, idx) => {

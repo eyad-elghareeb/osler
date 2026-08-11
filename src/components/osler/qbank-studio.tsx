@@ -140,6 +140,7 @@ import { gradeWithAI, createManualEvaluation, transcribePhoto } from "@/lib/osle
 import { useI18n } from "./i18n-provider";
 import { NavigationStack } from "./navigation-stack";
 import { PageHeader, SectionHeading, StatTile, EmptyState, LoadingState, HubSkeleton } from "./ui-primitives";
+import { SparkTrend } from "./analytics-primitives";
 import { FolderTreeNav } from "./folder-tree-nav";
 import type { StringKey } from "@/lib/osler/i18n";
 import { loadUiLang } from "@/lib/osler/i18n";
@@ -2954,6 +2955,17 @@ function TrackerTab({
     return { attempted, correct, wrong, flagged, accuracy: attempted > 0 ? Math.round((correct / attempted) * 100) : 0 };
   }, [data, force]);
 
+  // Per-session accuracy, oldest → newest, for the last 10 completed
+  // sessions in this tracker — feeds the accuracy tile's <SparkTrend>.
+  // Sorted defensively rather than assuming `sessionList`'s incoming order.
+  const accuracyTrend = React.useMemo(() => {
+    return sessionList
+      .filter((s) => !!s.completedAt && s.answeredCount > 0)
+      .sort((a, b) => (a.completedAt ?? 0) - (b.completedAt ?? 0))
+      .slice(-10)
+      .map((s) => Math.round((s.correctCount / s.answeredCount) * 100));
+  }, [sessionList]);
+
   // P5-3: per-folder insight. Walk every QBank-owned engine tree, compute
   // aggregated stats per node (recursive — same pattern as ContentTab).
   const collectLeafUids = React.useCallback((node: ContentTreeNode): string[] => {
@@ -3329,7 +3341,17 @@ function TrackerTab({
             <StatTile label={t("qbank.tracker.attempted")} value={overall.attempted} icon={ListChecks} color="primary" />
             <StatTile label={t("qbank.tracker.correctLabel")} value={overall.correct} icon={CheckCircle2} color="success" />
             <StatTile label={t("qbank.tracker.wrongLabel")} value={overall.wrong} icon={X} color="destructive" />
-            <StatTile label={t("qbank.tracker.accuracy")} value={`${overall.accuracy}%`} icon={Target} color="warning" />
+            <StatTile
+              label={t("qbank.tracker.accuracy")}
+              value={`${overall.accuracy}%`}
+              icon={Target}
+              color="warning"
+              trend={
+                accuracyTrend.length >= 2 ? (
+                  <SparkTrend data={accuracyTrend} tone="auto" showDelta />
+                ) : undefined
+              }
+            />
           </div>
         )}
       </div>

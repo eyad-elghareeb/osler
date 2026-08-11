@@ -36,7 +36,7 @@ import { contentFileUrl } from "@/lib/osler/content-url";
 import type { ContentTreeNode } from "@/lib/osler/types";
 import { cn } from "@/lib/utils";
 import { Skeleton } from "@/components/ui/skeleton";
-import { SkeletonText } from "./ui-primitives";
+import { SkeletonText, EmptyState as SharedEmptyState } from "./ui-primitives";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useArticleHighlighter } from "@/hooks/use-article-highlighter";
 import { useOslerTheme } from "./theme-provider";
@@ -1509,6 +1509,11 @@ function PdfViewer({ url, title }: { url: string; title: string }) {
 }
 
 /* ── Empty State ──────────────────────────────────────────────────── */
+/* Composes the shared `EmptyState` primitive (icon + title + body +
+ * staggered entrance, same as QBank/Flashcards) and adds a Library-specific
+ * "popular articles" quick-open grid via the `actions` slot, per the
+ * roadmap's rule that product-specific compositions extend the shared
+ * primitive rather than re-implementing it locally. */
 
 function EmptyState({
   onOpen,
@@ -1517,31 +1522,33 @@ function EmptyState({
   onOpen: (file: string) => void;
   allArticles: ArticleMeta[];
 }) {
+  const { t } = useI18n();
   const popular = allArticles.slice(0, 6);
   return (
-    <div className="flex-1 flex flex-col items-center justify-center text-center px-4 py-12">
-      <div className="w-16 h-16 rounded-full bg-primary/15 text-primary flex items-center justify-center mb-4">
-        <LibraryIcon className="size-8" />
-      </div>
-      <h2 className="text-xl font-semibold mb-1">Article Library</h2>
-      <p className="text-sm text-muted-foreground max-w-sm mb-6">
-        Browse the medical article library by specialty and topic. Select an
-        article from the sidebar to start reading.
-      </p>
-      <div className="grid grid-cols-2 md:grid-cols-3 gap-2 max-w-lg">
-        {popular.map((a) => (
-          <button
-            key={a.file}
-            onClick={() => onOpen(a.file)}
-            className="text-left text-xs px-3 py-2 rounded-md border border-border bg-card hover:border-primary/40 transition-colors"
-          >
-            <div className="font-medium truncate">{a.title}</div>
-            <div className="text-muted-foreground text-[10px] mt-0.5">
-              {a.specialty} &middot; {a.readTimeMin} min
+    <div className="flex-1 flex flex-col items-center justify-center">
+      <SharedEmptyState
+        icon={LibraryIcon}
+        title={t("library.emptyTitle")}
+        description={t("library.emptyDesc")}
+        actions={
+          popular.length > 0 && (
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-2 max-w-lg">
+              {popular.map((a) => (
+                <button
+                  key={a.file}
+                  onClick={() => onOpen(a.file)}
+                  className="text-left text-xs px-3 py-2 rounded-md border border-border bg-card hover:border-primary/40 transition-colors"
+                >
+                  <div className="font-medium truncate">{a.title}</div>
+                  <div className="text-muted-foreground text-[10px] mt-0.5">
+                    {a.specialty} &middot; {a.readTimeMin} min
+                  </div>
+                </button>
+              ))}
             </div>
-          </button>
-        ))}
-      </div>
+          )
+        }
+      />
     </div>
   );
 }
