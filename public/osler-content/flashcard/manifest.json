@@ -26,7 +26,22 @@
                 "cards.json"
               ],
               "images": [],
-              "items": []
+              "items": [],
+              "packCount": 1,
+              "questionCount": 6,
+              "itemCount": 6,
+              "tags": [
+                "cardiology",
+                "diagnosis",
+                "differential",
+                "heart-failure",
+                "jvp",
+                "mi",
+                "mortality",
+                "myocarditis",
+                "pericardial",
+                "valvular"
+              ]
             },
             {
               "uid": "flashcard-clinical-rotation-internal-medicine-pulmonology",
@@ -37,9 +52,28 @@
                 "cards.json"
               ],
               "images": [],
-              "items": []
+              "items": [],
+              "packCount": 1,
+              "questionCount": 5,
+              "itemCount": 5,
+              "tags": [
+                "abg",
+                "ards",
+                "cap",
+                "copd",
+                "cxr-interpretation",
+                "gas-exchange",
+                "infectious",
+                "pe",
+                "prognosis",
+                "pulmonology",
+                "vq-scan"
+              ]
             }
-          ]
+          ],
+          "packCount": 2,
+          "questionCount": 11,
+          "itemCount": 11
         },
         {
           "uid": "flashcard-clinical-rotation-surgery",
@@ -58,7 +92,19 @@
                 "cards.json"
               ],
               "images": [],
-              "items": []
+              "items": [],
+              "packCount": 1,
+              "questionCount": 4,
+              "itemCount": 4,
+              "tags": [
+                "ankle",
+                "clinical-decision",
+                "fracture",
+                "hip",
+                "humeral",
+                "nerve-injury",
+                "orthopedics"
+              ]
             },
             {
               "uid": "flashcard-clinical-rotation-surgery-trauma",
@@ -69,11 +115,34 @@
                 "cards.json"
               ],
               "images": [],
-              "items": []
+              "items": [],
+              "packCount": 1,
+              "questionCount": 6,
+              "itemCount": 6,
+              "tags": [
+                "abdominal",
+                "atls",
+                "critical-care",
+                "emergency",
+                "fast",
+                "mtp",
+                "pneumothorax",
+                "primary-survey",
+                "spleen",
+                "transfusion",
+                "trauma",
+                "ultrasound"
+              ]
             }
-          ]
+          ],
+          "packCount": 2,
+          "questionCount": 10,
+          "itemCount": 10
         }
-      ]
+      ],
+      "packCount": 4,
+      "questionCount": 21,
+      "itemCount": 21
     },
     {
       "uid": "flashcard-medical-board-review",
@@ -92,7 +161,17 @@
             "cards.json"
           ],
           "images": [],
-          "items": []
+          "items": [],
+          "packCount": 1,
+          "questionCount": 6,
+          "itemCount": 6,
+          "tags": [
+            "cardiology",
+            "ecg",
+            "heart-failure",
+            "hypertension",
+            "ischemia"
+          ]
         },
         {
           "uid": "flashcard-medical-board-review-gastroenterology",
@@ -103,7 +182,16 @@
             "cards.json"
           ],
           "images": [],
-          "items": []
+          "items": [],
+          "packCount": 1,
+          "questionCount": 3,
+          "itemCount": 3,
+          "tags": [
+            "cirrhosis",
+            "gastroenterology",
+            "h-pylori",
+            "infectious-disease"
+          ]
         },
         {
           "uid": "flashcard-medical-board-review-neurology",
@@ -114,7 +202,16 @@
             "cards.json"
           ],
           "images": [],
-          "items": []
+          "items": [],
+          "packCount": 1,
+          "questionCount": 4,
+          "itemCount": 4,
+          "tags": [
+            "infectious-disease",
+            "neurology",
+            "parkinsons",
+            "stroke"
+          ]
         },
         {
           "uid": "flashcard-medical-board-review-pharmacology",
@@ -125,7 +222,16 @@
             "cards.json"
           ],
           "images": [],
-          "items": []
+          "items": [],
+          "packCount": 1,
+          "questionCount": 3,
+          "itemCount": 3,
+          "tags": [
+            "ace-inhibitors",
+            "anticoagulation",
+            "pharmacology",
+            "smoking-cessation"
+          ]
         },
         {
           "uid": "flashcard-medical-board-review-pulmonology",
@@ -136,9 +242,20 @@
             "cards.json"
           ],
           "images": [],
-          "items": []
+          "items": [],
+          "packCount": 1,
+          "questionCount": 3,
+          "itemCount": 3,
+          "tags": [
+            "copd",
+            "pe",
+            "pulmonology"
+          ]
         }
-      ]
+      ],
+      "packCount": 5,
+      "questionCount": 19,
+      "itemCount": 19
     },
     {
       "uid": "flashcard-medical-board-review-ar",
@@ -157,9 +274,33 @@
             "cards.json"
           ],
           "images": [],
-          "items": []
+          "items": [],
+          "packCount": 1,
+          "questionCount": 10,
+          "itemCount": 10,
+          "tags": [
+            "DAPT",
+            "ECG",
+            "STEMI",
+            "VT/VF",
+            "أمراض القلب",
+            "احتشاء سفلي",
+            "بعد احتشاء",
+            "تشخيص",
+            "ستاتين",
+            "صدمة قلبية",
+            "طوارئ",
+            "علاج",
+            "مضاعفات",
+            "موانع",
+            "نترات",
+            "وقاية ثانوية"
+          ]
         }
-      ]
+      ],
+      "packCount": 1,
+      "questionCount": 10,
+      "itemCount": 10
     },
     {
       "uid": "flashcard-sample-deck",
@@ -172,7 +313,15 @@
       "images": [
         "sample-ecg.svg"
       ],
-      "items": []
+      "items": [],
+      "packCount": 1,
+      "questionCount": 2,
+      "itemCount": 2,
+      "tags": [
+        "cloze",
+        "sample",
+        "test"
+      ]
     }
   ]
 }

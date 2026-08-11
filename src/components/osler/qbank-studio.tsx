@@ -1600,7 +1600,7 @@ function PackCard({
   const { t, rtl } = useI18n();
   const meta = ENGINE_META[node.type as EngineType];
   const Icon = ENGINE_ICONS[node.type as EngineType] ?? ListChecks;
-  const count = content ? countQuestions(content) : 0;
+  const count = content ? countQuestions(content) : node.questionCount ?? 0;
   const packProgress = storage.packProgress(node.uid);
   const isAr = (content?.meta.lang ?? node.lang) === "ar";
 
@@ -1664,9 +1664,9 @@ function PackCard({
       </div>
 
       {/* Description */}
-      {content?.meta.description && (
+      {(content?.meta.description ?? node.description) && (
         <p className="text-xs text-muted-foreground/80 line-clamp-2 leading-relaxed">
-          {content.meta.description}
+          {content?.meta.description ?? node.description}
         </p>
       )}
 
@@ -1824,16 +1824,17 @@ function ContentTab({
       let correct = 0;
       for (const uid of uids) {
         const content = contentByUid.get(uid);
-        if (!content) continue;
+        const pack = data?.items.find((entry) => entry.node.uid === uid)?.node;
+        if (!pack) continue;
         packs += 1;
-        questions += countQuestions(content);
+        questions += content ? countQuestions(content) : pack.questionCount ?? 0;
         const p = storage.packProgress(uid);
         attempted += p.attempted;
         correct += p.correct;
       }
       return { packs, questions, attempted, correct };
     },
-    [contentByUid, collectLeafUids],
+    [contentByUid, collectLeafUids, data],
   );
 
   /**
@@ -2455,7 +2456,7 @@ function CreateTestTab({
                         if (isLeaf) {
                           const entry = entryByUid.get(child.uid);
                           const isChecked = selectedSourceUids.includes(child.uid);
-                          const qCount = entry?.content ? countQuestions(entry.content) : 0;
+                          const qCount = entry?.content ? countQuestions(entry.content) : child.questionCount ?? 0;
                           return (
                             <button
                               key={child.uid}
@@ -2549,7 +2550,7 @@ function CreateTestTab({
                       // Leaf — pack with checkbox
                       const entry = entryByUid.get(node.uid);
                       const isChecked = selectedSourceUids.includes(node.uid);
-                      const qCount = entry?.content ? countQuestions(entry.content) : 0;
+                      const qCount = entry?.content ? countQuestions(entry.content) : node.questionCount ?? 0;
                       return (
                         <button
                           key={node.uid}
@@ -3072,28 +3073,6 @@ function TrackerTab({
       .map((s) => Math.round((s.correctCount / s.answeredCount) * 100));
   }, [sessionList]);
 
-  // P5-3: per-folder insight. Walk every QBank-owned engine tree, compute
-  // aggregated stats per node (recursive — same pattern as ContentTab).
-  const collectLeafUids = React.useCallback((node: ContentTreeNode): string[] => {
-    if (node.items.length === 0) return [node.uid];
-    return node.items.flatMap(collectLeafUids);
-  }, []);
-
-  const folderStats = React.useCallback(
-    (node: ContentTreeNode) => {
-      const uids = collectLeafUids(node);
-      let attempted = 0;
-      let correct = 0;
-      for (const uid of uids) {
-        const p = storage.packProgress(uid);
-        attempted += p.attempted;
-        correct += p.correct;
-      }
-      return { attempted, correct, accuracy: attempted > 0 ? Math.round((correct / attempted) * 100) : null };
-    },
-    [collectLeafUids],
-  );
-
   // P5-4: wrong & flagged question records. We compute across ALL QBank-owned
   // pack uids (not just selected ones). Dismissed records are filtered by
   // default; showDismissed reveals them.
@@ -3501,50 +3480,28 @@ function TrackerTab({
 
   const [trackerPdfOpen, setTrackerPdfOpen] = React.useState(false);
 
-  // Build folder stats list for tracker PDF export
-  const folderStatsList = React.useMemo(() => {
-    if (!data) return [] as Array<{ title: string; engine: string; attempted: number; correct: number; lastAttempt: number | null }>;
-    const qbankTree = data.trees.quiz ?? data.trees.bank ?? data.trees.written ?? [];
-    const list: Array<{ title: string; engine: string; attempted: number; correct: number; lastAttempt: number | null }> = [];
-    for (const node of qbankTree) {
-      const fs = folderStats(node);
-      if (fs.attempted > 0) {
-        list.push({
-          title: node.title,
-          engine: node.type,
-          attempted: fs.attempted,
-          correct: fs.correct,
-          lastAttempt: null, // not tracked at folder level
-        });
-      }
-    }
-    return list;
-  }, [data, folderStats]);
-
   const handleExportTrackerPdf = React.useCallback((opts: PdfExportOptions) => {
     const doc = generateDashboardPdf({
       username: "Tracker Report",
       stats: {
-        packs: folderStatsList.filter((fs) => fs.attempted > 0).length,
+        packs: new Set(sessionList.map((session) => session.packUid)).size,
         attempted: overall.attempted,
         correct: overall.correct,
         accuracy: overall.accuracy,
       },
-      recentPacks: folderStatsList
-        .filter((fs) => fs.attempted > 0)
-        .map((fs) => ({
-          title: fs.title,
-          engine: fs.engine ?? "quiz",
-          attempted: fs.attempted,
-          correct: fs.correct,
-          lastAttempt: fs.lastAttempt ?? null,
+      recentPacks: sessionList.map((session) => ({
+          title: session.packTitle,
+          engine: session.engine,
+          attempted: session.answeredCount,
+          correct: session.correctCount,
+          lastAttempt: session.completedAt ?? session.startedAt,
         })),
       opts,
     });
     downloadPdf(doc, "Tracker Report");
     toast({ title: t("pdf.pdfReady"), description: t("pdf.pdfReadyDesc") });
     setTrackerPdfOpen(false);
-  }, [overall, folderStatsList, t]);
+  }, [overall, sessionList, t]);
 
   if (!data) {
     return <LoadingState label={t("qbank.tracker.loading")} />;
@@ -3738,67 +3695,6 @@ function TrackerTab({
         )}
       </div>
 
-      {/* By folder — single qbank tree, folder hierarchy */}
-      <div>
-        <SectionHeading icon={Folder}>{t("qbank.tracker.byFolder")}</SectionHeading>
-        {(() => {
-          const qbankTree = data.trees.quiz ?? data.trees.bank ?? data.trees.written ?? [];
-          if (qbankTree.length === 0) {
-            return <EmptyState icon={Folder} title={t("qbank.tracker.noRecords")} />;
-          }
-          return (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-              {qbankTree.map((node) => {
-                const fs = folderStats(node);
-                if (fs.attempted === 0) return null;
-                const acc = fs.accuracy ?? 0;
-                const nodeType = node.type as EngineType;
-                const meta = ENGINE_META[nodeType];
-                const isBranch = node.items.length > 0;
-                const NodeIcon = isBranch ? Folder : (ENGINE_ICONS[nodeType] ?? ListChecks);
-                return (
-                  <div key={node.uid} className="osler-card--default">
-                    <div className="flex items-center gap-3 mb-2">
-                      <div
-                        className="size-9 rounded-lg flex items-center justify-center shrink-0"
-                        style={{ backgroundColor: `color-mix(in oklch, ${meta.color} 15%, transparent)`, color: meta.color }}
-                      >
-                        <NodeIcon className="size-4" />
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <h4 className="text-sm font-medium truncate">{node.title}</h4>
-                        <p className="text-[11px] text-muted-foreground">
-                          {isBranch
-                            ? t("qbank.home.packs", { n: node.items.length })
-                            : t(`engine.${nodeType}` as any)}
-                        </p>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-3 text-xs">
-                      <span className="text-muted-foreground tabular-nums">
-                        {fs.attempted} {t("qbank.tracker.attempted").toLowerCase()}
-                      </span>
-                      <span className={cn("ms-auto font-medium tabular-nums", acc >= 70 ? "text-success" : acc >= 50 ? "text-warning" : "text-destructive")}>
-                        {acc}%
-                      </span>
-                    </div>
-                    <div className="mt-2 h-1.5 rounded-full bg-muted/40 overflow-hidden">
-                      <div
-                        className="h-full rounded-full transition-all duration-300"
-                        style={{
-                          width: `${acc}%`,
-                          backgroundColor: acc >= 70 ? "var(--success)" : acc >= 50 ? "var(--warning)" : "var(--destructive)",
-                        }}
-                      />
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          );
-        })()}
-      </div>
-
       {/* Wrong & Flagged browser + Start review */}
       <div>
         <SectionHeading
@@ -3835,11 +3731,10 @@ function TrackerTab({
                 {t("qbank.tracker.selected", { n: selectedKeys.size })}
               </span>
               <label className="flex items-center gap-2 text-xs cursor-pointer">
-                <input
-                  type="checkbox"
+                <Checkbox
                   checked={dismissAfterCorrect}
-                  onChange={(e) => setDismissAfterCorrect(e.target.checked)}
-                  className="size-3.5 rounded accent-primary"
+                  onCheckedChange={(checked) => setDismissAfterCorrect(checked === true)}
+                  aria-label={t("qbank.tracker.removeOnCorrect")}
                 />
                 {t("qbank.tracker.removeOnCorrect")}
               </label>

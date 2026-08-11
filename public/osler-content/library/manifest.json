@@ -18,9 +18,15 @@
             "stemi-arabic.md"
           ],
           "images": [],
-          "items": []
+          "items": [],
+          "packCount": 1,
+          "questionCount": 0,
+          "itemCount": 1
         }
-      ]
+      ],
+      "packCount": 1,
+      "questionCount": 0,
+      "itemCount": 1
     },
     {
       "uid": "library-cardiology",
@@ -39,7 +45,10 @@
             "heart-failure-reduced-ef.md"
           ],
           "images": [],
-          "items": []
+          "items": [],
+          "packCount": 1,
+          "questionCount": 0,
+          "itemCount": 1
         },
         {
           "uid": "library-cardiology-ischemic-syndrome",
@@ -51,9 +60,15 @@
             "st-elevation-mi.md"
           ],
           "images": [],
-          "items": []
+          "items": [],
+          "packCount": 1,
+          "questionCount": 0,
+          "itemCount": 2
         }
-      ]
+      ],
+      "packCount": 2,
+      "questionCount": 0,
+      "itemCount": 3
     },
     {
       "uid": "library-demos",
@@ -74,9 +89,15 @@
           "images": [
             "ecg-lead-ii.svg"
           ],
-          "items": []
+          "items": [],
+          "packCount": 1,
+          "questionCount": 0,
+          "itemCount": 1
         }
-      ]
+      ],
+      "packCount": 1,
+      "questionCount": 0,
+      "itemCount": 1
     },
     {
       "uid": "library-gastroenterology",
@@ -95,9 +116,15 @@
             "cirrhosis.md"
           ],
           "images": [],
-          "items": []
+          "items": [],
+          "packCount": 1,
+          "questionCount": 0,
+          "itemCount": 1
         }
-      ]
+      ],
+      "packCount": 1,
+      "questionCount": 0,
+      "itemCount": 1
     },
     {
       "uid": "library-neurology",
@@ -118,9 +145,15 @@
             "subarachnoid-hemorrhage.md"
           ],
           "images": [],
-          "items": []
+          "items": [],
+          "packCount": 1,
+          "questionCount": 0,
+          "itemCount": 3
         }
-      ]
+      ],
+      "packCount": 1,
+      "questionCount": 0,
+      "itemCount": 3
     },
     {
       "uid": "library-pulmonology",
@@ -140,7 +173,10 @@
             "copd.md"
           ],
           "images": [],
-          "items": []
+          "items": [],
+          "packCount": 1,
+          "questionCount": 0,
+          "itemCount": 2
         },
         {
           "uid": "library-pulmonology-vascular-disease",
@@ -151,9 +187,15 @@
             "pulmonary-embolism.md"
           ],
           "images": [],
-          "items": []
+          "items": [],
+          "packCount": 1,
+          "questionCount": 0,
+          "itemCount": 1
         }
-      ]
+      ],
+      "packCount": 2,
+      "questionCount": 0,
+      "itemCount": 3
     }
   ]
 }

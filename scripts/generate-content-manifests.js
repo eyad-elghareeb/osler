@@ -64,6 +64,75 @@ function inferTypeFromData(filePath) {
 }
 
 /**
+ * Read display and study metadata from a pack's JSON files. Keeping this in
+ * the manifest lets pack browsers render complete cards before the pack body
+ * is requested for a study session.
+ */
+function getPackMetadata(dirPath, fileNames) {
+  const metadata = {
+    questionCount: 0,
+    itemCount: 0,
+    description: undefined,
+    lang: undefined,
+    tags: new Set(),
+  };
+
+  for (const fileName of fileNames.filter((name) => name.endsWith(".json"))) {
+    try {
+      const data = JSON.parse(fs.readFileSync(path.join(dirPath, fileName), "utf-8"));
+      const meta = data.meta && typeof data.meta === "object" ? data.meta : {};
+      if (!metadata.description && typeof meta.description === "string") metadata.description = meta.description;
+      if (!metadata.lang && (meta.lang === "en" || meta.lang === "ar")) metadata.lang = meta.lang;
+
+      for (const { key } of DATA_TYPE_KEYS) {
+        const entries = Array.isArray(data[key]) ? data[key] : [];
+        metadata.itemCount += entries.length;
+        if (key === "passages") {
+          metadata.questionCount += entries.reduce(
+            (count, passage) => count + (Array.isArray(passage?.questions) ? passage.questions.length : 1),
+            0,
+          );
+        } else {
+          metadata.questionCount += entries.length;
+        }
+        for (const entry of entries) {
+          if (!Array.isArray(entry?.tags)) continue;
+          for (const tag of entry.tags) {
+            if (typeof tag === "string" && tag.trim()) metadata.tags.add(tag.trim());
+          }
+        }
+      }
+    } catch {
+      // A malformed optional data file should not prevent other packs from publishing.
+    }
+  }
+
+  // Non-JSON library resources are individual readable entries. Their file
+  // names are already listed on the node, so count them without fetching any
+  // content at runtime.
+  metadata.itemCount += fileNames.filter((name) => !name.endsWith(".json")).length;
+
+  return {
+    questionCount: metadata.questionCount,
+    itemCount: metadata.itemCount,
+    ...(metadata.description ? { description: metadata.description } : {}),
+    ...(metadata.lang ? { lang: metadata.lang } : {}),
+    ...(metadata.tags.size > 0 ? { tags: Array.from(metadata.tags).sort() } : {}),
+  };
+}
+
+function summarizeChildren(children) {
+  return children.reduce(
+    (summary, child) => ({
+      questionCount: summary.questionCount + (child.questionCount ?? 0),
+      itemCount: summary.itemCount + (child.itemCount ?? 0),
+      packCount: summary.packCount + (child.packCount ?? 0),
+    }),
+    { questionCount: 0, itemCount: 0, packCount: 0 },
+  );
+}
+
+/**
  * Infer engine type from a folder by reading its .json data files.
  */
 function inferTypeFromFolder(dirPath) {
@@ -158,19 +227,24 @@ function scanDirectory(dirPath, relativePath, parentType) {
         files: getDataFileNames(childPath),
         images: getImageFileNames(childPath),
         items: children,
+        packCount: countLeaves(children),
+        ...summarizeChildren(children),
       });
     } else {
       // Leaf node — has data files, no subfolders
       const type = parentType || inferTypeFromFolder(childPath) || "quiz";
       const uid = buildUid(type, childRelative.split("/"));
+      const files = getDataFileNames(childPath);
       nodes.push({
         uid,
         title: dir.name.replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()),
         type,
         path: childRelative + "/",
-        files: getDataFileNames(childPath),
+        files,
         images: getImageFileNames(childPath),
         items: [],
+        packCount: 1,
+        ...getPackMetadata(childPath, files),
       });
     }
   }
@@ -179,14 +253,17 @@ function scanDirectory(dirPath, relativePath, parentType) {
   if (subdirs.length === 0 && dataFiles.length > 0 && relativePath) {
     const type = parentType || inferTypeFromFolder(dirPath) || "quiz";
     const uid = buildUid(type, relativePath.split("/"));
+    const files = dataFiles.map((e) => e.name).sort();
     return [{
       uid,
       title: path.basename(dirPath).replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()),
       type,
       path: relativePath + "/",
-      files: dataFiles.map((e) => e.name).sort(),
+      files,
       images: getImageFileNames(dirPath),
       items: [],
+      packCount: 1,
+      ...getPackMetadata(dirPath, files),
     }];
   }
 

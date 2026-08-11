@@ -10,7 +10,10 @@
         "stations.json"
       ],
       "images": [],
-      "items": []
+      "items": [],
+      "packCount": 1,
+      "questionCount": 2,
+      "itemCount": 2
     },
     {
       "uid": "osce-clinical-skills",
@@ -21,7 +24,10 @@
         "stations.json"
       ],
       "images": [],
-      "items": []
+      "items": [],
+      "packCount": 1,
+      "questionCount": 6,
+      "itemCount": 6
     },
     {
       "uid": "osce-emergency-medicine",
@@ -32,7 +38,10 @@
         "stations.json"
       ],
       "images": [],
-      "items": []
+      "items": [],
+      "packCount": 1,
+      "questionCount": 2,
+      "itemCount": 2
     },
     {
       "uid": "osce-neurology",
@@ -43,7 +52,10 @@
         "stations.json"
       ],
       "images": [],
-      "items": []
+      "items": [],
+      "packCount": 1,
+      "questionCount": 2,
+      "itemCount": 2
     }
   ]
 }

@@ -37,12 +37,14 @@ let hasWarnedAboutRemoteFallback = false;
 let remoteContentUnavailable = false;
 
 async function fetchWithLocalFallback(primaryUrl: string, fallbackUrl: string): Promise<Response> {
+  // Respect HTTP cache headers so revisiting a hub does not re-download its
+  // manifest or pack files. clearContentCache() remains the explicit refresh.
   if (primaryUrl !== fallbackUrl && remoteContentUnavailable) {
-    return fetch(fallbackUrl, { cache: "no-store" });
+    return fetch(fallbackUrl);
   }
 
   try {
-    const response = await fetch(primaryUrl, { cache: "no-store" });
+    const response = await fetch(primaryUrl);
     if (response.ok || primaryUrl === fallbackUrl) return response;
     throw new Error(`Request failed with status ${response.status}`);
   } catch (error) {
@@ -52,7 +54,7 @@ async function fetchWithLocalFallback(primaryUrl: string, fallbackUrl: string): 
       hasWarnedAboutRemoteFallback = true;
       console.warn("Remote content is unavailable; using bundled content.", error);
     }
-    const fallbackResponse = await fetch(fallbackUrl, { cache: "no-store" });
+    const fallbackResponse = await fetch(fallbackUrl);
     if (!fallbackResponse.ok) {
       throw new Error(`Fallback request failed with status ${fallbackResponse.status}`);
     }
@@ -98,20 +100,36 @@ export function nodeUrls(node: ContentTreeNode): string[] {
 
 /* ── Tree loading ─────────────────────────────────────────────────── */
 
+/** Shared in-flight and resolved manifest requests for the current session. */
+const manifestTreeMemo = new Map<string, Promise<ContentTreeNode[]>>();
+
+async function loadManifestTree(folder: string): Promise<ContentTreeNode[]> {
+  await loadConfig();
+  const cached = manifestTreeMemo.get(folder);
+  if (cached) return cached;
+
+  const promise = (async () => {
+    const res = await fetchWithLocalFallback(manifestUrl(folder), localManifestUrl(folder));
+    if (!res.ok) throw new Error(`Failed to load ${folder}/manifest.json: ${res.status}`);
+    const manifest = (await res.json()) as CategoryManifest;
+    return manifest.items;
+  })();
+  manifestTreeMemo.set(folder, promise);
+  try {
+    return await promise;
+  } catch (error) {
+    manifestTreeMemo.delete(folder);
+    throw error;
+  }
+}
+
 /**
  * Load the category manifest (tree) for a given engine type. The URL is
  * resolved by cloud config. If the remote source is unavailable, the bundled
  * manifest keeps local study sessions usable.
  */
 export async function loadCategoryTree(type: EngineType): Promise<ContentTreeNode[]> {
-  // Wait for osler.config so URL resolution uses the real cloud setting, not
-  // the DEFAULT_CONFIG returned by getConfig() before the async load finishes.
-  await loadConfig();
-  const folder = categoryFolder(type);
-  const res = await fetchWithLocalFallback(manifestUrl(folder), localManifestUrl(folder));
-  if (!res.ok) throw new Error(`Failed to load ${folder}/manifest.json: ${res.status}`);
-  const manifest = (await res.json()) as CategoryManifest;
-  return manifest.items;
+  return loadManifestTree(categoryFolder(type));
 }
 
 /**
@@ -259,9 +277,7 @@ export async function loadAllContent(): Promise<{
 
   for (const folder of folders) {
     try {
-      const res = await fetchWithLocalFallback(manifestUrl(folder), localManifestUrl(folder));
-      if (!res.ok) continue;
-      const manifest = (await res.json()) as CategoryManifest;
+      const manifestItems = await loadManifestTree(folder);
 
       // For multi-type folders (qbank hosts quiz, bank, written), store the
       // same tree under every engine type that maps to this folder so the UI
@@ -269,7 +285,7 @@ export async function loadAllContent(): Promise<{
       const qbankTypes: Array<"quiz" | "bank" | "written"> = ["quiz", "bank", "written"];
       if (folder === "qbank") {
         for (const et of qbankTypes) {
-          if (types.includes(et)) trees[et] = manifest.items;
+          if (types.includes(et)) trees[et] = manifestItems;
         }
       } else {
         let engineType: EngineType;
@@ -278,10 +294,10 @@ export async function loadAllContent(): Promise<{
         else if (folder === "videos") engineType = "video";
         else if (folder === "library") engineType = "library";
         else engineType = "quiz";
-        trees[engineType] = manifest.items;
+        trees[engineType] = manifestItems;
       }
 
-      const leaves = flattenTree(manifest.items);
+      const leaves = flattenTree(manifestItems);
       allLeaves.push(...leaves);
     } catch {
       // ignore missing manifests
@@ -364,6 +380,7 @@ function nodeCacheSet(uid: string, node: ContentTreeNode): void {
 export function clearContentCache(): void {
   contentCacheMemo.clear();
   nodeCacheMemo.clear();
+  manifestTreeMemo.clear();
 }
 
 /**
@@ -390,10 +407,8 @@ export async function loadNodeByUid(uid: string, engineHint?: EngineType): Promi
 
   for (const folder of folders) {
     try {
-      const res = await fetchWithLocalFallback(manifestUrl(folder), localManifestUrl(folder));
-      if (!res.ok) continue;
-      const manifest = (await res.json()) as CategoryManifest;
-      const found = findNodeByUid(manifest.items, uid);
+      const manifestItems = await loadManifestTree(folder);
+      const found = findNodeByUid(manifestItems, uid);
       if (found) {
         nodeCacheSet(uid, found);
         return found;

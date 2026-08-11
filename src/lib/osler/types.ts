@@ -42,6 +42,14 @@ export interface ContentTreeNode {
   files?: string[];
   /** Image asset filenames in this folder's `images/` subfolder (leaf nodes only). */
   images?: string[];
+  /** Number of study questions represented by this pack or its descendants. */
+  questionCount?: number;
+  /** Number of source items represented by this pack or its descendants. */
+  itemCount?: number;
+  /** Number of leaf packs represented by this node. */
+  packCount?: number;
+  /** Pack-level topic tags, generated from the underlying content. */
+  tags?: string[];
   /** Child nodes — empty array for leaf (content-having) nodes. */
   items: ContentTreeNode[];
   /**

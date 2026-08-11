@@ -10,7 +10,25 @@
         "questions.json"
       ],
       "images": [],
-      "items": []
+      "items": [],
+      "packCount": 1,
+      "questionCount": 8,
+      "itemCount": 8,
+      "tags": [
+        "COPD",
+        "STEMI",
+        "أمراض الأعصاب",
+        "أمراض الجهاز الهضمي",
+        "أمراض الصدر",
+        "أمراض القلب",
+        "أمراض معدية",
+        "تليف الكبد",
+        "حاصرات بيتا",
+        "سكتة دماغية",
+        "علم الأدوية",
+        "قرحة",
+        "مضادات التخثر"
+      ]
     },
     {
       "uid": "quiz-cardiology",
@@ -32,7 +50,24 @@
             "inferior-stemi-ecg.svg",
             "rca-supply.svg"
           ],
-          "items": []
+          "items": [],
+          "packCount": 1,
+          "questionCount": 6,
+          "itemCount": 6,
+          "tags": [
+            "angina",
+            "antiplatelet",
+            "cardiology",
+            "ecg-localization",
+            "invasive-strategy",
+            "lbbb",
+            "nstemi",
+            "post-acs",
+            "posterior-mi",
+            "sgarbossa",
+            "stemi",
+            "vasospastic"
+          ]
         },
         {
           "uid": "bank-cardiology-arrhythmias",
@@ -43,9 +78,15 @@
             "passages.json"
           ],
           "images": [],
-          "items": []
+          "items": [],
+          "packCount": 1,
+          "questionCount": 6,
+          "itemCount": 3
         }
-      ]
+      ],
+      "packCount": 2,
+      "questionCount": 12,
+      "itemCount": 9
     },
     {
       "uid": "bank-clinical-vignettes",
@@ -56,7 +97,10 @@
         "passages.json"
       ],
       "images": [],
-      "items": []
+      "items": [],
+      "packCount": 1,
+      "questionCount": 10,
+      "itemCount": 5
     },
     {
       "uid": "written-clinical-written",
@@ -67,7 +111,25 @@
         "prompts.json"
       ],
       "images": [],
-      "items": []
+      "items": [],
+      "packCount": 1,
+      "questionCount": 6,
+      "itemCount": 6,
+      "tags": [
+        "anticoagulation",
+        "asthma",
+        "cardiology",
+        "celiac",
+        "copd",
+        "gastroenterology",
+        "heart-failure",
+        "lung-cancer",
+        "neurology",
+        "oncology",
+        "pharmacology",
+        "pulmonology",
+        "stroke"
+      ]
     },
     {
       "uid": "quiz-multisystem-quiz",
@@ -78,7 +140,30 @@
         "questions.json"
       ],
       "images": [],
-      "items": []
+      "items": [],
+      "packCount": 1,
+      "questionCount": 15,
+      "itemCount": 15,
+      "tags": [
+        "anticoagulation",
+        "beta-blockers",
+        "cardiology",
+        "cirrhosis",
+        "copd",
+        "gastroenterology",
+        "heart-failure",
+        "hypertension",
+        "infectious-disease",
+        "neurology",
+        "parkinsons",
+        "pe",
+        "pharmacology",
+        "pulmonology",
+        "smoking-cessation",
+        "stemil",
+        "stroke",
+        "ulcer"
+      ]
     },
     {
       "uid": "quiz-nephrology",
@@ -97,9 +182,25 @@
             "prompts.json"
           ],
           "images": [],
-          "items": []
+          "items": [],
+          "packCount": 1,
+          "questionCount": 3,
+          "itemCount": 3,
+          "tags": [
+            "aki",
+            "cirrhosis",
+            "glomerulonephritis",
+            "hepatology",
+            "lupus",
+            "nephrology",
+            "postoperative",
+            "rheumatology"
+          ]
         }
-      ]
+      ],
+      "packCount": 1,
+      "questionCount": 3,
+      "itemCount": 3
     },
     {
       "uid": "quiz-neurology",
@@ -118,7 +219,19 @@
             "prompts.json"
           ],
           "images": [],
-          "items": []
+          "items": [],
+          "packCount": 1,
+          "questionCount": 3,
+          "itemCount": 3,
+          "tags": [
+            "antiepileptics",
+            "drug-interaction",
+            "emergency-medicine",
+            "epilepsy",
+            "neurology",
+            "pharmacology",
+            "seizure"
+          ]
         },
         {
           "uid": "quiz-neurology-stroke",
@@ -129,9 +242,29 @@
             "questions.json"
           ],
           "images": [],
-          "items": []
+          "items": [],
+          "packCount": 1,
+          "questionCount": 6,
+          "itemCount": 6,
+          "tags": [
+            "anticoagulation-reversal",
+            "ich",
+            "lvo",
+            "neurology",
+            "pica",
+            "stroke",
+            "surgical-indication",
+            "thrombectomy",
+            "vascular-territory",
+            "wallenberg",
+            "workup",
+            "young-patient"
+          ]
         }
-      ]
+      ],
+      "packCount": 2,
+      "questionCount": 9,
+      "itemCount": 9
     }
   ]
 }

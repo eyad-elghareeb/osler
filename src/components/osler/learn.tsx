@@ -14,9 +14,8 @@ import {
 import { useI18n } from "./i18n-provider";
 import type { OslerView } from "./app-shell";
 import { cn } from "@/lib/utils";
-import { loadAllContent, getEngineMeta } from "@/lib/osler/content";
-import { listAllArticles } from "@/lib/osler/articles";
-import { listAllVideos } from "@/lib/osler/videos";
+import { flattenTree, getEngineMeta, loadCategoryTree } from "@/lib/osler/content";
+import type { ContentTreeNode } from "@/lib/osler/types";
 import { storage } from "@/lib/osler/storage";
 import { fadeUp, staggerContainer } from "@/lib/osler/motion";
 import { isEngineEnabled } from "@/lib/osler/config";
@@ -57,6 +56,12 @@ interface ModuleCardDef {
   tintFg: string;
   /** Top accent gradient color. */
   accent: string;
+}
+
+interface LearnEntry {
+  uid: string;
+  title: string;
+  count: number;
 }
 
 const ALL_MODULES: ModuleCardDef[] = [
@@ -114,12 +119,18 @@ export function Learn({ onNavigate: propOnNavigate }: LearnProps = {}) {
     [],
   );
 
-  // Live counts per module — fall back to "—" while loading.
+  // Manifest counts and titles arrive without downloading every pack body.
   const [counts, setCounts] = React.useState<Record<string, number | null>>({
     library: null,
     flashcards: null,
     osce: null,
     videos: null,
+  });
+  const [entries, setEntries] = React.useState<Record<ModuleCardDef["id"], LearnEntry[]>>({
+    library: [],
+    flashcards: [],
+    osce: [],
+    videos: [],
   });
 
   React.useEffect(() => {
@@ -127,25 +138,31 @@ export function Learn({ onNavigate: propOnNavigate }: LearnProps = {}) {
 
     (async () => {
       try {
-        const [articles, videos, all] = await Promise.all([
-          listAllArticles(),
-          listAllVideos(),
-          loadAllContent(),
+        const [libraryTree, flashcardTree, osceTree, videoTree] = await Promise.all([
+          loadCategoryTree("library"),
+          loadCategoryTree("flashcard"),
+          loadCategoryTree("osce"),
+          loadCategoryTree("video"),
         ]);
         if (cancelled) return;
 
-        // Count leaf packs by engine type.
-        const byEngine: Record<string, number> = {};
-        all.items.forEach(({ node }) => {
-          byEngine[node.type] = (byEngine[node.type] ?? 0) + 1;
-        });
+        const toEntries = (nodes: ContentTreeNode[]) => flattenTree(nodes).map((node) => ({
+          uid: node.uid,
+          title: node.title,
+          count: node.itemCount ?? node.questionCount ?? node.files?.length ?? 0,
+        }));
+        const libraryEntries = toEntries(libraryTree);
+        const flashcardEntries = toEntries(flashcardTree);
+        const osceEntries = toEntries(osceTree);
+        const videoEntries = toEntries(videoTree);
 
         setCounts({
-          library: articles.length,
-          flashcards: byEngine.flashcard ?? 0,
-          osce: byEngine.osce ?? 0,
-          videos: videos.length,
+          library: libraryEntries.reduce((total, entry) => total + entry.count, 0),
+          flashcards: flashcardEntries.reduce((total, entry) => total + entry.count, 0),
+          osce: osceEntries.reduce((total, entry) => total + entry.count, 0),
+          videos: videoEntries.reduce((total, entry) => total + entry.count, 0),
         });
+        setEntries({ library: libraryEntries, flashcards: flashcardEntries, osce: osceEntries, videos: videoEntries });
       } catch {
         // Keep nulls — the UI shows a non-breaking placeholder.
       }
@@ -171,12 +188,16 @@ export function Learn({ onNavigate: propOnNavigate }: LearnProps = {}) {
       );
       const latestUid = sorted[0]?.uid;
       if (!latestUid) return;
-      // Resolve engine via the in-memory cache if loaded already; if not, skip.
-      loadAllContent()
-        .then((data) => {
-          const item = data.items.find((x) => x.node.uid === latestUid);
-          if (!item) return;
-          const eng = item.node.type;
+      Promise.all([
+        loadCategoryTree("library"),
+        loadCategoryTree("flashcard"),
+        loadCategoryTree("osce"),
+        loadCategoryTree("video"),
+      ])
+        .then((trees) => {
+          const node = trees.flatMap(flattenTree).find((item) => item.uid === latestUid);
+          if (!node) return;
+          const eng = node.type;
           if (eng === "flashcard") setRecentModule("flashcards");
           else if (eng === "osce") setRecentModule("osce");
           else if (eng === "library") setRecentModule("library");
@@ -225,6 +246,27 @@ export function Learn({ onNavigate: propOnNavigate }: LearnProps = {}) {
             />
           ))}
         </motion.div>
+
+        <div className="mt-8">
+          <h2 className="mb-3 text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+            {t("learn.entries.title")}
+          </h2>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            {modules.flatMap((module) => entries[module.id].map((entry) => (
+              <button
+                key={entry.uid}
+                type="button"
+                onClick={() => onNavigate(module.id)}
+                className="flex items-center justify-between gap-3 rounded-xl border border-border bg-card p-4 text-start transition-colors hover:border-primary/40 hover:shadow-md"
+              >
+                <span className="min-w-0 truncate text-sm font-medium">{entry.title}</span>
+                <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
+                  {t(`learn.count.${module.id}`, { n: entry.count })}
+                </span>
+              </button>
+            )))}
+          </div>
+        </div>
       </div>
     </div>
   );
@@ -289,7 +331,7 @@ function ModuleCard({
 
           <div className="flex items-center justify-between gap-2">
             <span className="text-[11px] text-muted-foreground tabular-nums">
-              {count === null ? "—" : count}
+              {count === null ? "—" : t(`learn.count.${def.id}`, { n: count })}
             </span>
             <span className="inline-flex items-center gap-1 text-xs font-medium text-primary group-hover:gap-1.5 transition-all">
               {t("learn.open")}

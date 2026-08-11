@@ -957,6 +957,46 @@ function inferTypeFromFileName(files: string[]): string | null {
 function sanitizeSeg(s: string): string { return s.replace(/\s+/g, "-").replace(/[^a-zA-Z0-9_-]/g, "").toLowerCase() || s; }
 function buildUid(type: string, segments: string[]): string { return [type, ...segments.map(sanitizeSeg)].filter(Boolean).join("-"); }
 
+async function manifestMetadataForFiles(env: Env, category: string, folderPath: string, files: string[]) {
+  let questionCount = 0;
+  let itemCount = files.filter((file) => !file.endsWith(".json")).length;
+  let description: string | undefined;
+  let lang: "en" | "ar" | undefined;
+  const tags = new Set<string>();
+
+  for (const file of files.filter((name) => name.endsWith(".json"))) {
+    try {
+      const object = await env.CONTENT!.get(`content-files/${category}/${folderPath ? `${folderPath}/` : ""}${file}`);
+      if (!object) continue;
+      const data = JSON.parse(await object.text()) as Record<string, any>;
+      const meta = data.meta && typeof data.meta === "object" ? data.meta : {};
+      if (!description && typeof meta.description === "string") description = meta.description;
+      if (!lang && (meta.lang === "en" || meta.lang === "ar")) lang = meta.lang;
+      for (const key of Object.keys(FILE_TYPE_KEYS)) {
+        const entries = Array.isArray(data[key]) ? data[key] : [];
+        itemCount += entries.length;
+        questionCount += key === "passages"
+          ? entries.reduce((count: number, passage: any) => count + (Array.isArray(passage?.questions) ? passage.questions.length : 1), 0)
+          : entries.length;
+        for (const entry of entries) {
+          if (!Array.isArray(entry?.tags)) continue;
+          for (const tag of entry.tags) if (typeof tag === "string" && tag.trim()) tags.add(tag.trim());
+        }
+      }
+    } catch {
+      // A malformed pack must not prevent the admin from rebuilding other entries.
+    }
+  }
+
+  return {
+    questionCount,
+    itemCount,
+    ...(description ? { description } : {}),
+    ...(lang ? { lang } : {}),
+    ...(tags.size ? { tags: [...tags].sort() } : {}),
+  };
+}
+
 async function regenerateManifestForCategory(env: Env, category: string): Promise<any> {
   if (!env.CONTENT) return null;
   const prefix = `content-files/${category}/`;
@@ -1003,14 +1043,17 @@ async function regenerateManifestForCategory(env: Env, category: string): Promis
     // across sources.
     const segments = fp ? fp.split("/") : [];
     const uid = buildUid(inferredType, segments);
+    const files = info.files.sort();
     nodes.set(fp, {
       uid,
       title: fp ? fp.split("/").pop()!.replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()) : category,
       type: inferredType,
       path: fp ? `${fp}/` : "",
-      files: info.files,
-      images: info.images,
+      files,
+      images: info.images.sort(),
       items: [],
+      packCount: 1,
+      ...(await manifestMetadataForFiles(env, category, fp, files)),
     });
   }
   // Synthesize branch nodes for pure grouping folders. `folders` only records
@@ -1048,6 +1091,24 @@ async function regenerateManifestForCategory(env: Env, category: string): Promis
       roots.push(node);
     }
   }
+  const summarizeNode = (node: any): { questionCount: number; itemCount: number; packCount: number } => {
+    node.items.sort((a: any, b: any) => a.title.localeCompare(b.title));
+    if (node.items.length === 0) return node;
+    const summary = node.items.reduce(
+      (total: { questionCount: number; itemCount: number; packCount: number }, child: any) => {
+        const childSummary = summarizeNode(child);
+        return {
+          questionCount: total.questionCount + childSummary.questionCount,
+          itemCount: total.itemCount + childSummary.itemCount,
+          packCount: total.packCount + childSummary.packCount,
+        };
+      },
+      { questionCount: 0, itemCount: 0, packCount: 0 },
+    );
+    Object.assign(node, summary);
+    return summary;
+  };
+  for (const root of roots) summarizeNode(root);
   const manifest = {
     type: parentType || (roots.length > 0 ? roots[0].type : "quiz"),
     items: roots.sort((a, b) => a.title.localeCompare(b.title)),

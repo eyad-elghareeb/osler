@@ -18,7 +18,23 @@
             "videos.json"
           ],
           "images": [],
-          "items": []
+          "items": [],
+          "packCount": 1,
+          "questionCount": 3,
+          "itemCount": 3,
+          "tags": [
+            "ACS",
+            "ECG",
+            "HFpEF",
+            "HFrEF",
+            "NSTEMI",
+            "STEMI",
+            "cardiology",
+            "clinical skills",
+            "emergency",
+            "heart failure",
+            "unstable angina"
+          ]
         },
         {
           "uid": "video-cardiology-lectures",
@@ -29,9 +45,25 @@
             "videos.json"
           ],
           "images": [],
-          "items": []
+          "items": [],
+          "packCount": 1,
+          "questionCount": 2,
+          "itemCount": 2,
+          "tags": [
+            "RAAS",
+            "auscultation",
+            "blood pressure",
+            "cardiology",
+            "clinical skills",
+            "heart sounds",
+            "hypertension",
+            "murmurs"
+          ]
         }
-      ]
+      ],
+      "packCount": 2,
+      "questionCount": 5,
+      "itemCount": 5
     },
     {
       "uid": "video-nephrology",
@@ -50,9 +82,22 @@
             "videos.json"
           ],
           "images": [],
-          "items": []
+          "items": [],
+          "packCount": 1,
+          "questionCount": 2,
+          "itemCount": 2,
+          "tags": [
+            "dialysis",
+            "hemodialysis",
+            "nephrology",
+            "peritoneal-dialysis",
+            "vascular-access"
+          ]
         }
-      ]
+      ],
+      "packCount": 1,
+      "questionCount": 2,
+      "itemCount": 2
     },
     {
       "uid": "video-neurology",
@@ -71,9 +116,26 @@
             "videos.json"
           ],
           "images": [],
-          "items": []
+          "items": [],
+          "packCount": 1,
+          "questionCount": 2,
+          "itemCount": 2,
+          "tags": [
+            "SAH",
+            "aneurysm",
+            "emergency",
+            "ischemic stroke",
+            "neurology",
+            "stroke",
+            "subarachnoid hemorrhage",
+            "tPA",
+            "thrombolysis"
+          ]
         }
-      ]
+      ],
+      "packCount": 1,
+      "questionCount": 2,
+      "itemCount": 2
     },
     {
       "uid": "video-pharmacology",
@@ -92,9 +154,23 @@
             "videos.json"
           ],
           "images": [],
-          "items": []
+          "items": [],
+          "packCount": 1,
+          "questionCount": 2,
+          "itemCount": 2,
+          "tags": [
+            "antibiotic-stewardship",
+            "antibiotics",
+            "infectious-disease",
+            "mechanism-of-action",
+            "microbiology",
+            "pharmacology"
+          ]
         }
-      ]
+      ],
+      "packCount": 1,
+      "questionCount": 2,
+      "itemCount": 2
     }
   ]
 }
