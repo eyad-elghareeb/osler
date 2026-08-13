@@ -801,6 +801,19 @@ export function QBankStudio({
   // First-time entry uses a shared launch dialog for quiz and bank packs.
   // The bank dialog adds session sizing and can hand off to the advanced
   // Create tab without losing the selected source.
+  //
+  // IMPORTANT: this effect must only re-run when the *pack identity*
+  // (activeItem/activeContent) changes — NOT on every `session`/`mode`
+  // change. `session` gets a new object reference on every quiz
+  // interaction (selecting an answer, pausing, flagging, navigating
+  // questions...). If it were a dependency here, each of those
+  // interactions would re-trigger this effect while activeItem/activeContent
+  // are still set, falling through to `startSession(...)` again — silently
+  // restoring a stale auto-saved copy (or a completely unrelated pack's
+  // session, e.g. one left over from launching a custom session while a
+  // pack was still open) and clobbering whatever the user just did. That's
+  // what made pause/select/exit/custom-sessions appear broken. `mode` and
+  // `session` are only read here, never watched.
   React.useEffect(() => {
     if (activeItem && activeContent) {
       if ((activeContent.type === "quiz" || activeContent.type === "bank") && !session && mode === "home") {
@@ -810,16 +823,24 @@ export function QBankStudio({
         }
         return;
       }
+      if (session || mode !== "home") return;
       const limit = pendingQuestionLimitRef.current;
       pendingQuestionLimitRef.current = 0;
       startSession(activeItem, activeContent, { maxQuestions: limit || undefined });
-    } else if (!activeItem && mode !== "home") {
+    } else if (!activeItem) {
+      // Reset unconditionally on `!activeItem` (not gated on `mode`) — by
+      // the time the URL actually drops `uid`, `exitToHome` has usually
+      // already set mode to "home" synchronously, so a `mode !== "home"`
+      // guard here would never run and `startPromptUid` would stay stale,
+      // permanently blocking the launch dialog from reopening if the user
+      // navigates back to the same pack later. These setters are all
+      // idempotent no-ops when already at their reset values.
       setMode("home");
       setSession(null);
       setStartDialogOpen(false);
       setStartPromptUid(null);
     }
-  }, [activeItem?.uid, activeContent?.meta.uid, activeContent?.type, mode, session, startPromptUid, startSession]);
+  }, [activeItem?.uid, activeContent?.meta.uid, activeContent?.type, startPromptUid, startSession]);
 
   const handleStartPrompt = React.useCallback((options: SessionStartOptions) => {
     if (!activeItem || !activeContent) return;
@@ -887,7 +908,14 @@ export function QBankStudio({
     setMode("home");
     setSession(null);
     setStartDialogOpen(false);
-    setStartPromptUid(null);
+    // NOTE: do NOT reset `startPromptUid` here. It's a dependency of the
+    // auto-open effect above, and `navigate("qbank")` below is async
+    // (router.push) — activeItem/activeContent stay non-null for at least
+    // one more render. Clearing startPromptUid synchronously would make
+    // that effect re-fire immediately (before the URL actually changes),
+    // see `!session && mode === "home"` as true again, and reopen the
+    // dialog it was just asked to close. The effect's own `!activeItem`
+    // branch clears startPromptUid once the navigation has truly landed.
     setImmersiveMode(false);
     if (activeItem) {
       navigate("qbank");
@@ -2566,14 +2594,26 @@ function CreateTestTab({
 
   // P2-2: when `initialSourceUid` changes, pre-check that source and scroll
   // it into view. Consume the prop so a remount doesn't re-trigger.
+  //
+  // `qbankTree` comes from an async fetch (HomeView's `data` state) and is
+  // empty on first mount — which is exactly when this fires, since "More
+  // options" on the launch dialog is usually clicked before that fetch
+  // resolves. We must NOT consume `initialSourceUid` (or mark it selected)
+  // until the node is actually found: consuming it early means the source
+  // never gets checked/loaded, and once the tree finishes loading there's
+  // no `initialSourceUid` left to retry with — the pre-selection is
+  // silently dropped. Instead, bail out and let the effect re-run (via the
+  // `qbankTree` dependency) once the tree has loaded far enough to contain
+  // this node.
   React.useEffect(() => {
     if (!initialSourceUid) return;
+    const node = findNodeByUid(qbankTree, initialSourceUid);
+    if (!node) return; // tree not loaded yet — retry on the next qbankTree update
     setSelectedSourceUids((prev) =>
       prev.includes(initialSourceUid) ? prev : [...prev, initialSourceUid],
     );
+    void onLoadPack(node);
     // Defer the scroll until after the DOM updates.
-    const node = findNodeByUid(qbankTree, initialSourceUid);
-    if (node) void onLoadPack(node);
     requestAnimationFrame(() => {
       preselectScrollRef.current?.scrollIntoView({
         behavior: "smooth",
