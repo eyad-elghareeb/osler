@@ -351,7 +351,16 @@ export function QBankStudio({
   const [mode, setMode] = React.useState<QuizMode>("home");
   const [session, setSession] = React.useState<SessionData | null>(null);
   const [testMode, setTestMode] = React.useState<TestMode>("tutor");
-  const [homeTab, setHomeTab] = React.useState<HomeTab>("content");
+  const [homeTab, setHomeTab] = React.useState<HomeTab>(() => {
+    try {
+      const stored = sessionStorage.getItem("osler_qbank_initial_tab");
+      if (stored === "create" || stored === "tracker" || stored === "content") {
+        sessionStorage.removeItem("osler_qbank_initial_tab");
+        return stored as HomeTab;
+      }
+    } catch {}
+    return "content";
+  });
   const [startDialogOpen, setStartDialogOpen] = React.useState(false);
   const [startPromptUid, setStartPromptUid] = React.useState<string | null>(null);
   const [launchOnlyMode, setLaunchOnlyMode] = React.useState<OnlyMode>("new");
@@ -624,7 +633,16 @@ export function QBankStudio({
   // spin up a session from a built question pool without going through the
   // `activeItem`/`activeContent` effect.
   const [pendingCreateTestSourceUid, setPendingCreateTestSourceUid] =
-    React.useState<string | null>(null);
+    React.useState<string | null>(() => {
+      try {
+        const stored = sessionStorage.getItem("osler_qbank_initial_source");
+        if (stored) {
+          sessionStorage.removeItem("osler_qbank_initial_source");
+          return stored;
+        }
+      } catch {}
+      return null;
+    });
 
   const handlePickForCreateTest = React.useCallback(
     (node: ContentTreeNode) => {
@@ -821,6 +839,10 @@ export function QBankStudio({
     haptic("selection");
     setStartDialogOpen(false);
     setStartPromptUid(activeItem.uid);
+    try {
+      sessionStorage.setItem("osler_qbank_initial_tab", "create");
+      sessionStorage.setItem("osler_qbank_initial_source", activeItem.uid);
+    } catch {}
     setPendingCreateTestSourceUid(activeItem.uid);
     setHomeTab("create");
     setMode("home");
