@@ -1185,6 +1185,9 @@ export const en = {
     "qbank.home.correct": "Correct",
     "qbank.home.incorrect": "Incorrect",
     "qbank.home.unanswered": "Unanswered",
+    "qbank.home.progress": "Progress",
+    "qbank.home.done": "Done",
+    "qbank.home.current": "Current",
 
     /* ── Native app feel features (biometric, haptics, view transitions, wake lock, network info) ── */
     "native.sectionTitle": "Native App Experience",

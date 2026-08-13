@@ -1180,6 +1180,9 @@ export const ar = {
     "qbank.home.correct": "صحيح",
     "qbank.home.incorrect": "خطأ",
     "qbank.home.unanswered": "لم تُجب",
+    "qbank.home.progress": "التقدّم",
+    "qbank.home.done": "تم",
+    "qbank.home.current": "الحالي",
 
     /* ── ميزات إحساس التطبيق الأصلي (بصمة، اهتزاز، انتقالات، إبقاء الشاشة، الشبكة) ── */
     "native.sectionTitle": "تجربة التطبيق الأصلي",

@@ -56,6 +56,7 @@ import {
   Download,
   PackageOpen,
   Wrench,
+  type LucideIcon,
 } from "lucide-react";
 import { loadCategoryTree, loadContentByUid, loadNodeByUid, ENGINE_META, flattenTree, packBasePath } from "@/lib/osler/content";
 import { toast } from "@/hooks/use-toast";
@@ -112,6 +113,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import {
   Sheet,
   SheetContent,
+  SheetDescription,
   SheetHeader,
   SheetTitle,
   SheetTrigger,
@@ -167,6 +169,7 @@ import {
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Progress } from "@/components/ui/progress";
 
 const LETTERS = ["A", "B", "C", "D", "E", "F", "G", "H"];
 const ARABIC_LETTERS = ["أ", "ب", "ج", "د", "ه", "و", "ز", "ح", "ط", "ي"];
@@ -727,7 +730,7 @@ export function QBankStudio({
           onToggleAiAssistant={() => setAiAssistantOpen((o) => !o)}
           onToggleQuizSettings={() => setQuizSettingsOpen((o) => !o)}
           onToggleNotes={() => setNotesOpen((o) => !o)}
-          onToggleNavMobile={() => setNavOpenMobile((o) => !o)}
+          onNavMobileChange={(open) => setNavOpenMobile(open)}
           onOpenArticle={(id) => setArticleModalId(id)}
           onExitRequest={requestExit}
           onSelect={(idx) => {
@@ -3923,7 +3926,7 @@ function QuizView({
   onToggleAiAssistant,
   onToggleQuizSettings,
   onToggleNotes,
-  onToggleNavMobile,
+  onNavMobileChange,
   onOpenArticle,
   onSelect,
   onToggleStrikethrough,
@@ -3956,7 +3959,7 @@ function QuizView({
   onToggleAiAssistant: () => void;
   onToggleQuizSettings: () => void;
   onToggleNotes: () => void;
-  onToggleNavMobile: () => void;
+  onNavMobileChange: (open: boolean) => void;
   onOpenArticle: (id: string) => void;
   onSelect: (idx: number) => void;
   onToggleStrikethrough: (idx: number) => void;
@@ -4938,10 +4941,15 @@ function QuizView({
         </div>
 
         <button
-          onClick={onToggleNavMobile}
-          className="md:hidden size-8 rounded-lg bg-primary-foreground/15 hover:bg-primary-foreground/25 flex items-center justify-center me-1 shrink-0"
+          onClick={() => { haptic("selection"); onNavMobileChange(!navOpenMobile); }}
+          className={`md:hidden size-8 rounded-lg flex items-center justify-center me-1 shrink-0 transition-colors ${
+            navOpenMobile
+              ? "bg-primary-foreground/30 ring-1 ring-inset ring-primary-foreground/40"
+              : "bg-primary-foreground/15 hover:bg-primary-foreground/25"
+          }`}
           title={t("qbank.home.questionNavigator")}
           aria-label={t("qbank.home.questionNavigator")}
+          aria-pressed={navOpenMobile}
         >
           <ListChecks className="size-4" />
         </button>
@@ -5043,46 +5051,22 @@ function QuizView({
       {/* ── Body: Question panel ─────────────────────────────────────────── */}
       <div className="flex flex-1 min-h-0 relative">
 
-        {/* Floating navigator overlay (desktop + mobile) */}
-        <AnimatePresence>
-          {navOpenMobile && (
-            <motion.div
-              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-              className="absolute inset-0 z-30 flex items-start justify-center pt-16 bg-background/60 backdrop-blur-[2px]"
-            >
-              <motion.div
-                initial={{ scale: 0.95, opacity: 0, y: -8 }}
-                animate={{ scale: 1, opacity: 1, y: 0 }}
-                exit={{ scale: 0.95, opacity: 0, y: -8 }}
-                transition={{ type: "spring", damping: 25, stiffness: 300 }}
-                onClick={(e) => e.stopPropagation()}
-                className="bg-card border border-border rounded-2xl shadow-2xl w-[90vw] max-w-xl max-h-[70vh] overflow-hidden"
-              >
-                <div className="px-4 py-3 border-b border-border flex items-center justify-between bg-primary text-primary-foreground">
-                  <span className="text-sm font-semibold">{t("qbank.home.questionNavigator")}</span>
-                  <button onClick={onToggleNavMobile} aria-label={t("common.close")} className="size-7 rounded-lg hover:bg-primary-foreground/15 flex items-center justify-center">
-                    <X className="size-4" />
-                  </button>
-                </div>
-                <div className="overflow-y-auto medos-scroll p-4">
-                  <NavigatorPanel
-                    session={session}
-                    answeredCount={answeredCount} flaggedCount={flaggedCount}
-                    correctCount={correctCount} incorrectCount={incorrectCount}
-                    progressPct={progressPct}
-                    onJumpTo={(idx) => { onJumpTo(idx); onToggleNavMobile(); }}
-                    onEndTest={() => { onFinish(); onToggleNavMobile(); }}
-                    readonly={readonly}
-                  />
-                </div>
-                <div className="px-4 py-2.5 border-t border-border flex items-center justify-between text-xs text-muted-foreground">
-                  <span>{t("qbank.home.answered", { n: answeredCount, total: session.questions.length })}</span>
-                  <span>{t("qbank.home.flagged", { n: flaggedCount })}</span>
-                </div>
-              </motion.div>
-            </motion.div>
-          )}
-        </AnimatePresence>
+        {/* Question navigator — mobile bottom sheet (shadcn, no backdrop
+            blur). Slides up natively, respects safe areas, and gives the
+            whole palette to the fingers. Desktop keeps the left strip. */}
+        <QuestionNavigatorSheet
+          open={navOpenMobile}
+          onOpenChange={onNavMobileChange}
+          session={session}
+          answeredCount={answeredCount}
+          flaggedCount={flaggedCount}
+          correctCount={correctCount}
+          incorrectCount={incorrectCount}
+          progressPct={progressPct}
+          onJumpTo={onJumpTo}
+          onEndTest={onFinish}
+          readonly={readonly}
+        />
 
         {/* Simple question navigator (left strip) */}
         <div className="hidden md:flex flex-col w-12 shrink-0 border-r border-border bg-sidebar">
@@ -6723,9 +6707,16 @@ function OsceEngineView({
 }
 
 /* ─────────────────────────────────────────────────────────────────────────
- * NAVIGATOR PANEL — Question grid (NBME-style compact)
- * ───────────────────────────────────────────────────────────────────────── */
-interface NavigatorPanelProps {
+ * QUESTION NAVIGATOR SHEET — mobile bottom-sheet question palette
+ *
+ * A shadcn bottom Sheet (solid overlay — no backdrop blur) with a live
+ * progress summary, an NBME-style tap-to-jump grid, a compact legend, and
+ * a safe-area-aware End Test / Done footer. All states use semantic status
+ * tokens (success/warning/destructive/primary) — never palette colors.
+ * ---------------------------------------------------------------------- */
+interface QuestionNavigatorSheetProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
   session: SessionData;
   answeredCount: number;
   flaggedCount: number;
@@ -6737,72 +6728,182 @@ interface NavigatorPanelProps {
   readonly?: boolean;
 }
 
-function NavigatorPanel(p: NavigatorPanelProps) {
+function QuestionNavigatorSheet(p: QuestionNavigatorSheetProps) {
   const { t } = useI18n();
-  const total = p.session.questions.length;
+  const { session, readonly = false } = p;
+  const total = session.questions.length;
+  const unansweredCount = total - p.answeredCount;
+  // Correct/incorrect is only meaningful when answers have been revealed
+  // (tutor mode, or read-only review replays).
+  const showOutcome = session.mode === "tutor" || readonly;
+
+  const jump = (i: number) => {
+    haptic("selection");
+    p.onJumpTo(i);
+    p.onOpenChange(false);
+  };
+
   return (
-    <div className="flex flex-col h-full">
-      {/* NBME-style compact header */}
-      <div className="px-3 py-2.5 border-b border-sidebar-border flex items-center justify-between">
-        <span className="text-[11px] font-semibold uppercase tracking-wider text-foreground">{t("qbank.home.questionNavigator")}</span>
-        <span className="text-[11px] text-muted-foreground tabular-nums">{p.answeredCount}/{total}</span>
-      </div>
+    <Sheet open={p.open} onOpenChange={p.onOpenChange}>
+      <SheetContent
+        side="bottom"
+        className="px-0 pt-0 pb-[max(env(safe-area-inset-bottom,0px),0.75rem)] rounded-t-2xl max-h-[85vh] data-[state=open]:duration-200 data-[state=closed]:duration-150"
+      >
+        {/* Grab handle */}
+        <div className="mx-auto mt-2.5 h-1 w-10 rounded-full bg-border shrink-0" />
 
-      {/* Question grid - NBME compact style */}
-      <div className="flex-1 overflow-y-auto medos-scroll p-3">
-        <div className="grid grid-cols-5 gap-1">
-          {p.session.questions.map((_, i) => {
-            const ans = p.session.answers[i];
-            const isFlagged = p.session.flagged[i];
-            const isCurrent = i === p.session.current;
-            const isRevealed = p.session.revealed[i];
-            const isCorrect = ans !== undefined && p.session.questions[i]?.correct === ans;
-            const isIncorrect = ans !== undefined && !isCorrect;
+        {/* Header */}
+        <SheetHeader className="px-4 pe-10 pt-2.5 pb-3 border-b border-border text-start">
+          <SheetTitle className="flex items-center gap-2 text-sm font-semibold">
+            <span className="size-7 rounded-lg bg-primary/10 border border-primary/20 text-primary flex items-center justify-center shrink-0">
+              <ListChecks className="size-4" />
+            </span>
+            {t("qbank.home.questionNavigator")}
+          </SheetTitle>
+          <SheetDescription className="text-xs">
+            {t("qbank.session.question", { n: session.current + 1, total })}
+            {"  ·  "}
+            {t("qbank.home.answered", { n: p.answeredCount, total })}
+          </SheetDescription>
+        </SheetHeader>
 
-            let cellClass = "bg-sidebar text-muted-foreground border-sidebar-border hover:bg-sidebar-accent";
-            if (isRevealed && isCorrect) cellClass = "bg-success/20 text-success border-success/30 hover:bg-success/30";
-            else if (isRevealed && isIncorrect) cellClass = "bg-destructive/20 text-destructive border-destructive/30 hover:bg-destructive/30";
-            else if (ans !== undefined) cellClass = "bg-primary/25 text-primary border-primary/40 hover:bg-primary/35";
+        {/* Live progress summary */}
+        <div className="px-4 py-3 flex flex-col gap-2.5 border-b border-border bg-muted/20">
+          <div className="flex items-center justify-between text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+            <span>{t("qbank.home.progress")}</span>
+            <span className="tabular-nums">{p.progressPct}%</span>
+          </div>
+          <Progress value={p.progressPct} className="h-1.5" />
 
-            return (
-              <button
-                key={i}
-                onClick={() => p.onJumpTo(i)}
-                className={`relative aspect-square rounded-md text-[11px] font-semibold border transition-all ${cellClass} ${
-                  isCurrent ? "ring-2 ring-primary ring-offset-1 ring-offset-sidebar" : ""
-                }`}
-                title={t("qbank.session.question", { n: i + 1, total })}
-              >
-                {i + 1}
-                {isFlagged && <span className="absolute -top-0.5 -right-0.5 size-2 rounded-full bg-warning border border-sidebar" />}
-              </button>
-            );
-          })}
+          <div className="flex flex-wrap gap-1.5">
+            {showOutcome ? (
+              <>
+                <NavigatorChip tone="success" icon={CheckCircle2} value={p.correctCount} label={t("qbank.home.correct")} />
+                <NavigatorChip tone="destructive" icon={X} value={p.incorrectCount} label={t("qbank.home.incorrect")} />
+              </>
+            ) : (
+              <NavigatorChip tone="primary" icon={CheckCircle2} value={p.answeredCount} label={t("qbank.home.answeredLabel")} />
+            )}
+            <NavigatorChip tone="warning" icon={Flag} value={p.flaggedCount} label={t("qbank.home.flaggedLabel")} />
+            <NavigatorChip tone="muted" icon={Circle} value={unansweredCount} label={t("qbank.home.unanswered")} />
+          </div>
         </div>
 
-        {/* Compact inline legend */}
-        <div className="mt-4 pt-3 border-t border-sidebar-border flex flex-wrap gap-2.5 text-[10px] text-muted-foreground">
-          <span className="flex items-center gap-1"><span className="size-2.5 rounded bg-sidebar border border-sidebar-border" /> {t("qbank.home.unanswered")}</span>
-          <span className="flex items-center gap-1"><span className="size-2.5 rounded bg-primary/25 border border-primary/40" /> {t("qbank.home.answeredLabel")}</span>
-          {p.session.mode === "tutor" && (
-            <>
-              <span className="flex items-center gap-1"><span className="size-2.5 rounded bg-success/20 border border-success/30" /> {t("qbank.home.correct")}</span>
-              <span className="flex items-center gap-1"><span className="size-2.5 rounded bg-destructive/20 border border-destructive/30" /> {t("qbank.home.incorrect")}</span>
-            </>
+        {/* Question grid — NBME compact style */}
+        <div className="flex-1 overflow-y-auto medos-scroll min-h-20 px-4 py-3">
+          <div className="grid grid-cols-5 gap-1.5">
+            {session.questions.map((_, i) => {
+              const ans = session.answers[i];
+              const isCurrent = i === session.current;
+              const isFlagged = session.flagged[i];
+              const isRevealed = session.revealed[i];
+              const isCorrect = ans !== undefined && session.questions[i]?.correct === ans;
+              const isIncorrect = ans !== undefined && !isCorrect;
+
+              let cellClass = "bg-sidebar text-muted-foreground border-border hover:border-primary/40 hover:bg-sidebar-accent";
+              if (isRevealed && isCorrect) cellClass = "bg-success/15 text-success border-success/30 hover:bg-success/25";
+              else if (isRevealed && isIncorrect) cellClass = "bg-destructive/15 text-destructive border-destructive/30 hover:bg-destructive/25";
+              else if (ans !== undefined) cellClass = "bg-primary/15 text-primary border-primary/30 hover:bg-primary/25";
+
+              return (
+                <button
+                  key={i}
+                  onClick={() => jump(i)}
+                  aria-current={isCurrent ? "step" : undefined}
+                  aria-label={t("qbank.session.question", { n: i + 1, total })}
+                  className={cn(
+                    "relative aspect-square rounded-lg text-xs font-semibold tabular-nums border transition-all select-none active:scale-95",
+                    cellClass,
+                    isCurrent && "ring-2 ring-primary ring-offset-1 ring-offset-background scale-[1.06]"
+                  )}
+                >
+                  {i + 1}
+                  {isFlagged && (
+                    <span className="absolute -top-1 -end-1 size-2.5 rounded-full bg-warning border-2 border-background" />
+                  )}
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Compact legend */}
+          <div className="mt-3 pt-2.5 border-t border-border flex flex-wrap gap-x-3 gap-y-1.5 text-[10px] text-muted-foreground">
+            <LegendSwatch className="bg-sidebar border border-border" label={t("qbank.home.unanswered")} />
+            {showOutcome ? (
+              <>
+                <LegendSwatch className="bg-success/15 border border-success/30" label={t("qbank.home.correct")} />
+                <LegendSwatch className="bg-destructive/15 border border-destructive/30" label={t("qbank.home.incorrect")} />
+              </>
+            ) : (
+              <LegendSwatch className="bg-primary/15 border border-primary/30" label={t("qbank.home.answeredLabel")} />
+            )}
+            <LegendSwatch className="bg-warning border-2 border-background rounded-full" label={t("qbank.session.flag")} />
+            <LegendSwatch className="ring-2 ring-primary ring-offset-1 ring-offset-background rounded-md" label={t("qbank.home.current")} />
+          </div>
+        </div>
+
+        {/* Footer — safe-area aware */}
+        <div className="px-4 pt-3 flex items-center gap-2 border-t border-border">
+          {!readonly && (
+            <Button
+              variant="outline"
+              size="lg"
+              onClick={() => { haptic("warning"); p.onEndTest(); p.onOpenChange(false); }}
+              className="h-10 rounded-xl shrink-0 text-destructive border-destructive/40 hover:bg-destructive/10 hover:text-destructive"
+            >
+              {t("qbank.session.endTest")}
+            </Button>
           )}
-          <span className="flex items-center gap-1"><span className="size-2.5 rounded-full bg-warning" /> {t("qbank.session.flag")}</span>
-        </div>
-      </div>
-
-      {/* Compact end test button */}
-      {!p.readonly && (
-        <div className="p-2 border-t border-sidebar-border">
-          <Button variant="ghost" size="sm" onClick={p.onEndTest} className="w-full h-8 text-xs rounded-md text-destructive hover:text-destructive hover:bg-destructive/10">
-            {t("qbank.session.endTest")}
+          <Button
+            variant="default"
+            size="lg"
+            onClick={() => { haptic("light"); p.onOpenChange(false); }}
+            className="flex-1 h-10 rounded-xl"
+          >
+            {t("qbank.home.done")}
           </Button>
         </div>
-      )}
-    </div>
+      </SheetContent>
+    </Sheet>
+  );
+}
+
+function NavigatorChip({
+  tone,
+  icon: Icon,
+  value,
+  label,
+}: {
+  tone: "success" | "destructive" | "primary" | "warning" | "muted";
+  icon: LucideIcon;
+  value: number;
+  label: string;
+}) {
+  const toneClass =
+    tone === "success"
+      ? "bg-success/15 text-success border-success/30"
+      : tone === "destructive"
+        ? "bg-destructive/15 text-destructive border-destructive/30"
+        : tone === "warning"
+          ? "bg-warning/15 text-warning border-warning/30"
+          : tone === "primary"
+            ? "bg-primary/15 text-primary border-primary/30"
+            : "bg-sidebar text-muted-foreground border-border";
+  return (
+    <span className={cn("inline-flex items-center gap-1 rounded-full border px-2 py-1 text-[11px] font-semibold tabular-nums", toneClass)}>
+      <Icon className="size-3 shrink-0" />
+      <span>{value}</span>
+      <span className="font-medium opacity-80">{label}</span>
+    </span>
+  );
+}
+
+function LegendSwatch({ className, label }: { className: string; label: string }) {
+  return (
+    <span className="inline-flex items-center gap-1.5">
+      <span className={cn("size-2.5 rounded-[4px] shrink-0", className)} />
+      {label}
+    </span>
   );
 }
 
