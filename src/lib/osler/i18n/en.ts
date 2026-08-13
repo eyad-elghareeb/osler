@@ -57,7 +57,6 @@ export const en = {
     "learn.osce.desc": "Clinical skills & exam stations",
     "learn.videos.title": "Videos",
     "learn.videos.desc": "Clinical video lectures & skills",
-    "learn.entries.title": "Available content",
     "learn.count.library": "{n} articles",
     "learn.count.flashcards": "{n} cards",
     "learn.count.osce": "{n} stations",

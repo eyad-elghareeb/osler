@@ -58,12 +58,6 @@ interface ModuleCardDef {
   accent: string;
 }
 
-interface LearnEntry {
-  uid: string;
-  title: string;
-  count: number;
-}
-
 const ALL_MODULES: ModuleCardDef[] = [
   {
     id: "library",
@@ -126,12 +120,6 @@ export function Learn({ onNavigate: propOnNavigate }: LearnProps = {}) {
     osce: null,
     videos: null,
   });
-  const [entries, setEntries] = React.useState<Record<ModuleCardDef["id"], LearnEntry[]>>({
-    library: [],
-    flashcards: [],
-    osce: [],
-    videos: [],
-  });
 
   React.useEffect(() => {
     let cancelled = false;
@@ -146,23 +134,18 @@ export function Learn({ onNavigate: propOnNavigate }: LearnProps = {}) {
         ]);
         if (cancelled) return;
 
-        const toEntries = (nodes: ContentTreeNode[]) => flattenTree(nodes).map((node) => ({
-          uid: node.uid,
-          title: node.title,
-          count: node.itemCount ?? node.questionCount ?? node.files?.length ?? 0,
-        }));
-        const libraryEntries = toEntries(libraryTree);
-        const flashcardEntries = toEntries(flashcardTree);
-        const osceEntries = toEntries(osceTree);
-        const videoEntries = toEntries(videoTree);
+        const sumCounts = (nodes: ContentTreeNode[]) =>
+          flattenTree(nodes).reduce(
+            (total, node) => total + (node.itemCount ?? node.questionCount ?? node.files?.length ?? 0),
+            0,
+          );
 
         setCounts({
-          library: libraryEntries.reduce((total, entry) => total + entry.count, 0),
-          flashcards: flashcardEntries.reduce((total, entry) => total + entry.count, 0),
-          osce: osceEntries.reduce((total, entry) => total + entry.count, 0),
-          videos: videoEntries.reduce((total, entry) => total + entry.count, 0),
+          library: sumCounts(libraryTree),
+          flashcards: sumCounts(flashcardTree),
+          osce: sumCounts(osceTree),
+          videos: sumCounts(videoTree),
         });
-        setEntries({ library: libraryEntries, flashcards: flashcardEntries, osce: osceEntries, videos: videoEntries });
       } catch {
         // Keep nulls — the UI shows a non-breaking placeholder.
       }
@@ -246,27 +229,6 @@ export function Learn({ onNavigate: propOnNavigate }: LearnProps = {}) {
             />
           ))}
         </motion.div>
-
-        <div className="mt-8">
-          <h2 className="mb-3 text-sm font-semibold uppercase tracking-wider text-muted-foreground">
-            {t("learn.entries.title")}
-          </h2>
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            {modules.flatMap((module) => entries[module.id].map((entry) => (
-              <button
-                key={entry.uid}
-                type="button"
-                onClick={() => onNavigate(module.id)}
-                className="flex items-center justify-between gap-3 rounded-xl border border-border bg-card p-4 text-start transition-colors hover:border-primary/40 hover:shadow-md"
-              >
-                <span className="min-w-0 truncate text-sm font-medium">{entry.title}</span>
-                <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
-                  {t(`learn.count.${module.id}`, { n: entry.count })}
-                </span>
-              </button>
-            )))}
-          </div>
-        </div>
       </div>
     </div>
   );

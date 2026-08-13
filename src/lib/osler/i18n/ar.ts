@@ -57,7 +57,6 @@ export const ar = {
     "learn.osce.desc": "المحطات السريرية ومهارات الامتحان",
     "learn.videos.title": "الفيديوهات",
     "learn.videos.desc": "محاضرات ومهارات سريرية بالفيديو",
-    "learn.entries.title": "المحتوى المتاح",
     "learn.count.library": "{n} مقالة",
     "learn.count.flashcards": "{n} بطاقة",
     "learn.count.osce": "{n} محطة",
