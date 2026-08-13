@@ -819,13 +819,14 @@ export function QBankStudio({
   const openBankMoreOptions = React.useCallback(() => {
     if (!activeItem) return;
     haptic("selection");
+    // Close dialog first so it fully unmounts before the view transition
+    // snapshot is taken — keeping it inside withViewTransition causes the
+    // modal to remain visible for the entire transition animation.
+    setStartDialogOpen(false);
+    setStartPromptUid(null);
     withViewTransition(() => {
       setPendingCreateTestSourceUid(activeItem.uid);
       setHomeTab("create");
-      setStartDialogOpen(false);
-      // Reset startPromptUid so returning to Content tab and clicking the same
-      // pack again will correctly re-open the launch dialog.
-      setStartPromptUid(null);
       setMode("home");
       setImmersiveMode(false);
     }, "forward");
