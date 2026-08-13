@@ -124,6 +124,7 @@ function directionFor(from: OslerView, to: OslerView): ViewTransitionDirection {
 import { useOslerSession } from "@/lib/osler/session-context";
 import { useCurrentView, useOslerRouter } from "@/lib/osler/navigation";
 import { loadContentByUid } from "@/lib/osler/content";
+import { AutoResumeSessionDialog } from "./resume-session-dialog";
 
 interface AppShellProps {
   children: React.ReactNode;
@@ -442,6 +443,14 @@ export function AppShell({ children }: AppShellProps) {
 
       {/* Mobile tab bar */}
       <MobileTabBar view={view} onViewChange={handleViewChange} />
+
+      {/* Resume-session auto-pop — hidden on the dashboard (which has its
+          own "Continue learning" card that opens the same dialog on click)
+          AND on /qbank (where the user is either actively taking a quiz or
+          can use the tracker's "In progress" panel). On all other pages
+          (library, flashcards, osce, videos, profile, settings, learn) the
+          auto-pop fires so the user is reminded of their unfinished session. */}
+      {!isDashboard && !isQbank && <AutoResumeSessionDialog />}
     </div>
   );
 }

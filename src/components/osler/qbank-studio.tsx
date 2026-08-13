@@ -251,6 +251,7 @@ function ContentImageFigure({
 }
 
 import { useOslerRouter } from "@/lib/osler/navigation";
+import { markSessionDismissed, isSessionDismissed, clearSessionDismissed } from "./resume-session-dialog";
 
 interface QBankStudioProps {
   activeItem?: ContentTreeNode | null;
@@ -414,8 +415,19 @@ export function QBankStudio({
   const sessionRef = React.useRef(session);
   sessionRef.current = session;
 
+  // Track whether this component instance has ever owned a live session.
+  // The auto-save effect must NOT clear the active record on initial mount
+  // (when `session` starts null) — otherwise a session saved via "Save &
+  // exit" or still in-flight from a refresh gets wiped from IDB before the
+  // restore effect can pick it up. Only clear when we actually transition
+  // out of a session we owned (endSession / exitToHome / discard).
+  const hadSessionRef = React.useRef(false);
+
   // Debounced save on state change
   React.useEffect(() => {
+    if (session) {
+      hadSessionRef.current = true;
+    }
     if (!session || session.isReview || session.completedAt) {
       // "Save & exit" nulls the session on purpose — the active in-progress
       // record was already persisted before the navigation, so don't wipe it.
@@ -423,7 +435,16 @@ export function QBankStudio({
         keepProgressOnExitRef.current = false;
         return;
       }
+      // Initial-mount guard: if we never owned a session in this component
+      // instance, there is nothing to clear — wiping the active record here
+      // would destroy a session saved by a previous mount (Save & exit,
+      // refresh, or cross-tab resume). Only clear on a real transition out
+      // of a live session we controlled.
+      if (!session && !hadSessionRef.current) {
+        return;
+      }
       sessions.clearActive();
+      if (!session) hadSessionRef.current = false;
       return;
     }
     if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
@@ -485,6 +506,21 @@ export function QBankStudio({
     return () => document.removeEventListener("visibilitychange", handleVisibility);
   }, []);
 
+  // Save on unmount (client-side navigation away from /qbank). The handlers
+  // above cover page unload and tab switching, but NONE of them fire on a
+  // Next.js router push (e.g. clicking "Dashboard" in the nav while mid-quiz).
+  // Without this, the latest answers could be lost if the user navigates
+  // away within the 500ms debounce window. The empty dependency array means
+  // the cleanup runs only on true unmount, not on every session state change.
+  React.useEffect(() => {
+    return () => {
+      const s = sessionRef.current;
+      if (s && !s.isReview && !s.completedAt) {
+        sessions.saveActive(s);
+      }
+    };
+  }, []);
+
   // ── Restore active session from IndexedDB on mount ─────────────────
   // Only restores when no pack is selected via URL (activeItem is null),
   // so the startSession effect for URL packs is never overridden. An
@@ -528,6 +564,10 @@ export function QBankStudio({
     ) {
       restoreBlockedRef.current = true;
       keepProgressOnExitRef.current = false;
+      // Clear the dismissed flag — the user is back in the quiz, so if they
+      // navigate away again the auto-pop SHOULD fire (they didn't dismiss
+      // it this time, they just left mid-quiz).
+      clearSessionDismissed(candidate.sessionId);
       setSession(candidate);
       setTestMode(candidate.mode);
       setMode("quiz");
@@ -544,6 +584,21 @@ export function QBankStudio({
       restoreBlockedRef.current = true;
       return;
     }
+    // Suppress auto-restore for sessions the user explicitly dismissed via
+    // "Save & exit" — they chose to leave, so landing on /qbank shouldn't
+    // pull them back in. They can still resume from the dashboard card,
+    // the tracker's "In progress" panel, or an explicit /qbank?resume=1
+    // (forceResume bypasses this check). A non-dismissed active session
+    // (e.g. the user navigated to /library mid-quiz and came back) DOES
+    // auto-restore, preserving the original refresh-recovery behavior.
+    if (!forceResume) {
+      const activeRaw = sessions.getActive() as SessionData | null;
+      if (activeRaw?.sessionId && isSessionDismissed(activeRaw.sessionId)) {
+        restoreBlockedRef.current = true;
+        return;
+      }
+    }
+    restoreBlockedRef.current = false;
     const restore = () => {
       if (restoreBlockedRef.current) return;
       resumeActiveSession();
@@ -551,7 +606,7 @@ export function QBankStudio({
     restore();
     const unsub = storage.onHydrated(restore);
     return unsub;
-  }, [resumeActiveSession]);
+  }, [resumeActiveSession, forceResume]);
 
   // Cross-tab plumbing (P0-4): a pack picked from Content tab gets handed to
   // Create Test as `initialSourceUid`. The custom-session callback is
@@ -766,9 +821,21 @@ export function QBankStudio({
 
   // "Save & exit": persist the in-progress session, then leave the quiz view
   // WITHOUT clearing it, so a refresh or the Resume flow picks it back up.
+  // The session appears in the Tracker's "In progress" panel (via
+  // sessions.getActive()). It is NOT also saved as a SavedSession here —
+  // that would create a duplicate in the tracker's "Recent sessions" list.
+  // It gets archived to a SavedSession only when another session later
+  // displaces it (see archiveDisplacedActive).
   const saveAndExit = () => {
     const s = sessionRef.current;
-    if (s && !s.isReview && !s.completedAt) sessions.saveActive(s);
+    if (s && !s.isReview && !s.completedAt) {
+      sessions.saveActive(s);
+      // Suppress the auto-pop resume dialog on the immediately-following
+      // /qbank navigation — the user just chose to leave, so prompting
+      // them to resume right away would be annoying. They can still resume
+      // from the dashboard card or the tracker's "In progress" panel.
+      markSessionDismissed(s.sessionId);
+    }
     keepProgressOnExitRef.current = true;
     setMode("home");
     setSession(null);

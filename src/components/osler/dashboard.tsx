@@ -19,8 +19,6 @@ import {
   Flame,
   PlayCircle,
   RotateCcw,
-  Trash2,
-  X,
 } from "lucide-react";
 import {
   loadCategoryTree,
@@ -29,9 +27,8 @@ import {
   getEngineMeta,
 } from "@/lib/osler/content";
 import { enabledEngines } from "@/lib/osler/config";
-import type { AnyContent, ContentTreeNode, EngineType } from "@/lib/osler/types";
-import { storage, sessions } from "@/lib/osler/storage";
-import { haptic } from "@/lib/osler/native";
+import type { AnyContent, ContentTreeNode } from "@/lib/osler/types";
+import { storage } from "@/lib/osler/storage";
 import { listAllArticles, loadArticleContent } from "@/lib/osler/articles";
 import { listAllVideos } from "@/lib/osler/videos";
 import type { Article } from "@/lib/osler/articles";
@@ -47,20 +44,14 @@ import {
 } from "./ui-primitives";
 import { toast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
 
 import { StreakCard } from "./streak-card";
 import { useOslerRouter } from "@/lib/osler/navigation";
 import { useOslerSession } from "@/lib/osler/session-context";
+import {
+  useActiveSession,
+  ResumeSessionDialog,
+} from "./resume-session-dialog";
 
 interface DashboardProps {
   username?: string;
@@ -133,72 +124,12 @@ export function Dashboard({
     };
   }, []);
 
-  // Active (in-progress) session from IDB — shown as a popup, not auto-resumed
-  const [activeSession, setActiveSession] = React.useState<{
-    itemTitle: string;
-    engine: EngineType;
-    current: number;
-    total: number;
-    startedAt: number;
-    mode: string;
-  } | null>(null);
+  // Active (in-progress) QBank session — drives the "Continue learning"
+  // hero card. When the card is clicked, it opens the shared
+  // ResumeSessionDialog (same modal used on every other page via the
+  // AppShell auto-pop). The dashboard itself does NOT auto-pop the modal.
+  const activeSession = useActiveSession();
   const [resumeDialogOpen, setResumeDialogOpen] = React.useState(false);
-  // Once the user has dismissed the resume dialog (keeping the session), don't
-  // re-pop it on unrelated storage events from other tabs / auto-saves — a
-  // single dismissal is honored for this dashboard mount.
-  const dismissedResumeRef = React.useRef(false);
-
-  React.useEffect(() => {
-    const check = () => {
-      const raw = sessions.getActive() as {
-        itemTitle?: string;
-        engine?: EngineType;
-        current?: number;
-        questions?: Array<unknown>;
-        startedAt?: number;
-        completedAt?: number;
-        isReview?: boolean;
-        mode?: string;
-      } | null;
-      if (
-        raw &&
-        !raw.completedAt &&
-        !raw.isReview &&
-        Array.isArray(raw.questions) &&
-        raw.questions.length > 0 &&
-        raw.itemTitle &&
-        raw.engine &&
-        typeof raw.current === "number" &&
-        Date.now() - (raw.startedAt ?? 0) < 7 * 24 * 60 * 60 * 1000
-      ) {
-        setActiveSession({
-          itemTitle: raw.itemTitle,
-          engine: raw.engine,
-          current: raw.current,
-          total: raw.questions.length,
-          startedAt: raw.startedAt ?? 0,
-          mode: raw.mode ?? "tutor",
-        });
-        if (!dismissedResumeRef.current) setResumeDialogOpen(true);
-      } else {
-        setActiveSession(null);
-        setResumeDialogOpen(false);
-        dismissedResumeRef.current = false;
-      }
-    };
-    check();
-    const unsub = sessions.subscribe(check);
-    const unsubH = storage.onHydrated(check);
-    return () => { unsub(); unsubH(); };
-  }, []);
-
-  const dismissResume = React.useCallback(() => {
-    haptic("warning");
-    sessions.clearActive();
-    setActiveSession(null);
-    setResumeDialogOpen(false);
-    dismissedResumeRef.current = false;
-  }, []);
 
   const recentPacks = React.useMemo(() => {
     if (!leaves) return [];
@@ -302,73 +233,83 @@ export function Dashboard({
           />
         </motion.div>
 
-        {/* Resume session dialog */}
-        <AlertDialog
+        {/* Resume session dialog — controlled by the "Continue learning"
+            card below. The dashboard does NOT auto-pop this modal (the
+            AppShell handles auto-pop on every other page). */}
+        <ResumeSessionDialog
           open={resumeDialogOpen}
-          onOpenChange={(open) => {
-            if (!open) dismissedResumeRef.current = true;
-            setResumeDialogOpen(open);
-          }}
-        >
-          <AlertDialogContent>
-            <AlertDialogHeader>
-              <AlertDialogTitle className="flex items-center gap-2">
-                <RotateCcw className="size-5 text-primary" />
-                {t("dash.resumeSession")}
-              </AlertDialogTitle>
-              <AlertDialogDescription>
-                {activeSession ? (
-                  <div className="space-y-3 mt-2">
-                    <p className="text-sm text-foreground font-medium">{activeSession.itemTitle}</p>
-                    <div className="flex items-center gap-3 text-xs text-muted-foreground flex-wrap">
-                      <span>{t("dash.sessionProgress", { n: activeSession.current + 1, total: activeSession.total })}</span>
-                      <span>·</span>
-                      <span className="capitalize">{activeSession.mode}</span>
-                      <span>·</span>
-                      <span className="flex items-center gap-1">
-                        <Clock className="size-3" />
-                        {timeAgo(activeSession.startedAt)}
-                      </span>
-                    </div>
-                    <p className="text-xs text-muted-foreground mt-1">
-                      {t("dash.resumePrompt")}
-                    </p>
-                  </div>
-                ) : null}
-              </AlertDialogDescription>
-            </AlertDialogHeader>
-            <AlertDialogFooter className="flex-col-reverse sm:flex-row sm:items-center sm:justify-between">
-              <Button
-                variant="ghost"
-                size="sm"
-                className="text-destructive hover:text-destructive self-start sm:self-auto"
-                onClick={dismissResume}
-              >
-                <Trash2 className="size-3.5 ms-1.5" />
-                {t("dash.discardSession")}
-              </Button>
-              <div className="flex flex-col-reverse sm:flex-row gap-2">
-                <AlertDialogCancel className="text-muted-foreground">
-                  {t("common.dismiss")}
-                </AlertDialogCancel>
-                <AlertDialogAction asChild>
-                  <Button
-                    onClick={() => {
-                      setResumeDialogOpen(false);
-                      navigate("qbank", { resume: true });
-                    }}
-                  >
-                    <RotateCcw className="size-3.5 ms-1.5" />
-                    {t("common.resume")}
-                  </Button>
-                </AlertDialogAction>
-              </div>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
+          onOpenChange={setResumeDialogOpen}
+        />
 
-        {/* Continue card */}
-        {continuePack ? (
+        {/* Continue card — shows the active in-progress QBank session when
+            one exists. Clicking the card opens the resume dialog (same modal
+            used everywhere else) so the user can resume, dismiss, or discard.
+            Falls back to the most-recently-studied pack when there's no
+            active session, so the hero card is never empty. */}
+        {activeSession ? (
+          <motion.button
+            type="button"
+            initial={{ opacity: 0, y: 6 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.3, delay: 0.05 }}
+            onClick={() => setResumeDialogOpen(true)}
+            className="osler-surface-hero mb-6 p-5 md:p-6 text-start w-full hover:shadow-e2 transition-shadow"
+          >
+            <div className="flex items-start justify-between gap-4 flex-wrap">
+              <div className="flex-1 min-w-0">
+                <span className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium flex items-center gap-1.5">
+                  <Activity className="size-3" />
+                  {t("dash.continueLearning")}
+                </span>
+                <h2 className="text-lg md:text-xl font-semibold mt-1 mb-1">
+                  {activeSession.itemTitle}
+                </h2>
+                <div className="flex items-center gap-3 text-xs flex-wrap">
+                  <span className="text-muted-foreground">
+                    {t("dash.sessionProgress", {
+                      n: activeSession.current + 1,
+                      total: activeSession.total,
+                    })}
+                  </span>
+                  <span className="text-muted-foreground">·</span>
+                  <span className="capitalize text-muted-foreground">
+                    {activeSession.mode}
+                  </span>
+                  <span className="text-muted-foreground">·</span>
+                  <span className="flex items-center gap-1 text-muted-foreground">
+                    <Clock className="size-3" />
+                    {timeAgo(activeSession.startedAt)}
+                  </span>
+                </div>
+                {/* Progress bar */}
+                <div className="mt-3 flex items-center gap-3">
+                  <div className="flex-1 h-1.5 rounded-full bg-muted/60 overflow-hidden">
+                    <div
+                      className="h-full rounded-full bg-primary transition-all duration-300"
+                      style={{
+                        width: `${activeSession.total > 0 ? Math.round(((activeSession.current + 1) / activeSession.total) * 100) : 0}%`,
+                      }}
+                    />
+                  </div>
+                  <span className="text-[11px] text-muted-foreground tabular-nums whitespace-nowrap">
+                    {activeSession.total > 0
+                      ? Math.round(((activeSession.current + 1) / activeSession.total) * 100)
+                      : 0}
+                    %
+                  </span>
+                </div>
+              </div>
+              <Button
+                size="lg"
+                className="shrink-0 pointer-events-none"
+                tabIndex={-1}
+              >
+                <RotateCcw className={cn("size-4", rtl && "rtl-flip-x")} />
+                {t("common.resume")}
+              </Button>
+            </div>
+          </motion.button>
+        ) : continuePack ? (
           <motion.div
             initial={{ opacity: 0, y: 6 }}
             animate={{ opacity: 1, y: 0 }}

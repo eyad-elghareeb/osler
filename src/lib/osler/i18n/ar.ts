@@ -180,6 +180,7 @@ export const ar = {
 
     "dash.resumeSession": "استئناف الجلسة",
     "dash.sessionProgress": "السؤال {n} من {total}",
+    "dash.resumePrompt": "لديك جلسة غير مكتملة. هل تريد استئنافها أم تجاهلها؟",
     "dash.discardSession": "تجاهل الاختبار",
 
     "dash.streak.title": "أيام متتالية",
