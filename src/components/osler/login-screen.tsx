@@ -50,7 +50,7 @@ declare global {
 interface LoginScreenProps {
   onLogin: (username: string) => void;
   /** When set, show the corresponding error banner (e.g. Google OAuth failure). */
-  cloudAuthError?: "google";
+  cloudAuthError?: "google" | "email_claimed";
 }
 
 export function LoginScreen({ onLogin, cloudAuthError }: LoginScreenProps) {
@@ -101,6 +101,9 @@ export function LoginScreen({ onLogin, cloudAuthError }: LoginScreenProps) {
     // login page, which read it from searchParams) or a stray URL param.
     if (cloudAuthError === "google" || params.get("cloudAuthError") === "google") {
       setCloudError(t("login.googleError"));
+    }
+    if (cloudAuthError === "email_claimed" || params.get("cloudAuthError") === "email_claimed") {
+      setCloudError(t("login.googleEmailClaimed"));
     }
     // If a stored cloud session died (revoked / expired beyond the refresh
     // grace), tell the user why they're back on the login screen instead of

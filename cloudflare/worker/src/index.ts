@@ -668,19 +668,41 @@ async function availableGoogleUsername(env: Env, email: string): Promise<string>
   return `google-${id().slice(0, 8)}`;
 }
 
-async function googleUser(env: Env, claims: any): Promise<UserRow> {
+async function googleUser(env: Env, claims: any): Promise<UserRow | null> {
   const existingIdentity = await env.DB.prepare("SELECT u.* FROM auth_identities i JOIN users u ON u.id = i.user_id WHERE i.provider = 'google' AND i.provider_subject = ?").bind(claims.sub).first<UserRow>();
   if (existingIdentity) return existingIdentity;
   let user = await env.DB.prepare("SELECT * FROM users WHERE email = ? COLLATE NOCASE").bind(claims.email.toLowerCase()).first<UserRow>();
-  if (!user) {
+  if (user) {
+    // Account-jacking guard: a Google identity may only be linked onto an
+    // existing account when that account is provably owned by the email's
+    // controller — either the email was verified (the owner clicked a link
+    // sent to it) or the account has no password (it was itself created by
+    // an earlier Google sign-in). Otherwise an attacker could pre-register
+    // a victim's email (registration never proves ownership) and then absorb
+    // the victim's Google login into the attacker's account. Return null so
+    // the caller fails the sign-in instead of linking.
+    const isPasswordAccount = Number(user.has_password ?? 1) === 1;
+    if (isPasswordAccount && !user.email_verified_at) return null;
+  } else {
     const generatedPassword = await passwordHash(`${id()}${id()}`);
     const userId = id();
-    await env.DB.prepare("INSERT INTO users (id, username, email, display_name, password_hash, password_salt, has_password, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?)")
-      .bind(userId, await availableGoogleUsername(env, claims.email), claims.email.toLowerCase(), String(claims.name || claims.email.split("@")[0]).slice(0, 80), generatedPassword.hash, generatedPassword.salt, now(), now()).run();
+    try {
+      await env.DB.prepare("INSERT INTO users (id, username, email, display_name, password_hash, password_salt, has_password, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?)")
+        .bind(userId, await availableGoogleUsername(env, claims.email), claims.email.toLowerCase(), String(claims.name || claims.email.split("@")[0]).slice(0, 80), generatedPassword.hash, generatedPassword.salt, now(), now()).run();
+    } catch {
+      // Lost the race: an account now exists for this email (email is UNIQUE).
+      // Fail closed rather than link onto it or half-create a user.
+      return null;
+    }
     user = (await env.DB.prepare("SELECT * FROM users WHERE id = ?").bind(userId).first<UserRow>())!;
   }
-  await env.DB.prepare("INSERT INTO auth_identities (provider, provider_subject, user_id, provider_email, created_at) VALUES ('google', ?, ?, ?, ?)")
-    .bind(claims.sub, user.id, claims.email.toLowerCase(), now()).run();
+  try {
+    await env.DB.prepare("INSERT INTO auth_identities (provider, provider_subject, user_id, provider_email, created_at) VALUES ('google', ?, ?, ?, ?)")
+      .bind(claims.sub, user.id, claims.email.toLowerCase(), now()).run();
+  } catch {
+    // Concurrent Google callbacks for the same sub — the identity row already
+    // exists and the account is already linked; proceed.
+  }
   return user;
 }
 
@@ -2845,6 +2867,7 @@ export default {
         const tokenResponse: any = await response.json();
         const claims = await verifyGoogleIdToken(tokenResponse.id_token, env, authState.nonce);
         const user = await googleUser(env, claims);
+        if (!user) return Response.redirect(`${authState.return_to.replace(/\/$/, "")}/?cloudAuthError=email_claimed`, 302);
         const ticket = await createAuthHandoff(env, user.id);
         return Response.redirect(`${authState.return_to.replace(/\/$/, "")}/?cloudAuth=${encodeURIComponent(ticket)}`, 302);
       }
@@ -3053,7 +3076,11 @@ export default {
         const displayName = typeof body.displayName === "string" ? body.displayName.trim().slice(0, 80) : session.user.display_name;
         const email = body.email === null || body.email === "" ? null : typeof body.email === "string" ? body.email.trim().toLowerCase() : session.user.email;
         if (!displayName || !validEmail(email)) return json({ error: "Invalid account details" }, 400, origin, log);
-        try { await env.DB.prepare("UPDATE users SET display_name = ?, email = ?, updated_at = ? WHERE id = ?").bind(displayName, email, now(), session.user.id).run(); } catch { return json({ error: "That email is already in use" }, 409, origin, log); }
+        // Changing the email must clear verification — a verification that was
+        // issued for the old address must not validate the new one (the new
+        // address could belong to someone else and become a Google-link anchor).
+        const emailChanged = email !== session.user.email;
+        try { await env.DB.prepare("UPDATE users SET display_name = ?, email = ?, email_verified_at = ?, updated_at = ? WHERE id = ?").bind(displayName, email, emailChanged ? null : session.user.email_verified_at ?? null, now(), session.user.id).run(); } catch { return json({ error: "That email is already in use" }, 409, origin, log); }
         return json(await accountPayload(env, await env.DB.prepare("SELECT * FROM users WHERE id = ?").bind(session.user.id).first<any>()), 200, origin, log);
       }
       if (request.method === "POST" && url.pathname === "/v1/account/password") {

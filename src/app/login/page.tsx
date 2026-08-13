@@ -60,7 +60,7 @@ function LoginContent() {
   return (
     <LoginScreen
       onLogin={handleLogin}
-      cloudAuthError={cloudAuthError === "google" ? "google" : undefined}
+      cloudAuthError={cloudAuthError === "google" || cloudAuthError === "email_claimed" ? cloudAuthError : undefined}
     />
   );
 }
