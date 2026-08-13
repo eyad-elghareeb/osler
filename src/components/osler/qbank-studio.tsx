@@ -354,6 +354,7 @@ export function QBankStudio({
   const [homeTab, setHomeTab] = React.useState<HomeTab>("content");
   const [startDialogOpen, setStartDialogOpen] = React.useState(false);
   const [startPromptUid, setStartPromptUid] = React.useState<string | null>(null);
+  const [launchOnlyMode, setLaunchOnlyMode] = React.useState<OnlyMode>("new");
   const [, force] = React.useReducer((x) => x + 1, 0);
   const pendingQuestionLimitRef = React.useRef(0);
   const { t } = useI18n();
@@ -694,11 +695,16 @@ export function QBankStudio({
     async (
       item: ContentTreeNode,
       content: AnyContent,
-      options: { maxQuestions?: number; order?: SessionOrder; mode?: SessionMode; timerMinutes?: number } = {},
+      options: { maxQuestions?: number; order?: SessionOrder; mode?: SessionMode; timerMinutes?: number; onlyMode?: OnlyMode } = {},
     ) => {
       let questions = contentToQuestions(content, item.uid, item.title, item);
       if (questions.length === 0) return;
       const sessionMode = options.mode ?? testMode;
+      // Apply progress filter (new/wrong/flagged/all) before picking questions.
+      if (options.onlyMode && options.onlyMode !== "all") {
+        const filtered = filterPoolByProgress(questions as PoolQuestion[], options.onlyMode);
+        if (filtered.length > 0) questions = filtered as typeof questions;
+      }
       if (options.maxQuestions && options.maxQuestions > 0 && options.maxQuestions < questions.length) {
         questions = pickQuestions(questions, options.maxQuestions, options.order ?? "sequential");
       }
@@ -806,6 +812,7 @@ export function QBankStudio({
       order: options.order,
       mode: options.mode,
       timerMinutes: options.timerMinutes,
+      onlyMode: options.onlyMode,
     });
   }, [activeContent, activeItem, startSession]);
 
@@ -816,6 +823,9 @@ export function QBankStudio({
       setPendingCreateTestSourceUid(activeItem.uid);
       setHomeTab("create");
       setStartDialogOpen(false);
+      // Reset startPromptUid so returning to Content tab and clicking the same
+      // pack again will correctly re-open the launch dialog.
+      setStartPromptUid(null);
       setMode("home");
       setImmersiveMode(false);
     }, "forward");
@@ -1277,6 +1287,8 @@ export function QBankStudio({
           content={activeContent}
           mode={testMode}
           onModeChange={setTestMode}
+          onlyMode={launchOnlyMode}
+          onOnlyModeChange={setLaunchOnlyMode}
           onStart={handleStartPrompt}
           onMoreOptions={activeContent.type === "bank" ? openBankMoreOptions : undefined}
           onClose={exitToHome}

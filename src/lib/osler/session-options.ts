@@ -8,4 +8,5 @@ export interface SessionStartOptions {
   questionCount: number;
   order: SessionOrder;
   timerMinutes?: number;
+  onlyMode?: import("./qbank-pool").OnlyMode;
 }
