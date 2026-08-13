@@ -511,7 +511,7 @@ export function QBankStudio({
   );
 
   const startCustomSession = React.useCallback(
-    (pool: PoolQuestion[], meta: { title: string; engine: EngineType; mode?: TestMode; dismissAfterCorrect?: boolean; tagsFilter?: string[]; onlyMode?: OnlyMode; isReview?: boolean; savedDrafts?: Record<string, WrittenDraft>; savedRubricState?: Record<string, boolean[]>; savedAnswers?: Record<number, number>; savedRevealed?: Record<number, boolean>; savedFlagged?: Record<number, boolean>; savedRatings?: Record<string, "easy" | "hard" | "unknown">; savedQuestionTimes?: Record<string, number>; savedCurrent?: number }) => {
+    (pool: PoolQuestion[], meta: { title: string; engine: EngineType; mode?: TestMode; dismissAfterCorrect?: boolean; tagsFilter?: string[]; onlyMode?: OnlyMode; isReview?: boolean; savedDrafts?: Record<string, WrittenDraft>; savedRubricState?: Record<string, boolean[]>; savedAnswers?: Record<number, number>; savedRevealed?: Record<number, boolean>; savedFlagged?: Record<number, boolean>; savedRatings?: Record<string, "easy" | "hard" | "unknown">; savedQuestionTimes?: Record<string, number> }) => {
       if (pool.length === 0) return;
       const sessionId = `custom-${Date.now()}`;
       const totalTime = pool.length * 60;
@@ -525,7 +525,7 @@ export function QBankStudio({
         answers: meta.savedAnswers ?? {},
         revealed: meta.savedRevealed ?? {},
         flagged: meta.savedFlagged ?? {},
-        current: meta.savedCurrent ?? 0,
+        current: 0,
         startedAt: Date.now(),
         examTimeRemaining: totalTime,
         timeEndsAt: (meta.mode ?? testMode) === "timed" ? Date.now() + totalTime * 1000 : undefined,
@@ -1088,7 +1088,6 @@ function HomeView({
       savedFlagged?: Record<number, boolean>;
       savedRatings?: Record<string, "easy" | "hard" | "unknown">;
       savedQuestionTimes?: Record<string, number>;
-      savedCurrent?: number;
     }
   ) => void;
 }) {
@@ -3023,7 +3022,6 @@ function TrackerTab({
       savedFlagged?: Record<number, boolean>;
       savedRatings?: Record<string, "easy" | "hard" | "unknown">;
       savedQuestionTimes?: Record<string, number>;
-      savedCurrent?: number;
     }
   ) => void;
 }) {
@@ -3445,7 +3443,6 @@ function TrackerTab({
           savedFlagged,
           savedRatings: s.ratings,
           savedQuestionTimes: s.questionTimes,
-          savedCurrent: s.current,
         });
       } finally {
         setBusy(null);
