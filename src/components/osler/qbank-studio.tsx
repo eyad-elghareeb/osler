@@ -4061,10 +4061,11 @@ function QuizView({
   const useSplitExplanation = quizSettingsState.explanationMode === "split";
 
   // Whether we're currently rendering in 2-page (split) mode.
-  // Split mode is only active when: explanationMode is "split" AND the user
-  // has submitted the answer AND we're in tutor mode (the only mode that
-  // reveals explanations inline).
-  const isSplitMode = useSplitExplanation && session.mode === "tutor";
+  // Split mode is active when: explanationMode is "split" AND the user has
+  // submitted the answer, in tutor mode OR when reviewing an old session
+  // (readonly — every question is already revealed, so the explanation is
+  // always available).
+  const isSplitMode = useSplitExplanation && (session.mode === "tutor" || readonly);
 
   // Block-level alignment for the ENTIRE content area (question + choices).
   // Applied to the outer content wrapper so the block positions relative to
@@ -4970,6 +4971,8 @@ function QuizView({
         <button
           onClick={onToggleQuizSettings}
           className={`size-7 rounded-lg flex items-center justify-center transition-colors shrink-0 ${
+            readonly ? "me-1.5 sm:me-2" : ""
+          } ${
             quizSettingsOpen
               ? "bg-primary-foreground/30 ring-1 ring-inset ring-primary-foreground/40"
               : "bg-primary-foreground/15 hover:bg-primary-foreground/25"
@@ -5135,8 +5138,8 @@ function QuizView({
             )}
           </AnimatePresence>
 
-          {/* Mobile tutor-mode tab switcher — shown only on phones in split mode after submit */}
-          {submitted && session.mode === "tutor" && useSplitExplanation && !readonly && (
+          {/* Mobile tab switcher — shown only on phones in split mode after submit */}
+          {submitted && isSplitMode && (
             <div className="md:hidden flex border-b border-border bg-muted/30">
               <button
                 onClick={() => setMobileTutorTab("question")}
@@ -5160,7 +5163,7 @@ function QuizView({
           <div
             ref={tabSwipeRef}
             className={`flex-1 min-h-0 medos-qbank-split ${
-              submitted && session.mode === "tutor" && useSplitExplanation
+              submitted && isSplitMode
                 ? isMobile ? "overflow-hidden" : "flex flex-row"
                 : "flex flex-col"
             }`}
@@ -5182,7 +5185,7 @@ function QuizView({
                       In continuous mode: full-width, single column. */}
                   <div
                     className={`medos-qbank-qcol ${(activeItem.lang ?? "en") === "ar" ? "osler-content-ar" : ""} ${
-                      submitted && session.mode === "tutor" && useSplitExplanation
+                      submitted && isSplitMode
                         ? mobileTabsActive ? "w-full flex-none" : "w-[55%] border-e border-border"
                         : "flex-1"
                     } flex flex-col min-h-0`}
@@ -5190,7 +5193,7 @@ function QuizView({
                     {mobileTabsActive && mobileTutorTab === "answer" ? (
                       <div className="flex-1 min-h-0" />
                     ) : (
-                      <div className={`flex-1 min-h-0 flex flex-col px-4 sm:px-6 ${submitted && session.mode === "tutor" && useSplitExplanation ? "py-4" : "lg:px-8 py-6"} ${contentAlignClass}`}>
+                      <div className={`flex-1 min-h-0 flex flex-col px-4 sm:px-6 ${submitted && isSplitMode ? "py-4" : "lg:px-8 py-6"} ${contentAlignClass}`}>
                         <VerticalSnapGallery
                           items={session.questions}
                           currentIndex={session.current}
@@ -5217,7 +5220,7 @@ function QuizView({
                       contains a VerticalSnapGallery so the user can swipe
                       vertically to see the next/prev question's explanation.
                       On desktop it's a plain scrollable 45%-wide column. */}
-                  {submitted && session.mode === "tutor" && useSplitExplanation && (
+                  {submitted && isSplitMode && (
                     <div
                       className={`medos-qbank-acol ${
                         mobileTabsActive ? "w-full flex-none" : "w-[45%]"
@@ -5240,7 +5243,7 @@ function QuizView({
                             renderItem={(_item, idx) => {
                               const eq = session.questions[idx];
                               if (!eq) return null;
-                              const eqSubmitted = session.revealed[idx] || false;
+                              const eqSubmitted = readonly || session.revealed[idx] || false;
                               const eqSelected = session.answers[idx];
                               const eqIsMCQ = eq.correct >= 0;
                               const eqIsWritten = !eqIsMCQ && (!!eq.rubric?.length || !!eq.modelAnswer);
@@ -5480,7 +5483,7 @@ function QuizView({
                   </SheetTrigger>
                   <SheetContent
                     side="bottom"
-                    className="px-0 pt-0 pb-[max(env(safe-area-inset-bottom,0px),0.75rem)] rounded-t-2xl"
+                    className="px-0 pt-0 pb-[max(env(safe-area-inset-bottom,0px),0.75rem)] rounded-t-2xl data-[state=open]:duration-200 data-[state=closed]:duration-150"
                   >
                     <SheetHeader className="flex-row items-center justify-between gap-2 px-4 pt-4 pb-1">
                       <SheetTitle className="flex items-center gap-2 text-sm font-semibold">
