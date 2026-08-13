@@ -229,7 +229,7 @@ export const en = {
     "qbank.launch.tutorDesc": "See feedback and explanations as you learn.",
     "qbank.launch.exam": "Exam mode",
     "qbank.launch.examDesc": "Work under time pressure with answers hidden.",
-    "qbank.launch.timedHint": "Timed sessions use one minute per question.",
+    "qbank.launch.timedHint": "Set the total time limit for this session.",
     "qbank.launch.sessionSize": "Session size",
     "qbank.launch.splitSessions": "Split sessions",
     "qbank.launch.splitSessionsDesc": "Break a larger bank into focused sessions.",
@@ -244,7 +244,8 @@ export const en = {
     "qbank.launch.moreOptions": "More options",
     "qbank.launch.start": "Start quiz",
     "qbank.launch.startSession": "Start session",
-    "qbank.launch.timerMinutes": "Timer minutes",
+    "qbank.launch.timerMinutes": "Time limit",
+    "qbank.launch.minutes": "min",
 
     "qbank.session.question": "Question {n} of {total}",
     "qbank.session.exit": "Exit",

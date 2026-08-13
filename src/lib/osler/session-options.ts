@@ -7,4 +7,5 @@ export interface SessionStartOptions {
   strategy: SessionStrategy;
   questionCount: number;
   order: SessionOrder;
+  timerMinutes?: number;
 }

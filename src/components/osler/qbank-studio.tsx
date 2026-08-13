@@ -6,6 +6,7 @@ import {
   ChevronLeft,
   ChevronRight,
   ChevronDown,
+  Minus,
   ClipboardCheck,
   Flag,
   Check,
@@ -633,10 +634,10 @@ export function QBankStudio({
   );
 
   const startCustomSession = React.useCallback(
-    async (pool: PoolQuestion[], meta: { title: string; engine: EngineType; mode?: TestMode; dismissAfterCorrect?: boolean; tagsFilter?: string[]; onlyMode?: OnlyMode; isReview?: boolean; savedDrafts?: Record<string, WrittenDraft>; savedRubricState?: Record<string, boolean[]>; savedAnswers?: Record<number, number>; savedRevealed?: Record<number, boolean>; savedFlagged?: Record<number, boolean>; savedRatings?: Record<string, "easy" | "hard" | "unknown">; savedQuestionTimes?: Record<string, number> }) => {
+    async (pool: PoolQuestion[], meta: { title: string; engine: EngineType; mode?: TestMode; timerMinutes?: number; dismissAfterCorrect?: boolean; tagsFilter?: string[]; onlyMode?: OnlyMode; isReview?: boolean; savedDrafts?: Record<string, WrittenDraft>; savedRubricState?: Record<string, boolean[]>; savedAnswers?: Record<number, number>; savedRevealed?: Record<number, boolean>; savedFlagged?: Record<number, boolean>; savedRatings?: Record<string, "easy" | "hard" | "unknown">; savedQuestionTimes?: Record<string, number> }) => {
       if (pool.length === 0) return;
       const sessionId = `custom-${Date.now()}`;
-      const totalTime = pool.length * 60;
+      const totalTime = (meta.timerMinutes ?? pool.length) * 60;
       await archiveDisplacedActive();
       setImmersiveMode(true);
       setSession({
@@ -693,7 +694,7 @@ export function QBankStudio({
     async (
       item: ContentTreeNode,
       content: AnyContent,
-      options: { maxQuestions?: number; order?: SessionOrder; mode?: SessionMode } = {},
+      options: { maxQuestions?: number; order?: SessionOrder; mode?: SessionMode; timerMinutes?: number } = {},
     ) => {
       let questions = contentToQuestions(content, item.uid, item.title, item);
       if (questions.length === 0) return;
@@ -701,7 +702,7 @@ export function QBankStudio({
       if (options.maxQuestions && options.maxQuestions > 0 && options.maxQuestions < questions.length) {
         questions = pickQuestions(questions, options.maxQuestions, options.order ?? "sequential");
       }
-      const totalTime = questions.length * 60;
+      const totalTime = (options.timerMinutes ?? questions.length) * 60;
       const sessionId = `${item.uid}-${Date.now()}`;
 
       // Resume-aware: if an unfinished active session exists for the SAME
@@ -804,6 +805,7 @@ export function QBankStudio({
       maxQuestions: options.questionCount,
       order: options.order,
       mode: options.mode,
+      timerMinutes: options.timerMinutes,
     });
   }, [activeContent, activeItem, startSession]);
 
@@ -1322,6 +1324,7 @@ function HomeView({
       title: string;
       engine: EngineType;
       mode?: TestMode;
+      timerMinutes?: number;
       dismissAfterCorrect?: boolean;
       tagsFilter?: string[];
       onlyMode?: OnlyMode;
@@ -2452,6 +2455,7 @@ function CreateTestTab({
       title: string;
       engine: EngineType;
       mode?: TestMode;
+      timerMinutes?: number;
       tagsFilter?: string[];
       onlyMode?: OnlyMode;
       savedDrafts?: Record<string, WrittenDraft>;
@@ -2471,6 +2475,8 @@ function CreateTestTab({
   const [order, setOrder] = React.useState<OrderMode>("sequential");
   // Stepper value (P4-1).
   const [countInput, setCountInput] = React.useState("20");
+  const [timerMinutes, setTimerMinutes] = React.useState("20");
+  const timerEditedRef = React.useRef(false);
   // Tree search (mirrors the Content tab pattern).
   const [search, setSearch] = React.useState("");
   // Folder navigation for source picker (flashcard-style deck browser).
@@ -2605,6 +2611,9 @@ function CreateTestTab({
 
   const totalAvailable = filteredPool.length;
   const desiredCount = Math.max(1, Math.min(parseInt(countInput) || 1, Math.max(1, totalAvailable)));
+  React.useEffect(() => {
+    if (!timerEditedRef.current) setTimerMinutes(String(desiredCount));
+  }, [desiredCount]);
   // Clamp the stepper value if it overshoots the new pool size.
   React.useEffect(() => {
     const parsed = parseInt(countInput) || 0;
@@ -2668,6 +2677,9 @@ function CreateTestTab({
       title,
       engine,
       mode: testMode,
+      timerMinutes: testMode === "timed"
+        ? Math.max(1, Math.min(720, parseInt(timerMinutes, 10) || desiredCount))
+        : undefined,
       tagsFilter: selectedTags,
       onlyMode,
     });
@@ -2686,17 +2698,17 @@ function CreateTestTab({
         {/* Test Mode */}
         <div className="qbank-card">
           <SectionHeader number={1} title={t("qbank.home.testMode")} subtitle={t("qbank.home.timed") + " / " + t("qbank.home.tutor")} />
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-4">
+          <div className="grid grid-cols-2 gap-2 mt-3">
             <ModeCard
               active={testMode === "timed"}
-              onClick={() => onTestModeChange("timed")}
+              onClick={() => { haptic("selection"); onTestModeChange("timed"); }}
               icon={TimerIcon}
               label={t("qbank.home.timed")}
               description={t("qbank.home.timedDesc")}
             />
             <ModeCard
               active={testMode === "tutor"}
-              onClick={() => onTestModeChange("tutor")}
+              onClick={() => { haptic("selection"); onTestModeChange("tutor"); }}
               icon={Sparkles}
               label={t("qbank.home.tutor")}
               description={t("qbank.home.tutorDesc")}
@@ -2936,21 +2948,22 @@ function CreateTestTab({
           <SectionHeader number={4} title={t("qbank.create.onlyMode")} subtitle={t("qbank.tracker.wrongAndFlagged")} />
           <div className="mt-4 flex flex-wrap gap-2">
             {([
-              { id: "all" as const, label: t("qbank.create.onlyAll") },
-              { id: "new" as const, label: t("qbank.create.onlyNew") },
-              { id: "wrong" as const, label: t("qbank.create.onlyWrong") },
-              { id: "flagged" as const, label: t("qbank.create.onlyFlagged") },
+              { id: "all" as const, label: t("qbank.create.onlyAll"), icon: Layers },
+              { id: "new" as const, label: t("qbank.create.onlyNew"), icon: Sparkles },
+              { id: "wrong" as const, label: t("qbank.create.onlyWrong"), icon: RotateCcw },
+              { id: "flagged" as const, label: t("qbank.create.onlyFlagged"), icon: Flag },
             ]).map((opt) => (
               <button
                 key={opt.id}
-                onClick={() => setOnlyMode(opt.id)}
+                onClick={() => { haptic("selection"); setOnlyMode(opt.id); }}
                 className={cn(
-                  "px-4 py-2 rounded-xl text-sm font-medium border-2 transition-all",
+                  "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border transition-all",
                   onlyMode === opt.id
                     ? "border-primary bg-primary/10 text-primary"
                     : "border-border bg-card text-foreground hover:border-primary/40",
                 )}
               >
+                <opt.icon className="size-3.5" />
                 {opt.label}
               </button>
             ))}
@@ -2960,16 +2973,21 @@ function CreateTestTab({
         {/* Count + order (P4-1) */}
         <div className="qbank-card">
           <SectionHeader number={5} title={t("qbank.create.countStepper")} subtitle={t("qbank.home.questionOrder")} />
-          <div className="mt-4 flex flex-wrap items-center gap-3">
+          <div className="mt-3 flex flex-wrap items-center gap-3">
             {/* Stepper */}
             <div className="flex items-center gap-1">
               <button
-                onClick={() => setCountInput(String(Math.max(1, desiredCount - 1)))}
+                onClick={() => {
+                  haptic("light");
+                  const nextCount = Math.max(1, desiredCount - 5);
+                  setCountInput(String(nextCount));
+                  if (!timerEditedRef.current) setTimerMinutes(String(nextCount));
+                }}
                 disabled={desiredCount <= 1}
                 className="size-9 rounded-xl border border-border bg-card hover:bg-muted/60 flex items-center justify-center disabled:opacity-40 disabled:cursor-not-allowed"
                 aria-label={t("qbank.home.decrementCount")}
               >
-                <ChevronDown className="size-4 rotate-90" />
+                <Minus className="size-3.5" />
               </button>
               <input
                 type="number"
@@ -2979,17 +2997,26 @@ function CreateTestTab({
                 onChange={(e) => {
                   const v = parseInt(e.target.value);
                   if (isNaN(v)) setCountInput("");
-                  else setCountInput(String(Math.max(1, Math.min(v, totalAvailable || 1))));
+                  else {
+                    const nextCount = Math.max(1, Math.min(v, totalAvailable || 1));
+                    setCountInput(String(nextCount));
+                    if (!timerEditedRef.current) setTimerMinutes(String(nextCount));
+                  }
                 }}
                 className="w-20 h-9 rounded-xl border border-border bg-card text-sm text-center font-medium tabular-nums focus:outline-none focus:ring-2 focus:ring-primary/30 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
               />
               <button
-                onClick={() => setCountInput(String(Math.min(totalAvailable || 1, desiredCount + 1)))}
+                onClick={() => {
+                  haptic("light");
+                  const nextCount = Math.min(totalAvailable || 1, desiredCount + 5);
+                  setCountInput(String(nextCount));
+                  if (!timerEditedRef.current) setTimerMinutes(String(nextCount));
+                }}
                 disabled={desiredCount >= totalAvailable || totalAvailable === 0}
                 className="size-9 rounded-xl border border-border bg-card hover:bg-muted/60 flex items-center justify-center disabled:opacity-40 disabled:cursor-not-allowed"
                 aria-label={t("qbank.home.incrementCount")}
               >
-                <ChevronRight className="size-4" />
+                <Plus className="size-3.5" />
               </button>
             </div>
             <span className="text-xs text-muted-foreground">
@@ -3001,7 +3028,7 @@ function CreateTestTab({
               <span className="text-xs text-muted-foreground">{t("qbank.home.questionOrder")}:</span>
               <div className="flex rounded-xl border border-border bg-card overflow-hidden">
                 <button
-                  onClick={() => setOrder("sequential")}
+                  onClick={() => { haptic("selection"); setOrder("sequential"); }}
                   className={cn(
                     "px-3 py-1.5 text-xs font-medium transition-colors",
                     order === "sequential" ? "bg-primary/10 text-primary" : "text-muted-foreground hover:text-foreground",
@@ -3010,7 +3037,7 @@ function CreateTestTab({
                   {t("qbank.home.defaultOrder")}
                 </button>
                 <button
-                  onClick={() => setOrder("random")}
+                  onClick={() => { haptic("selection"); setOrder("random"); }}
                   className={cn(
                     "px-3 py-1.5 text-xs font-medium transition-colors",
                     order === "random" ? "bg-primary/10 text-primary" : "text-muted-foreground hover:text-foreground",
@@ -3020,6 +3047,28 @@ function CreateTestTab({
                 </button>
               </div>
             </div>
+
+            {testMode === "timed" && (
+              <div className="flex basis-full items-center gap-2 border-t border-border pt-3">
+                <Clock className="size-3.5 shrink-0 text-primary" />
+                <label htmlFor="create-timer-minutes" className="text-xs font-medium text-foreground">
+                  {t("qbank.launch.timerMinutes")}
+                </label>
+                <input
+                  id="create-timer-minutes"
+                  type="number"
+                  min={1}
+                  max={720}
+                  value={timerMinutes}
+                  onChange={(event) => {
+                    timerEditedRef.current = true;
+                    setTimerMinutes(String(Math.max(1, Math.min(720, parseInt(event.target.value, 10) || 1))));
+                  }}
+                  className="ms-auto h-8 w-16 rounded-lg border border-border bg-card text-center text-sm font-semibold tabular-nums outline-none focus:ring-2 focus:ring-ring"
+                />
+                <span className="text-xs text-muted-foreground">{t("qbank.launch.minutes")}</span>
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -3038,6 +3087,12 @@ function CreateTestTab({
                 label={t("qbank.home.questionsLabel")}
                 value={totalAvailable > 0 ? String(desiredCount) : "—"}
               />
+              {testMode === "timed" && (
+                <SummaryRow
+                  label={t("qbank.launch.timerMinutes")}
+                  value={`${Math.max(1, Math.min(720, parseInt(timerMinutes, 10) || desiredCount))} ${t("qbank.launch.minutes")}`}
+                />
+              )}
               <SummaryRow
                 label={t("qbank.home.packs")}
                 value={String(selectedEntries.length)}

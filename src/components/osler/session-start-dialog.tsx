@@ -6,13 +6,12 @@ import {
   ArrowUpDown,
   BookOpen,
   ClipboardCheck,
+  Clock,
   Layers,
   Minus,
   Plus,
   Sparkles,
   Timer,
-  Flag,
-  Eye,
 } from "lucide-react";
 import {
   Dialog,
@@ -127,21 +126,29 @@ export function SessionStartDialog({
   const [countInput, setCountInput] = React.useState(
     String(isBank ? Math.min(20, totalQuestions) : totalQuestions),
   );
-  const [timerMinutes, setTimerMinutes] = React.useState(isBank ? 60 : 0);
+  const [timerMinutes, setTimerMinutes] = React.useState(Math.max(1, isBank ? Math.min(20, totalQuestions) : totalQuestions));
+  const timerEditedRef = React.useRef(false);
 
   React.useEffect(() => {
     if (!open) return;
     setOrder("sequential");
     setCountInput(String(isBank ? Math.min(20, totalQuestions) : totalQuestions));
-    setTimerMinutes(isBank ? 60 : 0);
+    timerEditedRef.current = false;
+    setTimerMinutes(Math.max(1, isBank ? Math.min(20, totalQuestions) : totalQuestions));
   }, [open, isBank, totalQuestions]);
 
   const maxCount = Math.max(1, totalQuestions);
   const sessionCount = Math.max(1, Math.min(parseInt(countInput, 10) || 1, maxCount));
   const selectedCount = isBank ? sessionCount : maxCount;
 
+  React.useEffect(() => {
+    if (open && !timerEditedRef.current) setTimerMinutes(selectedCount);
+  }, [open, selectedCount]);
+
   const adjustCount = (delta: number) => {
-    setCountInput(String(Math.max(1, Math.min(maxCount, sessionCount + delta))));
+    const nextCount = Math.max(1, Math.min(maxCount, sessionCount + delta));
+    setCountInput(String(nextCount));
+    if (!timerEditedRef.current) setTimerMinutes(nextCount);
   };
 
   const handleModeChange = (next: SessionMode) => {
@@ -151,27 +158,33 @@ export function SessionStartDialog({
 
   const handleStart = () => {
     haptic("light");
-    onStart({ mode, strategy, questionCount: selectedCount, order });
+    onStart({
+      mode,
+      strategy,
+      questionCount: selectedCount,
+      order,
+      timerMinutes: mode === "timed" ? Math.max(1, Math.min(720, timerMinutes || 1)) : undefined,
+    });
   };
 
   return (
     <Dialog open={open} onOpenChange={(nextOpen) => !nextOpen && onClose()}>
-      <DialogContent className="flex max-h-[min(760px,calc(100dvh-2rem))] flex-col overflow-hidden p-0 sm:max-w-2xl">
+      <DialogContent className="flex max-h-[min(720px,calc(100dvh-1.5rem))] flex-col overflow-hidden p-0 sm:max-w-2xl">
         <motion.div
           initial={{ opacity: 0, y: 8 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.2 }}
           className="flex min-h-0 flex-1 flex-col"
         >
-          <div className="min-h-0 flex-1 overflow-y-auto px-5 pb-4 pt-5 sm:px-6 sm:pt-6">
+          <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-3 pt-4 sm:px-5 sm:pt-5">
             <DialogHeader className="text-start">
-              <div className="mb-4 flex items-start gap-3">
-                <div className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+              <div className="mb-3 flex items-start gap-3">
+                <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
                   {isBank ? <BookOpen className="size-5" /> : <ClipboardCheck className="size-5" />}
                 </div>
                 <div className="min-w-0">
-                  <DialogTitle className="text-xl font-bold tracking-tight">{item.title}</DialogTitle>
-                  <DialogDescription className="mt-1 text-sm leading-relaxed">
+                  <DialogTitle className="text-lg font-bold tracking-tight sm:text-xl">{item.title}</DialogTitle>
+                  <DialogDescription className="mt-0.5 text-xs leading-relaxed sm:text-sm">
                     {description}
                   </DialogDescription>
                 </div>
@@ -179,7 +192,7 @@ export function SessionStartDialog({
             </DialogHeader>
 
             {isBank && (
-              <div className="grid grid-cols-2 gap-x-4 gap-y-3 border-y border-border py-3 sm:grid-cols-4">
+              <div className="grid grid-cols-2 gap-x-3 gap-y-2 border-y border-border py-2.5 sm:grid-cols-4">
                 <Stat label={t("qbank.launch.questions")} value={totalQuestions} />
                 <Stat label={t("qbank.launch.passages")} value={passageCount} />
                 <Stat label={t("qbank.launch.covered")} value={`${progress.covered}/${totalQuestions}`} />
@@ -188,7 +201,7 @@ export function SessionStartDialog({
             )}
 
             {isBank && totalQuestions > 0 && (
-              <div className="mt-3 rounded-xl border border-border bg-muted/20 p-3">
+              <div className="mt-2.5 rounded-xl border border-border bg-muted/20 p-2.5">
                 <div className="flex items-center justify-between gap-3 text-xs">
                   <span className="font-medium text-foreground">{t("qbank.launch.coverage")}</span>
                   <span className="tabular-nums text-muted-foreground">{progress.coverage}%</span>
@@ -197,8 +210,8 @@ export function SessionStartDialog({
               </div>
             )}
 
-            <div className="mt-6">
-              <div className="mb-3 flex items-center gap-2 text-sm font-semibold">
+            <div className="mt-4">
+              <div className="mb-2 flex items-center gap-2 text-sm font-semibold">
                 <Sparkles className="size-4 text-primary" />
                 {t("qbank.launch.modeTitle")}
               </div>
@@ -221,21 +234,24 @@ export function SessionStartDialog({
                 />
               </div>
               {mode === "timed" && (
-                <p className="mt-2 text-xs text-muted-foreground">{t("qbank.launch.timedHint")}</p>
-              )}
-              {isBank && (
-                <div className="mt-3 flex items-center gap-2">
-                  <Eye className="size-3.5 text-primary" />
-                  <span className="text-xs font-medium text-foreground">{t("qbank.launch.timerMinutes")}</span>
+                <div className="mt-2.5 flex items-center gap-2 rounded-lg border border-border bg-muted/20 px-2.5 py-2">
+                  <Clock className="size-3.5 shrink-0 text-primary" />
+                  <label htmlFor="session-timer-minutes" className="text-xs font-medium text-foreground">
+                    {t("qbank.launch.timerMinutes")}
+                  </label>
                   <input
+                    id="session-timer-minutes"
                     type="number"
                     min={1}
-                    max={120}
+                    max={720}
                     value={timerMinutes}
-                    onChange={(e) => setTimerMinutes(parseInt(e.target.value) || 60)}
-                    className="h-6 w-14 rounded-md border border-border bg-card text-center text-sm font-medium tabular-nums outline-none focus:ring-2 focus:ring-ring"
+                    onChange={(e) => {
+                      timerEditedRef.current = true;
+                      setTimerMinutes(Math.max(1, Math.min(720, parseInt(e.target.value, 10) || 1)));
+                    }}
+                    className="ms-auto h-7 w-16 rounded-md border border-border bg-card text-center text-sm font-semibold tabular-nums outline-none focus:ring-2 focus:ring-ring"
                   />
-                  <span className="text-xs text-muted-foreground">min</span>
+                  <span className="text-xs text-muted-foreground">{t("qbank.launch.minutes")}</span>
                 </div>
               )}
             </div>
@@ -246,16 +262,16 @@ export function SessionStartDialog({
                   <Layers className="size-4 text-primary" />
                   {t("qbank.launch.sessionSize")}
                 </div>
-                <div className="rounded-xl border border-primary/20 bg-primary/[0.03] p-2">
-                  <div className="flex items-center justify-between gap-2">
+              <div className="rounded-xl border border-primary/20 bg-primary/[0.03] p-2.5">
+                <div className="flex items-center justify-between gap-2">
                     <div className="min-w-0">
                       <div className="text-sm font-medium">{t("qbank.launch.splitSessions")}</div>
-                      <p className="mt-0.5 text-[10px] leading-relaxed text-muted-foreground">
+                      <p className="mt-0.5 text-[11px] leading-relaxed text-muted-foreground">
                         {t("qbank.launch.splitSessionsDesc")}
                       </p>
                     </div>
                     <div className="flex shrink-0 items-center gap-1">
-                      <Button type="button" variant="outline" size="iconSm" onClick={() => adjustCount(-5)} aria-label={t("qbank.launch.decreaseQuestions")}>
+                      <Button type="button" variant="outline" size="iconSm" onClick={() => { haptic("light"); adjustCount(-5); }} aria-label={t("qbank.launch.decreaseQuestions")}>
                         <Minus className="size-3" />
                       </Button>
                       <input
@@ -264,27 +280,47 @@ export function SessionStartDialog({
                         min={1}
                         max={maxCount}
                         value={countInput}
-                        onChange={(event) => setCountInput(event.target.value)}
+                        onChange={(event) => {
+                          const value = event.target.value;
+                          setCountInput(value);
+                          const nextCount = parseInt(value, 10);
+                          if (!timerEditedRef.current && Number.isFinite(nextCount)) {
+                            setTimerMinutes(Math.max(1, Math.min(maxCount, nextCount)));
+                          }
+                        }}
                         aria-describedby="session-question-count-hint"
                         className="h-7 w-14 rounded-md border border-border bg-card text-center text-sm font-semibold tabular-nums outline-none focus:ring-2 focus:ring-ring"
                       />
-                      <Button type="button" variant="outline" size="iconSm" onClick={() => adjustCount(5)} aria-label={t("qbank.launch.increaseQuestions")}>
+                      <Button type="button" variant="outline" size="iconSm" onClick={() => { haptic("light"); adjustCount(5); }} aria-label={t("qbank.launch.increaseQuestions")}>
                         <Plus className="size-3" />
                       </Button>
                     </div>
                   </div>
-                  <p id="session-question-count-hint" className="mt-1 text-[10px] text-muted-foreground">
-                    {t("qbank.launch.questionsPerSessionHint")}
-                  </p>
-                </div>
-              </div>
-            )}
-
-            {isBank && (
-              <div className="mt-3">
-                <div className="flex items-center gap-2">
-                  <ArrowUpDown className="size-4 text-primary" />
-                  {t("qbank.launch.order")}
+                  <div className="mt-2 flex flex-wrap items-center justify-between gap-2 border-t border-border/70 pt-2">
+                    <p id="session-question-count-hint" className="text-[11px] text-muted-foreground">
+                      {t("qbank.launch.questionsPerSessionHint")}
+                    </p>
+                    <div className="flex items-center gap-1.5">
+                      <ArrowUpDown className="size-3.5 text-primary" />
+                      <span className="text-xs font-medium text-foreground">{t("qbank.launch.order")}</span>
+                      <div className="flex overflow-hidden rounded-md border border-border bg-card">
+                        <button
+                          type="button"
+                          onClick={() => { haptic("selection"); setOrder("sequential"); }}
+                          className={cn("px-2 py-1 text-[11px] font-medium transition-colors", order === "sequential" ? "bg-primary/10 text-primary" : "text-muted-foreground hover:text-foreground")}
+                        >
+                          {t("qbank.launch.sequential")}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => { haptic("selection"); setOrder("random"); }}
+                          className={cn("border-s border-border px-2 py-1 text-[11px] font-medium transition-colors", order === "random" ? "bg-primary/10 text-primary" : "text-muted-foreground hover:text-foreground")}
+                        >
+                          {t("qbank.launch.random")}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
                 </div>
               </div>
             )}

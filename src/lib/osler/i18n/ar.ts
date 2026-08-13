@@ -230,7 +230,7 @@ export const ar = {
     "qbank.launch.tutorDesc": "شاهد الملاحظات والشروحات أثناء التعلم.",
     "qbank.launch.exam": "وضع الامتحان",
     "qbank.launch.examDesc": "اعمل تحت ضغط الوقت مع إخفاء الإجابات.",
-    "qbank.launch.timedHint": "تستخدم الجلسات الموقوتة دقيقة واحدة لكل سؤال.",
+    "qbank.launch.timedHint": "حدّد الحد الزمني الإجمالي لهذه الجلسة.",
     "qbank.launch.sessionSize": "حجم الجلسة",
     "qbank.launch.splitSessions": "جلسات مقسّمة",
     "qbank.launch.splitSessionsDesc": "قسّم البنك الكبير إلى جلسات مركزة.",
@@ -245,7 +245,8 @@ export const ar = {
     "qbank.launch.moreOptions": "خيارات أكثر",
     "qbank.launch.start": "بدء الاختبار",
     "qbank.launch.startSession": "بدء الجلسة",
-    "qbank.launch.timerMinutes": "دقائق المؤقت",
+    "qbank.launch.timerMinutes": "الحد الزمني",
+    "qbank.launch.minutes": "دقيقة",
 
     "qbank.session.question": "السؤال {n} من {total}",
     "qbank.session.exit": "خروج",
