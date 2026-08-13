@@ -1213,6 +1213,8 @@ export const en = {
     "native.biometric.unlock": "Unlock",
     "native.biometric.unlocking": "Unlocking…",
     "native.biometric.cancelled": "Biometric prompt cancelled",
+    "native.biometric.cloudError": "Cloud unlock failed. Please sign in with your password.",
+    "native.biometric.cloudSynced": "Tied to your Osler account",
     "native.biometric.enrollFailed": "Could not set up biometric: {error}",
     "native.biometric.disabling": "Removing biometric credential…",
     "native.network.title": "Network",

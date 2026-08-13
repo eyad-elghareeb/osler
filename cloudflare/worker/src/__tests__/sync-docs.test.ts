@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { mergeQbank, mergeFlashcards, mergeKind, SYNC_KINDS, gzipString, gunzipString, gunzipBytes } from "../sync-docs";
+import { mergeQbank, mergeFlashcards, mergeKind, SYNC_KINDS, gzipString, gunzipString, gunzipBytes, gunzipBytesBounded } from "../sync-docs";
 
 describe("mergeQbank", () => {
   it("adds new records from local", () => {
@@ -173,6 +173,20 @@ describe("gzip codec", () => {
     const compressed = await gzipString(text);
     const bytes = Uint8Array.from(atob(compressed), (c) => c.charCodeAt(0));
     expect(await gunzipBytes(bytes)).toBe(text);
+  });
+
+  it("gunzipBytesBounded returns content within the cap", async () => {
+    const text = "some large payload ".repeat(1000);
+    const compressed = await gzipString(text);
+    const bytes = Uint8Array.from(atob(compressed), (c) => c.charCodeAt(0));
+    expect(await gunzipBytesBounded(bytes, text.length)).toBe(text);
+  });
+
+  it("gunzipBytesBounded aborts when the cap is exceeded", async () => {
+    const text = "some large payload ".repeat(1000);
+    const compressed = await gzipString(text);
+    const bytes = Uint8Array.from(atob(compressed), (c) => c.charCodeAt(0));
+    await expect(gunzipBytesBounded(bytes, 100)).rejects.toThrow("Request body is too large");
   });
 
   it("compresses repetitive content well below raw size", async () => {

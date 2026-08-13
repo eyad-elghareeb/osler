@@ -26,7 +26,9 @@ export interface MergeResult {
   records: Record<string, any>;
   /** True when `records` actually differs from `remote` (skips no-op D1 writes). */
   changed: boolean;
-  /** JSON serialization of `records` (computed once, reused by callers). */
+  /** JSON serialization of `records`. Only computed when `changed` — the sync
+   *  PUT caller uses it solely to size/persist a rewritten document, so an
+   *  unchanged merge returns `""` to skip the large stringify entirely. */
   json: string;
 }
 
@@ -47,12 +49,27 @@ function itemTime(value: any, cfg: { field: string; fallback?: string }): number
 
 function mergeBy(remote: Record<string, any>, local: Record<string, any>, cfg: { field: string; fallback?: string }): MergeResult {
   const out: Record<string, any> = { ...remote };
+  let changed = false;
   for (const [key, value] of Object.entries(local || {})) {
     if (!value || typeof value !== "object") continue;
-    if (!out[key] || itemTime(value, cfg) >= itemTime(out[key], cfg)) out[key] = value;
+    const existing = out[key];
+    if (!existing) {
+      out[key] = value;
+      changed = true;
+    } else {
+      const tLocal = itemTime(value, cfg);
+      const tRemote = itemTime(existing, cfg);
+      // Strictly newer wins; equal timestamps resolve "last writer wins" only
+      // when the content actually differs (a no-op re-push must not burn a
+      // D1 write). This replicates the old `>=` + serialization-compare
+      // semantics without re-stringifying the whole document.
+      if (tLocal > tRemote || (tLocal === tRemote && JSON.stringify(value) !== JSON.stringify(existing))) {
+        out[key] = value;
+        changed = true;
+      }
+    }
   }
-  const json = JSON.stringify(out);
-  const changed = json !== JSON.stringify(remote);
+  const json = changed ? JSON.stringify(out) : "";
   return { records: out, changed, json };
 }
 
@@ -99,7 +116,7 @@ function mergeItemArrays(remote: Record<string, any>, local: Record<string, any>
       changed = true;
     }
   }
-  const json = JSON.stringify(out);
+  const json = changed ? JSON.stringify(out) : "";
   return { records: out, changed, json };
 }
 
@@ -107,9 +124,16 @@ function mergeItemArrays(remote: Record<string, any>, local: Record<string, any>
  *  bookmark removed on one device will be re-added by the union until removed
  *  on every device. Accepted trade-off for a plain localStorage set. */
 function mergeUnion(remote: Record<string, any>, local: Record<string, any>): MergeResult {
-  const out: Record<string, any> = { ...remote, ...(local || {}) };
-  const json = JSON.stringify(out);
-  return { records: out, changed: json !== JSON.stringify(remote), json };
+  const out: Record<string, any> = { ...remote };
+  let changed = false;
+  for (const [k, v] of Object.entries(local || {})) {
+    if (!(k in out) || JSON.stringify(out[k]) !== JSON.stringify(v)) {
+      out[k] = v;
+      changed = true;
+    }
+  }
+  const json = changed ? JSON.stringify(out) : "";
+  return { records: out, changed, json };
 }
 
 /** Deep dict merge for nested key-value data (e.g. writtenDrafts:
@@ -129,7 +153,7 @@ function mergeDictDeep(remote: Record<string, any>, local: Record<string, any>, 
       if (JSON.stringify(out[k]) !== JSON.stringify(v)) { out[k] = v; changed = true; }
     }
   }
-  const json = JSON.stringify(out);
+  const json = changed ? JSON.stringify(out) : "";
   return { records: out, changed, json };
 }
 
@@ -183,6 +207,31 @@ export async function gunzipBytes(bytes: Uint8Array): Promise<string> {
   const stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream("gzip"));
   const buf = await new Response(stream).arrayBuffer();
   return _decoder.decode(buf);
+}
+
+/** gunzip with a hard cap on the DECOMPRESSED size, enforced while streaming
+ *  so a gzip bomb is aborted at `maxBytes` instead of buffering unbounded
+ *  output into isolate memory. Used for untrusted request bodies. */
+export async function gunzipBytesBounded(bytes: Uint8Array, maxBytes: number): Promise<string> {
+  const reader = new Blob([bytes]).stream().pipeThrough(new DecompressionStream("gzip")).getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  const decoder = new TextDecoder();
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      total += value.byteLength;
+      if (total > maxBytes) throw new Error("Request body is too large");
+      chunks.push(value);
+    }
+  } finally {
+    await reader.cancel().catch(() => {});
+  }
+  let out = "";
+  for (const chunk of chunks) out += decoder.decode(chunk, { stream: true });
+  out += decoder.decode();
+  return out;
 }
 
 /** Decompress a base64 gzip blob back to its original string. */

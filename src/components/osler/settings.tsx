@@ -1789,6 +1789,7 @@ function NativeSettingsSection() {
   const [biometricPlatform, setBiometricPlatform] = React.useState(false);
   const [biometricEnrolled, setBiometricEnrolled] = React.useState(false);
   const [biometricEnabled, setBiometricEnabled] = React.useState(false);
+  const [biometricCloud, setBiometricCloud] = React.useState(false);
   const [biometricBusy, setBiometricBusy] = React.useState(false);
   const [biometricMsg, setBiometricMsg] = React.useState<string>("");
 
@@ -1804,6 +1805,7 @@ function NativeSettingsSection() {
       setBiometricPlatform(a.platformAuthenticator);
       setBiometricEnrolled(a.enrolled);
       setBiometricEnabled(a.enabled);
+      setBiometricCloud(a.cloudBacked);
     });
     return () => { cancelled = true; };
   }, []);
@@ -1831,29 +1833,41 @@ function NativeSettingsSection() {
   const handleEnrollBiometric = async () => {
     setBiometricBusy(true);
     setBiometricMsg("");
-    const username = (typeof window !== "undefined" && window.localStorage.getItem("osler-session")) || "User";
-    const result = await enrollBiometric(username);
+    // When signed into a cloud account, enrollment is server-backed: the
+    // Worker mints the challenge and stores the credential against the
+    // account so it can quick-unlock from the login screen.
+    const cloudSession = readCloudSession();
+    const username =
+      cloudSession?.user.username ??
+      ((typeof window !== "undefined" && window.localStorage.getItem("osler-session")) || "User");
+    const result = await enrollBiometric(username, cloudSession);
     setBiometricBusy(false);
     if (result.ok) {
       haptic("success");
       const a = await checkBiometricAvailability();
       setBiometricEnrolled(a.enrolled);
       setBiometricEnabled(a.enabled);
+      setBiometricCloud(a.cloudBacked);
     } else {
       setBiometricMsg(
-        result.message ||
-          (result.reason === "cancelled"
+        result.message && !cloudSession
+          ? result.message
+          : result.reason === "cancelled"
             ? t("native.biometric.cancelled")
-            : t("native.biometric.unsupported")),
+            : t("native.biometric.cloudError"),
       );
       haptic("error");
     }
   };
 
-  const handleDisableBiometric = () => {
-    disableBiometric();
+  const handleDisableBiometric = async () => {
+    setBiometricBusy(true);
+    setBiometricMsg("");
+    await disableBiometric();
     setBiometricEnrolled(false);
     setBiometricEnabled(false);
+    setBiometricCloud(false);
+    setBiometricBusy(false);
     haptic("warning");
   };
 
@@ -1979,13 +1993,19 @@ function NativeSettingsSection() {
                   <Check className="size-3.5" />
                   <span>{t("native.biometric.enrolled", { user: "user" })}</span>
                 </div>
+                {biometricCloud && (
+                  <p className="text-[11px] text-muted-foreground">
+                    {t("native.biometric.cloudSynced")}
+                  </p>
+                )}
                 <Button
                   size="sm"
                   variant="outline"
                   className="h-8 text-xs text-destructive hover:text-destructive"
                   onClick={handleDisableBiometric}
+                  disabled={biometricBusy}
                 >
-                  {t("native.biometric.disable")}
+                  {biometricBusy ? t("native.biometric.disabling") : t("native.biometric.disable")}
                 </Button>
               </div>
             ) : (

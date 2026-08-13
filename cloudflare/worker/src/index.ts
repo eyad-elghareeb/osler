@@ -28,7 +28,8 @@
 
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
-import { SYNC_KINDS, mergeKind, gzipString, gunzipBytes, base64ToBytes } from "./sync-docs";
+import { SYNC_KINDS, mergeKind, gzipString, gunzipBytes, gunzipBytesBounded, base64ToBytes } from "./sync-docs";
+import { verifyAssertion } from "./cose";
 const PASSWORD_ITERATIONS = 100_000;
 const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 // After a session token's JWT `exp` passes, it may still be rotated through
@@ -200,6 +201,17 @@ async function passwordMatches(password: string, salt: string, expected: string)
   return mismatch === 0;
 }
 
+// Uniform timing for login of unknown accounts. The real path runs a ~100ms
+// PBKDF2 derive before answering; without this, a missing-username attempt
+// returns instantly and leaks whether an account exists over a network link.
+// We burn the same derive against a fixed dummy credential so both paths cost
+// the same wall-clock time. The dummy entry is lazily derived once.
+let dummyPasswordCredentials: { hash: string; salt: string } | null = null;
+async function verifyDummyPassword(password: string): Promise<void> {
+  if (!dummyPasswordCredentials) dummyPasswordCredentials = await passwordHash("verify-dummy-password");
+  await passwordMatches(password, dummyPasswordCredentials.salt, dummyPasswordCredentials.hash);
+}
+
 // ─── Field-level encryption (AEAD AES-256-GCM) ───────────────────────────────
 
 async function deriveFieldKey(rawKey: string, salt: Uint8Array): Promise<CryptoKey> {
@@ -252,11 +264,15 @@ async function decryptField(data: string | null | undefined, encryptionKey?: str
  *  `maxTextBytes` bounds the DECOMPRESSED size. */
 async function requestBodyText(request: Request, maxTextBytes: number): Promise<string> {
   const encoding = request.headers.get("content-encoding") ?? "";
+  // Reject oversized bodies on Content-Length BEFORE buffering, so a huge
+  // plain request never gets read into memory just to be thrown away. gzip is
+  // non-expanding (compressed ≤ decompressed), so the same bound holds.
+  const declaredLength = Number(request.headers.get("content-length") || "0");
+  if (declaredLength > maxTextBytes) throw new Error("Request body is too large");
   if (encoding.includes("gzip")) {
     const buf = await request.arrayBuffer();
-    const text = await gunzipBytes(new Uint8Array(buf));
-    if (text.length > maxTextBytes) throw new Error("Request body is too large");
-    return text;
+    if (buf.byteLength > maxTextBytes) throw new Error("Request body is too large");
+    return await gunzipBytesBounded(new Uint8Array(buf), maxTextBytes);
   }
   const text = await request.text();
   if (text.length > maxTextBytes) throw new Error("Request body is too large");
@@ -433,11 +449,34 @@ function rateLimit(ip: string, bucket: string): boolean {
   if (!entry || entry.expiresAt < t) entry = { count: 0, expiresAt: t + RATE_LIMIT_WINDOW_MS };
   entry.count += 1;
   RATE_LIMIT_BUCKETS.set(bucketKey, entry);
-  if (RATE_LIMIT_BUCKETS.size > 2000) {
-    const keys = [...RATE_LIMIT_BUCKETS.entries()].sort((a, b) => a[1].expiresAt - b[1].expiresAt);
-    for (let i = 0; i < 100 && i < keys.length; i += 1) RATE_LIMIT_BUCKETS.delete(keys[i][0]);
-  }
+  if (RATE_LIMIT_BUCKETS.size > 2000) pruneRateLimitBuckets(t);
   return entry.count <= (RATE_LIMIT_MAX[bucket] ?? 60);
+}
+
+/** Cheap bounded sweep for the in-memory rate-limit table. The old prune
+ *  sorted the ENTIRE map (O(n log n)) on every request once the table grew
+ *  past 2000 entries — under a burst that serialized each request. We instead
+ *  delete up to 200 already-expired buckets (a linear scan, no allocation),
+ *  then fall back to evicting the oldest-inserted buckets — Map preserves
+ *  insertion order, which approximates age closely enough for rate limiting. */
+function pruneRateLimitBuckets(t: number): void {
+  if (RATE_LIMIT_BUCKETS.size <= 2000) return;
+  let removed = 0;
+  for (const [key, entry] of RATE_LIMIT_BUCKETS) {
+    if (entry.expiresAt < t) {
+      RATE_LIMIT_BUCKETS.delete(key);
+      removed += 1;
+      if (removed >= 200) break;
+    }
+  }
+  if (RATE_LIMIT_BUCKETS.size > 2000) {
+    let i = 0;
+    for (const key of RATE_LIMIT_BUCKETS.keys()) {
+      if (i >= 200) break;
+      RATE_LIMIT_BUCKETS.delete(key);
+      i += 1;
+    }
+  }
 }
 
 // ─── Turnstile ───────────────────────────────────────────────────────────────
@@ -553,16 +592,17 @@ async function getDocument(env: Env, userId: string, kind: string): Promise<{ re
 
 async function getAllDocuments(env: Env, userId: string): Promise<Record<string, { records: Record<string, any>; updatedAt: number }>> {
   const docs: Record<string, { records: Record<string, any>; updatedAt: number }> = {};
-  for (const kind of SYNC_KINDS) docs[kind] = await getDocument(env, userId, kind);
+  const results = await Promise.all(SYNC_KINDS.map((kind) => getDocument(env, userId, kind)));
+  SYNC_KINDS.forEach((kind, i) => { docs[kind] = results[i]; });
   return docs;
 }
 
 async function getSelectedDocuments(env: Env, userId: string, kinds: string[]): Promise<Record<string, { records: Record<string, any>; updatedAt: number }>> {
-  const docs: Record<string, { records: Record<string, any>; updatedAt: number }> = {};
   const validKinds = new Set<string>(SYNC_KINDS);
-  for (const kind of kinds) {
-    if (validKinds.has(kind)) docs[kind] = await getDocument(env, userId, kind);
-  }
+  const kindsToFetch = kinds.filter((kind) => validKinds.has(kind));
+  const docs: Record<string, { records: Record<string, any>; updatedAt: number }> = {};
+  const results = await Promise.all(kindsToFetch.map((kind) => getDocument(env, userId, kind)));
+  kindsToFetch.forEach((kind, i) => { docs[kind] = results[i]; });
   return docs;
 }
 
@@ -701,6 +741,36 @@ const WEBHOOK_EVENTS = {
   ACCOUNT_DELETED: "account.deleted",
 } as const;
 
+/** Webhook delivery URLs are fetched by the Worker, so a stored hook pointing
+ *  at a loopback/private address becomes an SSRF primitive. Webhooks are
+ *  admin-created, but defense-in-depth: require HTTPS and reject internal
+ *  hostnames and RFC1918/link-local/reserved IP literals. */
+function validWebhookUrl(raw: string): { ok: true } | { ok: false; reason: string } {
+  if (raw.length > 2048) return { ok: false, reason: "Webhook URL is too long" };
+  let url: URL;
+  try { url = new URL(raw); } catch { return { ok: false, reason: "Webhook URL is invalid" }; }
+  if (url.protocol !== "https:") return { ok: false, reason: "Webhook URL must use https" };
+  const host = url.hostname.toLowerCase();
+  if (host === "localhost" || host.endsWith(".localhost")) return { ok: false, reason: "Localhost webhooks are not allowed" };
+  for (const suffix of [".local", ".internal", ".lan", ".home", ".corp", ".intranet"]) {
+    if (host.endsWith(suffix)) return { ok: false, reason: "Internal webhook hostnames are not allowed" };
+  }
+  if (host.includes(":")) {
+    if (host === "::" || host === "::1" || host.startsWith("fe80") || host.startsWith("fc") || host.startsWith("fd") || host.startsWith("::ffff:10.") || host.startsWith("::ffff:127.")) {
+      return { ok: false, reason: "Private or reserved webhook addresses are not allowed" };
+    }
+    return { ok: true };
+  }
+  const v4 = host.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
+  if (v4) {
+    const [a, b] = [Number(v4[1]), Number(v4[2])];
+    const privateOrReserved = a === 0 || a === 10 || a === 127 || a >= 224 ||
+      (a === 169 && b === 254) || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168);
+    if (privateOrReserved) return { ok: false, reason: "Private or reserved webhook addresses are not allowed" };
+  }
+  return { ok: true };
+}
+
 async function dispatchWebhook(env: Env, event: string, payload: Record<string, unknown>, _log?: Logger): Promise<void> {
   try {
     const hooks = await env.DB.prepare("SELECT * FROM webhooks WHERE enabled = 1 AND events LIKE ?").bind(`%${event}%`).all<any>();
@@ -744,6 +814,7 @@ async function cleanupStale(env: Env, _log?: Logger): Promise<void> {
       env.DB.prepare("DELETE FROM auth_handoffs WHERE expires_at < ?").bind(now()),
       env.DB.prepare("DELETE FROM password_reset_tokens WHERE expires_at < ?").bind(now()),
       env.DB.prepare("DELETE FROM email_verify_tokens WHERE expires_at < ?").bind(now()),
+      env.DB.prepare("DELETE FROM biometric_sessions WHERE expires_at < ? OR used_at IS NOT NULL").bind(now()),
       env.DB.prepare("DELETE FROM sessions WHERE expires_at < ? OR revoked_at IS NOT NULL").bind(now()),
       env.DB.prepare("DELETE FROM admin_audit WHERE created_at < ?").bind(cutoff),
       env.DB.prepare("DELETE FROM analytics_events WHERE created_at < ?").bind(analyticsCutoff),
@@ -1261,10 +1332,18 @@ async function handleBiometricAuthenticate(request: Request, env: Env, _session:
   if (_session) uid = _session.user.id;
   if (!uid) {
     const body = await readJson(request);
-    uid = typeof body.userId === "string" ? body.userId.trim() : null;
-    if (!uid) return json({ error: "userId required" }, 400, "", log);
-    const user = await env.DB.prepare("SELECT id FROM users WHERE id = ?").bind(uid).first();
+    let userId = typeof body.userId === "string" ? body.userId.trim() : "";
+    if (!userId && typeof body.username === "string" && body.username.trim()) {
+      // The login screen's quick unlock only knows the locally-stored
+      // username, not the account's row id — resolve it case-insensitively.
+      const byName = await env.DB.prepare("SELECT id FROM users WHERE username = ? COLLATE NOCASE").bind(body.username.trim()).first<any>();
+      if (!byName) return json({ error: "User not found" }, 404, "", log);
+      userId = byName.id;
+    }
+    if (!userId) return json({ error: "userId or username required" }, 400, "", log);
+    const user = await env.DB.prepare("SELECT id FROM users WHERE id = ?").bind(userId).first();
     if (!user) return json({ error: "User not found" }, 404, "", log);
+    uid = userId;
   }
   const creds = await env.DB.prepare("SELECT * FROM biometric_credentials WHERE user_id = ?").bind(uid).all<any>();
   if (!creds.results?.length) return json({ error: "No biometric credentials registered" }, 400, "", log);
@@ -1304,10 +1383,21 @@ async function handleBiometricAuthenticateComplete(request: Request, env: Env, _
   const rpOrigin = env.ALLOWED_ORIGIN.replace(/\/$/, "");
   if (cdj.origin !== rpOrigin) return json({ error: "Origin mismatch" }, 400, "", log);
 
-  const allowed = await env.DB.prepare("SELECT id, user_id, credential_id FROM biometric_credentials WHERE user_id = ?").bind(bs.user_id).all<any>();
-  if (!allowed.results?.length) return json({ error: "No credentials found" }, 400, "", log);
-  const matched = allowed.results.find((c: any) => c.credential_id === rawId);
-  if (!matched) return json({ error: "Credential not found" }, 400, "", log);
+  // The clientDataJSON above is fully attacker-supplied, so the ONLY thing
+  // that proves possession of the enrolled key is the assertion signature.
+  // Before this, the handler issued a session based solely on the client's
+  // (leakable) credential id — a full account-takeover for any user with a
+  // registered biometric. Fetch the stored enrollment and verify the ECDSA
+  // signature over authenticatorData || SHA256(clientDataJSON) now.
+  const credential = await env.DB.prepare("SELECT * FROM biometric_credentials WHERE credential_id = ? AND user_id = ?").bind(rawId, bs.user_id).first<any>();
+  if (!credential) return json({ error: "Credential not found" }, 400, "", log);
+  const authenticatorData = typeof responseData.authenticatorData === "string" ? responseData.authenticatorData : "";
+  const assertionSignature = typeof responseData.signature === "string" ? responseData.signature : "";
+  if (!authenticatorData || !assertionSignature) return json({ error: "Assertion data missing" }, 400, "", log);
+  const rpId = bs.rp_id || windowOrigin(env);
+  const storedCred: { attestationObject?: string } = (() => { try { return JSON.parse(credential.credential_data_json ?? "{}"); } catch { return {}; } })();
+  const verified = await verifyAssertion(storedCred.attestationObject ?? "", rpId, authenticatorData, assertionSignature, clientDataJSON);
+  if (!verified) return json({ error: "Biometric verification failed" }, 401, "", log);
 
   const user = await env.DB.prepare("SELECT * FROM users WHERE id = ?").bind(bs.user_id).first<any>();
   if (!user) return json({ error: "User not found" }, 404, "", log);
@@ -1335,18 +1425,26 @@ async function handleSearch(request: Request, env: Env, session: Session, log: L
   const types = (new URL(request.url).searchParams.get("types") || "content,users,audit").split(",");
   const results: Record<string, any[]> = {};
   const like = `%${escapeLike(q)}%`;
+  const queries: Array<Promise<void>> = [];
   if (types.includes("content")) {
-    const rows = await env.DB.prepare("SELECT id as uid, title, content_type as type, status, updated_at FROM content_objects WHERE title LIKE ? ESCAPE '\\' OR id LIKE ? ESCAPE '\\' ORDER BY updated_at DESC LIMIT 20").bind(like, like).all();
-    results.content = rows.results || [];
+    queries.push((async () => {
+      const rows = await env.DB.prepare("SELECT id as uid, title, content_type as type, status, updated_at FROM content_objects WHERE title LIKE ? ESCAPE '\\' OR id LIKE ? ESCAPE '\\' ORDER BY updated_at DESC LIMIT 20").bind(like, like).all();
+      results.content = rows.results || [];
+    })());
   }
   if (types.includes("users")) {
-    const rows = await env.DB.prepare("SELECT id, username, display_name, role, created_at FROM users WHERE username LIKE ? ESCAPE '\\' OR display_name LIKE ? ESCAPE '\\' OR email LIKE ? ESCAPE '\\' ORDER BY created_at DESC LIMIT 20").bind(like, like, like).all();
-    results.users = rows.results || [];
+    queries.push((async () => {
+      const rows = await env.DB.prepare("SELECT id, username, display_name, role, created_at FROM users WHERE username LIKE ? ESCAPE '\\' OR display_name LIKE ? ESCAPE '\\' OR email LIKE ? ESCAPE '\\' ORDER BY created_at DESC LIMIT 20").bind(like, like, like).all();
+      results.users = rows.results || [];
+    })());
   }
   if (types.includes("audit")) {
-    const rows = await env.DB.prepare("SELECT a.id, a.action, a.target_id, a.created_at, u.username as actor_username FROM admin_audit a LEFT JOIN users u ON u.id = a.actor_id WHERE a.action LIKE ? ESCAPE '\\' OR a.target_id LIKE ? ESCAPE '\\' ORDER BY a.created_at DESC LIMIT 20").bind(like, like).all();
-    results.audit = rows.results || [];
+    queries.push((async () => {
+      const rows = await env.DB.prepare("SELECT a.id, a.action, a.target_id, a.created_at, u.username as actor_username FROM admin_audit a LEFT JOIN users u ON u.id = a.actor_id WHERE a.action LIKE ? ESCAPE '\\' OR a.target_id LIKE ? ESCAPE '\\' ORDER BY a.created_at DESC LIMIT 20").bind(like, like).all();
+      results.audit = rows.results || [];
+    })());
   }
+  await Promise.all(queries);
   return json(results, 200, "", log);
 }
 
@@ -2595,7 +2693,13 @@ async function handleAdmin(request: Request, env: Env, session: Session, url: UR
       const body = await readJson(request);
       const val = validate(body, [{ field: "url", type: "string", required: true, min: 1, max: 2048 }, { field: "events", type: "string", required: true, min: 2 }, { field: "secret", type: "string", min: 1, max: 512 }]);
       if (!val.valid) return json({ error: val.errors.join("; ") }, 400, origin, log);
-      try { JSON.parse(body.events); } catch { return json({ error: "events must be a JSON array string" }, 400, origin, log); }
+      const webhookCheck = validWebhookUrl(body.url);
+      if (!webhookCheck.ok) return json({ error: webhookCheck.reason }, 400, origin, log);
+      let eventsList: unknown;
+      try { eventsList = JSON.parse(body.events); } catch { return json({ error: "events must be a JSON array string" }, 400, origin, log); }
+      if (!Array.isArray(eventsList) || !eventsList.every((e) => typeof e === "string")) {
+        return json({ error: "events must be a JSON array of event names" }, 400, origin, log);
+      }
       await env.DB.prepare("INSERT INTO webhooks (id, url, events, secret, enabled, created_by, created_at) VALUES (?, ?, ?, ?, 1, ?, ?)").bind(id(), body.url, body.events, body.secret || null, session.user.id, now()).run();
       await auditLog(env, session.user.id, "create_webhook", null, { url: body.url, events: body.events }, log);
       return json({ ok: true }, 201, origin, log);
@@ -2788,7 +2892,11 @@ export default {
         if (!identifier || !validPassword(body.password)) return json({ error: "Invalid username or password" }, 401, origin, log);
         if (!await verifyTurnstile(body.turnstileToken, request, env)) return json({ error: "Verification failed" }, 400, origin, log);
         const user = await env.DB.prepare("SELECT * FROM users WHERE has_password = 1 AND (username = ? COLLATE NOCASE OR email = ? COLLATE NOCASE)").bind(identifier, identifier).first<any>();
-        if (!user || !await passwordMatches(body.password, user.password_salt, user.password_hash)) return json({ error: "Invalid username or password" }, 401, origin, log);
+        if (!user) {
+          await verifyDummyPassword(body.password);
+          return json({ error: "Invalid username or password" }, 401, origin, log);
+        }
+        if (!await passwordMatches(body.password, user.password_salt, user.password_hash)) return json({ error: "Invalid username or password" }, 401, origin, log);
         return json(await issueSession(user, env), 200, origin, log);
       }
 
@@ -3040,18 +3148,26 @@ export default {
         const body = await readJsonBody(request, MAX_GZIP_BODY_BYTES); const statements: any[] = []; const response: Record<string, any> = {};
         const bodyKinds = new Set<string>();
         for (const kind of SYNC_KINDS) if (body[kind] && typeof body[kind] === "object") bodyKinds.add(kind);
+        const kindsToSync = SYNC_KINDS.filter((kind) => bodyKinds.has(kind));
+        // Fetch the storage budget and every in-flight document in parallel —
+        // previously each kind's doc was awaited sequentially inside the loop,
+        // stretching a multi-kind push to N round-trips.
+        const [sizeRows, ...currentDocs] = await Promise.all([
+          env.DB.prepare("SELECT kind, raw_bytes FROM progress_documents WHERE user_id = ?").bind(session.user.id).all<{ kind: string; raw_bytes: number }>(),
+          ...kindsToSync.map((kind) => getDocument(env, session.user.id, kind)),
+        ]);
+        const currentByKind = new Map<string, { records: Record<string, any>; updatedAt: number }>();
+        kindsToSync.forEach((kind, i) => { currentByKind.set(kind, currentDocs[i]); });
         // Per-user storage budget: start from the raw bytes of stored docs NOT
         // being rewritten in this request, then add each merged doc's size.
-        const sizeRows = await env.DB.prepare("SELECT kind, raw_bytes FROM progress_documents WHERE user_id = ?").bind(session.user.id).all<{ kind: string; raw_bytes: number }>();
         let projectedBytes = (sizeRows.results || []).reduce((sum, row) => {
           const kind = row?.kind ?? "";
           return sum + (bodyKinds.has(kind) ? 0 : (Number(row?.raw_bytes) || 0));
         }, 0);
-        for (const kind of SYNC_KINDS) {
-          if (!bodyKinds.has(kind)) continue;
+        for (const kind of kindsToSync) {
           const local = body[kind].records;
           if (!local || typeof local !== "object" || Array.isArray(local)) return json({ error: "Invalid progress document" }, 400, origin, log);
-          const current = await getDocument(env, session.user.id, kind);
+          const current = currentByKind.get(kind)!;
           // Per-kind optimistic concurrency: each document compares against
           // the updatedAt snapshot the client saw for THAT kind, so a qbank
           // change doesn't spuriously 409 the flashcards write (and vice versa).

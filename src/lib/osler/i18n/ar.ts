@@ -1208,6 +1208,8 @@ export const ar = {
     "native.biometric.unlock": "فتح",
     "native.biometric.unlocking": "جارٍ الفتح…",
     "native.biometric.cancelled": "تم إلغاء طلب البصمة",
+    "native.biometric.cloudError": "فشل الفتح عبر السحابة. يرجى تسجيل الدخول بكلمة المرور.",
+    "native.biometric.cloudSynced": "مرتبط بحساب أوسلر الخاص بك",
     "native.biometric.enrollFailed": "تعذّر إعداد البصمة: {error}",
     "native.biometric.disabling": "جارٍ إزالة بيانات الاعتماد بالبصمة…",
     "native.network.title": "الشبكة",

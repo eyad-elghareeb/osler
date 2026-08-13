@@ -21,16 +21,35 @@
  *    WebAuthn, doesn't have a platform authenticator, or the user has
  *    disabled biometrics in Settings, every call short-circuits with a
  *    graceful `unsupported` / `cancelled` / `disabled` result.
- *  - For demo / local-only operation we don't actually need a server.
- *    The "registration" step is `navigator.credentials.create()` and the
- *    "authentication" step is `navigator.credentials.get()`. Both work
- *    fully client-side; the only thing missing is a server-issued
- *    challenge, which we synthesize locally with `crypto.getRandomValues`.
+ *  - When Osler runs in cloud mode (`cloud.enabled` + registered account),
+ *    enrollment goes through the Worker: it issues the challenge
+ *    (`/v1/biometric/register`) and verifies the WebAuthn assertion on the
+ *    server (`/v1/biometric/authenticate-complete`). The Worker stores the
+ *    credential against the account, so a device whose credential was
+ *    revoked server-side can't unlock.
+ *  - For demo / local-only operation there's no server: the challenge is
+ *    synthesized locally with `crypto.getRandomValues` and the credential
+ *    lives only on this device.
+ *  - The `osler-biometric-cloud` flag records which mode a credential was
+ *    enrolled in. Cloud-backed credentials quick-unlock at the login screen
+ *    even though the pending flow there can't mint a session.
  */
+
+import {
+  biometricAuthenticateOptions,
+  biometricAuthenticateComplete,
+  biometricRegisterOptions,
+  biometricRegisterComplete,
+  biometricCredentialsList,
+  biometricCredentialDelete,
+  readCloudSession,
+  type CloudSession,
+} from "@/lib/osler/cloud";
 
 const BIOMETRIC_CRED_KEY = "osler-biometric-credential";
 const BIOMETRIC_USER_KEY = "osler-biometric-username";
 const BIOMETRIC_ENABLED_KEY = "osler-biometric-enabled";
+const BIOMETRIC_CLOUD_KEY = "osler-biometric-cloud";
 
 export interface BiometricAvailability {
   supported: boolean;
@@ -38,6 +57,9 @@ export interface BiometricAvailability {
   enabled: boolean;
   /** A credential has been registered for this device. */
   enrolled: boolean;
+  /** The enrolled credential is tied to the cloud account, so unlock runs
+   *  through the Worker's challenge + assertion verification. */
+  cloudBacked: boolean;
 }
 
 export type BiometricResult =
@@ -48,7 +70,7 @@ export type BiometricResult =
 
 export async function checkBiometricAvailability(): Promise<BiometricAvailability> {
   if (typeof window === "undefined" || typeof PublicKeyCredential === "undefined") {
-    return { supported: false, platformAuthenticator: false, enabled: false, enrolled: false };
+    return { supported: false, platformAuthenticator: false, enabled: false, enrolled: false, cloudBacked: false };
   }
   let platformAuthenticator = false;
   try {
@@ -65,6 +87,7 @@ export async function checkBiometricAvailability(): Promise<BiometricAvailabilit
     platformAuthenticator,
     enabled,
     enrolled,
+    cloudBacked: enrolled && readCloudFlag(),
   };
 }
 
@@ -117,6 +140,26 @@ function readStoredUsername(): string | null {
   }
 }
 
+function readCloudFlag(): boolean {
+  try {
+    if (typeof window === "undefined") return false;
+    return window.localStorage.getItem(BIOMETRIC_CLOUD_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+function writeCloudFlag(cloud: boolean): void {
+  try {
+    if (typeof window === "undefined") return;
+    if (cloud) {
+      window.localStorage.setItem(BIOMETRIC_CLOUD_KEY, "1");
+    } else {
+      window.localStorage.removeItem(BIOMETRIC_CLOUD_KEY);
+    }
+  } catch { /* noop */ }
+}
+
 /* ── Low-level helpers ────────────────────────────────────────────── */
 
 function randomChallenge(bytes = 32): Uint8Array {
@@ -142,10 +185,84 @@ function uint8ArrayToBase64(arr: ArrayBuffer | Uint8Array): string {
 
 /* ── Registration (enroll a new biometric credential) ─────────────── */
 
-export async function enrollBiometric(username: string): Promise<BiometricResult> {
+export async function enrollBiometric(username: string, cloudSession?: CloudSession | null): Promise<BiometricResult> {
   if (typeof window === "undefined" || typeof PublicKeyCredential === "undefined") {
     return { ok: false, reason: "unsupported" };
   }
+
+  if (cloudSession) {
+    // Server-backed enrollment (Settings with an active cloud session): the
+    // Worker mints the challenge and stores the credential against the
+    // account, so it outlives this device and unlocks from the login screen.
+    try {
+      const serverOptions = await biometricRegisterOptions(cloudSession);
+      const serverKey = serverOptions.publicKey as {
+        rp?: { name?: string; id?: string };
+        user?: { id?: string; name?: string; displayName?: string };
+        challenge?: number[];
+        sessionId?: string;
+      };
+      const challenge = serverKey.challenge;
+      const userId = serverKey.user?.id;
+      const sessionId = serverKey.sessionId;
+      if (!Array.isArray(challenge) || typeof userId !== "string" || typeof sessionId !== "string") {
+        return { ok: false, reason: "error", message: "Server returned an invalid WebAuthn challenge." };
+      }
+      const rp: PublicKeyCredentialRpEntity = serverKey.rp?.name
+        ? { name: serverKey.rp.name, ...(serverKey.rp.id ? { id: serverKey.rp.id } : {}) }
+        : { name: "Osler" };
+      const credential = (await navigator.credentials.create({
+        publicKey: {
+          rp,
+          user: {
+            id: base64ToUint8Array(userId) as BufferSource,
+            name: serverKey.user?.name ?? username,
+            displayName: serverKey.user?.displayName ?? username,
+          },
+          challenge: new Uint8Array(challenge) as BufferSource,
+          pubKeyCredParams: [
+            { type: "public-key", alg: -7 },     // ES256 (server only issues this)
+          ],
+          timeout: 60_000,
+          authenticatorSelection: {
+            authenticatorAttachment: "platform",
+            userVerification: "required",
+            residentKey: "preferred",
+            requireResidentKey: false,
+          },
+          attestation: "none",
+        },
+      })) as PublicKeyCredential | null;
+
+      if (!credential) return { ok: false, reason: "cancelled" };
+
+      const response = credential.response as AuthenticatorAttestationResponse;
+      const rawId = uint8ArrayToBase64(credential.rawId ?? new Uint8Array());
+      await biometricRegisterComplete(cloudSession, {
+        sessionId,
+        credential: {
+          rawId,
+          clientDataJSON: uint8ArrayToBase64(response.clientDataJSON),
+          attestationObject: uint8ArrayToBase64(response.attestationObject),
+        },
+        deviceName: deviceLabel(),
+      });
+
+      writeStoredCredential({ id: credential.id, rawId });
+      try {
+        window.localStorage.setItem(BIOMETRIC_USER_KEY, username);
+      } catch { /* noop */ }
+      writeCloudFlag(true);
+      setBiometricEnabled(true);
+      return { ok: true, username };
+    } catch (err: any) {
+      if (err?.name === "NotAllowedError") {
+        return { ok: false, reason: "cancelled", message: "Biometric prompt was dismissed." };
+      }
+      return { ok: false, reason: "error", message: err?.message ?? String(err) };
+    }
+  }
+
   const platformOk = await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable();
   if (!platformOk) return { ok: false, reason: "unsupported", message: "No platform authenticator available." };
 
@@ -192,6 +309,7 @@ export async function enrollBiometric(username: string): Promise<BiometricResult
     try {
       window.localStorage.setItem(BIOMETRIC_USER_KEY, username);
     } catch { /* noop */ }
+    writeCloudFlag(false);
     setBiometricEnabled(true);
 
     return { ok: true, username };
@@ -212,6 +330,63 @@ export async function authenticateWithBiometric(): Promise<BiometricResult> {
   if (!readEnabledFlag()) return { ok: false, reason: "disabled" };
   const stored = readStoredCredential();
   if (!stored) return { ok: false, reason: "not-enrolled" };
+
+  if (readCloudFlag()) {
+    // Cloud-backed assertion: the Worker mints the challenge and verifies
+    // the ECDSA signature against the registered key before issuing a
+    // session — a leaked credential id alone can no longer authenticate.
+    try {
+      const serverOptions = await biometricAuthenticateOptions({ username: readStoredUsername() ?? undefined });
+      const serverKey = serverOptions.publicKey as {
+        challenge?: number[];
+        sessionId?: string;
+        allowCredentials?: Array<{ id: string; type: "public-key"; transports?: string[] }>;
+      };
+      const challenge = serverKey.challenge;
+      const sessionId = serverKey.sessionId;
+      if (!Array.isArray(challenge) || typeof sessionId !== "string") {
+        return { ok: false, reason: "error", message: "Server returned an invalid WebAuthn challenge." };
+      }
+      // Only prompt for this device's credential — the account may hold
+      // several registered on other devices.
+      const mine = serverKey.allowCredentials?.find((c) => c.id === stored.rawId);
+      const allowCredentials: PublicKeyCredentialDescriptor[] = mine
+        ? [{ id: base64ToUint8Array(mine.id) as BufferSource, type: "public-key", transports: mine.transports as AuthenticatorTransport[] }]
+        : [{ id: base64ToUint8Array(stored.rawId) as BufferSource, type: "public-key", transports: ["internal"] }];
+      const assertion = (await navigator.credentials.get({
+        publicKey: {
+          challenge: new Uint8Array(challenge) as BufferSource,
+          timeout: 60_000,
+          userVerification: "required",
+          allowCredentials,
+        },
+      })) as PublicKeyCredential | null;
+
+      if (!assertion) return { ok: false, reason: "cancelled" };
+
+      const response = assertion.response as AuthenticatorAssertionResponse;
+      // Persists the returned CloudSession (same as loginCloudAccount) so a
+      // subsequent `login()` picks the account up via readCloudSession.
+      const session = await biometricAuthenticateComplete({
+        sessionId,
+        credential: {
+          rawId: uint8ArrayToBase64(assertion.rawId ?? new Uint8Array()),
+          response: {
+            clientDataJSON: uint8ArrayToBase64(response.clientDataJSON),
+            authenticatorData: uint8ArrayToBase64(response.authenticatorData),
+            signature: uint8ArrayToBase64(response.signature),
+            ...(response.userHandle ? { userHandle: uint8ArrayToBase64(response.userHandle) } : {}),
+          },
+        },
+      });
+      return { ok: true, username: session.user.displayName };
+    } catch (err: any) {
+      if (err?.name === "NotAllowedError") {
+        return { ok: false, reason: "cancelled", message: "Biometric prompt was dismissed." };
+      }
+      return { ok: false, reason: "error", message: err?.message ?? String(err) };
+    }
+  }
 
   const challenge = randomChallenge();
   // See enrollBiometric for the BufferSource cast rationale.
@@ -244,9 +419,34 @@ export async function authenticateWithBiometric(): Promise<BiometricResult> {
 
 /* ── Unenroll (clears the stored credential) ──────────────────────── */
 
-export function disableBiometric(): void {
+/** Best-effort revoke: when the credential is cloud-backed and a session is
+ *  available, delete it from the account first, then clear local state. The
+ *  local credential is always cleared even if the server call fails. */
+export async function disableBiometric(): Promise<void> {
+  if (readCloudFlag()) {
+    const session = readCloudSession();
+    const stored = readStoredCredential();
+    if (session && stored) {
+      try {
+        const { credentials } = await biometricCredentialsList(session);
+        const match = credentials.find((c) => c.credential_id === stored.rawId);
+        if (match) await biometricCredentialDelete(session, match.id);
+      } catch {
+        // best-effort — the local state is cleared regardless
+      }
+    }
+  }
   writeStoredCredential(null);
+  writeCloudFlag(false);
   setBiometricEnabled(false);
+}
+
+/* ── Human-friendly device name for the account's credential list ─── */
+
+function deviceLabel(): string {
+  if (typeof navigator === "undefined") return "WebAuthn device";
+  const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+  return `${navigator.platform || "Device"} ${isMobile ? "Mobile" : "Browser"}`;
 }
 
 /* ── Stored username (for the login screen "quick unlock" hint) ──── */

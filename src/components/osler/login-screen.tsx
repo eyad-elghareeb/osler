@@ -259,18 +259,23 @@ export function LoginScreen({ onLogin, cloudAuthError }: LoginScreenProps) {
     } else {
       setBiometricStatus("error");
       setBiometricMsg(
-        result.message ||
-          (result.reason === "cancelled"
+        result.message && !availability?.cloudBacked
+          ? result.message
+          : result.reason === "cancelled"
             ? t("native.biometric.cancelled")
-            : t("native.biometric.unsupported")),
+            : t("native.biometric.cloudError"),
       );
       haptic("error");
     }
   };
 
   const canEnroll = !cloudActive && !!availability?.supported && !!availability?.platformAuthenticator;
-  const canQuickUnlock = !!availability?.enrolled && !!availability?.enabled;
-  const biometricSupported = !cloudActive && (canEnroll || canQuickUnlock);
+  // Quick unlock works in both modes, but a credential enrolled locally
+  // (login screen, no cloud session) must not silently log a cloud user into
+  // the local guest experience — only cloud-backed credentials unlock in
+  // cloud mode.
+  const canQuickUnlock = !!availability?.enrolled && !!availability?.enabled && (!cloudActive || !!availability?.cloudBacked);
+  const biometricSupported = canEnroll || canQuickUnlock;
 
   const checkUsername = async () => {
     if (!cloudActive || cloudMode !== "register" || !username.trim()) return;
@@ -603,9 +608,10 @@ export function LoginScreen({ onLogin, cloudAuthError }: LoginScreenProps) {
                     <button
                       type="button"
                       onClick={() => {
-                        disableBiometric();
-                        refreshBiometric();
-                        haptic("warning");
+                        void disableBiometric().then(() => {
+                          refreshBiometric();
+                          haptic("warning");
+                        });
                       }}
                       className="text-[10px] text-destructive hover:underline"
                     >

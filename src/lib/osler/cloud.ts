@@ -407,6 +407,63 @@ export async function getCloudAccount(session: CloudSession): Promise<CloudAccou
   return request<CloudAccount>("/v1/auth/me", { method: "GET" }, session.token);
 }
 
+/* ─── Biometric (WebAuthn) ──────────────────────────────────────────────
+ *
+ * These wrap the Worker's /v1/biometric/* endpoints. The register flow is
+ * authenticated (enrolled in Settings with an active session); the
+ * authenticate flow is intentionally unauthenticated so the login screen can
+ * unlock a device without a password. Credential options come back with
+ * `publicKey.sessionId` (nested inside `publicKey`) that ties the completion
+ * call to the short-lived server challenge.
+ */
+
+export type BiometricPublicKeyOptions = Record<string, unknown>;
+
+export async function biometricRegisterOptions(session: CloudSession): Promise<{ publicKey: BiometricPublicKeyOptions }> {
+  return request<{ publicKey: BiometricPublicKeyOptions }>("/v1/biometric/register", { method: "GET" }, session.token);
+}
+
+export async function biometricRegisterComplete(
+  session: CloudSession,
+  input: { sessionId: string; credential: { rawId: string; clientDataJSON: string; attestationObject: string }; deviceName?: string },
+): Promise<void> {
+  await request("/v1/biometric/register-complete", { method: "POST", body: JSON.stringify(input) }, session.token);
+}
+
+export async function biometricAuthenticateOptions(input?: { username?: string }): Promise<{ publicKey: BiometricPublicKeyOptions }> {
+  return request<{ publicKey: BiometricPublicKeyOptions }>("/v1/biometric/authenticate", { method: "POST", body: JSON.stringify(input ?? {}) });
+}
+
+/** Completes the WebAuthn assertion and, on success, persists the returned
+ *  CloudSession (exactly like loginCloudAccount does) so a `login()` right
+ *  after finds the account via readCloudSession. */
+export async function biometricAuthenticateComplete(input: {
+  sessionId: string;
+  credential: {
+    rawId: string;
+    response: { clientDataJSON: string; authenticatorData: string; signature: string; userHandle?: string };
+  };
+}): Promise<CloudSession> {
+  const session = await request<CloudSession>("/v1/biometric/authenticate-complete", { method: "POST", body: JSON.stringify(input) });
+  saveCloudSession(session);
+  return session;
+}
+
+export interface CloudBiometricCredential {
+  id: string;
+  credential_id: string;
+  device_name: string;
+  created_at: number;
+}
+
+export async function biometricCredentialsList(session: CloudSession): Promise<{ credentials: CloudBiometricCredential[] }> {
+  return request<{ credentials: CloudBiometricCredential[] }>("/v1/biometric/credentials", { method: "GET" }, session.token);
+}
+
+export async function biometricCredentialDelete(session: CloudSession, credentialId: string): Promise<void> {
+  await request(`/v1/biometric/credentials/${encodeURIComponent(credentialId)}`, { method: "DELETE" }, session.token);
+}
+
 export async function updateCloudAccount(session: CloudSession, input: { displayName: string; email: string | null }): Promise<CloudAccount> {
   return request<CloudAccount>("/v1/account", { method: "PATCH", body: JSON.stringify(input) }, session.token);
 }
