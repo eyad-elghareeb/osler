@@ -487,12 +487,12 @@ export async function requestPasswordReset(email: string, turnstileToken?: strin
   await request("/v1/auth/reset/request", { method: "POST", body: JSON.stringify({ email, turnstileToken }) });
 }
 
-export async function confirmPasswordReset(token: string, password: string): Promise<void> {
-  await request("/v1/auth/reset/confirm", { method: "POST", body: JSON.stringify({ token, password }) });
+export async function confirmPasswordReset(token: string, password: string, turnstileToken?: string): Promise<void> {
+  await request("/v1/auth/reset/confirm", { method: "POST", body: JSON.stringify({ token, password, turnstileToken }) });
 }
 
-export async function requestEmailVerify(email: string): Promise<void> {
-  await request("/v1/auth/verify/request", { method: "POST", body: JSON.stringify({ email }) });
+export async function requestEmailVerify(email: string, turnstileToken?: string): Promise<void> {
+  await request("/v1/auth/verify/request", { method: "POST", body: JSON.stringify({ email, turnstileToken }) });
 }
 
 export async function confirmEmailVerify(token: string): Promise<{ ok: boolean; verified: boolean }> {

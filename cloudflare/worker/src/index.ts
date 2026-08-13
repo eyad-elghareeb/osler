@@ -480,17 +480,24 @@ function pruneRateLimitBuckets(t: number): void {
 }
 
 // ─── Turnstile ───────────────────────────────────────────────────────────────
+// Single source of truth for bot verification. Fail-closed: when Turnstile is
+// enabled (TURNSTILE_ENABLED === "true") the challenge MUST verify — a missing
+// token, a missing secret, or a siteverify non-success all reject. When
+// disabled, every call passes and the app is unaffected.
 
-async function verifyTurnstile(token: string | undefined, request: Request, env: Env): Promise<boolean> {
+async function verifyTurnstile(token: string | undefined, env: Env): Promise<boolean> {
   if (env.TURNSTILE_ENABLED !== "true") return true;
   if (!token || !env.TURNSTILE_SECRET_KEY) return false;
   const fb = new FormData();
   fb.set("secret", env.TURNSTILE_SECRET_KEY);
   fb.set("response", token);
-  const rip = request.headers.get("CF-Connecting-IP");
-  if (rip) fb.set("remoteip", rip);
+  // Deliberately no `remoteip`: Cloudflare's siteverify docs warn that IP
+  // binding makes legit solves fail behind proxies/VPNs, and Turnstile tokens
+  // are single-use — replay across IPs is already impossible.
   const result = await fetch("https://challenges.cloudflare.com/turnstile/v0/siteverify", { method: "POST", body: fb });
-  return result.ok && ((await result.json()) as { success: boolean }).success === true;
+  if (!result.ok) return false;
+  const payload = await result.json() as { success: boolean };
+  return payload.success === true;
 }
 
 // ─── Validation helpers ──────────────────────────────────────────────────────
@@ -2899,7 +2906,7 @@ export default {
         const email = body.email ? String(body.email).trim().toLowerCase() : null;
         const displayName = String(body.displayName || username).trim().slice(0, 80);
         if (!validUsername(username) || !validEmail(email) || !validPassword(body.password) || !displayName) return json({ error: "Invalid registration details" }, 400, origin, log);
-        if (!await verifyTurnstile(body.turnstileToken, request, env)) return json({ error: "Verification failed" }, 400, origin, log);
+        if (!await verifyTurnstile(body.turnstileToken, env)) return json({ error: "Verification failed" }, 400, origin, log);
         const userId = id(); const password = await passwordHash(body.password);
         try {
           await env.DB.prepare("INSERT INTO users (id, username, email, display_name, password_hash, password_salt, has_password, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?)").bind(userId, username, email, displayName, password.hash, password.salt, now(), now()).run();
@@ -2913,7 +2920,7 @@ export default {
         if (!rateLimit(ip, "auth:login")) return json({ error: "Too many login attempts" }, 429, origin, log);
         const body = await readJson(request); const identifier = String(body.identifier || "").trim();
         if (!identifier || !validPassword(body.password)) return json({ error: "Invalid username or password" }, 401, origin, log);
-        if (!await verifyTurnstile(body.turnstileToken, request, env)) return json({ error: "Verification failed" }, 400, origin, log);
+        if (!await verifyTurnstile(body.turnstileToken, env)) return json({ error: "Verification failed" }, 400, origin, log);
         const user = await env.DB.prepare("SELECT * FROM users WHERE has_password = 1 AND (username = ? COLLATE NOCASE OR email = ? COLLATE NOCASE)").bind(identifier, identifier).first<any>();
         if (!user) {
           await verifyDummyPassword(body.password);
@@ -2945,7 +2952,11 @@ export default {
       if (request.method === "POST" && url.pathname === "/v1/auth/reset/request") {
         if (!rateLimit(ip, "auth:reset")) return json({ error: "Too many reset attempts" }, 429, origin, log);
         const body = await readJson(request); const email = String(body.email || "").trim().toLowerCase();
-        if (validEmail(email) && await verifyTurnstile(body.turnstileToken, request, env)) {
+        // Fail closed on the challenge regardless of email validity so a bot
+        // can't probe or mail-bomb the endpoint without first solving
+        // Turnstile. Account existence is still never revealed (ok:true below).
+        if (!await verifyTurnstile(body.turnstileToken, env)) return json({ error: "Verification failed" }, 400, origin, log);
+        if (validEmail(email)) {
           const user = await env.DB.prepare("SELECT * FROM users WHERE email = ? COLLATE NOCASE").bind(email).first<any>();
           if (user && env.RESEND_API_KEY && env.EMAIL_FROM && env.APP_ORIGIN) {
             const token = `${id()}${id()}`; const expiresAt = now() + RESET_TTL_MS;
@@ -2958,7 +2969,11 @@ export default {
       }
       if (request.method === "POST" && url.pathname === "/v1/auth/reset/confirm") {
         if (!rateLimit(ip, "auth:reset")) return json({ error: "Too many reset attempts" }, 429, origin, log);
-        const body = await readJson(request); if (typeof body.token !== "string" || !validPassword(body.password)) return json({ error: "Invalid reset request" }, 400, origin, log);
+        const body = await readJson(request);
+        // Setting a new password is a high-value action — require a fresh
+        // challenge even though the reset link itself is already a bearer of intent.
+        if (!await verifyTurnstile(body.turnstileToken, env)) return json({ error: "Verification failed" }, 400, origin, log);
+        if (typeof body.token !== "string" || !validPassword(body.password)) return json({ error: "Invalid reset request" }, 400, origin, log);
         const row = await env.DB.prepare("SELECT * FROM password_reset_tokens WHERE token_hash = ? AND used_at IS NULL AND expires_at > ?").bind(await sha256(body.token), now()).first<any>();
         if (!row) return json({ error: "This reset link is invalid or expired" }, 400, origin, log);
         const password = await passwordHash(body.password);
@@ -2974,6 +2989,10 @@ export default {
       if (request.method === "POST" && url.pathname === "/v1/auth/verify/request") {
         if (!rateLimit(ip, "auth:register")) return json({ error: "Too many attempts" }, 429, origin, log);
         const body = await readJson(request);
+        // Verifying sends an email that could otherwise be used to mail-bomb a
+        // victim — gate it on the challenge like every other unauthenticated
+        // mail-triggering endpoint.
+        if (!await verifyTurnstile(body.turnstileToken, env)) return json({ error: "Verification failed" }, 400, origin, log);
         const email = String(body.email || "").trim().toLowerCase();
         if (!validEmail(email)) return json({ error: "Invalid email" }, 400, origin, log);
         const user = await env.DB.prepare("SELECT * FROM users WHERE email = ? COLLATE NOCASE AND email_verified_at IS NULL").bind(email).first<any>();

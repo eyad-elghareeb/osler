@@ -43,6 +43,8 @@ declare global {
     turnstile?: {
       render: (container: HTMLElement, options: { sitekey: string; callback: (token: string) => void; "expired-callback": () => void }) => string;
       remove: (widgetId: string) => void;
+      /** Re-issue the challenge in-place and produce a fresh single-use token. */
+      reset: (widgetId: string) => void;
     };
   }
 }
@@ -77,6 +79,23 @@ export function LoginScreen({ onLogin, cloudAuthError }: LoginScreenProps) {
   const [usernameStatus, setUsernameStatus] = React.useState<"idle" | "checking" | "available" | "taken">("idle");
   const [turnstileToken, setTurnstileToken] = React.useState("");
   const turnstileRef = React.useRef<HTMLDivElement>(null);
+  const turnstileWidgetId = React.useRef("");
+
+  // Turnstile tokens are single-use: once a submit fires (success OR failure)
+  // the presented token is spent. Reset the widget so the next attempt carries
+  // a fresh token instead of re-sending a dead one and bouncing off the
+  // server's fail-closed check.
+  const resetTurnstile = React.useCallback(() => {
+    setTurnstileToken("");
+    const widgetId = turnstileWidgetId.current;
+    if (!widgetId || !window.turnstile) return;
+    try {
+      window.turnstile.reset(widgetId);
+    } catch {
+      window.turnstile.remove(widgetId);
+      turnstileWidgetId.current = "";
+    }
+  }, []);
 
   const { availability, refresh: refreshBiometric } = useBiometricAvailability();
 
@@ -132,6 +151,7 @@ export function LoginScreen({ onLogin, cloudAuthError }: LoginScreenProps) {
         callback: setTurnstileToken,
         "expired-callback": () => setTurnstileToken(""),
       });
+      turnstileWidgetId.current = widgetId;
     };
     const existing = document.querySelector<HTMLScriptElement>('script[src^="https://challenges.cloudflare.com/turnstile/"]');
     if (existing) {
@@ -183,7 +203,7 @@ export function LoginScreen({ onLogin, cloudAuthError }: LoginScreenProps) {
         }
         if (cloudMode === "reset") {
           if (resetToken) {
-            await confirmPasswordReset(resetToken, password);
+            await confirmPasswordReset(resetToken, password, turnstileToken || undefined);
             setResetToken("");
             setCloudMode("login");
             setCloudError("");
@@ -204,6 +224,9 @@ export function LoginScreen({ onLogin, cloudAuthError }: LoginScreenProps) {
         haptic("error");
       } finally {
         setCloudBusy(false);
+        // The Turnstile token for this attempt was consumed by the request
+        // (success or failure) — re-issue so a retry never sends a dead token.
+        resetTurnstile();
       }
       return;
     }
