@@ -570,10 +570,11 @@ export function QBankStudio({
   );
 
   const startCustomSession = React.useCallback(
-    (pool: PoolQuestion[], meta: { title: string; engine: EngineType; mode?: TestMode; dismissAfterCorrect?: boolean; tagsFilter?: string[]; onlyMode?: OnlyMode; isReview?: boolean; savedDrafts?: Record<string, WrittenDraft>; savedRubricState?: Record<string, boolean[]>; savedAnswers?: Record<number, number>; savedRevealed?: Record<number, boolean>; savedFlagged?: Record<number, boolean>; savedRatings?: Record<string, "easy" | "hard" | "unknown">; savedQuestionTimes?: Record<string, number> }) => {
+    async (pool: PoolQuestion[], meta: { title: string; engine: EngineType; mode?: TestMode; dismissAfterCorrect?: boolean; tagsFilter?: string[]; onlyMode?: OnlyMode; isReview?: boolean; savedDrafts?: Record<string, WrittenDraft>; savedRubricState?: Record<string, boolean[]>; savedAnswers?: Record<number, number>; savedRevealed?: Record<number, boolean>; savedFlagged?: Record<number, boolean>; savedRatings?: Record<string, "easy" | "hard" | "unknown">; savedQuestionTimes?: Record<string, number> }) => {
       if (pool.length === 0) return;
       const sessionId = `custom-${Date.now()}`;
       const totalTime = pool.length * 60;
+      await archiveDisplacedActive();
       setImmersiveMode(true);
       setSession({
         itemId: sessionId,
@@ -640,8 +641,9 @@ export function QBankStudio({
       // this is what makes a hard refresh on /qbank?uid=<pack> mid-session
       // resume exactly where you left off. Custom pools bypass this (their
       // itemId is `custom-<ts>` so the match below never fires).
+      let active: SessionData | null = null;
       try {
-        const active = (await sessions.getActiveFromDb()) as SessionData | null;
+        active = (await sessions.getActiveFromDb()) as SessionData | null;
         if (
           active &&
           active.sessionId &&
@@ -663,6 +665,13 @@ export function QBankStudio({
           return;
         }
       } catch {}
+
+      // The active record couldn't be resumed (different pack / different
+      // question set). Preserve it as a saved session before the fresh session
+      // overwrites it — a mid-session hard refresh on /qbank?uid=<other> (or
+      // starting another pack from the hub) must never silently destroy the
+      // in-progress progress. Stale and review sessions are skipped.
+      await archiveDisplacedActive();
 
       setImmersiveMode(true);
 
@@ -7606,6 +7615,39 @@ function contentToQuestions(
   // progress recording. The multi-pack path (buildQuestionPool) stamps them
   // explicitly when constructing the pool.
   return poolContentToQuestions(content, sourceUid, sourceTitle, sourceNode) as SessionQuestion[];
+}
+
+/**
+ * Preserve a genuinely in-progress active session as a saved record before a
+ * fresh session overwrites it. Called when a start attempt could NOT resume
+ * the active record (different pack, or the same pack with a different
+ * question set) — so starting another test never silently destroys unresolved
+ * progress. Skip conditions: no sessionId, completed, review replays, stale
+ * (>7 days), or zero progress so the tracker stays free of noise. Re-saving
+ * is idempotent (the store keys by sessionId).
+ */
+async function archiveDisplacedActive() {
+  try {
+    const active = (await sessions.getActiveFromDb()) as SessionData | null;
+    const hasProgress =
+      Object.keys(active?.answers ?? {}).some(
+        (k) => active?.answers[+k] !== undefined
+      ) ||
+      (active?.current ?? 0) > 0 ||
+      Object.values(active?.flagged ?? {}).some(Boolean);
+    if (
+      active &&
+      active.sessionId &&
+      !active.completedAt &&
+      !active.isReview &&
+      Array.isArray(active.questions) &&
+      active.questions.length > 0 &&
+      hasProgress &&
+      Date.now() - (active.startedAt ?? 0) < 7 * 24 * 60 * 60 * 1000
+    ) {
+      saveSession(active);
+    }
+  } catch {} // Non-fatal — the session still starts regardless.
 }
 
 function saveSession(s: SessionData) {

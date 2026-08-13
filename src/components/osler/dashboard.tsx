@@ -31,6 +31,7 @@ import {
 import { enabledEngines } from "@/lib/osler/config";
 import type { AnyContent, ContentTreeNode, EngineType } from "@/lib/osler/types";
 import { storage, sessions } from "@/lib/osler/storage";
+import { haptic } from "@/lib/osler/native";
 import { listAllArticles, loadArticleContent } from "@/lib/osler/articles";
 import { listAllVideos } from "@/lib/osler/videos";
 import type { Article } from "@/lib/osler/articles";
@@ -142,6 +143,10 @@ export function Dashboard({
     mode: string;
   } | null>(null);
   const [resumeDialogOpen, setResumeDialogOpen] = React.useState(false);
+  // Once the user has dismissed the resume dialog (keeping the session), don't
+  // re-pop it on unrelated storage events from other tabs / auto-saves — a
+  // single dismissal is honored for this dashboard mount.
+  const dismissedResumeRef = React.useRef(false);
 
   React.useEffect(() => {
     const check = () => {
@@ -174,10 +179,11 @@ export function Dashboard({
           startedAt: raw.startedAt ?? 0,
           mode: raw.mode ?? "tutor",
         });
-        setResumeDialogOpen(true);
+        if (!dismissedResumeRef.current) setResumeDialogOpen(true);
       } else {
         setActiveSession(null);
         setResumeDialogOpen(false);
+        dismissedResumeRef.current = false;
       }
     };
     check();
@@ -187,9 +193,11 @@ export function Dashboard({
   }, []);
 
   const dismissResume = React.useCallback(() => {
+    haptic("warning");
     sessions.clearActive();
     setActiveSession(null);
     setResumeDialogOpen(false);
+    dismissedResumeRef.current = false;
   }, []);
 
   const recentPacks = React.useMemo(() => {
@@ -295,7 +303,13 @@ export function Dashboard({
         </motion.div>
 
         {/* Resume session dialog */}
-        <AlertDialog open={resumeDialogOpen} onOpenChange={setResumeDialogOpen}>
+        <AlertDialog
+          open={resumeDialogOpen}
+          onOpenChange={(open) => {
+            if (!open) dismissedResumeRef.current = true;
+            setResumeDialogOpen(open);
+          }}
+        >
           <AlertDialogContent>
             <AlertDialogHeader>
               <AlertDialogTitle className="flex items-center gap-2">
@@ -330,7 +344,7 @@ export function Dashboard({
                 className="text-destructive hover:text-destructive self-start sm:self-auto"
                 onClick={dismissResume}
               >
-                <Trash2 className="size-3.5 mr-1.5" />
+                <Trash2 className="size-3.5 ms-1.5" />
                 {t("dash.discardSession")}
               </Button>
               <div className="flex flex-col-reverse sm:flex-row gap-2">
@@ -344,7 +358,7 @@ export function Dashboard({
                       navigate("qbank", { resume: true });
                     }}
                   >
-                    <RotateCcw className="size-3.5 mr-1.5" />
+                    <RotateCcw className="size-3.5 ms-1.5" />
                     {t("common.resume")}
                   </Button>
                 </AlertDialogAction>
