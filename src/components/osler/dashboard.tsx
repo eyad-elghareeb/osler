@@ -21,7 +21,13 @@ import {
   RotateCcw,
   X,
 } from "lucide-react";
-import { loadAllContent, getEngineMeta } from "@/lib/osler/content";
+import {
+  loadCategoryTree,
+  flattenTree,
+  loadNodeContent,
+  getEngineMeta,
+} from "@/lib/osler/content";
+import { enabledEngines } from "@/lib/osler/config";
 import type { AnyContent, ContentTreeNode, EngineType } from "@/lib/osler/types";
 import { storage, sessions } from "@/lib/osler/storage";
 import { listAllArticles, loadArticleContent } from "@/lib/osler/articles";
@@ -36,7 +42,6 @@ import {
   SectionHeading,
   StatTile as SharedStatTile,
   type StatTileProps,
-  HubSkeleton,
 } from "./ui-primitives";
 import { toast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
@@ -58,7 +63,7 @@ import { useOslerSession } from "@/lib/osler/session-context";
 interface DashboardProps {
   username?: string;
   onViewChange?: (v: OslerView) => void;
-  onOpenPack?: (item: ContentTreeNode, content: AnyContent) => void;
+  onOpenPack?: (item: ContentTreeNode, content?: AnyContent) => void;
   onOpenArticle?: (id: string) => void;
 }
 
@@ -81,14 +86,32 @@ export function Dashboard({
     else navigate("qbank", { uid: node.uid });
   });
 
-  const [data, setData] = React.useState<{
-    items: Array<{ node: ContentTreeNode; content: AnyContent | null }>;
-  } | null>(null);
-  const [stats, setStats] = React.useState({ attempted: 0, correct: 0, packs: 0 });
+  // Manifest-only content tree — loaded from category manifests (fast, no
+  // pack JSON fetched). Recent packs + continue card need node metadata, so
+  // the dashboard no longer waits for every pack's data files to hydrate.
+  const [leaves, setLeaves] = React.useState<ContentTreeNode[] | null>(null);
 
   React.useEffect(() => {
-    loadAllContent().then(setData).catch(console.error);
+    let cancelled = false;
+    (async () => {
+      try {
+        const types = enabledEngines().filter((t) => t !== "library");
+        const folders = [...new Set(types)];
+        const trees = await Promise.all(
+          folders.map((type) => loadCategoryTree(type).catch(() => [] as ContentTreeNode[]))
+        );
+        if (cancelled) return;
+        setLeaves(trees.flatMap((tree) => flattenTree(tree)));
+      } catch {
+        if (!cancelled) setLeaves([]);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, []);
+
+  const [stats, setStats] = React.useState({ attempted: 0, correct: 0, packs: 0 });
 
   React.useEffect(() => {
     const update = () => {
@@ -169,11 +192,10 @@ export function Dashboard({
   }, []);
 
   const recentPacks = React.useMemo(() => {
-    if (!data) return [];
-    return data.items
-      .map(({ node, content }) => ({
+    if (!leaves) return [];
+    return leaves
+      .map((node) => ({
         node,
-        content,
         progress: storage.packProgress(node.uid),
       }))
       .filter((x) => x.progress.attempted > 0)
@@ -182,9 +204,28 @@ export function Dashboard({
           (b.progress.lastAttempt ?? 0) - (a.progress.lastAttempt ?? 0)
       )
       .slice(0, 4);
-  }, [data, stats]);
+  }, [leaves, stats]);
 
   const continuePack = recentPacks[0];
+
+  // Lazily load just the continue pack's data so the hero card can show its
+  // description without forcing the whole tree's JSON to hydrate.
+  const [continueContent, setContinueContent] = React.useState<AnyContent | null>(null);
+  React.useEffect(() => {
+    let cancelled = false;
+    if (!continuePack) {
+      setContinueContent(null);
+      return;
+    }
+    loadNodeContent(continuePack.node)
+      .then((content) => {
+        if (!cancelled) setContinueContent(content);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [continuePack?.node.uid]);
   const accuracy = stats.attempted
     ? Math.round((stats.correct / stats.attempted) * 100)
     : 0;
@@ -237,14 +278,6 @@ export function Dashboard({
   return (
     <div className="osler-page">
       <div className="osler-page__inner--wide">
-        {/* Loading skeleton — shown while content + stats hydrate.
-         * Mirrors the real layout (header → hero → stats → cards) so the
-         * transition to populated content is seamless. */}
-        {!data && (
-          <HubSkeleton hero statCount={4} cardCount={3} />
-        )}
-        {data && (
-        <>
         {/* Hero */}
         <motion.div
           initial={{ opacity: 0, y: 8 }}
@@ -322,7 +355,7 @@ export function Dashboard({
                   {continuePack.node.title}
                 </h2>
                 <p className="text-xs text-muted-foreground mb-3 line-clamp-1">
-                  {continuePack.content?.meta.description}
+                  {continueContent?.meta.description}
                 </p>
                 <div className="flex items-center gap-3 text-xs flex-wrap">
                   <span className="text-muted-foreground">
@@ -344,10 +377,7 @@ export function Dashboard({
               </div>
               <Button
                 size="lg"
-                onClick={() =>
-                  continuePack.content &&
-                  onOpenPack?.(continuePack.node, continuePack.content)
-                }
+                onClick={() => onOpenPack?.(continuePack.node, continueContent ?? undefined)}
                 className="shrink-0"
               >
                 {t("common.resume")}
@@ -495,14 +525,14 @@ export function Dashboard({
               animate="visible"
               className="grid grid-cols-1 md:grid-cols-2 gap-3"
             >
-              {recentPacks.map(({ node, content, progress }) => (
+              {recentPacks.map(({ node, progress }) => (
                 <motion.button
                   key={node.uid}
                   type="button"
                   variants={fadeUp}
                   whileHover={{ y: -2 }}
                   whileTap={{ scale: 0.99 }}
-                  onClick={() => content && onOpenPack?.(node, content)}
+                  onClick={() => onOpenPack?.(node)}
                   className="text-start osler-card--default group hover:border-primary/40 hover:shadow-e2 transition-all"
                 >
                   <div className="flex items-start gap-3">
@@ -541,8 +571,6 @@ export function Dashboard({
             </motion.div>
           </>
         ) : null}
-        </>
-        )}
       </div>
 
     </div>

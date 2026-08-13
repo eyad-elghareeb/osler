@@ -980,6 +980,16 @@ export function HubSkeleton({
   header = true,
   className,
 }: HubSkeletonProps) {
+  // Column count maps to responsive classes (Tailwind can't JIT-compile
+  // dynamic `md:grid-cols-${n}`, so enumerate the handful of shapes used).
+  const statCols =
+    statCount >= 4
+      ? "grid-cols-2 md:grid-cols-4"
+      : statCount === 3
+        ? "grid-cols-2 md:grid-cols-3"
+        : statCount === 2
+          ? "grid-cols-2"
+          : "grid-cols-1";
   return (
     <div className={cn("osler-page", className)}>
       <div className="osler-page__inner--wide">
@@ -993,22 +1003,19 @@ export function HubSkeleton({
         {hero && (
           <Skeleton className="h-32 w-full rounded-xl mb-6" />
         )}
-        <div
-          className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6"
-          style={{ gridTemplateColumns: `repeat(${Math.min(statCount, 4)}, minmax(0, 1fr))` }}
-        >
+        <div className={cn("grid gap-3 mb-6", statCols)}>
           {Array.from({ length: statCount }).map((_, i) => (
             <div key={i} className="osler-stat-tile">
               <div className="flex items-center justify-between mb-2">
-                <Skeleton className="h-3 w-16" />
-                <Skeleton className="size-4 rounded" />
+                <Skeleton className="h-3 w-3/4 max-w-16" />
+                <Skeleton className="size-4 rounded shrink-0" />
               </div>
-              <Skeleton className="h-7 w-20" />
+              <Skeleton className="h-7 w-1/2 max-w-20" />
             </div>
           ))}
         </div>
         <Skeleton className="h-4 w-32 mb-3" />
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
           {Array.from({ length: cardCount }).map((_, i) => (
             <SkeletonCard key={i} lines={3} />
           ))}

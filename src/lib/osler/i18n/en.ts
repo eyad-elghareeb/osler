@@ -261,6 +261,7 @@ export const en = {
     "qbank.session.aiAssistant": "AI Assistant",
     "qbank.session.openArticle": "Open Article",
     "qbank.session.articles": "Articles",
+    "qbank.session.noArticles": "No articles available",
     "qbank.session.tools": "Tools",
     "qbank.session.questionTab": "Question",
     "qbank.session.answerTab": "Answer",

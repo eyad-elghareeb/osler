@@ -261,6 +261,7 @@ export const ar = {
     "qbank.session.aiAssistant": "المساعد الذكي",
     "qbank.session.openArticle": "فتح مقال",
     "qbank.session.articles": "المقالات",
+    "qbank.session.noArticles": "لا توجد مقالات متاحة",
     "qbank.session.tools": "الأدوات",
     "qbank.session.questionTab": "السؤال",
     "qbank.session.answerTab": "الإجابة",

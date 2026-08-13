@@ -55,6 +55,7 @@ import {
   RefreshCw,
   Download,
   PackageOpen,
+  Wrench,
 } from "lucide-react";
 import { loadCategoryTree, loadContentByUid, loadNodeByUid, ENGINE_META, flattenTree, packBasePath } from "@/lib/osler/content";
 import { toast } from "@/hooks/use-toast";
@@ -108,6 +109,13 @@ import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+} from "@/components/ui/sheet";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -1582,6 +1590,41 @@ const ENGINE_ICONS: Record<
   video: VideoIcon,
 };
 
+/** Single tool row inside the mobile session tools sheet. */
+function SessionToolRow({
+  icon: Icon,
+  label,
+  active,
+  onClick,
+}: {
+  icon: React.ComponentType<{ className?: string }>;
+  label: string;
+  active?: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        "w-full text-start px-3 py-2.5 hover:bg-muted flex items-center gap-3 rounded-lg text-sm transition-colors",
+        active ? "text-primary font-medium" : "text-foreground",
+      )}
+    >
+      <span
+        className={cn(
+          "size-9 rounded-lg flex items-center justify-center shrink-0",
+          active ? "bg-primary/10 text-primary" : "bg-muted/60 text-muted-foreground",
+        )}
+      >
+        <Icon className="size-4" />
+      </span>
+      <span className="flex-1 min-w-0 truncate">{label}</span>
+      {active && <Check className="size-4 text-primary shrink-0" />}
+    </button>
+  );
+}
+
 function PackCard({
   node,
   content,
@@ -1812,29 +1855,28 @@ function ContentTab({
     return node.items.flatMap(collectLeafUids);
   }, []);
 
-  /**
-   * Per-folder stat rollup — aggregates all leaf packs under a node.
+/**
+   * Per-folder stat rollup - aggregates all leaf packs under a node.
+   * Question counts come straight from the manifest (`node.questionCount` is
+   * rolled up by the generator), so no pack JSON needs to load for the hub
+   * stat bars - keeps the deck grid cheap even for large trees.
    */
   const folderStats = React.useCallback(
     (node: ContentTreeNode): { packs: number; questions: number; attempted: number; correct: number } => {
       const uids = collectLeafUids(node);
       let packs = 0;
-      let questions = 0;
+      let questions = node.questionCount ?? 0;
       let attempted = 0;
       let correct = 0;
       for (const uid of uids) {
-        const content = contentByUid.get(uid);
-        const pack = data?.items.find((entry) => entry.node.uid === uid)?.node;
-        if (!pack) continue;
         packs += 1;
-        questions += content ? countQuestions(content) : pack.questionCount ?? 0;
         const p = storage.packProgress(uid);
         attempted += p.attempted;
         correct += p.correct;
       }
       return { packs, questions, attempted, correct };
     },
-    [contentByUid, collectLeafUids, data],
+    [collectLeafUids],
   );
 
   /**
@@ -3970,6 +4012,7 @@ function QuizView({
   // Live quiz settings (font, weight, line height, auto-submit, layout, alignment)
   const { settings: quizSettingsState } = useQuizSettings();
   const [articleSearchOpen, setArticleSearchOpen] = React.useState(false);
+  const [toolsOpen, setToolsOpen] = React.useState(false);
   const isMobile = useIsMobile();
   const [mobileTutorTab, setMobileTutorTab] = React.useState<"question" | "answer">("question");
   const [showShortcuts, setShowShortcuts] = React.useState(false);
@@ -4282,7 +4325,7 @@ function QuizView({
 
         {/* Choices (MCQ only) */}
         {qIsMCQ ? (
-          <div className="mt-6 space-y-2.5">
+          <div className="mt-6 space-y-3">
             <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">
               {qSubmitted ? t("qbank.session.readOnly") : t("qbank.session.selectOne")}
             </div>
@@ -5094,7 +5137,7 @@ function QuizView({
 
           {/* Mobile tutor-mode tab switcher — shown only on phones in split mode after submit */}
           {submitted && session.mode === "tutor" && useSplitExplanation && !readonly && (
-            <div className="md:hidden flex border-b border-border bg-muted/30 safe-pt">
+            <div className="md:hidden flex border-b border-border bg-muted/30">
               <button
                 onClick={() => setMobileTutorTab("question")}
                 className={`flex-1 py-2.5 text-xs font-medium transition-colors ${
@@ -5419,65 +5462,93 @@ function QuizView({
                   <Flag className={`size-4 ${session.flagged[session.current] ? "fill-warning text-warning" : ""}`} />
                 </Button>
 
-                {/* Tools dropdown for mobile */}
-                  <Popover>
-                    <PopoverTrigger asChild>
-                      <Button variant="outline" size="icon" className="size-10 rounded-lg shrink-0 medos-touch-target" title={t("qbank.session.tools")}>
-                        <CalcIcon className="size-4" />
-                      </Button>
-                    </PopoverTrigger>
-                    <PopoverContent side="top" align="end" className="min-w-44">
-                    <div className="py-1">
-                      <button onClick={onToggleCalculator} className="w-full text-left text-sm px-3 py-2 hover:bg-muted flex items-center gap-2">
-                        <CalcIcon className="size-4" /> {t("qbank.session.calculator")}
-                      </button>
-                      <button onClick={onToggleLabValues} className="w-full text-left text-sm px-3 py-2 hover:bg-muted flex items-center gap-2">
-                        <FlaskConical className="size-4" /> {t("qbank.session.labValues")}
-                      </button>
-                      <button onClick={onToggleAiAssistant} className="w-full text-left text-sm px-3 py-2 hover:bg-muted flex items-center gap-2">
-                        <Sparkles className="size-4" /> {t("qbank.session.aiAssistant")}
-                      </button>
-                      <button onClick={() => setArticleSearchOpen(true)} className="w-full text-left text-sm px-3 py-2 hover:bg-muted flex items-center gap-2">
-                        <BookOpen className="size-4" /> {t("qbank.session.articles")}
-                      </button>
-                      {submitted && session.mode === "tutor" && (
-                        <button onClick={onRetry} className="w-full text-left text-sm px-3 py-2 hover:bg-muted flex items-center gap-2">
-                          <RotateCcw className="size-4" /> {t("qbank.session.retry")}
-                        </button>
-                      )}
-                    </div>
-                  </PopoverContent>
-                </Popover>
-
-                {/* Mobile article search dropdown — anchored above bottom bar */}
-                <AnimatePresence>
-                  {articleSearchOpen && (
-                    <motion.div
-                      initial={{ opacity: 0, y: 8 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      exit={{ opacity: 0, y: 8 }}
-                      transition={{ duration: 0.15 }}
-                      className="sm:hidden fixed bottom-20 right-2 z-50 w-72 max-h-72 overflow-y-auto rounded-xl border border-border bg-card shadow-xl"
+                {/* Tools menu for mobile - bottom sheet with tool shortcuts
+                    + inline article picker. A sheet (not a popover) so it
+                    slides up natively, respects safe areas, and never clips
+                    against the viewport edge. */}
+                <Sheet open={toolsOpen} onOpenChange={setToolsOpen}>
+                  <SheetTrigger asChild>
+                    <Button
+                      variant="outline" size="icon"
+                      onClick={() => { haptic("selection"); setToolsOpen(true); }}
+                      className="size-10 rounded-lg shrink-0 medos-touch-target"
+                      title={t("qbank.session.tools")}
+                      aria-label={t("qbank.session.tools")}
                     >
-                      <div className="py-1">
-                        <div className="px-4 py-2 text-xs font-bold uppercase tracking-wider text-primary border-b border-border">{t("qbank.session.openArticle")}</div>
-                        {articleList.map((a) => (
-                          <button
-                            key={a.file}
-                            onClick={() => {
-                              onOpenArticle(a.file);
-                              setArticleSearchOpen(false);
-                            }}
-                            className="w-full text-left text-sm px-4 py-2.5 hover:bg-muted transition-colors flex items-center gap-2 border-b border-border last:border-0"
-                          >
-                            <FileText className="size-3.5 shrink-0 text-muted-foreground" />
-                            <span className="truncate">{a.title}</span>
-                          </button>
-                        ))}
+                      <Wrench className="size-4" />
+                    </Button>
+                  </SheetTrigger>
+                  <SheetContent
+                    side="bottom"
+                    className="px-0 pt-0 pb-[max(env(safe-area-inset-bottom,0px),0.75rem)] rounded-t-2xl"
+                  >
+                    <SheetHeader className="flex-row items-center justify-between gap-2 px-4 pt-4 pb-1">
+                      <SheetTitle className="flex items-center gap-2 text-sm font-semibold">
+                        <Wrench className="size-4 text-muted-foreground" />
+                        {t("qbank.session.tools")}
+                      </SheetTitle>
+                    </SheetHeader>
+                    <div className="px-2">
+                      <SessionToolRow
+                        icon={CalcIcon}
+                        label={t("qbank.session.calculator")}
+                        active={calculatorOpen}
+                        onClick={() => { haptic("light"); setToolsOpen(false); onToggleCalculator(); }}
+                      />
+                      <SessionToolRow
+                        icon={FlaskConical}
+                        label={t("qbank.session.labValues")}
+                        active={labValuesOpen}
+                        onClick={() => { haptic("light"); setToolsOpen(false); onToggleLabValues(); }}
+                      />
+                      <SessionToolRow
+                        icon={Sparkles}
+                        label={t("qbank.session.aiAssistant")}
+                        active={aiAssistantOpen}
+                        onClick={() => { haptic("light"); setToolsOpen(false); onToggleAiAssistant(); }}
+                      />
+                      <SessionToolRow
+                        icon={NotebookPen}
+                        label={t("qbank.notes.title")}
+                        active={notesOpen}
+                        onClick={() => { haptic("light"); setToolsOpen(false); onToggleNotes(); }}
+                      />
+                      {submitted && session.mode === "tutor" && (
+                        <SessionToolRow
+                          icon={RotateCcw}
+                          label={t("qbank.session.retry")}
+                          onClick={() => { haptic("light"); setToolsOpen(false); onRetry(); }}
+                        />
+                      )}
+
+                      {/* Articles - inline, scrollable picker */}
+                      <div className="mt-1 border-t border-border pt-3 pb-1 px-1">
+                        <div className="flex items-center gap-2 px-2 pb-1.5 text-[11px] uppercase tracking-wider text-muted-foreground font-medium">
+                          <BookOpen className="size-3.5" />
+                          {t("qbank.session.openArticle")}
+                        </div>
+                        <div className="max-h-48 overflow-y-auto medos-quiet-scrollbar">
+                          {articleList.length === 0 ? (
+                            <p className="px-2 py-2 text-sm text-muted-foreground">
+                              {t("qbank.session.noArticles")}
+                            </p>
+                          ) : (
+                            articleList.map((a) => (
+                              <button
+                                key={a.file}
+                                onClick={() => { haptic("light"); setToolsOpen(false); onOpenArticle(a.file); }}
+                                className="w-full text-start px-3 py-2 hover:bg-muted flex items-center gap-2 rounded-lg text-sm text-foreground"
+                              >
+                                <FileText className="size-4 shrink-0 text-muted-foreground" />
+                                <span className="truncate">{a.title}</span>
+                              </button>
+                            ))
+                          )}
+                        </div>
                       </div>
-                    </motion.div>
-                  )}
-                </AnimatePresence>
+                    </div>
+                  </SheetContent>
+                </Sheet>
               </>
             )}
 
