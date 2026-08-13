@@ -69,3 +69,4 @@ cloudflare/worker/seed-admin.mjs
 worker.log
 output/playwright
 .playwright-cli
+.cortexkit/.gitignore
