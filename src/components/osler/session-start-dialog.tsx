@@ -11,6 +11,8 @@ import {
   Plus,
   Sparkles,
   Timer,
+  Flag,
+  Eye,
 } from "lucide-react";
 import {
   Dialog,
@@ -125,11 +127,13 @@ export function SessionStartDialog({
   const [countInput, setCountInput] = React.useState(
     String(isBank ? Math.min(20, totalQuestions) : totalQuestions),
   );
+  const [timerMinutes, setTimerMinutes] = React.useState(isBank ? 60 : 0);
 
   React.useEffect(() => {
     if (!open) return;
     setOrder("sequential");
     setCountInput(String(isBank ? Math.min(20, totalQuestions) : totalQuestions));
+    setTimerMinutes(isBank ? 60 : 0);
   }, [open, isBank, totalQuestions]);
 
   const maxCount = Math.max(1, totalQuestions);
@@ -198,7 +202,7 @@ export function SessionStartDialog({
                 <Sparkles className="size-4 text-primary" />
                 {t("qbank.launch.modeTitle")}
               </div>
-              <div className="grid gap-3 sm:grid-cols-2">
+              <div className="grid grid-cols-2 gap-2">
                 <ChoiceCard
                   active={mode === "tutor"}
                   icon={Sparkles}
@@ -219,25 +223,40 @@ export function SessionStartDialog({
               {mode === "timed" && (
                 <p className="mt-2 text-xs text-muted-foreground">{t("qbank.launch.timedHint")}</p>
               )}
+              {isBank && (
+                <div className="mt-3 flex items-center gap-2">
+                  <Eye className="size-3.5 text-primary" />
+                  <span className="text-xs font-medium text-foreground">{t("qbank.launch.timerMinutes")}</span>
+                  <input
+                    type="number"
+                    min={1}
+                    max={120}
+                    value={timerMinutes}
+                    onChange={(e) => setTimerMinutes(parseInt(e.target.value) || 60)}
+                    className="h-6 w-14 rounded-md border border-border bg-card text-center text-sm font-medium tabular-nums outline-none focus:ring-2 focus:ring-ring"
+                  />
+                  <span className="text-xs text-muted-foreground">min</span>
+                </div>
+              )}
             </div>
 
             {isBank && (
-              <div className="mt-6">
-                <div className="mb-3 flex items-center gap-2 text-sm font-semibold">
+              <div className="mt-3">
+                <div className="mb-2 flex items-center gap-2 text-sm font-semibold">
                   <Layers className="size-4 text-primary" />
                   {t("qbank.launch.sessionSize")}
                 </div>
-                <div className="rounded-xl border border-primary/20 bg-primary/[0.03] p-3">
-                  <div className="flex items-center justify-between gap-3">
+                <div className="rounded-xl border border-primary/20 bg-primary/[0.03] p-2">
+                  <div className="flex items-center justify-between gap-2">
                     <div className="min-w-0">
                       <div className="text-sm font-medium">{t("qbank.launch.splitSessions")}</div>
-                      <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+                      <p className="mt-0.5 text-[10px] leading-relaxed text-muted-foreground">
                         {t("qbank.launch.splitSessionsDesc")}
                       </p>
                     </div>
-                    <div className="flex shrink-0 items-center gap-1.5">
+                    <div className="flex shrink-0 items-center gap-1">
                       <Button type="button" variant="outline" size="iconSm" onClick={() => adjustCount(-5)} aria-label={t("qbank.launch.decreaseQuestions")}>
-                        <Minus className="size-3.5" />
+                        <Minus className="size-3" />
                       </Button>
                       <input
                         id="session-question-count"
@@ -247,14 +266,14 @@ export function SessionStartDialog({
                         value={countInput}
                         onChange={(event) => setCountInput(event.target.value)}
                         aria-describedby="session-question-count-hint"
-                        className="h-8 w-16 rounded-md border border-border bg-card text-center text-sm font-semibold tabular-nums outline-none focus:ring-2 focus:ring-ring"
+                        className="h-7 w-14 rounded-md border border-border bg-card text-center text-sm font-semibold tabular-nums outline-none focus:ring-2 focus:ring-ring"
                       />
                       <Button type="button" variant="outline" size="iconSm" onClick={() => adjustCount(5)} aria-label={t("qbank.launch.increaseQuestions")}>
-                        <Plus className="size-3.5" />
+                        <Plus className="size-3" />
                       </Button>
                     </div>
                   </div>
-                  <p id="session-question-count-hint" className="mt-2 text-xs text-muted-foreground">
+                  <p id="session-question-count-hint" className="mt-1 text-[10px] text-muted-foreground">
                     {t("qbank.launch.questionsPerSessionHint")}
                   </p>
                 </div>
@@ -262,26 +281,10 @@ export function SessionStartDialog({
             )}
 
             {isBank && (
-              <div className="mt-6">
-                <div className="mb-3 flex items-center gap-2 text-sm font-semibold">
+              <div className="mt-3">
+                <div className="flex items-center gap-2">
                   <ArrowUpDown className="size-4 text-primary" />
                   {t("qbank.launch.order")}
-                </div>
-                <div className="flex gap-2">
-                  {(["sequential", "random"] as const).map((value) => (
-                    <Button
-                      key={value}
-                      type="button"
-                      variant={order === value ? "secondary" : "outline"}
-                      size="sm"
-                      onClick={() => {
-                        haptic("selection");
-                        setOrder(value);
-                      }}
-                    >
-                      {value === "sequential" ? t("qbank.launch.sequential") : t("qbank.launch.random")}
-                    </Button>
-                  ))}
                 </div>
               </div>
             )}

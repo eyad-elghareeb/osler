@@ -244,6 +244,7 @@ export const en = {
     "qbank.launch.moreOptions": "More options",
     "qbank.launch.start": "Start quiz",
     "qbank.launch.startSession": "Start session",
+    "qbank.launch.timerMinutes": "Timer minutes",
 
     "qbank.session.question": "Question {n} of {total}",
     "qbank.session.exit": "Exit",

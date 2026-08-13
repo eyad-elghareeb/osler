@@ -245,6 +245,7 @@ export const ar = {
     "qbank.launch.moreOptions": "خيارات أكثر",
     "qbank.launch.start": "بدء الاختبار",
     "qbank.launch.startSession": "بدء الجلسة",
+    "qbank.launch.timerMinutes": "دقائق المؤقت",
 
     "qbank.session.question": "السؤال {n} من {total}",
     "qbank.session.exit": "خروج",
