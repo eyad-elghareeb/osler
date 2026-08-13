@@ -7,7 +7,6 @@ import {
   BookOpen,
   ClipboardCheck,
   Layers,
-  ListChecks,
   Minus,
   Plus,
   Sparkles,
@@ -34,6 +33,7 @@ import type {
 import { sessions, storage } from "@/lib/osler/storage";
 import { haptic } from "@/lib/osler/native";
 import { useI18n } from "./i18n-provider";
+import { MetricBar } from "./ui-primitives";
 
 interface SessionStartDialogProps {
   open: boolean;
@@ -52,35 +52,40 @@ function ChoiceCard({
   label,
   description,
   onClick,
+  compact = false,
 }: {
   active: boolean;
   icon: React.ComponentType<{ className?: string }>;
   label: string;
   description: string;
   onClick: () => void;
+  compact?: boolean;
 }) {
   return (
     <button
       type="button"
       onClick={onClick}
+      aria-pressed={active}
       className={cn(
-        "flex min-h-24 items-start gap-3 rounded-xl border p-4 text-start transition-colors active:scale-[0.98]",
+        "flex items-start rounded-xl border text-start transition-[border-color,background-color,box-shadow,transform] active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+        compact ? "min-h-0 gap-2.5 p-3" : "min-h-24 gap-3 p-4",
         active
           ? "border-primary bg-primary/5 text-foreground shadow-e1"
-          : "border-border bg-card hover:border-primary/40 hover:bg-primary/[0.02]",
+          : "border-border bg-card hover:border-primary/40 hover:bg-primary/[0.02] hover:shadow-e1",
       )}
     >
       <span
         className={cn(
-          "flex size-9 shrink-0 items-center justify-center rounded-lg",
+          "flex shrink-0 items-center justify-center",
+          compact ? "size-8 rounded-md" : "size-9 rounded-lg",
           active ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground",
         )}
       >
         <Icon className="size-4" />
       </span>
       <span className="min-w-0">
-        <span className="block text-sm font-semibold">{label}</span>
-        <span className="mt-1 block text-xs leading-relaxed text-muted-foreground">
+        <span className={cn("block font-semibold", compact ? "text-xs" : "text-sm")}>{label}</span>
+        <span className={cn("block text-muted-foreground", compact ? "mt-0.5 text-[11px] leading-snug" : "mt-1 text-xs leading-relaxed")}>
           {description}
         </span>
       </span>
@@ -90,9 +95,9 @@ function ChoiceCard({
 
 function Stat({ label, value }: { label: string; value: string | number }) {
   return (
-    <div className="rounded-xl border border-border bg-muted/30 px-3 py-2.5">
-      <div className="text-base font-bold tabular-nums text-foreground">{value}</div>
-      <div className="mt-0.5 text-xs text-muted-foreground">{label}</div>
+    <div className="flex min-w-0 items-baseline justify-between gap-2">
+      <div className="text-sm font-semibold tabular-nums text-foreground">{value}</div>
+      <div className="truncate text-xs text-muted-foreground">{label}</div>
     </div>
   );
 }
@@ -112,24 +117,24 @@ export function SessionStartDialog({
   const totalQuestions = countQuestions(content);
   const passageCount = isBank ? content.passages?.length ?? 0 : 0;
   const progress = storageProgress(item.uid, totalQuestions);
-  const [strategy, setStrategy] = React.useState<SessionStrategy>(
-    isBank && totalQuestions > 40 ? "split" : "single",
-  );
+  const description = content.meta.description?.startsWith("Content pack:")
+    ? t("qbank.launch.subtitle", { title: item.title })
+    : content.meta.description ?? t("qbank.launch.subtitle", { title: item.title });
+  const strategy: SessionStrategy = isBank ? "split" : "single";
   const [order, setOrder] = React.useState<SessionOrder>("sequential");
   const [countInput, setCountInput] = React.useState(
-    String(isBank && totalQuestions > 40 ? Math.min(20, totalQuestions) : totalQuestions),
+    String(isBank ? Math.min(20, totalQuestions) : totalQuestions),
   );
 
   React.useEffect(() => {
     if (!open) return;
-    setStrategy(isBank && totalQuestions > 40 ? "split" : "single");
     setOrder("sequential");
-    setCountInput(String(isBank && totalQuestions > 40 ? Math.min(20, totalQuestions) : totalQuestions));
+    setCountInput(String(isBank ? Math.min(20, totalQuestions) : totalQuestions));
   }, [open, isBank, totalQuestions]);
 
   const maxCount = Math.max(1, totalQuestions);
   const sessionCount = Math.max(1, Math.min(parseInt(countInput, 10) || 1, maxCount));
-  const selectedCount = strategy === "single" ? maxCount : sessionCount;
+  const selectedCount = isBank ? sessionCount : maxCount;
 
   const adjustCount = (delta: number) => {
     setCountInput(String(Math.max(1, Math.min(maxCount, sessionCount + delta))));
@@ -140,11 +145,6 @@ export function SessionStartDialog({
     onModeChange(next);
   };
 
-  const handleStrategyChange = (next: SessionStrategy) => {
-    haptic("selection");
-    setStrategy(next);
-  };
-
   const handleStart = () => {
     haptic("light");
     onStart({ mode, strategy, questionCount: selectedCount, order });
@@ -152,101 +152,90 @@ export function SessionStartDialog({
 
   return (
     <Dialog open={open} onOpenChange={(nextOpen) => !nextOpen && onClose()}>
-      <DialogContent className="max-h-[min(760px,calc(100dvh-2rem))] overflow-y-auto p-0 sm:max-w-2xl">
+      <DialogContent className="flex max-h-[min(760px,calc(100dvh-2rem))] flex-col overflow-hidden p-0 sm:max-w-2xl">
         <motion.div
           initial={{ opacity: 0, y: 8 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.2 }}
-          className="p-5 sm:p-6"
+          className="flex min-h-0 flex-1 flex-col"
         >
-          <DialogHeader className="text-start">
-            <div className="mb-4 flex items-start gap-3">
-              <div className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
-                {isBank ? <BookOpen className="size-5" /> : <ClipboardCheck className="size-5" />}
+          <div className="min-h-0 flex-1 overflow-y-auto px-5 pb-4 pt-5 sm:px-6 sm:pt-6">
+            <DialogHeader className="text-start">
+              <div className="mb-4 flex items-start gap-3">
+                <div className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                  {isBank ? <BookOpen className="size-5" /> : <ClipboardCheck className="size-5" />}
+                </div>
+                <div className="min-w-0">
+                  <DialogTitle className="text-xl font-bold tracking-tight">{item.title}</DialogTitle>
+                  <DialogDescription className="mt-1 text-sm leading-relaxed">
+                    {description}
+                  </DialogDescription>
+                </div>
               </div>
-              <div className="min-w-0">
-                <DialogTitle className="text-xl font-bold tracking-tight">{item.title}</DialogTitle>
-                <DialogDescription className="mt-1 text-sm leading-relaxed">
-                  {content.meta.description ?? t("qbank.launch.subtitle", { title: item.title })}
-                </DialogDescription>
-              </div>
-            </div>
-          </DialogHeader>
+            </DialogHeader>
 
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-            <Stat label={t("qbank.launch.questions")} value={totalQuestions} />
-            {isBank && <Stat label={t("qbank.launch.passages")} value={passageCount} />}
-            <Stat label={t("qbank.launch.covered")} value={`${progress.covered}/${totalQuestions}`} />
-            <Stat label={t("qbank.launch.sessions")} value={progress.sessions} />
-          </div>
-
-          {isBank && totalQuestions > 0 && (
-            <div className="mt-3 rounded-xl border border-border bg-muted/20 p-3">
-              <div className="flex items-center justify-between gap-3 text-xs">
-                <span className="font-medium text-foreground">{t("qbank.launch.coverage")}</span>
-                <span className="tabular-nums text-muted-foreground">{progress.coverage}%</span>
+            {isBank && (
+              <div className="grid grid-cols-2 gap-x-4 gap-y-3 border-y border-border py-3 sm:grid-cols-4">
+                <Stat label={t("qbank.launch.questions")} value={totalQuestions} />
+                <Stat label={t("qbank.launch.passages")} value={passageCount} />
+                <Stat label={t("qbank.launch.covered")} value={`${progress.covered}/${totalQuestions}`} />
+                <Stat label={t("qbank.launch.sessions")} value={progress.sessions} />
               </div>
-              <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-muted">
-                <div className="h-full rounded-full bg-primary transition-[width] duration-200" style={{ width: `${progress.coverage}%` }} />
-              </div>
-            </div>
-          )}
-
-          <div className="mt-6">
-            <div className="mb-3 flex items-center gap-2 text-sm font-semibold">
-              <Sparkles className="size-4 text-primary" />
-              {t("qbank.launch.modeTitle")}
-            </div>
-            <div className="grid gap-3 sm:grid-cols-2">
-              <ChoiceCard
-                active={mode === "tutor"}
-                icon={Sparkles}
-                label={t("qbank.launch.tutor")}
-                description={t("qbank.launch.tutorDesc")}
-                onClick={() => handleModeChange("tutor")}
-              />
-              <ChoiceCard
-                active={mode === "timed"}
-                icon={Timer}
-                label={t("qbank.launch.exam")}
-                description={t("qbank.launch.examDesc")}
-                onClick={() => handleModeChange("timed")}
-              />
-            </div>
-            {mode === "timed" && (
-              <p className="mt-2 text-xs text-muted-foreground">{t("qbank.launch.timedHint")}</p>
             )}
-          </div>
 
-          {isBank && (
+            {isBank && totalQuestions > 0 && (
+              <div className="mt-3 rounded-xl border border-border bg-muted/20 p-3">
+                <div className="flex items-center justify-between gap-3 text-xs">
+                  <span className="font-medium text-foreground">{t("qbank.launch.coverage")}</span>
+                  <span className="tabular-nums text-muted-foreground">{progress.coverage}%</span>
+                </div>
+                <MetricBar value={progress.coverage} label={t("qbank.launch.coverage")} className="mt-2" />
+              </div>
+            )}
+
             <div className="mt-6">
               <div className="mb-3 flex items-center gap-2 text-sm font-semibold">
-                <Layers className="size-4 text-primary" />
-                {t("qbank.launch.sessionPlan")}
+                <Sparkles className="size-4 text-primary" />
+                {t("qbank.launch.modeTitle")}
               </div>
               <div className="grid gap-3 sm:grid-cols-2">
                 <ChoiceCard
-                  active={strategy === "single"}
-                  icon={ListChecks}
-                  label={t("qbank.launch.singleSession")}
-                  description={t("qbank.launch.singleSessionDesc")}
-                  onClick={() => handleStrategyChange("single")}
+                  active={mode === "tutor"}
+                  icon={Sparkles}
+                  label={t("qbank.launch.tutor")}
+                  description={t("qbank.launch.tutorDesc")}
+                  compact
+                  onClick={() => handleModeChange("tutor")}
                 />
                 <ChoiceCard
-                  active={strategy === "split"}
-                  icon={Layers}
-                  label={t("qbank.launch.splitSessions")}
-                  description={t("qbank.launch.splitSessionsDesc")}
-                  onClick={() => handleStrategyChange("split")}
+                  active={mode === "timed"}
+                  icon={Timer}
+                  label={t("qbank.launch.exam")}
+                  description={t("qbank.launch.examDesc")}
+                  compact
+                  onClick={() => handleModeChange("timed")}
                 />
               </div>
-              {strategy === "split" && (
-                <div className="mt-3 rounded-xl border border-primary/20 bg-primary/[0.03] p-3">
+              {mode === "timed" && (
+                <p className="mt-2 text-xs text-muted-foreground">{t("qbank.launch.timedHint")}</p>
+              )}
+            </div>
+
+            {isBank && (
+              <div className="mt-6">
+                <div className="mb-3 flex items-center gap-2 text-sm font-semibold">
+                  <Layers className="size-4 text-primary" />
+                  {t("qbank.launch.sessionSize")}
+                </div>
+                <div className="rounded-xl border border-primary/20 bg-primary/[0.03] p-3">
                   <div className="flex items-center justify-between gap-3">
-                    <label htmlFor="session-question-count" className="text-sm font-medium">
-                      {t("qbank.launch.questionsPerSession")}
-                    </label>
-                    <div className="flex items-center gap-1.5">
+                    <div className="min-w-0">
+                      <div className="text-sm font-medium">{t("qbank.launch.splitSessions")}</div>
+                      <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+                        {t("qbank.launch.splitSessionsDesc")}
+                      </p>
+                    </div>
+                    <div className="flex shrink-0 items-center gap-1.5">
                       <Button type="button" variant="outline" size="iconSm" onClick={() => adjustCount(-5)} aria-label={t("qbank.launch.decreaseQuestions")}>
                         <Minus className="size-3.5" />
                       </Button>
@@ -257,6 +246,7 @@ export function SessionStartDialog({
                         max={maxCount}
                         value={countInput}
                         onChange={(event) => setCountInput(event.target.value)}
+                        aria-describedby="session-question-count-hint"
                         className="h-8 w-16 rounded-md border border-border bg-card text-center text-sm font-semibold tabular-nums outline-none focus:ring-2 focus:ring-ring"
                       />
                       <Button type="button" variant="outline" size="iconSm" onClick={() => adjustCount(5)} aria-label={t("qbank.launch.increaseQuestions")}>
@@ -264,54 +254,58 @@ export function SessionStartDialog({
                       </Button>
                     </div>
                   </div>
-                  <p className="mt-2 text-xs text-muted-foreground">{t("qbank.launch.questionsPerSessionHint")}</p>
+                  <p id="session-question-count-hint" className="mt-2 text-xs text-muted-foreground">
+                    {t("qbank.launch.questionsPerSessionHint")}
+                  </p>
                 </div>
-              )}
-            </div>
-          )}
-
-          {isBank && (
-            <div className="mt-6">
-              <div className="mb-3 flex items-center gap-2 text-sm font-semibold">
-                <ArrowUpDown className="size-4 text-primary" />
-                {t("qbank.launch.order")}
               </div>
+            )}
+
+            {isBank && (
+              <div className="mt-6">
+                <div className="mb-3 flex items-center gap-2 text-sm font-semibold">
+                  <ArrowUpDown className="size-4 text-primary" />
+                  {t("qbank.launch.order")}
+                </div>
+                <div className="flex gap-2">
+                  {(["sequential", "random"] as const).map((value) => (
+                    <Button
+                      key={value}
+                      type="button"
+                      variant={order === value ? "secondary" : "outline"}
+                      size="sm"
+                      onClick={() => {
+                        haptic("selection");
+                        setOrder(value);
+                      }}
+                    >
+                      {value === "sequential" ? t("qbank.launch.sequential") : t("qbank.launch.random")}
+                    </Button>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+
+          <DialogFooter className="shrink-0 border-t border-border bg-card/95 px-5 py-3 safe-pb backdrop-blur-md sm:px-6">
+            <div className="flex w-full items-center justify-between gap-2">
               <div className="flex gap-2">
-                {(["sequential", "random"] as const).map((value) => (
-                  <Button
-                    key={value}
-                    type="button"
-                    variant={order === value ? "secondary" : "outline"}
-                    size="sm"
-                    onClick={() => {
-                      haptic("selection");
-                      setOrder(value);
-                    }}
-                  >
-                    {value === "sequential" ? t("qbank.launch.sequential") : t("qbank.launch.random")}
-                  </Button>
-                ))}
-              </div>
-            </div>
-          )}
-
-          <DialogFooter className="mt-7 flex-col gap-2 sm:flex-row sm:justify-between">
-            <div className="flex gap-2">
-              <Button type="button" variant="ghost" onClick={onClose}>
-                {t("qbank.launch.back")}
-              </Button>
-              {isBank && onMoreOptions && (
-                <Button type="button" variant="outline" onClick={() => {
-                  haptic("selection");
-                  onMoreOptions();
-                }}>
-                  {t("qbank.launch.moreOptions")}
+                <Button type="button" variant="ghost" onClick={onClose}>
+                  {t("qbank.launch.back")}
                 </Button>
-              )}
+                {isBank && onMoreOptions && (
+                  <Button type="button" variant="outline" onClick={() => {
+                    haptic("selection");
+                    onMoreOptions();
+                  }}>
+                    {t("qbank.launch.moreOptions")}
+                  </Button>
+                )}
+              </div>
+              <Button type="button" size="lg" onClick={handleStart} disabled={totalQuestions === 0}>
+                {isBank ? t("qbank.launch.startSession") : t("qbank.launch.start")}
+              </Button>
             </div>
-            <Button type="button" size="lg" onClick={handleStart} disabled={totalQuestions === 0}>
-              {isBank && strategy === "split" ? t("qbank.launch.startSession") : t("qbank.launch.start")}
-            </Button>
           </DialogFooter>
         </motion.div>
       </DialogContent>
