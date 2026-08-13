@@ -25,6 +25,7 @@
 import type {
   AnyContent,
   BankContent,
+  BankPassage,
   BankQuestion,
   ContentImage,
   EngineType,
@@ -106,7 +107,7 @@ export function countQuestions(content: AnyContent | null | undefined): number {
     case "quiz":
       return content.questions.length;
     case "bank":
-      return content.passages.reduce((a, p) => a + p.questions.length, 0);
+      return (content.passages ?? []).reduce((a, p) => a + p.questions.length, 0) + (content.questions?.length ?? 0);
     case "flashcard":
       return content.cards.length;
     case "written":
@@ -161,28 +162,31 @@ export function contentToQuestions(
       });
     });
   } else if (content.type === "bank") {
-    (content as BankContent).passages.forEach((p) => {
-      p.questions.forEach((q) => {
-        out.push({
-          id: q.id,
-          stem: `${p.content}\n\n${q.question}`,
-          images: p.images ?? q.images,
-          choiceImages: q.options.map((_o, i) =>
-            (q as BankQuestion & { choiceImages?: (ContentImage | ContentImage[] | undefined)[] }).choiceImages?.[i],
-          ),
-          choices: q.options,
-          correct: q.correct,
-          explanation: q.explanation,
-          explanationImages: q.explanationImages,
-          tags: q.tags,
-          difficulty: q.difficulty ? `${q.difficulty}/5` : undefined,
-          sourceUid,
-          sourceTitle,
-          sourcePath,
-          sourceCategory,
-        });
+    const bank = content as BankContent;
+    const addBankQuestion = (q: BankQuestion, passage?: BankPassage) => {
+      out.push({
+        id: q.id,
+        stem: passage?.content ? `${passage.content}\n\n${q.question}` : q.question,
+        images: passage?.images ?? q.images,
+        choiceImages: q.options.map((_o, i) =>
+          (q as BankQuestion & { choiceImages?: (ContentImage | ContentImage[] | undefined)[] }).choiceImages?.[i],
+        ),
+        choices: q.options,
+        correct: q.correct,
+        explanation: q.explanation,
+        explanationImages: q.explanationImages,
+        tags: q.tags,
+        difficulty: q.difficulty ? `${q.difficulty}/5` : undefined,
+        sourceUid,
+        sourceTitle,
+        sourcePath,
+        sourceCategory,
       });
-    });
+    };
+    for (const passage of bank.passages ?? []) {
+      for (const question of passage.questions) addBankQuestion(question, passage);
+    }
+    for (const question of bank.questions ?? []) addBankQuestion(question);
   } else if (content.type === "flashcard") {
     (content as FlashcardContent).cards.forEach((c) => {
       out.push({

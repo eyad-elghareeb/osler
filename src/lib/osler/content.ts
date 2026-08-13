@@ -245,7 +245,12 @@ function buildContent(node: ContentTreeNode, data: Record<string, unknown[]>, ef
     case "quiz":
       return { meta, type: "quiz", questions: data.questions ?? [] } as QuizContent;
     case "bank":
-      return { meta, type: "bank", passages: data.passages ?? [] } as BankContent;
+      return {
+        meta,
+        type: "bank",
+        passages: data.passages as unknown as BankContent["passages"],
+        questions: data.questions as unknown as BankContent["questions"],
+      } as BankContent;
     case "written":
       return { meta, type: "written", prompts: data.prompts ?? [] } as WrittenContent;
     case "osce":

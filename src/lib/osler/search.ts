@@ -20,6 +20,7 @@
 import { listAllArticles, type ArticleMeta } from "@/lib/osler/articles";
 import { loadAllContent, ENGINE_META } from "@/lib/osler/content";
 import { listAllVideos } from "@/lib/osler/videos";
+import { countQuestions } from "@/lib/osler/qbank-pool";
 import type {
   AnyContent,
   ContentTreeNode,
@@ -202,7 +203,7 @@ function packResult(
   const cardCount =
     content.type === "flashcard" ? content.cards.length :
     content.type === "quiz" ? content.questions.length :
-    content.type === "bank" ? content.passages.length :
+    content.type === "bank" ? countQuestions(content) :
     content.type === "written" ? content.prompts.length :
     content.type === "osce" ? content.stations.length :
     content.type === "video" ? content.videos.length : 0;

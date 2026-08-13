@@ -98,7 +98,8 @@ export interface QuizContent {
 /* ── Bank (passage-based) ────────────────────────────────────────────── */
 export interface BankQuestion {
   id: string;
-  passageId: string;
+  /** Present for passage-backed questions; omitted for flat bank questions. */
+  passageId?: string;
   question: string;
   /** Optional image(s) shown above the question stem. */
   images?: ContentImage | ContentImage[];
@@ -122,7 +123,10 @@ export interface BankPassage {
 export interface BankContent {
   meta: ContentMeta;
   type: "bank";
-  passages: BankPassage[];
+  /** Passage-backed questions are optional so banks can also be flat. */
+  passages?: BankPassage[];
+  /** Flat bank questions used when a source has no passages. */
+  questions?: BankQuestion[];
 }
 
 /* ── Flashcard Subdeck ─────────────────────────────────────────────── */

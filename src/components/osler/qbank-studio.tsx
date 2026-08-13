@@ -148,7 +148,7 @@ import { useLightbox } from "./lightbox-provider";
 import { useSwipeTabs } from "@/hooks/use-swipe-tabs";
 import { useQuizSettings } from "@/hooks/use-quiz-settings";
 import { setImmersiveMode } from "./immersive-mode";
-import { haptic } from "@/lib/osler/native";
+import { haptic, withViewTransition } from "@/lib/osler/native";
 import { gradeWithAI, createManualEvaluation, transcribePhoto } from "@/lib/osler/grading";
 import { useI18n } from "./i18n-provider";
 import { NavigationStack } from "./navigation-stack";
@@ -161,6 +161,12 @@ import type { StringKey } from "@/lib/osler/i18n";
 import { loadUiLang } from "@/lib/osler/i18n";
 import { generateResultsPdf, generateDashboardPdf, generateQuizCompilationPdf, downloadPdf, type FullQuestion, type PdfExportConfig } from "@/lib/osler/pdf";
 import { PdfExportDialog, type PdfExportOptions } from "./pdf-export-dialog";
+import { SessionStartDialog } from "./session-start-dialog";
+import type {
+  SessionMode,
+  SessionOrder,
+  SessionStartOptions,
+} from "@/lib/osler/session-options";
 import {
   Dialog,
   DialogContent,
@@ -264,7 +270,7 @@ interface QBankStudioProps {
 }
 
 type QuizMode = "home" | "quiz" | "results" | "review";
-type TestMode = "tutor" | "timed";
+type TestMode = SessionMode;
 type HomeTab = "content" | "create" | "tracker";
 
 interface SessionData {
@@ -345,6 +351,8 @@ export function QBankStudio({
   const [session, setSession] = React.useState<SessionData | null>(null);
   const [testMode, setTestMode] = React.useState<TestMode>("tutor");
   const [homeTab, setHomeTab] = React.useState<HomeTab>("content");
+  const [startDialogOpen, setStartDialogOpen] = React.useState(false);
+  const [startPromptUid, setStartPromptUid] = React.useState<string | null>(null);
   const [, force] = React.useReducer((x) => x + 1, 0);
   const pendingQuestionLimitRef = React.useRef(0);
   const { t } = useI18n();
@@ -682,11 +690,16 @@ export function QBankStudio({
   }, []);
 
   const startSession = React.useCallback(
-    async (item: ContentTreeNode, content: AnyContent, maxQuestions?: number) => {
+    async (
+      item: ContentTreeNode,
+      content: AnyContent,
+      options: { maxQuestions?: number; order?: SessionOrder; mode?: SessionMode } = {},
+    ) => {
       let questions = contentToQuestions(content, item.uid, item.title, item);
       if (questions.length === 0) return;
-      if (maxQuestions && maxQuestions > 0 && maxQuestions < questions.length) {
-        questions = questions.slice(0, maxQuestions);
+      const sessionMode = options.mode ?? testMode;
+      if (options.maxQuestions && options.maxQuestions > 0 && options.maxQuestions < questions.length) {
+        questions = pickQuestions(questions, options.maxQuestions, options.order ?? "sequential");
       }
       const totalTime = questions.length * 60;
       const sessionId = `${item.uid}-${Date.now()}`;
@@ -737,7 +750,7 @@ export function QBankStudio({
         itemId: item.uid,
         itemTitle: item.title,
         engine: item.type,
-        mode: testMode,
+        mode: sessionMode,
         questions,
         answers: {},
         revealed: {},
@@ -745,7 +758,7 @@ export function QBankStudio({
         current: 0,
         startedAt: Date.now(),
         examTimeRemaining: totalTime,
-        timeEndsAt: testMode === "timed" ? Date.now() + totalTime * 1000 : undefined,
+        timeEndsAt: sessionMode === "timed" ? Date.now() + totalTime * 1000 : undefined,
         examPaused: false,
         sessionId,
         writtenDrafts: drafts,
@@ -760,24 +773,51 @@ export function QBankStudio({
     [testMode, precacheSessionPack]
   );
 
-  // Start a session when a content pack is provided. Bank packs open the
-  // Create Test tab with the pack pre-selected as a source instead — a bank
-  // is configured into a test, not launched directly (mirrors handleNodeClick).
+  // First-time entry uses a shared launch dialog for quiz and bank packs.
+  // The bank dialog adds session sizing and can hand off to the advanced
+  // Create tab without losing the selected source.
   React.useEffect(() => {
     if (activeItem && activeContent) {
-      if (activeContent.type === "bank") {
-        setPendingCreateTestSourceUid(activeItem.uid);
-        setHomeTab("create");
+      if ((activeContent.type === "quiz" || activeContent.type === "bank") && !session && mode === "home") {
+        if (startPromptUid !== activeItem.uid) {
+          setStartPromptUid(activeItem.uid);
+          setStartDialogOpen(true);
+        }
         return;
       }
       const limit = pendingQuestionLimitRef.current;
       pendingQuestionLimitRef.current = 0;
-      startSession(activeItem, activeContent, limit || undefined);
+      startSession(activeItem, activeContent, { maxQuestions: limit || undefined });
     } else if (!activeItem && mode !== "home") {
       setMode("home");
       setSession(null);
+      setStartDialogOpen(false);
+      setStartPromptUid(null);
     }
-  }, [activeItem?.uid, activeContent?.meta.uid, startSession]);
+  }, [activeItem?.uid, activeContent?.meta.uid, activeContent?.type, mode, session, startPromptUid, startSession]);
+
+  const handleStartPrompt = React.useCallback((options: SessionStartOptions) => {
+    if (!activeItem || !activeContent) return;
+    setTestMode(options.mode);
+    setStartDialogOpen(false);
+    startSession(activeItem, activeContent, {
+      maxQuestions: options.questionCount,
+      order: options.order,
+      mode: options.mode,
+    });
+  }, [activeContent, activeItem, startSession]);
+
+  const openBankMoreOptions = React.useCallback(() => {
+    if (!activeItem) return;
+    haptic("selection");
+    withViewTransition(() => {
+      setPendingCreateTestSourceUid(activeItem.uid);
+      setHomeTab("create");
+      setStartDialogOpen(false);
+      setMode("home");
+      setImmersiveMode(false);
+    }, "forward");
+  }, [activeItem]);
 
   const endSession = React.useCallback(() => {
     setSession((s) => {
@@ -1214,19 +1254,33 @@ export function QBankStudio({
   }
 
   return (
-    <HomeView
-      testMode={testMode}
-      onTestModeChange={setTestMode}
-      onOpenPack={onOpenPack}
-      homeTab={homeTab}
-      onHomeTabChange={setHomeTab}
-      onSetQuestionLimit={(n) => { pendingQuestionLimitRef.current = n; }}
-      pendingCreateTestSourceUid={pendingCreateTestSourceUid}
-      onPickForCreateTest={handlePickForCreateTest}
-      onClearPendingCreateTestSource={() => setPendingCreateTestSourceUid(null)}
-      onStartCustomSession={startCustomSession}
-      onResumeActive={resumeActiveSession}
-    />
+    <>
+      <HomeView
+        testMode={testMode}
+        onTestModeChange={setTestMode}
+        onOpenPack={onOpenPack}
+        homeTab={homeTab}
+        onHomeTabChange={setHomeTab}
+        onSetQuestionLimit={(n) => { pendingQuestionLimitRef.current = n; }}
+        pendingCreateTestSourceUid={pendingCreateTestSourceUid}
+        onPickForCreateTest={handlePickForCreateTest}
+        onClearPendingCreateTestSource={() => setPendingCreateTestSourceUid(null)}
+        onStartCustomSession={startCustomSession}
+        onResumeActive={resumeActiveSession}
+      />
+      {startDialogOpen && activeItem && activeContent && (activeContent.type === "quiz" || activeContent.type === "bank") && (
+        <SessionStartDialog
+          open={startDialogOpen}
+          item={activeItem}
+          content={activeContent}
+          mode={testMode}
+          onModeChange={setTestMode}
+          onStart={handleStartPrompt}
+          onMoreOptions={activeContent.type === "bank" ? openBankMoreOptions : undefined}
+          onClose={exitToHome}
+        />
+      )}
+    </>
   );
 }
 
@@ -2106,8 +2160,9 @@ function ContentTab({
     (node: ContentTreeNode) => {
       if (node.items.length > 0) {
         setSelectedFolders((folders) => [...folders, node]);
-      } else if (node.type === "quiz") {
-        // Quiz packs are small — start directly.
+      } else if (node.type === "quiz" || node.type === "bank") {
+        // Quiz and bank packs open their launch experience first. Banks can
+        // still hand off to the advanced Create tab from that dialog.
         onOpenPack?.(node);
       } else if (onPickForCreateTest) {
         onPickForCreateTest(node);
