@@ -819,18 +819,14 @@ export function QBankStudio({
   const openBankMoreOptions = React.useCallback(() => {
     if (!activeItem) return;
     haptic("selection");
-    // Close dialog first so it fully unmounts before the view transition
-    // snapshot is taken — keeping it inside withViewTransition causes the
-    // modal to remain visible for the entire transition animation.
     setStartDialogOpen(false);
-    setStartPromptUid(null);
-    withViewTransition(() => {
-      setPendingCreateTestSourceUid(activeItem.uid);
-      setHomeTab("create");
-      setMode("home");
-      setImmersiveMode(false);
-    }, "forward");
-  }, [activeItem]);
+    setStartPromptUid(activeItem.uid);
+    setPendingCreateTestSourceUid(activeItem.uid);
+    setHomeTab("create");
+    setMode("home");
+    setImmersiveMode(false);
+    navigate("qbank");
+  }, [activeItem, navigate]);
 
   const endSession = React.useCallback(() => {
     setSession((s) => {

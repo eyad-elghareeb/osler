@@ -334,15 +334,14 @@ export function SessionStartDialog({
             {isBank && (
               <motion.div custom={5} variants={sectionVariants} initial="hidden" animate="visible">
                 <div>
-                  <div className="mb-2 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  <div className="mb-1.5 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                     <Layers className="size-3.5 text-primary" />
                     {t("qbank.launch.sessionSize")}
                   </div>
-                  <div className="rounded-xl border border-primary/20 bg-primary/[0.03] px-3 py-2">
-                    <div className="flex items-center justify-between gap-2">
-                      <div className="min-w-0">
-                        <div className="text-xs font-medium text-foreground">{t("qbank.launch.splitSessions")}</div>
-                      </div>
+                  <div className="flex flex-wrap items-center justify-between gap-2.5 rounded-xl border border-primary/20 bg-primary/[0.03] p-2.5">
+                    {/* Questions count stepper */}
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-medium text-foreground">{t("qbank.launch.splitSessions")}</span>
                       <div className="flex shrink-0 items-center gap-1">
                         <Button
                           type="button"
@@ -381,35 +380,32 @@ export function SessionStartDialog({
                         </Button>
                       </div>
                     </div>
-                    <div className="mt-2 flex flex-wrap items-center justify-between gap-2 border-t border-border/60 pt-2">
-                      <p id="session-question-count-hint" className="text-[10px] text-muted-foreground">
-                        {t("qbank.launch.questionsPerSessionHint")}
-                      </p>
-                      <div className="flex items-center gap-1.5">
-                        <ArrowUpDown className="size-3 text-primary" />
-                        <span className="text-[11px] font-medium text-foreground">{t("qbank.launch.order")}</span>
-                        <div className="flex overflow-hidden rounded-md border border-border bg-card">
-                          <button
-                            type="button"
-                            onClick={() => { haptic("selection"); setOrder("sequential"); }}
-                            className={cn(
-                              "px-2 py-0.5 text-[11px] font-medium transition-colors",
-                              order === "sequential" ? "bg-primary/10 text-primary" : "text-muted-foreground hover:text-foreground",
-                            )}
-                          >
-                            {t("qbank.launch.sequential")}
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => { haptic("selection"); setOrder("random"); }}
-                            className={cn(
-                              "border-s border-border px-2 py-0.5 text-[11px] font-medium transition-colors",
-                              order === "random" ? "bg-primary/10 text-primary" : "text-muted-foreground hover:text-foreground",
-                            )}
-                          >
-                            {t("qbank.launch.random")}
-                          </button>
-                        </div>
+
+                    {/* Question order toggle */}
+                    <div className="flex items-center gap-1.5 ms-auto sm:ms-0">
+                      <ArrowUpDown className="size-3 text-primary shrink-0" />
+                      <span className="text-xs font-medium text-foreground">{t("qbank.launch.order")}</span>
+                      <div className="flex overflow-hidden rounded-md border border-border bg-card">
+                        <button
+                          type="button"
+                          onClick={() => { haptic("selection"); setOrder("sequential"); }}
+                          className={cn(
+                            "px-2 py-0.5 text-[11px] font-medium transition-colors",
+                            order === "sequential" ? "bg-primary/10 text-primary" : "text-muted-foreground hover:text-foreground",
+                          )}
+                        >
+                          {t("qbank.launch.sequential")}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => { haptic("selection"); setOrder("random"); }}
+                          className={cn(
+                            "border-s border-border px-2 py-0.5 text-[11px] font-medium transition-colors",
+                            order === "random" ? "bg-primary/10 text-primary" : "text-muted-foreground hover:text-foreground",
+                          )}
+                        >
+                          {t("qbank.launch.random")}
+                        </button>
                       </div>
                     </div>
                   </div>
@@ -419,7 +415,7 @@ export function SessionStartDialog({
           </div>
 
           {/* Footer */}
-          <DialogFooter className="shrink-0 border-t border-border bg-card/95 px-4 pb-5 pt-3 safe-pb backdrop-blur-md sm:px-5">
+          <DialogFooter className="shrink-0 border-t border-border/80 bg-card px-4 py-4 sm:px-6 sm:py-5">
             <div className="flex w-full items-center justify-between gap-2">
               <div className="flex gap-2">
                 <Button type="button" variant="ghost" size="sm" onClick={onClose}>
