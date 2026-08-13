@@ -180,6 +180,7 @@ export const en = {
     "dash.resumeSession": "Resume Session",
     "dash.sessionProgress": "Question {n} of {total}",
     "dash.resumePrompt": "You have an unfinished session. Would you like to resume or dismiss it?",
+    "dash.discardSession": "Discard test",
 
     "dash.streak.title": "Day Streak",
     "dash.streak.longest": "Longest: {n} days",
@@ -422,8 +423,11 @@ export const en = {
     /* Exit confirm */
     "qbank.exit.title": "Exit this session?",
     "qbank.exit.body": "Your progress on answered questions has been saved, but the in-progress session will end. You can start a new session from the Q-Bank hub later.",
+    "qbank.exit.bodyResumable": "Answered questions are saved automatically. Save & exit keeps this test in your in-progress list so you can resume exactly where you left off — discarding removes it permanently.",
     "qbank.exit.stay": "Stay",
     "qbank.exit.confirm": "Exit session",
+    "qbank.exit.saveLater": "Save & exit",
+    "qbank.exit.discard": "Discard",
 
     /* ── Tracker tab ─────────────────────────────────────────────────── */
     "qbank.tracker.title": "Tracker",
@@ -454,6 +458,10 @@ export const en = {
     "qbank.tracker.sessionsCount": "{n} sessions",
     "qbank.tracker.noSessions": "No tests yet",
     "qbank.tracker.noSessionsDesc": "Complete a test to see it here. Every test is saved automatically so you can review or retake it anytime.",
+    "qbank.tracker.inProgress": "In progress",
+    "qbank.tracker.continue": "Continue",
+    "qbank.tracker.noActive": "That in-progress session is no longer available.",
+    "qbank.tracker.discardActive": "Discard in-progress session",
     "qbank.tracker.deleteSession": "Delete session",
 
     /* ── Tracker preview sheet ───────────────────────────────────────── */
@@ -1167,6 +1175,7 @@ export const en = {
     "qbank.home.flagged": "{n} flagged",
     "qbank.home.testPaused": "Test Paused",
     "qbank.home.testPausedDesc": "The timer is stopped. Click Resume to continue your test.",
+    "qbank.home.saveAndExit": "Save & exit for now",
     "qbank.home.resumeTest": "Resume Test",
     "qbank.home.testResults": "Test Results",
     "qbank.home.restart": "Restart",

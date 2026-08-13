@@ -1025,7 +1025,9 @@ export const sessions = {
   list(): SavedSession[] {
     const sessions: SavedSession[] = [];
     for (const [k, v] of memoryCache) {
-      if (k.startsWith("sessions:session:")) {
+      // The active (in-progress) session lives under __active__ — it is NOT a
+      // finished, reviewable session and must not appear in the saved list.
+      if (k.startsWith("sessions:session:") && k !== "sessions:session:__active__") {
         sessions.push(v as SavedSession);
       }
     }
@@ -1061,11 +1063,24 @@ export const sessions = {
     };
   },
 
+  /** Subscribe to active-session changes (in-progress save/clear). */
+  subscribeActive(cb: () => void): () => void {
+    if (typeof window === "undefined") return () => {};
+    const handler = () => cb();
+    window.addEventListener("osler-active-session-changed", handler);
+    window.addEventListener("storage", handler);
+    return () => {
+      window.removeEventListener("osler-active-session-changed", handler);
+      window.removeEventListener("storage", handler);
+    };
+  },
+
   /** Persist the active (in-progress) session so it survives hard refresh. */
   saveActive(session: unknown) {
     const key = "session:__active__";
     setCached("sessions", key, session);
     idbPut("sessions", key, session).catch(console.warn);
+    dispatchChange("osler-active-session-changed");
   },
 
   /** Load the active session from IDB (returns null if none). */
@@ -1073,10 +1088,16 @@ export const sessions = {
     return getCached<unknown>("sessions", "session:__active__");
   },
 
+  /** Load the active session straight from IndexedDB (hydration-independent). */
+  async getActiveFromDb(): Promise<unknown | null> {
+    return idbGet<unknown>("sessions", "session:__active__");
+  },
+
   /** Clear the active session from IDB when session ends or is exited. */
   clearActive() {
     deleteCached("sessions", "session:__active__");
     idbDelete("sessions", "session:__active__").catch(console.warn);
+    dispatchChange("osler-active-session-changed");
   },
 };
 

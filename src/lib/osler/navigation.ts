@@ -76,9 +76,18 @@ export function useCurrentView(): OslerView {
  * dynamic-route placeholder pages and NO `_redirects` SPA-fallback rules.
  * The page reads its param via `useSearchParams()` and renders the content.
  */
+export interface OslerRouteParams {
+  uid?: string;
+  article?: string;
+  video?: string;
+  section?: string;
+  /** Force-resume the active Q-Bank session on arrival (adds ?resume=1). */
+  resume?: boolean;
+}
+
 export function routeFor(
   view: OslerView,
-  params?: { uid?: string; article?: string; video?: string; section?: string }
+  params?: OslerRouteParams
 ): string {
   switch (view) {
     case "dashboard":
@@ -88,7 +97,8 @@ export function routeFor(
     case "library":
       return params?.article ? `/library?article=${encodeURIComponent(params.article)}` : "/library";
     case "qbank":
-      return params?.uid ? `/qbank?uid=${encodeURIComponent(params.uid)}` : "/qbank";
+      if (params?.uid) return `/qbank?uid=${encodeURIComponent(params.uid)}${params.resume ? "&resume=1" : ""}`;
+      return params?.resume ? "/qbank?resume=1" : "/qbank";
     case "flashcards":
       return params?.uid ? `/flashcards?uid=${encodeURIComponent(params.uid)}` : "/flashcards";
     case "osce":
@@ -123,7 +133,7 @@ export function useOslerRouter() {
   const currentView = useCurrentView();
 
   const navigate = React.useCallback(
-    (view: OslerView, params?: { uid?: string; article?: string; video?: string; section?: string }) => {
+    (view: OslerView, params?: OslerRouteParams) => {
       const targetPath = routeFor(view, params);
       const direction = directionFor(currentView, view);
 

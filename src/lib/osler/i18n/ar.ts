@@ -180,6 +180,7 @@ export const ar = {
 
     "dash.resumeSession": "استئناف الجلسة",
     "dash.sessionProgress": "السؤال {n} من {total}",
+    "dash.discardSession": "تجاهل الاختبار",
 
     "dash.streak.title": "أيام متتالية",
     "dash.streak.longest": "الأطول: {n} يوم",
@@ -422,8 +423,11 @@ export const ar = {
     /* Exit confirm */
     "qbank.exit.title": "إنهاء هذه الجلسة؟",
     "qbank.exit.body": "تم حفظ تقدّمك في الأسئلة التي أجبت عنها، لكن الجلسة الحالية ستنتهي. تقدر تبدأ جلسة جديدة من بنك الأسئلة في أي وقت.",
+    "qbank.exit.bodyResumable": "يُحفظ الإجابات تلقائيًا. الحفظ والخروج يُبقي هذا الاختبار في قائمة الاختبارات الجارية كي تستكمله من حيث توقفت — أما تجاهله فيحذفه نهائيًا.",
     "qbank.exit.stay": "البقاء",
     "qbank.exit.confirm": "إنهاء الجلسة",
+    "qbank.exit.saveLater": "حفظ والخروج",
+    "qbank.exit.discard": "تجاهل",
 
     /* ── Tracker tab ─────────────────────────────────────────────────── */
     "qbank.tracker.title": "التتبّع",
@@ -454,6 +458,10 @@ export const ar = {
     "qbank.tracker.sessionsCount": "{n} جلسات",
     "qbank.tracker.noSessions": "لا توجد اختبارات بعد",
     "qbank.tracker.noSessionsDesc": "أكمل اختبارًا لتراه هنا. تُحفظ جميع الاختبارات تلقائيًا لتتمكن من مراجعتها أو إعادة حلها في أي وقت.",
+    "qbank.tracker.inProgress": "قيد التنفيذ",
+    "qbank.tracker.continue": "استكمال",
+    "qbank.tracker.noActive": "لم يعد هذا الاختبار الجاري متاحًا.",
+    "qbank.tracker.discardActive": "تجاهل الاختبار الجاري",
     "qbank.tracker.deleteSession": "حذف الجلسة",
 
     /* ── Tracker preview sheet ───────────────────────────────────────── */
@@ -1162,6 +1170,7 @@ export const ar = {
     "qbank.home.flagged": "{n} معلَّم",
     "qbank.home.testPaused": "الاختبار متوقف مؤقتًا",
     "qbank.home.testPausedDesc": "العداد متوقف. انقر استئناف لمتابعة اختبارك.",
+    "qbank.home.saveAndExit": "حفظ والخروج الآن",
     "qbank.home.resumeTest": "استئناف الاختبار",
     "qbank.home.testResults": "نتائج الاختبار",
     "qbank.home.restart": "إعادة التشغيل",

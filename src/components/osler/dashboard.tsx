@@ -19,6 +19,7 @@ import {
   Flame,
   PlayCircle,
   RotateCcw,
+  Trash2,
   X,
 } from "lucide-react";
 import {
@@ -322,17 +323,32 @@ export function Dashboard({
                 ) : null}
               </AlertDialogDescription>
             </AlertDialogHeader>
-            <AlertDialogFooter>
-              <AlertDialogCancel onClick={dismissResume}>
-                <X className="size-3.5 mr-1.5" />
-                {t("common.dismiss")}
-              </AlertDialogCancel>
-              <AlertDialogAction asChild>
-                <Button onClick={() => { setResumeDialogOpen(false); onViewChange("qbank"); }}>
-                  <RotateCcw className="size-3.5 mr-1.5" />
-                  {t("common.resume")}
-                </Button>
-              </AlertDialogAction>
+            <AlertDialogFooter className="flex-col-reverse sm:flex-row sm:items-center sm:justify-between">
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-destructive hover:text-destructive self-start sm:self-auto"
+                onClick={dismissResume}
+              >
+                <Trash2 className="size-3.5 mr-1.5" />
+                {t("dash.discardSession")}
+              </Button>
+              <div className="flex flex-col-reverse sm:flex-row gap-2">
+                <AlertDialogCancel className="text-muted-foreground">
+                  {t("common.dismiss")}
+                </AlertDialogCancel>
+                <AlertDialogAction asChild>
+                  <Button
+                    onClick={() => {
+                      setResumeDialogOpen(false);
+                      navigate("qbank", { resume: true });
+                    }}
+                  >
+                    <RotateCcw className="size-3.5 mr-1.5" />
+                    {t("common.resume")}
+                  </Button>
+                </AlertDialogAction>
+              </div>
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>

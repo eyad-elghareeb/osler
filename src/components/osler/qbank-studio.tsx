@@ -56,9 +56,11 @@ import {
   Download,
   PackageOpen,
   Wrench,
+  LogOut,
+  PlayCircle,
   type LucideIcon,
 } from "lucide-react";
-import { loadCategoryTree, loadContentByUid, loadNodeByUid, ENGINE_META, flattenTree, packBasePath } from "@/lib/osler/content";
+import { loadCategoryTree, loadContentByUid, loadNodeByUid, ENGINE_META, flattenTree, packBasePath, nodeUrls } from "@/lib/osler/content";
 import { toast } from "@/hooks/use-toast";
 import {
   contentToQuestions as poolContentToQuestions,
@@ -138,6 +140,7 @@ import { QuizSettingsPanel } from "./quiz-settings-panel";
 import { NotesPanel } from "./notes-panel";
 import { ContentCacheButton } from "./content-cache-button";
 import { useShortcutBindings, useShortcutListener } from "@/hooks/use-shortcuts";
+import { useContentCache } from "@/hooks/use-content-cache";
 import { defaultBindings } from "@/lib/osler/shortcuts";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { VerticalSnapGallery } from "./vertical-snap-gallery";
@@ -254,6 +257,9 @@ interface QBankStudioProps {
   activeContent?: AnyContent | null;
   onExit?: () => void;
   onOpenPack?: (item: ContentTreeNode) => void;
+  /** Arrived via /qbank?resume=1 — restore the active in-progress session
+   *  even when a pack uid is present in the URL. */
+  forceResume?: boolean;
 }
 
 type QuizMode = "home" | "quiz" | "results" | "review";
@@ -329,6 +335,7 @@ export function QBankStudio({
   activeContent,
   onExit: propOnExit,
   onOpenPack: propOnOpenPack,
+  forceResume = false,
 }: QBankStudioProps = {}) {
   const { navigate } = useOslerRouter();
   const onExit = propOnExit || (() => navigate("qbank"));
@@ -410,6 +417,12 @@ export function QBankStudio({
   // Debounced save on state change
   React.useEffect(() => {
     if (!session || session.isReview || session.completedAt) {
+      // "Save & exit" nulls the session on purpose — the active in-progress
+      // record was already persisted before the navigation, so don't wipe it.
+      if (!session && keepProgressOnExitRef.current) {
+        keepProgressOnExitRef.current = false;
+        return;
+      }
       sessions.clearActive();
       return;
     }
@@ -445,6 +458,19 @@ export function QBankStudio({
     return () => window.removeEventListener("beforeunload", handleBeforeUnload);
   }, []);
 
+  // Force-save on pagehide too — fires on iOS Safari and bfcache round-trips
+  // where `beforeunload` is unreliable or suppressed entirely.
+  React.useEffect(() => {
+    const handlePageHide = () => {
+      const s = sessionRef.current;
+      if (s && !s.isReview && !s.completedAt) {
+        sessions.saveActive(s);
+      }
+    };
+    window.addEventListener("pagehide", handlePageHide);
+    return () => window.removeEventListener("pagehide", handlePageHide);
+  }, []);
+
   // Save when tab goes hidden (app switch, tab switch, screen lock)
   React.useEffect(() => {
     const handleVisibility = () => {
@@ -461,38 +487,71 @@ export function QBankStudio({
 
   // ── Restore active session from IndexedDB on mount ─────────────────
   // Only restores when no pack is selected via URL (activeItem is null),
-  // so the startSession effect for URL packs is never overridden.
+  // so the startSession effect for URL packs is never overridden. An
+  // explicit /qbank?resume=1 arrival overrides that rule and restores even
+  // when a pack uid is present.
   const restoreBlockedRef = React.useRef(false);
+  // Set by "Save & exit": the session state is cleared on purpose but the
+  // active in-progress record stays in IndexedDB for later resumption.
+  const keepProgressOnExitRef = React.useRef(false);
+
+  // Cache lever: when a real pack session (re)starts, quietly ask the service
+  // worker to precache the pack's data + images so resume stays snappy and
+  // works offline. Custom-built sessions carry a "custom-" id and are skipped.
+  const { precache: cachePrecache } = useContentCache();
+  const precacheSessionPack = React.useCallback(
+    async (itemId?: string, engine?: EngineType) => {
+      if (!itemId || itemId.startsWith("custom-")) return;
+      try {
+        const node = await loadNodeByUid(itemId, engine);
+        const urls = nodeUrls(node);
+        if (urls.length > 0) cachePrecache(itemId, urls);
+      } catch {
+        // Non-fatal — the session still resumes from IndexedDB regardless.
+      }
+    },
+    [cachePrecache],
+  );
+
+  // Restore an unfinished active session in place (shared by the mount
+  // restore effect and the in-progress Resume actions in Tracker/Home).
+  const resumeActiveSession = React.useCallback((saved?: SessionData | null) => {
+    const candidate = saved ?? (sessions.getActive() as SessionData | null);
+    if (
+      candidate &&
+      candidate.sessionId &&
+      !candidate.completedAt &&
+      !candidate.isReview &&
+      Array.isArray(candidate.questions) &&
+      candidate.questions.length > 0 &&
+      Date.now() - (candidate.startedAt ?? 0) < 7 * 24 * 60 * 60 * 1000
+    ) {
+      restoreBlockedRef.current = true;
+      keepProgressOnExitRef.current = false;
+      setSession(candidate);
+      setTestMode(candidate.mode);
+      setMode("quiz");
+      setImmersiveMode(true);
+      precacheSessionPack(candidate.itemId, candidate.engine);
+      return true;
+    }
+    if (candidate) sessions.clearActive();
+    return false;
+  }, [precacheSessionPack]);
+
   React.useEffect(() => {
-    if (mode !== "home" || session || activeItem) {
+    if (mode !== "home" || session || (activeItem && !forceResume)) {
       restoreBlockedRef.current = true;
       return;
     }
     const restore = () => {
       if (restoreBlockedRef.current) return;
-      const saved = sessions.getActive() as SessionData | null;
-      if (
-        saved &&
-        saved.sessionId &&
-        !saved.completedAt &&
-        !saved.isReview &&
-        Array.isArray(saved.questions) &&
-        saved.questions.length > 0 &&
-        // Staleness check: discard if older than 7 days
-        Date.now() - (saved.startedAt ?? 0) < 7 * 24 * 60 * 60 * 1000
-      ) {
-        restoreBlockedRef.current = true;
-        setSession(saved);
-        setMode("quiz");
-        setTestMode(saved.mode);
-      } else if (saved) {
-        sessions.clearActive();
-      }
+      resumeActiveSession();
     };
     restore();
     const unsub = storage.onHydrated(restore);
     return unsub;
-  }, []);
+  }, [resumeActiveSession]);
 
   // Cross-tab plumbing (P0-4): a pack picked from Content tab gets handed to
   // Create Test as `initialSourceUid`. The custom-session callback is
@@ -567,7 +626,7 @@ export function QBankStudio({
   }, []);
 
   const startSession = React.useCallback(
-    (item: ContentTreeNode, content: AnyContent, maxQuestions?: number) => {
+    async (item: ContentTreeNode, content: AnyContent, maxQuestions?: number) => {
       let questions = contentToQuestions(content, item.uid, item.title, item);
       if (questions.length === 0) return;
       if (maxQuestions && maxQuestions > 0 && maxQuestions < questions.length) {
@@ -575,6 +634,35 @@ export function QBankStudio({
       }
       const totalTime = questions.length * 60;
       const sessionId = `${item.uid}-${Date.now()}`;
+
+      // Resume-aware: if an unfinished active session exists for the SAME
+      // pack and question set, restore it instead of silently restarting —
+      // this is what makes a hard refresh on /qbank?uid=<pack> mid-session
+      // resume exactly where you left off. Custom pools bypass this (their
+      // itemId is `custom-<ts>` so the match below never fires).
+      try {
+        const active = (await sessions.getActiveFromDb()) as SessionData | null;
+        if (
+          active &&
+          active.sessionId &&
+          active.itemId === item.uid &&
+          !active.completedAt &&
+          !active.isReview &&
+          Array.isArray(active.questions) &&
+          active.questions.length === questions.length &&
+          active.questions[0]?.id === questions[0]?.id &&
+          // Staleness check: discard if older than 7 days
+          Date.now() - (active.startedAt ?? 0) < 7 * 24 * 60 * 60 * 1000
+        ) {
+          restoreBlockedRef.current = true;
+          setImmersiveMode(true);
+          setSession(active);
+          setTestMode(active.mode);
+          setMode("quiz");
+          precacheSessionPack(active.itemId, active.engine);
+          return;
+        }
+      } catch {}
 
       setImmersiveMode(true);
 
@@ -603,8 +691,9 @@ export function QBankStudio({
         strikethroughs: {},
       });
       setMode("quiz");
+      precacheSessionPack(item.uid, item.type);
     },
-    [testMode]
+    [testMode, precacheSessionPack]
   );
 
   // Start a session when a content pack is provided. Bank packs open the
@@ -660,6 +749,18 @@ export function QBankStudio({
 
   const exitToHome = () => {
     sessions.clearActive();
+    setMode("home");
+    setSession(null);
+    setImmersiveMode(false);
+    onExit();
+  };
+
+  // "Save & exit": persist the in-progress session, then leave the quiz view
+  // WITHOUT clearing it, so a refresh or the Resume flow picks it back up.
+  const saveAndExit = () => {
+    const s = sessionRef.current;
+    if (s && !s.isReview && !s.completedAt) sessions.saveActive(s);
+    keepProgressOnExitRef.current = true;
     setMode("home");
     setSession(null);
     setImmersiveMode(false);
@@ -933,6 +1034,7 @@ export function QBankStudio({
             delete qTimersRef.current[session.current];
           }}
           onGoHome={requestExit}
+          onSaveAndExit={saveAndExit}
           onFinish={endSession}
         />
         {/* Floating tools */}
@@ -985,14 +1087,25 @@ export function QBankStudio({
             <AlertDialogHeader>
               <AlertDialogTitle>{t("qbank.exit.title")}</AlertDialogTitle>
               <AlertDialogDescription>
-                {t("qbank.exit.body")}
+                {t("qbank.exit.bodyResumable")}
               </AlertDialogDescription>
             </AlertDialogHeader>
-            <AlertDialogFooter>
-              <AlertDialogCancel>{t("qbank.exit.stay")}</AlertDialogCancel>
+            <AlertDialogFooter className="flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+              <AlertDialogCancel asChild>
+                <Button variant="ghost">{t("qbank.exit.stay")}</Button>
+              </AlertDialogCancel>
               <AlertDialogAction asChild>
-                <Button variant="destructive" onClick={exitToHome}>
-                  {t("qbank.exit.confirm")}
+                <Button
+                  variant="outline"
+                  className="text-destructive hover:text-destructive border-destructive/30 hover:border-destructive"
+                  onClick={exitToHome}
+                >
+                  {t("qbank.exit.discard")}
+                </Button>
+              </AlertDialogAction>
+              <AlertDialogAction asChild>
+                <Button onClick={saveAndExit}>
+                  {t("qbank.exit.saveLater")}
                 </Button>
               </AlertDialogAction>
             </AlertDialogFooter>
@@ -1036,6 +1149,7 @@ export function QBankStudio({
       onPickForCreateTest={handlePickForCreateTest}
       onClearPendingCreateTestSource={() => setPendingCreateTestSourceUid(null)}
       onStartCustomSession={startCustomSession}
+      onResumeActive={resumeActiveSession}
     />
   );
 }
@@ -1057,6 +1171,7 @@ function HomeView({
   onPickForCreateTest,
   onClearPendingCreateTestSource,
   onStartCustomSession,
+  onResumeActive,
 }: {
   testMode: TestMode;
   onTestModeChange: (m: TestMode) => void;
@@ -1090,6 +1205,8 @@ function HomeView({
       savedQuestionTimes?: Record<string, number>;
     }
   ) => void;
+  /** Resume the active in-progress session in place (Tracker / in-session). */
+  onResumeActive?: () => boolean;
 }) {
   const [data, setData] = React.useState<{
     items: PackEntry[];
@@ -1240,6 +1357,7 @@ function HomeView({
                   sessions={savedSessions}
                   onDelete={(id) => sessions.delete(id)}
                   onStartCustomSession={onStartCustomSession}
+                  onResume={onResumeActive}
                 />
               </div>
             </div>
@@ -3000,10 +3118,13 @@ function TrackerTab({
   sessions: sessionList,
   onDelete,
   onStartCustomSession,
+  onResume,
 }: {
   data: { items: PackEntry[]; trees: Record<string, ContentTreeNode[]> } | null;
   sessions: SavedSession[];
   onDelete: (id: string) => void;
+  /** Resume the active in-progress session in place. */
+  onResume?: () => boolean;
   /** Review a past session (read-only) or retake just its wrong questions.
    *  Both build a pool from the session's questionRefs/sourceUids. */
   onStartCustomSession?: (
@@ -3044,6 +3165,28 @@ function TrackerTab({
   const [showDismissed, setShowDismissed] = React.useState(false);
   // Pack currently open in the tracker preview sheet.
   const [previewUid, setPreviewUid] = React.useState<string | null>(null);
+
+  // Active in-progress session (resumable) — reactive across saves/clears so
+  // the panel appears the moment work is paused mid-test.
+  const [activeSession, setActiveSession] = React.useState<SessionData | null>(null);
+  React.useEffect(() => {
+    const refresh = () => setActiveSession((sessions.getActive() as SessionData | null));
+    refresh();
+    const unsubActive = sessions.subscribeActive(refresh);
+    const unsubHydrated = storage.onHydrated(refresh);
+    return () => {
+      unsubActive();
+      unsubHydrated();
+    };
+  }, []);
+
+  const activeAnsweredCount = activeSession ? Object.keys(activeSession.answers ?? {}).length : 0;
+  const activeFlaggedCount = activeSession
+    ? Object.values(activeSession.flagged ?? {}).filter(Boolean).length
+    : 0;
+  const activeProgressPct = activeSession && activeSession.questions.length
+    ? Math.round((activeAnsweredCount / activeSession.questions.length) * 100)
+    : 0;
 
   // Past-session PDF export + busy/error state for replay actions.
   const [sessionPdfOpen, setSessionPdfOpen] = React.useState(false);
@@ -3614,6 +3757,75 @@ function TrackerTab({
         )}
       </div>
 
+      {/* In-progress session — resumed here, no need to hunt through packs */}
+      {activeSession && (
+        <div>
+          <SectionHeading icon={PlayCircle}>{t("qbank.tracker.inProgress")}</SectionHeading>
+          <div className="osler-card--default">
+            <div className="flex items-center gap-3">
+              <div className="size-11 rounded-xl bg-warning/15 text-warning flex items-center justify-center shrink-0">
+                <PlayCircle className="size-5" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="text-sm font-semibold truncate">{activeSession.itemTitle}</div>
+                <div className="flex items-center gap-2 text-[11px] text-muted-foreground flex-wrap">
+                  <Badge variant="secondary" className="text-[10px] capitalize">
+                    {ENGINE_META[activeSession.engine]?.label ?? activeSession.engine}
+                  </Badge>
+                  <Badge variant="outline" className="text-[10px] capitalize">
+                    {activeSession.mode === "timed" ? t("qbank.home.timed") : t("qbank.home.tutor")}
+                  </Badge>
+                  {activeFlaggedCount > 0 && (
+                    <Badge variant="outline" className="text-[10px] capitalize text-warning border-warning/30">
+                      <Flag className="size-3 me-1" /> {activeFlaggedCount}
+                    </Badge>
+                  )}
+                </div>
+              </div>
+              <div className="flex items-center gap-1.5 shrink-0">
+                <Button
+                  variant="default"
+                  size="sm"
+                  className="rounded-xl"
+                  onClick={() => {
+                    haptic("selection");
+                    if (!onResume?.()) {
+                      toast({ title: t("qbank.tracker.noActive") });
+                    }
+                  }}
+                >
+                  <Play className="size-4 me-1.5" /> {t("qbank.tracker.continue")}
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="iconSm"
+                  onClick={() => {
+                    haptic("warning");
+                    sessions.clearActive();
+                  }}
+                  className="hover:text-destructive"
+                  title={t("qbank.tracker.discardActive")}
+                >
+                  <Trash2 className="size-4" />
+                </Button>
+              </div>
+            </div>
+            <div className="flex items-center gap-3 mt-4">
+              <div className="flex-1 h-1.5 rounded-full bg-muted/60 overflow-hidden">
+                <div
+                  className="h-full rounded-full bg-warning transition-all duration-300"
+                  style={{ width: `${activeProgressPct}%` }}
+                />
+              </div>
+              <span className="text-[11px] text-muted-foreground tabular-nums whitespace-nowrap">
+                {activeAnsweredCount}/{activeSession.questions.length}{" "}
+                {t("qbank.tracker.attempted").toLowerCase()} · {activeProgressPct}%
+              </span>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Recent sessions — merged from the old Previous Tests tab */}
       <div>
         <SectionHeading
@@ -3938,6 +4150,7 @@ function QuizView({
   onJumpTo,
   onRetry,
   onGoHome,
+  onSaveAndExit,
   onFinish,
   onTimeUp,
   onExitRequest,
@@ -3972,6 +4185,7 @@ function QuizView({
   onJumpTo: (i: number) => void;
   onRetry: () => void;
   onGoHome: () => void;
+  onSaveAndExit: () => void;
   onFinish: () => void;
   onExitRequest: () => void;
 }) {
@@ -5111,9 +5325,14 @@ function QuizView({
                   <p className="text-sm text-muted-foreground mt-2 mb-6">
                     {t("qbank.home.testPausedDesc")}
                   </p>
-                  <Button onClick={onTogglePause} variant="default" className="rounded-xl">
-                    <Play className="size-4 mr-2" /> {t("qbank.home.resumeTest")}
-                  </Button>
+                  <div className="flex flex-col sm:flex-row gap-2 sm:justify-center">
+                    <Button onClick={onTogglePause} variant="default" className="rounded-xl">
+                      <Play className="size-4 me-2" /> {t("qbank.home.resumeTest")}
+                    </Button>
+                    <Button onClick={onSaveAndExit} variant="outline" className="rounded-xl">
+                      <LogOut className="size-4 me-2" /> {t("qbank.home.saveAndExit")}
+                    </Button>
+                  </div>
                 </div>
               </motion.div>
             )}

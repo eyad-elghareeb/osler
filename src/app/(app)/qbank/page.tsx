@@ -27,8 +27,9 @@ export default function QBankPage() {
 function QBankView() {
   const params = useSearchParams();
   const uid = params.get("uid");
-  if (!uid) return <QBankStudio />;
-  return <QBankPackView uid={uid} />;
+  const resume = params.get("resume") === "1";
+  if (!uid) return <QBankStudio forceResume={resume} />;
+  return <QBankPackView uid={uid} forceResume={resume} />;
 }
 
 function nodeFromPack(uid: string, content: AnyContent): ContentTreeNode {
@@ -42,7 +43,7 @@ function nodeFromPack(uid: string, content: AnyContent): ContentTreeNode {
   };
 }
 
-function QBankPackView({ uid }: { uid: string }) {
+function QBankPackView({ uid, forceResume }: { uid: string; forceResume?: boolean }) {
   const router = useRouter();
   const { navigate } = useOslerRouter();
   const { t } = useI18n();
@@ -99,5 +100,5 @@ function QBankPackView({ uid }: { uid: string }) {
     );
   }
 
-  return <QBankStudio activeItem={item} activeContent={content} />;
+  return <QBankStudio activeItem={item} activeContent={content} forceResume={forceResume} />;
 }
