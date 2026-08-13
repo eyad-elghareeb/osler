@@ -186,7 +186,7 @@ export function SessionStartDialog({
 
   return (
     <Dialog open={open} onOpenChange={(nextOpen) => !nextOpen && onClose()}>
-      <DialogContent className="flex max-h-[min(740px,calc(100dvh-1.5rem))] flex-col overflow-hidden p-0 sm:max-w-lg">
+      <DialogContent className="flex max-h-[min(820px,calc(100dvh-2rem))] flex-col overflow-hidden p-0 sm:max-w-xl">
         <motion.div
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
@@ -194,18 +194,18 @@ export function SessionStartDialog({
           className="flex min-h-0 flex-1 flex-col"
         >
           {/* Scrollable body */}
-          <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-4 pt-4 sm:px-5 sm:pt-5">
+          <div className="min-h-0 flex-1 overflow-y-auto px-5 py-5 sm:px-6 space-y-4">
 
             {/* Header */}
             <motion.div custom={0} variants={sectionVariants} initial="hidden" animate="visible">
               <DialogHeader className="text-start">
-                <div className="mb-3 flex items-start gap-3">
+                <div className="mb-2 flex items-start gap-3">
                   <div className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-primary/20 to-primary/5 text-primary ring-1 ring-primary/20">
                     {isBank ? <BookOpen className="size-5" /> : <ClipboardCheck className="size-5" />}
                   </div>
                   <div className="min-w-0">
-                    <DialogTitle className="text-base font-bold tracking-tight sm:text-lg">{item.title}</DialogTitle>
-                    <DialogDescription className="mt-0.5 text-xs leading-relaxed">
+                    <DialogTitle className="text-lg font-bold tracking-tight sm:text-xl">{item.title}</DialogTitle>
+                    <DialogDescription className="mt-0.5 text-xs leading-relaxed sm:text-sm">
                       {description}
                     </DialogDescription>
                   </div>
@@ -216,7 +216,7 @@ export function SessionStartDialog({
             {/* Stats row */}
             {isBank && (
               <motion.div custom={1} variants={sectionVariants} initial="hidden" animate="visible">
-                <div className="mb-3 flex gap-2">
+                <div className="flex gap-2.5">
                   <StatPill label={t("qbank.launch.questions")} value={totalQuestions} />
                   <StatPill label={t("qbank.launch.passages")} value={passageCount} />
                   <StatPill label={t("qbank.launch.covered")} value={`${progress.covered}/${totalQuestions}`} />
@@ -228,7 +228,7 @@ export function SessionStartDialog({
             {/* Coverage bar */}
             {isBank && totalQuestions > 0 && (
               <motion.div custom={2} variants={sectionVariants} initial="hidden" animate="visible">
-                <div className="mb-3 rounded-xl border border-border bg-muted/20 px-3 py-2.5">
+                <div className="rounded-xl border border-border bg-muted/20 px-3.5 py-3">
                   <div className="flex items-center justify-between gap-3 text-xs">
                     <span className="font-medium text-foreground">{t("qbank.launch.coverage")}</span>
                     <span className="tabular-nums text-muted-foreground">{progress.coverage}%</span>
@@ -240,12 +240,12 @@ export function SessionStartDialog({
 
             {/* Mode picker */}
             <motion.div custom={3} variants={sectionVariants} initial="hidden" animate="visible">
-              <div className="mb-3">
+              <div>
                 <div className="mb-2 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                   <Sparkles className="size-3.5 text-primary" />
                   {t("qbank.launch.modeTitle")}
                 </div>
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-2 gap-2.5">
                   <ChoiceCard
                     active={mode === "tutor"}
                     icon={Sparkles}
@@ -271,7 +271,7 @@ export function SessionStartDialog({
                       transition={{ duration: 0.18 }}
                       className="overflow-hidden"
                     >
-                      <div className="flex items-center gap-2 rounded-lg border border-border bg-muted/20 px-2.5 py-2">
+                      <div className="flex items-center gap-2 rounded-lg border border-border bg-muted/20 px-3 py-2.5">
                         <Clock className="size-3.5 shrink-0 text-primary" />
                         <label htmlFor="session-timer-minutes" className="text-xs font-medium text-foreground">
                           {t("qbank.launch.timerMinutes")}
@@ -299,12 +299,12 @@ export function SessionStartDialog({
             {/* Filter by progress — bank packs only */}
             {isBank && (
               <motion.div custom={4} variants={sectionVariants} initial="hidden" animate="visible">
-                <div className="mb-3">
+                <div>
                   <div className="mb-2 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                     <Flag className="size-3.5 text-primary" />
                     {t("qbank.create.onlyMode")}
                   </div>
-                  <div className="flex flex-wrap gap-1.5">
+                  <div className="flex flex-wrap gap-2">
                     {ONLY_MODE_OPTIONS.map((opt) => {
                       const Icon = opt.icon;
                       const active = onlyMode === opt.id;
@@ -330,18 +330,18 @@ export function SessionStartDialog({
               </motion.div>
             )}
 
-            {/* Session size — bank packs only */}
+            {/* Session size / question count — bank packs only */}
             {isBank && (
               <motion.div custom={5} variants={sectionVariants} initial="hidden" animate="visible">
                 <div>
-                  <div className="mb-1.5 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  <div className="mb-2 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                     <Layers className="size-3.5 text-primary" />
-                    {t("qbank.launch.sessionSize")}
+                    {t("qbank.create.countStepper")}
                   </div>
-                  <div className="flex flex-wrap items-center justify-between gap-2.5 rounded-xl border border-primary/20 bg-primary/[0.03] p-2.5">
+                  <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-primary/20 bg-primary/[0.03] p-3">
                     {/* Questions count stepper */}
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs font-medium text-foreground">{t("qbank.launch.splitSessions")}</span>
+                    <div className="flex items-center gap-2.5">
+                      <span className="text-xs font-medium text-foreground">{t("qbank.launch.questions")}</span>
                       <div className="flex shrink-0 items-center gap-1">
                         <Button
                           type="button"
@@ -382,15 +382,15 @@ export function SessionStartDialog({
                     </div>
 
                     {/* Question order toggle */}
-                    <div className="flex items-center gap-1.5 ms-auto sm:ms-0">
-                      <ArrowUpDown className="size-3 text-primary shrink-0" />
+                    <div className="flex items-center gap-2 ms-auto sm:ms-0">
+                      <ArrowUpDown className="size-3.5 text-primary shrink-0" />
                       <span className="text-xs font-medium text-foreground">{t("qbank.launch.order")}</span>
                       <div className="flex overflow-hidden rounded-md border border-border bg-card">
                         <button
                           type="button"
                           onClick={() => { haptic("selection"); setOrder("sequential"); }}
                           className={cn(
-                            "px-2 py-0.5 text-[11px] font-medium transition-colors",
+                            "px-2.5 py-1 text-xs font-medium transition-colors",
                             order === "sequential" ? "bg-primary/10 text-primary" : "text-muted-foreground hover:text-foreground",
                           )}
                         >
@@ -400,7 +400,7 @@ export function SessionStartDialog({
                           type="button"
                           onClick={() => { haptic("selection"); setOrder("random"); }}
                           className={cn(
-                            "border-s border-border px-2 py-0.5 text-[11px] font-medium transition-colors",
+                            "border-s border-border px-2.5 py-1 text-xs font-medium transition-colors",
                             order === "random" ? "bg-primary/10 text-primary" : "text-muted-foreground hover:text-foreground",
                           )}
                         >
@@ -414,8 +414,8 @@ export function SessionStartDialog({
             )}
           </div>
 
-          {/* Footer */}
-          <DialogFooter className="shrink-0 border-t border-border/80 bg-card px-4 py-4 sm:px-6 sm:py-5">
+          {/* Footer — compact padding */}
+          <DialogFooter className="shrink-0 border-t border-border/80 bg-card px-5 py-3 sm:px-6 sm:py-3.5">
             <div className="flex w-full items-center justify-between gap-2">
               <div className="flex gap-2">
                 <Button type="button" variant="ghost" size="sm" onClick={onClose}>

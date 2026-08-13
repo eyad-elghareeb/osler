@@ -860,13 +860,17 @@ export function QBankStudio({
     }
   };
 
-  const exitToHome = () => {
+  const exitToHome = React.useCallback(() => {
     sessions.clearActive();
     setMode("home");
     setSession(null);
+    setStartDialogOpen(false);
+    setStartPromptUid(null);
     setImmersiveMode(false);
-    onExit();
-  };
+    if (activeItem) {
+      navigate("qbank");
+    }
+  }, [activeItem, navigate]);
 
   // "Save & exit": persist the in-progress session, then leave the quiz view
   // WITHOUT clearing it, so a refresh or the Resume flow picks it back up.
