@@ -30,10 +30,14 @@ import {
 import { useSwipeBackDismiss } from "@/hooks/use-swipe-back-dismiss";
 import { notes as notesStore, type NoteRecord } from "@/lib/osler/storage";
 import { useI18n } from "./i18n-provider";
+import { MilkdownEditor } from "./milkdown-editor";
 
-/* ── Markdown rendering (lightweight, GFM, no raw HTML) ──────────────── */
-// Lazy import — avoids pulling the markdown pipeline into the initial bundle
-// if the user never opens the notes panel.
+/* ── Markdown preview (lightweight, GFM, no raw HTML) ──────────────── */
+/* The notes panel uses a lightweight read-only preview built on
+ * react-markdown + remark-gfm, lazy-loaded on first use so it doesn't
+ * bloat the initial bundle. The MilkdownEditor in `edit` mode handles all
+ * the WYSIWYG editing — this is only used when the user toggles to
+ * "preview" mode to read a finished note. */
 let MarkdownRenderer: React.ComponentType<{
   remarkPlugins?: unknown[];
   children?: React.ReactNode;
@@ -74,174 +78,6 @@ function MarkdownPreview({ body }: { body: string }) {
       <Comp remarkPlugins={remarkGfmPlugin ? [remarkGfmPlugin] : []}>
         {body || `*${t("qbank.notes.preview.empty")}*`}
       </Comp>
-    </div>
-  );
-}
-
-/* ── Inline SVG icon components (avoid extra lucide deps) ───────────── */
-const BoldIcon = (p: { className?: string }) => (
-  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className={p.className}>
-    <path d="M14 12a4 4 0 0 0 0-8H6v8" /><path d="M15 20a4 4 0 0 0 0-8H6v8Z" />
-  </svg>
-);
-const ItalicIcon = (p: { className?: string }) => (
-  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={p.className}>
-    <line x1="19" y1="4" x2="10" y2="4" /><line x1="14" y1="20" x2="5" y2="20" /><line x1="15" y1="4" x2="9" y2="20" />
-  </svg>
-);
-const StrikeIcon = (p: { className?: string }) => (
-  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={p.className}>
-    <path d="M16 4H9a3 3 0 0 0-2.83 4" /><path d="M14 12a4 4 0 0 1 0 8H6" /><line x1="4" y1="12" x2="20" y2="12" />
-  </svg>
-);
-const CodeIcon = (p: { className?: string }) => (
-  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={p.className}>
-    <polyline points="16 18 22 12 16 6" /><polyline points="8 6 2 12 8 18" />
-  </svg>
-);
-const QuoteIcon = (p: { className?: string }) => (
-  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={p.className}>
-    <path d="M3 21c3 0 7-1 7-8V5c0-1.25-.756-2.017-2-2H4c-1.25 0-2 .75-2 1.972V11c0 1.25.75 2 2 2 1 0 1 0 1 1v1c0 1-1 2-2 2s-1 .008-1 1.031V20c0 1 0 1 1 1z" /><path d="M15 21c3 0 7-1 7-8V5c0-1.25-.757-2.017-2-2h-4c-1.25 0-2 .75-2 1.972V11c0 1.25.75 2 2 2h.75c0 2.25.25 4-2.75 4v3c0 1 0 1 1 1z" />
-  </svg>
-);
-const ListIcon = (p: { className?: string }) => (
-  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={p.className}>
-    <line x1="8" y1="6" x2="21" y2="6" /><line x1="8" y1="12" x2="21" y2="12" /><line x1="8" y1="18" x2="21" y2="18" /><line x1="3" y1="6" x2="3.01" y2="6" /><line x1="3" y1="12" x2="3.01" y2="12" /><line x1="3" y1="18" x2="3.01" y2="18" />
-  </svg>
-);
-const OrderedListIcon = (p: { className?: string }) => (
-  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={p.className}>
-    <line x1="10" y1="6" x2="21" y2="6" /><line x1="10" y1="12" x2="21" y2="12" /><line x1="10" y1="18" x2="21" y2="18" /><path d="M4 6h1v4" /><path d="M4 10h2" /><path d="M6 18H4c0-1 2-2 2-3s-1-1.5-2-1" />
-  </svg>
-);
-const LinkIcon = (p: { className?: string }) => (
-  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={p.className}>
-    <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" /><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
-  </svg>
-);
-const CodeBlockIcon = (p: { className?: string }) => (
-  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={p.className}>
-    <rect x="3" y="3" width="18" height="18" rx="2" /><polyline points="9 9 7 12 9 15" /><polyline points="15 9 17 12 15 15" />
-  </svg>
-);
-const HrIcon = (p: { className?: string }) => (
-  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={p.className}>
-    <line x1="3" y1="12" x2="21" y2="12" />
-  </svg>
-);
-
-/* ── Markdown editor (split textarea + toolbar, like admin dashboard) ── */
-
-interface EditorActions {
-  wrapSelection: (before: string, after?: string) => void;
-  prefixLines: (prefix: string) => void;
-  insertAtCursor: (text: string, cursorOffset?: number) => void;
-}
-
-const EDITOR_TOOLBAR_BUTTONS: Array<{
-  icon: React.ComponentType<{ className?: string }>;
-  title: string;
-  apply: (a: EditorActions) => void;
-}> = [
-  { icon: FileText, title: "Heading", apply: (a) => a.prefixLines("## ") },
-  { icon: BoldIcon, title: "Bold", apply: (a) => a.wrapSelection("**") },
-  { icon: ItalicIcon, title: "Italic", apply: (a) => a.wrapSelection("*") },
-  { icon: StrikeIcon, title: "Strikethrough", apply: (a) => a.wrapSelection("~~") },
-  { icon: CodeIcon, title: "Inline code", apply: (a) => a.wrapSelection("`") },
-  { icon: QuoteIcon, title: "Blockquote", apply: (a) => a.prefixLines("> ") },
-  { icon: ListIcon, title: "Bullet list", apply: (a) => a.prefixLines("- ") },
-  { icon: OrderedListIcon, title: "Numbered list", apply: (a) => a.prefixLines("1. ") },
-  { icon: LinkIcon, title: "Link", apply: (a) => a.insertAtCursor("[](url)", -9) },
-  { icon: CodeBlockIcon, title: "Code block", apply: (a) => a.insertAtCursor("\n```\n\n```\n", -5) },
-  { icon: HrIcon, title: "Horizontal rule", apply: (a) => a.insertAtCursor("\n---\n", 0) },
-];
-
-function MarkdownEditor({
-  value,
-  onChange,
-  placeholder,
-}: {
-  value: string;
-  onChange: (v: string) => void;
-  placeholder?: string;
-}) {
-  const textareaRef = React.useRef<HTMLTextAreaElement>(null);
-
-  const actions: EditorActions = React.useMemo(
-    () => ({
-      wrapSelection: (before: string, after: string = before) => {
-        const ta = textareaRef.current;
-        if (!ta) return;
-        const start = ta.selectionStart;
-        const end = ta.selectionEnd;
-        const selected = value.slice(start, end) || "";
-        const next = value.slice(0, start) + before + selected + after + value.slice(end);
-        onChange(next);
-        requestAnimationFrame(() => {
-          ta.focus();
-          ta.setSelectionRange(start + before.length, end + before.length);
-        });
-      },
-      prefixLines: (prefix: string) => {
-        const ta = textareaRef.current;
-        if (!ta) return;
-        const start = ta.selectionStart;
-        const end = ta.selectionEnd;
-        const lineStart = value.lastIndexOf("\n", start - 1) + 1;
-        const block = value.slice(lineStart, end);
-        const newBlock = block
-          .split("\n")
-          .map((l) => prefix + l)
-          .join("\n");
-        const next = value.slice(0, lineStart) + newBlock + value.slice(end);
-        onChange(next);
-        requestAnimationFrame(() => {
-          ta.focus();
-          ta.setSelectionRange(lineStart, lineStart + newBlock.length);
-        });
-      },
-      insertAtCursor: (text: string, cursorOffset = 0) => {
-        const ta = textareaRef.current;
-        if (!ta) return;
-        const start = ta.selectionStart;
-        const next = value.slice(0, start) + text + value.slice(ta.selectionEnd);
-        onChange(next);
-        requestAnimationFrame(() => {
-          ta.focus();
-          ta.setSelectionRange(start + text.length + cursorOffset, start + text.length + cursorOffset);
-        });
-      },
-    }),
-    [value, onChange]
-  );
-
-  return (
-    <div className="flex flex-col h-full min-h-0 border border-border rounded-lg overflow-hidden bg-background">
-      <div className="flex items-center gap-0.5 px-1.5 py-1.5 border-b border-border bg-muted/30 overflow-x-auto medos-scroll shrink-0">
-        {EDITOR_TOOLBAR_BUTTONS.map((b, i) => {
-          const Icon = b.icon;
-          return (
-            <button
-              key={i}
-              type="button"
-              onClick={() => b.apply(actions)}
-              title={b.title}
-              aria-label={b.title}
-              className="size-7 rounded-md hover:bg-muted flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors shrink-0"
-            >
-              <Icon className="size-3.5" />
-            </button>
-          );
-        })}
-      </div>
-      <textarea
-        ref={textareaRef}
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        placeholder={placeholder ?? "Write your note in markdown…"}
-        className="flex-1 min-h-0 resize-none bg-background text-foreground px-3 py-3 text-sm font-mono leading-relaxed outline-none medos-scroll"
-        spellCheck={true}
-      />
     </div>
   );
 }
@@ -946,10 +782,19 @@ function EditorView({
           }`}
         >
           {editorMode === "edit" ? (
-            <MarkdownEditor
+            <MilkdownEditor
               value={note.body}
               onChange={(v) => onUpdate({ body: v })}
               placeholder={t("qbank.notes.editor.placeholder")}
+              className="h-full"
+              // Notes is a long-form writing context — enable mermaid
+              // diagrams and the persistent top formatting bar.
+              // Image upload is DISABLED because notes don't have an R2
+              // destination — uploads would silently fail.
+              enableMermaid
+              enableTopBar
+              enableImageUpload={false}
+              showCounters
             />
           ) : (
             <div className="h-full overflow-y-auto medos-scroll border border-border rounded-lg bg-background p-4">

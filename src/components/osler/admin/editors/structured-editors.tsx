@@ -53,7 +53,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { MarkdownEditor } from "./markdown-editor";
+import { MilkdownEditor } from "@/components/osler/milkdown-editor";
 import { useToast } from "@/hooks/use-toast";
 import { ImageLightbox } from "@/components/osler/admin/image-lightbox";
 import {
@@ -742,13 +742,15 @@ export function QuizEditor({ value, onChange, readOnly, r2KeyBase, rawR2Key }: S
               />
             </Field>
             <Field label={t("admin.content.editor.stem")} hint="Markdown supported">
-              <Textarea
-                value={q.question ?? q.stem ?? ""}
-                onChange={(e) => patchQuestion(i, { question: e.target.value, stem: e.target.value })}
-                readOnly={readOnly}
-                rows={3}
-                placeholder="Question text — supports **bold**, *italic*, `code`, and ![alt](image.png)"
-              />
+              <MilkdownEditor
+  value={q.question ?? q.stem ?? ""}
+  onChange={(v) => patchQuestion(i, { question: v, stem: v })}
+  readOnly={readOnly}
+  r2KeyBase={r2KeyBase}
+  rawR2Key={rawR2Key}
+  className="min-h-[120px]"
+  placeholder="Question text — supports **bold**, *italic*, `code`, and ![alt](image.png)"
+/>
             </Field>
             <ChoicesEditor
               choices={q.options ?? q.choices ?? []}
@@ -757,12 +759,14 @@ export function QuizEditor({ value, onChange, readOnly, r2KeyBase, rawR2Key }: S
               readOnly={readOnly}
             />
             <Field label={t("admin.content.editor.explanation")} hint="Markdown supported">
-              <Textarea
-                value={q.explanation ?? ""}
-                onChange={(e) => patchQuestion(i, { explanation: e.target.value })}
-                readOnly={readOnly}
-                rows={3}
-              />
+              <MilkdownEditor
+  value={q.explanation ?? ""}
+  onChange={(v) => patchQuestion(i, { explanation: v })}
+  readOnly={readOnly}
+  r2KeyBase={r2KeyBase}
+  rawR2Key={rawR2Key}
+  className="min-h-[120px]"
+/>
             </Field>
             <ImageListField
               label="Stem image(s)"
@@ -995,12 +999,14 @@ function PassagesEditor({ value, onChange, readOnly, r2KeyBase, rawR2Key }: Stru
             />
           </Field>
           <Field label="Passage text" hint="Markdown supported">
-            <Textarea
-              value={p.content ?? p.stem ?? ""}
-              onChange={(e) => patchPassage(i, { content: e.target.value, stem: e.target.value })}
-              readOnly={readOnly}
-              rows={5}
-            />
+            <MilkdownEditor
+  value={p.content ?? p.stem ?? ""}
+  onChange={(v) => patchPassage(i, { content: v, stem: v })}
+  readOnly={readOnly}
+  r2KeyBase={r2KeyBase}
+  rawR2Key={rawR2Key}
+  className="min-h-[120px]"
+/>
           </Field>
           <Field label="Questions">
             <QuizEditor
@@ -1030,20 +1036,24 @@ export function FlashcardEditor({ value, onChange, readOnly, r2KeyBase, rawR2Key
     return (
       <div className="space-y-3">
         <Field label="Front">
-          <Textarea
-            value={value.front ?? ""}
-            onChange={(e) => onChange({ ...value, front: e.target.value })}
-            readOnly={readOnly}
-            rows={3}
-          />
+          <MilkdownEditor
+  value={value.front ?? ""}
+  onChange={(v) => onChange({ ...value, front: v })}
+  readOnly={readOnly}
+  r2KeyBase={r2KeyBase}
+  rawR2Key={rawR2Key}
+  className="min-h-[120px]"
+/>
         </Field>
         <Field label="Back">
-          <Textarea
-            value={value.back ?? ""}
-            onChange={(e) => onChange({ ...value, back: e.target.value })}
-            readOnly={readOnly}
-            rows={3}
-          />
+          <MilkdownEditor
+  value={value.back ?? ""}
+  onChange={(v) => onChange({ ...value, back: v })}
+  readOnly={readOnly}
+  r2KeyBase={r2KeyBase}
+  rawR2Key={rawR2Key}
+  className="min-h-[120px]"
+/>
         </Field>
       </div>
     );
@@ -1175,39 +1185,47 @@ export function FlashcardEditor({ value, onChange, readOnly, r2KeyBase, rawR2Key
               {isCloze ? (
                 <>
                   <Field label="Text" hint="Use {{c1::answer::hint}} for cloze deletions">
-                    <Textarea
-                      value={c.text ?? ""}
-                      onChange={(e) => patchCard(i, { text: e.target.value })}
-                      readOnly={readOnly}
-                      rows={3}
-                    />
+                    <MilkdownEditor
+  value={c.text ?? ""}
+  onChange={(v) => patchCard(i, { text: v })}
+  readOnly={readOnly}
+  r2KeyBase={r2KeyBase}
+  rawR2Key={rawR2Key}
+  className="min-h-[120px]"
+/>
                   </Field>
                   <Field label="Extra (shown under answer)">
-                    <Textarea
-                      value={c.extra ?? ""}
-                      onChange={(e) => patchCard(i, { extra: e.target.value })}
-                      readOnly={readOnly}
-                      rows={2}
-                    />
+                    <MilkdownEditor
+  value={c.extra ?? ""}
+  onChange={(v) => patchCard(i, { extra: v })}
+  readOnly={readOnly}
+  r2KeyBase={r2KeyBase}
+  rawR2Key={rawR2Key}
+  className="min-h-[120px]"
+/>
                   </Field>
                 </>
               ) : (
                 <>
                   <Field label="Front">
-                    <Textarea
-                      value={c.front ?? ""}
-                      onChange={(e) => patchCard(i, { front: e.target.value })}
-                      readOnly={readOnly}
-                      rows={3}
-                    />
+                    <MilkdownEditor
+  value={c.front ?? ""}
+  onChange={(v) => patchCard(i, { front: v })}
+  readOnly={readOnly}
+  r2KeyBase={r2KeyBase}
+  rawR2Key={rawR2Key}
+  className="min-h-[120px]"
+/>
                   </Field>
                   <Field label="Back">
-                    <Textarea
-                      value={c.back ?? ""}
-                      onChange={(e) => patchCard(i, { back: e.target.value })}
-                      readOnly={readOnly}
-                      rows={3}
-                    />
+                    <MilkdownEditor
+  value={c.back ?? ""}
+  onChange={(v) => patchCard(i, { back: v })}
+  readOnly={readOnly}
+  r2KeyBase={r2KeyBase}
+  rawR2Key={rawR2Key}
+  className="min-h-[120px]"
+/>
                   </Field>
                 </>
               )}
@@ -1443,12 +1461,14 @@ export function OsceEditor({ value, onChange, readOnly, r2KeyBase, rawR2Key }: S
               </Field>
             </div>
             <Field label="Task">
-              <Textarea
-                value={s.task ?? ""}
-                onChange={(e) => patchStation(i, { task: e.target.value })}
-                readOnly={readOnly}
-                rows={3}
-              />
+              <MilkdownEditor
+  value={s.task ?? ""}
+  onChange={(v) => patchStation(i, { task: v })}
+  readOnly={readOnly}
+  r2KeyBase={r2KeyBase}
+  rawR2Key={rawR2Key}
+  className="min-h-[120px]"
+/>
             </Field>
             <Field label="Time (minutes)">
               <Input
@@ -1519,23 +1539,27 @@ export function OsceEditor({ value, onChange, readOnly, r2KeyBase, rawR2Key }: S
               />
             </Field>
             <Field label="Opening">
-              <Textarea
-                value={s.patient?.opening ?? ""}
-                onChange={(e) => patchStation(i, { patient: { ...(s.patient ?? {}), opening: e.target.value } })}
-                readOnly={readOnly}
-                rows={2}
-                placeholder="Patient's first line"
-              />
+              <MilkdownEditor
+  value={s.patient?.opening ?? ""}
+  onChange={(v) => patchStation(i, { patient: { ...(s.patient ?? {}), opening: v } })}
+  readOnly={readOnly}
+  r2KeyBase={r2KeyBase}
+  rawR2Key={rawR2Key}
+  className="min-h-[120px]"
+  placeholder="Patient's first line"
+/>
             </Field>
 
             <SectionLabel>{t("admin.structured.hiddenProfile")}</SectionLabel>
             <Field label="Diagnosis">
-              <Textarea
-                value={s.hiddenProfile?.diagnosis ?? ""}
-                onChange={(e) => patchStation(i, { hiddenProfile: { ...(s.hiddenProfile ?? {}), diagnosis: e.target.value } })}
-                readOnly={readOnly}
-                rows={2}
-              />
+              <MilkdownEditor
+  value={s.hiddenProfile?.diagnosis ?? ""}
+  onChange={(v) => patchStation(i, { hiddenProfile: { ...(s.hiddenProfile ?? {}), diagnosis: v } })}
+  readOnly={readOnly}
+  r2KeyBase={r2KeyBase}
+  rawR2Key={rawR2Key}
+  className="min-h-[120px]"
+/>
             </Field>
             <TagListField
               label="Key symptoms"
@@ -1556,13 +1580,15 @@ export function OsceEditor({ value, onChange, readOnly, r2KeyBase, rawR2Key }: S
               readOnly={readOnly}
             />
             <Field label="Vital signs">
-              <Textarea
-                value={s.hiddenProfile?.vitalSigns ?? ""}
-                onChange={(e) => patchStation(i, { hiddenProfile: { ...(s.hiddenProfile ?? {}), vitalSigns: e.target.value } })}
-                readOnly={readOnly}
-                rows={2}
-                placeholder="BP, HR, RR, O2 sat, Temp"
-              />
+              <MilkdownEditor
+  value={s.hiddenProfile?.vitalSigns ?? ""}
+  onChange={(v) => patchStation(i, { hiddenProfile: { ...(s.hiddenProfile ?? {}), vitalSigns: v } })}
+  readOnly={readOnly}
+  r2KeyBase={r2KeyBase}
+  rawR2Key={rawR2Key}
+  className="min-h-[120px]"
+  placeholder="BP, HR, RR, O2 sat, Temp"
+/>
             </Field>
 
             <SectionLabel>{t("admin.structured.rubric")}</SectionLabel>
@@ -1584,6 +1610,8 @@ export function OsceEditor({ value, onChange, readOnly, r2KeyBase, rawR2Key }: S
               questions={s.questions ?? []}
               onChange={(v) => patchStation(i, { questions: v })}
               readOnly={readOnly}
+              r2KeyBase={r2KeyBase}
+              rawR2Key={rawR2Key}
             />
           </ItemRow>
         ))
@@ -1596,10 +1624,14 @@ function OsceQuestionsEditor({
   questions,
   onChange,
   readOnly,
+  r2KeyBase,
+  rawR2Key,
 }: {
   questions: any[];
   onChange: (next: any[]) => void;
   readOnly?: boolean;
+  r2KeyBase?: string;
+  rawR2Key?: string;
 }) {
   function add() {
     onChange([...questions, { question: "", answer: "", rubric: "" }]);
@@ -1627,20 +1659,24 @@ function OsceQuestionsEditor({
               </Button>
             )}
           </div>
-          <Textarea
-            value={q.question ?? ""}
-            onChange={(e) => patch(i, { question: e.target.value })}
-            readOnly={readOnly}
-            rows={2}
-            placeholder="Question"
-          />
-          <Textarea
-            value={q.answer ?? ""}
-            onChange={(e) => patch(i, { answer: e.target.value })}
-            readOnly={readOnly}
-            rows={2}
-            placeholder="Answer"
-          />
+          <MilkdownEditor
+  value={q.question ?? ""}
+  onChange={(v) => patch(i, { question: v })}
+  readOnly={readOnly}
+  r2KeyBase={r2KeyBase}
+  rawR2Key={rawR2Key}
+  className="min-h-[120px]"
+  placeholder="Question"
+/>
+          <MilkdownEditor
+  value={q.answer ?? ""}
+  onChange={(v) => patch(i, { answer: v })}
+  readOnly={readOnly}
+  r2KeyBase={r2KeyBase}
+  rawR2Key={rawR2Key}
+  className="min-h-[120px]"
+  placeholder="Answer"
+/>
           <Textarea
             value={q.rubric ?? ""}
             onChange={(e) => patch(i, { rubric: e.target.value })}
@@ -1756,12 +1792,14 @@ export function VideoEditor({ value, onChange, readOnly, r2KeyBase, rawR2Key }: 
                 />
               </Field>
               <Field label="Description">
-                <Textarea
-                  value={v.description ?? ""}
-                  onChange={(e) => patchVideo(i, { description: e.target.value })}
-                  readOnly={readOnly}
-                  rows={2}
-                />
+                <MilkdownEditor
+  value={v.description ?? ""}
+  onChange={(v) => patchVideo(i, { description: v })}
+  readOnly={readOnly}
+  r2KeyBase={r2KeyBase}
+  rawR2Key={rawR2Key}
+  className="min-h-[120px]"
+/>
               </Field>
               <div className="grid grid-cols-2 gap-3">
                 <Field label="Specialty">
@@ -1899,6 +1937,8 @@ export function VideoEditor({ value, onChange, readOnly, r2KeyBase, rawR2Key }: 
                 chapters={v.chapters ?? []}
                 onChange={(c) => patchVideo(i, { chapters: c })}
                 readOnly={readOnly}
+                r2KeyBase={r2KeyBase}
+                rawR2Key={rawR2Key}
               />
 
               <SectionLabel>{t("admin.structured.tagsRelated")}</SectionLabel>
@@ -1927,10 +1967,14 @@ function ChaptersEditor({
   chapters,
   onChange,
   readOnly,
+  r2KeyBase,
+  rawR2Key,
 }: {
   chapters: any[];
   onChange: (next: any[]) => void;
   readOnly?: boolean;
+  r2KeyBase?: string;
+  rawR2Key?: string;
 }) {
   function add() {
     const lastTime = chapters.length ? chapters[chapters.length - 1].time : 0;
@@ -2049,28 +2093,34 @@ export function WrittenEditor({ value, onChange, readOnly, r2KeyBase, rawR2Key }
               />
             </Field>
             <Field label="Prompt">
-              <Textarea
-                value={p.prompt ?? ""}
-                onChange={(e) => patchPrompt(i, { prompt: e.target.value })}
-                readOnly={readOnly}
-                rows={3}
-              />
+              <MilkdownEditor
+  value={p.prompt ?? ""}
+  onChange={(v) => patchPrompt(i, { prompt: v })}
+  readOnly={readOnly}
+  r2KeyBase={r2KeyBase}
+  rawR2Key={rawR2Key}
+  className="min-h-[120px]"
+/>
             </Field>
             <Field label="Model Answer" hint="Markdown supported">
-              <Textarea
-                value={p.modelAnswer ?? ""}
-                onChange={(e) => patchPrompt(i, { modelAnswer: e.target.value })}
-                readOnly={readOnly}
-                rows={4}
-              />
+              <MilkdownEditor
+  value={p.modelAnswer ?? ""}
+  onChange={(v) => patchPrompt(i, { modelAnswer: v })}
+  readOnly={readOnly}
+  r2KeyBase={r2KeyBase}
+  rawR2Key={rawR2Key}
+  className="min-h-[120px]"
+/>
             </Field>
             <Field label="Explanation" hint="Markdown supported">
-              <Textarea
-                value={p.explanation ?? ""}
-                onChange={(e) => patchPrompt(i, { explanation: e.target.value })}
-                readOnly={readOnly}
-                rows={2}
-              />
+              <MilkdownEditor
+  value={p.explanation ?? ""}
+  onChange={(v) => patchPrompt(i, { explanation: v })}
+  readOnly={readOnly}
+  r2KeyBase={r2KeyBase}
+  rawR2Key={rawR2Key}
+  className="min-h-[120px]"
+/>
             </Field>
             <Field label="Rubric" hint="One item per line">
               <Textarea
@@ -2102,6 +2152,8 @@ export function WrittenEditor({ value, onChange, readOnly, r2KeyBase, rawR2Key }
               items={p.children ?? []}
               onChange={(c) => patchPrompt(i, { children: c })}
               readOnly={readOnly}
+              r2KeyBase={r2KeyBase}
+              rawR2Key={rawR2Key}
             />
           </ItemRow>
         ))
@@ -2115,10 +2167,14 @@ function WrittenChildrenEditor({
   items,
   onChange,
   readOnly,
+  r2KeyBase,
+  rawR2Key,
 }: {
   items: any[];
   onChange: (next: any[]) => void;
   readOnly?: boolean;
+  r2KeyBase?: string;
+  rawR2Key?: string;
 }) {
   const children = items;
   function add() {
@@ -2165,20 +2221,24 @@ function WrittenChildrenEditor({
               />
             </Field>
           </div>
-          <Textarea
-            value={c.question ?? ""}
-            onChange={(e) => patch(i, { question: e.target.value })}
-            readOnly={readOnly}
-            rows={2}
-            placeholder="Sub-question"
-          />
-          <Textarea
-            value={c.modelAnswer ?? ""}
-            onChange={(e) => patch(i, { modelAnswer: e.target.value })}
-            readOnly={readOnly}
-            rows={2}
-            placeholder="Model answer"
-          />
+          <MilkdownEditor
+  value={c.question ?? ""}
+  onChange={(v) => patch(i, { question: v })}
+  readOnly={readOnly}
+  r2KeyBase={r2KeyBase}
+  rawR2Key={rawR2Key}
+  className="min-h-[120px]"
+  placeholder="Sub-question"
+/>
+          <MilkdownEditor
+  value={c.modelAnswer ?? ""}
+  onChange={(v) => patch(i, { modelAnswer: v })}
+  readOnly={readOnly}
+  r2KeyBase={r2KeyBase}
+  rawR2Key={rawR2Key}
+  className="min-h-[120px]"
+  placeholder="Model answer"
+/>
         </div>
       ))}
       {!readOnly && (
@@ -2294,12 +2354,14 @@ function BankFlatQuestionsEditor({ value, onChange, readOnly, r2KeyBase, rawR2Ke
                 />
               </Field>
               <Field label={t("admin.content.editor.stem")} hint="Markdown supported">
-                <Textarea
-                  value={q.question ?? q.stem ?? ""}
-                  onChange={(e) => patchQuestion(i, { question: e.target.value, stem: e.target.value })}
-                  readOnly={readOnly}
-                  rows={3}
-                />
+                <MilkdownEditor
+  value={q.question ?? q.stem ?? ""}
+  onChange={(v) => patchQuestion(i, { question: v, stem: v })}
+  readOnly={readOnly}
+  r2KeyBase={r2KeyBase}
+  rawR2Key={rawR2Key}
+  className="min-h-[120px]"
+/>
               </Field>
               <ChoicesEditor
                 choices={q.options ?? q.choices ?? []}
@@ -2308,12 +2370,14 @@ function BankFlatQuestionsEditor({ value, onChange, readOnly, r2KeyBase, rawR2Ke
                 readOnly={readOnly}
               />
               <Field label={t("admin.content.editor.explanation")} hint="Markdown supported">
-                <Textarea
-                  value={q.explanation ?? ""}
-                  onChange={(e) => patchQuestion(i, { explanation: e.target.value })}
-                  readOnly={readOnly}
-                  rows={3}
-                />
+                <MilkdownEditor
+  value={q.explanation ?? ""}
+  onChange={(v) => patchQuestion(i, { explanation: v })}
+  readOnly={readOnly}
+  r2KeyBase={r2KeyBase}
+  rawR2Key={rawR2Key}
+  className="min-h-[120px]"
+/>
               </Field>
               <ImageListField
                 label="Stem image(s)"
@@ -2572,14 +2636,19 @@ export function LibraryArticleEditor({ value, onChange, readOnly, r2KeyBase, raw
             <span>·</span>
             <span>{t("admin.content.editor.lineCount", { n: lines })}</span>
           </div>
-          <MarkdownEditor
+          <MilkdownEditor
             value={currentBody}
             onChange={(next) => update(next, "md")}
             readOnly={readOnly}
             r2KeyBase={r2KeyBase}
             rawR2Key={rawR2Key}
-            placeholder="# Article title\n\nWrite your article in **Markdown**…"
+            placeholder={t("editor.placeholder.article")}
             className="flex-1 min-h-0"
+            // Article editor is a long-form writing context — enable mermaid
+            // diagrams and the persistent top formatting bar.
+            enableMermaid
+            enableTopBar
+            showCounters
           />
         </>
       )}

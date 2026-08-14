@@ -1955,6 +1955,20 @@ export const ar = {
     "admin.markdown.toolbar.Table": "جدول",
     "admin.markdown.toolbar.Horizontal rule": "خط أفقي",
 
+    // ── محرر Milkdown (مكون WYSIWYG المشترك) ─────────────────────────────
+    "editor.placeholder.default": "اكتب إجابتك…",
+    "editor.placeholder.note": "اكتب ملاحظتك بصيغة ماركداون…",
+    "editor.placeholder.article": "# عنوان المقال\n\nاكتب مقالك بصيغة **Markdown**…",
+    "editor.uploadImage": "رفع صورة",
+    "editor.uploading": "جارٍ الرفع…",
+    "editor.mermaid.label": "مخططات",
+    "editor.mermaid.insertDiagram": "+ مخطط",
+    "editor.mermaid.insertMermaidBlock": "إدراج كتلة مخطط",
+    "editor.mermaid.editDiagramN": "تعديل المخطط {n}",
+    "editor.mermaid.noDiagrams": "لا توجد مخططات",
+    "editor.wordCount": "{n}",
+    "editor.dropToUpload": "أفلت الصور للرفع",
+
     // ── محرر JSON ─────────────────────────────────────────────────────────
     "admin.json.lines": "{n} سطر",
     "admin.json.chars": "{n} حرفاً",

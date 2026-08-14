@@ -1959,6 +1959,20 @@ export const en = {
     "admin.markdown.toolbar.Table": "Table",
     "admin.markdown.toolbar.Horizontal rule": "Horizontal rule",
 
+    // ── Milkdown editor (shared WYSIWYG component) ───────────────────────
+    "editor.placeholder.default": "Write your answer…",
+    "editor.placeholder.note": "Write your note in markdown…",
+    "editor.placeholder.article": "# Article title\n\nWrite your article in **Markdown**…",
+    "editor.uploadImage": "Upload image",
+    "editor.uploading": "Uploading…",
+    "editor.mermaid.label": "Mermaid",
+    "editor.mermaid.insertDiagram": "+ Diagram",
+    "editor.mermaid.insertMermaidBlock": "Insert mermaid block",
+    "editor.mermaid.editDiagramN": "Edit diagram {n}",
+    "editor.mermaid.noDiagrams": "No diagrams",
+    "editor.wordCount": "{n}",
+    "editor.dropToUpload": "Drop images to upload",
+
     // ── JSON code editor ──────────────────────────────────────────────────
     "admin.json.lines": "{n} lines",
     "admin.json.chars": "{n} chars",

@@ -64,7 +64,7 @@ import {
 } from "lucide-react";
 import { loadCategoryTree, loadContentByUid, loadNodeByUid, ENGINE_META, flattenTree, packBasePath, nodeUrls } from "@/lib/osler/content";
 import { toast } from "@/hooks/use-toast";
-import { RenderedMarkdownEditor } from "@/components/osler/rendered-markdown-editor";
+import { MilkdownEditor } from "@/components/osler/milkdown-editor";
 import { MarkdownPreview } from "@/components/osler/admin/editors/markdown-preview";
 import {
   contentToQuestions as poolContentToQuestions,
@@ -6863,11 +6863,15 @@ function WrittenEngineView({
             </span>
           </div>
 
-          <RenderedMarkdownEditor
+          <MilkdownEditor
             value={draft.text}
             onChange={onTextChange}
             placeholder={t("qbank.written.placeholder")}
             className="osler-written-area"
+            // Written answers use a separate "Photo" camera capture mode
+            // for handwritten answers — disable image upload in the
+            // editor itself to avoid confusion.
+            enableImageUpload={false}
           />
           {transcribing && (
             <div className="flex items-center gap-2 text-xs text-muted-foreground bg-muted/30 rounded-lg px-3 py-2 mt-2">
@@ -6937,11 +6941,12 @@ function WrittenEngineView({
                   {child.question && (
                     <div className="text-sm text-foreground mb-1.5">{child.question}</div>
                   )}
-                  <RenderedMarkdownEditor
+                  <MilkdownEditor
                     value={childAns}
                     onChange={(v) => onChildTextChange?.(ci, v)}
                     placeholder={t("qbank.written.answerFor", { label: child.label || `part ${ci + 1}` })}
                     className="osler-written-area"
+                    enableImageUpload={false}
                   />
                   <div className="flex gap-2">
                     <button

@@ -2,10 +2,26 @@
 @import "tw-animate-css";
 
 /* Milkdown Crepe WYSIWYG editor — theme + common feature styles.
- * The `classic` theme bundles ProseMirror reset, placeholder, toolbar,
- * list, table, code-mirror, link-tooltip, latex, cursor, and block-edit
- * styles. Also import the matching dark theme so it adapts automatically. */
+ *
+ * Architecture:
+ *   • `classic.css` and `classic-dark.css` set the Crepe CSS VARIABLES
+ *     (colors, fonts, shadows) for light and dark modes. They do NOT
+ *     include any UI styling.
+ *   • `common/style.css` is the master import that pulls in every UI
+ *     surface stylesheet (prosemirror, reset, block-edit, toolbar,
+ *     slash-menu, code-mirror, link-tooltip, list-item, placeholder,
+ *     table, latex, top-bar, cursor, image-block). WITHOUT THIS, the
+ *     editor renders unstyled — slash menus appear as static blocks
+ *     instead of floating popovers, toolbars don't float, the
+ *     `[data-show='false'] { display: none }` rule is missing so hidden
+ *     UI stays visible, etc.
+ *   • Our `.osler-milkdown-editor` overrides (below) then remap the
+ *     Crepe variables onto Osler's design tokens and adjust the layout
+ *     for a compact answer field (vs Crepe's default full-page document
+ *     layout with 60×120px padding and 42px headings). */
 @import "@milkdown/crepe/theme/classic.css";
+@import "@milkdown/crepe/theme/classic-dark.css";
+@import "@milkdown/crepe/theme/common/style.css";
 
 @custom-variant dark (&:is(.dark *));
 
@@ -1577,22 +1593,19 @@ html[dir="rtl"] {
   flex-shrink: 0;
 }
 
-/* ── Written answer ─────────────────────────────────────────────────────── */
+/* ── Written answer ───────────────────────────────────────────────────────
+ * Originally styled the plain textarea used for written answers. Now that
+ * the answer field is a MilkdownEditor (whose own .osler-milkdown-editor
+ * wrapper handles border/padding/background), this class is a thin
+ * sizing-only hint: it just sets a comfortable min-height for the
+ * written-answer context. The wrapper's own border/background take over.
+ * ────────────────────────────────────────────────────────────────────── */
 .osler-written-area {
-  width: 100%; min-height: 220px;
-  background: var(--card);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  padding: 1rem 1.15rem;
-  color: var(--foreground);
-  font-family: var(--font-geist-sans, inherit);
-  font-size: 0.95rem; line-height: 1.65;
-  resize: vertical;
+  width: 100%;
+  min-height: 220px;
 }
 .osler-written-area:focus {
   outline: none;
-  border-color: var(--primary);
-  box-shadow: 0 0 0 3px color-mix(in oklch, var(--primary) 20%, transparent);
 }
 
 /* ── Written photo mode ─────────────────────────────────────────────────── */
@@ -2871,12 +2884,35 @@ html.osler-ar body,
 /* ───────────────────────────────────────────────────────────────────────
  * Milkdown Crepe editor — Osler theme overrides
  *
- * The Crepe theme ships its own color palette (warm beige). We map its
- * CSS variables onto Osler's design tokens so the editor matches the
- * surrounding UI in both light and dark modes. The wrapper class
- * `.osler-milkdown-editor` is applied by the `<MilkdownEditor>` React
- * component.
+ * The Crepe theme ships:
+ *   1. A warm beige/orange color palette we don't want.
+ *   2. A "document" layout designed for full-page editing —
+ *      `.ProseMirror { padding: 60px 120px }` and
+ *      `h1 { font-size: 2.625em }` — completely wrong for a compact
+ *      answer field embedded in a card.
+ *
+ * This block fixes both:
+ *   • Maps every Crepe CSS variable onto Osler's design tokens so the
+ *     editor inherits the surrounding card / foreground / muted palette
+ *     in both light and dark modes.
+ *   • Neutralizes the document-y padding and oversized typography so
+ *     the editor reads like a comfortable input field, not a Notion
+ *     page.
+ *   • Restyles every Crepe UI surface (top bar, slash menu, block-edit
+ *     handle, selection toolbar, code block, link tooltip, placeholder)
+ *     to match Osler's card / border / elevation tokens.
+ *
+ * Selector strategy: every rule is scoped under `.osler-milkdown-editor`
+ * (applied by the <MilkdownEditor> wrapper) AND uses `!important` on the
+ * few properties where Crepe's reset.css uses higher specificity than
+ * our scoped selector (e.g. `.milkdown .ProseMirror { padding: ... }`
+ * would otherwise win because our rule is loaded earlier in the cascade
+ * for the same specificity). Most properties don't need `!important`
+ * because our 3-class selector `.osler-milkdown-editor .milkdown .X`
+ * (0,3,0) beats Crepe's 2-class `.milkdown .X` (0,2,0).
  * ─────────────────────────────────────────────────────────────────────── */
+
+/* ── 1. Color + font variable mapping (light mode default) ────────────── */
 .osler-milkdown-editor {
   --crepe-color-background: var(--card);
   --crepe-color-on-background: var(--foreground);
@@ -2884,43 +2920,730 @@ html.osler-ar body,
   --crepe-color-surface-low: var(--muted);
   --crepe-color-on-surface: var(--foreground);
   --crepe-color-on-surface-variant: var(--muted-foreground);
-  --crepe-color-outline: var(--border);
+  --crepe-color-outline: var(--muted-foreground);
   --crepe-color-primary: var(--primary);
   --crepe-color-secondary: var(--secondary);
-  --crepe-radius: var(--radius-md);
-  font-family: var(--font-geist-sans, inherit);
+  --crepe-color-on-secondary: var(--secondary-foreground);
+  --crepe-color-inverse: var(--secondary-foreground);
+  --crepe-color-on-inverse: var(--secondary);
+  --crepe-color-inline-code: var(--destructive);
+  --crepe-color-error: var(--destructive);
+  --crepe-color-hover: color-mix(in oklch, var(--muted) 80%, var(--primary) 6%);
+  --crepe-color-selected: color-mix(in oklch, var(--muted) 65%, var(--primary) 18%);
+  --crepe-color-inline-area: var(--border);
+  /* Diff colors (used by Crepe's AI/diff feature) — map to our
+   * semantic success/destructive tokens so they follow the theme. */
+  --crepe-color-diff-added: var(--success);
+  --crepe-color-diff-removed: var(--destructive);
+  --crepe-color-diff-added-text: var(--success);
+  --crepe-color-diff-removed-text: var(--destructive);
+  /* ProseMirror-tables default cell width */
+  --default-cell-min-width: 100px;
+
+  --crepe-base-font-size: 15px;
+  --crepe-font-title: var(--font-geist-sans, Georgia, serif);
+  --crepe-font-default: var(--font-geist-sans, system-ui, sans-serif);
+  --crepe-font-code: var(--font-geist-mono, ui-monospace, "SF Mono", Menlo, monospace);
+
+  --crepe-shadow-1: var(--shadow-e2);
+  --crepe-shadow-2: var(--shadow-e3);
+
+  font-family: var(--font-geist-sans, system-ui, sans-serif);
   font-size: 0.95rem;
-}
-
-.osler-milkdown-editor .milkdown {
-  background: transparent;
+  line-height: 1.65;
+  background: var(--card);
   color: var(--foreground);
-  min-height: 180px;
-  padding: 0.75rem 1rem;
 }
 
-.osler-milkdown-editor .milkdown .editor {
-  padding: 0;
-  outline: none;
+/* Dark mode — Osler's :root is dark by default; .light opts into light.
+ * We re-declare the mapping here so the editor matches regardless of
+ * which Crepe theme CSS (classic vs classic-dark) was loaded last. */
+.dark .osler-milkdown-editor,
+:root:not(.light) .osler-milkdown-editor {
+  --crepe-color-background: var(--card);
+  --crepe-color-on-background: var(--foreground);
+  --crepe-color-surface: var(--muted);
+  --crepe-color-surface-low: var(--secondary);
+  --crepe-color-on-surface: var(--foreground);
+  --crepe-color-on-surface-variant: var(--muted-foreground);
+  --crepe-color-outline: var(--muted-foreground);
+  --crepe-color-primary: var(--primary);
+  --crepe-color-secondary: var(--secondary);
+  --crepe-color-on-secondary: var(--secondary-foreground);
+  --crepe-color-inverse: var(--secondary-foreground);
+  --crepe-color-on-inverse: var(--secondary);
+  --crepe-color-inline-code: oklch(0.78 0.18 25);
+  --crepe-color-error: var(--destructive);
+  --crepe-color-hover: color-mix(in oklch, var(--muted) 70%, var(--primary) 10%);
+  --crepe-color-selected: color-mix(in oklch, var(--muted) 55%, var(--primary) 22%);
+  --crepe-color-inline-area: var(--border-strong);
+  --crepe-color-diff-added: var(--success);
+  --crepe-color-diff-removed: var(--destructive);
+  --crepe-color-diff-added-text: var(--success);
+  --crepe-color-diff-removed-text: var(--destructive);
 }
 
-.osler-milkdown-editor .milkdown.ProseMirror {
-  outline: none;
+/* ── 2. Editor body — kill the "document" padding, use compact spacing ─ */
+.osler-milkdown-editor .milkdown {
+  background: transparent !important;
+  color: var(--crepe-color-on-background);
   min-height: 160px;
+  padding: 0 !important;
+  position: relative;
 }
 
-/* Placeholder text — match Osler's muted placeholder style */
-.osler-milkdown-editor .milkdown .ProseMirror .placeholder {
+/* ProseMirror content surface — Crepe's reset.css sets
+ * `padding: 60px 120px` (full-page document layout). Override with a
+ * compact input-field padding. `!important` because Crepe's
+ * `.milkdown .ProseMirror` selector has the same specificity as ours
+ * but loads later in the cascade.
+ *
+ * LEFT PADDING NOTE: the Crepe block-edit handle (the +/drag button
+ * that appears on hover) is positioned absolutely to the left of the
+ * text by floating-UI. With our minimized 18px handle (37px total
+ * width for the two-button group), it sits ~83px to the left of the
+ * text. We give the ProseMirror 3rem (48px) left padding + the editor
+ * wrapper has its own padding, so the handle lands inside the card. */
+.osler-milkdown-editor .milkdown .ProseMirror {
+  outline: none !important;
+  min-height: 160px;
+  padding: 0.75rem 1rem 0.75rem 3rem !important;
+  color: var(--crepe-color-on-background);
+  font-family: var(--crepe-font-default);
+  font-size: var(--crepe-base-font-size);
+  line-height: 1.65;
+}
+
+/* ── 3. Typography — override Crepe's giant document-style headings ──── */
+.osler-milkdown-editor .milkdown .ProseMirror h1,
+.osler-milkdown-editor .milkdown .ProseMirror h2,
+.osler-milkdown-editor .milkdown .ProseMirror h3,
+.osler-milkdown-editor .milkdown .ProseMirror h4,
+.osler-milkdown-editor .milkdown .ProseMirror h5,
+.osler-milkdown-editor .milkdown .ProseMirror h6 {
+  font-family: var(--crepe-font-title);
+  font-weight: 600;
+  color: var(--crepe-color-on-background);
+  line-height: 1.3;
+  margin: 0.85rem 0 0.35rem;
+  padding: 0 !important;
+}
+.osler-milkdown-editor .milkdown .ProseMirror h1 {
+  font-size: 1.5rem !important;
+  font-weight: 700;
+  margin-top: 1rem;
+}
+.osler-milkdown-editor .milkdown .ProseMirror h2 {
+  font-size: 1.25rem !important;
+}
+.osler-milkdown-editor .milkdown .ProseMirror h3 {
+  font-size: 1.1rem !important;
+}
+.osler-milkdown-editor .milkdown .ProseMirror h4 {
+  font-size: 1rem !important;
+}
+.osler-milkdown-editor .milkdown .ProseMirror h5 {
+  font-size: 0.9rem !important;
+}
+.osler-milkdown-editor .milkdown .ProseMirror h6 {
+  font-size: 0.85rem !important;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted-foreground);
+}
+
+.osler-milkdown-editor .milkdown .ProseMirror p {
+  margin: 0.4rem 0;
+  padding: 0 !important;
+  font-size: 1em;
+  line-height: 1.65;
+}
+.osler-milkdown-editor .milkdown .ProseMirror ul,
+.osler-milkdown-editor .milkdown .ProseMirror ol {
+  padding-inline-start: 1.5rem !important;
+  margin: 0.4rem 0;
+}
+.osler-milkdown-editor .milkdown .ProseMirror li {
+  margin: 0.15rem 0;
+}
+.osler-milkdown-editor .milkdown .ProseMirror blockquote {
+  border-inline-start: 3px solid var(--crepe-color-primary);
+  border-radius: 0 0.25rem 0.25rem 0;
+  padding: 0.25rem 0.75rem !important;
+  margin: 0.5rem 0;
+  color: var(--crepe-color-on-surface-variant);
+  background: color-mix(in oklch, var(--crepe-color-primary) 6%, transparent);
+}
+.osler-milkdown-editor .milkdown .ProseMirror blockquote::before {
+  display: none; /* Crepe adds a pill-shaped bar; we use a border instead */
+}
+.osler-milkdown-editor .milkdown .ProseMirror code {
+  font-family: var(--crepe-font-code);
+  background: var(--crepe-color-surface);
+  color: var(--crepe-color-inline-code);
+  padding: 0.1rem 0.35rem !important;
+  border-radius: 0.25rem;
+  font-size: 0.875em;
+  line-height: 1.4;
+  display: inline-block;
+}
+.osler-milkdown-editor .milkdown .ProseMirror pre {
+  background: var(--crepe-color-surface) !important;
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+  padding: 0.75rem 1rem !important;
+  margin: 0.5rem 0;
+  overflow-x: auto;
+}
+.osler-milkdown-editor .milkdown .ProseMirror pre code {
+  background: transparent !important;
+  padding: 0 !important;
+  color: var(--crepe-color-on-surface);
+  font-size: 0.85em;
+}
+.osler-milkdown-editor .milkdown .ProseMirror a {
+  color: var(--crepe-color-primary);
+  text-decoration: underline;
+  cursor: pointer;
+}
+.osler-milkdown-editor .milkdown .ProseMirror img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 0.5rem;
+  margin: 0.5rem 0;
+}
+.osler-milkdown-editor .milkdown .ProseMirror hr {
+  border: none;
+  background-color: var(--crepe-color-inline-area) !important;
+  border-top: 1px solid var(--crepe-color-inline-area);
+  height: 1px !important;
+  padding: 0 !important;
+  margin: 1rem 0;
+}
+.osler-milkdown-editor .milkdown .ProseMirror table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 0.5rem 0;
+}
+.osler-milkdown-editor .milkdown .ProseMirror th,
+.osler-milkdown-editor .milkdown .ProseMirror td {
+  border: 1px solid var(--crepe-color-inline-area);
+  padding: 0.35rem 0.6rem;
+  text-align: start;
+}
+.osler-milkdown-editor .milkdown .ProseMirror th {
+  background: var(--crepe-color-surface);
+  font-weight: 600;
+}
+
+/* ── 4. Placeholder ──────────────────────────────────────────────────── */
+.osler-milkdown-editor .milkdown .crepe-placeholder::before {
   color: var(--muted-foreground);
   font-style: italic;
   opacity: 0.7;
+  height: 0;
+  position: absolute;
+  pointer-events: none;
 }
 
-/* Selection toolbar (Crepe bubble) — use Osler's card/elevation tokens */
-.osler-milkdown-editor .crepe-toolbar,
-.osler-milkdown-editor .milkdown-toolbar {
+/* ── 5. Selection toolbar (Crepe bubble that appears on text selection) */
+.osler-milkdown-editor .milkdown .milkdown-toolbar {
+  background: var(--card) !important;
+  border: 1px solid var(--border) !important;
+  border-radius: var(--radius-md) !important;
+  box-shadow: var(--shadow-e2) !important;
+  padding: 2px;
+  overflow: visible;
+}
+.osler-milkdown-editor .milkdown .milkdown-toolbar .toolbar-item {
+  width: 28px;
+  height: 28px;
+  margin: 2px;
+  padding: 4px;
+  border-radius: 4px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--muted-foreground);
+}
+.osler-milkdown-editor .milkdown .milkdown-toolbar .toolbar-item:hover {
+  background: var(--muted);
+}
+.osler-milkdown-editor .milkdown .milkdown-toolbar .toolbar-item.active {
+  background: color-mix(in oklch, var(--primary) 12%, transparent);
+}
+.osler-milkdown-editor .milkdown .milkdown-toolbar .toolbar-item svg {
+  width: 16px !important;
+  height: 16px !important;
+  color: var(--muted-foreground);
+  fill: var(--muted-foreground);
+}
+.osler-milkdown-editor .milkdown .milkdown-toolbar .toolbar-item:hover svg {
+  color: var(--foreground);
+  fill: var(--foreground);
+}
+.osler-milkdown-editor .milkdown .milkdown-toolbar .toolbar-item.active svg {
+  color: var(--primary);
+  fill: var(--primary);
+}
+.osler-milkdown-editor .milkdown .milkdown-toolbar .divider {
+  background: var(--border);
+  width: 1px;
+  height: 18px;
+  margin: 6px 4px;
+}
+
+/* ── 6. Slash command menu (the / command palette) ──────────────────── */
+.osler-milkdown-editor .milkdown .milkdown-slash-menu {
+  background: var(--card) !important;
+  border: 1px solid var(--border) !important;
+  border-radius: var(--radius-md) !important;
+  box-shadow: var(--shadow-e3) !important;
+  color: var(--foreground);
+  font-family: var(--crepe-font-default);
+  overflow: hidden;
+}
+/* Tab strip at the top (Text / List / Advanced) */
+.osler-milkdown-editor .milkdown .milkdown-slash-menu .tab-group {
+  border-bottom: 1px solid var(--border) !important;
+  padding: 6px 6px 0 !important;
+}
+.osler-milkdown-editor .milkdown .milkdown-slash-menu .tab-group ul {
+  padding: 0 !important;
+  display: flex;
+  gap: 2px;
+  flex-wrap: nowrap;
+}
+.osler-milkdown-editor .milkdown .milkdown-slash-menu .tab-group ul li {
+  padding: 6px 10px !important;
+  font-size: 0.8rem !important;
+  font-weight: 600;
+  line-height: 1.2;
+  border-radius: 4px;
+  color: var(--muted-foreground);
+  cursor: pointer;
+}
+.osler-milkdown-editor .milkdown .milkdown-slash-menu .tab-group ul li:hover {
+  background: var(--muted);
+  color: var(--foreground);
+}
+.osler-milkdown-editor .milkdown .milkdown-slash-menu .tab-group ul li.selected {
+  background: color-mix(in oklch, var(--primary) 12%, transparent);
+  color: var(--primary);
+}
+/* Scrollable menu body */
+.osler-milkdown-editor .milkdown .milkdown-slash-menu .menu-groups {
+  padding: 4px !important;
+  max-height: 320px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.osler-milkdown-editor .milkdown .milkdown-slash-menu .menu-groups .menu-group h6 {
+  font-size: 0.7rem !important;
+  font-weight: 700;
+  line-height: 1.2;
+  padding: 8px 8px 4px !important;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted-foreground);
+}
+.osler-milkdown-editor .milkdown .milkdown-slash-menu .menu-groups .menu-group li {
+  min-width: 200px;
+  display: flex;
+  align-items: center;
+  gap: 10px !important;
+  padding: 8px !important;
+  border-radius: 6px;
+  cursor: pointer;
+  color: var(--foreground);
+}
+.osler-milkdown-editor .milkdown .milkdown-slash-menu .menu-groups .menu-group li.hover,
+.osler-milkdown-editor .milkdown .milkdown-slash-menu .menu-groups .menu-group li:hover {
+  background: var(--muted);
+}
+.osler-milkdown-editor .milkdown .milkdown-slash-menu .menu-groups .menu-group li.active {
+  background: color-mix(in oklch, var(--primary) 12%, transparent);
+}
+.osler-milkdown-editor .milkdown .milkdown-slash-menu .menu-groups .menu-group li svg {
+  width: 18px !important;
+  height: 18px !important;
+  color: var(--muted-foreground);
+  fill: var(--muted-foreground);
+  flex-shrink: 0;
+}
+.osler-milkdown-editor .milkdown .milkdown-slash-menu .menu-groups .menu-group li.active svg,
+.osler-milkdown-editor .milkdown .milkdown-slash-menu .menu-groups .menu-group li:hover svg {
+  color: var(--primary);
+  fill: var(--primary);
+}
+.osler-milkdown-editor .milkdown .milkdown-slash-menu .menu-groups .menu-group li > span {
+  font-size: 0.85rem !important;
+  font-weight: 500;
+  line-height: 1.2;
+  color: var(--foreground);
+}
+.osler-milkdown-editor .milkdown .milkdown-slash-menu .menu-groups .menu-group + .menu-group::before {
+  background: var(--border) !important;
+  margin: 4px 8px !important;
+  height: 1px !important;
+}
+
+/* ── 7. Block-edit handle (the +/drag handle on the left margin) ──────
+ * Minimized to save space: 16×16px buttons with 12px SVGs (vs Crepe's
+ * default 32×32px with 24px SVGs). The handle only appears on hover. */
+.osler-milkdown-editor .milkdown .milkdown-block-handle {
+  display: flex;
+  align-items: center;
+  gap: 1px;
+  z-index: 5;
+}
+.osler-milkdown-editor .milkdown .milkdown-block-handle .operation-item {
+  border-radius: 4px;
+  width: 18px;
+  height: 18px;
+  padding: 2px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--muted-foreground);
+  background: transparent;
+  cursor: grab;
+  transition: background 0.15s, color 0.15s;
+}
+.osler-milkdown-editor .milkdown .milkdown-block-handle .operation-item:hover {
+  background: var(--muted);
+  color: var(--foreground);
+}
+.osler-milkdown-editor .milkdown .milkdown-block-handle .operation-item:active {
+  cursor: grabbing;
+  background: var(--muted);
+}
+.osler-milkdown-editor .milkdown .milkdown-block-handle .operation-item.active {
+  background: color-mix(in oklch, var(--primary) 12%, transparent);
+  color: var(--primary);
+}
+.osler-milkdown-editor .milkdown .milkdown-block-handle .operation-item svg {
+  width: 12px !important;
+  height: 12px !important;
+  color: inherit;
+  fill: currentColor;
+}
+
+/* ── 8. Code block (CodeMirror-powered) ─────────────────────────────── */
+.osler-milkdown-editor .milkdown .milkdown-code-block {
+  background: var(--muted) !important;
+  border: 1px solid var(--border) !important;
+  border-radius: var(--radius-md) !important;
+  padding: 8px 12px 12px !important;
+  margin: 0.5rem 0;
+}
+.osler-milkdown-editor .milkdown .milkdown-code-block .language-picker {
+  padding-top: 4px !important;
+}
+.osler-milkdown-editor .milkdown .milkdown-code-block .milkdown-code-block-placeholder,
+.osler-milkdown-editor .milkdown .milkdown-code-block .cm-content {
+  font-family: var(--crepe-font-code) !important;
+  font-size: 0.85rem !important;
+  color: var(--foreground) !important;
+}
+.osler-milkdown-editor .milkdown .milkdown-code-block.selected {
+  outline-color: var(--primary) !important;
+}
+
+/* ── 9. Link tooltip ─────────────────────────────────────────────────── */
+.osler-milkdown-editor .milkdown .milkdown-link-preview,
+.osler-milkdown-editor .milkdown .milkdown-link-edit {
+  background: var(--card) !important;
+  border: 1px solid var(--border) !important;
+  border-radius: var(--radius-md) !important;
+  box-shadow: var(--shadow-e2) !important;
+  color: var(--foreground);
+  z-index: 20;
+}
+.osler-milkdown-editor .milkdown .milkdown-link-preview > .link-preview {
+  background: var(--card) !important;
+  border-radius: var(--radius-md) !important;
+  padding: 4px 10px !important;
+  height: auto !important;
+}
+.osler-milkdown-editor .milkdown .milkdown-link-preview > .link-preview > .link-icon > svg,
+.osler-milkdown-editor .milkdown .milkdown-link-edit .link-icon > svg {
+  width: 14px !important;
+  height: 14px !important;
+  color: var(--muted-foreground);
+  fill: var(--muted-foreground);
+}
+.osler-milkdown-editor .milkdown .milkdown-link-edit input {
+  background: var(--background) !important;
+  border: 1px solid var(--border) !important;
+  border-radius: var(--radius-sm) !important;
+  color: var(--foreground) !important;
+  padding: 4px 8px !important;
+  font-size: 0.85rem;
+}
+
+/* ── 10. Top bar (when enabled — currently disabled in MilkdownEditor,
+ *        but styled here for completeness / future use) ─────────────── */
+.osler-milkdown-editor .milkdown .milkdown-top-bar {
+  background: var(--muted) !important;
+  border-bottom: 1px solid var(--border) !important;
+  padding: 0 8px !important;
+  min-height: 40px !important;
+  border-radius: 0;
+}
+.osler-milkdown-editor .milkdown .milkdown-top-bar .top-bar-item {
+  width: 28px;
+  height: 28px;
+  margin: 4px;
+  padding: 4px;
+  border-radius: 4px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.osler-milkdown-editor .milkdown .milkdown-top-bar .top-bar-item:hover {
   background: var(--card);
-  border: 1px solid var(--border);
+}
+.osler-milkdown-editor .milkdown .milkdown-top-bar .top-bar-item.active {
+  background: color-mix(in oklch, var(--primary) 12%, transparent);
+}
+.osler-milkdown-editor .milkdown .milkdown-top-bar .top-bar-item svg {
+  width: 16px !important;
+  height: 16px !important;
+  color: var(--muted-foreground);
+  fill: var(--muted-foreground);
+}
+.osler-milkdown-editor .milkdown .milkdown-top-bar .top-bar-item:hover svg,
+.osler-milkdown-editor .milkdown .milkdown-top-bar .top-bar-item.active svg {
+  color: var(--primary);
+  fill: var(--primary);
+}
+.osler-milkdown-editor .milkdown .milkdown-top-bar .top-bar-heading-button {
+  padding: 4px 8px !important;
+  border-radius: 4px;
+  cursor: pointer;
+}
+.osler-milkdown-editor .milkdown .milkdown-top-bar .top-bar-heading-button:hover {
+  background: var(--card);
+}
+.osler-milkdown-editor .milkdown .milkdown-top-bar .top-bar-heading-button .top-bar-heading-label {
+  font-size: 0.8rem !important;
+  font-weight: 600;
+  color: var(--foreground) !important;
+  min-width: 60px !important;
+}
+.osler-milkdown-editor .milkdown .milkdown-top-bar .top-bar-heading-dropdown {
+  background: var(--card) !important;
+  border: 1px solid var(--border) !important;
+  box-shadow: var(--shadow-e2) !important;
+  border-radius: var(--radius-md) !important;
+  padding: 4px !important;
+  min-width: 140px !important;
+}
+.osler-milkdown-editor .milkdown .milkdown-top-bar .top-bar-heading-option {
+  padding: 6px 10px !important;
+  border-radius: 4px;
+  font-size: 0.8rem !important;
+  color: var(--foreground) !important;
+}
+.osler-milkdown-editor .milkdown .milkdown-top-bar .top-bar-heading-option:hover {
+  background: var(--muted);
+}
+.osler-milkdown-editor .milkdown .milkdown-top-bar .top-bar-heading-option.active {
+  color: var(--primary) !important;
+  font-weight: 600;
+}
+.osler-milkdown-editor .milkdown .milkdown-top-bar .top-bar-divider {
+  background: var(--border) !important;
+  width: 1px;
+  height: 20px;
+  margin: 8px 4px !important;
+}
+
+/* ── 11. Caret + selection ──────────────────────────────────────────── */
+.osler-milkdown-editor .milkdown .ProseMirror {
+  caret-color: var(--primary);
+}
+.osler-milkdown-editor .milkdown .ProseMirror *::selection {
+  background: color-mix(in oklch, var(--primary) 25%, transparent);
+}
+.osler-milkdown-editor .milkdown .ProseMirror *::-moz-selection {
+  background: color-mix(in oklch, var(--primary) 25%, transparent);
+}
+
+/* ── 12. Selected node outline ──────────────────────────────────────── */
+.osler-milkdown-editor .milkdown .ProseMirror .ProseMirror-selectednode,
+.osler-milkdown-editor .milkdown .ProseMirror li.ProseMirror-selectednode {
+  outline: 2px solid var(--primary) !important;
+  outline-offset: -2px;
+  background: color-mix(in oklch, var(--primary) 8%, transparent) !important;
+}
+.osler-milkdown-editor .milkdown .ProseMirror li.ProseMirror-selectednode:after {
+  all: unset;
+}
+.osler-milkdown-editor .milkdown .ProseMirror img.ProseMirror-selectednode {
+  outline: 2px solid var(--primary) !important;
+}
+
+/* ── 13. Image block (when an image is selected) ────────────────────── */
+.osler-milkdown-editor .milkdown .milkdown-image-block {
+  margin: 0.5rem 0;
   border-radius: var(--radius-md);
-  box-shadow: var(--shadow-e2);
+  overflow: hidden;
+}
+.osler-milkdown-editor .milkdown .milkdown-image-block img {
+  max-width: 100%;
+  height: auto;
+  border-radius: var(--radius-md);
+}
+.osler-milkdown-editor .milkdown .milkdown-image-block .image-caption {
+  font-size: 0.8rem;
+  color: var(--muted-foreground);
+  padding: 4px 8px;
+  text-align: center;
+}
+/* Image edit confirm button — Crepe uses a hardcoded rgba(29,25,43,0.08)
+ * overlay. Replace with our --primary at low opacity so it follows the
+ * theme. */
+.osler-milkdown-editor .milkdown .milkdown-image-block .image-edit .confirm:hover {
+  background: color-mix(in oklch, var(--primary) 8%, var(--secondary)) !important;
+}
+/* Image operation buttons (resize handles, edit overlay) */
+.osler-milkdown-editor .milkdown .milkdown-image-block .image-wrapper .operation .operation-item {
+  background-color: var(--card) !important;
+  color: var(--muted-foreground) !important;
+}
+.osler-milkdown-editor .milkdown .milkdown-image-block .image-wrapper .operation .operation-item svg {
+  color: var(--muted-foreground);
+  fill: var(--muted-foreground);
+}
+.osler-milkdown-editor .milkdown .milkdown-image-block .image-wrapper .image-resize-handle {
+  background-color: var(--primary) !important;
+}
+/* Caption input — use our input styling */
+.osler-milkdown-editor .milkdown .milkdown-image-block input {
+  background: var(--background) !important;
+  color: var(--foreground) !important;
+  border: 1px solid var(--border) !important;
+  border-radius: var(--radius-sm) !important;
+}
+.osler-milkdown-editor .milkdown .milkdown-image-block input::placeholder {
+  color: var(--muted-foreground);
+}
+
+/* ── 14. Table (Crepe table feature) ──────────────────────────────────
+ * Force ALL table colors to use Osler's design tokens. Crepe's table
+ * CSS uses var(--crepe-color-*) which we've already mapped, but the
+ * underlying prosemirror-tables CSS has hardcoded #adf for the column
+ * resize handle. We override that here. */
+.osler-milkdown-editor .milkdown .ProseMirror .milkdown-table,
+.osler-milkdown-editor .milkdown .ProseMirror table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 0.5rem 0;
+  overflow: hidden;
+}
+.osler-milkdown-editor .milkdown .ProseMirror .milkdown-table th,
+.osler-milkdown-editor .milkdown .ProseMirror .milkdown-table td,
+.osler-milkdown-editor .milkdown .ProseMirror table th,
+.osler-milkdown-editor .milkdown .ProseMirror table td {
+  border: 1px solid var(--border) !important;
+  padding: 0.35rem 0.6rem;
+  position: relative;
+  vertical-align: top;
+}
+/* Table header — use --muted (not the Crepe warm beige) so it matches
+ * the rest of the UI. !important to beat Crepe's .milkdown .milkdown-table-block th. */
+.osler-milkdown-editor .milkdown .ProseMirror .milkdown-table th,
+.osler-milkdown-editor .milkdown .ProseMirror table th {
+  background: var(--muted) !important;
+  color: var(--foreground) !important;
+  font-weight: 600;
+}
+.osler-milkdown-editor .milkdown .ProseMirror .milkdown-table .selected-cell,
+.osler-milkdown-editor .milkdown .ProseMirror .selectedCell {
+  background: color-mix(in oklch, var(--primary) 12%, transparent) !important;
+}
+/* Column resize handle — prosemirror-tables hardcodes #adf (light blue).
+ * Override to use --primary so it follows the theme. */
+.osler-milkdown-editor .milkdown .ProseMirror .column-resize-handle {
+  background-color: var(--primary) !important;
+  opacity: 0.4;
+}
+/* Table cell handles (Crepe's add/drag buttons) — already use
+ * var(--crepe-color-*) but reinforce the button group background. */
+.osler-milkdown-editor .milkdown .milkdown-table-block .cell-handle {
+  background-color: var(--card) !important;
+  color: var(--muted-foreground) !important;
+}
+.osler-milkdown-editor .milkdown .milkdown-table-block .cell-handle .button-group {
+  background-color: var(--card) !important;
+  border: 1px solid var(--border);
+}
+.osler-milkdown-editor .milkdown .milkdown-table-block .cell-handle .button-group button svg {
+  color: var(--muted-foreground);
+  fill: var(--muted-foreground);
+}
+.osler-milkdown-editor .milkdown .milkdown-table-block .line-handle {
+  background-color: var(--primary) !important;
+}
+.osler-milkdown-editor .milkdown .milkdown-table-block .line-handle .add-button {
+  background-color: var(--card) !important;
+  color: var(--muted-foreground) !important;
+}
+
+/* ── 15. Cursor (virtual cursor for keyboard navigation) ────────────── */
+.osler-milkdown-editor .milkdown .crepe-drop-cursor {
+  background-color: var(--primary) !important;
+  opacity: 0.6;
+}
+
+/* ── 16. Make sure the editor fills its wrapper height ────────────────
+ * Only the editor body div (the one wrapping MilkdownProvider) should
+ * fill the available height. The mermaid chips bar and word count
+ * footer should NOT expand — they're sized to their content. */
+.osler-milkdown-editor > .flex-1,
+.osler-milkdown-editor .milkdown {
+  display: flex;
+  flex-direction: column;
+}
+.osler-milkdown-editor > .flex-1 {
+  flex: 1 1 0%;
+  min-height: 120px;
+}
+.osler-milkdown-editor .milkdown .ProseMirror {
+  flex: 1;
+}
+
+/* ── 17. RTL support ──────────────────────────────────────────────────
+ * When the editor is in RTL mode (Arabic UI), flip the block-edit
+ * handle to the RIGHT side, swap blockquote border to the right, and
+ * ensure list padding starts from the right. The `dir="rtl"` attribute
+ * on the wrapper handles text direction automatically; these rules
+ * handle the UI chrome that's positioned absolutely. */
+.osler-milkdown-editor--rtl .milkdown .ProseMirror {
+  padding-left: 1rem !important;
+  padding-right: 3rem !important;
+}
+.osler-milkdown-editor--rtl .milkdown .milkdown-block-handle {
+  right: 4px;
+  left: auto;
+}
+.osler-milkdown-editor--rtl .milkdown .ProseMirror blockquote {
+  border-inline-start: none;
+  border-inline-end: 3px solid var(--crepe-color-primary);
+  border-radius: 0.25rem 0 0 0.25rem;
+}
+.osler-milkdown-editor--rtl .milkdown .ProseMirror ul,
+.osler-milkdown-editor--rtl .milkdown .ProseMirror ol {
+  padding-inline-start: 0 !important;
+  padding-inline-end: 1.5rem !important;
+}
+/* Image upload button moves to the left in RTL */
+.osler-milkdown-editor--rtl .absolute.end-1\\.5 {
+  inset-inline-end: auto;
+  inset-inline-start: 0.375rem;
 }
