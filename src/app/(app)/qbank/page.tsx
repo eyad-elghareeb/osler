@@ -2,19 +2,17 @@
 
 import * as React from "react";
 import { Suspense } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import { QBankStudio } from "@/components/osler/qbank-studio";
-import { loadContentByUid } from "@/lib/osler/content";
-import { routeFor, useOslerRouter } from "@/lib/osler/navigation";
-import type { AnyContent, ContentTreeNode } from "@/lib/osler/types";
-import { EmptyState, HubSkeleton } from "@/components/osler/ui-primitives";
-import { ListChecks } from "lucide-react";
-import { useI18n } from "@/components/osler/i18n-provider";
 
 /**
  * QBank hub + pack studio, driven by `?uid=<pack>`.
  * Static export friendly: no dynamic route, no `_redirects` fallback needed.
  * `useSearchParams` is wrapped in `<Suspense>` so the page prerenders cleanly.
+ *
+ * The studio is ALWAYS mounted and self-loads the pack from the `uid` prop —
+ * navigating `/qbank` → `/qbank?uid=X` never changes the rendered component
+ * type, so the hub is never unmounted/remounted and its loaded tree survives.
  */
 export default function QBankPage() {
   return (
@@ -28,77 +26,5 @@ function QBankView() {
   const params = useSearchParams();
   const uid = params.get("uid");
   const resume = params.get("resume") === "1";
-  if (!uid) return <QBankStudio forceResume={resume} />;
-  return <QBankPackView uid={uid} forceResume={resume} />;
-}
-
-function nodeFromPack(uid: string, content: AnyContent): ContentTreeNode {
-  return {
-    uid,
-    title: content.meta?.title || uid,
-    type: content.type,
-    path: "",
-    items: [],
-    lang: content.meta?.lang,
-  };
-}
-
-function QBankPackView({ uid, forceResume }: { uid: string; forceResume?: boolean }) {
-  const router = useRouter();
-  const { navigate } = useOslerRouter();
-  const { t } = useI18n();
-
-  const [loading, setLoading] = React.useState(true);
-  const [error, setError] = React.useState(false);
-  const [content, setContent] = React.useState<AnyContent | null>(null);
-  const [item, setItem] = React.useState<ContentTreeNode | null>(null);
-
-  React.useEffect(() => {
-    let cancelled = false;
-    setLoading(true);
-    setError(false);
-
-    loadContentByUid(uid)
-      .then((loadedContent) => {
-        if (cancelled) return;
-        if (loadedContent.type === "flashcard") {
-          router.replace(routeFor("flashcards", { uid }));
-          return;
-        }
-        if (loadedContent.type === "osce") {
-          router.replace(routeFor("osce", { uid }));
-          return;
-        }
-        setContent(loadedContent);
-        setItem(nodeFromPack(uid, loadedContent));
-        setLoading(false);
-      })
-      .catch((e) => {
-        if (cancelled) return;
-        console.error("Failed to load QBank pack:", e);
-        setError(true);
-        setLoading(false);
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [uid, router]);
-
-  if (loading) {
-    return <HubSkeleton statCount={3} cardCount={6} />;
-  }
-
-  if (error || !content || !item) {
-    return (
-      <EmptyState
-        icon={ListChecks}
-        title={t("empty.qbank.title")}
-        description={t("empty.qbank.description")}
-        actions={<button onClick={() => navigate("qbank")} className="text-sm font-medium text-primary underline">{t("empty.qbank.back")}</button>}
-      />
-    );
-  }
-
-  return <QBankStudio activeItem={item} activeContent={content} forceResume={forceResume} />;
+  return <QBankStudio uid={uid ?? null} forceResume={resume} />;
 }

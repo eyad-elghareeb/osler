@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import { motion, AnimatePresence, useMotionValue, animate } from "framer-motion";
+import { useRouter } from "next/navigation";
 import {
   ChevronLeft,
   ChevronRight,
@@ -257,8 +258,19 @@ function ContentImageFigure({
   );
 }
 
-import { useOslerRouter } from "@/lib/osler/navigation";
+import { routeFor, useOslerRouter } from "@/lib/osler/navigation";
 import { markSessionDismissed, isSessionDismissed, clearSessionDismissed } from "./resume-session-dialog";
+
+function nodeFromPack(uid: string, content: AnyContent): ContentTreeNode {
+  return {
+    uid,
+    title: content.meta?.title || uid,
+    type: content.type,
+    path: "",
+    items: [],
+    lang: content.meta?.lang,
+  };
+}
 
 interface QBankStudioProps {
   activeItem?: ContentTreeNode | null;
@@ -268,6 +280,11 @@ interface QBankStudioProps {
   /** Arrived via /qbank?resume=1 — restore the active in-progress session
    *  even when a pack uid is present in the URL. */
   forceResume?: boolean;
+  /** Self-load a pack by uid (keeps the hub mounted across /qbank → /qbank?uid=X).
+   *  When set, the studio loads the pack content itself and feeds it through
+   *  the same activeItem/activeContent machinery instead of the page swapping
+   *  component types (which unmounted the whole hub and reloaded its data). */
+  uid?: string | null;
 }
 
 type QuizMode = "home" | "quiz" | "results" | "review";
@@ -339,15 +356,61 @@ interface SessionQuestion {
 }
 
 export function QBankStudio({
-  activeItem,
-  activeContent,
+  activeItem: activeItemProp,
+  activeContent: activeContentProp,
   onExit: propOnExit,
   onOpenPack: propOnOpenPack,
   forceResume = false,
+  uid,
 }: QBankStudioProps = {}) {
   const { navigate } = useOslerRouter();
+  const router = useRouter();
   const onExit = propOnExit || (() => navigate("qbank"));
   const onOpenPack = propOnOpenPack || ((item: ContentTreeNode) => navigate("qbank", { uid: item.uid }));
+
+  // Self-load a pack by uid so the studio never unmounts when the URL gains
+  // ?uid=X. The page used to swap to a separate pack view (component-type
+  // swap = React unmounts the hub + boots a fresh studio, reloading its
+  // tree and session state). Keeping the studio mounted with a uid prop
+  // preserves the hub, then feeds the loaded pack through the same
+  // activeItem/activeContent path below.
+  const [selfPack, setSelfPack] = React.useState<{ item: ContentTreeNode; content: AnyContent } | null>(null);
+  const [selfPackError, setSelfPackError] = React.useState(false);
+
+  React.useEffect(() => {
+    if (!uid || activeItemProp || activeContentProp) {
+      setSelfPack(null);
+      setSelfPackError(false);
+      return;
+    }
+    let cancelled = false;
+    setSelfPack(null);
+    setSelfPackError(false);
+    loadContentByUid(uid)
+      .then((loaded) => {
+        if (cancelled) return;
+        if (loaded.type === "flashcard") {
+          router.replace(routeFor("flashcards", { uid }));
+          return;
+        }
+        if (loaded.type === "osce") {
+          router.replace(routeFor("osce", { uid }));
+          return;
+        }
+        setSelfPack({ item: nodeFromPack(uid, loaded), content: loaded });
+      })
+      .catch((e) => {
+        if (cancelled) return;
+        console.error("Failed to load QBank pack:", e);
+        setSelfPackError(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [uid, activeItemProp, activeContentProp, router]);
+
+  const activeItem = activeItemProp ?? selfPack?.item ?? null;
+  const activeContent = activeContentProp ?? selfPack?.content ?? null;
   const [mode, setMode] = React.useState<QuizMode>("home");
   const [session, setSession] = React.useState<SessionData | null>(null);
   const [testMode, setTestMode] = React.useState<TestMode>("tutor");
@@ -599,7 +662,7 @@ export function QBankStudio({
   }, [precacheSessionPack]);
 
   React.useEffect(() => {
-    if (mode !== "home" || session || (activeItem && !forceResume)) {
+    if (mode !== "home" || session || ((uid || activeItem) && !forceResume)) {
       restoreBlockedRef.current = true;
       return;
     }
@@ -920,7 +983,7 @@ export function QBankStudio({
     if (activeItem) {
       navigate("qbank");
     }
-  }, [activeItem, navigate]);
+  }, [activeItem?.uid, navigate]);
 
   // "Save & exit": persist the in-progress session, then leave the quiz view
   // WITHOUT clearing it, so a refresh or the Resume flow picks it back up.
@@ -1313,6 +1376,25 @@ export function QBankStudio({
           exitToHome();
         } : restartSession}
       />
+    );
+  }
+
+  if (selfPackError && uid && !activeItem && !activeContent) {
+    return (
+      <div className="osler-page">
+        <div className="osler-page__inner flex min-h-[60vh] items-center">
+          <EmptyState
+            icon={ListChecks}
+            title={t("empty.qbank.title")}
+            description={t("empty.qbank.description")}
+            actions={
+              <Button variant="outline" size="lg" onClick={() => navigate("qbank")}>
+                {t("empty.qbank.back")}
+              </Button>
+            }
+          />
+        </div>
+      </div>
     );
   }
 
