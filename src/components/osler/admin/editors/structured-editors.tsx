@@ -18,6 +18,9 @@ import {
   AlignLeft,
   ChevronUp,
   ChevronDown,
+  ChevronRight,
+  ChevronsDown,
+  ChevronsUp,
   Plus,
   Trash2,
   ImagePlus,
@@ -27,6 +30,7 @@ import {
   Upload,
   Eye,
   Loader2,
+  ListChecks,
 } from "lucide-react";
 import { useI18n } from "@/components/osler/i18n-provider";
 import { haptic } from "@/lib/osler/native";
@@ -111,22 +115,66 @@ function SectionLabel({ children }: { children: React.ReactNode }) {
   );
 }
 
+// Shared collapse state context for structured editors.
+// Allows "Collapse All" / "Expand All" to work across all items.
+const CollapseContext = React.createContext<{
+  collapsed: Record<number, boolean>;
+  toggle: (i: number) => void;
+  collapseAll: () => void;
+  expandAll: () => void;
+  total: number;
+}>({ collapsed: {}, toggle: () => {}, collapseAll: () => {}, expandAll: () => {}, total: 0 });
+
+function useCollapseState(total: number) {
+  const [collapsed, setCollapsed] = React.useState<Record<number, boolean>>({});
+  const toggle = React.useCallback((i: number) => {
+    setCollapsed((prev) => ({ ...prev, [i]: !prev[i] }));
+  }, []);
+  const collapseAll = React.useCallback(() => {
+    const next: Record<number, boolean> = {};
+    for (let i = 0; i < total; i++) next[i] = true;
+    setCollapsed(next);
+  }, [total]);
+  const expandAll = React.useCallback(() => {
+    setCollapsed({});
+  }, []);
+  return { collapsed, toggle, collapseAll, expandAll, total };
+}
+
 function ListToolbar({
   onAdd,
   addLabel,
   readOnly,
+  showCollapseControls,
 }: {
   onAdd: () => void;
   addLabel: string;
   readOnly?: boolean;
+  showCollapseControls?: boolean;
 }) {
-  if (readOnly) return null;
+  const ctx = React.useContext(CollapseContext);
   return (
-    <div className="flex justify-end mb-1.5">
-      <Button size="xs" variant="outline" onClick={onAdd}>
-        <Plus className="size-3 me-1" />
-        {addLabel}
-      </Button>
+    <div className="flex items-center justify-between mb-1.5 gap-2">
+      {showCollapseControls && ctx.total > 1 && (
+        <div className="flex items-center gap-1">
+          <Button size="xs" variant="ghost" onClick={ctx.collapseAll} title="Collapse all">
+            <ChevronsDown className="size-3 me-0.5" />
+            <span className="text-[10px]">Collapse</span>
+          </Button>
+          <Button size="xs" variant="ghost" onClick={ctx.expandAll} title="Expand all">
+            <ChevronsUp className="size-3 me-0.5" />
+            <span className="text-[10px]">Expand</span>
+          </Button>
+        </div>
+      )}
+      <div className="ms-auto">
+        {!readOnly && (
+          <Button size="xs" variant="outline" onClick={onAdd}>
+            <Plus className="size-3 me-1" />
+            {addLabel}
+          </Button>
+        )}
+      </div>
     </div>
   );
 }
@@ -139,6 +187,7 @@ function ItemRow({
   readOnly,
   children,
   title,
+  collapsible,
 }: {
   index: number;
   total: number;
@@ -147,13 +196,32 @@ function ItemRow({
   readOnly?: boolean;
   children: React.ReactNode;
   title: string;
+  /** If true, show a collapse/expand toggle. */
+  collapsible?: boolean;
 }) {
   const { t } = useI18n();
+  const ctx = React.useContext(CollapseContext);
+  const isCollapsed = collapsible ? (ctx.collapsed[index] ?? false) : false;
+  const toggleCollapse = () => ctx.toggle(index);
   return (
-    <div className="border border-border rounded-lg p-2.5 space-y-2.5 bg-card/60">
-      <div className="flex items-center gap-1.5">
+    <div className={`border border-border rounded-lg bg-card/60 ${isCollapsed ? "" : "p-2.5 space-y-2.5"}`}>
+      <div className={`flex items-center gap-1.5 ${isCollapsed ? "p-2" : ""}`}>
+        {collapsible && (
+          <button
+            type="button"
+            onClick={toggleCollapse}
+            className="size-5 rounded flex items-center justify-center hover:bg-muted transition-colors shrink-0"
+            title={isCollapsed ? "Expand" : "Collapse"}
+          >
+            <ChevronRight className={`size-3.5 text-muted-foreground transition-transform ${isCollapsed ? "" : "rotate-90"}`} />
+          </button>
+        )}
         <GripVertical className="size-3 text-muted-foreground/40" />
-        <Badge variant="outline" className="font-mono text-[10px] px-1.5 py-0">
+        <Badge
+          variant="outline"
+          className={`font-mono text-[10px] px-1.5 py-0 ${collapsible ? "cursor-pointer" : ""}`}
+          onClick={collapsible ? toggleCollapse : undefined}
+        >
           {title}
         </Badge>
         {!readOnly && (
@@ -206,7 +274,7 @@ function ItemRow({
           </div>
         )}
       </div>
-      {children}
+      {!isCollapsed && children}
     </div>
   );
 }
@@ -613,6 +681,7 @@ export function QuizEditor({ value, onChange, readOnly, r2KeyBase, rawR2Key }: S
   }
 
   const questions: any[] = Array.isArray(value?.questions) ? value.questions : [];
+  const collapseState = useCollapseState(questions.length);
 
   function update(next: any[]) {
     onChange({ ...value, questions: next });
@@ -646,21 +715,23 @@ export function QuizEditor({ value, onChange, readOnly, r2KeyBase, rawR2Key }: S
   }
 
   return (
-    <div className="space-y-3">
-      <ListToolbar onAdd={addQuestion} addLabel={t("admin.content.editor.addQuestion")} readOnly={readOnly} />
-      {questions.length === 0 ? (
-        <p className="text-sm text-muted-foreground text-center py-6">{t("admin.structured.noQuestions")}</p>
-      ) : (
-        questions.map((q, i) => (
-          <ItemRow
-            key={i}
-            index={i}
-            total={questions.length}
-            onMove={(d) => moveQuestion(i, d)}
-            onRemove={() => removeQuestion(i)}
-            readOnly={readOnly}
-            title={t("admin.content.editor.question", { n: i + 1 })}
-          >
+    <CollapseContext.Provider value={collapseState}>
+      <div className="space-y-3">
+        <ListToolbar onAdd={addQuestion} addLabel={t("admin.content.editor.addQuestion")} readOnly={readOnly} showCollapseControls />
+        {questions.length === 0 ? (
+          <p className="text-sm text-muted-foreground text-center py-6">{t("admin.structured.noQuestions")}</p>
+        ) : (
+          questions.map((q, i) => (
+            <ItemRow
+              key={i}
+              index={i}
+              total={questions.length}
+              onMove={(d) => moveQuestion(i, d)}
+              onRemove={() => removeQuestion(i)}
+              readOnly={readOnly}
+              title={t("admin.content.editor.question", { n: i + 1 })}
+              collapsible
+            >
             <Field label="ID">
               <Input
                 value={q.id ?? ""}
@@ -738,7 +809,8 @@ export function QuizEditor({ value, onChange, readOnly, r2KeyBase, rawR2Key }: S
           </ItemRow>
         ))
       )}
-    </div>
+      </div>
+    </CollapseContext.Provider>
   );
 }
 
@@ -874,6 +946,7 @@ function ChoiceImagesEditor({
 
 function PassagesEditor({ value, onChange, readOnly, r2KeyBase, rawR2Key }: StructuredEditorProps) {
   const passages: any[] = Array.isArray(value?.passages) ? value.passages : [];
+  const collapseState = useCollapseState(passages.length);
 
   function update(next: any[]) {
     onChange({ ...value, passages: next });
@@ -899,18 +972,20 @@ function PassagesEditor({ value, onChange, readOnly, r2KeyBase, rawR2Key }: Stru
   }
 
   return (
-    <div className="space-y-3">
-      <ListToolbar onAdd={addPassage} addLabel="Add passage" readOnly={readOnly} />
-      {passages.map((p, i) => (
-        <ItemRow
-          key={i}
-          index={i}
-          total={passages.length}
-          onMove={(d) => movePassage(i, d)}
-          onRemove={() => removePassage(i)}
-          readOnly={readOnly}
-          title={`Passage ${i + 1}`}
-        >
+    <CollapseContext.Provider value={collapseState}>
+      <div className="space-y-3">
+        <ListToolbar onAdd={addPassage} addLabel="Add passage" readOnly={readOnly} showCollapseControls />
+        {passages.map((p, i) => (
+          <ItemRow
+            key={i}
+            index={i}
+            total={passages.length}
+            onMove={(d) => movePassage(i, d)}
+            onRemove={() => removePassage(i)}
+            readOnly={readOnly}
+            title={`Passage ${i + 1}`}
+            collapsible
+          >
           <Field label="ID">
             <Input
               value={p.id ?? ""}
@@ -938,7 +1013,8 @@ function PassagesEditor({ value, onChange, readOnly, r2KeyBase, rawR2Key }: Stru
           </Field>
         </ItemRow>
       ))}
-    </div>
+      </div>
+    </CollapseContext.Provider>
   );
 }
 
@@ -1911,6 +1987,7 @@ function ChaptersEditor({
 export function WrittenEditor({ value, onChange, readOnly, r2KeyBase, rawR2Key }: StructuredEditorProps) {
   const { t } = useI18n();
   const prompts: any[] = Array.isArray(value?.prompts) ? value.prompts : [];
+  const collapseState = useCollapseState(prompts.length);
 
   function update(next: any[]) {
     onChange({ ...value, prompts: next });
@@ -1945,21 +2022,23 @@ export function WrittenEditor({ value, onChange, readOnly, r2KeyBase, rawR2Key }
   }
 
   return (
-    <div className="space-y-3">
-      <ListToolbar onAdd={addPrompt} addLabel={t("admin.structured.addPrompt")} readOnly={readOnly} />
-      {prompts.length === 0 ? (
-        <p className="text-sm text-muted-foreground text-center py-6">{t("admin.structured.noPrompts")}</p>
-      ) : (
-        prompts.map((p, i) => (
-          <ItemRow
-            key={i}
-            index={i}
-            total={prompts.length}
-            onMove={(d) => movePrompt(i, d)}
-            onRemove={() => removePrompt(i)}
-            readOnly={readOnly}
-            title={`Prompt ${i + 1}`}
-          >
+    <CollapseContext.Provider value={collapseState}>
+      <div className="space-y-3">
+        <ListToolbar onAdd={addPrompt} addLabel={t("admin.structured.addPrompt")} readOnly={readOnly} showCollapseControls />
+        {prompts.length === 0 ? (
+          <p className="text-sm text-muted-foreground text-center py-6">{t("admin.structured.noPrompts")}</p>
+        ) : (
+          prompts.map((p, i) => (
+            <ItemRow
+              key={i}
+              index={i}
+              total={prompts.length}
+              onMove={(d) => movePrompt(i, d)}
+              onRemove={() => removePrompt(i)}
+              readOnly={readOnly}
+              title={`Prompt ${i + 1}`}
+              collapsible
+            >
             <Field label="ID">
               <Input
                 value={p.id ?? ""}
@@ -2027,7 +2106,8 @@ export function WrittenEditor({ value, onChange, readOnly, r2KeyBase, rawR2Key }
           </ItemRow>
         ))
       )}
-    </div>
+      </div>
+    </CollapseContext.Provider>
   );
 }
 
@@ -2110,11 +2190,241 @@ function WrittenChildrenEditor({
   );
 }
 
-// ── Bank editor (alias for PassagesEditor shape) ───────────────────────────
+// ── Bank editor — supports passages + flat questions ──────────────────────
+// Bank files may have:
+//   { passages: [...], questions: [...] }  — passage-backed + standalone
+//   { passages: [...] }                    — passage-backed only
+//   { questions: [...] }                   — flat questions only (no passages)
 
 export function BankEditor({ value, onChange, readOnly, r2KeyBase, rawR2Key }: StructuredEditorProps) {
+  const hasPassages = Array.isArray(value?.passages) && value.passages.length > 0;
+  const hasFlatQuestions = Array.isArray(value?.questions) && value.questions.length > 0;
+
+  // If only passages (classic mode), delegate to PassagesEditor
+  if (hasPassages && !hasFlatQuestions) {
+    return <PassagesEditor value={value} onChange={onChange} readOnly={readOnly} r2KeyBase={r2KeyBase} rawR2Key={rawR2Key} />;
+  }
+
+  // If only flat questions, render them directly with the bank question shape
+  if (!hasPassages && hasFlatQuestions) {
+    return <BankFlatQuestionsEditor value={value} onChange={onChange} readOnly={readOnly} r2KeyBase={r2KeyBase} rawR2Key={rawR2Key} />;
+  }
+
+  // Both passages and flat questions — render in sections
   return (
-    <PassagesEditor value={value} onChange={onChange} readOnly={readOnly} r2KeyBase={r2KeyBase} rawR2Key={rawR2Key} />
+    <div className="space-y-4">
+      {hasPassages && (
+        <div>
+          <SectionLabel>Passages</SectionLabel>
+          <PassagesEditor value={value} onChange={onChange} readOnly={readOnly} r2KeyBase={r2KeyBase} rawR2Key={rawR2Key} />
+        </div>
+      )}
+      {hasFlatQuestions && (
+        <div>
+          <SectionLabel>Standalone Questions</SectionLabel>
+          <BankFlatQuestionsEditor value={value} onChange={onChange} readOnly={readOnly} r2KeyBase={r2KeyBase} rawR2Key={rawR2Key} />
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Flat questions editor for bank files without passages ─────────────────
+function BankFlatQuestionsEditor({ value, onChange, readOnly, r2KeyBase, rawR2Key }: StructuredEditorProps) {
+  const { t } = useI18n();
+  const questions: any[] = Array.isArray(value?.questions) ? value.questions : [];
+  const collapseState = useCollapseState(questions.length);
+
+  function update(next: any[]) {
+    onChange({ ...value, questions: next });
+  }
+  function addQuestion() {
+    update([
+      ...questions,
+      {
+        id: `bq-${String(Date.now()).slice(-6)}`,
+        question: "",
+        options: ["", "", "", ""],
+        correct: 0,
+        explanation: "",
+        tags: [],
+        difficulty: 2,
+      },
+    ]);
+  }
+  function moveQuestion(i: number, delta: number) {
+    const j = i + delta;
+    if (j < 0 || j >= questions.length) return;
+    const next = [...questions];
+    [next[i], next[j]] = [next[j], next[i]];
+    update(next);
+  }
+  function removeQuestion(i: number) {
+    update(questions.filter((_, idx) => idx !== i));
+  }
+  function patchQuestion(i: number, patch: any) {
+    update(questions.map((q, idx) => (idx === i ? { ...q, ...patch } : q)));
+  }
+
+  return (
+    <CollapseContext.Provider value={collapseState}>
+      <div className="space-y-3">
+        <ListToolbar onAdd={addQuestion} addLabel={t("admin.content.editor.addQuestion")} readOnly={readOnly} showCollapseControls />
+        {questions.length === 0 ? (
+          <p className="text-sm text-muted-foreground text-center py-6">{t("admin.structured.noQuestions")}</p>
+        ) : (
+          questions.map((q, i) => (
+            <ItemRow
+              key={i}
+              index={i}
+              total={questions.length}
+              onMove={(d) => moveQuestion(i, d)}
+              onRemove={() => removeQuestion(i)}
+              readOnly={readOnly}
+              title={`Question ${i + 1}`}
+              collapsible
+            >
+              <Field label="ID">
+                <Input
+                  value={q.id ?? ""}
+                  onChange={(e) => patchQuestion(i, { id: e.target.value })}
+                  readOnly={readOnly}
+                  className="font-mono text-xs"
+                  placeholder="bq-001"
+                />
+              </Field>
+              <Field label={t("admin.content.editor.stem")} hint="Markdown supported">
+                <Textarea
+                  value={q.question ?? q.stem ?? ""}
+                  onChange={(e) => patchQuestion(i, { question: e.target.value, stem: e.target.value })}
+                  readOnly={readOnly}
+                  rows={3}
+                />
+              </Field>
+              <ChoicesEditor
+                choices={q.options ?? q.choices ?? []}
+                correct={q.correct}
+                onChange={(options, correct) => patchQuestion(i, { options, correct })}
+                readOnly={readOnly}
+              />
+              <Field label={t("admin.content.editor.explanation")} hint="Markdown supported">
+                <Textarea
+                  value={q.explanation ?? ""}
+                  onChange={(e) => patchQuestion(i, { explanation: e.target.value })}
+                  readOnly={readOnly}
+                  rows={3}
+                />
+              </Field>
+              <ImageListField
+                label="Stem image(s)"
+                images={q.images}
+                onChange={(v) => patchQuestion(i, { images: v })}
+                readOnly={readOnly}
+                r2KeyBase={r2KeyBase}
+                rawR2Key={rawR2Key}
+              />
+              <ImageListField
+                label="Explanation image(s)"
+                images={q.explanationImages}
+                onChange={(v) => patchQuestion(i, { explanationImages: v })}
+                readOnly={readOnly}
+                r2KeyBase={r2KeyBase}
+                rawR2Key={rawR2Key}
+              />
+              <TagListField
+                label="Tags"
+                tags={q.tags ?? []}
+                onChange={(v) => patchQuestion(i, { tags: v })}
+                readOnly={readOnly}
+              />
+              <Field label="Difficulty (1-5)">
+                <Input
+                  type="number"
+                  min={1}
+                  max={5}
+                  value={q.difficulty ?? 2}
+                  onChange={(e) => patchQuestion(i, { difficulty: Number(e.target.value) })}
+                  readOnly={readOnly}
+                  className="w-24"
+                />
+              </Field>
+            </ItemRow>
+          ))
+        )}
+      </div>
+    </CollapseContext.Provider>
+  );
+}
+
+// ── Editor Navigator — compact question grid for quick jumping ────────────
+// Similar to the QuestionNavigatorSheet in qbank mobile quiz UI.
+// Shows a small floating panel with a grid of numbered cells that
+// scroll the corresponding ItemRow into view.
+
+export function EditorNavigator({
+  items,
+  collapsed,
+  onToggleCollapse,
+  onJumpTo,
+  labels,
+}: {
+  items: number;
+  collapsed: Record<number, boolean>;
+  onToggleCollapse: (i: number) => void;
+  onJumpTo: (i: number) => void;
+  labels?: string[];
+}) {
+  if (items <= 1) return null;
+  const allCollapsed = Object.values(collapsed).filter((_, i) => i < items).every(Boolean);
+  const noneCollapsed = Object.values(collapsed).filter((_, i) => i < items).every((v) => !v);
+  return (
+    <div className="sticky top-2 z-10 border border-border rounded-lg bg-card/90 backdrop-blur-sm p-2 space-y-2 shadow-sm">
+      <div className="flex items-center gap-1 mb-1">
+        <ListChecks className="size-3.5 text-primary" />
+        <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+          Navigator ({items})
+        </span>
+      </div>
+      <div className="grid grid-cols-5 gap-1">
+        {Array.from({ length: items }, (_, i) => {
+          const isCollapsed = collapsed[i] ?? false;
+          return (
+            <button
+              key={i}
+              type="button"
+              onClick={() => onJumpTo(i)}
+              className={cn(
+                "aspect-square rounded text-[10px] font-semibold tabular-nums border transition-all hover:border-primary/40",
+                isCollapsed
+                  ? "bg-muted/50 text-muted-foreground border-border"
+                  : "bg-primary/10 text-primary border-primary/30",
+              )}
+              title={labels?.[i] ?? `Item ${i + 1}`}
+            >
+              {i + 1}
+            </button>
+          );
+        })}
+      </div>
+      <div className="flex gap-1 pt-1 border-t border-border">
+        <button
+          type="button"
+          onClick={() => { for (let i = 0; i < items; i++) if (!(collapsed[i] ?? false)) onToggleCollapse(i); }}
+          disabled={allCollapsed}
+          className="flex-1 text-[9px] font-medium px-1.5 py-1 rounded border border-border hover:border-primary/40 disabled:opacity-40"
+        >
+          Collapse all
+        </button>
+        <button
+          type="button"
+          onClick={() => { for (let i = 0; i < items; i++) if (collapsed[i] ?? false) onToggleCollapse(i); }}
+          disabled={noneCollapsed}
+          className="flex-1 text-[9px] font-medium px-1.5 py-1 rounded border border-border hover:border-primary/40 disabled:opacity-40"
+        >
+          Expand all
+        </button>
+      </div>
+    </div>
   );
 }
 

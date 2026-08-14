@@ -323,10 +323,19 @@ export function createManualEvaluation(userAnswer: string): WrittenEvaluation {
 }
 
 const TRANSCRIPTION_PROMPT = [
-  "You are an OCR assistant. Transcribe ALL handwritten or printed text from this photo of a written answer.",
-  "Return ONLY the raw transcribed text — no commentary, no markdown, no wrapping, no labels.",
-  "If the photo contains multiple sections or numbered parts, separate them with blank lines.",
+  "You are an OCR and formatting assistant. Transcribe ALL handwritten or printed text from this photo of a written answer.",
+  "Return the transcribed text using Markdown formatting:",
+  "- Tables must be formatted as Markdown tables with pipe separators and header rows (| Col1 | Col2 |\\n|---|---|\\n| ... |).",
+  "- Bullet lists should use - or * syntax.",
+  "- Numbered lists should use 1. 2. 3. syntax.",
+  "- Headings/section titles should use ## or ### syntax if visually prominent.",
+  "- Bold text (underlined or circled) should use **bold** syntax.",
+  "- Preserve line breaks and paragraph structure.",
+  "- Code-like text or diagrams should be wrapped in ``` code blocks.",
+  "- If the photo contains multiple sections or numbered parts, separate them with blank lines.",
+  "Do NOT add commentary, labels, or wrapping outside the transcribed content.",
   "Preserve the student's original wording exactly. Do not correct spelling or grammar.",
+  "Output only the Markdown-formatted transcription — nothing else.",
 ].join("\n");
 
 export interface TranscribeOptions {
@@ -351,7 +360,7 @@ export async function transcribePhoto(options: TranscribeOptions): Promise<strin
         systemInstruction: { parts: [{ text: TRANSCRIPTION_PROMPT }] },
         contents: [{
           parts: [
-            { text: "Transcribe all text in this image:" },
+            { text: "Transcribe all text in this image, formatting tables as Markdown tables, lists as Markdown lists, and preserving structure:" },
             { inlineData: { mimeType: options.mimeType || "image/jpeg", data: options.photoBase64 } },
           ],
         }],

@@ -990,6 +990,12 @@ function FormEditorSwitch({
     return <WrittenEditor value={parsed} onChange={onChange} readOnly={readOnly} r2KeyBase={r2KeyBase} rawR2Key={rawR2Key} />;
   }
   if (Array.isArray(parsed?.questions)) {
+    // Bank files may have a flat questions[] array without passages.
+    // If the content type is explicitly "bank", use BankEditor;
+    // otherwise use QuizEditor for regular quiz packs.
+    if (contentType === "bank") {
+      return <BankEditor value={parsed} onChange={onChange} readOnly={readOnly} r2KeyBase={r2KeyBase} rawR2Key={rawR2Key} />;
+    }
     return <QuizEditor value={parsed} onChange={onChange} readOnly={readOnly} r2KeyBase={r2KeyBase} rawR2Key={rawR2Key} />;
   }
   return (

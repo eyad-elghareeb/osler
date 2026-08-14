@@ -14,6 +14,7 @@ import {
   RotateCcw,
   Sparkles,
   Timer,
+  NotebookPen,
 } from "lucide-react";
 import {
   Dialog,
@@ -130,9 +131,9 @@ export function SessionStartDialog({
   onClose,
 }: SessionStartDialogProps) {
   const { t } = useI18n();
-  const isBank = content.type === "bank";
+  const isBank = content.type === "bank" || content.type === "written";
   const totalQuestions = countQuestions(content);
-  const passageCount = isBank ? content.passages?.length ?? 0 : 0;
+  const passageCount = content.type === "bank" ? content.passages?.length ?? 0 : 0;
   const progress = storageProgress(item.uid, totalQuestions);
   const description = content.meta.description?.startsWith("Content pack:")
     ? t("qbank.launch.subtitle", { title: item.title })
@@ -186,7 +187,7 @@ export function SessionStartDialog({
 
   return (
     <Dialog open={open} onOpenChange={(nextOpen) => !nextOpen && onClose()}>
-      <DialogContent className="flex max-h-[min(820px,calc(100dvh-2rem))] flex-col overflow-hidden p-0 sm:max-w-xl">
+      <DialogContent className="flex max-h-[min(920px,calc(100dvh-1.5rem))] flex-col overflow-hidden p-0 sm:max-w-2xl scale-[1.06] origin-top">
         <motion.div
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
@@ -201,7 +202,7 @@ export function SessionStartDialog({
               <DialogHeader className="text-start">
                 <div className="mb-2 flex items-start gap-3">
                   <div className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-primary/20 to-primary/5 text-primary ring-1 ring-primary/20">
-                    {isBank ? <BookOpen className="size-5" /> : <ClipboardCheck className="size-5" />}
+                    {content.type === "written" ? <NotebookPen className="size-5" /> : isBank ? <BookOpen className="size-5" /> : <ClipboardCheck className="size-5" />}
                   </div>
                   <div className="min-w-0">
                     <DialogTitle className="text-lg font-bold tracking-tight sm:text-xl">{item.title}</DialogTitle>

@@ -64,6 +64,8 @@ import {
 } from "lucide-react";
 import { loadCategoryTree, loadContentByUid, loadNodeByUid, ENGINE_META, flattenTree, packBasePath, nodeUrls } from "@/lib/osler/content";
 import { toast } from "@/hooks/use-toast";
+import { RenderedMarkdownEditor } from "@/components/osler/rendered-markdown-editor";
+import { MarkdownPreview } from "@/components/osler/admin/editors/markdown-preview";
 import {
   contentToQuestions as poolContentToQuestions,
   countQuestions as poolCountQuestions,
@@ -782,9 +784,18 @@ export function QBankStudio({
       if (questions.length === 0) return;
       const sessionMode = options.mode ?? testMode;
       // Apply progress filter (new/wrong/flagged/all) before picking questions.
+      // Pass the pack uid as fallbackUid so single-pack paths (where
+      // sourceUid may not be stamped on every question) still resolve
+      // progress records correctly.
       if (options.onlyMode && options.onlyMode !== "all") {
-        const filtered = filterPoolByProgress(questions as PoolQuestion[], options.onlyMode);
+        const filtered = filterPoolByProgress(questions as PoolQuestion[], options.onlyMode, item.uid);
         if (filtered.length > 0) questions = filtered as typeof questions;
+        else {
+          // No questions matched the filter — inform the user instead of
+          // silently falling back to the full pool.
+          toast({ title: "No matching questions", variant: "destructive", description: "No questions found for the selected filter. Try a different filter or start with all questions." });
+          return;
+        }
       }
       if (options.maxQuestions && options.maxQuestions > 0 && options.maxQuestions < questions.length) {
         questions = pickQuestions(questions, options.maxQuestions, options.order ?? "sequential");
@@ -879,7 +890,7 @@ export function QBankStudio({
   // `session` are only read here, never watched.
   React.useEffect(() => {
     if (activeItem && activeContent) {
-      if ((activeContent.type === "quiz" || activeContent.type === "bank") && !session && mode === "home") {
+      if ((activeContent.type === "quiz" || activeContent.type === "bank" || activeContent.type === "written") && !session && mode === "home") {
         if (startPromptUid !== activeItem.uid) {
           setStartPromptUid(activeItem.uid);
           setStartDialogOpen(true);
@@ -1219,17 +1230,38 @@ export function QBankStudio({
           }}
           onToggleFlag={() => {
             if (session.isReview) return;
+            const nextFlagged = !session.flagged[session.current];
             setSession((s) =>
               s
                 ? {
                     ...s,
                     flagged: {
                       ...s.flagged,
-                      [s.current]: !s.flagged[s.current],
+                      [s.current]: nextFlagged,
                     },
                   }
                 : s
             );
+            // Persist flag change to storage immediately so that
+            // "flagged only" sessions can find this question later.
+            const q = session.questions[session.current];
+            if (q) {
+              const uid = q.sourceUid ?? activeItem?.uid ?? session.itemId;
+              if (uid) {
+                const existing = storage.getRecord(uid, q.id);
+                const qEngine = q.correct >= 0 ? "quiz" : (q.rubric?.length ? "written" : session.engine);
+                storage.recordAnswer(uid, q.id, qEngine, {
+                  selected: existing?.selected,
+                  correct: existing?.correct ?? false,
+                  flagged: nextFlagged,
+                  dismissed: existing?.dismissed,
+                  timeMs: existing?.timeMs,
+                  tags: existing?.tags ?? q.tags,
+                  difficulty: existing?.difficulty ?? q.difficulty,
+                });
+                force();
+              }
+            }
           }}
           onTogglePause={() => {
             if (session.isReview) return;
@@ -1413,7 +1445,7 @@ export function QBankStudio({
         onStartCustomSession={startCustomSession}
         onResumeActive={resumeActiveSession}
       />
-      {startDialogOpen && activeItem && activeContent && (activeContent.type === "quiz" || activeContent.type === "bank") && (
+      {startDialogOpen && activeItem && activeContent && (activeContent.type === "quiz" || activeContent.type === "bank" || activeContent.type === "written") && (
         <SessionStartDialog
           open={startDialogOpen}
           item={activeItem}
@@ -1423,7 +1455,7 @@ export function QBankStudio({
           onlyMode={launchOnlyMode}
           onOnlyModeChange={setLaunchOnlyMode}
           onStart={handleStartPrompt}
-          onMoreOptions={activeContent.type === "bank" ? openBankMoreOptions : undefined}
+          onMoreOptions={(activeContent.type === "bank" || activeContent.type === "written") ? openBankMoreOptions : undefined}
           onClose={exitToHome}
         />
       )}
@@ -6342,7 +6374,13 @@ function CameraModal({
 
   const openCamera = React.useCallback(async (front: boolean) => {
     if (typeof window === "undefined") return;
-    if (!window.isSecureContext && location.hostname !== "localhost" && location.hostname !== "127.0.0.1") {
+    // Detect if running as an installed PWA — standalone PWAs may have
+    // camera access even on HTTP origins (Chrome grants them secure-context
+    // privileges). Only block on insecure HTTP *non-PWA* contexts.
+    const isPwa = window.matchMedia("(display-mode: standalone)").matches
+      || (navigator as any).standalone === true
+      || document.referrer.includes("android-app://");
+    if (!window.isSecureContext && !isPwa && location.hostname !== "localhost" && location.hostname !== "127.0.0.1") {
       toast({ title: t("qbank.written.cameraSecureContext"), variant: "destructive" });
       fileInputRef.current?.click();
       return;
@@ -6361,6 +6399,10 @@ function CameraModal({
         toast({ title: t("qbank.written.cameraPermissionDenied"), variant: "destructive" });
       } else if (name === "NotFoundError") {
         toast({ title: t("qbank.written.noCamera"), variant: "destructive" });
+      } else if (!window.isSecureContext && !isPwa) {
+        // Generic error on insecure non-PWA context — likely a
+        // getUserMedia availability issue.
+        toast({ title: t("qbank.written.cameraSecureContext"), variant: "destructive" });
       }
       fileInputRef.current?.click();
     }
@@ -6765,12 +6807,11 @@ function WrittenEngineView({
             </span>
           </div>
 
-          <textarea
+          <RenderedMarkdownEditor
             value={draft.text}
-            onChange={(e) => onTextChange(e.target.value)}
+            onChange={onTextChange}
             placeholder={t("qbank.written.placeholder")}
             className="osler-written-area"
-            style={{ minHeight: 220 }}
           />
           {transcribing && (
             <div className="flex items-center gap-2 text-xs text-muted-foreground bg-muted/30 rounded-lg px-3 py-2 mt-2">
@@ -6840,12 +6881,11 @@ function WrittenEngineView({
                   {child.question && (
                     <div className="text-sm text-foreground mb-1.5">{child.question}</div>
                   )}
-                  <textarea
+                  <RenderedMarkdownEditor
                     value={childAns}
-                    onChange={(e) => onChildTextChange?.(ci, e.target.value)}
+                    onChange={(v) => onChildTextChange?.(ci, v)}
                     placeholder={t("qbank.written.answerFor", { label: child.label || `part ${ci + 1}` })}
                     className="osler-written-area"
-                    style={{ minHeight: 120 }}
                   />
                   <div className="flex gap-2">
                     <button
@@ -6899,8 +6939,10 @@ function WrittenEngineView({
             <span className="size-2 rounded-full bg-warning" />
             {t("qbank.written.yourResponse")}
           </h4>
-          <div className="text-sm whitespace-pre-wrap leading-relaxed text-foreground bg-muted/30 rounded-lg p-4 min-h-[80px] max-h-[400px] overflow-y-auto">
-            {draft.text.trim() || (
+          <div className="text-sm leading-relaxed text-foreground bg-muted/30 rounded-lg p-4 min-h-[80px] max-h-[400px] overflow-y-auto">
+            {draft.text.trim() ? (
+              <MarkdownPreview body={draft.text} />
+            ) : (
               <span className="text-muted-foreground italic">{t("qbank.written.noAnswer")}</span>
             )}
           </div>
@@ -6910,8 +6952,10 @@ function WrittenEngineView({
             <span className="size-2 rounded-full bg-primary" />
             {t("qbank.written.modelAnswer")}
           </h4>
-          <div className="text-sm whitespace-pre-wrap leading-relaxed text-foreground bg-primary/5 rounded-lg p-4 min-h-[80px] max-h-[400px] overflow-y-auto">
-            {question.modelAnswer || (
+          <div className="text-sm leading-relaxed text-foreground bg-primary/5 rounded-lg p-4 min-h-[80px] max-h-[400px] overflow-y-auto">
+            {question.modelAnswer ? (
+              <MarkdownPreview body={question.modelAnswer} />
+            ) : (
               <span className="text-muted-foreground italic">{t("qbank.written.noModelAnswer")}</span>
             )}
           </div>

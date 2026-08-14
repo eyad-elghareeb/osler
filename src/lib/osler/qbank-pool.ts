@@ -320,10 +320,12 @@ export function filterPoolByTags(pool: PoolQuestion[], tags: string[]): PoolQues
 export function filterPoolByProgress(
   pool: PoolQuestion[],
   mode: OnlyMode,
+  /** Optional fallback uid when sourceUid is missing (single-pack path). */
+  fallbackUid?: string,
 ): PoolQuestion[] {
   if (mode === "all") return pool;
   return pool.filter((q) => {
-    const uid = q.sourceUid;
+    const uid = q.sourceUid || fallbackUid;
     if (!uid) return false;
     const rec = storage.getRecord(uid, q.id);
     if (mode === "new") return !rec;
