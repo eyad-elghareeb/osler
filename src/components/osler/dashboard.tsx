@@ -40,6 +40,8 @@ import {
   PageHeader,
   SectionHeading,
   StatTile as SharedStatTile,
+  HubSkeleton,
+  SkeletonCard,
   type StatTileProps,
 } from "./ui-primitives";
 import { toast } from "@/hooks/use-toast";
@@ -105,6 +107,12 @@ export function Dashboard({
   }, []);
 
   const [stats, setStats] = React.useState({ attempted: 0, correct: 0, packs: 0 });
+  const [hydrated, setHydrated] = React.useState(storage.isHydrated());
+
+  React.useEffect(() => {
+    const unsubHydrated = storage.onHydrated(() => setHydrated(true));
+    return unsubHydrated;
+  }, []);
 
   React.useEffect(() => {
     const update = () => {
@@ -173,6 +181,7 @@ export function Dashboard({
   const [featuredArticles, setFeaturedArticles] = React.useState<Article[]>([]);
   const [articleCount, setArticleCount] = React.useState(0);
   const [videoCount, setVideoCount] = React.useState(0);
+  const [featuredLoading, setFeaturedLoading] = React.useState(true);
 
   React.useEffect(() => {
     (async () => {
@@ -185,6 +194,7 @@ export function Dashboard({
         );
         setFeaturedArticles(previews.filter(Boolean) as Article[]);
       } catch {}
+      setFeaturedLoading(false);
     })();
   }, []);
 
@@ -214,6 +224,13 @@ export function Dashboard({
     if (h < 18) return t("dash.greetingAfternoon");
     return t("dash.greetingEvening");
   })();
+
+  // Wait for both the content tree (leaves) and the storage cache hydration
+  // before first paint, so stats / hero / recent packs render with real data
+  // instead of flashing zeros and popping in.
+  if (leaves === null || !hydrated) {
+    return <HubSkeleton hero statCount={4} cardCount={3} />;
+  }
 
   return (
     <div className="osler-page">
@@ -455,7 +472,13 @@ export function Dashboard({
           animate="visible"
           className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-8"
         >
-          {featuredArticles.map((a) => (
+          {featuredLoading
+            ? Array.from({ length: 3 }).map((_, i) => (
+                <div key={i} className="osler-card--default">
+                  <SkeletonCard lines={3} />
+                </div>
+              ))
+            : featuredArticles.map((a) => (
             <motion.button
               key={a.file}
               type="button"

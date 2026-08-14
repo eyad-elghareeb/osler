@@ -7,7 +7,7 @@ import { QBankStudio } from "@/components/osler/qbank-studio";
 import { loadContentByUid } from "@/lib/osler/content";
 import { routeFor, useOslerRouter } from "@/lib/osler/navigation";
 import type { AnyContent, ContentTreeNode } from "@/lib/osler/types";
-import { LoadingState, EmptyState } from "@/components/osler/ui-primitives";
+import { EmptyState, HubSkeleton } from "@/components/osler/ui-primitives";
 import { ListChecks } from "lucide-react";
 import { useI18n } from "@/components/osler/i18n-provider";
 
@@ -86,7 +86,7 @@ function QBankPackView({ uid, forceResume }: { uid: string; forceResume?: boolea
   }, [uid, router]);
 
   if (loading) {
-    return <LoadingState label={t("loading.qbankPack")} />;
+    return <HubSkeleton statCount={3} cardCount={6} />;
   }
 
   if (error || !content || !item) {
