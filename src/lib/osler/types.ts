@@ -58,6 +58,31 @@ export interface ContentTreeNode {
    * Defaults to `en` if absent.
    */
   lang?: ContentLang;
+
+  /* ── OSCE station summary (manifest-only, no full pack fetch needed) ── */
+
+  /** Lightweight per-station preview for OSCE packs (id/title/specialty/difficulty/type/time). */
+  stationSummary?: OsceStationSummary[];
+  /** Distinct station specialties across this pack and its descendants. */
+  stationSpecialties?: string[];
+  /** Distinct station difficulty labels (e.g. "Easy", "Medium", "Hard"). */
+  stationDifficulties?: string[];
+  /** Distinct station types ("history" | "data-interp"). */
+  stationTypes?: string[];
+  /** Longest station time (minutes) under this node — drives lobby duration hints. */
+  stationTimeMax?: number;
+}
+
+/** Station preview embedded in the manifest for OSCE packs. Excludes patient
+ *  profiles, rubrics, and hidden info so the manifest stays small and the
+ *  lobby can render without fetching the full stations.json. */
+export interface OsceStationSummary {
+  id?: string;
+  title?: string;
+  specialty?: string;
+  difficulty?: string;
+  type?: string;
+  time?: number;
 }
 
 /** Per-category manifest listing the full tree. */

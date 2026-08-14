@@ -67,6 +67,11 @@ function inferTypeFromData(filePath) {
  * Read display and study metadata from a pack's JSON files. Keeping this in
  * the manifest lets pack browsers render complete cards before the pack body
  * is requested for a study session.
+ *
+ * For OSCE packs we also collect a per-station summary (id, title, specialty,
+ * difficulty, type, time) and derive tags/description from station fields, so
+ * the OSCE lobby can render full pack cards from the manifest alone — without
+ * fetching the heavy stations.json (patient profiles, rubrics, hidden info).
  */
 function getPackMetadata(dirPath, fileNames) {
   const metadata = {
@@ -75,6 +80,11 @@ function getPackMetadata(dirPath, fileNames) {
     description: undefined,
     lang: undefined,
     tags: new Set(),
+    stationSummary: [],
+    stationSpecialties: new Set(),
+    stationDifficulties: new Set(),
+    stationTypes: new Set(),
+    stationTimeMax: 0,
   };
 
   for (const fileName of fileNames.filter((name) => name.endsWith(".json"))) {
@@ -101,6 +111,26 @@ function getPackMetadata(dirPath, fileNames) {
             if (typeof tag === "string" && tag.trim()) metadata.tags.add(tag.trim());
           }
         }
+
+        // OSCE station summary — capture enough to render pack cards & a
+        // station picker without loading the full stations.json. We strip
+        // patient.hiddenProfile/rubric/questions which are session-only.
+        if (key === "stations") {
+          for (const station of entries) {
+            if (!station || typeof station !== "object") continue;
+            const id = typeof station.id === "string" ? station.id : undefined;
+            const title = typeof station.title === "string" ? station.title : undefined;
+            const specialty = typeof station.specialty === "string" ? station.specialty : undefined;
+            const difficulty = typeof station.difficulty === "string" ? station.difficulty : undefined;
+            const type = typeof station.type === "string" ? station.type : undefined;
+            const time = typeof station.time === "number" ? station.time : undefined;
+            if (specialty) metadata.stationSpecialties.add(specialty);
+            if (difficulty) metadata.stationDifficulties.add(difficulty);
+            if (type) metadata.stationTypes.add(type);
+            if (typeof time === "number" && time > metadata.stationTimeMax) metadata.stationTimeMax = time;
+            metadata.stationSummary.push({ id, title, specialty, difficulty, type, time });
+          }
+        }
       }
     } catch {
       // A malformed optional data file should not prevent other packs from publishing.
@@ -112,24 +142,90 @@ function getPackMetadata(dirPath, fileNames) {
   // content at runtime.
   metadata.itemCount += fileNames.filter((name) => !name.endsWith(".json")).length;
 
-  return {
+  // For OSCE packs with no explicit description, derive one from the station
+  // specialties so the lobby card has useful context.
+  if (!metadata.description && metadata.stationSummary.length > 0) {
+    const specialties = Array.from(metadata.stationSpecialties).sort();
+    if (specialties.length > 0) {
+      metadata.description = `${metadata.stationSummary.length} station${metadata.stationSummary.length === 1 ? "" : "s"} · ${specialties.join(", ")}`;
+    }
+  }
+
+  // OSCE packs don't carry entry.tags today — derive tag chips from
+  // specialty/difficulty so the lobby card can show filters without loading
+  // the pack body. Skip generic difficulties ("Easy/Medium/Hard") to keep
+  // chips clinically meaningful, but always include specialties.
+  if (metadata.stationSummary.length > 0) {
+    for (const specialty of metadata.stationSpecialties) {
+      if (typeof specialty === "string" && specialty.trim()) metadata.tags.add(specialty.trim());
+    }
+    for (const type of metadata.stationTypes) {
+      if (typeof type === "string" && type.trim()) metadata.tags.add(type.trim());
+    }
+  }
+
+  const result = {
     questionCount: metadata.questionCount,
     itemCount: metadata.itemCount,
     ...(metadata.description ? { description: metadata.description } : {}),
     ...(metadata.lang ? { lang: metadata.lang } : {}),
     ...(metadata.tags.size > 0 ? { tags: Array.from(metadata.tags).sort() } : {}),
   };
+
+  // Only attach station summary for actual OSCE packs (avoids bloating
+  // quiz/bank/library manifests).
+  if (metadata.stationSummary.length > 0) {
+    result.stationSummary = metadata.stationSummary;
+    result.stationSpecialties = Array.from(metadata.stationSpecialties).sort();
+    result.stationDifficulties = Array.from(metadata.stationDifficulties).sort();
+    result.stationTypes = Array.from(metadata.stationTypes).sort();
+    if (metadata.stationTimeMax > 0) result.stationTimeMax = metadata.stationTimeMax;
+  }
+
+  return result;
 }
 
 function summarizeChildren(children) {
-  return children.reduce(
-    (summary, child) => ({
-      questionCount: summary.questionCount + (child.questionCount ?? 0),
-      itemCount: summary.itemCount + (child.itemCount ?? 0),
-      packCount: summary.packCount + (child.packCount ?? 0),
-    }),
-    { questionCount: 0, itemCount: 0, packCount: 0 },
-  );
+  // Roll up child metadata into a branch summary. For OSCE we also aggregate
+  // station-level info so a parent folder (e.g. "Cardiology" with multiple
+  // OSCE sub-packs) can render a card without descending into its children.
+  const summary = {
+    questionCount: 0,
+    itemCount: 0,
+    packCount: 0,
+    stationSummary: [],
+    stationSpecialties: new Set(),
+    stationDifficulties: new Set(),
+    stationTypes: new Set(),
+    stationTimeMax: 0,
+  };
+  for (const child of children) {
+    summary.questionCount += child.questionCount ?? 0;
+    summary.itemCount += child.itemCount ?? 0;
+    summary.packCount += child.packCount ?? 0;
+    if (Array.isArray(child.stationSummary)) {
+      for (const s of child.stationSummary) summary.stationSummary.push(s);
+    }
+    for (const sp of child.stationSpecialties ?? []) summary.stationSpecialties.add(sp);
+    for (const d of child.stationDifficulties ?? []) summary.stationDifficulties.add(d);
+    for (const tp of child.stationTypes ?? []) summary.stationTypes.add(tp);
+    if (typeof child.stationTimeMax === "number" && child.stationTimeMax > summary.stationTimeMax) {
+      summary.stationTimeMax = child.stationTimeMax;
+    }
+  }
+  const out = {
+    questionCount: summary.questionCount,
+    itemCount: summary.itemCount,
+    packCount: summary.packCount,
+  };
+  if (summary.stationSummary.length > 0) {
+    out.stationSummary = summary.stationSummary;
+    out.stationSpecialties = Array.from(summary.stationSpecialties).sort();
+    out.stationDifficulties = Array.from(summary.stationDifficulties).sort();
+    out.stationTypes = Array.from(summary.stationTypes).sort();
+    if (summary.stationTimeMax > 0) out.stationTimeMax = summary.stationTimeMax;
+  }
+  return out;
 }
 
 /**

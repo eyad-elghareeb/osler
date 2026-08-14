@@ -26,11 +26,14 @@ import {
   Tag,
   BarChart3,
   ArrowRight,
+  ArrowLeft,
+  Folder,
   Play,
   type LucideIcon,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { loadCategoryTree, loadContentByUid, flattenTree, packBasePath } from "@/lib/osler/content";
+import { NavigationStack } from "./navigation-stack";
 import type {
   AnyContent,
   ContentTreeNode,
@@ -725,6 +728,24 @@ export function OsceStudio({
   const [resetModalOpen, setResetModalOpen] = React.useState(false);
   const [renderedCount, setRenderedCount] = React.useState(0);
   const [selectedPackUid, setSelectedPackUid] = React.useState<string | null>(null);
+  // True while a pack's stations.json is being fetched on demand after the
+  // user clicks a card. With manifest-first loading, the lobby paints
+  // immediately from the manifest; this spinner only covers the lazy content
+  // fetch that happens when the user actually opens a pack.
+  const [loadingPack, setLoadingPack] = React.useState(false);
+
+  // ── Folder navigation state (mirrors qbank's ContentTab) ─────────────
+  // allTree holds the *unflattened* OSCE tree so the hub can render folder
+  // cards for branch nodes (e.g. `cardiology/` containing sub-packs) and
+  // drill down into them with NavigationStack. allPacks is still kept as a
+  // flat list of leaves so the lazy content cache + selectPack workflow
+  // keeps working unchanged.
+  const [allTree, setAllTree] = React.useState<ContentTreeNode[]>([]);
+  // Stack of currently open folders — last entry is the one being viewed.
+  // Empty array → root grid is shown. Pushed on folder click, popped on back.
+  const [selectedFolders, setSelectedFolders] = React.useState<ContentTreeNode[]>([]);
+  // Subfolder-view search query (filters by title substring).
+  const [folderSearch, setFolderSearch] = React.useState("");
 
   // ── Swipe-back dismiss for the OSCE lobby/conversation/debrief overlays ─
   // Mirrors the Settings NavigationStack pattern: a horizontal drag past
@@ -783,26 +804,37 @@ export function OsceStudio({
     transcriptRef.current = transcript;
   }, [transcript]);
 
-  /* Paint the OSCE hub from the manifest, warm pack content in the background */
+  /* Paint the OSCE hub from the manifest alone — no background pre-warming.
+   *
+   * Mirrors the library & qbank studios: every pack card renders from the
+   * manifest's stationSummary/description/tags fields, and the heavy
+   * stations.json (patient profiles, rubrics, hidden info) is only fetched
+   * on demand when the user selects a pack (see `selectPack`).
+   *
+   * Pre-warming every pack's content was the main reason the OSCE hub felt
+   * slow on cold loads: 4+ stations.json fetches per visit, all racing the
+   * manifest. With manifest-first rendering, the lobby paints after a single
+   * manifest fetch (typically <5 KB).
+   *
+   * We flatten the tree to leaf nodes only — branch folders (e.g. a
+   * `pediatrics/` folder that contains `pediatrics/cardiology/stations.json`
+   * but no direct stations.json) have `files: []` and would throw
+   * "No JSON data files" if treated as packs. flattenTree() skips asset
+   * subdirs (images/, assets/) and returns only nodes with no child items,
+   * which is exactly the set of packs that can be loaded by uid.
+   */
   React.useEffect(() => {
     setPacksLoading(true);
     loadCategoryTree("osce")
-      .then(async (nodes) => {
-        setAllPacks(nodes.map((node) => ({ node, content: null })));
+      .then((nodes) => {
+        // Preserve the full folder tree for the hub's folder-by-folder
+        // navigation (folder cards → drill-down via NavigationStack).
+        setAllTree(nodes);
+        // Also keep a flattened leaf list — used as the lazy content cache
+        // (selectPack writes loaded content back into allPacks by uid).
+        const leaves = flattenTree(nodes).filter((node) => node.type === "osce");
+        setAllPacks(leaves.map((node) => ({ node, content: null })));
         setPacksLoading(false);
-        for (const leaf of flattenTree(nodes)) {
-          try {
-            const content = await loadContentByUid(leaf.uid, "osce");
-            if (content.type !== "osce") continue;
-            setAllPacks((prev) =>
-              prev.map((p) =>
-                p.node.uid === leaf.uid ? { ...p, content: content as OsceContent } : p,
-              ),
-            );
-          } catch {
-            // leave the pack manifest-only — description/tags just stay hidden
-          }
-        }
       })
       .catch(() => setPacksLoading(false));
   }, []);
@@ -1337,14 +1369,36 @@ export function OsceStudio({
 
   async function selectPack(pack: { node: ContentTreeNode; content: OsceContent | null }) {
     let content = pack.content;
+    // Guard: branch nodes (folders with sub-packs but no direct data files)
+    // can't be loaded as a single pack. This shouldn't happen now that the
+    // hub uses flattenTree(), but a stale saved session or deep link could
+    // still surface one — bail with a clear message instead of throwing
+    // "No JSON data files in <path>" inside loadNodeContent.
+    if (!content && (pack.node.files ?? []).filter((f) => f.endsWith(".json")).length === 0) {
+      setError(
+        `"${pack.node.title}" is a folder, not a pack. Open one of its sub-packs instead.`
+      );
+      return;
+    }
     if (!content) {
+      // Lazy content fetch — manifest-first loading means this only happens
+      // when the user actually opens a pack, not when the hub mounts.
+      setLoadingPack(true);
       try {
         const loaded = await loadContentByUid(pack.node.uid, "osce");
         content = loaded.type === "osce" ? (loaded as OsceContent) : null;
-      } catch {
+      } catch (err) {
+        console.error("Failed to load OSCE pack:", err);
         content = null;
+      } finally {
+        setLoadingPack(false);
       }
-      if (!content) return;
+      if (!content) {
+        setError(
+          "Could not load this OSCE pack. Check your connection and try again."
+        );
+        return;
+      }
       setAllPacks((prev) =>
         prev.map((p) => (p.node.uid === pack.node.uid ? { ...p, content } : p)),
       );
@@ -1362,13 +1416,199 @@ export function OsceStudio({
     setPhase("lobby");
   }
 
-  const filteredPacks = React.useMemo(() => {
-    return contentFilter === "all"
-      ? allPacks
-      : allPacks.filter(({ node, content }) =>
-          (node.lang ?? content?.meta.lang ?? "en") === contentFilter
-        );
-  }, [allPacks, contentFilter]);
+  // ── Folder-navigation helpers (ported from qbank's ContentTab) ────────
+  // contentByUid gives O(1) lookup of cached content when computing per-folder
+  // stats and rendering pack cards. Built from the flat leaf list since only
+  // leaves have loadable content.
+  const contentByUid = React.useMemo(() => {
+    const map = new Map<string, OsceContent | null>();
+    for (const { node, content } of allPacks) {
+      map.set(node.uid, content);
+    }
+    return map;
+  }, [allPacks]);
+
+  /** Recursively collect every leaf uid under a node (used for folder stats). */
+  const collectLeafUids = React.useCallback((node: ContentTreeNode): string[] => {
+    if (node.items.length === 0) return [node.uid];
+    return node.items.flatMap(collectLeafUids);
+  }, []);
+
+  /** Per-folder rollup: total leaf packs and total stations across all leaves. */
+  const folderStats = React.useCallback(
+    (node: ContentTreeNode): { packs: number; stations: number } => {
+      const uids = collectLeafUids(node);
+      let packs = 0;
+      let stations = 0;
+      for (const uid of uids) {
+        packs += 1;
+        const leaf = allPacks.find((p) => p.node.uid === uid);
+        const content = leaf?.content;
+        const nodeStationCount =
+          content?.stations?.length
+          || leaf?.node.stationSummary?.length
+          || leaf?.node.itemCount
+          || 0;
+        stations += nodeStationCount;
+      }
+      return { packs, stations };
+    },
+    [collectLeafUids, allPacks],
+  );
+
+  /** Recursively filter a tree by a title-substring match (preserves folders). */
+  const filterTree = React.useCallback(
+    (nodes: ContentTreeNode[], q: string): ContentTreeNode[] => {
+      if (!q) return nodes;
+      const needle = q.toLowerCase();
+      function walk(list: ContentTreeNode[]): ContentTreeNode[] {
+        const out: ContentTreeNode[] = [];
+        for (const node of list) {
+          const titleMatch = node.title.toLowerCase().includes(needle);
+          if (node.items.length === 0) {
+            if (titleMatch) out.push(node);
+          } else {
+            const children = walk(node.items);
+            if (titleMatch || children.length > 0) {
+              out.push({ ...node, items: children });
+            }
+          }
+        }
+        return out;
+      }
+      return walk(nodes);
+    },
+    [],
+  );
+
+  // Apply content-language filter to *root* nodes only — branches are kept
+  // intact so the user can still drill into them; their leaves are filtered
+  // naturally by the lang check at the pack-card level (no-op for OSCE today
+  // since the bundled content is English-only, but ready for future AR packs).
+  const filteredRootTree = React.useMemo(() => {
+    if (contentFilter === "all") return allTree;
+    return allTree.filter((node) => {
+      // Branches: keep them — leaves inside may still match.
+      if (node.items.length > 0) return true;
+      // Leaves: filter by lang.
+      const content = contentByUid.get(node.uid);
+      return (node.lang ?? content?.meta.lang ?? "en") === contentFilter;
+    });
+  }, [allTree, contentFilter, contentByUid]);
+
+  /** Render a single OSCE leaf pack as a clickable card. Shared by the root
+   *  grid and the subfolder grid so the look is identical everywhere. */
+  const renderOscePackCard = (node: ContentTreeNode, idx: number) => {
+    const content = contentByUid.get(node.uid) ?? null;
+    const stationCount =
+      content?.stations?.length
+      || node.stationSummary?.length
+      || node.itemCount
+      || 0;
+    const tags = content?.meta.tags?.slice(0, 4) || node.tags?.slice(0, 4) || [];
+    const description = content?.meta.description || node.description;
+    const packBase = packBasePath(node);
+    const packUrls = (node.files ?? []).map((f) => `${packBase}${f}`);
+    for (const img of node.images ?? []) packUrls.push(`${packBase}images/${img}`);
+    const lang = node.lang ?? content?.meta.lang;
+    return (
+      <motion.div
+        key={node.uid}
+        initial={{ opacity: 0, y: 8 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.2, delay: idx * 0.04 }}
+      >
+        <div
+          role="button"
+          tabIndex={0}
+          onClick={() => void selectPack({ node, content })}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" || e.key === " ") {
+              e.preventDefault();
+              void selectPack({ node, content });
+            }
+          }}
+          className={cn(
+            "w-full text-start group relative overflow-hidden bg-card border border-border rounded-xl p-5 hover:border-primary/40 hover:shadow-md transition-all duration-200 active:scale-[0.99] cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
+            lang === "ar" && "osler-content-ar",
+          )}
+          dir={lang === "ar" ? "rtl" : undefined}
+          lang={lang ?? undefined}
+        >
+          <div className="absolute top-0 left-0 right-0 h-0.5 bg-gradient-to-r from-primary/60 to-primary/20 opacity-0 group-hover:opacity-100 transition-opacity" />
+          <div className="flex items-start justify-between gap-3 mb-3">
+            <div className="size-9 rounded-lg bg-primary/10 border border-primary/20 flex items-center justify-center shrink-0">
+              <Stethoscope className="size-4 text-primary" />
+            </div>
+            <div className="flex items-center gap-1.5 shrink-0">
+              <ContentCacheButton packId={node.uid} urls={packUrls} />
+              <span className="text-[11px] font-medium text-muted-foreground tabular-nums">
+                {stationCount} {stationCount === 1 ? "station" : "stations"}
+              </span>
+              <ArrowRight className="size-3.5 text-muted-foreground group-hover:text-primary group-hover:translate-x-0.5 transition-all" />
+            </div>
+          </div>
+          <h3 className="font-semibold text-sm mb-1 group-hover:text-primary transition-colors leading-snug">
+            {node.title}
+          </h3>
+          {description && (
+            <p className="text-xs text-muted-foreground line-clamp-2 mb-3 leading-relaxed">
+              {description}
+            </p>
+          )}
+          {tags.length > 0 && (
+            <div className="flex flex-wrap gap-1">
+              {tags.map((tag) => (
+                <span
+                  key={tag}
+                  className="inline-flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded-full bg-muted/60 text-muted-foreground border border-border"
+                >
+                  <Tag className="size-2.5" />
+                  {tag}
+                </span>
+              ))}
+            </div>
+          )}
+        </div>
+      </motion.div>
+    );
+  };
+
+  /** Render a single folder card (mirrors qbank's folder card). Clicking
+   *  pushes the folder onto the selectedFolders stack, sliding in the
+   *  subfolder view via NavigationStack. */
+  const renderOsceFolderCard = (node: ContentTreeNode, idx: number) => {
+    const fs = folderStats(node);
+    return (
+      <motion.div
+        key={node.uid}
+        initial={{ opacity: 0, y: 8 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.2, delay: idx * 0.04 }}
+      >
+        <button
+          type="button"
+          aria-label={node.title}
+          onClick={() => {
+            setSelectedFolders((folders) => [...folders, node]);
+            setFolderSearch("");
+          }}
+          className="medos-fade-in h-auto w-full min-w-0 justify-start text-start bg-card border border-border rounded-xl p-5 hover:border-primary/40 hover:shadow-md hover:bg-card transition-all group flex items-center gap-3.5 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+        >
+          <div className="size-11 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-center shrink-0">
+            <Folder className="size-5 text-primary" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <h3 className="font-semibold text-sm truncate">{node.title}</h3>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              {fs.packs} {fs.packs === 1 ? "pack" : "packs"} · {fs.stations} {fs.stations === 1 ? "station" : "stations"}
+            </p>
+          </div>
+          <ChevronRight className="size-4 text-muted-foreground/40 group-hover:text-primary transition-colors shrink-0" />
+        </button>
+      </motion.div>
+    );
+  };
 
   if (selfPackError && uid) {
     return (
@@ -1390,132 +1630,206 @@ export function OsceStudio({
   }
 
   if (phase === "select") {
-    return (
-      <motion.div {...learnHubDismiss} className="osler-page">
+    // Topmost breadcrumb entry — null means "root grid is showing".
+    const selectedFolder = selectedFolders.at(-1) ?? null;
+
+    // ── ROOT VIEW (folder cards + leaf pack cards) ─────────────────────
+    // Always rendered as the NavigationStack home layer. When a folder is
+    // open, this layer dims to 65% opacity and the subfolder view slides in
+    // on top (see `subfolderView` below). Mirrors qbank's ContentTab.
+    const decksView = (
+      <div className="osler-page__inner">
+        <motion.div
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.3 }}
+        >
+          {/* Page header */}
+          <div className="osler-page-header--inline">
+            <div className="size-10 rounded-xl bg-primary/15 border border-primary/30 flex items-center justify-center shrink-0">
+              <Stethoscope className="size-5 text-primary" />
+            </div>
+            <div>
+              <h1 className="osler-page-header__title">{t("osce.home.title")}</h1>
+              <p className="osler-page-header__subtitle">
+                {t("osce.home.subtitle")}
+              </p>
+            </div>
+          </div>
+
+          <ContentLangFilter />
+
+          {/* Inline error banner — shown if a lazy pack fetch fails */}
+          {error && phase === "select" && (
+            <div className="mb-3 flex items-start gap-2 rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+              <AlertCircle className="size-4 shrink-0 mt-0.5" />
+              <div className="flex-1">{error}</div>
+              <button
+                className="text-destructive/80 hover:text-destructive text-[11px] font-medium underline"
+                onClick={() => setError(null)}
+              >
+                Dismiss
+              </button>
+            </div>
+          )}
+
+          {/* Folder / pack grid — branches render as folder cards (click to
+              drill in), leaves render as the existing OSCE pack cards. */}
+          {packsLoading ? (
+            <div className="osler-loading">
+              <Loader2 className="size-6 animate-spin text-primary" />
+              <span className="text-sm">Loading scenarios…</span>
+            </div>
+          ) : filteredRootTree.length === 0 ? (
+            <div className="osler-empty">
+              <div className="osler-empty__icon">
+                <Stethoscope className="size-6" />
+              </div>
+              <div>
+                <p className="osler-empty__title mb-1">{t("osce.home.empty")}</p>
+                <p className="osler-empty__body">
+                  {t("osce.home.empty")}
+                </p>
+              </div>
+              <button
+                onClick={onExit}
+                className="h-9 px-4 rounded-md border border-border text-sm font-medium hover:bg-muted/60 transition-colors"
+              >
+                {t("nav.dashboard")}
+              </button>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {filteredRootTree.map((node, idx) =>
+                node.items.length > 0
+                  ? renderOsceFolderCard(node, idx)
+                  : renderOscePackCard(node, idx),
+              )}
+            </div>
+          )}
+        </motion.div>
+      </div>
+    );
+
+    // ── SUBFOLDER VIEW (drill-down) ────────────────────────────────────
+    // Slides in on top of the root view when a folder is clicked. Has its
+    // own header (back button + folder title + stats) and a search box that
+    // filters the visible children by title substring.
+    let subfolderView: React.ReactNode = null;
+    if (selectedFolder) {
+      const fs = folderStats(selectedFolder);
+      const childTree = filterTree(selectedFolder.items, folderSearch.trim());
+
+      subfolderView = (
         <div className="osler-page__inner">
           <motion.div
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.3 }}
           >
-            {/* Page header */}
-            <div className="osler-page-header--inline">
-              <div className="size-10 rounded-xl bg-primary/15 border border-primary/30 flex items-center justify-center shrink-0">
-                <Stethoscope className="size-5 text-primary" />
-              </div>
-              <div>
-                <h1 className="osler-page-header__title">{t("osce.home.title")}</h1>
-                <p className="osler-page-header__subtitle">
-                  {t("osce.home.subtitle")}
-                </p>
-              </div>
+            {/* Back button + breadcrumb */}
+            <button
+              onClick={() => {
+                setSelectedFolders((folders) => folders.slice(0, -1));
+                setFolderSearch("");
+              }}
+              className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors mb-3"
+            >
+              <ArrowLeft className={cn("size-3.5", rtl && "rtl-flip-x")} />
+              {t("osce.home.title")}
+            </button>
+
+            {/* Folder header */}
+            <div className="flex items-center gap-2 text-xs text-muted-foreground mb-1">
+              <Folder className="size-3.5 text-primary" />
+              <span className="text-primary">{t("osce.home.title")}</span>
+            </div>
+            <h1 className="text-2xl md:text-3xl font-bold tracking-tight mb-1">
+              {selectedFolder.title}
+            </h1>
+            <p className="text-sm text-muted-foreground">
+              {fs.packs} {fs.packs === 1 ? "pack" : "packs"} · {fs.stations} {fs.stations === 1 ? "station" : "stations"}
+            </p>
+
+            {/* Search */}
+            <div className="relative mb-4 mt-4">
+              <Search className={cn("size-4 text-muted-foreground absolute top-1/2 -translate-y-1/2", rtl ? "right-3" : "left-3")} />
+              <input
+                type="text"
+                value={folderSearch}
+                onChange={(e) => setFolderSearch(e.target.value)}
+                placeholder="Search scenarios…"
+                className={cn(
+                  "w-full h-10 rounded-xl border border-border bg-card text-sm focus:outline-none focus:ring-2 focus:ring-primary/30",
+                  rtl ? "pr-9 pl-3 text-right" : "pl-9 pr-3",
+                )}
+              />
+              {folderSearch && (
+                <button
+                  onClick={() => setFolderSearch("")}
+                  className={cn(
+                    "absolute top-1/2 -translate-y-1/2 size-6 rounded-full hover:bg-muted flex items-center justify-center text-muted-foreground",
+                    rtl ? "left-2" : "right-2",
+                  )}
+                  aria-label="Clear search"
+                >
+                  <X className="size-3.5" />
+                </button>
+              )}
             </div>
 
-            <ContentLangFilter />
-
-            {/* Pack grid */}
-            {packsLoading ? (
-              <div className="osler-loading">
-                <Loader2 className="size-6 animate-spin text-primary" />
-                <span className="text-sm">Loading scenarios…</span>
-              </div>
-            ) : filteredPacks.length === 0 ? (
+            {/* Child grid */}
+            {childTree.length === 0 ? (
               <div className="osler-empty">
                 <div className="osler-empty__icon">
-                  <Stethoscope className="size-6" />
+                  <Search className="size-6" />
                 </div>
                 <div>
                   <p className="osler-empty__title mb-1">{t("osce.home.empty")}</p>
                   <p className="osler-empty__body">
-                    {t("osce.home.empty")}
+                    No scenarios match &ldquo;{folderSearch}&rdquo;.
                   </p>
                 </div>
-                <button
-                  onClick={onExit}
-                  className="h-9 px-4 rounded-md border border-border text-sm font-medium hover:bg-muted/60 transition-colors"
-                >
-                  {t("nav.dashboard")}
-                </button>
               </div>
             ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {filteredPacks.map(({ node, content }, idx) => {
-                  const stationCount = content?.stations?.length || node.itemCount || 0;
-                  const tags = content?.meta.tags?.slice(0, 4) || [];
-                  // Per-pack content URLs for the offline download button.
-                  const packBase = packBasePath(node);
-                  const packUrls = (node.files ?? []).map((f) => `${packBase}${f}`);
-                  for (const img of node.images ?? []) packUrls.push(`${packBase}images/${img}`);
-                  return (
-                    <motion.div
-                      key={node.uid}
-                      initial={{ opacity: 0, y: 8 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{ duration: 0.2, delay: idx * 0.04 }}
-                    >
-                      <div
-                        role="button"
-                        tabIndex={0}
-                        onClick={() => void selectPack({ node, content })}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter" || e.key === " ") {
-                            e.preventDefault();
-                            void selectPack({ node, content });
-                          }
-                        }}
-                        className={cn(
-                          "w-full text-start group relative overflow-hidden bg-card border border-border rounded-xl p-5 hover:border-primary/40 hover:shadow-md transition-all duration-200 active:scale-[0.99] cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
-                          (node.lang ?? content?.meta.lang) === "ar" && "osler-content-ar",
-                        )}
-                        dir={(node.lang ?? content?.meta.lang) === "ar" ? "rtl" : undefined}
-                        lang={node.lang ?? content?.meta.lang ?? undefined}
-                      >
-                        {/* Top accent line */}
-                        <div className="absolute top-0 left-0 right-0 h-0.5 bg-gradient-to-r from-primary/60 to-primary/20 opacity-0 group-hover:opacity-100 transition-opacity" />
-
-                        <div className="flex items-start justify-between gap-3 mb-3">
-                          <div className="size-9 rounded-lg bg-primary/10 border border-primary/20 flex items-center justify-center shrink-0">
-                            <Stethoscope className="size-4 text-primary" />
-                          </div>
-                          <div className="flex items-center gap-1.5 shrink-0">
-                            <ContentCacheButton packId={node.uid} urls={packUrls} />
-                            <span className="text-[11px] font-medium text-muted-foreground tabular-nums">
-                              {stationCount} {stationCount === 1 ? "station" : "stations"}
-                            </span>
-                            <ArrowRight className="size-3.5 text-muted-foreground group-hover:text-primary group-hover:translate-x-0.5 transition-all" />
-                          </div>
-                        </div>
-
-                        <h3 className="font-semibold text-sm mb-1 group-hover:text-primary transition-colors leading-snug">
-                          {node.title}
-                        </h3>
-                        {content?.meta.description && (
-                          <p className="text-xs text-muted-foreground line-clamp-2 mb-3 leading-relaxed">
-                            {content.meta.description}
-                          </p>
-                        )}
-
-                        {tags.length > 0 && (
-                          <div className="flex flex-wrap gap-1">
-                            {tags.map((tag) => (
-                              <span
-                                key={tag}
-                                className="inline-flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded-full bg-muted/60 text-muted-foreground border border-border"
-                              >
-                                <Tag className="size-2.5" />
-                                {tag}
-                              </span>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    </motion.div>
-                  );
-                })}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                {childTree.map((child, idx) =>
+                  child.items.length > 0
+                    ? renderOsceFolderCard(child, idx)
+                    : renderOscePackCard(child, idx),
+                )}
               </div>
             )}
-           </motion.div>
+          </motion.div>
         </div>
+      );
+    }
+
+    return (
+      <motion.div {...learnHubDismiss} className="osler-page">
+        {/* Loading overlay — hoisted outside NavigationStack so it stays
+            visible at full opacity even when a subfolder view is open. */}
+        {loadingPack && (
+          <div className="fixed inset-0 z-50 bg-background/80 backdrop-blur-sm flex items-center justify-center pointer-events-none">
+            <div className="flex items-center gap-2 rounded-lg bg-card border border-border px-4 py-3 shadow-md">
+              <Loader2 className="size-4 animate-spin text-primary" />
+              <span className="text-sm font-medium">Loading pack…</span>
+            </div>
+          </div>
+        )}
+
+        <NavigationStack
+          className="h-full"
+          homeClassName="osler-page"
+          subpageClassName="osler-page"
+          rtl={rtl}
+          home={decksView}
+          subpage={subfolderView}
+          onBack={() => {
+            setSelectedFolders((folders) => folders.slice(0, -1));
+            setFolderSearch("");
+          }}
+        />
       </motion.div>
     );
   }

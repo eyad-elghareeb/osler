@@ -13,7 +13,41 @@
       "items": [],
       "packCount": 1,
       "questionCount": 2,
-      "itemCount": 2
+      "itemCount": 2,
+      "description": "2 stations · Cardiology",
+      "tags": [
+        "Cardiology",
+        "history"
+      ],
+      "stationSummary": [
+        {
+          "id": "osce-card-001",
+          "title": "Acute Chest Pain — Aortic Dissection",
+          "specialty": "Cardiology",
+          "difficulty": "Hard",
+          "type": "history",
+          "time": 12
+        },
+        {
+          "id": "osce-card-002",
+          "title": "New-Onset Atrial Fibrillation",
+          "specialty": "Cardiology",
+          "difficulty": "Medium",
+          "type": "history",
+          "time": 10
+        }
+      ],
+      "stationSpecialties": [
+        "Cardiology"
+      ],
+      "stationDifficulties": [
+        "Hard",
+        "Medium"
+      ],
+      "stationTypes": [
+        "history"
+      ],
+      "stationTimeMax": 12
     },
     {
       "uid": "osce-clinical-skills",
@@ -27,7 +61,81 @@
       "items": [],
       "packCount": 1,
       "questionCount": 6,
-      "itemCount": 6
+      "itemCount": 6,
+      "description": "6 stations · Cardiology, Emergency Medicine, Gastroenterology, Neurology, Pulmonology",
+      "tags": [
+        "Cardiology",
+        "Emergency Medicine",
+        "Gastroenterology",
+        "Neurology",
+        "Pulmonology",
+        "history"
+      ],
+      "stationSummary": [
+        {
+          "id": "osce-001",
+          "title": "Chest Pain — STEMI",
+          "specialty": "Cardiology",
+          "difficulty": "Medium",
+          "type": "history",
+          "time": 10
+        },
+        {
+          "id": "osce-002",
+          "title": "Acute Dyspnea — Pulmonary Embolism",
+          "specialty": "Emergency Medicine",
+          "difficulty": "Medium",
+          "type": "history",
+          "time": 10
+        },
+        {
+          "id": "osce-003",
+          "title": "Stroke Assessment",
+          "specialty": "Neurology",
+          "difficulty": "Hard",
+          "type": "history",
+          "time": 12
+        },
+        {
+          "id": "osce-004",
+          "title": "Acute Asthma Exacerbation",
+          "specialty": "Pulmonology",
+          "difficulty": "Medium",
+          "type": "history",
+          "time": 10
+        },
+        {
+          "id": "osce-005",
+          "title": "Upper GI Bleed — Variceal Hemorrhage",
+          "specialty": "Gastroenterology",
+          "difficulty": "Hard",
+          "type": "history",
+          "time": 12
+        },
+        {
+          "id": "osce-006",
+          "title": "ACE Inhibitor-Induced Angioedema",
+          "specialty": "Emergency Medicine",
+          "difficulty": "Hard",
+          "type": "history",
+          "time": 10
+        }
+      ],
+      "stationSpecialties": [
+        "Cardiology",
+        "Emergency Medicine",
+        "Gastroenterology",
+        "Neurology",
+        "Pulmonology"
+      ],
+      "stationDifficulties": [
+        "Hard",
+        "Medium"
+      ],
+      "stationTypes": [
+        "history"
+      ],
+      "stationTimeMax": 12
     },
     {
       "uid": "osce-emergency-medicine",
@@ -41,7 +149,41 @@
       "items": [],
       "packCount": 1,
       "questionCount": 2,
-      "itemCount": 2
+      "itemCount": 2,
+      "description": "2 stations · Emergency Medicine",
+      "tags": [
+        "Emergency Medicine",
+        "history"
+      ],
+      "stationSummary": [
+        {
+          "id": "osce-em-001",
+          "title": "Anaphylaxis Management",
+          "specialty": "Emergency Medicine",
+          "difficulty": "Medium",
+          "type": "history",
+          "time": 8
+        },
+        {
+          "id": "osce-em-002",
+          "title": "Sepsis Recognition and Initial Management",
+          "specialty": "Emergency Medicine",
+          "difficulty": "Hard",
+          "type": "history",
+          "time": 12
+        }
+      ],
+      "stationSpecialties": [
+        "Emergency Medicine"
+      ],
+      "stationDifficulties": [
+        "Hard",
+        "Medium"
+      ],
+      "stationTypes": [
+        "history"
+      ],
+      "stationTimeMax": 12
     },
     {
       "uid": "osce-neurology",
@@ -55,7 +197,41 @@
       "items": [],
       "packCount": 1,
       "questionCount": 2,
-      "itemCount": 2
+      "itemCount": 2,
+      "description": "2 stations · Neurology",
+      "tags": [
+        "Neurology",
+        "history"
+      ],
+      "stationSummary": [
+        {
+          "id": "osce-neuro-001",
+          "title": "Seizure — Status Epilepticus",
+          "specialty": "Neurology",
+          "difficulty": "Hard",
+          "type": "history",
+          "time": 12
+        },
+        {
+          "id": "osce-neuro-002",
+          "title": "Peripheral Neuropathy Evaluation",
+          "specialty": "Neurology",
+          "difficulty": "Medium",
+          "type": "history",
+          "time": 10
+        }
+      ],
+      "stationSpecialties": [
+        "Neurology"
+      ],
+      "stationDifficulties": [
+        "Hard",
+        "Medium"
+      ],
+      "stationTypes": [
+        "history"
+      ],
+      "stationTimeMax": 12
     }
   ]
 }

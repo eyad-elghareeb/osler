@@ -1064,6 +1064,16 @@ async function manifestMetadataForFiles(env: Env, category: string, folderPath: 
   let lang: "en" | "ar" | undefined;
   const tags = new Set<string>();
 
+  // OSCE station summary — captures id/title/specialty/difficulty/type/time so
+  // the lobby can render pack cards from the manifest alone, mirroring the
+  // local generator (scripts/generate-content-manifests.js). Excludes patient
+  // profiles, rubrics, and hidden info so the manifest stays small.
+  const stationSummary: any[] = [];
+  const stationSpecialties = new Set<string>();
+  const stationDifficulties = new Set<string>();
+  const stationTypes = new Set<string>();
+  let stationTimeMax = 0;
+
   for (const file of files.filter((name) => name.endsWith(".json"))) {
     try {
       const object = await env.CONTENT!.get(`content-files/${category}/${folderPath ? `${folderPath}/` : ""}${file}`);
@@ -1082,19 +1092,59 @@ async function manifestMetadataForFiles(env: Env, category: string, folderPath: 
           if (!Array.isArray(entry?.tags)) continue;
           for (const tag of entry.tags) if (typeof tag === "string" && tag.trim()) tags.add(tag.trim());
         }
+
+        // OSCE: collect a per-station preview and derive tags/description.
+        if (key === "stations") {
+          for (const station of entries) {
+            if (!station || typeof station !== "object") continue;
+            const id = typeof station.id === "string" ? station.id : undefined;
+            const title = typeof station.title === "string" ? station.title : undefined;
+            const specialty = typeof station.specialty === "string" ? station.specialty : undefined;
+            const difficulty = typeof station.difficulty === "string" ? station.difficulty : undefined;
+            const type = typeof station.type === "string" ? station.type : undefined;
+            const time = typeof station.time === "number" ? station.time : undefined;
+            if (specialty) stationSpecialties.add(specialty);
+            if (difficulty) stationDifficulties.add(difficulty);
+            if (type) stationTypes.add(type);
+            if (typeof time === "number" && time > stationTimeMax) stationTimeMax = time;
+            stationSummary.push({ id, title, specialty, difficulty, type, time });
+          }
+        }
       }
     } catch {
       // A malformed pack must not prevent the admin from rebuilding other entries.
     }
   }
 
-  return {
+  // OSCE packs: derive a description from specialties if none was set on meta.
+  if (!description && stationSummary.length > 0) {
+    const sp = [...stationSpecialties].sort();
+    if (sp.length > 0) {
+      description = `${stationSummary.length} station${stationSummary.length === 1 ? "" : "s"} · ${sp.join(", ")}`;
+    }
+  }
+  // OSCE packs: surface specialties/types as tag chips so the lobby can show
+  // filterable metadata without loading the pack body.
+  if (stationSummary.length > 0) {
+    for (const sp of stationSpecialties) if (typeof sp === "string" && sp.trim()) tags.add(sp.trim());
+    for (const tp of stationTypes) if (typeof tp === "string" && tp.trim()) tags.add(tp.trim());
+  }
+
+  const result: Record<string, any> = {
     questionCount,
     itemCount,
     ...(description ? { description } : {}),
     ...(lang ? { lang } : {}),
     ...(tags.size ? { tags: [...tags].sort() } : {}),
   };
+  if (stationSummary.length > 0) {
+    result.stationSummary = stationSummary;
+    result.stationSpecialties = [...stationSpecialties].sort();
+    result.stationDifficulties = [...stationDifficulties].sort();
+    result.stationTypes = [...stationTypes].sort();
+    if (stationTimeMax > 0) result.stationTimeMax = stationTimeMax;
+  }
+  return result;
 }
 
 async function regenerateManifestForCategory(env: Env, category: string): Promise<any> {
@@ -1194,18 +1244,33 @@ async function regenerateManifestForCategory(env: Env, category: string): Promis
   const summarizeNode = (node: any): { questionCount: number; itemCount: number; packCount: number } => {
     node.items.sort((a: any, b: any) => a.title.localeCompare(b.title));
     if (node.items.length === 0) return node;
+    // Roll up OSCE station-summary fields so a branch folder (e.g. a
+    // specialty with multiple OSCE sub-packs) can render a card from the
+    // manifest alone — mirrors scripts/generate-content-manifests.js.
     const summary = node.items.reduce(
-      (total: { questionCount: number; itemCount: number; packCount: number }, child: any) => {
+      (total: { questionCount: number; itemCount: number; packCount: number; stationSummary: any[]; stationSpecialties: Set<string>; stationDifficulties: Set<string>; stationTypes: Set<string>; stationTimeMax: number }, child: any) => {
         const childSummary = summarizeNode(child);
         return {
           questionCount: total.questionCount + childSummary.questionCount,
           itemCount: total.itemCount + childSummary.itemCount,
           packCount: total.packCount + childSummary.packCount,
+          stationSummary: total.stationSummary.concat(Array.isArray(child.stationSummary) ? child.stationSummary : []),
+          stationSpecialties: new Set([...total.stationSpecialties, ...(child.stationSpecialties ?? [])]),
+          stationDifficulties: new Set([...total.stationDifficulties, ...(child.stationDifficulties ?? [])]),
+          stationTypes: new Set([...total.stationTypes, ...(child.stationTypes ?? [])]),
+          stationTimeMax: Math.max(total.stationTimeMax, child.stationTimeMax ?? 0),
         };
       },
-      { questionCount: 0, itemCount: 0, packCount: 0 },
+      { questionCount: 0, itemCount: 0, packCount: 0, stationSummary: [], stationSpecialties: new Set<string>(), stationDifficulties: new Set<string>(), stationTypes: new Set<string>(), stationTimeMax: 0 },
     );
     Object.assign(node, summary);
+    if (summary.stationSummary.length > 0) {
+      node.stationSummary = summary.stationSummary;
+      node.stationSpecialties = [...summary.stationSpecialties].sort();
+      node.stationDifficulties = [...summary.stationDifficulties].sort();
+      node.stationTypes = [...summary.stationTypes].sort();
+      if (summary.stationTimeMax > 0) node.stationTimeMax = summary.stationTimeMax;
+    }
     return summary;
   };
   for (const root of roots) summarizeNode(root);
