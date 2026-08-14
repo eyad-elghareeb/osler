@@ -1,6 +1,12 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 
+/* Milkdown Crepe WYSIWYG editor — theme + common feature styles.
+ * The `classic` theme bundles ProseMirror reset, placeholder, toolbar,
+ * list, table, code-mirror, link-tooltip, latex, cursor, and block-edit
+ * styles. Also import the matching dark theme so it adapts automatically. */
+@import "@milkdown/crepe/theme/classic.css";
+
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {
@@ -2860,4 +2866,61 @@ html.osler-ar body,
 .dark .osler-noise::after {
   opacity: 0.04;
   filter: invert(1);
+}
+
+/* ───────────────────────────────────────────────────────────────────────
+ * Milkdown Crepe editor — Osler theme overrides
+ *
+ * The Crepe theme ships its own color palette (warm beige). We map its
+ * CSS variables onto Osler's design tokens so the editor matches the
+ * surrounding UI in both light and dark modes. The wrapper class
+ * `.osler-milkdown-editor` is applied by the `<MilkdownEditor>` React
+ * component.
+ * ─────────────────────────────────────────────────────────────────────── */
+.osler-milkdown-editor {
+  --crepe-color-background: var(--card);
+  --crepe-color-on-background: var(--foreground);
+  --crepe-color-surface: var(--muted);
+  --crepe-color-surface-low: var(--muted);
+  --crepe-color-on-surface: var(--foreground);
+  --crepe-color-on-surface-variant: var(--muted-foreground);
+  --crepe-color-outline: var(--border);
+  --crepe-color-primary: var(--primary);
+  --crepe-color-secondary: var(--secondary);
+  --crepe-radius: var(--radius-md);
+  font-family: var(--font-geist-sans, inherit);
+  font-size: 0.95rem;
+}
+
+.osler-milkdown-editor .milkdown {
+  background: transparent;
+  color: var(--foreground);
+  min-height: 180px;
+  padding: 0.75rem 1rem;
+}
+
+.osler-milkdown-editor .milkdown .editor {
+  padding: 0;
+  outline: none;
+}
+
+.osler-milkdown-editor .milkdown.ProseMirror {
+  outline: none;
+  min-height: 160px;
+}
+
+/* Placeholder text — match Osler's muted placeholder style */
+.osler-milkdown-editor .milkdown .ProseMirror .placeholder {
+  color: var(--muted-foreground);
+  font-style: italic;
+  opacity: 0.7;
+}
+
+/* Selection toolbar (Crepe bubble) — use Osler's card/elevation tokens */
+.osler-milkdown-editor .crepe-toolbar,
+.osler-milkdown-editor .milkdown-toolbar {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-e2);
 }

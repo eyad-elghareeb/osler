@@ -1668,6 +1668,7 @@ function HomeView({
                   onDelete={(id) => sessions.delete(id)}
                   onStartCustomSession={onStartCustomSession}
                   onResume={onResumeActive}
+                  onLoadPack={loadPack}
                 />
               </div>
             </div>
@@ -2340,9 +2341,10 @@ function ContentTab({
     (node: ContentTreeNode) => {
       if (node.items.length > 0) {
         setSelectedFolders((folders) => [...folders, node]);
-      } else if (node.type === "quiz" || node.type === "bank") {
-        // Quiz and bank packs open their launch experience first. Banks can
-        // still hand off to the advanced Create tab from that dialog.
+      } else if (node.type === "quiz" || node.type === "bank" || node.type === "written") {
+        // Quiz, bank, and written packs open their launch experience first.
+        // Banks and written packs can still hand off to the advanced Create
+        // tab from that dialog.
         onOpenPack?.(node);
       } else if (onPickForCreateTest) {
         onPickForCreateTest(node);
@@ -3494,6 +3496,7 @@ function TrackerTab({
   onDelete,
   onStartCustomSession,
   onResume,
+  onLoadPack,
 }: {
   data: { items: PackEntry[]; trees: Record<string, ContentTreeNode[]> } | null;
   sessions: SavedSession[];
@@ -3520,6 +3523,11 @@ function TrackerTab({
       savedQuestionTimes?: Record<string, number>;
     }
   ) => void;
+  /** Lazily fetch a pack's content JSON when it's not yet cached.
+   *  Mirrors the prop passed to ContentTab — without this, the tracker
+   *  preview can't render question stems/choices for packs the user
+   *  hasn't already opened in the Content tab. */
+  onLoadPack?: (node: ContentTreeNode) => Promise<AnyContent | null>;
 }) {
   const { t } = useI18n();
   const [, force] = React.useReducer((x) => x + 1, 0);
@@ -3687,7 +3695,15 @@ function TrackerTab({
 
   // Lazily resolve a pack's wrong/flagged records into briefable questions.
   // Cached per uid (keyed on the uid) and cleared whenever the record set
-  // changes, so dismissals / new answers never render stale content.
+  // or the cached content map changes, so dismissals / new answers / lazy
+  // content loads never render stale content.
+  //
+  // Important: we only cache the result when the pack's content is actually
+  // loaded. If we cached entries with `question: null`, a later content load
+  // would never be reflected (the cache invalidation effect runs on
+  // `contentByUid` reference change, which fires — but defensively skipping
+  // the cache for unloaded packs avoids any window where stale null entries
+  // could be served).
   const resolveCache = React.useRef(new Map<string, TrackerPreviewItem[]>());
   const resolveItems = React.useCallback(
     (uid: string): TrackerPreviewItem[] => {
@@ -3700,17 +3716,57 @@ function TrackerTab({
         const pool = poolContentToQuestions(content, uid, content.meta.title, nodeByUid.get(uid));
         const byId = new Map(pool.map((q) => [q.id, q]));
         for (const it of items) it.question = byId.get(it.record.qid) ?? null;
+        // Only cache once content has been resolved — otherwise we'd pin a
+        // null-question snapshot that the load effect has to remember to
+        // evict. Skipping the cache for unloaded packs is safer.
+        resolveCache.current.set(uid, items);
       }
-      resolveCache.current.set(uid, items);
       return items;
     },
     [recordsByUid, contentByUid, nodeByUid],
   );
 
-  // Invalidate the resolver cache when the record set changes.
+  // Invalidate the resolver cache when the record set OR the cached content
+  // map changes. Without `contentByUid` in the deps, items would be cached
+  // with `question: null` forever — even after the user opens a pack in the
+  // Content tab (which loads its JSON) — and the preview would never show
+  // the question stems/choices.
   React.useEffect(() => {
     resolveCache.current.clear();
-  }, [visibleRecords]);
+  }, [visibleRecords, contentByUid]);
+
+  // When the user opens a pack in the preview sheet, ensure its content JSON
+  // is loaded. Without this, packs the user hasn't already opened in the
+  // Content tab have `content: null` in `contentByUid`, so `resolveItems`
+  // can't attach question stems/choices — every card renders the
+  // "no content" fallback. We also clear the resolver cache entry so the
+  // next `resolveItems(previewUid)` call rebuilds items with the freshly
+  // loaded content.
+  React.useEffect(() => {
+    if (!previewUid) return;
+    if (!onLoadPack) return;
+    if (!data) return;
+    if (contentByUid.has(previewUid)) return;
+    const entry = data.items.find((e) => e.node.uid === previewUid);
+    if (!entry) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const content = await onLoadPack(entry.node);
+        if (cancelled || !content) return;
+        // The cache key for this uid is now stale (its previous entry was
+        // built with `content: null`). Drop it so the next resolve picks
+        // up the new content.
+        resolveCache.current.delete(previewUid);
+        force();
+      } catch (error) {
+        console.error(`[tracker] Failed to load pack ${previewUid}:`, error);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [previewUid, onLoadPack, data, contentByUid]);
 
   // Prune the content hierarchy down to branches/packs that have wrong or
   // flagged records, mirroring the real folder structure in the tree.
