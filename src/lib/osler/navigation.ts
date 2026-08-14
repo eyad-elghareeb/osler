@@ -139,6 +139,18 @@ export function useOslerRouter() {
 
       haptic("selection");
 
+      // Same-view navigation (e.g. qbank → qbank?uid=X) is NOT a view change,
+      // so it must not run a full-page View Transition. Running one here
+      // cross-fades the entire page — including any dialog/overlay that opens
+      // or closes in the same tick — and double-fades against that surface's
+      // own enter/exit animation (visible as a flicker when a modal closes
+      // during pack navigation). The studio stays mounted and re-renders the
+      // new param in place, so no global crossfade is needed.
+      if (direction === "none") {
+        router.push(targetPath);
+        return;
+      }
+
       withViewTransition(() => {
         router.push(targetPath);
       }, direction);
