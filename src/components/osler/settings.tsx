@@ -78,7 +78,7 @@ import {
   setAnimationsEnabled,
 } from "@/lib/osler/motion";
 import { getConfig, getGithubRepo, getSiteName, getSiteTagline } from "@/lib/osler/config";
-import { loadAllContent, getEngineMeta, nodeUrls } from "@/lib/osler/content";
+import { loadCategoryTrees, getEngineMeta, nodeUrls } from "@/lib/osler/content";
 import type { EngineType, ContentTreeNode } from "@/lib/osler/types";
 import { useContentCache, type DownloadState } from "@/hooks/use-content-cache";
 import { ContentCacheButton } from "./content-cache-button";
@@ -1395,8 +1395,8 @@ function DownloadsSettingsSection() {
   }, []);
 
   React.useEffect(() => {
-    loadAllContent()
-      .then((res) => setTrees(res.trees))
+    loadCategoryTrees()
+      .then(setTrees)
       .catch(() => setTrees({}));
   }, []);
 

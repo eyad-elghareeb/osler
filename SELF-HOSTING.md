@@ -116,7 +116,7 @@ End users of your hosted instance **cannot** toggle plugins on or off. The decis
 
 Disabling an engine:
 - Hides its module from the Learn hub (`learn.tsx` filters `ALL_MODULES` by `isEngineEnabled`).
-- Skips its category in `loadAllContent()` / `loadContentByUid()` — content is never fetched from disk.
+- Skips its category in `loadCategoryTrees()` / `loadContentForTypes()` / `loadContentByUid()` — content is never fetched from disk.
 - **Does NOT delete content on disk** — re-enabling the engine brings it back.
 
 ### Per-engine overrides

@@ -36,6 +36,8 @@ import {
 let hasWarnedAboutRemoteFallback = false;
 let remoteContentUnavailable = false;
 
+export { fetchWithLocalFallback as fetchWithLocalFallback };
+
 async function fetchWithLocalFallback(primaryUrl: string, fallbackUrl: string): Promise<Response> {
   // Respect HTTP cache headers so revisiting a hub does not re-download its
   // manifest or pack files. clearContentCache() remains the explicit refresh.
@@ -268,42 +270,46 @@ function buildContent(node: ContentTreeNode, data: Record<string, unknown[]>, ef
  * Walk all category manifests and load all leaf content.
  * Returns both flat items list and per-category trees.
  */
-export async function loadAllContent(): Promise<{
+/**
+ * Load the category manifests (trees) for every enabled engine, keyed by
+ * engine type. Library articles are .md files loaded via articles.ts, not
+ * JSON, so they are excluded. No content files are fetched — hub views can
+ * paint entries from the manifest alone (titles, itemCount, lang).
+ */
+export async function loadCategoryTrees(): Promise<Record<string, ContentTreeNode[]>> {
+  await loadConfig();
+  const trees: Record<string, ContentTreeNode[]> = {};
+  for (const type of enabledEngines().filter((t) => t !== "library")) {
+    const folder = categoryFolder(type);
+    if (!folder) continue;
+    try {
+      // Multi-type folders (qbank hosts quiz/bank/written) map to one
+      // manifest, memoized per folder, so each type shares the tree.
+      trees[type] = await loadManifestTree(folder);
+    } catch {
+      // ignore missing manifests
+    }
+  }
+  return trees;
+}
+
+/**
+ * Load manifests AND leaf content for an explicit set of engine types.
+ * Scoped by the caller (the global search index builds from all enabled
+ * engines, on demand) so no hub render path ever fetches unrelated
+ * categories.
+ */
+export async function loadContentForTypes(types: EngineType[]): Promise<{
   items: Array<{ node: ContentTreeNode; content: AnyContent | null }>;
   trees: Record<string, ContentTreeNode[]>;
 }> {
   await loadConfig();
-  // Filter out disabled engine plugins — only iterate engines enabled in osler.config.
-  // Library articles use .md files loaded via articles.ts, not JSON — skip them here.
-  const types = enabledEngines().filter((t) => t !== "library");
-  const folders = new Set(types.map(categoryFolder));
+  const trees = await loadCategoryTrees();
   const allLeaves: ContentTreeNode[] = [];
-  const trees: Record<string, ContentTreeNode[]> = {};
-
+  const folders = new Set(types.map(categoryFolder).filter(Boolean) as string[]);
   for (const folder of folders) {
     try {
-      const manifestItems = await loadManifestTree(folder);
-
-      // For multi-type folders (qbank hosts quiz, bank, written), store the
-      // same tree under every engine type that maps to this folder so the UI
-      // can look up trees[engineType] for any qbank type.
-      const qbankTypes: Array<"quiz" | "bank" | "written"> = ["quiz", "bank", "written"];
-      if (folder === "qbank") {
-        for (const et of qbankTypes) {
-          if (types.includes(et)) trees[et] = manifestItems;
-        }
-      } else {
-        let engineType: EngineType;
-        if (folder === "flashcard") engineType = "flashcard";
-        else if (folder === "osce") engineType = "osce";
-        else if (folder === "videos") engineType = "video";
-        else if (folder === "library") engineType = "library";
-        else engineType = "quiz";
-        trees[engineType] = manifestItems;
-      }
-
-      const leaves = flattenTree(manifestItems);
-      allLeaves.push(...leaves);
+      allLeaves.push(...flattenTree(await loadManifestTree(folder)));
     } catch {
       // ignore missing manifests
     }

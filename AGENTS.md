@@ -547,10 +547,11 @@ The UI language selector and the content-language filter both derive their optio
 
 - `loadCategoryTree(type)` — loads the tree for a category (from `manifest.json`)
 - `loadNodeContent(node)` — fetches and merges all JSON files in a leaf node
-- `loadAllContent()` — loads all content across all categories, returns `{ items, trees }`
+- `loadCategoryTrees()` — loads all enabled category manifests (no content), keyed by engine type
+- `loadContentForTypes(types)` — loads manifests + leaf content for an explicit set of engine types
 - `loadContentByUid(uid)` — loads a single content pack by UID
 - `flattenTree(node)` — flattens a tree node into an array of leaf nodes
-- `useContentTree(options?)` — React hook wrapping `loadAllContent` with helpers: `collectLeafUids`, `mergeCards`, `nodeCardCount`, `nodeDueCount`
+- `useContentTree(options?)` — React hook for flashcards: paints the hub from the manifest, warms leaf content in the background, exposes `ensureLoaded(node)`; helpers: `collectLeafUids`, `mergeCards`, `nodeCardCount`, `nodeDueCount`
 - All content is JSON fetched from `/osler-content/`
 - Library articles are Markdown (.md) files rendered to HTML via `unified`/`remark`/`rehype` pipeline at runtime
 
@@ -640,7 +641,7 @@ The 7 engine types (`quiz | bank | written | flashcard | osce | library | video`
 are each treated as a toggleable plugin. Disabling an engine:
 
 - Hides its module from the Learn hub (`learn.tsx` filters `ALL_MODULES` by `isEngineEnabled`).
-- Skips its category in `loadAllContent()` / `loadContentByUid()` — content is
+- Skips its category in `loadCategoryTrees()` / `loadContentForTypes()` / `loadContentByUid()` — content is
   never fetched from disk.
 - Does NOT delete content on disk — re-enabling the engine brings it back.
 

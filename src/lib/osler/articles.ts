@@ -5,8 +5,8 @@ import remarkRehype from "remark-rehype";
 import rehypeRaw from "rehype-raw";
 import rehypeStringify from "rehype-stringify";
 import type { Plugin } from "unified";
-import { loadCategoryTree } from "./content";
-import { contentFileUrl } from "./content-url";
+import { loadCategoryTree, fetchWithLocalFallback } from "./content";
+import { contentFileUrl, localContentUrl } from "./content-url";
 import { loadConfig } from "./config";
 import type { ContentTreeNode, ContentLang } from "./types";
 
@@ -215,7 +215,7 @@ async function loadLeafMeta(node: ContentTreeNode): Promise<ArticleMeta[]> {
       }
 
       if (ext === "html") {
-        const res = await fetch(`${libraryBaseUrl()}${filePath}`, { cache: "no-store" });
+        const res = await fetchWithLocalFallback(contentFileUrl("library", filePath), localContentUrl("library", filePath));
         if (!res.ok) return null;
         const text = await res.text();
         // Extract <title> from HTML if present
@@ -230,7 +230,7 @@ async function loadLeafMeta(node: ContentTreeNode): Promise<ArticleMeta[]> {
       }
 
       // Default: markdown
-      const res = await fetch(`${libraryBaseUrl()}${filePath}`, { cache: "no-store" });
+      const res = await fetchWithLocalFallback(contentFileUrl("library", filePath), localContentUrl("library", filePath));
       if (!res.ok) return null;
       const text = await res.text();
       const { meta } = parseFrontmatter(text);
@@ -247,6 +247,36 @@ async function loadLeafMeta(node: ContentTreeNode): Promise<ArticleMeta[]> {
     })
   );
   return results.filter((r): r is ArticleMeta => r !== null);
+}
+
+/**
+ * Build ArticleMeta[] purely from the manifest tree — slug titles, folder
+ * specialty, no network fetches. Lets the library list paint instantly and
+ * enrich once `listAllArticles()` resolves with real frontmatter metadata.
+ */
+export function articlesFromManifestTree(tree: ContentTreeNode[]): ArticleMeta[] {
+  const result: ArticleMeta[] = [];
+  function walk(nodes: ContentTreeNode[]) {
+    for (const node of nodes) {
+      if (node.items.length === 0 && (node.files?.length ?? 0) > 0) {
+        for (const file of node.files ?? []) {
+          const ext = extOf(file);
+          const slug = file.replace(/\.[a-z0-9]+$/i, "").replace(/-/g, " ");
+          result.push({
+            file: `${node.path}${file}`,
+            title: slug.replace(/\b\w/g, (c) => c.toUpperCase()),
+            specialty: node.title,
+            lang: node.lang ?? "en",
+            contentType: ext === "pdf" || ext === "html" ? ext : "md",
+          });
+        }
+      } else {
+        walk(node.items);
+      }
+    }
+  }
+  walk(tree);
+  return result;
 }
 
 /** Return all articles across all library leaf nodes, with metadata only (no html). */
@@ -283,7 +313,7 @@ export async function loadArticleContent(filePath: string): Promise<Article | nu
   }
 
   if (ext === "html") {
-    const res = await fetch(`${libraryBaseUrl()}${filePath}`, { cache: "no-store" });
+    const res = await fetchWithLocalFallback(contentFileUrl("library", filePath), localContentUrl("library", filePath));
     if (!res.ok) return null;
     const text = await res.text();
     const titleMatch = text.match(/<title[^>]*>([^<]+)<\/title>/i);
@@ -299,7 +329,7 @@ export async function loadArticleContent(filePath: string): Promise<Article | nu
   }
 
   // Default: markdown
-  const res = await fetch(`${libraryBaseUrl()}${filePath}`, { cache: "no-store" });
+  const res = await fetchWithLocalFallback(contentFileUrl("library", filePath), localContentUrl("library", filePath));
   if (!res.ok) return null;
   const text = await res.text();
   const { meta, body } = parseFrontmatter(text);

@@ -100,7 +100,6 @@ export function VideosStudio({
   const [selectedNodeUid, setSelectedNodeUid] = React.useState<string | null>(null);
   const [folderVideos, setFolderVideos] = React.useState<VideoResource[]>([]);
   const [folderLoading, setFolderLoading] = React.useState(false);
-  const [allVideos, setAllVideos] = React.useState<Array<VideoResource & { nodeUid: string; nodePath: string }>>([]);
 
   // The active video being played (or null = hub view).
   const [activeVideo, setActiveVideo] = React.useState<(VideoResource & { nodeUid: string; nodePath: string }) | null>(null);
@@ -121,16 +120,12 @@ export function VideosStudio({
     disabled: !!activeVideo,
   });
 
-  /* ── Load tree + all videos ── */
+  /* ── Load tree (manifest) only — folder videos load on demand ── */
   React.useEffect(() => {
     (async () => {
       try {
-        const [treeData, all] = await Promise.all([
-          loadVideoTree(),
-          listAllVideos(),
-        ]);
+        const treeData = await loadVideoTree();
         setTree(treeData);
-        setAllVideos(all);
         // Auto-select the first leaf folder so the right pane isn't empty.
         const firstLeaf = findFirstLeaf(treeData);
         if (firstLeaf) setSelectedNodeUid(firstLeaf.uid);
@@ -172,14 +167,22 @@ export function VideosStudio({
       .finally(() => setFolderLoading(false));
   }, [selectedNodeUid, tree, contentFilter]);
 
-  // Open initial video if provided.
+  // Open initial video if provided — resolve it from the folder lists on
+  // demand (the hub itself never fetches every video up front).
   React.useEffect(() => {
-    if (!initialVideoId || allVideos.length === 0) return;
-    const found = allVideos.find((v) => v.id === initialVideoId);
-    if (found) {
-      openVideo(found);
-    }
-  }, [initialVideoId, allVideos]);
+    if (!initialVideoId) return;
+    let cancelled = false;
+    listAllVideos()
+      .then((all) => {
+        if (cancelled) return;
+        const found = all.find((v) => v.id === initialVideoId);
+        if (found) openVideo(found);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [initialVideoId]);
 
   // Hide the global mobile tab bar while a video is playing.
   React.useEffect(() => {

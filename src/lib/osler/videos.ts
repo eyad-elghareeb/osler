@@ -11,8 +11,8 @@
  *  - Same content-resolving logic as flashcards / OSCE / library
  */
 
-import { loadCategoryTree, flattenTree } from "./content";
-import { contentFileUrl } from "./content-url";
+import { loadCategoryTree, flattenTree, fetchWithLocalFallback } from "./content";
+import { contentFileUrl, localContentUrl } from "./content-url";
 import { loadConfig } from "./config";
 import type {
   ContentTreeNode,
@@ -59,7 +59,7 @@ export async function loadNodeVideos(node: ContentTreeNode): Promise<VideoResour
   const files = node.files ?? [];
   const results = await Promise.all(
     files.map(async (file) => {
-      const res = await fetch(videoFileUrl(`${node.path}${file}`), { cache: "no-store" });
+      const res = await fetchWithLocalFallback(videoFileUrl(`${node.path}${file}`), localContentUrl("videos", `${node.path}${file}`));
       if (!res.ok) return [] as VideoResource[];
       const data = (await res.json()) as { videos?: VideoResource[] };
       return Array.isArray(data.videos) ? data.videos : [];

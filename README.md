@@ -377,7 +377,8 @@ Content organized into category folders under `public/osler-content/`:
 |----------|-------------|
 | `loadCategoryTree(type)` | Loads tree for a category from `manifest.json` |
 | `loadNodeContent(node)` | Fetches + merges all JSON files in a leaf node |
-| `loadAllContent()` | Loads all content across categories → `{ items, trees }` |
+| `loadCategoryTrees()` | Loads all enabled category manifests (no content), keyed by engine type |
+| `loadContentForTypes(types)` | Loads manifests + leaf content for an explicit set of engine types |
 | `loadContentByUid(uid)` | Loads single content pack by UID |
 | `flattenTree(node)` | Flattens tree into leaf node array |
 | `useContentTree(options?)` | React hook with tree query helpers |

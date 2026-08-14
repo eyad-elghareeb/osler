@@ -29,6 +29,7 @@ import {
   loadArticleTree,
   loadArticleContent,
   listAllArticles,
+  articlesFromManifestTree,
   type ArticleMeta,
   type Article,
 } from "@/lib/osler/articles";
@@ -113,20 +114,20 @@ export function Library({ initialArticleId, onNavigateBack: propOnNavigateBack }
     enabled: true,
   });
 
-  // Load tree and all articles
+  // Paint the folder tree from the manifest immediately; article metadata
+  // (titles, read times) enriches the file list in the background.
   React.useEffect(() => {
-    (async () => {
-      try {
-        const [treeData, articleData] = await Promise.all([
-          loadArticleTree(),
-          listAllArticles(),
-        ]);
+    loadArticleTree()
+      .then((treeData) => {
         setTree(treeData);
-        setAllArticles(articleData);
-      } catch (e) {
-        console.error("Failed to load article data:", e);
-      }
-    })();
+        // Seed the list from the manifest so it paints instantly, then the
+        // background metadata load replaces it with real frontmatter titles.
+        setAllArticles(articlesFromManifestTree(treeData));
+      })
+      .catch((e) => console.error("Failed to load article tree:", e));
+    listAllArticles()
+      .then(setAllArticles)
+      .catch((e) => console.error("Failed to load article metadata:", e));
   }, []);
 
   // Enrich tree: turn leaf nodes with files into branch nodes with virtual children

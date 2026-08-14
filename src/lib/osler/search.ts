@@ -18,7 +18,8 @@
  */
 
 import { listAllArticles, type ArticleMeta } from "@/lib/osler/articles";
-import { loadAllContent, ENGINE_META } from "@/lib/osler/content";
+import { loadContentForTypes, ENGINE_META } from "@/lib/osler/content";
+import { loadConfig, enabledEngines } from "@/lib/osler/config";
 import { listAllVideos } from "@/lib/osler/videos";
 import { countQuestions } from "@/lib/osler/qbank-pool";
 import type {
@@ -120,9 +121,11 @@ async function buildIndex(): Promise<SearchResult[]> {
     // ignore — search just yields fewer articles
   }
 
-  // Content packs (quiz / bank / written / flashcard / osce)
+  // Content packs (quiz / bank / written / flashcard / osce) — scoped to the
+  // enabled engines; this runs lazily when the search index is first built.
   try {
-    const { items } = await loadAllContent();
+    await loadConfig();
+    const { items } = await loadContentForTypes(enabledEngines().filter((t) => t !== "library"));
     for (const { node, content } of items) {
       const r = packResult(node, content);
       if (r) out.push(r);

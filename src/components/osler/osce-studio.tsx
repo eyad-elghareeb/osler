@@ -30,7 +30,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { loadAllContent, loadContentByUid, packBasePath } from "@/lib/osler/content";
+import { loadCategoryTree, loadContentByUid, flattenTree, packBasePath } from "@/lib/osler/content";
 import type {
   AnyContent,
   ContentTreeNode,
@@ -698,7 +698,7 @@ export function OsceStudio({
   const { t, rtl, contentFilter } = useI18n();
 
   /* ── State ── */
-  const [allPacks, setAllPacks] = React.useState<Array<{ node: ContentTreeNode; content: OsceContent }>>([]);
+  const [allPacks, setAllPacks] = React.useState<Array<{ node: ContentTreeNode; content: OsceContent | null }>>([]);
   const [packsLoading, setPacksLoading] = React.useState(true);
   const [stations, setStations] = React.useState<OsceStation[]>([]);
   const [activeIdx, setActiveIdx] = React.useState(0);
@@ -783,21 +783,28 @@ export function OsceStudio({
     transcriptRef.current = transcript;
   }, [transcript]);
 
-  /* Load all OSCE packs */
+  /* Paint the OSCE hub from the manifest, warm pack content in the background */
   React.useEffect(() => {
     setPacksLoading(true);
-    loadAllContent()
-      .then(({ items }) => {
-        const oscePacks: Array<{ node: ContentTreeNode; content: OsceContent }> = [];
-        for (const { node, content } of items) {
-          if (content?.type === "osce") {
-            oscePacks.push({ node, content: content as OsceContent });
+    loadCategoryTree("osce")
+      .then(async (nodes) => {
+        setAllPacks(nodes.map((node) => ({ node, content: null })));
+        setPacksLoading(false);
+        for (const leaf of flattenTree(nodes)) {
+          try {
+            const content = await loadContentByUid(leaf.uid, "osce");
+            if (content.type !== "osce") continue;
+            setAllPacks((prev) =>
+              prev.map((p) =>
+                p.node.uid === leaf.uid ? { ...p, content: content as OsceContent } : p,
+              ),
+            );
+          } catch {
+            // leave the pack manifest-only — description/tags just stay hidden
           }
         }
-        setAllPacks(oscePacks);
       })
-      .catch(() => {})
-      .finally(() => setPacksLoading(false));
+      .catch(() => setPacksLoading(false));
   }, []);
 
   /* Self-load a pack from the uid segment so the studio stays mounted */
@@ -1328,8 +1335,21 @@ export function OsceStudio({
 
   /* ── Phase: Select (Scenario Picker) ──────────────────────── */
 
-  function selectPack(pack: { node: ContentTreeNode; content: OsceContent }) {
-    const normalized = pack.content.stations.map((s, i) =>
+  async function selectPack(pack: { node: ContentTreeNode; content: OsceContent | null }) {
+    let content = pack.content;
+    if (!content) {
+      try {
+        const loaded = await loadContentByUid(pack.node.uid, "osce");
+        content = loaded.type === "osce" ? (loaded as OsceContent) : null;
+      } catch {
+        content = null;
+      }
+      if (!content) return;
+      setAllPacks((prev) =>
+        prev.map((p) => (p.node.uid === pack.node.uid ? { ...p, content } : p)),
+      );
+    }
+    const normalized = content.stations.map((s, i) =>
       normalizeStation(s as unknown as Record<string, unknown>, i)
     );
     setStations(normalized);
@@ -1346,7 +1366,7 @@ export function OsceStudio({
     return contentFilter === "all"
       ? allPacks
       : allPacks.filter(({ node, content }) =>
-          (node.lang ?? content.meta.lang ?? "en") === contentFilter
+          (node.lang ?? content?.meta.lang ?? "en") === contentFilter
         );
   }, [allPacks, contentFilter]);
 
@@ -1420,8 +1440,8 @@ export function OsceStudio({
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {filteredPacks.map(({ node, content }, idx) => {
-                  const stationCount = content.stations?.length || 0;
-                  const tags = content.meta.tags?.slice(0, 4) || [];
+                  const stationCount = content?.stations?.length || node.itemCount || 0;
+                  const tags = content?.meta.tags?.slice(0, 4) || [];
                   // Per-pack content URLs for the offline download button.
                   const packBase = packBasePath(node);
                   const packUrls = (node.files ?? []).map((f) => `${packBase}${f}`);
@@ -1436,19 +1456,19 @@ export function OsceStudio({
                       <div
                         role="button"
                         tabIndex={0}
-                        onClick={() => selectPack({ node, content })}
+                        onClick={() => void selectPack({ node, content })}
                         onKeyDown={(e) => {
                           if (e.key === "Enter" || e.key === " ") {
                             e.preventDefault();
-                            selectPack({ node, content });
+                            void selectPack({ node, content });
                           }
                         }}
                         className={cn(
                           "w-full text-start group relative overflow-hidden bg-card border border-border rounded-xl p-5 hover:border-primary/40 hover:shadow-md transition-all duration-200 active:scale-[0.99] cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
-                          (node.lang ?? content.meta.lang) === "ar" && "osler-content-ar",
+                          (node.lang ?? content?.meta.lang) === "ar" && "osler-content-ar",
                         )}
-                        dir={(node.lang ?? content.meta.lang) === "ar" ? "rtl" : undefined}
-                        lang={node.lang ?? content.meta.lang ?? undefined}
+                        dir={(node.lang ?? content?.meta.lang) === "ar" ? "rtl" : undefined}
+                        lang={node.lang ?? content?.meta.lang ?? undefined}
                       >
                         {/* Top accent line */}
                         <div className="absolute top-0 left-0 right-0 h-0.5 bg-gradient-to-r from-primary/60 to-primary/20 opacity-0 group-hover:opacity-100 transition-opacity" />
@@ -1469,7 +1489,7 @@ export function OsceStudio({
                         <h3 className="font-semibold text-sm mb-1 group-hover:text-primary transition-colors leading-snug">
                           {node.title}
                         </h3>
-                        {content.meta.description && (
+                        {content?.meta.description && (
                           <p className="text-xs text-muted-foreground line-clamp-2 mb-3 leading-relaxed">
                             {content.meta.description}
                           </p>
