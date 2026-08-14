@@ -22,13 +22,13 @@ import {
   X as XIcon,
   GraduationCap,
 } from "lucide-react";
-import { ENGINE_META, packBasePath } from "@/lib/osler/content";
+import { useRouter } from "next/navigation";
+import { ENGINE_META, loadContentByUid, packBasePath } from "@/lib/osler/content";
 import { contentFileUrl } from "@/lib/osler/content-url";
 import type {
   FlashcardContent,
   FlashcardSubdeck,
   ContentTreeNode,
-  AnyContent,
   Flashcard,
   FlashcardImage,
 } from "@/lib/osler/types";
@@ -47,13 +47,12 @@ import { EmptyState } from "./ui-primitives";
 import { ContentLangFilter } from "./qbank-studio";
 import { NavigationStack } from "./navigation-stack";
 import { useSwipeBackDismiss } from "@/hooks/use-swipe-back-dismiss";
-import { useOslerRouter } from "@/lib/osler/navigation";
+import { useOslerRouter, routeFor } from "@/lib/osler/navigation";
 
 type ViewMode = "decks" | "subdecks" | "study" | "complete";
 
 interface FlashcardStudioProps {
-  activeItem?: ContentTreeNode | null;
-  activeContent?: AnyContent | null;
+  uid?: string | null;
   onExit?: () => void;
   onOpenPack?: (item: ContentTreeNode) => void;
   onNavigateHome?: () => void;
@@ -313,14 +312,14 @@ function expandCards(cards: Flashcard[]): StudyCard[] {
 }
 
 export function FlashcardStudio({
-  activeItem,
-  activeContent,
+  uid,
   onExit: propOnExit,
   onOpenPack: propOnOpenPack,
   onNavigateHome: propOnNavigateHome,
   onNavigateBack: propOnNavigateBack,
 }: FlashcardStudioProps = {}) {
   const { navigate } = useOslerRouter();
+  const router = useRouter();
   const onExit = propOnExit || (() => navigate("flashcards"));
   const onOpenPack = propOnOpenPack || ((item: ContentTreeNode) => navigate("flashcards", { uid: item.uid }));
   const onNavigateHome = propOnNavigateHome || (() => navigate("dashboard"));
@@ -339,6 +338,37 @@ export function FlashcardStudio({
   const tree = trees.flashcard ?? [];
 
   const [mode, setMode] = React.useState<ViewMode>("decks");
+
+  /* Validate a deep-linked deck so the studio stays mounted on a bad uid */
+  const [deepLinkError, setDeepLinkError] = React.useState(false);
+  React.useEffect(() => {
+    if (!uid) {
+      setDeepLinkError(false);
+      return;
+    }
+    let cancelled = false;
+    setDeepLinkError(false);
+    loadContentByUid(uid, "flashcard")
+      .then((loaded) => {
+        if (cancelled) return;
+        if (loaded.type === "osce") {
+          router.replace(routeFor("osce", { uid }));
+          return;
+        }
+        if (loaded.type !== "flashcard") {
+          router.replace(routeFor("qbank", { uid }));
+          return;
+        }
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        console.error("Failed to load flashcard deck:", err);
+        setDeepLinkError(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [uid, router]);
 
   // Hide the global mobile tab bar while actively studying flashcards
   React.useEffect(() => {
@@ -958,6 +988,25 @@ export function FlashcardStudio({
   );
 
   /* ── Complete view ──────────────────────────────────────────────── */
+  if (deepLinkError && uid) {
+    return (
+      <div className="osler-page">
+        <div className="osler-page__inner flex items-center">
+          <EmptyState
+            icon={Layers}
+            title={t("empty.flashcard.title")}
+            description={t("empty.flashcard.description")}
+            actions={
+              <Button variant="outline" onClick={() => navigate("flashcards")}>
+                {t("empty.flashcard.back")}
+              </Button>
+            }
+          />
+        </div>
+      </div>
+    );
+  }
+
   if (mode === "complete" && currentDeck) {
     return (
       <div className="h-full overflow-y-auto medos-scroll">

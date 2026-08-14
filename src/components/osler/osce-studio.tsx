@@ -29,7 +29,8 @@ import {
   Play,
   type LucideIcon,
 } from "lucide-react";
-import { loadAllContent, packBasePath } from "@/lib/osler/content";
+import { useRouter } from "next/navigation";
+import { loadAllContent, loadContentByUid, packBasePath } from "@/lib/osler/content";
 import type {
   AnyContent,
   ContentTreeNode,
@@ -47,7 +48,8 @@ import { useIsMobile } from "@/hooks/use-mobile";
 import { useLightbox } from "./lightbox-provider";
 import { setImmersiveMode } from "./immersive-mode";
 import { useI18n } from "./i18n-provider";
-import { HubSkeleton } from "./ui-primitives";
+import { HubSkeleton, EmptyState } from "./ui-primitives";
+import { Button } from "@/components/ui/button";
 import { ContentCacheButton } from "./content-cache-button";
 import { ContentLangFilter } from "./qbank-studio";
 import { useSwipeBackDismiss } from "@/hooks/use-swipe-back-dismiss";
@@ -555,15 +557,23 @@ interface SpeechRecognitionAlternative {
 
 /* ── Component Props ───────────────────────────────────────────────── */
 
-import { useOslerRouter } from "@/lib/osler/navigation";
+import { useOslerRouter, routeFor } from "@/lib/osler/navigation";
 
 interface OsceStudioProps {
+  uid?: string | null;
   activeItem?: ContentTreeNode | null;
   activeContent?: OsceContent | null;
   onExit?: () => void;
   onOpenPack?: (item: ContentTreeNode) => void;
   /** Called when the user swipes back to navigate to the Learn hub. */
   onNavigateBack?: () => void;
+}
+
+function nodeFromPack(item: ContentTreeNode, content: AnyContent) {
+  return {
+    item: { uid: item.uid, type: item.type, title: item.title, path: item.path } as ContentTreeNode,
+    content: content as OsceContent,
+  };
 }
 
 /* ── Achievements Builder ──────────────────────────────────────────── */
@@ -672,13 +682,15 @@ function getSpeakerGender(c: OsceStation): string {
 /* ── OSCE Studio Component ───────────────────────────────────────── */
 
 export function OsceStudio({
-  activeItem,
-  activeContent,
+  uid,
+  activeItem: activeItemProp,
+  activeContent: activeContentProp,
   onExit: propOnExit,
   onOpenPack: propOnOpenPack,
   onNavigateBack: propOnNavigateBack,
 }: OsceStudioProps = {}) {
   const { navigate } = useOslerRouter();
+  const router = useRouter();
   const onExit = propOnExit || (() => navigate("osce"));
   const onOpenPack = propOnOpenPack || ((item: ContentTreeNode) => navigate("osce", { uid: item.uid }));
   const onNavigateBack = propOnNavigateBack || (() => navigate("learn"));
@@ -787,6 +799,43 @@ export function OsceStudio({
       .catch(() => {})
       .finally(() => setPacksLoading(false));
   }, []);
+
+  /* Self-load a pack from the uid segment so the studio stays mounted */
+  const [selfPack, setSelfPack] = React.useState<ReturnType<typeof nodeFromPack> | null>(null);
+  const [selfPackError, setSelfPackError] = React.useState(false);
+  React.useEffect(() => {
+    if (!uid || activeItemProp || activeContentProp) {
+      setSelfPack(null);
+      setSelfPackError(false);
+      return;
+    }
+    let cancelled = false;
+    setSelfPackError(false);
+    loadContentByUid(uid, "osce")
+      .then((loaded) => {
+        if (cancelled) return;
+        if (loaded.type === "flashcard") {
+          router.replace(routeFor("flashcards", { uid }));
+          return;
+        }
+        if (loaded.type !== "osce") {
+          router.replace(routeFor("qbank", { uid }));
+          return;
+        }
+        setSelfPack(nodeFromPack({ uid, type: "osce", title: loaded.meta?.title || uid, path: "" } as ContentTreeNode, loaded));
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        console.error("Failed to load OSCE pack:", err);
+        setSelfPackError(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [uid, router]);
+
+  const activeItem = activeItemProp ?? (selfPack?.item ?? null);
+  const activeContent = activeContentProp ?? (selfPack?.content ?? null);
 
   /* If a pack is injected from outside (library/dashboard), go straight to lobby */
   React.useEffect(() => {
@@ -1300,6 +1349,25 @@ export function OsceStudio({
           (node.lang ?? content.meta.lang ?? "en") === contentFilter
         );
   }, [allPacks, contentFilter]);
+
+  if (selfPackError && uid) {
+    return (
+      <div className="osler-page">
+        <div className="osler-page__inner flex items-center">
+          <EmptyState
+            icon={Stethoscope}
+            title={t("empty.osce.title")}
+            description={t("empty.osce.description")}
+            actions={
+              <Button variant="outline" onClick={() => navigate("osce")}>
+                {t("empty.osce.back")}
+              </Button>
+            }
+          />
+        </div>
+      </div>
+    );
+  }
 
   if (phase === "select") {
     return (
