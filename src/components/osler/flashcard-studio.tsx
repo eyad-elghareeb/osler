@@ -333,6 +333,7 @@ export function FlashcardStudio({
     mergeCards,
     nodeCardCount,
     nodeDueCount,
+    ensureLoaded,
   } = useContentTree({ types: ["flashcard"] });
 
   const tree = trees.flashcard ?? [];
@@ -475,23 +476,25 @@ export function FlashcardStudio({
     setMode("study");
   }
 
-  function startDeck(deckIdx: number) {
+  async function startDeck(deckIdx: number) {
     setDeckIndex(deckIdx);
     setActiveSubdeckId(null);
     const node = tree[deckIdx];
     if (!node) return;
+    await ensureLoaded(node);
     const cards = mergeCards(collectLeafUids(node));
     if (cards.length === 0) return;
     startSession(cards, node.uid);
   }
 
-  function startSubdeck(deckIdx: number, subdeckUid: string) {
+  async function startSubdeck(deckIdx: number, subdeckUid: string) {
     setDeckIndex(deckIdx);
     setActiveSubdeckId(subdeckUid);
     const node = tree[deckIdx];
     if (!node) return;
     const child = node.items.find((c) => c.uid === subdeckUid);
     if (!child) return;
+    await ensureLoaded(child);
     const cards = mergeCards(collectLeafUids(child));
     if (cards.length === 0) return;
     startSession(cards, child.uid);
@@ -573,9 +576,9 @@ export function FlashcardStudio({
   function restartDeck() {
     if (!currentDeck) return;
     if (activeSubdeckId) {
-      startSubdeck(deckIndex, activeSubdeckId);
+      void startSubdeck(deckIndex, activeSubdeckId);
     } else {
-      startDeck(deckIndex);
+      void startDeck(deckIndex);
     }
   }
 
@@ -714,9 +717,11 @@ export function FlashcardStudio({
     );
   };
 
-  function openSubdecks(deckIdx: number) {
+  async function openSubdecks(deckIdx: number) {
     setDeckIndex(deckIdx);
     setMode("subdecks");
+    const node = tree[deckIdx];
+    if (node) await ensureLoaded(node);
   }
 
   function backToDecks() {
@@ -739,8 +744,9 @@ export function FlashcardStudio({
     setSessionResults([]);
   }
 
-  function exportToAnki() {
+  async function exportToAnki() {
     if (!currentDeck) return;
+    await ensureLoaded(currentDeck);
     haptic("success");
     const cards = mergeCards(collectLeafUids(currentDeck));
     const title = currentDeck.title;
@@ -911,16 +917,16 @@ export function FlashcardStudio({
                   tabIndex={0}
                   onClick={() => {
                     if (isBranch) {
-                      openSubdecks(idx);
+                      void openSubdecks(idx);
                     } else {
-                      startDeck(idx);
+                      void startDeck(idx);
                     }
                   }}
                   onKeyDown={(e) => {
                     if (e.key === "Enter" || e.key === " ") {
                       e.preventDefault();
-                      if (isBranch) openSubdecks(idx);
-                      else startDeck(idx);
+                      if (isBranch) void openSubdecks(idx);
+                      else void startDeck(idx);
                     }
                   }}
                   className={cn(
@@ -1287,14 +1293,14 @@ export function FlashcardStudio({
             {/* Study All + Export buttons */}
             <div className="flex items-center gap-2 mb-6">
               <button
-                onClick={() => startDeck(deckIndex)}
+                onClick={() => void startDeck(deckIndex)}
                 className="h-10 px-4 rounded-xl bg-primary text-primary-foreground font-medium text-sm hover:bg-primary/90 transition-colors flex items-center gap-2"
               >
                 <GraduationCap className="size-4" />
                 {t("flash.home.studyAll")}
               </button>
-              <button
-                onClick={exportToAnki}
+<button
+                    onClick={() => void exportToAnki()}
                 className="h-10 px-4 rounded-xl border border-border text-foreground font-medium text-sm hover:bg-muted/60 transition-colors flex items-center gap-2"
               >
                 <Download className="size-4" />
@@ -1315,9 +1321,9 @@ export function FlashcardStudio({
                       if (isBranch) {
                         /* drill deeper — open this branch in subdecks view */
                         const idx = tree.indexOf(currentDeck); // won't work for nested
-                        startDeck(deckIndex); // start session with merged cards for now
+                        void startDeck(deckIndex); // start session with merged cards for now
                       } else {
-                        startSubdeck(deckIndex, child.uid);
+                        void startSubdeck(deckIndex, child.uid);
                       }
                     }}
                     className="medos-fade-in text-left bg-card border border-border rounded-xl p-5 hover:border-primary/40 hover:shadow-md hover:bg-primary/[0.02] transition-colors group"

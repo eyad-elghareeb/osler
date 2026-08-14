@@ -1,7 +1,8 @@
 "use client";
 
 import * as React from "react";
-import { loadAllContent, loadCategoryTree, loadNodeContent } from "@/lib/osler/content";
+import { loadCategoryTree, loadContentByUid, flattenTree as flattenContentTree } from "@/lib/osler/content";
+import { loadConfig, enabledEngines } from "@/lib/osler/config";
 import type {
   ContentTreeNode,
   AnyContent,
@@ -13,7 +14,7 @@ import { flashcardReview } from "@/lib/osler/storage";
 type LeafItem = { node: ContentTreeNode; content: AnyContent | null };
 
 interface UseContentTreeOptions {
-  /** Only load these engine types (default: all) */
+  /** Only load these engine types (default: all enabled engines) */
   types?: EngineType[];
 }
 
@@ -24,8 +25,15 @@ interface UseContentTreeResult {
   items: LeafItem[];
   /** Map from uid to leaf content */
   leafContent: Map<string, AnyContent>;
-  /** True while initial load is in progress */
+  /** True while the category manifests are loading */
   loading: boolean;
+
+  /**
+   * Ensure all leaf content under a node is loaded (fetches on demand when
+   * the background warm-load has not reached it yet). Resolves once the
+   * node's cards are available in `leafContent`.
+   */
+  ensureLoaded(node: ContentTreeNode): Promise<void>;
 
   /** Collect all leaf uids under a tree node */
   collectLeafUids(node: ContentTreeNode): string[];
@@ -45,33 +53,75 @@ interface UseContentTreeResult {
 
 export function useContentTree(options?: UseContentTreeOptions): UseContentTreeResult {
   const [trees, setTrees] = React.useState<Record<string, ContentTreeNode[]>>({});
-  const [items, setItems] = React.useState<LeafItem[]>([]);
   const [leafContent, setLeafContent] = React.useState<Map<string, AnyContent>>(new Map());
   const [loading, setLoading] = React.useState(true);
+
+  const typesKey = options?.types?.join(",") ?? "all";
+  const types = React.useMemo(
+    () => (options?.types?.length ? options.types : null),
+    [typesKey],
+  );
 
   React.useEffect(() => {
     let cancelled = false;
     setLoading(true);
 
-    loadAllContent()
-      .then((result) => {
-        if (cancelled) return;
-        let allItems = result.items;
-        if (options?.types) {
-          allItems = allItems.filter((entry) => options.types!.includes(entry.node.type as EngineType));
-        }
-        const map = new Map<string, AnyContent>();
-        for (const { node, content } of allItems) {
-          if (content) map.set(node.uid, content);
-        }
-        setTrees(result.trees);
-        setItems(allItems);
-        setLeafContent(map);
-        setLoading(false);
-      })
-      .catch(() => setLoading(false));
-    return () => { cancelled = true; };
-  }, [options?.types?.join(",")]);
+    const run = async () => {
+      await loadConfig();
+      const engineTypes = types ?? enabledEngines().filter((t) => t !== "library");
+      const loaded = await Promise.all(
+        engineTypes.map((type) => loadCategoryTree(type))
+      );
+      if (cancelled) return;
+
+      const nextTrees: Record<string, ContentTreeNode[]> = {};
+      engineTypes.forEach((type, i) => {
+        nextTrees[type] = loaded[i];
+      });
+      setTrees(nextTrees);
+      // Manifest-first: the hub paints from the manifest immediately; the
+      // leaf content below is warmed in the background so due counts, stats
+      // and card data populate progressively instead of blocking first paint.
+      setLoading(false);
+
+      const leaves = engineTypes.flatMap((type) =>
+        flattenContentTree(nextTrees[type] ?? [])
+      );
+      for (const leaf of leaves) {
+        loadContentByUid(leaf.uid, leaf.type)
+          .then((content) => {
+            if (cancelled) return;
+            setLeafContent((prev) => {
+              if (prev.has(leaf.uid)) return prev;
+              const next = new Map(prev);
+              next.set(leaf.uid, content);
+              return next;
+            });
+          })
+          .catch(() => {
+            // Leave unset — ensureLoaded() retries on demand.
+          });
+      }
+    };
+
+    run().catch(() => {
+      if (!cancelled) setLoading(false);
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [typesKey, types]);
+
+  const items = React.useMemo<LeafItem[]>(() => {
+    const list: LeafItem[] = [];
+    for (const nodes of Object.values(trees)) {
+      for (const leaf of flattenContentTree(nodes)) {
+        list.push({ node: leaf, content: leafContent.get(leaf.uid) ?? null });
+      }
+    }
+    return list;
+  }, [trees, leafContent]);
 
   function collectLeafUids(node: ContentTreeNode): string[] {
     if (node.items.length === 0) return [node.uid];
@@ -90,6 +140,9 @@ export function useContentTree(options?: UseContentTreeOptions): UseContentTreeR
   }
 
   function nodeCardCount(node: ContentTreeNode): number {
+    // Manifest itemCount is authoritative for counts and avoids waiting on
+    // card content — falls back to content-derived count once loaded.
+    if (typeof node.itemCount === "number" && node.itemCount > 0) return node.itemCount;
     return mergeCards(collectLeafUids(node)).length;
   }
 
@@ -118,11 +171,38 @@ export function useContentTree(options?: UseContentTreeOptions): UseContentTreeR
     return leaves;
   }
 
+  async function ensureLoaded(node: ContentTreeNode): Promise<void> {
+    const leaves: ContentTreeNode[] = [];
+    const walk = (n: ContentTreeNode) => {
+      if (n.items.length === 0) leaves.push(n);
+      else n.items.forEach(walk);
+    };
+    walk(node);
+
+    await Promise.all(
+      leaves.map(async (leaf) => {
+        if (leafContent.get(leaf.uid)) return;
+        try {
+          const content = await loadContentByUid(leaf.uid, leaf.type);
+          setLeafContent((prev) => {
+            if (prev.has(leaf.uid)) return prev;
+            const next = new Map(prev);
+            next.set(leaf.uid, content);
+            return next;
+          });
+        } catch {
+          // Content genuinely missing — mergeCards simply yields no cards.
+        }
+      })
+    );
+  }
+
   return {
     trees,
     items,
     leafContent,
     loading,
+    ensureLoaded,
     collectLeafUids,
     mergeCards,
     nodeCardCount,
