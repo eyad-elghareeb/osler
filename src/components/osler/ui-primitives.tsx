@@ -42,6 +42,8 @@ import {
 import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/lib/utils";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Button } from "@/components/ui/button";
+import { easeOut, fadeUp, staggerContainer, pressFeedback } from "@/lib/osler/motion";
 
 /* ─── PageHeader ─────────────────────────────────────────────────────── */
 
@@ -129,26 +131,68 @@ interface SectionHeadingProps {
   children: React.ReactNode;
   /** Optional right-aligned actions (e.g. "View all" link). */
   actions?: React.ReactNode;
+  /** Optional numbered circle (1, 2, 3…) shown before the label. Renders a
+   *  small `size-5 rounded-full bg-primary/10 text-primary` chip. Use for
+   *  stepped flows where the order matters (Create Test, onboarding). */
+  number?: number;
+  /** Optional muted description shown below the label. */
+  description?: React.ReactNode;
   className?: string;
 }
 
-export function SectionHeading({ icon: Icon, children, actions, className }: SectionHeadingProps) {
+export function SectionHeading({ icon: Icon, children, actions, number, description, className }: SectionHeadingProps) {
+  const label = (
+    <h2 className="osler-section-heading mb-0 flex items-center gap-2">
+      {typeof number === "number" && (
+        <span className="inline-flex size-5 items-center justify-center rounded-full bg-primary/10 text-[11px] font-bold tabular-nums text-primary shrink-0">
+          {number}
+        </span>
+      )}
+      {Icon && <Icon className="size-4" />}
+      <span>{children}</span>
+    </h2>
+  );
+  const block = description ? (
+    <div>
+      {label}
+      <p className="text-xs text-muted-foreground mt-1">{description}</p>
+    </div>
+  ) : label;
+
   if (actions) {
     return (
-      <div className={cn("flex items-center justify-between mb-3", className)}>
-        <h2 className="osler-section-heading mb-0 flex items-center gap-2">
-          {Icon && <Icon className="size-4" />}
-          {children}
-        </h2>
+      <div className={cn("flex items-center justify-between mb-3 gap-3", className)}>
+        {block}
         {actions}
       </div>
     );
   }
   return (
-    <h2 className={cn("osler-section-heading flex items-center gap-2", className)}>
-      {Icon && <Icon className="size-4" />}
+    <div className={cn(description ? "mb-3" : void 0, className)}>
+      {block}
+    </div>
+  );
+}
+
+/* ─── SectionLabel ────────────────────────────────────────────────────
+ * Tiny uppercase label used inside cards/dialogs where a full SectionHeading
+ * is too heavy. Replaces ad-hoc `<div className="mb-2 flex items-center gap-1.5
+ * text-xs font-semibold uppercase tracking-wider text-muted-foreground">`
+ * strings scattered across the app.
+ */
+
+interface SectionLabelProps {
+  icon?: LucideIcon;
+  children: React.ReactNode;
+  className?: string;
+}
+
+export function SectionLabel({ icon: Icon, children, className }: SectionLabelProps) {
+  return (
+    <div className={cn("mb-2 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground", className)}>
+      {Icon && <Icon className="size-3.5 text-primary" />}
       {children}
-    </h2>
+    </div>
   );
 }
 
@@ -308,7 +352,7 @@ export function StatTile({
         <span className="osler-stat-tile__label">{label}</span>
         {Icon && <Icon className={cn("size-4", STAT_TILE_COLOR[color])} />}
       </div>
-      <div className="flex flex-wrap items-end justify-between gap-2">
+      <div className="osler-stat-tile__row">
         <div className="osler-stat-tile__value">{value}</div>
         {trend && <div className="shrink-0 pb-0.5">{trend}</div>}
       </div>
@@ -1022,5 +1066,283 @@ export function HubSkeleton({
         </div>
       </div>
     </div>
+  );
+}
+
+/* ─── SelectableCard ──────────────────────────────────────────────────
+ * The single canonical "selectable card" pattern. Replaces ChoiceCard,
+ * ModeCard, LayoutOption, theme buttons, and the inline mode toggle —
+ * every "card you tap to pick an option" in the app.
+ *
+ * Active state: border-primary + bg-primary/5 + shadow-sm (subtle lift).
+ * Inactive state: border-border + bg-card + hover:border-primary/40.
+ * Press feedback: scale 0.98 on tap (respects reduced motion via framer).
+ */
+
+interface SelectableCardProps {
+  active: boolean;
+  onClick: () => void;
+  /** Optional lucide icon rendered in a leading chip. */
+  icon?: LucideIcon;
+  /** Card title. */
+  label: React.ReactNode;
+  /** Optional muted description. */
+  description?: React.ReactNode;
+  /** Optional leading content rendered in place of the icon chip (e.g. a
+   *  preview swatch). */
+  leading?: React.ReactNode;
+  /** Optional trailing content (e.g. a checkmark or count). */
+  trailing?: React.ReactNode;
+  /** Disable the card. */
+  disabled?: boolean;
+  /** Stretch to fill the parent width. */
+  fullWidth?: boolean;
+  className?: string;
+  "aria-label"?: string;
+}
+
+export function SelectableCard({
+  active,
+  onClick,
+  icon: Icon,
+  label,
+  description,
+  leading,
+  trailing,
+  disabled,
+  fullWidth,
+  className,
+  ...rest
+}: SelectableCardProps) {
+  return (
+    <motion.button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      aria-pressed={active}
+      variants={pressFeedback}
+      initial="rest"
+      whileTap="press"
+      className={cn(
+        "flex items-start gap-2.5 rounded-xl border p-3 text-start transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
+        fullWidth && "w-full",
+        active
+          ? "border-primary bg-primary/5 shadow-sm"
+          : "border-border bg-card hover:border-primary/40 hover:bg-primary/[0.02] hover:shadow-sm",
+        disabled && "opacity-50 pointer-events-none",
+        className,
+      )}
+      {...rest}
+    >
+      {leading}
+      {Icon && !leading && (
+        <span
+          className={cn(
+            "flex size-8 shrink-0 items-center justify-center rounded-lg transition-colors duration-200",
+            active ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground",
+          )}
+        >
+          <Icon className="size-4" />
+        </span>
+      )}
+      <span className="min-w-0 flex-1">
+        <span className="block text-xs font-semibold">{label}</span>
+        {description && (
+          <span className="mt-0.5 block text-[11px] leading-snug text-muted-foreground">{description}</span>
+        )}
+      </span>
+      {trailing}
+    </motion.button>
+  );
+}
+
+/* ─── Pill ────────────────────────────────────────────────────────────
+ * The single canonical "selectable pill" pattern. Replaces the tag pills,
+ * only-mode pills, font buttons, alignment buttons, and every other
+ * `inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border`
+ * variant in the app.
+ *
+ * Active: border-primary + bg-primary/10 + text-primary.
+ * Inactive: border-border + bg-card + hover:border-primary/40.
+ */
+
+interface PillProps {
+  active: boolean;
+  onClick: () => void;
+  icon?: LucideIcon;
+  children: React.ReactNode;
+  disabled?: boolean;
+  className?: string;
+  "aria-label"?: string;
+}
+
+export function Pill({ active, onClick, icon: Icon, children, disabled, className, ...rest }: PillProps) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      aria-pressed={active}
+      className={cn(
+        "inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
+        active
+          ? "border-primary bg-primary/10 text-primary"
+          : "border-border bg-card text-foreground hover:border-primary/40",
+        disabled && "opacity-50 pointer-events-none",
+        className,
+      )}
+      {...rest}
+    >
+      {Icon && <Icon className="size-3.5" />}
+      {children}
+    </button>
+  );
+}
+
+/* ─── ToolButton ──────────────────────────────────────────────────────
+ * Unified icon-button for the session action bars and tool menus. Active
+ * state is always `border-primary bg-primary/10 text-primary`; inactive is
+ * `border-border hover:bg-muted/60`. Stops the three-way split between
+ * desktop outline buttons, header primary-foreground buttons, and the
+ * SessionToolRow check-mark pattern.
+ */
+
+interface ToolButtonProps {
+  onClick: () => void;
+  icon: LucideIcon;
+  active?: boolean;
+  title?: string;
+  "aria-label"?: string;
+  "aria-pressed"?: boolean;
+  disabled?: boolean;
+  size?: "sm" | "icon" | "iconSm";
+  variant?: "outline" | "ghost";
+  className?: string;
+}
+
+export function ToolButton({
+  onClick,
+  icon: Icon,
+  active,
+  title,
+  disabled,
+  size = "sm",
+  variant = "outline",
+  className,
+  ...rest
+}: ToolButtonProps) {
+  return (
+    <Button
+      type="button"
+      variant={variant}
+      size={size}
+      onClick={onClick}
+      disabled={disabled}
+      title={title}
+      className={cn(
+        "h-9 rounded-lg transition-colors",
+        active && "border-primary bg-primary/10 text-primary hover:bg-primary/15 hover:text-primary",
+        className,
+      )}
+      {...rest}
+    >
+      <Icon className="size-4" />
+    </Button>
+  );
+}
+
+/* ─── PackSheetHeader / PackSheetFooter ───────────────────────────────
+ * Shared chrome for the right-side sheets that show pack-scoped content
+ * (TrackerPreviewSheet, SessionsSheet, future Wrong-Only review sheet).
+ * Renders the canonical sticky header with optional icon chip + count
+ * badges, and an optional sticky footer with actions. Both use the same
+ * `bg-card/60 backdrop-blur-md` recipe so the sheet reads as one surface.
+ */
+
+interface PackSheetHeaderProps {
+  icon?: LucideIcon;
+  iconColor?: string;
+  title: React.ReactNode;
+  meta?: React.ReactNode;
+  badges?: React.ReactNode;
+  className?: string;
+}
+
+export function PackSheetHeader({ icon: Icon, iconColor, title, meta, badges, className }: PackSheetHeaderProps) {
+  return (
+    <header className={cn("safe-pt flex h-12 shrink-0 items-center gap-2 border-b border-border bg-card/60 px-4 pe-12 backdrop-blur-md", className)}>
+      {Icon && (
+        <span
+          className="flex size-7 shrink-0 items-center justify-center rounded-lg"
+          style={{
+            backgroundColor: iconColor ? `color-mix(in oklch, ${iconColor} 12%, transparent)` : "color-mix(in oklch, var(--primary) 12%, transparent)",
+            color: iconColor ?? "var(--primary)",
+          }}
+        >
+          <Icon className="size-3.5" />
+        </span>
+      )}
+      <div className="min-w-0 flex-1">
+        <h2 className="truncate text-sm font-semibold">{title}</h2>
+        {meta && <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">{meta}</div>}
+      </div>
+      {badges && <div className="flex shrink-0 items-center gap-1.5">{badges}</div>}
+    </header>
+  );
+}
+
+interface PackSheetFooterProps {
+  children: React.ReactNode;
+  className?: string;
+}
+
+export function PackSheetFooter({ children, className }: PackSheetFooterProps) {
+  return (
+    <footer className={cn("shrink-0 border-t border-border bg-card/60 p-4 pb-[max(env(safe-area-inset-bottom),1rem)] backdrop-blur-md", className)}>
+      {children}
+    </footer>
+  );
+}
+
+/* ─── SectionList ─────────────────────────────────────────────────────
+ * Stagger-animated list wrapper. Renders `<motion.div variants={staggerContainer}
+ * initial="hidden" animate="visible">` and lets children opt in via
+ * `variants={fadeUp}`. Use for grids of cards, recent-session lists, etc.
+ * — replaces the hand-rolled `medos-fade-in` + `animationDelay` pattern.
+ */
+
+interface SectionListProps {
+  children: React.ReactNode;
+  className?: string;
+}
+
+export function SectionList({ children, className }: SectionListProps) {
+  return (
+    <motion.div
+      variants={staggerContainer}
+      initial="hidden"
+      animate="visible"
+      className={className}
+    >
+      {children}
+    </motion.div>
+  );
+}
+
+/* ─── SectionItem ─────────────────────────────────────────────────────
+ * Pair with `<SectionList>` — renders a `<motion.div variants={fadeUp}>`
+ * that fades + lifts into place as part of a staggered list.
+ */
+
+interface SectionItemProps {
+  children: React.ReactNode;
+  className?: string;
+}
+
+export function SectionItem({ children, className }: SectionItemProps) {
+  return (
+    <motion.div variants={fadeUp} className={className}>
+      {children}
+    </motion.div>
   );
 }

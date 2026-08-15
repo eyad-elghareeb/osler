@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import { springSoft } from "@/lib/osler/motion";
 import {
   ArrowLeft,
   Plus,
@@ -366,11 +367,7 @@ export function NotesPanel({
           initial={useFullscreen ? { y: "100%", opacity: 0 } : { x: rtl ? -448 : 448, opacity: 0 }}
           animate={useFullscreen ? { y: 0, opacity: 1 } : { x: 0, opacity: 1 }}
           exit={useFullscreen ? { y: "100%", opacity: 0 } : { x: rtl ? -448 : 448, opacity: 0 }}
-          transition={
-            useFullscreen
-              ? { type: "spring", damping: 32, stiffness: 320 }
-              : { type: "spring", damping: 28, stiffness: 300 }
-          }
+          transition={springSoft}
           {...outerDismiss}
           className={
             useFullscreen
@@ -577,7 +574,7 @@ function NoteCard({
   }, [note.body]);
 
   return (
-    <div className="group rounded-lg border border-border bg-background hover:border-primary/40 hover:bg-primary/5 transition-colors p-3 cursor-pointer">
+    <div className="group rounded-xl border border-border bg-card hover:border-primary/40 hover:bg-primary/5 transition-colors p-3 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40">
       <div onClick={onOpen} className="space-y-1">
         <div className="flex items-start justify-between gap-2">
           <h4 className="text-sm font-semibold truncate flex-1">
@@ -754,7 +751,7 @@ function EditorView({
             {saving ? (
               <span className="text-[10px] text-muted-foreground">{t("qbank.notes.editor.saving")}</span>
             ) : (
-              <span className="text-[10px] text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
+              <span className="text-[10px] text-success flex items-center gap-1">
                 <Check className="size-3" />
                 {t("qbank.notes.editor.saved")}
               </span>

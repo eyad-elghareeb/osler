@@ -53,6 +53,8 @@ import { Sheet, SheetContent } from "@/components/ui/sheet";
 import {
   EmptyState,
   LoadingState,
+  PageHeader,
+  PackSheetHeader,
   SectionHeading,
 } from "./ui-primitives";
 import { cn } from "@/lib/utils";
@@ -419,37 +421,37 @@ export function SessionHistoryView() {
   return (
     <div className="osler-page">
       <div className="osler-page__inner space-y-6">
-        {/* Header */}
-        <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0">
-            <Button
-              variant="ghost"
-              size="sm"
-              className="mb-2 -ms-2 text-muted-foreground"
-              onClick={() => {
-                haptic("selection");
-                router.push("/qbank");
-              }}
-            >
-              {rtl ? (
-                <ChevronRight className="size-4 me-1 rtl:rotate-180" />
-              ) : (
-                <ArrowLeft className="size-4 me-1 rtl:rotate-180" />
-              )}
-              {t("qbank.history.back")}
-            </Button>
-            <h1 className="text-xl font-semibold text-foreground">
-              {t("qbank.history.title")}
-            </h1>
-            <p className="text-sm text-muted-foreground mt-1">
-              {t("qbank.history.subtitle")}
-            </p>
-          </div>
-          {totalSessions > 0 && (
-            <span className="text-xs text-muted-foreground tabular-nums shrink-0 mt-2">
-              {t("qbank.history.sessionCount", { n: totalSessions })}
-            </span>
-          )}
+        {/* Header — back button + PageHeader with the history icon chip */}
+        <div>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="mb-2 -ms-2 text-muted-foreground"
+            onClick={() => {
+              haptic("selection");
+              router.push("/qbank");
+            }}
+          >
+            {rtl ? (
+              <ChevronRight className="size-4 me-1 rtl:rotate-180" />
+            ) : (
+              <ArrowLeft className="size-4 me-1 rtl:rotate-180" />
+            )}
+            {t("qbank.history.back")}
+          </Button>
+          <PageHeader
+            inline
+            inlineIcon={History}
+            title={t("qbank.history.title")}
+            subtitle={t("qbank.history.subtitle")}
+            actions={
+              totalSessions > 0 ? (
+                <span className="text-xs text-muted-foreground tabular-nums shrink-0">
+                  {t("qbank.history.sessionCount", { n: totalSessions })}
+                </span>
+              ) : undefined
+            }
+          />
         </div>
 
         {/* Tree-grouped history */}
@@ -569,27 +571,23 @@ function SessionsSheet({
         dir={rtl ? "rtl" : "ltr"}
         className="w-full gap-0 bg-background p-0 sm:max-w-xl"
       >
-        <header className="safe-pt flex h-12 shrink-0 items-center gap-2 border-b border-border bg-card/60 px-4 pe-12 backdrop-blur-md">
-          <div className="min-w-0 flex-1">
-            <h2 className="truncate text-sm font-semibold">
-              {t("qbank.history.sessionsForPack", { title: shownPack.title })}
-            </h2>
-            <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+        <PackSheetHeader
+          title={t("qbank.history.sessionsForPack", { title: shownPack.title })}
+          meta={
+            <>
               <span>{meta.label}</span>
               <span aria-hidden>·</span>
               <span className="tabular-nums">
                 {t("qbank.history.sessionCount", { n: shownSessions.length })}
               </span>
-            </div>
-          </div>
-        </header>
+            </>
+          }
+        />
 
         <ScrollArea className="min-h-0 flex-1" dir={rtl ? "rtl" : "ltr"}>
           <div className="space-y-3 p-4">
             {shownSessions.length === 0 ? (
-              <p className="py-10 text-center text-sm text-muted-foreground">
-                {t("qbank.history.noSessions")}
-              </p>
+              <EmptyState icon={History} title={t("qbank.history.noSessions")} />
             ) : (
               shownSessions.map((s) => (
                 <SessionRow

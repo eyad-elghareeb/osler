@@ -4,6 +4,7 @@ import * as React from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Download, Share, X, MoreVertical } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { Checkbox } from "@/components/ui/checkbox";
 import { settings } from "@/lib/osler/storage";
 import { useI18n } from "@/components/osler/i18n-provider";
 
@@ -155,15 +156,14 @@ export function PwaInstallButton({ className }: { className?: string }) {
               </p>
             )}
             <label className="mt-3 flex items-center gap-1.5 cursor-pointer border-t border-border pt-2">
-              <input
-                type="checkbox"
-                className="size-3.5 accent-foreground"
+              <Checkbox
+                className="size-4"
                 checked={dismissed}
-                onChange={(e) => {
-                  const next = e.target.checked;
-                  setDismissed(next);
+                onCheckedChange={(next) => {
+                  const nextBool = next === true;
+                  setDismissed(nextBool);
                   setHint(false);
-                  if (next) settings.set("dismiss-pwa-hint", "true");
+                  if (nextBool) settings.set("dismiss-pwa-hint", "true");
                   else settings.set("dismiss-pwa-hint", "false");
                 }}
               />

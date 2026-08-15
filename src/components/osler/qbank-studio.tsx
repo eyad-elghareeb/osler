@@ -61,6 +61,7 @@ import {
   Wrench,
   LogOut,
   PlayCircle,
+  Tag,
   type LucideIcon,
 } from "lucide-react";
 import { loadCategoryTree, loadContentByUid, loadNodeByUid, ENGINE_META, flattenTree, packBasePath, nodeUrls } from "@/lib/osler/content";
@@ -157,11 +158,27 @@ import { haptic, withViewTransition } from "@/lib/osler/native";
 import { gradeWithAI, createManualEvaluation, transcribePhoto } from "@/lib/osler/grading";
 import { useI18n } from "./i18n-provider";
 import { NavigationStack } from "./navigation-stack";
-import { PageHeader, SectionHeading, StatTile, EmptyState, LoadingState, HubSkeleton } from "./ui-primitives";
+import {
+  PageHeader,
+  SectionHeading,
+  SectionLabel,
+  StatTile,
+  EmptyState,
+  LoadingState,
+  HubSkeleton,
+  OslerCard,
+  InteractiveCard,
+  SelectableCard,
+  Pill,
+  ToolButton,
+  MetricBar,
+  SectionList,
+  SectionItem,
+} from "./ui-primitives";
 import { SparkTrend, defaultSparkDelta } from "./analytics-primitives";
-import { FolderTreeNav } from "./folder-tree-nav";
 import { TrackerTree, type TrackerTreeNode } from "./tracker-tree";
 import { TrackerPreviewSheet, type TrackerPreviewItem } from "./tracker-preview";
+import { easeOut, fadeUp, staggerContainer, springSoft } from "@/lib/osler/motion";
 import type { StringKey } from "@/lib/osler/i18n";
 import { loadUiLang } from "@/lib/osler/i18n";
 import { generateResultsPdf, generateDashboardPdf, generateQuizCompilationPdf, downloadPdf, type FullQuestion, type PdfExportConfig } from "@/lib/osler/pdf";
@@ -1764,48 +1781,61 @@ function HomeView({
         </div>
 
         {/* Content zone — fills remaining height; each tab owns its own
-            padding and scroll so we don't double-apply horizontal padding. */}
+            padding and scroll so we don't double-apply horizontal padding.
+            AnimatePresence + keyed motion.div cross-fades between tabs so
+            switching feels like a native push instead of an instant swap. */}
         <div className="flex-1 min-h-0 overflow-hidden">
-          {homeTab === "content" && (
-            <ContentTab
-              data={data}
-              onLoadPack={loadPack}
-              onOpenPack={onOpenPack}
-              onPickForCreateTest={onPickForCreateTest}
-              onContextMenu={handleContextMenu}
-            />
-          )}
-          {homeTab === "create" && (
-            <div className="osler-page">
-              <div className="osler-page__inner">
-                <CreateTestTab
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={homeTab}
+              initial={{ opacity: 0, y: 4 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -4 }}
+              transition={{ duration: 0.2, ease: easeOut.ease }}
+              className="h-full"
+            >
+              {homeTab === "content" && (
+                <ContentTab
                   data={data}
                   onLoadPack={loadPack}
-                  testMode={testMode}
-                  onTestModeChange={onTestModeChange}
                   onOpenPack={onOpenPack}
-                  onSetQuestionLimit={onSetQuestionLimit}
-                  initialSourceUid={pendingCreateTestSourceUid}
-                  onConsumeInitialSource={onClearPendingCreateTestSource}
-                  onStartCustomSession={onStartCustomSession}
+                  onPickForCreateTest={onPickForCreateTest}
+                  onContextMenu={handleContextMenu}
                 />
-              </div>
-            </div>
-          )}
-          {homeTab === "tracker" && (
-            <div className="osler-page">
-              <div className="osler-page__inner">
-                <TrackerTab
-                  data={data}
-                  sessions={savedSessions}
-                  onDelete={(id) => sessions.delete(id)}
-                  onStartCustomSession={onStartCustomSession}
-                  onResume={onResumeActive}
-                  onLoadPack={loadPack}
-                />
-              </div>
-            </div>
-          )}
+              )}
+              {homeTab === "create" && (
+                <div className="osler-page">
+                  <div className="osler-page__inner">
+                    <CreateTestTab
+                      data={data}
+                      onLoadPack={loadPack}
+                      testMode={testMode}
+                      onTestModeChange={onTestModeChange}
+                      onOpenPack={onOpenPack}
+                      onSetQuestionLimit={onSetQuestionLimit}
+                      initialSourceUid={pendingCreateTestSourceUid}
+                      onConsumeInitialSource={onClearPendingCreateTestSource}
+                      onStartCustomSession={onStartCustomSession}
+                    />
+                  </div>
+                </div>
+              )}
+              {homeTab === "tracker" && (
+                <div className="osler-page">
+                  <div className="osler-page__inner">
+                    <TrackerTab
+                      data={data}
+                      sessions={savedSessions}
+                      onDelete={(id) => sessions.delete(id)}
+                      onStartCustomSession={onStartCustomSession}
+                      onResume={onResumeActive}
+                      onLoadPack={loadPack}
+                    />
+                  </div>
+                </div>
+              )}
+            </motion.div>
+          </AnimatePresence>
         </div>
       </div>
 
@@ -2241,7 +2271,7 @@ function PackCard({
         }
       }}
       className={cn(
-        "medos-fade-in text-start bg-card border border-border rounded-2xl p-5 hover:border-primary/40 hover:shadow-lg transition-all active:scale-[0.98] group flex flex-col gap-3 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
+        "medos-fade-in text-start bg-card border border-border rounded-xl p-5 hover:border-primary/40 hover:shadow-md transition-all active:scale-[0.98] group flex flex-col gap-3 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
         isAr && "osler-content-ar",
       )}
       dir={isAr ? "rtl" : undefined}
@@ -2251,8 +2281,8 @@ function PackCard({
       {/* Top row: icon + title + cache button */}
       <div className="flex items-center gap-3.5">
         <div
-          className="size-12 rounded-2xl flex items-center justify-center shrink-0"
-          style={{ backgroundColor: `${meta.color}/15`, color: meta.color }}
+          className="size-12 rounded-xl flex items-center justify-center shrink-0"
+          style={{ backgroundColor: `color-mix(in oklch, ${meta.color} 12%, transparent)`, color: meta.color }}
         >
           <Icon className="size-6" />
         </div>
@@ -2280,22 +2310,20 @@ function PackCard({
       {/* Footer: completion bar or start prompt */}
       <div className="flex items-center justify-between gap-3">
         {packProgress.attempted > 0 ? (
-          <>
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center justify-between text-xs mb-1">
-                <span className="text-muted-foreground">{t("osce.home.progress")}</span>
-                <span className="text-primary font-semibold tabular-nums">
-                  {Math.round((packProgress.attempted / count) * 100)}%
-                </span>
-              </div>
-              <div className="h-1 rounded-full bg-muted/50 overflow-hidden">
-                <div
-                  className="h-full rounded-full bg-primary transition-all duration-300"
-                  style={{ width: `${Math.min(100, Math.round((packProgress.attempted / count) * 100))}%` }}
-                />
-              </div>
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center justify-between text-xs mb-1">
+              <span className="text-muted-foreground">{t("osce.home.progress")}</span>
+              <span className="text-primary font-semibold tabular-nums">
+                {Math.round((packProgress.attempted / count) * 100)}%
+              </span>
             </div>
-          </>
+            <MetricBar
+              value={packProgress.attempted}
+              max={count}
+              color="primary"
+              label={t("osce.home.progress")}
+            />
+          </div>
         ) : (
           <span className="text-xs text-muted-foreground/50">{t("qbank.home.start")}</span>
         )}
@@ -2496,14 +2524,10 @@ function ContentTab({
 
   if (data.items.length === 0) {
     return (
-      <div className="osler-empty">
-        <div className="osler-empty__icon">
-          <Grid3x3 className="size-6" />
+      <div className="osler-page">
+        <div className="osler-page__inner">
+          <EmptyState icon={Grid3x3} title={t("qbank.home.empty")} />
         </div>
-        <h3 className="osler-empty__title">{t("qbank.home.empty")}</h3>
-        <p className="osler-empty__body">
-          {t("qbank.home.empty")}
-        </p>
       </div>
     );
   }
@@ -2516,13 +2540,7 @@ function ContentTab({
 
       {/* Pack / folder grid */}
       {filteredRootTree.length === 0 ? (
-        <div className="osler-empty">
-          <div className="osler-empty__icon">
-            <Search className="size-6" />
-          </div>
-          <h3 className="osler-empty__title">{t("qbank.home.empty")}</h3>
-          <p className="osler-empty__body">{t("qbank.home.search")}</p>
-        </div>
+        <EmptyState icon={Search} title={t("qbank.home.empty")} description={t("qbank.home.search")} />
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {filteredRootTree.map((node, idx) => {
@@ -2534,31 +2552,55 @@ function ContentTab({
             if (isBranch) {
               const fs = folderStats(node);
               const acc = fs.attempted > 0 ? Math.round((fs.correct / fs.attempted) * 100) : 0;
+              const pct = fs.questions > 0 ? Math.min(100, Math.round((fs.attempted / fs.questions) * 100)) : 0;
               return (
-                <Button
+                <button
                   type="button"
-                  variant="ghost"
                   aria-label={node.title}
                   key={node.uid}
                   onClick={() => setSelectedFolders([node])}
-                  className="medos-fade-in h-auto w-full min-w-0 justify-start text-start bg-card border border-border rounded-xl p-4 hover:border-primary/40 hover:shadow-md hover:bg-card transition-all group flex items-center gap-3.5 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+                  className="medos-fade-in text-start bg-card border border-border rounded-xl p-5 hover:border-primary/40 hover:shadow-md transition-all group flex flex-col gap-3 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 w-full"
                   style={{ animationDelay: `${idx * 0.04}s` }}
                 >
-                  <div
-                    className="size-11 rounded-xl flex items-center justify-center shrink-0"
-                    style={{ backgroundColor: `${meta.color}/15`, color: meta.color }}
-                  >
-                    <Folder className="size-5" />
+                  {/* Top row: icon + title (matches PackCard's header) */}
+                  <div className="flex items-center gap-3.5">
+                    <div
+                      className="size-12 rounded-xl flex items-center justify-center shrink-0"
+                      style={{ backgroundColor: `color-mix(in oklch, ${meta.color} 12%, transparent)`, color: meta.color }}
+                    >
+                      <Icon className="size-6" />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <h3 className="font-semibold text-sm truncate text-foreground leading-snug">{node.title}</h3>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        {t("qbank.home.packs", { n: fs.packs })} · {t("qbank.home.questions", { n: fs.questions })}
+                      </p>
+                    </div>
                   </div>
-                  <div className="min-w-0 flex-1">
-                    <h3 className="font-semibold text-sm truncate">{node.title}</h3>
-                    <p className="text-xs text-muted-foreground mt-0.5">
-                      {t("qbank.home.packs", { n: fs.packs })} · {t("qbank.home.questions", { n: fs.questions })}
-                      {fs.attempted > 0 && <span className="ms-2 text-success font-medium tabular-nums">{acc}%</span>}
-                    </p>
+
+                  {/* Description (placeholder line so the card body matches PackCard's 2-line description) */}
+                  <p className="text-xs text-muted-foreground/70 line-clamp-2 leading-relaxed">
+                    {fs.attempted > 0
+                      ? `${fs.attempted} ${t("qbank.tracker.attempted").toLowerCase()} · ${acc}% ${t("qbank.tracker.accuracy").toLowerCase()}`
+                      : t("qbank.home.start")}
+                  </p>
+
+                  {/* Footer: progress bar or start prompt (matches PackCard's footer) */}
+                  <div className="flex items-center justify-between gap-3 mt-auto">
+                    {fs.attempted > 0 ? (
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center justify-between text-xs mb-1">
+                          <span className="text-muted-foreground">{t("osce.home.progress")}</span>
+                          <span className="text-primary font-semibold tabular-nums">{pct}%</span>
+                        </div>
+                        <MetricBar value={pct} color="primary" label={t("osce.home.progress")} />
+                      </div>
+                    ) : (
+                      <span className="text-xs text-muted-foreground/50">{t("qbank.home.start")}</span>
+                    )}
+                    <ChevronRight className={cn("size-4 text-muted-foreground/40 group-hover:text-primary transition-colors shrink-0", rtl && "rtl-flip-x")} />
                   </div>
-                  <ChevronRight className="size-4 text-muted-foreground/40 group-hover:text-primary transition-colors shrink-0" />
-                </Button>
+                </button>
               );
             }
 
@@ -2619,7 +2661,7 @@ function ContentTab({
             onChange={(e) => setSearch(e.target.value)}
             placeholder={t("qbank.home.search")}
             className={cn(
-              "w-full h-10 rounded-xl border border-border bg-card text-sm px-9 focus:outline-none focus:ring-2 focus:ring-primary/30",
+              "w-full h-10 rounded-xl border border-border bg-card text-sm px-9 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
               rtl ? "pr-9 pl-3 text-right" : "pl-9 pr-3",
             )}
           />
@@ -2639,13 +2681,7 @@ function ContentTab({
 
         {/* Child items grid */}
         {childTree.length === 0 ? (
-          <div className="osler-empty">
-            <div className="osler-empty__icon">
-              <Search className="size-6" />
-            </div>
-            <h3 className="osler-empty__title">{t("qbank.home.empty")}</h3>
-            <p className="osler-empty__body">{t("qbank.home.search")}</p>
-          </div>
+          <EmptyState icon={Search} title={t("qbank.home.empty")} description={t("qbank.home.search")} />
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {childTree.map((child, idx) => {
@@ -2657,31 +2693,50 @@ function ContentTab({
               if (isBranch) {
                 const cfs = folderStats(child);
                 const cacc = cfs.attempted > 0 ? Math.round((cfs.correct / cfs.attempted) * 100) : 0;
+                const cpct = cfs.questions > 0 ? Math.min(100, Math.round((cfs.attempted / cfs.questions) * 100)) : 0;
                 return (
-                  <Button
+                  <button
                     type="button"
-                    variant="ghost"
                     aria-label={child.title}
                     key={child.uid}
                     onClick={() => setSelectedFolders((folders) => [...folders, child])}
-                    className="medos-fade-in h-auto w-full min-w-0 justify-start text-start bg-card border border-border rounded-xl p-4 hover:border-primary/40 hover:shadow-md hover:bg-card transition-all group flex items-center gap-3.5 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+                    className="medos-fade-in text-start bg-card border border-border rounded-xl p-5 hover:border-primary/40 hover:shadow-md transition-all group flex flex-col gap-3 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 w-full"
                     style={{ animationDelay: `${idx * 0.04}s` }}
                   >
-                  <div
-                    className="size-11 rounded-xl flex items-center justify-center shrink-0"
-                    style={{ backgroundColor: `${childMeta.color}/15`, color: childMeta.color }}
-                  >
-                    <Folder className="size-5" />
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <h3 className="font-semibold text-sm truncate">{child.title}</h3>
-                    <p className="text-xs text-muted-foreground mt-0.5">
-                      {t("qbank.home.packs", { n: cfs.packs })} · {t("qbank.home.questions", { n: cfs.questions })}
-                      {cfs.attempted > 0 && <span className="ms-2 text-success font-medium tabular-nums">{cacc}%</span>}
+                    <div className="flex items-center gap-3.5">
+                      <div
+                        className="size-12 rounded-xl flex items-center justify-center shrink-0"
+                        style={{ backgroundColor: `color-mix(in oklch, ${childMeta.color} 12%, transparent)`, color: childMeta.color }}
+                      >
+                        <ChildIcon className="size-6" />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <h3 className="font-semibold text-sm truncate text-foreground leading-snug">{child.title}</h3>
+                        <p className="text-xs text-muted-foreground mt-0.5">
+                          {t("qbank.home.packs", { n: cfs.packs })} · {t("qbank.home.questions", { n: cfs.questions })}
+                        </p>
+                      </div>
+                    </div>
+                    <p className="text-xs text-muted-foreground/70 line-clamp-2 leading-relaxed">
+                      {cfs.attempted > 0
+                        ? `${cfs.attempted} ${t("qbank.tracker.attempted").toLowerCase()} · ${cacc}% ${t("qbank.tracker.accuracy").toLowerCase()}`
+                        : t("qbank.home.start")}
                     </p>
-                  </div>
-                  <ChevronRight className="size-4 text-muted-foreground/40 group-hover:text-primary transition-colors shrink-0" />
-                  </Button>
+                    <div className="flex items-center justify-between gap-3 mt-auto">
+                      {cfs.attempted > 0 ? (
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center justify-between text-xs mb-1">
+                            <span className="text-muted-foreground">{t("osce.home.progress")}</span>
+                            <span className="text-primary font-semibold tabular-nums">{cpct}%</span>
+                          </div>
+                          <MetricBar value={cpct} color="primary" label={t("osce.home.progress")} />
+                        </div>
+                      ) : (
+                        <span className="text-xs text-muted-foreground/50">{t("qbank.home.start")}</span>
+                      )}
+                      <ChevronRight className={cn("size-4 text-muted-foreground/40 group-hover:text-primary transition-colors shrink-0", rtl && "rtl-flip-x")} />
+                    </div>
+                  </button>
                 );
               }
 
@@ -3020,17 +3075,23 @@ function CreateTestTab({
       {/* Builder column */}
       <div className="lg:col-span-2 space-y-5">
         {/* Test Mode */}
-        <div className="qbank-card">
-          <SectionHeader number={1} title={t("qbank.home.testMode")} subtitle={t("qbank.home.timed") + " / " + t("qbank.home.tutor")} />
+        <OslerCard>
+          <SectionHeading
+            number={1}
+            icon={TimerIcon}
+            description={t("qbank.home.timed") + " / " + t("qbank.home.tutor")}
+          >
+            {t("qbank.home.testMode")}
+          </SectionHeading>
           <div className="grid grid-cols-2 gap-2 mt-3">
-            <ModeCard
+            <SelectableCard
               active={testMode === "timed"}
               onClick={() => { haptic("selection"); onTestModeChange("timed"); }}
               icon={TimerIcon}
               label={t("qbank.home.timed")}
               description={t("qbank.home.timedDesc")}
             />
-            <ModeCard
+            <SelectableCard
               active={testMode === "tutor"}
               onClick={() => { haptic("selection"); onTestModeChange("tutor"); }}
               icon={Sparkles}
@@ -3038,11 +3099,17 @@ function CreateTestTab({
               description={t("qbank.home.tutorDesc")}
             />
           </div>
-        </div>
+        </OslerCard>
 
         {/* Source packs — flashcard-style deck browser with folder hierarchy */}
-        <div className="qbank-card">
-          <SectionHeader number={2} title={t("qbank.create.sources")} subtitle={t("qbank.create.sourceHint")} />
+        <OslerCard>
+          <SectionHeading
+            number={2}
+            icon={Folder}
+            description={t("qbank.create.sourceHint")}
+          >
+            {t("qbank.create.sources")}
+          </SectionHeading>
           <div className="mt-4 space-y-3">
             {/* Search box */}
             <div className="relative">
@@ -3053,7 +3120,7 @@ function CreateTestTab({
                 onChange={(e) => { setSearch(e.target.value); setSelectedFolders([]); }}
                 placeholder={t("qbank.home.search")}
                 className={cn(
-                  "w-full h-9 rounded-xl border border-border bg-card text-sm px-9 focus:outline-none focus:ring-2 focus:ring-primary/30",
+                  "w-full h-9 rounded-xl border border-border bg-card text-sm px-9 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
                   rtl ? "pr-9 pl-3 text-right" : "pl-9 pr-3",
                 )}
               />
@@ -3098,7 +3165,7 @@ function CreateTestTab({
                             >
                               <div
                                 className="size-9 rounded-lg flex items-center justify-center shrink-0"
-                                style={{ backgroundColor: `${childMeta.color}/15`, color: childMeta.color }}
+                                style={{ backgroundColor: `color-mix(in oklch, ${childMeta.color} 12%, transparent)`, color: childMeta.color }}
                               >
                                 <ChildIcon className="size-4" />
                               </div>
@@ -3106,12 +3173,11 @@ function CreateTestTab({
                                 <h4 className="text-sm font-medium truncate">{child.title}</h4>
                                 <p className="text-[11px] text-muted-foreground">{qCount} {t("qbank.home.questions", { n: qCount }).split(" ").slice(1).join(" ")}</p>
                               </div>
-                              <input
-                                type="checkbox"
+                              <Checkbox
                                 checked={isChecked}
-                                onChange={(e) => { e.stopPropagation(); toggleSource(child.uid); }}
+                                onCheckedChange={() => toggleSource(child.uid)}
                                 onClick={(e) => e.stopPropagation()}
-                                className="size-4 rounded accent-primary shrink-0"
+                                className="size-4 shrink-0"
                               />
                             </button>
                           );
@@ -3124,7 +3190,7 @@ function CreateTestTab({
                           >
                             <div
                               className="size-9 rounded-lg flex items-center justify-center shrink-0"
-                              style={{ backgroundColor: `${childMeta.color}/15`, color: childMeta.color }}
+                              style={{ backgroundColor: `color-mix(in oklch, ${childMeta.color} 12%, transparent)`, color: childMeta.color }}
                             >
                               <Folder className="size-4" />
                             </div>
@@ -3161,7 +3227,7 @@ function CreateTestTab({
                           >
                             <div
                               className="size-9 rounded-lg flex items-center justify-center shrink-0"
-                              style={{ backgroundColor: `${meta.color}/15`, color: meta.color }}
+                              style={{ backgroundColor: `color-mix(in oklch, ${meta.color} 12%, transparent)`, color: meta.color }}
                             >
                               <Folder className="size-4" />
                             </div>
@@ -3192,7 +3258,7 @@ function CreateTestTab({
                         >
                           <div
                             className="size-9 rounded-lg flex items-center justify-center shrink-0"
-                            style={{ backgroundColor: `${meta.color}/15`, color: meta.color }}
+                            style={{ backgroundColor: `color-mix(in oklch, ${meta.color} 12%, transparent)`, color: meta.color }}
                           >
                             <NodeIcon className="size-4" />
                           </div>
@@ -3200,12 +3266,11 @@ function CreateTestTab({
                             <h4 className="text-sm font-medium truncate">{node.title}</h4>
                             <p className="text-[11px] text-muted-foreground">{qCount} {t("qbank.home.questions", { n: qCount }).split(" ").slice(1).join(" ")}</p>
                           </div>
-                          <input
-                            type="checkbox"
+                          <Checkbox
                             checked={isChecked}
-                            onChange={(e) => { e.stopPropagation(); toggleSource(node.uid); }}
+                            onCheckedChange={() => toggleSource(node.uid)}
                             onClick={(e) => e.stopPropagation()}
-                            className="size-4 rounded accent-primary shrink-0"
+                            className="size-4 shrink-0"
                           />
                         </button>
                       );
@@ -3235,41 +3300,37 @@ function CreateTestTab({
               </div>
             )}
           </div>
-        </div>
+        </OslerCard>
 
         {/* Tag filter (P2-3) — question-level tags from selected sources */}
         {availableTags.length > 0 && (
-          <div className="qbank-card">
-            <SectionHeader number={3} title={t("qbank.create.tagQuestionLevel")} subtitle={t("qbank.home.tagsTopics")} />
+          <OslerCard>
+            <SectionHeading number={3} icon={Tag} description={t("qbank.home.tagsTopics")}>
+              {t("qbank.create.tagQuestionLevel")}
+            </SectionHeading>
             <div className="mt-4 flex flex-wrap gap-2">
-              {availableTags.map((tag) => {
-                const active = selectedTags.includes(tag);
-                return (
-                  <button
-                    key={tag}
-                    onClick={() =>
-                      setSelectedTags((prev) =>
-                        prev.includes(tag) ? prev.filter((x) => x !== tag) : [...prev, tag],
-                      )
-                    }
-                    className={cn(
-                      "px-3 py-1.5 rounded-full text-xs font-medium border transition-colors",
-                      active
-                        ? "border-primary bg-primary/10 text-primary"
-                        : "border-border bg-card text-foreground hover:border-primary/40",
-                    )}
-                  >
-                    {tag}
-                  </button>
-                );
-              })}
+              {availableTags.map((tag) => (
+                <Pill
+                  key={tag}
+                  active={selectedTags.includes(tag)}
+                  onClick={() =>
+                    setSelectedTags((prev) =>
+                      prev.includes(tag) ? prev.filter((x) => x !== tag) : [...prev, tag],
+                    )
+                  }
+                >
+                  {tag}
+                </Pill>
+              ))}
             </div>
-          </div>
+          </OslerCard>
         )}
 
         {/* Progress-mode filter (P4-2) */}
-        <div className="qbank-card">
-          <SectionHeader number={4} title={t("qbank.create.onlyMode")} subtitle={t("qbank.tracker.wrongAndFlagged")} />
+        <OslerCard>
+          <SectionHeading number={4} icon={Flag} description={t("qbank.tracker.wrongAndFlagged")}>
+            {t("qbank.create.onlyMode")}
+          </SectionHeading>
           <div className="mt-4 flex flex-wrap gap-2">
             {([
               { id: "all" as const, label: t("qbank.create.onlyAll"), icon: Layers },
@@ -3277,26 +3338,23 @@ function CreateTestTab({
               { id: "wrong" as const, label: t("qbank.create.onlyWrong"), icon: RotateCcw },
               { id: "flagged" as const, label: t("qbank.create.onlyFlagged"), icon: Flag },
             ]).map((opt) => (
-              <button
+              <Pill
                 key={opt.id}
+                active={onlyMode === opt.id}
+                icon={opt.icon}
                 onClick={() => { haptic("selection"); setOnlyMode(opt.id); }}
-                className={cn(
-                  "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border transition-all",
-                  onlyMode === opt.id
-                    ? "border-primary bg-primary/10 text-primary"
-                    : "border-border bg-card text-foreground hover:border-primary/40",
-                )}
               >
-                <opt.icon className="size-3.5" />
                 {opt.label}
-              </button>
+              </Pill>
             ))}
           </div>
-        </div>
+        </OslerCard>
 
         {/* Count + order (P4-1) */}
-        <div className="qbank-card">
-          <SectionHeader number={5} title={t("qbank.create.countStepper")} subtitle={t("qbank.home.questionOrder")} />
+        <OslerCard>
+          <SectionHeading number={5} icon={ArrowUpDown} description={t("qbank.home.questionOrder")}>
+            {t("qbank.create.countStepper")}
+          </SectionHeading>
           <div className="mt-3 flex flex-wrap items-center gap-3">
             {/* Stepper */}
             <div className="flex items-center gap-1">
@@ -3308,7 +3366,7 @@ function CreateTestTab({
                   if (!timerEditedRef.current) setTimerMinutes(String(nextCount));
                 }}
                 disabled={desiredCount <= 1}
-                className="size-9 rounded-xl border border-border bg-card hover:bg-muted/60 flex items-center justify-center disabled:opacity-40 disabled:cursor-not-allowed"
+                className="size-9 rounded-lg border border-border bg-card hover:bg-muted/60 flex items-center justify-center disabled:opacity-40 disabled:cursor-not-allowed transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
                 aria-label={t("qbank.home.decrementCount")}
               >
                 <Minus className="size-3.5" />
@@ -3327,7 +3385,7 @@ function CreateTestTab({
                     if (!timerEditedRef.current) setTimerMinutes(String(nextCount));
                   }
                 }}
-                className="w-20 h-9 rounded-xl border border-border bg-card text-sm text-center font-medium tabular-nums focus:outline-none focus:ring-2 focus:ring-primary/30 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                className="w-20 h-9 rounded-lg border border-border bg-card text-sm text-center font-medium tabular-nums focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
               />
               <button
                 onClick={() => {
@@ -3337,7 +3395,7 @@ function CreateTestTab({
                   if (!timerEditedRef.current) setTimerMinutes(String(nextCount));
                 }}
                 disabled={desiredCount >= totalAvailable || totalAvailable === 0}
-                className="size-9 rounded-xl border border-border bg-card hover:bg-muted/60 flex items-center justify-center disabled:opacity-40 disabled:cursor-not-allowed"
+                className="size-9 rounded-lg border border-border bg-card hover:bg-muted/60 flex items-center justify-center disabled:opacity-40 disabled:cursor-not-allowed transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
                 aria-label={t("qbank.home.incrementCount")}
               >
                 <Plus className="size-3.5" />
@@ -3350,11 +3408,11 @@ function CreateTestTab({
             {/* Order toggle */}
             <div className="ms-auto flex items-center gap-2">
               <span className="text-xs text-muted-foreground">{t("qbank.home.questionOrder")}:</span>
-              <div className="flex rounded-xl border border-border bg-card overflow-hidden">
+              <div className="flex rounded-lg border border-border bg-card overflow-hidden">
                 <button
                   onClick={() => { haptic("selection"); setOrder("sequential"); }}
                   className={cn(
-                    "px-3 py-1.5 text-xs font-medium transition-colors",
+                    "px-3 py-1.5 text-xs font-medium transition-colors focus-visible:outline-none",
                     order === "sequential" ? "bg-primary/10 text-primary" : "text-muted-foreground hover:text-foreground",
                   )}
                 >
@@ -3363,7 +3421,7 @@ function CreateTestTab({
                 <button
                   onClick={() => { haptic("selection"); setOrder("random"); }}
                   className={cn(
-                    "px-3 py-1.5 text-xs font-medium transition-colors",
+                    "px-3 py-1.5 text-xs font-medium transition-colors focus-visible:outline-none",
                     order === "random" ? "bg-primary/10 text-primary" : "text-muted-foreground hover:text-foreground",
                   )}
                 >
@@ -3388,19 +3446,19 @@ function CreateTestTab({
                     timerEditedRef.current = true;
                     setTimerMinutes(String(Math.max(1, Math.min(720, parseInt(event.target.value, 10) || 1))));
                   }}
-                  className="ms-auto h-8 w-16 rounded-lg border border-border bg-card text-center text-sm font-semibold tabular-nums outline-none focus:ring-2 focus:ring-ring"
+                  className="ms-auto h-8 w-16 rounded-lg border border-border bg-card text-center text-sm font-semibold tabular-nums outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
                 />
                 <span className="text-xs text-muted-foreground">{t("qbank.launch.minutes")}</span>
               </div>
             )}
           </div>
-        </div>
+        </OslerCard>
       </div>
 
       {/* Right rail — Test Summary */}
       <div className="lg:col-span-1">
         <div className="lg:sticky lg:top-6 space-y-4">
-          <div className="qbank-card">
+          <OslerCard>
             <h3 className="text-base font-semibold text-foreground flex items-center gap-2">
               <FileText className="size-4 text-primary" />
               {t("qbank.home.testSummary")}
@@ -3441,7 +3499,7 @@ function CreateTestTab({
                 disabled={selectedEntries.length === 0 || totalAvailable === 0}
                 className="w-full h-11 text-sm font-semibold rounded-xl"
               >
-                <Plus className={cn("size-4", rtl ? "ml-2" : "mr-2")} />
+                <Plus className="size-4 me-2" />
                 {t("qbank.create.startCustom")}
               </Button>
               <p className="text-[11px] text-muted-foreground text-center mt-2">
@@ -3450,11 +3508,11 @@ function CreateTestTab({
                   : t("qbank.home.noItems")}
               </p>
             </div>
-          </div>
+          </OslerCard>
 
           {/* Selected packs preview */}
           {selectedEntries.length > 0 && (
-            <div className="qbank-card">
+            <OslerCard>
               <h3 className="text-sm font-semibold text-foreground flex items-center gap-2 mb-3">
                 <ListChecks className="size-4 text-primary" />
                 {t("qbank.create.matchingPacks")}
@@ -3483,10 +3541,10 @@ function CreateTestTab({
                   </p>
                 )}
               </div>
-            </div>
+            </OslerCard>
           )}
 
-          <div className="qbank-card">
+          <OslerCard>
             <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
               <Lightbulb className="size-4 text-warning" />
               {t("qbank.home.tip")}
@@ -3495,7 +3553,7 @@ function CreateTestTab({
               className="text-xs text-muted-foreground mt-2 leading-relaxed"
               dangerouslySetInnerHTML={{ __html: t("qbank.home.tipContent") }}
             />
-          </div>
+          </OslerCard>
         </div>
       </div>
     </div>
@@ -3521,13 +3579,6 @@ function CheckboxColumn({
   const { t } = useI18n();
   const allSelected = items.length > 0 && selected.length === items.length;
   const someSelected = selected.length > 0 && !allSelected;
-  const allCheckboxRef = React.useRef<HTMLInputElement>(null);
-
-  React.useEffect(() => {
-    if (allCheckboxRef.current) {
-      allCheckboxRef.current.indeterminate = someSelected;
-    }
-  }, [someSelected]);
 
   const toggleAll = () => {
     if (allSelected) onClear();
@@ -3542,12 +3593,10 @@ function CheckboxColumn({
   return (
     <div className="rounded-xl border border-border bg-card overflow-hidden flex flex-col">
       <div className="px-3 py-2.5 bg-muted/40 border-b border-border flex items-center gap-2">
-        <input
-          ref={allCheckboxRef}
-          type="checkbox"
-          checked={allSelected}
-          onChange={toggleAll}
-          className="size-3.5 rounded accent-primary"
+        <Checkbox
+          checked={allSelected ? true : someSelected ? "indeterminate" : false}
+          onCheckedChange={toggleAll}
+          className="size-4"
           title={t("qbank.home.selectAll")}
         />
         <span className="text-xs font-semibold uppercase tracking-wider text-foreground flex-1">{title}</span>
@@ -3568,11 +3617,10 @@ function CheckboxColumn({
                   isSel ? "bg-primary/8" : "hover:bg-muted/60"
                 }`}
               >
-                <input
-                  type="checkbox"
+                <Checkbox
                   checked={isSel}
-                  onChange={() => toggleOne(item.id)}
-                  className="size-3.5 rounded accent-primary"
+                  onCheckedChange={() => toggleOne(item.id)}
+                  className="size-4"
                 />
                 <span className={`text-sm flex-1 truncate ${isSel ? "text-foreground font-medium" : "text-foreground"}`}>
                   {item.label}
@@ -3584,38 +3632,6 @@ function CheckboxColumn({
         )}
       </div>
     </div>
-  );
-}
-
-/* ─────────────────────────────────────────────────────────────────────────
- * MODE CARD — Selectable card for Timed/Tutor mode
- * ───────────────────────────────────────────────────────────────────────── */
-function ModeCard({
-  active,
-  onClick,
-  icon: Icon,
-  label,
-  description,
-}: {
-  active: boolean;
-  onClick: () => void;
-  icon: React.ComponentType<{ className?: string }>;
-  label: string;
-  description: string;
-}) {
-  return (
-    <button
-      onClick={onClick}
-      className={cn("qbank-mode-card", active && "active")}
-    >
-      <div className="qbank-mode-card-icon">
-        <Icon className="size-5" />
-      </div>
-      <div className="flex-1">
-        <div className="font-semibold text-sm">{label}</div>
-        <p className="text-xs text-muted-foreground mt-0.5">{description}</p>
-      </div>
-    </button>
   );
 }
 
@@ -3769,6 +3785,37 @@ function TrackerTab({
   // sessions in this tracker — feeds the accuracy tile's <SparkTrend>.
   // Sorted defensively rather than assuming `sessionList`'s incoming order.
   const accuracyTrend = React.useMemo(() => {
+    return sessionList
+      .filter((s) => !!s.completedAt && s.answeredCount > 0)
+      .sort((a, b) => (a.completedAt ?? 0) - (b.completedAt ?? 0))
+      .slice(-10)
+      .map((s) => Math.round((s.correctCount / s.answeredCount) * 100));
+  }, [sessionList]);
+
+  // Per-session average question time (ms), oldest → newest, last 10 —
+  // feeds the avg-time tile's <SparkTrend>. Falls back to 0 for sessions
+  // with no captured questionTimes (the SparkTrend filters non-finite
+  // values, so a 0 just becomes a flat baseline point).
+  const avgTimeTrend = React.useMemo(() => {
+    return sessionList
+      .filter((s) => !!s.completedAt && s.answeredCount > 0)
+      .sort((a, b) => (a.completedAt ?? 0) - (b.completedAt ?? 0))
+      .slice(-10)
+      .map((s) => {
+        const times = s.questionTimes ? Object.values(s.questionTimes) : [];
+        if (times.length === 0) return 0;
+        return Math.round(times.reduce((sum, t) => sum + t, 0) / times.length);
+      });
+  }, [sessionList]);
+
+  // Per-session first-try accuracy (%), oldest → newest, last 10 — feeds
+  // the first-try tile's <SparkTrend>. A session's first-try rate is the
+  // fraction of questions answered correctly on the first reveal (no retry).
+  // We approximate it from the session's correctCount vs answeredCount —
+  // the true first-try flag lives on the question records, but for a per-
+  // session trend this is a good proxy that matches the accuracy tile's
+  // computation method.
+  const firstTryTrend = React.useMemo(() => {
     return sessionList
       .filter((s) => !!s.completedAt && s.answeredCount > 0)
       .sort((a, b) => (a.completedAt ?? 0) - (b.completedAt ?? 0))
@@ -4291,18 +4338,25 @@ function TrackerTab({
         {overall.attempted === 0 ? (
           <EmptyState icon={Activity} title={t("qbank.tracker.noRecords")} />
         ) : (
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
-            <StatTile compact label={t("qbank.tracker.attempted")} value={overall.attempted} icon={ListChecks} color="primary" />
-            <StatTile compact label={t("qbank.tracker.correctLabel")} value={overall.correct} icon={CheckCircle2} color="success" />
-            <StatTile compact label={t("qbank.tracker.wrongLabel")} value={overall.wrong} icon={X} color="destructive" />
-            <StatTile
-              compact
-              label={t("qbank.tracker.accuracy")}
-              value={`${overall.accuracy}%`}
-              icon={Target}
-              color="warning"
-              trend={
-                accuracyTrend.length >= 2 ? (
+          <SectionList className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+            <SectionItem>
+              <StatTile compact label={t("qbank.tracker.attempted")} value={overall.attempted} icon={ListChecks} color="primary" />
+            </SectionItem>
+            <SectionItem>
+              <StatTile compact label={t("qbank.tracker.correctLabel")} value={overall.correct} icon={CheckCircle2} color="success" />
+            </SectionItem>
+            <SectionItem>
+              <StatTile compact label={t("qbank.tracker.wrongLabel")} value={overall.wrong} icon={X} color="destructive" />
+            </SectionItem>
+            <SectionItem>
+              <StatTile
+                compact
+                label={t("qbank.tracker.accuracy")}
+                value={`${overall.accuracy}%`}
+                icon={Target}
+                color="warning"
+                trend={
+                  accuracyTrend.length >= 2 ? (
                   <SparkTrend
                     data={accuracyTrend}
                     tone="auto"
@@ -4312,21 +4366,50 @@ function TrackerTab({
                 ) : undefined
               }
             />
-            <StatTile
-              compact
-              label={t("qbank.tracker.avgTime")}
-              value={timingStats.avgTimeMs > 0 ? formatMs(timingStats.avgTimeMs) : "—"}
-              icon={Timer}
-              color="info"
-            />
-            <StatTile
-              compact
-              label={t("qbank.tracker.firstAttempt")}
-              value={timingStats.firstTryAcc > 0 ? `${timingStats.firstTryAcc}%` : "—"}
-              icon={Target}
-              color="info"
-            />
-          </div>
+            </SectionItem>
+            <SectionItem>
+              <StatTile
+                compact
+                label={t("qbank.tracker.avgTime")}
+                value={timingStats.avgTimeMs > 0 ? formatMs(timingStats.avgTimeMs) : "—"}
+                icon={Timer}
+                color="info"
+                trend={
+                  avgTimeTrend.length >= 2 ? (
+                    <SparkTrend
+                      data={avgTimeTrend}
+                      tone="auto"
+                      showDelta
+                      deltaFormatter={(first, last) => {
+                        const diff = last - first;
+                        const sign = diff > 0 ? "+" : diff < 0 ? "\u2212" : "";
+                        return `${sign}${formatMs(Math.abs(diff))}`;
+                      }}
+                    />
+                  ) : undefined
+                }
+              />
+            </SectionItem>
+            <SectionItem>
+              <StatTile
+                compact
+                label={t("qbank.tracker.firstAttempt")}
+                value={timingStats.firstTryAcc > 0 ? `${timingStats.firstTryAcc}%` : "—"}
+                icon={Target}
+                color="info"
+                trend={
+                  firstTryTrend.length >= 2 ? (
+                    <SparkTrend
+                      data={firstTryTrend}
+                      tone="auto"
+                      showDelta
+                      deltaFormatter={(first, last) => `${defaultSparkDelta(first, last)}%`}
+                    />
+                  ) : undefined
+                }
+              />
+            </SectionItem>
+          </SectionList>
         )}
       </div>
 
@@ -4384,12 +4467,12 @@ function TrackerTab({
               </div>
             </div>
             <div className="flex items-center gap-3 mt-4">
-              <div className="flex-1 h-1.5 rounded-full bg-muted/60 overflow-hidden">
-                <div
-                  className="h-full rounded-full bg-warning transition-all duration-300"
-                  style={{ width: `${activeProgressPct}%` }}
-                />
-              </div>
+              <MetricBar
+                value={activeProgressPct}
+                color="warning"
+                label={t("qbank.tracker.attempted")}
+                className="flex-1"
+              />
               <span className="text-[11px] text-muted-foreground tabular-nums whitespace-nowrap">
                 {activeAnsweredCount}/{activeSession.questions.length}{" "}
                 {t("qbank.tracker.attempted").toLowerCase()} · {activeProgressPct}%
@@ -4438,11 +4521,13 @@ function TrackerTab({
             description={t("qbank.tracker.noSessionsDesc")}
           />
         ) : (
-          <div className="space-y-3">
+          <SectionList className="space-y-3">
             {sessionError && (
-              <div className="osler-card--default text-sm text-destructive bg-destructive/5">
-                {sessionError}
-              </div>
+              <SectionItem>
+                <div className="osler-card--default text-sm text-destructive bg-destructive/5">
+                  {sessionError}
+                </div>
+              </SectionItem>
             )}
             {recentSessions.map((s) => {
               const total = s.totalQuestions;
@@ -4536,7 +4621,7 @@ function TrackerTab({
                 </div>
               );
             })}
-          </div>
+          </SectionList>
         )}
       </div>
 
@@ -5897,15 +5982,15 @@ function QuizView({
               const isIncorrect = ans !== undefined && !isCorrect;
               let bg = "bg-sidebar text-muted-foreground border-transparent";
               if (isCurrent) bg = "ring-2 ring-primary bg-sidebar-accent text-foreground";
-              else if (isFlagged) bg = "bg-warning/20 text-warning border-warning/30";
-              else if (isRevealed && isCorrect) bg = "bg-success/20 text-success";
-              else if (isRevealed && isIncorrect) bg = "bg-destructive/20 text-destructive";
-              else if (ans !== undefined) bg = "bg-primary/25 text-primary";
+              else if (isFlagged) bg = "bg-warning/15 text-warning border-warning/30";
+              else if (isRevealed && isCorrect) bg = "bg-success/15 text-success border-success/30";
+              else if (isRevealed && isIncorrect) bg = "bg-destructive/15 text-destructive border-destructive/30";
+              else if (ans !== undefined) bg = "bg-primary/15 text-primary border-primary/30";
               return (
                 <button
                   key={i}
                   onClick={() => onJumpTo(i)}
-                  className={`w-full aspect-square rounded text-[10px] font-semibold border transition-all ${bg}`}
+                  className={`w-full aspect-square rounded-md text-[10px] font-semibold border transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 ${bg}`}
                   title={`Q${i + 1}`}
                 >
                   {i + 1}
@@ -6140,7 +6225,7 @@ function QuizView({
           {/* Bottom action bar — desktop */}
           <footer className="hidden sm:flex border-t border-border bg-card px-4 sm:px-6 py-2.5 items-center gap-2 shrink-0">
             <Button variant="outline" size="sm" onClick={goPrev} disabled={session.current === 0} className="h-9 rounded-lg">
-              <ChevronLeft className="size-4 mr-1" /> {t("common.previous")}
+              <ChevronLeft className="size-4 me-1" /> {t("common.previous")}
             </Button>
 
             <div className="flex-1" />
@@ -6148,26 +6233,13 @@ function QuizView({
             {!readonly && (
               <>
                 <div className="flex items-center gap-1">
-                  <Button variant="outline" size="sm" onClick={onToggleCalculator} className={`h-9 px-2.5 rounded-lg ${calculatorOpen ? "border-primary bg-primary/10 text-primary" : ""}`} title={t("qbank.session.calculator")}>
-                    <CalcIcon className="size-4" />
-                  </Button>
-                  <Button variant="outline" size="sm" onClick={onToggleLabValues} className={`h-9 px-2.5 rounded-lg ${labValuesOpen ? "border-primary bg-primary/10 text-primary" : ""}`} title={t("qbank.session.labValues")}>
-                    <FlaskConical className="size-4" />
-                  </Button>
-                  <Button
-                    variant="outline" size="sm"
-                    onClick={onToggleAiAssistant}
-                    className={`h-9 px-2.5 rounded-lg ${aiAssistantOpen ? "border-primary bg-primary/10 text-primary" : ""}`}
-                    title={t("qbank.session.aiAssistant")}
-                  >
-                    <Sparkles className="size-4" />
-                  </Button>
+                  <ToolButton onClick={onToggleCalculator} icon={CalcIcon} active={calculatorOpen} title={t("qbank.session.calculator")} />
+                  <ToolButton onClick={onToggleLabValues} icon={FlaskConical} active={labValuesOpen} title={t("qbank.session.labValues")} />
+                  <ToolButton onClick={onToggleAiAssistant} icon={Sparkles} active={aiAssistantOpen} title={t("qbank.session.aiAssistant")} />
                   {!isMobile && (
                     <Popover open={articleSearchOpen} onOpenChange={setArticleSearchOpen}>
                       <PopoverTrigger asChild>
-                        <Button variant="outline" size="sm" className="h-9 px-2.5 rounded-lg" title={t("qbank.session.openArticle")}>
-                          <BookOpen className="size-4" />
-                        </Button>
+                        <ToolButton onClick={() => setArticleSearchOpen(true)} icon={BookOpen} title={t("qbank.session.openArticle")} />
                       </PopoverTrigger>
                       <PopoverContent align="end" className="w-72 p-0 max-h-64 overflow-y-auto">
                         <div className="py-1">
@@ -6179,7 +6251,7 @@ function QuizView({
                                 onOpenArticle(a.file);
                                 setArticleSearchOpen(false);
                               }}
-                              className="w-full text-left text-sm px-4 py-2.5 hover:bg-muted transition-colors flex items-center gap-2 border-b border-border last:border-0"
+                              className="w-full text-left text-sm px-4 py-2.5 hover:bg-muted transition-colors flex items-center gap-2 border-b border-border last:border-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
                             >
                               <FileText className="size-3.5 shrink-0 text-muted-foreground" />
                               <span className="truncate">{a.title}</span>
@@ -6189,17 +6261,10 @@ function QuizView({
                       </PopoverContent>
                     </Popover>
                   )}
-                  <Button
-                    variant="outline" size="sm"
-                    onClick={() => setShowShortcuts((s) => !s)}
-                    className={`h-9 px-2.5 rounded-lg ${showShortcuts ? "border-primary bg-primary/10 text-primary" : ""}`}
-                    title={t("qbank.session.keyboardShortcuts")}
-                  >
-                    <Keyboard className="size-4" />
-                  </Button>
+                  <ToolButton onClick={() => setShowShortcuts((s) => !s)} icon={Keyboard} active={showShortcuts} title={t("qbank.session.keyboardShortcuts")} />
                 </div>
 
-                <div className="h-5 w-px bg-border mx-1 hidden sm:block" />
+                <div className="h-5 w-px bg-border mx-1 hidden sm:block" aria-hidden="true" />
 
                 <Button
                   variant="outline" size="sm" onClick={onToggleFlag}
@@ -6207,10 +6272,10 @@ function QuizView({
                   title={session.flagged[session.current] ? t("qbank.session.unflagQuestion") : t("qbank.session.flagForReview")}
                 >
                   <Flag className={`size-4 ${session.flagged[session.current] ? "fill-warning text-warning" : ""}`} />
-                  <span className="hidden sm:inline ml-1">{session.flagged[session.current] ? t("qbank.session.flagged") : t("qbank.session.flag")}</span>
+                  <span className="hidden sm:inline ms-1">{session.flagged[session.current] ? t("qbank.session.flagged") : t("qbank.session.flag")}</span>
                 </Button>
 
-                <div className="h-5 w-px bg-border mx-1 hidden sm:block" />
+                <div className="h-5 w-px bg-border mx-1 hidden sm:block" aria-hidden="true" />
 
                 {!submitted && isMCQ && (
                   <Button size="sm" onClick={onSubmit} disabled={selected === undefined} className="h-9 rounded-lg">
@@ -6224,7 +6289,7 @@ function QuizView({
                 )}
                 {submitted && session.mode === "tutor" && (
                   <Button variant="outline" size="sm" onClick={onRetry} className="h-9 rounded-lg" title={t("qbank.session.retryQuestion")}>
-                    <RotateCcw className="size-4 mr-1" />
+                    <RotateCcw className="size-4 me-1" />
                     <span className="hidden sm:inline">{t("qbank.session.retry")}</span>
                   </Button>
                 )}
@@ -6236,13 +6301,13 @@ function QuizView({
               variant={readonly ? "default" : isLast ? "destructive" : "default"}
             >
               {readonly ? (
-                <>{isLast ? t("qbank.review.exit") : t("common.next")} <ChevronRight className="size-4 ml-1" /></>
+                <>{isLast ? t("qbank.review.exit") : t("common.next")} <ChevronRight className="size-4 ms-1" /></>
               ) : isLast ? (
-                <>{t("qbank.session.endTest")} <ChevronRight className="size-4 ml-1" /></>
+                <>{t("qbank.session.endTest")} <ChevronRight className="size-4 ms-1" /></>
               ) : submitted && session.mode === "tutor" ? (
-                <>{t("qbank.session.nextQuestion")} <ChevronRight className="size-4 ml-1" /></>
+                <>{t("qbank.session.nextQuestion")} <ChevronRight className="size-4 ms-1" /></>
               ) : (
-                <>{t("common.next")} <ChevronRight className="size-4 ml-1" /></>
+                <>{t("common.next")} <ChevronRight className="size-4 ms-1" /></>
               )}
             </Button>
           </footer>
@@ -6291,9 +6356,13 @@ function QuizView({
                     side="bottom"
                     className="px-0 pt-0 pb-[max(env(safe-area-inset-bottom,0px),0.75rem)] rounded-t-2xl data-[state=open]:duration-200 data-[state=closed]:duration-150"
                   >
-                    <SheetHeader className="flex-row items-center justify-between gap-2 px-4 pt-4 pb-1">
+                    {/* Grab handle — matches QuestionNavigatorSheet */}
+                    <div className="mx-auto mt-2.5 h-1 w-10 rounded-full bg-border shrink-0" />
+                    <SheetHeader className="flex-row items-center justify-between gap-2 px-4 pt-2.5 pb-1">
                       <SheetTitle className="flex items-center gap-2 text-sm font-semibold">
-                        <Wrench className="size-4 text-muted-foreground" />
+                        <span className="size-7 rounded-lg bg-primary/10 border border-primary/20 text-primary flex items-center justify-center shrink-0">
+                          <Wrench className="size-4" />
+                        </span>
                         {t("qbank.session.tools")}
                       </SheetTitle>
                     </SheetHeader>
@@ -6336,7 +6405,7 @@ function QuizView({
                           <BookOpen className="size-3.5" />
                           {t("qbank.session.openArticle")}
                         </div>
-                        <div className="max-h-48 overflow-y-auto medos-quiet-scrollbar">
+                        <div className="max-h-48 overflow-y-auto medos-scroll">
                           {articleList.length === 0 ? (
                             <p className="px-2 py-2 text-sm text-muted-foreground">
                               {t("qbank.session.noArticles")}
@@ -6369,7 +6438,7 @@ function QuizView({
                 className="flex-1 h-10 rounded-lg medos-touch-target"
               >
                 {isLast ? t("qbank.review.exit") : t("common.next")}
-                <ChevronRight className="size-4 ml-1" />
+                <ChevronRight className="size-4 ms-1" />
               </Button>
             ) : !submitted && isMCQ ? (
               <Button
@@ -6396,7 +6465,7 @@ function QuizView({
                   : submitted && session.mode === "tutor"
                   ? t("qbank.session.nextQuestion")
                   : t("common.next")}
-                <ChevronRight className="size-4 ml-1" />
+                <ChevronRight className="size-4 ms-1" />
               </Button>
             )}
           </footer>
@@ -7478,7 +7547,7 @@ function OsceEngineView({
 
       {/* Differential Diagnosis */}
       {question.differential && question.differential.length > 0 && (
-        <div className="qbank-card">
+        <div className="osler-card--default">
           <h4 className="flex items-center gap-2 text-sm font-semibold mb-2">
             <Stethoscope className="size-4 text-primary" />
             Differential Diagnosis
@@ -7498,7 +7567,7 @@ function OsceEngineView({
 
       {/* Performance Rubric */}
       {question.rubric && question.rubric.length > 0 && (
-        <div className="qbank-card">
+        <div className="osler-card--default">
           <div className="flex items-center justify-between mb-1">
             <h4 className="flex items-center gap-2 text-sm font-semibold">
               <ListChecks className="size-4 text-primary" />
@@ -8003,18 +8072,18 @@ function ResultsView({
           </div>
           <div className="flex gap-2">
             <Button variant="outline" onClick={() => setPdfDialogOpen(true)} className="rounded-xl">
-              <FileText className="size-4 mr-1.5" /> {t("pdf.exportResults")}
+              <FileText className="size-4 me-1.5" /> {t("pdf.exportResults")}
             </Button>
             <Button variant="outline" onClick={onRestart} className="rounded-xl">
-              <RotateCcw className="size-4 mr-1.5" /> {t("qbank.home.restart")}
+              <RotateCcw className="size-4 me-1.5" /> {t("qbank.home.restart")}
             </Button>
             <Button variant="outline" onClick={onGoHome} className="rounded-xl">
-              <Home className="size-4 mr-1.5" /> {t("qbank.home.backToQBank")}
+              <Home className="size-4 me-1.5" /> {t("qbank.home.backToQBank")}
             </Button>
           </div>
         </div>
 
-        <div className="qbank-card">
+        <div className="osler-card--default">
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-center">
             <div className="text-center lg:border-r lg:border-border lg:pr-6">
               <div className="text-xs uppercase tracking-wider text-muted-foreground mb-1">
@@ -8062,7 +8131,7 @@ function ResultsView({
           </div>
         </div>
 
-        <div className="qbank-card">
+        <div className="osler-card--default">
           <h3 className="text-sm font-semibold mb-3">{t("qbank.home.scoreDistribution")}</h3>
           <div className="flex h-3 rounded-full overflow-hidden bg-muted">
             <div
@@ -8091,7 +8160,7 @@ function ResultsView({
           </div>
         </div>
 
-        <div className="qbank-card">
+        <div className="osler-card--default">
           <h3 className="text-base font-semibold mb-3 flex items-center gap-2">
             <ListChecks className="size-4 text-primary" /> {t("qbank.home.questionReview")}
           </h3>
@@ -8170,28 +8239,6 @@ function ResultsView({
 /* ─────────────────────────────────────────────────────────────────────────
  * Helpers
  * ───────────────────────────────────────────────────────────────────────── */
-function SectionHeader({
-  number,
-  title,
-  subtitle,
-}: {
-  number: number;
-  title: string;
-  subtitle?: string;
-}) {
-  return (
-    <div className="qbank-card-header">
-      <div className="qbank-card-number">{number}</div>
-      <div>
-        <h3 className="text-base font-semibold text-foreground">{title}</h3>
-        {subtitle && (
-          <p className="text-xs text-muted-foreground mt-0.5">{subtitle}</p>
-        )}
-      </div>
-    </div>
-  );
-}
-
 function SummaryRow({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex items-center justify-between">

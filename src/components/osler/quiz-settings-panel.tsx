@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import { springSoft } from "@/lib/osler/motion";
 import {
   X,
   AlignLeft,
@@ -183,7 +184,7 @@ export function QuizSettingsPanel({
             <button
               onClick={() => setTheme("light")}
               className={cn(
-                "flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg border-2 transition-all",
+                "flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg border transition-all",
                 theme === "light"
                   ? "border-primary bg-primary/5 text-primary"
                   : "border-border hover:border-primary/40 text-muted-foreground"
@@ -195,7 +196,7 @@ export function QuizSettingsPanel({
             <button
               onClick={() => setTheme("dark")}
               className={cn(
-                "flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg border-2 transition-all",
+                "flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg border transition-all",
                 theme === "dark"
                   ? "border-primary bg-primary/5 text-primary"
                   : "border-border hover:border-primary/40 text-muted-foreground"
@@ -221,7 +222,7 @@ export function QuizSettingsPanel({
                   key={opt.id}
                   onClick={() => update({ fontFamily: opt.id })}
                   className={cn(
-                    "flex flex-col items-center gap-1 px-2 py-2.5 rounded-lg border-2 transition-all",
+                    "flex flex-col items-center gap-1 px-2 py-2.5 rounded-lg border transition-all",
                     settings.fontFamily === opt.id
                       ? "border-primary bg-primary/5"
                       : "border-border hover:border-primary/40"
@@ -261,7 +262,7 @@ export function QuizSettingsPanel({
                   onClick={() => update({ fontWeight: w.id })}
                   style={{ fontWeight: w.id }}
                   className={cn(
-                    "px-2 py-2 rounded-lg border-2 text-xs transition-all",
+                    "px-2 py-2 rounded-lg border text-xs transition-all",
                     settings.fontWeight === w.id
                       ? "border-primary bg-primary/5"
                       : "border-border hover:border-primary/40"
@@ -356,7 +357,7 @@ export function QuizSettingsPanel({
                     key={opt.id}
                     onClick={() => update({ questionAlign: opt.id })}
                     className={cn(
-                      "flex flex-col items-center gap-1.5 px-2 py-3 rounded-lg border-2 transition-all",
+                      "flex flex-col items-center gap-1.5 px-2 py-3 rounded-lg border transition-all",
                       active
                         ? "border-primary bg-primary/5 text-primary"
                         : "border-border hover:border-primary/40 text-muted-foreground"
@@ -394,11 +395,7 @@ export function QuizSettingsPanel({
           initial={isPhone ? { y: "100%", opacity: 0 } : { x: rtl ? -360 : 360, opacity: 0 }}
           animate={isPhone ? { y: 0, opacity: 1 } : { x: 0, opacity: 1 }}
           exit={isPhone ? { y: "100%", opacity: 0 } : { x: rtl ? -360 : 360, opacity: 0 }}
-          transition={
-            isPhone
-              ? { type: "spring", damping: 32, stiffness: 320 }
-              : { type: "spring", damping: 28, stiffness: 300 }
-          }
+          transition={springSoft}
           {...dismissProps}
           className={
             isPhone
@@ -576,7 +573,7 @@ function LayoutOption({
     <button
       onClick={onClick}
       className={cn(
-        "flex flex-col items-start gap-1 px-3 py-2.5 rounded-lg border-2 text-start transition-all",
+        "flex flex-col items-start gap-1 px-3 py-2.5 rounded-lg border text-start transition-all",
         active
           ? "border-primary bg-primary/5 text-primary"
           : "border-border hover:border-primary/40 text-muted-foreground"

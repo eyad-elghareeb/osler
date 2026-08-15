@@ -257,48 +257,93 @@
   }
 }
 
-/* Global scrollbar — thin, adapts to mode */
-html {
-  scrollbar-width: thin;
-  scrollbar-color: color-mix(in oklch, var(--ring) 40%, transparent) transparent;
-}
-html::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
-}
-html::-webkit-scrollbar-track {
-  background: transparent;
-}
-html::-webkit-scrollbar-thumb {
-  background-color: color-mix(in oklch, var(--ring) 40%, transparent);
-  border-radius: 999px;
-  border: 2px solid transparent;
-  background-clip: content-box;
-}
-html::-webkit-scrollbar-thumb:hover {
-  background-color: color-mix(in oklch, var(--ring) 65%, transparent);
+/* Global scrollbar — deprecated. The refined `*` selector below now
+ * handles every element including <html>. This block is intentionally
+ * empty; the old 8px/40% recipe has been superseded. */
+
+/* ── Refined scrollbar system ──────────────────────────────────────────────
+ * Project-wide subtle scrollbars. Applied globally to every scrollable
+ * element via the `*` selector below, so individual components don't need
+ * to opt in. The recipe:
+ *   - 6px thumb (was 8px) — less visual weight
+ *   - 20% ring color at rest, 45% on hover — barely visible until needed
+ *   - 999px radius + 2px transparent border → pill-shaped thumb with a
+ *     gap between the thumb and the track edge
+ *   - 150ms transition on background-color so the hover fade is smooth
+ *   - transparent track (no gutter)
+ *
+ * Firefox uses `scrollbar-color` (two-color shorthand: thumb then track).
+ * Webkit/Blink uses the `::-webkit-scrollbar-*` pseudo-elements.
+ *
+ * The `.medos-scroll` / `.osler-has-scroll` / `.osler-scroll` utility
+ * classes are kept for backward-compat but now just reference the same
+ * recipe — they're no-ops on top of the global default.
+ */
+
+/* Global default — every scrollable element gets the subtle scrollbar. */
+@layer base {
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: color-mix(in oklch, var(--ring) 20%, transparent) transparent;
+  }
+  *::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  *::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  *::-webkit-scrollbar-thumb {
+    background-color: color-mix(in oklch, var(--ring) 20%, transparent);
+    border-radius: 999px;
+    border: 1px solid transparent;
+    background-clip: content-box;
+    transition: background-color 150ms ease;
+  }
+  *::-webkit-scrollbar-thumb:hover {
+    background-color: color-mix(in oklch, var(--ring) 45%, transparent);
+    background-clip: content-box;
+  }
+  /* Corner where two scrollbars meet — keep it transparent so the
+     intersection doesn't draw a solid square. */
+  *::-webkit-scrollbar-corner {
+    background: transparent;
+  }
 }
 
-/* Custom scrollbar — adapts to mode */
-.medos-scroll {
+/* Legacy utility classes — kept for backward-compat, now identical to the
+ * global default above. Safe to remove once all `medos-scroll` /
+ * `osler-has-scroll` / `osler-scroll` class usages are dropped. */
+.medos-scroll,
+.osler-has-scroll,
+.osler-scroll {
   scrollbar-width: thin;
-  scrollbar-color: color-mix(in oklch, var(--ring) 40%, transparent) transparent;
+  scrollbar-color: color-mix(in oklch, var(--ring) 20%, transparent) transparent;
 }
-.medos-scroll::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+.medos-scroll::-webkit-scrollbar,
+.osler-has-scroll::-webkit-scrollbar,
+.osler-scroll::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
 }
-.medos-scroll::-webkit-scrollbar-track {
+.medos-scroll::-webkit-scrollbar-track,
+.osler-has-scroll::-webkit-scrollbar-track,
+.osler-scroll::-webkit-scrollbar-track {
   background: transparent;
 }
-.medos-scroll::-webkit-scrollbar-thumb {
-  background-color: color-mix(in oklch, var(--ring) 40%, transparent);
+.medos-scroll::-webkit-scrollbar-thumb,
+.osler-has-scroll::-webkit-scrollbar-thumb,
+.osler-scroll::-webkit-scrollbar-thumb {
+  background-color: color-mix(in oklch, var(--ring) 20%, transparent);
   border-radius: 999px;
-  border: 2px solid transparent;
+  border: 1px solid transparent;
   background-clip: content-box;
+  transition: background-color 150ms ease;
 }
-.medos-scroll::-webkit-scrollbar-thumb:hover {
-  background-color: color-mix(in oklch, var(--ring) 65%, transparent);
+.medos-scroll::-webkit-scrollbar-thumb:hover,
+.osler-has-scroll::-webkit-scrollbar-thumb:hover,
+.osler-scroll::-webkit-scrollbar-thumb:hover {
+  background-color: color-mix(in oklch, var(--ring) 45%, transparent);
   background-clip: content-box;
 }
 
@@ -371,24 +416,14 @@ html::-webkit-scrollbar-thumb:hover {
  * component. See `AGENTS.md → Design System` for the full rules.
  * ─────────────────────────────────────────────────────────────────────── */
 
-/* Thin scrollbar mixin — inlined into `.osler-page` and friends so we
- * don't depend on `@apply medos-scroll` (Tailwind v4 can only `@apply`
- * real Tailwind utilities, not custom classes). */
+/* Thin scrollbar mixin — deprecated. The global `*` selector above now
+ * applies the refined scrollbar recipe to every element. This block is
+ * kept only as a placeholder so existing `osler-has-scroll` class usages
+ * don't break if they relied on the class being defined; it adds nothing
+ * on top of the global default. */
 @layer base {
   .osler-has-scroll {
-    scrollbar-width: thin;
-    scrollbar-color: color-mix(in oklch, var(--ring) 40%, transparent) transparent;
-  }
-  .osler-has-scroll::-webkit-scrollbar { width: 8px; height: 8px; }
-  .osler-has-scroll::-webkit-scrollbar-track { background: transparent; }
-  .osler-has-scroll::-webkit-scrollbar-thumb {
-    background-color: color-mix(in oklch, var(--ring) 40%, transparent);
-    border-radius: 999px;
-    border: 2px solid transparent;
-    background-clip: content-box;
-  }
-  .osler-has-scroll::-webkit-scrollbar-thumb:hover {
-    background-color: color-mix(in oklch, var(--ring) 65%, transparent);
+    /* inherits from the global * selector */
   }
 }
 
@@ -399,19 +434,20 @@ html::-webkit-scrollbar-thumb:hover {
 .osler-page {
   @apply h-full overflow-y-auto md:pb-0;
   scrollbar-width: thin;
-  scrollbar-color: color-mix(in oklch, var(--ring) 40%, transparent) transparent;
+  scrollbar-color: color-mix(in oklch, var(--ring) 20%, transparent) transparent;
   padding-bottom: env(safe-area-inset-bottom, 0px);
 }
-.osler-page::-webkit-scrollbar { width: 8px; height: 8px; }
+.osler-page::-webkit-scrollbar { width: 6px; height: 6px; }
 .osler-page::-webkit-scrollbar-track { background: transparent; }
 .osler-page::-webkit-scrollbar-thumb {
-  background-color: color-mix(in oklch, var(--ring) 40%, transparent);
+  background-color: color-mix(in oklch, var(--ring) 20%, transparent);
   border-radius: 999px;
-  border: 2px solid transparent;
+  border: 1px solid transparent;
   background-clip: content-box;
+  transition: background-color 150ms ease;
 }
 .osler-page::-webkit-scrollbar-thumb:hover {
-  background-color: color-mix(in oklch, var(--ring) 65%, transparent);
+  background-color: color-mix(in oklch, var(--ring) 45%, transparent);
 }
 @media (max-width: 767px) {
   .osler-page {
@@ -495,10 +531,13 @@ html::-webkit-scrollbar-thumb:hover {
 
 /* Stat tile — label + big value, used in Dashboard, Profile, QBank/Flashcard hubs.
  * Premium recipe: subtle elevation + a hair stronger border on the top edge
- * so the value reads as the focal point. */
+ * so the value reads as the focal point. The value row has a min-height so
+ * tiles with and without a trend/sparkline line up perfectly in a grid. */
 .osler-stat-tile {
   @apply bg-card border border-border rounded-xl p-4 transition-all;
   box-shadow: var(--shadow-e1);
+  display: flex;
+  flex-direction: column;
 }
 .osler-stat-tile__label {
   @apply text-[11px] font-medium uppercase tracking-wider text-muted-foreground;
@@ -506,13 +545,29 @@ html::-webkit-scrollbar-thumb:hover {
 .osler-stat-tile__value {
   @apply text-2xl font-bold tabular-nums;
 }
+.osler-stat-tile__row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 0.5rem;
+  /* Reserve space for a SparkTrend (28px tall) so tiles with and without
+     a trend align. Without this, the tile with a trend is ~28px taller than
+     its siblings and the grid looks ragged. */
+  min-height: 2rem;
+}
 /* Compact variant for 3-column dense grids (QBank / Flashcard hub stat bars). */
 .osler-stat-tile--compact {
   @apply bg-card border border-border rounded-xl p-3.5;
   box-shadow: var(--shadow-e1);
+  display: flex;
+  flex-direction: column;
 }
 .osler-stat-tile--compact .osler-stat-tile__value {
   @apply text-xl;
+}
+.osler-stat-tile--compact .osler-stat-tile__row {
+  min-height: 1.75rem;
 }
 /* Clickable stat tile — refined hover lift. */
 button.osler-stat-tile:hover,
@@ -1439,8 +1494,13 @@ html[dir="rtl"] {
  * (navy/blue OKLCH tokens, shadcn-style cards, Geist typography)
  * ═══════════════════════════════════════════════════════════════════════════ */
 
-/* ── Hub content grid ───────────────────────────────────────────────────── */
-.osler-card {
+/* ── Hub content grid (legacy) ────────────────────────────────────────────
+ * This was the old hub-card recipe with a hover lift + accent bar. Renamed
+ * to .osler-card--legacy so it no longer conflicts with the plain .osler-card
+ * base class (which every .osler-card--default / --compact / --roomy inherits
+ * from). Kept for backward-compat with any external CSS that still references
+ * the hover-lift behaviour; new code should use .osler-card--interactive. */
+.osler-card--legacy {
   background: var(--card);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
@@ -1450,7 +1510,7 @@ html[dir="rtl"] {
   position: relative;
   overflow: hidden;
 }
-.osler-card::before {
+.osler-card--legacy::before {
   content: "";
   position: absolute;
   top: 0; left: 0; right: 0;
@@ -1459,12 +1519,12 @@ html[dir="rtl"] {
   opacity: 0;
   transition: opacity 0.18s ease;
 }
-.osler-card:hover {
+.osler-card--legacy:hover {
   border-color: color-mix(in oklch, var(--primary) 50%, var(--border));
   transform: translateY(-2px);
   box-shadow: 0 8px 28px oklch(0 0 0 / 0.18);
 }
-.osler-card:hover::before { opacity: 1; }
+.osler-card--legacy:hover::before { opacity: 1; }
 
 .osler-card-icon {
   width: 40px; height: 40px;
@@ -1791,16 +1851,11 @@ html[dir="rtl"] {
 .osler-card.osler-engine-written    .osler-card-icon { background: color-mix(in oklch, oklch(0.78 0.16 80) 18%, transparent); color: oklch(0.78 0.16 80); }
 .osler-card.osler-engine-osce       .osler-card-icon { background: color-mix(in oklch, oklch(0.7 0.2 16) 18%, transparent); color: oklch(0.7 0.2 16); }
 
-/* ── Scrollbar utility ──────────────────────────────────────────────────── */
-.osler-scroll { scrollbar-width: thin; }
-.osler-scroll::-webkit-scrollbar { width: 8px; height: 8px; }
-.osler-scroll::-webkit-scrollbar-track { background: transparent; }
-.osler-scroll::-webkit-scrollbar-thumb {
-  background-color: color-mix(in oklch, var(--ring) 40%, transparent);
-  border-radius: 999px;
-  border: 2px solid transparent;
-  background-clip: content-box;
-}
+/* ── Scrollbar utility — deprecated. The global `*` selector in the
+ * refined scrollbar system above now handles every element. This block
+ * is kept only so existing `osler-scroll` class usages don't break if
+ * they relied on the class being defined. */
+.osler-scroll { /* inherits from global * selector */ }
 
 /* ── Print-friendly (used by tracker PDF export) ───────────────────────── */
 @media print {
@@ -2044,10 +2099,15 @@ html[dir="rtl"] {
 
 /* ── QBank card (used in create-test form sections) ──────────────────────── */
 .qbank-card {
+  /* Unified with .osler-card--default so every card in QBank reads as the
+     same surface. Legacy class kept for backward-compat with any external
+     CSS or future code that still references it. */
   background: var(--card);
   border: 1px solid var(--border);
-  border-radius: 16px;
-  padding: 1.25rem 1.5rem;
+  border-radius: var(--radius-xl);
+  padding: 1rem;
+  box-shadow: var(--shadow-e1);
+  transition: all 0.18s ease;
 }
 .qbank-card-header {
   display: flex;
@@ -2056,27 +2116,30 @@ html[dir="rtl"] {
   margin-bottom: 0.85rem;
 }
 .qbank-card-number {
-  width: 28px;
-  height: 28px;
+  width: 20px;
+  height: 20px;
   border-radius: 999px;
-  background: color-mix(in oklch, var(--primary) 15%, transparent);
+  background: color-mix(in oklch, var(--primary) 12%, transparent);
   color: var(--primary);
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  font-size: 0.75rem;
+  font-size: 11px;
   font-weight: 700;
   flex-shrink: 0;
 }
 
-/* ── QBank mode card (Timed / Tutor) ─────────────────────────────────────── */
+/* ── QBank mode card (Timed / Tutor) ───────────────────────────────────────
+ * Unified with the SelectableCard active treatment (1px border, /5 bg, /10
+ * icon chip). The .active border-color now uses a 1px border (was 2px) so
+ * the layout doesn't shift when toggling. */
 .qbank-mode-card {
   display: flex;
   align-items: flex-start;
   gap: 0.625rem;
-  padding: 0.75rem 0.8rem;
-  border-radius: 14px;
-  border: 2px solid var(--border);
+  padding: 0.75rem;
+  border-radius: var(--radius-xl);
+  border: 1px solid var(--border);
   background: var(--card);
   text-align: left;
   width: 100%;
@@ -2089,21 +2152,23 @@ html[dir="rtl"] {
 .qbank-mode-card.active {
   border-color: var(--primary);
   background: color-mix(in oklch, var(--primary) 5%, var(--card));
+  box-shadow: var(--shadow-e1);
 }
 .qbank-mode-card-icon {
   width: 32px;
   height: 32px;
-  border-radius: 9px;
+  border-radius: var(--radius-lg);
   background: color-mix(in oklch, var(--primary) 12%, transparent);
   color: var(--primary);
   display: inline-flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
+  transition: all 0.18s ease;
 }
 .qbank-mode-card.active .qbank-mode-card-icon {
-  background: var(--primary);
-  color: var(--primary-foreground);
+  background: color-mix(in oklch, var(--primary) 10%, transparent);
+  color: var(--primary);
 }
 
 /* ── Library (AMBOSS-style article reader) ───────────────────────────────── */

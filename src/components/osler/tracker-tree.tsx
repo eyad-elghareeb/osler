@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import type { EngineType } from "@/lib/osler/types";
 import { ENGINE_META } from "@/lib/osler/content";
+import { easeOut, disclosureVariants } from "@/lib/osler/motion";
 import { useI18n } from "./i18n-provider";
 import { cn } from "@/lib/utils";
 
@@ -42,8 +43,6 @@ const PACK_ICONS: Record<EngineType, React.ComponentType<{ className?: string }>
   library: BookOpen,
   video: BookOpen,
 };
-
-const EASE: [number, number, number, number] = [0.23, 1, 0.32, 1];
 
 function CountChip({ count, kind }: { count: number; kind: "wrong" | "flagged" }) {
   if (count <= 0) return null;
@@ -83,7 +82,7 @@ const Caret = React.memo(function Caret({ open, rtl }: { open: boolean; rtl: boo
     <motion.div
       initial={false}
       animate={{ rotate: open ? (rtl ? -90 : 90) : 0 }}
-      transition={{ duration: 0.18, ease: EASE }}
+      transition={{ duration: 0.18, ease: easeOut.ease }}
       className="size-4 shrink-0 text-muted-foreground"
       aria-hidden="true"
     >
@@ -339,10 +338,11 @@ export function TrackerTree({ nodes, label, defaultExpanded, selectedUid, onOpen
           <AnimatePresence initial={false}>
             {isOpen && (
               <motion.div
-                initial={{ height: 0, opacity: 0 }}
-                animate={{ height: "auto", opacity: 1 }}
-                exit={{ height: 0, opacity: 0 }}
-                transition={{ duration: reduced ? 0 : 0.25, ease: EASE }}
+                initial="hidden"
+                animate="visible"
+                exit="exit"
+                variants={disclosureVariants}
+                transition={reduced ? { duration: 0 } : undefined}
                 className="overflow-hidden"
               >
                 <div

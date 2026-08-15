@@ -11,9 +11,12 @@ import type { PoolQuestion } from "@/lib/osler/qbank-pool";
 import type { QuestionRecord } from "@/lib/osler/storage";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { useI18n } from "./i18n-provider";
+import { EmptyState, PackSheetHeader, PackSheetFooter } from "./ui-primitives";
+import { disclosureVariants } from "@/lib/osler/motion";
 import { cn } from "@/lib/utils";
 
 export interface TrackerPreviewItem {
@@ -44,8 +47,6 @@ const LETTERS = ["A", "B", "C", "D", "E", "F", "G", "H"];
 const ARABIC_LETTERS = ["أ", "ب", "ج", "د", "ه", "و", "ز", "ح", "ط", "ي"];
 const choiceLetter = (idx: number, lang?: string): string =>
   (lang && lang.startsWith("ar") ? ARABIC_LETTERS : LETTERS)[idx] ?? "?";
-
-const EASE: [number, number, number, number] = [0.23, 1, 0.32, 1];
 
 function formatMs(ms: number): string {
   const total = Math.max(0, Math.round(ms / 1000));
@@ -88,6 +89,9 @@ function StatusBadges({ record, t }: { record: QuestionRecord; t: (key: StringKe
   );
 }
 
+/** Inline disclosure for the explanation / model answer under each preview
+ *  card. Uses the shared `disclosureVariants` from motion.ts so the height
+ *  + opacity transition matches every other expandable surface in the app. */
 function Disclosure({ title, html }: { title: string; html: string }) {
   const reduced = useReducedMotion() ?? false;
   const [open, setOpen] = React.useState(false);
@@ -96,7 +100,7 @@ function Disclosure({ title, html }: { title: string; html: string }) {
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
-        className="flex w-full items-center gap-2 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:outline-none rounded"
+        className="flex w-full items-center gap-2 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:outline-none rounded-md"
       >
         <ChevronDown className={cn("size-3.5 transition-transform", open && "rotate-180")} />
         {title}
@@ -104,10 +108,11 @@ function Disclosure({ title, html }: { title: string; html: string }) {
       <AnimatePresence initial={false}>
         {open && (
           <motion.div
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: "auto", opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: reduced ? 0 : 0.2, ease: EASE }}
+            initial="hidden"
+            animate="visible"
+            exit="exit"
+            variants={disclosureVariants}
+            transition={reduced ? { duration: 0 } : undefined}
             className="overflow-hidden"
           >
             <div className="uworld-prose mt-2 text-sm" dir="auto" dangerouslySetInnerHTML={{ __html: html }} />
@@ -129,11 +134,10 @@ function PreviewCard({ item, pack, selected, onToggle, t }: {
   return (
     <div className="osler-card--default">
       <div className="flex items-start gap-3">
-        <input
-          type="checkbox"
+        <Checkbox
           checked={selected}
-          onChange={onToggle}
-          className="mt-0.5 size-3.5 shrink-0 rounded accent-primary"
+          onCheckedChange={onToggle}
+          className="mt-0.5 size-4 shrink-0"
           aria-label={t("qbank.preview.selectQuestion")}
         />
         <div className="min-w-0 flex-1 space-y-2">
@@ -230,33 +234,37 @@ export function TrackerPreviewSheet({
         className="w-full gap-0 bg-background p-0 sm:max-w-xl"
       >
         <>
-          <header className="safe-pt flex h-12 shrink-0 items-center gap-2 border-b border-border bg-card/60 px-4 pe-12 backdrop-blur-md">
-            <div className="min-w-0 flex-1">
-              <h2 className="truncate text-sm font-semibold">{shownPack.title}</h2>
-              <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+          <PackSheetHeader
+            title={shownPack.title}
+            meta={
+              <>
                 <span>{meta.label}</span>
                 <span aria-hidden>·</span>
                 <span className="tabular-nums">{t("qbank.preview.questions", { n: shownItems.length })}</span>
-              </div>
-            </div>
-            {wrongCount > 0 && (
-              <Badge variant="outline" className="shrink-0 text-xs border-destructive/30 text-destructive">
-                <X className="size-2.5 me-1" />
-                {wrongCount}
-              </Badge>
-            )}
-            {flaggedCount > 0 && (
-              <Badge variant="outline" className="shrink-0 text-xs border-warning/30 text-warning">
-                <Flag className="size-2.5 me-1" />
-                {flaggedCount}
-              </Badge>
-            )}
-          </header>
+              </>
+            }
+            badges={
+              <>
+                {wrongCount > 0 && (
+                  <Badge variant="outline" className="shrink-0 text-xs border-destructive/30 text-destructive">
+                    <X className="size-2.5 me-1" />
+                    {wrongCount}
+                  </Badge>
+                )}
+                {flaggedCount > 0 && (
+                  <Badge variant="outline" className="shrink-0 text-xs border-warning/30 text-warning">
+                    <Flag className="size-2.5 me-1" />
+                    {flaggedCount}
+                  </Badge>
+                )}
+              </>
+            }
+          />
 
           <ScrollArea className="min-h-0 flex-1" dir={rtl ? "rtl" : "ltr"}>
             <div className="space-y-3 p-4">
               {shownItems.length === 0 ? (
-                <p className="py-10 text-center text-sm text-muted-foreground">{t("qbank.preview.noContent")}</p>
+                <EmptyState icon={CheckCircle2} title={t("qbank.preview.noContent")} />
               ) : (
                 shownItems.map((it) => (
                   <PreviewCard
@@ -272,14 +280,13 @@ export function TrackerPreviewSheet({
             </div>
           </ScrollArea>
 
-          <footer className="shrink-0 border-t border-border bg-card/60 p-4 pb-[max(env(safe-area-inset-bottom),1rem)] backdrop-blur-md">
+          <PackSheetFooter>
             <div className="flex items-center gap-3">
               <label className="flex cursor-pointer items-center gap-2 text-xs">
-                <input
-                  type="checkbox"
+                <Checkbox
                   checked={allSelected}
-                  onChange={onToggleAll}
-                  className="size-3.5 rounded accent-primary"
+                  onCheckedChange={onToggleAll}
+                  className="size-4"
                 />
                 {t("qbank.preview.selectAll")}
               </label>
@@ -290,7 +297,7 @@ export function TrackerPreviewSheet({
                 {t("qbank.tracker.startReview")}
               </Button>
             </div>
-          </footer>
+          </PackSheetFooter>
         </>
       </SheetContent>
     </Sheet>
