@@ -18,8 +18,8 @@ export interface ShortcutBinding {
 function action(id: string, scope: ShortcutScope, defaultBinding: string): ShortcutAction {
   return {
     id,
-    labelKey: `shortcuts.action.${id}` as StringKey,
-    descriptionKey: `shortcuts.action.${id}.desc` as StringKey,
+    labelKey: `settings.shortcuts.action.${id}` as StringKey,
+    descriptionKey: `settings.shortcuts.action.${id}.desc` as StringKey,
     scope,
     defaultBinding,
   };
@@ -46,7 +46,12 @@ export const SHORTCUT_ACTIONS: readonly ShortcutAction[] = [
   action("qbank.answer5", "qbank", "5"),
   action("qbank.calculator", "qbank", "mod+b"),
   action("qbank.labValues", "qbank", "mod+l"),
-  action("qbank.aiAssistant", "qbank", "mod+i"),
+  action("qbank.aiAssistant", "qbank", "a"),
+  action("qbank.notes", "qbank", "n"),
+  action("qbank.highlight", "qbank", "h"),
+  action("qbank.eraser", "qbank", "e"),
+  action("qbank.quizSettings", "qbank", ","),
+  action("qbank.shortcutsHelp", "qbank", "shift+/"),
   action("qbank.pause", "qbank", "space"),
   action("qbank.endTest", "qbank", "mod+shift+e"),
   action("qbank.goHome", "qbank", "escape"),
@@ -171,6 +176,7 @@ function normalizeKey(k: string): string {
   if (lower === "plus" || lower === "+") return "+";
   if (lower === "minus" || lower === "-") return "-";
   if (lower === "=" || lower === "equal") return "=";
+  if (lower === "?") return "/";
   if (lower.startsWith("arrow")) return lower;
   return lower;
 }

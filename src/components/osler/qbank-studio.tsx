@@ -145,7 +145,7 @@ import { NotesPanel } from "./notes-panel";
 import { ContentCacheButton } from "./content-cache-button";
 import { useShortcutBindings, useShortcutListener } from "@/hooks/use-shortcuts";
 import { useContentCache } from "@/hooks/use-content-cache";
-import { defaultBindings, isTextInput } from "@/lib/osler/shortcuts";
+import { isTextInput, parseBinding, chordMatches, describeBinding } from "@/lib/osler/shortcuts";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { VerticalSnapGallery } from "./vertical-snap-gallery";
 import { useLightbox } from "./lightbox-provider";
@@ -191,6 +191,23 @@ const ARABIC_LETTERS = ["أ", "ب", "ج", "د", "ه", "و", "ز", "ح", "ط", "�
 const choiceLetter = (idx: number, lang?: string): string =>
   (lang && lang.startsWith("ar") ? ARABIC_LETTERS : LETTERS)[idx] ?? "?";
 const HIGHLIGHT_COLORS = HIGHLIGHT_COLOR_KEYS;
+
+/** Resolve the action a keydown event matches against a scope's single-chord
+ *  bindings (Settings → Keyboard). Multi-chord (sequence) bindings are not
+ *  handled here — the qbank session only binds single keys. */
+function matchSingleChordBinding(
+  e: KeyboardEvent,
+  bindings: Record<string, string>,
+  scope: string,
+): string | null {
+  for (const [actionId, binding] of Object.entries(bindings)) {
+    if (!actionId.startsWith(`${scope}.`)) continue;
+    const chords = parseBinding(binding);
+    if (chords.length !== 1) continue;
+    if (chordMatches(e, chords[0])) return actionId;
+  }
+  return null;
+}
 
 /** Resolve the content-relative base (category + folder) for a question. */
 function questionAssetBase(q: SessionQuestion, item?: ContentTreeNode): {
@@ -5447,43 +5464,58 @@ function QuizView({
     onToggleNotes();
   }, [onToggleNotes]);
 
-  // Keyboard shortcuts
+  // Keyboard shortcuts — resolved against the user's configured bindings so
+  // everything shown in Settings → Keyboard is honored (and rebindable).
   React.useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if (isTextInput(e.target)) return;
-      // Navigation-only shortcuts in readonly (review) mode
+      const actionId = matchSingleChordBinding(e, bindings, "qbank");
+      // Navigation + help are the only shortcuts in readonly (review) mode.
       if (readonly) {
-        if (e.key === "ArrowLeft") { e.preventDefault(); goPrev(); }
-        if (e.key === "ArrowRight") { e.preventDefault(); goNext(); }
-        if (e.key === "?" && !e.shiftKey) { e.preventDefault(); setShowShortcuts((s) => !s); }
+        if (actionId === "qbank.prev") { e.preventDefault(); goPrev(); }
+        else if (actionId === "qbank.next") { e.preventDefault(); goNext(); }
+        else if (actionId === "qbank.shortcutsHelp") { e.preventDefault(); setShowShortcuts((s) => !s); }
         return;
       }
-      if (e.key === "f" || e.key === "F") { e.preventDefault(); onToggleFlag(); }
-      if (e.key === "ArrowLeft") { e.preventDefault(); goPrev(); }
-      if (e.key === "ArrowRight") { e.preventDefault(); goNext(); }
-      if (e.key === "?" && !e.shiftKey) { e.preventDefault(); setShowShortcuts((s) => !s); }
-      if (e.key === "a" && !e.shiftKey && !e.ctrlKey && !e.metaKey) { e.preventDefault(); onToggleAiAssistant(); }
-      if (e.key === "h" || e.key === "H") { e.preventDefault(); setTool((t) => (t && t !== ERASER_TOOL ? null : color)); }
-      if (e.key === "e" || e.key === "E") { e.preventDefault(); setTool((t) => (t === ERASER_TOOL ? null : ERASER_TOOL)); }
-      if (e.key === "n" || e.key === "N") { e.preventDefault(); onToggleNotes(); }
-      if (e.key === "," && !e.shiftKey && !e.ctrlKey && !e.metaKey) { e.preventDefault(); onToggleQuizSettings(); }
-      if (isMCQ && !submitted) {
-        const num = parseInt(e.key);
-        if (num >= 1 && num <= q.choices.length) {
-          e.preventDefault();
-          onSelect(num - 1);
-        }
-      }
-      if (e.key === "Enter" && !submitted) {
+      // Plain Enter always submits — the standard form convention, even if the
+      // configured submit binding is a modifier chord.
+      if (e.key === "Enter" && !e.ctrlKey && !e.metaKey && !e.altKey && !submitted) {
         if (isMCQ ? selected !== undefined : true) {
           e.preventDefault();
           onSubmit();
         }
+        return;
+      }
+      switch (actionId) {
+        case "qbank.prev": e.preventDefault(); goPrev(); break;
+        case "qbank.next": e.preventDefault(); goNext(); break;
+        case "qbank.flag": e.preventDefault(); onToggleFlag(); break;
+        case "qbank.submit":
+          if (!submitted && (isMCQ ? selected !== undefined : true)) {
+            e.preventDefault();
+            onSubmit();
+          }
+          break;
+        case "qbank.aiAssistant": e.preventDefault(); onToggleAiAssistant(); break;
+        case "qbank.highlight": e.preventDefault(); setTool((t) => (t && t !== ERASER_TOOL ? null : color)); break;
+        case "qbank.eraser": e.preventDefault(); setTool((t) => (t === ERASER_TOOL ? null : ERASER_TOOL)); break;
+        case "qbank.notes": e.preventDefault(); onToggleNotes(); break;
+        case "qbank.quizSettings": e.preventDefault(); onToggleQuizSettings(); break;
+        case "qbank.shortcutsHelp": e.preventDefault(); setShowShortcuts((s) => !s); break;
+        case "qbank.answer1": case "qbank.answer2": case "qbank.answer3":
+        case "qbank.answer4": case "qbank.answer5": {
+          if (isMCQ && !submitted) {
+            const idx = parseInt(actionId.slice(-1), 10) - 1;
+            if (idx < q.choices.length) { e.preventDefault(); onSelect(idx); }
+          }
+          break;
+        }
+        default: return;
       }
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [q, isMCQ, submitted, selected, onToggleFlag, goPrev, goNext, onSelect, onSubmit, onToggleAiAssistant, onToggleNotes, onToggleQuizSettings, setTool, readonly]);
+  }, [q, isMCQ, submitted, selected, onToggleFlag, goPrev, goNext, onSelect, onSubmit, onToggleAiAssistant, onToggleNotes, onToggleQuizSettings, setTool, readonly, bindings]);
 
   const currentHighlights = React.useMemo(
     () => highlights.get(activeItem.uid, session.current),
@@ -6259,24 +6291,29 @@ function QuizView({
               </div>
               <div className="space-y-2.5">
                 {([
-                  ["← / →", "qbank.session.shortcut.prev"],
-                  ["1–8", "qbank.session.shortcut.select"],
-                  ["Enter", "qbank.session.shortcut.submit"],
-                  ["F", "qbank.session.shortcut.flag"],
-                  ["A", "qbank.session.shortcut.ai"],
-                  ["H", "qbank.session.shortcut.highlight"],
-                  ["E", "qbank.session.shortcut.eraser"],
-                  ["N", "qbank.session.shortcut.notes"],
-                  [",", "qbank.session.shortcut.settings"],
-                  ["?", "qbank.session.shortcut.help"],
-                ] as [string, StringKey][]).map(([keys, descKey]) => (
-                  <div key={keys} className="flex items-center justify-between text-sm">
-                    <span className="text-muted-foreground">{t(descKey)}</span>
-                    <kbd className="px-2 py-0.5 rounded border border-border bg-muted/50 text-xs font-mono tabular-nums">
-                      {keys}
-                    </kbd>
-                  </div>
-                ))}
+                  ["qbank.prev", "qbank.next", null, "qbank.session.shortcut.prev"],
+                  ["qbank.answer1", "qbank.answer2", "qbank.answer3", "qbank.session.shortcut.select"],
+                  ["qbank.answer4", "qbank.answer5", null, "qbank.session.shortcut.select"],
+                  ["qbank.submit", null, null, "qbank.session.shortcut.submit"],
+                  ["qbank.flag", null, null, "qbank.session.shortcut.flag"],
+                  ["qbank.aiAssistant", null, null, "qbank.session.shortcut.ai"],
+                  ["qbank.highlight", null, null, "qbank.session.shortcut.highlight"],
+                  ["qbank.eraser", null, null, "qbank.session.shortcut.eraser"],
+                  ["qbank.notes", null, null, "qbank.session.shortcut.notes"],
+                  ["qbank.quizSettings", null, null, "qbank.session.shortcut.settings"],
+                  ["qbank.shortcutsHelp", null, null, "qbank.session.shortcut.help"],
+                ] as [string, string | null, string | null, StringKey][]).map(
+                  ([first, second, third, descKey]) => (
+                    <div key={descKey} className="flex items-center justify-between text-sm">
+                      <span className="text-muted-foreground">{t(descKey)}</span>
+                      <kbd className="px-2 py-0.5 rounded border border-border bg-muted/50 text-xs font-mono tabular-nums">
+                        {first && describeBinding(bindings[first] ?? "")}
+                        {second && ` / ${describeBinding(bindings[second] ?? "")}`}
+                        {third && ` / ${describeBinding(bindings[third] ?? "")}`}
+                      </kbd>
+                    </div>
+                  ),
+                )}
               </div>
             </motion.div>
           </motion.div>

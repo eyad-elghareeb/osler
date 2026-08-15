@@ -48,6 +48,7 @@ import { GlobalSearchPanel } from "./global-search-panel";
 import type { SearchResult } from "@/lib/osler/search";
 import { VIEW_PLACEHOLDER_KEY } from "@/lib/osler/search";
 import type { StringKey } from "@/lib/osler/i18n";
+import { isTextInput } from "@/lib/osler/shortcuts";
 import { cn } from "@/lib/utils";
 import { useIsMobile } from "@/hooks/use-mobile";
 import {
@@ -186,6 +187,9 @@ export function AppShell({ children }: AppShellProps) {
   React.useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
+        // Let Ctrl+K reach the markdown editor (bold) and other inputs —
+        // the search toggle only responds outside text fields.
+        if (isTextInput(e.target)) return;
         e.preventDefault();
         setSearchOpen((s) => !s);
       }
