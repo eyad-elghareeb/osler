@@ -2562,31 +2562,41 @@ function ContentTab({
                   className="medos-fade-in text-start bg-card border border-border rounded-xl p-5 hover:border-primary/40 hover:shadow-md transition-all group flex flex-col gap-3 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 w-full"
                   style={{ animationDelay: `${idx * 0.04}s` }}
                 >
-                  {/* Top row: icon + title (matches PackCard's header) */}
+                  {/* Top row: folder icon + title + pack count.
+                      Folders use a Folder icon (not the engine icon) so
+                      they read as containers, not tests. The icon chip
+                      uses the engine color tint so the folder still reads
+                      as part of its category. */}
                   <div className="flex items-center gap-3.5">
                     <div
                       className="size-12 rounded-xl flex items-center justify-center shrink-0"
                       style={{ backgroundColor: `color-mix(in oklch, ${meta.color} 12%, transparent)`, color: meta.color }}
                     >
-                      <Icon className="size-6" />
+                      <Folder className="size-6" />
                     </div>
                     <div className="min-w-0 flex-1">
                       <h3 className="font-semibold text-sm truncate text-foreground leading-snug">{node.title}</h3>
                       <p className="text-xs text-muted-foreground mt-0.5">
-                        {t("qbank.home.packs", { n: fs.packs })} · {t("qbank.home.questions", { n: fs.questions })}
+                        {t("qbank.home.packs", { n: fs.packs })}
                       </p>
                     </div>
                   </div>
 
-                  {/* Description (placeholder line so the card body matches PackCard's 2-line description) */}
-                  <p className="text-xs text-muted-foreground/70 line-clamp-2 leading-relaxed">
-                    {fs.attempted > 0
-                      ? `${fs.attempted} ${t("qbank.tracker.attempted").toLowerCase()} · ${acc}% ${t("qbank.tracker.accuracy").toLowerCase()}`
-                      : t("qbank.home.start")}
+                  {/* Summary — how many questions / files the folder contains.
+                      Uses line-clamp-2 to match PackCard's description height
+                      so both card types are the same height in the grid. */}
+                  <p className="text-xs text-muted-foreground/80 line-clamp-2 leading-relaxed">
+                    {t("qbank.home.questions", { n: fs.questions })}
+                    {fs.attempted > 0 && (
+                      <span className="text-success font-medium">
+                        {" · "}{acc}% {t("qbank.tracker.accuracy").toLowerCase()}
+                      </span>
+                    )}
                   </p>
 
-                  {/* Footer: progress bar or start prompt (matches PackCard's footer) */}
-                  <div className="flex items-center justify-between gap-3 mt-auto">
+                  {/* Footer: progress bar when started, or "Start" prompt.
+                      Matches PackCard's footer exactly. */}
+                  <div className="flex items-center justify-between gap-3">
                     {fs.attempted > 0 ? (
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center justify-between text-xs mb-1">
@@ -2708,21 +2718,24 @@ function ContentTab({
                         className="size-12 rounded-xl flex items-center justify-center shrink-0"
                         style={{ backgroundColor: `color-mix(in oklch, ${childMeta.color} 12%, transparent)`, color: childMeta.color }}
                       >
-                        <ChildIcon className="size-6" />
+                        <Folder className="size-6" />
                       </div>
                       <div className="min-w-0 flex-1">
                         <h3 className="font-semibold text-sm truncate text-foreground leading-snug">{child.title}</h3>
                         <p className="text-xs text-muted-foreground mt-0.5">
-                          {t("qbank.home.packs", { n: cfs.packs })} · {t("qbank.home.questions", { n: cfs.questions })}
+                          {t("qbank.home.packs", { n: cfs.packs })}
                         </p>
                       </div>
                     </div>
-                    <p className="text-xs text-muted-foreground/70 line-clamp-2 leading-relaxed">
-                      {cfs.attempted > 0
-                        ? `${cfs.attempted} ${t("qbank.tracker.attempted").toLowerCase()} · ${cacc}% ${t("qbank.tracker.accuracy").toLowerCase()}`
-                        : t("qbank.home.start")}
+                    <p className="text-xs text-muted-foreground/80 line-clamp-2 leading-relaxed">
+                      {t("qbank.home.questions", { n: cfs.questions })}
+                      {cfs.attempted > 0 && (
+                        <span className="text-success font-medium">
+                          {" · "}{cacc}% {t("qbank.tracker.accuracy").toLowerCase()}
+                        </span>
+                      )}
                     </p>
-                    <div className="flex items-center justify-between gap-3 mt-auto">
+                    <div className="flex items-center justify-between gap-3">
                       {cfs.attempted > 0 ? (
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center justify-between text-xs mb-1">

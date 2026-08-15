@@ -585,7 +585,7 @@ function SessionsSheet({
         />
 
         <ScrollArea className="min-h-0 flex-1" dir={rtl ? "rtl" : "ltr"}>
-          <div className="space-y-3 p-4">
+          <div className="space-y-3 pt-6 pb-4 px-4">
             {shownSessions.length === 0 ? (
               <EmptyState icon={History} title={t("qbank.history.noSessions")} />
             ) : (

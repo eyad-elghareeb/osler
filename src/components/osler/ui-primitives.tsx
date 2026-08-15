@@ -353,7 +353,7 @@ export function StatTile({
         {Icon && <Icon className={cn("size-4", STAT_TILE_COLOR[color])} />}
       </div>
       <div className="osler-stat-tile__row">
-        <div className="osler-stat-tile__value">{value}</div>
+        <div className="osler-stat-tile__value min-w-0">{value}</div>
         {trend && <div className="shrink-0 pb-0.5">{trend}</div>}
       </div>
     </Container>

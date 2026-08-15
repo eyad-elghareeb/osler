@@ -4,6 +4,7 @@ import * as React from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   ArrowUpDown,
+  ArrowDown,
   BookOpen,
   ClipboardCheck,
   Clock,
@@ -12,6 +13,7 @@ import {
   Minus,
   Plus,
   RotateCcw,
+  Shuffle,
   Sparkles,
   Timer,
   NotebookPen,
@@ -279,9 +281,9 @@ export function SessionStartDialog({
               <SectionItem>
                 <div>
                   <SectionLabel icon={Layers}>{t("qbank.create.countStepper")}</SectionLabel>
-                  <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-primary/20 bg-primary/[0.03] p-3">
+                  <div className="flex flex-nowrap items-center justify-between gap-3 rounded-xl border border-primary/20 bg-primary/[0.03] p-3">
                     {/* Questions count stepper */}
-                    <div className="flex items-center gap-2.5">
+                    <div className="flex items-center gap-2.5 shrink-0">
                       <span className="text-xs font-medium text-foreground">{t("qbank.launch.questions")}</span>
                       <div className="flex shrink-0 items-center gap-1">
                         <Button
@@ -322,30 +324,37 @@ export function SessionStartDialog({
                       </div>
                     </div>
 
-                    {/* Question order toggle */}
-                    <div className="flex items-center gap-2 ms-auto sm:ms-0">
+                    {/* Question order toggle — compact on mobile (icon-only
+                        buttons + "Order" label), full text on sm+ so it
+                        always fits on one line. */}
+                    <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
                       <ArrowUpDown className="size-3.5 text-primary shrink-0" />
-                      <span className="text-xs font-medium text-foreground">{t("qbank.launch.order")}</span>
+                      <span className="text-xs font-medium text-foreground hidden sm:inline">{t("qbank.launch.order")}</span>
+                      <span className="text-xs font-medium text-foreground sm:hidden">Order</span>
                       <div className="flex overflow-hidden rounded-lg border border-border bg-card">
                         <button
                           type="button"
                           onClick={() => { haptic("selection"); setOrder("sequential"); }}
+                          aria-label={t("qbank.launch.sequential")}
                           className={cn(
-                            "px-2.5 py-1 text-xs font-medium transition-colors focus-visible:outline-none",
+                            "flex items-center justify-center px-2 sm:px-2.5 py-1 text-xs font-medium transition-colors focus-visible:outline-none",
                             order === "sequential" ? "bg-primary/10 text-primary" : "text-muted-foreground hover:text-foreground",
                           )}
                         >
-                          {t("qbank.launch.sequential")}
+                          <ArrowDown className="size-3.5 sm:hidden" />
+                          <span className="hidden sm:inline">{t("qbank.launch.sequential")}</span>
                         </button>
                         <button
                           type="button"
                           onClick={() => { haptic("selection"); setOrder("random"); }}
+                          aria-label={t("qbank.launch.random")}
                           className={cn(
-                            "border-s border-border px-2.5 py-1 text-xs font-medium transition-colors focus-visible:outline-none",
+                            "border-s border-border flex items-center justify-center px-2 sm:px-2.5 py-1 text-xs font-medium transition-colors focus-visible:outline-none",
                             order === "random" ? "bg-primary/10 text-primary" : "text-muted-foreground hover:text-foreground",
                           )}
                         >
-                          {t("qbank.launch.random")}
+                          <Shuffle className="size-3.5 sm:hidden" />
+                          <span className="hidden sm:inline">{t("qbank.launch.random")}</span>
                         </button>
                       </div>
                     </div>

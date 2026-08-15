@@ -547,14 +547,15 @@
 }
 .osler-stat-tile__row {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   align-items: flex-end;
   justify-content: space-between;
   gap: 0.5rem;
-  /* Reserve space for a SparkTrend (28px tall) so tiles with and without
-     a trend align. Without this, the tile with a trend is ~28px taller than
-     its siblings and the grid looks ragged. */
-  min-height: 2rem;
+  /* Reserve enough space for a SparkTrend (28px sparkline + delta badge +
+     breathing room) so tiles with and without a trend are the same height.
+     The taller min-height gives graph tiles room to breathe instead of
+     being cramped, and non-graph tiles have matching empty space. */
+  min-height: 2.5rem;
 }
 /* Compact variant for 3-column dense grids (QBank / Flashcard hub stat bars). */
 .osler-stat-tile--compact {
@@ -567,7 +568,7 @@
   @apply text-xl;
 }
 .osler-stat-tile--compact .osler-stat-tile__row {
-  min-height: 1.75rem;
+  min-height: 2.25rem;
 }
 /* Clickable stat tile — refined hover lift. */
 button.osler-stat-tile:hover,
