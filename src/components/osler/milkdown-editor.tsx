@@ -181,6 +181,14 @@ function InnerMilkdownEditor({
           blockHandle: {
             getOffset: () => 4,
           },
+          // Position the slash menu against the viewport instead of the
+          // editor's scroll container. The editor scrolls internally
+          // (overflow-y: auto), so a default `absolute` popover gets
+          // clipped at the container edge — a `fixed` popover floats
+          // above it and stays fully visible while typing.
+          slashMenu: {
+            floatingUIOptions: { strategy: "fixed" },
+          },
         },
       },
     });

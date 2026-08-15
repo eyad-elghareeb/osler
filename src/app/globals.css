@@ -3218,6 +3218,12 @@ html.osler-ar body,
 
 /* ── 6. Slash command menu (the / command palette) ──────────────────── */
 .osler-milkdown-editor .milkdown .milkdown-slash-menu {
+  /* The editor scrolls internally, so the menu must float above it:
+   * `position: fixed` matches the floating-UI `strategy: "fixed"` used
+   * in the SlashProvider config and prevents the popover from being
+   * clipped at the editor's scroll container edge. */
+  position: fixed !important;
+  z-index: 60 !important;
   background: var(--card) !important;
   border: 1px solid var(--border) !important;
   border-radius: var(--radius-md) !important;
@@ -3634,6 +3640,31 @@ html.osler-ar body,
 .osler-milkdown-editor > .flex-1 {
   flex: 1 1 0%;
   min-height: 120px;
+  /* An explicit height makes this flex item a definite containing block
+   * so `.milkdown { height: 100% }` resolves against it and scrolls
+   * internally. Chrome won't use a flex-resolved size (flex-basis: 0%)
+   * as the basis for a child's percentage height when the child's content
+   * overflows, so the editor silently grew past the notes panel instead
+   * of scrolling. In auto-height contexts (written answers, admin forms)
+   * `height: 100%` resolves to auto and behaves exactly as before. */
+  height: 100%;
+  /* CSS Flexbox §9.9.4: a flex item with `overflow: visible` whose content
+   * would overflow its flex-resolved size is treated as INDEFINITE for
+   * resolving a child's percentage height — so `.milkdown { height: 100% }`
+   * silently resolved to auto and the editor grew past the notes panel.
+   * `overflow: hidden` flips the flex item to definite, making the editor
+   * fill the panel and scroll internally. The `.milkdown` element itself
+   * remains the visible scroll container (`overflow-y: auto` above), so
+   * nothing is actually clipped; the fixed-position slash menu escapes it. */
+  overflow: hidden;
+}
+/* @milkdown/react's <Milkdown> renders a plain root <div> (display:block,
+ * height:auto) and Crepe mounts `.milkdown` INSIDE it. So `.milkdown`'s
+ * `height: 100%` resolves against that root div, not `.flex-1` — unless the
+ * root div is itself constrained. Give it the same definite height so the
+ * percentage chain `.flex-1 → root div → .milkdown` resolves to the panel. */
+.osler-milkdown-editor > .flex-1 > div {
+  height: 100%;
 }
 .osler-milkdown-editor .milkdown .ProseMirror {
   flex: 1;
@@ -3664,7 +3695,7 @@ html.osler-ar body,
   padding-inline-end: 1.5rem !important;
 }
 /* Image upload button moves to the left in RTL */
-.osler-milkdown-editor--rtl .absolute.end-1\\.5 {
+.osler-milkdown-editor--rtl .absolute.end-1\.5 {
   inset-inline-end: auto;
   inset-inline-start: 0.375rem;
 }
