@@ -50,6 +50,7 @@ import {
   SlidersHorizontal,
   Languages,
   ArrowLeft,
+  ArrowRight,
   ArrowUpDown,
   BarChart3,
   Target,
@@ -192,6 +193,10 @@ const choiceLetter = (idx: number, lang?: string): string =>
   (lang && lang.startsWith("ar") ? ARABIC_LETTERS : LETTERS)[idx] ?? "?";
 const HIGHLIGHT_COLORS = HIGHLIGHT_COLOR_KEYS;
 
+/** How many saved sessions the Tracker tab shows before collapsing into the
+ *  "View all sessions" link to /qbank/history. */
+const RECENT_SESSION_PREVIEW_COUNT = 5;
+
 /** Resolve the action a keydown event matches against a scope's single-chord
  *  bindings (Settings → Keyboard). Multi-chord (sequence) bindings are not
  *  handled here — the qbank session only binds single keys. */
@@ -304,6 +309,14 @@ interface QBankStudioProps {
    *  the same activeItem/activeContent machinery instead of the page swapping
    *  component types (which unmounted the whole hub and reloaded its data). */
   uid?: string | null;
+  /** Arrived via /qbank?review=SESSION_ID — open the saved session in
+   *  read-only review mode. The session's questionRefs are rebuilt into a
+   *  PoolQuestion[] and pushed through `startCustomSession({ isReview: true })`. */
+  reviewSessionId?: string | null;
+  /** Arrived via /qbank?retake=SESSION_ID — restart a saved session with
+   *  only its previously-wrong questions. Same rebuild path as `reviewSessionId`
+   *  but with `onlyMode: "wrong"` and no `isReview` flag. */
+  retakeSessionId?: string | null;
 }
 
 type QuizMode = "home" | "quiz" | "results" | "review";
@@ -381,6 +394,8 @@ export function QBankStudio({
   onOpenPack: propOnOpenPack,
   forceResume = false,
   uid,
+  reviewSessionId,
+  retakeSessionId,
 }: QBankStudioProps = {}) {
   const { navigate } = useOslerRouter();
   const router = useRouter();
@@ -770,6 +785,107 @@ export function QBankStudio({
     },
     [testMode],
   );
+
+  // /qbank?review=SESSION_ID or /qbank?retake=SESSION_ID — rebuild a saved
+  // session's pool from its questionRefs and push it through the same
+  // startCustomSession path used by the Tracker tab. Fires once when the
+  // studio mounts with one of these params, then clears the URL so a refresh
+  // doesn't replay the action. The `reviewSessionId` / `retakeSessionId`
+  // props are read from the URL by the page component (see src/app/(app)/qbank/page.tsx).
+  const consumedDeepLinkRef = React.useRef<string | null>(null);
+  React.useEffect(() => {
+    const targetId = reviewSessionId ?? retakeSessionId ?? null;
+    if (!targetId) return;
+    // Guard against StrictMode double-invoke + re-runs when unrelated state changes.
+    if (consumedDeepLinkRef.current === targetId) return;
+    consumedDeepLinkRef.current = targetId;
+    const isReview = !!reviewSessionId;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const s = sessions.get(targetId);
+        if (!s) {
+          toast({ title: t("qbank.review.noQuestions") });
+          return;
+        }
+        const refs = s.questionRefs ?? [];
+        const bySource = new Map<string, string[]>();
+        if (refs.length > 0) {
+          for (const r of refs) {
+            const list = bySource.get(r.sourceUid) ?? [];
+            list.push(r.id);
+            bySource.set(r.sourceUid, list);
+          }
+        } else {
+          bySource.set(s.packUid, []);
+        }
+        const pool: PoolQuestion[] = [];
+        for (const [sourceUid, ids] of bySource.entries()) {
+          try {
+            const content = await loadContentByUid(sourceUid);
+            let node: ContentTreeNode | undefined;
+            try {
+              node = await loadNodeByUid(sourceUid, content.type as EngineType);
+            } catch {
+              node = undefined;
+            }
+            const stamped = poolContentToQuestions(content, sourceUid, content.meta.title, node) as PoolQuestion[];
+            if (ids.length === 0) pool.push(...stamped);
+            else {
+              const byId = new Map(stamped.map((q) => [q.id, q]));
+              for (const id of ids) {
+                const q = byId.get(id);
+                if (q) pool.push(q);
+              }
+            }
+          } catch (e) {
+            console.warn(`[deep-link] Failed to load source ${sourceUid}:`, e);
+          }
+        }
+        if (cancelled) return;
+        const finalPool = isReview ? pool : filterPoolByProgress(pool, "wrong");
+        if (finalPool.length === 0) {
+          toast({ title: t("qbank.review.noQuestions") });
+          return;
+        }
+        const meta: Parameters<typeof startCustomSession>[1] = {
+          title: isReview ? s.packTitle : `${s.packTitle} — ${t("qbank.review.retakeWrong")}`,
+          engine: s.engine,
+          mode: s.mode,
+        };
+        if (isReview) {
+          meta.isReview = true;
+          meta.savedDrafts = s.writtenDrafts;
+          meta.savedRubricState = s.rubricState;
+          const savedAnswers: Record<number, number> = {};
+          const savedRevealed: Record<number, boolean> = {};
+          const savedFlagged: Record<number, boolean> = {};
+          for (const [k, v] of Object.entries(s.answers)) savedAnswers[+k] = v;
+          for (const [k, v] of Object.entries(s.revealed)) savedRevealed[+k] = v;
+          for (const [k, v] of Object.entries(s.flagged)) savedFlagged[+k] = v;
+          meta.savedAnswers = savedAnswers;
+          meta.savedRevealed = savedRevealed;
+          meta.savedFlagged = savedFlagged;
+          meta.savedRatings = s.ratings;
+          meta.savedQuestionTimes = s.questionTimes;
+        } else {
+          meta.onlyMode = "wrong";
+          meta.savedDrafts = s.writtenDrafts;
+          meta.savedRubricState = s.rubricState;
+        }
+        await archiveDisplacedActive();
+        startCustomSession(finalPool, meta);
+        // Clean the URL so a refresh doesn't replay the deep link.
+        router.replace("/qbank");
+      } catch (e) {
+        console.error("[deep-link] Failed to load session", targetId, e);
+        toast({ title: t("qbank.review.noQuestions") });
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [reviewSessionId, retakeSessionId]);
 
   // Tools state (calculator, lab values, article modal, AI, quiz settings, notes)
   const [calculatorOpen, setCalculatorOpen] = React.useState(false);
@@ -3547,6 +3663,7 @@ function TrackerTab({
   onLoadPack?: (node: ContentTreeNode) => Promise<AnyContent | null>;
 }) {
   const { t } = useI18n();
+  const router = useRouter();
   const [, force] = React.useReducer((x) => x + 1, 0);
   React.useEffect(() => {
     const unsub = storage.subscribe(force);
@@ -3658,6 +3775,14 @@ function TrackerTab({
       .slice(-10)
       .map((s) => Math.round((s.correctCount / s.answeredCount) * 100));
   }, [sessionList]);
+
+  // Recent sessions preview — `sessions.list()` is already sorted newest-first,
+  // so a simple slice gives us the last N. The full list lives on the
+  // dedicated /qbank/history page so the tracker tab stays scannable.
+  const recentSessions = React.useMemo(
+    () => sessionList.slice(0, RECENT_SESSION_PREVIEW_COUNT),
+    [sessionList],
+  );
 
   // P5-4: wrong & flagged question records. We compute across ALL QBank-owned
   // pack uids (not just selected ones). Dismissed records are filtered by
@@ -4274,15 +4399,33 @@ function TrackerTab({
         </div>
       )}
 
-      {/* Recent sessions — merged from the old Previous Tests tab */}
+      {/* Recent sessions — merged from the old Previous Tests tab.
+          Only the last 5 are shown here; the full history lives on the
+          dedicated /qbank/history page (tree-grouped by source file). */}
       <div>
         <SectionHeading
           icon={History}
           actions={
             sessionList.length > 0 ? (
-              <span className="text-xs text-muted-foreground tabular-nums">
-                {t("qbank.tracker.sessionsCount", { n: sessionList.length })}
-              </span>
+              <div className="flex items-center gap-3">
+                <span className="text-xs text-muted-foreground tabular-nums">
+                  {t("qbank.tracker.sessionsCount", { n: sessionList.length })}
+                </span>
+                {sessionList.length > RECENT_SESSION_PREVIEW_COUNT && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 px-2 text-xs"
+                    onClick={() => {
+                      haptic("selection");
+                      router.push("/qbank/history");
+                    }}
+                  >
+                    {t("qbank.tracker.viewAllSessions")}
+                    <ArrowRight className="size-3.5 ms-1 rtl:rotate-180" />
+                  </Button>
+                )}
+              </div>
             ) : undefined
           }
         >
@@ -4301,7 +4444,7 @@ function TrackerTab({
                 {sessionError}
               </div>
             )}
-            {sessionList.map((s) => {
+            {recentSessions.map((s) => {
               const total = s.totalQuestions;
               const pct = total ? Math.round((s.correctCount / total) * 100) : 0;
               const durationSec = Math.floor(((s.completedAt ?? Date.now()) - s.startedAt) / 1000);

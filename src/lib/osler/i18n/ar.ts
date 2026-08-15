@@ -493,6 +493,8 @@ export const ar = {
     "qbank.tracker.noActive": "لم يعد هذا الاختبار الجاري متاحًا.",
     "qbank.tracker.discardActive": "تجاهل الاختبار الجاري",
     "qbank.tracker.deleteSession": "حذف الجلسة",
+    "qbank.tracker.viewAllSessions": "عرض كل الجلسات",
+    "qbank.tracker.recentSessionsHint": "عرض آخر {n} جلسات",
 
     /* ── Tracker preview sheet ───────────────────────────────────────── */
     "qbank.preview.selectQuestion": "اختر السؤال للمراجعة",
@@ -506,6 +508,21 @@ export const ar = {
     "qbank.tracker.avgTime": "متوسط / سؤال",
     "qbank.tracker.firstAttempt": "أول محاولة",
     "qbank.tracker.attemptsCount": "{n} محاولات",
+
+    /* ── Session history page ───────────────────────────────────────── */
+    "qbank.history.title": "سجل الجلسات",
+    "qbank.history.subtitle": "كل الجلسات المحفوظة، مجمّعة حسب الملف المصدر.",
+    "qbank.history.loading": "جارٍ تحميل السجل…",
+    "qbank.history.back": "العودة إلى المتتبع",
+    "qbank.history.byFile": "حسب الملف",
+    "qbank.history.noSessions": "لا توجد جلسات محفوظة بعد",
+    "qbank.history.noSessionsDesc": "الجلسات التي تكملها في استوديو بنك الأسئلة ستُجمّع هنا حسب ملفها المصدر.",
+    "qbank.history.sessionsForPack": "جلسات {title}",
+    "qbank.history.sessionCount": "{n} جلسات",
+    "qbank.history.lastAttempt": "آخر محاولة",
+    "qbank.history.untitledPack": "حزمة بدون عنوان",
+    "qbank.history.orphanGroup": "جلسات أخرى",
+    "qbank.history.orphanGroupDesc": "جلسات لم يعد الملف المصدر لها موجودًا.",
 
     /* ── Review / retake ─────────────────────────────────────────────── */
     "qbank.review.title": "مراجعة الجلسة",

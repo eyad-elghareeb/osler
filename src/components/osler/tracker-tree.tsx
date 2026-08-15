@@ -9,6 +9,7 @@ import {
   ClipboardCheck,
   Flag,
   Folder,
+  History,
   ListChecks,
   PenTool,
   X,
@@ -26,6 +27,10 @@ export interface TrackerTreeNode {
   wrong: number;
   flagged: number;
   children: TrackerTreeNode[];
+  /** Sessions-mode: number of saved sessions under this node. */
+  sessions?: number;
+  /** Sessions-mode: last session start timestamp under this node (ms). */
+  lastSessionAt?: number;
 }
 
 const PACK_ICONS: Record<EngineType, React.ComponentType<{ className?: string }>> = {
@@ -56,6 +61,22 @@ function CountChip({ count, kind }: { count: number; kind: "wrong" | "flagged" }
   );
 }
 
+/** Sessions-mode chip: shows a session count badge with the History icon. */
+function SessionsChip({ count }: { count: number }) {
+  if (count <= 0) return null;
+  return (
+    <span
+      className={cn(
+        "flex items-center gap-1 rounded-full px-1.5 py-0.5 text-xs font-medium tabular-nums",
+        "bg-primary/10 text-primary",
+      )}
+    >
+      <History className="size-2.5" />
+      {count}
+    </span>
+  );
+}
+
 const Caret = React.memo(function Caret({ open, rtl }: { open: boolean; rtl: boolean }) {
   const Icon = rtl ? ChevronLeft : ChevronRight;
   return (
@@ -77,6 +98,12 @@ interface TrackerTreeProps {
   defaultExpanded?: string[];
   selectedUid?: string | null;
   onOpenPack?: (node: TrackerTreeNode) => void;
+  /**
+   * "records" (default) renders wrong/flagged count chips.
+   * "sessions" renders session-count chips with a History icon and
+   * treats `onOpenPack` as "open the sessions list for this pack".
+   */
+  mode?: "records" | "sessions";
 }
 
 interface Row {
@@ -84,7 +111,7 @@ interface Row {
   depth: number;
 }
 
-export function TrackerTree({ nodes, label, defaultExpanded, selectedUid, onOpenPack }: TrackerTreeProps) {
+export function TrackerTree({ nodes, label, defaultExpanded, selectedUid, onOpenPack, mode = "records" }: TrackerTreeProps) {
   const { rtl } = useI18n();
   const reduced = useReducedMotion() ?? false;
   const [openIds, setOpenIds] = React.useState<Set<string>>(
@@ -261,8 +288,14 @@ export function TrackerTree({ nodes, label, defaultExpanded, selectedUid, onOpen
               <Folder className="size-4 shrink-0 text-muted-foreground" />
               <span className="min-w-0 flex-1 truncate">{node.title}</span>
               <span className="flex shrink-0 items-center gap-1.5">
-                <CountChip count={node.wrong} kind="wrong" />
-                <CountChip count={node.flagged} kind="flagged" />
+                {mode === "sessions" ? (
+                  <SessionsChip count={node.sessions ?? 0} />
+                ) : (
+                  <>
+                    <CountChip count={node.wrong} kind="wrong" />
+                    <CountChip count={node.flagged} kind="flagged" />
+                  </>
+                )}
               </span>
             </>
           ) : (
@@ -279,8 +312,14 @@ export function TrackerTree({ nodes, label, defaultExpanded, selectedUid, onOpen
               </div>
               <span className="min-w-0 flex-1 truncate">{node.title}</span>
               <span className="flex shrink-0 items-center gap-1.5">
-                <CountChip count={node.wrong} kind="wrong" />
-                <CountChip count={node.flagged} kind="flagged" />
+                {mode === "sessions" ? (
+                  <SessionsChip count={node.sessions ?? 0} />
+                ) : (
+                  <>
+                    <CountChip count={node.wrong} kind="wrong" />
+                    <CountChip count={node.flagged} kind="flagged" />
+                  </>
+                )}
                 {rtl ? (
                   <ChevronLeft className="size-3.5 text-muted-foreground/40" aria-hidden="true" />
                 ) : (

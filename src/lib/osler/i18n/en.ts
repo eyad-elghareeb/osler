@@ -492,6 +492,8 @@ export const en = {
     "qbank.tracker.noActive": "That in-progress session is no longer available.",
     "qbank.tracker.discardActive": "Discard in-progress session",
     "qbank.tracker.deleteSession": "Delete session",
+    "qbank.tracker.viewAllSessions": "View all sessions",
+    "qbank.tracker.recentSessionsHint": "Showing the last {n} sessions",
 
     /* ── Tracker preview sheet ───────────────────────────────────────── */
     "qbank.preview.selectQuestion": "Select question for review",
@@ -505,6 +507,21 @@ export const en = {
     "qbank.tracker.avgTime": "Avg / question",
     "qbank.tracker.firstAttempt": "First-try",
     "qbank.tracker.attemptsCount": "{n} attempts",
+
+    /* ── Session history page ───────────────────────────────────────── */
+    "qbank.history.title": "Session history",
+    "qbank.history.subtitle": "Every saved session, grouped by the file it came from.",
+    "qbank.history.loading": "Loading history…",
+    "qbank.history.back": "Back to tracker",
+    "qbank.history.byFile": "By file",
+    "qbank.history.noSessions": "No saved sessions yet",
+    "qbank.history.noSessionsDesc": "Sessions you complete in the Q-Bank Studio will be grouped here by their source file.",
+    "qbank.history.sessionsForPack": "Sessions for {title}",
+    "qbank.history.sessionCount": "{n} sessions",
+    "qbank.history.lastAttempt": "Last attempt",
+    "qbank.history.untitledPack": "Untitled pack",
+    "qbank.history.orphanGroup": "Other sessions",
+    "qbank.history.orphanGroupDesc": "Sessions whose source pack is no longer on disk.",
 
     /* ── Review / retake ─────────────────────────────────────────────── */
     "qbank.review.title": "Review session",

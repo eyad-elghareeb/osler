@@ -13,6 +13,11 @@ import { QBankStudio } from "@/components/osler/qbank-studio";
  * The studio is ALWAYS mounted and self-loads the pack from the `uid` prop —
  * navigating `/qbank` → `/qbank?uid=X` never changes the rendered component
  * type, so the hub is never unmounted/remounted and its loaded tree survives.
+ *
+ * Additional deep-link params:
+ *   - `?resume=1`            force-resume the active in-progress session.
+ *   - `?review=<sessionId>`  open a saved session in read-only review mode.
+ *   - `?retake=<sessionId>`  restart a saved session with only its wrong questions.
  */
 export default function QBankPage() {
   return (
@@ -26,5 +31,14 @@ function QBankView() {
   const params = useSearchParams();
   const uid = params.get("uid");
   const resume = params.get("resume") === "1";
-  return <QBankStudio uid={uid ?? null} forceResume={resume} />;
+  const reviewSessionId = params.get("review");
+  const retakeSessionId = params.get("retake");
+  return (
+    <QBankStudio
+      uid={uid ?? null}
+      forceResume={resume}
+      reviewSessionId={reviewSessionId ?? null}
+      retakeSessionId={retakeSessionId ?? null}
+    />
+  );
 }
