@@ -252,6 +252,17 @@ export function isTextInput(target: EventTarget | null): boolean {
   return false;
 }
 
+/**
+ * Shortcuts that may fire while the user is typing in a text field or
+ * contenteditable (e.g. the Markdown editor). All other modifier shortcuts
+ * are suppressed in inputs — Ctrl+B / Ctrl+I / Ctrl+K / Ctrl+L etc. are
+ * editor bindings (bold / italic / insert link / insert image), not app
+ * chrome, and must not hijack the keystroke. Ctrl+Enter ("qbank.submit")
+ * is the exception: it submits the current answer and never collides with
+ * a text-editing binding.
+ */
+const TYPING_SAFE_ACTIONS: ReadonlySet<string> = new Set(["qbank.submit"]);
+
 interface SequenceState {
   matched: ParsedChord[];
   candidates: Set<string>;
@@ -274,9 +285,11 @@ export function matchShortcut(
   if (e.repeat && !options.allowRepeat) {
     if (!seqState) return null;
   }
+  let typingSafe: ReadonlySet<string> | null = null;
   if (options.ignoreInputs !== false && isTextInput(e.target)) {
     const hasMod = PLATFORM_MAC ? e.metaKey : e.ctrlKey;
     if (!hasMod) return null;
+    typingSafe = TYPING_SAFE_ACTIONS;
   }
 
   const now = Date.now();
@@ -302,6 +315,7 @@ export function matchShortcut(
   let completed: string | null = null;
 
   for (const actionId of candidates) {
+    if (typingSafe && !typingSafe.has(actionId)) continue;
     const binding = bindings[actionId];
     if (!binding) continue;
     const chords = parseBinding(binding);

@@ -35,6 +35,7 @@ import type {
 import { flashcardReview, storage } from "@/lib/osler/storage";
 import { useContentTree } from "@/hooks/use-content-tree";
 import { useShortcutBindings } from "@/hooks/use-shortcuts";
+import { isTextInput } from "@/lib/osler/shortcuts";
 import { VerticalSnapGallery } from "./vertical-snap-gallery";
 
 import { cn } from "@/lib/utils";
@@ -547,7 +548,7 @@ export function FlashcardStudio({
   React.useEffect(() => {
     if (mode !== "study") return;
     const handler = (e: KeyboardEvent) => {
-      if (e.defaultPrevented || e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+      if (e.defaultPrevented || isTextInput(e.target)) return;
       const key = e.key.toLowerCase();
       if (key === " ") { e.preventDefault(); flipCard(); return; }
       if (key === "escape") { e.preventDefault(); closeStudy(); return; }

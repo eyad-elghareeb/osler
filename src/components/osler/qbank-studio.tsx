@@ -145,7 +145,7 @@ import { NotesPanel } from "./notes-panel";
 import { ContentCacheButton } from "./content-cache-button";
 import { useShortcutBindings, useShortcutListener } from "@/hooks/use-shortcuts";
 import { useContentCache } from "@/hooks/use-content-cache";
-import { defaultBindings } from "@/lib/osler/shortcuts";
+import { defaultBindings, isTextInput } from "@/lib/osler/shortcuts";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { VerticalSnapGallery } from "./vertical-snap-gallery";
 import { useLightbox } from "./lightbox-provider";
@@ -5450,7 +5450,7 @@ function QuizView({
   // Keyboard shortcuts
   React.useEffect(() => {
     const handler = (e: KeyboardEvent) => {
-      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+      if (isTextInput(e.target)) return;
       // Navigation-only shortcuts in readonly (review) mode
       if (readonly) {
         if (e.key === "ArrowLeft") { e.preventDefault(); goPrev(); }

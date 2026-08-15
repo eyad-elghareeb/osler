@@ -26,7 +26,7 @@ export function parseFrontmatter(md: string): { body: string } {
 // ── Typography ─────────────────────────────────────────────────────────────
 
 export const PREVIEW_MARKDOWN_STYLES = `
-  .preview-md { color: var(--foreground); font-size: 0.9rem; line-height: 1.65; }
+  .preview-md { color: var(--foreground); font-size: 0.9rem; line-height: 1.65; unicode-bidi: plaintext; }
   .preview-md h1 { font-size: 1.75rem; font-weight: 700; margin: 1.5rem 0 0.75rem; color: var(--foreground); }
   .preview-md h2 { font-size: 1.4rem; font-weight: 600; margin: 1.25rem 0 0.5rem; border-bottom: 1px solid var(--border); padding-bottom: 0.25rem; color: var(--foreground); }
   .preview-md h3 { font-size: 1.1rem; font-weight: 600; margin: 1rem 0 0.4rem; color: var(--foreground); }

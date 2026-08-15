@@ -1607,6 +1607,14 @@ html[dir="rtl"] {
 .osler-written-area:focus {
   outline: none;
 }
+/* Written answers are short-form responses sitting inside a scrolling
+ * session view — cap the editor height so a very long answer scrolls
+ * inside the editor instead of pushing the whole session down the page.
+ * The base `.milkdown` rule already sets `overflow-y: auto`, so all that's
+ * needed here is the ceiling. */
+.osler-written-area .milkdown {
+  max-height: 60vh;
+}
 
 /* ── Written photo mode ─────────────────────────────────────────────────── */
 .osler-camera-overlay {
@@ -2990,6 +2998,13 @@ html.osler-ar body,
   min-height: 160px;
   padding: 0 !important;
   position: relative;
+  /* When the editor is placed in a height-constrained container (the
+   * full-height notes panel), fill it and scroll internally instead of
+   * overflowing the hidden ancestor. In auto-height contexts (written
+   * answers, admin forms) `height: 100%` resolves to auto, so the editor
+   * just grows with its content. */
+  height: 100%;
+  overflow-y: auto;
 }
 
 /* ProseMirror content surface — Crepe's reset.css sets
@@ -3012,6 +3027,12 @@ html.osler-ar body,
   font-family: var(--crepe-font-default);
   font-size: var(--crepe-base-font-size);
   line-height: 1.65;
+  /* Per-paragraph bidi: each line's base direction is taken from its own
+   * first strong character (Arabic line → RTL, next English line → LTR),
+   * independent of the UI language. The `dir` attribute on the wrapper
+   * keeps the editor chrome (toolbar, slash menu, placeholder) in the UI
+   * language — only the typed content auto-detects. */
+  unicode-bidi: plaintext;
 }
 
 /* ── 3. Typography — override Crepe's giant document-style headings ──── */
