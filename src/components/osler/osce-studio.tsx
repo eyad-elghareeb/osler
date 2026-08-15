@@ -22,7 +22,6 @@ import {
   Loader2,
   AlertCircle,
   AlignLeft,
-  Search,
   Tag,
   BarChart3,
   ArrowRight,
@@ -744,8 +743,6 @@ export function OsceStudio({
   // Stack of currently open folders — last entry is the one being viewed.
   // Empty array → root grid is shown. Pushed on folder click, popped on back.
   const [selectedFolders, setSelectedFolders] = React.useState<ContentTreeNode[]>([]);
-  // Subfolder-view search query (filters by title substring).
-  const [folderSearch, setFolderSearch] = React.useState("");
 
   // ── Swipe-back dismiss for the OSCE lobby/conversation/debrief overlays ─
   // Mirrors the Settings NavigationStack pattern: a horizontal drag past
@@ -1456,31 +1453,6 @@ export function OsceStudio({
     [collectLeafUids, allPacks],
   );
 
-  /** Recursively filter a tree by a title-substring match (preserves folders). */
-  const filterTree = React.useCallback(
-    (nodes: ContentTreeNode[], q: string): ContentTreeNode[] => {
-      if (!q) return nodes;
-      const needle = q.toLowerCase();
-      function walk(list: ContentTreeNode[]): ContentTreeNode[] {
-        const out: ContentTreeNode[] = [];
-        for (const node of list) {
-          const titleMatch = node.title.toLowerCase().includes(needle);
-          if (node.items.length === 0) {
-            if (titleMatch) out.push(node);
-          } else {
-            const children = walk(node.items);
-            if (titleMatch || children.length > 0) {
-              out.push({ ...node, items: children });
-            }
-          }
-        }
-        return out;
-      }
-      return walk(nodes);
-    },
-    [],
-  );
-
   // Apply content-language filter to *root* nodes only — branches are kept
   // intact so the user can still drill into them; their leaves are filtered
   // naturally by the lang check at the pack-card level (no-op for OSCE today
@@ -1591,7 +1563,7 @@ export function OsceStudio({
           aria-label={node.title}
           onClick={() => {
             setSelectedFolders((folders) => [...folders, node]);
-            setFolderSearch("");
+
           }}
           className="medos-fade-in h-auto w-full min-w-0 justify-start text-start bg-card border border-border rounded-xl p-5 hover:border-primary/40 hover:shadow-md hover:bg-card transition-all group flex items-center gap-3.5 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
         >
@@ -1714,11 +1686,12 @@ export function OsceStudio({
     // ── SUBFOLDER VIEW (drill-down) ────────────────────────────────────
     // Slides in on top of the root view when a folder is clicked. Has its
     // own header (back button + folder title + stats) and a search box that
-    // filters the visible children by title substring.
     let subfolderView: React.ReactNode = null;
     if (selectedFolder) {
       const fs = folderStats(selectedFolder);
-      const childTree = filterTree(selectedFolder.items, folderSearch.trim());
+      // Local search removed — the unified global search bar handles content
+      // discovery. Just render the folder's children directly.
+      const childTree = selectedFolder.items;
 
       subfolderView = (
         <div className="osler-page__inner">
@@ -1731,7 +1704,7 @@ export function OsceStudio({
             <button
               onClick={() => {
                 setSelectedFolders((folders) => folders.slice(0, -1));
-                setFolderSearch("");
+    
               }}
               className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors mb-3"
             >
@@ -1751,44 +1724,14 @@ export function OsceStudio({
               {fs.packs} {fs.packs === 1 ? "pack" : "packs"} · {fs.stations} {fs.stations === 1 ? "station" : "stations"}
             </p>
 
-            {/* Search */}
-            <div className="relative mb-4 mt-4">
-              <Search className={cn("size-4 text-muted-foreground absolute top-1/2 -translate-y-1/2", rtl ? "right-3" : "left-3")} />
-              <input
-                type="text"
-                value={folderSearch}
-                onChange={(e) => setFolderSearch(e.target.value)}
-                placeholder="Search scenarios…"
-                className={cn(
-                  "w-full h-10 rounded-xl border border-border bg-card text-sm focus:outline-none focus:ring-2 focus:ring-primary/30",
-                  rtl ? "pr-9 pl-3 text-right" : "pl-9 pr-3",
-                )}
-              />
-              {folderSearch && (
-                <button
-                  onClick={() => setFolderSearch("")}
-                  className={cn(
-                    "absolute top-1/2 -translate-y-1/2 size-6 rounded-full hover:bg-muted flex items-center justify-center text-muted-foreground",
-                    rtl ? "left-2" : "right-2",
-                  )}
-                  aria-label="Clear search"
-                >
-                  <X className="size-3.5" />
-                </button>
-              )}
-            </div>
-
             {/* Child grid */}
             {childTree.length === 0 ? (
               <div className="osler-empty">
                 <div className="osler-empty__icon">
-                  <Search className="size-6" />
+                  <Folder className="size-6" />
                 </div>
                 <div>
                   <p className="osler-empty__title mb-1">{t("osce.home.empty")}</p>
-                  <p className="osler-empty__body">
-                    No scenarios match &ldquo;{folderSearch}&rdquo;.
-                  </p>
                 </div>
               </div>
             ) : (
@@ -1827,7 +1770,7 @@ export function OsceStudio({
           subpage={subfolderView}
           onBack={() => {
             setSelectedFolders((folders) => folders.slice(0, -1));
-            setFolderSearch("");
+
           }}
         />
       </motion.div>

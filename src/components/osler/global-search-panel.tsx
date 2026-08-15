@@ -144,15 +144,20 @@ export function GlobalSearchPanel({
 
   const placeholderKey = (VIEW_PLACEHOLDER_KEY[view ?? "dashboard"] ?? "search.globalPlaceholder") as StringKey;
   const placeholder = t(placeholderKey);
-  const padCls = variant === "sheet" ? "p-4" : "p-3";
+  const isSheet = variant === "sheet";
+  const padCls = isSheet ? "p-4" : "p-3";
 
   let runningIdx = -1; // flat index as we render groups
 
   return (
-    <div className="flex flex-col">
+    <div className="flex flex-col h-full">
+      {/* Input row — taller + more touch-friendly on mobile sheet */}
       <div className={cn("border-b border-border", padCls)}>
-        <div className="flex items-center gap-2">
-          <SearchIcon className="size-4 text-muted-foreground shrink-0" />
+        <div className={cn(
+          "flex items-center gap-2 rounded-lg",
+          isSheet && "px-3 h-11 bg-muted/40 border border-border",
+        )}>
+          <SearchIcon className={cn("text-muted-foreground shrink-0", isSheet ? "size-4" : "size-4")} />
           <input
             ref={inputRef}
             value={query}
@@ -160,24 +165,39 @@ export function GlobalSearchPanel({
             onKeyDown={handleKeyDown}
             placeholder={placeholder}
             aria-label={placeholder}
-            className="flex-1 bg-transparent outline-none text-sm placeholder:text-muted-foreground min-w-0"
+            className={cn(
+              "flex-1 bg-transparent outline-none placeholder:text-muted-foreground min-w-0",
+              isSheet ? "text-base" : "text-sm",
+            )}
           />
-          <kbd className="text-[10px] px-1.5 py-0.5 rounded border border-border text-muted-foreground shrink-0">
-            ESC
-          </kbd>
+          {query ? (
+            <button
+              type="button"
+              onClick={() => onQueryChange("")}
+              className="size-6 rounded-full hover:bg-muted flex items-center justify-center text-muted-foreground shrink-0"
+              aria-label="Clear"
+            >
+              <span className="text-lg leading-none">×</span>
+            </button>
+          ) : (
+            <kbd className="text-[10px] px-1.5 py-0.5 rounded border border-border text-muted-foreground shrink-0 hidden sm:inline-block">
+              ESC
+            </kbd>
+          )}
         </div>
       </div>
 
-      <div ref={listRef} className="max-h-[60vh] min-h-[120px] overflow-y-auto medos-scroll p-2">
+      {/* Results — taller rows on mobile sheet for better touch targets */}
+      <div ref={listRef} className={cn(
+        "flex-1 overflow-y-auto medos-scroll",
+        isSheet ? "min-h-0" : "max-h-[60vh] min-h-[120px]",
+        "p-2",
+      )}>
         {loading ? (
-          /* 21st.dev-inspired shimmer rows — reads as "results arriving"
-           * rather than a flat "Loading…" string. Three placeholder rows
-           * match the typical result-group height so the panel doesn't
-           * jump when real results land. */
           <div className="space-y-2 p-1">
             {[0, 1, 2].map((i) => (
-              <div key={i} className="flex items-center gap-3 px-2 py-2 rounded-md">
-                <Skeleton className="size-7 rounded-md shrink-0" />
+              <div key={i} className={cn("flex items-center gap-3 rounded-md", isSheet ? "px-2 py-3" : "px-2 py-2")}>
+                <Skeleton className="size-8 rounded-lg shrink-0" />
                 <div className="flex-1 flex flex-col gap-1.5">
                   <Skeleton className="h-3.5 w-1/2" />
                   <Skeleton className="h-2.5 w-1/3" />
@@ -186,12 +206,39 @@ export function GlobalSearchPanel({
             ))}
           </div>
         ) : !query ? (
-          <div className="px-3 py-6 text-center text-sm text-muted-foreground">
-            <p>{t("search.empty")}</p>
-            <p className="mt-2 text-[11px] text-muted-foreground/70">{t("search.globalHint")}</p>
+          /* Empty-state — on mobile, show quick-access category chips
+             instead of just "start typing" so the sheet is useful on
+             first open even without a query. */
+          <div className="px-2 py-4">
+            <p className="text-xs text-muted-foreground px-2 mb-3">{t("search.globalHint")}</p>
+            {isSheet && (
+              <div className="grid grid-cols-2 gap-2">
+                {([
+                  { kind: "qbank", icon: ListChecks, label: t("nav.qbank") },
+                  { kind: "article", icon: BookOpen, label: t("nav.library") },
+                  { kind: "flashcard", icon: Layers, label: t("nav.flashcards") },
+                  { kind: "video", icon: VideoIcon, label: t("nav.videos") },
+                ] as const).map((cat) => {
+                  const CatIcon = cat.icon;
+                  return (
+                    <button
+                      key={cat.kind}
+                      type="button"
+                      onClick={() => onQueryChange(cat.label)}
+                      className="flex items-center gap-2.5 px-3 py-3 rounded-xl border border-border bg-card hover:border-primary/40 hover:bg-primary/5 transition-colors text-sm font-medium"
+                    >
+                      <span className="size-8 rounded-lg bg-primary/10 text-primary flex items-center justify-center shrink-0">
+                        <CatIcon className="size-4" />
+                      </span>
+                      <span className="truncate">{cat.label}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
           </div>
         ) : flat.length === 0 ? (
-          <div className="px-3 py-6 text-center text-sm text-muted-foreground">
+          <div className="px-3 py-8 text-center text-sm text-muted-foreground">
             {t("search.noResults", { query })}
           </div>
         ) : (
@@ -227,12 +274,16 @@ export function GlobalSearchPanel({
                             }}
                             onMouseEnter={() => setActiveIdx(idx)}
                             className={cn(
-                              "relative w-full text-start px-2 py-2 rounded-md transition-colors flex items-center gap-3",
+                              "relative w-full text-start px-2 rounded-lg transition-colors flex items-center gap-3",
+                              isSheet ? "py-2.5" : "py-2",
                               isActive ? "bg-primary/10 text-foreground" : "hover:bg-muted/60",
                             )}
                           >
-                            <span className="size-7 rounded-md bg-muted/60 flex items-center justify-center shrink-0">
-                              <Icon className="size-3.5 text-muted-foreground" />
+                            <span className={cn(
+                              "rounded-lg bg-muted/60 flex items-center justify-center shrink-0",
+                              isSheet ? "size-8" : "size-7",
+                            )}>
+                              <Icon className={cn("text-muted-foreground", isSheet ? "size-4" : "size-3.5")} />
                             </span>
                             <div className="flex-1 min-w-0">
                               <div className="text-sm font-medium truncate">{title}</div>
@@ -262,7 +313,8 @@ export function GlobalSearchPanel({
         )}
       </div>
 
-      {flat.length > 0 && (
+      {/* Keyboard footer — desktop only (hidden on mobile sheet) */}
+      {flat.length > 0 && !isSheet && (
         <div className="border-t border-border px-3 py-1.5 text-[10px] text-muted-foreground flex items-center gap-3">
           <span className="flex items-center gap-1">
             <kbd className="px-1 py-0.5 rounded border border-border">↑</kbd>

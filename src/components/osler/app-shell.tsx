@@ -243,7 +243,16 @@ export function AppShell({ children }: AppShellProps) {
 
   return (
     <div className="h-screen md:h-screen h-[100dvh] flex flex-col bg-background overflow-hidden">
-      <header className={cn("z-40 shrink-0 h-14 border-b border-border bg-background/80 backdrop-blur-md supports-[backdrop-filter]:bg-background/60 safe-pt", isMobile && immersive && "hidden")}>
+      {/* Top bar — desktop only on mobile. The mobile layout uses the
+          bottom tab bar for all navigation (Dashboard, Q-Bank, Learn,
+          Search, User menu) so the top bar is hidden to reclaim screen
+          space. The header stays mounted (just CSS-hidden) so the global
+          search sheet + user dropdown state isn't reset on view changes. */}
+      <header className={cn(
+        "z-40 shrink-0 h-14 border-b border-border bg-background/80 backdrop-blur-md supports-[backdrop-filter]:bg-background/60 safe-pt",
+        "hidden md:flex",
+        isMobile && immersive && "hidden",
+      )}>
         <div className="h-full px-3 sm:px-4 flex items-center gap-2 sm:gap-3">
           {/* Logo */}
           <button
@@ -424,7 +433,7 @@ export function AppShell({ children }: AppShellProps) {
           browser supports the View Transitions API we disable the framer enter/
           exit animation — the VT snapshot already crossfades the old and new
           views. */}
-      <main className="flex-1 min-h-0 relative overflow-hidden flex flex-col">
+      <main className="flex-1 min-h-0 relative overflow-hidden flex flex-col safe-pt">
         <LightboxProvider>
           <AnimatePresence mode="sync" initial={false}>
             <motion.div
@@ -441,8 +450,24 @@ export function AppShell({ children }: AppShellProps) {
         </LightboxProvider>
       </main>
 
-      {/* Mobile tab bar */}
-      <MobileTabBar view={view} onViewChange={handleViewChange} />
+      {/* Mobile tab bar — 5 tabs: Dashboard, Q-Bank, Learn, Search, User.
+          The User tab navigates to Profile on tap and opens a quick menu
+          (Settings, Theme, Sign out) on long-press. */}
+      <MobileTabBar
+        view={view}
+        onViewChange={handleViewChange}
+        onSearchOpen={() => setSearchOpen(true)}
+        user={cloudSession?.user ? {
+          displayName: cloudSession.user.displayName,
+          username: cloudSession.user.username,
+          email: cloudSession.user.email ?? undefined,
+          role: cloudSession.user.role,
+        } : { username: username ?? undefined }}
+        isCloudSession={!!cloudSession}
+        isDark={isDark}
+        onToggleTheme={toggleTheme}
+        onSignOut={logout}
+      />
 
       {/* Resume-session auto-pop — hidden on the dashboard (which has its
           own "Continue learning" card that opens the same dialog on click)

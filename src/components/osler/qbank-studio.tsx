@@ -2410,7 +2410,6 @@ function ContentTab({
 }) {
   const { t, rtl, contentFilter } = useI18n();
   const [selectedFolders, setSelectedFolders] = React.useState<ContentTreeNode[]>([]);
-  const [search, setSearch] = React.useState("");
 
   // Build a uid → content map for O(1) lookup when computing per-folder stats.
   const contentByUid = React.useMemo(() => {
@@ -2469,33 +2468,6 @@ function ContentTab({
       return { packs, questions, attempted, correct };
     },
     [collectLeafUids],
-  );
-
-  /**
-   * Recursively filter a tree by a title-substring match.
-   */
-  const filterTree = React.useCallback(
-    (nodes: ContentTreeNode[], q: string): ContentTreeNode[] => {
-      if (!q) return nodes;
-      const needle = q.toLowerCase();
-      function walk(list: ContentTreeNode[]): ContentTreeNode[] {
-        const out: ContentTreeNode[] = [];
-        for (const node of list) {
-          const titleMatch = node.title.toLowerCase().includes(needle);
-          if (node.items.length === 0) {
-            if (titleMatch) out.push(node);
-          } else {
-            const children = walk(node.items);
-            if (titleMatch || children.length > 0) {
-              out.push({ ...node, items: children });
-            }
-          }
-        }
-        return out;
-      }
-      return walk(nodes);
-    },
-    [],
   );
 
   const handleNodeClick = React.useCallback(
@@ -2630,14 +2602,20 @@ function ContentTab({
     const fs = folderStats(selectedFolder);
     const acc = fs.attempted > 0 ? Math.round((fs.correct / fs.attempted) * 100) : 0;
 
-    const childTree = filterTree(selectedFolder.items, search.trim());
+    // Local search removed — the unified global search bar at the top
+    // handles all content discovery. Just render the folder's children
+    // directly; the grid below handles empty state.
+    const childTree = selectedFolder.items.filter((child) => {
+      const qbankTypes = new Set(["quiz", "bank", "written"]);
+      return qbankTypes.has(child.type);
+    });
 
     subfolderView = (
       <div className="max-w-5xl mx-auto px-4 md:px-6 lg:px-8 py-6 md:py-8">
         {/* Header with back button */}
         <div className="mb-6">
           <button
-            onClick={() => { setSelectedFolders((folders) => folders.slice(0, -1)); setSearch(""); }}
+            onClick={() => setSelectedFolders((folders) => folders.slice(0, -1))}
             className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors mb-3"
           >
             <ArrowLeft className={cn("size-3.5", rtl && "rtl-flip-x")} />
@@ -2662,36 +2640,9 @@ function ContentTab({
           </p>
         </div>
 
-        {/* Search */}
-        <div className="relative mb-4">
-          <Search className={cn("size-4 text-muted-foreground absolute top-1/2 -translate-y-1/2", rtl ? "right-3" : "left-3")} />
-          <input
-            type="text"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder={t("qbank.home.search")}
-            className={cn(
-              "w-full h-10 rounded-xl border border-border bg-card text-sm px-9 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
-              rtl ? "pr-9 pl-3 text-right" : "pl-9 pr-3",
-            )}
-          />
-          {search && (
-            <button
-              onClick={() => setSearch("")}
-              className={cn(
-                "absolute top-1/2 -translate-y-1/2 size-6 rounded-full hover:bg-muted flex items-center justify-center text-muted-foreground",
-                rtl ? "left-2" : "right-2",
-              )}
-              aria-label={t("qbank.home.clearSearch")}
-            >
-              <X className="size-3.5" />
-            </button>
-          )}
-        </div>
-
         {/* Child items grid */}
         {childTree.length === 0 ? (
-          <EmptyState icon={Search} title={t("qbank.home.empty")} description={t("qbank.home.search")} />
+          <EmptyState icon={Folder} title={t("qbank.home.empty")} />
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {childTree.map((child, idx) => {
@@ -2773,7 +2724,7 @@ function ContentTab({
       rtl={rtl}
       home={decksView}
       subpage={subfolderView}
-      onBack={() => { setSelectedFolders((folders) => folders.slice(0, -1)); setSearch(""); }}
+      onBack={() => setSelectedFolders((folders) => folders.slice(0, -1))}
     />
   );
 }
@@ -2858,7 +2809,6 @@ function CreateTestTab({
   const [timerMinutes, setTimerMinutes] = React.useState("20");
   const timerEditedRef = React.useRef(false);
   // Tree search (mirrors the Content tab pattern).
-  const [search, setSearch] = React.useState("");
   // Folder navigation for source picker (flashcard-style deck browser).
   const [selectedFolders, setSelectedFolders] = React.useState<ContentTreeNode[]>([]);
   // Ref for scrolling a pre-selected source into view.
@@ -2888,18 +2838,15 @@ function CreateTestTab({
   const filteredTree = React.useMemo(() => {
     if (!qbankTree.length) return [] as ContentTreeNode[];
     const qbankEngineTypes = new Set(["quiz", "bank", "written"]);
-    const needle = search.trim().toLowerCase();
-
     function walk(list: ContentTreeNode[]): ContentTreeNode[] {
       const out: ContentTreeNode[] = [];
       for (const node of list) {
         if (!qbankEngineTypes.has(node.type)) continue;
-        const titleMatch = !needle || node.title.toLowerCase().includes(needle);
         if (node.items.length === 0) {
-          if (titleMatch) out.push(node);
+          out.push(node);
         } else {
           const children = walk(node.items);
-          if (titleMatch || children.length > 0) {
+          if (children.length > 0) {
             out.push({ ...node, items: children });
           }
         }
@@ -2907,7 +2854,7 @@ function CreateTestTab({
       return out;
     }
     return walk(qbankTree);
-  }, [qbankTree, search]);
+  }, [qbankTree]);
 
   // P2-2: when `initialSourceUid` changes, pre-check that source and scroll
   // it into view. Consume the prop so a remount doesn't re-trigger.
@@ -3124,28 +3071,14 @@ function CreateTestTab({
             {t("qbank.create.sources")}
           </SectionHeading>
           <div className="mt-4 space-y-3">
-            {/* Search box */}
-            <div className="relative">
-              <Search className={cn("size-4 text-muted-foreground absolute top-1/2 -translate-y-1/2", rtl ? "right-3" : "left-3")} />
-              <input
-                type="text"
-                value={search}
-                onChange={(e) => { setSearch(e.target.value); setSelectedFolders([]); }}
-                placeholder={t("qbank.home.search")}
-                className={cn(
-                  "w-full h-9 rounded-xl border border-border bg-card text-sm px-9 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
-                  rtl ? "pr-9 pl-3 text-right" : "pl-9 pr-3",
-                )}
-              />
-            </div>
-
-            {/* Folder hierarchy browser */}
+            {/* Folder hierarchy browser — local search removed; the unified
+                global search bar handles content discovery. */}
             <div className="rounded-xl border border-border bg-card max-h-80 overflow-y-auto medos-scroll">
               {selectedFolders.length > 0 ? (
                 /* Subfolder view — children of the selected folder */
                 <div className="p-3">
                   <button
-                    onClick={() => { setSelectedFolders((folders) => folders.slice(0, -1)); setSearch(""); }}
+                    onClick={() => setSelectedFolders((folders) => folders.slice(0, -1))}
                     className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors mb-3"
                   >
                     <ArrowLeft className={cn("size-3.5", rtl && "rtl-flip-x")} />

@@ -1801,29 +1801,6 @@ html[dir="rtl"] {
 .osler-stat-val { font-size: 1.5rem; font-weight: 700; }
 .osler-stat-lbl { font-size: 0.78rem; color: var(--muted-foreground); }
 
-/* ── Topbar search input ────────────────────────────────────────────────── */
-.osler-search {
-  display: flex; align-items: center; gap: 0.5rem;
-  height: 36px; padding: 0 0.85rem;
-  background: var(--muted);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  color: var(--muted-foreground);
-  font-size: 0.85rem;
-  width: 240px;
-  transition: border-color 0.15s ease, width 0.2s ease;
-}
-.osler-search:focus-within {
-  border-color: var(--primary);
-  width: 320px;
-}
-.osler-search input {
-  background: transparent; border: none; outline: none;
-  color: var(--foreground); flex: 1; min-width: 0;
-  font-family: inherit; font-size: inherit;
-}
-.osler-search input::placeholder { color: var(--muted-foreground); }
-
 /* ── Engine icon button ─────────────────────────────────────────────────── */
 .osler-icon-btn {
   width: 36px; height: 36px;
