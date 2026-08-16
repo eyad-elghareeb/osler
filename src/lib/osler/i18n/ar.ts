@@ -204,7 +204,7 @@ export const ar = {
     "qbank.home.subtitle":
       "اعمل جلسة مذاكرة من الاختبارات والبنوك والأسئلة المقالية ومحطات OSCE والبطاقات.",
     "qbank.home.tabContent": "المحتوى",
-    "qbank.home.tabCreate": "إنشاء",
+    "qbank.home.tabCreate": "مخصص",
     "qbank.home.tabTracker": "التتبّع",
     "qbank.home.empty": "لا توجد حزم محتوى بعد.",
     "qbank.home.start": "ابدأ",

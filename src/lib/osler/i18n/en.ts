@@ -203,7 +203,7 @@ export const en = {
     "qbank.home.subtitle":
       "Build a study session from quizzes, banks, written prompts, OSCE stations, and flashcards.",
     "qbank.home.tabContent": "Content",
-    "qbank.home.tabCreate": "Create",
+    "qbank.home.tabCreate": "Custom",
     "qbank.home.tabTracker": "Tracker",
     "qbank.home.empty": "No content packs available yet.",
     "qbank.home.start": "Start",

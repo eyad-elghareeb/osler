@@ -439,7 +439,7 @@ export function QBankStudio({
     setSelfPack(null);
     setSelfPackError(false);
     loadContentByUid(uid)
-      .then((loaded) => {
+      .then(async (loaded) => {
         if (cancelled) return;
         if (loaded.type === "flashcard") {
           router.replace(routeFor("flashcards", { uid }));
@@ -449,7 +449,20 @@ export function QBankStudio({
           router.replace(routeFor("osce", { uid }));
           return;
         }
-        setSelfPack({ item: nodeFromPack(uid, loaded), content: loaded });
+        // Resolve the real manifest node so the pack folder path is
+        // available — question/choice/explanation images resolve against
+        // `item.path`, and the synthetic nodeFromPack node carries an empty
+        // path, which 404s every image in an active session (review mode
+        // re-resolves the node, which is why images worked there).
+        // loadNodeByUid hits the node cache, so this is usually free.
+        let node: ContentTreeNode;
+        try {
+          node = await loadNodeByUid(uid, loaded.type as EngineType);
+        } catch {
+          node = nodeFromPack(uid, loaded);
+        }
+        if (cancelled) return;
+        setSelfPack({ item: node, content: loaded });
       })
       .catch((e) => {
         if (cancelled) return;
