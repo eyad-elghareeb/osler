@@ -2080,10 +2080,14 @@ async function handleAnalytics(request: Request, env: Env, url: URL, origin: str
     const since = now() - analyticsRangeMs(url);
     const limit = Math.min(100, Math.max(1, Number(url.searchParams.get("limit") || 20)));
     // Group by the error message (extracted from JSON detail). Falls back
-    // to the raw detail text if json_extract returns null.
+    // to the raw detail text if json_extract returns null. json_extract
+    // THROWS on malformed JSON (rather than returning null), so guard with
+    // json_valid first — legacy details may be plain text, not JSON.
     const rows = await env.DB.prepare(
       `SELECT
-         COALESCE(json_extract(detail, '$.message'), detail, '(unknown)') AS message,
+         CASE WHEN json_valid(detail)
+           THEN COALESCE(json_extract(detail, '$.message'), detail, '(unknown)')
+           ELSE detail END AS message,
          COUNT(*) AS count,
          MIN(created_at) AS first_seen,
          MAX(created_at) AS last_seen,
