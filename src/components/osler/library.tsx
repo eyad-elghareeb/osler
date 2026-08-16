@@ -633,7 +633,7 @@ export function Library({ initialArticleId, onNavigateBack: propOnNavigateBack }
               onPrint={printArticle}
               onExportPdf={() => setPdfDialogOpen(true)}
             />
-            <div className="flex-1 overflow-y-auto medos-scroll medos-tabbar-pad md:pb-0 relative flex flex-col">
+            <div className="flex-1 overflow-y-auto osler-scroll osler-tabbar-pad md:pb-0 relative flex flex-col">
               {loading ? (
                 <div className="flex-1 flex flex-col gap-4 p-6 max-w-3xl mx-auto w-full">
                   <Skeleton className="h-8 w-2/3 mb-2" />
@@ -1078,7 +1078,7 @@ function MobileReader({
       </header>
 
       {/* Content */}
-      <div className="flex-1 overflow-y-auto medos-scroll safe-pb flex flex-col" style={{ touchAction: "pan-y" }}>
+      <div className="flex-1 overflow-y-auto osler-scroll safe-pb flex flex-col" style={{ touchAction: "pan-y" }}>
         {loading ? (
           <div className="flex items-center justify-center py-20">
             <Loader2 className="size-6 animate-spin text-muted-foreground" />
@@ -1205,7 +1205,7 @@ function SidebarContent({
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto medos-scroll p-2 space-y-0.5 medos-tabbar-pad md:pb-2">
+      <div className="flex-1 overflow-y-auto osler-scroll p-2 space-y-0.5 osler-tabbar-pad md:pb-2">
         {sidebarTab === "bookmarks" && bookmarkedArticles.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-10 text-center">
             <BookmarkX className="size-8 text-muted-foreground/40 mb-2" />

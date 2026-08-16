@@ -115,7 +115,7 @@ function Disclosure({ title, html }: { title: string; html: string }) {
             transition={reduced ? { duration: 0 } : undefined}
             className="overflow-hidden"
           >
-            <div className="uworld-prose mt-2 text-sm" dir="auto" dangerouslySetInnerHTML={{ __html: html }} />
+            <div className="osler-prose mt-2 text-sm" dir="auto" dangerouslySetInnerHTML={{ __html: html }} />
           </motion.div>
         )}
       </AnimatePresence>
@@ -156,7 +156,7 @@ function PreviewCard({ item, pack, selected, onToggle, t }: {
           {q ? (
             <>
               <div
-                className="uworld-prose text-sm"
+                className="osler-prose text-sm"
                 dir="auto"
                 dangerouslySetInnerHTML={{ __html: previewHtml(q.stem, q) }}
               />

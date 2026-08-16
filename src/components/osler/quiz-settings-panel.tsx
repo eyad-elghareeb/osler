@@ -174,7 +174,7 @@ export function QuizSettingsPanel({
       </div>
 
       {/* Scrollable settings body */}
-      <div className="flex-1 overflow-y-auto medos-scroll px-4 md:px-6 py-5 space-y-7">
+      <div className="flex-1 overflow-y-auto osler-scroll px-4 md:px-6 py-5 space-y-7">
         {/* Theme switcher — quick dark/light toggle at the top */}
         <Section
           icon={theme === "dark" ? Moon : Sun}

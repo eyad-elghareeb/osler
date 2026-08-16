@@ -193,7 +193,7 @@ export function ImageLightbox({ src, alt, onClose }: ImageLightboxProps) {
 
       {/* Close button — top-end, safe-area aware, larger on touch */}
       <button
-        className="absolute size-11 sm:size-10 flex items-center justify-center rounded-full bg-white/10 text-white/90 hover:bg-white/20 hover:text-white transition-colors z-10 medos-touch-target"
+        className="absolute size-11 sm:size-10 flex items-center justify-center rounded-full bg-white/10 text-white/90 hover:bg-white/20 hover:text-white transition-colors z-10 osler-touch-target"
         style={{
           top: "max(env(safe-area-inset-top, 0px), 1rem)",
           right: "max(env(safe-area-inset-right, 0px), 1rem)",
@@ -215,21 +215,21 @@ export function ImageLightbox({ src, alt, onClose }: ImageLightboxProps) {
       >
         <button
           onClick={(e) => { e.stopPropagation(); zoomOut(); }}
-          className="size-10 sm:size-9 flex items-center justify-center rounded-full bg-white/10 text-white/90 hover:bg-white/20 transition-colors medos-touch-target"
+          className="size-10 sm:size-9 flex items-center justify-center rounded-full bg-white/10 text-white/90 hover:bg-white/20 transition-colors osler-touch-target"
           aria-label="Zoom out"
         >
           <ZoomOut className="size-4" />
         </button>
         <button
           onClick={(e) => { e.stopPropagation(); resetZoom(); }}
-          className="px-3 h-10 sm:h-9 flex items-center justify-center rounded-full bg-white/10 text-white/90 hover:bg-white/20 transition-colors text-xs font-medium tabular-nums medos-touch-target"
+          className="px-3 h-10 sm:h-9 flex items-center justify-center rounded-full bg-white/10 text-white/90 hover:bg-white/20 transition-colors text-xs font-medium tabular-nums osler-touch-target"
           aria-label="Reset zoom"
         >
           {Math.round(scale * 100)}%
         </button>
         <button
           onClick={(e) => { e.stopPropagation(); zoomIn(); }}
-          className="size-10 sm:size-9 flex items-center justify-center rounded-full bg-white/10 text-white/90 hover:bg-white/20 transition-colors medos-touch-target"
+          className="size-10 sm:size-9 flex items-center justify-center rounded-full bg-white/10 text-white/90 hover:bg-white/20 transition-colors osler-touch-target"
           aria-label="Zoom in"
         >
           <ZoomIn className="size-4" />

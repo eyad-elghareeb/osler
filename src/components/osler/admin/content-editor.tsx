@@ -789,7 +789,7 @@ export function ContentEditor({ id, rawR2Key, capabilities }: ContentEditorProps
       <div className="flex flex-1 min-h-0 overflow-hidden">
         {/* Metadata sidebar — managed mode only */}
         {!isRawMode && obj && (
-        <aside className="hidden lg:flex w-56 shrink-0 border-e border-border bg-card p-4 text-xs space-y-3 flex-col overflow-y-auto medos-scroll-y">
+        <aside className="hidden lg:flex w-56 shrink-0 border-e border-border bg-card p-4 text-xs space-y-3 flex-col overflow-y-auto osler-scroll-y">
           <div>
             <div className="font-semibold uppercase tracking-wider text-muted-foreground mb-1">
               {t("admin.content.col.type")}
@@ -855,7 +855,7 @@ export function ContentEditor({ id, rawR2Key, capabilities }: ContentEditorProps
 
         {/* Metadata sidebar — raw mode */}
         {isRawMode && (
-        <aside className="hidden lg:flex w-56 shrink-0 border-e border-warning/20 bg-warning/5 p-4 text-xs space-y-3 flex-col overflow-y-auto medos-scroll-y">
+        <aside className="hidden lg:flex w-56 shrink-0 border-e border-warning/20 bg-warning/5 p-4 text-xs space-y-3 flex-col overflow-y-auto osler-scroll-y">
           <div>
             <div className="font-semibold uppercase tracking-wider text-muted-foreground mb-1">
               {t("admin.content.editor.rawSidebarTitle")}
@@ -902,7 +902,7 @@ export function ContentEditor({ id, rawR2Key, capabilities }: ContentEditorProps
           ) : mode === "form" ? (
             <div className={cn(
               "flex-1",
-              isLibrary ? "min-h-0 p-3 sm:p-4 flex flex-col overflow-hidden" : "overflow-y-auto medos-scroll-y p-3 sm:p-4"
+              isLibrary ? "min-h-0 p-3 sm:p-4 flex flex-col overflow-hidden" : "overflow-y-auto osler-scroll-y p-3 sm:p-4"
             )}>
               {isLibrary ? (
                 <LibraryArticleEditor

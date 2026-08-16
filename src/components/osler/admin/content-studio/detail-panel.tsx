@@ -376,7 +376,7 @@ function R2Preview({ node }: { node: ContentTreeNode }) {
   if (isImage) {
     return (
       <div className="flex h-full flex-col overflow-hidden">
-        <div className="flex-1 min-h-0 overflow-auto medos-scroll-y p-2.5">
+        <div className="flex-1 min-h-0 overflow-auto osler-scroll-y p-2.5">
           {loading ? (
             <div className="text-xs text-muted-foreground text-center py-6">{t("common.loading")}</div>
           ) : imageUrl ? (
@@ -426,7 +426,7 @@ function R2Preview({ node }: { node: ContentTreeNode }) {
 
   return (
     <div className="flex h-full flex-col overflow-hidden">
-      <div dir={lang === "ar" ? "rtl" : "ltr"} className="flex-1 min-h-0 overflow-auto medos-scroll-y p-2.5">
+      <div dir={lang === "ar" ? "rtl" : "ltr"} className="flex-1 min-h-0 overflow-auto osler-scroll-y p-2.5">
         {loading ? (
           <div className="text-xs text-muted-foreground text-center py-6">{t("common.loading")}</div>
         ) : renderable && body != null ? (

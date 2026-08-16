@@ -275,7 +275,7 @@
  * Firefox uses `scrollbar-color` (two-color shorthand: thumb then track).
  * Webkit/Blink uses the `::-webkit-scrollbar-*` pseudo-elements.
  *
- * The `.medos-scroll` / `.osler-has-scroll` / `.osler-scroll` utility
+ * The `.osler-scroll` / `.osler-has-scroll` / `.osler-scroll` utility
  * classes are kept for backward-compat but now just reference the same
  * recipe — they're no-ops on top of the global default.
  */
@@ -312,66 +312,45 @@
 }
 
 /* Legacy utility classes — kept for backward-compat, now identical to the
- * global default above. Safe to remove once all `medos-scroll` /
+ * global default above. Safe to remove once all `osler-scroll` /
  * `osler-has-scroll` / `osler-scroll` class usages are dropped. */
-.medos-scroll,
-.osler-has-scroll,
-.osler-scroll {
+.osler-scroll,
+.osler-has-scroll {
   scrollbar-width: thin;
   scrollbar-color: color-mix(in oklch, var(--ring) 20%, transparent) transparent;
 }
-.medos-scroll::-webkit-scrollbar,
-.osler-has-scroll::-webkit-scrollbar,
-.osler-scroll::-webkit-scrollbar {
+.osler-scroll::-webkit-scrollbar,
+.osler-has-scroll::-webkit-scrollbar {
   width: 6px;
   height: 6px;
 }
-.medos-scroll::-webkit-scrollbar-track,
-.osler-has-scroll::-webkit-scrollbar-track,
-.osler-scroll::-webkit-scrollbar-track {
+.osler-scroll::-webkit-scrollbar-track,
+.osler-has-scroll::-webkit-scrollbar-track {
   background: transparent;
 }
-.medos-scroll::-webkit-scrollbar-thumb,
-.osler-has-scroll::-webkit-scrollbar-thumb,
-.osler-scroll::-webkit-scrollbar-thumb {
+.osler-scroll::-webkit-scrollbar-thumb,
+.osler-has-scroll::-webkit-scrollbar-thumb {
   background-color: color-mix(in oklch, var(--ring) 20%, transparent);
   border-radius: 999px;
   border: 1px solid transparent;
   background-clip: content-box;
   transition: background-color 150ms ease;
 }
-.medos-scroll::-webkit-scrollbar-thumb:hover,
-.osler-has-scroll::-webkit-scrollbar-thumb:hover,
-.osler-scroll::-webkit-scrollbar-thumb:hover {
+.osler-scroll::-webkit-scrollbar-thumb:hover,
+.osler-has-scroll::-webkit-scrollbar-thumb:hover {
   background-color: color-mix(in oklch, var(--ring) 45%, transparent);
   background-clip: content-box;
 }
 
-/* Subtle grid background for the app shell */
-.medos-grid-bg {
-  background-image:
-    linear-gradient(oklch(1 0 0 / 0.025) 1px, transparent 1px),
-    linear-gradient(90deg, oklch(1 0 0 / 0.025) 1px, transparent 1px);
-  background-size: 32px 32px;
-  background-position: -1px -1px;
-}
 
-/* Pulse highlight for new items */
-@keyframes medos-pulse {
-  0%, 100% { box-shadow: 0 0 0 0 color-mix(in oklch, var(--primary) 50%, transparent); }
-  50% { box-shadow: 0 0 0 6px color-mix(in oklch, var(--primary) 0%, transparent); }
-}
-.medos-pulse {
-  animation: medos-pulse 2s ease-in-out infinite;
-}
 
 /* One-shot mount fade (re-render safe, no JS animation conflict) */
-@keyframes medos-fade-in {
+@keyframes osler-fade-in {
   from { opacity: 0; transform: translateY(8px); }
   to { opacity: 1; transform: translateY(0); }
 }
-.medos-fade-in {
-  animation: medos-fade-in 0.25s ease-out both;
+.osler-fade-in {
+  animation: osler-fade-in 0.25s ease-out both;
 }
 
 /* ─── Shimmer skeleton (21st.dev-inspired) ─────────────────────────────
@@ -454,8 +433,8 @@
     padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 4.25rem);
   }
 }
-.osler-page.medos-tabbar-pad::after,
-.osler-page .medos-tabbar-pad::after {
+.osler-page.osler-tabbar-pad::after,
+.osler-page .osler-tabbar-pad::after {
   display: none !important;
 }
 .osler-page__inner {
@@ -695,113 +674,6 @@ button.osler-stat-tile--compact:hover {
  * / `--color-info` tokens declared in the `@theme inline` block above. Use
  * them in place of `text-emerald-500` / `text-amber-500` / `text-red-500`. */
 
-/* Article content (rendered inside the article viewer) */
-.medos-article {
-  color: oklch(0.93 0.005 240);
-  font-size: 0.95rem;
-  line-height: 1.7;
-}
-.medos-article h1 {
-  font-size: 1.75rem;
-  font-weight: 700;
-  margin: 1.25rem 0 0.75rem;
-  color: oklch(0.99 0 0);
-  letter-spacing: -0.01em;
-}
-.medos-article h2 {
-  font-size: 1.3rem;
-  font-weight: 600;
-  margin: 1.5rem 0 0.5rem;
-  color: oklch(0.95 0.02 240);
-  padding-bottom: 0.25rem;
-  border-bottom: 1px solid oklch(1 0 0 / 0.08);
-}
-.medos-article h3 {
-  font-size: 1.1rem;
-  font-weight: 600;
-  margin: 1.25rem 0 0.5rem;
-  color: oklch(0.9 0.01 240);
-}
-.medos-article p {
-  margin: 0.6rem 0;
-}
-.medos-article ul {
-  list-style: disc;
-  padding-left: 1.5rem;
-  margin: 0.5rem 0;
-}
-.medos-article ol {
-  list-style: decimal;
-  padding-left: 1.5rem;
-  margin: 0.5rem 0;
-}
-.medos-article li {
-  margin: 0.25rem 0;
-}
-.medos-article strong {
-  color: oklch(0.99 0 0);
-  font-weight: 600;
-}
-.medos-article em {
-  color: oklch(0.85 0.06 240);
-  font-style: italic;
-}
-.medos-article a {
-  color: var(--primary);
-  text-decoration: underline;
-  text-underline-offset: 2px;
-}
-.medos-article code {
-  font-family: var(--font-geist-mono), ui-monospace, monospace;
-  background: oklch(1 0 0 / 0.06);
-  padding: 0.1rem 0.35rem;
-  border-radius: 4px;
-  font-size: 0.85em;
-}
-.medos-article blockquote {
-  border-left: 3px solid var(--primary);
-  padding-left: 1rem;
-  margin: 0.75rem 0;
-  color: oklch(0.78 0.01 240);
-  font-style: italic;
-}
-.medos-article table {
-  width: 100%;
-  border-collapse: collapse;
-  margin: 0.75rem 0;
-  font-size: 0.9rem;
-}
-.medos-article th, .medos-article td {
-  border: 1px solid oklch(1 0 0 / 0.1);
-  padding: 0.4rem 0.6rem;
-  text-align: left;
-}
-.medos-article th {
-  background: oklch(1 0 0 / 0.04);
-  font-weight: 600;
-  color: oklch(0.95 0.02 240);
-}
-.medos-article .medos-callout {
-  background: color-mix(in oklch, var(--primary) 20%, transparent);
-  border-left: 4px solid var(--primary);
-  padding: 0.75rem 1rem;
-  border-radius: 6px;
-  margin: 1rem 0;
-}
-.medos-article .medos-warning {
-  background: oklch(0.35 0.1 30 / 0.25);
-  border-left: 4px solid oklch(0.7 0.18 30);
-  padding: 0.75rem 1rem;
-  border-radius: 6px;
-  margin: 1rem 0;
-}
-.medos-article .lc-highlight {
-  background: color-mix(in oklch, var(--primary) 15%, transparent);
-  padding: 0.05rem 0.25rem;
-  border-radius: 3px;
-  cursor: help;
-  border-bottom: 1px dashed color-mix(in oklch, var(--primary) 60%, transparent);
-}
 
 /* ── Highlight spans (QBank + Library) ──────────────────────────────── */
 [data-osler-hl-id] {
@@ -822,147 +694,89 @@ button.osler-stat-tile--compact:hover {
 }
 
 /* ───────────────────────────────────────────────────────────────────────
- * UWorld-aligned utility classes (used by QBank Studio v2)
+ * Exam-style utility classes (used by QBank Studio v2)
  * ─────────────────────────────────────────────────────────────────────── */
 
-/* Rounded checkbox tree — UWorld-style content selector */
-.uworld-tree-checkbox {
-  appearance: none;
-  -webkit-appearance: none;
-  width: 1.05rem;
-  height: 1.05rem;
-  border: 1.5px solid var(--border);
-  border-radius: 5px;
-  background: var(--card);
-  cursor: pointer;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  transition: all 0.15s ease;
-  position: relative;
-}
-.uworld-tree-checkbox:hover {
-  border-color: var(--primary);
-}
-.uworld-tree-checkbox:checked {
-  background: var(--primary);
-  border-color: var(--primary);
-}
-.uworld-tree-checkbox:checked::after {
-  content: "";
-  width: 0.35rem;
-  height: 0.6rem;
-  border: solid white;
-  border-width: 0 2px 2px 0;
-  transform: rotate(45deg) translate(-1px, -1px);
-}
-.uworld-tree-checkbox:indeterminate {
-  background: var(--primary);
-  border-color: var(--primary);
-}
-.uworld-tree-checkbox:indeterminate::after {
-  content: "";
-  width: 0.55rem;
-  height: 2px;
-  background: white;
-  border-radius: 1px;
-}
 
-/* Subtle dotted background used on the create-test page */
-.uworld-grid-bg {
-  background-image:
-    radial-gradient(oklch(0.55 0.02 240 / 0.08) 1px, transparent 1px);
-  background-size: 18px 18px;
-  background-position: 0 0;
-}
 
-/* Pulse highlight for newly selected answer */
-@keyframes uworld-pulse {
-  0%, 100% { box-shadow: 0 0 0 0 oklch(0.36 0.11 250 / 0.35); }
-  50% { box-shadow: 0 0 0 6px oklch(0.36 0.11 250 / 0); }
-}
-.uworld-pulse {
-  animation: uworld-pulse 1.6s ease-in-out infinite;
-}
 
 /* Question & explanation typography (rich HTML content) */
-.uworld-prose {
+.osler-prose {
   color: var(--foreground);
   font-size: 0.95rem;
   line-height: 1.65;
 }
-.uworld-prose p {
+.osler-prose p {
   margin: 0.65rem 0;
 }
-.uworld-prose h1, .uworld-prose h2, .uworld-prose h3 {
+.osler-prose h1, .osler-prose h2, .osler-prose h3 {
   color: var(--foreground);
   font-family: var(--font-display, var(--font-serif));
   font-weight: 700;
   margin: 1rem 0 0.5rem;
   text-wrap: balance;
 }
-.uworld-prose h1 { font-size: 1.3rem; }
-.uworld-prose h2 { font-size: 1.15rem; }
-.uworld-prose h3 { font-size: 1.05rem; }
-.uworld-prose ul {
+.osler-prose h1 { font-size: 1.3rem; }
+.osler-prose h2 { font-size: 1.15rem; }
+.osler-prose h3 { font-size: 1.05rem; }
+.osler-prose ul {
   list-style: disc;
   padding-left: 1.5rem;
   margin: 0.5rem 0;
 }
-.uworld-prose ol {
+.osler-prose ol {
   list-style: decimal;
   padding-left: 1.5rem;
   margin: 0.5rem 0;
 }
-.uworld-prose li {
+.osler-prose li {
   margin: 0.25rem 0;
 }
-.uworld-prose strong {
+.osler-prose strong {
   color: var(--foreground);
   font-weight: 700;
 }
-.uworld-prose em {
+.osler-prose em {
   color: var(--primary);
   font-style: italic;
   font-weight: 600;
 }
-.uworld-prose a {
+.osler-prose a {
   color: var(--primary);
   text-decoration: underline;
   text-underline-offset: 2px;
 }
-.uworld-prose code {
+.osler-prose code {
   font-family: var(--font-geist-mono), ui-monospace, monospace;
   background: var(--muted);
   padding: 0.1rem 0.35rem;
   border-radius: 4px;
   font-size: 0.85em;
 }
-.uworld-prose blockquote {
+.osler-prose blockquote {
   border-left: 3px solid var(--primary);
   padding-left: 1rem;
   margin: 0.75rem 0;
   color: var(--muted-foreground);
   font-style: italic;
 }
-.uworld-prose table {
+.osler-prose table {
   width: 100%;
   border-collapse: collapse;
   margin: 0.75rem 0;
   font-size: 0.9rem;
 }
-.uworld-prose th, .uworld-prose td {
+.osler-prose th, .osler-prose td {
   border: 1px solid var(--border);
   padding: 0.4rem 0.6rem;
   text-align: left;
 }
-.uworld-prose th {
+.osler-prose th {
   background: var(--muted);
   font-weight: 600;
   color: var(--foreground);
 }
-.uworld-prose img {
+.osler-prose img {
   max-width: 100%;
   height: auto;
   border-radius: 6px;
@@ -970,7 +784,7 @@ button.osler-stat-tile--compact:hover {
   cursor: zoom-in;
   transition: opacity 0.15s;
 }
-.uworld-prose img:hover {
+.osler-prose img:hover {
   opacity: 0.85;
 }
 
@@ -1101,19 +915,19 @@ html, body {
   overscroll-behavior-x: none;
 }
 
-.medos-no-select {
+.osler-no-select {
   -webkit-user-select: none;
   user-select: none;
   -webkit-touch-callout: none;
 }
 
 /* On desktop (pointer: fine), keep text selection enabled everywhere —
- * the `.medos-no-select` class is for mobile UI chrome that shouldn't show
+ * the `.osler-no-select` class is for mobile UI chrome that shouldn't show
  * a long-press selection callout. Restricting to touch devices prevents
  * the class from breaking desktop text selection (copy-paste of labels,
  * button text, etc.). */
 @media (pointer: fine) {
-  .medos-no-select {
+  .osler-no-select {
     -webkit-user-select: text;
     user-select: text;
     -webkit-touch-callout: default;
@@ -1121,7 +935,7 @@ html, body {
 }
 
 /* Inputs / article content remain selectable on every device. */
-input, textarea, [contenteditable="true"], .medos-article, .uworld-prose, .ai-chat-msg {
+input, textarea, [contenteditable="true"], .osler-prose, .ai-chat-msg {
   -webkit-user-select: text;
   user-select: text;
   -webkit-touch-callout: default;
@@ -1129,7 +943,7 @@ input, textarea, [contenteditable="true"], .medos-article, .uworld-prose, .ai-ch
 
 /* Disable the iOS tap-highlight on interactive chrome — it makes the UI
  * feel "web-appy" rather than native. */
-.medos-tap-none {
+.osler-tap-none {
   -webkit-tap-highlight-color: transparent;
 }
 
@@ -1137,7 +951,7 @@ input, textarea, [contenteditable="true"], .medos-article, .uworld-prose, .ai-ch
  * is below Apple's 44pt guideline. Apply to all icon-only buttons inside
  * the app chrome when on a touch device. */
 @media (pointer: coarse) {
-  .medos-touch-target {
+  .osler-touch-target {
     min-width: 40px;
     min-height: 40px;
   }
@@ -1149,7 +963,7 @@ input, textarea, [contenteditable="true"], .medos-article, .uworld-prose, .ai-ch
  * `safe-bottom` inset is applied via the .safe-bottom utility on the
  * inner <nav> so the tab bar visually sits above the home indicator.
  */
-.medos-tabbar {
+.osler-tabbar {
   background: var(--background);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
@@ -1164,19 +978,19 @@ input, textarea, [contenteditable="true"], .medos-article, .uworld-prose, .ai-ch
  * iOS Safari ignores padding on overflow:auto elements during scroll
  * (content scrolls right to the edge). The ::after spacer is real content
  * so it always participates in the scroll area. */
-.medos-tabbar-pad {
+.osler-tabbar-pad {
   scroll-padding-bottom: calc(3rem + max(env(safe-area-inset-bottom, 0px), 0.5rem));
 }
-.medos-tabbar-pad::after {
+.osler-tabbar-pad::after {
   content: "";
   display: block;
   height: calc(3rem + max(env(safe-area-inset-bottom, 0px), 0.5rem));
   pointer-events: none;
 }
 @media (min-width: 768px) {
-  .medos-tabbar-pad::after { display: none; }
+  .osler-tabbar-pad::after { display: none; }
 }
-.medos-tabbar-item {
+.osler-tabbar-item {
   position: relative;
   display: flex;
   flex-direction: column;
@@ -1192,10 +1006,10 @@ input, textarea, [contenteditable="true"], .medos-article, .uworld-prose, .ai-ch
   transition: color 0.15s ease;
   -webkit-tap-highlight-color: transparent;
 }
-.medos-tabbar-item.active {
+.osler-tabbar-item.active {
   color: var(--primary);
 }
-.medos-tabbar-item.active::before {
+.osler-tabbar-item.active::before {
   content: "";
   position: absolute;
   top: 0;
@@ -1226,7 +1040,7 @@ input, textarea, [contenteditable="true"], .medos-article, .uworld-prose, .ai-ch
  * until we implement it explicitly we disable it to avoid the browser's
  * native reload gesture firing during scroll-bounce.
  */
-.medos-scroll-y {
+.osler-scroll-y {
   overscroll-behavior-y: contain;
   -webkit-overflow-scrolling: touch;
 }
@@ -1235,18 +1049,6 @@ input, textarea, [contenteditable="true"], .medos-article, .uworld-prose, .ai-ch
  * On phones these overlays become full-screen sheets; on tablets/desktops
  * they retain their original panel/modal sizes.
  */
-@media (max-width: 767px) {
-  .medos-sheet-fullscreen {
-    position: fixed !important;
-    inset: 0 !important;
-    width: 100% !important;
-    height: 100% !important;
-    max-width: 100% !important;
-    max-height: 100% !important;
-    border-radius: 0 !important;
-    border: none !important;
-  }
-}
 
 /* ── Mobile reader (article viewer) ───────────────────────────────────────
  * On phones the article viewer's toolbar wraps onto multiple lines; this
@@ -1254,24 +1056,8 @@ input, textarea, [contenteditable="true"], .medos-article, .uworld-prose, .ai-ch
  * shrinks the title row so the toolbar never pushes the article body off
  * the viewport.
  */
-@media (max-width: 480px) {
-  .medos-reader-toolbar-meta { display: none !important; }
-  .medos-reader-toolbar-share { display: none !important; }
-}
 
 /* Article body padding for readability on narrow viewports. */
-@media (max-width: 640px) {
-  .medos-article {
-    font-size: 0.95rem;
-    /* Reader padding handled by the component, but tighten line-height for
-     * small screens to fit more text without sacrificing legibility. */
-    line-height: 1.65;
-  }
-  .medos-article h1 { font-size: 1.45rem; }
-  .medos-article h2 { font-size: 1.18rem; }
-  .medos-article h3 { font-size: 1.04rem; }
-  .medos-article pre, .medos-article code { font-size: 0.82em; }
-}
 
 /* ── QBank mobile quiz view ───────────────────────────────────────────────
  * In tutor mode the desktop shows question (left 55%) and explanation
@@ -1279,25 +1065,17 @@ input, textarea, [contenteditable="true"], .medos-article, .uworld-prose, .ai-ch
  * sticky in-page tab switcher.
  */
 @media (max-width: 767px) {
-  .medos-qbank-split {
+  .osler-qbank-split {
     flex-direction: column !important;
   }
-  .medos-qbank-split .medos-qbank-qcol,
-  .medos-qbank-split .medos-qbank-acol {
+  .osler-qbank-split .osler-qbank-qcol,
+  .osler-qbank-split .osler-qbank-acol {
     width: 100% !important;
     border-inline-end: none !important;
     border-bottom: 1px solid var(--border);
   }
 }
 
-/* ── Mobile: hide the desktop-only window controls (min/max/close) ────────
- * They make no sense in a Tauri-mobile webview (no window decorations).
- * The component itself also short-circuits on mobile, but the CSS is the
- * final safety net.
- */
-@media (max-width: 767px) {
-  .medos-window-controls { display: none !important; }
-}
 
 /* ── Mobile: drag region is meaningless on phones ────────────────────────
  * The app-shell sets `data-tauri-drag-region` on the top bar so desktop
@@ -1314,10 +1092,6 @@ input, textarea, [contenteditable="true"], .medos-article, .uworld-prose, .ai-ch
 }
 
 /* ── Mobile: prevent horizontal scroll caused by long unbreakable strings ─ */
-.medos-overflow-wrap {
-  overflow-wrap: anywhere;
-  word-break: break-word;
-}
 
 /* ── Reduced-motion preferences ───────────────────────────────────────────
  * Honor `prefers-reduced-motion` for users who disable animations at the
@@ -1477,17 +1251,6 @@ html[dir="rtl"] {
   }
 }
 
-/* ── Mobile: viewport height fix ──────────────────────────────────────────
- * Use 100dvh (dynamic viewport height) where supported — 100vh on iOS
- * Safari doesn't account for the URL bar shrinking/growing, causing
- * content to be clipped. The fallback to 100vh keeps older browsers working.
- */
-.medos-h-dvh { height: 100dvh; }
-.medos-min-h-dvh { min-height: 100dvh; }
-@supports not (height: 100dvh) {
-  .medos-h-dvh { height: 100vh; }
-  .medos-min-h-dvh { min-height: 100vh; }
-}
 
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -1833,8 +1596,6 @@ html[dir="rtl"] {
  * refined scrollbar system above now handles every element. This block
  * is kept only so existing `osler-scroll` class usages don't break if
  * they relied on the class being defined. */
-.osler-scroll { /* inherits from global * selector */ }
-
 /* ── Print-friendly (used by tracker PDF export) ───────────────────────── */
 @media print {
   .no-print { display: none !important; }
@@ -1872,7 +1633,7 @@ html[dir="rtl"] {
 
 /* ═══════════════════════════════════════════════════════════════════════════
  * QBank Studio
- * Navy topbar with UWorld-style question layout
+ * Navy topbar with exam-style question layout
  * ═══════════════════════════════════════════════════════════════════════════ */
 
 /* ── QBank Studio topbar (navy/blue) ────────────────────────────────────── */
@@ -1968,7 +1729,7 @@ html[dir="rtl"] {
   color: var(--primary);
 }
 
-/* ── QBank choice button (UWorld style) ──────────────────────────────────── */
+/* ── QBank choice button (exam style) ────────────────────────────────────── */
 .qbank-choice {
   width: 100%;
   text-align: left;
@@ -2768,11 +2529,11 @@ html.osler-ar body,
  *
  * Premium typographic touches that raise the reading experience across
  * Library articles, QBank prose, and long-form content. These build on
- * the existing `.uworld-prose` and `.library-article` systems.
+ * the existing `.osler-prose` and `.library-article` systems.
  * ─────────────────────────────────────────────────────────────────────── */
 
 /* --- Hanging punctuation for blockquotes — optically crisp edge --- */
-.uworld-prose blockquote,
+.osler-prose blockquote,
 .library-article blockquote {
   hanging-punctuation: first;
 }
@@ -2783,14 +2544,17 @@ html.osler-ar body,
  * (not always a native heading tag) as a defensive, low-cost duplicate. */
 .osler-page-header__title,
 .osler-section-heading,
-.uworld-prose h1, .uworld-prose h2, .uworld-prose h3,
-.library-article h1, .library-article h2, .library-article h3,
-.medos-article h1, .medos-article h2, .medos-article h3 {
+.osler-prose h1,
+.osler-prose h2,
+.osler-prose h3,
+.library-article h1,
+.library-article h2,
+.library-article h3 {
   text-wrap: balance;
 }
 
 /* --- Lead paragraph — slightly larger opening text to hook the reader --- */
-.uworld-prose > p:first-of-type,
+.osler-prose > p:first-of-type,
 .library-article > p:first-of-type {
   font-size: 1.05rem;
   line-height: 1.6;
@@ -2798,9 +2562,8 @@ html.osler-ar body,
 }
 
 /* --- Pull quote variant — editorial break, no decorative border --- */
-.uworld-prose .pullquote,
-.library-article .pullquote,
-.medos-article .pullquote {
+.osler-prose .pullquote,
+.library-article .pullquote {
   font-family: var(--font-display, var(--font-serif));
   font-size: 1.25rem;
   line-height: 1.5;
@@ -2812,9 +2575,8 @@ html.osler-ar body,
   max-width: 80%;
   position: relative;
 }
-.uworld-prose .pullquote::before,
-.library-article .pullquote::before,
-.medos-article .pullquote::before {
+.osler-prose .pullquote::before,
+.library-article .pullquote::before {
   content: "\201C";
   display: block;
   font-size: 3rem;
@@ -2826,7 +2588,7 @@ html.osler-ar body,
 }
 
 /* --- Refined inline code — distinct typographic element --- */
-.uworld-prose code,
+.osler-prose code,
 .ai-chat-msg code,
 .library-article code {
   font-family: var(--font-code, var(--font-mono), ui-monospace, monospace);
@@ -2838,7 +2600,7 @@ html.osler-ar body,
 }
 
 /* --- Refined strong — subtle weight bump instead of harsh 700 --- */
-.uworld-prose strong,
+.osler-prose strong,
 .library-article strong,
 .osler-explanation strong {
   font-variation-settings: "wght" 550;

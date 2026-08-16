@@ -108,7 +108,7 @@ export function ExplorerToolbar(props: ExplorerToolbarProps) {
       {/* Breadcrumbs */}
       <nav
         aria-label={t("admin.studio.breadcrumbRoot")}
-        className="flex min-w-0 flex-1 items-center gap-0.5 overflow-x-auto medos-scroll-x"
+        className="flex min-w-0 flex-1 items-center gap-0.5 overflow-x-auto osler-scroll-x"
       >
         {breadcrumbs.map((crumb, i) => {
           const isLast = i === breadcrumbs.length - 1;

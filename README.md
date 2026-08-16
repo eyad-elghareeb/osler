@@ -433,7 +433,7 @@ Library, Flashcards, OSCE, and Videos are sub-views under the **Learn** hub — 
 Quiz, Bank, Written → `QBankStudio.tsx` adapts UI per content type. Flashcards and OSCE have dedicated studios.
 
 ### Theme System
-Dark mode default (navy + light blue — UWorld style). Light mode: cream background, dark navy primary. Persisted to `localStorage` (`osler-theme`). Uses oklch color space with `@theme inline` tokens.
+Dark mode default (navy + light blue — exam-platform style). Light mode: cream background, dark navy primary. Persisted to `localStorage` (`osler-theme`). Uses oklch color space with `@theme inline` tokens.
 
 ### Progress Tracking
 IndexedDB-backed reactive store with in-memory cache (`storage.ts`). Old `localStorage` keys (`osler-progress-v1`, `osler-qbank-sessions-v1`) are migrated to IndexedDB on first boot. Reactive subscribe pattern (`osler-progress-changed` events) for cross-component state updates. Flashcard spaced repetition stored separately.

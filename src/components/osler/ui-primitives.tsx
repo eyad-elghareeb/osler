@@ -383,7 +383,7 @@ export function OslerCard({ padding = "default", className, ...props }: CardProp
 }
 
 interface InteractiveCardProps extends React.HTMLAttributes<HTMLDivElement> {
-  /** Optional animation delay (ms) for the medos-fade-in mount animation. */
+  /** Optional animation delay (ms) for the osler-fade-in mount animation. */
   animationDelay?: number;
   /** Disable the mount animation. */
   noAnimation?: boolean;
@@ -399,7 +399,7 @@ export function InteractiveCard({
     <div
       className={cn(
         "osler-card--interactive",
-        !noAnimation && "medos-fade-in",
+        !noAnimation && "osler-fade-in",
         className,
       )}
       style={animationDelay !== undefined ? { animationDelay: `${animationDelay}ms` } : undefined}
@@ -1309,7 +1309,7 @@ export function PackSheetFooter({ children, className }: PackSheetFooterProps) {
  * Stagger-animated list wrapper. Renders `<motion.div variants={staggerContainer}
  * initial="hidden" animate="visible">` and lets children opt in via
  * `variants={fadeUp}`. Use for grids of cards, recent-session lists, etc.
- * — replaces the hand-rolled `medos-fade-in` + `animationDelay` pattern.
+ * — replaces the hand-rolled `osler-fade-in` + `animationDelay` pattern.
  */
 
 interface SectionListProps {

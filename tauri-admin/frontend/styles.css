@@ -148,31 +148,31 @@ button { cursor: pointer; }
 }
 
 /* Subtle grid background — matches the Osler web app shell */
-.medos-grid-bg {
+.osler-grid-bg {
   background-image:
     linear-gradient(oklch(1 0 0 / 0.025) 1px, transparent 1px),
     linear-gradient(90deg, oklch(1 0 0 / 0.025) 1px, transparent 1px);
   background-size: 32px 32px;
   background-position: -1px -1px;
 }
-:root[data-theme="light"] .medos-grid-bg {
+:root[data-theme="light"] .osler-grid-bg {
   background-image:
     linear-gradient(oklch(0 0 0 / 0.04) 1px, transparent 1px),
     linear-gradient(90deg, oklch(0 0 0 / 0.04) 1px, transparent 1px);
 }
 
 /* Mount fade — re-render safe, no JS animation conflict */
-@keyframes medos-fade-in {
+@keyframes osler-fade-in {
   from { opacity: 0; transform: translateY(8px); }
   to   { opacity: 1; transform: translateY(0); }
 }
-.medos-fade-in { animation: medos-fade-in 0.25s ease-out both; }
+.osler-fade-in { animation: osler-fade-in 0.25s ease-out both; }
 
-@keyframes medos-pulse {
+@keyframes osler-pulse {
   0%, 100% { box-shadow: 0 0 0 0 color-mix(in oklch, var(--primary) 50%, transparent); }
   50%      { box-shadow: 0 0 0 6px color-mix(in oklch, var(--primary) 0%, transparent); }
 }
-.medos-pulse { animation: medos-pulse 2s ease-in-out infinite; }
+.osler-pulse { animation: osler-pulse 2s ease-in-out infinite; }
 
 /* ═══════════════════════════════════════════════════════════════════════
    App shell — topbar + sidebar + main
@@ -711,7 +711,7 @@ h1, h2, h3, h4 { letter-spacing: -0.01em; }
   pointer-events: auto;
   min-width: 240px;
   max-width: 380px;
-  animation: medos-fade-in 0.2s ease-out;
+  animation: osler-fade-in 0.2s ease-out;
 }
 .toast.success { border-inline-start: 3px solid var(--success); }
 .toast.error   { border-inline-start: 3px solid var(--danger); }
@@ -740,7 +740,7 @@ h1, h2, h3, h4 { letter-spacing: -0.01em; }
   width: 100%;
   text-align: center;
   box-shadow: var(--shadow-lg);
-  animation: medos-fade-in 0.2s ease-out;
+  animation: osler-fade-in 0.2s ease-out;
 }
 .picker-card h2 {
   margin: 1rem 0 0.5rem;
@@ -1883,7 +1883,7 @@ h1, h2, h3, h4 { letter-spacing: -0.01em; }
   box-shadow: var(--shadow-lg);
   padding: 0.375rem;
   display: none;
-  animation: medos-fade-in 0.12s ease-out;
+  animation: osler-fade-in 0.12s ease-out;
 }
 
 .slash-group {
@@ -2343,7 +2343,7 @@ h1, h2, h3, h4 { letter-spacing: -0.01em; }
   min-height: 0;
 }
 .tab-host > .view {
-  /* Original views already add .view + .medos-fade-in — neutralise the
+  /* Original views already add .view + .osler-fade-in — neutralise the
      outer padding so the tab content fills the wrapper cleanly. */
   padding-top: 0;
 }

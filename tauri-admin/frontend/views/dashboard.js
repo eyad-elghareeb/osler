@@ -66,7 +66,7 @@
   window.OslerAdminViews = window.OslerAdminViews || {};
   window.OslerAdminViews.dashboard = async function (view) {
     const projectState = window.OslerAdmin.projectState;
-    const wrap = el("div", { class: "view medos-fade-in" });
+    const wrap = el("div", { class: "view osler-fade-in" });
     wrap.appendChild(el("div", { class: "view-header" },
       el("div", {},
         el("h1", {}, t("dashboard.title")),

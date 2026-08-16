@@ -116,7 +116,7 @@
   function providerCard(provider) {
     const connected = isConfigured(provider.id);
     const card = el("div", { class: "provider-card" + (connected ? " connected" : ""), "data-provider": provider.id });
-    card.classList.add("medos-fade-in");
+    card.classList.add("osler-fade-in");
 
     const head = el("div", { class: "provider-head" });
     head.appendChild(el("div", { class: "provider-logo " + provider.logoClass }, provider.glyph));
@@ -441,7 +441,7 @@
 
     await loadConfig();
 
-    const wrap = el("div", { class: "view medos-fade-in" });
+    const wrap = el("div", { class: "view osler-fade-in" });
 
     // Header
     const header = el("div", { class: "view-header" });

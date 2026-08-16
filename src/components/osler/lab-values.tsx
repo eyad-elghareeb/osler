@@ -153,7 +153,7 @@ export function LabValuesSidebar({ open, onClose }: { open?: boolean; onClose: (
         ))}
       </div>
 
-      <div className="flex-1 overflow-y-auto medos-scroll p-3">
+      <div className="flex-1 overflow-y-auto osler-scroll p-3">
         <div className="space-y-1.5">
           {labs.map((lab) => (
             <div

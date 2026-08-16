@@ -106,7 +106,7 @@
       return;
     }
 
-    const wrap = el("div", { class: "view medos-fade-in" });
+    const wrap = el("div", { class: "view osler-fade-in" });
     const header = el("div", { class: "view-header" });
     header.appendChild(el("div", {},
       el("h1", {}, t("manifest.title")),

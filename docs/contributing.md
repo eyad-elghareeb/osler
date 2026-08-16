@@ -450,7 +450,7 @@ fix(qbank): pause timer when document loses visibility
 The quiz timer kept running when a student switched tabs or locked
 their phone, leading to unfair time penalties. Now useDocumentVisibility
 pauses the timer on `visibilitychange` and resumes on return, matching
-UWorld's behavior.
+the behavior of major exam platforms.
 ```
 
 ```

@@ -98,7 +98,7 @@
       return;
     }
 
-    const wrap = el("div", { class: "view medos-fade-in", style: { height: "calc(100vh - var(--topbar-h))", display: "flex", flexDirection: "column" } });
+    const wrap = el("div", { class: "view osler-fade-in", style: { height: "calc(100vh - var(--topbar-h))", display: "flex", flexDirection: "column" } });
     const header = el("div", { class: "view-header" });
     header.appendChild(el("div", {},
       el("h1", {}, t("build.title")),

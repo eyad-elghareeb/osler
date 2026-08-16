@@ -181,7 +181,7 @@ export function ReviewPreview({
       )}
 
       {/* Body */}
-      <div dir={lang === "ar" ? "rtl" : "ltr"} className="min-h-0 flex-1 overflow-auto medos-scroll-y p-3">
+      <div dir={lang === "ar" ? "rtl" : "ltr"} className="min-h-0 flex-1 overflow-auto osler-scroll-y p-3">
         {!target ? (
           <div className="flex h-full flex-col items-center justify-center gap-2 py-8 text-center">
             <div className="osler-empty__icon"><Eye className="size-6" /></div>

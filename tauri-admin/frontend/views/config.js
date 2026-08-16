@@ -35,7 +35,7 @@
 
   window.OslerAdminViews = window.OslerAdminViews || {};
   window.OslerAdminViews.config = async function (view) {
-    const wrap = el("div", { class: "view medos-fade-in" });
+    const wrap = el("div", { class: "view osler-fade-in" });
     wrap.appendChild(el("div", { class: "view-header" },
       el("div", {},
         el("h1", {}, t("config.title")),

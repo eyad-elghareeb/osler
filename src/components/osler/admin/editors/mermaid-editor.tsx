@@ -312,7 +312,7 @@ export function MermaidEditorModal({ open, initialCode, onSave, onClose }: Merma
         {/* Layout */}
         <div className="flex-1 min-h-0 grid grid-cols-[200px_1fr_1fr] divide-x divide-border">
           {/* Sidebar — templates */}
-          <div className="overflow-y-auto medos-scroll-y p-3 bg-muted/10">
+          <div className="overflow-y-auto osler-scroll-y p-3 bg-muted/10">
             <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">
               {t("admin.mermaid.templates")}
             </div>
@@ -360,7 +360,7 @@ export function MermaidEditorModal({ open, initialCode, onSave, onClose }: Merma
             <div className="px-3 py-1.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground border-b border-border bg-muted/10">
               {t("admin.mermaid.preview")}
             </div>
-            <div className="flex-1 min-h-0 overflow-auto medos-scroll-y p-4 flex items-center justify-center">
+            <div className="flex-1 min-h-0 overflow-auto osler-scroll-y p-4 flex items-center justify-center">
               {loading ? (
                 <div className="text-muted-foreground flex items-center gap-2 text-sm">
                   <Loader2 className="size-4 animate-spin" /> {t("admin.mermaid.rendering")}

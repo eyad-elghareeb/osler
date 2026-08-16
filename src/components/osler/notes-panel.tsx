@@ -75,7 +75,7 @@ function MarkdownPreview({ body }: { body: string }) {
   }
   const Comp = MarkdownRenderer!;
   return (
-    <div className="uworld-prose text-sm">
+    <div className="osler-prose text-sm">
       <Comp remarkPlugins={remarkGfmPlugin ? [remarkGfmPlugin] : []}>
         {body || `*${t("qbank.notes.preview.empty")}*`}
       </Comp>
@@ -490,7 +490,7 @@ function ListView({
       </div>
 
       {/* List */}
-      <div className="flex-1 overflow-y-auto medos-scroll p-3 space-y-2">
+      <div className="flex-1 overflow-y-auto osler-scroll p-3 space-y-2">
         {notes.length === 0 ? (
           <EmptyNotesState onCreate={onCreate} searching={false} />
         ) : (
@@ -794,7 +794,7 @@ function EditorView({
               showCounters
             />
           ) : (
-            <div className="h-full overflow-y-auto medos-scroll border border-border rounded-lg bg-background p-4">
+            <div className="h-full overflow-y-auto osler-scroll border border-border rounded-lg bg-background p-4">
               <MarkdownPreview body={note.body} />
             </div>
           )}

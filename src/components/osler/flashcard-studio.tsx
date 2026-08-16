@@ -638,16 +638,16 @@ export function FlashcardStudio({
                 {t("flash.cloze")}
               </div>
             </div>
-            <div className="flex-1 min-h-0 flex flex-col items-center justify-center p-4 sm:p-8 overflow-y-auto medos-scroll">
+            <div className="flex-1 min-h-0 flex flex-col items-center justify-center p-4 sm:p-8 overflow-y-auto osler-scroll">
               {renderImages(frontImages, packPath)}
               <div
-                className="text-base sm:text-xl leading-relaxed max-w-2xl uworld-prose text-center"
+                className="text-base sm:text-xl leading-relaxed max-w-2xl osler-prose text-center"
                 dangerouslySetInnerHTML={{ __html: html }}
               />
               {isFlipped && card.extra && (
                 <div className="mt-5 pt-4 border-t border-border w-full max-w-2xl">
                   <div
-                    className="text-sm leading-relaxed text-muted-foreground uworld-prose text-center"
+                    className="text-sm leading-relaxed text-muted-foreground osler-prose text-center"
                     dangerouslySetInnerHTML={{ __html: renderCardMarkdown(card.extra) }}
                   />
                 </div>
@@ -675,17 +675,17 @@ export function FlashcardStudio({
               {t("flash.question")}
             </div>
             <div
-              className="text-xs sm:text-sm leading-snug max-w-lg uworld-prose text-muted-foreground line-clamp-3"
+              className="text-xs sm:text-sm leading-snug max-w-lg osler-prose text-muted-foreground line-clamp-3"
               dangerouslySetInnerHTML={{ __html: renderCardMarkdown(card.front ?? "") }}
             />
           </div>
-          <div className="flex-1 min-h-0 flex flex-col items-center justify-center p-4 sm:p-6 bg-[color-mix(in_oklch,var(--primary)_4%,var(--card))] rounded-b-xl overflow-y-auto medos-scroll">
+          <div className="flex-1 min-h-0 flex flex-col items-center justify-center p-4 sm:p-6 bg-[color-mix(in_oklch,var(--primary)_4%,var(--card))] rounded-b-xl overflow-y-auto osler-scroll">
             <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-2 flex items-center gap-1.5">
               <Sparkles className="size-3" />
               {t("flash.answer")}
             </div>
             <div
-              className="text-sm sm:text-base leading-relaxed max-w-lg uworld-prose text-center"
+              className="text-sm sm:text-base leading-relaxed max-w-lg osler-prose text-center"
               dangerouslySetInnerHTML={{ __html: renderCardMarkdown(card.back ?? "") }}
             />
             {renderImages(backImages, packPath)}
@@ -693,7 +693,7 @@ export function FlashcardStudio({
         </div>
         {/* Front cover — shrinks vertically to reveal the back. */}
         <motion.div
-          className="absolute inset-0 flex flex-col items-center justify-center p-6 sm:p-10 bg-card rounded-xl overflow-y-auto medos-scroll"
+          className="absolute inset-0 flex flex-col items-center justify-center p-6 sm:p-10 bg-card rounded-xl overflow-y-auto osler-scroll"
           style={{ originY: 0 }}
           animate={{
             scaleY: isFlipped ? 0 : 1,
@@ -707,7 +707,7 @@ export function FlashcardStudio({
           </div>
           {renderImages(frontImages, packPath)}
           <div
-            className="text-lg sm:text-xl leading-relaxed max-w-lg uworld-prose text-center"
+            className="text-lg sm:text-xl leading-relaxed max-w-lg osler-prose text-center"
             dangerouslySetInnerHTML={{ __html: renderCardMarkdown(card.front ?? "") }}
           />
           <div className="mt-auto pt-6 text-xs text-muted-foreground/60">
@@ -931,7 +931,7 @@ export function FlashcardStudio({
                     }
                   }}
                   className={cn(
-                    "medos-fade-in text-start bg-card border border-border rounded-xl p-5 hover:border-primary/40 hover:shadow-md hover:bg-primary/[0.02] transition-colors group cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
+                    "osler-fade-in text-start bg-card border border-border rounded-xl p-5 hover:border-primary/40 hover:shadow-md hover:bg-primary/[0.02] transition-colors group cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
                     node.lang === "ar" && "osler-content-ar",
                   )}
                   dir={node.lang === "ar" ? "rtl" : undefined}
@@ -1016,7 +1016,7 @@ export function FlashcardStudio({
 
   if (mode === "complete" && currentDeck) {
     return (
-      <div className="h-full overflow-y-auto medos-scroll">
+      <div className="h-full overflow-y-auto osler-scroll">
         <div className="max-w-lg mx-auto px-4 py-12 text-center">
           <motion.div
             initial={{ scale: 0.8, opacity: 0 }}
@@ -1081,7 +1081,7 @@ export function FlashcardStudio({
         <header className="h-12 flex items-center px-2 sm:px-4 gap-2 shrink-0 border-b border-border bg-card/60 backdrop-blur-md safe-pt">
           <button
             onClick={closeStudy}
-            className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors medos-touch-target"
+            className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors osler-touch-target"
             title={t("flash.exitTooltip")}
           >
             <XIcon className="size-4" />
@@ -1327,7 +1327,7 @@ export function FlashcardStudio({
                         void startSubdeck(deckIndex, child.uid);
                       }
                     }}
-                    className="medos-fade-in text-left bg-card border border-border rounded-xl p-5 hover:border-primary/40 hover:shadow-md hover:bg-primary/[0.02] transition-colors group"
+                    className="osler-fade-in text-left bg-card border border-border rounded-xl p-5 hover:border-primary/40 hover:shadow-md hover:bg-primary/[0.02] transition-colors group"
                   >
                     <div className="flex items-center gap-3 mb-3">
                       <div

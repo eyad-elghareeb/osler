@@ -80,7 +80,7 @@ export function TreeView({ roots, selectedIds, onSelect, onOpen, query, onDropOn
   }
 
   return (
-    <div className={cn("h-full overflow-y-auto medos-scroll-y p-1.5", className)} role="tree" aria-label={t("admin.studio.view.tree")}>
+    <div className={cn("h-full overflow-y-auto osler-scroll-y p-1.5", className)} role="tree" aria-label={t("admin.studio.view.tree")}>
       {filtered.map((node) => (
         <TreeRow
           key={node.id}

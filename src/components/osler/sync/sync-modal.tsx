@@ -74,7 +74,7 @@ export function SyncModal({
             </div>
 
             {/* Body — quick network sync */}
-            <div className="flex-1 overflow-y-auto medos-scroll p-4">
+            <div className="flex-1 overflow-y-auto osler-scroll p-4">
               <NetworkSyncPanel />
             </div>
 

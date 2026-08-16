@@ -180,7 +180,7 @@ export function ContentTreePane({
       </div>
 
       {/* Tree body */}
-      <div className="flex-1 min-h-0 overflow-y-auto medos-scroll-y p-1.5">
+      <div className="flex-1 min-h-0 overflow-y-auto osler-scroll-y p-1.5">
         {tree.length === 0 ? (
           <div className="p-6 text-center text-xs text-muted-foreground">
             {t("admin.content.tree.empty")}

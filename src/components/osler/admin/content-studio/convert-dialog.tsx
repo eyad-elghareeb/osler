@@ -270,7 +270,7 @@ export function ConvertDialog({ open, onOpenChange, node, onConverted }: Convert
                 <summary className="cursor-pointer text-xs font-medium text-muted-foreground hover:text-foreground">
                   {t("admin.studio.convertPreview")}
                 </summary>
-                <pre className="mt-2 max-h-60 overflow-auto medos-scroll-y rounded-md border border-border bg-card p-2 text-[11px] font-mono whitespace-pre-wrap break-words">
+                <pre className="mt-2 max-h-60 overflow-auto osler-scroll-y rounded-md border border-border bg-card p-2 text-[11px] font-mono whitespace-pre-wrap break-words">
                   {converted.body.slice(0, 4000)}
                   {converted.body.length > 4000 && `\n\n${t("admin.studio.convertMoreChars", { n: String(converted.body.length - 4000) })}`}
                 </pre>

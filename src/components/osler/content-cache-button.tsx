@@ -117,7 +117,7 @@ export function ContentCacheButton({
       aria-pressed={state === "cached" || state === "partial"}
       disabled={state === "downloading"}
       className={cn(
-        "rounded-lg flex items-center justify-center transition-colors shrink-0 medos-touch-target",
+        "rounded-lg flex items-center justify-center transition-colors shrink-0 osler-touch-target",
         sizeClass,
         colorClass,
         state === "downloading" && "cursor-wait",

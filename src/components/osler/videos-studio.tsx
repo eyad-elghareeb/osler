@@ -333,7 +333,7 @@ export function VideosStudio({
 
             {/* Folder quick-nav chips (mobile) */}
             {isMobile && (
-              <div className="flex gap-2 overflow-x-auto medos-scroll-x pb-2 mb-2 -mx-1 px-1">
+              <div className="flex gap-2 overflow-x-auto osler-scroll-x pb-2 mb-2 -mx-1 px-1">
                 {flattenLeaves(tree).map((node) => (
                   <button
                     key={node.uid}
@@ -664,7 +664,7 @@ function VideoPlayerView({
       <header className="h-12 flex items-center px-2 sm:px-4 gap-2 shrink-0 border-b border-border bg-card/60 backdrop-blur-md safe-pt">
         <button
           onClick={() => { haptic('light'); onExit(); }}
-          className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors medos-touch-target"
+          className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors osler-touch-target"
           title={t("videos.backToVideos")}
         >
           <ArrowLeft className={cn("size-4", rtl && "rtl-flip-x")} />

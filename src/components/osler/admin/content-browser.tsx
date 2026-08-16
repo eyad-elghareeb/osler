@@ -1152,7 +1152,7 @@ function R2Preview({ node }: { node: ContentTreeNode }) {
   if (isImage) {
     return (
       <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
-        <div className="flex-1 min-h-0 overflow-auto medos-scroll-y border border-border rounded-xl bg-muted/30 p-3 flex items-center justify-center">
+        <div className="flex-1 min-h-0 overflow-auto osler-scroll-y border border-border rounded-xl bg-muted/30 p-3 flex items-center justify-center">
           {loading ? (
             <div className="text-xs text-muted-foreground text-center py-6">{t("common.loading")}</div>
           ) : imageUrl ? (
@@ -1197,7 +1197,7 @@ function R2Preview({ node }: { node: ContentTreeNode }) {
   }
 
   return (
-    <div className="flex-1 min-h-0 overflow-auto medos-scroll-y border border-border rounded-xl bg-card p-3">
+    <div className="flex-1 min-h-0 overflow-auto osler-scroll-y border border-border rounded-xl bg-card p-3">
       {loading ? (
         <div className="text-xs text-muted-foreground text-center py-6">{t("common.loading")}</div>
       ) : body == null ? (
@@ -1466,7 +1466,7 @@ function UploadDialog({
               <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                 {t("admin.content.queuedFiles", { n: dropped.length })}
               </p>
-              <div className="max-h-44 overflow-y-auto medos-scroll-y space-y-1">
+              <div className="max-h-44 overflow-y-auto osler-scroll-y space-y-1">
                 {dropped.map((d, i) => (
                   <div
                     key={i}

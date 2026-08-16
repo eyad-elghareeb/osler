@@ -395,7 +395,7 @@ export function UploadDialog({
               <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
                 {t("admin.content.queuedFiles", { n: dropped.length })}
               </p>
-              <div className="max-h-40 overflow-y-auto medos-scroll-y space-y-1">
+              <div className="max-h-40 overflow-y-auto osler-scroll-y space-y-1">
                 {dropped.map((d, i) => (
                   <div
                     key={i}

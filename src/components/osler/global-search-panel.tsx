@@ -190,7 +190,7 @@ export function GlobalSearchPanel({
 
       {/* Results — taller rows on mobile sheet for better touch targets */}
       <div ref={listRef} className={cn(
-        "flex-1 overflow-y-auto medos-scroll",
+        "flex-1 overflow-y-auto osler-scroll",
         isSheet ? "min-h-0" : "max-h-[60vh] min-h-[120px]",
         "p-2",
       )}>

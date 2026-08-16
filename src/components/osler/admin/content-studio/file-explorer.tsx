@@ -332,7 +332,7 @@ interface ItemViewProps {
 
 function GridView({ items, selectedIds, onSelectSingle, onToggle, onSelectRange, onOpenFolder, onOpen, onDropOnFolder }: ItemViewProps) {
   return (
-    <div className="flex-1 overflow-y-auto medos-scroll-y p-2.5">
+    <div className="flex-1 overflow-y-auto osler-scroll-y p-2.5">
       <div
         role="listbox"
         aria-multiselectable
@@ -459,7 +459,7 @@ function GridTile({
 function ListView({ items, selectedIds, onSelectSingle, onToggle, onSelectRange, onOpenFolder, onOpen, onDropOnFolder }: ItemViewProps) {
   const { t } = useI18n();
   return (
-    <div className="flex-1 overflow-y-auto medos-scroll-y">
+    <div className="flex-1 overflow-y-auto osler-scroll-y">
       {/* Header row */}
       <div className="sticky top-0 z-10 grid grid-cols-[minmax(0,1fr)_110px_70px_100px_110px] items-center gap-2 border-b border-border bg-background/95 px-3 py-1.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground backdrop-blur">
         <span>{t("admin.studio.columnName")}</span>

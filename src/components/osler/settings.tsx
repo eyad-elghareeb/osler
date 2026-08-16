@@ -329,7 +329,7 @@ export function Settings({
                 <div className="flex items-center gap-2 mb-4">
                   <button
                     onClick={goHome}
-                    className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors medos-touch-target -ms-1 ps-1"
+                    className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors osler-touch-target -ms-1 ps-1"
                     aria-label={t("settings.backToList")}
                   >
                     <ArrowLeft className={cn("size-4", rtl && "rtl-flip-x")} />
@@ -355,7 +355,7 @@ export function Settings({
 
   // ── Desktop: sidebar + content pane ────────────────────────────────
   return (
-    <div className="h-full overflow-y-auto medos-scroll">
+    <div className="h-full overflow-y-auto osler-scroll">
       <div className="max-w-5xl mx-auto px-4 md:px-6 lg:px-8 py-6 md:py-8">
         <motion.div
           initial={{ opacity: 0, y: 12 }}
@@ -1667,7 +1667,7 @@ function DownloadsSettingsSection() {
                   </Button>
                 </div>
 
-                <div className="border border-border rounded-lg p-1 max-h-[420px] overflow-y-auto medos-scroll">
+                <div className="border border-border rounded-lg p-1 max-h-[420px] overflow-y-auto osler-scroll">
                   {filteredTypes.map((et) => (
                     <div key={et} className="py-1">
                       <div className="flex items-center gap-2 px-2 py-1.5">

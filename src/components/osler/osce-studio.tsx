@@ -1565,7 +1565,7 @@ export function OsceStudio({
             setSelectedFolders((folders) => [...folders, node]);
 
           }}
-          className="medos-fade-in h-auto w-full min-w-0 justify-start text-start bg-card border border-border rounded-xl p-5 hover:border-primary/40 hover:shadow-md hover:bg-card transition-all group flex items-center gap-3.5 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+          className="osler-fade-in h-auto w-full min-w-0 justify-start text-start bg-card border border-border rounded-xl p-5 hover:border-primary/40 hover:shadow-md hover:bg-card transition-all group flex items-center gap-3.5 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
         >
           <div className="size-11 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-center shrink-0">
             <Folder className="size-5 text-primary" />
@@ -1802,7 +1802,7 @@ export function OsceStudio({
 
      return (
       <motion.div
-        className="fixed inset-0 z-50 bg-background overflow-y-auto medos-scroll"
+        className="fixed inset-0 z-50 bg-background overflow-y-auto osler-scroll"
         {...lobbyDismiss}
       >
         <div className="max-w-3xl mx-auto px-4 md:px-8 py-8">
@@ -2216,7 +2216,7 @@ export function OsceStudio({
           {/* Chat Zone */}
           <div className="flex-1 min-w-0 flex flex-col">
             {/* Transcript */}
-            <div ref={scrollRef} className="flex-1 overflow-y-auto px-3 md:px-4 py-4 space-y-4 medos-scroll flex flex-col">
+            <div ref={scrollRef} className="flex-1 overflow-y-auto px-3 md:px-4 py-4 space-y-4 osler-scroll flex flex-col">
               {transcript.length === 0 && (
                 <div className="flex flex-col items-center justify-center h-full text-center gap-2 py-12 text-muted-foreground">
                   <Stethoscope className="size-8 opacity-30" />
@@ -2528,7 +2528,7 @@ export function OsceStudio({
 
     return (
       <motion.div
-        className="fixed inset-0 z-50 bg-background overflow-y-auto medos-scroll"
+        className="fixed inset-0 z-50 bg-background overflow-y-auto osler-scroll"
         {...debriefDismiss}
       >
         <div className="max-w-3xl mx-auto px-4 md:px-8 py-8">

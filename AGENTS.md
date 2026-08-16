@@ -110,7 +110,7 @@ The Osler design system lives in three places:
 
 **Rules:**
 
-- Use `font-[var(--font-display)]` (or the `--font-display` CSS variable directly) for headings inside `.library-article` and `.uworld-prose` — never Geist Sans for editorial headings.
+- Use `font-[var(--font-display)]` (or the `--font-display` CSS variable directly) for headings inside `.library-article` and `.osler-prose` — never Geist Sans for editorial headings.
 - Use `font-[var(--font-serif)]` for long-form body text (Library articles). Short UI text stays on Geist Sans.
 - Use `font-[var(--font-code)]` for all code — never raw `ui-monospace` or the system monospace fallback.
 - All five fonts are loaded via `next/font/google` (self-hosted, zero layout shift). Never add a `<link>` to Google fonts.
@@ -136,7 +136,7 @@ Every hub view (Dashboard, Learn, Profile, Settings desktop, QBank hub, Flashcar
 </div>
 ```
 
-- **`osler-page`** — outer scroll wrapper with thin scrollbar styling and mobile bottom-tab-bar padding. Replaces the previous `h-full overflow-y-auto medos-scroll medos-tabbar-pad md:pb-0` string.
+- **`osler-page`** — outer scroll wrapper with thin scrollbar styling and mobile bottom-tab-bar padding. Replaces the previous hand-rolled `h-full overflow-y-auto` + tabbar-padding utility string.
 - **`osler-page__inner`** — centered content column at `max-w-5xl`. Use `__inner--wide` (`max-w-6xl`) for media-heavy views (Dashboard, Videos) and `__inner--narrow` (`max-w-4xl`) for text-heavy views (Profile, Settings).
 - **Standard padding**: `px-4 md:px-6 lg:px-8 py-6 md:py-8`. The previous `py-4 sm:py-6` and `py-3` variants are gone — every hub view uses `py-6 md:py-8` for consistent vertical rhythm.
 - **Standard max-widths**: `max-w-4xl` (narrow) / `max-w-5xl` (default) / `max-w-6xl` (wide) / `max-w-7xl` (extra-wide, used by QBank hub only). Never introduce a new max-width without adding it as a new `.osler-page__inner--*` variant.
@@ -295,7 +295,7 @@ Osler uses two tab styles:
 
 ### In-session top bars
 
-Quiz session (QBank active test) uses a primary-color navy bar (`bg-primary text-primary-foreground` via inline style) — this is the UWorld-style quiz mode indicator and is intentionally distinct.
+Quiz session (QBank active test) uses a primary-color navy bar (`bg-primary text-primary-foreground` via inline style) — this is the exam-style quiz mode indicator and is intentionally distinct.
 
 All other in-session top bars (Flashcard study, OSCE conversation, Library reader, Lab Values panel, Calculator modal) standardize on:
 
@@ -311,13 +311,13 @@ border-b border-border bg-card/60 backdrop-blur-md safe-pt
 
 ### Article typography
 
-Three near-identical typography systems existed (`.medos-article`, `.uworld-prose`, `.library-article`). The canonical system going forward is `.uworld-prose` for QBank/Flashcard rich text and `.library-article` for the Library article viewer. `.medos-article` is being phased out — do not use it in new code.
+Three near-identical typography systems existed (`.medos-article`, `.uworld-prose`, `.library-article`). The canonical system is `.osler-prose` for QBank/Flashcard rich text and `.library-article` for the Library article viewer — `.uworld-prose` was renamed to `.osler-prose` and the legacy `.medos-article` system was deleted outright (the `medos`/`uworld` namespaces are gone project-wide).
 
-When adding new rich-text rendering (e.g. AI chat messages, notes), reuse `.uworld-prose` rather than introducing a fourth system.
+When adding new rich-text rendering (e.g. AI chat messages, notes), reuse `.osler-prose` rather than introducing a fourth system.
 
 ### Editorial typography refinements
 
-The following typographic patterns are applied globally to `.uworld-prose` and `.library-article`:
+The following typographic patterns are applied globally to `.osler-prose` and `.library-article`:
 
 | Pattern | Effect | Where applied |
 |---|---|---|
@@ -381,7 +381,7 @@ These items are documented as known drift and may be cleaned up incrementally. D
 - ~~The QBank session UI (active quiz mode) still uses `text-emerald-500` / `text-amber-500` / `text-red-500` for correct/wrong/flagged indicators. These should eventually migrate to `text-success` / `text-warning` / `text-destructive`.~~ **Resolved** — palette colors migrated to semantic tokens across QBank, OSCE, sync panels, library, and article modal.
 - ~~The Flashcard study top bar uses `border-border/60` instead of `border-border`. Migrate when next editing `flashcard-studio.tsx`.~~ **Resolved** — `flashcard-studio.tsx` now uses `border-border bg-card/60 backdrop-blur-md` per the in-session top bar recipe.
 - ~~The OSCE session sidebar uses `bg-card/40` and `border-border/60`. Migrate when next editing `osce-studio.tsx`.~~ **Resolved** — `osce-studio.tsx` migrated to `bg-card` / `bg-card/60 backdrop-blur-md` and semantic status tokens.
-- ~28 unused custom CSS classes are defined in `globals.css` (`.osler-card` system, `.osler-engine-*` layout, `.osler-stat` system, `.qbank-topbar*`, `.qbank-nav-strip*`, `.qbank-choice*`, `.uworld-tree-checkbox`, `.uworld-grid-bg`, `.uworld-pulse`, `.library-toc*`, `.medos-grid-bg`, `.medos-pulse`, `.medos-h-dvh`). Delete them when the namespace consolidation work is scheduled.
+- The old `medos-*` / `uworld-*` CSS namespaces were removed project-wide: live classes were renamed to `osler-*` (scroll, fade-in, tabbar, prose, touch-target, qbank-split, …) and the documented-unused ones (`.medos-article`, `.medos-grid-bg`, `.medos-pulse`, `.medos-h-dvh`, `.uworld-tree-checkbox`, `.uworld-grid-bg`, `.uworld-pulse`, …) were deleted. Remaining unused custom CSS classes in `globals.css` (`.osler-card` system, `.osler-engine-*` layout, `.osler-stat` system, `.qbank-topbar*`, `.qbank-nav-strip*`, `.qbank-choice*`, `.library-toc*`) can still be deleted when that consolidation is scheduled.
 - ~~The `ENGINE_COLORS` map in `dashboard.tsx` duplicates colors that already live in `ENGINE_META` in `@/lib/osler/content`. Refactor to read from `ENGINE_META` instead.~~ **Resolved** — `ENGINE_COLORS` removed; the dashboard reads from `getEngineMeta()` directly.
 
 ### Premium primitives (added per `docs/design-library-roadmap.md`)

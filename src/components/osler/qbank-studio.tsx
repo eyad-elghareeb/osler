@@ -2008,7 +2008,7 @@ function PackExportDialog({
           {/* Pack selection */}
           <div className="space-y-1.5">
             <Label className="text-xs">{t("pdf.context.packs", { n: leafPacks.length })}</Label>
-            <div className="border border-border rounded-lg max-h-48 overflow-y-auto medos-scroll divide-y divide-border">
+            <div className="border border-border rounded-lg max-h-48 overflow-y-auto osler-scroll divide-y divide-border">
               {leafPacks.map((p) => {
                 const entry = items.find((i) => i.node.uid === p.uid);
                 const qCount = entry?.content ? toQuestions(entry.content).length : 0;
@@ -2272,7 +2272,7 @@ function PackCard({
         }
       }}
       className={cn(
-        "medos-fade-in text-start bg-card border border-border rounded-xl p-5 hover:border-primary/40 hover:shadow-md transition-all active:scale-[0.98] group flex flex-col gap-3 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
+        "osler-fade-in text-start bg-card border border-border rounded-xl p-5 hover:border-primary/40 hover:shadow-md transition-all active:scale-[0.98] group flex flex-col gap-3 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
         isAr && "osler-content-ar",
       )}
       dir={isAr ? "rtl" : undefined}
@@ -2532,7 +2532,7 @@ function ContentTab({
                   aria-label={node.title}
                   key={node.uid}
                   onClick={() => setSelectedFolders([node])}
-                  className="medos-fade-in text-start bg-card border border-border rounded-xl p-5 hover:border-primary/40 hover:shadow-md transition-all group flex flex-col gap-3 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 w-full"
+                  className="osler-fade-in text-start bg-card border border-border rounded-xl p-5 hover:border-primary/40 hover:shadow-md transition-all group flex flex-col gap-3 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 w-full"
                   style={{ animationDelay: `${idx * 0.04}s` }}
                 >
                   {/* Top row: folder icon + title + pack count.
@@ -2662,7 +2662,7 @@ function ContentTab({
                     aria-label={child.title}
                     key={child.uid}
                     onClick={() => setSelectedFolders((folders) => [...folders, child])}
-                    className="medos-fade-in text-start bg-card border border-border rounded-xl p-5 hover:border-primary/40 hover:shadow-md transition-all group flex flex-col gap-3 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 w-full"
+                    className="osler-fade-in text-start bg-card border border-border rounded-xl p-5 hover:border-primary/40 hover:shadow-md transition-all group flex flex-col gap-3 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 w-full"
                     style={{ animationDelay: `${idx * 0.04}s` }}
                   >
                     <div className="flex items-center gap-3.5">
@@ -3074,7 +3074,7 @@ function CreateTestTab({
           <div className="mt-4 space-y-3">
             {/* Folder hierarchy browser — local search removed; the unified
                 global search bar handles content discovery. */}
-            <div className="rounded-xl border border-border bg-card max-h-80 overflow-y-auto medos-scroll">
+            <div className="rounded-xl border border-border bg-card max-h-80 overflow-y-auto osler-scroll">
               {selectedFolders.length > 0 ? (
                 /* Subfolder view — children of the selected folder */
                 <div className="p-3">
@@ -3464,7 +3464,7 @@ function CreateTestTab({
                 <ListChecks className="size-4 text-primary" />
                 {t("qbank.create.matchingPacks")}
               </h3>
-              <div className="space-y-2 max-h-64 overflow-y-auto medos-scroll">
+              <div className="space-y-2 max-h-64 overflow-y-auto osler-scroll">
                 {selectedEntries.slice(0, 20).map(({ node, content }) => (
                   <div
                     key={node.uid}
@@ -3508,7 +3508,7 @@ function CreateTestTab({
 }
 
 /* ─────────────────────────────────────────────────────────────────────────
- * CHECKBOX COLUMN — Multi-select with select-all (UWorld-style)
+ * CHECKBOX COLUMN — Multi-select with select-all (exam-style)
  * ───────────────────────────────────────────────────────────────────────── */
 function CheckboxColumn({
   title,
@@ -3551,7 +3551,7 @@ function CheckboxColumn({
           {selected.length}/{items.length}
         </span>
       </div>
-      <div className="max-h-48 overflow-y-auto medos-scroll p-1.5">
+      <div className="max-h-48 overflow-y-auto osler-scroll p-1.5">
         {items.length === 0 ? (
           <p className="text-xs text-muted-foreground text-center py-4">{t("qbank.home.noItems")}</p>
         ) : (
@@ -5128,7 +5128,7 @@ function QuizView({
     const qWrittenPassed = qWrittenVerdict === "pass" || (qWrittenVerdict === null && qWrittenDraft.evaluation?.passed === true);
 
     return (
-      <div className="h-full overflow-y-auto medos-scroll pr-1 -mr-1 pb-4" style={{ touchAction: "none" }}>
+      <div className="h-full overflow-y-auto osler-scroll pr-1 -mr-1 pb-4" style={{ touchAction: "none" }}>
         {/* Optional subtle difficulty indicator */}
         {question.difficulty && question.difficulty !== "standard" && (
           <div className="mb-2 text-[11px] font-medium text-muted-foreground uppercase tracking-wider">
@@ -5153,7 +5153,7 @@ function QuizView({
 
         {/* Stem */}
         <div className="relative">
-          <div className="uworld-prose" style={stemStyle} dir="auto">
+          <div className="osler-prose" style={stemStyle} dir="auto">
             <HighlightedContent
               html={renderQuestionText(question.stem, question, activeItem)}
               highlights={qHighlights}
@@ -5240,13 +5240,13 @@ function QuizView({
                   onTouchMove={onChoiceTouchMove}
                   className={`w-full text-start p-3 sm:p-3.5 rounded-xl border-2 transition-all flex items-start gap-3 ${stateClass} ${
                     qSubmitted ? "cursor-default" : "cursor-pointer"
-                  } ${hasStrikethrough ? "opacity-60" : ""} medos-touch-target`}
+                  } ${hasStrikethrough ? "opacity-60" : ""} osler-touch-target`}
                 >
                   <div className={`size-7 rounded-full border-2 flex items-center justify-center text-sm font-semibold shrink-0 ${letterBg}`}>
                     {letterContent}
                   </div>
                   <div
-                    className={`flex-1 min-w-0 uworld-prose ${quizSettingsState.textAffectsChoices ? "" : "text-[14px] leading-relaxed"} pt-0.5 select-text ${hasStrikethrough ? "line-through text-muted-foreground" : ""}`}
+                    className={`flex-1 min-w-0 osler-prose ${quizSettingsState.textAffectsChoices ? "" : "text-[14px] leading-relaxed"} pt-0.5 select-text ${hasStrikethrough ? "line-through text-muted-foreground" : ""}`}
                     style={choiceStyle}
                     dir="auto"
                   >
@@ -5765,7 +5765,7 @@ function QuizView({
 
   return (
     <div className="fixed inset-0 z-50 bg-background flex flex-col safe-screen">
-      {/* ── Top bar (UWorld navy) ───────────────────────────────────────────
+      {/* ── Top bar (exam-mode navy) ────────────────────────────────────────
           All icon buttons in this bar use size-7 (matching the graduation cap
           button) for visual consistency. The mobile-only navigator button uses
           size-8 to give a slightly larger touch target on phones (it's the
@@ -5919,7 +5919,7 @@ function QuizView({
 
         {/* Simple question navigator (left strip) */}
         <div className="hidden md:flex flex-col w-12 shrink-0 border-r border-border bg-sidebar">
-          <div className="flex-1 overflow-y-auto medos-scroll p-1 space-y-0.5">
+          <div className="flex-1 overflow-y-auto osler-scroll p-1 space-y-0.5">
             {session.questions.map((_, i) => {
               const ans = session.answers[i];
               const isCurrent = i === session.current;
@@ -6000,7 +6000,7 @@ function QuizView({
 
           <div
             ref={tabSwipeRef}
-            className={`flex-1 min-h-0 medos-qbank-split ${
+            className={`flex-1 min-h-0 osler-qbank-split ${
               submitted && isSplitMode
                 ? isMobile ? "overflow-hidden" : "flex flex-row"
                 : "flex flex-col"
@@ -6022,7 +6022,7 @@ function QuizView({
                       On desktop in split mode: 55% side-by-side.
                       In continuous mode: full-width, single column. */}
                   <div
-                    className={`medos-qbank-qcol ${(activeItem.lang ?? "en") === "ar" ? "osler-content-ar" : ""} ${
+                    className={`osler-qbank-qcol ${(activeItem.lang ?? "en") === "ar" ? "osler-content-ar" : ""} ${
                       submitted && isSplitMode
                         ? mobileTabsActive ? "w-full flex-none" : "w-[55%] border-e border-border"
                         : "flex-1"
@@ -6060,7 +6060,7 @@ function QuizView({
                       On desktop it's a plain scrollable 45%-wide column. */}
                   {submitted && isSplitMode && (
                     <div
-                      className={`medos-qbank-acol ${
+                      className={`osler-qbank-acol ${
                         mobileTabsActive ? "w-full flex-none" : "w-[45%]"
                       } flex flex-col min-h-0 bg-muted/20`}
                     >
@@ -6087,7 +6087,7 @@ function QuizView({
                               const eqIsWritten = !eqIsMCQ && (!!eq.rubric?.length || !!eq.modelAnswer);
                               const eqHighlights = highlights.get(activeItem.uid, idx);
                               return (
-                                <div className="h-full overflow-y-auto medos-scroll p-2 pb-6" style={{ touchAction: "none" }}>
+                                <div className="h-full overflow-y-auto osler-scroll p-2 pb-6" style={{ touchAction: "none" }}>
                                    {eqIsWritten ? (
                                       <WrittenEvaluationPanel
                                         draft={session.writtenDrafts[eq.id] ?? { text: "", rubricChecked: eq.rubric ? eq.rubric.map(() => false) : [], submitted: false }}
@@ -6112,7 +6112,7 @@ function QuizView({
                           />
                         </div>
                       ) : (
-                        <div className="flex-1 overflow-y-auto medos-scroll">
+                        <div className="flex-1 overflow-y-auto osler-scroll">
                           <div className="px-4 sm:px-6 py-4">
                             {qIsWritten ? (
                               <WrittenEvaluationPanel
@@ -6262,11 +6262,11 @@ function QuizView({
           {/* Bottom action bar — mobile (compact).
               Extra bottom padding (pb-[env+0.5rem]) ensures the action buttons
               clear the iOS home indicator with breathing room. */}
-          <footer className="sm:hidden border-t border-border bg-card px-3 pt-2 pb-[max(env(safe-area-inset-bottom,0px),0.75rem)] flex items-center gap-1.5 shrink-0 medos-tap-none">
+          <footer className="sm:hidden border-t border-border bg-card px-3 pt-2 pb-[max(env(safe-area-inset-bottom,0px),0.75rem)] flex items-center gap-1.5 shrink-0 osler-tap-none">
             <Button
               variant="outline" size="icon"
               onClick={goPrev} disabled={session.current === 0}
-              className="size-10 rounded-lg shrink-0 medos-touch-target"
+              className="size-10 rounded-lg shrink-0 osler-touch-target"
               title={t("common.previous")}
             >
               <ChevronLeft className="size-4" />
@@ -6277,7 +6277,7 @@ function QuizView({
                 <Button
                   variant="outline" size="icon"
                   onClick={onToggleFlag}
-                  className={`size-10 rounded-lg shrink-0 medos-touch-target ${session.flagged[session.current] ? "border-warning bg-warning/10 text-warning" : ""}`}
+                  className={`size-10 rounded-lg shrink-0 osler-touch-target ${session.flagged[session.current] ? "border-warning bg-warning/10 text-warning" : ""}`}
                   title={session.flagged[session.current] ? t("qbank.session.unflagShort") : t("qbank.session.flag")}
                 >
                   <Flag className={`size-4 ${session.flagged[session.current] ? "fill-warning text-warning" : ""}`} />
@@ -6292,7 +6292,7 @@ function QuizView({
                     <Button
                       variant="outline" size="icon"
                       onClick={() => { haptic("selection"); setToolsOpen(true); }}
-                      className="size-10 rounded-lg shrink-0 medos-touch-target"
+                      className="size-10 rounded-lg shrink-0 osler-touch-target"
                       title={t("qbank.session.tools")}
                       aria-label={t("qbank.session.tools")}
                     >
@@ -6351,7 +6351,7 @@ function QuizView({
                           <BookOpen className="size-3.5" />
                           {t("qbank.session.openArticle")}
                         </div>
-                        <div className="max-h-48 overflow-y-auto medos-scroll">
+                        <div className="max-h-48 overflow-y-auto osler-scroll">
                           {articleList.length === 0 ? (
                             <p className="px-2 py-2 text-sm text-muted-foreground">
                               {t("qbank.session.noArticles")}
@@ -6381,7 +6381,7 @@ function QuizView({
               <Button
                 size="sm" onClick={goNext}
                 variant="default"
-                className="flex-1 h-10 rounded-lg medos-touch-target"
+                className="flex-1 h-10 rounded-lg osler-touch-target"
               >
                 {isLast ? t("qbank.review.exit") : t("common.next")}
                 <ChevronRight className="size-4 ms-1" />
@@ -6389,14 +6389,14 @@ function QuizView({
             ) : !submitted && isMCQ ? (
               <Button
                 size="sm" onClick={onSubmit} disabled={selected === undefined}
-                className="flex-1 h-10 rounded-lg medos-touch-target"
+                className="flex-1 h-10 rounded-lg osler-touch-target"
               >
                 {t("qbank.session.submitAnswer")}
               </Button>
             ) : !submitted && !isMCQ && !qIsWritten ? (
               <Button
                 size="sm" onClick={onSubmit}
-                className="flex-1 h-10 rounded-lg medos-touch-target"
+                className="flex-1 h-10 rounded-lg osler-touch-target"
               >
                 {session.engine === "flashcard" ? t("qbank.session.revealAnswer") : t("qbank.session.submit")}
               </Button>
@@ -6404,7 +6404,7 @@ function QuizView({
               <Button
                 size="sm" onClick={goNext}
                 variant={isLast ? "destructive" : "default"}
-                className="flex-1 h-10 rounded-lg medos-touch-target"
+                className="flex-1 h-10 rounded-lg osler-touch-target"
               >
                 {isLast
                   ? t("qbank.session.endTest")
@@ -7372,7 +7372,7 @@ function WrittenEvaluationPanel({
             <Sparkles className="size-4 text-primary" />
             <h3 className="text-sm font-semibold text-foreground">{t("qbank.explanation.title")}</h3>
           </div>
-          <div className="uworld-prose text-[14px] whitespace-pre-wrap leading-relaxed text-foreground">
+          <div className="osler-prose text-[14px] whitespace-pre-wrap leading-relaxed text-foreground">
             {question.explanation}
           </div>
         </div>
@@ -7648,7 +7648,7 @@ function QuestionNavigatorSheet(p: QuestionNavigatorSheetProps) {
         </div>
 
         {/* Question grid — NBME compact style */}
-        <div className="flex-1 overflow-y-auto medos-scroll min-h-20 px-4 py-3">
+        <div className="flex-1 overflow-y-auto osler-scroll min-h-20 px-4 py-3">
           <div className="grid grid-cols-5 gap-1.5">
             {session.questions.map((_, i) => {
               const ans = session.answers[i];
@@ -7817,7 +7817,7 @@ function ExplanationCard({
             <Lightbulb className="size-4 text-primary" />
             <h3 className="text-sm font-semibold text-foreground">{t("qbank.explanation.title")}</h3>
           </div>
-          <div className="uworld-prose text-[14px]" style={{ whiteSpace: "pre-wrap" }} dir="auto">
+          <div className="osler-prose text-[14px]" style={{ whiteSpace: "pre-wrap" }} dir="auto">
             <HighlightedContent
               html={renderQuestionText(q.explanation || t("qbank.explanation.noExplanation"), q, item)}
               highlights={hl}
@@ -7882,7 +7882,7 @@ function ExplanationCard({
           <Lightbulb className="size-4 text-primary" />
           <h3 className="text-sm font-semibold text-foreground">{t("qbank.explanation.title")}</h3>
         </div>
-        <div className="uworld-prose text-[14px]" style={{ whiteSpace: "pre-wrap" }} dir="auto">
+        <div className="osler-prose text-[14px]" style={{ whiteSpace: "pre-wrap" }} dir="auto">
           <HighlightedContent
             html={renderQuestionText(q.explanation || t("qbank.explanation.noExplanation"), q, item)}
             highlights={hl}

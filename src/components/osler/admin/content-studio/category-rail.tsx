@@ -51,7 +51,7 @@ export function CategoryRail({
     <nav
       aria-label={t("admin.studio.allCategories")}
       className={cn(
-        "flex h-full w-full flex-col gap-0.5 overflow-y-auto medos-scroll-y p-1.5",
+        "flex h-full w-full flex-col gap-0.5 overflow-y-auto osler-scroll-y p-1.5",
         className,
       )}
     >

@@ -2,7 +2,7 @@ import { resolveHighlightColor } from "@/lib/osler/highlight-palette";
 
 export const HL_CLASS = "osler-hl";
 
-export type ArticleSource = "amboss" | "uworld-library" | "uptodate" | "library";
+export type ArticleSource = "amboss" | "uptodate" | "library";
 
 export interface ArticleHighlightRange {
   start: number;

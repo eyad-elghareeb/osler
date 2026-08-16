@@ -224,7 +224,7 @@ export function FloatingArticleModal({
                     transition={{ duration: 0.2 }}
                     className="border-r border-border bg-sidebar overflow-hidden flex flex-col"
                   >
-                    <div className="flex-1 overflow-y-auto medos-scroll p-2 space-y-0.5">
+                    <div className="flex-1 overflow-y-auto osler-scroll p-2 space-y-0.5">
                       {allArticles.map((a) => (
                         <button
                           key={a.file}
@@ -250,7 +250,7 @@ export function FloatingArticleModal({
               </AnimatePresence>
 
               {/* Article content */}
-              <div className="flex-1 overflow-y-auto medos-scroll">
+              <div className="flex-1 overflow-y-auto osler-scroll">
                 {article ? (
                   article.contentType === "pdf" ? (
                     <PdfViewer url={article.fileUrl!} title={article.title} />

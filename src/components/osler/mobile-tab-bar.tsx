@@ -65,7 +65,7 @@ export function MobileTabBar({ view: propView, onViewChange }: MobileTabBarProps
   return (
     <nav
       className={cn(
-        "medos-tabbar medos-tap-none md:hidden fixed inset-x-0 bottom-0 z-50 flex",
+        "osler-tabbar osler-tap-none md:hidden fixed inset-x-0 bottom-0 z-50 flex",
         immersive && "hidden"
       )}
       role="tablist"
@@ -85,7 +85,7 @@ export function MobileTabBar({ view: propView, onViewChange }: MobileTabBarProps
               if (active) return;
               handleNav(tab.id);
             }}
-            className={`medos-tabbar-item medos-no-select ${active ? "active" : ""}`}
+            className={`osler-tabbar-item osler-no-select ${active ? "active" : ""}`}
           >
             <Icon className="size-5" />
             <span>{t(tab.labelKey)}</span>

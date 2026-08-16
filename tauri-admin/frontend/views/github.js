@@ -880,7 +880,7 @@
       window.__oslerGhTab = null;
     }
     // Render the outer shell once, then populate via rerender()
-    const shell = el("div", { class: "view medos-fade-in" });
+    const shell = el("div", { class: "view osler-fade-in" });
     const header = el("div", { class: "view-header" });
     header.appendChild(el("div", {},
       el("h1", {}, t("gh.title")),
