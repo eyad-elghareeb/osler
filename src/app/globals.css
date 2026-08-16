@@ -2725,8 +2725,15 @@ html.osler-ar body,
  * (0,3,0) beats Crepe's 2-class `.milkdown .X` (0,2,0).
  * ─────────────────────────────────────────────────────────────────────── */
 
-/* ── 1. Color + font variable mapping (light mode default) ────────────── */
-.osler-milkdown-editor {
+/* ── 1. Color + font variable mapping (light mode default) ──────────────
+ * Crepe declares its palette on `.milkdown` itself (an element INSIDE our
+ * wrapper), so an outer-scope mapping would be shadowed for every
+ * descendant — the editor content kept Crepe's sepia/brown "classic" theme.
+ * Re-declaring the mapping on `.osler-milkdown-editor .milkdown` (same
+ * specificity as Crepe's `.milkdown`, later in the cascade) plus the
+ * 2-class wrapper selector makes the Osler tokens win everywhere. */
+.osler-milkdown-editor,
+.osler-milkdown-editor .milkdown {
   --crepe-color-background: var(--card);
   --crepe-color-on-background: var(--foreground);
   --crepe-color-surface: var(--muted);
@@ -2756,11 +2763,13 @@ html.osler-ar body,
   --crepe-base-font-size: 15px;
   --crepe-font-title: var(--font-geist-sans, Georgia, serif);
   --crepe-font-default: var(--font-geist-sans, system-ui, sans-serif);
-  --crepe-font-code: var(--font-geist-mono, ui-monospace, "SF Mono", Menlo, monospace);
+  --crepe-font-code: var(--font-jetbrains-mono, var(--font-geist-mono, ui-monospace, monospace));
 
   --crepe-shadow-1: var(--shadow-e2);
   --crepe-shadow-2: var(--shadow-e3);
+}
 
+.osler-milkdown-editor {
   font-family: var(--font-geist-sans, system-ui, sans-serif);
   font-size: 0.95rem;
   line-height: 1.65;
@@ -2769,10 +2778,12 @@ html.osler-ar body,
 }
 
 /* Dark mode — Osler's :root is dark by default; .light opts into light.
- * We re-declare the mapping here so the editor matches regardless of
- * which Crepe theme CSS (classic vs classic-dark) was loaded last. */
+ * Same dual-scope strategy as above so the mapping wins no matter which
+ * Crepe theme CSS (classic vs classic-dark) was loaded last. */
 .dark .osler-milkdown-editor,
-:root:not(.light) .osler-milkdown-editor {
+.dark .osler-milkdown-editor .milkdown,
+:root:not(.light) .osler-milkdown-editor,
+:root:not(.light) .osler-milkdown-editor .milkdown {
   --crepe-color-background: var(--card);
   --crepe-color-on-background: var(--foreground);
   --crepe-color-surface: var(--muted);
@@ -2785,7 +2796,7 @@ html.osler-ar body,
   --crepe-color-on-secondary: var(--secondary-foreground);
   --crepe-color-inverse: var(--secondary-foreground);
   --crepe-color-on-inverse: var(--secondary);
-  --crepe-color-inline-code: oklch(0.78 0.18 25);
+  --crepe-color-inline-code: var(--destructive);
   --crepe-color-error: var(--destructive);
   --crepe-color-hover: color-mix(in oklch, var(--muted) 70%, var(--primary) 10%);
   --crepe-color-selected: color-mix(in oklch, var(--muted) 55%, var(--primary) 22%);
