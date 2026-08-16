@@ -67,11 +67,11 @@ export function AnalyticsContentPanel({ data, loading }: AnalyticsContentPanelPr
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             {Array.from({ length: 2 }).map((_, i) => (
               <div key={i} className="rounded-lg border border-border overflow-hidden">
-                <div className="border-b border-border bg-muted/40 px-3 py-2">
+                <div className="border-b border-border bg-muted/40 px-4 py-2.5">
                   <Skeleton className="h-4 w-32" />
                 </div>
                 {Array.from({ length: 5 }).map((__, j) => (
-                  <div key={j} className="flex items-center justify-between gap-3 border-b border-border last:border-0 px-3 py-2.5">
+                  <div key={j} className="flex items-center justify-between gap-3 border-b border-border last:border-0 px-4 py-3">
                     <Skeleton className="h-4 w-40" />
                     <Skeleton className="h-4 w-12" />
                   </div>
@@ -115,12 +115,12 @@ export function AnalyticsContentPanel({ data, loading }: AnalyticsContentPanelPr
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start">
             {/* Top content */}
             <div className="rounded-lg border border-border overflow-hidden">
-              <div className="border-b border-border bg-muted/40 px-3 py-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              <div className="border-b border-border bg-muted/40 px-4 py-2.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                 {t("admin.analytics.content.topContent")}
               </div>
               <ul className="divide-y divide-border">
                 {data.packs.map((p, i) => (
-                  <li key={p.uid} className="px-3 py-2.5">
+                  <li key={p.uid} className="px-4 py-3">
                     <div className="flex items-center justify-between gap-3">
                       <div className="flex items-center gap-2 min-w-0">
                         <span className="text-xs text-muted-foreground font-mono w-6 shrink-0 text-end">{i + 1}.</span>
@@ -128,20 +128,20 @@ export function AnalyticsContentPanel({ data, loading }: AnalyticsContentPanelPr
                       </div>
                       <span className="font-mono font-medium tabular-nums shrink-0">{p.attempts.toLocaleString()}</span>
                     </div>
-                    <div className="mt-1.5 ms-8 space-y-1">
+                    <div className="mt-2 ms-8 space-y-1.5">
                       <div className="h-1.5 w-full rounded-full bg-muted/60 overflow-hidden">
                         <div
                           className="h-full rounded-full bg-primary/70"
                           style={{ width: `${Math.max(4, (p.attempts / maxPackAttempts) * 100)}%` }}
                         />
                       </div>
-                      <div className="flex items-center gap-3 text-[11px] text-muted-foreground">
+                      <div className="flex items-center gap-4 text-xs text-muted-foreground">
                         <span>{t("admin.analytics.content.col.users")}: {p.users.toLocaleString()}</span>
                         <span>{t("admin.analytics.content.col.accuracy")}: {p.accuracy != null ? `${p.accuracy}%` : "—"}</span>
                         <span className="ms-auto">{t("admin.analytics.content.col.lastSolved")}: {fmtWhen(p.lastSolvedAt)}</span>
                       </div>
                       {p.topUsers.length > 0 && (
-                        <div className="rounded-md border border-border bg-card px-2 py-1.5 space-y-0.5">
+                        <div className="rounded-md border border-border bg-card px-3 py-2 space-y-1">
                           <div className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
                             {t("admin.analytics.content.topUsersInPack")}
                           </div>
@@ -163,14 +163,14 @@ export function AnalyticsContentPanel({ data, loading }: AnalyticsContentPanelPr
 
             {/* Top learners */}
             <div className="rounded-lg border border-border overflow-hidden">
-              <div className="border-b border-border bg-muted/40 px-3 py-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              <div className="border-b border-border bg-muted/40 px-4 py-2.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                 {t("admin.analytics.content.topUsers")}
               </div>
               <ul className="divide-y divide-border">
                 {data.topUsers.map((u, i) => {
                   const r = ratingAcc(u.accuracy);
                   return (
-                    <li key={u.username} className="px-3 py-2.5">
+                    <li key={u.username} className="px-4 py-3">
                       <div className="flex items-center justify-between gap-3">
                         <div className="flex items-center gap-2 min-w-0">
                           <span className="text-xs text-muted-foreground font-mono w-6 shrink-0 text-end">{i + 1}.</span>
@@ -183,14 +183,14 @@ export function AnalyticsContentPanel({ data, loading }: AnalyticsContentPanelPr
                           {u.accuracy != null ? `${u.accuracy}%` : "—"}
                         </span>
                       </div>
-                      <div className="mt-1.5 ms-8 space-y-1">
+                      <div className="mt-2 ms-8 space-y-1.5">
                         <div className="h-1.5 w-full rounded-full bg-muted/60 overflow-hidden">
                           <div
                             className={cn("h-full rounded-full", r === "good" ? "bg-success/70" : r === "warn" ? "bg-warning/70" : "bg-destructive/70")}
                             style={{ width: `${Math.max(4, (u.attempts / maxUserAttempts) * 100)}%` }}
                           />
                         </div>
-                        <div className="flex items-center gap-3 text-[11px] text-muted-foreground">
+                        <div className="flex items-center gap-4 text-xs text-muted-foreground">
                           <span>{t("admin.analytics.content.col.packs")}: {u.packs.toLocaleString()}</span>
                           <span className="ms-auto">{t("admin.analytics.content.col.attempts")}: {u.attempts.toLocaleString()}</span>
                         </div>

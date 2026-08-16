@@ -36,35 +36,34 @@ export function AnalyticsTopPagesPanel({ data, loading }: AnalyticsTopPagesPanel
           description={t("admin.analytics.topPages.desc")}
         />
       ) : (
-        <ul className="space-y-2">
+        <ul className="space-y-3">
           {data.items.map((p, i) => (
-            <li key={p.path} className="space-y-1">
-              <div className="flex items-center justify-between gap-3 text-sm">
-                <div className="flex items-center gap-2 min-w-0">
-                  <span className="text-xs text-muted-foreground font-mono w-6 shrink-0 text-end">
-                    {i + 1}.
-                  </span>
-                  <code className="font-mono text-xs truncate">{p.path}</code>
-                </div>
-                <div className="flex items-center gap-3 shrink-0">
-                  <span className="text-xs text-muted-foreground">
-                    {t("admin.analytics.topPages.unique", { n: p.uniqueSessions.toLocaleString() })}
-                  </span>
-                  <span className="font-mono font-medium tabular-nums">
-                    {p.views.toLocaleString()}
-                  </span>
+            <li key={p.path}>
+              <div className="flex items-start gap-2">
+                <span className="text-xs text-muted-foreground font-mono w-6 shrink-0 text-end pt-1">
+                  {i + 1}.
+                </span>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center justify-between gap-3 text-sm">
+                    <code className="font-mono text-xs truncate">{p.path}</code>
+                    <div className="flex items-center gap-3 shrink-0">
+                      <span className="text-xs text-muted-foreground whitespace-nowrap">
+                        {t("admin.analytics.topPages.unique", { n: p.uniqueSessions.toLocaleString() })}
+                      </span>
+                      <span className="font-mono font-medium tabular-nums">
+                        {p.views.toLocaleString()}
+                      </span>
+                    </div>
+                  </div>
+                  <MetricBar
+                    value={p.views}
+                    max={max}
+                    color="primary"
+                    label={`${p.path} views`}
+                    className="mt-1.5"
+                  />
                 </div>
               </div>
-              {/* Per-row metric bar — replaces the hand-rolled progress
-               * track with the shared MetricBar primitive. Reads the
-               * row's view count relative to the top page. */}
-              <MetricBar
-                value={p.views}
-                max={max}
-                color="primary"
-                label={`${p.path} views`}
-                className="ms-8"
-              />
             </li>
           ))}
         </ul>

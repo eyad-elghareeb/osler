@@ -80,57 +80,59 @@ export function AnalyticsApiPerformancePanel({ data, loading }: AnalyticsApiPerf
           description={t("admin.analytics.apiPerf.desc")}
         />
       ) : (
-        <div className="rounded-lg border border-border overflow-hidden overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-border bg-muted/40">
-                <th className="px-3 py-2 text-start text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                  {t("admin.analytics.apiPerf.col.endpoint")}
-                </th>
-                <th className="px-3 py-2 text-end text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                  {t("admin.analytics.apiPerf.col.count")}
-                </th>
-                <th className="px-3 py-2 text-end text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                  {t("admin.analytics.apiPerf.col.p50")}
-                </th>
-                <th className="px-3 py-2 text-end text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                  {t("admin.analytics.apiPerf.col.p95")}
-                </th>
-                <th className="px-3 py-2 text-end text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                  {t("admin.analytics.apiPerf.col.max")}
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {data.items.map((row: AnalyticsApiPerfRow, i) => {
-                const r = ratingMs(row.p95);
-                return (
-                  <tr key={`${row.endpoint}-${i}`} className="border-b border-border last:border-0 hover:bg-muted/30 transition-colors">
-                    <td className="px-3 py-2">
-                      <code className="font-mono text-xs">{row.endpoint}</code>
-                    </td>
-                    <td className="px-3 py-2 text-end font-mono tabular-nums text-xs">
-                      {row.count.toLocaleString()}
-                    </td>
-                    <td className="px-3 py-2 text-end font-mono tabular-nums text-xs">
-                      {fmtMs(row.p50)}
-                    </td>
-                    <td className="px-3 py-2 text-end">
-                      <span className={cn(
-                        "inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium font-mono tabular-nums",
-                        RATING_COLORS[r],
-                      )}>
-                        {fmtMs(row.p95)}
-                      </span>
-                    </td>
-                    <td className="px-3 py-2 text-end font-mono tabular-nums text-xs text-muted-foreground">
-                      {fmtMs(row.max)}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+        <div className="rounded-lg border border-border overflow-hidden">
+          <div className="max-h-80 overflow-y-auto overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-border">
+                  <th className="sticky top-0 z-10 bg-muted px-3 py-2 text-start text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                    {t("admin.analytics.apiPerf.col.endpoint")}
+                  </th>
+                  <th className="sticky top-0 z-10 bg-muted px-3 py-2 text-end text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                    {t("admin.analytics.apiPerf.col.count")}
+                  </th>
+                  <th className="sticky top-0 z-10 bg-muted px-3 py-2 text-end text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                    {t("admin.analytics.apiPerf.col.p50")}
+                  </th>
+                  <th className="sticky top-0 z-10 bg-muted px-3 py-2 text-end text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                    {t("admin.analytics.apiPerf.col.p95")}
+                  </th>
+                  <th className="sticky top-0 z-10 bg-muted px-3 py-2 text-end text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                    {t("admin.analytics.apiPerf.col.max")}
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.items.map((row: AnalyticsApiPerfRow, i) => {
+                  const r = ratingMs(row.p95);
+                  return (
+                    <tr key={`${row.endpoint}-${i}`} className="border-b border-border last:border-0 hover:bg-muted/30 transition-colors">
+                      <td className="px-3 py-2">
+                        <code className="font-mono text-xs">{row.endpoint}</code>
+                      </td>
+                      <td className="px-3 py-2 text-end font-mono tabular-nums text-xs">
+                        {row.count.toLocaleString()}
+                      </td>
+                      <td className="px-3 py-2 text-end font-mono tabular-nums text-xs">
+                        {fmtMs(row.p50)}
+                      </td>
+                      <td className="px-3 py-2 text-end">
+                        <span className={cn(
+                          "inline-flex items-center justify-center rounded-full border px-2 py-0.5 text-[11px] font-medium font-mono tabular-nums whitespace-nowrap min-w-[4.5rem]",
+                          RATING_COLORS[r],
+                        )}>
+                          {fmtMs(row.p95)}
+                        </span>
+                      </td>
+                      <td className="px-3 py-2 text-end font-mono tabular-nums text-xs text-muted-foreground">
+                        {fmtMs(row.max)}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
     </ChartCard>
