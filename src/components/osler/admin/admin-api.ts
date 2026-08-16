@@ -370,6 +370,45 @@ export interface AnalyticsApiPerformance {
   items: AnalyticsApiPerfRow[];
 }
 
+/** Per-user subtotal inside a content pack. */
+export interface ContentUserStat {
+  username: string;
+  attempts: number;
+  correct: number;
+  accuracy: number | null;
+}
+
+/** One content pack's engagement aggregate. `uid` is the pack UID
+ *  (e.g. "qbank/cardiology/questions"); `engine` is a ContentType. */
+export interface ContentPackStat {
+  uid: string;
+  engine: string;
+  users: number;
+  attempts: number;
+  correct: number;
+  accuracy: number | null;
+  lastSolvedAt: number | null;
+  topUsers: ContentUserStat[];
+}
+
+export interface ContentUserTotal {
+  username: string;
+  packs: number;
+  attempts: number;
+  correct: number;
+  accuracy: number | null;
+}
+
+/** "Who solved what, how many times" — aggregated from the per-user
+ *  progress documents already stored by the sync pipeline (all-time). */
+export interface AnalyticsContent {
+  totalPacks: number;
+  totalUsers: number;
+  totalAttempts: number;
+  packs: ContentPackStat[];
+  topUsers: ContentUserTotal[];
+}
+
 export const analyticsApi = {
   overview:        (range: AnalyticsRange = "24h") =>
                                                     req<AnalyticsOverview>(`/v1/admin/analytics/overview?range=${range}`),
@@ -383,6 +422,7 @@ export const analyticsApi = {
                                                     req<AnalyticsErrors>(`/v1/admin/analytics/errors?range=${range}&limit=${limit}`),
   apiPerformance:  (range: AnalyticsRange = "24h", limit = 20) =>
                                                     req<AnalyticsApiPerformance>(`/v1/admin/analytics/api-performance?range=${range}&limit=${limit}`),
+  content:         (limit = 20)                   => req<AnalyticsContent>(`/v1/admin/analytics/content?limit=${limit}`),
 };
 
 // ── Gemini key management (per-user, stored in D1) ──────────────────────────

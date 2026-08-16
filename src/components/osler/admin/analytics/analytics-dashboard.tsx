@@ -7,6 +7,7 @@ import {
   AdminApiError,
   analyticsApi,
   type AnalyticsApiPerformance,
+  type AnalyticsContent,
   type AnalyticsErrors,
   type AnalyticsOverview,
   type AnalyticsRange,
@@ -21,6 +22,7 @@ import { AnalyticsWebVitalsPanel } from "./analytics-web-vitals";
 import { AnalyticsTopPagesPanel } from "./analytics-top-pages";
 import { AnalyticsErrorsPanel } from "./analytics-errors";
 import { AnalyticsApiPerformancePanel } from "./analytics-api-performance";
+import { AnalyticsContentPanel } from "./analytics-content";
 
 interface AnalyticsState {
   overview: AnalyticsOverview | null;
@@ -29,6 +31,7 @@ interface AnalyticsState {
   topPages: AnalyticsTopPages | null;
   errors: AnalyticsErrors | null;
   apiPerformance: AnalyticsApiPerformance | null;
+  content: AnalyticsContent | null;
 }
 
 const EMPTY_STATE: AnalyticsState = {
@@ -38,6 +41,7 @@ const EMPTY_STATE: AnalyticsState = {
   topPages: null,
   errors: null,
   apiPerformance: null,
+  content: null,
 };
 
 export function AnalyticsDashboard() {
@@ -51,15 +55,16 @@ export function AnalyticsDashboard() {
   const load = useCallback(async (r: AnalyticsRange, isRefresh = false) => {
     if (isRefresh) setRefreshing(true); else setLoading(true);
     try {
-      const [overview, timeseries, webVitals, topPages, errors, apiPerformance] = await Promise.all([
+      const [overview, timeseries, webVitals, topPages, errors, apiPerformance, content] = await Promise.all([
         analyticsApi.overview(r),
         analyticsApi.timeseries(r),
         analyticsApi.webVitals(r),
         analyticsApi.topPages(r, 15),
         analyticsApi.errors(r, 15),
         analyticsApi.apiPerformance(r, 15),
+        analyticsApi.content(15),
       ]);
-      setData({ overview, timeseries, webVitals, topPages, errors, apiPerformance });
+      setData({ overview, timeseries, webVitals, topPages, errors, apiPerformance, content });
     } catch (err) {
       // 503 = cloud backend not configured (typical in local dev preview).
       // Show a softer message in that case.
@@ -103,6 +108,8 @@ export function AnalyticsDashboard() {
         <AnalyticsTopPagesPanel data={data.topPages} loading={loading} />
         <AnalyticsErrorsPanel data={data.errors} loading={loading} />
       </div>
+
+      <AnalyticsContentPanel data={data.content} loading={loading} />
     </div>
   );
 }

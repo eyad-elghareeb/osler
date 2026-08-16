@@ -1710,11 +1710,14 @@ function sanitizeAnalyticsDetail(raw: unknown): string | null {
  * Each event:
  *   { type, path?, metric?, value?, detail?, browser?, device?, connection?, ts? }
  *
- * Auth: any signed-in user. We do NOT log user id, IP, or full UA — only
+ * Auth: none required — guests and signed-in users both report (the deployed
+ * app runs most sessions as local guests, so gating this on a session would
+ * mean collecting nothing). We do NOT log user id, IP, or full UA — only
  * the client-supplied session_id (which the client rotates every 30 min).
  * This is enough to count distinct sessions without identifying anyone.
+ * Abuse is bounded by the per-IP rate limit and the global daily write cap.
  */
-async function handleAnalyticsIngest(request: Request, env: Env, session: Session, origin: string, log: Logger): Promise<Response> {
+async function handleAnalyticsIngest(request: Request, env: Env, origin: string, log: Logger): Promise<Response> {
   // Pre-check Content-Length to avoid parsing a huge body that we'll reject
   // anyway. 20 events * ~1KB each ≈ 20KB; reject anything over 100KB to
   // leave headroom for JSON overhead.
@@ -1823,6 +1826,124 @@ function percentile(sortedAsc: number[], p: number): number | null {
   if (sortedAsc.length === 0) return null;
   const idx = Math.min(sortedAsc.length - 1, Math.floor((p / 100) * (sortedAsc.length - 1)));
   return sortedAsc[idx];
+}
+
+/* ── Content analytics ─────────────────────────────────────────────────
+ * "Who solved what, how many times": aggregates the per-user qbank +
+ * flashcards progress documents the sync pipeline already stores, so no
+ * new collection path is needed. It is an all-time snapshot — progress
+ * docs are cumulative state, not time-bucketed events. The heavy scan is
+ * cached in-process for 60s since the admin dashboard polls on a timer.
+ */
+const CONTENT_ANALYTICS_CACHE_TTL_MS = 60_000;
+const contentAnalyticsCache = new Map<string, { at: number; data: unknown }>();
+
+async function contentAnalytics(env: Env, url: URL): Promise<unknown> {
+  const limit = Math.min(100, Math.max(1, Number(url.searchParams.get("limit") || 20)));
+  const cacheKey = `limit:${limit}`;
+  const cached = contentAnalyticsCache.get(cacheKey);
+  if (cached && now() - cached.at < CONTENT_ANALYTICS_CACHE_TTL_MS) return cached.data;
+
+  const [userRows, docRows] = await Promise.all([
+    env.DB.prepare("SELECT id, username, display_name FROM users").all<{ id: string; username: string | null; display_name: string | null }>(),
+    env.DB.prepare("SELECT user_id, kind, payload, compressed FROM progress_documents WHERE kind IN ('qbank','flashcards')").all<{ user_id: string; kind: string; payload: string; compressed: number }>(),
+  ]);
+
+  const userNames = new Map<string, string>();
+  for (const u of userRows.results || []) userNames.set(u.id, u.username || u.display_name || u.id.slice(0, 8));
+
+  // Per pack uid: aggregate totals + per-user subtotals.
+  const packs = new Map<string, {
+    uid: string; engine: string; attempts: number; correct: number; lastSolvedAt: number;
+    perUser: Map<string, { attempts: number; correct: number; lastTs: number }>;
+  }>();
+  const globalUsers = new Map<string, { packs: Set<string>; attempts: number; correct: number }>();
+
+  for (const row of docRows.results || []) {
+    let records: Record<string, any>;
+    try {
+      const json = row.compressed ? await gunzipBytes(base64ToBytes(row.payload)) : row.payload;
+      records = JSON.parse(json);
+    } catch { continue; }
+    const isFlashcard = row.kind === "flashcards";
+    for (const [key, rec] of Object.entries(records || {})) {
+      if (!rec || typeof rec !== "object") continue;
+      let packUid: string | null;
+      let attempts: number;
+      let correct: number;
+      let ts: number;
+      if (isFlashcard) {
+        // Flashcard keys are `${deckUid}:${cardId}`; the record carries no uid.
+        const sep = key.indexOf(":");
+        if (sep < 0) continue;
+        packUid = key.slice(0, sep);
+        attempts = Number(rec.reviewCount) || 0;
+        correct = Number(rec.correctCount) || 0;
+        ts = Number(rec.lastReviewed) || 0;
+      } else {
+        // QBank records carry `uid`; fall back to the key prefix.
+        packUid = typeof rec.uid === "string" && rec.uid ? rec.uid : key.slice(0, key.indexOf(":") >= 0 ? key.indexOf(":") : key.length);
+        attempts = Number(rec.attempts) || 0;
+        correct = Number(rec.correctCount) || 0;
+        ts = Number(rec.timestamp) || 0;
+      }
+      if (!packUid || attempts <= 0) continue;
+      const engine = isFlashcard ? "flashcard" : (typeof rec.engine === "string" ? rec.engine : "quiz");
+      let p = packs.get(packUid);
+      if (!p) { p = { uid: packUid, engine, attempts: 0, correct: 0, lastSolvedAt: 0, perUser: new Map() }; packs.set(packUid, p); }
+      p.attempts += attempts;
+      p.correct += correct;
+      if (ts > p.lastSolvedAt) p.lastSolvedAt = ts;
+      const u = p.perUser.get(row.user_id);
+      if (u) { u.attempts += attempts; u.correct += correct; if (ts > u.lastTs) u.lastTs = ts; }
+      else p.perUser.set(row.user_id, { attempts, correct, lastTs: ts });
+      const gu = globalUsers.get(row.user_id);
+      if (gu) { gu.packs.add(packUid); gu.attempts += attempts; gu.correct += correct; }
+      else globalUsers.set(row.user_id, { packs: new Set([packUid]), attempts, correct });
+    }
+  }
+
+  const packList = Array.from(packs.values())
+    .map((p) => {
+      const topUsers = Array.from(p.perUser.entries())
+        .map(([userId, s]) => ({
+          username: userNames.get(userId) ?? userId.slice(0, 8),
+          attempts: s.attempts,
+          correct: s.correct,
+          accuracy: s.attempts > 0 ? Math.round((s.correct / s.attempts) * 100) : null,
+        }))
+        .sort((a, b) => b.attempts - a.attempts)
+        .slice(0, 5);
+      return {
+        uid: p.uid, engine: p.engine,
+        users: p.perUser.size,
+        attempts: p.attempts, correct: p.correct,
+        accuracy: p.attempts > 0 ? Math.round((p.correct / p.attempts) * 100) : null,
+        lastSolvedAt: p.lastSolvedAt || null,
+        topUsers,
+      };
+    })
+    .sort((a, b) => b.attempts - a.attempts);
+
+  const topUsers = Array.from(globalUsers.entries())
+    .map(([userId, s]) => ({
+      username: userNames.get(userId) ?? userId.slice(0, 8),
+      packs: s.packs.size,
+      attempts: s.attempts, correct: s.correct,
+      accuracy: s.attempts > 0 ? Math.round((s.correct / s.attempts) * 100) : null,
+    }))
+    .sort((a, b) => b.attempts - a.attempts)
+    .slice(0, limit);
+
+  const data = {
+    totalPacks: packs.size,
+    totalUsers: globalUsers.size,
+    totalAttempts: packList.reduce((sum, p) => sum + p.attempts, 0),
+    packs: packList.slice(0, limit),
+    topUsers,
+  };
+  contentAnalyticsCache.set(cacheKey, { at: now(), data });
+  return data;
 }
 
 async function handleAnalytics(request: Request, env: Env, url: URL, origin: string, log: Logger): Promise<Response | null> {
@@ -2014,6 +2135,11 @@ async function handleAnalytics(request: Request, env: Env, url: URL, origin: str
       .sort((a, b) => b.count - a.count)
       .slice(0, limit);
     return json({ range: analyticsRangeLabel(url), items }, 200, origin, log);
+  }
+
+  /* ── Content (who solved what, how many times) ── */
+  if (request.method === "GET" && path === "/v1/admin/analytics/content") {
+    return json(await contentAnalytics(env, url), 200, origin, log);
   }
 
   return null;
@@ -3130,20 +3256,24 @@ export default {
         return handleSearch(request, env, session, log);
       }
 
+      // ── Analytics ingest (pre-auth) ──
+      // POST /v1/analytics/events — performance metrics only, no PII. Must
+      // sit BEFORE the authenticated-route gate: the deployed app runs most
+      // sessions as guests (local-only), and those would otherwise 401 before
+      // anything reached the database. Guests are rate-limited per IP; the
+      // global daily write cap (ANALYTICS_DAILY_WRITE_CAP) backstops abuse.
+      if (request.method === "POST" && url.pathname === "/v1/analytics/events") {
+        if (!rateLimit(ip, "analytics")) return json({ error: "Too many requests" }, 429, origin, log);
+        const ingestSession = await requireUser(request, env);
+        if (ingestSession && !rateLimit(ingestSession.user.id, "analytics_user")) {
+          return json({ error: "Too many requests" }, 429, origin, log);
+        }
+        return handleAnalyticsIngest(request, env, origin, log);
+      }
+
       // ── From here on: authenticated routes ──
       const session = await requireUser(request, env);
       if (!session) return json({ error: "Authentication required" }, 401, origin, log);
-
-      // Analytics ingest (any signed-in user — performance metrics only,
-      // no PII). Rate-limited per IP AND per user to prevent a single user
-      // from rotating IPs to bypass the limit.
-      if (request.method === "POST" && url.pathname === "/v1/analytics/events") {
-        if (!rateLimit(ip, "analytics")) return json({ error: "Too many requests" }, 429, origin, log);
-        if (!rateLimit(session.user.id, "analytics_user")) {
-          return json({ error: "Too many requests" }, 429, origin, log);
-        }
-        return handleAnalyticsIngest(request, env, session, origin, log);
-      }
 
       // Admin namespace
       if (url.pathname.startsWith("/v1/admin")) {
