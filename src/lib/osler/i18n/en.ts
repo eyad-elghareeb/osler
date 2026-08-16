@@ -1488,6 +1488,16 @@ export const en = {
     "admin.nav.signOut": "Sign out",
 
     "admin.dashboard.subtitle": "Overview of users, sessions, and content activity.",
+    "admin.dashboard.analytics.title": "Live Analytics",
+    "admin.dashboard.analytics.desc": "App activity over the last 24 hours.",
+    "admin.dashboard.analytics.viewAll": "View all",
+    "admin.dashboard.quickActions": "Quick actions",
+    "admin.dashboard.shortcut.content": "Browse, upload and edit packs",
+    "admin.dashboard.shortcut.review": "Approve pending submissions",
+    "admin.dashboard.shortcut.users": "Manage accounts and roles",
+    "admin.dashboard.shortcut.analytics": "Traffic, vitals, errors, engagement",
+    "admin.dashboard.shortcut.audit": "Timestamped admin actions",
+    "admin.dashboard.shortcut.settings": "Cloud, appearance, preferences",
 
     "admin.stats.users": "Total Users",
     "admin.stats.sessions": "Active Sessions",

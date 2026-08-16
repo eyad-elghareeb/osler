@@ -1484,6 +1484,16 @@ export const ar = {
     "admin.nav.signOut": "تسجيل الخروج",
 
     "admin.dashboard.subtitle": "نظرة عامة على المستخدمين والجلسات ونشاط المحتوى.",
+    "admin.dashboard.analytics.title": "التحليلات المباشرة",
+    "admin.dashboard.analytics.desc": "نشاط التطبيق خلال آخر 24 ساعة.",
+    "admin.dashboard.analytics.viewAll": "عرض الكل",
+    "admin.dashboard.quickActions": "إجراءات سريعة",
+    "admin.dashboard.shortcut.content": "تصفّح الحزم وارفعها وحرّرها",
+    "admin.dashboard.shortcut.review": "اعتماد المساهمات المعلّقة",
+    "admin.dashboard.shortcut.users": "إدارة الحسابات والأدوار",
+    "admin.dashboard.shortcut.analytics": "الزيارات والأداء والأخطاء والتفاعل",
+    "admin.dashboard.shortcut.audit": "الإجراءات الإدارية بطابع زمني",
+    "admin.dashboard.shortcut.settings": "السحابة والمظهر والتفضيلات",
 
     "admin.stats.users": "إجمالي المستخدمين",
     "admin.stats.sessions": "الجلسات النشطة",
