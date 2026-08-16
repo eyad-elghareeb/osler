@@ -387,6 +387,10 @@ export interface ContentPackStat {
   attempts: number;
   correct: number;
   accuracy: number | null;
+  questions: number;
+  firstTryRate: number | null;
+  avgTimeMs: number | null;
+  flagged: number;
   lastSolvedAt: number | null;
   topUsers: ContentUserStat[];
 }
@@ -399,12 +403,41 @@ export interface ContentUserTotal {
   accuracy: number | null;
 }
 
+export interface ContentEngineStat {
+  engine: string;
+  packs: number;
+  users: number;
+  attempts: number;
+  correct: number;
+  accuracy: number | null;
+}
+
+export interface ContentBucketStat {
+  bucket: string;
+  packs: number;
+}
+
+export interface ContentUserTier {
+  tier: string;
+  users: number;
+}
+
 /** "Who solved what, how many times" — aggregated from the per-user
  *  progress documents already stored by the sync pipeline (all-time). */
 export interface AnalyticsContent {
   totalPacks: number;
   totalUsers: number;
   totalAttempts: number;
+  totalCorrect: number;
+  avgAccuracy: number | null;
+  totalQuestions: number;
+  flaggedQuestions: number;
+  firstTryRate: number | null;
+  avgTimeMs: number | null;
+  byEngine: ContentEngineStat[];
+  recencyBuckets: ContentBucketStat[];
+  userTiers: ContentUserTier[];
+  accuracyBands: ContentBucketStat[];
   packs: ContentPackStat[];
   topUsers: ContentUserTotal[];
 }

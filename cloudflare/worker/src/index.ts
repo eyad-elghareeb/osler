@@ -1852,9 +1852,11 @@ async function contentAnalytics(env: Env, url: URL): Promise<unknown> {
   const userNames = new Map<string, string>();
   for (const u of userRows.results || []) userNames.set(u.id, u.username || u.display_name || u.id.slice(0, 8));
 
-  // Per pack uid: aggregate totals + per-user subtotals.
+  // Per pack uid: aggregate totals + per-user subtotals + quality signals.
   const packs = new Map<string, {
     uid: string; engine: string; attempts: number; correct: number; lastSolvedAt: number;
+    questions: Set<string>; firstTryCorrect: number; firstTryTotal: number;
+    flagged: number; timeSum: number; timeCount: number;
     perUser: Map<string, { attempts: number; correct: number; lastTs: number }>;
   }>();
   const globalUsers = new Map<string, { packs: Set<string>; attempts: number; correct: number }>();
@@ -1889,11 +1891,29 @@ async function contentAnalytics(env: Env, url: URL): Promise<unknown> {
       }
       if (!packUid || attempts <= 0) continue;
       const engine = isFlashcard ? "flashcard" : (typeof rec.engine === "string" ? rec.engine : "quiz");
+      // The record key is `${packUid}:${itemId}` — the part after the first
+      // colon is the distinct question/card id within the pack.
+      const itemId = key.indexOf(":") >= 0 ? key.slice(key.indexOf(":") + 1) : key;
       let p = packs.get(packUid);
-      if (!p) { p = { uid: packUid, engine, attempts: 0, correct: 0, lastSolvedAt: 0, perUser: new Map() }; packs.set(packUid, p); }
+      if (!p) {
+        p = {
+          uid: packUid, engine, attempts: 0, correct: 0, lastSolvedAt: 0,
+          questions: new Set(), firstTryCorrect: 0, firstTryTotal: 0,
+          flagged: 0, timeSum: 0, timeCount: 0, perUser: new Map(),
+        };
+        packs.set(packUid, p);
+      }
       p.attempts += attempts;
       p.correct += correct;
       if (ts > p.lastSolvedAt) p.lastSolvedAt = ts;
+      p.questions.add(itemId);
+      if (typeof rec.firstAttemptCorrect === "boolean") {
+        p.firstTryTotal += 1;
+        if (rec.firstAttemptCorrect) p.firstTryCorrect += 1;
+      }
+      if (rec.flagged === true) p.flagged += 1;
+      const avgTime = Number(rec.avgTimeMs);
+      if (Number.isFinite(avgTime) && avgTime > 0) { p.timeSum += avgTime; p.timeCount += 1; }
       const u = p.perUser.get(row.user_id);
       if (u) { u.attempts += attempts; u.correct += correct; if (ts > u.lastTs) u.lastTs = ts; }
       else p.perUser.set(row.user_id, { attempts, correct, lastTs: ts });
@@ -1919,6 +1939,10 @@ async function contentAnalytics(env: Env, url: URL): Promise<unknown> {
         users: p.perUser.size,
         attempts: p.attempts, correct: p.correct,
         accuracy: p.attempts > 0 ? Math.round((p.correct / p.attempts) * 100) : null,
+        questions: p.questions.size,
+        firstTryRate: p.firstTryTotal > 0 ? Math.round((p.firstTryCorrect / p.firstTryTotal) * 100) : null,
+        avgTimeMs: p.timeCount > 0 ? Math.round(p.timeSum / p.timeCount) : null,
+        flagged: p.flagged,
         lastSolvedAt: p.lastSolvedAt || null,
         topUsers,
       };
@@ -1935,10 +1959,107 @@ async function contentAnalytics(env: Env, url: URL): Promise<unknown> {
     .sort((a, b) => b.attempts - a.attempts)
     .slice(0, limit);
 
+  // Engine mix — how engagement splits across content types.
+  const engineMap = new Map<string, { engine: string; packs: number; users: Set<string>; attempts: number; correct: number }>();
+  for (const p of packs.values()) {
+    let e = engineMap.get(p.engine);
+    if (!e) { e = { engine: p.engine, packs: 0, users: new Set(), attempts: 0, correct: 0 }; engineMap.set(p.engine, e); }
+    e.packs += 1;
+    for (const userId of p.perUser.keys()) e.users.add(userId);
+    e.attempts += p.attempts;
+    e.correct += p.correct;
+  }
+  const byEngine = Array.from(engineMap.values())
+    .map((e) => ({
+      engine: e.engine,
+      packs: e.packs,
+      users: e.users.size,
+      attempts: e.attempts,
+      correct: e.correct,
+      accuracy: e.attempts > 0 ? Math.round((e.correct / e.attempts) * 100) : null,
+    }))
+    .sort((a, b) => b.attempts - a.attempts);
+
+  // Recency — how fresh the engagement is (per pack, from its last solve).
+  const nowMs = now();
+  const recency = { "24h": 0, "7d": 0, "30d": 0, older: 0 };
+  for (const p of packs.values()) {
+    const age = p.lastSolvedAt ? nowMs - p.lastSolvedAt : Infinity;
+    if (age <= 24 * 60 * 60 * 1000) recency["24h"] += 1;
+    else if (age <= 7 * 24 * 60 * 60 * 1000) recency["7d"] += 1;
+    else if (age <= 30 * 24 * 60 * 60 * 1000) recency["30d"] += 1;
+    else recency.older += 1;
+  }
+  const recencyBuckets = [
+    { bucket: "24h", packs: recency["24h"] },
+    { bucket: "7d", packs: recency["7d"] },
+    { bucket: "30d", packs: recency["30d"] },
+    { bucket: "older", packs: recency.older },
+  ];
+
+  // Adoption — how many packs each learner has touched.
+  const tiers = { "1": 0, "2to5": 0, "6to10": 0, "11plus": 0 };
+  for (const s of globalUsers.values()) {
+    const n = s.packs.size;
+    if (n <= 1) tiers["1"] += 1;
+    else if (n <= 5) tiers["2to5"] += 1;
+    else if (n <= 10) tiers["6to10"] += 1;
+    else tiers["11plus"] += 1;
+  }
+  const userTiers = [
+    { tier: "1", users: tiers["1"] },
+    { tier: "2to5", users: tiers["2to5"] },
+    { tier: "6to10", users: tiers["6to10"] },
+    { tier: "11plus", users: tiers["11plus"] },
+  ];
+
+  // Accuracy bands — how packs distribute across quality zones.
+  const bands = { good: 0, warn: 0, bad: 0 };
+  for (const p of packList) {
+    if (p.accuracy == null) continue;
+    if (p.accuracy >= 80) bands.good += 1;
+    else if (p.accuracy >= 50) bands.warn += 1;
+    else bands.bad += 1;
+  }
+  const accuracyBands = [
+    { bucket: "good", packs: bands.good },
+    { bucket: "warn", packs: bands.warn },
+    { bucket: "bad", packs: bands.bad },
+  ];
+
+  let totalAttempts = 0;
+  let totalCorrect = 0;
+  let totalQuestions = 0;
+  let flaggedQuestions = 0;
+  let firstTryCorrect = 0;
+  let firstTryTotal = 0;
+  let timeSum = 0;
+  let timeCount = 0;
+  for (const p of packs.values()) {
+    totalAttempts += p.attempts;
+    totalCorrect += p.correct;
+    totalQuestions += p.questions.size;
+    flaggedQuestions += p.flagged;
+    firstTryCorrect += p.firstTryCorrect;
+    firstTryTotal += p.firstTryTotal;
+    timeSum += p.timeSum;
+    timeCount += p.timeCount;
+  }
+
   const data = {
     totalPacks: packs.size,
     totalUsers: globalUsers.size,
-    totalAttempts: packList.reduce((sum, p) => sum + p.attempts, 0),
+    totalAttempts,
+    totalCorrect,
+    avgAccuracy: totalAttempts > 0 ? Math.round((totalCorrect / totalAttempts) * 100) : null,
+    totalQuestions,
+    flaggedQuestions,
+    firstTryRate: firstTryTotal > 0 ? Math.round((firstTryCorrect / firstTryTotal) * 100) : null,
+    avgTimeMs: timeCount > 0 ? Math.round(timeSum / timeCount) : null,
+    byEngine,
+    recencyBuckets,
+    userTiers,
+    accuracyBands,
     packs: packList.slice(0, limit),
     topUsers,
   };
