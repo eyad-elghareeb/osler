@@ -1997,7 +1997,7 @@ async function handleAnalytics(request: Request, env: Env, url: URL, origin: str
     const bucketMs = range === "24h" ? 60 * 60 * 1000 : range === "7d" ? 6 * 60 * 60 * 1000 : 24 * 60 * 60 * 1000;
     const rows = await env.DB.prepare(
       `SELECT
-         (created_at / ?) * ? AS bucket,
+         (created_at / CAST(? AS INTEGER)) * CAST(? AS INTEGER) AS bucket,
          event_type,
          COUNT(*) AS count
        FROM analytics_events
