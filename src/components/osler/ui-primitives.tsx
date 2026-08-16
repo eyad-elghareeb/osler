@@ -97,7 +97,15 @@ export function PageHeader({
         <div className="min-w-0 flex-1">
           {eyebrow && (
             <p className="osler-page-header__eyebrow">
-              {EyebrowIcon && <EyebrowIcon className="size-3" />}
+              {EyebrowIcon && (
+                <motion.span
+                  className="inline-flex"
+                  animate={{ scale: [1, 1.25, 1] }}
+                  transition={{ duration: 2.2, repeat: Infinity, ease: "easeInOut" }}
+                >
+                  <EyebrowIcon className="size-3" />
+                </motion.span>
+              )}
               {eyebrow}
             </p>
           )}
@@ -113,7 +121,15 @@ export function PageHeader({
     <div className={cn("osler-page-header", className)}>
       {eyebrow && (
         <p className="osler-page-header__eyebrow">
-          {EyebrowIcon && <EyebrowIcon className="size-3" />}
+          {EyebrowIcon && (
+            <motion.span
+              className="inline-flex"
+              animate={{ scale: [1, 1.25, 1] }}
+              transition={{ duration: 2.2, repeat: Infinity, ease: "easeInOut" }}
+            >
+              <EyebrowIcon className="size-3" />
+            </motion.span>
+          )}
           {eyebrow}
         </p>
       )}
@@ -337,11 +353,16 @@ export function StatTile({
   onClick,
   className,
 }: StatTileProps) {
-  const Container = onClick ? "button" : "div";
+  const Container = onClick ? motion.button : motion.div;
   return (
     <Container
       type={onClick ? "button" : undefined}
       onClick={onClick}
+      initial={{ scale: 0.88, opacity: 0 }}
+      animate={{ scale: 1, opacity: 1 }}
+      transition={{ type: "spring", stiffness: 450, damping: 24 }}
+      whileHover="hover"
+      whileTap={onClick ? { scale: 0.98 } : undefined}
       className={cn(
         "text-left",
         compact ? "osler-stat-tile--compact" : "osler-stat-tile",
@@ -351,7 +372,15 @@ export function StatTile({
     >
       <div className="flex items-center justify-between mb-2">
         <span className="osler-stat-tile__label">{label}</span>
-        {Icon && <Icon className={cn("size-4", STAT_TILE_COLOR[color])} />}
+        {Icon && (
+          <motion.span
+            className="inline-flex"
+            variants={{ hover: { scale: 1.22, rotate: -10 } }}
+            transition={{ type: "spring", stiffness: 500, damping: 14 }}
+          >
+            <Icon className={cn("size-4", STAT_TILE_COLOR[color])} />
+          </motion.span>
+        )}
       </div>
       <div className="osler-stat-tile__row">
         <div className="osler-stat-tile__value min-w-0">{value}</div>

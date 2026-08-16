@@ -560,7 +560,7 @@ function PerformanceInsights({ metrics }: { metrics: MetricsSummary }) {
             <div className="flex items-center justify-between mb-3">
               <h4 className="text-sm font-semibold">{t("profile.insights.studyChart")}</h4>
               <span className="text-xs text-muted-foreground tabular-nums">
-                {formatStudyTime(metrics.totalStudyMs)}
+                {metrics.totalStudyMs > 0 ? formatStudyTime(metrics.totalStudyMs) : "—"}
               </span>
             </div>
             <div className="flex items-end gap-1 h-24" role="img" aria-label={t("profile.insights.studyChart")}>
@@ -895,16 +895,21 @@ function Achievement({
           : "opacity-60"
       )}
     >
-      <div
+      {/* Unlocked achievements keep a slow celebratory pulse on their icon
+       *  chip — locked ones stay perfectly still. Gated by the global
+       *  MotionConfig (animations toggle + prefers-reduced-motion). */}
+      <motion.div
         className={cn(
           "w-10 h-10 rounded-lg flex items-center justify-center shrink-0",
           unlocked
             ? "bg-primary/15 text-primary"
             : "bg-muted text-muted-foreground"
         )}
+        animate={unlocked ? { scale: [1, 1.08, 1] } : undefined}
+        transition={unlocked ? { duration: 2.6, repeat: Infinity, ease: "easeInOut" } : undefined}
       >
         <Icon className="size-5" />
-      </div>
+      </motion.div>
       <div className="flex-1 min-w-0">
         <div className="text-sm font-semibold">{title}</div>
         <div className="text-xs text-muted-foreground">{description}</div>

@@ -136,8 +136,15 @@ export function summarizeMetrics(records: QuestionRecord[]): MetricsSummary {
       b.correct += r.correctCount ?? (r.correct ? 1 : 0);
       difficultyBuckets.set(r.difficulty, b);
     }
+    // Day attribution uses only the LATEST attempt's measured duration
+    // (`timeMs`, stamped on every answer). A record's cumulative estimate
+    // (avgTimeMs × attempts) spans attempts made on many days whose
+    // timestamps we no longer keep — dumping all of it onto the last-attempt
+    // day flooded "today"'s bar and emptied the days the studying actually
+    // happened, so the 14-day chart was badly wrong for anyone who reviews
+    // old questions.
     const key = localDateKey(r.timestamp);
-    dayBuckets.set(key, (dayBuckets.get(key) ?? 0) + recordStudyMs(r));
+    dayBuckets.set(key, (dayBuckets.get(key) ?? 0) + (r.timeMs ?? 0));
   }
 
   // Last 14 days, oldest → newest, zero-filled so the chart never jumps.
