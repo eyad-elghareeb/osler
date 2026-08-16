@@ -1943,6 +1943,7 @@ export const en = {
     "admin.structured.medium": "Medium",
     "admin.structured.moveDown": "Move down",
     "admin.structured.moveUp": "Move up",
+    "admin.structured.dragReorder": "Drag to reorder",
     "admin.structured.newDeck": "New deck",
     "admin.structured.noPrompts": "No prompts yet",
     "admin.structured.noQuestions": "No questions yet",

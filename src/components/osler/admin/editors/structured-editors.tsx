@@ -209,6 +209,19 @@ function ListToolbar({
   );
 }
 
+/** In-flight HTML5 drag, shared module-level so sibling rows (and only
+ *  rows in the same list — see `dragScope`) can coordinate without lifting
+ *  state into every editor. Null when no drag is active. */
+let itemDrag: { scope: string; index: number } | null = null;
+
+/** Pure reorder: move arr[from] to insertion slot `to`. */
+function arrayMove<T>(arr: T[], from: number, to: number): T[] {
+  const next = arr.slice();
+  const [item] = next.splice(from, 1);
+  next.splice(to, 0, item);
+  return next;
+}
+
 function ItemRow({
   index,
   total,
@@ -218,6 +231,8 @@ function ItemRow({
   children,
   title,
   collapsible,
+  dragScope,
+  onDragReorder,
 }: {
   index: number;
   total: number;
@@ -228,13 +243,75 @@ function ItemRow({
   title: string;
   /** If true, show a collapse/expand toggle. */
   collapsible?: boolean;
+  /** Scope token identifying the list this row belongs to — drops are only
+   *  accepted between rows of the same list (e.g. questions can't be dragged
+   *  into a different passage's question list). */
+  dragScope?: string;
+  /** Drag-and-drop reorder callback (insertion index after removal). */
+  onDragReorder?: (from: number, to: number) => void;
 }) {
   const { t } = useI18n();
   const ctx = React.useContext(CollapseContext);
   const isCollapsed = collapsible ? (ctx.collapsed[index] ?? false) : false;
   const toggleCollapse = () => ctx.toggle(index);
+
+  // The row is only draggable while the grip handle is held — otherwise
+  // selecting text inside an expanded row's inputs would start a drag.
+  const [gripHeld, setGripHeld] = React.useState(false);
+  const [dropEdge, setDropEdge] = React.useState<"top" | "bottom" | null>(null);
+  const canDrag = !!dragScope && !!onDragReorder && !readOnly;
+
+  function handleDragStart(e: React.DragEvent) {
+    if (!canDrag || !dragScope) { e.preventDefault(); return; }
+    itemDrag = { scope: dragScope, index };
+    e.dataTransfer.effectAllowed = "move";
+    e.dataTransfer.dropEffect = "move";
+    // Firefox requires data for the drag to start.
+    e.dataTransfer.setData("text/plain", String(index));
+  }
+  function handleDragOver(e: React.DragEvent) {
+    if (!canDrag || !itemDrag || itemDrag.scope !== dragScope || itemDrag.index === index) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "move";
+    const rect = e.currentTarget.getBoundingClientRect();
+    setDropEdge(e.clientY < rect.top + rect.height / 2 ? "top" : "bottom");
+  }
+  function handleDrop(e: React.DragEvent) {
+    e.preventDefault();
+    const edge = dropEdge;
+    setDropEdge(null);
+    if (!canDrag || !itemDrag || itemDrag.scope !== dragScope || edge == null) return;
+    const from = itemDrag.index;
+    let to = edge === "bottom" ? index + 1 : index;
+    if (from < to) to -= 1; // removing the source shifts later slots down
+    itemDrag = null;
+    if (from !== to) {
+      haptic("selection");
+      onDragReorder?.(from, to);
+    }
+  }
+  function handleDragEnd() {
+    itemDrag = null;
+    setGripHeld(false);
+    setDropEdge(null);
+  }
+
   return (
-    <div className={`border border-border rounded-lg bg-card/60 ${isCollapsed ? "" : "p-2.5 space-y-2.5"}`}>
+    <div
+      draggable={canDrag && gripHeld}
+      onDragStart={handleDragStart}
+      onDragOver={handleDragOver}
+      onDrop={handleDrop}
+      onDragLeave={(e) => {
+        // Only clear when actually leaving the row — dragleave also fires
+        // when the pointer crosses between the row's own children.
+        if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setDropEdge(null);
+      }}
+      onDragEnd={handleDragEnd}
+      className={`border border-border rounded-lg bg-card/60 ${isCollapsed ? "" : "p-2.5 space-y-2.5"} ${
+        dropEdge === "top" ? "border-t-2 border-t-primary" : dropEdge === "bottom" ? "border-b-2 border-b-primary" : ""
+      } ${canDrag && gripHeld ? "opacity-80" : ""}`}
+    >
       <div className={`flex items-center gap-1.5 ${isCollapsed ? "p-2" : ""}`}>
         {collapsible && (
           <button
@@ -246,7 +323,21 @@ function ItemRow({
             <ChevronRight className={`size-3.5 text-muted-foreground transition-transform ${isCollapsed ? "" : "rotate-90"}`} />
           </button>
         )}
-        <GripVertical className="size-3 text-muted-foreground/40" />
+        {canDrag ? (
+          <span
+            // The drag source is armed while the grip is pressed (mousedown),
+            // then disarmed on mouseup / drag end.
+            onMouseDown={() => setGripHeld(true)}
+            onMouseUp={() => setGripHeld(false)}
+            title={t("admin.structured.dragReorder")}
+            className="shrink-0 cursor-grab active:cursor-grabbing flex items-center"
+            aria-hidden
+          >
+            <GripVertical className="size-3 text-muted-foreground/70" />
+          </span>
+        ) : (
+          <GripVertical className="size-3 text-muted-foreground/40" />
+        )}
         <Badge
           variant="outline"
           className={`font-mono text-[10px] px-1.5 py-0 ${collapsible ? "cursor-pointer" : ""}`}
@@ -705,6 +796,7 @@ function StringListField({
 
 export function QuizEditor({ value, onChange, readOnly, r2KeyBase, rawR2Key }: StructuredEditorProps) {
   const { t } = useI18n();
+  const dndScope = React.useId();
   const questions: any[] = Array.isArray(value?.questions) ? value.questions : [];
   // Hooks must run before the passages early-return below — the value shape
   // can change between renders, and a conditional hook crashes React.
@@ -760,6 +852,8 @@ export function QuizEditor({ value, onChange, readOnly, r2KeyBase, rawR2Key }: S
               onMove={(d) => moveQuestion(i, d)}
               onRemove={() => removeQuestion(i)}
               readOnly={readOnly}
+              dragScope={dndScope}
+              onDragReorder={(from, to) => update(arrayMove(questions, from, to))}
               title={`${t("admin.content.editor.question", { n: i + 1 })}${questionSnippet(q)}`}
               collapsible
             >
@@ -980,6 +1074,7 @@ function ChoiceImagesEditor({
 // ── Passages editor (quiz mode + bank mode) ────────────────────────────────
 
 function PassagesEditor({ value, onChange, readOnly, r2KeyBase, rawR2Key }: StructuredEditorProps) {
+  const dndScope = React.useId();
   const passages: any[] = Array.isArray(value?.passages) ? value.passages : [];
   const collapseState = useCollapseState(passages.length);
 
@@ -1018,6 +1113,8 @@ function PassagesEditor({ value, onChange, readOnly, r2KeyBase, rawR2Key }: Stru
             onMove={(d) => movePassage(i, d)}
             onRemove={() => removePassage(i)}
             readOnly={readOnly}
+            dragScope={dndScope}
+            onDragReorder={(from, to) => update(arrayMove(passages, from, to))}
             title={`Passage ${i + 1}`}
             collapsible
           >
@@ -1059,6 +1156,7 @@ function PassagesEditor({ value, onChange, readOnly, r2KeyBase, rawR2Key }: Stru
 
 export function FlashcardEditor({ value, onChange, readOnly, r2KeyBase, rawR2Key }: StructuredEditorProps) {
   const { t } = useI18n();
+  const dndScope = React.useId();
   if (Array.isArray(value?.decks)) {
     return <SubdecksEditor value={value} onChange={onChange} readOnly={readOnly} r2KeyBase={r2KeyBase} rawR2Key={rawR2Key} />;
   }
@@ -1187,6 +1285,8 @@ export function FlashcardEditor({ value, onChange, readOnly, r2KeyBase, rawR2Key
               onMove={(d) => moveCard(i, d)}
               onRemove={() => removeCard(i)}
               readOnly={readOnly}
+              dragScope={dndScope}
+              onDragReorder={(from, to) => updateCards(arrayMove(cards, from, to))}
               title={`Card ${i + 1}`}
             >
               <Field label="ID">
@@ -1319,6 +1419,7 @@ export function FlashcardEditor({ value, onChange, readOnly, r2KeyBase, rawR2Key
 
 function SubdecksEditor({ value, onChange, readOnly, r2KeyBase, rawR2Key }: StructuredEditorProps) {
   const { t } = useI18n();
+  const dndScope = React.useId();
   const decks: any[] = Array.isArray(value?.decks) ? value.decks : [];
   function update(next: any[]) {
     onChange({ ...value, decks: next });
@@ -1343,6 +1444,8 @@ function SubdecksEditor({ value, onChange, readOnly, r2KeyBase, rawR2Key }: Stru
           onMove={() => {}}
           onRemove={() => removeDeck(i)}
           readOnly={readOnly}
+          dragScope={dndScope}
+          onDragReorder={(from, to) => update(arrayMove(decks, from, to))}
           title={`Deck ${i + 1}`}
         >
           <Field label="ID">
@@ -1379,6 +1482,7 @@ function SubdecksEditor({ value, onChange, readOnly, r2KeyBase, rawR2Key }: Stru
 
 export function OsceEditor({ value, onChange, readOnly, r2KeyBase, rawR2Key }: StructuredEditorProps) {
   const { t } = useI18n();
+  const dndScope = React.useId();
   const stations: any[] = Array.isArray(value?.stations) ? value.stations : [];
 
   function update(next: any[]) {
@@ -1432,6 +1536,8 @@ export function OsceEditor({ value, onChange, readOnly, r2KeyBase, rawR2Key }: S
             onMove={(d) => moveStation(i, d)}
             onRemove={() => removeStation(i)}
             readOnly={readOnly}
+            dragScope={dndScope}
+            onDragReorder={(from, to) => update(arrayMove(stations, from, to))}
             title={`Station ${i + 1}: ${s.title || ""}`}
           >
             <Field label="ID">
@@ -1749,6 +1855,7 @@ function youTubeThumb(id: string): string {
 
 export function VideoEditor({ value, onChange, readOnly, r2KeyBase, rawR2Key }: StructuredEditorProps) {
   const { t } = useI18n();
+  const dndScope = React.useId();
   const videos: any[] = Array.isArray(value?.videos) ? value.videos : [];
 
   function update(next: any[]) {
@@ -1804,6 +1911,8 @@ export function VideoEditor({ value, onChange, readOnly, r2KeyBase, rawR2Key }: 
               onMove={(d) => moveVideo(i, d)}
               onRemove={() => removeVideo(i)}
               readOnly={readOnly}
+              dragScope={dndScope}
+              onDragReorder={(from, to) => update(arrayMove(videos, from, to))}
               title={`Video ${i + 1}: ${v.title || ""}`}
             >
               <Field label="ID">
@@ -2061,6 +2170,7 @@ function ChaptersEditor({
 
 export function WrittenEditor({ value, onChange, readOnly, r2KeyBase, rawR2Key }: StructuredEditorProps) {
   const { t } = useI18n();
+  const dndScope = React.useId();
   const prompts: any[] = Array.isArray(value?.prompts) ? value.prompts : [];
   const collapseState = useCollapseState(prompts.length);
 
@@ -2111,6 +2221,8 @@ export function WrittenEditor({ value, onChange, readOnly, r2KeyBase, rawR2Key }
               onMove={(d) => movePrompt(i, d)}
               onRemove={() => removePrompt(i)}
               readOnly={readOnly}
+              dragScope={dndScope}
+              onDragReorder={(from, to) => update(arrayMove(prompts, from, to))}
               title={`Prompt ${i + 1}`}
               collapsible
             >
@@ -2323,6 +2435,7 @@ export function BankEditor({ value, onChange, readOnly, r2KeyBase, rawR2Key }: S
 // ── Flat questions editor for bank files without passages ─────────────────
 function BankFlatQuestionsEditor({ value, onChange, readOnly, r2KeyBase, rawR2Key }: StructuredEditorProps) {
   const { t } = useI18n();
+  const dndScope = React.useId();
   const questions: any[] = Array.isArray(value?.questions) ? value.questions : [];
   const collapseState = useCollapseState(questions.length);
 
@@ -2372,6 +2485,8 @@ function BankFlatQuestionsEditor({ value, onChange, readOnly, r2KeyBase, rawR2Ke
               onMove={(d) => moveQuestion(i, d)}
               onRemove={() => removeQuestion(i)}
               readOnly={readOnly}
+              dragScope={dndScope}
+              onDragReorder={(from, to) => update(arrayMove(questions, from, to))}
               title={`Question ${i + 1}${questionSnippet(q)}`}
               collapsible
             >

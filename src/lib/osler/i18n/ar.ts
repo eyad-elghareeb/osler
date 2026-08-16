@@ -1939,6 +1939,7 @@ export const ar = {
     "admin.structured.medium": "متوسط",
     "admin.structured.moveDown": "تحريك لأسفل",
     "admin.structured.moveUp": "تحريك لأعلى",
+    "admin.structured.dragReorder": "اسحب لإعادة الترتيب",
     "admin.structured.newDeck": "رزمة جديدة",
     "admin.structured.noPrompts": "لا توجد موجهات بعد",
     "admin.structured.noQuestions": "لا توجد أسئلة بعد",
