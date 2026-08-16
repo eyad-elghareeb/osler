@@ -44,6 +44,7 @@ import { cn } from "@/lib/utils";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { easeOut, fadeUp, staggerContainer, pressFeedback } from "@/lib/osler/motion";
+import { useSwipeBackDismiss } from "@/hooks/use-swipe-back-dismiss";
 
 /* ─── PageHeader ─────────────────────────────────────────────────────── */
 
@@ -1342,6 +1343,90 @@ interface SectionItemProps {
 export function SectionItem({ children, className }: SectionItemProps) {
   return (
     <motion.div variants={fadeUp} className={className}>
+      {children}
+    </motion.div>
+  );
+}
+
+/* ─── SwipeableSheetHandle ────────────────────────────────────────────
+ * A grab handle for bottom sheets that lets the user drag down to close.
+ * Renders a visual grab bar that follows the finger via framer-motion drag.
+ *
+ * Uses `drag="y"` with `dragSnapToOrigin` so the sheet either snaps back
+ * (if the drag didn't pass the threshold) or closes (if it did).
+ * Velocity-aware: a fast flick closes even below the distance threshold.
+ *
+ * Usage inside a <SheetContent side="bottom">:
+ *   <SwipeableSheetHandle onClose={() => setOpen(false)} />
+ *   <SheetHeader>...</SheetHeader>
+ */
+
+interface SwipeableSheetHandleProps {
+  /** Called when the user drags far enough to close the sheet. */
+  onClose: () => void;
+  className?: string;
+}
+
+export function SwipeableSheetHandle({ onClose, className }: SwipeableSheetHandleProps) {
+  const dismiss = useSwipeBackDismiss({
+    onDismiss: onClose,
+    direction: "vertical",
+    threshold: 80,
+    velocityThreshold: 400,
+  });
+
+  return (
+    <motion.div
+      {...dismiss}
+      className={cn(
+        "flex justify-center pt-2.5 pb-1 shrink-0 cursor-grab active:cursor-grabbing",
+        className,
+      )}
+    >
+      <div className="h-1 w-10 rounded-full bg-border" />
+    </motion.div>
+  );
+}
+
+/* ─── SwipeableSideSheet ──────────────────────────────────────────────
+ * Wraps the content of a side sheet (right or left) so the user can
+ * swipe horizontally to dismiss it — the same gesture iOS Settings uses.
+ *
+ * The Radix Sheet content controls its own enter/exit transform, so we
+ * can't make the SheetContent itself draggable. Instead, this wrapper
+ * goes *inside* the SheetContent and makes the inner content draggable.
+ * When the drag commits, it calls `onClose` which triggers the Radix
+ * exit animation.
+ *
+ * Usage:
+ *   <SheetContent side="right" ...>
+ *     <SwipeableSideSheet onClose={() => setOpen(false)} rtl={rtl}>
+ *       ...sheet body...
+ *     </SwipeableSideSheet>
+ *   </SheetContent>
+ */
+
+interface SwipeableSideSheetProps {
+  onClose: () => void;
+  rtl?: boolean;
+  className?: string;
+  children: React.ReactNode;
+}
+
+export function SwipeableSideSheet({ onClose, rtl = false, className, children }: SwipeableSideSheetProps) {
+  const dismiss = useSwipeBackDismiss({
+    onDismiss: onClose,
+    direction: "horizontal",
+    rtl,
+    threshold: 100,
+    velocityThreshold: 400,
+  });
+
+  return (
+    <motion.div
+      {...dismiss}
+      className={cn("flex flex-col h-full", className)}
+    >
       {children}
     </motion.div>
   );

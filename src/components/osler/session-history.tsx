@@ -56,6 +56,7 @@ import {
   PageHeader,
   PackSheetHeader,
   SectionHeading,
+  SwipeableSideSheet,
 } from "./ui-primitives";
 import { cn } from "@/lib/utils";
 
@@ -571,6 +572,7 @@ function SessionsSheet({
         dir={rtl ? "rtl" : "ltr"}
         className="w-full gap-0 bg-background p-0 sm:max-w-xl"
       >
+        <SwipeableSideSheet onClose={() => onOpenChange(false)} rtl={rtl} className="gap-0">
         <PackSheetHeader
           title={t("qbank.history.sessionsForPack", { title: shownPack.title })}
           meta={
@@ -603,6 +605,7 @@ function SessionsSheet({
             )}
           </div>
         </ScrollArea>
+        </SwipeableSideSheet>
       </SheetContent>
     </Sheet>
   );

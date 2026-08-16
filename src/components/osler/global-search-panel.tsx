@@ -23,6 +23,7 @@ import {
   Settings as SettingsIcon,
   CornerDownLeft,
   ArrowRight,
+  X,
   type LucideIcon,
 } from "lucide-react";
 import {
@@ -174,10 +175,10 @@ export function GlobalSearchPanel({
             <button
               type="button"
               onClick={() => onQueryChange("")}
-              className="size-6 rounded-full hover:bg-muted flex items-center justify-center text-muted-foreground shrink-0"
+              className="flex size-5 items-center justify-center rounded-full bg-muted text-muted-foreground hover:bg-muted-foreground/20 hover:text-foreground shrink-0 transition-colors"
               aria-label="Clear"
             >
-              <span className="text-lg leading-none">×</span>
+              <X className="size-3" />
             </button>
           ) : (
             <kbd className="text-[10px] px-1.5 py-0.5 rounded border border-border text-muted-foreground shrink-0 hidden sm:inline-block">

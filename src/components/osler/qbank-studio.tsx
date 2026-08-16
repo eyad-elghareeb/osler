@@ -174,6 +174,7 @@ import {
   MetricBar,
   SectionList,
   SectionItem,
+  SwipeableSheetHandle,
 } from "./ui-primitives";
 import { SparkTrend, defaultSparkDelta } from "./analytics-primitives";
 import { TrackerTree, type TrackerTreeNode } from "./tracker-tree";
@@ -6302,8 +6303,7 @@ function QuizView({
                     side="bottom"
                     className="px-0 pt-0 pb-[max(env(safe-area-inset-bottom,0px),0.75rem)] rounded-t-2xl data-[state=open]:duration-200 data-[state=closed]:duration-150"
                   >
-                    {/* Grab handle — matches QuestionNavigatorSheet */}
-                    <div className="mx-auto mt-2.5 h-1 w-10 rounded-full bg-border shrink-0" />
+                    <SwipeableSheetHandle onClose={() => setToolsOpen(false)} />
                     <SheetHeader className="flex-row items-center justify-between gap-2 px-4 pt-2.5 pb-1">
                       <SheetTitle className="flex items-center gap-2 text-sm font-semibold">
                         <span className="size-7 rounded-lg bg-primary/10 border border-primary/20 text-primary flex items-center justify-center shrink-0">
@@ -7608,8 +7608,7 @@ function QuestionNavigatorSheet(p: QuestionNavigatorSheetProps) {
         side="bottom"
         className="px-0 pt-0 pb-[max(env(safe-area-inset-bottom,0px),0.75rem)] rounded-t-2xl max-h-[85vh] data-[state=open]:duration-200 data-[state=closed]:duration-150"
       >
-        {/* Grab handle */}
-        <div className="mx-auto mt-2.5 h-1 w-10 rounded-full bg-border shrink-0" />
+        <SwipeableSheetHandle onClose={() => p.onOpenChange(false)} />
 
         {/* Header */}
         <SheetHeader className="px-4 pe-10 pt-2.5 pb-3 border-b border-border text-start">

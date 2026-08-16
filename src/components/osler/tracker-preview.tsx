@@ -15,7 +15,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { useI18n } from "./i18n-provider";
-import { EmptyState, PackSheetHeader, PackSheetFooter } from "./ui-primitives";
+import { EmptyState, PackSheetHeader, PackSheetFooter, SwipeableSideSheet } from "./ui-primitives";
 import { disclosureVariants } from "@/lib/osler/motion";
 import { cn } from "@/lib/utils";
 
@@ -233,7 +233,7 @@ export function TrackerPreviewSheet({
         dir={rtl ? "rtl" : "ltr"}
         className="w-full gap-0 bg-background p-0 sm:max-w-xl"
       >
-        <>
+        <SwipeableSideSheet onClose={() => onOpenChange(false)} rtl={rtl} className="gap-0">
           <PackSheetHeader
             title={shownPack.title}
             meta={
@@ -298,7 +298,7 @@ export function TrackerPreviewSheet({
               </Button>
             </div>
           </PackSheetFooter>
-        </>
+        </SwipeableSideSheet>
       </SheetContent>
     </Sheet>
   );
