@@ -124,11 +124,14 @@ export function ContentEditor({ id, rawR2Key, capabilities }: ContentEditorProps
   const savingRef = React.useRef(false);
 
   // ── Large-file handling ──────────────────────────────────────────────
-  // JSON.parse on every keystroke is what makes 1MB+ question banks feel
-  // sluggish. Bodies below LARGE_BODY parse synchronously; larger ones
-  // re-parse ~300ms after typing pauses (and form-mode edits debounce their
-  // JSON.stringify the same way). bodyRef always holds the latest text for
-  // saves, validation, and mode switches.
+  // Three rules keep 400KB+ documents responsive:
+  //   1. Parse once per body — the parse result is cached against the exact
+  //      text it came from (parsedSourceRef) and reused by mode inference.
+  //   2. In form mode the parsed object is the live source of truth — it
+  //      updates synchronously so controlled inputs never lag, while the
+  //      serialized body follows on a short debounce (a 400KB stringify per
+  //      keystroke is what freezes typing).
+  //   3. Code-mode re-parses debounce ~300ms after typing pauses.
   const LARGE_BODY = 150_000;
   const [parseState, setParseState] = React.useState<{
     parsed: any;
@@ -136,12 +139,19 @@ export function ContentEditor({ id, rawR2Key, capabilities }: ContentEditorProps
     parsing: boolean;
   }>({ parsed: null, error: null, parsing: false });
   const parseTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
-  const formBodyTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+  const formSyncTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+  const parsedRef = React.useRef<any>(null);
+  /** The exact body text that parsedRef/parseState came from. */
+  const parsedSourceRef = React.useRef<string | null>(null);
 
   const computeParse = React.useCallback((text: string) => {
+    parsedSourceRef.current = text;
     try {
-      setParseState({ parsed: JSON.parse(text), error: null, parsing: false });
+      const parsed = JSON.parse(text);
+      parsedRef.current = parsed;
+      setParseState({ parsed, error: null, parsing: false });
     } catch (err) {
+      parsedRef.current = null;
       setParseState({
         parsed: null,
         error: String(err).replace(/^SyntaxError:\s*/, ""),
@@ -150,43 +160,51 @@ export function ContentEditor({ id, rawR2Key, capabilities }: ContentEditorProps
     }
   }, []);
 
-  // Flush any pending debounced setBody from form-mode edits so dependent
-  // views (the code editor, autosave) see the latest text immediately.
+  /** Serialize the latest parsed document into the body (ref + state). */
+  function syncBodyFromParsed() {
+    const s = JSON.stringify(parsedRef.current ?? {}, null, 2);
+    parsedSourceRef.current = s;
+    bodyRef.current = s;
+    setBody(s);
+  }
+
+  // Flush any pending debounced form-mode serialization so saves,
+  // validation, and mode switches always see the latest text.
   function flushFormBody() {
-    if (formBodyTimerRef.current) {
-      clearTimeout(formBodyTimerRef.current);
-      formBodyTimerRef.current = null;
-      setBody(bodyRef.current);
+    if (formSyncTimerRef.current) {
+      clearTimeout(formSyncTimerRef.current);
+      formSyncTimerRef.current = null;
+      syncBodyFromParsed();
     }
   }
 
-  /** Parse `text` right now, cancelling any pending debounced parse. Used
-   *  when switching to Form mode so the structured editors never render a
-   *  stale snapshot of a large body. */
+  /** Parse the latest text right now, cancelling any pending debounced
+   *  parse. Used when switching to Form mode so the structured editors
+   *  never render a stale snapshot of a large body. */
   function forceParseNow() {
     if (parseTimerRef.current) {
       clearTimeout(parseTimerRef.current);
       parseTimerRef.current = null;
     }
-    computeParse(bodyRef.current);
+    if (parsedSourceRef.current !== bodyRef.current) computeParse(bodyRef.current);
   }
 
-  function inferModeFromBody(text: string, key: string) {
+  function inferModeFromBody(text: string, parsed: any, key: string) {
     // Infer artifact content type from the key extension.
     if (key.endsWith(".md")) setArtifactContentType("md");
     else if (key.endsWith(".pdf") || text.startsWith("data:application/pdf;base64,")) setArtifactContentType("pdf");
     else if (key.endsWith(".html") || (text.startsWith("<") && !text.startsWith("---"))) setArtifactContentType("html");
     // Default to code mode for raw files (no form mapping unless we
-    // can recognise the shape).
-    try {
-      const parsed = JSON.parse(text);
+    // can recognise the shape) — `parsed` comes from the single load-time
+    // parse, never a second JSON.parse here.
+    if (parsed != null) {
       if (Array.isArray(parsed.questions) || Array.isArray(parsed.passages) || Array.isArray(parsed.cards) ||
           Array.isArray(parsed.stations) || Array.isArray(parsed.videos) || Array.isArray(parsed.prompts)) {
         setMode("form");
       } else {
         setMode("code");
       }
-    } catch {
+    } else {
       // Not JSON — if it's markdown, use form (LibraryArticleEditor); otherwise code.
       if (artifactContentType === "md" || key.endsWith(".md")) setMode("form");
       else setMode("code");
@@ -210,7 +228,10 @@ export function ContentEditor({ id, rawR2Key, capabilities }: ContentEditorProps
             const text = res.body;
             bodyRef.current = text;
             setBody(text);
-            inferModeFromBody(text, rawR2Key);
+            if (!rawR2Key.endsWith(".md") && !rawR2Key.endsWith(".html") && !rawR2Key.endsWith(".pdf")) {
+              computeParse(text);
+            }
+            inferModeFromBody(text, parsedRef.current, rawR2Key);
             return;
           }
           const url = r2KeyToWorkerUrl(rawR2Key);
@@ -221,14 +242,19 @@ export function ContentEditor({ id, rawR2Key, capabilities }: ContentEditorProps
           if (cancelled) return;
           bodyRef.current = text;
           setBody(text);
-          inferModeFromBody(text, rawR2Key);
+          if (!rawR2Key.endsWith(".md") && !rawR2Key.endsWith(".html") && !rawR2Key.endsWith(".pdf")) {
+            computeParse(text);
+          }
+          inferModeFromBody(text, parsedRef.current, rawR2Key);
         } else if (id) {
           // Managed mode — fetch the content_object + body from the admin API.
           const c = await adminApi.getContent(id);
           if (cancelled) return;
           setObj(c);
-          bodyRef.current = c.body ?? "{}";
-          setBody(c.body ?? "{}");
+          const text = c.body ?? "{}";
+          bodyRef.current = text;
+          setBody(text);
+          if (c.content_type !== "library") computeParse(text);
         }
       } catch {
         if (!cancelled) toast({ title: t("admin.toast.contentNotFound"), variant: "destructive" });
@@ -237,7 +263,7 @@ export function ContentEditor({ id, rawR2Key, capabilities }: ContentEditorProps
       }
     })();
     return () => { cancelled = true; };
-  }, [id, rawR2Key, isRawMode, t, toast]);
+  }, [id, rawR2Key, isRawMode, t, toast, computeParse]);
 
   // Auto-pick the best initial editor mode for managed library content.
   React.useEffect(() => {
@@ -250,19 +276,29 @@ export function ContentEditor({ id, rawR2Key, capabilities }: ContentEditorProps
       else setArtifactContentType("md");
       return;
     }
-    try {
-      const parsed = JSON.parse(bodyRef.current || "{}");
-      if (isFormSupported(obj.content_type, parsed)) setMode("form");
-      else setMode("code");
-    } catch {
-      setMode("code");
+    // Reuse the load-time parse when it matches the current body; fall back
+    // to a synchronous parse only if the cache is cold (e.g. a mode pick
+    // raced ahead of the load). Never re-parse per keystroke.
+    if (parsedSourceRef.current === bodyRef.current) {
+      if (parsedRef.current != null) {
+        setMode(isFormSupported(obj.content_type, parsedRef.current) ? "form" : "code");
+      } else {
+        setMode("code");
+      }
+    } else {
+      try {
+        const parsed = JSON.parse(bodyRef.current || "{}");
+        if (isFormSupported(obj.content_type, parsed)) setMode("form");
+        else setMode("code");
+      } catch {
+        setMode("code");
+      }
     }
-    // The initial mode is picked once when the object loads; later edits
-    // must not re-run this (bodyRef holds the latest text, and re-parsing
-    // per keystroke is exactly what the debounced parse below avoids).
+    // Runs once when the object loads — later edits must not re-run this.
   }, [obj, isRawMode]);
 
-  // Debounced JSON parse — see LARGE_BODY above.
+  // Debounced JSON parse — see LARGE_BODY above. Skips text that has
+  // already been parsed (load path, form-mode sync).
   React.useEffect(() => {
     // Inline `isLibrary` (the render-time const is declared after the
     // loading early-return, so it isn't initialized on the first render).
@@ -272,6 +308,7 @@ export function ContentEditor({ id, rawR2Key, capabilities }: ContentEditorProps
         || (rawR2Key?.endsWith(".pdf") ?? false)
       : obj?.content_type === "library";
     if (isLib) return;
+    if (parsedSourceRef.current === body) return; // already parsed this exact text
     if (parseTimerRef.current) {
       clearTimeout(parseTimerRef.current);
       parseTimerRef.current = null;
@@ -291,7 +328,7 @@ export function ContentEditor({ id, rawR2Key, capabilities }: ContentEditorProps
         parseTimerRef.current = null;
       }
     };
-  }, [body, isRawMode, rawR2Key, obj]);
+  }, [body, isRawMode, rawR2Key, obj, computeParse]);
 
   function handleBodyChange(value: string) {
     bodyRef.current = value;
@@ -308,6 +345,7 @@ export function ContentEditor({ id, rawR2Key, capabilities }: ContentEditorProps
     if (!obj || !id) return;
     if (savingRef.current) return; // a manual save is in flight and writes the latest body
     if (!dirty) return;            // nothing unsaved — a manual save already persisted it
+    flushFormBody();
     try {
       await adminApi.saveDraft(id, bodyRef.current);
       setLastSavedAt(Date.now());
@@ -319,6 +357,7 @@ export function ContentEditor({ id, rawR2Key, capabilities }: ContentEditorProps
     if (debounceRef.current) { clearTimeout(debounceRef.current); debounceRef.current = null; }
     setSaving(true);
     savingRef.current = true;
+    flushFormBody();
     const latest = bodyRef.current;
     try {
       if (isRawMode && rawR2Key) {
@@ -378,6 +417,7 @@ export function ContentEditor({ id, rawR2Key, capabilities }: ContentEditorProps
       // R2, so push any unsaved edits into the (new or existing) managed
       // draft — otherwise they'd be lost on re-adopt of an already-managed
       // file, or stale after a fresh adopt.
+      flushFormBody();
       if (dirty) await adminApi.saveDraft(res.id, bodyRef.current).catch(() => {});
       router.replace(`/admin/content?id=${encodeURIComponent(res.id)}`);
     } catch (err: any) {
@@ -390,6 +430,7 @@ export function ContentEditor({ id, rawR2Key, capabilities }: ContentEditorProps
   async function submit() {
     if (!id) return;
     haptic("light");
+    flushFormBody();
     await adminApi.saveDraft(id, bodyRef.current).catch(() => {});
     try {
       const res = await adminApi.submitForReview(id);
@@ -405,6 +446,7 @@ export function ContentEditor({ id, rawR2Key, capabilities }: ContentEditorProps
   async function doPublish(targetPath?: string) {
     if (!id) return;
     haptic("light");
+    flushFormBody();
     await adminApi.saveDraft(id, bodyRef.current).catch(() => {});
     try {
       const res = await adminApi.publishDirect(id, targetPath ? { targetPath } : {});
@@ -424,6 +466,7 @@ export function ContentEditor({ id, rawR2Key, capabilities }: ContentEditorProps
 
   async function runValidation() {
     if (!obj && !isRawMode) return;
+    flushFormBody();
     setValidating(true);
     setShowValidation(true);
     try {
@@ -499,25 +542,25 @@ export function ContentEditor({ id, rawR2Key, capabilities }: ContentEditorProps
         else setArtifactContentType("md");
       }
     } else {
-      // JSON.stringify of a large structured document on every keystroke is
-      // expensive; bodyRef stays current while the body state (and the
-      // debounced parse that follows it) trails by ~200ms.
-      const nextBody = JSON.stringify(next, null, 2);
-      bodyRef.current = nextBody;
+      // Form mode: the parsed document is the source of truth. It updates
+      // synchronously so the controlled inputs stay live, while the
+      // serialized body follows on a short debounce — serializing a 400KB
+      // document on every keystroke is what freezes typing on big packs.
+      parsedRef.current = next;
+      setParseState({ parsed: next, error: null, parsing: false });
       setDirty(true);
       if (validationErrors !== null) setValidationErrors(null);
       if (settings.autoSaveDrafts) {
         if (debounceRef.current) clearTimeout(debounceRef.current);
         debounceRef.current = setTimeout(() => autoSave(), 2500);
       }
-      if (nextBody.length <= LARGE_BODY) {
-        setBody(nextBody);
-      } else {
-        if (formBodyTimerRef.current) clearTimeout(formBodyTimerRef.current);
-        formBodyTimerRef.current = setTimeout(() => {
-          formBodyTimerRef.current = null;
-          setBody(nextBody);
-        }, 200);
+      if ((bodyRef.current?.length ?? 0) <= LARGE_BODY) {
+        syncBodyFromParsed();
+      } else if (!formSyncTimerRef.current) {
+        formSyncTimerRef.current = setTimeout(() => {
+          formSyncTimerRef.current = null;
+          syncBodyFromParsed();
+        }, 400);
       }
     }
   }
@@ -707,7 +750,7 @@ export function ContentEditor({ id, rawR2Key, capabilities }: ContentEditorProps
             }}
             icon={FormInput}
             label={t("admin.content.editor.form")}
-            disabled={!!parseError}
+            disabled={!!parseError && !parseState.parsing}
           />
           <ModeButton
             active={mode === "code"}
@@ -869,6 +912,8 @@ export function ContentEditor({ id, rawR2Key, capabilities }: ContentEditorProps
                   r2KeyBase={isRawMode ? undefined : obj?.r2_key_base}
                   rawR2Key={isRawMode ? rawR2Key : undefined}
                 />
+              ) : parseState.parsing ? (
+                <LoadingState label={t("admin.content.editor.parsing")} />
               ) : parseError ? (
                 <div className="flex flex-col items-center justify-center h-full text-center p-6">
                   <XCircle className="size-8 text-destructive mb-2" />
@@ -881,8 +926,6 @@ export function ContentEditor({ id, rawR2Key, capabilities }: ContentEditorProps
                     {t("admin.content.editor.code")}
                   </Button>
                 </div>
-              ) : parseState.parsing ? (
-                <LoadingState label={t("admin.content.editor.parsing")} />
               ) : (
                 <FormEditorSwitch
                   contentType={obj?.content_type ?? inferContentTypeFromR2Key(rawR2Key ?? "", body) ?? "quiz"}

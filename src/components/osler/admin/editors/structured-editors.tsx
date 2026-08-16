@@ -136,8 +136,27 @@ const CollapseContext = React.createContext<{
   total: number;
 }>({ collapsed: {}, toggle: () => {}, collapseAll: () => {}, expandAll: () => {}, total: 0 });
 
+/** Lists longer than this start fully collapsed. Each expanded item mounts
+ *  several inputs plus rich-text editors — a 600+ question bank expanded by
+ *  default mounts well over a thousand editor instances and freezes the
+ *  page. Admins can still "Expand" all explicitly (their call, their wait). */
+const LARGE_LIST = 30;
+
+/** Collapsed-row title suffix: a short single-line preview of the question
+ *  text, so a bank with hundreds of collapsed rows is still navigable. */
+function questionSnippet(q: any): string {
+  const text = String(q?.question ?? q?.stem ?? "").replace(/\s+/g, " ").trim();
+  if (!text) return "";
+  return `: ${text.length > 60 ? text.slice(0, 60) + "…" : text}`;
+}
+
 function useCollapseState(total: number) {
-  const [collapsed, setCollapsed] = React.useState<Record<number, boolean>>({});
+  const [collapsed, setCollapsed] = React.useState<Record<number, boolean>>(() => {
+    if (total <= LARGE_LIST) return {};
+    const next: Record<number, boolean> = {};
+    for (let i = 0; i < total; i++) next[i] = true;
+    return next;
+  });
   const toggle = React.useCallback((i: number) => {
     setCollapsed((prev) => ({ ...prev, [i]: !prev[i] }));
   }, []);
@@ -741,7 +760,7 @@ export function QuizEditor({ value, onChange, readOnly, r2KeyBase, rawR2Key }: S
               onMove={(d) => moveQuestion(i, d)}
               onRemove={() => removeQuestion(i)}
               readOnly={readOnly}
-              title={t("admin.content.editor.question", { n: i + 1 })}
+              title={`${t("admin.content.editor.question", { n: i + 1 })}${questionSnippet(q)}`}
               collapsible
             >
             <Field label="ID">
@@ -2353,7 +2372,7 @@ function BankFlatQuestionsEditor({ value, onChange, readOnly, r2KeyBase, rawR2Ke
               onMove={(d) => moveQuestion(i, d)}
               onRemove={() => removeQuestion(i)}
               readOnly={readOnly}
-              title={`Question ${i + 1}`}
+              title={`Question ${i + 1}${questionSnippet(q)}`}
               collapsible
             >
               <Field label="ID">
