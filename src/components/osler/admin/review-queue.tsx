@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ClipboardList, CheckCircle2, XCircle, UploadCloud, Layers, FolderOpen } from "lucide-react";
+import { ClipboardList, CheckCircle2, XCircle, UploadCloud, Layers, FolderOpen, Loader2 } from "lucide-react";
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -12,6 +12,7 @@ import {
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { useI18n } from "@/components/osler/i18n-provider";
+import type { StringKey } from "@/lib/osler/i18n";
 import { haptic } from "@/lib/osler/native";
 import { EmptyState, LoadingState, SectionHeading } from "@/components/osler/ui-primitives";
 import { adminApi, type ContentObject } from "@/components/osler/admin/admin-api";
@@ -29,6 +30,27 @@ import { cn } from "@/lib/utils";
  *  Mirrors the Content hub's unified browser so both views agree on the
  *  student-facing keyspaces. */
 const REVIEW_CATEGORIES = ["library", "qbank", "flashcard", "osce", "videos"];
+
+type BatchKind = "approve" | "reject" | "publish" | "discard";
+
+/** Live progress of a batch operation. Batches run sequentially so `done`
+ *  reflects real completions (each step is a Worker round-trip that writes
+ *  R2 + D1); `currentId`/`currentDir` mark the in-flight row for its
+ *  per-item spinner. */
+interface BatchProgress {
+  kind: BatchKind;
+  done: number;
+  total: number;
+  currentId?: string;
+  currentDir?: string;
+}
+
+const PROGRESS_LABEL: Record<BatchKind, StringKey> = {
+  approve: "admin.review.progress.approve",
+  reject: "admin.review.progress.reject",
+  publish: "admin.review.progress.publish",
+  discard: "admin.review.progress.discard",
+};
 
 export function ReviewQueue() {
   const { t } = useI18n();
@@ -48,7 +70,10 @@ export function ReviewQueue() {
   // Selection state for bulk actions.
   const [selectedPending, setSelectedPending] = useState<Set<string>>(new Set());
   const [selectedStaged, setSelectedStaged] = useState<Set<string>>(new Set());
-  const [busy, setBusy] = useState(false);
+  // Batch operation progress — drives both the progress banner and every
+  // button's disabled state (derived `busy`).
+  const [progress, setProgress] = useState<BatchProgress | null>(null);
+  const busy = progress !== null;
 
   // Preview panel target.
   const [preview, setPreview] = useState<ReviewPreviewTarget | null>(null);
@@ -114,9 +139,15 @@ export function ReviewQueue() {
   async function approveMany(ids: string[]) {
     if (ids.length === 0) return;
     haptic("success");
-    setBusy(true);
-    const results = await Promise.allSettled(ids.map((id) => adminApi.approveContent(id)));
-    const ok = ids.filter((_, i) => results[i]?.status === "fulfilled");
+    setProgress({ kind: "approve", done: 0, total: ids.length, currentId: ids[0] });
+    const ok: string[] = [];
+    for (let i = 0; i < ids.length; i++) {
+      try {
+        await adminApi.approveContent(ids[i]);
+        ok.push(ids[i]);
+      } catch {}
+      setProgress({ kind: "approve", done: i + 1, total: ids.length, currentId: ids[i + 1] });
+    }
     if (ok.length > 0) {
       const okSet = new Set(ok);
       setItems((prev) => prev.filter((i) => !okSet.has(i.id)));
@@ -127,15 +158,21 @@ export function ReviewQueue() {
     if (ok.length < ids.length) {
       toast({ title: t("admin.toast.approveFailed"), variant: "destructive" });
     }
-    setBusy(false);
+    setProgress(null);
   }
 
   async function rejectMany(ids: string[], reason: string) {
     if (ids.length === 0) return;
     haptic("warning");
-    setBusy(true);
-    const results = await Promise.allSettled(ids.map((id) => adminApi.rejectContent(id, reason)));
-    const ok = ids.filter((_, i) => results[i]?.status === "fulfilled");
+    setProgress({ kind: "reject", done: 0, total: ids.length, currentId: ids[0] });
+    const ok: string[] = [];
+    for (let i = 0; i < ids.length; i++) {
+      try {
+        await adminApi.rejectContent(ids[i], reason);
+        ok.push(ids[i]);
+      } catch {}
+      setProgress({ kind: "reject", done: i + 1, total: ids.length, currentId: ids[i + 1] });
+    }
     if (ok.length > 0) {
       const okSet = new Set(ok);
       setItems((prev) => prev.filter((i) => !okSet.has(i.id)));
@@ -148,7 +185,7 @@ export function ReviewQueue() {
     }
     setRejectTargets(null);
     setRejectReason("");
-    setBusy(false);
+    setProgress(null);
   }
 
   function groupsForDirs(dirs: string[]): StagedGroup[] {
@@ -158,48 +195,66 @@ export function ReviewQueue() {
 
   async function publishMany(dirs: string[]) {
     const groups = groupsForDirs(dirs);
-    const keys = groups.flatMap((g) => g.keys.map((k) => k.key));
-    if (keys.length === 0) return;
+    if (groups.length === 0 || groups.every((g) => g.keys.length === 0)) return;
     haptic("light");
-    setBusy(true);
-    try {
-      const res = await adminApi.publishStaged(keys);
-      toast({ title: t("admin.toast.publishedStaged", { n: String(res.published.length) }) });
-      setSelectedStaged((prev) => {
-        const keep = new Set(prev);
-        groups.forEach((g) => keep.delete(g.dir));
-        return keep;
-      });
-      setPreview((p) => (p?.kind === "stagedGroup" && groups.some((g) => g.dir === p.group.dir) ? null : p));
-      loadStaged();
-    } catch (err) {
-      toast({ title: t("admin.toast.publishStagedFailed", { error: String(err) }), variant: "destructive" });
-    } finally {
-      setBusy(false);
+    setProgress({ kind: "publish", done: 0, total: groups.length, currentDir: groups[0].dir });
+    let published = 0;
+    const okDirs = new Set<string>();
+    for (let i = 0; i < groups.length; i++) {
+      const keys = groups[i].keys.map((k) => k.key);
+      if (keys.length > 0) {
+        try {
+          const res = await adminApi.publishStaged(keys);
+          published += res.published.length;
+          okDirs.add(groups[i].dir);
+        } catch {}
+      }
+      setProgress({ kind: "publish", done: i + 1, total: groups.length, currentDir: groups[i + 1]?.dir });
     }
+    if (published > 0) toast({ title: t("admin.toast.publishedStaged", { n: String(published) }) });
+    if (okDirs.size < groups.length) {
+      toast({ title: t("admin.toast.publishStagedFailed", { error: String(groups.length - okDirs.size) }), variant: "destructive" });
+    }
+    setSelectedStaged((prev) => {
+      const keep = new Set(prev);
+      okDirs.forEach((d) => keep.delete(d));
+      return keep;
+    });
+    setPreview((p) => (p?.kind === "stagedGroup" && okDirs.has(p.group.dir) ? null : p));
+    loadStaged();
+    setProgress(null);
   }
 
   async function discardMany(dirs: string[]) {
     const groups = groupsForDirs(dirs);
-    const keys = groups.flatMap((g) => g.keys.map((k) => k.key));
-    if (keys.length === 0) return;
+    if (groups.length === 0 || groups.every((g) => g.keys.length === 0)) return;
     haptic("warning");
-    setBusy(true);
-    try {
-      const res = await adminApi.discardStaged(keys);
-      toast({ title: t("admin.toast.discardedStaged", { n: String(res.deleted) }) });
-      setSelectedStaged((prev) => {
-        const keep = new Set(prev);
-        groups.forEach((g) => keep.delete(g.dir));
-        return keep;
-      });
-      setPreview((p) => (p?.kind === "stagedGroup" && groups.some((g) => g.dir === p.group.dir) ? null : p));
-      loadStaged();
-    } catch (err) {
-      toast({ title: t("admin.toast.discardStagedFailed", { error: String(err) }), variant: "destructive" });
-    } finally {
-      setBusy(false);
+    setProgress({ kind: "discard", done: 0, total: groups.length, currentDir: groups[0].dir });
+    let deleted = 0;
+    const okDirs = new Set<string>();
+    for (let i = 0; i < groups.length; i++) {
+      const keys = groups[i].keys.map((k) => k.key);
+      if (keys.length > 0) {
+        try {
+          const res = await adminApi.discardStaged(keys);
+          deleted += res.deleted;
+          okDirs.add(groups[i].dir);
+        } catch {}
+      }
+      setProgress({ kind: "discard", done: i + 1, total: groups.length, currentDir: groups[i + 1]?.dir });
     }
+    if (deleted > 0) toast({ title: t("admin.toast.discardedStaged", { n: String(deleted) }) });
+    if (okDirs.size < groups.length) {
+      toast({ title: t("admin.toast.discardStagedFailed", { error: String(groups.length - okDirs.size) }), variant: "destructive" });
+    }
+    setSelectedStaged((prev) => {
+      const keep = new Set(prev);
+      okDirs.forEach((d) => keep.delete(d));
+      return keep;
+    });
+    setPreview((p) => (p?.kind === "stagedGroup" && okDirs.has(p.group.dir) ? null : p));
+    loadStaged();
+    setProgress(null);
   }
 
   // ── Selection helpers ───────────────────────────────────────────────────
@@ -251,6 +306,30 @@ export function ReviewQueue() {
   return (
     <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_380px]">
       <div className="min-w-0 space-y-6">
+        {/* Batch progress — sequential batches report real per-item
+            completion, so the bar advances as each Worker write lands. */}
+        {progress && (
+          <div
+            role="status"
+            aria-live="polite"
+            className="rounded-xl border border-primary/30 bg-primary/5 p-3.5 flex items-center gap-3"
+          >
+            <Loader2 className="size-4 animate-spin text-primary shrink-0" />
+            <div className="flex-1 min-w-0">
+              <div className="text-xs font-medium">{t(PROGRESS_LABEL[progress.kind])}</div>
+              <div className="mt-1.5 h-1.5 w-full rounded-full bg-muted overflow-hidden">
+                <div
+                  className="h-full rounded-full bg-primary transition-all duration-200"
+                  style={{ width: `${(progress.done / Math.max(1, progress.total)) * 100}%` }}
+                />
+              </div>
+            </div>
+            <span className="text-xs text-muted-foreground font-mono tabular-nums shrink-0">
+              {progress.done}/{progress.total}
+            </span>
+          </div>
+        )}
+
         {/* Pending content_object submissions */}
         {items.length > 0 && (
           <section className="space-y-3">
@@ -362,7 +441,11 @@ export function ReviewQueue() {
                       disabled={busy}
                       onClick={() => approveMany([item.id])}
                     >
-                      <CheckCircle2 className="me-1.5 size-3.5" />
+                      {progress?.kind === "approve" && progress.currentId === item.id ? (
+                        <Loader2 className="me-1.5 size-3.5 animate-spin" />
+                      ) : (
+                        <CheckCircle2 className="me-1.5 size-3.5" />
+                      )}
                       {t("admin.review.approve")}
                     </Button>
                     <Button
@@ -372,7 +455,11 @@ export function ReviewQueue() {
                       disabled={busy}
                       onClick={() => setRejectTargets([item.id])}
                     >
-                      <XCircle className="me-1.5 size-3.5" />
+                      {progress?.kind === "reject" && progress.currentId === item.id ? (
+                        <Loader2 className="me-1.5 size-3.5 animate-spin" />
+                      ) : (
+                        <XCircle className="me-1.5 size-3.5" />
+                      )}
                       {t("admin.review.reject")}
                     </Button>
                   </div>
@@ -506,7 +593,11 @@ export function ReviewQueue() {
                         disabled={busy}
                         onClick={() => publishMany([group.dir])}
                       >
-                        <CheckCircle2 className="me-1.5 size-3.5" />
+                        {progress?.kind === "publish" && progress.currentDir === group.dir ? (
+                          <Loader2 className="me-1.5 size-3.5 animate-spin" />
+                        ) : (
+                          <CheckCircle2 className="me-1.5 size-3.5" />
+                        )}
                         {t("admin.review.publish")}
                       </Button>
                       <Button
@@ -516,7 +607,11 @@ export function ReviewQueue() {
                         disabled={busy}
                         onClick={() => discardMany([group.dir])}
                       >
-                        <XCircle className="me-1.5 size-3.5" />
+                        {progress?.kind === "discard" && progress.currentDir === group.dir ? (
+                          <Loader2 className="me-1.5 size-3.5 animate-spin" />
+                        ) : (
+                          <XCircle className="me-1.5 size-3.5" />
+                        )}
                         {t("admin.review.discard")}
                       </Button>
                     </div>

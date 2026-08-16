@@ -11,6 +11,13 @@ import { Button } from "@/components/ui/button";
 // A lightweight code-style textarea with inline JSON validation and one-click
 // formatting. Avoids pulling in a heavyweight editor like Monaco — this is
 // plenty for editing content JSON in the admin panel.
+//
+// Validation is debounced for large bodies: JSON.parse on every keystroke of
+// a 1MB file stalls the main thread, so big values re-validate ~300ms after
+// typing pauses instead.
+
+/** Bodies above this size get debounced validation. */
+const LARGE_BODY = 150_000;
 
 interface JsonCodeEditorProps {
   value: string;
@@ -30,18 +37,25 @@ export function JsonCodeEditor({
   const { t } = useI18n();
   const [error, setError] = React.useState<string | null>(null);
 
-  // Re-validate on every change. Cheap for typical content sizes.
   React.useEffect(() => {
     if (!value.trim()) {
       setError(null);
       return;
     }
-    try {
-      JSON.parse(value);
-      setError(null);
-    } catch (err) {
-      setError(String(err).replace(/^SyntaxError:\s*/, ""));
+    const run = () => {
+      try {
+        JSON.parse(value);
+        setError(null);
+      } catch (err) {
+        setError(String(err).replace(/^SyntaxError:\s*/, ""));
+      }
+    };
+    if (value.length <= LARGE_BODY) {
+      run();
+      return;
     }
+    const id = setTimeout(run, 300);
+    return () => clearTimeout(id);
   }, [value]);
 
   function format() {
@@ -54,7 +68,7 @@ export function JsonCodeEditor({
     }
   }
 
-  const lines = value.split("\n").length;
+  const lines = React.useMemo(() => value.split("\n").length, [value]);
   const chars = value.length;
 
   return (

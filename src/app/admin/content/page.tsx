@@ -2,11 +2,19 @@
 
 import * as React from "react";
 import { Suspense } from "react";
+import dynamic from "next/dynamic";
 import { useSearchParams } from "next/navigation";
 import { useI18n } from "@/components/osler/i18n-provider";
 import { useAdminIdentity } from "@/components/osler/admin/admin-context";
-import { ContentEditor } from "@/components/osler/admin/content-editor";
+import { LoadingState } from "@/components/osler/ui-primitives";
 import { ContentStudio } from "@/components/osler/admin/content-studio/content-studio";
+
+// The editor (and its structured-editor dependency tree) only loads when an
+// `?id=` edit is actually opened — landing on the hub pulls just the studio.
+const ContentEditor = dynamic(
+  () => import("@/components/osler/admin/content-editor").then((m) => ({ default: m.ContentEditor })),
+  { ssr: false, loading: () => <LoadingState className="h-full" /> },
+);
 
 /**
  * Admin content hub + editor, driven by `?id=<content-uuid>` or

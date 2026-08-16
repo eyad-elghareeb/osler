@@ -274,6 +274,11 @@ export function ContentStudio({ capabilities }: ContentStudioProps) {
   }, [unifiedTree, currentCategory]);
 
   // ── Auto-validate managed objects (automation) ────────────────────────
+  // Validation runs with a small concurrency pool. Each call is a Worker
+  // round-trip that re-reads + validates the draft body server-side, so a
+  // sequential loop turns a folder with many managed files into a long
+  // serial waterfall — the pool keeps badge fill-in fast without
+  // stampeding the Worker with all requests at once.
   React.useEffect(() => {
     if (!capabilities.manageContent) return;
     const managedInView = currentFolderItems.filter((n) => n.managed && n.cloudObject);
@@ -281,24 +286,28 @@ export function ContentStudio({ capabilities }: ContentStudioProps) {
 
     setValidationStates((prev) => {
       const next = new Map(prev);
-      for (const n of managedInView) if (!next.has(n.id)) next.set(n.id, "checking");
+      for (const n of managedInView) {
+        if (!next.has(n.id)) next.set(n.id, "checking");
+      }
       return next;
     });
 
     let cancelled = false;
-    (async () => {
-      for (const n of managedInView) {
-        if (cancelled || !n.cloudObject) continue;
+    let cursor = 0;
+    async function validateNext() {
+      while (!cancelled && cursor < managedInView.length) {
+        const n = managedInView[cursor++];
+        if (!n.cloudObject) continue;
         try {
           const res = await adminApi.validateContent(n.cloudObject.id);
-          if (cancelled) break;
+          if (cancelled) return;
           setValidationStates((prev) => {
             const next = new Map(prev);
             next.set(n.id, res.errors.length === 0 ? "valid" : "invalid");
             return next;
           });
         } catch {
-          if (cancelled) break;
+          if (cancelled) return;
           setValidationStates((prev) => {
             const next = new Map(prev);
             next.delete(n.id);
@@ -306,7 +315,12 @@ export function ContentStudio({ capabilities }: ContentStudioProps) {
           });
         }
       }
-    })();
+    }
+    const workers = Array.from(
+      { length: Math.min(4, managedInView.length) },
+      () => validateNext(),
+    );
+    void Promise.all(workers);
     return () => { cancelled = true; };
   }, [currentFolderItems, capabilities.manageContent]);
 

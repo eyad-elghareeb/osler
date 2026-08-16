@@ -12,6 +12,7 @@
  */
 
 import * as React from "react";
+import dynamic from "next/dynamic";
 import {
   CheckCircle2,
   XCircle,
@@ -53,7 +54,17 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { MilkdownEditor } from "@/components/osler/milkdown-editor";
+// Milkdown is a heavyweight WYSIWYG framework that this module only needs
+// for rich-text fields. Loading it lazily keeps the entire @milkdown/* stack
+// out of the admin content route's initial bundle — it streams in on first
+// use instead.
+const MilkdownEditor = dynamic(
+  () => import("@/components/osler/milkdown-editor").then((m) => ({ default: m.MilkdownEditor })),
+  {
+    ssr: false,
+    loading: () => <div className="h-24 rounded-lg bg-muted/40 animate-pulse" />,
+  },
+);
 import { useToast } from "@/hooks/use-toast";
 import { ImageLightbox } from "@/components/osler/admin/image-lightbox";
 import {
@@ -675,13 +686,14 @@ function StringListField({
 
 export function QuizEditor({ value, onChange, readOnly, r2KeyBase, rawR2Key }: StructuredEditorProps) {
   const { t } = useI18n();
+  const questions: any[] = Array.isArray(value?.questions) ? value.questions : [];
+  // Hooks must run before the passages early-return below — the value shape
+  // can change between renders, and a conditional hook crashes React.
+  const collapseState = useCollapseState(questions.length);
 
   if (Array.isArray(value?.passages)) {
     return <PassagesEditor value={value} onChange={onChange} readOnly={readOnly} r2KeyBase={r2KeyBase} rawR2Key={rawR2Key} />;
   }
-
-  const questions: any[] = Array.isArray(value?.questions) ? value.questions : [];
-  const collapseState = useCollapseState(questions.length);
 
   function update(next: any[]) {
     onChange({ ...value, questions: next });

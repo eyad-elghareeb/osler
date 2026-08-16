@@ -15,7 +15,9 @@ import {
   Settings as SettingsIcon,
   GraduationCap,
   Cloud,
+  ShieldCheck,
 } from "lucide-react";
+import Link from "next/link";
 import { readCloudSession, syncGeminiKeyFromCloud, type CloudSession } from "@/lib/osler/cloud";
 
 import {
@@ -234,6 +236,11 @@ export function AppShell({ children }: AppShellProps) {
 
   const isDashboard = view === "dashboard";
   const isQbank = view === "qbank";
+  // Admins (and content admins) get a topbar shortcut to /admin. The role
+  // comes from the local cloud session — the admin APIs re-verify it on
+  // every request, so this is purely an entrance affordance.
+  const isAdminUser =
+    cloudSession?.user.role === "admin" || cloudSession?.user.role === "content_admin";
   // The Learn tab is highlighted while inside any Learn-hub sub-view
   // (learn hub itself, library, flashcards, osce, videos).
   const isLearnActive = LEARN_SUBVIEWS.has(view);
@@ -327,8 +334,23 @@ export function AppShell({ children }: AppShellProps) {
             </Popover>
           </div>
 
-          {/* Right section: cloud sync + PWA + user menu */}
+          {/* Right section: admin shortcut + cloud sync + PWA + user menu */}
           <div className="flex items-center gap-2 shrink-0">
+            {/* Admin panel shortcut — only surfaced to admins/content admins.
+             * Access itself is enforced by the admin route guard + the
+             * Worker's role checks on every /v1/admin endpoint; this button
+             * merely hides the entrance for normal users. */}
+            {isAdminUser && (
+              <Link
+                href="/admin"
+                onClick={() => haptic("selection")}
+                aria-label={t("nav.adminPanel")}
+                title={t("nav.adminPanel")}
+                className="flex items-center gap-1.5 h-8 px-2 rounded-md border border-border bg-muted/40 hover:bg-muted/60 transition-colors shrink-0"
+              >
+                <ShieldCheck className="size-3.5 text-primary" />
+              </Link>
+            )}
             {cloudSession && (
               <button
                 onClick={() => navigate("settings", { section: "account" })}
