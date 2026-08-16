@@ -48,6 +48,7 @@ export const SHORTCUT_ACTIONS: readonly ShortcutAction[] = [
   action("qbank.labValues", "qbank", "mod+l"),
   action("qbank.aiAssistant", "qbank", "a"),
   action("qbank.notes", "qbank", "n"),
+  action("qbank.notesNew", "qbank", "mod+shift+n"),
   action("qbank.highlight", "qbank", "h"),
   action("qbank.eraser", "qbank", "e"),
   action("qbank.quizSettings", "qbank", ","),

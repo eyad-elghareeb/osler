@@ -15,14 +15,23 @@ import {
   X,
   Clock,
   Check,
+  CheckCheck,
   FileText,
   Folder,
   ExternalLink,
   Maximize2,
   Minimize2,
+  Search,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { usePlatform } from "@/hooks/use-platform";
 import {
   useResizableSidebar,
@@ -30,6 +39,8 @@ import {
 } from "@/hooks/use-resizable-sidebar";
 import { useSwipeBackDismiss } from "@/hooks/use-swipe-back-dismiss";
 import { notes as notesStore, type NoteRecord } from "@/lib/osler/storage";
+import { isTextInput } from "@/lib/osler/shortcuts";
+import { haptic } from "@/lib/osler/native";
 import { useI18n } from "./i18n-provider";
 import { MilkdownEditor } from "./milkdown-editor";
 
@@ -84,18 +95,21 @@ function MarkdownPreview({ body }: { body: string }) {
 }
 
 /* ── Time-ago formatter ─────────────────────────────────────────────── */
-function timeAgo(ts: number): string {
+function timeAgo(ts: number, t: (k: any, p?: any) => string): string {
   const diff = Date.now() - ts;
   const sec = Math.floor(diff / 1000);
-  if (sec < 60) return "just now";
+  if (sec < 60) return t("qbank.notes.time.now");
   const min = Math.floor(sec / 60);
-  if (min < 60) return `${min}m ago`;
+  if (min < 60) return t("qbank.notes.time.minAgo", { n: min });
   const hr = Math.floor(min / 60);
-  if (hr < 24) return `${hr}h ago`;
+  if (hr < 24) return t("qbank.notes.time.hourAgo", { n: hr });
   const day = Math.floor(hr / 24);
-  if (day < 7) return `${day}d ago`;
+  if (day < 7) return t("qbank.notes.time.dayAgo", { n: day });
   return new Date(ts).toLocaleDateString();
 }
+
+/* ── Sort modes for the notes list ──────────────────────────────────── */
+type SortMode = "recent" | "oldest" | "title";
 
 /* ── Main panel component ───────────────────────────────────────────── */
 
@@ -115,6 +129,9 @@ interface NotesPanelProps {
   onOpenInProfile?: () => void;
   /** Optional callback fired when user clicks "open in qbank" (from profile) */
   onOpenInQBank?: (note: NoteRecord) => void;
+  /** Incremented by the parent to request "create a note now" (wired to the
+   *  qbank.notesNew shortcut: opens the panel and immediately starts a note). */
+  createSignal?: number;
 }
 
 type View = "list" | "editor";
@@ -129,6 +146,7 @@ export function NotesPanel({
   onClose,
   onOpenInProfile,
   onOpenInQBank,
+  createSignal,
 }: NotesPanelProps) {
   const platform = usePlatform();
   const { t, rtl } = useI18n();
@@ -145,6 +163,16 @@ export function NotesPanel({
   // the panel takes the full viewport (like the mobile fullscreen experience)
   // to give a larger writing area.
   const [maximized, setMaximized] = React.useState(false);
+
+  // ── List controls: search / tag filter / sort ─────────────────────────
+  const [search, setSearch] = React.useState("");
+  const [tagFilter, setTagFilter] = React.useState<string | null>(null);
+  const [sortMode, setSortMode] = React.useState<SortMode>("recent");
+  const searchInputRef = React.useRef<HTMLInputElement>(null);
+
+  // ── Inline delete confirmation (click again within 2.5s to confirm) ──
+  const [confirmDeleteId, setConfirmDeleteId] = React.useState<string | null>(null);
+  const confirmTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const resizable = useResizableSidebar({
     storageKey: "osler-notes-width",
@@ -189,19 +217,46 @@ export function NotesPanel({
     return unsub;
   }, [refresh]);
 
-  // Filtered notes
+  // Filtered notes — search matches title + body + tags across ALL notes
+  // (searching a single pack while typing a global term is rarely useful),
+  // the tag filter applies within the pack scope.
   const visibleNotes = React.useMemo(() => {
-    if (!showAllPacks && packUid) {
-      return allNotes.filter((n) => n.packUid === packUid);
+    const q = search.trim().toLowerCase();
+    let list = q || showAllPacks || !packUid
+      ? allNotes
+      : allNotes.filter((n) => n.packUid === packUid);
+    if (q) {
+      list = list.filter((n) =>
+        `${n.title}\n${n.body}\n${n.tags.join(" ")}`.toLowerCase().includes(q)
+      );
     }
-    return allNotes;
+    if (tagFilter) list = list.filter((n) => n.tags.includes(tagFilter));
+    const sorted = [...list];
+    if (sortMode === "recent") sorted.sort((a, b) => b.updatedAt - a.updatedAt);
+    else if (sortMode === "oldest") sorted.sort((a, b) => a.updatedAt - b.updatedAt);
+    else sorted.sort((a, b) => (a.title || "").localeCompare(b.title || ""));
+    return sorted;
+  }, [allNotes, packUid, showAllPacks, search, tagFilter, sortMode]);
+
+  // Tag chips — the most-used tags within the current scope (pre-search).
+  const scopeTags = React.useMemo(() => {
+    const scoped = showAllPacks || !packUid
+      ? allNotes
+      : allNotes.filter((n) => n.packUid === packUid);
+    const counts = new Map<string, number>();
+    for (const n of scoped) for (const tag of n.tags) counts.set(tag, (counts.get(tag) ?? 0) + 1);
+    return [...counts.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 8)
+      .map(([tag]) => tag);
   }, [allNotes, packUid, showAllPacks]);
 
   const handleCreate = async () => {
+    haptic("light");
     const note = await notesStore.create({
       title: "",
       body: "",
-      tags: [],
+      tags: tagFilter ? [tagFilter] : [],
       packUid,
       packTitle,
       questionIdx: currentQuestionIdx,
@@ -211,7 +266,17 @@ export function NotesPanel({
     setView("editor");
   };
 
+  // Parent-requested creation (qbank.notesNew shortcut): the signal only
+  // ever increments, so compare against the last-seen value.
+  const lastCreateSignalRef = React.useRef(createSignal);
+  React.useEffect(() => {
+    if (createSignal === undefined || createSignal === lastCreateSignalRef.current) return;
+    lastCreateSignalRef.current = createSignal;
+    if (open) void handleCreate();
+  }, [createSignal, open]);
+
   const handleOpen = (note: NoteRecord) => {
+    haptic("selection");
     setActiveNote(note);
     setEditorMode("edit");
     setView("editor");
@@ -219,11 +284,14 @@ export function NotesPanel({
 
   // Debounced save for the active note
   const saveTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+  const activeNoteRef = React.useRef<NoteRecord | null>(null);
+  activeNoteRef.current = activeNote;
   const updateActive = React.useCallback(
     (patch: Partial<NoteRecord>) => {
       if (!activeNote) return;
       const next: NoteRecord = { ...activeNote, ...patch };
       setActiveNote(next);
+      activeNoteRef.current = next;
       if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
       setSaving(true);
       saveTimerRef.current = setTimeout(async () => {
@@ -234,13 +302,81 @@ export function NotesPanel({
     [activeNote]
   );
 
+  /** Persist any pending debounced edit immediately (used before leaving the
+   *  editor — Escape, Done, Ctrl+Enter — so nothing is ever lost mid-flight). */
+  const flushSave = React.useCallback(() => {
+    if (!saveTimerRef.current) return;
+    clearTimeout(saveTimerRef.current);
+    saveTimerRef.current = null;
+    const note = activeNoteRef.current;
+    if (!note) return;
+    setSaving(true);
+    void notesStore.save(note).then(() => setSaving(false));
+  }, []);
+
+  const backToList = React.useCallback(() => {
+    flushSave();
+    setView("list");
+    setActiveNote(null);
+  }, [flushSave]);
+
   const handleDelete = async (id: string) => {
+    haptic("warning");
     await notesStore.delete(id);
     if (activeNote?.id === id) {
       setActiveNote(null);
       setView("list");
     }
   };
+
+  /** Two-step delete: first click arms the button, second click within 2.5s
+   *  confirms. Prevents accidental data loss with no modal in the way. */
+  const requestDelete = (id: string) => {
+    if (confirmDeleteId === id) {
+      if (confirmTimerRef.current) clearTimeout(confirmTimerRef.current);
+      setConfirmDeleteId(null);
+      void handleDelete(id);
+      return;
+    }
+    haptic("light");
+    setConfirmDeleteId(id);
+    if (confirmTimerRef.current) clearTimeout(confirmTimerRef.current);
+    confirmTimerRef.current = setTimeout(() => {
+      confirmTimerRef.current = null;
+      setConfirmDeleteId((cur) => (cur === id ? null : cur));
+    }, 2500);
+  };
+  React.useEffect(() => () => {
+    if (confirmTimerRef.current) clearTimeout(confirmTimerRef.current);
+  }, []);
+
+  // ── Keyboard shortcuts (panel-scoped; only while the panel is open) ──
+  //   Escape  → editor: back to list (flushing the save) · list: close panel
+  //   /       → focus search (list view)
+  //   Ctrl/⌘+Enter → done editing (flush + back to list)
+  React.useEffect(() => {
+    if (!open) return;
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        if (view === "editor") backToList();
+        else onClose?.();
+        return;
+      }
+      if (isTextInput(e.target)) return;
+      if (e.key === "/" && view === "list") {
+        e.preventDefault();
+        searchInputRef.current?.focus();
+        return;
+      }
+      if (e.key === "Enter" && (e.metaKey || e.ctrlKey) && view === "editor") {
+        e.preventDefault();
+        backToList();
+      }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [open, view, onClose, backToList]);
 
   const handleAddTag = () => {
     if (!activeNote) return;
@@ -280,10 +416,7 @@ export function NotesPanel({
         </div>
         {view === "editor" && (
           <button
-            onClick={() => {
-              setView("list");
-              setActiveNote(null);
-            }}
+            onClick={backToList}
             className="size-7 rounded-lg hover:bg-muted flex items-center justify-center transition-colors text-muted-foreground"
             title={t("qbank.notes.back")}
             aria-label={t("qbank.notes.back")}
@@ -320,12 +453,23 @@ export function NotesPanel({
           notes={visibleNotes}
           onCreate={handleCreate}
           onOpen={handleOpen}
-          onDelete={handleDelete}
+          onRequestDelete={requestDelete}
+          confirmDeleteId={confirmDeleteId}
           hasPack={!!packUid}
           showAllPacks={showAllPacks}
           onToggleScope={() => setShowAllPacks((s) => !s)}
           onOpenInProfile={onOpenInProfile}
           onOpenInQBank={onOpenInQBank}
+          controls={{
+            search,
+            onSearchChange: setSearch,
+            tagFilter,
+            onTagFilterChange: setTagFilter,
+            sortMode,
+            onSortChange: setSortMode,
+            scopeTags,
+          }}
+          searchInputRef={searchInputRef}
         />
       ) : (
         <EditorView
@@ -338,6 +482,7 @@ export function NotesPanel({
           tagInput={tagInput}
           onTagInputChange={setTagInput}
           onDelete={() => activeNote && handleDelete(activeNote.id)}
+          onDone={backToList}
           saving={saving}
           // `wide` = the panel takes the full viewport (maximized / phone / embedded).
           // `maximized` = specifically the desktop "maximize" toggle — used to give
@@ -403,32 +548,51 @@ export function NotesPanel({
 
 /* ── List view ──────────────────────────────────────────────────────── */
 
+interface ListControls {
+  search: string;
+  onSearchChange: (s: string) => void;
+  tagFilter: string | null;
+  onTagFilterChange: (tag: string | null) => void;
+  sortMode: SortMode;
+  onSortChange: (m: SortMode) => void;
+  scopeTags: string[];
+}
+
 function ListView({
   notes,
   onCreate,
   onOpen,
-  onDelete,
+  onRequestDelete,
+  confirmDeleteId,
   hasPack,
   showAllPacks,
   onToggleScope,
   onOpenInProfile,
   onOpenInQBank,
+  controls,
+  searchInputRef,
 }: {
   notes: NoteRecord[];
   onCreate: () => void;
   onOpen: (n: NoteRecord) => void;
-  onDelete: (id: string) => void;
+  onRequestDelete: (id: string) => void;
+  confirmDeleteId: string | null;
   hasPack: boolean;
   showAllPacks: boolean;
   onToggleScope: () => void;
   onOpenInProfile?: () => void;
   onOpenInQBank?: (n: NoteRecord) => void;
+  controls: ListControls;
+  searchInputRef: React.RefObject<HTMLInputElement | null>;
 }) {
   const { t } = useI18n();
+  const { search, onSearchChange, tagFilter, onTagFilterChange, sortMode, onSortChange, scopeTags } = controls;
+  const searching = search.trim().length > 0;
+
   return (
     <div className="flex flex-col flex-1 min-h-0">
       {/* Toolbar */}
-      <div className="px-4 py-3 border-b border-border space-y-2 shrink-0">
+      <div className="px-4 py-3 border-b border-border space-y-2.5 shrink-0">
         <div className="flex items-center gap-2">
           <Button
             size="sm"
@@ -439,51 +603,106 @@ function ListView({
             <Plus className="size-3.5 mr-1" />
             <span className="hidden sm:inline">{t("qbank.notes.new")}</span>
           </Button>
-        </div>
-
-        {hasPack && (
-          <div className="flex items-center gap-1 text-[10px]">
-            <button
-              onClick={onToggleScope}
-              className={`px-2 py-1 rounded-md font-medium transition-colors ${
-                !showAllPacks
-                  ? "bg-primary/15 text-primary"
-                  : "text-muted-foreground hover:bg-muted"
-              }`}
-            >
-              {t("qbank.notes.scope.thisPack")}
-            </button>
-            <button
-              onClick={onToggleScope}
-              className={`px-2 py-1 rounded-md font-medium transition-colors ${
-                showAllPacks
-                  ? "bg-primary/15 text-primary"
-                  : "text-muted-foreground hover:bg-muted"
-              }`}
-            >
-              {t("qbank.notes.scope.all")}
-            </button>
+          <span className="text-[11px] text-muted-foreground tabular-nums shrink-0">
+            {searching
+              ? t("qbank.notes.searchCount", { n: notes.length })
+              : t("qbank.notes.count", { n: notes.length })}
+          </span>
+          <div className="ms-auto flex items-center gap-2 shrink-0">
             {onOpenInProfile && (
               <button
                 onClick={onOpenInProfile}
-                className="ms-auto px-2 py-1 rounded-md font-medium text-muted-foreground hover:text-foreground hover:bg-muted transition-colors flex items-center gap-1"
+                className="px-2 py-1 rounded-md text-[11px] font-medium text-muted-foreground hover:text-foreground hover:bg-muted transition-colors flex items-center gap-1"
                 title={t("qbank.notes.openInProfile")}
               >
                 <ExternalLink className="size-3" />
                 {t("qbank.notes.openInProfile")}
               </button>
             )}
+            <Select value={sortMode} onValueChange={(v) => onSortChange(v as SortMode)}>
+              <SelectTrigger
+                className="h-8 w-[110px] text-[11px] rounded-lg"
+                aria-label={t("qbank.notes.sort.label")}
+              >
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="recent">{t("qbank.notes.sort.recent")}</SelectItem>
+                <SelectItem value="oldest">{t("qbank.notes.sort.oldest")}</SelectItem>
+                <SelectItem value="title">{t("qbank.notes.sort.title")}</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+
+        {/* Search — "/" focuses it from anywhere in the panel */}
+        <div className="relative">
+          <Search className="absolute start-2.5 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground pointer-events-none" />
+          <input
+            ref={searchInputRef}
+            value={search}
+            onChange={(e) => onSearchChange(e.target.value)}
+            placeholder={t("qbank.notes.search")}
+            className="w-full h-9 ps-8 pe-12 rounded-lg border border-border bg-background text-sm outline-none focus:ring-2 focus:ring-primary/30 transition-shadow"
+          />
+          {search ? (
+            <button
+              onClick={() => onSearchChange("")}
+              className="absolute end-2 top-1/2 -translate-y-1/2 size-6 rounded-md hover:bg-muted flex items-center justify-center text-muted-foreground"
+              aria-label={t("common.cancel")}
+            >
+              <X className="size-3.5" />
+            </button>
+          ) : (
+            <kbd className="absolute end-2 top-1/2 -translate-y-1/2 hidden sm:inline-block px-1.5 py-0.5 rounded border border-border bg-muted/50 text-[10px] font-mono text-muted-foreground pointer-events-none">
+              /
+            </kbd>
+          )}
+        </div>
+
+        {/* Tag filter chips — hidden while searching (search already matches tags) */}
+        {scopeTags.length > 0 && !searching && (
+          <div className="flex flex-wrap items-center gap-1">
+            {scopeTags.map((tag) => {
+              const active = tagFilter === tag;
+              return (
+                <button
+                  key={tag}
+                  onClick={() => onTagFilterChange(active ? null : tag)}
+                  className={cn(
+                    "px-2 py-0.5 rounded-full text-[10px] font-medium border transition-colors",
+                    active
+                      ? "bg-primary/15 text-primary border-primary/30"
+                      : "text-muted-foreground border-border hover:text-foreground hover:bg-muted",
+                  )}
+                >
+                  {tag}
+                </button>
+              );
+            })}
           </div>
         )}
-        {!hasPack && onOpenInProfile && (
-          <div className="flex justify-end">
+
+        {/* Pack scope toggle */}
+        {hasPack && (
+          <div className="flex items-center gap-1 text-[10px]">
             <button
-              onClick={onOpenInProfile}
-              className="px-2 py-1 rounded-md text-[10px] font-medium text-muted-foreground hover:text-foreground hover:bg-muted transition-colors flex items-center gap-1"
-              title={t("qbank.notes.openInProfile")}
+              onClick={onToggleScope}
+              className={cn(
+                "px-2 py-1 rounded-md font-medium transition-colors",
+                !showAllPacks ? "bg-primary/15 text-primary" : "text-muted-foreground hover:bg-muted",
+              )}
             >
-              <ExternalLink className="size-3" />
-              {t("qbank.notes.openInProfile")}
+              {t("qbank.notes.scope.thisPack")}
+            </button>
+            <button
+              onClick={onToggleScope}
+              className={cn(
+                "px-2 py-1 rounded-md font-medium transition-colors",
+                showAllPacks ? "bg-primary/15 text-primary" : "text-muted-foreground hover:bg-muted",
+              )}
+            >
+              {t("qbank.notes.scope.all")}
             </button>
           </div>
         )}
@@ -492,14 +711,15 @@ function ListView({
       {/* List */}
       <div className="flex-1 overflow-y-auto osler-scroll p-3 space-y-2">
         {notes.length === 0 ? (
-          <EmptyNotesState onCreate={onCreate} searching={false} />
+          <EmptyNotesState onCreate={onCreate} searching={searching || !!tagFilter} />
         ) : (
           notes.map((note) => (
             <NoteCard
               key={note.id}
               note={note}
               onOpen={() => onOpen(note)}
-              onDelete={() => onDelete(note.id)}
+              onRequestDelete={() => onRequestDelete(note.id)}
+              confirming={confirmDeleteId === note.id}
               onOpenInQBank={
                 onOpenInQBank && note.packUid
                   ? () => onOpenInQBank(note)
@@ -547,12 +767,14 @@ function EmptyNotesState({
 function NoteCard({
   note,
   onOpen,
-  onDelete,
+  onRequestDelete,
+  confirming,
   onOpenInQBank,
 }: {
   note: NoteRecord;
   onOpen: () => void;
-  onDelete: () => void;
+  onRequestDelete: () => void;
+  confirming: boolean;
   onOpenInQBank?: () => void;
 }) {
   const { t } = useI18n();
@@ -574,7 +796,10 @@ function NoteCard({
   }, [note.body]);
 
   return (
-    <div className="group rounded-xl border border-border bg-card hover:border-primary/40 hover:bg-primary/5 transition-colors p-3 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40">
+    <div className={cn(
+      "group rounded-xl border bg-card hover:border-primary/40 hover:bg-primary/5 transition-colors p-3 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
+      confirming ? "border-destructive/40" : "border-border",
+    )}>
       <div onClick={onOpen} className="space-y-1">
         <div className="flex items-start justify-between gap-2">
           <h4 className="text-sm font-semibold truncate flex-1">
@@ -582,7 +807,7 @@ function NoteCard({
           </h4>
           <div className="flex items-center gap-0.5 text-[10px] text-muted-foreground shrink-0">
             <Clock className="size-3" />
-            <span>{timeAgo(note.updatedAt)}</span>
+            <span>{timeAgo(note.updatedAt, t)}</span>
           </div>
         </div>
         {preview && (
@@ -620,7 +845,10 @@ function NoteCard({
           </div>
         )}
       </div>
-      <div className="flex items-center justify-end gap-1 mt-2 pt-2 border-t border-border opacity-0 group-hover:opacity-100 transition-opacity">
+      <div className={cn(
+        "flex items-center justify-end gap-1 mt-2 pt-2 border-t border-border transition-opacity",
+        confirming ? "opacity-100" : "opacity-0 group-hover:opacity-100 focus-within:opacity-100",
+      )}>
         {onOpenInQBank && (
           <button
             onClick={onOpenInQBank}
@@ -634,13 +862,18 @@ function NoteCard({
         <button
           onClick={(e) => {
             e.stopPropagation();
-            onDelete();
+            onRequestDelete();
           }}
-          className="px-2 py-0.5 rounded text-[10px] text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors flex items-center gap-1"
+          className={cn(
+            "px-2 py-0.5 rounded text-[10px] transition-colors flex items-center gap-1",
+            confirming
+              ? "bg-destructive/10 text-destructive font-medium"
+              : "text-muted-foreground hover:text-destructive hover:bg-destructive/10",
+          )}
           title={t("qbank.notes.card.delete")}
         >
           <Trash2 className="size-3" />
-          {t("qbank.notes.card.delete")}
+          {confirming ? t("qbank.notes.card.confirmDelete") : t("qbank.notes.card.delete")}
         </button>
       </div>
     </div>
@@ -659,6 +892,7 @@ function EditorView({
   tagInput,
   onTagInputChange,
   onDelete,
+  onDone,
   saving,
   wide,
   maximized,
@@ -672,6 +906,7 @@ function EditorView({
   tagInput: string;
   onTagInputChange: (s: string) => void;
   onDelete: () => void;
+  onDone: () => void;
   saving: boolean;
   wide?: boolean;
   maximized?: boolean;
@@ -756,6 +991,16 @@ function EditorView({
                 {t("qbank.notes.editor.saved")}
               </span>
             )}
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={onDone}
+              className="h-7 px-2.5 text-[11px] rounded-md"
+              title={t("qbank.notes.editor.doneHint")}
+            >
+              <CheckCheck className="size-3.5 me-1" />
+              {t("qbank.notes.editor.done")}
+            </Button>
             <button
               onClick={onDelete}
               className="size-7 rounded-md hover:bg-destructive/10 text-muted-foreground hover:text-destructive flex items-center justify-center transition-colors"

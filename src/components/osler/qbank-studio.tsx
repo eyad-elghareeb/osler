@@ -912,6 +912,9 @@ export function QBankStudio({
   const [aiAssistantOpen, setAiAssistantOpen] = React.useState(false);
   const [quizSettingsOpen, setQuizSettingsOpen] = React.useState(false);
   const [notesOpen, setNotesOpen] = React.useState(false);
+  // Incremented to request "create a note now" from the qbank.notesNew
+  // shortcut — NotesPanel consumes it via its `createSignal` prop.
+  const [notesCreateSeq, setNotesCreateSeq] = React.useState(0);
   const [exitConfirmOpen, setExitConfirmOpen] = React.useState(false);
   const [navOpenMobile, setNavOpenMobile] = React.useState(false);
   const [articleList, setArticleList] = React.useState<ArticleMeta[]>([]);
@@ -1235,6 +1238,7 @@ export function QBankStudio({
           onToggleAiAssistant={() => setAiAssistantOpen((o) => !o)}
           onToggleQuizSettings={() => setQuizSettingsOpen((o) => !o)}
           onToggleNotes={() => setNotesOpen((o) => !o)}
+          onNewNote={() => { setNotesOpen(true); setNotesCreateSeq((n) => n + 1); }}
           onNavMobileChange={(open) => setNavOpenMobile(open)}
           onOpenArticle={(id) => setArticleModalId(id)}
           onExitRequest={requestExit}
@@ -1503,6 +1507,7 @@ export function QBankStudio({
         <NotesPanel
           open={notesOpen}
           onClose={() => setNotesOpen(false)}
+          createSignal={notesCreateSeq}
           packUid={activeItem?.uid}
           packTitle={activeItem?.title}
           currentQuestionIdx={session.current}
@@ -4758,6 +4763,7 @@ function QuizView({
   onToggleAiAssistant,
   onToggleQuizSettings,
   onToggleNotes,
+  onNewNote,
   onNavMobileChange,
   onOpenArticle,
   onSelect,
@@ -4792,6 +4798,7 @@ function QuizView({
   onToggleAiAssistant: () => void;
   onToggleQuizSettings: () => void;
   onToggleNotes: () => void;
+  onNewNote: () => void;
   onNavMobileChange: (open: boolean) => void;
   onOpenArticle: (id: string) => void;
   onSelect: (idx: number) => void;
@@ -5675,6 +5682,7 @@ function QuizView({
         case "qbank.highlight": e.preventDefault(); setTool((t) => (t && t !== ERASER_TOOL ? null : color)); break;
         case "qbank.eraser": e.preventDefault(); setTool((t) => (t === ERASER_TOOL ? null : ERASER_TOOL)); break;
         case "qbank.notes": e.preventDefault(); onToggleNotes(); break;
+        case "qbank.notesNew": e.preventDefault(); onNewNote(); break;
         case "qbank.quizSettings": e.preventDefault(); onToggleQuizSettings(); break;
         case "qbank.shortcutsHelp": e.preventDefault(); setShowShortcuts((s) => !s); break;
         case "qbank.answer1": case "qbank.answer2": case "qbank.answer3":
@@ -5690,7 +5698,7 @@ function QuizView({
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [q, isMCQ, submitted, selected, onToggleFlag, goPrev, goNext, onSelect, onSubmit, onToggleAiAssistant, onToggleNotes, onToggleQuizSettings, setTool, readonly, bindings]);
+  }, [q, isMCQ, submitted, selected, onToggleFlag, goPrev, goNext, onSelect, onSubmit, onToggleAiAssistant, onToggleNotes, onNewNote, onToggleQuizSettings, setTool, readonly, bindings]);
 
   const currentHighlights = React.useMemo(
     () => highlights.get(activeItem.uid, session.current),
@@ -6458,6 +6466,7 @@ function QuizView({
                   ["qbank.highlight", null, null, "qbank.session.shortcut.highlight"],
                   ["qbank.eraser", null, null, "qbank.session.shortcut.eraser"],
                   ["qbank.notes", null, null, "qbank.session.shortcut.notes"],
+                  ["qbank.notesNew", null, null, "qbank.session.shortcut.notesNew"],
                   ["qbank.quizSettings", null, null, "qbank.session.shortcut.settings"],
                   ["qbank.shortcutsHelp", null, null, "qbank.session.shortcut.help"],
                 ] as [string, string | null, string | null, StringKey][]).map(
