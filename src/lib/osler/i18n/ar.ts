@@ -1847,6 +1847,9 @@ export const ar = {
     "admin.toast.backfillSuccess": "اكتمل الاستيراد والتحديث",
     "admin.toast.backfillSuccessDesc": "تم تسجيل {backfilled} عنصراً ({existing} كانت مسجلة بالفعل).",
     "admin.toast.backfillFailed": "فشل الاستيراد",
+    "admin.toast.gcOrphansSuccess": "اكتمل تنظيف الكائنات غير المرتبطة",
+    "admin.toast.gcOrphansSuccessDesc": "تم حذف {deleted} كائناً غير مرتبط. تبقى {remaining} للمراجعة.",
+    "admin.toast.gcOrphansFailed": "فشل تنظيف الكائنات غير المرتبطة",
     // Content editor — raw mode
     "admin.content.editor.rawBadge": "ملف R2 خام",
     "admin.content.editor.rawBannerTitle": "تحرير ملف R2 خام — لا يوجد سجل إصدار",
@@ -2115,6 +2118,7 @@ export const ar = {
     "admin.studio.upload": "رفع",
     "admin.studio.regenerateManifests": "إعادة بناء الكشوف",
     "admin.studio.backfillContent": "استيراد وتحديث المحتوى القديم",
+    "admin.studio.gcOrphans": "تنظيف الكائنات غير المرتبطة",
     "admin.studio.newContent": "محتوى جديد",
     "admin.studio.moreActions": "إجراءات إضافية",
     "admin.studio.validate": "تحقق",

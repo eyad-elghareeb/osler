@@ -21,6 +21,7 @@ import {
   ChevronLeft, ChevronRight, ArrowUp, RefreshCw, Search,
   LayoutGrid, List as ListIcon, ListTree, FolderPlus, FilePlus, Upload,
   Plus, Sparkles, Loader2, Home, PanelLeft, PanelRight, MoreHorizontal,
+  Trash2,
 } from "lucide-react";
 import { useI18n } from "@/components/osler/i18n-provider";
 import { haptic } from "@/lib/osler/native";
@@ -68,6 +69,8 @@ export interface ExplorerToolbarProps {
   regenerating?: boolean;
   onBackfill?: () => void;
   backfilling?: boolean;
+  onGcOrphans?: () => void;
+  gcRunning?: boolean;
   railOpen: boolean;
   onToggleRail: () => void;
   detailOpen: boolean;
@@ -87,6 +90,7 @@ export function ExplorerToolbar(props: ExplorerToolbarProps) {
     onNewFile, onNewFolder, onUpload, onNewContent,
     onRegenerateManifests, regenerating,
     onBackfill, backfilling,
+    onGcOrphans, gcRunning,
     railOpen, onToggleRail, detailOpen, onToggleDetail, className,
   } = props;
 
@@ -273,6 +277,16 @@ export function ExplorerToolbar(props: ExplorerToolbarProps) {
                   <RefreshCw className="me-2 size-3.5" />
                 )}
                 {t("admin.studio.backfillContent")}
+              </DropdownMenuItem>
+            )}
+            {onGcOrphans && (
+              <DropdownMenuItem onClick={onGcOrphans} disabled={gcRunning}>
+                {gcRunning ? (
+                  <Loader2 className="me-2 size-3.5 animate-spin" />
+                ) : (
+                  <Trash2 className="me-2 size-3.5" />
+                )}
+                {t("admin.studio.gcOrphans")}
               </DropdownMenuItem>
             )}
           </DropdownMenuContent>

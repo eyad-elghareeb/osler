@@ -1,9 +1,17 @@
 // Osler Cloud Worker — TypeScript
 // ---------------------------------------------------------------------------
-// Plan: implement Sprint 3 (M6→M3→M1→M7→M8) and Sprint 4 (Q3→Q4→Q1→Q2→Q5→Q6)
-// from sprint-3-4-plan.md. Sequence: Q3 (validation), Q4 (logging), Q1 (TS),
-// Q5 (CORS), Q6 (CSP), M6 (audit HMAC), M3 (scheduling), M1 (biometric),
-// M7 (webhooks), M8 (search). No restructuring — patch in place.
+// Plan: harden the content workflow against the free-plan 1,000-subrequest
+// cap (see incident 2026-08-17: backfill 500 emptied the D1 registry and
+// left ~2,500 orphaned R2 objects). Changes: (1) add admin gc-orphans
+// endpoint so orphaned content/<type>/<uuid>/ objects can be swept in
+// bounded runs; (2) bound r2-delete-prefix / r2-rename-prefix per invocation
+// (they loop every key across content-files + content-staging and can exceed
+// the cap mid-loop, returning a partial 500); (3) DELETE :id also removes the
+// managed base's images/ folder (previously orphaned); (4) single DELETE
+// r2-key regenerates the category manifest (previously left a stale manifest
+// advertising deleted files); (5) publish-staged chunks client-side. All new
+// runs return complete/remaining so the admin UI loops like the backfill.
+// No restructuring — patch in place.
 // ---------------------------------------------------------------------------
 // Email/password & Google accounts, role-based authorization
 // (`student` | `content_admin` | `admin`), password reset, account management
@@ -916,6 +924,26 @@ async function r2Put(env: Env, key: string, text: string, contentType = "applica
 async function r2Delete(env: Env, key: string): Promise<void> {
   if (!env.CONTENT) return;
   await env.CONTENT.delete(key);
+}
+
+/** Delete every key under a managed base (content/<type>/<uuid>/), including
+ *  the doc keys (draft/pending/published) and any images/ — so a delete never
+ *  leaves orphaned managed objects behind. Returns the number of keys removed. */
+async function deleteManagedBase(env: Env, base: string): Promise<number> {
+  if (!env.CONTENT) return 0;
+  let deleted = 0;
+  let cursor: string | undefined = undefined;
+  for (let page = 0; page < 10; page++) {
+    const listed: any = await env.CONTENT.list({ prefix: base + "/", limit: 1000, cursor });
+    if (!listed || !listed.objects) break;
+    for (const o of listed.objects) {
+      await env.CONTENT.delete(o.key);
+      deleted += 1;
+    }
+    if (!listed.truncated) break;
+    cursor = listed.cursor;
+  }
+  return deleted;
 }
 
 const CONTENT_TYPE_TO_CATEGORY: Record<string, string> = {
@@ -2542,6 +2570,12 @@ async function handleAdmin(request: Request, env: Env, session: Session, url: UR
       if (!key) return json({ error: "key required" }, 400, origin, log);
       if (!key.startsWith("content-files/") && !key.startsWith("content-manifests/") && !key.startsWith("content-staging/")) return json({ error: "Only content-files/, content-staging/ and content-manifests/ keys" }, 400, origin, log);
       await env.CONTENT.delete(key);
+      if (key.startsWith("content-files/")) {
+        const cat = key.slice("content-files/".length).split("/")[0];
+        if (cat && cat in CATEGORY_TYPE_MAP) {
+          try { await regenerateManifestForCategory(env, cat); } catch (e) { console.error("manifest regen failed:", e); }
+        }
+      }
       await auditLog(env, session.user.id, "delete_r2_key", null, { key }, log);
       return json({ ok: true }, 200, origin, log);
     }
@@ -2691,16 +2725,29 @@ async function handleAdmin(request: Request, env: Env, session: Session, url: UR
       if (!prefix || prefix.includes("..") || prefix.includes("\\")) return json({ error: "Invalid prefix" }, 400, origin, log);
       const cat = prefix.split("/")[0];
       if (!cat || !(cat in CATEGORY_TYPE_MAP)) return json({ error: "Invalid prefix" }, 400, origin, log);
+      // Each delete is one subrequest; a qbank-scale folder (~300 files +
+      // images) can exceed the free-plan 1,000-subrequest cap in a single
+      // invocation, so bound each run and let the caller re-invoke until
+      // complete — already-deleted keys vanish from the list, so resuming is
+      // idempotent. The manifest is regenerated only once the run completes.
+      const MAX_DELETE_PER_RUN = 500;
       let deleted = 0;
+      let remaining = 0;
       for (const scope of ["content-files", "content-staging"]) {
-        for (const key of await listUnderPrefix(`${scope}/${prefix}/`)) {
+        const keys = await listUnderPrefix(`${scope}/${prefix}/`);
+        const budget = Math.max(0, MAX_DELETE_PER_RUN - deleted);
+        for (const key of keys.slice(0, budget)) {
           await env.CONTENT.delete(key);
           deleted += 1;
         }
+        remaining += Math.max(0, keys.length - budget);
       }
-      try { await regenerateManifestForCategory(env, cat); } catch (e) { console.error("manifest regen failed:", e); }
-      await auditLog(env, session.user.id, "delete_r2_folder", null, { prefix, deleted }, log);
-      return json({ ok: true, deleted }, 200, origin, log);
+      const complete = remaining === 0;
+      if (complete) {
+        try { await regenerateManifestForCategory(env, cat); } catch (e) { console.error("manifest regen failed:", e); }
+        await auditLog(env, session.user.id, "delete_r2_folder", null, { prefix, deleted }, log);
+      }
+      return json({ ok: true, deleted, remaining, complete }, 200, origin, log);
     }
     if (request.method === "POST" && path === "/v1/admin/content/r2-rename-prefix") {
       if (!isAdmin(session)) return json({ error: "Forbidden" }, 403, origin, log);
@@ -2710,16 +2757,25 @@ async function handleAdmin(request: Request, env: Env, session: Session, url: UR
       const from = typeof body.from === "string" ? body.from.trim().replace(/^\/+|\/+$/g, "") : "";
       const to = typeof body.to === "string" ? body.to.trim().replace(/^\/+|\/+$/g, "") : "";
       if (!from || !to) return json({ error: "from and to required" }, 400, origin, log);
-      if (from === to) return json({ ok: true, moved: 0 }, 200, origin, log);
+      if (from === to) return json({ ok: true, moved: 0, remaining: 0, complete: true }, 200, origin, log);
       if (from.includes("..") || from.includes("\\") || to.includes("..") || to.includes("\\")) return json({ error: "Invalid key" }, 400, origin, log);
       const cat = from.split("/")[0];
       if (!cat || !(cat in CATEGORY_TYPE_MAP)) return json({ error: "Invalid prefix" }, 400, origin, log);
       const toCat = to.split("/")[0];
       if (toCat !== cat) return json({ error: "Cannot move across categories" }, 400, origin, log);
+      // Each rename costs 3 subrequests (get, put, delete) — a qbank-scale
+      // folder can exceed the free-plan 1,000-subrequest cap in one
+      // invocation, so bound each run and let the caller re-invoke until
+      // complete. Moved keys leave the source prefix, so resuming is
+      // idempotent. The manifest is regenerated only once the run completes.
+      const MAX_RENAME_PER_RUN = 200;
       let moved = 0;
+      let remaining = 0;
       for (const scope of ["content-files", "content-staging"]) {
         const prefix = `${scope}/${from}/`;
-        for (const key of await listUnderPrefix(prefix)) {
+        const keys = await listUnderPrefix(prefix);
+        const budget = Math.max(0, MAX_RENAME_PER_RUN - moved);
+        for (const key of keys.slice(0, budget)) {
           const rel = key.slice(prefix.length);
           if (!rel) continue;
           const dstKey = `${scope}/${to}/${rel}`;
@@ -2730,10 +2786,14 @@ async function handleAdmin(request: Request, env: Env, session: Session, url: UR
           await env.CONTENT.delete(key);
           moved += 1;
         }
+        remaining += Math.max(0, keys.length - budget);
       }
-      try { await regenerateManifestForCategory(env, cat); } catch (e) { console.error("manifest regen failed:", e); }
-      await auditLog(env, session.user.id, "rename_r2_folder", null, { from, to, moved }, log);
-      return json({ ok: true, moved }, 200, origin, log);
+      const complete = remaining === 0;
+      if (complete) {
+        try { await regenerateManifestForCategory(env, cat); } catch (e) { console.error("manifest regen failed:", e); }
+        await auditLog(env, session.user.id, "rename_r2_folder", null, { from, to, moved }, log);
+      }
+      return json({ ok: true, moved, remaining, complete }, 200, origin, log);
     }
     if (request.method === "POST" && path === "/v1/admin/content/backfill") {
       if (!isAdmin(session)) return json({ error: "Forbidden" }, 403, origin, log);
@@ -2885,6 +2945,53 @@ async function handleAdmin(request: Request, env: Env, session: Session, url: UR
       const complete = !stoppedEarly;
       await auditLog(env, session.user.id, "backfill_content", null, { backfilled, existing, errors: errors.length, complete }, log);
       return json({ ok: true, backfilled, existing, total: backfilled + existing, errors, complete }, 200, origin, log);
+    }
+    if (request.method === "POST" && path === "/v1/admin/content/gc-orphans") {
+      if (!isAdmin(session)) return json({ error: "Forbidden" }, 403, origin, log);
+      if (!env.CONTENT) return json({ error: "Content storage not configured" }, 503, origin, log);
+      const rows = await env.DB.prepare("SELECT r2_key_base FROM content_objects WHERE r2_key_base IS NOT NULL").all<any>();
+      const referenced = new Set<string>();
+      for (const row of rows.results || []) if (row.r2_key_base) referenced.add(row.r2_key_base);
+      // Managed objects live at content/<type>/<uuid>/; any base without a
+      // content_objects row is orphaned debris (failed backfill runs write
+      // fresh uuids before the DB batch commits). Deletes are bounded per
+      // invocation (free-plan 1,000-subrequest cap); already-deleted orphans
+      // vanish from the list, so re-invoking until complete is idempotent.
+      const MAX_ORPHAN_DELETES = 400;
+      const prefixes = ["content/quiz/", "content/bank/", "content/written/", "content/flashcard/", "content/osce/", "content/library/", "content/video/"];
+      let scanned = 0;
+      let deleted = 0;
+      let remaining = 0;
+      let budget = MAX_ORPHAN_DELETES;
+      for (const pfx of prefixes) {
+        let cursor: string | undefined = undefined;
+        for (let page = 0; page < 40; page++) {
+          const listed: any = await env.CONTENT.list({ prefix: pfx, limit: 1000, cursor });
+          if (!listed || !listed.objects) break;
+          for (const obj of listed.objects) {
+            const key = obj.key;
+            if (!key.startsWith(pfx)) continue;
+            const tail = key.slice(pfx.length);
+            const slash = tail.indexOf("/");
+            if (slash <= 0) continue;
+            const base = pfx + tail.slice(0, slash);
+            scanned += 1;
+            if (referenced.has(base)) continue;
+            if (budget > 0) {
+              await env.CONTENT.delete(key);
+              deleted += 1;
+              budget -= 1;
+            } else {
+              remaining += 1;
+            }
+          }
+          if (!listed.truncated) break;
+          cursor = listed.cursor;
+        }
+      }
+      const complete = remaining === 0;
+      await auditLog(env, session.user.id, "gc_orphans", null, { scanned, deleted, remaining, complete }, log);
+      return json({ ok: true, scanned, deleted, remaining, complete }, 200, origin, log);
     }
     if (request.method === "POST" && path === "/v1/admin/content/regenerate-manifest") {
       if (!isAdmin(session)) return json({ error: "Forbidden" }, 403, origin, log);
@@ -3250,7 +3357,7 @@ async function handleAdmin(request: Request, env: Env, session: Session, url: UR
       }
       if (request.method === "DELETE" && !action) {
         if (!isAdmin(session)) return json({ error: "Forbidden" }, 403, origin, log);
-        await Promise.all([r2Delete(env, r2Draft(obj.r2_key_base)), r2Delete(env, r2Pending(obj.r2_key_base)), r2Delete(env, r2Published(obj.r2_key_base))]);
+        if (obj.r2_key_base) await deleteManagedBase(env, obj.r2_key_base);
         await env.DB.prepare("DELETE FROM content_objects WHERE id = ?").bind(objectId).run();
         await auditLog(env, session.user.id, "delete_content", objectId, { title: obj.title }, log);
         return json({ ok: true }, 200, origin, log);

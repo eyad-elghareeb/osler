@@ -184,6 +184,25 @@ async function listAllContent(status: string = "all"): Promise<ContentObject[]> 
   return all;
 }
 
+/** Invoke a bounded worker run repeatedly until it reports `complete: true`,
+ *  summing a progress field across runs. The free-plan subrequest cap means
+ *  multi-hundred-key operations (folder delete/rename, orphan GC) can't finish
+ *  in one invocation — the worker bounds each run and the caller re-invokes. */
+async function loopBoundedRun<T>(
+  run: () => Promise<T & { complete: boolean; remaining: number }>,
+  progress: (r: T & { complete: boolean; remaining: number }) => number,
+  maxRuns = 25
+): Promise<{ total: number; runs: number }> {
+  let total = 0;
+  let runs = 0;
+  for (; runs < maxRuns; runs++) {
+    const r = await run();
+    total += progress(r);
+    if (r.complete) break;
+  }
+  return { total, runs };
+}
+
 // ── Public API surface ───────────────────────────────────────────────────────
 
 export const adminApi = {
@@ -266,16 +285,45 @@ export const adminApi = {
   /** Recursively move every key under a content-files/ (and content-staging/)
    *  prefix to a new path (same category), then regenerate the manifest.
    *  `from`/`to` are the folder prefix without the keyspace, e.g.
-   *  "library/cardiology" → "library/cardio". */
-  renameR2Folder:  (from: string, to: string)    => req<{ ok: boolean; moved: number }>("/v1/admin/content/r2-rename-prefix", "POST", { from, to }),
+   *  "library/cardiology" → "library/cardio". The worker bounds each run to
+   *  fit the free-plan subrequest cap, so the helper loops until complete. */
+  renameR2Folder:  async (from: string, to: string) => {
+    const { total, runs } = await loopBoundedRun(
+      () => req<{ ok: boolean; moved: number; remaining: number; complete: boolean }>("/v1/admin/content/r2-rename-prefix", "POST", { from, to }),
+      (r) => r.moved
+    );
+    return { ok: true, moved: total, runs };
+  },
   /** Recursively delete every key under a content-files/ (and content-staging/)
    *  prefix, then regenerate the category manifest. `prefix` is the folder
-   *  path without the keyspace, e.g. "library/cardiology". */
-  deleteR2Folder:  (prefix: string)              => req<{ ok: boolean; deleted: number }>("/v1/admin/content/r2-delete-prefix", "POST", { prefix }),
+   *  path without the keyspace, e.g. "library/cardiology". The worker bounds
+   *  each run to fit the free-plan subrequest cap, so the helper loops until
+   *  complete. */
+  deleteR2Folder:  async (prefix: string) => {
+    const { total, runs } = await loopBoundedRun(
+      () => req<{ ok: boolean; deleted: number; remaining: number; complete: boolean }>("/v1/admin/content/r2-delete-prefix", "POST", { prefix }),
+      (r) => r.deleted
+    );
+    return { ok: true, deleted: total, runs };
+  },
   /** Create an "empty folder" by writing a `.keep` placeholder. */
   createR2Folder:  (path: string)                => req<{ ok: boolean; key: string }>("/v1/admin/content/r2-folder", "POST", { path }),
   /** Rebuild the manifest for one category (or "all"). */
   regenerateManifest: (category: string)         => req<{ ok: boolean; results: Record<string, string> }>("/v1/admin/content/regenerate-manifest", "POST", { category }),
+
+  /** Sweep orphaned managed R2 objects (content/<type>/<uuid>/ keys with no
+   *  content_objects row — debris from failed backfill runs). Bounded per
+   *  invocation; loops until complete. Returns total deleted + remaining. */
+  gcOrphans:       async () => {
+    let deleted = 0;
+    let runs = 0;
+    for (;;) {
+      const r = await req<{ ok: boolean; scanned: number; deleted: number; remaining: number; complete: boolean }>("/v1/admin/content/gc-orphans", "POST");
+      deleted += r.deleted;
+      runs += 1;
+      if (r.complete || runs >= 25) return { ok: true, deleted, runs, remaining: r.complete ? 0 : r.remaining };
+    }
+  },
 
   /** Look up the content_object (if any) that publishes to the given R2 key
    *  inside content-files/. Returns { found: false } if the key is loose. */

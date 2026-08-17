@@ -92,6 +92,10 @@ export interface ContentActions {
   backfill: () => Promise<void>;
   /** Whether a backfill is in flight. */
   backfilling: boolean;
+  /** Sweep orphaned managed R2 objects (failed-backfill debris). */
+  gcOrphans: () => Promise<void>;
+  /** Whether an orphan sweep is in flight. */
+  gcRunning: boolean;
 }
 
 export interface UseContentActionsArgs {
@@ -129,6 +133,7 @@ export function useContentActions({
   const [adopting, setAdopting] = React.useState(false);
   const [regenerating, setRegenerating] = React.useState(false);
   const [backfilling, setBackfilling] = React.useState(false);
+  const [gcRunning, setGcRunning] = React.useState(false);
 
   // ── Backfill ──────────────────────────────────────────────────────────
   async function backfill() {
@@ -162,6 +167,29 @@ export function useContentActions({
       toast({ title: t("admin.toast.backfillFailed"), variant: "destructive" });
     } finally {
       setBackfilling(false);
+    }
+  }
+
+  // ── Orphan GC ──────────────────────────────────────────────────────────
+  async function gcOrphans() {
+    if (!capabilities.manageUsers) return;
+    setGcRunning(true);
+    try {
+      const res = await adminApi.gcOrphans();
+      haptic("success");
+      toast({
+        title: t("admin.toast.gcOrphansSuccess"),
+        description: t("admin.toast.gcOrphansSuccessDesc", {
+          deleted: String(res.deleted),
+          remaining: String(res.remaining),
+        }),
+      });
+      onMutated();
+    } catch {
+      haptic("error");
+      toast({ title: t("admin.toast.gcOrphansFailed"), variant: "destructive" });
+    } finally {
+      setGcRunning(false);
     }
   }
 
@@ -444,7 +472,9 @@ export function useContentActions({
     adopting,
     backfill,
     backfilling,
-  }), [capabilities, onMutated, onPromoted, adopting, regenerating, backfilling, t, toast, router]);
+    gcOrphans,
+    gcRunning,
+  }), [capabilities, onMutated, onPromoted, adopting, regenerating, backfilling, gcRunning, t, toast, router]);
 
   return { actions, dialog, setDialog };
 }

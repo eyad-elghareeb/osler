@@ -485,6 +485,8 @@ export function ContentStudio({ capabilities }: ContentStudioProps) {
         regenerating={actions.regenerating}
         onBackfill={actions.backfill}
         backfilling={actions.backfilling}
+        onGcOrphans={actions.gcOrphans}
+        gcRunning={actions.gcRunning}
         railOpen={railOpen}
         onToggleRail={() => setRailOpen((v) => !v)}
         detailOpen={detailOpen}

@@ -1851,6 +1851,9 @@ export const en = {
     "admin.toast.backfillSuccess": "Backfill complete",
     "admin.toast.backfillSuccessDesc": "Adopted {backfilled} items ({existing} were already registered).",
     "admin.toast.backfillFailed": "Backfill failed",
+    "admin.toast.gcOrphansSuccess": "Orphan sweep complete",
+    "admin.toast.gcOrphansSuccessDesc": "Deleted {deleted} orphaned object(s). {remaining} remain for review.",
+    "admin.toast.gcOrphansFailed": "Orphan sweep failed",
     // Content editor — raw mode
     "admin.content.editor.rawBadge": "Raw R2 file",
     "admin.content.editor.rawBannerTitle": "Editing a raw R2 file — no version history",
@@ -2119,6 +2122,7 @@ export const en = {
     "admin.studio.upload": "Upload",
     "admin.studio.regenerateManifests": "Rebuild manifests",
     "admin.studio.backfillContent": "Backfill legacy content",
+    "admin.studio.gcOrphans": "Sweep orphaned objects",
     "admin.studio.newContent": "New content",
     "admin.studio.moreActions": "More actions",
     "admin.studio.validate": "Validate",
