@@ -45,23 +45,32 @@ async function fetchWithLocalFallback(primaryUrl: string, fallbackUrl: string): 
     return fetch(fallbackUrl);
   }
 
+  let response: Response;
   try {
-    const response = await fetch(primaryUrl);
-    if (response.ok || primaryUrl === fallbackUrl) return response;
-    throw new Error(`Request failed with status ${response.status}`);
+    response = await fetch(primaryUrl);
   } catch (error) {
+    // Only a network-level failure (offline, DNS, CORS, worker down) makes the
+    // remote source unavailable. Latch so the rest of the session stops
+    // hammering a dead remote and reads bundled content instead.
     if (primaryUrl === fallbackUrl) throw error;
     remoteContentUnavailable = true;
     if (!hasWarnedAboutRemoteFallback) {
       hasWarnedAboutRemoteFallback = true;
       console.warn("Remote content is unavailable; using bundled content.", error);
     }
-    const fallbackResponse = await fetch(fallbackUrl);
-    if (!fallbackResponse.ok) {
-      throw new Error(`Fallback request failed with status ${fallbackResponse.status}`);
-    }
-    return fallbackResponse;
+    return fetch(fallbackUrl);
   }
+
+  if (response.ok || primaryUrl === fallbackUrl) return response;
+
+  // A non-ok HTTP status (e.g. 404 for one missing file) means the remote is
+  // reachable but the specific resource is absent — fall back to bundled for
+  // THIS request only. Do NOT latch: other remote resources may still exist.
+  const fallbackResponse = await fetch(fallbackUrl);
+  if (!fallbackResponse.ok) {
+    throw new Error(`Fallback request failed with status ${fallbackResponse.status}`);
+  }
+  return fallbackResponse;
 }
 
 /* ── Category helpers ─────────────────────────────────────────────── */

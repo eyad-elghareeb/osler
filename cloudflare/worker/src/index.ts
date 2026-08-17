@@ -3451,8 +3451,16 @@ export default {
       // the browser allows the Pages site to read the body. The default
       // SECURITY_HEADERS has CORP=same-origin, which would block these reads.
       if (request.method === "GET" && url.pathname.startsWith("/v1/content/")) {
-        const contentPath = url.pathname.slice("/v1/content/".length).replace(/\/{2,}/g, "/");
+        let contentPath = url.pathname.slice("/v1/content/".length).replace(/\/{2,}/g, "/");
         if (!contentPath || contentPath.includes("..") || contentPath.includes("\\") || contentPath.startsWith("/")) return json({ error: "Not found" }, 404, origin, log);
+        // Paths can carry percent-encoded characters (folder names with spaces,
+        // e.g. "Cardiology AR" → "Cardiology%20AR"). Decode before building the
+        // R2 key so the lookup matches the literal key stored in the bucket.
+        try {
+          contentPath = decodeURIComponent(contentPath);
+        } catch {
+          return json({ error: "Not found" }, 404, origin, log);
+        }
         if (!env.CONTENT) return json({ error: "Content storage not configured" }, 503, origin, log);
         const r2Key = `content-files/${contentPath}`;
         const obj = await env.CONTENT.get(r2Key);
