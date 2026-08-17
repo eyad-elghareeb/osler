@@ -16,7 +16,7 @@
 import * as React from "react";
 import {
   Eye, Pencil, Send, CloudUpload, Copy, Download, Trash2,
-  PackagePlus, Sparkles, Repeat2, Layers, FolderOpen,
+  PackagePlus, Sparkles, Repeat2, Layers, FolderOpen, FolderInput,
 } from "lucide-react";
 import { useI18n } from "@/components/osler/i18n-provider";
 import { cn } from "@/lib/utils";
@@ -57,6 +57,7 @@ export interface DetailPanelProps {
   onOpen: (node: ContentTreeNode) => void;
   onRename: (node: ContentTreeNode) => void;
   onDelete: (node: ContentTreeNode) => void;
+  onMove?: (nodes: ContentTreeNode | ContentTreeNode[]) => void;
   onDuplicate: (node: ContentTreeNode) => void;
   onDownload: (node: ContentTreeNode) => void;
   onConvert: (node: ContentTreeNode) => void;
@@ -106,7 +107,7 @@ export function DetailPanel(props: DetailPanelProps) {
 // ── Batch summary ───────────────────────────────────────────────────────────
 
 function BatchSummary({
-  nodes, onDelete, onConvert, onPublishStaged, onDiscardStaged, canManage,
+  nodes, onDelete, onConvert, onPublishStaged, onDiscardStaged, onMove, canManage,
 }: DetailPanelProps & { nodes: ContentTreeNode[] }) {
   const { t } = useI18n();
   const managedCount = nodes.filter((n) => n.managed).length;
@@ -171,6 +172,11 @@ function BatchSummary({
             <Repeat2 className="me-1.5 size-3" /> {t("admin.studio.convert")}
           </Button>
         )}
+        {canManage && onMove && (
+          <Button size="xs" variant="outline" className="justify-start text-primary" onClick={() => onMove(nodes)}>
+            <FolderInput className="me-1.5 size-3" /> {t("admin.studio.context.move")}
+          </Button>
+        )}
         {canManage && (
           <Button size="xs" variant="outline" className="justify-start text-destructive hover:text-destructive" onClick={() => nodes.forEach((n) => onDelete(n))}>
             <Trash2 className="me-1.5 size-3" /> {t("admin.studio.batchDelete")}
@@ -203,7 +209,7 @@ function SingleDetail(props: DetailPanelProps & { node: ContentTreeNode }) {
               {node.sourcePath ?? node.r2Key ?? node.id}
             </p>
             <div className="mt-1.5 flex flex-wrap items-center gap-1">
-              <NodeBadges node={node} />
+              <NodeBadges node={node} showText />
               {validationStates.has(node.id) && (
                 <ValidationBadge state={validationStates.get(node.id)!} />
               )}
@@ -246,6 +252,11 @@ function SingleDetail(props: DetailPanelProps & { node: ContentTreeNode }) {
           <Button size="xs" className="col-span-2" onClick={() => onOpen(node)}>
             <Eye className="me-1 size-3" /> {t("admin.studio.openEditor")}
           </Button>
+          {canManage && props.onMove && (
+            <Button size="xs" variant="outline" onClick={() => props.onMove?.(node)}>
+              <FolderInput className="me-1 size-3 text-primary" /> {t("admin.studio.context.move")}
+            </Button>
+          )}
           <Button size="xs" variant="outline" onClick={() => onConvert(node)}>
             <Repeat2 className="me-1 size-3" /> {t("admin.studio.convert")}
           </Button>

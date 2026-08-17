@@ -15,11 +15,23 @@ import {
   FileText,
   FileJson,
   FolderOpen,
+  Folder,
   Image as ImageIcon,
   File,
   CheckCircle2,
   XCircle,
   Loader2,
+  Layers,
+  Sparkles,
+  FileCode,
+  FileEdit,
+  Clock,
+  AlertCircle,
+  BookOpen,
+  ListChecks,
+  Brain,
+  Stethoscope,
+  Video,
   type LucideIcon,
 } from "lucide-react";
 import { useI18n } from "@/components/osler/i18n-provider";
@@ -36,16 +48,24 @@ import type { ContentTreeNode } from "@/components/osler/admin/content-tree-pane
 import { STATUS_BADGE, type ValidationState } from "./types";
 
 // ── NodeIcon — pick the right Lucide icon for a tree node ────────────────────
-//
-// Folders use FolderOpen with `fill-current` so they read as solid shapes
-// (the outline-only default looks too airy at small sizes). Files keep the
-// outline style but get a subtle fill tint via the parent container.
 
 export function NodeIcon({ node, className }: { node: ContentTreeNode; className?: string }) {
   if (node.kind === "folder") {
     return <FolderOpen className={cn("fill-current/15", className)} />;
   }
-  if (node.ext === "md" || node.ext === "pdf") return <FileText className={className} />;
+
+  // Type-aware file icon
+  const ct = node.cloudObject?.content_type;
+  if (ct === "quiz" || ct === "bank" || ct === "written") {
+    return <ListChecks className={className} />;
+  }
+  if (ct === "flashcard") return <Brain className={className} />;
+  if (ct === "osce") return <Stethoscope className={className} />;
+  if (ct === "video") return <Video className={className} />;
+  if (ct === "library") return <BookOpen className={className} />;
+
+  if (node.ext === "md") return <BookOpen className={className} />;
+  if (node.ext === "pdf" || node.ext === "html") return <FileText className={className} />;
   if (node.ext === "json") return <FileJson className={className} />;
   if (node.ext && IMG_EXTS.has(node.ext)) return <ImageIcon className={className} />;
   return <File className={className} />;
@@ -54,61 +74,107 @@ export function NodeIcon({ node, className }: { node: ContentTreeNode; className
 const IMG_EXTS = new Set(["png", "jpg", "jpeg", "svg", "gif", "webp"]);
 
 // ── Folder color tokens ─────────────────────────────────────────────────────
-//
-// Muted, professional folder colors. Replaces the bright amber-500/600 that
-// was used everywhere — the new palette is desaturated so folders don't
-// dominate the file list. Files keep the primary tint.
-//
-// `folderIconCls`   — applied to the <NodeIcon /> itself (text color)
-// `folderTileCls`   — applied to the icon's container (bg + border)
-// `folderRowCls`    — applied to inline list-row icons (text color only)
 
-export const folderIconCls = "text-warning/80";
-export const folderTileCls = "bg-warning/5 border-warning/20";
-export const folderRowCls = "text-warning/80";
+export const folderIconCls = "text-warning/80 dark:text-warning/90";
+export const folderTileCls = "bg-warning/5 border-warning/20 dark:bg-warning/10 dark:border-warning/30";
+export const folderRowCls = "text-warning/80 dark:text-warning/90";
 
-// ── NodeBadges — the row of small "managed / staged / raw / status" pills ──
-//
-// Renders up to 4 badges depending on the node's state. Used by the grid
-// tile, the list row, and the detail panel header.
+// ── NodeBadges — icon-based micro-badges with rich tooltips ─────────────────
 
 export function NodeBadges({
   node,
   variant = "default",
+  showText = false,
 }: {
   node: ContentTreeNode;
-  /** "default" = colored pills; "compact" = smaller, for tight rows */
+  /** "default" = normal icon badge; "compact" = micro icon badge */
   variant?: "default" | "compact";
+  /** Optional flag to show text alongside icon (used in detail header) */
+  showText?: boolean;
 }) {
   const { t } = useI18n();
   const status = node.cloudObject?.status;
-  const sizeCls = variant === "compact"
-    ? "px-1 py-px text-xs"
-    : "px-1.5 py-0.5 text-xs";
+
+  const badgeWrapperCls = cn(
+    "inline-flex items-center gap-1 rounded-md border transition-colors shadow-2xs",
+    variant === "compact" ? "p-0.5 text-[10px]" : "px-1.5 py-0.5 text-xs font-medium",
+  );
 
   return (
-    <div className="flex flex-wrap items-center gap-1">
-      {node.managed && (
-        <span className={cn("rounded-full border border-primary/30 bg-primary/10 font-medium uppercase tracking-wider text-primary", sizeCls)}>
-          {t("admin.studio.rowManaged")}
-        </span>
-      )}
-      {node.staged && (
-        <span className={cn("rounded-full border border-info/30 bg-info/15 font-medium uppercase tracking-wider text-info", sizeCls)}>
-          {t("admin.studio.rowStaged")}
-        </span>
-      )}
-      {!node.managed && !node.staged && node.r2Key && (
-        <span className={cn("rounded-full border border-border bg-muted font-medium uppercase tracking-wider text-muted-foreground", sizeCls)}>
-          {t("admin.studio.rowRaw")}
-        </span>
-      )}
-      {status && (
-        <span className={cn("rounded-full border font-medium uppercase tracking-wider", sizeCls, STATUS_BADGE[status])}>
-          {t(`admin.studio.row${status.charAt(0).toUpperCase() + status.slice(1)}` as any)}
-        </span>
-      )}
-    </div>
+    <TooltipProvider delayDuration={150}>
+      <div className="flex flex-wrap items-center gap-1">
+        {/* Managed badge */}
+        {node.managed && (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <span
+                className={cn(badgeWrapperCls, "border-primary/25 bg-primary/10 text-primary")}
+                aria-label={t("admin.studio.badge.managed")}
+              >
+                <Layers className={variant === "compact" ? "size-2.5" : "size-3"} />
+                {showText && <span className="uppercase tracking-wider">{t("admin.studio.rowManaged")}</span>}
+              </span>
+            </TooltipTrigger>
+            <TooltipContent>{t("admin.studio.badge.managed")}</TooltipContent>
+          </Tooltip>
+        )}
+
+        {/* Staged badge */}
+        {node.staged && (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <span
+                className={cn(badgeWrapperCls, "border-info/25 bg-info/10 text-info")}
+                aria-label={t("admin.studio.badge.staged")}
+              >
+                <Sparkles className={variant === "compact" ? "size-2.5" : "size-3"} />
+                {showText && <span className="uppercase tracking-wider">{t("admin.studio.rowStaged")}</span>}
+              </span>
+            </TooltipTrigger>
+            <TooltipContent>{t("admin.studio.badge.staged")}</TooltipContent>
+          </Tooltip>
+        )}
+
+        {/* Raw / loose badge */}
+        {!node.managed && !node.staged && node.r2Key && (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <span
+                className={cn(badgeWrapperCls, "border-border/70 bg-muted/60 text-muted-foreground")}
+                aria-label={t("admin.studio.badge.raw")}
+              >
+                <FileCode className={variant === "compact" ? "size-2.5" : "size-3"} />
+                {showText && <span className="uppercase tracking-wider">{t("admin.studio.rowRaw")}</span>}
+              </span>
+            </TooltipTrigger>
+            <TooltipContent>{t("admin.studio.badge.raw")}</TooltipContent>
+          </Tooltip>
+        )}
+
+        {/* Status icon badge */}
+        {status && (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <span
+                className={cn(badgeWrapperCls, STATUS_BADGE[status] ?? "border-border bg-muted text-muted-foreground")}
+                aria-label={t(`admin.studio.badge.${status}` as any)}
+              >
+                {status === "published" && <CheckCircle2 className={variant === "compact" ? "size-2.5 text-success" : "size-3 text-success"} />}
+                {status === "draft" && <FileEdit className={variant === "compact" ? "size-2.5" : "size-3"} />}
+                {status === "pending" && <Clock className={variant === "compact" ? "size-2.5 text-warning" : "size-3 text-warning"} />}
+                {status === "rejected" && <AlertCircle className={variant === "compact" ? "size-2.5 text-destructive" : "size-3 text-destructive"} />}
+                {showText && (
+                  <span className="uppercase tracking-wider">
+                    {t(`admin.studio.row${status.charAt(0).toUpperCase() + status.slice(1)}` as any)}
+                  </span>
+                )}
+              </span>
+            </TooltipTrigger>
+            <TooltipContent>{t(`admin.studio.badge.${status}` as any)}</TooltipContent>
+          </Tooltip>
+        )}
+      </div>
+    </TooltipProvider>
   );
 }
 

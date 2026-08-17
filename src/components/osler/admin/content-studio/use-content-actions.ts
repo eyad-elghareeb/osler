@@ -45,6 +45,9 @@ export interface DialogState {
   /** Convert dialog. */
   convertNode: ContentTreeNode | null;
   convertOpen: boolean;
+  /** Move dialog. */
+  moveNodes: ContentTreeNode[];
+  moveOpen: boolean;
 }
 
 export interface ContentActions {
@@ -68,6 +71,12 @@ export interface ContentActions {
   openConvertDialog: (node: ContentTreeNode) => void;
   /** Close the convert dialog. */
   closeConvertDialog: () => void;
+  /** Open the move dialog for one or more nodes. */
+  openMoveDialog: (nodes: ContentTreeNode | ContentTreeNode[]) => void;
+  /** Close the move dialog. */
+  closeMoveDialog: () => void;
+  /** Confirm moving nodes to a destination folder. */
+  confirmMove: (destinationFolder: string, nodes: ContentTreeNode[]) => Promise<void>;
   /** Duplicate a node's R2 key. */
   duplicate: (node: ContentTreeNode) => Promise<void>;
   /** Download a node's R2 body as a blob. */
@@ -129,19 +138,35 @@ export function useContentActions({
     deleteOpen: false,
     convertNode: null,
     convertOpen: false,
+    moveNodes: [],
+    moveOpen: false,
   });
   const [adopting, setAdopting] = React.useState(false);
   const [regenerating, setRegenerating] = React.useState(false);
   const [backfilling, setBackfilling] = React.useState(false);
   const [gcRunning, setGcRunning] = React.useState(false);
 
+  // ── Auto-rebuild helper ───────────────────────────────────────────────
+  const autoRebuildForCategory = React.useCallback((categoryOrKey: string) => {
+    if (!capabilities.manageUsers || !categoryOrKey) return;
+    const clean = categoryOrKey
+      .replace(/^content-files\//, "")
+      .replace(/^content-staging\//, "")
+      .replace(/^content\//, "")
+      .replace(/^\/+/, "");
+    const cat = clean.split("/")[0];
+    if (cat && ["library", "qbank", "flashcard", "osce", "videos"].includes(cat)) {
+      adminApi.regenerateManifest(cat).catch(() => {
+        // Background silent failure log
+      });
+    }
+  }, [capabilities.manageUsers]);
+
   // ── Backfill ──────────────────────────────────────────────────────────
   async function backfill() {
     if (!capabilities.manageUsers) return;
     setBackfilling(true);
     try {
-      // The worker backfill is bounded per invocation (free-plan subrequest cap),
-      // so loop until it reports complete, accumulating per-run totals.
       let backfilled = 0;
       let existing = 0;
       let guard = 0;
@@ -161,6 +186,7 @@ export function useContentActions({
           existing: String(existing),
         }),
       });
+      autoRebuildForCategory("all");
       onMutated();
     } catch {
       haptic("error");
@@ -250,9 +276,11 @@ export function useContentActions({
         const body = isJson ? "{}" : isMd ? "# New article\n" : "";
         await adminApi.uploadFile(key, body);
         toast({ title: t("admin.toast.created", { path: dialog.pathInput }) });
+        autoRebuildForCategory(cleaned);
       } else if (dialog.pathMode === "newFolder") {
         await adminApi.createR2Folder(`content-files/${cleaned}`);
         toast({ title: t("admin.toast.createdFolder", { path: dialog.pathInput }) });
+        autoRebuildForCategory(cleaned);
       } else if (dialog.pathMode === "rename") {
         const to = `content-files/${cleaned}`;
         if (dialog.renameIsFolder) {
@@ -262,6 +290,8 @@ export function useContentActions({
           await adminApi.renameR2Key(dialog.pathParent, to);
           toast({ title: t("admin.toast.renamed", { path: dialog.pathInput }) });
         }
+        autoRebuildForCategory(dialog.pathParent);
+        autoRebuildForCategory(cleaned);
       }
       setDialog((d) => ({ ...d, pathMode: null }));
       onMutated();
@@ -272,6 +302,70 @@ export function useContentActions({
           ? "admin.toast.createFolderFailed"
           : "admin.toast.renameFailed";
       toast({ title: t(key as any, { error: String(err) }), variant: "destructive" });
+    }
+  }
+
+  // ── Move ──────────────────────────────────────────────────────────────
+  function openMoveDialog(nodes: ContentTreeNode | ContentTreeNode[]) {
+    const list = Array.isArray(nodes) ? nodes : [nodes];
+    setDialog((d) => ({ ...d, moveNodes: list, moveOpen: true }));
+  }
+  function closeMoveDialog() {
+    setDialog((d) => ({ ...d, moveOpen: false, moveNodes: [] }));
+  }
+
+  async function confirmMove(destinationFolder: string, nodes: ContentTreeNode[]) {
+    if (!capabilities.manageUsers || nodes.length === 0) return;
+    const destClean = destinationFolder.replace(/^\/+/, "").replace(/\/+$/, "");
+    let movedCount = 0;
+    const affectedCats = new Set<string>();
+    affectedCats.add(destClean.split("/")[0]);
+
+    for (const node of nodes) {
+      try {
+        if (node.kind === "folder") {
+          const fromPrefix = folderPathOf(node);
+          const toPrefix = `${destClean}/${node.name}`;
+          await adminApi.renameR2Folder(fromPrefix, toPrefix);
+          affectedCats.add(fromPrefix.split("/")[0]);
+          movedCount++;
+        } else {
+          const rawKey = node.r2Key ?? "";
+          if (rawKey) {
+            const isStaged = rawKey.startsWith("content-staging/");
+            const scope = isStaged ? "content-staging" : "content-files";
+            const targetKey = `${scope}/${destClean}/${node.name}`;
+            await adminApi.renameR2Key(rawKey, targetKey);
+            affectedCats.add(rawKey.replace(/^content-[^/]+\//, "").split("/")[0]);
+            movedCount++;
+          }
+          if (node.managed && node.cloudObject) {
+            if (node.cloudObject.status === "published") {
+              await adminApi.publishDirect(node.cloudObject.id, {
+                targetPath: `${destClean}/${node.name}`,
+                hybrid: true,
+              });
+            }
+          }
+        }
+      } catch (err) {
+        console.error("Move error for", node.name, err);
+      }
+    }
+
+    if (movedCount > 0) {
+      haptic("success");
+      toast({
+        title: nodes.length === 1
+          ? t("admin.studio.move.success", { name: nodes[0].name, dest: destClean })
+          : t("admin.studio.move.batchSuccess", { n: String(movedCount), dest: destClean }),
+      });
+      // Auto-rebuild manifests for all affected categories
+      affectedCats.forEach((cat) => autoRebuildForCategory(cat));
+      onMutated();
+    } else {
+      haptic("error");
+      toast({ title: t("admin.studio.move.failed", { error: "Could not move items" }), variant: "destructive" });
     }
   }
 
@@ -287,8 +381,10 @@ export function useContentActions({
     if (!node) return;
     try {
       if (node.kind === "folder") {
-        const res = await adminApi.deleteR2Folder(folderPathOf(node));
+        const path = folderPathOf(node);
+        const res = await adminApi.deleteR2Folder(path);
         toast({ title: t("admin.toast.deletedFolder", { name: node.name, n: String(res.deleted) }) });
+        autoRebuildForCategory(path);
       } else {
         if (!node.r2Key) return;
         if (node.managed && node.cloudObject) {
@@ -297,6 +393,7 @@ export function useContentActions({
           await adminApi.deleteR2Key(node.r2Key);
         }
         toast({ title: t("admin.toast.deleted", { name: node.name }) });
+        autoRebuildForCategory(node.r2Key);
       }
       setDialog((d) => ({ ...d, deleteOpen: false, deleteNode: null }));
       onMutated();
@@ -327,6 +424,7 @@ export function useContentActions({
       const body = await res.text();
       await adminApi.uploadFile(copyKey, body);
       toast({ title: t("admin.toast.duplicated", { path: copyKey.replace(/^content-files\//, "") }) });
+      autoRebuildForCategory(copyKey);
       onMutated();
     } catch (err) {
       toast({ title: t("admin.toast.duplicateFailed", { error: String(err) }), variant: "destructive" });
@@ -373,6 +471,7 @@ export function useContentActions({
           ? t("admin.toast.adoptAlreadyManaged")
           : t("admin.toast.adopted", { id: res.id.slice(0, 8) }),
       });
+      autoRebuildForCategory(node.r2Key);
       onPromoted(res.id);
     } catch (err: any) {
       toast({ title: t("admin.toast.adoptFailed", { error: String(err?.message ?? err) }), variant: "destructive" });
@@ -389,6 +488,7 @@ export function useContentActions({
     try {
       const res = await adminApi.publishStaged(keys);
       toast({ title: t("admin.toast.publishedStaged", { n: res.published.length }) });
+      keys.forEach((k) => autoRebuildForCategory(k));
       onMutated();
     } catch (err: any) {
       toast({ title: t("admin.toast.publishStagedFailed", { error: String(err?.message ?? err) }), variant: "destructive" });
@@ -413,6 +513,7 @@ export function useContentActions({
     try {
       await adminApi.publishDirect(node.cloudObject.id);
       toast({ title: t("admin.content.published") });
+      if (node.r2Key) autoRebuildForCategory(node.r2Key);
       onMutated();
     } catch (err: any) {
       toast({ title: t("admin.toast.publishFailed"), description: String(err?.message ?? err), variant: "destructive" });
@@ -423,6 +524,7 @@ export function useContentActions({
     try {
       await adminApi.unpublish(node.cloudObject.id);
       toast({ title: "Unpublished" });
+      if (node.r2Key) autoRebuildForCategory(node.r2Key);
       onMutated();
     } catch (err: any) {
       toast({ title: "Unpublish failed", description: String(err?.message ?? err), variant: "destructive" });
@@ -460,6 +562,9 @@ export function useContentActions({
     confirmDelete,
     openConvertDialog,
     closeConvertDialog,
+    openMoveDialog,
+    closeMoveDialog,
+    confirmMove,
     duplicate,
     download,
     promote,
@@ -474,7 +579,7 @@ export function useContentActions({
     backfilling,
     gcOrphans,
     gcRunning,
-  }), [capabilities, onMutated, onPromoted, adopting, regenerating, backfilling, gcRunning, t, toast, router]);
+  }), [capabilities, onMutated, onPromoted, adopting, regenerating, backfilling, gcRunning, t, toast, router, autoRebuildForCategory]);
 
   return { actions, dialog, setDialog };
 }

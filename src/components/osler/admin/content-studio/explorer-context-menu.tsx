@@ -24,8 +24,16 @@ import {
   Send,
   Repeat2,
   CloudUpload,
+  FolderInput,
+  Link,
+  Search,
+  CheckSquare,
+  Plus,
+  Upload,
 } from "lucide-react";
 import { useI18n } from "@/components/osler/i18n-provider";
+import { useToast } from "@/hooks/use-toast";
+import { haptic } from "@/lib/osler/native";
 import {
   ContextMenuItem,
   ContextMenuSeparator,
@@ -42,19 +50,47 @@ interface ExplorerContextMenuProps {
 
 export function ExplorerContextMenu({ node, canManage, actions }: ExplorerContextMenuProps) {
   const { t } = useI18n();
+  const { toast } = useToast();
+
+  function copyToClipboard(text: string, labelKey = "admin.studio.context.copied") {
+    haptic("light");
+    navigator.clipboard.writeText(text);
+    toast({ title: t(labelKey as any) });
+  }
 
   // ── Empty area right-click (no node) ─────────────────────────────────
   if (!node) {
     return (
       <>
+        {actions.onSearch && (
+          <ContextMenuItem onClick={actions.onSearch}>
+            <Search className="size-3.5 me-2" /> {t("admin.studio.context.searchEverything")}
+          </ContextMenuItem>
+        )}
+        {actions.onSelectAll && (
+          <ContextMenuItem onClick={actions.onSelectAll}>
+            <CheckSquare className="size-3.5 me-2" /> {t("admin.studio.context.selectAll")}
+          </ContextMenuItem>
+        )}
+        <ContextMenuSeparator />
         {canManage && (
           <>
+            {actions.onNewContent && (
+              <ContextMenuItem onClick={actions.onNewContent}>
+                <Plus className="size-3.5 me-2 text-primary" /> {t("admin.studio.newContent")}
+              </ContextMenuItem>
+            )}
             <ContextMenuItem onClick={() => actions.onNewFile("")}>
               <FilePlus className="size-3.5 me-2" /> {t("admin.content.context.newFileHere")}
             </ContextMenuItem>
             <ContextMenuItem onClick={() => actions.onNewFolder("")}>
               <FolderPlus className="size-3.5 me-2" /> {t("admin.content.context.newFolderHere")}
             </ContextMenuItem>
+            {actions.onUpload && (
+              <ContextMenuItem onClick={actions.onUpload}>
+                <Upload className="size-3.5 me-2" /> {t("admin.studio.upload")}
+              </ContextMenuItem>
+            )}
             <ContextMenuSeparator />
           </>
         )}
@@ -79,12 +115,31 @@ export function ExplorerContextMenu({ node, canManage, actions }: ExplorerContex
         <ContextMenuItem onClick={() => actions.onOpen(node)}>
           <Eye className="size-3.5 me-2" /> {t("admin.studio.openEditor")}
         </ContextMenuItem>
+        {actions.onMove && canManage && (
+          <ContextMenuItem onClick={() => actions.onMove?.(node)}>
+            <FolderInput className="size-3.5 me-2 text-primary" /> {t("admin.studio.context.move")}
+          </ContextMenuItem>
+        )}
         <ContextMenuItem onClick={() => actions.onConvert(node)}>
           <Repeat2 className="size-3.5 me-2" /> {t("admin.studio.convert")}
         </ContextMenuItem>
         <ContextMenuItem onClick={() => actions.onDownload(node)}>
           <Download className="size-3.5 me-2" /> {t("admin.studio.download")}
         </ContextMenuItem>
+
+        <ContextMenuSeparator />
+        {/* Copy utilities */}
+        {node.cloudObject && (
+          <ContextMenuItem onClick={() => copyToClipboard(node.cloudObject!.id)}>
+            <Link className="size-3.5 me-2" /> {t("admin.studio.context.copyId")}
+          </ContextMenuItem>
+        )}
+        {node.r2Key && (
+          <ContextMenuItem onClick={() => copyToClipboard(node.r2Key!)}>
+            <Copy className="size-3.5 me-2" /> {t("admin.studio.context.copyKey")}
+          </ContextMenuItem>
+        )}
+
         {canManage && (
           <>
             <ContextMenuSeparator />
@@ -116,6 +171,16 @@ export function ExplorerContextMenu({ node, canManage, actions }: ExplorerContex
         <ContextMenuItem onClick={() => actions.onOpen(node)}>
           <Eye className="size-3.5 me-2" /> {t("admin.studio.openRaw")}
         </ContextMenuItem>
+        {actions.onMove && canManage && (
+          <ContextMenuItem onClick={() => actions.onMove?.(node)}>
+            <FolderInput className="size-3.5 me-2 text-primary" /> {t("admin.studio.context.move")}
+          </ContextMenuItem>
+        )}
+        {node.r2Key && (
+          <ContextMenuItem onClick={() => copyToClipboard(node.r2Key!)}>
+            <Copy className="size-3.5 me-2" /> {t("admin.studio.context.copyKey")}
+          </ContextMenuItem>
+        )}
         {canManage && (
           <>
             <ContextMenuSeparator />
@@ -138,12 +203,22 @@ export function ExplorerContextMenu({ node, canManage, actions }: ExplorerContex
         <ContextMenuItem onClick={() => actions.onOpen(node)}>
           <Eye className="size-3.5 me-2" /> {t("admin.studio.openRaw")}
         </ContextMenuItem>
+        {actions.onMove && canManage && (
+          <ContextMenuItem onClick={() => actions.onMove?.(node)}>
+            <FolderInput className="size-3.5 me-2 text-primary" /> {t("admin.studio.context.move")}
+          </ContextMenuItem>
+        )}
         <ContextMenuItem onClick={() => actions.onConvert(node)}>
           <Repeat2 className="size-3.5 me-2" /> {t("admin.studio.convert")}
         </ContextMenuItem>
         <ContextMenuItem onClick={() => actions.onDownload(node)}>
           <Download className="size-3.5 me-2" /> {t("admin.studio.download")}
         </ContextMenuItem>
+        {node.r2Key && (
+          <ContextMenuItem onClick={() => copyToClipboard(node.r2Key!)}>
+            <Copy className="size-3.5 me-2" /> {t("admin.studio.context.copyKey")}
+          </ContextMenuItem>
+        )}
         {canManage && (
           <>
             <ContextMenuSeparator />
@@ -195,6 +270,18 @@ export function ExplorerContextMenu({ node, canManage, actions }: ExplorerContex
             </ContextMenuItem>
           </>
         )}
+        {/* Move folder */}
+        {!isDrafts && node.r2Key && actions.onMove && (
+          <ContextMenuItem onClick={() => actions.onMove?.(node)}>
+            <FolderInput className="size-3.5 me-2 text-primary" /> {t("admin.studio.context.move")}
+          </ContextMenuItem>
+        )}
+        {/* Copy folder path */}
+        {!isDrafts && (
+          <ContextMenuItem onClick={() => copyToClipboard(folderPath)}>
+            <Copy className="size-3.5 me-2" /> {t("admin.studio.context.copyPath")}
+          </ContextMenuItem>
+        )}
         {/* Only non-root, non-drafts folders can be renamed/deleted */}
         {!isDrafts && node.r2Key && (
           <>
@@ -211,7 +298,6 @@ export function ExplorerContextMenu({ node, canManage, actions }: ExplorerContex
     );
   }
 
-  // Fallback — no items
   return null;
 }
 

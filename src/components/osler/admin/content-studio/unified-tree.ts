@@ -73,24 +73,44 @@ export function buildUnifiedTree(
     else roots.push(leaf);
   }
 
-  // 1. Process managed items that have a published_r2_key
+  const normalizeKey = (key: string): string => {
+    return key
+      .replace(/^content-files\//, "")
+      .replace(/^content-staging\//, "")
+      .replace(/^content\//, "")
+      .replace(/^\/+/, "");
+  };
+
+  const isInCategory = (normalized: string): boolean => {
+    return normalized.startsWith(catPrefix) || normalized === categoryFolder;
+  };
+
+  // 1. Process managed items that have a published_r2_key or r2_key_base
   for (const obj of managed) {
-    if (obj.published_r2_key && obj.published_r2_key.startsWith(`content-files/${categoryFolder}/`)) {
+    const rawKey = obj.published_r2_key || (obj.status === "published" ? obj.r2_key_base : null);
+    if (!rawKey) continue;
+
+    const normalized = normalizeKey(rawKey);
+    if (isInCategory(normalized)) {
       const passesFilter = statusFilter === "all" || obj.status === statusFilter;
       if (!passesFilter) {
         consumedObjectIds.add(obj.id);
         continue;
       }
-      const rel = stripCat(obj.published_r2_key.replace(/^content-files\//, ""));
-      const parts = rel.split("/");
+      const rel = stripCat(normalized);
+      const parts = rel.split("/").filter(Boolean);
       const fileName = parts[parts.length - 1] || obj.id;
+      const ext = fileName.includes(".")
+        ? fileName.split(".").pop() ?? (obj.content_type === "library" ? "md" : "json")
+        : (obj.content_type === "library" ? "md" : "json");
+
       const fileNode: ContentTreeNode = {
         id: `cloud-${obj.id}`,
-        name: obj.title || fileName,
+        name: obj.title?.trim() || fileName,
         kind: "file",
-        ext: obj.content_type === "library" ? "md" : "json",
+        ext,
         size: obj.body?.length,
-        r2Key: obj.published_r2_key,
+        r2Key: obj.published_r2_key || `content-files/${normalized}`,
         sourcePath: obj.id,
         managed: true,
         cloudObject: obj,
@@ -102,8 +122,11 @@ export function buildUnifiedTree(
 
   // 2. Process legacy raw R2 items if present (fallback)
   for (const item of r2Items) {
-    const rel = stripCat(item.key.replace(/^content-files\//, ""));
-    const parts = rel.split("/");
+    const normalized = normalizeKey(item.key);
+    if (!isInCategory(normalized)) continue;
+
+    const rel = stripCat(normalized);
+    const parts = rel.split("/").filter(Boolean);
     const fileName = parts.pop() ?? "";
     // A `.keep` marker stands in for an empty folder — materialize the folder
     // chain so admins can see (and navigate into) folders that hold no files yet.
@@ -111,7 +134,7 @@ export function buildUnifiedTree(
       ensureFolderChain(parts.join("/"));
       continue;
     }
-    if (managed.some((o) => o.published_r2_key === item.key && consumedObjectIds.has(o.id))) continue;
+    if (managed.some((o) => (o.published_r2_key && normalizeKey(o.published_r2_key) === normalized) && consumedObjectIds.has(o.id))) continue;
 
     const fileNode: ContentTreeNode = {
       id: `r2-file-${rel}`,
@@ -128,8 +151,11 @@ export function buildUnifiedTree(
 
   // 3. Process staged items if present (fallback)
   for (const item of stagedItems) {
-    const rel = stripCat(item.key.replace(/^content-staging\//, ""));
-    const parts = rel.split("/");
+    const normalized = normalizeKey(item.key);
+    if (!isInCategory(normalized)) continue;
+
+    const rel = stripCat(normalized);
+    const parts = rel.split("/").filter(Boolean);
     const fileName = parts.pop() ?? "";
     if (fileName === ".keep") continue;
 

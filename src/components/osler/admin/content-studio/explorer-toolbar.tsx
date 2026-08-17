@@ -54,6 +54,7 @@ export interface ExplorerToolbarProps {
   onBreadcrumbClick: (path: string) => void;
   search: string;
   onSearchChange: (q: string) => void;
+  onOpenSearchModal: () => void;
   statusFilter: StatusFilter;
   onStatusFilterChange: (s: StatusFilter) => void;
   viewMode: ViewMode;
@@ -83,7 +84,7 @@ export function ExplorerToolbar(props: ExplorerToolbarProps) {
   const {
     breadcrumbs, canGoBack, canGoForward, canGoUp,
     onBack, onForward, onUp, onBreadcrumbClick,
-    search, onSearchChange,
+    search, onSearchChange, onOpenSearchModal,
     statusFilter, onStatusFilterChange,
     viewMode, onViewModeChange,
     onRefresh, loading, canManage,
@@ -95,21 +96,21 @@ export function ExplorerToolbar(props: ExplorerToolbarProps) {
   } = props;
 
   return (
-    <div className={cn("flex flex-wrap items-center gap-1.5 border-b border-border bg-card px-3 py-2", className)}>
+    <div className={cn("flex flex-wrap items-center gap-1.5 border-b border-border bg-card/90 px-3 py-2 backdrop-blur-md", className)}>
       {/* Side-panel toggles */}
       <IconActionButton
         icon={PanelLeft}
         label={t("admin.studio.allCategories")}
         size="iconSm"
         onClick={onToggleRail}
-        className={railOpen ? "text-primary" : "text-muted-foreground"}
+        className={railOpen ? "text-primary bg-primary/10" : "text-muted-foreground"}
       />
 
       {/* Nav buttons */}
       <div className="flex items-center gap-0.5">
-        <IconActionButton icon={ChevronLeft} label={t("admin.studio.back")} disabled={!canGoBack} onClick={onBack} size="iconSm" />
-        <IconActionButton icon={ArrowUp} label={t("admin.studio.up")} disabled={!canGoUp} onClick={onUp} size="iconSm" />
-        <IconActionButton icon={ChevronRight} label={t("admin.studio.forward")} disabled={!canGoForward} onClick={onForward} size="iconSm" />
+        <IconActionButton icon={ChevronLeft} label={`${t("admin.studio.back")} (Alt+Left)`} disabled={!canGoBack} onClick={onBack} size="iconSm" />
+        <IconActionButton icon={ArrowUp} label={`${t("admin.studio.up")} (Alt+Up)`} disabled={!canGoUp} onClick={onUp} size="iconSm" />
+        <IconActionButton icon={ChevronRight} label={`${t("admin.studio.forward")} (Alt+Right)`} disabled={!canGoForward} onClick={onForward} size="iconSm" />
       </div>
 
       {/* Breadcrumbs */}
@@ -130,8 +131,8 @@ export function ExplorerToolbar(props: ExplorerToolbarProps) {
                 onClick={() => !isLast && onBreadcrumbClick(crumb.path)}
                 disabled={isLast}
                 className={cn(
-                  "h-7 shrink-0 rounded px-1 text-xs font-medium",
-                  isLast ? "text-foreground" : "text-muted-foreground hover:bg-muted hover:text-foreground",
+                  "h-7 shrink-0 rounded px-1.5 text-xs font-medium",
+                  isLast ? "text-foreground font-semibold" : "text-muted-foreground hover:bg-muted hover:text-foreground",
                 )}
               >
                 {crumb.label}
@@ -141,20 +142,37 @@ export function ExplorerToolbar(props: ExplorerToolbarProps) {
         })}
       </nav>
 
-      {/* Search */}
-      <div className="relative w-40 shrink-0 lg:w-52">
-        <Search className="absolute start-2 top-1/2 size-3 -translate-y-1/2 text-muted-foreground" />
+      {/* Global Search Button */}
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        onClick={() => {
+          haptic("selection");
+          onOpenSearchModal();
+        }}
+        className="h-8 gap-2 px-2.5 text-xs text-muted-foreground hover:text-foreground border-border bg-background/50 shadow-2xs"
+      >
+        <Search className="size-3.5 text-muted-foreground" />
+        <span className="hidden lg:inline">{t("admin.studio.searchModal.title")}</span>
+        <kbd className="hidden sm:inline-flex items-center gap-0.5 rounded border border-border bg-muted/60 px-1 font-mono text-[10px] text-muted-foreground">
+          Ctrl K
+        </kbd>
+      </Button>
+
+      {/* Inline Quick Filter */}
+      <div className="relative w-28 shrink-0 md:w-36">
         <Input
           value={search}
           onChange={(e) => onSearchChange(e.target.value)}
           placeholder={t("admin.studio.search")}
-          className="h-8 ps-7 text-sm"
+          className="h-8 text-xs bg-background/50"
         />
       </div>
 
       {/* Status filter */}
       <Select value={statusFilter} onValueChange={(v) => onStatusFilterChange(v as StatusFilter)}>
-        <SelectTrigger className="h-8 w-32 shrink-0 text-sm">
+        <SelectTrigger className="h-8 w-28 shrink-0 text-xs bg-background/50">
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
@@ -297,19 +315,19 @@ export function ExplorerToolbar(props: ExplorerToolbarProps) {
       <div className="h-5 w-px shrink-0 bg-border" />
 
       {/* Primary actions */}
-      <div className="flex items-center gap-1">
-        <Button size="sm" variant="outline" onClick={onUpload}>
-          <Upload className="size-3" />
+      <div className="flex items-center gap-1.5">
+        <Button size="sm" variant="outline" onClick={onUpload} title="Upload files (Ctrl+U)" className="h-8 shadow-2xs">
+          <Upload className="size-3.5 text-muted-foreground" />
           <span className="hidden sm:inline">{t("admin.studio.upload")}</span>
         </Button>
         {canManage && (
           <>
-            <Button size="sm" variant="outline" onClick={onNewFolder}>
-              <FolderPlus className="size-3" />
+            <Button size="sm" variant="outline" onClick={onNewFolder} title="New folder (Ctrl+Shift+N)" className="h-8 shadow-2xs">
+              <FolderPlus className="size-3.5 text-muted-foreground" />
               <span className="hidden sm:inline">{t("admin.studio.newFolder")}</span>
             </Button>
-            <Button size="sm" onClick={onNewContent}>
-              <Plus className="size-3" />
+            <Button size="sm" onClick={onNewContent} title="New content (Ctrl+N)" className="h-8 shadow-2xs font-medium">
+              <Plus className="size-3.5" />
               <span className="hidden sm:inline">{t("admin.studio.newContent")}</span>
             </Button>
           </>
@@ -322,7 +340,7 @@ export function ExplorerToolbar(props: ExplorerToolbarProps) {
         label={t("admin.studio.noSelection")}
         size="iconSm"
         onClick={onToggleDetail}
-        className={detailOpen ? "text-primary" : "text-muted-foreground"}
+        className={detailOpen ? "text-primary bg-primary/10" : "text-muted-foreground"}
       />
     </div>
   );

@@ -64,6 +64,8 @@ import { FileExplorer, type ContextMenuActions } from "./file-explorer";
 import { DetailPanel } from "./detail-panel";
 import { ExplorerToolbar, type StatusFilter } from "./explorer-toolbar";
 import { ConvertDialog } from "./convert-dialog";
+import { MoveContentDialog } from "./move-dialog";
+import { ContentSearchModal } from "./search-modal";
 import {
   PathInputDialog,
   DeleteConfirmDialog,
@@ -103,8 +105,24 @@ export function ContentStudio({ capabilities }: ContentStudioProps) {
   const [historyIdx, setHistoryIdx] = React.useState(0);
 
   // ── UI state ──────────────────────────────────────────────────────────
-  const [viewMode, setViewMode] = React.useState<ViewMode>("grid");
+  const [viewMode, setViewModeState] = React.useState<ViewMode>(() => {
+    if (typeof window === "undefined") return "grid";
+    try {
+      return (localStorage.getItem("osler-studio-view-mode") as ViewMode) || "grid";
+    } catch {
+      return "grid";
+    }
+  });
+
+  const setViewMode = React.useCallback((m: ViewMode) => {
+    setViewModeState(m);
+    try {
+      localStorage.setItem("osler-studio-view-mode", m);
+    } catch {}
+  }, []);
+
   const [search, setSearch] = React.useState("");
+  const [searchModalOpen, setSearchModalOpen] = React.useState(false);
   const [selectedIds, setSelectedIds] = React.useState<Set<string>>(new Set());
   const [validationStates, setValidationStates] = React.useState<Map<string, ValidationState>>(new Map());
   // Collapsible side panels — persisted to localStorage so the choice
@@ -450,11 +468,92 @@ export function ContentStudio({ capabilities }: ContentStudioProps) {
     loadUnified();
   }
 
+  // ── Global Keyboard Shortcuts ─────────────────────────────────────────
+  React.useEffect(() => {
+    function handleKeyDown(e: KeyboardEvent) {
+      const activeEl = document.activeElement;
+      const isInput = activeEl && (
+        activeEl.tagName === "INPUT" ||
+        activeEl.tagName === "TEXTAREA" ||
+        activeEl.tagName === "SELECT" ||
+        (activeEl as HTMLElement).isContentEditable
+      );
+
+      // Ctrl+K / Cmd+K -> Search Modal (available anywhere)
+      if ((e.ctrlKey || e.metaKey) && (e.key === "k" || e.key === "K")) {
+        e.preventDefault();
+        setSearchModalOpen(true);
+        return;
+      }
+
+      // Global shortcuts active when not typing in an input
+      if (!isInput) {
+        // Alt+1 / Alt+2 / Alt+3 -> View mode
+        if (e.altKey && e.key === "1") {
+          e.preventDefault();
+          setViewMode("tree");
+          return;
+        }
+        if (e.altKey && e.key === "2") {
+          e.preventDefault();
+          setViewMode("grid");
+          return;
+        }
+        if (e.altKey && e.key === "3") {
+          e.preventDefault();
+          setViewMode("list");
+          return;
+        }
+
+        // Ctrl+N -> New content
+        if ((e.ctrlKey || e.metaKey) && !e.shiftKey && (e.key === "n" || e.key === "N")) {
+          e.preventDefault();
+          if (capabilities.manageUsers) setCreateOpen(true);
+          return;
+        }
+
+        // Ctrl+Shift+N -> New folder
+        if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === "n" || e.key === "N")) {
+          e.preventDefault();
+          if (capabilities.manageUsers) {
+            actions.openNewFolderDialog(activeFolder.endsWith("/__drafts__") ? "" : activeFolder);
+          }
+          return;
+        }
+
+        // Ctrl+U -> Upload
+        if ((e.ctrlKey || e.metaKey) && (e.key === "u" || e.key === "U")) {
+          e.preventDefault();
+          if (capabilities.manageUsers) setUploadOpen(true);
+          return;
+        }
+
+        // F2 -> Rename selected
+        if (e.key === "F2" && selectedNodes.length === 1 && capabilities.manageUsers) {
+          e.preventDefault();
+          actions.openRenameDialog(selectedNodes[0]);
+          return;
+        }
+
+        // Ctrl+M -> Move selected
+        if ((e.ctrlKey || e.metaKey) && (e.key === "m" || e.key === "M") && selectedNodes.length > 0 && capabilities.manageUsers) {
+          e.preventDefault();
+          actions.openMoveDialog(selectedNodes);
+          return;
+        }
+      }
+    }
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [actions, activeFolder, selectedNodes, setViewMode, capabilities.manageUsers]);
+
   // ── Context menu actions (wire the hook into the explorer's shape) ────
   const contextActions: ContextMenuActions = {
     onOpen: handleOpen,
     onRename: actions.openRenameDialog,
     onDelete: actions.openDeleteDialog,
+    onMove: (nodes) => actions.openMoveDialog(nodes),
     onDuplicate: actions.duplicate,
     onDownload: actions.download,
     onPromote: actions.promote,
@@ -462,6 +561,10 @@ export function ContentStudio({ capabilities }: ContentStudioProps) {
     onDiscardStaged: actions.discardStaged,
     onNewFile: actions.openNewFileDialog,
     onNewFolder: actions.openNewFolderDialog,
+    onNewContent: () => setCreateOpen(true),
+    onUpload: () => setUploadOpen(true),
+    onSearch: () => setSearchModalOpen(true),
+    onSelectAll: () => setSelectedIds(new Set(filteredItems.map((i) => i.id))),
     onConvert: actions.openConvertDialog,
     onPublish: actions.publish,
     onUnpublish: actions.unpublish,
@@ -504,6 +607,7 @@ export function ContentStudio({ capabilities }: ContentStudioProps) {
         }}
         search={search}
         onSearchChange={setSearch}
+        onOpenSearchModal={() => setSearchModalOpen(true)}
         statusFilter={statusFilter}
         onStatusFilterChange={setStatusFilter}
         viewMode={viewMode}
@@ -622,6 +726,7 @@ export function ContentStudio({ capabilities }: ContentStudioProps) {
                   onOpen={handleOpen}
                   onRename={actions.openRenameDialog}
                   onDelete={actions.openDeleteDialog}
+                  onMove={(nodes) => actions.openMoveDialog(nodes)}
                   onDuplicate={actions.duplicate}
                   onDownload={actions.download}
                   onConvert={actions.openConvertDialog}
@@ -667,6 +772,22 @@ export function ContentStudio({ capabilities }: ContentStudioProps) {
         onOpenChange={(o) => !o && actions.closeConvertDialog()}
         node={dialog.convertNode}
         onConverted={(id) => { actions.closeConvertDialog(); router.push(`/admin/content?id=${encodeURIComponent(id)}`); }}
+      />
+      <MoveContentDialog
+        open={dialog.moveOpen}
+        onClose={actions.closeMoveDialog}
+        targetNodes={dialog.moveNodes}
+        categoryFolder={currentCategory?.folder ?? "library"}
+        unifiedTree={unifiedTree}
+        onConfirmMove={actions.confirmMove}
+      />
+      <ContentSearchModal
+        open={searchModalOpen}
+        onClose={() => setSearchModalOpen(false)}
+        unifiedTree={unifiedTree}
+        onOpenItem={handleOpen}
+        onNavigateToFolder={navigateTo}
+        initialCategory={currentCategory?.folder ?? null}
       />
     </div>
   );

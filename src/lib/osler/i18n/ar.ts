@@ -2196,6 +2196,54 @@ export const ar = {
     "admin.studio.shortcutSelectAll": "Ctrl/Cmd+A — تحديد الكل",
     "admin.studio.shortcutEscape": "Esc — إلغاء التحديد",
     "admin.studio.shortcutRefresh": "F5 — تحديث",
+    "admin.studio.shortcutSearch": "Ctrl/Cmd+K — البحث في المحتوى",
+    "admin.studio.shortcutNewFolder": "Ctrl+Shift+N — مجلد جديد",
+    "admin.studio.shortcutNewContent": "Ctrl/Cmd+N — محتوى جديد",
+    "admin.studio.shortcutUpload": "Ctrl/Cmd+U — رفع ملفات",
+    "admin.studio.shortcutMove": "Ctrl/Cmd+M — نقل إلى مجلد",
+
+    // Search modal
+    "admin.studio.searchModal.title": "البحث في المحتوى",
+    "admin.studio.searchModal.placeholder": "ابحث بالعنوان، المسار، المعرّف، الوسم، أو الكاتب…",
+    "admin.studio.searchModal.allCategories": "جميع الأقسام",
+    "admin.studio.searchModal.noResults": "لا يوجد محتوى يطابق \"{query}\"",
+    "admin.studio.searchModal.hint": "اضغط Esc للإغلاق · ↑↓ للتنقل · Enter للفتح",
+    "admin.studio.searchModal.goToFolder": "الانتقال إلى المجلد",
+    "admin.studio.searchModal.openEditor": "فتح في المحرر",
+    "admin.studio.searchModal.copyPath": "نسخ المسار",
+    "admin.studio.searchModal.resultsCount": "تم العثور على {n} عنصر",
+
+    // Move dialog
+    "admin.studio.move.title": "نقل إلى مجلد",
+    "admin.studio.move.desc": "اختر أو أدخل مسار المجلد الوجهة لـ \"{name}\".",
+    "admin.studio.move.batchDesc": "اختر أو أدخل مسار المجلد الوجهة لـ {n} عنصر محدد.",
+    "admin.studio.move.destinationFolder": "مسار المجلد الوجهة",
+    "admin.studio.move.rootFolder": "(جذر القسم)",
+    "admin.studio.move.moveButton": "نقل إلى هنا",
+    "admin.studio.move.moving": "جارٍ النقل…",
+    "admin.studio.move.success": "تم نقل \"{name}\" إلى {dest}",
+    "admin.studio.move.batchSuccess": "تم نقل {n} عنصر إلى {dest}",
+    "admin.studio.move.failed": "فشل النقل: {error}",
+    "admin.studio.move.selectExisting": "أو اختر مجلداً موجوداً:",
+
+    // Context menu & copy
+    "admin.studio.context.move": "نقل إلى مجلد…",
+    "admin.studio.context.copyKey": "نسخ مفتاح R2",
+    "admin.studio.context.copyId": "نسخ معرّف المحتوى",
+    "admin.studio.context.copyPath": "نسخ المسار النسبي",
+    "admin.studio.context.copied": "تم النسخ إلى الحافظة",
+    "admin.studio.context.validateSchema": "التحقق من المخطط",
+    "admin.studio.context.searchEverything": "البحث في كل المحتوى (Ctrl+K)",
+    "admin.studio.context.selectAll": "تحديد الكل (Ctrl+A)",
+
+    // Micro-badge tooltips
+    "admin.studio.badge.managed": "عنصر محتوى مُدار (مُفهرس مع بيانات D1 وتاريخ الإصدارات)",
+    "admin.studio.badge.staged": "ملف مرحلي خاص (مخفي عن الطلاب حتى يتم نشره)",
+    "admin.studio.badge.raw": "ملف R2 خام (غير مُدار)",
+    "admin.studio.badge.published": "منشور (متاح للطلاب)",
+    "admin.studio.badge.draft": "مسودة",
+    "admin.studio.badge.pending": "قيد المراجعة",
+    "admin.studio.badge.rejected": "مرفوض",
 
     // ── الإعدادات: المستخدم ──────────────────────────────────────────────
     "admin.settings.about.user": "المستخدم",

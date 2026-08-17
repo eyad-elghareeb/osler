@@ -2200,6 +2200,54 @@ export const en = {
     "admin.studio.shortcutSelectAll": "Ctrl/Cmd+A — Select all",
     "admin.studio.shortcutEscape": "Esc — Clear selection",
     "admin.studio.shortcutRefresh": "F5 — Refresh",
+    "admin.studio.shortcutSearch": "Ctrl/Cmd+K — Search everything",
+    "admin.studio.shortcutNewFolder": "Ctrl+Shift+N — New folder",
+    "admin.studio.shortcutNewContent": "Ctrl/Cmd+N — New content",
+    "admin.studio.shortcutUpload": "Ctrl/Cmd+U — Upload files",
+    "admin.studio.shortcutMove": "Ctrl/Cmd+M — Move to folder",
+
+    // Search modal
+    "admin.studio.searchModal.title": "Search Content",
+    "admin.studio.searchModal.placeholder": "Search by title, path, slug, tag, or author…",
+    "admin.studio.searchModal.allCategories": "All Categories",
+    "admin.studio.searchModal.noResults": "No content matching \"{query}\"",
+    "admin.studio.searchModal.hint": "Press Esc to close · ↑↓ to navigate · Enter to open",
+    "admin.studio.searchModal.goToFolder": "Go to folder",
+    "admin.studio.searchModal.openEditor": "Open in Editor",
+    "admin.studio.searchModal.copyPath": "Copy Path",
+    "admin.studio.searchModal.resultsCount": "{n} item(s) found",
+
+    // Move dialog
+    "admin.studio.move.title": "Move to Folder",
+    "admin.studio.move.desc": "Choose or enter a destination folder for \"{name}\".",
+    "admin.studio.move.batchDesc": "Choose or enter a destination folder for {n} selected item(s).",
+    "admin.studio.move.destinationFolder": "Destination folder path",
+    "admin.studio.move.rootFolder": "(Category root)",
+    "admin.studio.move.moveButton": "Move here",
+    "admin.studio.move.moving": "Moving…",
+    "admin.studio.move.success": "Moved \"{name}\" to {dest}",
+    "admin.studio.move.batchSuccess": "Moved {n} item(s) to {dest}",
+    "admin.studio.move.failed": "Failed to move: {error}",
+    "admin.studio.move.selectExisting": "Or pick an existing folder:",
+
+    // Context menu & copy
+    "admin.studio.context.move": "Move to folder…",
+    "admin.studio.context.copyKey": "Copy R2 key",
+    "admin.studio.context.copyId": "Copy content ID",
+    "admin.studio.context.copyPath": "Copy relative path",
+    "admin.studio.context.copied": "Copied to clipboard",
+    "admin.studio.context.validateSchema": "Validate schema",
+    "admin.studio.context.searchEverything": "Search all content (Ctrl+K)",
+    "admin.studio.context.selectAll": "Select all (Ctrl+A)",
+
+    // Micro-badge tooltips
+    "admin.studio.badge.managed": "Managed content object (versioned with D1 metadata)",
+    "admin.studio.badge.staged": "Staged private file (hidden from students until published)",
+    "admin.studio.badge.raw": "Loose raw R2 file (unmanaged)",
+    "admin.studio.badge.published": "Published (available to students)",
+    "admin.studio.badge.draft": "Draft version",
+    "admin.studio.badge.pending": "Pending review",
+    "admin.studio.badge.rejected": "Rejected submission",
 
     // ── Settings: about user ──────────────────────────────────────────────
     "admin.settings.about.user": "User",

@@ -182,18 +182,27 @@ function TreeRow({ node, depth, expanded, selectedIds, searching, onToggle, onSe
         )}
 
         {isFolder ? (
-          <ChevronRight className={cn("size-3.5 shrink-0 text-muted-foreground transition-transform", isExpanded && "rotate-90")} />
+          <ChevronRight className={cn("size-3.5 shrink-0 text-muted-foreground/70 transition-transform", isExpanded && "rotate-90 text-foreground")} />
         ) : (
           <span className="w-3.5 shrink-0" />
         )}
         {isFolder ? (
-          <FolderOpen className={cn("size-3.5 shrink-0 fill-current/15", folderRowCls)} />
+          <FolderOpen className={cn("size-3.5 shrink-0", folderRowCls)} />
         ) : (
           <NodeIcon node={node} className="size-3.5 shrink-0 text-primary" />
         )}
-        <span className={cn("min-w-0 flex-1 truncate font-medium", !isFolder && selected && "text-primary")}>{node.name}</span>
+        <div className="min-w-0 flex-1 flex items-baseline gap-1.5 truncate">
+          <span className={cn("truncate font-medium text-xs", !isFolder && selected ? "text-primary font-semibold" : "text-foreground")}>
+            {node.name}
+          </span>
+          {!isFolder && node.r2Key && node.r2Key.split("/").pop() !== node.name && (
+            <span className="truncate font-mono text-[10px] text-muted-foreground/60">
+              {node.r2Key.split("/").pop()}
+            </span>
+          )}
+        </div>
         {isFolder && children.length > 0 && (
-          <span className="shrink-0 rounded-full bg-muted px-1.5 py-px text-[10px] font-medium tabular-nums text-muted-foreground">
+          <span className="shrink-0 rounded-md border border-border/60 bg-muted/40 px-1 py-px text-[10px] font-medium tabular-nums text-muted-foreground">
             {children.length}
           </span>
         )}

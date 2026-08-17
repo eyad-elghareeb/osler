@@ -73,6 +73,7 @@ export interface ContextMenuActions {
   onOpen: (node: ContentTreeNode) => void;
   onRename: (node: ContentTreeNode) => void;
   onDelete: (node: ContentTreeNode) => void;
+  onMove?: (node: ContentTreeNode | ContentTreeNode[]) => void;
   onDuplicate: (node: ContentTreeNode) => void;
   onDownload: (node: ContentTreeNode) => void;
   onPromote: (node: ContentTreeNode) => void;
@@ -80,6 +81,10 @@ export interface ContextMenuActions {
   onDiscardStaged: (node: ContentTreeNode) => void;
   onNewFile: (parentPath: string) => void;
   onNewFolder: (parentPath: string) => void;
+  onNewContent?: () => void;
+  onUpload?: () => void;
+  onSearch?: () => void;
+  onSelectAll?: () => void;
   onConvert: (node: ContentTreeNode) => void;
   onPublish?: (node: ContentTreeNode) => void;
   onUnpublish?: (node: ContentTreeNode) => void;
@@ -385,6 +390,9 @@ function GridTile({
     void onDropOnFolder(e, node);
   }
 
+  const rawKey = node.r2Key ? node.r2Key.split("/").pop() : null;
+  const hasDistinctSlug = rawKey && rawKey !== node.name && !isFolder;
+
   return (
     <Button
       type="button"
@@ -397,11 +405,11 @@ function GridTile({
       onClick={(e) => { haptic("selection"); onClick(e); }}
       onDoubleClick={() => { haptic("light"); onDoubleClick(); }}
       className={cn(
-        "group relative flex h-auto w-full aspect-[4/3] flex-col items-center gap-1 rounded-xl border p-2 text-center transition-all",
+        "group relative flex h-32 w-full flex-col justify-between rounded-xl border p-2.5 text-start transition-all shadow-xs",
         "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
         selected
           ? "border-primary/50 bg-primary/10 ring-1 ring-primary/30"
-          : "border-border bg-card hover:bg-muted/40 hover:shadow-sm",
+          : "border-border/80 bg-card hover:border-border hover:bg-muted/40 hover:shadow-sm",
         dropActive && "border-primary ring-2 ring-primary/50",
       )}
     >
@@ -414,40 +422,54 @@ function GridTile({
         </div>
       )}
 
-      {/* Badges — top-right, compact */}
-      <div className="absolute end-1 top-1">
-        <NodeBadges node={node} variant="compact" />
+      {/* Top row: Icon + Badges */}
+      <div className="flex w-full items-start justify-between gap-1.5">
+        <div
+          className={cn(
+            "flex size-8 shrink-0 items-center justify-center rounded-lg border",
+            isFolder
+              ? cn(folderTileCls, folderIconCls)
+              : "border-primary/20 bg-primary/5 text-primary shadow-2xs",
+          )}
+        >
+          <NodeIcon node={node} className="size-4" />
+        </div>
+
+        <div className="flex shrink-0 items-center gap-1">
+          <NodeBadges node={node} variant="compact" />
+        </div>
       </div>
 
-      {/* Icon */}
-      <div
-        className={cn(
-          "flex shrink-0 items-center justify-center rounded-md border",
-          isFolder
-            ? cn("size-8", folderTileCls, folderIconCls)
-            : "mt-1 size-10 bg-primary/5 border-primary/20 text-primary",
+      {/* Middle: Title & Slug */}
+      <div className="w-full min-w-0 space-y-0.5 my-auto">
+        <p
+          className={cn(
+            "w-full break-words font-semibold text-xs leading-snug text-foreground",
+            isFolder ? "line-clamp-2" : "line-clamp-2",
+          )}
+          title={node.name}
+        >
+          {node.name}
+        </p>
+        {hasDistinctSlug && (
+          <p className="w-full truncate font-mono text-[10px] text-muted-foreground/80">
+            {rawKey}
+          </p>
         )}
-      >
-        <NodeIcon node={node} className={cn(isFolder ? "size-4" : "size-5")} />
       </div>
-
-      {/* Name */}
-      <span
-        className={cn(
-          "w-full break-words font-medium leading-tight",
-          isFolder ? "line-clamp-1 text-xs" : "line-clamp-2 text-xs",
-        )}
-      >
-        {node.name}
-      </span>
 
       {/* Footer */}
-      <div className="mt-auto flex w-full items-center justify-center gap-1 text-xs text-muted-foreground">
-        {!isFolder && !status && node.size != null && node.size > 0 && (
-          <span className="tabular-nums">{formatSize(node.size)}</span>
+      <div className="flex w-full items-center justify-between gap-1 border-t border-border/40 pt-1 text-[10px] text-muted-foreground font-mono">
+        {isFolder ? (
+          <span className="tabular-nums font-sans text-muted-foreground font-medium">
+            {node.items ? `${node.items.length} items` : t("admin.studio.folder")}
+          </span>
+        ) : (
+          <span>{node.cloudObject?.content_type ?? node.ext ?? "file"}</span>
         )}
-        {isFolder && node.items && node.items.length > 0 && (
-          <span className="tabular-nums">{node.items.length}</span>
+
+        {!isFolder && node.size != null && node.size > 0 && (
+          <span className="tabular-nums">{formatSize(node.size)}</span>
         )}
       </div>
     </Button>
@@ -461,7 +483,7 @@ function ListView({ items, selectedIds, onSelectSingle, onToggle, onSelectRange,
   return (
     <div className="flex-1 overflow-y-auto osler-scroll-y">
       {/* Header row */}
-      <div className="sticky top-0 z-10 grid grid-cols-[minmax(0,1fr)_110px_70px_100px_110px] items-center gap-2 border-b border-border bg-background/95 px-3 py-1.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground backdrop-blur">
+      <div className="sticky top-0 z-10 grid grid-cols-[minmax(0,1fr)_100px_70px_100px_100px] items-center gap-2 border-b border-border bg-background/95 px-3 py-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground backdrop-blur">
         <span>{t("admin.studio.columnName")}</span>
         <span>{t("admin.studio.columnStatus")}</span>
         <span className="text-end">{t("admin.studio.columnSize")}</span>
@@ -501,6 +523,7 @@ function ListRow({
 }) {
   const { t } = useI18n();
   const status = node.cloudObject?.status;
+  const isFolder = node.kind === "folder";
   const [dropActive, setDropActive] = React.useState(false);
 
   function handleRowDragOver(e: React.DragEvent) {
@@ -517,6 +540,9 @@ function ListRow({
     void onDropOnFolder(e, node);
   }
 
+  const rawKey = node.r2Key ? node.r2Key.split("/").pop() : null;
+  const hasDistinctSlug = rawKey && rawKey !== node.name && !isFolder;
+
   return (
     <Button
       type="button"
@@ -529,7 +555,7 @@ function ListRow({
       onClick={(e) => { haptic("selection"); onClick(e); }}
       onDoubleClick={() => { haptic("light"); onDoubleClick(); }}
       className={cn(
-        "grid h-auto w-full grid-cols-[minmax(0,1fr)_110px_70px_100px_110px] items-center gap-2 rounded-none border-b border-border px-3 py-1.5 text-start text-xs transition-colors",
+        "grid h-auto w-full grid-cols-[minmax(0,1fr)_100px_70px_100px_100px] items-center gap-2 rounded-none border-b border-border/60 px-3 py-2 text-start text-xs transition-colors",
         "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/40",
         selected ? "bg-primary/10" : "hover:bg-muted/40",
         dropActive && "bg-primary/5 ring-1 ring-inset ring-primary/40",
@@ -544,23 +570,30 @@ function ListRow({
         </span>
       )}
 
-      {/* Name + icon */}
-      <div className="flex min-w-0 items-center gap-2">
+      {/* Name + icon + slug */}
+      <div className="flex min-w-0 items-center gap-2.5">
         <NodeIcon
           node={node}
           className={cn(
-            "size-3.5 shrink-0",
-            node.kind === "folder" ? folderRowCls : "text-primary",
+            "size-4 shrink-0",
+            isFolder ? folderRowCls : "text-primary",
           )}
         />
-        <span className="truncate font-medium">{node.name}</span>
-        <NodeBadges node={node} variant="compact" />
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-1.5">
+            <span className="truncate font-semibold text-foreground text-xs">{node.name}</span>
+            <NodeBadges node={node} variant="compact" />
+          </div>
+          {hasDistinctSlug && (
+            <p className="truncate font-mono text-[10px] text-muted-foreground/80">{rawKey}</p>
+          )}
+        </div>
       </div>
 
       {/* Status */}
       <div>
         {status ? (
-          <span className={cn("rounded-full border px-1 py-px text-xs uppercase tracking-wider", STATUS_BADGE[status])}>
+          <span className={cn("rounded-full border px-1.5 py-0.5 text-[10px] uppercase tracking-wider font-medium", STATUS_BADGE[status])}>
             {t(`admin.studio.row${status.charAt(0).toUpperCase() + status.slice(1)}` as any)}
           </span>
         ) : (
@@ -574,8 +607,8 @@ function ListRow({
       </div>
 
       {/* Type */}
-      <div className="text-xs text-muted-foreground">
-        {node.kind === "folder" ? t("admin.studio.folder") : node.cloudObject?.content_type ?? node.ext ?? "—"}
+      <div className="text-xs text-muted-foreground font-mono">
+        {isFolder ? t("admin.studio.folder") : node.cloudObject?.content_type ?? node.ext ?? "—"}
       </div>
 
       {/* Updated */}

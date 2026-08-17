@@ -113,7 +113,7 @@ export function folderToContentType(folder: string): ContentType | null {
 
 export type ViewMode = "grid" | "list" | "tree";
 
-// ── Accent color classes (Tailwind 4 tokens, kept here so they're static) ──
+// ── Accent color classes (Tailwind 4 tokens, subtle and harmonious) ────────
 
 export const ACCENT_CLASSES: Record<CategoryDef["accent"], {
   tile: string;       // background tint for the category rail tile
@@ -123,56 +123,56 @@ export const ACCENT_CLASSES: Record<CategoryDef["accent"], {
   ring: string;       // focus ring color
 }> = {
   violet: {
-    tile: "bg-primary/5 hover:bg-primary/10 border-primary/20",
-    tileActive: "bg-primary/15 border-primary/40 text-primary",
-    badge: "bg-primary/15 text-primary border-primary/30",
+    tile: "bg-primary/5 hover:bg-primary/10 border-border/80 text-foreground",
+    tileActive: "bg-primary/10 border-primary/30 text-primary font-semibold shadow-xs",
+    badge: "bg-primary/10 text-primary border-primary/20",
     dot: "bg-primary",
-    ring: "ring-primary/40",
+    ring: "ring-primary/30",
   },
   amber: {
-    tile: "bg-warning/5 hover:bg-warning/10 border-warning/20",
-    tileActive: "bg-warning/15 border-warning/40 text-warning",
-    badge: "bg-warning/15 text-warning border-warning/30",
+    tile: "bg-warning/5 hover:bg-warning/10 border-border/80 text-foreground",
+    tileActive: "bg-warning/10 border-warning/30 text-warning font-semibold shadow-xs",
+    badge: "bg-warning/10 text-warning border-warning/20",
     dot: "bg-warning",
-    ring: "ring-warning/40",
+    ring: "ring-warning/30",
   },
   rose: {
-    tile: "bg-destructive/5 hover:bg-destructive/10 border-destructive/20",
-    tileActive: "bg-destructive/15 border-destructive/40 text-destructive",
-    badge: "bg-destructive/15 text-destructive border-destructive/30",
+    tile: "bg-destructive/5 hover:bg-destructive/10 border-border/80 text-foreground",
+    tileActive: "bg-destructive/10 border-destructive/30 text-destructive font-semibold shadow-xs",
+    badge: "bg-destructive/10 text-destructive border-destructive/20",
     dot: "bg-destructive",
-    ring: "ring-destructive/40",
+    ring: "ring-destructive/30",
   },
   emerald: {
-    tile: "bg-success/5 hover:bg-success/10 border-success/20",
-    tileActive: "bg-success/15 border-success/40 text-success",
-    badge: "bg-success/15 text-success border-success/30",
+    tile: "bg-success/5 hover:bg-success/10 border-border/80 text-foreground",
+    tileActive: "bg-success/10 border-success/30 text-success font-semibold shadow-xs",
+    badge: "bg-success/10 text-success border-success/20",
     dot: "bg-success",
-    ring: "ring-success/40",
+    ring: "ring-success/30",
   },
   sky: {
-    tile: "bg-info/5 hover:bg-info/10 border-info/20",
-    tileActive: "bg-info/15 border-info/40 text-info",
-    badge: "bg-info/15 text-info border-info/30",
+    tile: "bg-info/5 hover:bg-info/10 border-border/80 text-foreground",
+    tileActive: "bg-info/10 border-info/30 text-info font-semibold shadow-xs",
+    badge: "bg-info/10 text-info border-info/20",
     dot: "bg-info",
-    ring: "ring-info/40",
+    ring: "ring-info/30",
   },
   slate: {
-    tile: "bg-muted hover:bg-muted/80 border-border",
-    tileActive: "bg-muted border-border text-foreground",
-    badge: "bg-muted text-muted-foreground border-border",
+    tile: "bg-muted/40 hover:bg-muted/70 border-border/80 text-foreground",
+    tileActive: "bg-muted/80 border-border text-foreground font-semibold shadow-xs",
+    badge: "bg-muted text-muted-foreground border-border/60",
     dot: "bg-muted-foreground",
     ring: "ring-border",
   },
 };
 
-// ── Status badge colors (shared between list, grid, detail panel) ──────────
+// ── Status badge colors (subtle semantic tones) ────────────────────────────
 
 export const STATUS_BADGE: Record<string, string> = {
-  draft: "bg-muted text-muted-foreground border-border",
-  pending: "bg-warning/15 text-warning border-warning/30",
-  published: "bg-success/15 text-success border-success/30",
-  rejected: "bg-destructive/15 text-destructive border-destructive/30",
+  draft: "bg-muted/70 text-muted-foreground border-border/70",
+  pending: "bg-warning/10 text-warning border-warning/25",
+  published: "bg-success/10 text-success border-success/25",
+  rejected: "bg-destructive/10 text-destructive border-destructive/25",
 };
 
 // ── Breadcrumb helpers ──────────────────────────────────────────────────────
