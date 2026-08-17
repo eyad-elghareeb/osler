@@ -64,38 +64,50 @@ fn resolve_source_root() -> Option<PathBuf> {
 
 /// Read the project's `osler.config.json`. Returns the parsed JSON object.
 #[tauri::command]
-pub fn read_config(state: State<'_, ProjectRoot>) -> Result<Value, String> {
+pub async fn read_config(state: State<'_, ProjectRoot>) -> Result<Value, String> {
     let root = crate::commands::root_or_err_pub(&state)?;
-    let p = config_path(&root);
-    if !p.is_file() {
-        return Err("Config file not found. Run the first-time wizard to create one.".into());
-    }
-    let raw = fs::read_to_string(&p).map_err(|e| e.to_string())?;
-    let parsed: Value = serde_json::from_str(&raw).map_err(|e| e.to_string())?;
-    Ok(parsed)
+    tauri::async_runtime::spawn_blocking(move || {
+        let p = config_path(&root);
+        if !p.is_file() {
+            return Err("Config file not found. Run the first-time wizard to create one.".into());
+        }
+        let raw = fs::read_to_string(&p).map_err(|e| e.to_string())?;
+        let parsed: Value = serde_json::from_str(&raw).map_err(|e| e.to_string())?;
+        Ok(parsed)
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
 
 /// Write a new config object to `osler.config.json`. Creates the file (and
 /// the `public/` parent) if missing. Pretty-prints with 2-space indentation.
 #[tauri::command]
-pub fn write_config(config: Value, state: State<'_, ProjectRoot>) -> Result<Value, String> {
+pub async fn write_config(config: Value, state: State<'_, ProjectRoot>) -> Result<Value, String> {
     let root = crate::commands::root_or_err_pub(&state)?;
-    let p = config_path(&root);
-    if let Some(parent) = p.parent() {
-        fs::create_dir_all(parent).map_err(|e| e.to_string())?;
-    }
-    let body = serde_json::to_string_pretty(&config).map_err(|e| e.to_string())?;
-    fs::write(&p, body).map_err(|e| e.to_string())?;
-    Ok(json!({ "written": true, "path": CONFIG_REL }))
+    tauri::async_runtime::spawn_blocking(move || {
+        let p = config_path(&root);
+        if let Some(parent) = p.parent() {
+            fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+        }
+        let body = serde_json::to_string_pretty(&config).map_err(|e| e.to_string())?;
+        fs::write(&p, body).map_err(|e| e.to_string())?;
+        Ok(json!({ "written": true, "path": CONFIG_REL }))
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
 
 /// Check whether the project has a config file. Used by the frontend to
 /// decide whether to launch the first-time wizard automatically.
 #[tauri::command]
-pub fn config_exists(state: State<'_, ProjectRoot>) -> Result<Value, String> {
+pub async fn config_exists(state: State<'_, ProjectRoot>) -> Result<Value, String> {
     let root = crate::commands::root_or_err_pub(&state)?;
-    let p = config_path(&root);
-    Ok(json!({ "exists": p.is_file(), "path": CONFIG_REL }))
+    tauri::async_runtime::spawn_blocking(move || {
+        let p = config_path(&root);
+        Ok(json!({ "exists": p.is_file(), "path": CONFIG_REL }))
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
 
 /* ═══════════════════════════════════════════════════════════════════════
@@ -134,7 +146,13 @@ pub struct InstanceCloudOptions {
 /// structure, copies core framework files, writes a starter `osler.config.json`,
 /// `package.json`, and content folders. Returns a summary of what was created.
 #[tauri::command]
-pub fn generate_instance(opts: InstanceOptions) -> Result<Value, String> {
+pub async fn generate_instance(opts: InstanceOptions) -> Result<Value, String> {
+    tauri::async_runtime::spawn_blocking(move || generate_instance_sync(opts))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+fn generate_instance_sync(opts: InstanceOptions) -> Result<Value, String> {
     let target = PathBuf::from(&opts.target_dir);
 
     // Validate the target directory.

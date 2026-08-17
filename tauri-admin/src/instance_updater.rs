@@ -128,7 +128,7 @@ fn is_protected_path(rel: &str) -> bool {
 
 /// Check an instance for available code updates by comparing against source Osler.
 #[tauri::command]
-pub fn check_instance_update(
+pub async fn check_instance_update(
     target_path: Option<String>,
     state: State<'_, ProjectRoot>,
 ) -> Result<UpdateCheckReport, String> {
@@ -137,7 +137,13 @@ pub fn check_instance_update(
     } else {
         crate::commands::root_or_err_pub(&state)?
     };
+    tauri::async_runtime::spawn_blocking(move || check_instance_update_sync(target_root))
+        .await
+        .map_err(|e| e.to_string())?
+}
 
+fn check_instance_update_sync(target_root: PathBuf) -> Result<UpdateCheckReport, String> {
+    let target_root = target_root;
     if !target_root.is_dir() {
         return Err("Target path is not a valid directory".into());
     }
@@ -209,7 +215,7 @@ pub fn check_instance_update(
 
 /// Apply code updates to the target instance with automatic pre-update backup snapshot.
 #[tauri::command]
-pub fn apply_instance_patch(
+pub async fn apply_instance_patch(
     target_path: Option<String>,
     state: State<'_, ProjectRoot>,
 ) -> Result<Value, String> {
@@ -218,7 +224,13 @@ pub fn apply_instance_patch(
     } else {
         crate::commands::root_or_err_pub(&state)?
     };
+    tauri::async_runtime::spawn_blocking(move || apply_instance_patch_sync(target_root))
+        .await
+        .map_err(|e| e.to_string())?
+}
 
+fn apply_instance_patch_sync(target_root: PathBuf) -> Result<Value, String> {
+    let target_root = target_root;
     if !target_root.is_dir() {
         return Err("Target path is not a valid directory".into());
     }
@@ -308,7 +320,7 @@ pub fn apply_instance_patch(
 
 /// Rollback the target instance to a previous backup snapshot.
 #[tauri::command]
-pub fn rollback_instance_patch(
+pub async fn rollback_instance_patch(
     backup_id: String,
     target_path: Option<String>,
     state: State<'_, ProjectRoot>,
@@ -318,7 +330,12 @@ pub fn rollback_instance_patch(
     } else {
         crate::commands::root_or_err_pub(&state)?
     };
+    tauri::async_runtime::spawn_blocking(move || rollback_instance_patch_sync(backup_id, target_root))
+        .await
+        .map_err(|e| e.to_string())?
+}
 
+fn rollback_instance_patch_sync(backup_id: String, target_root: PathBuf) -> Result<Value, String> {
     let backup_dir = target_root.join(".osler-backup").join(&backup_id);
     if !backup_dir.is_dir() {
         return Err(format!("Backup not found: {}", backup_id));
@@ -351,7 +368,7 @@ pub fn rollback_instance_patch(
 
 /// List available backup snapshots for an instance.
 #[tauri::command]
-pub fn list_instance_backups(
+pub async fn list_instance_backups(
     target_path: Option<String>,
     state: State<'_, ProjectRoot>,
 ) -> Result<Vec<BackupEntry>, String> {
@@ -360,7 +377,12 @@ pub fn list_instance_backups(
     } else {
         crate::commands::root_or_err_pub(&state)?
     };
+    tauri::async_runtime::spawn_blocking(move || list_instance_backups_sync(target_root))
+        .await
+        .map_err(|e| e.to_string())?
+}
 
+fn list_instance_backups_sync(target_root: PathBuf) -> Result<Vec<BackupEntry>, String> {
     let backups_root = target_root.join(".osler-backup");
     if !backups_root.is_dir() {
         return Ok(Vec::new());

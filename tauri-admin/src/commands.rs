@@ -135,17 +135,14 @@ pub fn ping() -> String {
 }
 
 #[tauri::command]
-pub fn set_project_root(root: String, state: State<'_, ProjectRoot>) -> Result<Value, String> {
+pub async fn set_project_root(root: String, state: State<'_, ProjectRoot>) -> Result<Value, String> {
     let path = PathBuf::from(&root);
     if !path.is_dir() {
         return Err("Not a valid directory".to_string());
     }
-
     let has_pkg = path.join("package.json").exists();
     let has_content = path.join("public/osler-content").is_dir();
-
     *state.0.lock().unwrap() = Some(path.clone());
-
     Ok(json!({
         "root": path.to_string_lossy(),
         "hasPackageJson": has_pkg,
@@ -154,9 +151,9 @@ pub fn set_project_root(root: String, state: State<'_, ProjectRoot>) -> Result<V
 }
 
 #[tauri::command]
-pub fn project_state(state: State<'_, ProjectRoot>) -> Result<Value, String> {
+pub async fn project_state(state: State<'_, ProjectRoot>) -> Result<Value, String> {
     let root = state.0.lock().unwrap().clone();
-    match root {
+    tauri::async_runtime::spawn_blocking(move || match root {
         Some(p) => {
             let has_pkg = p.join("package.json").exists();
             let has_content = p.join("public/osler-content").is_dir();
@@ -169,7 +166,9 @@ pub fn project_state(state: State<'_, ProjectRoot>) -> Result<Value, String> {
             }))
         }
         None => Ok(json!({ "root": null })),
-    }
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
 
 /* ═══════════════════════════════════════════════════════════════════════
@@ -183,14 +182,18 @@ fn content_root(root: &Path) -> PathBuf {
 }
 
 #[tauri::command]
-pub fn list_files(state: State<'_, ProjectRoot>) -> Result<Value, String> {
+pub async fn list_files(state: State<'_, ProjectRoot>) -> Result<Value, String> {
     let root = root_or_err(&state)?;
-    let base = content_root(&root);
-    if !base.is_dir() {
-        return Ok(json!({ "items": [] }));
-    }
-    let tree = walk_dir(&base, &base)?;
-    Ok(json!({ "items": tree }))
+    tauri::async_runtime::spawn_blocking(move || {
+        let base = content_root(&root);
+        if !base.is_dir() {
+            return Ok(json!({ "items": [] }));
+        }
+        let tree = walk_dir(&base, &base)?;
+        Ok(json!({ "items": tree }))
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
 
 fn walk_dir(dir: &Path, base: &Path) -> Result<Vec<Value>, String> {
@@ -249,52 +252,38 @@ fn walk_dir(dir: &Path, base: &Path) -> Result<Vec<Value>, String> {
 /// the owning file (e.g. `library/cardiology/stemi.md`); `file_name` is the
 /// desired asset name (e.g. `ecg.png`); `data` is the file bytes (base64).
 #[tauri::command]
-pub fn upload_content_asset(
+pub async fn upload_content_asset(
   content_path: String,
   file_name: String,
   data: String,
   state: State<'_, ProjectRoot>,
 ) -> Result<Value, String> {
   let root = root_or_err(&state)?;
-
-  // Determine the owning directory inside content root.
-  let base = content_root(&root);
-  let rel_dir = if content_path.ends_with(".md")
-    || content_path.ends_with(".json")
-    || content_path.ends_with(".html")
-    || content_path.ends_with(".pdf")
-  {
-    let idx = content_path.rfind('/').unwrap_or(0);
-    content_path[..idx].to_string()
-  } else {
-    content_path.trim_end_matches('/').to_string()
-  };
-
-  let images_dir = if rel_dir.is_empty() {
-    base.join("images")
-  } else {
-    base.join(&rel_dir).join("images")
-  };
-  std::fs::create_dir_all(&images_dir).map_err(|e| e.to_string())?;
-
-  // Sanitize the file name (no path separators / traversal).
-  let clean_name = file_name
-    .rsplit('/')
-    .next()
-    .unwrap_or(&file_name)
-    .to_string();
-  if clean_name.is_empty() || clean_name.contains("..") {
-    return Err("Invalid asset file name".to_string());
-  }
-
-  let asset_path = images_dir.join(&clean_name);
-  let bytes = base64_decode(&data)?;
-  std::fs::write(&asset_path, bytes).map_err(|e| e.to_string())?;
-
-  // Reference the asset the way the renderer expects: `images/<name>` when
-  // the image lives in the same folder as the content file.
-  let reference = format!("images/{}", clean_name);
-  Ok(json!({ "saved": true, "reference": reference }))
+  tauri::async_runtime::spawn_blocking(move || {
+    let base = content_root(&root);
+    let rel_dir = if content_path.ends_with(".md")
+      || content_path.ends_with(".json")
+      || content_path.ends_with(".html")
+      || content_path.ends_with(".pdf")
+    {
+      let idx = content_path.rfind('/').unwrap_or(0);
+      content_path[..idx].to_string()
+    } else {
+      content_path.trim_end_matches('/').to_string()
+    };
+    let images_dir = if rel_dir.is_empty() { base.join("images") } else { base.join(&rel_dir).join("images") };
+    std::fs::create_dir_all(&images_dir).map_err(|e| e.to_string())?;
+    let clean_name = file_name.rsplit('/').next().unwrap_or(&file_name).to_string();
+    if clean_name.is_empty() || clean_name.contains("..") {
+      return Err("Invalid asset file name".to_string());
+    }
+    let asset_path = images_dir.join(&clean_name);
+    let bytes = base64_decode(&data)?;
+    std::fs::write(&asset_path, bytes).map_err(|e| e.to_string())?;
+    Ok(json!({ "saved": true, "reference": format!("images/{}", clean_name) }))
+  })
+  .await
+  .map_err(|e| e.to_string())?
 }
 
 fn base64_decode(s: &str) -> Result<Vec<u8>, String> {
@@ -308,162 +297,156 @@ fn base64_decode(s: &str) -> Result<Vec<u8>, String> {
 /// return its bytes as base64 so the frontend can forward them to
 /// `upload_content_asset`. The path must stay inside the project root.
 #[tauri::command]
-pub fn read_file_base64(path: String, state: State<'_, ProjectRoot>) -> Result<Value, String> {
+pub async fn read_file_base64(path: String, state: State<'_, ProjectRoot>) -> Result<Value, String> {
   let root = root_or_err(&state)?;
-  let p = resolve(&root, &path)?;
-  if !p.is_file() {
-    return Err(format!("Not a file: {}", path));
-  }
-  let bytes = std::fs::read(&p).map_err(|e| e.to_string())?;
-  use base64::{engine::general_purpose::STANDARD, Engine};
-  let encoded = STANDARD.encode(&bytes);
-  let name = p.file_name().and_then(|n| n.to_str()).unwrap_or("asset").to_string();
-  Ok(json!({ "data": encoded, "name": name }))
+  tauri::async_runtime::spawn_blocking(move || {
+    let p = resolve(&root, &path)?;
+    if !p.is_file() { return Err(format!("Not a file: {}", path)); }
+    let bytes = std::fs::read(&p).map_err(|e| e.to_string())?;
+    use base64::{engine::general_purpose::STANDARD, Engine};
+    let encoded = STANDARD.encode(&bytes);
+    let name = p.file_name().and_then(|n| n.to_str()).unwrap_or("asset").to_string();
+    Ok(json!({ "data": encoded, "name": name }))
+  })
+  .await
+  .map_err(|e| e.to_string())?
 }
 
 #[tauri::command]
-pub fn load_file(path: String, state: State<'_, ProjectRoot>) -> Result<Value, String> {
+pub async fn load_file(path: String, state: State<'_, ProjectRoot>) -> Result<Value, String> {
   let root = root_or_err(&state)?;
-  let p = resolve_content(&root, &path)?;
-  if !p.is_file() {
-    return Err(format!("Not a file: {}", path));
-  }
-  let content = std::fs::read_to_string(&p).map_err(|e| e.to_string())?;
-  Ok(json!({ "path": path, "content": content }))
+  tauri::async_runtime::spawn_blocking(move || {
+    let p = resolve_content(&root, &path)?;
+    if !p.is_file() { return Err(format!("Not a file: {}", path)); }
+    let content = std::fs::read_to_string(&p).map_err(|e| e.to_string())?;
+    Ok(json!({ "path": path, "content": content }))
+  })
+  .await
+  .map_err(|e| e.to_string())?
 }
 
 #[tauri::command]
-pub fn save_file(
+pub async fn save_file(
     path: String,
     content: String,
     state: State<'_, ProjectRoot>,
 ) -> Result<Value, String> {
     let root = root_or_err(&state)?;
-    let p = resolve_content(&root, &path)?;
-    if let Some(parent) = p.parent() {
-        std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
-    }
-    std::fs::write(&p, content).map_err(|e| e.to_string())?;
-    Ok(json!({ "saved": true, "path": path }))
+    tauri::async_runtime::spawn_blocking(move || {
+        let p = resolve_content(&root, &path)?;
+        if let Some(parent) = p.parent() {
+            std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+        }
+        std::fs::write(&p, content).map_err(|e| e.to_string())?;
+        Ok(json!({ "saved": true, "path": path }))
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
 
 #[tauri::command]
-pub fn create_file(
+pub async fn create_file(
     path: String,
     content: Option<String>,
     state: State<'_, ProjectRoot>,
 ) -> Result<Value, String> {
     let root = root_or_err(&state)?;
-    let rel = path.trim_start_matches('/');
-    let full_rel = if rel.starts_with(CONTENT_BASE) {
-        rel.to_string()
-    } else {
-        format!("{}/{}", CONTENT_BASE, rel)
-    };
-    let p = resolve(&root, &full_rel)?;
-    if p.exists() {
-        return Err(format!("Already exists: {}", path));
-    }
-    if let Some(parent) = p.parent() {
-        std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
-    }
-    let body = content.unwrap_or_default();
-    let body = if body.is_empty() && p.extension().and_then(|e| e.to_str()) == Some("json") {
-        match p.file_name().and_then(|n| n.to_str()) {
-            Some("questions.json") => r#"{"questions":[]}"#.to_string(),
-            Some("cards.json") => r#"{"cards":[]}"#.to_string(),
-            Some("passages.json") => r#"{"passages":[]}"#.to_string(),
-            Some("prompts.json") => r#"{"prompts":[]}"#.to_string(),
-            Some("stations.json") => r#"{"stations":[]}"#.to_string(),
-            Some("videos.json") => r#"{"videos":[]}"#.to_string(),
-            _ => "{}".to_string(),
+    tauri::async_runtime::spawn_blocking(move || {
+        let rel = path.trim_start_matches('/');
+        let full_rel = if rel.starts_with(CONTENT_BASE) { rel.to_string() } else { format!("{}/{}", CONTENT_BASE, rel) };
+        let p = resolve(&root, &full_rel)?;
+        if p.exists() { return Err(format!("Already exists: {}", path)); }
+        if let Some(parent) = p.parent() {
+            std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
         }
-    } else {
-        body
-    };
-    std::fs::write(&p, body).map_err(|e| e.to_string())?;
-    Ok(json!({ "created": true, "path": full_rel }))
+        let body = content.unwrap_or_default();
+        let body = if body.is_empty() && p.extension().and_then(|e| e.to_str()) == Some("json") {
+            match p.file_name().and_then(|n| n.to_str()) {
+                Some("questions.json") => r#"{"questions":[]}"#.to_string(),
+                Some("cards.json")     => r#"{"cards":[]}"#.to_string(),
+                Some("passages.json")  => r#"{"passages":[]}"#.to_string(),
+                Some("prompts.json")   => r#"{"prompts":[]}"#.to_string(),
+                Some("stations.json")  => r#"{"stations":[]}"#.to_string(),
+                Some("videos.json")    => r#"{"videos":[]}"#.to_string(),
+                _                      => "{}".to_string(),
+            }
+        } else { body };
+        std::fs::write(&p, body).map_err(|e| e.to_string())?;
+        Ok(json!({ "created": true, "path": full_rel }))
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
 
 #[tauri::command]
-pub fn create_folder(path: String, state: State<'_, ProjectRoot>) -> Result<Value, String> {
+pub async fn create_folder(path: String, state: State<'_, ProjectRoot>) -> Result<Value, String> {
     let root = root_or_err(&state)?;
-    let rel = path.trim_start_matches('/');
-    let full_rel = if rel.starts_with(CONTENT_BASE) {
-        rel.to_string()
-    } else {
-        format!("{}/{}", CONTENT_BASE, rel)
-    };
-    let p = resolve(&root, &full_rel)?;
-    if p.exists() {
-        return Err(format!("Already exists: {}", path));
-    }
-    std::fs::create_dir_all(&p).map_err(|e| e.to_string())?;
-    Ok(json!({ "created": true, "path": full_rel }))
+    tauri::async_runtime::spawn_blocking(move || {
+        let rel = path.trim_start_matches('/');
+        let full_rel = if rel.starts_with(CONTENT_BASE) { rel.to_string() } else { format!("{}/{}", CONTENT_BASE, rel) };
+        let p = resolve(&root, &full_rel)?;
+        if p.exists() { return Err(format!("Already exists: {}", path)); }
+        std::fs::create_dir_all(&p).map_err(|e| e.to_string())?;
+        Ok(json!({ "created": true, "path": full_rel }))
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
 
 #[tauri::command]
-pub fn delete_path(path: String, state: State<'_, ProjectRoot>) -> Result<Value, String> {
+pub async fn delete_path(path: String, state: State<'_, ProjectRoot>) -> Result<Value, String> {
     let root = root_or_err(&state)?;
-    let p = resolve_content(&root, &path)?;
-    if !p.exists() {
-        return Err(format!("Not found: {}", path));
-    }
-    if p.is_dir() {
-        std::fs::remove_dir_all(&p).map_err(|e| e.to_string())?;
-    } else {
-        std::fs::remove_file(&p).map_err(|e| e.to_string())?;
-    }
-    Ok(json!({ "deleted": true, "path": path }))
+    tauri::async_runtime::spawn_blocking(move || {
+        let p = resolve_content(&root, &path)?;
+        if !p.exists() { return Err(format!("Not found: {}", path)); }
+        if p.is_dir() { std::fs::remove_dir_all(&p).map_err(|e| e.to_string())?; }
+        else { std::fs::remove_file(&p).map_err(|e| e.to_string())?; }
+        Ok(json!({ "deleted": true, "path": path }))
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
 
 #[tauri::command]
-pub fn move_path(
+pub async fn move_path(
     from: String,
     to_folder: String,
     state: State<'_, ProjectRoot>,
 ) -> Result<Value, String> {
     let root = root_or_err(&state)?;
-    let src = resolve(&root, &from)?;
-    let dst_dir = resolve(&root, &to_folder)?;
-    if !dst_dir.is_dir() {
-        return Err(format!("Destination folder not found: {}", to_folder));
-    }
-    let filename = src
-        .file_name()
-        .ok_or_else(|| "No file name".to_string())?
-        .to_string_lossy()
-        .to_string();
-    let dst = dst_dir.join(&filename);
-    if dst.exists() {
-        return Err(format!("Destination already exists: {}", filename));
-    }
-    std::fs::rename(&src, &dst).map_err(|e| e.to_string())?;
-    Ok(json!({ "moved": true, "from": from, "to": to_folder + "/" + &filename }))
+    tauri::async_runtime::spawn_blocking(move || {
+        let src = resolve(&root, &from)?;
+        let dst_dir = resolve(&root, &to_folder)?;
+        if !dst_dir.is_dir() { return Err(format!("Destination folder not found: {}", to_folder)); }
+        let filename = src.file_name().ok_or_else(|| "No file name".to_string())?.to_string_lossy().to_string();
+        let dst = dst_dir.join(&filename);
+        if dst.exists() { return Err(format!("Destination already exists: {}", filename)); }
+        std::fs::rename(&src, &dst).map_err(|e| e.to_string())?;
+        Ok(json!({ "moved": true, "from": from, "to": to_folder + "/" + &filename }))
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
 
 #[tauri::command]
-pub fn rename_path(
+pub async fn rename_path(
     path: String,
     new_name: String,
     state: State<'_, ProjectRoot>,
 ) -> Result<Value, String> {
     let root = root_or_err(&state)?;
-    let src = resolve(&root, &path)?;
-    if !src.exists() {
-        return Err(format!("Not found: {}", path));
-    }
-    let parent = src.parent().ok_or_else(|| "Cannot rename root".to_string())?;
-    let dst = parent.join(new_name.trim_end_matches('/'));
-    if dst.exists() {
-        return Err(format!("Target already exists: {}", new_name));
-    }
-    std::fs::rename(&src, &dst).map_err(|e| e.to_string())?;
-    let new_rel = dst
-        .strip_prefix(&root)
-        .map(|p| p.to_string_lossy().replace('\\', "/"))
-        .unwrap_or(new_name);
-    Ok(json!({ "renamed": true, "from": path, "to": new_rel }))
+    tauri::async_runtime::spawn_blocking(move || {
+        let src = resolve(&root, &path)?;
+        if !src.exists() { return Err(format!("Not found: {}", path)); }
+        let parent = src.parent().ok_or_else(|| "Cannot rename root".to_string())?;
+        let dst = parent.join(new_name.trim_end_matches('/'));
+        if dst.exists() { return Err(format!("Target already exists: {}", new_name)); }
+        std::fs::rename(&src, &dst).map_err(|e| e.to_string())?;
+        let new_rel = dst.strip_prefix(&root).map(|p| p.to_string_lossy().replace('\\', "/")).unwrap_or(new_name);
+        Ok(json!({ "renamed": true, "from": path, "to": new_rel }))
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
 
 /* ═══════════════════════════════════════════════════════════════════════
@@ -471,10 +454,14 @@ pub fn rename_path(
    ═══════════════════════════════════════════════════════════════════════ */
 
 #[tauri::command]
-pub fn generate_manifest(state: State<'_, ProjectRoot>) -> Result<Value, String> {
+pub async fn generate_manifest(state: State<'_, ProjectRoot>) -> Result<Value, String> {
     let root = root_or_err(&state)?;
-    let results = manifest::generate_all(&root)?;
-    Ok(json!({ "generated": results }))
+    tauri::async_runtime::spawn_blocking(move || {
+        let results = manifest::generate_all(&root)?;
+        Ok(json!({ "generated": results }))
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
 
 #[tauri::command]
