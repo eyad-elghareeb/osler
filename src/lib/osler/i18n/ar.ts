@@ -1810,6 +1810,10 @@ export const ar = {
     "admin.content.stagedPreviewHint": "عنصر R2 مخزّن (خاص). انقر بالزر الأيمن للنشر أو التجاهل.",
     "admin.content.rawInvalidKey": "مفتاح خام غير صالح",
     "admin.content.rawInvalidKeyDesc": "يجب أن يشير المعامل ?key= إلى مسار content-files/ أو content-staging/ .",
+    "admin.content.adopting": "جارٍ تبني المحتوى ونقله إلى بيئة العمل المُدارة…",
+    "admin.content.managedWorkflowNotice": "سير عمل المحتوى المُدار",
+    "admin.content.managedWorkflowNoticeDesc": "تم إيقاف التحرير المباشر للملفات الخام. أصبحت جميع عناصر المحتوى تُدار ويتم تتبع إصداراتها عبر استوديو المحتوى.",
+    "admin.content.backToStudio": "العودة إلى استوديو المحتوى",
     // معاينة الصور في لوحة الإدارة
     "admin.preview.image": "صورة",
     "admin.preview.dimensions": "{w} × {h}بكسل",
@@ -1840,6 +1844,9 @@ export const ar = {
     "admin.toast.adoptFailed": "فشل الترقية: {error}",
     "admin.toast.renamedFolder": "تمت إعادة تسمية المجلد إلى {path}",
     "admin.toast.deletedFolder": "تم حذف المجلد {name} ({n} ملف)",
+    "admin.toast.backfillSuccess": "اكتمل الاستيراد والتحديث",
+    "admin.toast.backfillSuccessDesc": "تم تسجيل {backfilled} عنصراً ({existing} كانت مسجلة بالفعل).",
+    "admin.toast.backfillFailed": "فشل الاستيراد",
     // Content editor — raw mode
     "admin.content.editor.rawBadge": "ملف R2 خام",
     "admin.content.editor.rawBannerTitle": "تحرير ملف R2 خام — لا يوجد سجل إصدار",
@@ -2107,6 +2114,7 @@ export const ar = {
     "admin.studio.newFolder": "مجلد جديد",
     "admin.studio.upload": "رفع",
     "admin.studio.regenerateManifests": "إعادة بناء الكشوف",
+    "admin.studio.backfillContent": "استيراد وتحديث المحتوى القديم",
     "admin.studio.newContent": "محتوى جديد",
     "admin.studio.moreActions": "إجراءات إضافية",
     "admin.studio.validate": "تحقق",

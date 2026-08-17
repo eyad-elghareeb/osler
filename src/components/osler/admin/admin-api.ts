@@ -269,6 +269,32 @@ export const adminApi = {
   adoptR2Key:      (key: string, opts?: { contentType?: ContentType; title?: string; language?: string }) =>
                                                     req<{ id: string; r2KeyBase: string; status: string; adopted: boolean; alreadyExisted: boolean }>("/v1/admin/content/adopt", "POST", { key, ...opts }),
 
+  /** Upload a binary or text asset scoped directly to a content object. */
+  uploadAsset: async (id: string, path: string, body: Blob | File | string, contentType?: string) => {
+    const enabled = await cloudEnabled();
+    if (!enabled) throw new AdminApiError(503, "Cloud features are disabled");
+    const base = await getApiBase();
+    const session = readCloudSession();
+    const headers: Record<string, string> = {};
+    if (session?.token) headers["authorization"] = `Bearer ${session.token}`;
+    if (contentType) headers["content-type"] = contentType;
+    else if (typeof body !== "string" && (body as any).type) headers["content-type"] = (body as any).type;
+    const res = await fetch(`${base}/v1/admin/content/${id}/asset?path=${encodeURIComponent(path)}`, {
+      method: "PUT",
+      headers,
+      body,
+    });
+    const data = (await res.json().catch(() => ({}))) as { ok: boolean; key: string; relPath: string; error?: string };
+    if (!res.ok) throw new AdminApiError(res.status, data.error ?? "Asset upload failed");
+    return data;
+  },
+
+  /** Fetch a draft asset associated with a content object as a Blob. */
+  getAssetBlob:    (id: string, path: string) => reqBinary(`/v1/admin/content/${id}/asset?path=${encodeURIComponent(path)}`),
+
+  /** Trigger batch backfill of raw files in content-files/ to managed content_objects. */
+  backfillContent: () => req<{ ok: boolean; backfilled: number; existing: number; total: number; errors: string[] }>("/v1/admin/content/backfill", "POST"),
+
   // Review (admin only)
   pendingQueue:    ()                            => req<{ items: ContentObject[] }>("/v1/admin/content/pending"),
   getDiff:         (id: string)                  => req<{ pending: string | null; published: string | null }>(`/v1/admin/content/${id}/diff`),

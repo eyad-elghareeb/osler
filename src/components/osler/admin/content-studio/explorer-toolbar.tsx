@@ -66,6 +66,8 @@ export interface ExplorerToolbarProps {
   onNewContent: () => void;
   onRegenerateManifests: () => void;
   regenerating?: boolean;
+  onBackfill?: () => void;
+  backfilling?: boolean;
   railOpen: boolean;
   onToggleRail: () => void;
   detailOpen: boolean;
@@ -84,6 +86,7 @@ export function ExplorerToolbar(props: ExplorerToolbarProps) {
     onRefresh, loading, canManage,
     onNewFile, onNewFolder, onUpload, onNewContent,
     onRegenerateManifests, regenerating,
+    onBackfill, backfilling,
     railOpen, onToggleRail, detailOpen, onToggleDetail, className,
   } = props;
 
@@ -262,6 +265,16 @@ export function ExplorerToolbar(props: ExplorerToolbarProps) {
               )}
               {t("admin.studio.regenerateManifests")}
             </DropdownMenuItem>
+            {onBackfill && (
+              <DropdownMenuItem onClick={onBackfill} disabled={backfilling}>
+                {backfilling ? (
+                  <Loader2 className="me-2 size-3.5 animate-spin" />
+                ) : (
+                  <RefreshCw className="me-2 size-3.5" />
+                )}
+                {t("admin.studio.backfillContent")}
+              </DropdownMenuItem>
+            )}
           </DropdownMenuContent>
         </DropdownMenu>
       )}

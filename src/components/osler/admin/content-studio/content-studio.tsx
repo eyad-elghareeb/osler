@@ -130,57 +130,28 @@ export function ContentStudio({ capabilities }: ContentStudioProps) {
   // Live progress of a direct-staging drag-and-drop upload.
   const [uploadJob, setUploadJob] = React.useState<UploadProgress | null>(null);
 
-  // ── Load unified tree ─────────────────────────────────────────────────
+  // ── Load unified tree (Fast single-query D1 load) ────────────────────
   const loadUnified = React.useCallback(async () => {
     setUnifiedLoading(true);
     setR2Missing(false);
     try {
-      let allObjects: ContentObject[] = [];
-      try {
-        const res = await adminApi.listContent("all");
-        allObjects = res.items || [];
-      } catch (err: any) {
-        if (err?.status === 503) {
-          setR2Missing(true);
-          setUnifiedObjects([]);
-          setUnifiedR2ByCat({});
-          setUnifiedStagedByCat({});
-          return;
-        }
-        throw err;
+      const res = await adminApi.listContent("all");
+      setUnifiedObjects(res.items || []);
+      setUnifiedR2ByCat({});
+      setUnifiedStagedByCat({});
+    } catch (err: any) {
+      if (err?.status === 503) {
+        setR2Missing(true);
+        setUnifiedObjects([]);
+        setUnifiedR2ByCat({});
+        setUnifiedStagedByCat({});
+        return;
       }
-
-      const r2ByCat: Record<string, R2Item[]> = {};
-      const stagedByCat: Record<string, R2Item[]> = {};
-      if (capabilities.manageUsers) {
-        const results = await Promise.allSettled(
-          CATEGORIES.map(async (cat) => {
-            const [r2, staged] = await Promise.all([
-              adminApi.listR2Keys(cat.folder),
-              adminApi.listR2Keys(cat.folder, undefined, "content-staging"),
-            ]);
-            return { folder: cat.folder, items: r2.items || [], stagedItems: staged.items || [] };
-          }),
-        );
-        for (const r of results) {
-          if (r.status === "fulfilled") {
-            r2ByCat[r.value.folder] = r.value.items;
-            stagedByCat[r.value.folder] = r.value.stagedItems;
-          } else if ((r.reason as any)?.status === 503) {
-            setR2Missing(true);
-          }
-        }
-      }
-
-      setUnifiedObjects(allObjects);
-      setUnifiedR2ByCat(r2ByCat);
-      setUnifiedStagedByCat(stagedByCat);
-    } catch {
       toast({ title: t("admin.toast.failedLoadContent"), variant: "destructive" });
     } finally {
       setUnifiedLoading(false);
     }
-  }, [capabilities.manageUsers, toast, t]);
+  }, [toast, t]);
 
   React.useEffect(() => { loadUnified(); }, [loadUnified]);
 
@@ -512,6 +483,8 @@ export function ContentStudio({ capabilities }: ContentStudioProps) {
         onNewContent={() => setCreateOpen(true)}
         onRegenerateManifests={actions.regenerateManifests}
         regenerating={actions.regenerating}
+        onBackfill={actions.backfill}
+        backfilling={actions.backfilling}
         railOpen={railOpen}
         onToggleRail={() => setRailOpen((v) => !v)}
         detailOpen={detailOpen}

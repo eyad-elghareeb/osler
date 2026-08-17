@@ -150,9 +150,6 @@ export function ContentBrowser({ capabilities }: ContentBrowserProps) {
     setUnifiedLoading(true);
     setR2Missing(false);
     try {
-      // Step 1: fetch all managed objects (all statuses) once. listContent
-      // supports status="all" so we can badge + filter client-side without
-      // re-fetching on every status-filter change.
       let allObjects: ContentObject[] = [];
       try {
         const res = await adminApi.listContent("all");
@@ -162,36 +159,9 @@ export function ContentBrowser({ capabilities }: ContentBrowserProps) {
         throw err;
       }
 
-      // Step 2: list raw R2 keys for every category in parallel. A sequential
-      // loop here turns 5 independent Worker round-trips into a serial
-      // waterfall — the main reason the admin content hub feels slow. AllSettled
-      // lets one failing category (e.g. R2 misconfigured) degrade to a
-      // managed-only tree without failing the others.
-      const r2ByCat: Record<string, Array<{ key: string; size: number; uploaded: string | null }>> = {};
-      const stagedByCat: Record<string, Array<{ key: string; size: number; uploaded: string | null }>> = {};
-      if (capabilities.manageUsers) {
-        const results = await Promise.allSettled(
-          getCategories(t).map(async (cat) => {
-            const [r2, staged] = await Promise.all([
-              adminApi.listR2Keys(cat.folder),
-              adminApi.listR2Keys(cat.folder, undefined, "content-staging"),
-            ]);
-            return { folder: cat.folder, items: r2.items || [], stagedItems: staged.items || [] };
-          }),
-        );
-        for (const r of results) {
-          if (r.status === "fulfilled") {
-            r2ByCat[r.value.folder] = r.value.items;
-            stagedByCat[r.value.folder] = r.value.stagedItems;
-          } else if ((r.reason as any)?.status === 503) {
-            setR2Missing(true);
-          }
-        }
-      }
-
       setUnifiedObjects(allObjects);
-      setUnifiedR2ByCat(r2ByCat);
-      setUnifiedStagedByCat(stagedByCat);
+      setUnifiedR2ByCat({});
+      setUnifiedStagedByCat({});
     } catch (err: any) {
       toast({ title: t("admin.toast.failedLoadContent"), variant: "destructive" });
     } finally {

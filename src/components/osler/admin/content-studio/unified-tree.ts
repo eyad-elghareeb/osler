@@ -28,31 +28,16 @@ export interface R2Item {
 export function buildUnifiedTree(
   categoryFolder: string,
   _contentType: ContentType,
-  r2Items: R2Item[],
-  stagedItems: R2Item[],
-  managed: ContentObject[],
+  r2Items: R2Item[] = [],
+  stagedItems: R2Item[] = [],
+  managed: ContentObject[] = [],
   statusFilter: string,
   categoryLabel: string,
 ): ContentTreeNode[] {
-  const managedByBasename = new Map<string, ContentObject>();
-  const managedByPublishedKey = new Map<string, ContentObject>();
-  for (const obj of managed) {
-    if (obj.published_r2_key) managedByPublishedKey.set(obj.published_r2_key, obj);
-    const tail = (obj.r2_key_base || "").split("/").pop();
-    if (!tail) continue;
-    const expected = obj.content_type === "library" ? `${tail}.md` : `${tail}.json`;
-    managedByBasename.set(expected, obj);
-  }
-
   const roots: ContentTreeNode[] = [];
   const folderMap = new Map<string, ContentTreeNode>();
   const consumedObjectIds = new Set<string>();
 
-  // R2 keys are listed per-category and carry the category prefix
-  // (content-files/library/...). The studio already wraps the tree under a
-  // unified-root-<category> node, so strip the prefix here — otherwise every
-  // category would get a redundant nested "<category>" folder that collides
-  // with the root's own path and makes folder navigation a no-op.
   const catPrefix = `${categoryFolder}/`;
   const stripCat = (rel: string): string =>
     rel.startsWith(catPrefix) ? rel.slice(catPrefix.length) : rel;
@@ -66,7 +51,7 @@ export function buildUnifiedTree(
       cur = cur ? `${cur}/${seg}` : seg;
       if (!folderMap.has(cur)) {
         const folder: ContentTreeNode = {
-          id: `r2-folder-${cur}`,
+          id: `r2-folder-${categoryFolder}-${cur.replace(/\//g, "-")}`,
           name: seg,
           kind: "folder",
           r2Key: `content-files/${categoryFolder}${cur ? "/" + cur : ""}`,
@@ -82,15 +67,40 @@ export function buildUnifiedTree(
     else roots.push(leaf);
   }
 
+  // 1. Process managed items that have a published_r2_key
+  for (const obj of managed) {
+    if (obj.published_r2_key && obj.published_r2_key.startsWith(`content-files/${categoryFolder}/`)) {
+      const passesFilter = statusFilter === "all" || obj.status === statusFilter;
+      if (!passesFilter) {
+        consumedObjectIds.add(obj.id);
+        continue;
+      }
+      const rel = stripCat(obj.published_r2_key.replace(/^content-files\//, ""));
+      const parts = rel.split("/");
+      const fileName = parts[parts.length - 1] || obj.id;
+      const fileNode: ContentTreeNode = {
+        id: `cloud-${obj.id}`,
+        name: obj.title || fileName,
+        kind: "file",
+        ext: obj.content_type === "library" ? "md" : "json",
+        size: obj.body?.length,
+        r2Key: obj.published_r2_key,
+        sourcePath: obj.id,
+        managed: true,
+        cloudObject: obj,
+      };
+      consumedObjectIds.add(obj.id);
+      placeLeaf(rel, fileNode);
+    }
+  }
+
+  // 2. Process legacy raw R2 items if present (fallback)
   for (const item of r2Items) {
     const rel = stripCat(item.key.replace(/^content-files\//, ""));
     const parts = rel.split("/");
     const fileName = parts.pop() ?? "";
     if (fileName === ".keep") continue;
-
-    const matched = managedByPublishedKey.get(item.key) ?? managedByBasename.get(fileName);
-    const passesFilter = !matched || statusFilter === "all" || matched.status === statusFilter;
-    if (matched && !passesFilter) continue;
+    if (managed.some((o) => o.published_r2_key === item.key && consumedObjectIds.has(o.id))) continue;
 
     const fileNode: ContentTreeNode = {
       id: `r2-file-${rel}`,
@@ -100,13 +110,12 @@ export function buildUnifiedTree(
       size: item.size,
       r2Key: item.key,
       sourcePath: item.key,
-      managed: !!matched,
-      cloudObject: matched,
+      managed: false,
     };
-    if (matched) consumedObjectIds.add(matched.id);
     placeLeaf(rel, fileNode);
   }
 
+  // 3. Process staged items if present (fallback)
   for (const item of stagedItems) {
     const rel = stripCat(item.key.replace(/^content-staging\//, ""));
     const parts = rel.split("/");
@@ -126,6 +135,7 @@ export function buildUnifiedTree(
     placeLeaf(rel, fileNode);
   }
 
+  // 4. Drafts and unplaced managed objects
   const orphanManaged = managed.filter((o) => !consumedObjectIds.has(o.id));
   const visibleOrphans = orphanManaged.filter((o) => statusFilter === "all" || o.status === statusFilter);
   if (visibleOrphans.length > 0) {
@@ -133,10 +143,6 @@ export function buildUnifiedTree(
       id: `r2-folder-${categoryFolder}-__drafts__`,
       name: `${categoryLabel} · drafts (managed only)`,
       kind: "folder",
-      // Synthetic path — the drafts folder has no real R2 counterpart. Using
-      // a distinct "__drafts__" segment (instead of the category root key)
-      // lets the explorer navigate into it via the normal folderPathOf /
-      // findFolderNode machinery.
       r2Key: `content-files/${categoryFolder}/__drafts__`,
       items: visibleOrphans
         .slice()

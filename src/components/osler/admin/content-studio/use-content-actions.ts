@@ -88,6 +88,10 @@ export interface ContentActions {
   regenerating: boolean;
   /** Whether an adopt() call is in flight. */
   adopting: boolean;
+  /** Batch backfill raw files in content-files/ to managed content_objects. */
+  backfill: () => Promise<void>;
+  /** Whether a backfill is in flight. */
+  backfilling: boolean;
 }
 
 export interface UseContentActionsArgs {
@@ -124,6 +128,30 @@ export function useContentActions({
   });
   const [adopting, setAdopting] = React.useState(false);
   const [regenerating, setRegenerating] = React.useState(false);
+  const [backfilling, setBackfilling] = React.useState(false);
+
+  // ── Backfill ──────────────────────────────────────────────────────────
+  async function backfill() {
+    if (!capabilities.manageUsers) return;
+    setBackfilling(true);
+    try {
+      const res = await adminApi.backfillContent();
+      haptic("success");
+      toast({
+        title: t("admin.toast.backfillSuccess"),
+        description: t("admin.toast.backfillSuccessDesc", {
+          backfilled: String(res.backfilled),
+          existing: String(res.existing),
+        }),
+      });
+      onMutated();
+    } catch {
+      haptic("error");
+      toast({ title: t("admin.toast.backfillFailed"), variant: "destructive" });
+    } finally {
+      setBackfilling(false);
+    }
+  }
 
   // ── Path validation ───────────────────────────────────────────────────
   function pathError(raw: string): string | null {
@@ -402,7 +430,9 @@ export function useContentActions({
     regenerateManifests,
     regenerating,
     adopting,
-  }), [capabilities, onMutated, onPromoted, adopting, regenerating, t, toast, router]);
+    backfill,
+    backfilling,
+  }), [capabilities, onMutated, onPromoted, adopting, regenerating, backfilling, t, toast, router]);
 
   return { actions, dialog, setDialog };
 }

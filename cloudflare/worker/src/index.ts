@@ -123,6 +123,11 @@ interface Env {
   GEMINI_ENCRYPTION_KEY?: string;
   WEBAUTHN_RP_NAME?: string;
   WEBAUTHN_RP_ID?: string;
+  CONTENT_ONLY_MANAGED?: string | boolean;
+}
+
+function isManagedOnly(env: Env): boolean {
+  return env.CONTENT_ONLY_MANAGED === "true" || env.CONTENT_ONLY_MANAGED === "1" || env.CONTENT_ONLY_MANAGED === true;
 }
 
 interface UserRow {
@@ -987,20 +992,30 @@ async function hybridPublish(env: Env, obj: any, body: string, targetPath?: stri
     const publishedImagePrefix = `content-files/${category}/${publishedDir}images/`;
     // list() returns up to 1000 keys per page — we cap at 5000 to avoid a
     // pathological hot loop. Real content objects rarely have >50 images.
+    const r2 = env.CONTENT;
     let cursor: string | undefined = undefined;
     for (let page = 0; page < 5; page++) {
-      const listed: any = await env.CONTENT.list({ prefix: draftImagePrefix, limit: 1000, cursor });
-      const objects: any[] = listed.objects || [];
-      for (const item of objects) {
+      const listed: any = await r2.list({ prefix: draftImagePrefix, limit: 1000, cursor });
+      const objects: any[] = listed?.objects || [];
+      const validItems = objects.filter((item: any) => {
         const rel = String(item.key).slice(draftImagePrefix.length);
-        if (!rel || rel.endsWith("/")) continue; // skip folder placeholders
-        const dstKey = publishedImagePrefix + rel;
-        const src = await env.CONTENT.get(item.key);
-        if (!src) continue;
-        const buf = await src.arrayBuffer();
-        const imgCt = guessImageContentType(rel);
-        await env.CONTENT.put(dstKey, buf, { httpMetadata: { contentType: imgCt } });
-        hybridKeys.push(dstKey);
+        return rel && !rel.endsWith("/");
+      });
+      const CHUNK_SIZE = 8;
+      for (let i = 0; i < validItems.length; i += CHUNK_SIZE) {
+        const chunk = validItems.slice(i, i + CHUNK_SIZE);
+        await Promise.all(
+          chunk.map(async (item: any) => {
+            const rel = String(item.key).slice(draftImagePrefix.length);
+            const dstKey = publishedImagePrefix + rel;
+            const src = await r2.get(item.key);
+            if (!src) return;
+            const buf = await src.arrayBuffer();
+            const imgCt = guessImageContentType(rel);
+            await r2.put(dstKey, buf, { httpMetadata: { contentType: imgCt } });
+            hybridKeys.push(dstKey);
+          })
+        );
       }
       if (!listed.truncated) break;
       cursor = listed.cursor;
@@ -2474,6 +2489,7 @@ async function handleAdmin(request: Request, env: Env, session: Session, url: UR
     if (!isAdminOrContent(session)) return json({ error: "Forbidden" }, 403, origin, log);
     if (request.method === "POST" && path === "/v1/admin/content/upload-file") {
       if (!isAdmin(session)) return json({ error: "Forbidden" }, 403, origin, log);
+      if (isManagedOnly(env)) return json({ error: "Direct R2 operations disabled in managed-only mode" }, 403, origin, log);
       if (!env.CONTENT) return json({ error: "Content storage not configured" }, 503, origin, log);
       // readJsonLarge (not readJson): base64 data-URI bodies for binary files
       // (PDFs, images, audio) far exceed the 1 MB cap that readJson enforces,
@@ -2510,6 +2526,7 @@ async function handleAdmin(request: Request, env: Env, session: Session, url: UR
     }
     if (request.method === "GET" && path === "/v1/admin/content/r2-keys") {
       if (!isAdmin(session)) return json({ error: "Forbidden" }, 403, origin, log);
+      if (isManagedOnly(env)) return json({ error: "Direct R2 operations disabled in managed-only mode" }, 403, origin, log);
       if (!env.CONTENT) return json({ error: "Content storage not configured" }, 503, origin, log);
       const category = (url.searchParams.get("prefix") || "").trim();
       const scope = (url.searchParams.get("scope") || "content-files") === "content-staging" ? "content-staging" : "content-files";
@@ -2519,6 +2536,7 @@ async function handleAdmin(request: Request, env: Env, session: Session, url: UR
     }
     if (request.method === "DELETE" && path === "/v1/admin/content/r2-key") {
       if (!isAdmin(session)) return json({ error: "Forbidden" }, 403, origin, log);
+      if (isManagedOnly(env)) return json({ error: "Direct R2 operations disabled in managed-only mode" }, 403, origin, log);
       if (!env.CONTENT) return json({ error: "Content storage not configured" }, 503, origin, log);
       const key = (url.searchParams.get("key") || "").trim();
       if (!key) return json({ error: "key required" }, 400, origin, log);
@@ -2529,6 +2547,7 @@ async function handleAdmin(request: Request, env: Env, session: Session, url: UR
     }
     if (request.method === "GET" && path === "/v1/admin/content/r2-content") {
       if (!isAdmin(session)) return json({ error: "Forbidden" }, 403, origin, log);
+      if (isManagedOnly(env)) return json({ error: "Direct R2 operations disabled in managed-only mode" }, 403, origin, log);
       if (!env.CONTENT) return json({ error: "Content storage not configured" }, 503, origin, log);
       const key = (url.searchParams.get("key") || "").trim();
       if (!key || (!key.startsWith("content-files/") && !key.startsWith("content-staging/") && !key.startsWith("content-manifests/"))) return json({ error: "Invalid key" }, 400, origin, log);
@@ -2555,6 +2574,7 @@ async function handleAdmin(request: Request, env: Env, session: Session, url: UR
     }
     if (request.method === "POST" && path === "/v1/admin/content/publish-staged") {
       if (!isAdmin(session)) return json({ error: "Forbidden" }, 403, origin, log);
+      if (isManagedOnly(env)) return json({ error: "Direct R2 operations disabled in managed-only mode" }, 403, origin, log);
       if (!env.CONTENT) return json({ error: "Content storage not configured" }, 503, origin, log);
       const body = await readJson(request);
       const keys = Array.isArray(body.keys) ? body.keys.filter((k: any): k is string => typeof k === "string" && k.startsWith("content-staging/") && !k.includes("..") && !k.includes("\\")) : [];
@@ -2597,6 +2617,7 @@ async function handleAdmin(request: Request, env: Env, session: Session, url: UR
     }
     if (request.method === "POST" && path === "/v1/admin/content/discard-staged") {
       if (!isAdmin(session)) return json({ error: "Forbidden" }, 403, origin, log);
+      if (isManagedOnly(env)) return json({ error: "Direct R2 operations disabled in managed-only mode" }, 403, origin, log);
       if (!env.CONTENT) return json({ error: "Content storage not configured" }, 503, origin, log);
       const body = await readJson(request);
       const keys: string[] = Array.isArray(body.keys) ? body.keys.filter((k: any): k is string => typeof k === "string" && k.startsWith("content-staging/") && !k.includes("..") && !k.includes("\\")) : [];
@@ -2611,6 +2632,7 @@ async function handleAdmin(request: Request, env: Env, session: Session, url: UR
     }
     if (request.method === "POST" && path === "/v1/admin/content/r2-rename") {
       if (!isAdmin(session)) return json({ error: "Forbidden" }, 403, origin, log);
+      if (isManagedOnly(env)) return json({ error: "Direct R2 operations disabled in managed-only mode" }, 403, origin, log);
       if (!env.CONTENT) return json({ error: "Content storage not configured" }, 503, origin, log);
       const body = await readJson(request);
       const from = typeof body.from === "string" ? body.from.trim() : "";
@@ -2629,6 +2651,7 @@ async function handleAdmin(request: Request, env: Env, session: Session, url: UR
     }
     if (request.method === "POST" && path === "/v1/admin/content/r2-folder") {
       if (!isAdmin(session)) return json({ error: "Forbidden" }, 403, origin, log);
+      if (isManagedOnly(env)) return json({ error: "Direct R2 operations disabled in managed-only mode" }, 403, origin, log);
       if (!env.CONTENT) return json({ error: "Content storage not configured" }, 503, origin, log);
       const body = await readJson(request);
       const pathArg = typeof body.path === "string" ? body.path.trim().replace(/^\/+|\/+$/g, "") : "";
@@ -2661,6 +2684,7 @@ async function handleAdmin(request: Request, env: Env, session: Session, url: UR
     };
     if (request.method === "POST" && path === "/v1/admin/content/r2-delete-prefix") {
       if (!isAdmin(session)) return json({ error: "Forbidden" }, 403, origin, log);
+      if (isManagedOnly(env)) return json({ error: "Direct R2 operations disabled in managed-only mode" }, 403, origin, log);
       if (!env.CONTENT) return json({ error: "Content storage not configured" }, 503, origin, log);
       const body = await readJson(request);
       const prefix = typeof body.prefix === "string" ? body.prefix.trim().replace(/^\/+|\/+$/g, "") : "";
@@ -2680,6 +2704,7 @@ async function handleAdmin(request: Request, env: Env, session: Session, url: UR
     }
     if (request.method === "POST" && path === "/v1/admin/content/r2-rename-prefix") {
       if (!isAdmin(session)) return json({ error: "Forbidden" }, 403, origin, log);
+      if (isManagedOnly(env)) return json({ error: "Direct R2 operations disabled in managed-only mode" }, 403, origin, log);
       if (!env.CONTENT) return json({ error: "Content storage not configured" }, 503, origin, log);
       const body = await readJson(request);
       const from = typeof body.from === "string" ? body.from.trim().replace(/^\/+|\/+$/g, "") : "";
@@ -2709,6 +2734,132 @@ async function handleAdmin(request: Request, env: Env, session: Session, url: UR
       try { await regenerateManifestForCategory(env, cat); } catch (e) { console.error("manifest regen failed:", e); }
       await auditLog(env, session.user.id, "rename_r2_folder", null, { from, to, moved }, log);
       return json({ ok: true, moved }, 200, origin, log);
+    }
+    if (request.method === "POST" && path === "/v1/admin/content/backfill") {
+      if (!isAdmin(session)) return json({ error: "Forbidden" }, 403, origin, log);
+      if (!env.CONTENT) return json({ error: "Content storage not configured" }, 503, origin, log);
+
+      const existingRows = await env.DB.prepare("SELECT id, r2_key_base, content_type, published_r2_key FROM content_objects").all<any>();
+      const existingByPub = new Map<string, any>();
+      const existingByCatAndFile = new Map<string, any>();
+      for (const row of existingRows.results || []) {
+        if (row.published_r2_key) existingByPub.set(row.published_r2_key, row);
+        const tail = (row.r2_key_base || "").split("/").pop();
+        if (tail) {
+          const expected = row.content_type === "library" ? `${tail}.md` : `${tail}.json`;
+          const cat = CONTENT_TYPE_TO_CATEGORY[row.content_type] ?? row.content_type;
+          existingByCatAndFile.set(`content-files/${cat}/${expected}`, row);
+        }
+      }
+
+      const categories = ["qbank", "flashcard", "osce", "library", "videos"];
+      let backfilled = 0;
+      let existing = 0;
+      const errors: string[] = [];
+      const dbStatements: any[] = [];
+
+      for (const cat of categories) {
+        const prefix = `content-files/${cat}/`;
+        let cursor: string | undefined = undefined;
+        for (let page = 0; page < 20; page++) {
+          const listed: any = await env.CONTENT.list({ prefix, limit: 1000, cursor });
+          const objects: any[] = listed.objects || [];
+          for (const item of objects) {
+            const key: string = item.key;
+            const rel = key.slice(prefix.length);
+            if (!rel || rel.endsWith("/") || rel.endsWith("/.keep") || rel === "manifest.json" || rel.includes("/images/")) {
+              continue;
+            }
+            if (!rel.endsWith(".json") && !rel.endsWith(".md") && !rel.endsWith(".html") && !rel.endsWith(".pdf")) {
+              continue;
+            }
+
+            const already = existingByPub.get(key) || existingByCatAndFile.get(key);
+            if (already) {
+              if (already.published_r2_key !== key) {
+                dbStatements.push(env.DB.prepare("UPDATE content_objects SET published_r2_key = ?, status = 'published', updated_at = ? WHERE id = ?").bind(key, now(), already.id));
+              }
+              existing += 1;
+              continue;
+            }
+
+            try {
+              const fileSegment = rel;
+              const tail = fileSegment.split("/").pop() ?? fileSegment;
+              const idBase = tail.replace(/\.[^.]+$/, "");
+              const src = await env.CONTENT.get(key);
+              if (!src) continue;
+              const text = await src.text();
+
+              let contentType: string | undefined;
+              if (fileSegment.endsWith(".md") || fileSegment.endsWith(".html") || fileSegment.endsWith(".pdf")) {
+                contentType = "library";
+              } else if (fileSegment.endsWith(".json")) {
+                try {
+                  const j = JSON.parse(text);
+                  if (Array.isArray(j.questions)) contentType = "quiz";
+                  else if (Array.isArray(j.passages)) contentType = "bank";
+                  else if (Array.isArray(j.prompts)) contentType = "written";
+                  else if (Array.isArray(j.cards) || Array.isArray(j.decks) || Array.isArray(j.subdecks)) contentType = "flashcard";
+                  else if (Array.isArray(j.stations)) contentType = "osce";
+                  else if (Array.isArray(j.videos)) contentType = "video";
+                } catch {}
+              }
+              if (!contentType) {
+                contentType = CATEGORY_TO_DEFAULT_TYPE[cat] || "quiz";
+              }
+
+              const objectId = id();
+              const r2Base = `content/${contentType}/${objectId}`;
+              let title = idBase.replace(/[-_]+/g, " ").replace(/\b\w/g, (c: string) => c.toUpperCase());
+              try {
+                const j = JSON.parse(text);
+                if (typeof j.title === "string" && j.title.trim()) title = j.title.trim().slice(0, 200);
+              } catch {}
+
+              await Promise.all([
+                r2Put(env, r2Draft(r2Base), text),
+                r2Put(env, r2Published(r2Base), text),
+              ]);
+
+              const dir = fileSegment.includes("/") ? fileSegment.slice(0, fileSegment.lastIndexOf("/") + 1) : "";
+              const imgPrefix = `content-files/${cat}/${dir}images/`;
+              const imgListed: any = await env.CONTENT.list({ prefix: imgPrefix, limit: 100 });
+              if (imgListed && imgListed.objects) {
+                for (const imgObj of imgListed.objects) {
+                  const imgRel = String(imgObj.key).slice(imgPrefix.length);
+                  if (!imgRel || imgRel.endsWith("/")) continue;
+                  const imgFile = await env.CONTENT.get(imgObj.key);
+                  if (!imgFile) continue;
+                  const imgBuf = await imgFile.arrayBuffer();
+                  await env.CONTENT.put(`${r2Base}/images/${imgRel}`, imgBuf, {
+                    httpMetadata: { contentType: guessImageContentType(imgRel) }
+                  });
+                }
+              }
+
+              dbStatements.push(
+                env.DB.prepare("INSERT INTO content_objects (id, r2_key_base, content_type, title, language, status, published_r2_key, created_by, created_at, updated_at, reviewed_by, reviewed_at) VALUES (?, ?, ?, ?, 'en', 'published', ?, ?, ?, ?, ?, ?)").bind(objectId, r2Base, contentType, title, key, session.user.id, now(), now(), session.user.id, now())
+              );
+              existingByPub.set(key, { id: objectId });
+              backfilled += 1;
+            } catch (err: any) {
+              errors.push(`${key}: ${err.message}`);
+            }
+          }
+          if (!listed.truncated) break;
+          cursor = listed.cursor;
+        }
+      }
+
+      const BATCH_SIZE = 25;
+      for (let i = 0; i < dbStatements.length; i += BATCH_SIZE) {
+        const chunk = dbStatements.slice(i, i + BATCH_SIZE);
+        await env.DB.batch(chunk);
+      }
+
+      await auditLog(env, session.user.id, "backfill_content", null, { backfilled, existing, errors: errors.length }, log);
+      return json({ ok: true, backfilled, existing, total: backfilled + existing, errors }, 200, origin, log);
     }
     if (request.method === "POST" && path === "/v1/admin/content/regenerate-manifest") {
       if (!isAdmin(session)) return json({ error: "Forbidden" }, 403, origin, log);
@@ -2915,10 +3066,66 @@ async function handleAdmin(request: Request, env: Env, session: Session, url: UR
     const cim = path.match(/^\/v1\/admin\/content\/([^/]+)(\/(.+))?$/);
     if (cim) {
       const objectId = cim[1]; const action = cim[3] || null;
-      if (["pending","upload-file","r2-keys","r2-key","r2-content","r2-rename","r2-rename-prefix","r2-delete-prefix","r2-folder","regenerate-manifest","validate","by-r2-key","adopt","publish-staged","discard-staged"].includes(objectId)) return json({ error: "Not found" }, 404, origin, log);
+      if (["pending","upload-file","r2-keys","r2-key","r2-content","r2-rename","r2-rename-prefix","r2-delete-prefix","r2-folder","regenerate-manifest","validate","by-r2-key","adopt","publish-staged","discard-staged","backfill"].includes(objectId)) return json({ error: "Not found" }, 404, origin, log);
       const obj = await env.DB.prepare("SELECT * FROM content_objects WHERE id = ?").bind(objectId).first<any>();
       if (!obj) return json({ error: "Content not found" }, 404, origin, log);
       if (!isAdmin(session) && obj.created_by !== session.user.id && obj.status !== "published") return json({ error: "Forbidden" }, 403, origin, log);
+
+      if (request.method === "PUT" && action === "asset") {
+        if (!env.CONTENT) return json({ error: "Content storage not configured" }, 503, origin, log);
+        if (!isAdmin(session) && obj.created_by !== session.user.id) return json({ error: "Forbidden" }, 403, origin, log);
+        let rel = (url.searchParams.get("path") || "").trim().replace(/^\/+|\/+$/g, "");
+        if (!rel || rel.includes("..") || rel.includes("\\")) return json({ error: "Invalid path" }, 400, origin, log);
+        if (!rel.includes("/")) {
+          rel = `images/${rel}`;
+        }
+        const r2Key = `${obj.r2_key_base}/${rel}`;
+        let contentType = request.headers.get("content-type") || guessImageContentType(rel);
+
+        let payload: any;
+        if (contentType.includes("application/json")) {
+          const body = await readJsonLarge(request);
+          const raw = typeof body.body === "string" ? body.body : "";
+          if (raw.startsWith("data:")) {
+            const b64 = (raw.split(",")[1] ?? "").replace(/\s+/g, "");
+            const binary = atob(b64);
+            const bytes = new Uint8Array(binary.length);
+            for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+            payload = bytes;
+            contentType = raw.slice(5, raw.indexOf(";")) || guessImageContentType(rel);
+          } else {
+            payload = raw;
+          }
+        } else {
+          payload = request.body || (await request.arrayBuffer());
+        }
+
+        await env.CONTENT.put(r2Key, payload, { httpMetadata: { contentType } });
+        await env.DB.prepare("UPDATE content_objects SET updated_at = ? WHERE id = ?").bind(now(), objectId).run();
+        await auditLog(env, session.user.id, "upload_asset", objectId, { key: r2Key, relPath: rel }, log);
+        return json({ ok: true, key: r2Key, relPath: rel }, 200, origin, log);
+      }
+      if (request.method === "GET" && action === "asset") {
+        if (!env.CONTENT) return json({ error: "Content storage not configured" }, 503, origin, log);
+        let rel = (url.searchParams.get("path") || "").trim().replace(/^\/+|\/+$/g, "");
+        if (!rel || rel.includes("..") || rel.includes("\\")) return json({ error: "Invalid path" }, 400, origin, log);
+        if (!rel.includes("/")) {
+          rel = `images/${rel}`;
+        }
+        const r2Key = `${obj.r2_key_base}/${rel}`;
+        const asset = await env.CONTENT.get(r2Key);
+        if (!asset) return json({ error: "Asset not found" }, 404, origin, log);
+        const buf = await asset.arrayBuffer();
+        return new Response(buf, {
+          status: 200,
+          headers: {
+            "content-type": asset.httpMetadata?.contentType ?? guessImageContentType(rel),
+            "cache-control": "no-cache",
+            ...cors(origin),
+            ...SECURITY_HEADERS,
+          } as any,
+        });
+      }
 
       if (request.method === "PATCH" && action === "schedule") {
         if (!isAdmin(session)) return json({ error: "Forbidden" }, 403, origin, log);

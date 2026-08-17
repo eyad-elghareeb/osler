@@ -249,7 +249,7 @@ export interface UploadImageResult {
  *    `ref`/`key` point at the optimized `.webp` file. */
 export async function uploadImageForEditor(
   file: File,
-  opts: { r2KeyBase?: string; rawR2Key?: string; unique?: boolean; optimize?: boolean },
+  opts: { contentId?: string; r2KeyBase?: string; rawR2Key?: string; unique?: boolean; optimize?: boolean },
 ): Promise<UploadImageResult> {
   const optimize = opts.optimize !== false;
   const optimized = optimize ? await optimizeImageFile(file) : null;
@@ -259,9 +259,19 @@ export async function uploadImageForEditor(
   const ref = `images/${name}`;
   const key = computeImageR2Key(name, opts);
   const dataUri = await fileToDataUri(active);
-  if (key) {
+
+  const targetId = opts.contentId || (opts.r2KeyBase ? opts.r2KeyBase.split("/").pop() : null);
+  if (targetId) {
+    try {
+      await adminApi.uploadAsset(targetId, ref, active);
+    } catch {
+      // Fall back to dataUri upload if needed
+      await adminApi.uploadAsset(targetId, ref, dataUri, active.type);
+    }
+  } else if (key) {
     await adminApi.uploadFile(key, dataUri);
   }
+
   return {
     ref,
     key: key ?? "",
@@ -305,22 +315,26 @@ export function r2KeyToWorkerUrl(r2Key: string): string | null {
 }
 
 /** Resolve a relative `images/foo.png` (or bare `foo.png`) reference to a
- *  URL the admin can preview. In raw mode this is the same R2 key the file
- *  was uploaded to (served directly from the Worker's public content
- *  endpoint). In managed mode we don't have a published location until
- *  publish time, so we use the draft R2 key (also via the Worker).
+ *  URL the admin can preview. In managed mode we fetch via the Worker's asset
+ *  preview endpoint. In raw mode it resolves to the public CDN endpoint.
  *
  *  Absolute URLs, `data:` URIs, and `/`-rooted paths pass through unchanged. */
 export function resolveImageForPreview(
   src: string,
-  opts: { r2KeyBase?: string; rawR2Key?: string },
+  opts: { contentId?: string; r2KeyBase?: string; rawR2Key?: string },
 ): string {
   if (!src) return src;
   if (/^(https?:)?\/\//i.test(src) || src.startsWith("data:") || src.startsWith("/")) {
     return src;
   }
-  // Normalise to "images/<name>"
   const base = src.includes("/") ? src : `images/${src}`;
+  const apiUrl = resolvedCloudApiUrlSync();
+  const targetId = opts.contentId || (opts.r2KeyBase ? opts.r2KeyBase.split("/").pop() : null);
+
+  if (targetId && apiUrl) {
+    return `${apiUrl}/v1/admin/content/${targetId}/asset?path=${encodeURIComponent(base)}`;
+  }
+
   let r2Key: string | null = null;
   if (opts.r2KeyBase) {
     r2Key = `${opts.r2KeyBase}/${base}`;
@@ -329,10 +343,6 @@ export function resolveImageForPreview(
     if (slash >= 0) r2Key = `${opts.rawR2Key.slice(0, slash + 1)}${base}`;
   }
   if (!r2Key) return src;
-  // Draft R2 keys (e.g. "content/library/<id>/images/<name>") aren't under
-  // content-files/, so the Worker's public /v1/content/* won't serve them.
-  // The admin previews those via the dataUri returned by uploadImageForEditor
-  // instead — this function returns the relative ref for the markdown body.
   const workerUrl = r2KeyToWorkerUrl(r2Key);
   return workerUrl ?? src;
 }

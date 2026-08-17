@@ -1814,6 +1814,10 @@ export const en = {
     "admin.content.stagedPreviewHint": "Staged R2 object (private). Right-click to publish or discard.",
     "admin.content.rawInvalidKey": "Invalid raw key",
     "admin.content.rawInvalidKeyDesc": "The ?key= parameter must point to a content-files/ or content-staging/ path.",
+    "admin.content.adopting": "Adopting content into managed workspace…",
+    "admin.content.managedWorkflowNotice": "Managed Content Workflow",
+    "admin.content.managedWorkflowNoticeDesc": "Direct raw file editing has been retired. All content is now versioned and managed through Content Studio.",
+    "admin.content.backToStudio": "Back to Content Studio",
     // Admin image preview lightbox
     "admin.preview.image": "Image",
     "admin.preview.dimensions": "{w} × {h}px",
@@ -1844,6 +1848,9 @@ export const en = {
     "admin.toast.adoptFailed": "Promote failed: {error}",
     "admin.toast.renamedFolder": "Renamed folder to {path}",
     "admin.toast.deletedFolder": "Deleted folder {name} ({n} file(s))",
+    "admin.toast.backfillSuccess": "Backfill complete",
+    "admin.toast.backfillSuccessDesc": "Adopted {backfilled} items ({existing} were already registered).",
+    "admin.toast.backfillFailed": "Backfill failed",
     // Content editor — raw mode
     "admin.content.editor.rawBadge": "Raw R2 file",
     "admin.content.editor.rawBannerTitle": "Editing a raw R2 file — no version history",
@@ -2111,6 +2118,7 @@ export const en = {
     "admin.studio.newFolder": "New folder",
     "admin.studio.upload": "Upload",
     "admin.studio.regenerateManifests": "Rebuild manifests",
+    "admin.studio.backfillContent": "Backfill legacy content",
     "admin.studio.newContent": "New content",
     "admin.studio.moreActions": "More actions",
     "admin.studio.validate": "Validate",
