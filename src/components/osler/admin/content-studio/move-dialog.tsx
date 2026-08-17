@@ -67,12 +67,8 @@ export function MoveContentDialog({
     }
   }, [open, categoryFolder]);
 
-  if (!open || targetNodes.length === 0) return null;
-
-  const isBatch = targetNodes.length > 1;
-  const singleName = targetNodes[0]?.name || "";
-
   // Extract all existing folders for the selected category
+  // Must be declared before any early returns to satisfy Rules of Hooks
   const categoryFolders = React.useMemo<{ path: string; label: string; depth: number }[]>(() => {
     const root = unifiedTree.find((n) => n.id === `unified-root-${selectedCategory}`);
     if (!root) return [];
@@ -105,6 +101,12 @@ export function MoveContentDialog({
     collectFolders(root, 0);
     return list;
   }, [unifiedTree, selectedCategory]);
+
+  // Early return AFTER all hooks
+  if (!open || targetNodes.length === 0) return null;
+
+  const isBatch = targetNodes.length > 1;
+  const singleName = targetNodes[0]?.name || "";
 
   const cleanDestination = subfolderPath.trim().replace(/^\/+/, "").replace(/\/+$/, "");
   const fullDestinationPath = cleanDestination ? `${selectedCategory}/${cleanDestination}` : selectedCategory;

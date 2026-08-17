@@ -275,6 +275,7 @@ function AdminShellInner({ children }: AdminShellProps) {
           {/* Logo — premium recipe: primary-soft tint + subtle elevation */}
           <Link
             href="/admin"
+            prefetch={false}
             className="flex items-center gap-2.5 me-1 sm:me-3 shrink-0"
           >
             <div className="size-8 rounded-lg bg-primary-soft border border-primary/30 flex items-center justify-center shadow-e1">
@@ -568,6 +569,7 @@ function SidebarLink({
   return (
     <Link
       href={item.href}
+      prefetch={false}
       onClick={() => {
         haptic("selection");
         onNavigate?.();

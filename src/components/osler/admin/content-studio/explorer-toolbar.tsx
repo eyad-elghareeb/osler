@@ -27,7 +27,6 @@ import { useI18n } from "@/components/osler/i18n-provider";
 import { haptic } from "@/lib/osler/native";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
@@ -52,8 +51,6 @@ export interface ExplorerToolbarProps {
   onForward: () => void;
   onUp: () => void;
   onBreadcrumbClick: (path: string) => void;
-  search: string;
-  onSearchChange: (q: string) => void;
   onOpenSearchModal: () => void;
   statusFilter: StatusFilter;
   onStatusFilterChange: (s: StatusFilter) => void;
@@ -84,7 +81,7 @@ export function ExplorerToolbar(props: ExplorerToolbarProps) {
   const {
     breadcrumbs, canGoBack, canGoForward, canGoUp,
     onBack, onForward, onUp, onBreadcrumbClick,
-    search, onSearchChange, onOpenSearchModal,
+    onOpenSearchModal,
     statusFilter, onStatusFilterChange,
     viewMode, onViewModeChange,
     onRefresh, loading, canManage,
@@ -159,16 +156,6 @@ export function ExplorerToolbar(props: ExplorerToolbarProps) {
           Ctrl K
         </kbd>
       </Button>
-
-      {/* Inline Quick Filter */}
-      <div className="relative w-28 shrink-0 md:w-36">
-        <Input
-          value={search}
-          onChange={(e) => onSearchChange(e.target.value)}
-          placeholder={t("admin.studio.search")}
-          className="h-8 text-xs bg-background/50"
-        />
-      </div>
 
       {/* Status filter */}
       <Select value={statusFilter} onValueChange={(v) => onStatusFilterChange(v as StatusFilter)}>

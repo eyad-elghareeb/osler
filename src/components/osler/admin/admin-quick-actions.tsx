@@ -60,6 +60,7 @@ export function AdminQuickActions() {
             >
               <Link
                 href={a.href}
+                prefetch={false}
                 onClick={() => haptic("selection")}
                 className="text-start osler-card--default group flex items-center gap-3 hover:border-primary/40 hover:shadow-e2 transition-all"
               >

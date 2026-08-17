@@ -559,8 +559,15 @@ export function ContentStudio({ capabilities }: ContentStudioProps) {
     onPromote: actions.promote,
     onPublishStaged: actions.publishStaged,
     onDiscardStaged: actions.discardStaged,
-    onNewFile: actions.openNewFileDialog,
-    onNewFolder: actions.openNewFolderDialog,
+    // When a folder node is right-clicked, the context menu passes its path.
+    // When the empty area is right-clicked, it passes "". We fall back to
+    // activeFolder so new files/folders always land in the current directory.
+    onNewFile: (path) => actions.openNewFileDialog(
+      path || (activeFolder.endsWith("/__drafts__") ? "" : activeFolder)
+    ),
+    onNewFolder: (path) => actions.openNewFolderDialog(
+      path || (activeFolder.endsWith("/__drafts__") ? "" : activeFolder)
+    ),
     onNewContent: () => setCreateOpen(true),
     onUpload: () => setUploadOpen(true),
     onSearch: () => setSearchModalOpen(true),
@@ -605,8 +612,6 @@ export function ContentStudio({ capabilities }: ContentStudioProps) {
           const newPath = currentCategory ? `${currentCategory.folder}${path ? "/" + path : ""}` : "";
           navigateTo(newPath);
         }}
-        search={search}
-        onSearchChange={setSearch}
         onOpenSearchModal={() => setSearchModalOpen(true)}
         statusFilter={statusFilter}
         onStatusFilterChange={setStatusFilter}

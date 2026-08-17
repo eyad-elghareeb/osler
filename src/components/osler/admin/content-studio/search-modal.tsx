@@ -230,14 +230,14 @@ export function ContentSearchModal({
         </DialogHeader>
 
         {/* Search Input Bar */}
-        <div className="flex items-center gap-2 border-b border-border px-3.5 py-2.5 bg-card">
+        <div className="flex items-center gap-3 border-b border-border px-4 py-3 bg-card">
           <Search className="size-4 shrink-0 text-muted-foreground" />
           <Input
             ref={inputRef}
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder={t("admin.studio.searchModal.placeholder")}
-            className="h-8 flex-1 border-0 bg-transparent p-0 text-sm focus-visible:ring-0 shadow-none placeholder:text-muted-foreground/60"
+            className="h-9 flex-1 border-0 bg-transparent p-0 text-sm focus-visible:ring-0 shadow-none placeholder:text-muted-foreground/60"
           />
           {query && (
             <Button
@@ -250,13 +250,13 @@ export function ContentSearchModal({
               <X className="size-3.5" />
             </Button>
           )}
-          <span className="hidden sm:inline-flex rounded-md border border-border bg-muted/60 px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground">
+          <span className="hidden sm:inline-flex items-center rounded-md border border-border bg-muted/60 px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground">
             ESC
           </span>
         </div>
 
         {/* Category Scope Tabs */}
-        <div className="flex items-center gap-1 overflow-x-auto osler-scroll-x border-b border-border/80 bg-muted/30 px-3 py-1.5">
+        <div className="flex items-center gap-1.5 overflow-x-auto osler-scroll-x border-b border-border/60 bg-muted/20 px-4 py-2">
           <Button
             type="button"
             variant="ghost"
@@ -308,7 +308,7 @@ export function ContentSearchModal({
         {/* Results List */}
         <div
           ref={listRef}
-          className="max-h-[50vh] min-h-[160px] overflow-y-auto osler-scroll-y p-1.5"
+          className="max-h-[50vh] min-h-[160px] overflow-y-auto osler-scroll-y px-2 py-2"
           role="listbox"
         >
           {filteredResults.length === 0 ? (
@@ -339,7 +339,7 @@ export function ContentSearchModal({
                   }}
                   onMouseEnter={() => setHighlightedIndex(index)}
                   className={cn(
-                    "group relative flex items-center justify-between gap-3 rounded-lg px-2.5 py-2 text-start transition-colors cursor-pointer",
+                    "group relative flex items-center justify-between gap-3 rounded-lg px-3 py-2.5 text-start transition-colors cursor-pointer",
                     highlighted ? "bg-primary/10 text-foreground ring-1 ring-primary/25" : "hover:bg-muted/50",
                   )}
                 >
@@ -405,7 +405,7 @@ export function ContentSearchModal({
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-between border-t border-border bg-muted/20 px-3.5 py-2 text-[11px] text-muted-foreground">
+        <div className="flex items-center justify-between border-t border-border bg-muted/20 px-4 py-2 text-[11px] text-muted-foreground">
           <span>{t("admin.studio.searchModal.resultsCount", { n: String(filteredResults.length) })}</span>
           <span>{t("admin.studio.searchModal.hint")}</span>
         </div>
