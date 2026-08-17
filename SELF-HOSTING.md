@@ -139,36 +139,32 @@ Read these via `getEngineMeta(type)` from `@/lib/osler/content`.
 
 ---
 
-## 4. The Tauri admin app
+## 4. The Tauri admin suite (Instance Manager & Content Studio)
 
-The admin app is a separate Tauri (Rust + HTML/JS) desktop application that lives in [`tauri-admin/`](tauri-admin/). It binds to a project root (your Osler folder) and lets you:
+The admin suite is a standalone Tauri (Rust + HTML/JS) desktop application in [`tauri-admin/`](tauri-admin/) split into two dedicated applications / modes:
 
-- Edit content files in `public/osler-content/` with a tree browser + JSON / Markdown editors
-- Regenerate content manifests
-- Run `npm run build` / `npm run start` with live log streaming
-- Git add / commit / push / pull against your remote
-- Deploy to Vercel / GitHub Pages / Cloudflare (Pages + Worker full stack) / Netlify
-- **Read & write `osler.config.json`** with a structured editor (the Config view)
-- **Run the first-time setup wizard** (auto-launches on first bind if no config exists)
-- **Generate brand-new Osler instances** into a target directory
+1. **Osler Instance & Cloud Manager** (`instance-manager.html`):
+   - **Automated Step-by-Step Instance Generator**: 5-step guided wizard (Prerequisites → Site Identity & Engines → Cloudflare Full-Stack Configuration → Automated Deployment Pipeline → Ready Actions).
+   - **Prerequisites Diagnostic & Auto-Installer**: Checks Node.js (>= 18), Git, Wrangler CLI, and Cloudflare login status with 1-click install/fix.
+   - **Full Cloudflare Deployment**: Provisions Cloudflare Pages frontend, Worker backend, D1 SQL database & migrations, and R2 content storage bucket.
+   - **Clean Scaffolding**: Strips out `tauri-admin/`, `.osler-admin/`, and build artifacts from generated instances so they remain clean, lean Next.js apps.
+   - **Instance Code Patch & Update Engine**: Pulls updates from main Osler into instances with pre-update safety snapshots (`.osler-backup/`) while preserving custom content (`public/osler-content/`), settings, and secrets.
+   - **1-Click Direct Deployment**: Runs `npm run deploy:pages` and `npm run deploy:worker` straight from the dashboard.
 
-### Running the admin
+2. **Osler Content Studio (CMS)** (`studio.html`):
+   - Pure content authoring for medical educators: Question Banks, Flashcards, OSCE Stations, Written Clinical Cases, and Library Articles.
+   - WYSIWYG & EasyMDE Markdown editors, LaTeX formulas, Mermaid diagrams, and real-time schema validation.
+   - Content-only Git workflows and manifest generation.
+
+### Running the suite
 
 ```bash
 cd tauri-admin
 cargo tauri dev     # development
-cargo tauri build   # produce a distributable installer
+cargo tauri build   # produce a release installer
 ```
 
-The admin's frontend is plain HTML/JS (no build step) — open `tauri-admin/frontend/index.html` directly in a browser to preview the UI without Tauri (it falls back to a mock backend).
-
-### Three new admin views
-
-| View | Purpose |
-|---|---|
-| **Setup Wizard** (`views/wizard.js`) | 6-step first-time setup: site identity → GitHub repo → engine plugins → theme → language → review. Auto-launches when no `osler.config.json` exists. |
-| **Instance Generator** (`views/instance.js`) | Scaffolds a brand-new Osler project into a target directory with a fresh config, content stubs, optional sample content, and a README. |
-| **Config Editor** (`views/config.js`) | Structured editor for every section of `osler.config.json` with 5 tabs: Site / Engines / Themes / Defaults / Raw JSON. |
+Switch between **Instance Manager** and **Content Studio** via the topbar switcher pill or open `instance-manager.html` / `studio.html` directly.
 
 ---
 
@@ -314,8 +310,18 @@ The Gemini AI key is configured in-app (Settings → AI Assistant), not via env,
 
 ---
 
-## 8. Keeping your fork in sync
+## 8. Keeping your instances and forks in sync
 
+You have two ways to receive updates from upstream Osler:
+
+### Option A: Using the Tauri Admin Instance Updater (Recommended)
+Open the **Osler Instance Manager** → select your instance directory → click **Check for Updates**.
+- Previews the exact file diffs in `src/`, `scripts/`, `cloudflare/worker/src/`, and D1 migrations.
+- Creates an automated backup snapshot in `.osler-backup/`.
+- Merges core updates while **strictly protecting** your content in `public/osler-content/`, custom branding, and secrets.
+- Provides 1-click rollback if needed.
+
+### Option B: Using Git upstream merge
 ```bash
 git fetch upstream
 git merge upstream/main           # or rebase if you prefer a linear history

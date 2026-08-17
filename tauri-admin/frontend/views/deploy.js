@@ -464,6 +464,39 @@
     wrap.appendChild(panel);
     updateDeployPanel();
 
+    // Cloudflare CLI 1-Click Deploy Actions Card
+    const cliCard = el("div", { class: "card", style: { padding: "1.25rem", marginBottom: "1.5rem", background: "var(--surface-2)" } });
+    cliCard.appendChild(el("div", { class: "label", style: { marginBottom: "0.4rem" } }, "⚡ Cloudflare CLI Direct Deployments"));
+    cliCard.appendChild(el("p", { style: { fontSize: "0.8125rem", color: "var(--text-muted)", marginBottom: "1rem" } }, "Directly trigger npm deployment scripts against your configured Cloudflare Pages and Workers."));
+
+    const cliActions = el("div", { style: { display: "flex", gap: "0.5rem", flexWrap: "wrap" } });
+    const pagesBtn = el("button", { class: "btn btn-sm btn-primary" }, svgIcon("M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5", 14), "Deploy Pages (npm run deploy:pages)");
+    pagesBtn.addEventListener("click", async () => {
+      try {
+        await invoke("deploy_pages_cli");
+        toast("Deploy Pages started", "success");
+        startPolling();
+      } catch (e) {
+        toast(t("toast.error", { msg: String(e) }), "error");
+      }
+    });
+    cliActions.appendChild(pagesBtn);
+
+    const workerBtn = el("button", { class: "btn btn-sm btn-primary" }, svgIcon("M13 10V3L4 14h7v7l9-11h-7z", 14), "Deploy Worker (npm run deploy:worker)");
+    workerBtn.addEventListener("click", async () => {
+      try {
+        await invoke("deploy_worker_cli");
+        toast("Deploy Worker started", "success");
+        startPolling();
+      } catch (e) {
+        toast(t("toast.error", { msg: String(e) }), "error");
+      }
+    });
+    cliActions.appendChild(workerBtn);
+
+    cliCard.appendChild(cliActions);
+    wrap.appendChild(cliCard);
+
     // Progress
     const progress = el("div", { class: "deploy-progress", id: "deploy-progress" });
     wrap.appendChild(progress);

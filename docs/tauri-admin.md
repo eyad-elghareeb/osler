@@ -1,6 +1,8 @@
-# Osler Admin — Tauri Desktop Guide
+# Osler Suite — Tauri Desktop Guide (v0.3)
 
-The Osler admin is a standalone **Tauri 2 desktop application** (Rust backend + plain HTML/JS frontend) that lives at [`tauri-admin/`](../tauri-admin/). It binds to an Osler project root and lets you edit content files, regenerate manifests, edit `osler.config.json`, run builds, manage git, and trigger production deploys — all from a desktop window instead of the terminal.
+The Osler suite is a standalone **Tauri 2 desktop application** (Rust backend + plain HTML/JS frontend) that lives at [`tauri-admin/`](../tauri-admin/). It provides two focused applications:
+1. **Osler Instance & Cloud Manager** (`instance-manager.html`): Automated step-by-step instance generator, full Cloudflare stack deployment (Worker, D1 SQL, R2 content storage, Pages frontend), prerequisites diagnostics and auto-installer, and instance code patch/updater.
+2. **Osler Content Studio (CMS)** (`studio.html`): Dedicated authoring CMS for medical educators to edit Question Banks, Flashcards, OSCE Stations, Written Clinical Cases, and Markdown Articles.
 
 This guide is the **operator manual** for the admin app. For the architectural overview, see [`tauri-admin/README.md`](../tauri-admin/README.md). For the web app's admin panel (the in-browser one at `/admin`), see [`admin-guide.md`](./admin-guide.md).
 
@@ -12,89 +14,63 @@ This guide is the **operator manual** for the admin app. For the architectural o
 
 ## Table of Contents
 
-1. [What is the Tauri admin?](#1-what-is-the-tauri-admin)
-2. [Prerequisites](#2-prerequisites)
+1. [What is the Tauri admin suite?](#1-what-is-the-tauri-admin-suite)
+2. [Prerequisites & Diagnostic Tool](#2-prerequisites--diagnostic-tool)
 3. [Building the admin](#3-building-the-admin)
-4. [First-run experience](#4-first-run-experience)
-5. [Main UI sections](#5-main-ui-sections)
-6. [Setup Wizard](#6-setup-wizard)
-7. [Config Editor](#7-config-editor)
-8. [Instance Generator](#8-instance-generator)
-9. [Content editor](#9-content-editor)
-10. [Manifest regeneration](#10-manifest-regeneration)
-11. [Build & start runner](#11-build--start-runner)
-12. [Git operations](#12-git-operations)
-13. [Deployment providers](#13-deployment-providers)
-14. [GitHub OAuth setup](#14-github-oauth-setup)
-15. [Build-time GitHub OAuth secret injection](#15-build-time-github-oauth-secret-injection)
-16. [Cross-platform builds](#16-cross-platform-builds)
-17. [Updating the admin](#17-updating-the-admin)
-18. [Troubleshooting](#18-troubleshooting)
-19. [Frontend-only preview](#19-frontend-only-preview)
-20. [Capabilities and permissions](#20-capabilities-and-permissions)
+4. [Dual-App Architecture (Instance Manager vs Content Studio)](#4-dual-app-architecture)
+5. [Automated Instance Generator (Step-by-Step)](#5-automated-instance-generator)
+6. [Cloudflare Full-Stack Deployment](#6-cloudflare-full-stack-deployment)
+7. [Instance Code Patch & Update Engine](#7-instance-code-patch--update-engine)
+8. [Content Studio (CMS)](#8-content-studio-cms)
+9. [Config Editor & Setup Wizard](#9-config-editor--setup-wizard)
+10. [Manifest Regeneration](#10-manifest-regeneration)
+11. [Build & Start Runner](#11-build--start-runner)
+12. [Git & GitHub Operations](#12-git--github-operations)
+13. [Deployment Providers](#13-deployment-providers)
+14. [Cross-Platform Builds](#14-cross-platform-builds)
+15. [Capabilities and Permissions](#15-capabilities-and-permissions)
 
 ---
 
-## 1. What is the Tauri admin?
+## 1. What is the Tauri admin suite?
 
-The Tauri admin is a desktop application that manages **one Osler project folder at a time**. Think of it as a friendly IDE specifically for Osler — it knows the project's structure (`public/osler-content/`, `osler.config.json`, `package.json`, the Cloudflare Worker subfolder) and gives you point-and-click access to the most common operator tasks.
-
-### What it manages
-
-| Surface | What you can do |
-|---|---|
-| **Content files** | Browse `public/osler-content/` as a tree; edit JSON in a structured form editor; edit Markdown in EasyMDE; validate on save |
-| **Manifests** | Regenerate `manifest.json` per category (or all at once) — Rust port of `scripts/generate-content-manifests.js` |
-| **`osler.config.json`** | Structured editor with 5 tabs (Site / Engines / Themes / Defaults / Raw JSON); writes via `write_config` Rust command |
-| **Build & start** | Run `npm run build` / `npm run start` (or `bun` equivalents) with live-streamed stdout/stderr logs; stop button |
-| **Git** | Status / stage / commit / push / pull; shows current branch + remote URL |
-| **GitHub sync** | OAuth-based repo binding for one-click push/pull without a PAT |
-| **Deploy** | Trigger production deploys to Vercel / GitHub Pages / Cloudflare (Pages + Worker full stack) / Netlify via PATs stored on disk |
-| **Instance scaffolding** | Generate a brand-new Osler project into a target directory with a fresh config + content stubs + README |
-| **First-time wizard** | 6-step setup wizard that auto-launches on first bind when no `osler.config.json` exists |
-
-### What it is **not**
-
-- It is **not** a replacement for the in-browser admin panel at `/admin` (that one runs on the Cloudflare Worker and manages users + content on R2). The Tauri admin manages **files on disk** in your local Osler project folder.
-- It is **not** a build server — it shells out to `npm` / `bun` on your local machine.
-- It is **not** a database inspector — D1 inspection happens via `wrangler d1 execute`.
-- It is **not** required to run Osler. It's a convenience tool. You can do everything the admin does with `git`, `npm`, `wrangler`, and a text editor.
+The Tauri admin suite is a desktop application that manages **Osler instances and content workflows**. It operates as two unified environments:
 
 ### Architecture at a glance
 
 ```
 ┌──────────────────────────────────────────────────────────┐
-│                 Osler Admin (Tauri 2)                     │
+│                 Osler Suite (Tauri 2)                    │
 │  ┌────────────────────────────────────────────────────┐  │
-│  │  Frontend (HTML/CSS/JS — no build step)            │  │
-│  │  ├── index.html (app shell + pre-hydration script) │  │
-│  │  ├── main.js (Tauri bridge + router)               │  │
-│  │  ├── i18n.js (en + ar)                             │  │
+│  │  Frontend (Dual-App Mode: Instance Mgr vs Studio)  │  │
+│  │  ├── index.html / instance-manager.html / studio.html │
+│  │  ├── main.js (Tauri bridge + multi-app router)     │  │
+│  │  ├── i18n.js (en + ar translations)                │  │
 │  │  ├── styles.css (design tokens + RTL + EasyMDE)    │  │
-│  │  └── views/ (dashboard, content, configure, …)     │  │
+│  │  └── views/ (instance, updater, prereq, content…)  │  │
 │  └─────────────────┬──────────────────────────────────┘  │
 │                    │ invoke("command", args)              │
 │  ┌─────────────────▼──────────────────────────────────┐  │
 │  │  Rust backend                                      │  │
 │  │  ├── commands.rs (file CRUD, manifest, build/start)│  │
 │  │  ├── config.rs (osler.config.json + instance gen)  │  │
-│  │  ├── deploy.rs (Vercel/GH/CF/Netlify pipelines)    │  │
+│  │  ├── deploy.rs (Cloudflare full-stack + CLI deploy)│  │
+│  │  ├── instance_updater.rs (code diffs + backups)    │  │
+│  │  ├── prereq.rs (Node, Git, Wrangler, CF auth check)│  │
 │  │  ├── github.rs (OAuth + repo sync)                 │  │
-│  │  ├── manifest.rs (manifest generator — Rust port)  │  │
-│  │  ├── runner.rs (build/start process state)         │  │
-│  │  └── validate.rs (content JSON validator)          │  │
+│  │  ├── manifest.rs (manifest generator)              │  │
+│  │  └── runner.rs (build/start process state)         │  │
 │  └─────────────────┬──────────────────────────────────┘  │
 │                    │ std::process / std::fs / ureq        │
 └────────────────────┼─────────────────────────────────────┘
                      │
                      ▼
         Your Osler project folder on disk
-        ├── public/osler-content/   ← file CRUD sandboxed here
+        ├── src/                    ← core framework & engines
+        ├── public/osler-content/   ← local content packs
         ├── public/osler.config.json
-        ├── package.json
-        ├── .git/
-        ├── cloudflare/worker/
-        └── .osler-admin/deploy.json  ← PATs (mode 0600)
+        ├── cloudflare/worker/      ← backend & D1 migrations
+        └── .osler-backup/          ← timestamped safety snapshots
 ```
 
 ---

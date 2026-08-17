@@ -1,44 +1,26 @@
-# Osler Admin — Tauri Project Dashboard (v0.2)
+# Osler Suite — Instance Manager & Content Studio (v0.3)
 
-A standalone Tauri 2 desktop app that manages an Osler Next.js project from the
-project root: edit content files with a full markdown editor, regenerate
-manifests, run `npm`/`bun` build and start with live-streamed logs, commit /
-push / pull to git, and trigger production deploys to **Vercel**, **GitHub
-Pages**, **Cloudflare Pages**, or **Netlify** — all from Personal Access
-Tokens saved on disk.
+A standalone Tauri 2 desktop suite that manages Osler instances from end-to-end:
+- **Osler Instance & Cloud Manager**: Automated step-by-step instance generator with Cloudflare full-stack deployment (Worker, D1 SQL database, R2 content storage, Pages frontend), system prerequisites diagnostics and auto-installer, and instance code patch/updater.
+- **Osler Content Studio**: Dedicated authoring CMS for medical educators to edit questions, flashcards, OSCE stations, written cases, and markdown articles with WYSIWYG, Mermaid diagrams, validation, and git sync.
 
-The frontend is plain HTML/CSS/JS that ports the design language of the Osler
-web app — same dark navy + amber palette, Geist + Cairo fonts (Cairo covers
-Latin + Arabic so the same family can render both UI languages), glassy
-backdrop-blur topbar, subtle grid background, RTL-aware CSS with the `osler-ar`
-class hook, and an English + Arabic i18n dictionary with a no-flash
-pre-hydration script. UI language and content language are fully decoupled,
-just like the web app.
+## What's new in v0.3
 
-## What's new in v0.2
-
-- **Redesigned UI** — glassy backdrop-blur topbar, refined sidebar with active
-  indicator, mount fade-in animations, refined cards/buttons/badges/inputs
-  that match the Osler web app's design tokens (radius 0.625rem, OKLCH palette,
-  thin scrollbars with primary-color thumbs).
-- **Full markdown editor** — `.md` files now open in **EasyMDE** (loaded
-  on demand from the jsDelivr CDN), with a 20-button toolbar (headings, bold,
-  italic, strikethrough, quote, lists, code, table, link, image, preview,
-  side-by-side, fullscreen, undo/redo, guide) and a live status bar showing
-  line/word/cursor counts.
-- **Connect Provider & Deploy page** — save Personal Access Tokens for Vercel,
-  GitHub Pages, Cloudflare, and Netlify; test each connection; then
-  trigger production deploys straight from the dashboard. Deploying to **Cloudflare**
-  deploys **everything** (Pages frontend + Worker backend & sync API from `cloudflare/worker`).
-  Deploying to other providers (Vercel, GitHub Pages, Netlify) deploys cloud-side via REST API/Git
-  without requiring or executing local builds on your system. Tokens are stored
-  under `.osler-admin/deploy.json` (mode 0600 on Unix, auto-added to
-  `.gitignore`) and redacted as `••••••••` whenever re-read by the UI. Empty
-  token submissions preserve the existing value, so you can update non-secret
-  fields without re-entering your PAT each time.
-- **Live deploy console** — every deploy streams info/warn/error/success log
-  lines back from the Rust backend, with the final deployment URL surfaced
-  in a quick-deploy panel.
+- **Two Distinct Applications / Dedicated Modes**:
+  - Topbar App Switcher pill (`[ 🚀 Instance Manager ]` ⇄ `[ ✍️ Content Studio ]`).
+  - Standalone entrypoints: `instance-manager.html` and `studio.html` for direct dedicated window launches.
+- **Advanced Automated Instance Generator with Cloudflare Full-Stack Deployment**:
+  - 5-step guided wizard (Prerequisites -> Site Identity & Engines -> Cloudflare Stack -> Automated Deploy -> Actions).
+  - Cloud-enabled instances host content directly on **Cloudflare R2** with automated sync.
+  - Direct 1-click deployment buttons: `npm run deploy:pages` and `npm run deploy:worker`.
+- **System Prerequisites Diagnostics & Installer**:
+  - Checks Node.js (>= 18), Git CLI, Wrangler CLI, and Cloudflare Authentication status.
+  - 1-click installation triggers for missing tools and browser login.
+- **Instance Code Patch & Update Engine**:
+  - Compares target instances with main Osler source to identify updates in `src/`, `scripts/`, `cloudflare/worker/src/`, and database migrations.
+  - Pre-update safety snapshot backup created in `.osler-backup/`.
+  - Intelligently merges dependencies in `package.json` and settings in `public/osler.config.json` while **strictly preserving** all user content in `public/osler-content/`, environment secrets, and `.git/`.
+  - 1-click rollback and manifest re-generation.
 
 ## Layout
 

@@ -7,7 +7,9 @@ pub mod commands;
 pub mod config;
 pub mod deploy;
 pub mod github;
+pub mod instance_updater;
 pub mod manifest;
+pub mod prereq;
 pub mod runner;
 pub mod validate;
 

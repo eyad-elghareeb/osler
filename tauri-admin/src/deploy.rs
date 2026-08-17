@@ -1258,4 +1258,239 @@ fn deploy_netlify(cfg: &Value) -> Result<String, String> {
     Ok(ssl_url.unwrap_or_else(|| format!("https://app.netlify.com/sites/{}/deploys/{}", site_id, id)))
 }
 
-// (hash helpers removed — no longer needed without Git Data API uploads)
+/* ═══════════════════════════════════════════════════════════════════════
+   Direct CLI deployment commands (npm run deploy:pages / deploy:worker / full-stack)
+   ═══════════════════════════════════════════════════════════════════════ */
+
+fn run_streaming_cmd(cmd_name: &str, args: &[&str], cwd: &Path) -> Result<String, String> {
+    use std::io::{BufRead, BufReader};
+    use std::process::{Command, Stdio};
+
+    log_info(format!("Executing: {} {} in {}", cmd_name, args.join(" "), cwd.display()));
+
+    let mut cmd = if cfg!(target_os = "windows") {
+        let mut c = Command::new("cmd");
+        c.args(["/C", cmd_name]);
+        for a in args {
+            c.arg(a);
+        }
+        c
+    } else {
+        let mut c = Command::new(cmd_name);
+        c.args(args);
+        c
+    };
+
+    cmd.current_dir(cwd);
+    cmd.stdout(Stdio::piped());
+    cmd.stderr(Stdio::piped());
+
+    let mut child = cmd.spawn().map_err(|e| format!("Failed to start command: {}", e))?;
+
+    let stdout = child.stdout.take();
+    let stderr = child.stderr.take();
+
+    let t1 = std::thread::spawn(move || {
+        if let Some(out) = stdout {
+            let reader = BufReader::new(out);
+            for line in reader.lines().filter_map(|l| l.ok()) {
+                log_info(&line);
+            }
+        }
+    });
+
+    let t2 = std::thread::spawn(move || {
+        if let Some(err) = stderr {
+            let reader = BufReader::new(err);
+            for line in reader.lines().filter_map(|l| l.ok()) {
+                log_warn(&line);
+            }
+        }
+    });
+
+    let _ = t1.join();
+    let _ = t2.join();
+
+    let status = child.wait().map_err(|e| format!("Command error: {}", e))?;
+    if !status.success() {
+        return Err(format!("Command exited with status {}", status));
+    }
+    Ok("Command completed successfully".into())
+}
+
+/// Deploy static Next.js export to Cloudflare Pages via `npm run deploy:pages`.
+#[tauri::command]
+pub async fn deploy_pages_cli(state: State<'_, ProjectRoot>) -> Result<Value, String> {
+    let root = crate::commands::root_or_err_pub(&state)?;
+
+    {
+        let mut g = match shared_deploy().lock() {
+            Ok(g) => g,
+            Err(p) => p.into_inner(),
+        };
+        g.provider = "cloudflare_pages_cli".into();
+        g.running = true;
+        g.success = false;
+        g.started_at = now_millis();
+        g.ended_at = 0;
+        g.logs.clear();
+        g.result_url = String::new();
+        g.error = String::new();
+    }
+
+    let root_clone = root.clone();
+    std::thread::spawn(move || {
+        log_info("Starting 'npm run deploy:pages'…");
+        let res = run_streaming_cmd("npm", &["run", "deploy:pages"], &root_clone);
+        let mut g = match shared_deploy().lock() {
+            Ok(g) => g,
+            Err(p) => p.into_inner(),
+        };
+        g.running = false;
+        g.ended_at = now_millis();
+        match res {
+            Ok(_) => {
+                g.success = true;
+                log_ok("Cloudflare Pages deployed successfully!");
+            }
+            Err(e) => {
+                g.success = false;
+                g.error = e.clone();
+                log_err(format!("Cloudflare Pages deploy failed: {}", e));
+            }
+        }
+    });
+
+    Ok(json!({ "started": true, "command": "npm run deploy:pages" }))
+}
+
+/// Deploy backend Worker to Cloudflare Workers via `npm run deploy:worker`.
+#[tauri::command]
+pub async fn deploy_worker_cli(state: State<'_, ProjectRoot>) -> Result<Value, String> {
+    let root = crate::commands::root_or_err_pub(&state)?;
+
+    {
+        let mut g = match shared_deploy().lock() {
+            Ok(g) => g,
+            Err(p) => p.into_inner(),
+        };
+        g.provider = "cloudflare_worker_cli".into();
+        g.running = true;
+        g.success = false;
+        g.started_at = now_millis();
+        g.ended_at = 0;
+        g.logs.clear();
+        g.result_url = String::new();
+        g.error = String::new();
+    }
+
+    let root_clone = root.clone();
+    std::thread::spawn(move || {
+        log_info("Starting 'npm run deploy:worker'…");
+        let res = run_streaming_cmd("npm", &["run", "deploy:worker"], &root_clone);
+        let mut g = match shared_deploy().lock() {
+            Ok(g) => g,
+            Err(p) => p.into_inner(),
+        };
+        g.running = false;
+        g.ended_at = now_millis();
+        match res {
+            Ok(_) => {
+                g.success = true;
+                log_ok("Cloudflare Worker deployed successfully!");
+            }
+            Err(e) => {
+                g.success = false;
+                g.error = e.clone();
+                log_err(format!("Cloudflare Worker deploy failed: {}", e));
+            }
+        }
+    });
+
+    Ok(json!({ "started": true, "command": "npm run deploy:worker" }))
+}
+
+/// Deploy full Cloudflare stack (D1 database, R2 bucket, migrations, Worker, and Pages).
+#[tauri::command]
+pub async fn deploy_cloudflare_full_stack(
+    target_dir: Option<String>,
+    origin: String,
+    project: Option<String>,
+    worker_url: Option<String>,
+    d1: Option<String>,
+    r2: Option<String>,
+    state: State<'_, ProjectRoot>,
+) -> Result<Value, String> {
+    let root = if let Some(td) = target_dir {
+        PathBuf::from(td)
+    } else {
+        crate::commands::root_or_err_pub(&state)?
+    };
+
+    {
+        let mut g = match shared_deploy().lock() {
+            Ok(g) => g,
+            Err(p) => p.into_inner(),
+        };
+        g.provider = "cloudflare_full_stack".into();
+        g.running = true;
+        g.success = false;
+        g.started_at = now_millis();
+        g.ended_at = 0;
+        g.logs.clear();
+        g.result_url = String::new();
+        g.error = String::new();
+    }
+
+    let proj_name = project.unwrap_or_else(|| "osler".to_string());
+    let d1_name = d1.unwrap_or_else(|| "osler-cloud".to_string());
+    let r2_name = r2.unwrap_or_else(|| "osler-content".to_string());
+
+    let root_clone = root.clone();
+    std::thread::spawn(move || {
+        log_info("━━━ Cloudflare Full-Stack Deploy Started ━━━");
+        log_info(format!("Origin: {} | Project: {} | D1: {} | R2: {}", origin, proj_name, d1_name, r2_name));
+
+        let mut args: Vec<String> = vec![
+            "scripts/cloudflare-init.js".into(),
+            "--origin".into(),
+            origin,
+            "--project".into(),
+            proj_name,
+            "--d1".into(),
+            d1_name,
+            "--r2".into(),
+            r2_name,
+        ];
+        if let Some(wu) = worker_url {
+            if !wu.trim().is_empty() {
+                args.push("--worker-url".into());
+                args.push(wu);
+            }
+        }
+
+        let arg_slices: Vec<&str> = args.iter().map(|s| s.as_str()).collect();
+        let res = run_streaming_cmd("node", &arg_slices, &root_clone);
+
+        let mut g = match shared_deploy().lock() {
+            Ok(g) => g,
+            Err(p) => p.into_inner(),
+        };
+        g.running = false;
+        g.ended_at = now_millis();
+        match res {
+            Ok(_) => {
+                g.success = true;
+                log_ok("Cloudflare Full-Stack deployment completed successfully!");
+            }
+            Err(e) => {
+                g.success = false;
+                g.error = e.clone();
+                log_err(format!("Cloudflare Full-Stack deploy failed: {}", e));
+            }
+        }
+    });
+
+    Ok(json!({ "started": true, "pipeline": "cloudflare_full_stack" }))
+}
+

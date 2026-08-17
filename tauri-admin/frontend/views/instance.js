@@ -1,310 +1,590 @@
-// views/instance.js — Instance Generator view.
+// views/instance.js — Advanced Step-by-Step Instance Generator & Cloudflare Deployer.
 //
-// Scaffolds a brand-new Osler project into a user-chosen directory. The Rust
-// backend `generate_instance` command does the actual file creation; this
-// view collects the options (target directory, site identity, engines, theme,
-// language) and shows a summary after creation.
-//
-// Use case: an educator wants to spin up a fresh Osler instance for a
-// different course / department / language — instead of cloning the repo
-// and editing config by hand, they fill in 6 fields here and the admin
-// app produces a ready-to-run project folder.
+// Features:
+//   1. Step-by-step wizard (Prerequisites -> Identity & Engines -> Cloudflare Stack -> Automated Deploy -> Actions)
+//   2. Cloud-enabled instance setup (D1 SQL database, R2 content storage, Worker backend, Pages frontend)
+//   3. Live execution pipeline with real-time logs
+//   4. Direct CLI actions: "npm run deploy:pages", "npm run deploy:worker", admin seed command
 
 (function () {
   "use strict";
 
   const { invoke, toast, helpers } = window.OslerAdmin;
-  const { el, svgIcon, escapeHtml, t } = helpers;
+  const { el, svgIcon, t } = helpers;
 
   const ENGINES = [
-    { id: "quiz",      label: "Quiz" },
-    { id: "bank",      label: "Question Bank" },
-    { id: "written",   label: "Written" },
+    { id: "quiz", label: "Quiz" },
+    { id: "bank", label: "Question Bank" },
+    { id: "written", label: "Written" },
     { id: "flashcard", label: "Flashcards" },
-    { id: "osce",      label: "OSCE" },
-    { id: "library",   label: "Library" },
-    { id: "video",     label: "Videos" },
+    { id: "osce", label: "OSCE" },
+    { id: "library", label: "Library" },
+    { id: "video", label: "Videos" },
   ];
 
   const THEME_PRESETS = [
-    { id: "dark",          name: "Dark" },
-    { id: "light",         name: "Light" },
-    { id: "navy-clinic",   name: "Navy Clinic" },
+    { id: "dark", name: "Dark" },
+    { id: "light", name: "Light" },
+    { id: "navy-clinic", name: "Navy Clinic" },
     { id: "forest-rounds", name: "Forest Rounds" },
     { id: "cream-journal", name: "Cream Journal" },
-    { id: "crimson-ed",    name: "Crimson ED" },
+    { id: "crimson-ed", name: "Crimson ED" },
   ];
 
   window.OslerAdminViews = window.OslerAdminViews || {};
   window.OslerAdminViews.instance = async function (view) {
     const wrap = el("div", { class: "view osler-fade-in" });
-    wrap.appendChild(el("div", { class: "view-header" },
-      el("div", {},
-        el("h1", {}, t("instance.title")),
-        el("p", { class: "subtitle" }, t("instance.subtitle"))
+
+    wrap.appendChild(
+      el(
+        "div",
+        { class: "view-header" },
+        el(
+          "div",
+          {},
+          el("h1", {}, t("instance.title")),
+          el("p", { class: "subtitle" }, t("instance.subtitle"))
+        )
       )
-    ));
+    );
 
     const state = {
+      step: 1, // 1: Prereqs, 2: Identity, 3: Cloud config, 4: Deploy pipeline, 5: Done
       targetDir: "",
       siteName: "",
       shortName: "",
       tagline: "",
       githubRepo: "https://github.com/eyad-elghareeb/osler",
       organisation: "",
-      enabledEngines: ENGINES.map((e) => e.id), // all enabled by default
+      enabledEngines: ENGINES.map((e) => e.id),
       defaultTheme: "dark",
       defaultLang: "en",
-      includeSampleContent: true,
+      includeSampleContent: false, // Cloud instances default to R2 cloud storage
       cloud: {
-        enabled: false,
+        enabled: true,
         workerUrl: "",
-        workerName: "",
-        allowedOrigin: "",
+        workerName: "osler-cloud",
+        projectName: "osler",
+        d1Name: "osler-cloud",
+        r2Name: "osler-content",
+        allowedOrigin: "http://localhost:3000",
         turnstileSiteKey: "",
       },
-      result: null, // set after generate_instance succeeds
-      busy: false,
+      prereqReport: null,
+      deployLogs: [],
+      deployRunning: false,
+      result: null,
     };
 
-    // ── Form card ───────────────────────────────────────────────────
-    const form = el("div", { class: "card", style: { padding: "1.5rem", marginBottom: "1.5rem" } });
-    wrap.appendChild(form);
+    // Step indicator bar
+    const stepBar = el("div", { class: "step-indicator-bar", style: { display: "flex", gap: "0.5rem", marginBottom: "1.5rem" } });
+    wrap.appendChild(stepBar);
 
-    // Target directory picker
-    form.appendChild(el("div", { class: "label", style: { marginBottom: "0.4rem" } }, t("instance.targetDir")));
-    const dirRow = el("div", { style: { display: "flex", gap: "0.5rem", marginBottom: "1rem" } });
-    const dirInput = el("input", { type: "text", class: "input", placeholder: "/path/to/new-project", style: { flex: "1", fontFamily: "var(--font-mono)", fontSize: "0.8125rem" } });
-    dirInput.addEventListener("input", () => state.targetDir = dirInput.value);
-    const dirBtn = el("button", { class: "btn btn-sm" }, t("instance.browse"));
-    dirBtn.addEventListener("click", async () => {
+    // Step content container
+    const stepHost = el("div", { id: "instance-step-host" });
+    wrap.appendChild(stepHost);
+
+    view.appendChild(wrap);
+
+    renderStepBar();
+    renderCurrentStep();
+
+    function renderStepBar() {
+      stepBar.innerHTML = "";
+      const steps = [
+        { num: 1, label: t("instance.step.prereqs") },
+        { num: 2, label: t("instance.step.identity") },
+        { num: 3, label: t("instance.step.cloud") },
+        { num: 4, label: t("instance.step.deploy") },
+        { num: 5, label: t("instance.step.ready") },
+      ];
+
+      for (const s of steps) {
+        const item = el(
+          "div",
+          {
+            class: "step-pill" + (state.step === s.num ? " active" : "") + (state.step > s.num ? " completed" : ""),
+            style: {
+              flex: "1",
+              padding: "0.6rem 0.75rem",
+              borderRadius: "var(--radius-sm)",
+              background: state.step === s.num ? "var(--primary-dim)" : "var(--surface)",
+              border: state.step === s.num ? "1px solid var(--primary)" : "1px solid var(--border)",
+              fontSize: "0.75rem",
+              fontWeight: "600",
+              display: "flex",
+              alignItems: "center",
+              gap: "0.5rem",
+              cursor: s.num <= state.step ? "pointer" : "default",
+            },
+            onClick: () => {
+              if (s.num <= state.step) {
+                state.step = s.num;
+                renderStepBar();
+                renderCurrentStep();
+              }
+            },
+          },
+          el("span", {
+            style: {
+              width: "18px",
+              height: "18px",
+              borderRadius: "50%",
+              display: "inline-flex",
+              alignItems: "center",
+              justifyContent: "center",
+              background: state.step >= s.num ? "var(--primary)" : "var(--border)",
+              color: "#fff",
+              fontSize: "0.6875rem",
+            },
+          }, String(s.num)),
+          el("span", {}, s.label)
+        );
+        stepBar.appendChild(item);
+      }
+    }
+
+    function renderCurrentStep() {
+      stepHost.innerHTML = "";
+      if (state.step === 1) renderStep1Prereqs();
+      else if (state.step === 2) renderStep2Identity();
+      else if (state.step === 3) renderStep3Cloud();
+      else if (state.step === 4) renderStep4Deploy();
+      else if (state.step === 5) renderStep5Ready();
+    }
+
+    // ── STEP 1: PREREQUISITES ──────────────────────────────────────────
+    async function renderStep1Prereqs() {
+      const card = el("div", { class: "card", style: { padding: "1.5rem" } });
+      card.appendChild(el("h2", { style: { fontSize: "1.125rem", margin: "0 0 0.5rem" } }, t("instance.prereqs.title")));
+      card.appendChild(el("p", { style: { fontSize: "0.8125rem", color: "var(--text-muted)", margin: "0 0 1.25rem" } }, t("instance.prereqs.desc")));
+
+      const listContainer = el("div", { style: { display: "flex", flexDirection: "column", gap: "0.75rem", marginBottom: "1.5rem" } });
+      listContainer.innerHTML = `<div style="display:flex;align-items:center;gap:0.75rem;padding:1rem;color:var(--text-muted);"><div class="spinner"></div><span>${t("common.loading")}</span></div>`;
+      card.appendChild(listContainer);
+
+      const navRow = el("div", { style: { display: "flex", justifyContent: "flex-end", gap: "0.5rem" } });
+      const nextBtn = el("button", { class: "btn btn-primary" }, t("common.next"), svgIcon("M9 5l7 7-7 7", 14));
+      nextBtn.addEventListener("click", () => {
+        state.step = 2;
+        renderStepBar();
+        renderCurrentStep();
+      });
+      navRow.appendChild(nextBtn);
+      card.appendChild(navRow);
+
+      stepHost.appendChild(card);
+
       try {
-        const folder = await invoke("plugin:dialog|open", {
-          options: { directory: true, title: t("instance.browse"), multiple: false },
-        });
-        const p = typeof folder === "string" ? folder : null;
-        if (p) {
-          state.targetDir = p;
-          dirInput.value = p;
+        const rep = await invoke("check_prerequisites");
+        state.prereqReport = rep;
+        listContainer.innerHTML = "";
+        for (const item of rep.items || []) {
+          const row = el(
+            "div",
+            {
+              style: {
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                padding: "0.75rem 1rem",
+                background: "var(--surface-2)",
+                borderRadius: "var(--radius-sm)",
+              },
+            },
+            el(
+              "div",
+              { style: { display: "flex", alignItems: "center", gap: "0.75rem" } },
+              el("span", { class: "badge " + (item.satisfied ? "badge-success" : "badge-danger") }, item.satisfied ? "✓" : "✗"),
+              el(
+                "div",
+                {},
+                el("div", { style: { fontWeight: "600", fontSize: "0.875rem" } }, item.label),
+                el("div", { style: { fontSize: "0.75rem", color: "var(--text-muted)" } }, item.details)
+              )
+            ),
+            el("span", { style: { fontFamily: "var(--font-mono)", fontSize: "0.75rem" } }, item.version)
+          );
+          listContainer.appendChild(row);
         }
       } catch (e) {
-        toast(t("toast.error", { msg: String(e) }), "error");
+        listContainer.innerHTML = `<div style="color:var(--danger);font-size:0.8125rem;">${t("toast.error", { msg: String(e) })}</div>`;
       }
-    });
-    dirRow.appendChild(dirInput);
-    dirRow.appendChild(dirBtn);
-    form.appendChild(dirRow);
-    form.appendChild(el("div", { style: { fontSize: "0.75rem", color: "var(--text-muted)", marginTop: "-0.5rem", marginBottom: "1rem" } }, t("instance.targetDirHint")));
-
-    // Site identity
-    form.appendChild(el("div", { class: "label", style: { marginBottom: "0.4rem" } }, t("instance.siteIdentity")));
-    const idGrid = el("div", { class: "grid grid-2", style: { marginBottom: "1rem" } });
-
-    function labeledInput(label, value, onChange, placeholder) {
-      const cell = el("div", {});
-      cell.appendChild(el("div", { style: { fontSize: "0.6875rem", textTransform: "uppercase", letterSpacing: "0.09em", color: "var(--text-muted)", marginBottom: "0.25rem" } }, label));
-      const inp = el("input", { type: "text", class: "input", value: value, placeholder: placeholder || "" });
-      inp.addEventListener("input", () => onChange(inp.value));
-      cell.appendChild(inp);
-      return cell;
     }
 
-    idGrid.appendChild(labeledInput(t("instance.siteName"), state.siteName, (v) => state.siteName = v, "My Medical School"));
-    idGrid.appendChild(labeledInput(t("instance.shortName"), state.shortName, (v) => state.shortName = v, "MMS"));
-    idGrid.appendChild(labeledInput(t("instance.tagline"), state.tagline, (v) => state.tagline = v, "Personalised medical study platform"));
-    idGrid.appendChild(labeledInput(t("instance.organisation"), state.organisation, (v) => state.organisation = v, "Your organisation"));
-    form.appendChild(idGrid);
+    // ── STEP 2: IDENTITY & ENGINES ─────────────────────────────────────
+    function renderStep2Identity() {
+      const card = el("div", { class: "card", style: { padding: "1.5rem" } });
+      card.appendChild(el("h2", { style: { fontSize: "1.125rem", margin: "0 0 0.5rem" } }, t("instance.identity.title")));
 
-    form.appendChild(labeledInput(t("instance.githubRepo"), state.githubRepo, (v) => state.githubRepo = v, "https://github.com/you/your-osler"));
-    form.appendChild(el("div", { style: { height: "1rem" } }));
-
-    // Engines
-    form.appendChild(el("div", { class: "label", style: { marginBottom: "0.4rem" } }, t("instance.engines")));
-    const egGrid = el("div", { class: "grid grid-3", style: { marginBottom: "1rem" } });
-    for (const e of ENGINES) {
-      const enabled = state.enabledEngines.includes(e.id);
-      const tile = el("button", {
-        class: "card",
-        style: {
-          padding: "0.6rem",
-          cursor: "pointer",
-          textAlign: "start",
-          fontSize: "0.8125rem",
-          border: enabled ? "2px solid var(--primary)" : "1px solid var(--border)",
-          background: enabled ? "var(--primary-dim)" : "var(--surface)",
-        },
-        onClick: () => {
-          const i = state.enabledEngines.indexOf(e.id);
-          if (i >= 0) state.enabledEngines.splice(i, 1);
-          else state.enabledEngines.push(e.id);
-          renderEngines();
-        },
-      }, e.label);
-      egGrid.appendChild(tile);
-    }
-    function renderEngines() {
-      egGrid.querySelectorAll("button").forEach((btn, i) => {
-        const enabled = state.enabledEngines.includes(ENGINES[i].id);
-        btn.style.border = enabled ? "2px solid var(--primary)" : "1px solid var(--border)";
-        btn.style.background = enabled ? "var(--primary-dim)" : "var(--surface)";
+      // Target Directory Picker
+      card.appendChild(el("div", { class: "label", style: { marginBottom: "0.4rem" } }, t("instance.targetDir")));
+      const dirRow = el("div", { style: { display: "flex", gap: "0.5rem", marginBottom: "0.5rem" } });
+      const dirInput = el("input", {
+        type: "text",
+        class: "input",
+        value: state.targetDir,
+        placeholder: "/path/to/new-osler-instance",
+        style: { flex: "1", fontFamily: "var(--font-mono)", fontSize: "0.8125rem" },
       });
-    }
-    form.appendChild(egGrid);
-
-    // Theme + language row
-    const tlRow = el("div", { class: "grid grid-2", style: { marginBottom: "1rem" } });
-    const themeCell = el("div", {});
-    themeCell.appendChild(el("div", { style: { fontSize: "0.6875rem", textTransform: "uppercase", letterSpacing: "0.09em", color: "var(--text-muted)", marginBottom: "0.25rem" } }, t("instance.theme")));
-    const themeSel = el("select", { class: "input" });
-    for (const th of THEME_PRESETS) {
-      const opt = el("option", { value: th.id }, th.name);
-      if (th.id === state.defaultTheme) opt.selected = true;
-      themeSel.appendChild(opt);
-    }
-    themeSel.addEventListener("change", () => state.defaultTheme = themeSel.value);
-    themeCell.appendChild(themeSel);
-    tlRow.appendChild(themeCell);
-
-    const langCell = el("div", {});
-    langCell.appendChild(el("div", { style: { fontSize: "0.6875rem", textTransform: "uppercase", letterSpacing: "0.09em", color: "var(--text-muted)", marginBottom: "0.25rem" } }, t("instance.language")));
-    const langSel = el("select", { class: "input" });
-    for (const opt of [{ id: "en", label: "English (LTR)" }, { id: "ar", label: "العربية (RTL)" }]) {
-      const o = el("option", { value: opt.id }, opt.label);
-      if (opt.id === state.defaultLang) o.selected = true;
-      langSel.appendChild(o);
-    }
-    langSel.addEventListener("change", () => state.defaultLang = langSel.value);
-    langCell.appendChild(langSel);
-    tlRow.appendChild(langCell);
-    form.appendChild(tlRow);
-
-    // Optional Cloudflare backend. Credentials are intentionally never
-    // collected here; the generated Worker has a secrets template instead.
-    const cloudWrap = el("div", { class: "card", style: { padding: "1rem", marginBottom: "1rem", background: "var(--surface-2)" } });
-    const cloudRow = el("label", { style: { display: "flex", alignItems: "center", gap: "0.5rem", cursor: "pointer", fontSize: "0.875rem" } });
-    const cloudChk = el("input", { type: "checkbox" });
-    cloudChk.checked = state.cloud.enabled;
-    cloudRow.appendChild(cloudChk);
-    cloudRow.appendChild(el("span", {}, t("instance.cloud.enable")));
-    cloudWrap.appendChild(cloudRow);
-    cloudWrap.appendChild(el("p", { style: { margin: "0.5rem 0 0", color: "var(--text-muted)", fontSize: "0.75rem", lineHeight: "1.5" } }, t("instance.cloud.hint")));
-    const cloudFields = el("div", { class: "grid grid-2", style: { marginTop: "0.75rem" } });
-    const workerUrl = labeledInput(t("instance.cloud.workerUrl"), state.cloud.workerUrl, (v) => state.cloud.workerUrl = v, "https://my-school-api.workers.dev");
-    const workerName = labeledInput(t("instance.cloud.workerName"), state.cloud.workerName, (v) => state.cloud.workerName = v, "my-school-cloud");
-    const allowedOrigin = labeledInput(t("instance.cloud.allowedOrigin"), state.cloud.allowedOrigin, (v) => state.cloud.allowedOrigin = v, "https://study.example.com");
-    const turnstileKey = labeledInput(t("instance.cloud.turnstileKey"), state.cloud.turnstileSiteKey, (v) => state.cloud.turnstileSiteKey = v, t("instance.cloud.optional"));
-    cloudFields.append(workerUrl, workerName, allowedOrigin, turnstileKey);
-    cloudWrap.appendChild(cloudFields);
-    function renderCloudFields() {
-      cloudFields.style.display = state.cloud.enabled ? "grid" : "none";
-    }
-    cloudChk.addEventListener("change", () => {
-      state.cloud.enabled = cloudChk.checked;
-      renderCloudFields();
-    });
-    renderCloudFields();
-    form.appendChild(cloudWrap);
-
-    // Sample content checkbox
-    const sampleRow = el("label", { style: { display: "flex", alignItems: "center", gap: "0.5rem", cursor: "pointer", marginBottom: "1rem", fontSize: "0.875rem" } });
-    const sampleChk = el("input", { type: "checkbox" });
-    sampleChk.checked = state.includeSampleContent;
-    sampleChk.addEventListener("change", () => state.includeSampleContent = sampleChk.checked);
-    sampleRow.appendChild(sampleChk);
-    sampleRow.appendChild(el("span", {}, t("instance.includeSample")));
-    form.appendChild(sampleRow);
-
-    // Generate button
-    const genBtn = el("button", { class: "btn btn-primary" }, t("instance.generate"));
-    genBtn.addEventListener("click", doGenerate);
-    form.appendChild(genBtn);
-
-    // ── Result panel (populated after generation) ──────────────────
-    const resultPanel = el("div", { class: "card", style: { padding: "1.5rem", display: "none" } });
-    wrap.appendChild(resultPanel);
-
-    async function doGenerate() {
-      // Validate required fields.
-      if (!state.targetDir.trim()) { toast(t("instance.err.noDir"), "error"); return; }
-      if (!state.siteName.trim()) { toast(t("instance.err.noName"), "error"); return; }
-      if (!state.shortName.trim()) state.shortName = state.siteName;
-      if (state.enabledEngines.length === 0) { toast(t("instance.err.noEngines"), "error"); return; }
-      if (state.cloud.enabled && !state.cloud.workerUrl.trim()) { toast(t("instance.err.noWorkerUrl"), "error"); return; }
-
-      state.busy = true;
-      genBtn.disabled = true;
-      genBtn.textContent = t("instance.generating");
-
-      try {
-        const opts = {
-          targetDir: state.targetDir,
-          siteName: state.siteName,
-          shortName: state.shortName,
-          tagline: state.tagline || "Medical Study Platform",
-          githubRepo: state.githubRepo || "https://github.com/eyad-elghareeb/osler",
-          organisation: state.organisation || "Osler Team",
-          enabledEngines: state.enabledEngines,
-          defaultTheme: state.defaultTheme,
-          defaultLang: state.defaultLang,
-          includeSampleContent: state.includeSampleContent,
-          cloud: state.cloud,
-        };
-        const res = await invoke("generate_instance", { opts });
-        state.result = res;
-        renderResult();
-        toast(t("instance.generated", { dir: state.targetDir }), "success");
-      } catch (e) {
-        toast(t("toast.error", { msg: String(e) }), "error");
-      } finally {
-        state.busy = false;
-        genBtn.disabled = false;
-        genBtn.textContent = t("instance.generate");
-      }
-    }
-
-    function renderResult() {
-      const res = state.result;
-      if (!res) {
-        resultPanel.style.display = "none";
-        return;
-      }
-      resultPanel.style.display = "";
-      resultPanel.innerHTML = "";
-
-      resultPanel.appendChild(el("div", { class: "label", style: { marginBottom: "0.5rem", color: "var(--primary)" } }, "✓ " + t("instance.result.title")));
-      resultPanel.appendChild(el("p", { style: { fontSize: "0.875rem", color: "var(--text-muted)", marginBottom: "1rem" } }, t("instance.result.desc")));
-
-      // Path
-      const pathRow = el("div", { style: { marginBottom: "1rem" } });
-      pathRow.appendChild(el("div", { style: { fontSize: "0.6875rem", textTransform: "uppercase", letterSpacing: "0.09em", color: "var(--text-muted)" } }, t("instance.result.path")));
-      pathRow.appendChild(el("div", { style: { fontFamily: "var(--font-mono)", fontSize: "0.8125rem", wordBreak: "break-all" } }, res.targetDir || ""));
-      resultPanel.appendChild(pathRow);
-
-      // Files list
-      resultPanel.appendChild(el("div", { style: { fontSize: "0.6875rem", textTransform: "uppercase", letterSpacing: "0.09em", color: "var(--text-muted)", marginBottom: "0.4rem" } }, t("instance.result.files") + " (" + (res.files || []).length + ")"));
-      const fileList = el("div", { style: { background: "var(--surface-2)", borderRadius: "var(--radius-sm)", padding: "0.75rem", marginBottom: "1rem", maxHeight: "240px", overflowY: "auto", fontFamily: "var(--font-mono)", fontSize: "0.75rem" } });
-      for (const f of (res.files || [])) {
-        fileList.appendChild(el("div", {}, "• " + f));
-      }
-      resultPanel.appendChild(fileList);
-
-      // Next-steps actions
-      const actions = el("div", { style: { display: "flex", gap: "0.5rem", flexWrap: "wrap" } });
-      const openBtn = el("button", { class: "btn btn-sm" }, t("instance.result.openDir"));
-      openBtn.addEventListener("click", async () => {
+      dirInput.addEventListener("input", () => (state.targetDir = dirInput.value));
+      const dirBtn = el("button", { class: "btn btn-sm" }, t("instance.browse"));
+      dirBtn.addEventListener("click", async () => {
         try {
-          await invoke("open_external", { url: res.targetDir });
+          const folder = await invoke("plugin:dialog|open", {
+            options: { directory: true, title: t("instance.browse"), multiple: false },
+          });
+          if (typeof folder === "string" && folder) {
+            state.targetDir = folder;
+            dirInput.value = folder;
+          }
         } catch (e) {
           toast(t("toast.error", { msg: String(e) }), "error");
         }
       });
-      actions.appendChild(openBtn);
+      dirRow.append(dirInput, dirBtn);
+      card.appendChild(dirRow);
+      card.appendChild(el("div", { style: { fontSize: "0.75rem", color: "var(--text-muted)", marginBottom: "1rem" } }, t("instance.targetDirHint")));
 
-      const switchBtn = el("button", { class: "btn btn-sm btn-primary" }, t("instance.result.switchProject"));
+      // Site Identity Grid
+      const idGrid = el("div", { class: "grid grid-2", style: { marginBottom: "1rem" } });
+      function field(label, val, set, ph) {
+        const c = el("div", {});
+        c.appendChild(el("div", { style: { fontSize: "0.6875rem", textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--text-muted)", marginBottom: "0.25rem" } }, label));
+        const inp = el("input", { type: "text", class: "input", value: val, placeholder: ph || "" });
+        inp.addEventListener("input", () => set(inp.value));
+        c.appendChild(inp);
+        return c;
+      }
+
+      idGrid.appendChild(field(t("instance.siteName"), state.siteName, (v) => { state.siteName = v; if (!state.shortName) state.shortName = v.slice(0, 4).toUpperCase(); }, "My Medical School"));
+      idGrid.appendChild(field(t("instance.shortName"), state.shortName, (v) => (state.shortName = v), "MMS"));
+      idGrid.appendChild(field(t("instance.tagline"), state.tagline, (v) => (state.tagline = v), "Medical Learning Platform"));
+      idGrid.appendChild(field(t("instance.organisation"), state.organisation, (v) => (state.organisation = v), "Faculty of Medicine"));
+      card.appendChild(idGrid);
+
+      // Engines selection
+      card.appendChild(el("div", { class: "label", style: { marginBottom: "0.4rem" } }, t("instance.engines")));
+      const egGrid = el("div", { class: "grid grid-3", style: { marginBottom: "1rem" } });
+      for (const e of ENGINES) {
+        const enabled = state.enabledEngines.includes(e.id);
+        const tile = el(
+          "button",
+          {
+            class: "card",
+            style: {
+              padding: "0.6rem",
+              cursor: "pointer",
+              textAlign: "start",
+              fontSize: "0.8125rem",
+              border: enabled ? "2px solid var(--primary)" : "1px solid var(--border)",
+              background: enabled ? "var(--primary-dim)" : "var(--surface)",
+            },
+            onClick: () => {
+              const idx = state.enabledEngines.indexOf(e.id);
+              if (idx >= 0) state.enabledEngines.splice(idx, 1);
+              else state.enabledEngines.push(e.id);
+              renderStep2Identity();
+            },
+          },
+          e.label
+        );
+        egGrid.appendChild(tile);
+      }
+      card.appendChild(egGrid);
+
+      // Theme & Language
+      const tlRow = el("div", { class: "grid grid-2", style: { marginBottom: "1.5rem" } });
+      const themeCell = el("div", {});
+      themeCell.appendChild(el("div", { style: { fontSize: "0.6875rem", textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--text-muted)", marginBottom: "0.25rem" } }, t("instance.theme")));
+      const themeSel = el("select", { class: "input" });
+      for (const th of THEME_PRESETS) {
+        const opt = el("option", { value: th.id }, th.name);
+        if (th.id === state.defaultTheme) opt.selected = true;
+        themeSel.appendChild(opt);
+      }
+      themeSel.addEventListener("change", () => (state.defaultTheme = themeSel.value));
+      themeCell.appendChild(themeSel);
+      tlRow.appendChild(themeCell);
+
+      const langCell = el("div", {});
+      langCell.appendChild(el("div", { style: { fontSize: "0.6875rem", textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--text-muted)", marginBottom: "0.25rem" } }, t("instance.language")));
+      const langSel = el("select", { class: "input" });
+      for (const l of [{ id: "en", label: "English" }, { id: "ar", label: "العربية" }]) {
+        const o = el("option", { value: l.id }, l.label);
+        if (l.id === state.defaultLang) o.selected = true;
+        langSel.appendChild(o);
+      }
+      langSel.addEventListener("change", () => (state.defaultLang = langSel.value));
+      langCell.appendChild(langSel);
+      tlRow.appendChild(langCell);
+      card.appendChild(tlRow);
+
+      // Nav
+      const navRow = el("div", { style: { display: "flex", justifyContent: "space-between" } });
+      const prevBtn = el("button", { class: "btn btn-ghost" }, svgIcon("M15 19l-7-7 7-7", 14), t("common.prev"));
+      prevBtn.addEventListener("click", () => { state.step = 1; renderStepBar(); renderCurrentStep(); });
+      const nextBtn = el("button", { class: "btn btn-primary" }, t("common.next"), svgIcon("M9 5l7 7-7 7", 14));
+      nextBtn.addEventListener("click", () => {
+        if (!state.targetDir.trim()) { toast(t("instance.err.noDir"), "error"); return; }
+        if (!state.siteName.trim()) { toast(t("instance.err.noName"), "error"); return; }
+        state.step = 3;
+        renderStepBar();
+        renderCurrentStep();
+      });
+      navRow.append(prevBtn, nextBtn);
+      card.appendChild(navRow);
+
+      stepHost.appendChild(card);
+    }
+
+    // ── STEP 3: CLOUDFLARE CONFIGURATION ──────────────────────────────
+    function renderStep3Cloud() {
+      const card = el("div", { class: "card", style: { padding: "1.5rem" } });
+      card.appendChild(el("h2", { style: { fontSize: "1.125rem", margin: "0 0 0.5rem" } }, t("instance.cloud.title")));
+      card.appendChild(el("p", { style: { fontSize: "0.8125rem", color: "var(--text-muted)", margin: "0 0 1.25rem" } }, t("instance.cloud.desc")));
+
+      // Cloud enabled toggle
+      const toggleRow = el("label", { style: { display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "1rem", cursor: "pointer", fontWeight: "600" } });
+      const chk = el("input", { type: "checkbox" });
+      chk.checked = state.cloud.enabled;
+      chk.addEventListener("change", () => {
+        state.cloud.enabled = chk.checked;
+        renderStep3Cloud();
+      });
+      toggleRow.append(chk, el("span", {}, t("instance.cloud.enableFullStack")));
+      card.appendChild(toggleRow);
+
+      if (state.cloud.enabled) {
+        const cloudGrid = el("div", { class: "grid grid-2", style: { marginBottom: "1.25rem" } });
+        function field(label, val, set, ph) {
+          const c = el("div", {});
+          c.appendChild(el("div", { style: { fontSize: "0.6875rem", textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--text-muted)", marginBottom: "0.25rem" } }, label));
+          const inp = el("input", { type: "text", class: "input", value: val, placeholder: ph || "" });
+          inp.addEventListener("input", () => set(inp.value));
+          c.appendChild(inp);
+          return c;
+        }
+
+        cloudGrid.appendChild(field(t("instance.cloud.projectName"), state.cloud.projectName, (v) => state.cloud.projectName = v, "osler-school"));
+        cloudGrid.appendChild(field(t("instance.cloud.workerName"), state.cloud.workerName, (v) => state.cloud.workerName = v, "osler-school-cloud"));
+        cloudGrid.appendChild(field(t("instance.cloud.d1Name"), state.cloud.d1Name, (v) => state.cloud.d1Name = v, "osler-school-d1"));
+        cloudGrid.appendChild(field(t("instance.cloud.r2Name"), state.cloud.r2Name, (v) => state.cloud.r2Name = v, "osler-school-content"));
+        cloudGrid.appendChild(field(t("instance.cloud.allowedOrigin"), state.cloud.allowedOrigin, (v) => state.cloud.allowedOrigin = v, "https://school.pages.dev"));
+        cloudGrid.appendChild(field(t("instance.cloud.turnstileKey"), state.cloud.turnstileSiteKey, (v) => state.cloud.turnstileSiteKey = v, "Optional Turnstile Key"));
+        card.appendChild(cloudGrid);
+
+        // R2 Note banner
+        const r2Banner = el(
+          "div",
+          {
+            style: {
+              background: "rgba(59, 130, 246, 0.08)",
+              border: "1px solid rgba(59, 130, 246, 0.2)",
+              borderRadius: "var(--radius-sm)",
+              padding: "0.75rem 1rem",
+              marginBottom: "1.25rem",
+              fontSize: "0.8125rem",
+              color: "var(--text-muted)",
+            },
+          },
+          "☁️ " + t("instance.cloud.r2HostingNote")
+        );
+        card.appendChild(r2Banner);
+      }
+
+      // Nav
+      const navRow = el("div", { style: { display: "flex", justifyContent: "space-between" } });
+      const prevBtn = el("button", { class: "btn btn-ghost" }, svgIcon("M15 19l-7-7 7-7", 14), t("common.prev"));
+      prevBtn.addEventListener("click", () => { state.step = 2; renderStepBar(); renderCurrentStep(); });
+      const nextBtn = el("button", { class: "btn btn-primary" }, t("instance.deployBtn"), svgIcon("M13 10V3L4 14h7v7l9-11h-7z", 14));
+      nextBtn.addEventListener("click", () => {
+        state.step = 4;
+        renderStepBar();
+        renderCurrentStep();
+        startDeployPipeline();
+      });
+      navRow.append(prevBtn, nextBtn);
+      card.appendChild(navRow);
+
+      stepHost.appendChild(card);
+    }
+
+    // ── STEP 4: DEPLOY PIPELINE & EXECUTION ───────────────────────────
+    function renderStep4Deploy() {
+      const card = el("div", { class: "card", style: { padding: "1.5rem" } });
+      card.appendChild(el("h2", { style: { fontSize: "1.125rem", margin: "0 0 0.5rem" } }, t("instance.pipeline.title")));
+      card.appendChild(el("p", { style: { fontSize: "0.8125rem", color: "var(--text-muted)", margin: "0 0 1.25rem" } }, t("instance.pipeline.desc")));
+
+      // Pipeline progress status
+      const pipeBox = el("div", { id: "pipeline-status-box", style: { marginBottom: "1rem" } });
+      card.appendChild(pipeBox);
+
+      // Terminal Log output
+      const term = el("div", {
+        id: "pipeline-terminal",
+        style: {
+          background: "#0d1117",
+          color: "#c9d1d9",
+          borderRadius: "var(--radius-sm)",
+          padding: "1rem",
+          fontFamily: "var(--font-mono)",
+          fontSize: "0.75rem",
+          maxHeight: "280px",
+          overflowY: "auto",
+          marginBottom: "1.25rem",
+        },
+      });
+      card.appendChild(term);
+
+      const navRow = el("div", { id: "deploy-nav-row", style: { display: "flex", justifyContent: "flex-end", gap: "0.5rem" } });
+      const finishBtn = el("button", { class: "btn btn-primary", id: "pipeline-finish-btn", disabled: true }, t("instance.viewActions"), svgIcon("M9 5l7 7-7 7", 14));
+      finishBtn.addEventListener("click", () => {
+        state.step = 5;
+        renderStepBar();
+        renderCurrentStep();
+      });
+      navRow.appendChild(finishBtn);
+      card.appendChild(navRow);
+
+      stepHost.appendChild(card);
+    }
+
+    async function startDeployPipeline() {
+      const term = document.getElementById("pipeline-terminal");
+      const pipeBox = document.getElementById("pipeline-status-box");
+      const finishBtn = document.getElementById("pipeline-finish-btn");
+
+      function addLog(msg, color = "#c9d1d9") {
+        if (!term) return;
+        const line = el("div", { style: { color, marginBottom: "0.2rem" } }, msg);
+        term.appendChild(line);
+        term.scrollTop = term.scrollHeight;
+      }
+
+      addLog("🚀 [1/3] Scaffolding instance files and configurations…", "#58a6ff");
+      try {
+        const genOpts = {
+          targetDir: state.targetDir,
+          siteName: state.siteName,
+          shortName: state.shortName || state.siteName,
+          tagline: state.tagline || "Medical Platform",
+          githubRepo: state.githubRepo,
+          organisation: state.organisation || "Osler",
+          enabledEngines: state.enabledEngines,
+          defaultTheme: state.defaultTheme,
+          defaultLang: state.defaultLang,
+          includeSampleContent: state.includeSampleContent,
+          cloud: state.cloud.enabled ? state.cloud : null,
+        };
+
+        const res = await invoke("generate_instance", { opts: genOpts });
+        state.result = res;
+        addLog(`✓ Scaffolded ${res.files?.length || 0} files in ${state.targetDir}`, "#3fb950");
+
+        if (state.cloud.enabled) {
+          addLog("☁️ [2/3] Initializing Cloudflare D1, R2, Worker and Pages deploy…", "#58a6ff");
+          const depRes = await invoke("deploy_cloudflare_full_stack", {
+            targetDir: state.targetDir,
+            origin: state.cloud.allowedOrigin || "http://localhost:3000",
+            project: state.cloud.projectName,
+            workerUrl: state.cloud.workerUrl || null,
+            d1: state.cloud.d1Name,
+            r2: state.cloud.r2Name,
+          });
+          addLog(`✓ Deployment pipeline triggered: ${depRes.pipeline}`, "#3fb950");
+
+          // Poll deploy logs
+          pollDeployStatus(addLog, finishBtn);
+        } else {
+          addLog("✓ [3/3] Local instance ready!", "#3fb950");
+          if (finishBtn) finishBtn.disabled = false;
+        }
+      } catch (err) {
+        addLog(`✗ Generation error: ${String(err)}`, "#f85149");
+        toast(t("toast.error", { msg: String(err) }), "error");
+        if (finishBtn) finishBtn.disabled = false;
+      }
+    }
+
+    function pollDeployStatus(addLog, finishBtn) {
+      let pollCount = 0;
+      const timer = setInterval(async () => {
+        pollCount++;
+        try {
+          const st = await invoke("deploy_status");
+          if (st.logs && st.logs.length > state.deployLogs.length) {
+            for (let i = state.deployLogs.length; i < st.logs.length; i++) {
+              const l = st.logs[i];
+              const c = l.stream === "error" ? "#f85149" : l.stream === "success" ? "#3fb950" : l.stream === "warn" ? "#d29922" : "#c9d1d9";
+              addLog(l.text, c);
+            }
+            state.deployLogs = st.logs;
+          }
+          if (!st.running) {
+            clearInterval(timer);
+            if (st.success) {
+              addLog("🎉 Cloudflare Full Stack Deployment Complete!", "#3fb950");
+              toast(t("instance.deployComplete"), "success");
+            } else if (st.error) {
+              addLog(`⚠️ Deploy notice: ${st.error}`, "#d29922");
+            }
+            if (finishBtn) finishBtn.disabled = false;
+          }
+        } catch (e) {
+          if (pollCount > 10) clearInterval(timer);
+        }
+      }, 1000);
+    }
+
+    // ── STEP 5: READY & ACTIONS ───────────────────────────────────────
+    function renderStep5Ready() {
+      const card = el("div", { class: "card", style: { padding: "1.5rem" } });
+      card.appendChild(el("h2", { style: { fontSize: "1.25rem", margin: "0 0 0.5rem", color: "var(--success)" } }, "🎉 " + t("instance.ready.title")));
+      card.appendChild(el("p", { style: { fontSize: "0.8125rem", color: "var(--text-muted)", margin: "0 0 1.25rem" } }, t("instance.ready.desc")));
+
+      // Summary details
+      const summaryGrid = el("div", { style: { background: "var(--surface-2)", borderRadius: "var(--radius-sm)", padding: "1rem", marginBottom: "1.5rem" } });
+      summaryGrid.appendChild(el("div", { style: { fontSize: "0.8125rem", marginBottom: "0.4rem" } }, `📁 Location: ${state.targetDir}`));
+      if (state.cloud.enabled) {
+        summaryGrid.appendChild(el("div", { style: { fontSize: "0.8125rem", marginBottom: "0.4rem" } }, `🌐 Pages Project: https://${state.cloud.projectName}.pages.dev`));
+        summaryGrid.appendChild(el("div", { style: { fontSize: "0.8125rem" } }, `⚡ Worker: ${state.cloud.workerUrl || `https://${state.cloud.workerName}.workers.dev`}`));
+      }
+      card.appendChild(summaryGrid);
+
+      // Direct Deploy & Management Actions
+      card.appendChild(el("div", { class: "label", style: { marginBottom: "0.6rem" } }, t("instance.quickActions")));
+      const actionRow = el("div", { style: { display: "flex", gap: "0.5rem", flexWrap: "wrap", marginBottom: "1.5rem" } });
+
+      const deployPagesBtn = el("button", { class: "btn btn-sm btn-primary" }, svgIcon("M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5", 14), "Deploy Pages (npm run deploy:pages)");
+      deployPagesBtn.addEventListener("click", async () => {
+        try {
+          await invoke("set_project_root", { root: state.targetDir });
+          await invoke("deploy_pages_cli");
+          toast("Deploy Pages started", "success");
+        } catch (e) {
+          toast(t("toast.error", { msg: String(e) }), "error");
+        }
+      });
+      actionRow.appendChild(deployPagesBtn);
+
+      const deployWorkerBtn = el("button", { class: "btn btn-sm btn-primary" }, svgIcon("M13 10V3L4 14h7v7l9-11h-7z", 14), "Deploy Worker (npm run deploy:worker)");
+      deployWorkerBtn.addEventListener("click", async () => {
+        try {
+          await invoke("set_project_root", { root: state.targetDir });
+          await invoke("deploy_worker_cli");
+          toast("Deploy Worker started", "success");
+        } catch (e) {
+          toast(t("toast.error", { msg: String(e) }), "error");
+        }
+      });
+      actionRow.appendChild(deployWorkerBtn);
+
+      const switchBtn = el("button", { class: "btn btn-sm" }, t("instance.result.switchProject"));
       switchBtn.addEventListener("click", async () => {
         try {
-          await invoke("set_project_root", { root: res.targetDir });
-          try { localStorage.setItem("osler-admin-project-root", res.targetDir); } catch {}
+          await invoke("set_project_root", { root: state.targetDir });
+          try { localStorage.setItem("osler-admin-project-root", state.targetDir); } catch {}
           await window.OslerAdmin.refreshProjectState();
           toast(t("project.state.connected"), "success");
           window.OslerAdmin.navigate("dashboard");
@@ -312,10 +592,16 @@
           toast(t("toast.error", { msg: String(e) }), "error");
         }
       });
-      actions.appendChild(switchBtn);
-      resultPanel.appendChild(actions);
-    }
+      actionRow.appendChild(switchBtn);
 
-    view.appendChild(wrap);
+      const openDirBtn = el("button", { class: "btn btn-sm" }, t("instance.result.openDir"));
+      openDirBtn.addEventListener("click", () => {
+        invoke("open_external", { url: state.targetDir });
+      });
+      actionRow.appendChild(openDirBtn);
+
+      card.appendChild(actionRow);
+      stepHost.appendChild(card);
+    }
   };
 })();

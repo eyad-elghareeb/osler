@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en" dir="ltr" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Osler Content Studio</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700&family=Geist+Mono:wght@400;500&family=Cairo:wght@300;400;500;600;700&display=swap"
+    rel="stylesheet"
+  />
+  <link rel="stylesheet" href="styles.css" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/easymde@2.18.0/dist/easymde.min.css" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.7.2/css/all.min.css" />
+  <script>
+    (function () {
+      try {
+        var v = localStorage.getItem("osler-admin-lang");
+        var lang = v === "ar" || v === "en" ? v : "en";
+        var dir = lang === "ar" ? "rtl" : "ltr";
+        var html = document.documentElement;
+        html.setAttribute("lang", lang);
+        html.setAttribute("dir", dir);
+        if (lang === "ar") html.classList.add("osler-ar");
+        var t = localStorage.getItem("osler-admin-theme");
+        if (t === "light" || t === "dark") html.setAttribute("data-theme", t);
+        window.__oslerForcedMode = "content-studio";
+      } catch (e) {}
+    })();
+  </script>
+</head>
+<body>
+  <div id="app" class="osler-grid-bg">
+    <header class="topbar" data-tauri-drag-region>
+      <div class="topbar-left" data-tauri-drag-region>
+        <button id="brand" class="brand" type="button" data-route="content">
+          <span class="brand-mark">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/>
+            </svg>
+          </span>
+          <span class="brand-text">
+            <span class="brand-name" id="app-title-display">Osler Content Studio</span>
+            <span class="brand-tagline" id="app-subtitle-display">Medical Learning Authoring CMS</span>
+          </span>
+        </button>
+      </div>
+
+      <div class="topbar-center" data-tauri-drag-region>
+        <div class="app-switcher" id="app-switcher">
+          <a class="app-switcher-btn" href="instance-manager.html" style="text-decoration:none;">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+            <span data-i18n="app.mode.instanceManager">Instance Manager</span>
+          </a>
+          <button class="app-switcher-btn active" id="btn-mode-studio" type="button">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+            <span data-i18n="app.mode.contentStudio">Content Studio</span>
+          </button>
+        </div>
+
+        <button id="project-pill" class="project-pill" type="button" title="Pick project root">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M3 7v13a1 1 0 0 0 1 1h16a1 1 0 0 0 1-1V9a1 1 0 0 0-1-1h-9l-2-3H4a1 1 0 0 0-1 1z" />
+          </svg>
+          <span id="project-pill-text" data-i18n="project.notPicked">Pick project root…</span>
+        </button>
+      </div>
+
+      <div class="topbar-right" data-tauri-drag-region>
+        <button id="lang-toggle" class="icon-btn" type="button" title="Toggle language" aria-label="Toggle language">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="10" />
+            <path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
+          </svg>
+          <span id="lang-toggle-label">ع</span>
+        </button>
+        <button id="theme-toggle" class="icon-btn" type="button" title="Toggle theme" aria-label="Toggle theme">
+          <svg id="theme-icon-sun" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="4" />
+            <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41" />
+          </svg>
+          <svg id="theme-icon-moon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:none">
+            <path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z" />
+          </svg>
+        </button>
+      </div>
+
+      <div class="window-controls">
+        <button class="wc-btn" id="wc-minimize" type="button" aria-label="Minimize" title="Minimize">
+          <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><line x1="2" y1="6" x2="10" y2="6" /></svg>
+        </button>
+        <button class="wc-btn" id="wc-maximize" type="button" aria-label="Maximize" title="Maximize">
+          <svg id="wc-max-icon" width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="2" width="8" height="8" rx="0.5" /></svg>
+          <svg id="wc-restore-icon" width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5" style="display:none"><rect x="1.5" y="3.5" width="7" height="7" rx="0.5" /><path d="M3.5 3.5V2a.5.5 0 0 1 .5-.5h6a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-.5.5h-1.5" /></svg>
+        </button>
+        <button class="wc-btn wc-close" id="wc-close" type="button" aria-label="Close" title="Close">
+          <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><line x1="2" y1="2" x2="10" y2="10" /><line x1="10" y1="2" x2="2" y2="10" /></svg>
+        </button>
+      </div>
+    </header>
+
+    <div class="body">
+      <aside class="sidebar">
+        <nav class="nav" id="sidebar-nav"></nav>
+        <div class="sidebar-footer">
+          <a id="sidebar-github-link" class="sidebar-github" href="https://github.com/eyad-elghareeb/osler" target="_blank" rel="noopener noreferrer" title="Osler on GitHub">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M12 .5C5.7.5.5 5.7.5 12c0 5.1 3.3 9.4 7.9 10.9.6.1.8-.2.8-.5v-2c-3.2.7-3.9-1.4-3.9-1.4-.5-1.3-1.3-1.7-1.3-1.7-1.1-.7.1-.7.1-.7 1.2.1 1.8 1.2 1.8 1.2 1 .1.8 1.7 2.6 1.2.1-.7.4-1.2.7-1.5-2.6-.3-5.3-1.3-5.3-5.8 0-1.3.5-2.3 1.2-3.2-.1-.3-.5-1.5.1-3.2 0 0 1-.3 3.3 1.2a11.5 11.5 0 0 1 6 0c2.3-1.5 3.3-1.2 3.3-1.2.7 1.7.3 2.9.1 3.2.8.9 1.2 1.9 1.2 3.2 0 4.6-2.8 5.5-5.4 5.8.4.4.8 1.1.8 2.2v3.3c0 .3.2.6.8.5 4.6-1.5 7.9-5.8 7.9-10.9C23.5 5.7 18.3.5 12 .5z" /></svg>
+            <span>GitHub</span>
+          </a>
+          <div class="version">v0.3.0</div>
+        </div>
+      </aside>
+
+      <main class="main">
+        <div id="view"></div>
+      </main>
+    </div>
+    <div id="toasts" class="toasts"></div>
+  </div>
+
+  <script src="main.js"></script>
+  <script src="constants.js"></script>
+  <script src="i18n.js"></script>
+  <script src="components/log-console.js"></script>
+  <script src="views/markdown-editor.js"></script>
+  <script src="views/mermaid-editor.js"></script>
+  <script src="views/content-editor.js"></script>
+  <script src="views/content.js"></script>
+  <script src="views/manifest.js"></script>
+  <script src="views/git.js"></script>
+  <script src="views/settings.js"></script>
+  <script>
+    document.addEventListener("DOMContentLoaded", function () {
+      OslerAdminI18n.init();
+      OslerAdmin.boot("content-studio");
+    });
+  </script>
+</body>
+</html>

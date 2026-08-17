@@ -7,7 +7,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 use osler_admin_lib::commands::{ProjectRoot, RunnerState};
-use osler_admin_lib::{commands, config, deploy, github};
+use osler_admin_lib::{commands, config, deploy, github, instance_updater, prereq};
 use std::sync::Arc;
 
 fn main() {
@@ -84,6 +84,17 @@ fn main() {
             deploy::deploy_status,
             deploy::deploy_stop,
             deploy::clear_deploy_logs,
+            deploy::deploy_pages_cli,
+            deploy::deploy_worker_cli,
+            deploy::deploy_cloudflare_full_stack,
+            // Prerequisites
+            prereq::check_prerequisites,
+            prereq::install_prerequisite,
+            // Instance updater & patches
+            instance_updater::check_instance_update,
+            instance_updater::apply_instance_patch,
+            instance_updater::rollback_instance_patch,
+            instance_updater::list_instance_backups,
             // osler.config.json
             config::read_config,
             config::write_config,

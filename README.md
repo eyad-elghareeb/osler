@@ -304,29 +304,34 @@ src/
 ├── build-deliverable.sh      # Linux deployment
 └── build-deliverable.ps1     # Windows deployment
 
-<a href="tauri-admin">tauri-admin</a>/                  # Desktop admin panel (Tauri + Rust)
+<a href="tauri-admin">tauri-admin</a>/                  # Desktop admin suite (Tauri + Rust)
   ├── build.rs                # Build-time GitHub OAuth secret injection
   ├── src/
   │   ├── commands.rs         # File CRUD, manifest, build/start runner, git
-  │   ├── config.rs           # osler.config.json read/write + instance generator
-  │   ├── deploy.rs           # Vercel / GitHub Pages / Cloudflare / Netlify deploy
+  │   ├── config.rs           # osler.config.json read/write + clean instance generator
+  │   ├── deploy.rs           # Cloudflare full-stack + CLI deploy pipelines
+  │   ├── instance_updater.rs # Code diff inspector, backups (.osler-backup), and patch apply
+  │   ├── prereq.rs           # Prerequisites check (Node, Git, Wrangler, CF login) & installer
   │   ├── github.rs           # GitHub OAuth & repo sync
   │   ├── manifest.rs         # Content manifest generator (port of scripts/)
   │   ├── runner.rs           # Build/start process runner
   │   └── validate.rs         # Content JSON validator
   ├── frontend/
-  │   ├── index.html          # Admin shell (4 main sections: Dashboard, Content, Configure, Run & Publish)
-  │   ├── main.js             # Tauri bridge + router + helpers
-  │   ├── i18n.js             # English + Arabic strings
+  │   ├── index.html          # App shell with topbar App Switcher
+  │   ├── instance-manager.html # Standalone Osler Instance & Cloud Manager entrypoint
+  │   ├── studio.html         # Standalone Osler Content Studio (CMS) entrypoint
+  │   ├── main.js             # Tauri bridge + multi-app router + helpers
+  │   ├── i18n.js             # Full English + Arabic dictionary
   │   ├── styles.css          # Admin theme tokens + components
   │   └── views/
-  │       ├── dashboard.js    # Quick stats + recent activity + GitHub link
+  │       ├── instance.js     # 5-step automated instance generator with Cloudflare deployment
+  │       ├── instance-updater.js # Instance code update & rollback engine
+  │       ├── prereq.js       # System prerequisites check & 1-click installer
   │       ├── content.js      # Simplified content tree browser & editor
   │       ├── configure.js    # osler.config.json & instance generator hub
   │       ├── run-publish.js  # Build, start, git & deploy hub
+  │       ├── deploy.js       # Cloudflare CLI deploy & multi-provider deployment
   │       ├── wizard.js       # First-time setup wizard
-  │       ├── instance.js     # Instance generator
-  │       ├── config.js       # Config editor
   │       ├── start.js        # Server runner
   │       └── build.js        # Build runner & PDF preview tools
   └── default-osler-config.json  # Bundled template used by the instance generator
