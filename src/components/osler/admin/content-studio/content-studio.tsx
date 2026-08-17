@@ -511,8 +511,8 @@ export function ContentStudio({ capabilities }: ContentStudioProps) {
         onRefresh={loadUnified}
         loading={unifiedLoading}
         canManage={capabilities.manageUsers}
-        onNewFile={() => actions.openNewFileDialog(currentPathWithinCat === "__drafts__" ? "" : currentPathWithinCat)}
-        onNewFolder={() => actions.openNewFolderDialog(currentPathWithinCat === "__drafts__" ? "" : currentPathWithinCat)}
+        onNewFile={() => actions.openNewFileDialog(activeFolder.endsWith("/__drafts__") ? "" : activeFolder)}
+        onNewFolder={() => actions.openNewFolderDialog(activeFolder.endsWith("/__drafts__") ? "" : activeFolder)}
         onUpload={() => setUploadOpen(true)}
         onNewContent={() => setCreateOpen(true)}
         onRegenerateManifests={actions.regenerateManifests}
