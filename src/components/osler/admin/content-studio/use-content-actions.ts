@@ -135,13 +135,25 @@ export function useContentActions({
     if (!capabilities.manageUsers) return;
     setBackfilling(true);
     try {
-      const res = await adminApi.backfillContent();
+      // The worker backfill is bounded per invocation (free-plan subrequest cap),
+      // so loop until it reports complete, accumulating per-run totals.
+      let backfilled = 0;
+      let existing = 0;
+      let guard = 0;
+      while (guard++ < 20) {
+        const res = await adminApi.backfillContent();
+        backfilled += res.backfilled;
+        existing += res.existing;
+        if (res.complete) break;
+        if (res.backfilled === 0 && res.existing === 0) break;
+        await new Promise((r) => setTimeout(r, 500));
+      }
       haptic("success");
       toast({
         title: t("admin.toast.backfillSuccess"),
         description: t("admin.toast.backfillSuccessDesc", {
-          backfilled: String(res.backfilled),
-          existing: String(res.existing),
+          backfilled: String(backfilled),
+          existing: String(existing),
         }),
       });
       onMutated();

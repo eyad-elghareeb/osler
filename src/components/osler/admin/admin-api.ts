@@ -293,7 +293,7 @@ export const adminApi = {
   getAssetBlob:    (id: string, path: string) => reqBinary(`/v1/admin/content/${id}/asset?path=${encodeURIComponent(path)}`),
 
   /** Trigger batch backfill of raw files in content-files/ to managed content_objects. */
-  backfillContent: () => req<{ ok: boolean; backfilled: number; existing: number; total: number; errors: string[] }>("/v1/admin/content/backfill", "POST"),
+  backfillContent: () => req<{ ok: boolean; backfilled: number; existing: number; total: number; errors: string[]; complete: boolean }>("/v1/admin/content/backfill", "POST"),
 
   // Review (admin only)
   pendingQueue:    ()                            => req<{ items: ContentObject[] }>("/v1/admin/content/pending"),

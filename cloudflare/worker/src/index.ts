@@ -2755,13 +2755,21 @@ async function handleAdmin(request: Request, env: Env, session: Session, url: UR
       const categories = ["qbank", "flashcard", "osce", "library", "videos"];
       let backfilled = 0;
       let existing = 0;
+      let processed = 0;
+      let stoppedEarly = false;
       const errors: string[] = [];
       const BATCH_SIZE = 25;
+      // Free-plan Workers cap subrequests at 1,000 per invocation; a full backfill
+      // costs ~4 subrequests per file (get, 2 puts, image list), so a full run
+      // (~476 files) can never complete in one invocation. Bound each run and let
+      // the caller re-invoke until complete — the published_r2_key check resumes.
+      const MAX_FILES_PER_RUN = 180;
 
       for (const cat of categories) {
         const dbStatements: any[] = [];
         const prefix = `content-files/${cat}/`;
         let cursor: string | undefined = undefined;
+        let hitCap = false;
         for (let page = 0; page < 20; page++) {
           const listed: any = await env.CONTENT.list({ prefix, limit: 1000, cursor });
           const objects: any[] = listed.objects || [];
@@ -2783,6 +2791,12 @@ async function handleAdmin(request: Request, env: Env, session: Session, url: UR
               existing += 1;
               continue;
             }
+
+            if (processed >= MAX_FILES_PER_RUN) {
+              hitCap = true;
+              break;
+            }
+            processed += 1;
 
             try {
               const fileSegment = rel;
@@ -2862,10 +2876,15 @@ async function handleAdmin(request: Request, env: Env, session: Session, url: UR
             return json({ error: `DB write failed for ${cat}: ${err.message}`, backfilled, existing }, 500, origin, log);
           }
         }
+        if (hitCap) {
+          stoppedEarly = true;
+          break;
+        }
       }
 
-      await auditLog(env, session.user.id, "backfill_content", null, { backfilled, existing, errors: errors.length }, log);
-      return json({ ok: true, backfilled, existing, total: backfilled + existing, errors }, 200, origin, log);
+      const complete = !stoppedEarly;
+      await auditLog(env, session.user.id, "backfill_content", null, { backfilled, existing, errors: errors.length, complete }, log);
+      return json({ ok: true, backfilled, existing, total: backfilled + existing, errors, complete }, 200, origin, log);
     }
     if (request.method === "POST" && path === "/v1/admin/content/regenerate-manifest") {
       if (!isAdmin(session)) return json({ error: "Forbidden" }, 403, origin, log);
