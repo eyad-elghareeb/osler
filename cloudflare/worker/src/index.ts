@@ -2756,9 +2756,10 @@ async function handleAdmin(request: Request, env: Env, session: Session, url: UR
       let backfilled = 0;
       let existing = 0;
       const errors: string[] = [];
-      const dbStatements: any[] = [];
+      const BATCH_SIZE = 25;
 
       for (const cat of categories) {
+        const dbStatements: any[] = [];
         const prefix = `content-files/${cat}/`;
         let cursor: string | undefined = undefined;
         for (let page = 0; page < 20; page++) {
@@ -2850,12 +2851,17 @@ async function handleAdmin(request: Request, env: Env, session: Session, url: UR
           if (!listed.truncated) break;
           cursor = listed.cursor;
         }
-      }
 
-      const BATCH_SIZE = 25;
-      for (let i = 0; i < dbStatements.length; i += BATCH_SIZE) {
-        const chunk = dbStatements.slice(i, i + BATCH_SIZE);
-        await env.DB.batch(chunk);
+        // Commit this category's rows before moving on, so a mid-run failure
+        // leaves durable progress a retry resumes via published_r2_key.
+        for (let i = 0; i < dbStatements.length; i += BATCH_SIZE) {
+          const chunk = dbStatements.slice(i, i + BATCH_SIZE);
+          try {
+            await env.DB.batch(chunk);
+          } catch (err: any) {
+            return json({ error: `DB write failed for ${cat}: ${err.message}`, backfilled, existing }, 500, origin, log);
+          }
+        }
       }
 
       await auditLog(env, session.user.id, "backfill_content", null, { backfilled, existing, errors: errors.length }, log);
