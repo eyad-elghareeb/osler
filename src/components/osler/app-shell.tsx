@@ -343,6 +343,7 @@ export function AppShell({ children }: AppShellProps) {
             {isAdminUser && (
               <Link
                 href="/admin"
+                prefetch={false}
                 onClick={() => haptic("selection")}
                 aria-label={t("nav.adminPanel")}
                 title={t("nav.adminPanel")}
