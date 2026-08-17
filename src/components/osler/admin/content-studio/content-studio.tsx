@@ -135,8 +135,8 @@ export function ContentStudio({ capabilities }: ContentStudioProps) {
     setUnifiedLoading(true);
     setR2Missing(false);
     try {
-      const res = await adminApi.listContent("all");
-      setUnifiedObjects(res.items || []);
+      const res = await adminApi.listAllContent("all");
+      setUnifiedObjects(res);
       setUnifiedR2ByCat({});
       setUnifiedStagedByCat({});
     } catch (err: any) {

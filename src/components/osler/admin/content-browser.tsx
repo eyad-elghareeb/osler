@@ -152,8 +152,7 @@ export function ContentBrowser({ capabilities }: ContentBrowserProps) {
     try {
       let allObjects: ContentObject[] = [];
       try {
-        const res = await adminApi.listContent("all");
-        allObjects = res.items || [];
+        allObjects = await adminApi.listAllContent("all");
       } catch (err: any) {
         if (err?.status === 503) { setR2Missing(true); setUnifiedObjects([]); setUnifiedR2ByCat({}); setUnifiedStagedByCat({}); return; }
         throw err;

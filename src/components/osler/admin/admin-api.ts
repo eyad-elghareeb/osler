@@ -167,6 +167,23 @@ async function reqBinary(path: string): Promise<Blob> {
   return res.blob();
 }
 
+/** Fetch every content_object matching a status, paging through the worker's
+ *  per-request limit until `total` is reached. The unified studio/browser
+ *  trees must render all managed objects, not just the first page. */
+async function listAllContent(status: string = "all"): Promise<ContentObject[]> {
+  const all: ContentObject[] = [];
+  const limit = 100;
+  let page = 1;
+  for (;;) {
+    const res = await req<{ items: ContentObject[]; total: number }>(`/v1/admin/content?status=${status}&page=${page}&limit=${limit}`);
+    const items = res.items || [];
+    all.push(...items);
+    if (all.length >= res.total || items.length === 0) break;
+    page += 1;
+  }
+  return all;
+}
+
 // ── Public API surface ───────────────────────────────────────────────────────
 
 export const adminApi = {
@@ -195,6 +212,7 @@ export const adminApi = {
 
   // Content (admin + content_admin)
   listContent:     (status: string, q?: string, page = 1, limit = 50)  => req<{ items: ContentObject[]; total: number; page: number; limit: number }>(`/v1/admin/content?status=${status}${q ? `&q=${encodeURIComponent(q)}` : ""}&page=${page}&limit=${limit}`),
+  listAllContent:  (status = "all") => listAllContent(status),
   getContent:      (id: string)                  => req<ContentObject>(`/v1/admin/content/${id}`),
   createContent:   (payload: { contentType: ContentType; title: string; language: string; content?: string }) =>
                                                     req<{ id: string; r2KeyBase: string; status: string }>("/v1/admin/content", "POST", payload),
