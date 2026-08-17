@@ -130,15 +130,49 @@ export function ContentStudio({ capabilities }: ContentStudioProps) {
   // Live progress of a direct-staging drag-and-drop upload.
   const [uploadJob, setUploadJob] = React.useState<UploadProgress | null>(null);
 
-  // ── Load unified tree (Fast single-query D1 load) ────────────────────
+  // ── Load unified tree (managed objects + loose R2 keys) ──────────────
   const loadUnified = React.useCallback(async () => {
     setUnifiedLoading(true);
     setR2Missing(false);
     try {
       const res = await adminApi.listAllContent("all");
       setUnifiedObjects(res);
-      setUnifiedR2ByCat({});
-      setUnifiedStagedByCat({});
+
+      // Fetch loose R2 keys (content-files/ + content-staging/) per category so
+      // folders created via `.keep` markers and files outside the managed set
+      // still render. Follows the cursor so categories with many keys don't
+      // silently truncate.
+      const r2ByCat: Record<string, R2Item[]> = {};
+      const stagedByCat: Record<string, R2Item[]> = {};
+      if (capabilities.manageUsers) {
+        const results = await Promise.allSettled(
+          CATEGORIES.map(async (cat) => {
+            const collect = async (scope: "content-files" | "content-staging") => {
+              const items: R2Item[] = [];
+              let cursor: string | undefined;
+              for (let page = 0; page < 10; page++) {
+                const listed = await adminApi.listR2Keys(cat.folder, cursor, scope);
+                items.push(...(listed.items || []));
+                if (!listed.cursor) break;
+                cursor = listed.cursor;
+              }
+              return items;
+            };
+            const [r2, staged] = await Promise.all([collect("content-files"), collect("content-staging")]);
+            return { folder: cat.folder, items: r2, stagedItems: staged };
+          }),
+        );
+        for (const r of results) {
+          if (r.status === "fulfilled") {
+            r2ByCat[r.value.folder] = r.value.items;
+            stagedByCat[r.value.folder] = r.value.stagedItems;
+          } else if ((r.reason as any)?.status === 503) {
+            setR2Missing(true);
+          }
+        }
+      }
+      setUnifiedR2ByCat(r2ByCat);
+      setUnifiedStagedByCat(stagedByCat);
     } catch (err: any) {
       if (err?.status === 503) {
         setR2Missing(true);
@@ -151,7 +185,7 @@ export function ContentStudio({ capabilities }: ContentStudioProps) {
     } finally {
       setUnifiedLoading(false);
     }
-  }, [toast, t]);
+  }, [capabilities.manageUsers, toast, t]);
 
   React.useEffect(() => { loadUnified(); }, [loadUnified]);
 

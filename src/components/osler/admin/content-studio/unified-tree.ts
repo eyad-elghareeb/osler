@@ -42,9 +42,8 @@ export function buildUnifiedTree(
   const stripCat = (rel: string): string =>
     rel.startsWith(catPrefix) ? rel.slice(catPrefix.length) : rel;
 
-  function placeLeaf(rel: string, leaf: ContentTreeNode): void {
-    const parts = rel.split("/");
-    parts.pop();
+  function ensureFolderChain(rel: string): ContentTreeNode | null {
+    const parts = rel.split("/").filter(Boolean);
     let parent: ContentTreeNode | null = null;
     let cur = "";
     for (const seg of parts) {
@@ -63,6 +62,13 @@ export function buildUnifiedTree(
       }
       parent = folderMap.get(cur) ?? null;
     }
+    return parent;
+  }
+
+  function placeLeaf(rel: string, leaf: ContentTreeNode): void {
+    const parts = rel.split("/");
+    parts.pop();
+    const parent = ensureFolderChain(parts.join("/"));
     if (parent) parent.items!.push(leaf);
     else roots.push(leaf);
   }
@@ -99,7 +105,12 @@ export function buildUnifiedTree(
     const rel = stripCat(item.key.replace(/^content-files\//, ""));
     const parts = rel.split("/");
     const fileName = parts.pop() ?? "";
-    if (fileName === ".keep") continue;
+    // A `.keep` marker stands in for an empty folder — materialize the folder
+    // chain so admins can see (and navigate into) folders that hold no files yet.
+    if (fileName === ".keep") {
+      ensureFolderChain(parts.join("/"));
+      continue;
+    }
     if (managed.some((o) => o.published_r2_key === item.key && consumedObjectIds.has(o.id))) continue;
 
     const fileNode: ContentTreeNode = {
