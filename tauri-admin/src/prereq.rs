@@ -103,141 +103,109 @@ pub async fn check_prerequisites() -> Result<PrereqsReport, String> {
 }
 
 fn check_prerequisites_sync() -> Result<PrereqsReport, String> {
-    let mut items = Vec::new();
+    // Run all four checks concurrently — total wall-clock time ≈ slowest single check
+    // instead of the sum of all four.
+    let (node_res, git_res, wrangler_res, cf_res) = std::thread::scope(|s| {
+        let node   = s.spawn(check_node);
+        let git    = s.spawn(check_git);
+        let wrangler = s.spawn(check_wrangler);
+        let cf     = s.spawn(check_cloudflare_auth);
+        (
+            node.join().unwrap_or_else(|_| node_error()),
+            git.join().unwrap_or_else(|_| git_error()),
+            wrangler.join().unwrap_or_else(|_| wrangler_error()),
+            cf.join().unwrap_or_else(|_| cf_error()),
+        )
+    });
 
-    // 1. Node.js
-    let node_out = run_cmd("node", &["-v"]);
-    let (node_installed, node_ver, node_sat, node_det) = match node_out {
+    let items = vec![node_res, git_res, wrangler_res, cf_res];
+    let all_satisfied = items.iter().all(|i| i.satisfied);
+    Ok(PrereqsReport { all_satisfied, items })
+}
+
+fn check_node() -> PrereqStatus {
+    let out = run_cmd("node", &["-v"]);
+    let (installed, ver, sat, det) = match out {
         Some(v) if v.starts_with('v') => {
-            let major = v
-                .trim_start_matches('v')
-                .split('.')
-                .next()
-                .and_then(|s| s.parse::<u32>().ok())
-                .unwrap_or(0);
+            let major = v.trim_start_matches('v').split('.').next()
+                .and_then(|s| s.parse::<u32>().ok()).unwrap_or(0);
             let sat = major >= 18;
-            let det = if sat {
-                format!("Node.js {} is ready", v)
-            } else {
-                format!("Node.js {} is too old (requires >= v18.0.0)", v)
-            };
+            let det = if sat { format!("Node.js {} is ready", v) }
+                      else   { format!("Node.js {} is too old (requires >= v18.0.0)", v) };
             (true, v, sat, det)
         }
-        _ => (
-            false,
-            "None".into(),
-            false,
-            "Node.js is not installed or not in PATH".into(),
-        ),
+        _ => (false, "None".into(), false, "Node.js is not installed or not in PATH".into()),
     };
-    items.push(PrereqStatus {
-        name: "node".into(),
-        label: "Node.js (Runtime)".into(),
-        installed: node_installed,
-        version: node_ver,
-        required_version: ">= 18.0.0".into(),
-        satisfied: node_sat,
-        details: node_det,
-        fixable: false,
-    });
+    PrereqStatus { name: "node".into(), label: "Node.js (Runtime)".into(), installed, version: ver,
+        required_version: ">= 18.0.0".into(), satisfied: sat, details: det, fixable: false }
+}
+fn node_error() -> PrereqStatus {
+    PrereqStatus { name: "node".into(), label: "Node.js (Runtime)".into(), installed: false,
+        version: "None".into(), required_version: ">= 18.0.0".into(), satisfied: false,
+        details: "Check panicked".into(), fixable: false }
+}
 
-    // 2. Git
-    let git_out = run_cmd("git", &["--version"]);
-    let (git_installed, git_ver, git_sat, git_det) = match git_out {
-        Some(v) if v.to_lowercase().contains("git version") => {
-            (true, v.clone(), true, format!("Git detected: {}", v))
-        }
-        _ => (
-            false,
-            "None".into(),
-            false,
-            "Git is not installed or not in PATH".into(),
-        ),
+fn check_git() -> PrereqStatus {
+    let out = run_cmd("git", &["--version"]);
+    let (installed, ver, sat, det) = match out {
+        Some(v) if v.to_lowercase().contains("git version") =>
+            (true, v.clone(), true, format!("Git detected: {}", v)),
+        _ => (false, "None".into(), false, "Git is not installed or not in PATH".into()),
     };
-    items.push(PrereqStatus {
-        name: "git".into(),
-        label: "Git (Version Control)".into(),
-        installed: git_installed,
-        version: git_ver,
-        required_version: ">= 2.0".into(),
-        satisfied: git_sat,
-        details: git_det,
-        fixable: false,
-    });
+    PrereqStatus { name: "git".into(), label: "Git (Version Control)".into(), installed, version: ver,
+        required_version: ">= 2.0".into(), satisfied: sat, details: det, fixable: false }
+}
+fn git_error() -> PrereqStatus {
+    PrereqStatus { name: "git".into(), label: "Git (Version Control)".into(), installed: false,
+        version: "None".into(), required_version: ">= 2.0".into(), satisfied: false,
+        details: "Check panicked".into(), fixable: false }
+}
 
-    // 3. Wrangler CLI — prefer global `wrangler`, fall back to `npx wrangler`
-    let wrangler_out = run_cmd("wrangler", &["--version"])
+fn check_wrangler() -> PrereqStatus {
+    let out = run_cmd("wrangler", &["--version"])
         .or_else(|| run_cmd_shell(&["npx", "--no-install", "wrangler", "--version"]));
-    let (wrangler_installed, wrangler_ver, wrangler_sat, wrangler_det) = match wrangler_out {
+    let (installed, ver, sat, det) = match out {
         Some(v) if v.contains('.') && !v.to_lowercase().contains("could not determine") => {
             let ver = v.lines().next().unwrap_or("").trim().to_string();
-            (
-                true,
-                ver.clone(),
-                true,
-                format!("Cloudflare Wrangler CLI detected ({})", ver),
-            )
+            (true, ver.clone(), true, format!("Cloudflare Wrangler CLI detected ({})", ver))
         }
-        _ => (
-            false,
-            "None".into(),
-            false,
-            "Wrangler CLI is not installed (can be auto-installed via npm)".into(),
-        ),
+        _ => (false, "None".into(), false,
+              "Wrangler CLI is not installed (can be auto-installed via npm)".into()),
     };
-    items.push(PrereqStatus {
-        name: "wrangler".into(),
-        label: "Cloudflare Wrangler CLI".into(),
-        installed: wrangler_installed,
-        version: wrangler_ver,
-        required_version: ">= 3.0.0".into(),
-        satisfied: wrangler_sat,
-        details: wrangler_det,
-        fixable: true,
-    });
+    PrereqStatus { name: "wrangler".into(), label: "Cloudflare Wrangler CLI".into(), installed, version: ver,
+        required_version: ">= 3.0.0".into(), satisfied: sat, details: det, fixable: true }
+}
+fn wrangler_error() -> PrereqStatus {
+    PrereqStatus { name: "wrangler".into(), label: "Cloudflare Wrangler CLI".into(), installed: false,
+        version: "None".into(), required_version: ">= 3.0.0".into(), satisfied: false,
+        details: "Check panicked".into(), fixable: true }
+}
 
-    // 4. Cloudflare Authentication
-    let whoami_out = run_cmd_shell(&["npx", "wrangler", "whoami"]);
-    let (cf_auth_sat, cf_auth_ver, cf_auth_det) = match whoami_out {
+fn check_cloudflare_auth() -> PrereqStatus {
+    let out = run_cmd_shell(&["npx", "wrangler", "whoami"]);
+    let (sat, ver, det) = match out {
         Some(v)
             if !v.to_lowercase().contains("not authenticated")
                 && !v.to_lowercase().contains("you are not logged in")
-                && (v.contains('@')
-                    || v.to_lowercase().contains("account")
+                && (v.contains('@') || v.to_lowercase().contains("account")
                     || v.to_lowercase().contains("logged in")) =>
         {
-            let line = v
-                .lines()
+            let line = v.lines()
                 .find(|l| l.contains('@') || l.contains("Account"))
                 .unwrap_or("Authenticated");
-            (
-                true,
-                "Logged In".into(),
-                format!("Authenticated: {}", line.trim()),
-            )
+            (true, "Logged In".into(), format!("Authenticated: {}", line.trim()))
         }
-        _ => (
-            false,
-            "Unauthenticated".into(),
-            "Not logged into Cloudflare. Click Install / Fix to open browser login.".into(),
-        ),
+        _ => (false, "Unauthenticated".into(),
+              "Not logged into Cloudflare. Click Install / Fix to open browser login.".into()),
     };
-    items.push(PrereqStatus {
-        name: "cloudflare_auth".into(),
-        label: "Cloudflare Account Login".into(),
-        installed: cf_auth_sat,
-        version: cf_auth_ver,
-        required_version: "Active session".into(),
-        satisfied: cf_auth_sat,
-        details: cf_auth_det,
-        fixable: true,
-    });
-
-    let all_satisfied = items.iter().all(|i| i.satisfied);
-    Ok(PrereqsReport {
-        all_satisfied,
-        items,
-    })
+    PrereqStatus { name: "cloudflare_auth".into(), label: "Cloudflare Account Login".into(),
+        installed: sat, version: ver, required_version: "Active session".into(),
+        satisfied: sat, details: det, fixable: true }
+}
+fn cf_error() -> PrereqStatus {
+    PrereqStatus { name: "cloudflare_auth".into(), label: "Cloudflare Account Login".into(),
+        installed: false, version: "Unauthenticated".into(), required_version: "Active session".into(),
+        satisfied: false, details: "Check panicked".into(), fixable: true }
 }
 
 /// Automated installation or login trigger for a prerequisite.

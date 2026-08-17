@@ -7,7 +7,7 @@
 (function () {
   "use strict";
 
-  const { invoke, toast, helpers, getProjectState } = window.OslerAdmin;
+  const { invoke, toast, helpers } = window.OslerAdmin;
   const { el, svgIcon, t } = helpers;
 
   window.OslerAdminViews = window.OslerAdminViews || {};
@@ -28,7 +28,7 @@
     );
 
     const state = {
-      targetDir: getProjectState()?.root || "",
+      targetDir: window.OslerAdmin.projectState?.root || "",
       checkReport: null,
       backups: [],
       busy: false,
