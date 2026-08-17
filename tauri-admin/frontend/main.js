@@ -1,18 +1,12 @@
-// main.js — Tauri API bridge + simple router + shared UI helpers for the
-// Osler admin dashboard.
-//
-// In Tauri (built app), `window.__TAURI__` is exposed by tauri-plugin and
-// every invoke() reaches the Rust handlers in src/commands.rs.
-//
-// In a plain browser (opened via file:// or a dev server), invoke() falls
-// back to a no-op mock that returns empty data so the UI can be previewed
-// without Tauri installed.
+// main.js — Tauri API bridge + multi-app router (Instance Manager vs Content Studio) + shared UI helpers.
 
 (function () {
   "use strict";
 
   const TAURI_AVAILABLE =
     typeof window !== "undefined" && window.__TAURI__ && typeof window.__TAURI__.core === "object";
+
+  let currentAppMode = "instance-manager"; // "instance-manager" | "content-studio"
 
   /**
    * Invoke a Tauri command. Returns a Promise.
@@ -27,33 +21,12 @@
 
   /** Browser-only mock so the UI can be opened without Tauri for preview. */
   async function mockInvoke(cmd, args) {
-    // Preview mode — `?preview=1` or localStorage["osler-admin-preview"] = "1"
-    // makes the mock pretend a project root is bound, so all views render.
     let preview = false;
     try {
       preview =
         new URLSearchParams(window.location.search).get("preview") === "1" ||
         localStorage.getItem("osler-admin-preview") === "1";
     } catch {}
-
-    /** Redact token-shaped fields in a config object before returning. */
-    function redactMockConfig(cfg) {
-      if (!cfg || typeof cfg !== "object") return {};
-      const out = {};
-      for (const [provider, fields] of Object.entries(cfg)) {
-        out[provider] = {};
-        if (fields && typeof fields === "object") {
-          for (const [k, v] of Object.entries(fields)) {
-            if (typeof v === "string" && (k.includes("token") || k === "password" || k === "api_key") && v && v !== "••••••••") {
-              out[provider][k] = "••••••••";
-            } else {
-              out[provider][k] = v;
-            }
-          }
-        }
-      }
-      return out;
-    }
 
     const fakeRoot = "/tmp/osler-preview-project";
     switch (cmd) {
@@ -73,6 +46,41 @@
         return { picked: false };
       case "set_project_root":
         return { root: args && args.root, hasPackageJson: true, hasContentDir: true };
+      case "check_prerequisites":
+        return {
+          allSatisfied: true,
+          items: [
+            { name: "node", label: "Node.js (Runtime)", installed: true, version: "v20.11.0", requiredVersion: ">= 18.0.0", satisfied: true, details: "Node.js v20.11.0 is ready", fixable: false },
+            { name: "git", label: "Git (Version Control)", installed: true, version: "git version 2.43.0", requiredVersion: ">= 2.0", satisfied: true, details: "Git detected", fixable: false },
+            { name: "wrangler", label: "Cloudflare Wrangler CLI", installed: true, version: "3.99.0", requiredVersion: ">= 3.0.0", satisfied: true, details: "Wrangler CLI detected (3.99.0)", fixable: true },
+            { name: "cloudflare_auth", label: "Cloudflare Account Login", installed: true, version: "Logged In", requiredVersion: "Active session", satisfied: true, details: "Authenticated: admin@example.com", fixable: true },
+          ],
+        };
+      case "check_instance_update":
+        return {
+          canUpdate: true,
+          sourceRoot: "/main/osler",
+          targetRoot: args && args.targetPath || fakeRoot,
+          hasUpdates: true,
+          changedCount: 3,
+          addedCount: 1,
+          files: [
+            { path: "src/app/(app)/qbank/page.tsx", status: "modified", sizeDiff: 120 },
+            { path: "src/lib/osler/cloud.ts", status: "modified", sizeDiff: 340 },
+            { path: "cloudflare/worker/migrations/0003_content_sync.sql", status: "added", sizeDiff: 850 },
+          ],
+          preservedPaths: [
+            "public/osler-content/ (All question banks, flashcards, articles, images)",
+            "public/osler.config.json (Branding, site name, enabled engines)",
+            "cloudflare/worker/wrangler.toml (Database IDs & bindings)",
+            ".env / .env.local / .dev.vars (All secrets & credentials)",
+            ".git/ (Instance git history)",
+          ],
+        };
+      case "list_instance_backups":
+        return [
+          { id: "backup-1723870000", timestamp: 1723870000, formattedDate: "Backup @ 1723870000s", path: "/backup/1", fileCount: 42 },
+        ];
       case "list_files":
         return preview
           ? {
@@ -100,7 +108,7 @@
         return preview
           ? {
               path: args && args.path,
-              content: "# Ischemic Stroke\n\nA **stroke** is a neurological deficit caused by an interruption of blood supply to the brain.\n\n## Pathophysiology\n\n- *Ischemic* strokes account for ~85% of all strokes.\n- Caused by **thrombotic** or **embolic** occlusion of cerebral arteries.\n\n## Risk Factors\n\n1. Hypertension\n2. Atrial fibrillation\n3. Diabetes mellitus\n4. Smoking\n5. Dyslipidemia\n\n> Time is brain — every minute of delay loses ~1.9 million neurons.\n\n## Clinical Presentation\n\n| Territory | Symptom |\n|---|---|\n| MCA | Contralateral hemiparesis, facial droop |\n| ACA | Leg weakness |\n| PCA | Visual field deficits |\n\n```code\nFAST = Face, Arms, Speech, Time\n```\n",
+              content: "# Medical Knowledge\n\nSample clinical library text.",
             }
           : { path: args && args.path, content: "" };
       case "save_file":
@@ -112,392 +120,290 @@
       case "delete_path":
         return { deleted: true, path: args && args.path };
       case "runner_status":
-        return {
-          kind: "",
-          running: false,
-          exitCode: null,
-          startedAt: 0,
-          endedAt: 0,
-          stopRequested: false,
-          logs: [],
-        };
-      case "git_status":
-        return { entries: [] };
-      case "git_remote":
-        return { remote: "", branch: "" };
-      case "git_repo_identity":
-        return { owner: "eyad-elghareeb", repo: "osler", remote: "https://github.com/eyad-elghareeb/osler.git" };
-      case "git_list_branches":
-        return {
-          branches: [
-            { name: "main", sha: "abc1234", current: true, remote: false },
-            { name: "content/sample-branch", sha: "def5678", current: false, remote: false },
-          ],
-          current: "main",
-        };
-      case "git_current_branch":
-        return { branch: "main" };
-      case "git_create_branch":
-        return { created: true, branch: args && args.name, base: args && args.base || "main" };
-      case "git_checkout":
-        return { checkedOut: args && args.branch };
-      case "git_push_branch":
-        return { pushed: true, remote: args && args.remote || "origin", branch: args && args.branch, output: "" };
-      case "git_add_remote":
-        return { added: true, name: args && args.name, url: args && args.url };
-      case "git_fetch_remote":
-        return { fetched: true, remote: args && args.remote || "origin", output: "" };
-      case "git_clone":
-        return { cloned: true, url: args && args.url, targetDir: args && args.targetDir, branch: "main", remote: args && args.url };
-      // ── GitHub OAuth + API mocks ──────────────────────────────────
-      case "gh_get_oauth_config":
-        return { clientId: "", clientSecretSet: false, redirectUri: "http://localhost:7878/callback", scopes: "repo user", defaultClientId: "" };
-      case "gh_set_oauth_config":
-        return { saved: true };
-      case "gh_sign_in":
-        return { started: true, authUrl: "https://github.com/login/oauth/authorize?client_id=demo", state: "demo-state" };
-      case "gh_sign_out":
-        return { signedOut: true };
-      case "gh_auth_status":
-        if (window.__oslerMockGhAuth) return JSON.parse(JSON.stringify(window.__oslerMockGhAuth));
-        return { authenticated: false, login: "", name: "", avatarUrl: "", scopes: [], tokenSource: "", oauthPending: false, oauthError: "" };
-      case "gh_list_user_repos":
-        return { repos: preview ? [
-          { id: 1, fullName: "mock-user/osler", owner: "mock-user", description: "Mock repo for preview", private: false, fork: false, defaultBranch: "main", htmlUrl: "https://github.com/mock-user/osler", updatedAt: "2025-01-01T00:00:00Z", permissions: { admin: true, push: true, pull: true } },
-          { id: 2, fullName: "mock-user/osler-content", owner: "mock-user", description: "Sample content repo", private: true, fork: false, defaultBranch: "main", htmlUrl: "https://github.com/mock-user/osler-content", updatedAt: "2024-12-15T00:00:00Z", permissions: { admin: true, push: true, pull: true } },
-        ] : [] };
-      case "gh_get_repo_info":
-        return { id: 1, fullName: (args && args.owner || "mock") + "/" + (args && args.repo || "repo"), owner: args && args.owner, description: "", private: false, fork: false, defaultBranch: "main", htmlUrl: "https://github.com/" + (args && args.owner || "mock") + "/" + (args && args.repo || "repo"), cloneUrl: "https://github.com/" + (args && args.owner || "mock") + "/" + (args && args.repo || "repo") + ".git", permissions: { admin: false, push: false, pull: true }, parent: null };
-      case "gh_fork_repo":
-        return { forked: true, fullName: "mock-user/" + (args && args.repo || "repo"), cloneUrl: "https://github.com/mock-user/" + (args && args.repo || "repo") + ".git", htmlUrl: "https://github.com/mock-user/" + (args && args.repo || "repo"), defaultBranch: "main" };
-      case "gh_create_pr":
-        return { created: true, number: 42, htmlUrl: "https://github.com/" + (args && args.owner || "mock") + "/" + (args && args.repo || "repo") + "/pull/42", state: "open", title: args && args.title || "" };
-      case "gh_list_prs":
-        return { prs: preview ? [
-          { number: 41, title: "Add cardiology quiz pack", state: "open", draft: false, htmlUrl: "https://github.com/mock-user/osler/pull/41", user: "alice", head: "content/cardio-quiz", headRepo: "alice/osler", base: "main", baseRepo: "mock-user/osler", mergeable: true, body: "Adds 20 cardiology questions", updatedAt: "2025-01-15T00:00:00Z" },
-          { number: 40, title: "WIP: Neurology flashcards", state: "open", draft: true, htmlUrl: "https://github.com/mock-user/osler/pull/40", user: "bob", head: "content/neuro-flash", headRepo: "bob/osler", base: "main", baseRepo: "mock-user/osler", mergeable: null, body: "", updatedAt: "2025-01-10T00:00:00Z" },
-        ] : [] };
-      case "gh_merge_pr":
-        return { merged: true, sha: "deadbeef", message: "Pull request successfully merged." };
-      case "gh_close_pr":
-        return { closed: true, number: args && args.prNumber };
-      case "read_manifest":
-        throw new Error("No manifest in mock mode");
-      case "generate_manifest":
-        return { generated: [] };
-      case "validate_content":
-        return { valid: true, errors: [] };
-      case "get_deploy_config":
-        return preview
-          ? (window.__oslerMockDeployConfig || {})
-          : (window.__oslerMockDeployConfig || {});
-      case "set_deploy_config":
-        // Merge incoming config into the in-memory mock store so the
-        // "Connected" badge updates immediately. Token fields sent as
-        // empty strings preserve the existing value (matching the Rust
-        // backend's merge_provider behavior).
-        if (!window.__oslerMockDeployConfig) window.__oslerMockDeployConfig = {};
-        if (args && args.config && typeof args.config === "object") {
-          for (const provider of Object.keys(args.config)) {
-            const incoming = args.config[provider];
-            const existing = window.__oslerMockDeployConfig[provider] || {};
-            const merged = { ...existing };
-            for (const [k, v] of Object.entries(incoming)) {
-              if (typeof v === "string" && v === "" && (k.includes("token") || k === "password" || k === "api_key")) {
-                // preserve existing token
-              } else {
-                merged[k] = v;
-              }
-            }
-            window.__oslerMockDeployConfig[provider] = merged;
-          }
-        }
-        // Redact tokens before returning
-        return redactMockConfig(window.__oslerMockDeployConfig);
-      case "clear_deploy_provider":
-        if (window.__oslerMockDeployConfig && args && args.provider) {
-          delete window.__oslerMockDeployConfig[args.provider];
-        }
-        return redactMockConfig(window.__oslerMockDeployConfig || {});
-      case "test_deploy_connection":
-        return preview
-          ? { ok: true, details: { user: "mock-user", repo: "mock-repo", project: "mock-project" } }
-          : { ok: false, error: "Mock mode — connect to Tauri to test live." };
-      case "deploy":
-        // Mock simulates a deploy that runs for ~3 seconds and streams
-        // a few log lines, then succeeds with a fake URL. Polling
-        // deploy_status will see the running state and logs.
-        if (preview) {
-          (function () {
-            const provider = args && args.provider || "vercel";
-            window.__oslerMockDeployState = {
-              provider,
-              running: true,
-              success: false,
-              startedAt: Date.now(),
-              endedAt: 0,
-              logs: [
-                { stream: "info", text: "Starting " + provider + " deploy", ts: Date.now() },
-              ],
-              resultUrl: "",
-              error: "",
-            };
-            const lines = [
-              { stream: "info", text: "Pushing current branch to remote…" },
-              { stream: "success", text: "Git push complete." },
-              { stream: "info", text: "Triggering " + provider + " production deploy…" },
-              { stream: "info", text: "Build queued on provider infrastructure." },
-              { stream: "success", text: "Deployment created." },
-            ];
-            let i = 0;
-            const interval = setInterval(() => {
-              if (!window.__oslerMockDeployState) {
-                clearInterval(interval);
-                return;
-              }
-              if (i < lines.length) {
-                window.__oslerMockDeployState.logs.push({
-                  stream: lines[i].stream,
-                  text: lines[i].text,
-                  ts: Date.now(),
-                });
-                i++;
-              } else {
-                clearInterval(interval);
-                window.__oslerMockDeployState.running = false;
-                window.__oslerMockDeployState.success = true;
-                window.__oslerMockDeployState.endedAt = Date.now();
-                window.__oslerMockDeployState.resultUrl =
-                  "https://" + provider + "-example.osler.preview.app";
-              }
-            }, 700);
-          })();
-        }
-        return { started: true, provider: args && args.provider || "vercel" };
+        return { kind: "", running: false, exitCode: null, startedAt: 0, endedAt: 0, stopRequested: false, logs: [] };
       case "deploy_status":
-        if (preview && window.__oslerMockDeployState) {
-          return JSON.parse(JSON.stringify(window.__oslerMockDeployState));
-        }
-        return {
-          provider: "",
-          running: false,
-          success: false,
-          startedAt: 0,
-          endedAt: 0,
-          logs: [],
-          resultUrl: "",
-          error: "",
-        };
-      case "clear_deploy_logs":
-        if (window.__oslerMockDeployState) {
-          window.__oslerMockDeployState.logs = [];
-        }
-        return { cleared: true };
-      // ── osler.config.json commands (mock) ──────────────────────────
-      case "config_exists":
-        return { exists: !!window.__oslerMockConfig, path: "public/osler.config.json" };
-      case "read_config":
-        if (window.__oslerMockConfig) return JSON.parse(JSON.stringify(window.__oslerMockConfig));
-        throw new Error("Config file not found. Run the first-time wizard to create one.");
-      case "write_config":
-        window.__oslerMockConfig = JSON.parse(JSON.stringify(args && args.config));
-        return { written: true, path: "public/osler.config.json" };
+        return { running: false, success: true, logs: [{ stream: "info", text: "Ready", ts: Date.now() }], error: "" };
       case "generate_instance":
-        // Mock: pretend the instance was scaffolded.
-        return {
-          created: true,
-          targetDir: (args && args.opts && args.opts.targetDir) || "/tmp/new-osler",
-          files: [
-            "public/osler.config.json",
-            "README.md",
-            ".gitignore",
-            "public/osler-content/qbank/manifest.json",
-            "public/osler-content/flashcard/manifest.json",
-            "public/osler-content/osce/manifest.json",
-            "public/osler-content/library/manifest.json",
-            "public/osler-content/videos/manifest.json",
-          ],
-          dirs: [
-            "public/osler-content/qbank",
-            "public/osler-content/flashcard",
-            "public/osler-content/osce",
-            "public/osler-content/library",
-            "public/osler-content/videos",
-          ],
-          config: (args && args.opts) || {},
-        };
+        return { created: true, targetDir: args && args.opts && args.opts.targetDir, files: ["src/", "public/osler.config.json"] };
+      case "deploy_pages_cli":
+      case "deploy_worker_cli":
+      case "deploy_cloudflare_full_stack":
+        return { started: true };
       default:
-        return null;
+        return {};
     }
   }
 
-  /* ────────────────────── Router ────────────────────── */
-
-  const routes = {};
-  let currentRoute = null;
-
-  function register(route, handler) {
-    routes[route] = handler;
-  }
-
-  function navigate(route) {
-    currentRoute = route;
-    document.querySelectorAll(".nav-item").forEach((btn) => {
-      btn.classList.toggle("active", btn.getAttribute("data-route") === route);
-    });
-    const view = document.getElementById("view");
-    if (!view) return;
-    view.innerHTML = "";
-    view.className = "";
-    const handler = routes[route];
-    if (handler) {
-      try {
-        handler(view);
-      } catch (e) {
-        console.error("Route handler error:", e);
-        view.innerHTML = '<div class="view"><div class="empty-state"><div class="empty-state-title">Failed to render view</div><div class="empty-state-text">' + escapeHtml(String(e)) + '</div></div></div>';
-      }
-    } else {
-      view.innerHTML = '<div class="view"><div class="empty-state"><div class="empty-state-title">Not found</div><div class="empty-state-text">Unknown route: ' + escapeHtml(route) + '</div></div></div>';
-    }
-  }
-
-  /* ────────────────────── Toasts ────────────────────── */
-
-  function toast(message, kind) {
-    const wrap = document.getElementById("toasts");
-    if (!wrap) return;
-    const el = document.createElement("div");
-    el.className = "toast " + (kind || "info");
-    el.textContent = message;
-    wrap.appendChild(el);
-    setTimeout(() => {
-      el.style.transition = "opacity 0.3s, transform 0.3s";
-      el.style.opacity = "0";
-      el.style.transform = "translateY(8px)";
-      setTimeout(() => el.remove(), 300);
-    }, 3200);
-  }
-
-  /* ────────────────────── Helpers ────────────────────── */
-
-  function escapeHtml(v) {
-    return String(v == null ? "" : v)
-      .replace(/&/g, "&amp;")
-      .replace(/</g, "&lt;")
-      .replace(/>/g, "&gt;")
-      .replace(/"/g, "&quot;");
-  }
+  /* ────────────────────── DOM Helpers ────────────────────── */
 
   function el(tag, attrs, ...children) {
-    const node = document.createElement(tag);
+    const element = document.createElement(tag);
     if (attrs) {
-      for (const [k, v] of Object.entries(attrs)) {
-        if (k === "class") node.className = v;
-        else if (k === "html") node.innerHTML = v;
-        else if (k.startsWith("on") && typeof v === "function") {
-          node.addEventListener(k.slice(2).toLowerCase(), v);
-        } else if (k === "style" && typeof v === "object") {
-          Object.assign(node.style, v);
-        } else if (v != null) node.setAttribute(k, v);
+      for (const [key, value] of Object.entries(attrs)) {
+        if (key === "class" || key === "className") {
+          element.className = value;
+        } else if (key === "style" && typeof value === "object") {
+          Object.assign(element.style, value);
+        } else if (key.startsWith("on") && typeof value === "function") {
+          const event = key.slice(2).toLowerCase();
+          element.addEventListener(event, value);
+        } else if (key === "dataset" && typeof value === "object") {
+          Object.assign(element.dataset, value);
+        } else if (value !== false && value !== null && value !== undefined) {
+          element.setAttribute(key, value === true ? "" : value);
+        }
       }
     }
-    for (const child of children) {
-      if (child == null || child === false) continue;
+    for (const child of children.flat()) {
+      if (child === null || child === undefined) continue;
       if (typeof child === "string" || typeof child === "number") {
-        node.appendChild(document.createTextNode(String(child)));
-      } else if (Array.isArray(child)) {
-        child.forEach((c) => node.appendChild(c));
-      } else {
-        node.appendChild(child);
+        element.appendChild(document.createTextNode(String(child)));
+      } else if (child instanceof Node) {
+        element.appendChild(child);
       }
     }
-    return node;
+    return element;
   }
 
-  function svgIcon(path, size) {
-    const ns = "http://www.w3.org/2000/svg";
-    const svg = document.createElementNS(ns, "svg");
-    svg.setAttribute("width", size || 16);
-    svg.setAttribute("height", size || 16);
+  function svgIcon(pathD, size = 16) {
+    const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    svg.setAttribute("width", String(size));
+    svg.setAttribute("height", String(size));
     svg.setAttribute("viewBox", "0 0 24 24");
     svg.setAttribute("fill", "none");
     svg.setAttribute("stroke", "currentColor");
     svg.setAttribute("stroke-width", "2");
     svg.setAttribute("stroke-linecap", "round");
     svg.setAttribute("stroke-linejoin", "round");
-    const p = document.createElementNS(ns, "path");
-    p.setAttribute("d", path);
-    svg.appendChild(p);
+
+    const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+    path.setAttribute("d", pathD);
+    svg.appendChild(path);
     return svg;
   }
 
-  function t(key, params) {
-    return window.OslerAdminI18n.t(key, params);
+  function escapeHtml(str) {
+    return String(str)
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#039;");
   }
 
-  /* ────────────────────── Project state ────────────────────── */
+  function t(key, params) {
+    if (window.OslerAdminI18n && typeof window.OslerAdminI18n.t === "function") {
+      return window.OslerAdminI18n.t(key, params);
+    }
+    return key;
+  }
+
+  /* ────────────────────── Toast Notifications ────────────────────── */
+
+  function toast(message, type = "info", duration = 3500) {
+    const container = document.getElementById("toasts");
+    if (!container) return;
+
+    const tEl = el(
+      "div",
+      { class: `toast toast-${type}` },
+      el("div", { class: "toast-message" }, message)
+    );
+
+    container.appendChild(tEl);
+    setTimeout(() => {
+      tEl.style.opacity = "0";
+      tEl.style.transform = "translateY(8px)";
+      setTimeout(() => tEl.remove(), 250);
+    }, duration);
+  }
+
+  /* ────────────────────── Router ────────────────────── */
+
+  const routes = new Map();
+  let currentRoute = null;
+
+  function register(route, handler) {
+    routes.set(route, handler);
+  }
+
+  async function navigate(route) {
+    const viewContainer = document.getElementById("view");
+    if (!viewContainer) return;
+
+    const handler = routes.get(route);
+    if (!handler) {
+      console.warn(`Route not found: ${route}`);
+      return;
+    }
+
+    currentRoute = route;
+
+    // Update active nav styling in sidebar
+    document.querySelectorAll(".nav-item").forEach((btn) => {
+      const active = btn.getAttribute("data-route") === route;
+      btn.classList.toggle("active", active);
+    });
+
+    viewContainer.innerHTML = "";
+    try {
+      await handler(viewContainer);
+    } catch (e) {
+      console.error(`Error rendering view for ${route}:`, e);
+      viewContainer.innerHTML = "";
+      viewContainer.appendChild(
+        el(
+          "div",
+          { class: "view osler-fade-in" },
+          el("div", { class: "card", style: { padding: "2rem", border: "1px solid var(--danger)" } },
+            el("h2", { style: { color: "var(--danger)", margin: "0 0 0.5rem" } }, "View Render Error"),
+            el("p", { style: { fontFamily: "var(--font-mono)", fontSize: "0.8125rem" } }, String(e))
+          )
+        )
+      );
+    }
+  }
+
+  /* ────────────────────── App Modes & Sidebar ────────────────────── */
+
+  const NAV_ITEMS_INSTANCE_MANAGER = [
+    { route: "instance", icon: "M13 10V3L4 14h7v7l9-11h-7z", labelKey: "nav.instanceGenerator" },
+    { route: "instance-updater", icon: "M21 12a9 9 0 0 1-9 9m9-9a9 9 0 0 0-9-9m9 9H3m9 9a9 9 0 0 1-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9", labelKey: "nav.instanceUpdater" },
+    { route: "configure", icon: "M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z", labelKey: "nav.configure" },
+    { route: "run-publish", icon: "M3.5 13.5 12 5l8.5 8.5 M5 12v8h14v-8 M12 5v15", labelKey: "nav.runPublish" },
+    { route: "prereq", icon: "M9 12l2 2 4-4m6 2a9 9 0 1 1-18 0 9 9 0 0 1 18 0z", labelKey: "nav.prereqs" },
+  ];
+
+  const NAV_ITEMS_CONTENT_STUDIO = [
+    { route: "content", icon: "M4 4h16v16H4z M4 9h16 M9 4v16", labelKey: "nav.content" },
+    { route: "manifest", icon: "M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z M14 2v6h6 M16 13H8 M16 17H8 M10 9H8", labelKey: "nav.manifest" },
+    { route: "git", icon: "M6 3v12 M18 9a3 3 0 1 0 0-6 3 3 0 0 0 0 6z M6 21a3 3 0 1 0 0-6 3 3 0 0 0 0 6z M18 9a9 9 0 0 1-9 9", labelKey: "nav.gitSync" },
+    { route: "settings", icon: "M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z", labelKey: "nav.settings" },
+  ];
+
+  function setAppMode(mode, targetRoute = null) {
+    currentAppMode = mode;
+    try {
+      localStorage.setItem("osler-admin-app-mode", mode);
+    } catch {}
+
+    // Update switcher buttons
+    const btnInst = document.getElementById("btn-mode-instance");
+    const btnStud = document.getElementById("btn-mode-studio");
+    if (btnInst) btnInst.classList.toggle("active", mode === "instance-manager");
+    if (btnInst) btnInst.setAttribute("aria-pressed", String(mode === "instance-manager"));
+    if (btnStud) btnStud.classList.toggle("active", mode === "content-studio");
+    if (btnStud) btnStud.setAttribute("aria-pressed", String(mode === "content-studio"));
+
+    // Update brand title
+    const titleEl = document.getElementById("app-title-display");
+    const subEl = document.getElementById("app-subtitle-display");
+    if (titleEl && subEl) {
+      if (mode === "instance-manager") {
+        titleEl.textContent = t("app.mode.instanceManagerTitle");
+        subEl.textContent = t("app.mode.instanceManagerSub");
+      } else {
+        titleEl.textContent = t("app.mode.contentStudioTitle");
+        subEl.textContent = t("app.mode.contentStudioSub");
+      }
+    }
+
+    // Render navigation for active mode
+    renderSidebarNav();
+
+    // Navigate to default route for mode
+    const dest = targetRoute || (mode === "instance-manager" ? "instance" : "content");
+    navigate(dest);
+  }
+
+  function renderSidebarNav() {
+    const nav = document.getElementById("sidebar-nav");
+    if (!nav) return;
+    nav.innerHTML = "";
+
+    const items = currentAppMode === "instance-manager" ? NAV_ITEMS_INSTANCE_MANAGER : NAV_ITEMS_CONTENT_STUDIO;
+
+    for (const item of items) {
+      const btn = el(
+        "button",
+        {
+          class: "nav-item" + (currentRoute === item.route ? " active" : ""),
+          "data-route": item.route,
+          type: "button",
+          onClick: () => navigate(item.route),
+        },
+        svgIcon(item.icon, 16),
+        el("span", {}, t(item.labelKey))
+      );
+      nav.appendChild(btn);
+    }
+  }
+
+  /* ────────────────────── Project State ────────────────────── */
 
   let projectState = null;
+  const STORAGE_ROOT_KEY = "osler-admin-project-root";
+
+  function saveProjectRoot(path) {
+    try {
+      localStorage.setItem(STORAGE_ROOT_KEY, path);
+    } catch {}
+  }
+
+  function loadSavedProjectRoot() {
+    try {
+      return localStorage.getItem(STORAGE_ROOT_KEY);
+    } catch {
+      return null;
+    }
+  }
 
   async function refreshProjectState() {
     try {
-      projectState = await invoke("project_state");
+      const st = await invoke("project_state");
+      projectState = st;
       updateProjectPill();
-      return projectState;
+      return st;
     } catch (e) {
-      console.error("project_state failed:", e);
-      projectState = { root: null };
-      updateProjectPill();
-      return projectState;
+      console.warn("Failed to fetch project state:", e);
+      return null;
     }
   }
 
   function updateProjectPill() {
-    const pill = document.getElementById("project-pill");
-    const text = document.getElementById("project-pill-text");
-    if (!pill || !text) return;
+    const textEl = document.getElementById("project-pill-text");
+    if (!textEl) return;
     if (projectState && projectState.root) {
-      pill.classList.add("connected");
-      const short = projectState.root.split(/[\\/]/).pop();
-      text.textContent = short;
-      pill.title = projectState.root;
+      const parts = projectState.root.split(/[\\/]/).filter(Boolean);
+      const name = parts[parts.length - 1] || projectState.root;
+      textEl.textContent = name;
+      textEl.parentElement.setAttribute("title", projectState.root);
+      textEl.parentElement.classList.add("connected");
     } else {
-      pill.classList.remove("connected");
-      text.textContent = t("project.notPicked");
-      pill.title = t("project.pick");
+      textEl.textContent = t("project.notPicked");
+      textEl.parentElement.setAttribute("title", t("project.pickTitle"));
+      textEl.parentElement.classList.remove("connected");
     }
-  }
-
-  const STORAGE_ROOT_KEY = "osler-admin-project-root";
-
-  function saveProjectRoot(root) {
-    try { localStorage.setItem(STORAGE_ROOT_KEY, root); } catch {}
-  }
-
-  function loadSavedProjectRoot() {
-    try { return localStorage.getItem(STORAGE_ROOT_KEY); } catch { return null; }
   }
 
   async function pickProjectRoot() {
     try {
       const folder = await invoke("plugin:dialog|open", {
-        options: {
-          directory: true,
-          title: "Pick Osler project root",
-          multiple: false,
-        },
+        options: { directory: true, title: t("project.pickTitle"), multiple: false },
       });
-      // Response is a plain path string when picked, null/undefined on cancel
-      const root = typeof folder === "string" ? folder : null;
-      if (!root) return;
-      const res = await invoke("set_project_root", { root });
-      saveProjectRoot(root);
+      const p = typeof folder === "string" ? folder : null;
+      if (!p) return;
+
+      const res = await invoke("set_project_root", { root: p });
+      saveProjectRoot(p);
       await refreshProjectState();
       toast(t("project.state.connected"), "success");
-      if (currentRoute) navigate(currentRoute);
-      if (res && res.hasContentDir === false) {
-        toast(t("project.state.noContent"), "info");
+
+      // Auto-navigate to appropriate view
+      if (currentAppMode === "instance-manager") {
+        navigate("instance");
+      } else {
+        navigate("content");
       }
     } catch (e) {
       if (!TAURI_AVAILABLE) {
@@ -516,7 +422,7 @@
     return true;
   }
 
-  /* ────────────────────── Theme toggle ────────────────────── */
+  /* ────────────────────── Theme Toggle ────────────────────── */
 
   function toggleTheme() {
     const html = document.documentElement;
@@ -538,7 +444,7 @@
     moon.style.display = current === "dark" ? "none" : "";
   }
 
-  /* ────────────────────── Window controls ────────────────────── */
+  /* ────────────────────── Window Controls ────────────────────── */
 
   let wcMaximized = false;
 
@@ -567,155 +473,68 @@
       wcMaximized = await window.__TAURI__.core.invoke("plugin:window|is_maximized");
       wcUpdateMaximizeIcon();
     } catch {}
-    try {
-      const { listen } = await import("@tauri-apps/api/event");
-      const unlisten = await listen("tauri://resize", async () => {
-        try {
-          wcMaximized = await window.__TAURI__.core.invoke("plugin:window|is_maximized");
-          wcUpdateMaximizeIcon();
-        } catch {}
-      });
-      window.__oslerWcUnlisten = unlisten;
-    } catch {}
   }
 
   /* ────────────────────── Boot ────────────────────── */
 
-  function boot() {
-    // Wire nav buttons
-    document.querySelectorAll(".nav-item").forEach((btn) => {
-      btn.addEventListener("click", () => navigate(btn.getAttribute("data-route")));
+  function boot(forcedMode = null) {
+    // Mode setup
+    let initialMode = forcedMode || window.__oslerForcedMode;
+    if (!initialMode) {
+      try {
+        initialMode = localStorage.getItem("osler-admin-app-mode") || "instance-manager";
+      } catch {
+        initialMode = "instance-manager";
+      }
+    }
+    currentAppMode = initialMode;
+
+    // App Switcher buttons
+    document.getElementById("btn-mode-instance")?.addEventListener("click", () => setAppMode("instance-manager"));
+    document.getElementById("btn-mode-studio")?.addEventListener("click", () => setAppMode("content-studio"));
+
+    document.getElementById("brand")?.addEventListener("click", () => {
+      navigate(currentAppMode === "instance-manager" ? "instance" : "content");
     });
-    document.getElementById("brand").addEventListener("click", () => navigate("start"));
-    document.getElementById("project-pill").addEventListener("click", pickProjectRoot);
-    document.getElementById("lang-toggle").addEventListener("click", () => {
+    document.getElementById("project-pill")?.addEventListener("click", pickProjectRoot);
+    document.getElementById("lang-toggle")?.addEventListener("click", () => {
       window.OslerAdminI18n.toggleLang();
+      renderSidebarNav();
     });
-    document.getElementById("theme-toggle").addEventListener("click", toggleTheme);
+    document.getElementById("theme-toggle")?.addEventListener("click", toggleTheme);
     updateThemeIcon();
 
-    // Register routes (4 top-level, down from 11).
-    // Each wrapper view internally hosts the original views as tabs.
-    register("start", window.OslerAdminViews.start);
+    // Register all view handlers
+    register("instance", window.OslerAdminViews.instance);
+    register("instance-updater", window.OslerAdminViews.instanceUpdater);
+    register("prereq", window.OslerAdminViews.prereq);
     register("content", window.OslerAdminViews.content);
+    register("manifest", window.OslerAdminViews.manifest);
     register("configure", window.OslerAdminViews.configure);
     register("run-publish", window.OslerAdminViews.runPublish);
+    register("start", window.OslerAdminViews.start);
+    register("git", window.OslerAdminViews.git);
+    register("deploy", window.OslerAdminViews.deploy);
+    register("settings", window.OslerAdminViews.settings);
+    register("dashboard", window.OslerAdminViews.dashboard);
 
-    // Legacy routes redirect to their new home inside a wrapper view.
-    // Kept so old bookmarked routes + the auto-launch logic below still work.
-    register("dashboard", (view) => {
-      window.__oslerStartTab = "overview";
-      window.OslerAdmin.navigate("start");
-    });
-    register("wizard", (view) => {
-      window.__oslerStartTab = "wizard";
-      window.OslerAdmin.navigate("start");
-    });
-    register("instance", (view) => {
-      window.__oslerStartTab = "instance";
-      window.OslerAdmin.navigate("start");
-    });
-    register("config", (view) => {
-      window.OslerAdmin.navigate("configure");
-    });
-    register("manifest", (view) => {
-      window.OslerAdmin.navigate("content");
-    });
-    register("build", (view) => {
-      window.OslerAdmin.navigate("run-publish");
-    });
-    register("git", (view) => {
-      window.OslerAdmin.navigate("run-publish");
-      // Open on the Git tab — wrapper reads this hint on next mount.
-      setTimeout(() => { window.__oslerRpTab = "git"; }, 0);
-    });
-    register("github", (view) => {
-      window.OslerAdmin.navigate("run-publish");
-    });
-    register("deploy", (view) => {
-      window.OslerAdmin.navigate("run-publish");
-    });
-    register("settings", (view) => {
-      window.OslerAdmin.navigate("configure");
-    });
-
-    // Initialise custom window controls (borderless window titlebar buttons)
     wcInit();
 
-    // Initial state fetch + first render
+    // Initial state fetch
     refreshProjectState().then(async () => {
-      // Auto-restore saved project root
       if (!projectState || !projectState.root) {
         const saved = loadSavedProjectRoot();
         if (saved) {
           try {
-            const res = await invoke("set_project_root", { root: saved });
-            saveProjectRoot(saved);
+            await invoke("set_project_root", { root: saved });
             await refreshProjectState();
           } catch (e) {
-            console.warn("Saved project root no longer valid:", e);
             try { localStorage.removeItem(STORAGE_ROOT_KEY); } catch {}
           }
         }
       }
-      navigate("start");
-      // If no root picked, show the picker overlay
-      if (!projectState || !projectState.root) {
-        showPickerOverlay();
-      } else {
-        // Root picked — check if osler.config.json exists. If not, auto-launch
-        // the first-time wizard (now hosted inside the Start tab group) so the
-        // user can configure site identity, engine plugins, themes, and the
-        // GitHub repo link on first boot.
-        try {
-          const ce = await invoke("config_exists");
-          if (ce && ce.exists === false) {
-            window.__oslerStartTab = "wizard";
-            navigate("start");
-            toast(t("wizard.autoLaunched"), "info");
-          }
-        } catch (e) {
-          // Mock mode or older backend — silently ignore.
-        }
-      }
+      setAppMode(currentAppMode);
     });
-  }
-
-  function showPickerOverlay() {
-    const existing = document.querySelector(".picker-overlay");
-    if (existing) existing.remove();
-
-    const overlay = el("div", { class: "picker-overlay" });
-    const card = el("div", { class: "picker-card" });
-    const mark = el("div", { class: "brand-mark" });
-    mark.style.width = "56px";
-    mark.style.height = "56px";
-    mark.style.borderRadius = "var(--radius)";
-    mark.style.margin = "0 auto";
-    mark.innerHTML =
-      '<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2" /></svg>';
-    card.appendChild(mark);
-    card.appendChild(el("h2", {}, t("project.pick")));
-    card.appendChild(el("p", {}, t("project.pickHelp")));
-    const btn = el("button", { class: "btn btn-primary", style: { width: "100%", justifyContent: "center" } }, t("project.pick"));
-    btn.addEventListener("click", async () => {
-      await pickProjectRoot();
-      if (projectState && projectState.root) {
-        overlay.remove();
-      }
-    });
-    card.appendChild(btn);
-
-    // Skip link — useful when previewing in a browser without Tauri installed.
-    const skip = el("button", {
-      class: "btn btn-ghost",
-      style: { width: "100%", justifyContent: "center", marginTop: "0.5rem", fontSize: "0.75rem" },
-    }, t("common.close"));
-    skip.addEventListener("click", () => overlay.remove());
-    card.appendChild(skip);
-
-    overlay.appendChild(card);
-    document.body.appendChild(overlay);
   }
 
   /* ────────────────────── Exports ────────────────────── */
@@ -729,11 +548,15 @@
     pickProjectRoot,
     requireProject,
     boot,
+    setAppMode,
     get projectState() {
       return projectState;
     },
     get currentRoute() {
       return currentRoute;
+    },
+    get appMode() {
+      return currentAppMode;
     },
     helpers: { el, svgIcon, escapeHtml, t },
     TAURI_AVAILABLE,

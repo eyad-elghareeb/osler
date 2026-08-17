@@ -13,6 +13,7 @@ use serde_json::{json, Value};
 use std::fs;
 use std::path::{Path, PathBuf};
 use tauri::State;
+use walkdir::WalkDir;
 
 /// Path to the config file inside the project root.
 const CONFIG_REL: &str = "public/osler.config.json";
@@ -22,7 +23,7 @@ const CONFIG_REL: &str = "public/osler.config.json";
 /// without surprises. Kept inline (not read from disk) so the admin app
 /// doesn't need to ship a template file alongside the Rust binary.
 const DEFAULT_CONFIG_TEMPLATE: &str = include_str!("../default-osler-config.json");
-const CLOUDFLARE_WORKER_SOURCE: &str = include_str!("../../cloudflare/worker/src/index.mjs");
+const CLOUDFLARE_WORKER_SOURCE: &str = include_str!("../../cloudflare/worker/src/index.ts");
 const CLOUDFLARE_MIGRATION: &str = include_str!("../../cloudflare/worker/migrations/0001_initial.sql");
 const CLOUDFLARE_MIGRATION_0002: &str = include_str!("../../cloudflare/worker/migrations/0002_accounts_and_google.sql");
 const CLOUDFLARE_PACKAGE: &str = include_str!("../../cloudflare/worker/package.json");
@@ -35,13 +36,33 @@ fn config_path(root: &Path) -> PathBuf {
     root.join(CONFIG_REL)
 }
 
+fn resolve_source_root() -> Option<PathBuf> {
+    if let Ok(exe) = std::env::current_exe() {
+        let mut curr = exe.parent();
+        while let Some(p) = curr {
+            if p.join("src/app").is_dir() && p.join("package.json").is_file() {
+                return Some(p.to_path_buf());
+            }
+            curr = p.parent();
+        }
+    }
+    if let Ok(cwd) = std::env::current_dir() {
+        let mut curr = Some(cwd.as_path());
+        while let Some(p) = curr {
+            if p.join("src/app").is_dir() && p.join("package.json").is_file() {
+                return Some(p.to_path_buf());
+            }
+            curr = p.parent();
+        }
+    }
+    None
+}
+
 /* ═══════════════════════════════════════════════════════════════════════
    read_config / write_config
    ═══════════════════════════════════════════════════════════════════════ */
 
 /// Read the project's `osler.config.json`. Returns the parsed JSON object.
-/// Returns a 404-style error if the file doesn't exist so the frontend can
-/// prompt the user to run the first-time wizard.
 #[tauri::command]
 pub fn read_config(state: State<'_, ProjectRoot>) -> Result<Value, String> {
     let root = crate::commands::root_or_err_pub(&state)?;
@@ -86,30 +107,16 @@ pub fn config_exists(state: State<'_, ProjectRoot>) -> Result<Value, String> {
 #[derive(serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct InstanceOptions {
-    /// Absolute path of the new project directory. Must not exist or must
-    /// be empty. The caller (frontend) picks this via the Tauri dialog.
     pub target_dir: String,
-    /// Site name (e.g. "My Medical School").
     pub site_name: String,
-    /// Short name for PWA / mobile home screen (e.g. "MMS").
     pub short_name: String,
-    /// Tagline shown under the brand mark.
     pub tagline: String,
-    /// Canonical GitHub repo URL.
     pub github_repo: String,
-    /// Organisation / author name.
     pub organisation: String,
-    /// Engine plugin ids to enable. The rest are disabled.
     pub enabled_engines: Vec<String>,
-    /// Default theme id ("dark", "light", or a custom theme id).
     pub default_theme: String,
-    /// Default UI language ("en" or "ar").
     pub default_lang: String,
-    /// If true, copy the bundled template content (sample articles + a small
-    /// quiz pack) into the new instance so it isn't empty. If false, only
-    /// the framework + empty content folders are scaffolded.
     pub include_sample_content: bool,
-    /// Optional Cloudflare Worker/D1 account and cloud-sync scaffold.
     pub cloud: Option<InstanceCloudOptions>,
 }
 
@@ -124,8 +131,8 @@ pub struct InstanceCloudOptions {
 }
 
 /// Generate a new Osler instance into `target_dir`. Creates the directory
-/// structure, writes a starter `osler.config.json`, `package.json`, and
-/// stub content folders. Returns a summary of what was created.
+/// structure, copies core framework files, writes a starter `osler.config.json`,
+/// `package.json`, and content folders. Returns a summary of what was created.
 #[tauri::command]
 pub fn generate_instance(opts: InstanceOptions) -> Result<Value, String> {
     let target = PathBuf::from(&opts.target_dir);
@@ -150,35 +157,78 @@ pub fn generate_instance(opts: InstanceOptions) -> Result<Value, String> {
     let mut created_files: Vec<String> = Vec::new();
     let mut created_dirs: Vec<String> = Vec::new();
 
-    // ── public/osler-content/ stub folders ──────────────────────────
-    let content_root = target.join("public/osler-content");
-    for sub in ["qbank", "flashcard", "osce", "library", "videos"] {
-        let p = content_root.join(sub);
-        fs::create_dir_all(&p).map_err(|e| e.to_string())?;
-        created_dirs.push(format!("public/osler-content/{}", sub));
+    let cloud_enabled = opts.cloud.as_ref().is_some_and(|cloud| cloud.enabled);
 
-        // Per-category manifest.json so the app boots cleanly.
-        let manifest = json!({
-            "type": match sub {
-                "qbank" => "quiz",
-                "flashcard" => "flashcard",
-                "osce" => "osce",
-                "library" => "library",
-                "videos" => "video",
-                _ => "quiz",
-            },
-            "items": []
-        });
-        let mp = p.join("manifest.json");
-        fs::write(&mp, serde_json::to_string_pretty(&manifest).unwrap())
-            .map_err(|e| e.to_string())?;
-        created_files.push(format!("public/osler-content/{}/manifest.json", sub));
+    // ── 1. Copy core framework code from source if available ───────────
+    if let Some(src_root) = resolve_source_root() {
+        for folder in ["src", "scripts"] {
+            let src_folder = src_root.join(folder);
+            if src_folder.is_dir() {
+                for entry in WalkDir::new(&src_folder).into_iter().filter_map(|e| e.ok()) {
+                    let path = entry.path();
+                    if let Ok(rel) = path.strip_prefix(&src_root) {
+                        let rel_str = rel.to_string_lossy().replace('\\', "/");
+                        let tgt_file = target.join(rel);
+                        if entry.file_type().is_dir() {
+                            let _ = fs::create_dir_all(&tgt_file);
+                        } else if entry.file_type().is_file() {
+                            if let Some(parent) = tgt_file.parent() {
+                                let _ = fs::create_dir_all(parent);
+                            }
+                            if fs::copy(path, &tgt_file).is_ok() {
+                                created_files.push(rel_str);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Copy root configuration files
+        for root_file in [
+            "package.json",
+            "tsconfig.json",
+            "next.config.ts",
+            "tailwind.config.ts",
+            "postcss.config.mjs",
+            "components.json",
+            "eslint.config.mjs",
+        ] {
+            let sf = src_root.join(root_file);
+            let tf = target.join(root_file);
+            if sf.is_file() && fs::copy(&sf, &tf).is_ok() {
+                created_files.push(root_file.into());
+            }
+        }
     }
 
-    // ── osler.config.json ───────────────────────────────────────────
-    // Start from the bundled default template, then patch in the user's
-    // choices. We parse → mutate → re-serialize so the resulting file is
-    // always valid JSON even if the template drifts.
+    // ── 2. Content structure ──────────────────────────────────────────
+    let content_root = target.join("public/osler-content");
+    if !cloud_enabled || opts.include_sample_content {
+        for sub in ["qbank", "flashcard", "osce", "library", "videos"] {
+            let p = content_root.join(sub);
+            fs::create_dir_all(&p).map_err(|e| e.to_string())?;
+            created_dirs.push(format!("public/osler-content/{}", sub));
+
+            let manifest = json!({
+                "type": match sub {
+                    "qbank" => "quiz",
+                    "flashcard" => "flashcard",
+                    "osce" => "osce",
+                    "library" => "library",
+                    "videos" => "video",
+                    _ => "quiz",
+                },
+                "items": []
+            });
+            let mp = p.join("manifest.json");
+            fs::write(&mp, serde_json::to_string_pretty(&manifest).unwrap())
+                .map_err(|e| e.to_string())?;
+            created_files.push(format!("public/osler-content/{}/manifest.json", sub));
+        }
+    }
+
+    // ── 3. osler.config.json ───────────────────────────────────────────
     let mut cfg: Value = serde_json::from_str(DEFAULT_CONFIG_TEMPLATE)
         .map_err(|e| format!("Internal template parse error: {}", e))?;
 
@@ -191,7 +241,6 @@ pub fn generate_instance(opts: InstanceOptions) -> Result<Value, String> {
     }
 
     if let Some(engines) = cfg.get_mut("engines").and_then(|v| v.as_object_mut()) {
-        // Disable every engine, then enable only the ones the user picked.
         for (_id, entry) in engines.iter_mut() {
             if let Some(obj) = entry.as_object_mut() {
                 obj.insert("enabled".into(), json!(false));
@@ -214,7 +263,6 @@ pub fn generate_instance(opts: InstanceOptions) -> Result<Value, String> {
         }
     }
 
-    let cloud_enabled = opts.cloud.as_ref().is_some_and(|cloud| cloud.enabled);
     if let Some(cloud) = opts.cloud.as_ref().filter(|cloud| cloud.enabled) {
         if let Some(root) = cfg.as_object_mut() {
             root.insert("cloud".into(), json!({
@@ -223,6 +271,7 @@ pub fn generate_instance(opts: InstanceOptions) -> Result<Value, String> {
                 "turnstileSiteKey": cloud.turnstile_site_key,
                 "syncQbank": true,
                 "syncFlashcards": true,
+                "r2Storage": true,
             }));
         }
     }
@@ -234,11 +283,14 @@ pub fn generate_instance(opts: InstanceOptions) -> Result<Value, String> {
     }
 
     let cfg_path = target.join("public/osler.config.json");
+    if let Some(parent) = cfg_path.parent() {
+        let _ = fs::create_dir_all(parent);
+    }
     fs::write(&cfg_path, serde_json::to_string_pretty(&cfg).unwrap())
         .map_err(|e| e.to_string())?;
     created_files.push("public/osler.config.json".into());
 
-    // ── Optional Cloudflare Worker + D1 backend ─────────────────────
+    // ── 4. Optional Cloudflare Worker + D1 backend ─────────────────────
     if let Some(cloud) = opts.cloud.as_ref().filter(|cloud| cloud.enabled) {
         let worker_root = target.join("cloudflare/worker");
         let worker_src = worker_root.join("src");
@@ -253,7 +305,8 @@ pub fn generate_instance(opts: InstanceOptions) -> Result<Value, String> {
         ]);
 
         let mut worker_config = format!(
-            "name = \"{}\"\nmain = \"src/index.mjs\"\ncompatibility_date = \"2026-07-23\"\nworkers_dev = true\n\n[[d1_databases]]\nbinding = \"DB\"\ndatabase_name = \"{}\"\ndatabase_id = \"REPLACE_WITH_D1_DATABASE_ID\"\n\n[vars]\nALLOWED_ORIGIN = \"{}\"\nTURNSTILE_ENABLED = \"false\"\n",
+            "name = \"{}\"\nmain = \"src/index.mjs\"\ncompatibility_date = \"2026-07-23\"\nworkers_dev = true\n\n[[d1_databases]]\nbinding = \"DB\"\ndatabase_name = \"{}\"\ndatabase_id = \"REPLACE_WITH_D1_DATABASE_ID\"\n\n[[r2_buckets]]\nbinding = \"CONTENT_BUCKET\"\nbucket_name = \"{}-content\"\n\n[vars]\nALLOWED_ORIGIN = \"{}\"\nTURNSTILE_ENABLED = \"false\"\n",
+            sanitize_worker_name(&cloud.worker_name, &opts.short_name),
             sanitize_worker_name(&cloud.worker_name, &opts.short_name),
             sanitize_worker_name(&cloud.worker_name, &opts.short_name),
             cloud.allowed_origin.trim_end_matches('/').replace('"', ""),
@@ -283,9 +336,9 @@ pub fn generate_instance(opts: InstanceOptions) -> Result<Value, String> {
         created_files.push("docs/cloudflare-backend.md".into());
     }
 
-    // ── README.md ───────────────────────────────────────────────────
+    // ── 5. README.md & .gitignore ───────────────────────────────────
     let readme = format!(
-        "# {name}\n\n{tagline}\n\nThis instance was scaffolded by the Osler Admin instance generator.\n\n- **GitHub repo:** {repo}\n- **Organisation:** {org}\n- **Default theme:** {theme}\n- **Default language:** {lang}\n- **Enabled engines:** {engines}\n- **Cloud accounts and sync:** {cloud}\n\n## Getting started\n\n```bash\nnpm install\nnpm run generate-manifests\nnpm run dev\n```\n\nSee `public/osler.config.json` to customise the site name, engines, themes, and cloud mode.\n\n{cloud_steps}",
+        "# {name}\n\n{tagline}\n\nThis instance was scaffolded by the Osler Admin instance generator.\n\n- **GitHub repo:** {repo}\n- **Organisation:** {org}\n- **Default theme:** {theme}\n- **Default language:** {lang}\n- **Enabled engines:** {engines}\n- **Cloud accounts and sync:** {cloud}\n\n## Getting started\n\n```bash\nnpm install\nnpm run generate-manifests\nnpm run dev\n```\n\n## Cloud Deploy commands\n\n```bash\nnpm run deploy:pages   # Deploy static web app to Cloudflare Pages\nnpm run deploy:worker  # Deploy backend Worker to Cloudflare Workers\n```\n\nSee `public/osler.config.json` to customise the site name, engines, themes, and cloud mode.\n",
         name = opts.site_name,
         tagline = opts.tagline,
         repo = opts.github_repo,
@@ -293,21 +346,17 @@ pub fn generate_instance(opts: InstanceOptions) -> Result<Value, String> {
         theme = opts.default_theme,
         lang = opts.default_lang,
         engines = opts.enabled_engines.join(", "),
-        cloud = if cloud_enabled { "enabled (Cloudflare Worker + D1)" } else { "local-only" },
-        cloud_steps = if cloud_enabled {
-            "## Deploy cloud accounts and sync\n\nThe generated Worker lives in `cloudflare/worker/`. Follow the [full cloud backend guide](docs/cloudflare-backend.md) before switching the frontend to production. The instance includes a full Worker source file, D1 migration, `wrangler.toml`, and a secrets template; no credentials are written into this repository.\n"
-        } else { "" },
+        cloud = if cloud_enabled { "enabled (Cloudflare Worker + D1 + R2)" } else { "local-only" },
     );
     let readme_path = target.join("README.md");
     fs::write(&readme_path, readme).map_err(|e| e.to_string())?;
     created_files.push("README.md".into());
 
-    // ── .gitignore ──────────────────────────────────────────────────
-    let gitignore = "# Dependencies\nnode_modules/\n\n# Build output\n.next/\nout/\ndist/\n\n# Environment\n.env\n.env.local\n.env*.local\ncloudflare/worker/.dev.vars\n\n# Editor\n.vscode/\n.idea/\n*.swp\n.DS_Store\n\n# Logs\n*.log\nnpm-debug.log*\n";
+    let gitignore = "# Dependencies\nnode_modules/\n\n# Build output\n.next/\nout/\ndist/\n\n# Environment\n.env\n.env.local\n.env*.local\ncloudflare/worker/.dev.vars\n\n# Backups\n.osler-backup/\n\n# Editor\n.vscode/\n.idea/\n*.swp\n.DS_Store\n\n# Logs\n*.log\nnpm-debug.log*\n";
     fs::write(target.join(".gitignore"), gitignore).map_err(|e| e.to_string())?;
     created_files.push(".gitignore".into());
 
-    // ── Optional sample content ─────────────────────────────────────
+    // ── 6. Optional sample content ─────────────────────────────────────
     if opts.include_sample_content {
         let sample_quiz = json!({
             "questions": [
@@ -323,12 +372,13 @@ pub fn generate_instance(opts: InstanceOptions) -> Result<Value, String> {
             ]
         });
         let qpath = content_root.join("qbank/welcome/questions.json");
-        fs::create_dir_all(qpath.parent().unwrap()).map_err(|e| e.to_string())?;
+        if let Some(parent) = qpath.parent() {
+            let _ = fs::create_dir_all(parent);
+        }
         fs::write(&qpath, serde_json::to_string_pretty(&sample_quiz).unwrap())
             .map_err(|e| e.to_string())?;
         created_files.push("public/osler-content/qbank/welcome/questions.json".into());
 
-        // Re-generate the qbank manifest to include the welcome pack.
         let qbank_manifest = json!({
             "type": "quiz",
             "items": [
@@ -371,14 +421,11 @@ fn sanitize_worker_name(value: &str, fallback: &str) -> String {
     }
 }
 
-/// Best-effort ISO-8601 timestamp of "now". Used to stamp `wizard.completedAt`.
 fn chrono_now_iso() -> String {
     use std::time::{SystemTime, UNIX_EPOCH};
     let secs = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map(|d| d.as_secs())
         .unwrap_or(0);
-    // Simple ISO format without bringing in chrono. Sufficient for a timestamp
-    // marker — consumers don't parse this back.
     format!("<epoch:{}>", secs)
 }
