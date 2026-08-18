@@ -707,6 +707,8 @@ export const en = {
     "videos.playlist": "Playlist",
     "videos.overview": "Overview",
     "videos.switchPlayer": "Switch Player",
+    "videos.altHost": "Alt Host",
+    "videos.standard": "Standard",
     "videos.showMore": "Show more",
     "videos.showLess": "Show less",
     "videos.jumpToSection": "Jump to section",

@@ -30,6 +30,7 @@ import {
   formatDuration,
 } from "@/lib/osler/videos";
 import { packBasePath } from "@/lib/osler/content";
+import { settings } from "@/lib/osler/storage";
 import type { VideoResource, ContentTreeNode } from "@/lib/osler/types";
 import { cn } from "@/lib/utils";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -487,10 +488,21 @@ function VideoPlayerView({
   const youtubeRef = React.useRef<any>(null);
 
   const [isFullscreen, setIsFullscreen] = React.useState(false);
-  const [invidiousMode, setInvidiousMode] = React.useState<boolean>(Boolean(INVIDIOUS_HOST));
+  const [invidiousMode, setInvidiousMode] = React.useState<boolean>(false);
   const [invidiousStart, setInvidiousStart] = React.useState<number | undefined>(undefined);
   const [showFullDescription, setShowFullDescription] = React.useState(false);
   const [downloadOpen, setDownloadOpen] = React.useState(false);
+
+  React.useEffect(() => {
+    let cancelled = false;
+    settings.get("video-alt-host").then((val) => {
+      if (cancelled || val == null) return;
+      setInvidiousMode(val === "true");
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const isYouTube = video.source.type === "youtube";
   const videoId = isYouTube ? video.source.id : undefined;
@@ -727,7 +739,9 @@ function VideoPlayerView({
             onClick={() => {
               haptic("selection");
               setInvidiousStart(undefined);
-              setInvidiousMode((prev) => !prev);
+              const next = !invidiousMode;
+              setInvidiousMode(next);
+              void settings.set("video-alt-host", String(next));
             }}
             className={cn(
               "px-2.5 h-8 rounded-md text-xs font-medium flex items-center gap-1.5 transition-colors border",
@@ -738,7 +752,7 @@ function VideoPlayerView({
             title={t("videos.switchPlayer")}
           >
             <ExternalLink className="size-3.5" />
-            <span className="hidden md:inline">{invidiousMode ? "Alt Host" : "Standard"}</span>
+            <span className="hidden md:inline">{invidiousMode ? t("videos.altHost") : t("videos.standard")}</span>
           </button>
         )}
       </header>

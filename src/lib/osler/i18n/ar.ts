@@ -708,6 +708,8 @@ export const ar = {
     "videos.playlist": "قائمة التشغيل",
     "videos.overview": "نظرة عامة",
     "videos.switchPlayer": "تغيير المشغّل",
+    "videos.altHost": "المضيف البديل",
+    "videos.standard": "القياسي",
     "videos.showMore": "عرض المزيد",
     "videos.showLess": "عرض أقل",
     "videos.jumpToSection": "الانتقال إلى قسم",
