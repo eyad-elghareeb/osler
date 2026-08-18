@@ -8,7 +8,6 @@ import {
   Sparkles,
   User as UserIcon,
   Trash2,
-  Loader2,
   X,
   Settings,
   ChevronDown,
@@ -26,6 +25,7 @@ import {
 import { useSwipeBackDismiss } from "@/hooks/use-swipe-back-dismiss";
 import { GEMINI_CLOUD_SYNCED_FLAG } from "@/lib/osler/cloud";
 import { Combobox } from "@/components/osler/ui-primitives";
+import { ThinkingStatus } from "@/components/osler/thinking-status";
 
 const MODELS = [
   ["gemini-3.5-flash-lite", "Gemini 3.5 Flash-Lite (default, fastest & cost-efficient)"],
@@ -490,10 +490,14 @@ export function AiAssistant({
             <div className="w-7 h-7 rounded-full bg-primary/15 text-primary flex items-center justify-center shrink-0">
               <Bot className="size-4" />
             </div>
-            <div className="flex items-center gap-1.5">
-              <Loader2 className="size-3.5 animate-spin" />
-              <span>{t("ai.thinking")}</span>
-            </div>
+            <ThinkingStatus
+              phases={[
+                { label: t("ai.orb.thinking"), state: "working" },
+                { label: t("ai.orb.searching"), state: "searching" },
+                { label: t("ai.orb.composing"), state: "composing" },
+                { label: t("ai.orb.reviewing"), state: "solving" },
+              ]}
+            />
           </div>
         )}
         {error && (

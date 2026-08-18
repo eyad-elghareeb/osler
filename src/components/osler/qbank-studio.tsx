@@ -68,6 +68,8 @@ import { loadCategoryTree, loadContentByUid, loadNodeByUid, ENGINE_META, flatten
 import { toast } from "@/hooks/use-toast";
 import { MilkdownEditor } from "@/components/osler/milkdown-editor";
 import { MarkdownPreview } from "@/components/osler/admin/editors/markdown-preview";
+import { ThinkingOrb } from "thinking-orbs";
+import { ThinkingStatus } from "@/components/osler/thinking-status";
 import {
   contentToQuestions as poolContentToQuestions,
   countQuestions as poolCountQuestions,
@@ -7126,7 +7128,7 @@ function WrittenEngineView({
           >
             {grading ? (
               <span className="flex items-center gap-2">
-                <Loader2 className="size-4 animate-spin" />
+                <ThinkingOrb state="solving" size={20} aria-hidden="true" />
                 {t("qbank.written.grading")}
               </span>
             ) : (
@@ -7137,8 +7139,14 @@ function WrittenEngineView({
 
         {grading && (
           <div className="flex items-center gap-2 text-xs text-muted-foreground bg-muted/30 rounded-lg px-3 py-2">
-            <Loader2 className="size-3.5 animate-spin" />
-            {t("qbank.written.analyzing")}
+            <ThinkingStatus
+              phases={[
+                { label: t("qbank.written.orb.reading"), state: "listening" },
+                { label: t("qbank.written.orb.checking"), state: "searching" },
+                { label: t("qbank.written.orb.scoring"), state: "solving" },
+                { label: t("qbank.written.orb.composing"), state: "composing" },
+              ]}
+            />
           </div>
         )}
 
@@ -7182,7 +7190,7 @@ function WrittenEngineView({
                     >
                       {childGrading === ci ? (
                         <span className="flex items-center gap-1.5">
-                          <Loader2 className="size-3 animate-spin" />
+                          <ThinkingOrb state="solving" size={20} aria-hidden="true" />
                           {t("qbank.written.grading")}
                         </span>
                       ) : (
@@ -7267,7 +7275,7 @@ function WrittenEngineView({
               >
                 {grading ? (
                   <span className="flex items-center gap-2">
-                    <Loader2 className="size-4 animate-spin" />
+                    <ThinkingOrb state="solving" size={20} aria-hidden="true" />
                     {t("qbank.written.grading")}
                   </span>
                 ) : (
