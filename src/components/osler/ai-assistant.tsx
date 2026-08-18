@@ -106,7 +106,7 @@ function buildUserPrompt(context: NonNullable<AiAssistantProps["questionContext"
     context.choices.forEach((opt, i) => {
       ctx += "\n" + (keys[i] || i) + ". " + opt;
     });
-    const correctIdx = context.correct != null ? context.correct - 1 : -1;
+    const correctIdx = context.correct ?? -1;
     if (correctIdx >= 0 && context.choices[correctIdx]) {
       ctx += "\n\nCorrect answer: " + (keys[correctIdx] || correctIdx) + ". " + context.choices[correctIdx];
     }
