@@ -50,11 +50,11 @@
   #  · connect-src wss://0.peerjs.com / wss://broker.emqx.io — P2P sync
   #    (PeerJS signaling + MQTT relay).
   #  · connect-src generativelanguage.googleapis.com — AI assistant (REST + WS).
-  #  · connect-src https://invidious.tiekoetter.com — Invidious download modal
-  #    fetches the format list from the instance API. The apex host AND the
-  #    *. wildcard are both required: a CSP wildcard matches subdomains but not
-  #    the apex. If you change NEXT_PUBLIC_INVIDIOUS_HOST, update both here.
+  #  · connect-src https://cobalt-api.slipfox.xyz — Video download modal posts
+  #    to the Cobalt download instance (default host; override via
+  #    NEXT_PUBLIC_COBALT_API). If you change it, update the CSP in the same
+  #    commit. The tunnel/redirect URL opens top-level, so it needs no CSP.
   #  · frame-src https:  — YouTube + Invidious video embeds (Invidious host is
   #    configurable via NEXT_PUBLIC_INVIDIOUS_HOST, so a scheme source is used).
   #    Tighten to your fixed hosts once they are stable.
-  Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://challenges.cloudflare.com https://www.youtube.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self' data:; connect-src 'self' https://*.workers.dev https://generativelanguage.googleapis.com wss://generativelanguage.googleapis.com https://challenges.cloudflare.com https://0.peerjs.com wss://0.peerjs.com wss://broker.emqx.io:8084 https://invidious.tiekoetter.com https://*.invidious.tiekoetter.com; media-src 'self' blob: https:; frame-src https://www.youtube.com https://www.youtube-nocookie.com https://challenges.cloudflare.com https:; worker-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; upgrade-insecure-requests
+  Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://challenges.cloudflare.com https://www.youtube.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self' data:; connect-src 'self' https://*.workers.dev https://generativelanguage.googleapis.com wss://generativelanguage.googleapis.com https://challenges.cloudflare.com https://0.peerjs.com wss://0.peerjs.com wss://broker.emqx.io:8084 https://cobalt-api.slipfox.xyz; media-src 'self' blob: https:; frame-src https://www.youtube.com https://www.youtube-nocookie.com https://challenges.cloudflare.com https:; worker-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; upgrade-insecure-requests

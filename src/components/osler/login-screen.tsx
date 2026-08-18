@@ -41,7 +41,16 @@ import {
 declare global {
   interface Window {
     turnstile?: {
-      render: (container: HTMLElement, options: { sitekey: string; callback: (token: string) => void; "expired-callback": () => void }) => string;
+      render: (
+        container: HTMLElement,
+        options: {
+          sitekey: string;
+          callback: (token: string) => void;
+          "expired-callback": () => void;
+          theme?: "light" | "dark" | "auto";
+          size?: "normal" | "compact" | "flexible";
+        },
+      ) => string;
       remove: (widgetId: string) => void;
       /** Re-issue the challenge in-place and produce a fresh single-use token. */
       reset: (widgetId: string) => void;

@@ -50,6 +50,7 @@ import {
 } from "@/lib/osler/native";
 import { useSwipeBackDismiss } from "@/hooks/use-swipe-back-dismiss";
 import { VideoDownloadDialog } from "./video-download-dialog";
+import { COBALT_ENABLED } from "@/lib/osler/cobalt";
 
 /* ── Constants ─────────────────────────────────────────────────────── */
 
@@ -488,7 +489,7 @@ function VideoPlayerView({
   const youtubeRef = React.useRef<any>(null);
 
   const [isFullscreen, setIsFullscreen] = React.useState(false);
-  const [invidiousMode, setInvidiousMode] = React.useState<boolean>(false);
+  const [invidiousMode, setInvidiousMode] = React.useState<boolean>(Boolean(INVIDIOUS_HOST));
   const [invidiousStart, setInvidiousStart] = React.useState<number | undefined>(undefined);
   const [showFullDescription, setShowFullDescription] = React.useState(false);
   const [downloadOpen, setDownloadOpen] = React.useState(false);
@@ -722,7 +723,7 @@ function VideoPlayerView({
             <ChevronRight className={cn("size-4", rtl && "rtl-flip-x")} />
           </button>
         )}
-        {isYouTube && INVIDIOUS_HOST && (
+        {isYouTube && COBALT_ENABLED && (
           <button
             onClick={() => {
               haptic("light");
@@ -941,12 +942,12 @@ function VideoPlayerView({
         </aside>
       </div>
 
-      {isYouTube && videoId && INVIDIOUS_HOST && (
+      {isYouTube && videoId && COBALT_ENABLED && (
         <VideoDownloadDialog
           open={downloadOpen}
           onOpenChange={setDownloadOpen}
           videoId={videoId}
-          host={INVIDIOUS_HOST}
+          title={video.title}
         />
       )}
     </div>

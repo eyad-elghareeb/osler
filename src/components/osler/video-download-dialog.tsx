@@ -1,143 +1,130 @@
 "use client";
 
 import * as React from "react";
-import { Download, ExternalLink, Loader2 } from "lucide-react";
+import { CheckCircle2, Download, ExternalLink, Loader2, RefreshCcw } from "lucide-react";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import { haptic } from "@/lib/osler/native";
+import {
+  COBALT_ENABLED,
+  COBALT_KEY,
+  classifyError,
+  createSession,
+  fetchInstanceInfo,
+  requestDownload,
+  type CobaltDownloadResult,
+  type CobaltInstanceInfo,
+  type DownloadFailure,
+} from "@/lib/osler/cobalt";
 import { useI18n } from "./i18n-provider";
+
+/* ── Turnstile widget (explicit render, no dependency) ─────────────── */
+
+function TurnstileChallenge({ sitekey, onToken, onExpire }: { sitekey: string; onToken: (token: string) => void; onExpire?: () => void }) {
+  const ref = React.useRef<HTMLDivElement>(null);
+  const onTokenRef = React.useRef(onToken);
+  const onExpireRef = React.useRef(onExpire);
+  React.useEffect(() => {
+    onTokenRef.current = onToken;
+    onExpireRef.current = onExpire;
+  });
+
+  React.useEffect(() => {
+    let widgetId: string | undefined;
+    let script: HTMLScriptElement | undefined;
+    const render = () => {
+      if (!ref.current || !window.turnstile) return;
+      widgetId = window.turnstile.render(ref.current, {
+        sitekey,
+        theme: "auto",
+        size: "flexible",
+        callback: (token: string) => onTokenRef.current(token),
+        "expired-callback": () => onExpireRef.current?.(),
+      });
+    };
+    if (window.turnstile) {
+      render();
+    } else {
+      script = document.createElement("script");
+      script.src = "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit";
+      script.async = true;
+      script.onload = render;
+      document.head.appendChild(script);
+    }
+    return () => {
+      if (widgetId && window.turnstile) window.turnstile.remove(widgetId);
+      script?.remove();
+    };
+  }, [sitekey]);
+
+  return <div ref={ref} className="min-h-16 w-full" />;
+}
 
 /* ── Types ─────────────────────────────────────────────────────────── */
 
-type DownloadGroup = "muxed" | "video" | "audio";
+type Phase = "booting" | "ready" | "auth" | "processing" | "done" | "picker" | "error";
 
-interface DownloadFormat {
-  key: string;
-  label: string;
-  ext: string;
-  url: string;
-  size?: number;
-  bitrate?: number;
-  group: DownloadGroup;
-}
+const QUALITY_OPTIONS = [
+  { id: "best", quality: "max" },
+  { id: "1080", quality: "1080" },
+  { id: "720", quality: "720" },
+  { id: "480", quality: "480" },
+  { id: "360", quality: "360" },
+] as const;
 
 interface VideoDownloadDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  /** YouTube video ID to query on the Invidious host. */
   videoId: string;
-  /** Invidious instance host (no scheme, e.g. "invidious.tiekoetter.com"). */
-  host: string;
-}
-
-/* ── Helpers ───────────────────────────────────────────────────────── */
-
-function extOf(type: string | undefined): string {
-  if (!type) return "mp4";
-  const m = type.match(/^[a-z0-9.]+\/([a-z0-9.]+)/i);
-  return m ? m[1] : "mp4";
-}
-
-function fmtBytes(bytes: number): string {
-  if (!isFinite(bytes) || bytes <= 0) return "";
-  const units = ["B", "KB", "MB", "GB"];
-  let v = bytes;
-  let i = 0;
-  while (v >= 1024 && i < units.length - 1) {
-    v /= 1024;
-    i++;
-  }
-  return `${v >= 100 ? v.toFixed(0) : v.toFixed(1)} ${units[i]}`;
-}
-
-function fmtKbps(bitrate: number): string {
-  return `${Math.round(bitrate / 1000)} kbps`;
+  title?: string;
 }
 
 /* ── Component ─────────────────────────────────────────────────────── */
 
-/**
- * Cross-origin note: Invidious instances proxy streams with a restricted
- * `Access-Control-Allow-Origin` (their own origin only), so fetching the
- * stream from our app and saving it as a blob is blocked by CORS and
- * rate-limited (HTTP 429). The reliable path is a plain top-level
- * navigation: the browser opens the stream URL, then either downloads it
- * (instances serving `Content-Disposition: attachment`) or plays it and
- * lets the user save from the player.
- */
-export function VideoDownloadDialog({ open, onOpenChange, videoId, host }: VideoDownloadDialogProps) {
+export function VideoDownloadDialog({ open, onOpenChange, videoId, title }: VideoDownloadDialogProps) {
   const { t } = useI18n();
 
-  const [formats, setFormats] = React.useState<DownloadFormat[]>([]);
-  const [loading, setLoading] = React.useState(false);
-  const [loadError, setLoadError] = React.useState(false);
+  const [phase, setPhase] = React.useState<Phase>("booting");
+  const [instance, setInstance] = React.useState<CobaltInstanceInfo | null>(null);
+  const [token, setToken] = React.useState<string | null>(null);
+  const [quality, setQuality] = React.useState<(typeof QUALITY_OPTIONS)[number]["id"] | "audio">("best");
+  const [result, setResult] = React.useState<CobaltDownloadResult | null>(null);
+  const [failure, setFailure] = React.useState<DownloadFailure>("unknown");
+  const [retryKey, setRetryKey] = React.useState(0);
+
+  const boot = React.useCallback(async () => {
+    setPhase("booting");
+    setInstance(null);
+    setToken(null);
+    setResult(null);
+    try {
+      const inst = await fetchInstanceInfo();
+      setInstance(inst);
+      setPhase(COBALT_KEY || !inst.turnstileSitekey ? "ready" : "auth");
+    } catch (err) {
+      setFailure(classifyError(err));
+      setPhase("error");
+    }
+  }, []);
 
   React.useEffect(() => {
-    if (!open) return;
-    let cancelled = false;
-    setFormats([]);
-    setLoading(true);
-    setLoadError(false);
+    if (open) void boot();
+  }, [open, retryKey, boot]);
 
-    (async () => {
-      try {
-        const res = await fetch(`https://${host}/api/v1/videos/${videoId}?fields=formatStreams,adaptiveFormats`);
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const data = (await res.json()) as Record<string, unknown>;
-        if (cancelled) return;
-
-        const list: DownloadFormat[] = [];
-        const streamList = Array.isArray(data.formatStreams) ? (data.formatStreams as any[]) : [];
-        for (const s of streamList) {
-          list.push({
-            key: `muxed-${s.itag}`,
-            label: typeof s.quality === "string" ? s.quality : "Video",
-            ext: extOf(s.type),
-            url: s.url,
-            size: Number(s.size) || undefined,
-            group: "muxed",
-          });
-        }
-        const adaptiveList = Array.isArray(data.adaptiveFormats) ? (data.adaptiveFormats as any[]) : [];
-        for (const f of adaptiveList) {
-          const type: string = typeof f.type === "string" ? f.type : "";
-          if (type.startsWith("video/")) {
-            list.push({
-              key: `video-${f.itag}`,
-              label: typeof f.qualityLabel === "string" ? f.qualityLabel : "Video",
-              ext: extOf(type),
-              url: f.url,
-              size: Number(f.size) || undefined,
-              bitrate: Number(f.bitrate) || undefined,
-              group: "video",
-            });
-          } else if (type.startsWith("audio/")) {
-            list.push({
-              key: `audio-${f.itag}`,
-              label: t("videos.downloadModal.audioOnly"),
-              ext: extOf(type),
-              url: f.url,
-              size: Number(f.size) || undefined,
-              bitrate: Number(f.bitrate) || undefined,
-              group: "audio",
-            });
-          }
-        }
-        setFormats(list);
-      } catch {
-        if (!cancelled) setLoadError(true);
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [open, videoId, host, t]);
-
-  const openDownload = (url: string) => {
+  const handleToken = React.useCallback((t: string) => {
+    setToken(t);
     haptic("selection");
+    setPhase("ready");
+  }, []);
+
+  const handleTokenExpire = React.useCallback(() => {
+    setToken(null);
+    haptic("warning");
+    setPhase("auth");
+  }, []);
+
+  const openUrl = (url: string) => {
     const a = document.createElement("a");
     a.href = url;
     a.target = "_blank";
@@ -147,12 +134,57 @@ export function VideoDownloadDialog({ open, onOpenChange, videoId, host }: Video
     a.remove();
   };
 
-  const groups: DownloadGroup[] = ["muxed", "video", "audio"];
-  const groupLabels: Record<DownloadGroup, string> = {
-    muxed: t("videos.downloadModal.muxed"),
-    video: t("videos.downloadModal.videoOnly"),
-    audio: t("videos.downloadModal.audioOnly"),
+  const handleDownload = async () => {
+    if (phase === "processing" || !instance) return;
+    const auth = COBALT_KEY
+      ? { kind: "apiKey" as const, token: COBALT_KEY }
+      : token
+        ? { kind: "bearer" as const, token }
+        : undefined;
+    if (!auth && instance.turnstileSitekey) {
+      setPhase("auth");
+      return;
+    }
+    haptic("selection");
+    setPhase("processing");
+    setResult(null);
+    try {
+      const watchUrl = `https://www.youtube.com/watch?v=${videoId}`;
+      const isAudio = quality === "audio";
+      const opts = isAudio
+        ? { mode: "audio" as const, videoQuality: "max" }
+        : { mode: "video" as const, videoQuality: QUALITY_OPTIONS.find((q) => q.id === quality)?.quality ?? "max" };
+      const res = await requestDownload(watchUrl, opts, auth);
+      if (res.status === "tunnel" || res.status === "redirect") {
+        if (res.url) openUrl(res.url);
+        setResult(res);
+        setPhase("done");
+      } else if (res.status === "picker") {
+        setResult(res);
+        setPhase("picker");
+      } else {
+        const kind = res.errorCode?.includes("auth")
+          ? "auth"
+          : res.errorCode?.includes("rate")
+            ? "rate"
+            : "unknown";
+        setFailure(kind);
+        setPhase("error");
+      }
+    } catch (err) {
+      setFailure(classifyError(err));
+      setPhase("error");
+    }
   };
+
+  const failureMessage = (kind: DownloadFailure) => {
+    if (kind === "auth") return t("videos.downloadModal.authRequired");
+    if (kind === "rate") return t("videos.downloadModal.rateLimited");
+    if (kind === "unavailable") return t("videos.downloadModal.unavailable");
+    return t("videos.downloadModal.error");
+  };
+
+  const isAudio = quality === "audio";
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -162,66 +194,138 @@ export function VideoDownloadDialog({ open, onOpenChange, videoId, host }: Video
           <DialogDescription>{t("videos.downloadModal.subtitle")}</DialogDescription>
         </DialogHeader>
 
-        {loading && (
+        {phase === "booting" && (
           <div className="flex items-center justify-center gap-2 py-8 text-sm text-muted-foreground">
             <Loader2 className="size-4 animate-spin" />
             {t("videos.downloadModal.loading")}
           </div>
         )}
 
-        {!loading && loadError && (
-          <div className="rounded-xl border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive">
-            {t("videos.downloadModal.error")}
+        {phase === "error" && (
+          <div className="space-y-3">
+            <div className="rounded-xl border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive">
+              {failureMessage(failure)}
+            </div>
+            <Button variant="outline" size="sm" className="gap-1.5" onClick={() => setRetryKey((k) => k + 1)}>
+              <RefreshCcw className="size-3.5" />
+              {t("videos.downloadModal.retry")}
+            </Button>
           </div>
         )}
 
-        {!loading && !loadError && formats.length === 0 && (
-          <div className="py-8 text-center text-sm text-muted-foreground">
-            {t("videos.downloadModal.empty")}
+        {phase === "auth" && (
+          <div className="space-y-3">
+            <p className="flex items-start gap-2 text-sm text-muted-foreground">
+              <ExternalLink className="mt-0.5 size-3.5 shrink-0" />
+              {t("videos.downloadModal.verify")}
+            </p>
+            {instance?.turnstileSitekey && <TurnstileChallenge sitekey={instance.turnstileSitekey} onToken={handleToken} onExpire={handleTokenExpire} />}
           </div>
         )}
 
-        {!loading && !loadError && formats.length > 0 && (
-          <div className="osler-scroll-y max-h-[50vh] space-y-4 pr-1">
-            {groups.map((group) => {
-              const rows = formats.filter((f) => f.group === group);
-              if (rows.length === 0) return null;
-              return (
-                <div key={group}>
-                  <div className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-                    {groupLabels[group]}
-                  </div>
-                  <div className="space-y-1.5">
-                    {rows.map((f) => (
-                      <div key={f.key} className="flex items-center gap-3 rounded-xl border border-border bg-card p-3">
-                        <div className="min-w-0 flex-1">
-                          <div className="truncate text-sm font-medium">{f.label}</div>
-                          <div className="mt-0.5 truncate text-xs text-muted-foreground">
-                            <span className="uppercase">{f.ext}</span>
-                            {f.size != null && <span> · {fmtBytes(f.size)}</span>}
-                            {f.bitrate != null && <span> · {fmtKbps(f.bitrate)}</span>}
-                          </div>
-                        </div>
-                        <Button size="sm" variant="outline" onClick={() => openDownload(f.url)}>
-                          <Download className="size-3.5" />
-                          {t("videos.download")}
-                        </Button>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              );
-            })}
+        {(phase === "ready" || phase === "processing") && (
+          <div className="space-y-4">
+            <div>
+              <div className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                {t("videos.downloadModal.quality")}
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                {QUALITY_OPTIONS.map((q) => (
+                  <button
+                    key={q.id}
+                    onClick={() => {
+                      haptic("selection");
+                      setQuality(q.id);
+                    }}
+                    className={cn(
+                      "px-2.5 h-8 rounded-md text-xs font-medium transition-colors border",
+                      quality === q.id
+                        ? "bg-primary text-primary-foreground border-primary"
+                        : "text-muted-foreground hover:text-foreground hover:bg-muted/60 border-border",
+                    )}
+                  >
+                    {q.id === "best" ? t("videos.downloadModal.best") : `${q.id}p`}
+                  </button>
+                ))}
+                <button
+                  onClick={() => {
+                    haptic("selection");
+                    setQuality("audio");
+                  }}
+                  className={cn(
+                    "px-2.5 h-8 rounded-md text-xs font-medium transition-colors border",
+                    isAudio
+                      ? "bg-primary text-primary-foreground border-primary"
+                      : "text-muted-foreground hover:text-foreground hover:bg-muted/60 border-border",
+                  )}
+                >
+                  {t("videos.downloadModal.audioOnly")}
+                </button>
+              </div>
+            </div>
+
+            {token && instance?.turnstileSitekey && (
+              <div className="flex items-center gap-2 rounded-xl border border-success/30 bg-success/5 p-3 text-xs text-success">
+                <CheckCircle2 className="size-3.5" />
+                {t("videos.downloadModal.verified")}
+              </div>
+            )}
+
+            <Button className="w-full gap-1.5" size="lg" loading={phase === "processing"} onClick={handleDownload}>
+              <Download className="size-4" />
+              {phase === "processing" ? t("videos.downloadModal.processing") : t("videos.downloadModal.download")}
+            </Button>
+
+            <p className="flex items-start gap-2 text-xs text-muted-foreground">
+              <ExternalLink className="mt-0.5 size-3.5 shrink-0" />
+              {t("videos.downloadModal.hint")}
+            </p>
           </div>
         )}
 
-        {!loading && !loadError && formats.length > 0 && (
-          <p className="mt-3 flex items-start gap-2 text-xs text-muted-foreground">
-            <ExternalLink className="mt-0.5 size-3.5 shrink-0" />
-            {t("videos.downloadModal.hint")}
+        {phase === "done" && (
+          <div className="space-y-4">
+            <div className="flex items-start gap-2 rounded-xl border border-success/30 bg-success/5 p-3 text-sm text-success">
+              <CheckCircle2 className="mt-0.5 size-4 shrink-0" />
+              <div className="min-w-0">
+                <div className="font-medium">{t("videos.downloadModal.started")}</div>
+                {result?.filename && <div className="mt-0.5 truncate text-xs">{result.filename}</div>}
+              </div>
+            </div>
+            <Button className="w-full gap-1.5" size="lg" onClick={handleDownload}>
+              <Download className="size-4" />
+              {t("videos.downloadModal.downloadAgain")}
+            </Button>
+            <p className="flex items-start gap-2 text-xs text-muted-foreground">
+              <ExternalLink className="mt-0.5 size-3.5 shrink-0" />
+              {t("videos.downloadModal.hint")}
+            </p>
+          </div>
+        )}
+
+        {phase === "picker" && result?.picker && (
+          <div className="space-y-2">
+            <div className="text-sm text-muted-foreground">{t("videos.downloadModal.picker")}</div>
+            {result.picker.map((item, i) => (
+              <div key={i} className="flex items-center justify-between gap-3 rounded-xl border border-border bg-card p-3">
+                <div className="truncate text-sm font-medium">{item.type}</div>
+                <Button size="sm" variant="outline" onClick={() => item.url && openUrl(item.url)}>
+                  <Download className="size-3.5" />
+                  {t("videos.download")}
+                </Button>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {title && (
+          <p className="truncate text-xs text-muted-foreground" title={title}>
+            {title}
           </p>
         )}
       </DialogContent>
     </Dialog>
   );
 }
+
+export { COBALT_ENABLED };
