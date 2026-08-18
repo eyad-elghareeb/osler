@@ -2,8 +2,10 @@
 
 import * as React from "react";
 import { useRouter, usePathname } from "next/navigation";
+import { Activity, Loader2 } from "lucide-react";
 import { useOslerSession } from "@/lib/osler/session-context";
 import { cloudEnabled } from "@/lib/osler/cloud";
+import { useI18n } from "@/components/osler/i18n-provider";
 
 /**
  * Public paths that never require an Osler session.
@@ -17,10 +19,6 @@ import { cloudEnabled } from "@/lib/osler/cloud";
  * briefly see the page render before the redirect fires — but the page's
  * data is gated by the Worker (no bearer token = no API access), so the
  * brief flash is just the chrome, not actual content.
- *
- * Mitigation: the AppShell and AdminShell render a loading spinner until
- * the session is restored, so the redirect usually fires before any real
- * UI is painted.
  */
 const PUBLIC_PATH_PREFIXES = [
   "/_next/",
@@ -72,24 +70,64 @@ function isLoginPath(input: string): boolean {
 }
 
 /**
+ * Branded first-paint screen shown while the session is being restored.
+ *
+ * The static export has no server runtime, so the boot HTML can't know
+ * whether a visitor is signed in. Rendering this splash (never app content)
+ * until the session resolves means a guest goes splash → login and a
+ * signed-in user goes splash → app — never content → login.
+ */
+function BootScreen() {
+  const { t } = useI18n();
+  return (
+    <div
+      role="status"
+      aria-label={t("common.loading")}
+      className="min-h-dvh w-full flex flex-col items-center justify-center gap-4 bg-background px-6"
+    >
+      <div className="w-16 h-16 rounded-2xl bg-primary flex items-center justify-center text-primary-foreground shadow-e2 relative overflow-hidden">
+        {/* Subtle inner highlight — reads as a polished glass tile */}
+        <span
+          aria-hidden
+          className="absolute inset-0 opacity-40"
+          style={{
+            background:
+              "linear-gradient(160deg, color-mix(in oklch, var(--primary-foreground) 25%, transparent), transparent 55%)",
+          }}
+        />
+        <Activity className="size-8 relative" />
+      </div>
+      <div className="text-center">
+        <div className="text-base font-semibold">{t("app.name")}</div>
+        <div className="text-xs text-muted-foreground mt-0.5">{t("app.tagline")}</div>
+      </div>
+      <Loader2 className="size-5 animate-spin text-muted-foreground" />
+    </div>
+  );
+}
+
+/**
  * Wrap the app with this guard to enforce session-based route gating on the
  * client. Place it inside `<OslerSessionProvider>` and outside the AppShell.
  *
  * Behavior:
- *   - While `loading` is true, render `null` (the AppShell shows its own
- *     loading state once mounted).
- *   - On `/login`: if the user IS logged in, redirect to `next` (or `/`).
- *   - On protected routes: if the user is NOT logged in, redirect to
- *     `/login?next=<current-path>`.
- *   - On public routes (`/admin/*`, `/_next/*`, etc.):
- *     always pass through. Admin auth is enforced separately by the
- *     AdminShell via a bearer token + role check.
+ *   - Public paths (`/admin/*`, `/_next/*`, …) always pass through — admin
+ *     auth is enforced separately by the AdminShell.
+ *   - While the session is restoring, render the branded `BootScreen` — never
+ *     app content, so the static export can't flash protected UI to a guest.
+ *   - On `/login`: if the user IS logged in, redirect to `next` (or `/`),
+ *     keeping the boot screen up while the redirect happens. Otherwise render
+ *     the login page.
+ *   - On protected routes: if the user is NOT logged in, keep the boot screen
+ *     up while the redirect to `/login?next=<current-path>` fires. App content
+ *     only ever mounts once a session is confirmed.
  */
 export function RouteGuard({ children }: { children: React.ReactNode }) {
   const { username, loading } = useOslerSession();
   const router = useRouter();
   const pathname = usePathname() || "/";
   const [isCloudEnabled, setIsCloudEnabled] = React.useState<boolean | null>(null);
+  const hasSession = !!username;
 
   // Determine whether cloud is enabled (one-time).
   React.useEffect(() => {
@@ -100,11 +138,12 @@ export function RouteGuard({ children }: { children: React.ReactNode }) {
     return () => { cancelled = true; };
   }, []);
 
+  // Session-based redirects. These fire after the render below has already
+  // chosen the safe surface (boot screen), so a redirect never reveals
+  // protected UI to a guest.
   React.useEffect(() => {
     if (loading || isCloudEnabled === null) return;
     if (isPublicPath(pathname)) return;
-
-    const hasSession = !!username;
 
     // /login handling: redirect to `next` (or `/`) if already logged in.
     if (isLoginPath(pathname)) {
@@ -126,11 +165,24 @@ export function RouteGuard({ children }: { children: React.ReactNode }) {
       }
       router.replace(`${loginUrl.pathname}${loginUrl.search}`);
     }
-  }, [loading, isCloudEnabled, username, pathname, router]);
+  }, [loading, isCloudEnabled, hasSession, pathname, router]);
 
-  // Render nothing while loading — avoids a flash of protected content
-  // before the redirect fires. The AppShell + page components also have
-  // their own loading states, so this is a thin top-level guard.
-  if (loading || isCloudEnabled === null) return null;
+  // Public paths (admin, assets, service worker, …) always pass through —
+  // AdminShell gates its own auth.
+  if (isPublicPath(pathname)) return <>{children}</>;
+
+  // Session not restored yet — branded boot screen, never content.
+  if (loading || isCloudEnabled === null) return <BootScreen />;
+
+  // /login: signed-in users are redirected to `next`; guests get the login.
+  if (isLoginPath(pathname)) {
+    if (hasSession) return <BootScreen />;
+    return <>{children}</>;
+  }
+
+  // Protected route with no session — keep the boot screen up while the
+  // redirect to /login fires. Never mount app content for a guest.
+  if (!hasSession) return <BootScreen />;
+
   return <>{children}</>;
 }
