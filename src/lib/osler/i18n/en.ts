@@ -720,9 +720,7 @@ export const en = {
     "videos.downloadModal.videoOnly": "Video only (no audio)",
     "videos.downloadModal.audioOnly": "Audio only",
     "videos.downloadModal.empty": "No download formats available on this instance.",
-    "videos.downloadModal.downloading": "Downloading…",
-    "videos.downloadModal.retry": "Retry",
-    "videos.downloadModal.saved": "Saved",
+    "videos.downloadModal.hint": "Opens in a new tab. If your browser plays it instead of downloading, right-click the video and choose Save video as.",
 
     "profile.title": "Profile",
     "profile.user": "User",

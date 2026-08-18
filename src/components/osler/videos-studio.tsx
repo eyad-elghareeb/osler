@@ -932,7 +932,6 @@ function VideoPlayerView({
           open={downloadOpen}
           onOpenChange={setDownloadOpen}
           videoId={videoId}
-          title={video.title}
           host={INVIDIOUS_HOST}
         />
       )}

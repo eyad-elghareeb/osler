@@ -721,9 +721,7 @@ export const ar = {
     "videos.downloadModal.videoOnly": "فيديو فقط (بدون صوت)",
     "videos.downloadModal.audioOnly": "صوت فقط",
     "videos.downloadModal.empty": "لا توجد صيغ تنزيل متاحة على هذا الملقّم.",
-    "videos.downloadModal.downloading": "جارٍ التنزيل…",
-    "videos.downloadModal.retry": "إعادة المحاولة",
-    "videos.downloadModal.saved": "تم الحفظ",
+    "videos.downloadModal.hint": "يُفتح في تبويب جديد. إذا قام المتصفح بتشغيله بدلاً من تنزيله، انقر بزر الفأرة الأيمن على الفيديو واختر \"حفظ الفيديو باسم\".",
 
     "profile.title": "الملف الشخصي",
     "profile.user": "مستخدم",

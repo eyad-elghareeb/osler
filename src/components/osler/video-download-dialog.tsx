@@ -1,17 +1,15 @@
 "use client";
 
 import * as React from "react";
-import { Check, Download, Loader2, RotateCcw } from "lucide-react";
+import { Download, ExternalLink, Loader2 } from "lucide-react";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { haptic } from "@/lib/osler/native";
-import { cn } from "@/lib/utils";
 import { useI18n } from "./i18n-provider";
 
 /* ── Types ─────────────────────────────────────────────────────────── */
 
 type DownloadGroup = "muxed" | "video" | "audio";
-type RowStatus = "idle" | "downloading" | "done" | "error";
 
 interface DownloadFormat {
   key: string;
@@ -28,8 +26,6 @@ interface VideoDownloadDialogProps {
   onOpenChange: (open: boolean) => void;
   /** YouTube video ID to query on the Invidious host. */
   videoId: string;
-  /** Video title — used to build the downloaded file name. */
-  title: string;
   /** Invidious instance host (no scheme, e.g. "invidious.tiekoetter.com"). */
   host: string;
 }
@@ -58,28 +54,28 @@ function fmtKbps(bitrate: number): string {
   return `${Math.round(bitrate / 1000)} kbps`;
 }
 
-function sanitizeFileName(name: string): string {
-  const cleaned = name.replace(/[\\/:*?"<>|\x00-\x1f]/g, " ").replace(/\s+/g, " ").trim();
-  return cleaned || "video";
-}
-
 /* ── Component ─────────────────────────────────────────────────────── */
 
-export function VideoDownloadDialog({ open, onOpenChange, videoId, title, host }: VideoDownloadDialogProps) {
+/**
+ * Cross-origin note: Invidious instances proxy streams with a restricted
+ * `Access-Control-Allow-Origin` (their own origin only), so fetching the
+ * stream from our app and saving it as a blob is blocked by CORS and
+ * rate-limited (HTTP 429). The reliable path is a plain top-level
+ * navigation: the browser opens the stream URL, then either downloads it
+ * (instances serving `Content-Disposition: attachment`) or plays it and
+ * lets the user save from the player.
+ */
+export function VideoDownloadDialog({ open, onOpenChange, videoId, host }: VideoDownloadDialogProps) {
   const { t } = useI18n();
 
   const [formats, setFormats] = React.useState<DownloadFormat[]>([]);
   const [loading, setLoading] = React.useState(false);
   const [loadError, setLoadError] = React.useState(false);
-  const [statuses, setStatuses] = React.useState<Record<string, RowStatus>>({});
-  const [activeKey, setActiveKey] = React.useState<string | null>(null);
 
   React.useEffect(() => {
     if (!open) return;
     let cancelled = false;
     setFormats([]);
-    setStatuses({});
-    setActiveKey(null);
     setLoading(true);
     setLoadError(false);
 
@@ -140,31 +136,15 @@ export function VideoDownloadDialog({ open, onOpenChange, videoId, title, host }
     };
   }, [open, videoId, host, t]);
 
-  const startDownload = async (f: DownloadFormat) => {
-    haptic("light");
-    if (activeKey) return;
-    setActiveKey(f.key);
-    setStatuses((prev) => ({ ...prev, [f.key]: "downloading" }));
-    try {
-      const res = await fetch(f.url);
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const blob = await res.blob();
-      const objectUrl = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = objectUrl;
-      a.download = `${sanitizeFileName(title)}.${f.ext}`;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      setTimeout(() => URL.revokeObjectURL(objectUrl), 5000);
-      setStatuses((prev) => ({ ...prev, [f.key]: "done" }));
-      haptic("success");
-    } catch {
-      setStatuses((prev) => ({ ...prev, [f.key]: "error" }));
-      haptic("error");
-    } finally {
-      setActiveKey(null);
-    }
+  const openDownload = (url: string) => {
+    haptic("selection");
+    const a = document.createElement("a");
+    a.href = url;
+    a.target = "_blank";
+    a.rel = "noopener noreferrer";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
   };
 
   const groups: DownloadGroup[] = ["muxed", "video", "audio"];
@@ -212,53 +192,34 @@ export function VideoDownloadDialog({ open, onOpenChange, videoId, title, host }
                     {groupLabels[group]}
                   </div>
                   <div className="space-y-1.5">
-                    {rows.map((f) => {
-                      const st = statuses[f.key] ?? "idle";
-                      const busy = activeKey !== null && activeKey !== f.key;
-                      return (
-                        <div key={f.key} className="flex items-center gap-3 rounded-xl border border-border bg-card p-3">
-                          <div className="min-w-0 flex-1">
-                            <div className="truncate text-sm font-medium">{f.label}</div>
-                            <div className="mt-0.5 truncate text-xs text-muted-foreground">
-                              <span className="uppercase">{f.ext}</span>
-                              {f.size != null && <span> · {fmtBytes(f.size)}</span>}
-                              {f.bitrate != null && <span> · {fmtKbps(f.bitrate)}</span>}
-                            </div>
+                    {rows.map((f) => (
+                      <div key={f.key} className="flex items-center gap-3 rounded-xl border border-border bg-card p-3">
+                        <div className="min-w-0 flex-1">
+                          <div className="truncate text-sm font-medium">{f.label}</div>
+                          <div className="mt-0.5 truncate text-xs text-muted-foreground">
+                            <span className="uppercase">{f.ext}</span>
+                            {f.size != null && <span> · {fmtBytes(f.size)}</span>}
+                            {f.bitrate != null && <span> · {fmtKbps(f.bitrate)}</span>}
                           </div>
-                          <Button
-                            size="sm"
-                            variant={st === "done" ? "secondary" : st === "error" ? "outline" : "default"}
-                            disabled={busy || st === "done" || st === "downloading"}
-                            className={cn(st === "error" && "border-destructive/40 text-destructive hover:text-destructive")}
-                            onClick={() => {
-                              if (st !== "done" && st !== "downloading") void startDownload(f);
-                            }}
-                          >
-                            {st === "downloading" ? (
-                              <Loader2 className="size-3.5 animate-spin" />
-                            ) : st === "done" ? (
-                              <Check className="size-3.5" />
-                            ) : st === "error" ? (
-                              <RotateCcw className="size-3.5" />
-                            ) : (
-                              <Download className="size-3.5" />
-                            )}
-                            {st === "downloading"
-                              ? t("videos.downloadModal.downloading")
-                              : st === "done"
-                                ? t("videos.downloadModal.saved")
-                                : st === "error"
-                                  ? t("videos.downloadModal.retry")
-                                  : t("videos.download")}
-                          </Button>
                         </div>
-                      );
-                    })}
+                        <Button size="sm" variant="outline" onClick={() => openDownload(f.url)}>
+                          <Download className="size-3.5" />
+                          {t("videos.download")}
+                        </Button>
+                      </div>
+                    ))}
                   </div>
                 </div>
               );
             })}
           </div>
+        )}
+
+        {!loading && !loadError && formats.length > 0 && (
+          <p className="mt-3 flex items-start gap-2 text-xs text-muted-foreground">
+            <ExternalLink className="mt-0.5 size-3.5 shrink-0" />
+            {t("videos.downloadModal.hint")}
+          </p>
         )}
       </DialogContent>
     </Dialog>
