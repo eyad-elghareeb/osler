@@ -107,7 +107,7 @@ function buildUserPrompt(context: NonNullable<AiAssistantProps["questionContext"
       ctx += "\n" + (keys[i] || i) + ". " + opt;
     });
     const correctIdx = context.correct ?? -1;
-    if (correctIdx >= 0 && context.choices[correctIdx]) {
+    if (context.submitted && correctIdx >= 0 && context.choices[correctIdx]) {
       ctx += "\n\nCorrect answer: " + (keys[correctIdx] || correctIdx) + ". " + context.choices[correctIdx];
     }
   }
@@ -461,7 +461,7 @@ export function AiAssistant({
                   <p className="font-medium text-foreground">{questionContext.stem?.slice(0, 200)}</p>
                   {questionContext.choices?.map((opt, i) => {
                     const letter = String.fromCharCode(65 + i);
-                    const isCorrect = questionContext.correct != null && i + 1 === questionContext.correct;
+                    const isCorrect = questionContext.submitted && questionContext.correct != null && i === questionContext.correct;
                     return (
                       <p key={i} className={`pl-2 ${isCorrect ? "text-primary font-medium" : "text-muted-foreground"}`}>
                         {letter}. {opt} {isCorrect ? "✓" : ""}
