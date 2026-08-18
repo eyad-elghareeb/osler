@@ -4,19 +4,15 @@ import * as React from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { springSoft } from "@/lib/osler/motion";
 import {
-  ArrowLeft,
   Plus,
   Trash2,
   NotebookPen,
   Notebook,
-  Eye,
-  Pencil,
   Tag,
   X,
   Clock,
   Check,
   CheckCheck,
-  FileText,
   Folder,
   ExternalLink,
   Maximize2,
@@ -43,56 +39,6 @@ import { isTextInput } from "@/lib/osler/shortcuts";
 import { haptic } from "@/lib/osler/native";
 import { useI18n } from "./i18n-provider";
 import { MilkdownEditor } from "./milkdown-editor";
-
-/* ── Markdown preview (lightweight, GFM, no raw HTML) ──────────────── */
-/* The notes panel uses a lightweight read-only preview built on
- * react-markdown + remark-gfm, lazy-loaded on first use so it doesn't
- * bloat the initial bundle. The MilkdownEditor in `edit` mode handles all
- * the WYSIWYG editing — this is only used when the user toggles to
- * "preview" mode to read a finished note. */
-let MarkdownRenderer: React.ComponentType<{
-  remarkPlugins?: unknown[];
-  children?: React.ReactNode;
-}> | null = null;
-let remarkGfmPlugin: unknown = null;
-let markdownPromise: Promise<void> | null = null;
-
-function ensureMarkdown(): Promise<void> {
-  if (MarkdownRenderer && remarkGfmPlugin) return Promise.resolve();
-  if (markdownPromise) return markdownPromise;
-  markdownPromise = Promise.all([
-    import("react-markdown"),
-    import("remark-gfm"),
-  ]).then(([mdMod, gfmMod]) => {
-    MarkdownRenderer = (mdMod as any).default;
-    remarkGfmPlugin = (gfmMod as any).default;
-  });
-  return markdownPromise;
-}
-
-/* ── Markdown preview component ──────────────────────────────────────── */
-function MarkdownPreview({ body }: { body: string }) {
-  const { t } = useI18n();
-  const [ready, setReady] = React.useState(!!MarkdownRenderer);
-  React.useEffect(() => {
-    if (!MarkdownRenderer) ensureMarkdown().then(() => setReady(true));
-  }, []);
-  if (!ready || !MarkdownRenderer) {
-    return (
-      <div className="flex items-center justify-center py-8 text-xs text-muted-foreground">
-        {t("qbank.notes.preview.loading")}
-      </div>
-    );
-  }
-  const Comp = MarkdownRenderer!;
-  return (
-    <div className="osler-prose text-sm">
-      <Comp remarkPlugins={remarkGfmPlugin ? [remarkGfmPlugin] : []}>
-        {body || `*${t("qbank.notes.preview.empty")}*`}
-      </Comp>
-    </div>
-  );
-}
 
 /* ── Time-ago formatter ─────────────────────────────────────────────── */
 function timeAgo(ts: number, t: (k: any, p?: any) => string): string {
@@ -135,7 +81,6 @@ interface NotesPanelProps {
 }
 
 type View = "list" | "editor";
-type EditorMode = "edit" | "preview";
 
 export function NotesPanel({
   packUid,
@@ -155,7 +100,6 @@ export function NotesPanel({
   const [allNotes, setAllNotes] = React.useState<NoteRecord[]>([]);
   const [view, setView] = React.useState<View>("list");
   const [activeNote, setActiveNote] = React.useState<NoteRecord | null>(null);
-  const [editorMode, setEditorMode] = React.useState<EditorMode>("edit");
   const [tagInput, setTagInput] = React.useState("");
   const [saving, setSaving] = React.useState(false);
   const [showAllPacks, setShowAllPacks] = React.useState(!packUid);
@@ -198,12 +142,8 @@ export function NotesPanel({
     rtl,
     disabled: variant === "embedded" || !onClose,
   });
-  // Inner editor → list swipe-back (only enabled when in editor view).
-  // We don't render this on a motion.div — it's used by the inner back
-  // arrow button area only, but we expose the same gesture on the inner
-  // motion.div via `drag` when the editor is active. For simplicity, we
-  // only enable the outer dismiss here; the inner back arrow + Escape
-  // already covers the editor → list transition.
+  // Inner editor → list transition (Done button, Escape, Ctrl/⌘+Enter) is
+  // handled separately; the outer dismiss here only closes the whole panel.
 
   // Load notes from store + subscribe
   const refresh = React.useCallback(async () => {
@@ -262,7 +202,6 @@ export function NotesPanel({
       questionIdx: currentQuestionIdx,
     });
     setActiveNote(note);
-    setEditorMode("edit");
     setView("editor");
   };
 
@@ -278,7 +217,6 @@ export function NotesPanel({
   const handleOpen = (note: NoteRecord) => {
     haptic("selection");
     setActiveNote(note);
-    setEditorMode("edit");
     setView("editor");
   };
 
@@ -414,15 +352,35 @@ export function NotesPanel({
           <h3 className="text-sm font-semibold">{t("qbank.notes.title")}</h3>
           <p className="text-[11px] text-muted-foreground truncate">{subtitleText}</p>
         </div>
-        {view === "editor" && (
-          <button
-            onClick={backToList}
-            className="size-7 rounded-lg hover:bg-muted flex items-center justify-center transition-colors text-muted-foreground"
-            title={t("qbank.notes.back")}
-            aria-label={t("qbank.notes.back")}
-          >
-            <ArrowLeft className="size-4 rtl-flip-x" />
-          </button>
+        {view === "editor" && activeNote && (
+          <>
+            {saving ? (
+              <span className="text-[10px] text-muted-foreground shrink-0">{t("qbank.notes.editor.saving")}</span>
+            ) : (
+              <span className="text-[10px] text-success flex items-center gap-1 shrink-0">
+                <Check className="size-3" />
+                {t("qbank.notes.editor.saved")}
+              </span>
+            )}
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={backToList}
+              className="h-7 px-2 text-[11px] rounded-md shrink-0"
+              title={t("qbank.notes.editor.doneHint")}
+            >
+              <CheckCheck className="size-3.5 me-1" />
+              <span className="hidden sm:inline">{t("qbank.notes.editor.done")}</span>
+            </Button>
+            <button
+              onClick={() => handleDelete(activeNote.id)}
+              className="size-7 rounded-md hover:bg-destructive/10 text-muted-foreground hover:text-destructive flex items-center justify-center transition-colors shrink-0"
+              title={t("qbank.notes.editor.delete")}
+              aria-label={t("qbank.notes.editor.delete")}
+            >
+              <Trash2 className="size-3.5" />
+            </button>
+          </>
         )}
         {/* Maximize / restore button — only on desktop sidebar variant */}
         {variant === "sidebar" && !isPhone && (
@@ -474,16 +432,11 @@ export function NotesPanel({
       ) : (
         <EditorView
           note={activeNote}
-          editorMode={editorMode}
-          onModeChange={setEditorMode}
           onUpdate={updateActive}
           onAddTag={handleAddTag}
           onRemoveTag={handleRemoveTag}
           tagInput={tagInput}
           onTagInputChange={setTagInput}
-          onDelete={() => activeNote && handleDelete(activeNote.id)}
-          onDone={backToList}
-          saving={saving}
           // `wide` = the panel takes the full viewport (maximized / phone / embedded).
           // `maximized` = specifically the desktop "maximize" toggle — used to give
           // the editor a wider max-width on PC where the viewport is large.
@@ -516,7 +469,7 @@ export function NotesPanel({
           {...outerDismiss}
           className={
             useFullscreen
-              ? "fixed inset-0 z-50 bg-card flex flex-col safe-screen"
+              ? "fixed inset-0 z-[60] bg-card flex flex-col safe-screen"
               : cn(
                   "fixed top-0 bottom-0 z-50 border-l border-border bg-card shadow-xl flex flex-col",
                   rtl ? "left-0 border-r border-l-0" : "right-0",
@@ -884,30 +837,20 @@ function NoteCard({
 
 function EditorView({
   note,
-  editorMode,
-  onModeChange,
   onUpdate,
   onAddTag,
   onRemoveTag,
   tagInput,
   onTagInputChange,
-  onDelete,
-  onDone,
-  saving,
   wide,
   maximized,
 }: {
   note: NoteRecord | null;
-  editorMode: EditorMode;
-  onModeChange: (m: EditorMode) => void;
   onUpdate: (patch: Partial<NoteRecord>) => void;
   onAddTag: () => void;
   onRemoveTag: (tag: string) => void;
   tagInput: string;
   onTagInputChange: (s: string) => void;
-  onDelete: () => void;
-  onDone: () => void;
-  saving: boolean;
   wide?: boolean;
   maximized?: boolean;
 }) {
@@ -916,7 +859,7 @@ function EditorView({
 
   return (
     <div className="flex flex-col flex-1 min-h-0">
-      {/* Title input + mode toggle */}
+      {/* Title input + tags */}
       <div className="px-4 py-3 border-b border-border space-y-2.5 shrink-0">
         <input
           value={note.title}
@@ -956,61 +899,6 @@ function EditorView({
             className="flex-1 min-w-[80px] bg-transparent outline-none text-[11px] placeholder:text-muted-foreground"
           />
         </div>
-        {/* Mode toggle + status */}
-        <div className="flex items-center justify-between gap-2">
-          <div className="flex items-center gap-1 p-0.5 rounded-lg bg-muted/60">
-            <button
-              onClick={() => onModeChange("edit")}
-              className={`px-2.5 py-1 rounded-md text-[11px] font-medium transition-colors flex items-center gap-1 ${
-                editorMode === "edit"
-                  ? "bg-background shadow-sm text-foreground"
-                  : "text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              <Pencil className="size-3" />
-              {t("qbank.notes.editor.edit")}
-            </button>
-            <button
-              onClick={() => onModeChange("preview")}
-              className={`px-2.5 py-1 rounded-md text-[11px] font-medium transition-colors flex items-center gap-1 ${
-                editorMode === "preview"
-                  ? "bg-background shadow-sm text-foreground"
-                  : "text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              <Eye className="size-3" />
-              {t("qbank.notes.editor.preview")}
-            </button>
-          </div>
-          <div className="flex items-center gap-2">
-            {saving ? (
-              <span className="text-[10px] text-muted-foreground">{t("qbank.notes.editor.saving")}</span>
-            ) : (
-              <span className="text-[10px] text-success flex items-center gap-1">
-                <Check className="size-3" />
-                {t("qbank.notes.editor.saved")}
-              </span>
-            )}
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={onDone}
-              className="h-7 px-2.5 text-[11px] rounded-md"
-              title={t("qbank.notes.editor.doneHint")}
-            >
-              <CheckCheck className="size-3.5 me-1" />
-              {t("qbank.notes.editor.done")}
-            </Button>
-            <button
-              onClick={onDelete}
-              className="size-7 rounded-md hover:bg-destructive/10 text-muted-foreground hover:text-destructive flex items-center justify-center transition-colors"
-              title={t("qbank.notes.editor.delete")}
-              aria-label={t("qbank.notes.editor.delete")}
-            >
-              <Trash2 className="size-3.5" />
-            </button>
-          </div>
-        </div>
       </div>
 
       {/* Body — when `wide` (fullscreen / embedded), constrain to a comfortable
@@ -1023,26 +911,20 @@ function EditorView({
             wide ? (maximized ? "max-w-6xl" : "max-w-3xl") : ""
           }`}
         >
-          {editorMode === "edit" ? (
-            <MilkdownEditor
-              value={note.body}
-              onChange={(v) => onUpdate({ body: v })}
-              placeholder={t("qbank.notes.editor.placeholder")}
-              className="h-full"
-              // Notes is a long-form writing context — enable mermaid
-              // diagrams and the persistent top formatting bar.
-              // Image upload is DISABLED because notes don't have an R2
-              // destination — uploads would silently fail.
-              enableMermaid
-              enableTopBar
-              enableImageUpload={false}
-              showCounters
-            />
-          ) : (
-            <div className="h-full overflow-y-auto osler-scroll border border-border rounded-lg bg-background p-4">
-              <MarkdownPreview body={note.body} />
-            </div>
-          )}
+          <MilkdownEditor
+            value={note.body}
+            onChange={(v) => onUpdate({ body: v })}
+            placeholder={t("qbank.notes.editor.placeholder")}
+            className="h-full"
+            // Notes is a long-form writing context — enable mermaid
+            // diagrams and the persistent top formatting bar.
+            // Image upload is DISABLED because notes don't have an R2
+            // destination — uploads would silently fail.
+            enableMermaid
+            enableTopBar
+            enableImageUpload={false}
+            showCounters
+          />
         </div>
       </div>
     </div>
