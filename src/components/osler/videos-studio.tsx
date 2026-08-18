@@ -49,8 +49,7 @@ import {
   haptic,
 } from "@/lib/osler/native";
 import { useSwipeBackDismiss } from "@/hooks/use-swipe-back-dismiss";
-import { VideoDownloadDialog } from "./video-download-dialog";
-import { COBALT_ENABLED } from "@/lib/osler/cobalt";
+import { COBALT_API } from "@/lib/osler/cobalt";
 
 /* ── Constants ─────────────────────────────────────────────────────── */
 
@@ -492,7 +491,7 @@ function VideoPlayerView({
   const [invidiousMode, setInvidiousMode] = React.useState<boolean>(Boolean(INVIDIOUS_HOST));
   const [invidiousStart, setInvidiousStart] = React.useState<number | undefined>(undefined);
   const [showFullDescription, setShowFullDescription] = React.useState(false);
-  const [downloadOpen, setDownloadOpen] = React.useState(false);
+  const [copied, setCopied] = React.useState(false);
 
   React.useEffect(() => {
     let cancelled = false;
@@ -723,16 +722,22 @@ function VideoPlayerView({
             <ChevronRight className={cn("size-4", rtl && "rtl-flip-x")} />
           </button>
         )}
-        {isYouTube && COBALT_ENABLED && (
+        {isYouTube && (
           <button
             onClick={() => {
               haptic("light");
-              setDownloadOpen(true);
+              const url = `https://www.youtube.com/watch?v=${videoId}`;
+              void navigator.clipboard.writeText(url).then(() => {
+                setCopied(true);
+                setTimeout(() => setCopied(false), 2000);
+              }).catch(() => {});
+              const webUrl = COBALT_API.replace("-api.", ".");
+              window.open(webUrl, "_blank", "noopener,noreferrer");
             }}
             className="size-8 rounded-md flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors"
             title={t("videos.downloadHint")}
           >
-            <Download className="size-4" />
+            <Download className={cn("size-4", copied && "text-success")} />
           </button>
         )}
         {isYouTube && INVIDIOUS_HOST && (
@@ -942,14 +947,6 @@ function VideoPlayerView({
         </aside>
       </div>
 
-      {isYouTube && videoId && COBALT_ENABLED && (
-        <VideoDownloadDialog
-          open={downloadOpen}
-          onOpenChange={setDownloadOpen}
-          videoId={videoId}
-          title={video.title}
-        />
-      )}
     </div>
   );
 }
