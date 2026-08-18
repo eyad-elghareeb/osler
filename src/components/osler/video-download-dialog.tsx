@@ -101,9 +101,9 @@ export function VideoDownloadDialog({ open, onOpenChange, videoId, title }: Vide
     try {
       const inst = await fetchInstanceInfo();
       setInstance(inst);
-      setPhase(COBALT_KEY || !inst.turnstileSitekey ? "ready" : "auth");
-    } catch (err) {
-      setFailure(classifyError(err));
+      setPhase(COBALT_KEY || !inst?.turnstileSitekey ? "ready" : "auth");
+    } catch {
+      setFailure("unavailable");
       setPhase("error");
     }
   }, []);
