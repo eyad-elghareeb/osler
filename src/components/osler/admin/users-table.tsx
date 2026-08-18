@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { Search, ChevronLeft, ChevronRight, KeyRound, Eye } from "lucide-react";
+import { Search, ChevronLeft, ChevronRight, KeyRound, Eye, MoreVertical } from "lucide-react";
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -138,81 +138,66 @@ export function UsersTable() {
       ) : users.length === 0 ? (
         <EmptyState icon={Search} title={t("common.none")} />
       ) : (
-        <div className="rounded-xl border border-border overflow-hidden">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-border bg-muted/40">
-                {(["user", "role", "email", "joined", "actions"] as const).map((key) => (
-                  <th key={key} className="px-4 py-2.5 text-start text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                    {t(`admin.users.col.${key}` as any)}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {users.map((user, i) => (
-                <motion.tr
-                  key={user.id}
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  transition={{ delay: i * 0.03 }}
-                  className="border-b border-border last:border-0 hover:bg-muted/30 transition-colors"
-                >
-                  <td className="px-4 py-3">
-                    <div className="font-medium">{user.displayName}</div>
-                    <div className="text-xs text-muted-foreground">@{user.username}</div>
-                  </td>
-                  <td className="px-4 py-3"><RoleBadge role={user.role} /></td>
-                  <td className="px-4 py-3 text-muted-foreground">{user.email ?? "—"}</td>
-                  <td className="px-4 py-3 text-muted-foreground">
-                    {new Date(user.createdAt).toLocaleDateString()}
-                  </td>
-                  <td className="px-4 py-3">
-                    <div className="flex items-center gap-1.5">
+        <div className="space-y-2">
+          {users.map((user, i) => (
+            <motion.div
+              key={user.id}
+              initial={{ opacity: 0, y: 4 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: i * 0.03 }}
+              className="rounded-xl border border-border bg-card p-3"
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0 flex-1">
+                  <div className="font-medium text-sm">{user.displayName}</div>
+                  <div className="text-xs text-muted-foreground">@{user.username}</div>
+                  {user.email && (
+                    <div className="text-xs text-muted-foreground mt-0.5">{user.email}</div>
+                  )}
+                  <div className="mt-1 flex items-center gap-2">
+                    <RoleBadge role={user.role} />
+                    <span className="text-xs text-muted-foreground">
+                      {new Date(user.createdAt).toLocaleDateString()}
+                    </span>
+                  </div>
+                </div>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="ghost" size="iconSm">
+                      <MoreVertical className="size-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuItem asChild>
                       <Link href={`/admin/users?id=${encodeURIComponent(user.id)}`}>
-                        <Button variant="ghost" size="sm">
-                          <Eye className="size-3.5 me-1.5" />
-                          {t("admin.users.view")}
-                        </Button>
+                        <Eye className="me-2 size-3.5" />
+                        {t("admin.users.view")}
                       </Link>
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="sm">{t("admin.users.changeRole")}</Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                          {(["student", "content_admin", "admin"] as Role[]).map((r) => (
-                            <DropdownMenuItem
-                              key={r}
-                              disabled={user.role === r}
-                              onClick={() => changeRole(user, r)}
-                            >
-                              {t(`admin.users.roles.${r}` as any)}
-                            </DropdownMenuItem>
-                          ))}
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => { setNewPassword(""); setResetTarget(user); }}
+                    </DropdownMenuItem>
+                    {(["student", "content_admin", "admin"] as Role[]).map((r) => (
+                      <DropdownMenuItem
+                        key={r}
+                        disabled={user.role === r}
+                        onClick={() => changeRole(user, r)}
                       >
-                        <KeyRound className="size-3.5 me-1.5" />
-                        {t("admin.users.resetPassword")}
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="text-destructive hover:text-destructive"
-                        onClick={() => setDeleteTarget(user)}
-                      >
-                        {t("admin.users.deleteUser")}
-                      </Button>
-                    </div>
-                  </td>
-                </motion.tr>
-              ))}
-            </tbody>
-          </table>
+                        {t(`admin.users.roles.${r}` as any)}
+                      </DropdownMenuItem>
+                    ))}
+                    <DropdownMenuItem onClick={() => { setNewPassword(""); setResetTarget(user); }}>
+                      <KeyRound className="me-2 size-3.5" />
+                      {t("admin.users.resetPassword")}
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      className="text-destructive"
+                      onClick={() => setDeleteTarget(user)}
+                    >
+                      {t("admin.users.deleteUser")}
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
+            </motion.div>
+          ))}
         </div>
       )}
 

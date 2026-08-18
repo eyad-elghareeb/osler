@@ -96,19 +96,19 @@ export function ContentDiff({ id }: ContentDiffProps) {
   return (
     <div className="flex h-full flex-col">
       {/* Top bar */}
-      <div className="flex h-12 shrink-0 items-center gap-2 border-b border-border bg-card/60 px-4 backdrop-blur-md safe-pt">
+      <div className="flex h-12 shrink-0 items-center gap-2 border-b border-border bg-card/60 px-3 sm:px-4 backdrop-blur-md safe-pt">
         <Button variant="ghost" size="iconSm" onClick={() => router.back()}>
           <ArrowLeft className="size-4" />
         </Button>
         <div className="flex-1 min-w-0">
-          <span className="font-semibold text-sm truncate">{obj.title ?? t("admin.content.untitled")}</span>
+          <span className="font-semibold text-sm truncate block">{obj.title ?? t("admin.content.untitled")}</span>
           {obj.creator_username && (
-            <span className="ms-2 text-xs text-muted-foreground">
+            <span className="text-xs text-muted-foreground">
               {t("admin.review.submittedBy", { name: `@${obj.creator_username}` })}
             </span>
           )}
         </div>
-        <div className="flex items-center gap-1.5">
+        <div className="flex items-center gap-1.5 shrink-0">
           <Button
             size="sm"
             className="bg-success/20 text-success border border-success/30 hover:bg-success/30"
@@ -116,7 +116,8 @@ export function ContentDiff({ id }: ContentDiffProps) {
             disabled={busy}
           >
             <CheckCircle2 className="me-1.5 size-3.5" />
-            {t("admin.review.approve")}
+            <span className="hidden sm:inline">{t("admin.review.approve")}</span>
+            <span className="sm:hidden"><CheckCircle2 className="size-3.5" /></span>
           </Button>
           <Button
             variant="outline"
@@ -126,29 +127,30 @@ export function ContentDiff({ id }: ContentDiffProps) {
             disabled={busy}
           >
             <XCircle className="me-1.5 size-3.5" />
-            {t("admin.review.reject")}
+            <span className="hidden sm:inline">{t("admin.review.reject")}</span>
+            <span className="sm:hidden"><XCircle className="size-3.5" /></span>
           </Button>
         </div>
       </div>
 
       {/* Diff pane */}
-      <div className="flex flex-1 overflow-hidden divide-x divide-border">
+      <div className="flex flex-1 overflow-hidden flex-col md:flex-row divide-y md:divide-y-0 md:divide-x divide-border">
         {/* Left — published */}
-        <div className="flex-1 flex flex-col overflow-hidden">
+        <div className="flex-1 flex flex-col overflow-hidden min-h-[200px] md:min-h-0">
           <div className="px-4 py-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground bg-muted/30 border-b border-border">
             {diff.published ? t("admin.review.diff.published") : t("admin.review.diff.nopublished")}
           </div>
-          <div className="flex-1 overflow-y-auto">
+          <div className="flex-1 overflow-auto osler-scroll-y">
             <DiffColumn lines={rows.map((r) => ({ line: r.left, changed: r.changed }))} side="left" />
           </div>
         </div>
 
         {/* Right — pending */}
-        <div className="flex-1 flex flex-col overflow-hidden">
+        <div className="flex-1 flex flex-col overflow-hidden min-h-[200px] md:min-h-0">
           <div className="px-4 py-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground bg-muted/30 border-b border-border">
             {t("admin.review.diff.pending")}
           </div>
-          <div className="flex-1 overflow-y-auto">
+          <div className="flex-1 overflow-auto osler-scroll-y">
             <DiffColumn lines={rows.map((r) => ({ line: r.right, changed: r.changed }))} side="right" />
           </div>
         </div>

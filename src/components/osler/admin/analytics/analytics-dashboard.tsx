@@ -85,7 +85,7 @@ export function AnalyticsDashboard() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between gap-3">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <p className="text-sm text-muted-foreground">{t("admin.analytics.intro")}</p>
         <AnalyticsFilters
           range={range}

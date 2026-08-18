@@ -93,7 +93,7 @@ export function ExplorerToolbar(props: ExplorerToolbarProps) {
   } = props;
 
   return (
-    <div className={cn("flex flex-wrap items-center gap-1.5 border-b border-border bg-card/90 px-3 py-2 backdrop-blur-md", className)}>
+    <div className={cn("flex flex-wrap items-center gap-1.5 border-b border-border bg-card/90 px-2 sm:px-3 py-2 backdrop-blur-md", className)}>
       {/* Side-panel toggles */}
       <IconActionButton
         icon={PanelLeft}
@@ -104,7 +104,7 @@ export function ExplorerToolbar(props: ExplorerToolbarProps) {
       />
 
       {/* Nav buttons */}
-      <div className="flex items-center gap-0.5">
+      <div className="hidden sm:flex items-center gap-0.5">
         <IconActionButton icon={ChevronLeft} label={`${t("admin.studio.back")} (Alt+Left)`} disabled={!canGoBack} onClick={onBack} size="iconSm" />
         <IconActionButton icon={ArrowUp} label={`${t("admin.studio.up")} (Alt+Up)`} disabled={!canGoUp} onClick={onUp} size="iconSm" />
         <IconActionButton icon={ChevronRight} label={`${t("admin.studio.forward")} (Alt+Right)`} disabled={!canGoForward} onClick={onForward} size="iconSm" />
@@ -148,18 +148,18 @@ export function ExplorerToolbar(props: ExplorerToolbarProps) {
           haptic("selection");
           onOpenSearchModal();
         }}
-        className="h-8 gap-2 px-2.5 text-xs text-muted-foreground hover:text-foreground border-border bg-background/50 shadow-2xs"
+        className="h-8 gap-2 px-2 sm:px-2.5 text-xs text-muted-foreground hover:text-foreground border-border bg-background/50 shadow-2xs"
       >
         <Search className="size-3.5 text-muted-foreground" />
         <span className="hidden lg:inline">{t("admin.studio.searchModal.title")}</span>
-        <kbd className="hidden sm:inline-flex items-center gap-0.5 rounded border border-border bg-muted/60 px-1 font-mono text-[10px] text-muted-foreground">
+        <kbd className="hidden md:inline-flex items-center gap-0.5 rounded border border-border bg-muted/60 px-1 font-mono text-[10px] text-muted-foreground">
           Ctrl K
         </kbd>
       </Button>
 
       {/* Status filter */}
       <Select value={statusFilter} onValueChange={(v) => onStatusFilterChange(v as StatusFilter)}>
-        <SelectTrigger className="h-8 w-28 shrink-0 text-xs bg-background/50">
+        <SelectTrigger className="h-8 w-20 sm:w-28 shrink-0 text-xs bg-background/50">
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
@@ -186,7 +186,7 @@ export function ExplorerToolbar(props: ExplorerToolbarProps) {
                 }}
                 aria-pressed={viewMode === "tree"}
                 className={cn(
-                  "flex h-8 w-8 items-center justify-center rounded-s-md transition-colors",
+                  "flex h-7 w-7 sm:h-8 sm:w-8 items-center justify-center rounded-s-md transition-colors",
                   viewMode === "tree" ? "bg-primary/10 text-primary" : "text-muted-foreground hover:bg-muted",
                 )}
               >
@@ -209,7 +209,7 @@ export function ExplorerToolbar(props: ExplorerToolbarProps) {
                 }}
                 aria-pressed={viewMode === "grid"}
                 className={cn(
-                  "flex h-8 w-8 items-center justify-center transition-colors",
+                  "flex h-7 w-7 sm:h-8 sm:w-8 items-center justify-center transition-colors",
                   viewMode === "grid" ? "bg-primary/10 text-primary" : "text-muted-foreground hover:bg-muted",
                 )}
               >
@@ -232,7 +232,7 @@ export function ExplorerToolbar(props: ExplorerToolbarProps) {
                 }}
                 aria-pressed={viewMode === "list"}
                 className={cn(
-                  "flex h-8 w-8 items-center justify-center rounded-e-md transition-colors",
+                  "flex h-7 w-7 sm:h-8 sm:w-8 items-center justify-center rounded-e-md transition-colors",
                   viewMode === "list" ? "bg-primary/10 text-primary" : "text-muted-foreground hover:bg-muted",
                 )}
               >
@@ -299,7 +299,7 @@ export function ExplorerToolbar(props: ExplorerToolbarProps) {
       )}
 
       {/* Divider before primary actions */}
-      <div className="h-5 w-px shrink-0 bg-border" />
+      <div className="hidden sm:block h-5 w-px shrink-0 bg-border" />
 
       {/* Primary actions */}
       <div className="flex items-center gap-1.5">

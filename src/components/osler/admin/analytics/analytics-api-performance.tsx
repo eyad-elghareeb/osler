@@ -81,7 +81,8 @@ export function AnalyticsApiPerformancePanel({ data, loading }: AnalyticsApiPerf
         />
       ) : (
         <div className="rounded-lg border border-border overflow-hidden">
-          <div className="max-h-80 overflow-y-auto overflow-x-auto">
+          {/* Desktop table */}
+          <div className="hidden md:block max-h-80 overflow-y-auto">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-border">
@@ -132,6 +133,34 @@ export function AnalyticsApiPerformancePanel({ data, loading }: AnalyticsApiPerf
                 })}
               </tbody>
             </table>
+          </div>
+          {/* Mobile card list */}
+          <div className="md:hidden max-h-80 overflow-y-auto divide-y divide-border">
+            {data.items.map((row: AnalyticsApiPerfRow, i) => {
+              const r = ratingMs(row.p95);
+              return (
+                <div key={`${row.endpoint}-${i}`} className="px-3 py-2.5">
+                  <code className="font-mono text-xs block truncate mb-1.5">{row.endpoint}</code>
+                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
+                    <span className="text-muted-foreground">
+                      {t("admin.analytics.apiPerf.col.count")}: <span className="font-mono tabular-nums font-medium text-foreground">{row.count.toLocaleString()}</span>
+                    </span>
+                    <span className="text-muted-foreground">
+                      {t("admin.analytics.apiPerf.col.p50")}: <span className="font-mono tabular-nums text-foreground">{fmtMs(row.p50)}</span>
+                    </span>
+                    <span className={cn(
+                      "inline-flex items-center rounded-full border px-1.5 py-px text-[10px] font-medium font-mono tabular-nums",
+                      RATING_COLORS[r],
+                    )}>
+                      P95 {fmtMs(row.p95)}
+                    </span>
+                    <span className="text-muted-foreground">
+                      {t("admin.analytics.apiPerf.col.max")}: <span className="font-mono tabular-nums text-foreground">{fmtMs(row.max)}</span>
+                    </span>
+                  </div>
+                </div>
+              );
+            })}
           </div>
         </div>
       )}

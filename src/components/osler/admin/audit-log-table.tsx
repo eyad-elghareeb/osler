@@ -61,9 +61,9 @@ export function AuditLogTable() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center gap-3">
+      <div className="flex flex-wrap items-center gap-3">
         <Select value={action} onValueChange={(v) => { setAction(v); setPage(1); }}>
-          <SelectTrigger id="audit-filter" className="w-56">
+          <SelectTrigger id="audit-filter" className="w-full sm:w-56">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -120,6 +120,7 @@ export function AuditLogTable() {
           {
             key: "target",
             label: t("admin.audit.col.target"),
+            hideOnMobile: true,
             render: (entry) => (
               <span className="text-muted-foreground font-mono text-xs">{entry.targetId ?? "—"}</span>
             ),
@@ -127,6 +128,7 @@ export function AuditLogTable() {
           {
             key: "detail",
             label: t("admin.audit.col.detail"),
+            hideOnMobile: true,
             render: (entry) =>
               entry.detail ? (
                 <code className="block max-w-[12rem] overflow-x-auto rounded bg-muted/60 px-2 py-1 font-mono text-xs">

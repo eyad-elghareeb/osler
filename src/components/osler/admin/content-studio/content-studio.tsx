@@ -36,6 +36,7 @@ import {
   ResizablePanel,
   ResizablePanelGroup,
 } from "@/components/ui/resizable";
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { useToast } from "@/hooks/use-toast";
 import {
   adminApi,
@@ -135,6 +136,8 @@ export function ContentStudio({ capabilities }: ContentStudioProps) {
     if (typeof window === "undefined") return true;
     try { return localStorage.getItem("osler-studio-detail-open") !== "0"; } catch { return true; }
   });
+  const [mobileRailOpen, setMobileRailOpen] = React.useState(false);
+  const [mobileDetailOpen, setMobileDetailOpen] = React.useState(false);
   React.useEffect(() => {
     try { localStorage.setItem("osler-studio-rail-open", railOpen ? "1" : "0"); } catch {}
   }, [railOpen]);
@@ -631,9 +634,21 @@ export function ContentStudio({ capabilities }: ContentStudioProps) {
         onGcOrphans={actions.gcOrphans}
         gcRunning={actions.gcRunning}
         railOpen={railOpen}
-        onToggleRail={() => setRailOpen((v) => !v)}
+        onToggleRail={() => {
+          if (window.innerWidth < 768) {
+            setMobileRailOpen(true);
+          } else {
+            setRailOpen((v) => !v);
+          }
+        }}
         detailOpen={detailOpen}
-        onToggleDetail={() => setDetailOpen((v) => !v)}
+        onToggleDetail={() => {
+          if (window.innerWidth < 768) {
+            setMobileDetailOpen(true);
+          } else {
+            setDetailOpen((v) => !v);
+          }
+        }}
       />
 
       {/* Three-pane layout — all panes are resizable via drag handles.
@@ -691,21 +706,21 @@ export function ContentStudio({ capabilities }: ContentStudioProps) {
             </div>
 
             {/* Status bar */}
-            <div className="flex shrink-0 items-center gap-2 border-t border-border bg-card px-3 py-1 text-[11px] text-muted-foreground">
+            <div className="flex shrink-0 items-center gap-2 border-t border-border bg-card px-2 sm:px-3 py-1 text-[11px] text-muted-foreground">
               <span>{t("admin.studio.statusBar.items", { n: String(filteredItems.length) })}</span>
               {selectedIds.size > 0 && (
                 <>
-                  <span>·</span>
-                  <span className="font-medium text-primary">
+                  <span className="hidden sm:inline">·</span>
+                  <span className="hidden sm:inline font-medium text-primary">
                     {t("admin.studio.statusBar.selected", { n: String(selectedIds.size) })}
                   </span>
                 </>
               )}
               <span className="ms-auto flex items-center gap-1">
                 {unifiedLoading ? (
-                  <><Loader2 className="size-3 animate-spin" /> {t("admin.studio.statusBar.syncing")}</>
+                  <><Loader2 className="size-3 animate-spin" /></>
                 ) : (
-                  <><RefreshCw className="size-3" /> {t("admin.studio.refresh")}</>
+                  <><RefreshCw className="size-3" /> <span className="hidden sm:inline">{t("admin.studio.refresh")}</span></>
                 )}
               </span>
             </div>
@@ -747,6 +762,65 @@ export function ContentStudio({ capabilities }: ContentStudioProps) {
           </>
         )}
       </ResizablePanelGroup>
+
+      {/* ── Mobile sheets for side panels ──────────────────────────────── */}
+      <Sheet open={mobileRailOpen} onOpenChange={setMobileRailOpen}>
+        <SheetContent side="left" className="w-72 p-0">
+          <SheetHeader className="sr-only">
+            <SheetTitle>{t("admin.studio.allCategories")}</SheetTitle>
+          </SheetHeader>
+          <div className="flex h-full flex-col">
+            <div className="h-14 shrink-0 border-b border-border flex items-center px-4">
+              <h2 className="text-sm font-semibold">{t("admin.studio.allCategories")}</h2>
+            </div>
+            <div className="flex-1 overflow-y-auto">
+              <CategoryRail
+                activeFolder={activeFolder || null}
+                onSelect={(folder) => {
+                  navigateTo(folder);
+                  setMobileRailOpen(false);
+                }}
+                counts={counts}
+                totalCount={counts.__total ?? 0}
+                onDropFiles={handleDropFiles}
+              />
+            </div>
+          </div>
+        </SheetContent>
+      </Sheet>
+
+      <Sheet open={mobileDetailOpen} onOpenChange={setMobileDetailOpen}>
+        <SheetContent side="right" className="w-80 p-0">
+          <SheetHeader className="sr-only">
+            <SheetTitle>{t("admin.studio.noSelection")}</SheetTitle>
+          </SheetHeader>
+          <div className="flex h-full flex-col">
+            <div className="h-14 shrink-0 border-b border-border flex items-center px-4">
+              <h2 className="text-sm font-semibold">{t("admin.studio.quickActions")}</h2>
+            </div>
+            <div className="flex-1 overflow-y-auto">
+              <DetailPanel
+                selectedNodes={selectedNodes}
+                categoryContentType={currentCategory?.contentType ?? "library"}
+                validationStates={validationStates}
+                onOpen={handleOpen}
+                onRename={actions.openRenameDialog}
+                onDelete={actions.openDeleteDialog}
+                onMove={(nodes) => actions.openMoveDialog(nodes)}
+                onDuplicate={actions.duplicate}
+                onDownload={actions.download}
+                onConvert={actions.openConvertDialog}
+                onPromote={actions.promote}
+                onPublishStaged={actions.publishStaged}
+                onDiscardStaged={actions.discardStaged}
+                onPublish={actions.publish}
+                onUnpublish={actions.unpublish}
+                canManage={capabilities.manageUsers}
+              />
+            </div>
+          </div>
+        </SheetContent>
+      </Sheet>
 
       {/* ── Dialogs ──────────────────────────────────────────────────────── */}
       <CreateContentDialog
