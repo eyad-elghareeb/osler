@@ -18,6 +18,7 @@ import {
   BookOpen,
   ExternalLink,
   Sun,
+  Download,
 } from "lucide-react";
 import Plyr from "plyr";
 import "plyr/dist/plyr.css";
@@ -47,6 +48,7 @@ import {
   haptic,
 } from "@/lib/osler/native";
 import { useSwipeBackDismiss } from "@/hooks/use-swipe-back-dismiss";
+import { VideoDownloadDialog } from "./video-download-dialog";
 
 /* ── Constants ─────────────────────────────────────────────────────── */
 
@@ -486,7 +488,9 @@ function VideoPlayerView({
 
   const [isFullscreen, setIsFullscreen] = React.useState(false);
   const [invidiousMode, setInvidiousMode] = React.useState<boolean>(Boolean(INVIDIOUS_HOST));
+  const [invidiousStart, setInvidiousStart] = React.useState<number | undefined>(undefined);
   const [showFullDescription, setShowFullDescription] = React.useState(false);
+  const [downloadOpen, setDownloadOpen] = React.useState(false);
 
   const isYouTube = video.source.type === "youtube";
   const videoId = isYouTube ? video.source.id : undefined;
@@ -494,7 +498,10 @@ function VideoPlayerView({
   // ── Jump to section helper ──
   const handleJumpToSection = (time: number) => {
     haptic("selection");
-    if (isYouTube && !invidiousMode && youtubeRef.current) {
+    if (invidiousMode && videoId) {
+      // Invidious embeds expose no JS API — reload the embed at the target time.
+      setInvidiousStart(Math.floor(time));
+    } else if (isYouTube && !invidiousMode && youtubeRef.current) {
       try {
         if (typeof youtubeRef.current.seekTo === "function") {
           youtubeRef.current.seekTo(time, true);
@@ -706,7 +713,20 @@ function VideoPlayerView({
         {isYouTube && INVIDIOUS_HOST && (
           <button
             onClick={() => {
+              haptic("light");
+              setDownloadOpen(true);
+            }}
+            className="size-8 rounded-md flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors"
+            title={t("videos.downloadHint")}
+          >
+            <Download className="size-4" />
+          </button>
+        )}
+        {isYouTube && INVIDIOUS_HOST && (
+          <button
+            onClick={() => {
               haptic("selection");
+              setInvidiousStart(undefined);
               setInvidiousMode((prev) => !prev);
             }}
             className={cn(
@@ -731,7 +751,7 @@ function VideoPlayerView({
           <div className="relative aspect-video w-full rounded-2xl overflow-hidden bg-black shadow-lg border border-border shrink-0">
             {invidiousMode && videoId ? (
               <iframe
-                src={`https://${INVIDIOUS_HOST}/embed/${videoId}`}
+                src={`https://${INVIDIOUS_HOST}/embed/${videoId}?autoplay=1${invidiousStart != null ? `&start=${invidiousStart}` : ""}`}
                 className="absolute inset-0 w-full h-full"
                 style={{ border: "none" }}
                 allow="autoplay; encrypted-media; fullscreen"
@@ -906,6 +926,16 @@ function VideoPlayerView({
           </div>
         </aside>
       </div>
+
+      {isYouTube && videoId && INVIDIOUS_HOST && (
+        <VideoDownloadDialog
+          open={downloadOpen}
+          onOpenChange={setDownloadOpen}
+          videoId={videoId}
+          title={video.title}
+          host={INVIDIOUS_HOST}
+        />
+      )}
     </div>
   );
 }
