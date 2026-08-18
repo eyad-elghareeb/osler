@@ -4840,7 +4840,7 @@ function QuizView({
   const submitted = readonly || session.revealed[session.current] || false;
   const selected = session.answers[session.current];
   const isMCQ = q ? q.correct >= 0 : false;
-  const qIsWritten = q ? (!q.correct || q.correct < 0) && (!!q.rubric?.length || !!q.modelAnswer) : false;
+  const qIsWritten = q ? (q.correct == null || q.correct < 0) && (!!q.rubric?.length || !!q.modelAnswer) : false;
   const isPausedOrLocked = session.examPaused;
   const { t, rtl } = useI18n();
   const hasMCQ = session.questions.some((q) => q.correct >= 0);
