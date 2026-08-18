@@ -136,15 +136,6 @@ export function VideoDownloadDialog({ open, onOpenChange, videoId, title }: Vide
 
   const handleDownload = async () => {
     if (phase === "processing" || !instance) return;
-    const auth = COBALT_KEY
-      ? { kind: "apiKey" as const, token: COBALT_KEY }
-      : token
-        ? { kind: "bearer" as const, token }
-        : undefined;
-    if (!auth && instance.turnstileSitekey) {
-      setPhase("auth");
-      return;
-    }
     haptic("selection");
     setPhase("processing");
     setResult(null);
@@ -154,6 +145,18 @@ export function VideoDownloadDialog({ open, onOpenChange, videoId, title }: Vide
       const opts = isAudio
         ? { mode: "audio" as const, videoQuality: "max" }
         : { mode: "video" as const, videoQuality: QUALITY_OPTIONS.find((q) => q.id === quality)?.quality ?? "max" };
+
+      let auth: { kind: "apiKey" | "bearer"; token: string } | undefined;
+      if (COBALT_KEY) {
+        auth = { kind: "apiKey", token: COBALT_KEY };
+      } else if (token) {
+        const jwt = await createSession(token);
+        auth = { kind: "bearer", token: jwt };
+      } else if (instance.turnstileSitekey) {
+        setPhase("auth");
+        return;
+      }
+
       const res = await requestDownload(watchUrl, opts, auth);
       if (res.status === "tunnel" || res.status === "redirect") {
         if (res.url) openUrl(res.url);
