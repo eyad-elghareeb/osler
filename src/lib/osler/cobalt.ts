@@ -10,7 +10,7 @@
  * community instance) and optionally NEXT_PUBLIC_COBALT_KEY for Api-Key auth.
  */
 
-export const COBALT_API = process.env.NEXT_PUBLIC_COBALT_API || "https://cobalt-api.slipfox.xyz";
+export const COBALT_API = process.env.NEXT_PUBLIC_COBALT_API || "https://bergung-api.hoffnungfuerdiezukunft.net";
 export const COBALT_KEY = process.env.NEXT_PUBLIC_COBALT_KEY || "";
 export const COBALT_ENABLED = Boolean(COBALT_API);
 
@@ -48,11 +48,23 @@ function errorCode(data: Record<string, unknown>): string | undefined {
   return typeof e?.code === "string" ? e.code : undefined;
 }
 
-export async function fetchInstanceInfo(): Promise<CobaltInstanceInfo> {
+/**
+ * Fetches the instance's public info (version + whether it uses a Turnstile
+ * challenge). Some instances sit behind a proxy/CDN that answers `GET /` with
+ * an HTML redirect or a challenge page instead of JSON — in that case we
+ * return null and let the download request itself reveal whether auth is
+ * required.
+ */
+export async function fetchInstanceInfo(): Promise<CobaltInstanceInfo | null> {
   const res = await fetch(`${COBALT_API}/`);
-  const data = await jsonOrThrow(res);
+  let data: Record<string, unknown>;
+  try {
+    data = await jsonOrThrow(res);
+  } catch {
+    return null;
+  }
   const cobalt = data?.cobalt as Record<string, unknown> | undefined;
-  if (!cobalt) throw new Error("missing instance info");
+  if (!cobalt) return null;
   return {
     version: typeof cobalt.version === "string" ? cobalt.version : "",
     url: typeof cobalt.url === "string" ? cobalt.url : COBALT_API,
