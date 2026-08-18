@@ -72,6 +72,7 @@ const RATE_LIMIT_MAX: Record<string, number> = {
   "auth:reset": 6,
   "auth:google:consume": 12,
   "auth:refresh": 30,
+  "guest": 12,
   "biometric": 6,
   "ip:global": 600,
   "content": 240,
@@ -3726,6 +3727,19 @@ export default {
         if (!session) return json({ error: "Authentication required" }, 401, origin, log);
         if (!rateLimit(ip, "search")) return json({ error: "Too many requests" }, 429, origin, log);
         return handleSearch(request, env, session, log);
+      }
+
+      // ── Guest Turnstile gate (pre-auth) ──
+      // POST /v1/guest/verify — guest (local-only) sessions have no account,
+      // but they still must pass the bot check. Mirrors the auth endpoints'
+      // fail-closed Turnstile verification: when TURNSTILE_ENABLED is off the
+      // call passes and guests are unaffected.
+      if (request.method === "POST" && url.pathname === "/v1/guest/verify") {
+        if (!rateLimit(ip, "guest")) return json({ error: "Too many requests" }, 429, origin, log);
+        const body = await readJson(request).catch(() => null);
+        if (!body || typeof body.turnstileToken !== "string") return json({ error: "Invalid request" }, 400, origin, log);
+        if (!await verifyTurnstile(body.turnstileToken, env)) return json({ error: "Verification failed" }, 400, origin, log);
+        return json({ ok: true }, 200, origin, log);
       }
 
       // ── Analytics ingest (pre-auth) ──

@@ -14,6 +14,14 @@ import {
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { useI18n } from "./i18n-provider";
 import { useBiometricAvailability } from "@/hooks/use-native";
 import {
@@ -36,6 +44,7 @@ import {
   registerCloudAccount,
   requestPasswordReset,
   startGoogleLogin,
+  verifyGuestTurnstile,
 } from "@/lib/osler/cloud";
 
 declare global {
@@ -90,6 +99,15 @@ export function LoginScreen({ onLogin, cloudAuthError }: LoginScreenProps) {
   const turnstileRef = React.useRef<HTMLDivElement>(null);
   const turnstileWidgetId = React.useRef("");
 
+  // Guest dialog — display-name picker with its own Turnstile gate.
+  const [guestDialogOpen, setGuestDialogOpen] = React.useState(false);
+  const [guestName, setGuestName] = React.useState("");
+  const [guestTurnstileToken, setGuestTurnstileToken] = React.useState("");
+  const guestTurnstileRef = React.useRef<HTMLDivElement>(null);
+  const guestTurnstileWidgetId = React.useRef("");
+  const [guestVerifying, setGuestVerifying] = React.useState(false);
+  const [guestError, setGuestError] = React.useState("");
+
   // Turnstile tokens are single-use: once a submit fires (success OR failure)
   // the presented token is spent. Reset the widget so the next attempt carries
   // a fresh token instead of re-sending a dead one and bouncing off the
@@ -105,6 +123,90 @@ export function LoginScreen({ onLogin, cloudAuthError }: LoginScreenProps) {
       turnstileWidgetId.current = "";
     }
   }, []);
+
+  // Guests have no account to submit the main form, so their Turnstile
+  // challenge lives in the guest dialog. Mirror the main widget's render logic
+  // but scoped to the dialog's container (rendered only while it's open).
+  const guestTurnstileEnabled = cloudActive && !!getConfig().cloud.turnstileSiteKey;
+
+  React.useEffect(() => {
+    const sitekey = getConfig().cloud.turnstileSiteKey;
+    const container = guestTurnstileRef.current;
+    if (!guestDialogOpen || !guestTurnstileEnabled || !sitekey || !container) return;
+
+    const render = () => {
+      if (!window.turnstile || !container.isConnected) return;
+      container.replaceChildren();
+      guestTurnstileWidgetId.current = window.turnstile.render(container, {
+        sitekey,
+        callback: (token) => {
+          setGuestTurnstileToken(token);
+          setGuestError("");
+        },
+        "expired-callback": () => setGuestTurnstileToken(""),
+      });
+    };
+    const existing = document.querySelector<HTMLScriptElement>('script[src^="https://challenges.cloudflare.com/turnstile/"]');
+    if (existing) {
+      existing.addEventListener("load", render, { once: true });
+      render();
+    } else {
+      const script = document.createElement("script");
+      script.src = "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit";
+      script.async = true;
+      script.defer = true;
+      script.addEventListener("load", render, { once: true });
+      document.head.appendChild(script);
+    }
+    return () => {
+      const widgetId = guestTurnstileWidgetId.current;
+      if (widgetId && window.turnstile) window.turnstile.remove(widgetId);
+      guestTurnstileWidgetId.current = "";
+      setGuestTurnstileToken("");
+    };
+  }, [guestDialogOpen, guestTurnstileEnabled]);
+
+  const resetGuestTurnstile = React.useCallback(() => {
+    setGuestTurnstileToken("");
+    const widgetId = guestTurnstileWidgetId.current;
+    if (!widgetId || !window.turnstile) return;
+    try {
+      window.turnstile.reset(widgetId);
+    } catch {
+      window.turnstile.remove(widgetId);
+      guestTurnstileWidgetId.current = "";
+    }
+  }, []);
+
+  const handleGuestContinue = async () => {
+    const name = guestName.trim();
+    if (!name || guestVerifying) return;
+    if (guestTurnstileEnabled) {
+      if (!guestTurnstileToken) return;
+      setGuestVerifying(true);
+      setGuestError("");
+      try {
+        const ok = await verifyGuestTurnstile(guestTurnstileToken);
+        if (!ok) {
+          setGuestError(t("login.guestTurnstileFailed"));
+          resetGuestTurnstile();
+          haptic("error");
+          return;
+        }
+      } catch {
+        setGuestError(t("login.guestVerifyError"));
+        resetGuestTurnstile();
+        haptic("error");
+        return;
+      } finally {
+        setGuestVerifying(false);
+      }
+    }
+    haptic("success");
+    setGuestDialogOpen(false);
+    setGuestName("");
+    onLogin(name);
+  };
 
   const { availability, refresh: refreshBiometric } = useBiometricAvailability();
 
@@ -712,14 +814,68 @@ export function LoginScreen({ onLogin, cloudAuthError }: LoginScreenProps) {
             variant="link"
             size="sm"
             onClick={() => {
-              haptic("light");
-              onLogin("Guest");
+              haptic("selection");
+              setGuestError("");
+              setGuestDialogOpen(true);
             }}
             className="w-full text-xs text-muted-foreground hover:text-foreground"
           >
             {t("login.guest")}
           </Button>
         </form>
+
+        {/* Guest display-name dialog */}
+        <Dialog open={guestDialogOpen} onOpenChange={setGuestDialogOpen}>
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle>{t("login.guestDialogTitle")}</DialogTitle>
+              <DialogDescription>{t("login.guestDialogDescription")}</DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4">
+              <div>
+                <label
+                  htmlFor="guest-name"
+                  className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground"
+                >
+                  {t("login.displayName")}
+                </label>
+                <input
+                  id="guest-name"
+                  type="text"
+                  value={guestName}
+                  onChange={(e) => setGuestName(e.target.value)}
+                  placeholder={t("login.displayNamePlaceholder")}
+                  autoComplete="nickname"
+                  autoFocus
+                  maxLength={48}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      void handleGuestContinue();
+                    }
+                  }}
+                  className="mt-1.5 w-full h-10 px-3 bg-background border border-border-strong rounded-md text-sm outline-none transition-all focus:border-primary focus:ring-2 focus:ring-primary/20"
+                />
+              </div>
+              {guestTurnstileEnabled && (
+                <div ref={guestTurnstileRef} className="flex justify-center" />
+              )}
+              {guestError && <p className="text-xs text-destructive">{guestError}</p>}
+            </div>
+            <DialogFooter>
+              <Button
+                type="button"
+                size="lg"
+                onClick={handleGuestContinue}
+                disabled={guestVerifying || !guestName.trim() || (guestTurnstileEnabled && !guestTurnstileToken)}
+                className="w-full gap-2"
+              >
+                {guestVerifying && <Loader2 className="size-4 animate-spin" />}
+                {t("login.guestContinue")}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
 
         <p className="text-center text-[10px] text-muted-foreground mt-6">
           {t("login.footer")}

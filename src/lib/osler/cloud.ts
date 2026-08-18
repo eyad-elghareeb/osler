@@ -245,7 +245,18 @@ export async function registerCloudAccount(input: {
 
 export async function cloudUsernameAvailable(username: string): Promise<boolean> {
   const result = await request<{ available: boolean }>(`/v1/auth/username-available?username=${encodeURIComponent(username)}`);
-  return result.available;
+  return result.available === true;
+}
+
+/** Verify a Turnstile token for a guest (local-only) login. The guest session
+ *  never reaches the auth endpoints, so the bot check runs through this
+ *  dedicated pre-auth endpoint instead. */
+export async function verifyGuestTurnstile(turnstileToken: string): Promise<boolean> {
+  const result = await request<{ ok: boolean }>("/v1/guest/verify", {
+    method: "POST",
+    body: JSON.stringify({ turnstileToken }),
+  });
+  return result.ok === true;
 }
 
 export async function loginCloudAccount(input: {
