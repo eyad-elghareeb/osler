@@ -61,7 +61,7 @@ function defaultConfig(): ConfigData {
       view: "dashboard",
       language: { ui: "en", content: "all" },
       quiz: { count: 10, secPerQuestion: 90, tutor: false, shuffle: true },
-      ai: { model: "gemini-2.5-flash", enabled: true, temperature: 0.7 },
+      ai: { model: "gemini-3.5-flash-lite", enabled: true, temperature: 0.7 },
       sync: { method: "webrtc", room: "" },
     },
   } as ConfigData;

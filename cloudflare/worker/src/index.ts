@@ -3405,7 +3405,7 @@ async function handleAdmin(request: Request, env: Env, session: Session, url: UR
     if (!env.CONTENT) return json({ error: "Content storage not configured" }, 503, origin, log);
     if (request.method === "GET") {
       const obj = await env.CONTENT.get("_osler.config.json");
-      if (!obj) return json({ site: { name: "Osler", shortName: "Osler", tagline: "Your medical companion", githubRepo: "", organisation: "", supportEmail: "" }, engines: {}, themes: { default: "light", custom: [] }, defaults: { view: "dashboard", language: { ui: "en", content: "all" }, quiz: { count: 10, secPerQuestion: 90, tutor: false, shuffle: true }, ai: { model: "gemini-2.5-flash", enabled: true, temperature: 0.7 }, sync: { method: "webrtc", room: "" } }, wizard: { completed: false } }, 200, origin, log);
+      if (!obj) return json({ site: { name: "Osler", shortName: "Osler", tagline: "Your medical companion", githubRepo: "", organisation: "", supportEmail: "" }, engines: {}, themes: { default: "light", custom: [] }, defaults: { view: "dashboard", language: { ui: "en", content: "all" }, quiz: { count: 10, secPerQuestion: 90, tutor: false, shuffle: true }, ai: { model: "gemini-3.5-flash-lite", enabled: true, temperature: 0.7 }, sync: { method: "webrtc", room: "" } }, wizard: { completed: false } }, 200, origin, log);
       const text = await obj.text();
       try { JSON.parse(text); } catch { return json({ error: "Corrupt config" }, 500, origin, log); }
       return new Response(text, { status: 200, headers: { "content-type": "application/json; charset=utf-8", ...cors(origin), ...SECURITY_HEADERS, "x-request-id": log.requestId } as any });
@@ -3828,7 +3828,7 @@ export default {
         if (!decryptedKey) return json({ error: "No Gemini API key saved" }, 400, origin, log);
         const body = await readJson(request);
         const endpoint = typeof body.endpoint === "string" ? body.endpoint : "generateContent";
-        const model = (typeof body.model === "string" && body.model.trim()) || row.gemini_model || "gemini-2.5-flash";
+        const model = (typeof body.model === "string" && body.model.trim()) || row.gemini_model || "gemini-3.5-flash-lite";
         if (!/^[a-zA-Z0-9._-]+$/.test(model)) return json({ error: "Invalid model name" }, 400, origin, log);
         if (!/^(generateContent|streamGenerateContent|countTokens)$/.test(endpoint)) {
           const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${encodeURIComponent(decryptedKey)}`, { method: "GET", headers: { "content-type": "application/json" } });

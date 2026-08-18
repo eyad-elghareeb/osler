@@ -8,13 +8,16 @@ import type { WrittenEvaluation } from "./storage";
 const GEMINI_BASE = "https://generativelanguage.googleapis.com/v1beta";
 
 const GRADING_MODELS = [
-  ["gemini-3.6-flash", "Gemini 3.6 Flash (newest, fastest Flash)"],
-  ["gemini-3.5-flash-lite", "Gemini 3.5 Flash-Lite (fast & efficient)"],
-  ["gemini-3.5-flash", "Gemini 3.5 Flash (latest, strongest Flash)"],
-  ["gemini-3.1-flash-lite", "Gemini 3.1 Flash-Lite (default, fast & modern)"],
+  ["gemini-3.5-flash-lite", "Gemini 3.5 Flash-Lite (default, fastest & cost-efficient)"],
+  ["gemini-3.7-flash", "Gemini 3.7 Flash (newest, most capable Flash)"],
+  ["gemini-3.6-flash", "Gemini 3.6 Flash (fast & efficient)"],
+  ["gemini-3.5-flash", "Gemini 3.5 Flash (stable, high-throughput)"],
+  ["gemini-3.1-flash-lite", "Gemini 3.1 Flash-Lite (fast & modern)"],
   ["gemini-3.1-pro-preview", "Gemini 3.1 Pro Preview (most capable, premium)"],
+  ["gemini-3-flash-preview", "Gemini 3 Flash Preview (experimental)"],
   ["gemma-4-26b-a4b-it", "Gemma 4 26B IT (open model, strong & free)"],
   ["gemma-4-31b-it", "Gemma 4 31B IT (larger open model)"],
+  ["gemini-2.5-flash-lite", "Gemini 2.5 Flash-Lite (budget fallback)"],
   ["gemini-2.5-flash", "Gemini 2.5 Flash (older fallback)"],
 ] as const;
 

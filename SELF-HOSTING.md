@@ -62,7 +62,7 @@ Every white-label decision lives in **`public/osler.config.json`**. The schema i
     "view": "dashboard",
     "language": { "ui": "en", "content": "all" },
     "quiz":     { "questionCount": 20, "secondsPerQuestion": 90, "tutorMode": false, "shuffle": true },
-    "ai":       { "model": "gemini-2.5-flash", "enabled": true, "temperature": 0.4 },
+    "ai":       { "model": "gemini-3.5-flash-lite", "enabled": true, "temperature": 0.4 },
     "sync":     { "method": "network", "defaultRoom": "mms-2026" }
   },
   "cloud": {

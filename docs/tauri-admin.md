@@ -367,7 +367,7 @@ After step 6, the wizard calls `write_config` with a JSON object shaped like:
     "view": "dashboard",
     "language": { "ui": "en", "content": "all" },
     "quiz":     { "questionCount": 20, "secondsPerQuestion": 90, "tutorMode": false, "shuffle": true },
-    "ai":       { "model": "gemini-2.5-flash", "enabled": true, "temperature": 0.4 },
+    "ai":       { "model": "gemini-3.5-flash-lite", "enabled": true, "temperature": 0.4 },
     "sync":     { "method": "network", "defaultRoom": "mms-2026" }
   },
   "cloud": { "enabled": false, "apiUrl": "", "syncQbank": true, "syncFlashcards": true },

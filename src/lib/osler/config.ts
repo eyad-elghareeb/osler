@@ -591,7 +591,7 @@ export const DEFAULT_CONFIG: OslerConfig = {
       shuffle: true,
     },
     ai: {
-      model: "gemini-2.5-flash",
+      model: "gemini-3.5-flash-lite",
       enabled: true,
       temperature: 0.4,
     },

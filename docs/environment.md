@@ -455,7 +455,7 @@ Default options applied on first use of each feature. The user's runtime choices
   "view": "dashboard",
   "language": { "ui": "en", "content": "all" },
   "quiz": { "questionCount": 10, "secondsPerQuestion": 60, "tutorMode": false, "shuffle": true },
-  "ai": { "model": "gemini-2.5-flash", "enabled": true, "temperature": 0.4 },
+  "ai": { "model": "gemini-3.5-flash-lite", "enabled": true, "temperature": 0.4 },
   "sync": { "method": "network", "defaultRoom": "osler-default" }
 }
 ```
@@ -486,7 +486,7 @@ Default options applied on first use of each feature. The user's runtime choices
 
 | Field | Type | Default | Description |
 | --- | --- | --- | --- |
-| `model` | `string` | `"gemini-2.5-flash"` | Default Gemini model id. The user enters their own API key in Settings → AI Assistant. |
+| `model` | `string` | `"gemini-3.5-flash-lite"` | Default Gemini model id. The user enters their own API key in Settings → AI Assistant. |
 | `enabled` | `boolean` | `true` | Whether the AI assistant panel is visible by default. |
 | `temperature` | `number` | `0.4` | Default temperature (0..1). Lower = more deterministic. |
 

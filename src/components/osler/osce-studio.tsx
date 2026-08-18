@@ -59,20 +59,22 @@ import { useSwipeBackDismiss } from "@/hooks/use-swipe-back-dismiss";
 /* ── Constants ─────────────────────────────────────────────────────── */
 
 const MODELS: [string, string][] = [
-  ["gemini-3.6-flash", "Gemini 3.6 Flash (newest, fastest Flash)"],
-  ["gemini-3.5-flash-lite", "Gemini 3.5 Flash-Lite (fast & efficient)"],
-  ["gemini-3.5-flash", "Gemini 3.5 Flash (latest, strongest Flash)"],
-  ["gemini-3.1-flash-lite", "Gemini 3.1 Flash-Lite (default, fast & modern)"],
+  ["gemini-3.5-flash-lite", "Gemini 3.5 Flash-Lite (default, fastest & cost-efficient)"],
+  ["gemini-3.7-flash", "Gemini 3.7 Flash (newest, most capable Flash)"],
+  ["gemini-3.6-flash", "Gemini 3.6 Flash (fast & efficient)"],
+  ["gemini-3.5-flash", "Gemini 3.5 Flash (stable, high-throughput)"],
+  ["gemini-3.1-flash-lite", "Gemini 3.1 Flash-Lite (fast & modern)"],
+  ["gemini-3.1-pro-preview", "Gemini 3.1 Pro Preview (most capable, premium)"],
+  ["gemini-3-flash-preview", "Gemini 3 Flash Preview (experimental)"],
   ["gemma-4-26b-a4b-it", "Gemma 4 26B IT (open model, strong & free)"],
   ["gemma-4-31b-it", "Gemma 4 31B IT (larger open model)"],
-  ["gemini-2.5-flash-lite", "Gemini 2.5 Flash-Lite"],
-  ["gemini-2.5-flash", "Gemini 2.5 Flash"],
+  ["gemini-2.5-flash-lite", "Gemini 2.5 Flash-Lite (budget fallback)"],
+  ["gemini-2.5-flash", "Gemini 2.5 Flash (older fallback)"],
 ];
 
 const LIVE_MODELS: [string, string][] = [
   ["gemini-3.1-flash-live-preview", "Gemini 3.1 Flash Live (recommended)"],
-  ["gemini-live-2.5-flash-native-audio", "Gemini Live 2.5 Flash — native audio"],
-  ["gemini-live-2.5-flash-preview-native-audio-09-2025", "Gemini 2.5 Flash Live — native audio preview"],
+  ["gemini-2.5-flash-native-audio-preview-12-2025", "Gemini 2.5 Flash Live — native audio"],
 ];
 
 const MAX_TURNS = 30;
