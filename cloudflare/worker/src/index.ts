@@ -3624,9 +3624,23 @@ export default {
           const user = await env.DB.prepare("SELECT * FROM users WHERE email = ? COLLATE NOCASE").bind(email).first<any>();
           if (user && env.RESEND_API_KEY && env.EMAIL_FROM && env.APP_ORIGIN) {
             const token = `${id()}${id()}`; const expiresAt = now() + RESET_TTL_MS;
-            await env.DB.prepare("INSERT INTO password_reset_tokens (id, user_id, token_hash, expires_at, created_at) VALUES (?, ?, ?, ?, ?)").bind(id(), user.id, await sha256(token), expiresAt, now()).run();
+            // Revoke any earlier outstanding reset links before issuing a fresh
+            // one, so a compromised old link dies the moment a new reset is
+            // requested instead of remaining usable for its full TTL.
+            await env.DB.batch([
+              env.DB.prepare("UPDATE password_reset_tokens SET used_at = ? WHERE user_id = ? AND used_at IS NULL").bind(now(), user.id),
+              env.DB.prepare("INSERT INTO password_reset_tokens (id, user_id, token_hash, expires_at, created_at) VALUES (?, ?, ?, ?, ?)").bind(id(), user.id, await sha256(token), expiresAt, now()),
+            ]);
             const link = `${env.APP_ORIGIN.replace(/\/$/, "")}/?reset=${encodeURIComponent(token)}`;
-            await fetch("https://api.resend.com/emails", { method: "POST", headers: { authorization: `Bearer ${env.RESEND_API_KEY}`, "content-type": "application/json" }, body: JSON.stringify({ from: env.EMAIL_FROM, to: [user.email], subject: "Reset your Osler password", html: `<p>Use this link within 30 minutes to reset your password:</p><p><a href="${link}">${link}</a></p><p>If you did not request a password reset, you can safely ignore this email.</p>` }) });
+            try {
+              await fetch("https://api.resend.com/emails", { method: "POST", headers: { authorization: `Bearer ${env.RESEND_API_KEY}`, "content-type": "application/json" }, body: JSON.stringify({ from: env.EMAIL_FROM, to: [user.email], subject: "Reset your Osler password", html: `<p>Use this link within 30 minutes to reset your password:</p><p><a href="${link}">${link}</a></p><p>If you did not request a password reset, you can safely ignore this email.</p>` }) });
+            } catch (error) {
+              // A Resend outage must not surface as a 500 — that would flip the
+              // always-{ok:true} no-enumeration contract into an account-existence
+              // oracle for the outage's duration. The token simply goes undelivered
+              // and expires; the next request revokes it anyway.
+              console.error("password-reset email send failed:", error);
+            }
           }
         }
         return json({ ok: true }, 200, origin, log);
@@ -3666,7 +3680,11 @@ export default {
             const token = `${id()}${id()}`; const expiresAt = now() + RESET_TTL_MS;
             await env.DB.prepare("INSERT INTO email_verify_tokens (id, user_id, token_hash, email, expires_at, created_at) VALUES (?, ?, ?, ?, ?, ?)").bind(id(), user.id, await sha256(token), email, expiresAt, now()).run();
             const link = `${env.APP_ORIGIN.replace(/\/$/, "")}/?verify=${encodeURIComponent(token)}`;
-            await fetch("https://api.resend.com/emails", { method: "POST", headers: { authorization: `Bearer ${env.RESEND_API_KEY}`, "content-type": "application/json" }, body: JSON.stringify({ from: env.EMAIL_FROM, to: [user.email], subject: "Verify your Osler email address", html: `<p>Use this link within 30 minutes to verify your email:</p><p><a href="${link}">${link}</a></p><p>If you did not create an Osler account, you can safely ignore this email.</p>` }) });
+            try {
+              await fetch("https://api.resend.com/emails", { method: "POST", headers: { authorization: `Bearer ${env.RESEND_API_KEY}`, "content-type": "application/json" }, body: JSON.stringify({ from: env.EMAIL_FROM, to: [user.email], subject: "Verify your Osler email address", html: `<p>Use this link within 30 minutes to verify your email:</p><p><a href="${link}">${link}</a></p><p>If you did not create an Osler account, you can safely ignore this email.</p>` }) });
+            } catch (error) {
+              console.error("verify-email send failed:", error);
+            }
           }
         }
         return json({ ok: true }, 200, origin, log);

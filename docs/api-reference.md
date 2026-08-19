@@ -746,6 +746,13 @@ If the email matches a user and Resend is configured, the Worker sends an HTML e
 
 The token is a single-use, 30-minute-TTL opaque string (sha256-hashed in the `password_reset_tokens` table). The user clicks the link, the frontend extracts `?reset=`, and the user is prompted for a new password which is submitted to `POST /v1/auth/reset/confirm`.
 
+**Security contract:**
+
+- Requesting a new reset **revokes all prior outstanding reset links** for that account — a compromised old link dies the moment a new one is requested.
+- A **send failure is swallowed** (logged server-side). The endpoint still returns `{ ok: true }` so a Resend outage can't turn the always-identical response into an account-existence oracle.
+- The frontend **strips the `?reset=` token from the URL** once consumed, so the bearer credential doesn't linger in history, bookmarks, or referrers.
+- Confirm additionally requires a fresh Turnstile challenge and revokes every active session for the account.
+
 #### Example error responses
 
 Rate limited — `429`:

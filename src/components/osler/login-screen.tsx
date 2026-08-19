@@ -222,10 +222,23 @@ export function LoginScreen({ onLogin, cloudAuthError }: LoginScreenProps) {
       }
     });
     const params = new URLSearchParams(window.location.search);
-    const token = params.get("reset");
-    if (token) {
-      setResetToken(token);
+    // A password-reset link carries a bearer token: either surfaced at the
+    // top level (/?reset=TOKEN, or /login?reset=TOKEN once RouteGuard has
+    // normalized it) or, defensively, still buried inside `next` from an old
+    // guest redirect. Recover it from both.
+    let reset = params.get("reset");
+    if (!reset) {
+      const nextRaw = params.get("next");
+      if (nextRaw) reset = new URLSearchParams(nextRaw.replace(/^\//, "")).get("reset");
+    }
+    if (reset) {
+      setResetToken(reset);
       setCloudMode("reset");
+      // The reset token is a bearer credential — drop it from the URL so it
+      // can't linger in browser history, bookmarks, or be leaked as a Referer.
+      params.delete("reset");
+      const cleanQuery = params.toString();
+      history.replaceState(null, "", `${window.location.pathname}${cleanQuery ? `?${cleanQuery}` : ""}${window.location.hash}`);
     }
     // Surface the Google OAuth error from either the prop (passed by the
     // login page, which read it from searchParams) or a stray URL param.

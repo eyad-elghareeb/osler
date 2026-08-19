@@ -145,10 +145,17 @@ export function RouteGuard({ children }: { children: React.ReactNode }) {
     if (loading || isCloudEnabled === null) return;
     if (isPublicPath(pathname)) return;
 
-    // /login handling: redirect to `next` (or `/`) if already logged in.
+    const search = window.location.search || "";
+    const params = new URLSearchParams(search);
+    // A password-reset link (/?reset=TOKEN) is a bearer credential that must
+    // reach the reset form on /login — never get dropped or buried.
+    const resetToken = params.get("reset");
+
+    // /login handling: redirect to `next` (or `/`) if already logged in —
+    // unless a password reset is pending, in which case the reset form must
+    // render even for a signed-in user (the reset link is what authorizes it).
     if (isLoginPath(pathname)) {
-      if (hasSession) {
-        const params = new URLSearchParams(window.location.search);
+      if (hasSession && !resetToken) {
         const nextRaw = params.get("next") || "/";
         const safeNext = isSafeLocalPath(nextRaw) && !isLoginPath(nextRaw) ? nextRaw : "/";
         router.replace(safeNext);
@@ -156,12 +163,30 @@ export function RouteGuard({ children }: { children: React.ReactNode }) {
       return;
     }
 
+    // A signed-in user arriving on a protected route with a reset token is
+    // redirected to the reset form, never left stranded on the dashboard.
+    if (hasSession && resetToken) {
+      const loginUrl = new URL("/login", window.location.origin);
+      loginUrl.searchParams.set("reset", resetToken);
+      loginUrl.searchParams.set("next", pathname);
+      router.replace(`${loginUrl.pathname}${loginUrl.search}`);
+      return;
+    }
+
     // Protected route — require a session.
     if (!hasSession) {
       const loginUrl = new URL("/login", window.location.origin);
-      const search = window.location.search || "";
       if (pathname !== "/" || search !== "") {
-        loginUrl.searchParams.set("next", `${pathname}${search}`);
+        if (resetToken) {
+          // Surface the reset token at the TOP level of the login URL.
+          // Burying it inside `next` (/login?next=/?reset=TOKEN) would lose it
+          // — the login screen reads `reset` from the search string.
+          loginUrl.searchParams.set("reset", resetToken);
+          const nextPath = `${pathname}${search.replace(/[?&]reset=[^&#]*/g, "")}`;
+          loginUrl.searchParams.set("next", nextPath || "/");
+        } else {
+          loginUrl.searchParams.set("next", `${pathname}${search}`);
+        }
       }
       router.replace(`${loginUrl.pathname}${loginUrl.search}`);
     }
