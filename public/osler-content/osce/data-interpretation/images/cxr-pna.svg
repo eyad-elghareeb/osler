@@ -1,0 +1,68 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 560 460" font-family="Arial, Helvetica, sans-serif">
+  <defs>
+    <radialGradient id="lung" cx="0.5" cy="0.45" r="0.65">
+      <stop offset="0" stop-color="#0a0a0a"/>
+      <stop offset="1" stop-color="#1c1c1c"/>
+    </radialGradient>
+  </defs>
+
+  <rect width="560" height="460" fill="#000"/>
+  <text x="20" y="26" font-size="13" font-weight="bold" fill="#cfcfcf">Chest X-ray — PA — patient: S.B., 58 y/o female</text>
+  <text x="20" y="44" font-size="11" fill="#9a9a9a">Cough 4 days, purulent sputum, right pleuritic chest pain, T 38.4&deg;C</text>
+
+  <!-- Torso silhouette -->
+  <path d="M180,70 Q200,52 280,52 Q360,52 380,70 L390,150 Q392,200 386,250 L370,340 Q340,400 280,410 Q220,400 190,340 L174,250 Q168,200 170,150 Z" fill="#161616" stroke="#3a3a3a" stroke-width="2"/>
+
+  <!-- Trachea + central mediastinum -->
+  <path d="M262,58 L262,120 L298,120 L298,58" fill="#0a0a0a"/>
+  <path d="M240,120 L320,120 Q330,150 328,180 L318,240 L242,240 L232,180 Q230,150 240,120 Z" fill="#2a2a2a"/>
+  <!-- Aortic arch -->
+  <path d="M268,120 Q320,112 320,150 Q320,170 306,180" fill="none" stroke="#2a2a2a" stroke-width="14"/>
+
+  <!-- Heart silhouette (patient's left = viewer's right) -->
+  <path d="M300,180 Q348,176 356,220 Q362,256 340,288 Q322,308 300,296 Q282,300 272,280 Q258,252 268,220 Q274,196 300,180 Z" fill="#3c3c3c"/>
+
+  <!-- Diaphragms -->
+  <path d="M150,340 Q240,360 300,340" fill="none" stroke="#4a4a4a" stroke-width="6"/>
+  <path d="M300,340 Q380,364 470,344" fill="none" stroke="#4a4a4a" stroke-width="6"/>
+
+  <!-- Lung fields -->
+  <ellipse cx="190" cy="240" rx="70" ry="110" fill="url(#lung)" opacity="0.9"/>
+  <ellipse cx="390" cy="240" rx="70" ry="110" fill="url(#lung)" opacity="0.9"/>
+
+  <!-- Vascular markings (right) -->
+  <g fill="none" stroke="#333" stroke-width="2">
+    <path d="M330,180 Q340,200 336,230 Q334,250 340,270"/>
+    <path d="M352,190 Q360,210 356,235"/>
+    <path d="M368,200 Q374,220 370,240"/>
+    <path d="M320,190 Q312,215 316,245"/>
+  </g>
+  <!-- Vascular markings (left) -->
+  <g fill="none" stroke="#333" stroke-width="2">
+    <path d="M232,190 Q224,215 230,245"/>
+    <path d="M214,205 Q206,230 212,258"/>
+    <path d="M250,185 Q246,210 250,240"/>
+    <path d="M200,215 Q196,238 202,262"/>
+  </g>
+
+  <!-- RIGHT LOWER LOBE consolidation (viewer's left) -->
+  <path d="M150,260 Q176,238 210,250 Q232,262 228,292 Q222,326 192,332 Q160,330 152,302 Q146,282 150,260 Z" fill="#8a8a8a" opacity="0.85"/>
+  <path d="M176,268 Q196,258 210,266 Q216,274 213,288 Q208,306 192,310 Q174,308 170,292 Q168,280 176,268 Z" fill="#9c9c9c" opacity="0.8"/>
+  <!-- Air bronchogram -->
+  <path d="M196,272 L204,294" stroke="#4a4a4a" stroke-width="3" fill="none"/>
+  <path d="M188,276 L192,296" stroke="#4a4a4a" stroke-width="2" fill="none"/>
+
+  <!-- Ribs (faint) -->
+  <g fill="none" stroke="#262626" stroke-width="4">
+    <path d="M186,90 Q250,120 250,150"/>
+    <path d="M182,110 Q246,140 248,172"/>
+    <path d="M180,132 Q244,162 246,196"/>
+    <path d="M374,90 Q310,120 310,150"/>
+    <path d="M378,110 Q314,140 312,172"/>
+    <path d="M380,132 Q316,162 314,196"/>
+  </g>
+
+  <!-- Side markers -->
+  <text x="140" y="100" font-size="26" font-weight="bold" fill="#666">R</text>
+  <text x="395" y="100" font-size="26" font-weight="bold" fill="#666">L</text>
+</svg>

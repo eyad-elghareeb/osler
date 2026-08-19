@@ -1,0 +1,52 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 420 420" font-family="Arial, Helvetica, sans-serif">
+  <rect width="420" height="420" fill="#000"/>
+  <text x="20" y="26" font-size="13" font-weight="bold" fill="#cfcfcf">CT Head — axial, non-contrast — patient: H.K., 70 y/o male</text>
+  <text x="20" y="44" font-size="11" fill="#9a9a9a">Sudden severe headache + left-sided weakness, on warfarin for AF, GCS 13</text>
+
+  <!-- Scalp soft tissue -->
+  <circle cx="210" cy="210" r="196" fill="#3a3a3a"/>
+  <!-- Skull bone -->
+  <circle cx="210" cy="210" r="176" fill="#d8d8d8" opacity="0.95"/>
+  <circle cx="210" cy="210" r="164" fill="#5a5a5a"/>
+  <!-- Brain parenchyma -->
+  <circle cx="210" cy="210" r="162" fill="#6a6a6a"/>
+  <circle cx="210" cy="210" r="158" fill="#5f5f5f"/>
+
+  <!-- Gyral texture (subtle) -->
+  <g fill="none" stroke="#555" stroke-width="1.5" opacity="0.7">
+    <path d="M120,150 Q150,140 170,152 Q185,160 178,180"/>
+    <path d="M250,120 Q280,132 296,152 Q306,168 292,182"/>
+    <path d="M100,220 Q130,214 150,226"/>
+    <path d="M280,260 Q308,254 324,270"/>
+    <path d="M150,300 Q176,294 196,306"/>
+    <path d="M230,300 Q258,292 274,304"/>
+  </g>
+
+  <!-- Frontal horns of lateral ventricles (CSF) -->
+  <path d="M188,196 Q196,184 208,190 Q214,196 210,204" fill="#262626"/>
+  <path d="M232,196 Q224,184 212,190 Q206,196 210,204" fill="#262626"/>
+  <!-- Third ventricle -->
+  <path d="M204,208 L216,208 L216,214 L204,214 Z" fill="#262626"/>
+  <!-- Posterior horns -->
+  <path d="M176,216 Q186,222 192,214" stroke="#262626" stroke-width="5" fill="none"/>
+  <path d="M244,216 Q234,222 228,214" stroke="#262626" stroke-width="5" fill="none"/>
+
+  <!-- Pineal calcification -->
+  <circle cx="210" cy="212" r="2.5" fill="#c8c8c8"/>
+
+  <!-- RIGHT basal ganglia ICH (viewer's left) — the finding -->
+  <ellipse cx="146" cy="200" rx="34" ry="30" fill="#f0f0f0"/>
+  <ellipse cx="142" cy="196" rx="26" ry="22" fill="#ffffff"/>
+  <ellipse cx="152" cy="206" rx="16" ry="12" fill="#e8e8e8" opacity="0.7"/>
+  <!-- Perihaematoma oedema -->
+  <ellipse cx="146" cy="200" rx="44" ry="40" fill="#4a4a4a" opacity="0.45"/>
+
+  <!-- Falx / midline structures -->
+  <path d="M210,52 L210,120" stroke="#8a8a8a" stroke-width="2"/>
+  <path d="M210,300 L210,368" stroke="#8a8a8a" stroke-width="2"/>
+
+  <!-- R marker (radiographic convention: R on viewer's left) -->
+  <text x="120" y="96" font-size="24" font-weight="bold" fill="#d9d9d9">R</text>
+  <text x="284" y="96" font-size="20" fill="#8f8f8f">CT</text>
+  <text x="284" y="118" font-size="13" fill="#8f8f8f">5 mm</text>
+</svg>

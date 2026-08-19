@@ -1,0 +1,112 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 820 400" font-family="Arial, Helvetica, sans-serif">
+  <defs>
+    <pattern id="grid1" width="5" height="5" patternUnits="userSpaceOnUse">
+      <path d="M5 0H0V5" fill="none" stroke="#e8b0b0" stroke-width="0.5"/>
+    </pattern>
+    <pattern id="grid5" width="25" height="25" patternUnits="userSpaceOnUse">
+      <path d="M25 0H0V25" fill="none" stroke="#e07878" stroke-width="1"/>
+    </pattern>
+    <path id="ecg-n" fill="none" stroke="#202020" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" d="
+      M0,0 L8,0 Q10,-8 14,-8 Q18,-8 20,0 L30,0 L32,3 L35,-25 L38,6 L42,0
+      L52,0 Q55,-13 65,-13 Q75,-13 78,0 L95,0"/>
+    <path id="ecg-st" fill="none" stroke="#202020" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" d="
+      M0,0 L8,0 Q10,-8 14,-8 Q18,-8 20,0 L30,0 L32,3 L35,-25 L38,6 L42,2
+      L46,-18 L54,-22 L58,-30 L64,-38 L70,-32 L76,-16 L80,-2 L95,0"/>
+    <path id="ecg-rec" fill="none" stroke="#202020" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" d="
+      M0,0 L8,0 Q10,-8 14,-8 Q18,-8 20,0 L30,0 L32,3 L35,-25 L38,6 L42,0
+      L46,10 L54,10 L60,4 L68,-6 L74,0 L95,0"/>
+  </defs>
+
+  <rect width="820" height="400" fill="#fdf4f4"/>
+
+  <text x="20" y="24" font-size="13" font-weight="bold" fill="#303030">Patient: M.A. — 62 y/o male</text>
+  <text x="20" y="42" font-size="11" fill="#555">12-LEAD ECG — ED presentation, central chest pain 45 min</text>
+  <text x="700" y="42" font-size="10" fill="#555">25 mm/s, 10 mm/mV</text>
+
+  <g id="cell-I">
+    <rect x="10" y="60" width="195" height="100" fill="url(#grid1)" stroke="#c88"/>
+    <rect x="10" y="60" width="195" height="100" fill="url(#grid5)" stroke="none"/>
+    <use href="#ecg-n" transform="translate(10,110)"/>
+    <use href="#ecg-n" transform="translate(105,110)"/>
+    <text x="15" y="74" font-size="12" font-weight="bold" fill="#303030">I</text>
+  </g>
+  <g id="cell-II">
+    <rect x="210" y="60" width="195" height="100" fill="url(#grid1)" stroke="#c88"/>
+    <rect x="210" y="60" width="195" height="100" fill="url(#grid5)" stroke="none"/>
+    <use href="#ecg-rec" transform="translate(210,110)"/>
+    <use href="#ecg-rec" transform="translate(305,110)"/>
+    <text x="215" y="74" font-size="12" font-weight="bold" fill="#303030">II</text>
+  </g>
+  <g id="cell-III">
+    <rect x="410" y="60" width="195" height="100" fill="url(#grid1)" stroke="#c88"/>
+    <rect x="410" y="60" width="195" height="100" fill="url(#grid5)" stroke="none"/>
+    <use href="#ecg-rec" transform="translate(410,110)"/>
+    <use href="#ecg-rec" transform="translate(505,110)"/>
+    <text x="415" y="74" font-size="12" font-weight="bold" fill="#303030">III</text>
+  </g>
+  <g id="cell-aVR">
+    <rect x="610" y="60" width="195" height="100" fill="url(#grid1)" stroke="#c88"/>
+    <rect x="610" y="60" width="195" height="100" fill="url(#grid5)" stroke="none"/>
+    <use href="#ecg-n" transform="translate(610,110)"/>
+    <use href="#ecg-n" transform="translate(705,110)"/>
+    <text x="615" y="74" font-size="12" font-weight="bold" fill="#303030">aVR</text>
+  </g>
+
+  <g id="cell-aVL">
+    <rect x="10" y="165" width="195" height="100" fill="url(#grid1)" stroke="#c88"/>
+    <rect x="10" y="165" width="195" height="100" fill="url(#grid5)" stroke="none"/>
+    <use href="#ecg-n" transform="translate(10,215)"/>
+    <use href="#ecg-n" transform="translate(105,215)"/>
+    <text x="15" y="179" font-size="12" font-weight="bold" fill="#303030">aVL</text>
+  </g>
+  <g id="cell-aVF">
+    <rect x="210" y="165" width="195" height="100" fill="url(#grid1)" stroke="#c88"/>
+    <rect x="210" y="165" width="195" height="100" fill="url(#grid5)" stroke="none"/>
+    <use href="#ecg-rec" transform="translate(210,215)"/>
+    <use href="#ecg-rec" transform="translate(305,215)"/>
+    <text x="215" y="179" font-size="12" font-weight="bold" fill="#303030">aVF</text>
+  </g>
+  <g id="cell-V1">
+    <rect x="410" y="165" width="195" height="100" fill="url(#grid1)" stroke="#c88"/>
+    <rect x="410" y="165" width="195" height="100" fill="url(#grid5)" stroke="none"/>
+    <use href="#ecg-st" transform="translate(410,215)"/>
+    <use href="#ecg-st" transform="translate(505,215)"/>
+    <text x="415" y="179" font-size="12" font-weight="bold" fill="#303030">V1</text>
+  </g>
+  <g id="cell-V2">
+    <rect x="610" y="165" width="195" height="100" fill="url(#grid1)" stroke="#c88"/>
+    <rect x="610" y="165" width="195" height="100" fill="url(#grid5)" stroke="none"/>
+    <use href="#ecg-st" transform="translate(610,215)"/>
+    <use href="#ecg-st" transform="translate(705,215)"/>
+    <text x="615" y="179" font-size="12" font-weight="bold" fill="#303030">V2</text>
+  </g>
+
+  <g id="cell-V3">
+    <rect x="10" y="270" width="195" height="100" fill="url(#grid1)" stroke="#c88"/>
+    <rect x="10" y="270" width="195" height="100" fill="url(#grid5)" stroke="none"/>
+    <use href="#ecg-st" transform="translate(10,320)"/>
+    <use href="#ecg-st" transform="translate(105,320)"/>
+    <text x="15" y="284" font-size="12" font-weight="bold" fill="#303030">V3</text>
+  </g>
+  <g id="cell-V4">
+    <rect x="210" y="270" width="195" height="100" fill="url(#grid1)" stroke="#c88"/>
+    <rect x="210" y="270" width="195" height="100" fill="url(#grid5)" stroke="none"/>
+    <use href="#ecg-st" transform="translate(210,320)"/>
+    <use href="#ecg-st" transform="translate(305,320)"/>
+    <text x="215" y="284" font-size="12" font-weight="bold" fill="#303030">V4</text>
+  </g>
+  <g id="cell-V5">
+    <rect x="410" y="270" width="195" height="100" fill="url(#grid1)" stroke="#c88"/>
+    <rect x="410" y="270" width="195" height="100" fill="url(#grid5)" stroke="none"/>
+    <use href="#ecg-n" transform="translate(410,320)"/>
+    <use href="#ecg-n" transform="translate(505,320)"/>
+    <text x="415" y="284" font-size="12" font-weight="bold" fill="#303030">V5</text>
+  </g>
+  <g id="cell-V6">
+    <rect x="610" y="270" width="195" height="100" fill="url(#grid1)" stroke="#c88"/>
+    <rect x="610" y="270" width="195" height="100" fill="url(#grid5)" stroke="none"/>
+    <use href="#ecg-n" transform="translate(610,320)"/>
+    <use href="#ecg-n" transform="translate(705,320)"/>
+    <text x="615" y="284" font-size="12" font-weight="bold" fill="#303030">V6</text>
+  </g>
+</svg>

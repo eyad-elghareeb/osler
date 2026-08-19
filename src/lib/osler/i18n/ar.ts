@@ -655,6 +655,14 @@ export const ar = {
     "osce.session.submitFeedback": "إرسال للتقييم",
     "osce.session.emptyState":
       "اكتب رسالة أدناه أو استخدم الميكروفون.",
+    "osce.session.sayHello": "قل مرحباً لـ {name} لتبدأ.",
+    "osce.dataPresented.images": "صور سريرية",
+    "osce.dataPresented.printedMaterials": "المواد المطبوعة",
+    "osce.dataPresented.labData": "البيانات المخبرية",
+    "osce.dataPresented.scenario": "السيناريو السريري",
+    "osce.dataPresented.enlarge": "اضغط على الصورة لتكبيرها",
+    "osce.dataPresented.examinerOpening":
+      "يقدّم الممتحن الحالة. راجع المواد المطبوعة وأجب عند السؤال.",
 
     "library.title": "مكتبة المقالات",
     "library.subtitle": "مقالات طبية عبر جميع التخصصات.",

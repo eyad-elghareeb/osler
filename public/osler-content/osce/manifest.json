@@ -138,6 +138,81 @@
       "stationTimeMax": 12
     },
     {
+      "uid": "osce-data-interpretation",
+      "title": "Data Interpretation",
+      "type": "osce",
+      "path": "data-interpretation/",
+      "files": [
+        "stations.json"
+      ],
+      "images": [
+        "ct-head.svg",
+        "cxr-pna.svg",
+        "labs-ckd.svg",
+        "stem-ecg.svg"
+      ],
+      "items": [],
+      "packCount": 1,
+      "questionCount": 4,
+      "itemCount": 4,
+      "description": "4 stations · Cardiology, Nephrology, Neurology, Respiratory Medicine",
+      "tags": [
+        "Cardiology",
+        "Nephrology",
+        "Neurology",
+        "Respiratory Medicine",
+        "data-interp"
+      ],
+      "stationSummary": [
+        {
+          "id": "osce-data-001",
+          "title": "Anterior STEMI — ECG Interpretation",
+          "specialty": "Cardiology",
+          "difficulty": "Medium",
+          "type": "data-interp",
+          "time": 10
+        },
+        {
+          "id": "osce-data-002",
+          "title": "Right Lower Lobe Pneumonia — CXR",
+          "specialty": "Respiratory Medicine",
+          "difficulty": "Medium",
+          "type": "data-interp",
+          "time": 10
+        },
+        {
+          "id": "osce-data-003",
+          "title": "Intracerebral Haemorrhage — CT Head",
+          "specialty": "Neurology",
+          "difficulty": "Hard",
+          "type": "data-interp",
+          "time": 10
+        },
+        {
+          "id": "osce-data-004",
+          "title": "CKD with Hyperkalaemia — Laboratory Report",
+          "specialty": "Nephrology",
+          "difficulty": "Medium",
+          "type": "data-interp",
+          "time": 10
+        }
+      ],
+      "stationSpecialties": [
+        "Cardiology",
+        "Nephrology",
+        "Neurology",
+        "Respiratory Medicine"
+      ],
+      "stationDifficulties": [
+        "Hard",
+        "Medium"
+      ],
+      "stationTypes": [
+        "data-interp"
+      ],
+      "stationTimeMax": 10
+    },
+    {
       "uid": "osce-emergency-medicine",
       "title": "Emergency Medicine",
       "type": "osce",

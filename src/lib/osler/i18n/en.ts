@@ -654,6 +654,14 @@ export const en = {
     "osce.session.submitFeedback": "Submit for Feedback",
     "osce.session.emptyState":
       "Type a message below or use the microphone.",
+    "osce.session.sayHello": "Say hello to {name} to begin.",
+    "osce.dataPresented.images": "Clinical Images",
+    "osce.dataPresented.printedMaterials": "Printed Materials",
+    "osce.dataPresented.labData": "Lab Data",
+    "osce.dataPresented.scenario": "Clinical Scenario",
+    "osce.dataPresented.enlarge": "Tap an image to enlarge",
+    "osce.dataPresented.examinerOpening":
+      "The examiner is presenting the case. Review the printed materials and answer when asked.",
 
     "library.title": "Article Library",
     "library.subtitle": "Medical articles across all specialties.",

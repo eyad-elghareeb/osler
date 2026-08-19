@@ -32,6 +32,7 @@ import {
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { loadCategoryTree, loadContentByUid, flattenTree, packBasePath } from "@/lib/osler/content";
+import { resolveContentAsset } from "@/lib/osler/richtext";
 import { NavigationStack } from "./navigation-stack";
 import type {
   AnyContent,
@@ -43,6 +44,7 @@ import type {
   OsceRubric,
   OsceDataTable,
   OsceDataImage,
+  OsceDataPresented,
   OsceExaminer,
 } from "@/lib/osler/types";
 import { cn } from "@/lib/utils";
@@ -297,14 +299,15 @@ function buildDataInterpSysPrompt(c: OsceStation): string {
   const e = c.examiner || { name: "Examiner", title: "Consultant" };
   const dp = c.dataPresented || {};
   const lines: string[] = [
-    "You are " + e.name + ", " + e.title + ", an expert medical examiner conducting an oral OSCE-style examination.",
+    "You are " + e.name + ", " + e.title + ", an expert medical examiner conducting an oral OSCE-style data-interpretation examination.",
     "",
-    "1. Start by presenting yourself and the clinical case. Then present the data.",
-    "2. Ask the student questions one at a time. Wait for their answer.",
+    "1. Present yourself and the clinical case. The student has already reviewed the printed materials.",
+    "2. Ask the student questions one at a time, referring to the printed materials (e.g. \"Take a look at the ECG — what do you see?\"). Wait for their answer.",
     "3. Be warm, professional, and encouraging. Give positive reinforcement.",
     "4. If the student struggles, offer gentle hints. Never give the answer away immediately.",
     "5. NEVER break character, never mention being an AI.",
     "6. Do NOT summarise performance at the end. Evaluation happens after.",
+    "7. Never read out the findings in the images directly — quiz the student on them.",
     "",
     "CASE: " + c.title + " (" + c.specialty + ", " + c.difficulty + ")",
   ];
@@ -315,6 +318,14 @@ function buildDataInterpSysPrompt(c: OsceStation): string {
       if (t.title) lines.push("--- " + t.title + " ---");
       if (t.headers) lines.push("  | " + t.headers.join(" | ") + " |");
       (t.rows || []).forEach((r) => lines.push("  | " + r.join(" | ") + " |"));
+    });
+  }
+  const images = dp.images || [];
+  if (images.length) {
+    lines.push("PRINTED MATERIALS (the student has these images):");
+    images.forEach((im, i) => {
+      lines.push((i + 1) + ". " + (im.title || "Image " + (i + 1)));
+      if (im.caption) lines.push("   " + im.caption);
     });
   }
   const questions = c.questions || [];
@@ -347,6 +358,14 @@ function buildDataInterpScoreUserPrompt(c: OsceStation, transcript: TranscriptEn
   const lines = ["CASE: " + c.title, "SPECIALTY: " + c.specialty, ""];
   const dp = c.dataPresented || {};
   if (dp.scenario) lines.push("SCENARIO: " + dp.scenario);
+  const images = dp.images || [];
+  if (images.length) {
+    lines.push("PRINTED MATERIALS:");
+    images.forEach((im) => {
+      if (im.title) lines.push("- " + im.title);
+      if (im.caption) lines.push("  " + im.caption);
+    });
+  }
   if (c.questions && c.questions.length) {
     lines.push("QUESTIONS:");
     c.questions.forEach((q, i) =>
@@ -446,9 +465,65 @@ function getLiveModel(): string {
   return localStorage.getItem(LIVE_MODEL_KEY) || LIVE_MODELS[0][0];
 }
 
+type GeminiInlineData = { mimeType: string; data: string };
+
+type GeminiPart =
+  | { text: string }
+  | { inlineData: GeminiInlineData };
+
+type GeminiContent = { role: string; parts: GeminiPart[] };
+
+/** Resolve a printed-materials image to a displayable URL. */
+function dataImageUrl(im: OsceDataImage, packPath: string): string {
+  if (im.data) return im.data.startsWith("data:") ? im.data : `data:image/png;base64,${im.data}`;
+  if (im.url) return im.url;
+  if (im.src) return resolveContentAsset(im.src, "osce", packPath);
+  return "";
+}
+
+/** Base64-encode an image URL (or pass through a data: URI) for Gemini vision. */
+async function fetchInlineData(url: string): Promise<GeminiInlineData | null> {
+  if (url.startsWith("data:")) {
+    const m = /^data:([^;]+);base64,(.+)$/.exec(url);
+    if (!m) return null;
+    return { mimeType: m[1], data: m[2] };
+  }
+  try {
+    const res = await fetch(url);
+    if (!res.ok) return null;
+    const blob = await res.blob();
+    const dataUrl = await new Promise<string>((resolve, reject) => {
+      const r = new FileReader();
+      r.onload = () => resolve(String(r.result));
+      r.onerror = () => reject(new Error("read failed"));
+      r.readAsDataURL(blob);
+    });
+    const m = /^data:([^;]+);base64,(.+)$/.exec(dataUrl);
+    if (!m) return null;
+    return { mimeType: m[1], data: m[2] };
+  } catch {
+    return null;
+  }
+}
+
+/** Build Gemini image parts for a data-interp station's printed materials. */
+async function printedImageParts(
+  images: OsceDataImage[] | undefined,
+  packPath: string
+): Promise<GeminiPart[]> {
+  const parts: GeminiPart[] = [];
+  for (const im of images ?? []) {
+    const url = dataImageUrl(im, packPath);
+    if (!url) continue;
+    const inline = await fetchInlineData(url);
+    if (inline) parts.push({ inlineData: inline });
+  }
+  return parts;
+}
+
 async function callGemini(
   systemPrompt: string,
-  contents: Array<{ role: string; parts: Array<{ text: string }> }>,
+  contents: GeminiContent[],
   signal?: AbortSignal
 ): Promise<string> {
   const key = getApiKey();
@@ -483,11 +558,31 @@ async function askPatient(c: OsceStation, transcript: TranscriptEntry[], signal?
   return callGemini(buildPatientSysPrompt(c), contents, signal);
 }
 
-async function askExaminer(c: OsceStation, transcript: TranscriptEntry[], signal?: AbortSignal): Promise<string> {
-  const contents = transcript.map((m) => ({
-    role: m.role === "model" ? "model" : "user",
-    parts: [{ text: m.text }],
-  }));
+async function askExaminer(
+  c: OsceStation,
+  transcript: TranscriptEntry[],
+  signal?: AbortSignal,
+  packPath = ""
+): Promise<string> {
+  // The professor sees the printed materials the student was handed as a
+  // leading context turn (vision via inlineData). It never appears in the
+  // visible transcript — the model is told not to describe the images.
+  const imageParts = await printedImageParts(c.dataPresented?.images, packPath);
+  const context: GeminiPart[] = [
+    ...imageParts,
+    {
+      text:
+        "These are the printed materials the student has been handed. " +
+        "You are the examiner. Present yourself and the case, then ask your " +
+        "questions one at a time. Never describe the images themselves.",
+    },
+  ];
+  const contents: GeminiContent[] = [{ role: "user", parts: context }].concat(
+    transcript.map((m) => ({
+      role: m.role === "model" ? "model" : "user",
+      parts: [{ text: m.text }],
+    }))
+  );
   return callGemini(buildDataInterpSysPrompt(c), contents, signal);
 }
 
@@ -500,8 +595,16 @@ async function scoreInterview(c: OsceStation, transcript: TranscriptEntry[], sig
   return parsed;
 }
 
-async function scoreDataInterpExam(c: OsceStation, transcript: TranscriptEntry[], signal?: AbortSignal): Promise<ExamResult> {
-  const contents = [{ role: "user", parts: [{ text: buildDataInterpScoreUserPrompt(c, transcript) }] }];
+async function scoreDataInterpExam(
+  c: OsceStation,
+  transcript: TranscriptEntry[],
+  signal?: AbortSignal,
+  packPath = ""
+): Promise<ExamResult> {
+  const imageParts = await printedImageParts(c.dataPresented?.images, packPath);
+  const contents: GeminiContent[] = [
+    { role: "user", parts: [{ text: buildDataInterpScoreUserPrompt(c, transcript) }, ...imageParts] },
+  ];
   const raw = await callGemini(buildDataInterpScoreSysPrompt(), contents, signal);
   const cleaned = String(raw).replace(/^```(?:json)?/i, "").replace(/```$/g, "").trim();
   const parsed = scoreDataInterp(cleaned);
@@ -728,6 +831,7 @@ export function OsceStudio({
   const [interimText, setInterimText] = React.useState("");
   const [resetModalOpen, setResetModalOpen] = React.useState(false);
   const [renderedCount, setRenderedCount] = React.useState(0);
+  const [materialsOpen, setMaterialsOpen] = React.useState(false);
   const [selectedPackUid, setSelectedPackUid] = React.useState<string | null>(null);
   // True while a pack's stations.json is being fetched on demand after the
   // user clicks a card. With manifest-first loading, the lobby paints
@@ -888,6 +992,41 @@ export function OsceStudio({
   }, [activeContent]);
 
   const activeCase = stations[activeIdx] || null;
+
+  /* Folder path of the active pack (relative, trailing slash) — used to
+     resolve `dataPresented.images[].src` against the pack's images/ folder. */
+  const activePackPath = activeItem?.path ?? "";
+
+  /* Professor-first auto-open: a data-interp examiner opens the examination
+     themselves (greeting + first question) when the student enters with no
+     prior messages — the professor asks you, not the other way round. */
+  const autoOpenRef = React.useRef(false);
+  React.useEffect(() => {
+    if (phase !== "conversation" || !activeCase) return;
+    if (activeCase.type !== "data-interp" || transcript.length > 0) return;
+    if (autoOpenRef.current) return;
+    autoOpenRef.current = true;
+    (async () => {
+      setThinking(true);
+      setError(null);
+      abortRef.current = new AbortController();
+      try {
+        const reply = await askExaminer(activeCase, [], abortRef.current.signal, activePackPath);
+        setThinking(false);
+        const updated = [{ role: "model" as const, text: sanitizeModelText(reply) }];
+        setTranscript(updated);
+        setRenderedCount(1);
+        saveSession();
+        if (voiceOn) speakText(updated[0].text);
+      } catch (err: unknown) {
+        setThinking(false);
+        if (err instanceof Error && err.name === "AbortError") return;
+        setError(err instanceof Error ? err.message : "Failed to get response");
+      } finally {
+        setSending(false);
+      }
+    })();
+  }, [phase, activeCase, transcript, activePackPath, voiceOn]);
 
   /* ── Gemini Live Voice System ────────────────────────── */
 
@@ -1878,6 +2017,11 @@ export function OsceStudio({
                 <DataTablesRenderer tables={activeCase.dataPresented.tables} />
               </div>
             )}
+            {isDataInterp && activeCase.dataPresented?.images && activeCase.dataPresented.images.length > 0 && (
+              <div className="mb-4">
+                <DataImagesRenderer images={activeCase.dataPresented.images} packPath={activePackPath} />
+              </div>
+            )}
 
             {/* Stats row */}
             <div className="grid grid-cols-3 gap-3 mb-6">
@@ -1978,10 +2122,12 @@ export function OsceStudio({
       setTranscript(newTranscript);
       setRenderedCount((prev) => prev + 1);
       setThinking(true);
-      const aiFn = activeCase.type === "data-interp" ? askExaminer : askPatient;
       abortRef.current = new AbortController();
       try {
-        const reply = await aiFn(activeCase, newTranscript, abortRef.current.signal);
+        const reply =
+          activeCase.type === "data-interp"
+            ? await askExaminer(activeCase, newTranscript, abortRef.current.signal, activePackPath)
+            : await askPatient(activeCase, newTranscript, abortRef.current.signal);
         setThinking(false);
         const cleanReply = sanitizeModelText(reply);
         const updated = [...newTranscript, { role: "model" as const, text: cleanReply }];
@@ -2011,9 +2157,11 @@ export function OsceStudio({
       setThinking(true);
       setError(null);
       abortRef.current = new AbortController();
-      const scoreFn = activeCase.type === "data-interp" ? scoreDataInterpExam : scoreInterview;
       try {
-        const r = await scoreFn(activeCase, transcript, abortRef.current.signal);
+        const r =
+          activeCase.type === "data-interp"
+            ? await scoreDataInterpExam(activeCase, transcript, abortRef.current.signal, activePackPath)
+            : await scoreInterview(activeCase, transcript, abortRef.current.signal);
         clearSession();
         setResult(r);
         setPhase("debrief");
@@ -2030,6 +2178,7 @@ export function OsceStudio({
       if (voiceOn) stopSpeaking();
       setTranscript([]);
       setRenderedCount(0);
+      autoOpenRef.current = false;
       resetTimer(activeCase?.time || EXAM_TIME);
       setResult(null);
       setError(null);
@@ -2204,6 +2353,11 @@ export function OsceStudio({
                 </div>
               )}
 
+              {/* Printed materials (data-interp) */}
+              {isDataInterp && (
+                <PrintedMaterialsPanel data={activeCase.dataPresented} packPath={activePackPath} />
+              )}
+
               {/* Submit */}
               <button
                 onClick={handleSubmit}
@@ -2217,6 +2371,41 @@ export function OsceStudio({
 
           {/* Chat Zone */}
           <div className="flex-1 min-w-0 flex flex-col">
+            {/* Printed materials strip (mobile) */}
+            {isDataInterp && isMobile && (
+              <div className="shrink-0 border-b border-border bg-card/60 backdrop-blur-md px-3 py-2">
+                <button
+                  onClick={() => setMaterialsOpen(!materialsOpen)}
+                  className="w-full flex items-center justify-between text-xs font-semibold"
+                >
+                  <span className="flex items-center gap-1.5">
+                    <BarChart3 className="size-3.5 text-primary" />
+                    {t("osce.dataPresented.printedMaterials")}
+                    {(() => {
+                      const n = (activeCase.dataPresented?.images || []).length;
+                      return n > 0 ? <span className="text-[10px] font-medium text-muted-foreground">({n})</span> : null;
+                    })()}
+                  </span>
+                  <ChevronRight className={cn("size-3.5 transition-transform", materialsOpen && "rotate-90")} />
+                </button>
+                <AnimatePresence>
+                  {materialsOpen && (
+                    <motion.div
+                      initial={{ height: 0, opacity: 0 }}
+                      animate={{ height: "auto", opacity: 1 }}
+                      exit={{ height: 0, opacity: 0 }}
+                      transition={{ duration: 0.25 }}
+                      className="overflow-hidden"
+                    >
+                      <div className="pt-2 pb-1">
+                        <PrintedMaterialsPanel data={activeCase.dataPresented} packPath={activePackPath} />
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
+            )}
+
             {/* Transcript */}
             <div ref={scrollRef} className="flex-1 overflow-y-auto px-3 md:px-4 py-4 space-y-4 osler-scroll flex flex-col">
               {transcript.length === 0 && (
@@ -2224,8 +2413,8 @@ export function OsceStudio({
                   <Stethoscope className="size-8 opacity-30" />
                   <p className="text-sm font-medium">
                     {isDataInterp
-                      ? "The examiner will present the case when you speak."
-                      : `Say hello to ${p.name} to begin.`}
+                      ? t("osce.dataPresented.examinerOpening")
+                      : t("osce.session.sayHello", { name: p.name })}
                   </p>
                   <p className="text-xs opacity-70">{t("osce.session.emptyState")}</p>
                 </div>
@@ -2761,6 +2950,7 @@ export function OsceStudio({
 
 function DataTablesRenderer({ tables }: { tables?: OsceDataTable[] }) {
   const [open, setOpen] = React.useState(false);
+  const { t } = useI18n();
   if (!tables || !tables.length) return null;
   return (
     <div>
@@ -2768,7 +2958,7 @@ function DataTablesRenderer({ tables }: { tables?: OsceDataTable[] }) {
         onClick={() => setOpen(!open)}
         className="w-full px-3 py-2 rounded-lg border border-border bg-card text-xs font-medium flex items-center justify-between hover:border-primary/40 transition-colors"
       >
-        Lab Data <ChevronRight className={cn("size-3.5 transition-transform", open && "rotate-90")} />
+        {t("osce.dataPresented.labData")} <ChevronRight className={cn("size-3.5 transition-transform", open && "rotate-90")} />
       </button>
       {open && (
         <div className="mt-2 space-y-2">
@@ -2811,8 +3001,15 @@ function DataTablesRenderer({ tables }: { tables?: OsceDataTable[] }) {
 
 /* ── Data Images Renderer ─────────────────────────────────────────── */
 
-function DataImagesRenderer({ images }: { images?: OsceDataImage[] }) {
+function DataImagesRenderer({
+  images,
+  packPath = "",
+}: {
+  images?: OsceDataImage[];
+  packPath?: string;
+}) {
   const [open, setOpen] = React.useState(false);
+  const { t } = useI18n();
   const { openLightbox } = useLightbox();
   if (!images || !images.length) return null;
   return (
@@ -2821,13 +3018,13 @@ function DataImagesRenderer({ images }: { images?: OsceDataImage[] }) {
         onClick={() => setOpen(!open)}
         className="w-full px-3 py-2 rounded-lg border border-border bg-card text-xs font-medium flex items-center justify-between hover:border-primary/40 transition-colors"
       >
-        Clinical Images ({images.length})
+        {t("osce.dataPresented.images")} ({images.length})
         <ChevronRight className={cn("size-3.5 transition-transform", open && "rotate-90")} />
       </button>
       {open && (
         <div className="mt-2 space-y-2">
           {images.map((im, i) => {
-            const src = im.src || im.url || "";
+            const src = dataImageUrl(im, packPath);
             if (!src) return null;
             return (
               <div key={i} className="bg-muted/20 border border-border rounded-lg overflow-hidden">
@@ -2848,6 +3045,70 @@ function DataImagesRenderer({ images }: { images?: OsceDataImage[] }) {
           })}
         </div>
       )}
+    </div>
+  );
+}
+
+/* ── Printed Materials Panel ──────────────────────────────────────── */
+
+function PrintedMaterialsPanel({
+  data,
+  packPath = "",
+}: {
+  data?: OsceDataPresented | null;
+  packPath?: string;
+}) {
+  const { t } = useI18n();
+  const { openLightbox } = useLightbox();
+  if (!data) return null;
+  const images = data.images || [];
+  if (!data.scenario && !images.length && !(data.tables || []).length) return null;
+  return (
+    <div className="space-y-2">
+      {data.scenario && (
+        <div className="rounded-lg border border-border bg-muted/20 p-3">
+          <div className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground mb-1">
+            {t("osce.dataPresented.scenario")}
+          </div>
+          <p className="text-xs leading-relaxed">{data.scenario}</p>
+        </div>
+      )}
+      {images.length > 0 && (
+        <div className="rounded-lg border border-border bg-card p-3">
+          <div className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground mb-2">
+            {t("osce.dataPresented.printedMaterials")}
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            {images.map((im, i) => {
+              const src = dataImageUrl(im, packPath);
+              if (!src) return null;
+              return (
+                <button
+                  key={i}
+                  onClick={() => openLightbox(src, im.alt || im.caption || "")}
+                  className="rounded-lg border border-border overflow-hidden bg-background text-left group"
+                >
+                  <img
+                    src={src}
+                    alt={im.alt || im.caption || ""}
+                    className="w-full aspect-[4/3] object-contain bg-muted/20"
+                    loading="lazy"
+                  />
+                  {im.title && (
+                    <div className="text-[9px] font-semibold text-muted-foreground px-2 py-1 truncate group-hover:text-primary transition-colors">
+                      {im.title}
+                    </div>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+          {images.length > 1 && (
+            <p className="text-[9px] text-muted-foreground mt-1.5">{t("osce.dataPresented.enlarge")}</p>
+          )}
+        </div>
+      )}
+      {data.tables && data.tables.length > 0 && <DataTablesRenderer tables={data.tables} />}
     </div>
   );
 }

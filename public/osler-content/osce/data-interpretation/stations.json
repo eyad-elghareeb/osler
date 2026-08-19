@@ -1,0 +1,166 @@
+{
+  "stations": [
+    {
+      "id": "osce-data-001",
+      "title": "Anterior STEMI — ECG Interpretation",
+      "type": "data-interp",
+      "specialty": "Cardiology",
+      "difficulty": "Medium",
+      "task": "Interpret the 12-lead ECG and discuss the management of a patient with acute chest pain",
+      "time": 10,
+      "examiner": { "name": "Dr. Haddad", "title": "Cardiology Consultant" },
+      "dataPresented": {
+        "scenario": "A 62-year-old man presents to the ED with crushing central chest pain radiating to the left arm for 45 minutes, associated with diaphoresis and nausea. He is haemodynamically stable. Here is the 12-lead ECG obtained on arrival.",
+        "images": [
+          { "title": "12-lead ECG", "src": "stem-ecg.svg", "alt": "12-lead ECG showing ST elevation in V1-V4 with reciprocal ST depression in II, III and aVF", "caption": "12-lead ECG — anterior leads V1-V4 show marked ST elevation with reciprocal changes in the inferior leads." }
+        ]
+      },
+      "patient": {
+        "name": "M.A.",
+        "age": 62,
+        "gender": "male",
+        "avatarSeed": "ma-ecg",
+        "opening": ""
+      },
+      "hiddenProfile": {
+        "diagnosis": "Acute anterior ST-elevation myocardial infarction",
+        "keySymptoms": ["Crushing central chest pain radiating to left arm", "Diaphoresis and nausea", "ST elevation in V1-V4 on ECG"],
+        "redFlags": ["Extensive anterior territory involvement", "Reciprocal ST depression in inferior leads", "Onset within 45 minutes — within reperfusion window"],
+        "pastHistory": ["Smoker", "Type 2 diabetes", "Hypertension"],
+        "vitalSigns": "BP 118/74, HR 88, RR 18, O2 sat 97%, Temp 36.8°C"
+      },
+      "rubric": { "mustAsk": ["Localize the ST elevation to the anterior leads (V1-V4)", "Identify reciprocal changes", "Name the likely culprit vessel (LAD)"], "bonus": ["State the reperfusion goal (PCI within 90 minutes / fibrinolysis within 30)", "Mention dual antiplatelet + anticoagulation"] },
+      "questions": [
+        { "question": "Describe the ECG findings. What is your diagnosis?", "answer": "ST elevation in V1-V4 with reciprocal ST depression in II, III and aVF — acute anterior ST-elevation MI.", "rubric": "Correctly interprets ST elevation location and reciprocal changes" },
+        { "question": "Which coronary artery is most likely the culprit?", "answer": "The left anterior descending artery (LAD).", "rubric": "Names LAD as culprit vessel" },
+        { "question": "How would you manage this patient in the first 10 minutes?", "answer": "Activate the cath lab (primary PCI within 90 minutes), loading dose of dual antiplatelet therapy, anticoagulation (heparin), morphine for pain if needed, monitor for arrhythmias.", "rubric": "Covers reperfusion pathway, antiplatelets and anticoagulation" }
+      ]
+    },
+    {
+      "id": "osce-data-002",
+      "title": "Right Lower Lobe Pneumonia — CXR",
+      "type": "data-interp",
+      "specialty": "Respiratory Medicine",
+      "difficulty": "Medium",
+      "task": "Interpret the chest X-ray and manage a patient with community-acquired pneumonia",
+      "time": 10,
+      "examiner": { "name": "Dr. Osei", "title": "Respiratory Consultant" },
+      "dataPresented": {
+        "scenario": "A 58-year-old woman presents with a cough productive of purulent sputum for 4 days, fever of 38.4°C and right-sided pleuritic chest pain. She is not short of breath at rest. Here is her chest X-ray.",
+        "images": [
+          { "title": "Chest X-ray (PA)", "src": "cxr-pna.svg", "alt": "PA chest X-ray showing dense right lower zone opacity with air bronchograms, silhouetting the right hemidiaphragm", "caption": "PA CXR — dense consolidation in the right lower zone with air bronchograms and an obscured right hemidiaphragm (silhouette sign)." }
+        ]
+      },
+      "patient": {
+        "name": "S.B.",
+        "age": 58,
+        "gender": "female",
+        "avatarSeed": "sb-cxr",
+        "opening": ""
+      },
+      "hiddenProfile": {
+        "diagnosis": "Right lower lobe pneumonia (community-acquired)",
+        "keySymptoms": ["Purulent sputum, fever, pleuritic chest pain", "Right lower zone consolidation on CXR", "Air bronchograms + silhouette sign"],
+        "redFlags": ["Respiratory rate rising", "Confusion", "Low oxygen saturations"],
+        "pastHistory": ["Asthma (well controlled)", "No smoking", "No recent hospital admission"],
+        "vitalSigns": "BP 126/78, HR 98, RR 22, O2 sat 94% on air, Temp 38.4°C"
+      },
+      "rubric": { "mustAsk": ["Localize the opacity to the right lower lobe", "Recognize consolidation (vs effusion or mass)", "Assess severity (CURB-65)"], "bonus": ["Mention empiric antibiotic choice", "Comment on vaccination / sputum culture"] },
+      "questions": [
+        { "question": "Describe the CXR findings. What is the diagnosis?", "answer": "Dense opacity in the right lower zone with air bronchograms and an obscured right hemidiaphragm — right lower lobe consolidation, consistent with lobar pneumonia.", "rubric": "Recognizes consolidation, air bronchograms and silhouette sign" },
+        { "question": "What is the most likely causative organism?", "answer": "Streptococcus pneumoniae — typical community-acquired pneumonia in this setting.", "rubric": "Names S. pneumoniae as most likely organism" },
+        { "question": "How would you manage this patient?", "answer": "Assess severity with CURB-65, start empiric oral antibiotics (amoxicillin, or doxycycline in penicillin allergy), analgesia, and review with safety-netting for deterioration.", "rubric": "Covers severity assessment and appropriate empiric antibiotics" }
+      ]
+    },
+    {
+      "id": "osce-data-003",
+      "title": "Intracerebral Haemorrhage — CT Head",
+      "type": "data-interp",
+      "specialty": "Neurology",
+      "difficulty": "Hard",
+      "task": "Interpret the CT head and manage an anticoagulated patient with a suspected stroke",
+      "time": 10,
+      "examiner": { "name": "Dr. Vasquez", "title": "Stroke Consultant" },
+      "dataPresented": {
+        "scenario": "A 70-year-old man on warfarin for atrial fibrillation presents with a sudden severe headache and left-sided weakness that started 2 hours ago. GCS 13. Here is his non-contrast CT head.",
+        "images": [
+          { "title": "CT Head (axial, non-contrast)", "src": "ct-head.svg", "alt": "Axial CT head showing a hyperdense haematoma in the right basal ganglia with surrounding oedema", "caption": "Non-contrast CT head — a large hyperdense haematoma in the right basal ganglia with perihaematomal oedema, in keeping with primary intracerebral haemorrhage." }
+        ]
+      },
+      "patient": {
+        "name": "H.K.",
+        "age": 70,
+        "gender": "male",
+        "avatarSeed": "hk-ct",
+        "opening": ""
+      },
+      "hiddenProfile": {
+        "diagnosis": "Right basal ganglia intracerebral haemorrhage (anticoagulation-associated)",
+        "keySymptoms": ["Sudden severe headache", "Left-sided weakness", "GCS 13", "On warfarin for AF"],
+        "redFlags": ["Warfarin anticoagulation", "Hypertension", "Deteriorating consciousness"],
+        "pastHistory": ["Atrial fibrillation on warfarin", "Hypertension", "Ischaemic heart disease"],
+        "vitalSigns": "BP 186/102, HR 92, RR 16, O2 sat 96%, Temp 36.9°C"
+      },
+      "rubric": { "mustAsk": ["Recognize the hyperdense haematoma in the right basal ganglia", "Identify the urgency of anticoagulation reversal", "Mention blood pressure management"], "bonus": ["Discuss indications for neurosurgical evacuation", "Discuss INR targets and repeat imaging"] },
+      "questions": [
+        { "question": "Describe the CT findings. What is the diagnosis?", "answer": "A large hyperdense haematoma in the right basal ganglia with surrounding oedema — spontaneous intracerebral haemorrhage.", "rubric": "Recognizes hyperdense haematoma and site" },
+        { "question": "What is the single most urgent intervention?", "answer": "Reverse the warfarin immediately — intravenous vitamin K and prothrombin complex concentrate (PCC).", "rubric": "Names anticoagulation reversal as the priority" },
+        { "question": "What are the key ongoing management priorities?", "answer": "Blood pressure control, repeat imaging for haematoma expansion, neurosurgery assessment, and monitoring for neurological deterioration.", "rubric": "Covers BP control, repeat imaging and neurosurgery assessment" }
+      ]
+    },
+    {
+      "id": "osce-data-004",
+      "title": "CKD with Hyperkalaemia — Laboratory Report",
+      "type": "data-interp",
+      "specialty": "Nephrology",
+      "difficulty": "Medium",
+      "task": "Interpret the renal function panel and manage a patient with chronic kidney disease and hyperkalaemia",
+      "time": 10,
+      "examiner": { "name": "Dr. Awan", "title": "Nephrology Consultant" },
+      "dataPresented": {
+        "scenario": "A 66-year-old man with type 2 diabetes and hypertension for 15 years presents with progressive fatigue, ankle swelling and reduced urine output. Here is his renal function panel.",
+        "images": [
+          { "title": "Renal Function Panel", "src": "labs-ckd.svg", "alt": "Lab report showing creatinine 3.2, eGFR 24, potassium 6.1, bicarbonate 18 and elevated urea", "caption": "Renal function panel — creatinine 3.2 mg/dL, eGFR 24, potassium 6.1 mmol/L (H), bicarbonate 18 (L), urea 68 (H), phosphate 5.9 (H)." }
+        ],
+        "tables": [
+          {
+            "title": "Renal Function Panel",
+            "headers": ["Test", "Result", "Reference", "Flag"],
+            "rows": [
+              ["Sodium", "138", "135–145 mmol/L", ""],
+              ["Potassium", "6.1", "3.5–5.0 mmol/L", "H"],
+              ["Chloride", "108", "98–108 mmol/L", ""],
+              ["Bicarbonate", "18", "22–29 mmol/L", "L"],
+              ["Urea", "68", "15–40 mg/dL", "H"],
+              ["Creatinine", "3.2", "0.6–1.3 mg/dL", "H"],
+              ["eGFR (CKD-EPI)", "24", "> 60 mL/min/1.73m²", "L"],
+              ["Calcium (corrected)", "9.0", "8.5–10.5 mg/dL", ""],
+              ["Phosphate", "5.9", "2.5–4.5 mg/dL", "H"],
+              ["Glucose", "142", "70–110 mg/dL", "H"]
+            ]
+          }
+        ]
+      },
+      "patient": {
+        "name": "N.A.",
+        "age": 66,
+        "gender": "male",
+        "avatarSeed": "na-labs",
+        "opening": ""
+      },
+      "hiddenProfile": {
+        "diagnosis": "Stage 4 chronic kidney disease with hyperkalaemia and metabolic acidosis (chronic diabetic nephropathy)",
+        "keySymptoms": ["Fatigue, ankle oedema, reduced urine output", "eGFR 24 with creatinine 3.2", "Hyperkalaemia (K 6.1) and low bicarbonate"],
+        "redFlags": ["ECG changes from hyperkalaemia", "Rapidly worsening renal function", "Signs of fluid overload"],
+        "pastHistory": ["Type 2 diabetes 15 years", "Hypertension", "Diabetic retinopathy and neuropathy"],
+        "vitalSigns": "BP 168/92, HR 76, RR 18, O2 sat 97%, Temp 36.7°C"
+      },
+      "rubric": { "mustAsk": ["Recognize the CKD stage and severity", "Identify hyperkalaemia as the urgent finding", "Discuss ECG first, then treatment of hyperkalaemia"], "bonus": ["Consider dialysis referral", "Review nephrotoxic / potassium-raising medications"] },
+      "questions": [
+        { "question": "Interpret this renal function panel. What is the stage of kidney disease?", "answer": "Creatinine 3.2 with eGFR 24 — stage 4 CKD (G4) with hyperkalaemia, metabolic acidosis and hyperphosphataemia.", "rubric": "Interprets eGFR and stages CKD correctly" },
+        { "question": "What is the most urgent abnormality to address and why?", "answer": "Hyperkalaemia (K 6.1) — risk of life-threatening cardiac arrhythmia. An ECG should be performed immediately.", "rubric": "Identifies hyperkalaemia as the urgent finding and its cardiac risk" },
+        { "question": "How would you manage the hyperkalaemia?", "answer": "Calcium gluconate for cardiac protection, insulin-dextrose and/or nebulised salbutamol to shift potassium intracellularly, then enhance elimination and review the cause; assess for dialysis if refractory or oliguric.", "rubric": "Covers cardiac protection and potassium shift therapies" }
+      ]
+    }
+  ]
+}
