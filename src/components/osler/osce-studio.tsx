@@ -1157,19 +1157,27 @@ export function OsceStudio({
           );
         }
         if (sc.interrupted) {
-          if (livePlayCtxRef.current) {
-            try { livePlayCtxRef.current.close(); } catch {}
-            livePlayCtxRef.current = null;
+          // Only treat as a genuine interruption if we've accumulated
+          // meaningful text — brief stutter artifacts should be ignored
+          // so the model can finish its answer without being cut off.
+          const accumulated = liveModelAccumTextRef.current || "";
+          const MIN_INTERRUPT_LENGTH = 20;
+          if (accumulated.length >= MIN_INTERRUPT_LENGTH) {
+            if (livePlayCtxRef.current) {
+              try { livePlayCtxRef.current.close(); } catch {}
+              livePlayCtxRef.current = null;
+            }
+            livePlayScheduleTimeRef.current = 0;
+            // The student cut the professor off mid-sentence — commit whatever
+            // the professor had said so far so the interruption is preserved in
+            // the transcript for both sides.
+            if (accumulated) {
+              finalizeModelText(accumulated);
+            }
+            liveModelAccumTextRef.current = "";
+            setVoicePhase("listening");
           }
-          livePlayScheduleTimeRef.current = 0;
-          // The student cut the professor off mid-sentence — commit whatever
-          // the professor had said so far so the interruption is preserved in
-          // the transcript for both sides.
-          if (liveModelAccumTextRef.current) {
-            finalizeModelText(liveModelAccumTextRef.current);
-          }
-          liveModelAccumTextRef.current = "";
-          setVoicePhase("listening");
+          // else: stutter artifact — keep speaking, do nothing
         }
         if (sc.turnComplete) {
           if (liveModelAccumTextRef.current) {
@@ -1367,12 +1375,20 @@ export function OsceStudio({
      professor's partial utterance, cut the audio, and go back to listening so
      the student's interjection is picked up. */
   function interruptSpeaking() {
-    if (liveModelAccumTextRef.current) {
-      finalizeModelText(liveModelAccumTextRef.current);
+    const accumulated = liveModelAccumTextRef.current || "";
+    const MIN_INTERRUPT_LENGTH = 20;
+    if (accumulated.length >= MIN_INTERRUPT_LENGTH) {
+      if (livePlayCtxRef.current) {
+        try { livePlayCtxRef.current.close(); } catch {}
+        livePlayCtxRef.current = null;
+      }
+      livePlayScheduleTimeRef.current = 0;
+      if (accumulated) {
+        finalizeModelText(accumulated);
+      }
+      liveModelAccumTextRef.current = "";
+      setVoicePhase(voiceOnRef.current ? "listening" : "idle");
     }
-    liveModelAccumTextRef.current = "";
-    stopSpeaking();
-    setVoicePhase(voiceOnRef.current ? "listening" : "idle");
   }
 
   /* TTS fallback */
