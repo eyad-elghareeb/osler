@@ -1150,9 +1150,11 @@ export function OsceStudio({
           }
           sc.modelTurn.parts.forEach(
             (part: { inlineData?: { mimeType: string; data: string } }) => {
-              if (part.inlineData && part.inlineData.mimeType && part.inlineData.mimeType.includes("audio")) {
-                playLiveAudio(part.inlineData.data, part.inlineData.mimeType);
-              }
+              if (!part.inlineData) return;
+              if (!part.inlineData.mimeType) return;
+              const mimeLower = part.inlineData.mimeType.toLowerCase();
+              if (!mimeLower.includes("audio")) return;
+              playLiveAudio(part.inlineData.data, part.inlineData.mimeType);
             }
           );
         }
@@ -1308,32 +1310,43 @@ export function OsceStudio({
       let sampleRate = 24000;
       const match = mimeType && mimeType.match(/rate=(\d+)/);
       if (match) sampleRate = parseInt(match[1], 10);
+
+      // Ensure AudioContext exists and is resumed
       if (!livePlayCtxRef.current) {
         livePlayCtxRef.current = new (window.AudioContext || (window as unknown as Record<string, unknown>).webkitAudioContext)({ sampleRate }) as AudioContext;
-        livePlayScheduleTimeRef.current = 0;
       }
       if (livePlayCtxRef.current.state === "suspended") { livePlayCtxRef.current.resume(); }
-      const raw = atob(b64data);
+
+      const ctx = livePlayCtxRef.current;
+      if (!ctx) return;
+
+      // Decode base64 audio data
+      let raw: string;
+      try { raw = atob(b64data); } catch { console.error("[GeminiLive] failed to decode base64 audio"); return; }
+      if (raw.length === 0) return;
+
+      // Convert base64 to PCM16 bytes
       const bytes = new Uint8Array(raw.length);
       for (let i = 0; i < raw.length; i++) bytes[i] = raw.charCodeAt(i);
       const int16 = new Int16Array(bytes.buffer);
       const float32 = new Float32Array(int16.length);
       for (let j = 0; j < int16.length; j++) float32[j] = int16[j] / 32768;
-      const ctx = livePlayCtxRef.current;
+
+      // Create AudioBuffer
       const buf = ctx.createBuffer(1, float32.length, sampleRate);
       buf.getChannelData(0).set(float32);
 
-      // A 150ms delay offset provides a lookahead queue window to absorb network jitter smoothly
+      // Schedule playback — use scheduleTimeRef to play chunks sequentially
       const startDelay = 0.15;
-      const when =
-        livePlayScheduleTimeRef.current > ctx.currentTime
-          ? livePlayScheduleTimeRef.current
-          : ctx.currentTime + startDelay;
+      const when = livePlayScheduleTimeRef.current > ctx.currentTime
+        ? livePlayScheduleTimeRef.current
+        : ctx.currentTime + startDelay;
+      livePlayScheduleTimeRef.current = when + buf.duration;
+
       const src = ctx.createBufferSource();
       src.buffer = buf;
       src.connect(ctx.destination);
       src.start(when);
-      livePlayScheduleTimeRef.current = when + buf.duration;
       setVoicePhase("speaking");
     } catch (e) {
       console.error("[GeminiLive] playLiveAudio error:", e);
