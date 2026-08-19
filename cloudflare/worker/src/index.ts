@@ -38,6 +38,7 @@ const encoder = new TextEncoder();
 const decoder = new TextDecoder();
 import { SYNC_KINDS, mergeKind, gzipString, gunzipBytes, gunzipBytesBounded, base64ToBytes } from "./sync-docs";
 import { verifyAssertion } from "./cose";
+import { sendEmail, passwordResetEmail, verifyEmail } from "./email";
 const PASSWORD_ITERATIONS = 100_000;
 const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 // After a session token's JWT `exp` passes, it may still be rotated through
@@ -3633,7 +3634,8 @@ export default {
             ]);
             const link = `${env.APP_ORIGIN.replace(/\/$/, "")}/?reset=${encodeURIComponent(token)}`;
             try {
-              await fetch("https://api.resend.com/emails", { method: "POST", headers: { authorization: `Bearer ${env.RESEND_API_KEY}`, "content-type": "application/json" }, body: JSON.stringify({ from: env.EMAIL_FROM, to: [user.email], subject: "Reset your Osler password", html: `<p>Use this link within 30 minutes to reset your password:</p><p><a href="${link}">${link}</a></p><p>If you did not request a password reset, you can safely ignore this email.</p>` }) });
+              const { html, text } = passwordResetEmail(link);
+              await sendEmail(env, { to: user.email, subject: "Reset your Osler password", text, html });
             } catch (error) {
               // A Resend outage must not surface as a 500 — that would flip the
               // always-{ok:true} no-enumeration contract into an account-existence
@@ -3681,7 +3683,8 @@ export default {
             await env.DB.prepare("INSERT INTO email_verify_tokens (id, user_id, token_hash, email, expires_at, created_at) VALUES (?, ?, ?, ?, ?, ?)").bind(id(), user.id, await sha256(token), email, expiresAt, now()).run();
             const link = `${env.APP_ORIGIN.replace(/\/$/, "")}/?verify=${encodeURIComponent(token)}`;
             try {
-              await fetch("https://api.resend.com/emails", { method: "POST", headers: { authorization: `Bearer ${env.RESEND_API_KEY}`, "content-type": "application/json" }, body: JSON.stringify({ from: env.EMAIL_FROM, to: [user.email], subject: "Verify your Osler email address", html: `<p>Use this link within 30 minutes to verify your email:</p><p><a href="${link}">${link}</a></p><p>If you did not create an Osler account, you can safely ignore this email.</p>` }) });
+              const { html, text } = verifyEmail(link);
+              await sendEmail(env, { to: user.email, subject: "Verify your Osler email address", text, html });
             } catch (error) {
               console.error("verify-email send failed:", error);
             }
