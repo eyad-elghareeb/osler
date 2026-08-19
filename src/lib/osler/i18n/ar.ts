@@ -667,6 +667,8 @@ export const ar = {
     "osce.dataPresented.next": "الصورة التالية",
     "osce.dataPresented.prev": "الصورة السابقة",
     "osce.dataPresented.close": "إغلاق العارض",
+    "osce.dataPresented.voiceModeHint": "راجع المواد، ثم أجب عنها صوتياً.",
+    "osce.dataPresented.openInVoiceMode": "فتح في وضع الصوت",
     "osce.session.stopSpeaking": "إيقاف الكلام",
     "osce.session.speaking": "يتحدث…",
     "osce.session.listening": "يستمع…",

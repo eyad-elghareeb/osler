@@ -66,6 +66,7 @@ import { ContentLangFilter } from "./qbank-studio";
 import { useSwipeBackDismiss } from "@/hooks/use-swipe-back-dismiss";
 import { ThinkingStatus, type ThinkingPhase } from "@/components/osler/thinking-status";
 import { ThinkingOrb, type OrbState } from "thinking-orbs";
+import FluidOrb from "@/components/ui/fluid-orb";
 
 /* ── Constants ─────────────────────────────────────────────────────── */
 
@@ -813,7 +814,17 @@ export function OsceStudio({
   const [interimText, setInterimText] = React.useState("");
   const [resetModalOpen, setResetModalOpen] = React.useState(false);
   const [renderedCount, setRenderedCount] = React.useState(0);
-  const [materialsOpen, setMaterialsOpen] = React.useState(false);
+  // Printed materials now live in the sidebar (desktop) / a header button
+  // (mobile) and open in a modal, rather than an inline collapsible strip
+  // above the transcript — this keeps the chat zone focused on the
+  // conversation. The modal itself offers a shortcut into voice mode.
+  const [materialsModalOpen, setMaterialsModalOpen] = React.useState(false);
+  // Real-time 0..1 amplitude refs feeding the voice-mode FluidOrb — updated
+  // directly from the audio callbacks (mic RMS while listening, playback
+  // RMS while speaking) so the orb visibly moves with the conversation
+  // without triggering a React re-render on every audio frame.
+  const micLevelRef = React.useRef(0);
+  const playbackLevelRef = React.useRef(0);
   // Full-screen ChatGPT-style voice overlay. When `voiceOn` is true, this is
   // also true so the conversation becomes a pure-voice experience with a
   // single tappable orb. The user can minimise the overlay to peek at the
@@ -886,7 +897,8 @@ export function OsceStudio({
   // + meta column) which made the chat zone feel narrow and the patient
   // info hard to find at a glance. The single sidebar consolidates all
   // meta into one column; for data-interp cases the printed materials are
-  // now a collapsible card at the top of the sidebar (or a strip on mobile).
+  // a card in that same sidebar (desktop) that opens a modal, with a
+  // header button standing in for the sidebar on mobile.
   const SIDEBAR_WIDTH = 264;
 
   const voicePhaseRef = React.useRef(voicePhase);
@@ -1206,6 +1218,7 @@ export function OsceStudio({
               livePlayCtxRef.current = null;
             }
             livePlayScheduleTimeRef.current = 0;
+            playbackLevelRef.current = 0;
             // The student cut the professor off mid-sentence — commit whatever
             // the professor had said so far so the interruption is preserved in
             // the transcript for both sides.
@@ -1221,6 +1234,7 @@ export function OsceStudio({
           if (liveModelAccumTextRef.current) {
             finalizeModelText(liveModelAccumTextRef.current);
           }
+          playbackLevelRef.current = 0;
           setVoicePhase("idle");
         }
       } catch (e) {
@@ -1240,6 +1254,8 @@ export function OsceStudio({
       liveSessionRef.current = null;
       stopLiveMic();
       setVoicePhase("idle");
+      micLevelRef.current = 0;
+      playbackLevelRef.current = 0;
       // 1000 = normal close (user toggled voice off); 1001 = going away
       // (page unload). Anything else is an error — surface the close
       // code/reason so the user sees WHY the connection dropped instead
@@ -1281,6 +1297,32 @@ export function OsceStudio({
     }
     setInterimText("");
     setVoicePhase("idle");
+    micLevelRef.current = 0;
+    playbackLevelRef.current = 0;
+  }
+
+  /** Cheap RMS amplitude (0..1) of a PCM float chunk, downsampled for perf. */
+  function rmsLevel(samples: Float32Array): number {
+    if (!samples || !samples.length) return 0;
+    const step = Math.max(1, Math.floor(samples.length / 256));
+    let sum = 0;
+    let n = 0;
+    for (let i = 0; i < samples.length; i += step) {
+      const v = samples[i];
+      sum += v * v;
+      n++;
+    }
+    const rms = Math.sqrt(sum / Math.max(1, n));
+    // Perceptual boost so normal speech visibly moves the orb rather than
+    // needing to shout, then clamp to the shader's expected 0..1 range.
+    return Math.max(0, Math.min(1, rms * 4.5));
+  }
+
+  /** Read by the voice-mode FluidOrb every animation frame — no re-renders. */
+  function getVoiceLevel(): number {
+    if (voicePhaseRef.current === "speaking") return playbackLevelRef.current;
+    if (voicePhaseRef.current === "listening") return micLevelRef.current;
+    return 0;
   }
 
   function startLiveMic() {
@@ -1313,6 +1355,7 @@ export function OsceStudio({
             // over the professor and emit sc.interrupted (auto-interruption).
             const input = e.data as Float32Array;
             if (!input || !input.length) return;
+            micLevelRef.current = rmsLevel(input);
             const pcm = new Int16Array(input.length);
             for (let i = 0; i < input.length; i++) pcm[i] = Math.max(-32768, Math.min(32767, Math.round(input[i] * 32767)));
             const bytes = new Uint8Array(pcm.buffer);
@@ -1354,6 +1397,7 @@ export function OsceStudio({
         // Streamed continuously — see the AudioWorklet mic path above.
         const input = e.inputBuffer.getChannelData(0);
         if (!input || !input.length) return;
+        micLevelRef.current = rmsLevel(input);
         const pcm = new Int16Array(input.length);
         for (let i = 0; i < input.length; i++) pcm[i] = Math.max(-32768, Math.min(32767, Math.round(input[i] * 32767)));
         const bytes = new Uint8Array(pcm.buffer);
@@ -1382,6 +1426,7 @@ export function OsceStudio({
       liveMicStreamRef.current.getTracks().forEach((t) => t.stop());
       liveMicStreamRef.current = null;
     }
+    micLevelRef.current = 0;
   }
 
   async function playLiveAudio(b64data: string, mimeType: string) {
@@ -1434,6 +1479,7 @@ export function OsceStudio({
       const int16 = new Int16Array(bytes.buffer);
       const float32 = new Float32Array(int16.length);
       for (let j = 0; j < int16.length; j++) float32[j] = int16[j] / 32768;
+      playbackLevelRef.current = rmsLevel(float32);
 
       // Create AudioBuffer — tag with the real PCM sample rate; the
       // browser resamples to the AudioContext's rate during playback.
@@ -1486,6 +1532,19 @@ export function OsceStudio({
     }
   }
 
+  /** Used by the Printed Materials modal's "Open in Voice Mode" button —
+      closes the modal and starts (or re-opens) the voice overlay so the
+      student can go straight from reviewing the materials to being quizzed
+      on them out loud. */
+  function openMaterialsInVoiceMode() {
+    setMaterialsModalOpen(false);
+    if (!voiceOn) {
+      toggleVoice();
+    } else {
+      setVoiceOverlayOpen(true);
+    }
+  }
+
   /** End the Live call completely — closes the WebSocket, mic, and overlay. */
   function endVoiceCall() {
     setVoiceOn(false);
@@ -1493,6 +1552,8 @@ export function OsceStudio({
     localStorage.setItem(STORAGE.voiceOn, "false");
     stopGeminiLive();
     setVoicePhase("idle");
+    micLevelRef.current = 0;
+    playbackLevelRef.current = 0;
   }
 
   /** Whether on-screen transcripts are enabled in Live mode (opt-in, default off). */
@@ -1518,6 +1579,7 @@ export function OsceStudio({
       livePlayCtxRef.current = null;
     }
     livePlayScheduleTimeRef.current = 0;
+    playbackLevelRef.current = 0;
     setVoicePhase("idle");
   }
 
@@ -1533,6 +1595,7 @@ export function OsceStudio({
         livePlayCtxRef.current = null;
       }
       livePlayScheduleTimeRef.current = 0;
+      playbackLevelRef.current = 0;
       if (accumulated) {
         finalizeModelText(accumulated);
       }
@@ -2485,6 +2548,47 @@ export function OsceStudio({
                 </div>
               </div>
 
+              {/* Printed materials — moved here from the old chat-zone strip
+                  so reference material lives alongside the rest of the
+                  station's meta (speaker, progress, map) instead of eating
+                  vertical space above the transcript. Opens in a modal that
+                  also offers a one-tap shortcut into voice mode. */}
+              {isDataInterp && (activeCase.dataPresented?.scenario || (activeCase.dataPresented?.images || []).length > 0 || (activeCase.dataPresented?.tables || []).length > 0) && (
+                <div className="bg-card border border-border rounded-xl p-3 shadow-e1">
+                  <button
+                    onClick={() => setMaterialsModalOpen(true)}
+                    className="w-full flex items-center justify-between text-[9px] font-bold uppercase tracking-wider text-muted-foreground group"
+                  >
+                    <span className="flex items-center gap-1.5">
+                      <BarChart3 className="size-3.5 text-primary" />
+                      {t("osce.dataPresented.printedMaterials")}
+                      {(() => {
+                        const n = (activeCase.dataPresented?.images || []).length;
+                        return n > 0 ? <span className="font-medium normal-case tracking-normal">({n})</span> : null;
+                      })()}
+                    </span>
+                    <ChevronRight className="size-3.5 group-hover:text-primary transition-colors" />
+                  </button>
+                  {(activeCase.dataPresented?.images || []).length > 0 && (
+                    <div className="mt-2 grid grid-cols-3 gap-1">
+                      {(activeCase.dataPresented?.images || []).slice(0, 3).map((im, i) => {
+                        const src = dataImageUrl(im, activePackPath);
+                        if (!src) return null;
+                        return (
+                          <button
+                            key={i}
+                            onClick={() => setMaterialsModalOpen(true)}
+                            className="rounded-md border border-border overflow-hidden bg-background aspect-square"
+                          >
+                            <img src={src} alt="" className="w-full h-full object-cover" loading="lazy" />
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              )}
+
               {/* Progress card */}
               <div className="bg-card border border-border rounded-xl p-3 space-y-2.5 shadow-e1">
                 <div className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground">{t("osce.home.progress")}</div>
@@ -2570,13 +2674,13 @@ export function OsceStudio({
 
           {/* Chat Zone */}
           <div className="flex-1 min-w-0 flex flex-col">
-            {/* Printed materials strip — for data-interp cases, both mobile
-                and desktop now collapse this here instead of dedicating a
-                whole side column to it. */}
-            {isDataInterp && (
-              <div className="shrink-0 border-b border-border bg-card/60 backdrop-blur-md px-3 md:px-4 py-2">
+            {/* Printed materials — on mobile there's no sidebar, so a
+                compact header button stands in for the sidebar card and
+                opens the same modal. */}
+            {isDataInterp && isMobile && (
+              <div className="shrink-0 border-b border-border bg-card/60 backdrop-blur-md px-3 py-2">
                 <button
-                  onClick={() => setMaterialsOpen(!materialsOpen)}
+                  onClick={() => setMaterialsModalOpen(true)}
                   className="w-full flex items-center justify-between text-xs font-semibold"
                 >
                   <span className="flex items-center gap-1.5">
@@ -2587,23 +2691,8 @@ export function OsceStudio({
                       return n > 0 ? <span className="text-[10px] font-medium text-muted-foreground">({n})</span> : null;
                     })()}
                   </span>
-                  <ChevronRight className={cn("size-3.5 transition-transform", materialsOpen && "rotate-90")} />
+                  <ChevronRight className="size-3.5" />
                 </button>
-                <AnimatePresence>
-                  {materialsOpen && (
-                    <motion.div
-                      initial={{ height: 0, opacity: 0 }}
-                      animate={{ height: "auto", opacity: 1 }}
-                      exit={{ height: 0, opacity: 0 }}
-                      transition={{ duration: 0.25 }}
-                      className="overflow-hidden"
-                    >
-                      <div className="pt-2 pb-1">
-                        <PrintedMaterialsPanel data={activeCase.dataPresented} packPath={activePackPath} />
-                      </div>
-                    </motion.div>
-                  )}
-                </AnimatePresence>
               </div>
             )}
 
@@ -2735,9 +2824,10 @@ export function OsceStudio({
                       onClick={() => setVoiceOverlayOpen(true)}
                       className="w-full flex items-center gap-2 px-3 py-2 rounded-xl bg-primary/5 border border-primary/20 hover:bg-primary/10 transition-colors"
                     >
-                      <ThinkingOrb
-                        state={voicePhase === "speaking" ? "composing" : voicePhase === "listening" ? "listening" : "breathing"}
+                      <FluidOrb
                         size={20}
+                        level={getVoiceLevel}
+                        className="shrink-0"
                         aria-hidden="true"
                       />
                       <span className="text-[11px] text-muted-foreground flex-1 text-left min-w-0 truncate">
@@ -2857,6 +2947,7 @@ export function OsceStudio({
               }
               orbState={presenceOrbState}
               voicePhase={voicePhase}
+              getVoiceLevel={getVoiceLevel}
               thinking={thinking}
               thinkingPhases={thinkingPhases}
               interimText={interimText}
@@ -2875,6 +2966,19 @@ export function OsceStudio({
             />
           )}
         </AnimatePresence>
+
+        {/* Printed Materials Modal — reachable from the sidebar card
+            (desktop) or the header button (mobile); offers a one-tap
+            shortcut straight into voice mode. */}
+        {isDataInterp && (
+          <PrintedMaterialsModal
+            open={materialsModalOpen}
+            onOpenChange={setMaterialsModalOpen}
+            data={activeCase.dataPresented}
+            packPath={activePackPath}
+            onOpenVoiceMode={openMaterialsInVoiceMode}
+          />
+        )}
 
         {/* Reset Modal */}
         <AnimatePresence>
@@ -3372,6 +3476,54 @@ function PrintedMaterialsPanel({
   );
 }
 
+/* ── Printed Materials Modal ──────────────────────────────────────── */
+
+/**
+ * Full printed-materials view in a modal, reachable from the sidebar card
+ * (desktop) or the header button (mobile). Ends with a button that takes
+ * the student straight into voice mode so they can be quizzed on what
+ * they just reviewed without leaving the flow to find the voice toggle.
+ */
+function PrintedMaterialsModal({
+  open,
+  onOpenChange,
+  data,
+  packPath = "",
+  onOpenVoiceMode,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  data?: OsceDataPresented | null;
+  packPath?: string;
+  onOpenVoiceMode: () => void;
+}) {
+  const { t } = useI18n();
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-2xl p-0 gap-0 max-h-[85vh] flex flex-col">
+        <DialogHeader className="px-4 pt-4 pb-2 text-start shrink-0">
+          <DialogTitle className="text-sm font-semibold flex items-center gap-1.5">
+            <BarChart3 className="size-4 text-primary" />
+            {t("osce.dataPresented.printedMaterials")}
+          </DialogTitle>
+        </DialogHeader>
+        <div className="flex-1 min-h-0 overflow-y-auto osler-scroll px-4 pb-3">
+          <PrintedMaterialsPanel data={data} packPath={packPath} />
+        </div>
+        <div className="shrink-0 border-t border-border px-4 py-3 flex items-center justify-between gap-3">
+          <p className="text-[11px] text-muted-foreground leading-snug">
+            {t("osce.dataPresented.voiceModeHint")}
+          </p>
+          <Button onClick={onOpenVoiceMode} size="sm" className="gap-1.5 shrink-0">
+            <Phone className="size-3.5" />
+            {t("osce.dataPresented.openInVoiceMode")}
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 /* ── OSCE Image Viewer (modal) ────────────────────────────────────── */
 
 function OsceImageViewer({
@@ -3466,6 +3618,7 @@ function LiveVoiceOverlay({
   speakerRole,
   orbState,
   voicePhase,
+  getVoiceLevel,
   thinking,
   thinkingPhases,
   interimText,
@@ -3481,6 +3634,8 @@ function LiveVoiceOverlay({
   speakerRole: string;
   orbState: OrbState;
   voicePhase: "idle" | "listening" | "speaking";
+  /** Read every animation frame by the FluidOrb — 0..1, no re-renders. */
+  getVoiceLevel: () => number;
   thinking: boolean;
   thinkingPhases: ThinkingPhase[];
   interimText: string;
@@ -3658,13 +3813,14 @@ function LiveVoiceOverlay({
             )}
             aria-hidden="true"
           />
-          {/* The orb itself — scaled up to dominate the center. The base
-              size is 64px (the largest supported by thinking-orbs); we
-              scale it visually with Tailwind to fill the 176px container. */}
-          <ThinkingOrb
-            state={orbState}
-            size={64}
-            className="scale-[2] sm:scale-[2.5] relative z-10"
+          {/* The orb itself — the FluidOrb auto-themes from the site's
+              --primary color and its fluid drift/turbulence/scale visibly
+              react to live mic and playback amplitude via getVoiceLevel. */}
+          <FluidOrb
+            size={224}
+            level={getVoiceLevel}
+            style={{ width: "100%", height: "100%" }}
+            className="relative z-10"
             aria-hidden="true"
           />
         </button>

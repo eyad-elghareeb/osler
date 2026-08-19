@@ -666,6 +666,8 @@ export const en = {
     "osce.dataPresented.next": "Next image",
     "osce.dataPresented.prev": "Previous image",
     "osce.dataPresented.close": "Close viewer",
+    "osce.dataPresented.voiceModeHint": "Review the materials, then get quizzed on them out loud.",
+    "osce.dataPresented.openInVoiceMode": "Open in Voice Mode",
     "osce.session.stopSpeaking": "Stop speaking",
     "osce.session.speaking": "Speaking…",
     "osce.session.listening": "Listening…",
