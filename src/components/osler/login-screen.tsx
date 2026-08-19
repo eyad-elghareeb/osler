@@ -39,9 +39,11 @@ import {
   cloudEnabled,
   cloudGoogleEnabled,
   cloudUsernameAvailable,
+  confirmEmailVerify,
   confirmPasswordReset,
   loginCloudAccount,
   registerCloudAccount,
+  requestEmailVerify,
   requestPasswordReset,
   startGoogleLogin,
   verifyGuestTurnstile,
@@ -85,7 +87,7 @@ export function LoginScreen({ onLogin, cloudAuthError }: LoginScreenProps) {
     "idle" | "enrolling" | "authenticating" | "error"
   >("idle");
   const [biometricMsg, setBiometricMsg] = React.useState<string>("");
-  const [cloudMode, setCloudMode] = React.useState<"login" | "register" | "reset">("login");
+  const [cloudMode, setCloudMode] = React.useState<"login" | "register" | "reset" | "verify">("login");
   const [cloudActive, setCloudActive] = React.useState(false);
   const [cloudGoogleActive, setCloudGoogleActive] = React.useState(false);
   const [email, setEmail] = React.useState("");
@@ -94,6 +96,8 @@ export function LoginScreen({ onLogin, cloudAuthError }: LoginScreenProps) {
   const [cloudError, setCloudError] = React.useState("");
   const [resetSent, setResetSent] = React.useState(false);
   const [resetToken, setResetToken] = React.useState("");
+  const [verifyState, setVerifyState] = React.useState<"idle" | "verifying" | "success" | "error">("idle");
+  const [verifySent, setVerifySent] = React.useState(false);
   const [usernameStatus, setUsernameStatus] = React.useState<"idle" | "checking" | "available" | "taken">("idle");
   const [turnstileToken, setTurnstileToken] = React.useState("");
   const turnstileRef = React.useRef<HTMLDivElement>(null);
@@ -222,10 +226,10 @@ export function LoginScreen({ onLogin, cloudAuthError }: LoginScreenProps) {
       }
     });
     const params = new URLSearchParams(window.location.search);
-    // A password-reset link carries a bearer token: either surfaced at the
-    // top level (/?reset=TOKEN, or /login?reset=TOKEN once RouteGuard has
-    // normalized it) or, defensively, still buried inside `next` from an old
-    // guest redirect. Recover it from both.
+    // A password-reset or email-verify link carries a bearer token: either
+    // surfaced at the top level (/?reset=TOKEN, /?verify=TOKEN, or their
+    // /login?… forms once RouteGuard has normalized them) or, defensively,
+    // still buried inside `next` from an old guest redirect. Recover from both.
     let reset = params.get("reset");
     if (!reset) {
       const nextRaw = params.get("next");
@@ -234,9 +238,24 @@ export function LoginScreen({ onLogin, cloudAuthError }: LoginScreenProps) {
     if (reset) {
       setResetToken(reset);
       setCloudMode("reset");
-      // The reset token is a bearer credential — drop it from the URL so it
-      // can't linger in browser history, bookmarks, or be leaked as a Referer.
       params.delete("reset");
+    }
+    let verify = params.get("verify");
+    if (!verify) {
+      const nextRaw = params.get("next");
+      if (nextRaw) verify = new URLSearchParams(nextRaw.replace(/^\//, "")).get("verify");
+    }
+    if (verify) {
+      params.delete("verify");
+      setVerifyState("verifying");
+      void confirmEmailVerify(verify)
+        .then((res) => setVerifyState(res.verified ? "success" : "error"))
+        .catch(() => setVerifyState("error"));
+    }
+    // Reset and verify tokens are bearer credentials — drop them from the URL
+    // so they can't linger in browser history, bookmarks, or be leaked as a
+    // Referer.
+    if (reset || verify) {
       const cleanQuery = params.toString();
       history.replaceState(null, "", `${window.location.pathname}${cleanQuery ? `?${cleanQuery}` : ""}${window.location.hash}`);
     }
@@ -337,6 +356,12 @@ export function LoginScreen({ onLogin, cloudAuthError }: LoginScreenProps) {
             setResetSent(true);
             haptic("success");
           }
+          return;
+        }
+        if (cloudMode === "verify") {
+          await requestEmailVerify(email, turnstileToken || undefined);
+          setVerifySent(true);
+          haptic("success");
           return;
         }
         const session = await loginCloudAccount({ identifier: username.trim(), password, turnstileToken: turnstileToken || undefined });
@@ -589,7 +614,7 @@ export function LoginScreen({ onLogin, cloudAuthError }: LoginScreenProps) {
             )}
           </div>
 
-          {cloudActive && (cloudMode === "register" || cloudMode === "reset") && !resetToken && (
+          {cloudActive && (cloudMode === "register" || cloudMode === "reset" || cloudMode === "verify") && !resetToken && (
             <div>
               <label htmlFor="email" className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
                 {t("login.email")}
@@ -601,7 +626,7 @@ export function LoginScreen({ onLogin, cloudAuthError }: LoginScreenProps) {
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder={t("login.emailPlaceholder")}
                 autoComplete="email"
-                required={cloudMode === "reset"}
+                required={cloudMode === "reset" || cloudMode === "verify"}
                 className="w-full h-10 px-3 bg-background border border-border-strong rounded-md text-sm outline-none transition-all focus:border-primary focus:ring-2 focus:ring-primary/20"
               />
               {cloudMode === "register" && (
@@ -612,7 +637,7 @@ export function LoginScreen({ onLogin, cloudAuthError }: LoginScreenProps) {
             </div>
           )}
 
-          {cloudMode !== "reset" || !!resetToken ? (
+          {cloudMode !== "verify" && (cloudMode !== "reset" || !!resetToken) ? (
             <div>
               <label htmlFor="password" className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
                 {t("login.password")}
@@ -680,11 +705,26 @@ export function LoginScreen({ onLogin, cloudAuthError }: LoginScreenProps) {
 
           {cloudError && <p className="text-xs text-destructive">{cloudError}</p>}
           {resetSent && <p className="text-xs text-success">{t("login.resetSent")}</p>}
+          {verifySent && <p className="text-xs text-success">{t("login.verifySent")}</p>}
+          {verifyState !== "idle" && (
+            <div className={cn("flex items-start gap-1.5 text-xs", verifyState === "success" ? "text-success" : "text-destructive")}>
+              {verifyState === "verifying" ? (
+                <Loader2 className="size-3.5 animate-spin shrink-0 mt-0.5" />
+              ) : verifyState === "success" ? (
+                <ShieldCheck className="size-3.5 shrink-0 mt-0.5" />
+              ) : (
+                <ShieldAlert className="size-3.5 shrink-0 mt-0.5" />
+              )}
+              <span>
+                {verifyState === "verifying" ? t("login.verifyChecking") : verifyState === "success" ? t("login.verifyConfirmed") : t("login.verifyFailed")}
+              </span>
+            </div>
+          )}
           {cloudActive && getConfig().cloud.turnstileSiteKey && <div ref={turnstileRef} className="flex justify-center" />}
 
           <Button type="submit" size="lg" disabled={cloudBusy} className="w-full gap-2">
             {cloudBusy ? <Loader2 className="size-4 animate-spin" /> : null}
-            {cloudMode === "register" ? t("login.createAccount") : cloudMode === "reset" ? (resetToken ? t("login.resetPassword") : t("login.sendReset")) : t("login.signIn")}
+            {cloudMode === "register" ? t("login.createAccount") : cloudMode === "reset" ? (resetToken ? t("login.resetPassword") : t("login.sendReset")) : cloudMode === "verify" ? t("login.sendVerify") : t("login.signIn")}
             {!cloudBusy && <ArrowRight className={cn("size-4", rtl && "rtl-flip-x")} />}
           </Button>
 
@@ -726,10 +766,17 @@ export function LoginScreen({ onLogin, cloudAuthError }: LoginScreenProps) {
               <Button type="button" variant="link" size="sm" onClick={() => { setCloudMode(cloudMode === "register" ? "login" : "register"); setCloudError(""); }}>
                 {cloudMode === "register" ? t("login.haveAccount") : t("login.createAccount")}
               </Button>
-              {cloudMode !== "reset" && <Button type="button" variant="link" size="sm" onClick={() => { setCloudMode("reset"); setCloudError(""); }}>
-                {t("login.forgotPassword")}
-              </Button>}
-              {cloudMode === "reset" && <Button type="button" variant="link" size="sm" onClick={() => { setCloudMode("login"); setResetToken(""); }}>
+              {cloudMode === "login" && (
+                <>
+                  <Button type="button" variant="link" size="sm" onClick={() => { setCloudMode("reset"); setCloudError(""); setVerifyState("idle"); setVerifySent(false); }}>
+                    {t("login.forgotPassword")}
+                  </Button>
+                  <Button type="button" variant="link" size="sm" onClick={() => { setCloudMode("verify"); setCloudError(""); setVerifyState("idle"); setVerifySent(false); }}>
+                    {t("login.resendVerification")}
+                  </Button>
+                </>
+              )}
+              {(cloudMode === "reset" || cloudMode === "verify") && <Button type="button" variant="link" size="sm" onClick={() => { setCloudMode("login"); setResetToken(""); setVerifyState("idle"); }}>
                 {t("login.backToSignIn")}
               </Button>}
             </div>

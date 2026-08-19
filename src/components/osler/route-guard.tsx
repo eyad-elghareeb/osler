@@ -138,7 +138,7 @@ export function RouteGuard({ children }: { children: React.ReactNode }) {
     return () => { cancelled = true; };
   }, []);
 
-  // Session-based redirects. These fire after the render below has already
+// Session-based redirects. These fire after the render below has already
   // chosen the safe surface (boot screen), so a redirect never reveals
   // protected UI to a guest.
   React.useEffect(() => {
@@ -147,15 +147,18 @@ export function RouteGuard({ children }: { children: React.ReactNode }) {
 
     const search = window.location.search || "";
     const params = new URLSearchParams(search);
-    // A password-reset link (/?reset=TOKEN) is a bearer credential that must
-    // reach the reset form on /login — never get dropped or buried.
+    // A password-reset link (/?reset=TOKEN) or email-verify link
+    // (/?verify=TOKEN) is a bearer credential that must reach the form on
+    // /login — never get dropped or buried.
     const resetToken = params.get("reset");
+    const verifyToken = params.get("verify");
+    const bearerToken = resetToken ?? verifyToken;
 
     // /login handling: redirect to `next` (or `/`) if already logged in —
-    // unless a password reset is pending, in which case the reset form must
-    // render even for a signed-in user (the reset link is what authorizes it).
+    // unless a reset/verify link is pending, in which case the form must
+    // render even for a signed-in user (the link is what authorizes it).
     if (isLoginPath(pathname)) {
-      if (hasSession && !resetToken) {
+      if (hasSession && !bearerToken) {
         const nextRaw = params.get("next") || "/";
         const safeNext = isSafeLocalPath(nextRaw) && !isLoginPath(nextRaw) ? nextRaw : "/";
         router.replace(safeNext);
@@ -163,11 +166,12 @@ export function RouteGuard({ children }: { children: React.ReactNode }) {
       return;
     }
 
-    // A signed-in user arriving on a protected route with a reset token is
-    // redirected to the reset form, never left stranded on the dashboard.
-    if (hasSession && resetToken) {
+    // A signed-in user arriving on a protected route with a reset/verify link
+    // is redirected to the form, never left stranded on the dashboard.
+    if (hasSession && bearerToken) {
       const loginUrl = new URL("/login", window.location.origin);
-      loginUrl.searchParams.set("reset", resetToken);
+      if (resetToken) loginUrl.searchParams.set("reset", resetToken);
+      if (verifyToken) loginUrl.searchParams.set("verify", verifyToken);
       loginUrl.searchParams.set("next", pathname);
       router.replace(`${loginUrl.pathname}${loginUrl.search}`);
       return;
@@ -177,12 +181,13 @@ export function RouteGuard({ children }: { children: React.ReactNode }) {
     if (!hasSession) {
       const loginUrl = new URL("/login", window.location.origin);
       if (pathname !== "/" || search !== "") {
-        if (resetToken) {
-          // Surface the reset token at the TOP level of the login URL.
+        if (bearerToken) {
+          // Surface the reset/verify token at the TOP level of the login URL.
           // Burying it inside `next` (/login?next=/?reset=TOKEN) would lose it
-          // — the login screen reads `reset` from the search string.
-          loginUrl.searchParams.set("reset", resetToken);
-          const nextPath = `${pathname}${search.replace(/[?&]reset=[^&#]*/g, "")}`;
+          // — the login screen reads these from the search string.
+          if (resetToken) loginUrl.searchParams.set("reset", resetToken);
+          if (verifyToken) loginUrl.searchParams.set("verify", verifyToken);
+          const nextPath = `${pathname}${search.replace(/[?&](reset|verify)=[^&#]*/g, "")}`;
           loginUrl.searchParams.set("next", nextPath || "/");
         } else {
           loginUrl.searchParams.set("next", `${pathname}${search}`);
