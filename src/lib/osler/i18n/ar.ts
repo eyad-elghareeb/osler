@@ -663,6 +663,11 @@ export const ar = {
     "osce.dataPresented.enlarge": "اضغط على الصورة لتكبيرها",
     "osce.dataPresented.examinerOpening":
       "يقدّم الممتحن الحالة. راجع المواد المطبوعة وأجب عند السؤال.",
+    "osce.dataPresented.viewerTitle": "{title} — {index} من {total}",
+    "osce.dataPresented.next": "الصورة التالية",
+    "osce.dataPresented.prev": "الصورة السابقة",
+    "osce.dataPresented.close": "إغلاق العارض",
+    "osce.session.stopSpeaking": "إيقاف الكلام",
 
     "library.title": "مكتبة المقالات",
     "library.subtitle": "مقالات طبية عبر جميع التخصصات.",

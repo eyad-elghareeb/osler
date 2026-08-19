@@ -662,6 +662,11 @@ export const en = {
     "osce.dataPresented.enlarge": "Tap an image to enlarge",
     "osce.dataPresented.examinerOpening":
       "The examiner is presenting the case. Review the printed materials and answer when asked.",
+    "osce.dataPresented.viewerTitle": "{title} — {index} of {total}",
+    "osce.dataPresented.next": "Next image",
+    "osce.dataPresented.prev": "Previous image",
+    "osce.dataPresented.close": "Close viewer",
+    "osce.session.stopSpeaking": "Stop speaking",
 
     "library.title": "Article Library",
     "library.subtitle": "Medical articles across all specialties.",

@@ -28,6 +28,8 @@ import {
   ArrowLeft,
   Folder,
   Play,
+  Square,
+  ClipboardList,
   type LucideIcon,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
@@ -49,11 +51,11 @@ import type {
 } from "@/lib/osler/types";
 import { cn } from "@/lib/utils";
 import { useIsMobile } from "@/hooks/use-mobile";
-import { useLightbox } from "./lightbox-provider";
 import { setImmersiveMode } from "./immersive-mode";
 import { useI18n } from "./i18n-provider";
 import { HubSkeleton, EmptyState } from "./ui-primitives";
 import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { ContentCacheButton } from "./content-cache-button";
 import { ContentLangFilter } from "./qbank-studio";
 import { useSwipeBackDismiss } from "@/hooks/use-swipe-back-dismiss";
@@ -301,8 +303,8 @@ function buildDataInterpSysPrompt(c: OsceStation): string {
   const lines: string[] = [
     "You are " + e.name + ", " + e.title + ", an expert medical examiner conducting an oral OSCE-style data-interpretation examination.",
     "",
-    "1. Present yourself and the clinical case. The student has already reviewed the printed materials.",
-    "2. Ask the student questions one at a time, referring to the printed materials (e.g. \"Take a look at the ECG — what do you see?\"). Wait for their answer.",
+    "1. Present yourself and the clinical case. In your opening, name each printed material by its title (e.g. \"I've placed the ECG on the desk — take a moment to look at it\") so the student knows what to reference.",
+    "2. Ask the student questions one at a time, referring to the printed materials by name (e.g. \"Take a look at the ECG — what do you see?\"). Wait for their answer.",
     "3. Be warm, professional, and encouraging. Give positive reinforcement.",
     "4. If the student struggles, offer gentle hints. Never give the answer away immediately.",
     "5. NEVER break character, never mention being an AI.",
@@ -628,40 +630,6 @@ interface Achievement {
   color: "gold" | "green" | "blue" | "purple";
 }
 
-/* ── SpeechRecognition types (browser API) ────────────────────────── */
-
-interface SpeechRecognition extends EventTarget {
-  continuous: boolean;
-  interimResults: boolean;
-  lang: string;
-  start(): void;
-  stop(): void;
-  abort(): void;
-  onresult: ((event: SpeechRecognitionEvent) => void) | null;
-  onerror: ((event: { error: string }) => void) | null;
-  onend: (() => void) | null;
-}
-
-interface SpeechRecognitionEvent {
-  results: SpeechRecognitionResultList;
-  resultIndex: number;
-}
-
-interface SpeechRecognitionResultList {
-  length: number;
-  [index: number]: SpeechRecognitionResult;
-}
-
-interface SpeechRecognitionResult {
-  isFinal: boolean;
-  [index: number]: SpeechRecognitionAlternative;
-}
-
-interface SpeechRecognitionAlternative {
-  transcript: string;
-  confidence: number;
-}
-
 /* ── Component Props ───────────────────────────────────────────────── */
 
 import { useOslerRouter, routeFor } from "@/lib/osler/navigation";
@@ -892,10 +860,9 @@ export function OsceStudio({
   const inputRef = React.useRef<HTMLTextAreaElement>(null);
   const scrollRef = React.useRef<HTMLDivElement>(null);
   const timerRef = React.useRef<ReturnType<typeof setInterval> | null>(null);
-  const recognitionRef = React.useRef<SpeechRecognition | null>(null);
-  const silenceTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const SIDEBAR_WIDTH = 220;
+  const DATA_REF_WIDTH = 260;
 
   const voicePhaseRef = React.useRef(voicePhase);
   React.useEffect(() => {
@@ -1039,6 +1006,19 @@ export function OsceStudio({
   const liveInterimTextRef = React.useRef("");
   const liveModelAccumTextRef = React.useRef("");
 
+  /* Commit the professor's (partial) spoken text as a model transcript entry. */
+  function finalizeModelText(text: string) {
+    if (!text) return;
+    const transcriptNow = transcriptRef.current;
+    const last = transcriptNow.length && transcriptNow[transcriptNow.length - 1];
+    if (last && last.role === "model" && last.text === text) return;
+    const updated = [...transcriptNow, { role: "model" as const, text: sanitizeModelText(text) }];
+    setTranscript(updated);
+    setRenderedCount((prev) => prev + 1);
+    liveModelAccumTextRef.current = "";
+    saveSession();
+  }
+
   function getGenderVoice(): string {
     if (!activeCase) return "Charon";
     if (activeCase.type === "data-interp") return "Charon";
@@ -1180,6 +1160,12 @@ export function OsceStudio({
             livePlayCtxRef.current = null;
           }
           livePlayScheduleTimeRef.current = 0;
+          // The student cut the professor off mid-sentence — commit whatever
+          // the professor had said so far so the interruption is preserved in
+          // the transcript for both sides.
+          if (liveModelAccumTextRef.current) {
+            finalizeModelText(liveModelAccumTextRef.current);
+          }
           liveModelAccumTextRef.current = "";
           setVoicePhase("listening");
         }
@@ -1192,18 +1178,6 @@ export function OsceStudio({
       } catch (e) {
         console.error("[GeminiLive] parse error:", e);
       }
-    }
-
-    function finalizeModelText(text: string) {
-      if (!text) return;
-      const transcriptNow = transcriptRef.current;
-      const last = transcriptNow.length && transcriptNow[transcriptNow.length - 1];
-      if (last && last.role === "model" && last.text === text) return;
-      const updated = [...transcriptNow, { role: "model" as const, text: sanitizeModelText(text) }];
-      setTranscript(updated);
-      setRenderedCount((prev) => prev + 1);
-      liveModelAccumTextRef.current = "";
-      saveSession();
     }
 
     ws.onerror = () => {
@@ -1255,9 +1229,9 @@ export function OsceStudio({
           const node = new AudioWorkletNode(actx, "mic-processor");
           node.port.onmessage = (e) => {
             if (!liveSessionRef.current || liveSessionRef.current.readyState !== WebSocket.OPEN) return;
-            // Skip sending microphone data while the model is actively speaking to prevent echo/choppiness
-            if (voicePhaseRef.current === "speaking") return;
-
+            // Microphone audio is streamed continuously — including while the
+            // model speaks — so Gemini Live's VAD can hear the student talk
+            // over the professor and emit sc.interrupted (auto-interruption).
             const input = e.data as Float32Array;
             const pcm = new Int16Array(input.length);
             for (let i = 0; i < input.length; i++) pcm[i] = Math.max(-32768, Math.min(32767, Math.round(input[i] * 32767)));
@@ -1287,9 +1261,7 @@ export function OsceStudio({
       const processor = actx.createScriptProcessor(4096, 1, 1);
       processor.onaudioprocess = (e) => {
         if (!liveSessionRef.current || liveSessionRef.current.readyState !== WebSocket.OPEN) return;
-        // Skip sending microphone data while the model is actively speaking to prevent echo/choppiness
-        if (voicePhaseRef.current === "speaking") return;
-
+        // Streamed continuously — see the AudioWorklet mic path above.
         const input = e.inputBuffer.getChannelData(0);
         const pcm = new Int16Array(input.length);
         for (let i = 0; i < input.length; i++) pcm[i] = Math.max(-32768, Math.min(32767, Math.round(input[i] * 32767)));
@@ -1387,6 +1359,18 @@ export function OsceStudio({
     }
     livePlayScheduleTimeRef.current = 0;
     setVoicePhase("idle");
+  }
+
+  /* Manual interrupt — same as the automatic sc.interrupted path: commit the
+     professor's partial utterance, cut the audio, and go back to listening so
+     the student's interjection is picked up. */
+  function interruptSpeaking() {
+    if (liveModelAccumTextRef.current) {
+      finalizeModelText(liveModelAccumTextRef.current);
+    }
+    liveModelAccumTextRef.current = "";
+    stopSpeaking();
+    setVoicePhase(voiceOnRef.current ? "listening" : "idle");
   }
 
   /* TTS fallback */
@@ -2115,6 +2099,9 @@ export function OsceStudio({
         setError(`Maximum ${MAX_TURNS} questions reached. Click Submit for feedback.`);
         return;
       }
+      // The student cut the professor off by typing their answer — interrupt
+      // the live speech and commit the professor's partial statement first.
+      if (voiceOn && voicePhaseRef.current === "speaking") interruptSpeaking();
       setInputText("");
       setSending(true);
       setError(null);
@@ -2254,6 +2241,21 @@ export function OsceStudio({
 
         {/* Body */}
         <div className="flex-1 min-h-0 flex overflow-hidden">
+          {/* Data reference column (data-interp, desktop) — leftmost so the
+              student can consult the printed materials at any time */}
+          {isDataInterp && !isMobile && (
+            <aside
+              className="bg-card border-e border-border flex flex-col gap-2 p-3 overflow-y-auto shrink-0 osler-scroll"
+              style={{ width: DATA_REF_WIDTH }}
+            >
+              <div className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-muted-foreground shrink-0">
+                <ClipboardList className="size-3.5 text-primary shrink-0" />
+                {t("osce.dataPresented.printedMaterials")}
+              </div>
+              <PrintedMaterialsPanel data={activeCase.dataPresented} packPath={activePackPath} />
+            </aside>
+          )}
+
           {/* Sidebar (desktop) */}
           {!isMobile && (
             <aside
@@ -2351,11 +2353,6 @@ export function OsceStudio({
                     ))}
                   </div>
                 </div>
-              )}
-
-              {/* Printed materials (data-interp) */}
-              {isDataInterp && (
-                <PrintedMaterialsPanel data={activeCase.dataPresented} packPath={activePackPath} />
               )}
 
               {/* Submit */}
@@ -2530,11 +2527,23 @@ export function OsceStudio({
                       "bg-muted-foreground"
                     )}
                   />
-                  <span className="text-[10px] text-muted-foreground">
+                  <span className="text-[10px] text-muted-foreground flex-1 min-w-0">
                     {voicePhase === "speaking" ? "Speaking…" :
                      voicePhase === "listening" ? "Listening…" :
                      "Voice ready"}
                   </span>
+                  {voicePhase === "speaking" && (
+                    <Button
+                      size="iconSm"
+                      variant="outline"
+                      className="size-7 shrink-0"
+                      onClick={interruptSpeaking}
+                      title={t("osce.session.stopSpeaking")}
+                      aria-label={t("osce.session.stopSpeaking")}
+                    >
+                      <Square className="size-3 fill-current" />
+                    </Button>
+                  )}
                 </div>
               )}
 
@@ -3009,8 +3018,8 @@ function DataImagesRenderer({
   packPath?: string;
 }) {
   const [open, setOpen] = React.useState(false);
+  const [viewerIndex, setViewerIndex] = React.useState<number | null>(null);
   const { t } = useI18n();
-  const { openLightbox } = useLightbox();
   if (!images || !images.length) return null;
   return (
     <div>
@@ -3033,7 +3042,7 @@ function DataImagesRenderer({
                 )}
                 <button
                   className="w-full cursor-pointer text-left"
-                  onClick={(e) => { e.stopPropagation(); openLightbox(src, im.alt || im.caption || ""); }}
+                  onClick={(e) => { e.stopPropagation(); setViewerIndex(i); }}
                 >
                   <img src={src} alt={im.alt || im.caption || ""} className="w-full max-h-80 object-contain" loading="lazy" />
                 </button>
@@ -3045,6 +3054,13 @@ function DataImagesRenderer({
           })}
         </div>
       )}
+      <OsceImageViewer
+        images={images}
+        packPath={packPath}
+        index={viewerIndex}
+        onIndexChange={setViewerIndex}
+        onClose={() => setViewerIndex(null)}
+      />
     </div>
   );
 }
@@ -3059,7 +3075,7 @@ function PrintedMaterialsPanel({
   packPath?: string;
 }) {
   const { t } = useI18n();
-  const { openLightbox } = useLightbox();
+  const [viewerIndex, setViewerIndex] = React.useState<number | null>(null);
   if (!data) return null;
   const images = data.images || [];
   if (!data.scenario && !images.length && !(data.tables || []).length) return null;
@@ -3085,7 +3101,7 @@ function PrintedMaterialsPanel({
               return (
                 <button
                   key={i}
-                  onClick={() => openLightbox(src, im.alt || im.caption || "")}
+                  onClick={() => setViewerIndex(i)}
                   className="rounded-lg border border-border overflow-hidden bg-background text-left group"
                 >
                   <img
@@ -3109,6 +3125,85 @@ function PrintedMaterialsPanel({
         </div>
       )}
       {data.tables && data.tables.length > 0 && <DataTablesRenderer tables={data.tables} />}
+      <OsceImageViewer
+        images={images}
+        packPath={packPath}
+        index={viewerIndex}
+        onIndexChange={setViewerIndex}
+        onClose={() => setViewerIndex(null)}
+      />
     </div>
+  );
+}
+
+/* ── OSCE Image Viewer (modal) ────────────────────────────────────── */
+
+function OsceImageViewer({
+  images,
+  packPath = "",
+  index,
+  onIndexChange,
+  onClose,
+}: {
+  images: OsceDataImage[];
+  packPath?: string;
+  index: number | null;
+  onIndexChange: (i: number) => void;
+  onClose: () => void;
+}) {
+  const { t } = useI18n();
+  const image = index === null ? null : images[index];
+  const src = image ? dataImageUrl(image, packPath) : null;
+  const total = images.length;
+  if (total === 0) return null;
+  const goTo = (i: number) => onIndexChange((i + total) % total);
+  return (
+    <Dialog open={index !== null} onOpenChange={(o) => { if (!o) onClose(); }}>
+      <DialogContent className="sm:max-w-3xl p-0 gap-0 max-h-[90vh] flex flex-col">
+        <DialogHeader className="px-4 pt-4 pb-0 text-start">
+          <DialogTitle className="text-sm font-semibold">
+            {t("osce.dataPresented.viewerTitle", {
+              title: image?.title || t("osce.dataPresented.images"),
+              index: (index ?? 0) + 1,
+              total,
+            })}
+          </DialogTitle>
+        </DialogHeader>
+        <div className="relative flex-1 min-h-0 flex items-center justify-center p-4">
+          {src && (
+            <img
+              src={src}
+              alt={image?.alt || image?.caption || ""}
+              className="max-w-full max-h-[60vh] object-contain rounded-lg"
+            />
+          )}
+          {total > 1 && (
+            <>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => goTo((index ?? 0) - 1)}
+                aria-label={t("osce.dataPresented.prev")}
+                className="absolute start-2 top-1/2 -translate-y-1/2"
+              >
+                <ChevronLeft className="size-5 rtl-flip-x" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => goTo((index ?? 0) + 1)}
+                aria-label={t("osce.dataPresented.next")}
+                className="absolute end-2 top-1/2 -translate-y-1/2"
+              >
+                <ChevronRight className="size-5 rtl-flip-x" />
+              </Button>
+            </>
+          )}
+        </div>
+        {image?.caption && (
+          <div className="px-4 pb-4 text-xs text-muted-foreground text-center">{image.caption}</div>
+        )}
+      </DialogContent>
+    </Dialog>
   );
 }
