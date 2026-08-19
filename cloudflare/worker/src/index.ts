@@ -1243,7 +1243,16 @@ async function regenerateManifestForCategory(env: Env, category: string): Promis
   }
   for (const path of [...folders.keys()]) {
     const seg = path.split("/").pop();
-    if (seg && ASSET_FOLDERS.has(seg)) folders.delete(path);
+    if (!seg || !ASSET_FOLDERS.has(seg)) continue;
+    // Roll the asset folder's files up into its parent pack so the manifest
+    // keeps `images` for packs that ship an `images/` subfolder (mirrors the
+    // local generator in scripts/generate-content-manifests.js). Without this,
+    // admin-published packs lose their precache URLs.
+    const info = folders.get(path)!;
+    const parentPath = path.slice(0, path.length - seg.length - 1);
+    const parent = folders.get(parentPath);
+    if (parent) parent.images.push(...info.images);
+    folders.delete(path);
   }
   const parentType = CATEGORY_TYPE_MAP[category] || null;
   const nodes = new Map<string, any>();
@@ -1405,6 +1414,8 @@ function validateContent(contentType: string, parsed: any): string[] {
       if (!s.patient || typeof s.patient !== "object") errors.push(`${p}: patient object required`);
       if (!s.hiddenProfile || typeof s.hiddenProfile !== "object") errors.push(`${p}: hiddenProfile object required`);
       if (!s.rubric || typeof s.rubric !== "object") errors.push(`${p}: rubric object required`);
+      if (s.type && s.type !== "history" && s.type !== "data-interp") errors.push(`${p}: type must be "history" or "data-interp"`);
+      if (s.type === "data-interp" && (!s.dataPresented || typeof s.dataPresented !== "object")) errors.push(`${p}: data-interp stations require a dataPresented object`);
     });
   } else if (contentType === "video") {
     const vs = parsed.videos;
