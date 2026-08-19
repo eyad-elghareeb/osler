@@ -679,6 +679,27 @@ export const en = {
     "osce.session.orb.ready": "Ready",
     "osce.session.toggleVoice": "Toggle voice",
 
+    // ── Live Voice overlay (ChatGPT-style) ──
+    "osce.session.voiceOverlay.title": "Live conversation",
+    "osce.session.voiceOverlay.subtitle": "Tap the orb to interrupt · Tap anywhere outside to minimise",
+    "osce.session.voiceOverlay.tapToTalk": "Tap to start speaking",
+    "osce.session.voiceOverlay.listening": "Listening…",
+    "osce.session.voiceOverlay.thinking": "Thinking…",
+    "osce.session.voiceOverlay.speaking": "Speaking…",
+    "osce.session.voiceOverlay.tapToInterrupt": "Tap to interrupt",
+    "osce.session.voiceOverlay.tapToStop": "Tap to stop",
+    "osce.session.voiceOverlay.transcriptOff": "Transcripts are off — pure voice mode",
+    "osce.session.voiceOverlay.transcriptOn": "Transcripts are on",
+    "osce.session.voiceOverlay.minimise": "Minimise",
+    "osce.session.voiceOverlay.expand": "Expand",
+    "osce.session.voiceOverlay.endCall": "End call",
+    "osce.session.voiceOverlay.micDenied": "Microphone access denied",
+    "osce.session.voiceOverlay.connectionLost": "Connection lost",
+
+    "settings.ai.liveTranscripts": "Live Transcripts",
+    "settings.ai.liveTranscriptsDesc":
+      "Show on-screen text during Live voice mode. Off by default — saves Live API quota and keeps the conversation purely audio, like ChatGPT voice mode.",
+
     "library.title": "Article Library",
     "library.subtitle": "Medical articles across all specialties.",
     "library.search": "Search articles…",

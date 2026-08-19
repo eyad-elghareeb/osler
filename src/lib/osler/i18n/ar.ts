@@ -680,6 +680,27 @@ export const ar = {
     "osce.session.orb.ready": "جاهز",
     "osce.session.toggleVoice": "تبديل الصوت",
 
+    // ── Live Voice overlay (ChatGPT-style) ──
+    "osce.session.voiceOverlay.title": "محادثة مباشرة",
+    "osce.session.voiceOverlay.subtitle": "انقر على الكرة للمقاطعة · انقر في الخارج للتصغير",
+    "osce.session.voiceOverlay.tapToTalk": "انقر لبدء الكلام",
+    "osce.session.voiceOverlay.listening": "يستمع…",
+    "osce.session.voiceOverlay.thinking": "يفكّر…",
+    "osce.session.voiceOverlay.speaking": "يتحدث…",
+    "osce.session.voiceOverlay.tapToInterrupt": "انقر للمقاطعة",
+    "osce.session.voiceOverlay.tapToStop": "انقر للإيقاف",
+    "osce.session.voiceOverlay.transcriptOff": "النصوص مغلقة — وضع الصوت فقط",
+    "osce.session.voiceOverlay.transcriptOn": "النصوص مفعّلة",
+    "osce.session.voiceOverlay.minimise": "تصغير",
+    "osce.session.voiceOverlay.expand": "توسيع",
+    "osce.session.voiceOverlay.endCall": "إنهاء المكالمة",
+    "osce.session.voiceOverlay.micDenied": "تم رفض الوصول إلى الميكروفون",
+    "osce.session.voiceOverlay.connectionLost": "انقطع الاتصال",
+
+    "settings.ai.liveTranscripts": "النصوص المباشرة",
+    "settings.ai.liveTranscriptsDesc":
+      "إظهار النص على الشاشة أثناء وضع الصوت المباشر. مغلق افتراضيًا — يوفر حصة Live API ويبقي المحادثة صوتية فقط، مثل وضع صوت ChatGPT.",
+
     "library.title": "مكتبة المقالات",
     "library.subtitle": "مقالات طبية عبر جميع التخصصات.",
     "library.search": "ابحث عن مقال…",

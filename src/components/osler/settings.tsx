@@ -123,7 +123,7 @@ const STORAGE_KEYS = {
 } as const;
 
 const OSCE_VOICE_MODELS = [
-  ["gemini-3.1-flash-live-preview", "Gemini 3.1 Flash Live (recommended)"],
+  ["gemini-3.1-flash-live-preview", "Gemini 3.1 Flash Live (default, recommended)"],
   ["gemini-2.5-flash-native-audio-preview-12-2025", "Gemini 2.5 Flash Live — native audio"],
 ] as const;
 
@@ -132,6 +132,8 @@ const OSCE_STORAGE_KEYS = {
   voiceOn: "osler_osce_voice_on",
   ttsVoice: "osler_osce_tts_voice",
   ttsRate: "osler_osce_tts_rate",
+  // Opt-in Live transcripts (default off — see STORAGE in osce-studio.tsx).
+  liveTranscripts: "osler_osce_live_transcripts",
 } as const;
 
 /* ─── Section catalog ─────────────────────────────────────────────── */
@@ -887,6 +889,19 @@ export function AiSettingsSection() {
   const [testing, setTesting] = React.useState(false);
   const [testResult, setTestResult] = React.useState<string | null>(null);
   const [cloudSynced, setCloudSynced] = React.useState(false);
+  // Opt-in Live transcripts toggle. Defaults to OFF. Lives in localStorage so
+  // the Live API WebSocket setup can read it on every connection without a
+  // round-trip through the cloud DB.
+  const [liveTranscripts, setLiveTranscripts] = React.useState<boolean>(() =>
+    typeof window !== "undefined" && localStorage.getItem(OSCE_STORAGE_KEYS.liveTranscripts) === "true"
+  );
+  const toggleLiveTranscripts = React.useCallback(() => {
+    setLiveTranscripts((prev) => {
+      const next = !prev;
+      localStorage.setItem(OSCE_STORAGE_KEYS.liveTranscripts, String(next));
+      return next;
+    });
+  }, []);
 
   // On mount: try to pull the saved key from the cloud DB so the user doesn't
   // have to re-enter it on a new device.
@@ -1093,6 +1108,21 @@ export function AiSettingsSection() {
                   {t("settings.ai.ttsRateDesc")}
                 </p>
               </div>
+            </div>
+
+            {/* Live transcripts opt-in (default off) */}
+            <div className="flex items-start justify-between gap-3 pt-3 mt-1 border-t border-border/60">
+              <div className="min-w-0 space-y-1">
+                <div className="text-xs font-semibold text-foreground">{t("settings.ai.liveTranscripts")}</div>
+                <p className="text-[11px] text-muted-foreground leading-relaxed">
+                  {t("settings.ai.liveTranscriptsDesc")}
+                </p>
+              </div>
+              <ToggleSwitch
+                checked={liveTranscripts}
+                onChange={toggleLiveTranscripts}
+                label={t("settings.ai.liveTranscripts")}
+              />
             </div>
           </div>
         </div>

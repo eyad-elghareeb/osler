@@ -30,6 +30,11 @@ import {
   Play,
   Square,
   ClipboardList,
+  Phone,
+  PhoneOff,
+  Maximize2,
+  Minimize2,
+  Captions,
   type LucideIcon,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
@@ -79,7 +84,9 @@ const MODELS: [string, string][] = [
 ];
 
 const LIVE_MODELS: [string, string][] = [
-  ["gemini-3.1-flash-live-preview", "Gemini 3.1 Flash Live (recommended)"],
+  // Live API is now the default — the user requested Gemini Live as the
+  // primary voice path, with server-side transcriptions as an opt-in.
+  ["gemini-3.1-flash-live-preview", "Gemini 3.1 Flash Live (default, recommended)"],
   ["gemini-2.5-flash-native-audio-preview-12-2025", "Gemini 2.5 Flash Live — native audio"],
 ];
 
@@ -93,6 +100,11 @@ const STORAGE = {
   voiceOn: "osler_osce_voice_on",
   ttsVoice: "osler_osce_tts_voice",
   ttsRate: "osler_osce_tts_rate",
+  // Opt-in: when true, the Gemini Live `setup` message requests server-side
+  // input/output audio transcription. Default is OFF — this matches the
+  // ChatGPT-voice-style UX where the conversation is purely audio and the
+  // transcript is a deliberate choice (saves Live API quota / latency).
+  liveTranscripts: "osler_osce_live_transcripts",
 } as const;
 
 const API_KEY = "osler_gemini_api_key";
@@ -802,6 +814,11 @@ export function OsceStudio({
   const [resetModalOpen, setResetModalOpen] = React.useState(false);
   const [renderedCount, setRenderedCount] = React.useState(0);
   const [materialsOpen, setMaterialsOpen] = React.useState(false);
+  // Full-screen ChatGPT-style voice overlay. When `voiceOn` is true, this is
+  // also true so the conversation becomes a pure-voice experience with a
+  // single tappable orb. The user can minimise the overlay to peek at the
+  // transcript / case materials without ending the call.
+  const [voiceOverlayOpen, setVoiceOverlayOpen] = React.useState(false);
   const [selectedPackUid, setSelectedPackUid] = React.useState<string | null>(null);
   // True while a pack's stations.json is being fetched on demand after the
   // user clicks a card. With manifest-first loading, the lobby paints
@@ -863,8 +880,14 @@ export function OsceStudio({
   const scrollRef = React.useRef<HTMLDivElement>(null);
   const timerRef = React.useRef<ReturnType<typeof setInterval> | null>(null);
 
-  const SIDEBAR_WIDTH = 220;
-  const DATA_REF_WIDTH = 260;
+  // Single sidebar — wider so we can fit the patient card, progress, map,
+  // quick prompts, and submit button without feeling cramped. The previous
+  // layout split the desktop view into TWO asides (printed-materials column
+  // + meta column) which made the chat zone feel narrow and the patient
+  // info hard to find at a glance. The single sidebar consolidates all
+  // meta into one column; for data-interp cases the printed materials are
+  // now a collapsible card at the top of the sidebar (or a strip on mobile).
+  const SIDEBAR_WIDTH = 264;
 
   const voicePhaseRef = React.useRef(voicePhase);
   React.useEffect(() => {
@@ -1042,6 +1065,10 @@ export function OsceStudio({
       "wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent?key=" +
       apiKey;
     const ws = new WebSocket(wsUrl);
+    // Use arraybuffer for predictable binary frame handling — Gemini Live
+    // sends JSON text frames, but Blob parsing adds a FileReader microtask
+    // hop and is slower under load.
+    ws.binaryType = "arraybuffer";
     liveSessionRef.current = ws;
 
     ws.onopen = () => {
@@ -1049,21 +1076,30 @@ export function OsceStudio({
         activeCase && activeCase.type === "data-interp"
           ? buildDataInterpSysPrompt(activeCase)
           : buildPatientSysPrompt(activeCase!);
-      ws.send(
-        JSON.stringify({
-          setup: {
-            model: "models/" + modelName,
-            generationConfig: {
-              responseModalities: ["AUDIO"],
-              speechConfig: {
-                voiceConfig: { prebuiltVoiceConfig: { voiceName: getGenderVoice() } },
-              },
-              temperature: 1.0,
-            },
-            systemInstruction: { parts: [{ text: sysPrompt }] },
+      // Transcriptions are opt-in (default off). When disabled, the Live
+      // API streams pure audio with no `sc.inputTranscription` /
+      // `sc.outputTranscription` events — this matches the ChatGPT-voice
+      // UX where the conversation is purely audio and the transcript is a
+      // deliberate user choice. Saves Live API quota and latency.
+      const wantTranscripts =
+        typeof window !== "undefined" &&
+        localStorage.getItem(STORAGE.liveTranscripts) === "true";
+      const setup: Record<string, unknown> = {
+        model: "models/" + modelName,
+        generationConfig: {
+          responseModalities: ["AUDIO"],
+          speechConfig: {
+            voiceConfig: { prebuiltVoiceConfig: { voiceName: getGenderVoice() } },
           },
-        })
-      );
+          temperature: 1.0,
+        },
+        systemInstruction: { parts: [{ text: sysPrompt }] },
+      };
+      if (wantTranscripts) {
+        setup.inputAudioTranscription = {};
+        setup.outputAudioTranscription = {};
+      }
+      ws.send(JSON.stringify({ setup }));
     };
 
     ws.onmessage = (e: MessageEvent) => {
@@ -1192,15 +1228,37 @@ export function OsceStudio({
       }
     }
 
-    ws.onerror = () => {
-      stopGeminiLive();
-      setError("Gemini Live connection failed. Falling back to text mode.");
+    ws.onerror = (ev: Event) => {
+      // WebSocket error events carry no detail by spec — the real error
+      // arrives in the close event's code/reason. Defer the user-facing
+      // message to onclose so we can surface "401 invalid API key" instead
+      // of a generic "connection failed".
+      console.error("[GeminiLive] WebSocket error event:", ev);
     };
 
-    ws.onclose = () => {
+    ws.onclose = (ev: CloseEvent) => {
       liveSessionRef.current = null;
       stopLiveMic();
       setVoicePhase("idle");
+      // 1000 = normal close (user toggled voice off); 1001 = going away
+      // (page unload). Anything else is an error — surface the close
+      // code/reason so the user sees WHY the connection dropped instead
+      // of a generic failure banner.
+      if (ev.code !== 1000 && ev.code !== 1001) {
+        let reason = ev.reason || "";
+        // Gemini Live sometimes sends a structured error JSON in the
+        // reason field on 400/401/403/429 — extract the human message.
+        try {
+          const parsed = JSON.parse(reason);
+          if (parsed?.error?.message) reason = parsed.error.message;
+        } catch {}
+        if (!reason) {
+          if (ev.code === 1006) reason = "Network or auth failure — check your Gemini API key.";
+          else if (ev.code === 1008) reason = "Policy violation — check your Gemini API key and model name.";
+          else reason = `Connection closed (code ${ev.code})`;
+        }
+        setError("Gemini Live disconnected: " + reason + " Falling back to text mode.");
+      }
     };
   }
 
@@ -1232,9 +1290,18 @@ export function OsceStudio({
         liveMicStreamRef.current = stream;
         const actx = new (window.AudioContext || (window as unknown as Record<string, unknown>).webkitAudioContext)({ sampleRate: 16000 }) as AudioContext;
         liveAudioCtxRef.current = actx;
+        // Capture the ACTUAL context sample rate — iOS Safari may silently
+        // ignore the requested 16000Hz and create the context at 48000. If
+        // we hard-code rate=16000 in the mime but the PCM is actually at
+        // 48000, Gemini's VAD hears chipmunk-speed audio and never fires.
+        const micSampleRate = actx.sampleRate;
         const source = actx.createMediaStreamSource(stream);
+        // Guard `inputs[0][0]` — when the mic is briefly disconnected
+        // (e.g., iOS Safari backgrounding, Bluetooth headset swap) the
+        // worklet receives an empty inputs array, and posting `undefined`
+        // crashes the receiver's Float32Array constructor.
         const processorCode =
-          "class MicProcessor extends AudioWorkletProcessor{process(inputs){this.port.postMessage(inputs[0][0]);return true;}}registerProcessor('mic-processor',MicProcessor);";
+          "class MicProcessor extends AudioWorkletProcessor{process(inputs){const c=inputs[0]&&inputs[0][0];if(c)this.port.postMessage(c);return true;}}registerProcessor('mic-processor',MicProcessor);";
         const blob = new Blob([processorCode], { type: "application/javascript" });
         const url = URL.createObjectURL(blob);
         actx.audioWorklet.addModule(url).then(() => {
@@ -1245,13 +1312,21 @@ export function OsceStudio({
             // model speaks — so Gemini Live's VAD can hear the student talk
             // over the professor and emit sc.interrupted (auto-interruption).
             const input = e.data as Float32Array;
+            if (!input || !input.length) return;
             const pcm = new Int16Array(input.length);
             for (let i = 0; i < input.length; i++) pcm[i] = Math.max(-32768, Math.min(32767, Math.round(input[i] * 32767)));
             const bytes = new Uint8Array(pcm.buffer);
+            // Chunked base64 encoding — String.fromCharCode.apply(null, ...)
+            // processes ~32KB at a time and is O(n) instead of the previous
+            // O(n^2) string-concatenation loop, which stalled the audio
+            // thread on long chunks and caused glitchy playback.
+            const CHUNK = 0x8000;
             let binary = "";
-            for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+            for (let i = 0; i < bytes.length; i += CHUNK) {
+              binary += String.fromCharCode.apply(null, bytes.subarray(i, i + CHUNK) as unknown as number[]);
+            }
             const b64 = btoa(binary);
-            liveSessionRef.current.send(JSON.stringify({ realtimeInput: { audio: { data: b64, mimeType: "audio/pcm" } } }));
+            liveSessionRef.current.send(JSON.stringify({ realtimeInput: { audio: { data: b64, mimeType: "audio/pcm;rate=" + micSampleRate } } }));
           };
           source.connect(node);
           liveMicProcessorRef.current = node;
@@ -1270,17 +1345,24 @@ export function OsceStudio({
     try {
       const actx = liveAudioCtxRef.current;
       if (!actx) return;
+      // Mirror the worklet path: use the ACTUAL context sample rate, not
+      // a hard-coded 16000 — see startLiveMic() for the iOS rationale.
+      const micSampleRate = actx.sampleRate;
       const processor = actx.createScriptProcessor(4096, 1, 1);
       processor.onaudioprocess = (e) => {
         if (!liveSessionRef.current || liveSessionRef.current.readyState !== WebSocket.OPEN) return;
         // Streamed continuously — see the AudioWorklet mic path above.
         const input = e.inputBuffer.getChannelData(0);
+        if (!input || !input.length) return;
         const pcm = new Int16Array(input.length);
         for (let i = 0; i < input.length; i++) pcm[i] = Math.max(-32768, Math.min(32767, Math.round(input[i] * 32767)));
         const bytes = new Uint8Array(pcm.buffer);
+        const CHUNK = 0x8000;
         let binary = "";
-        for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
-        liveSessionRef.current.send(JSON.stringify({ realtimeInput: { audio: { data: btoa(binary), mimeType: "audio/pcm" } } }));
+        for (let i = 0; i < bytes.length; i += CHUNK) {
+          binary += String.fromCharCode.apply(null, bytes.subarray(i, i + CHUNK) as unknown as number[]);
+        }
+        liveSessionRef.current.send(JSON.stringify({ realtimeInput: { audio: { data: btoa(binary), mimeType: "audio/pcm;rate=" + micSampleRate } } }));
       };
       const source = actx.createMediaStreamSource(stream);
       source.connect(processor);
@@ -1302,7 +1384,7 @@ export function OsceStudio({
     }
   }
 
-  function playLiveAudio(b64data: string, mimeType: string) {
+  async function playLiveAudio(b64data: string, mimeType: string) {
     try {
       // If we are actively listening to the user, discard any leftover/delayed audio chunks from the server
       if (voicePhaseRef.current === "listening") return;
@@ -1311,11 +1393,32 @@ export function OsceStudio({
       const match = mimeType && mimeType.match(/rate=(\d+)/);
       if (match) sampleRate = parseInt(match[1], 10);
 
-      // Ensure AudioContext exists and is resumed
-      if (!livePlayCtxRef.current) {
-        livePlayCtxRef.current = new (window.AudioContext || (window as unknown as Record<string, unknown>).webkitAudioContext)({ sampleRate }) as AudioContext;
+      // Browsers may close the playback AudioContext under memory pressure
+      // or after a long idle — if so, drop the stale handle and recreate.
+      if (livePlayCtxRef.current && livePlayCtxRef.current.state === "closed") {
+        livePlayCtxRef.current = null;
+        livePlayScheduleTimeRef.current = 0;
       }
-      if (livePlayCtxRef.current.state === "suspended") { livePlayCtxRef.current.resume(); }
+
+      // Create the AudioContext WITHOUT an explicit sampleRate option —
+      // Safari iOS silently rejects non-standard rates like 24000 (falls
+      // back to 48000 anyway) and Chrome prints a console warning when
+      // the requested rate differs from the hardware rate. Letting the
+      // browser pick the default avoids both; the AudioBuffer below is
+      // tagged with the real PCM rate and the buffer source resamples
+      // on play.
+      if (!livePlayCtxRef.current) {
+        const Ctor = (window.AudioContext || (window as unknown as Record<string, unknown>).webkitAudioContext) as typeof AudioContext;
+        livePlayCtxRef.current = new Ctor() as AudioContext;
+      }
+
+      // resume() returns a Promise — if we don't await it, scheduled
+      // buffers fire while the context is still suspended and play
+      // silently. This is the root cause of "Gemini speaks but I hear
+      // nothing" on iOS Safari after a tab regains focus.
+      if (livePlayCtxRef.current.state === "suspended") {
+        try { await livePlayCtxRef.current.resume(); } catch (e) { console.warn("[GeminiLive] ctx.resume() failed:", e); }
+      }
 
       const ctx = livePlayCtxRef.current;
       if (!ctx) return;
@@ -1332,7 +1435,8 @@ export function OsceStudio({
       const float32 = new Float32Array(int16.length);
       for (let j = 0; j < int16.length; j++) float32[j] = int16[j] / 32768;
 
-      // Create AudioBuffer
+      // Create AudioBuffer — tag with the real PCM sample rate; the
+      // browser resamples to the AudioContext's rate during playback.
       const buf = ctx.createBuffer(1, float32.length, sampleRate);
       buf.getChannelData(0).set(float32);
 
@@ -1347,6 +1451,10 @@ export function OsceStudio({
       src.buffer = buf;
       src.connect(ctx.destination);
       src.start(when);
+      // Disconnect the source after playback to avoid leaking
+      // AudioBufferSourceNode graphs across a long exam session —
+      // otherwise Chrome caps at ~256 nodes and silently drops audio.
+      src.onended = () => { try { src.disconnect(); } catch {} };
       setVoicePhase("speaking");
     } catch (e) {
       console.error("[GeminiLive] playLiveAudio error:", e);
@@ -1365,6 +1473,9 @@ export function OsceStudio({
     if (!hasApiKey()) { setError("Set a Gemini API key in Settings first."); return; }
     const next = !voiceOn;
     setVoiceOn(next);
+    // Opening voice also opens the full-screen overlay (ChatGPT-voice-style).
+    // Closing voice dismisses the overlay and ends the call.
+    setVoiceOverlayOpen(next);
     localStorage.setItem(STORAGE.voiceOn, String(next));
     if (!next) {
       stopGeminiLive();
@@ -1373,6 +1484,32 @@ export function OsceStudio({
       stopGeminiLive();
       startGeminiLive();
     }
+  }
+
+  /** End the Live call completely — closes the WebSocket, mic, and overlay. */
+  function endVoiceCall() {
+    setVoiceOn(false);
+    setVoiceOverlayOpen(false);
+    localStorage.setItem(STORAGE.voiceOn, "false");
+    stopGeminiLive();
+    setVoicePhase("idle");
+  }
+
+  /** Whether on-screen transcripts are enabled in Live mode (opt-in, default off). */
+  function isLiveTranscriptsOn(): boolean {
+    return typeof window !== "undefined" && localStorage.getItem(STORAGE.liveTranscripts) === "true";
+  }
+
+  /** Toggle the Live transcripts setting from inside the voice overlay.
+      Note: this takes effect on the NEXT Live connection — the running
+      WebSocket's setup message already negotiated the transcription
+      modality, so toggling mid-call doesn't retroactively start receiving
+      sc.inputTranscription / sc.outputTranscription frames. */
+  function toggleLiveTranscripts() {
+    const next = !isLiveTranscriptsOn();
+    localStorage.setItem(STORAGE.liveTranscripts, String(next));
+    // Force a re-render so the overlay's captions badge updates.
+    setRenderedCount((prev) => prev + 1);
   }
 
   function stopSpeaking() {
@@ -2239,12 +2376,15 @@ export function OsceStudio({
 
     return (
       <motion.div className="fixed inset-0 z-50 bg-background flex flex-col overflow-hidden" {...conversationDismiss}>
-        {/* Header */}
-        <header className="flex items-center gap-2 px-3 py-2 bg-card/60 backdrop-blur-md border-b border-border shrink-0">
+        {/* ── Header ────────────────────────────────────────────
+            Slimmer, cleaner header. The mic / end-call buttons live here so
+            they're always reachable even when the voice overlay is minimised. */}
+        <header className="flex items-center gap-2 px-3 md:px-4 py-2.5 bg-card/70 backdrop-blur-xl border-b border-border shrink-0">
           <button
             onClick={() => { stopTimer(); setPhase("lobby"); }}
-            className="size-8 rounded-md hover:bg-muted/60 flex items-center justify-center shrink-0 transition-colors"
+            className="size-8 rounded-lg hover:bg-muted/60 flex items-center justify-center shrink-0 transition-colors"
             title={t("osce.session.backToLobby")}
+            aria-label={t("osce.session.backToLobby")}
           >
             <ChevronLeft className="size-4" />
           </button>
@@ -2254,8 +2394,8 @@ export function OsceStudio({
             </div>
             <div className="text-[10px] text-muted-foreground truncate">{activeCase.specialty}</div>
           </div>
-          {/* Timer */}
-          <div className="flex items-center gap-1 shrink-0 px-2 py-1 rounded-md bg-muted/40 border border-border">
+          {/* Timer pill */}
+          <div className="flex items-center gap-1.5 shrink-0 px-2.5 py-1 rounded-lg bg-muted/40 border border-border">
             <Clock className="size-3 text-muted-foreground" />
             <span
               className={cn(
@@ -2268,16 +2408,31 @@ export function OsceStudio({
               {formatTime(timerRemaining)}
             </span>
           </div>
+          {/* Voice toggle — primary action */}
+          <button
+            onClick={toggleVoice}
+            className={cn(
+              "h-8 px-3 rounded-lg border flex items-center gap-1.5 text-xs font-semibold transition-all shrink-0",
+              voiceOn
+                ? "bg-destructive-soft border-destructive/30 text-destructive hover:bg-destructive/20"
+                : "border-primary/30 bg-primary/10 text-primary hover:bg-primary/20"
+            )}
+            title={voiceOn ? t("osce.session.voiceOverlay.minimise") : t("osce.session.toggleVoice")}
+            aria-label={voiceOn ? t("osce.session.voiceOverlay.minimise") : t("osce.session.toggleVoice")}
+          >
+            {voiceOn ? <PhoneOff className="size-3.5" /> : <Phone className="size-3.5" />}
+            <span className="hidden sm:inline">{voiceOn ? t("osce.session.voiceOverlay.endCall") : t("osce.session.toggleVoice")}</span>
+          </button>
         </header>
 
-        {/* Timer progress bar */}
+        {/* Timer progress bar (slim, gradient) */}
         <div className="h-0.5 bg-muted/40 shrink-0">
           <div
             className={cn(
               "h-full transition-all duration-1000",
-              timerState(timerRemaining) === "ok" && "bg-success",
-              timerState(timerRemaining) === "warn" && "bg-warning",
-              timerState(timerRemaining) === "danger" && "bg-destructive"
+              timerState(timerRemaining) === "ok" && "bg-gradient-to-r from-success/70 to-success",
+              timerState(timerRemaining) === "warn" && "bg-gradient-to-r from-warning/70 to-warning",
+              timerState(timerRemaining) === "danger" && "bg-gradient-to-r from-destructive/70 to-destructive"
             )}
             style={{ width: (timerRemaining / stationDuration) * 100 + "%" }}
           />
@@ -2297,74 +2452,28 @@ export function OsceStudio({
           )}
         </AnimatePresence>
 
-        {/* Speaker presence — the living orb that tracks the patient/professor
-            through listening → thinking → speaking */}
-        <SpeakerPresence
-          name={isDataInterp ? activeCase.examiner?.name || t("osce.session.examiner") : speakerName}
-          role={
-            isDataInterp
-              ? activeCase.examiner?.title || activeCase.specialty
-              : `${p.age}y · ${p.gender} · ${activeCase.specialty}`
-          }
-          orbState={presenceOrbState}
-          isSpeaking={isSpeaking}
-          status={
-            thinking ? (
-              <ThinkingStatus
-                phases={thinkingPhases}
-                size={20}
-                interval={1800}
-                labelClassName="text-xs"
-              />
-            ) : isSpeaking ? (
-              t("osce.session.speaking")
-            ) : isListening ? (
-              t("osce.session.listening")
-            ) : voiceOn ? (
-              t("osce.session.voiceReady")
-            ) : (
-              t("osce.session.orb.ready")
-            )
-          }
-          onOrbClick={isSpeaking ? interruptSpeaking : toggleVoice}
-          orbHint={isSpeaking ? t("osce.session.stopSpeaking") : t("osce.session.toggleVoice")}
-        isThinking={thinking}
-        isListening={isListening}
-/>
-
-        {/* Body */}
+        {/* ── Body: single sidebar + chat zone ──────────────────
+            Two asides (data-ref column + meta column) collapsed into one.
+            On mobile the sidebar disappears entirely and the chat zone
+            takes the full width; quick prompts move into a collapsible
+            card pinned above the input area. */}
         <div className="flex-1 min-h-0 flex overflow-hidden">
-          {/* Data reference column (data-interp, desktop) — leftmost so the
-              student can consult the printed materials at any time */}
-          {isDataInterp && !isMobile && (
-            <aside
-              className="bg-card border-e border-border flex flex-col gap-2 p-3 overflow-y-auto shrink-0 osler-scroll"
-              style={{ width: DATA_REF_WIDTH }}
-            >
-              <div className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-muted-foreground shrink-0">
-                <ClipboardList className="size-3.5 text-primary shrink-0" />
-                {t("osce.dataPresented.printedMaterials")}
-              </div>
-              <PrintedMaterialsPanel data={activeCase.dataPresented} packPath={activePackPath} />
-            </aside>
-          )}
-
           {/* Sidebar (desktop) */}
           {!isMobile && (
             <aside
-              className="bg-card border-r border-border flex flex-col gap-3 p-3 overflow-y-auto shrink-0"
+              className="bg-card/60 border-e border-border flex flex-col gap-3 p-3 overflow-y-auto shrink-0 osler-scroll"
               style={{ width: SIDEBAR_WIDTH }}
             >
-              {/* Patient card */}
-              <div className="bg-card border border-border rounded-lg p-3">
+              {/* Speaker card */}
+              <div className="bg-card border border-border rounded-xl p-3 shadow-e1">
                 <div className="flex items-center gap-2.5">
-                  <div className="size-8 rounded-full bg-primary/10 border border-primary/20 flex items-center justify-center text-primary font-semibold text-xs shrink-0">
+                  <div className="size-10 rounded-full bg-gradient-to-br from-primary/15 to-primary/5 border border-primary/20 flex items-center justify-center text-primary font-semibold text-sm shrink-0">
                     {isDataInterp
                       ? (activeCase.examiner?.name?.[0] || "E")
                       : p.name[0]}
                   </div>
                   <div className="min-w-0">
-                    <div className="text-xs font-semibold truncate">
+                    <div className="text-sm font-semibold truncate">
                       {isDataInterp ? activeCase.examiner?.name || "Examiner" : p.name}
                     </div>
                     <div className="text-[10px] text-muted-foreground truncate">
@@ -2376,14 +2485,14 @@ export function OsceStudio({
                 </div>
               </div>
 
-              {/* Progress */}
-              <div className="bg-card border border-border rounded-lg p-3 space-y-2">
-                  <div className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground">{t("osce.home.progress")}</div>
+              {/* Progress card */}
+              <div className="bg-card border border-border rounded-xl p-3 space-y-2.5 shadow-e1">
+                <div className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground">{t("osce.home.progress")}</div>
                 <div className="flex justify-between text-[11px]">
                   <span className="text-muted-foreground">Questions</span>
                   <span className="font-semibold tabular-nums">{turnCount} / {MAX_TURNS}</span>
                 </div>
-                <div className="h-1 bg-border/40 rounded-full overflow-hidden">
+                <div className="h-1.5 bg-border/40 rounded-full overflow-hidden">
                   <div
                     className="h-full rounded-full bg-gradient-to-r from-primary/60 to-primary transition-all duration-500"
                     style={{ width: momentum + "%" }}
@@ -2397,14 +2506,14 @@ export function OsceStudio({
 
               {/* Consultation map */}
               {!isDataInterp && (
-                <div className="bg-card border border-border rounded-lg p-3">
+                <div className="bg-card border border-border rounded-xl p-3 shadow-e1">
                   <div className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground mb-2">{t("osce.session.consultationMap")}</div>
                   <div className="flex flex-col gap-0.5">
                     {MAP_STEPS.map(([label, desc], i) => (
                       <div
                         key={i}
                         className={cn(
-                          "flex items-center gap-1.5 text-[11px] px-1.5 py-1 rounded-md transition-all",
+                          "flex items-center gap-2 text-[11px] px-1.5 py-1 rounded-md transition-all",
                           i < mapStep && "text-success",
                           i === mapStep && "text-foreground font-semibold bg-primary/10",
                           i > mapStep && "text-muted-foreground"
@@ -2425,7 +2534,7 @@ export function OsceStudio({
 
               {/* Quick prompts */}
               {!isDataInterp && (
-                <div className="bg-card border border-border rounded-lg p-3">
+                <div className="bg-card border border-border rounded-xl p-3 shadow-e1">
                   <div className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground mb-2">{t("osce.session.quickPrompts")}</div>
                   <div className="flex flex-col gap-1">
                     {[
@@ -2439,7 +2548,7 @@ export function OsceStudio({
                       <button
                         key={label}
                         onClick={() => insertPrompt(prompt)}
-                        className="w-full text-left px-2 py-1 rounded-md text-[11px] text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors"
+                        className="w-full text-left px-2 py-1.5 rounded-md text-[11px] text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors"
                       >
                         {label}
                       </button>
@@ -2448,11 +2557,11 @@ export function OsceStudio({
                 </div>
               )}
 
-              {/* Submit */}
+              {/* Submit button (sidebar footer) */}
               <button
                 onClick={handleSubmit}
                 disabled={sending || thinking || !transcript.length}
-                className="w-full h-9 rounded-lg bg-primary/10 border border-primary/30 text-primary text-xs font-semibold hover:bg-primary/20 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                className="w-full h-10 rounded-xl bg-primary/10 border border-primary/30 text-primary text-xs font-semibold hover:bg-primary/20 transition-colors disabled:opacity-40 disabled:cursor-not-allowed mt-auto"
               >
                 {t("osce.session.submitFeedback")}
               </button>
@@ -2461,9 +2570,11 @@ export function OsceStudio({
 
           {/* Chat Zone */}
           <div className="flex-1 min-w-0 flex flex-col">
-            {/* Printed materials strip (mobile) */}
-            {isDataInterp && isMobile && (
-              <div className="shrink-0 border-b border-border bg-card/60 backdrop-blur-md px-3 py-2">
+            {/* Printed materials strip — for data-interp cases, both mobile
+                and desktop now collapse this here instead of dedicating a
+                whole side column to it. */}
+            {isDataInterp && (
+              <div className="shrink-0 border-b border-border bg-card/60 backdrop-blur-md px-3 md:px-4 py-2">
                 <button
                   onClick={() => setMaterialsOpen(!materialsOpen)}
                   className="w-full flex items-center justify-between text-xs font-semibold"
@@ -2497,16 +2608,20 @@ export function OsceStudio({
             )}
 
             {/* Transcript */}
-            <div ref={scrollRef} className="flex-1 overflow-y-auto px-3 md:px-4 py-4 space-y-4 osler-scroll flex flex-col">
+            <div ref={scrollRef} className="flex-1 overflow-y-auto px-3 md:px-6 py-4 space-y-4 osler-scroll flex flex-col">
               {transcript.length === 0 && (
-                <div className="flex flex-col items-center justify-center h-full text-center gap-2 py-12 text-muted-foreground">
-                  <Stethoscope className="size-8 opacity-30" />
-                  <p className="text-sm font-medium">
-                    {isDataInterp
-                      ? t("osce.dataPresented.examinerOpening")
-                      : t("osce.session.sayHello", { name: p.name })}
-                  </p>
-                  <p className="text-xs opacity-70">{t("osce.session.emptyState")}</p>
+                <div className="flex flex-col items-center justify-center h-full text-center gap-3 py-12 text-muted-foreground">
+                  <div className="size-14 rounded-2xl bg-primary/5 border border-primary/10 flex items-center justify-center">
+                    <Stethoscope className="size-6 text-primary/50" />
+                  </div>
+                  <div className="space-y-1">
+                    <p className="text-sm font-medium">
+                      {isDataInterp
+                        ? t("osce.dataPresented.examinerOpening")
+                        : t("osce.session.sayHello", { name: p.name })}
+                    </p>
+                    <p className="text-xs opacity-70">{t("osce.session.emptyState")}</p>
+                  </div>
                 </div>
               )}
 
@@ -2522,7 +2637,7 @@ export function OsceStudio({
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
                     className={cn(
-                      "flex flex-col gap-1 max-w-[80%] md:max-w-[600px]",
+                      "flex flex-col gap-1 max-w-[80%] md:max-w-[640px]",
                       isModel ? "self-start" : "self-end items-end"
                     )}
                   >
@@ -2539,7 +2654,7 @@ export function OsceStudio({
                       className={cn(
                         "px-3.5 py-2.5 rounded-2xl text-sm leading-relaxed",
                         isModel
-                          ? "bg-card border border-border text-foreground rounded-tl-sm"
+                          ? "bg-card border border-border text-foreground rounded-tl-sm shadow-e1"
                           : "bg-primary/10 border border-primary/20 text-foreground rounded-tr-sm"
                       )}
                       dangerouslySetInnerHTML={{ __html: md(m.text) }}
@@ -2561,7 +2676,7 @@ export function OsceStudio({
                       <Stethoscope className="size-2.5" />
                       {isDataInterp ? activeCase.examiner?.name || "Examiner" : speakerName}
                     </div>
-                    <div className="bg-card border border-border rounded-2xl rounded-tl-sm px-4 py-3 flex items-center gap-3">
+                    <div className="bg-card border border-border rounded-2xl rounded-tl-sm px-4 py-3 flex items-center gap-3 shadow-e1">
                       <ThinkingStatus
                         size={64}
                         interval={1800}
@@ -2595,7 +2710,7 @@ export function OsceStudio({
                   initial={{ opacity: 0, height: 0 }}
                   animate={{ opacity: 1, height: "auto" }}
                   exit={{ opacity: 0, height: 0 }}
-                  className="mx-3 mb-1"
+                  className="mx-3 md:mx-6 mb-1"
                 >
                   <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-destructive/10 border border-destructive/20 text-xs text-destructive">
                     <AlertCircle className="size-3.5 shrink-0" />
@@ -2606,52 +2721,50 @@ export function OsceStudio({
             </AnimatePresence>
 
             {/* Input area */}
-            <div className="border-t border-border bg-card/60 backdrop-blur-md shrink-0 p-3">
-              {/* Voice status */}
-              {voiceOn && (
-                <div className="flex items-center gap-2 mb-2 px-1">
-                  {voicePhase === "idle" ? (
-                    <div className="size-1.5 rounded-full bg-muted-foreground" />
-                  ) : (
-                    <ThinkingOrb
-                      state={voicePhase === "speaking" ? "composing" : "listening"}
-                      size={20}
-                      aria-hidden="true"
-                    />
-                  )}
-                  <span className="text-[10px] text-muted-foreground flex-1 min-w-0">
-                    {voicePhase === "speaking" ? t("osce.session.speaking") :
-                     voicePhase === "listening" ? t("osce.session.listening") :
-                     t("osce.session.voiceReady")}
-                  </span>
-                  {voicePhase === "speaking" && (
-                    <Button
-                      size="iconSm"
-                      variant="outline"
-                      className="size-7 shrink-0"
-                      onClick={interruptSpeaking}
-                      title={t("osce.session.stopSpeaking")}
-                      aria-label={t("osce.session.stopSpeaking")}
+            <div className="border-t border-border bg-card/70 backdrop-blur-xl shrink-0 p-3 md:px-6">
+              {/* Voice status pill (only when voice on AND overlay minimised) */}
+              <AnimatePresence>
+                {voiceOn && !voiceOverlayOpen && (
+                  <motion.div
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: "auto" }}
+                    exit={{ opacity: 0, height: 0 }}
+                    className="mb-2"
+                  >
+                    <button
+                      onClick={() => setVoiceOverlayOpen(true)}
+                      className="w-full flex items-center gap-2 px-3 py-2 rounded-xl bg-primary/5 border border-primary/20 hover:bg-primary/10 transition-colors"
                     >
-                      <Square className="size-3 fill-current" />
-                    </Button>
-                  )}
-                </div>
-              )}
+                      <ThinkingOrb
+                        state={voicePhase === "speaking" ? "composing" : voicePhase === "listening" ? "listening" : "breathing"}
+                        size={20}
+                        aria-hidden="true"
+                      />
+                      <span className="text-[11px] text-muted-foreground flex-1 text-left min-w-0 truncate">
+                        {voicePhase === "speaking" ? t("osce.session.voiceOverlay.speaking") :
+                         voicePhase === "listening" ? t("osce.session.voiceOverlay.listening") :
+                         t("osce.session.voiceOverlay.title")}
+                      </span>
+                      <Maximize2 className="size-3.5 text-muted-foreground shrink-0" />
+                    </button>
+                  </motion.div>
+                )}
+              </AnimatePresence>
 
               {/* Input row */}
               <div className="flex items-end gap-2">
                 <button
                   onClick={toggleVoice}
                   className={cn(
-                    "size-10 rounded-lg border flex items-center justify-center shrink-0 transition-all",
+                    "size-10 rounded-xl border flex items-center justify-center shrink-0 transition-all",
                     voiceOn
                       ? "bg-destructive-soft border-destructive/30 text-destructive hover:bg-destructive/20"
                       : "border-border bg-muted/40 text-muted-foreground hover:border-primary/40 hover:text-primary hover:bg-primary/5"
                   )}
-                  title={voiceOn ? "Disable voice" : "Enable voice"}
+                  title={voiceOn ? t("osce.session.voiceOverlay.endCall") : t("osce.session.toggleVoice")}
+                  aria-label={voiceOn ? t("osce.session.voiceOverlay.endCall") : t("osce.session.toggleVoice")}
                 >
-                  {voiceOn ? <Mic className="size-4" /> : <MicOff className="size-4" />}
+                  {voiceOn ? <PhoneOff className="size-4" /> : <Phone className="size-4" />}
                 </button>
 
                 <textarea
@@ -2666,7 +2779,7 @@ export function OsceStudio({
                   }}
                   placeholder={isDataInterp ? "Answer the examiner's question…" : "Ask the patient a question…"}
                   rows={1}
-                  className="flex-1 resize-none min-h-[40px] max-h-[120px] px-3 py-2 rounded-lg border border-border bg-background text-sm outline-none focus:border-primary/60 focus:ring-2 focus:ring-primary/10 transition-all placeholder:text-muted-foreground"
+                  className="flex-1 resize-none min-h-[40px] max-h-[120px] px-3 py-2 rounded-xl border border-border bg-background text-sm outline-none focus:border-primary/60 focus:ring-2 focus:ring-primary/10 transition-all placeholder:text-muted-foreground"
                   style={{ height: "auto", minHeight: "40px" }}
                   onInput={(e) => {
                     const el = e.currentTarget;
@@ -2678,7 +2791,7 @@ export function OsceStudio({
                 <button
                   onClick={handleSend}
                   disabled={sending || !inputText.trim()}
-                  className="h-10 px-4 rounded-lg bg-primary text-primary-foreground font-medium text-sm hover:bg-primary/90 transition-all disabled:opacity-30 disabled:cursor-not-allowed active:scale-95 shrink-0 flex items-center gap-1.5"
+                  className="h-10 px-4 rounded-xl bg-primary text-primary-foreground font-medium text-sm hover:bg-primary/90 transition-all disabled:opacity-30 disabled:cursor-not-allowed active:scale-95 shrink-0 flex items-center gap-1.5"
                 >
                   {sending ? <Loader2 className="size-4 animate-spin" /> : <><Send className="size-3.5" />Send</>}
                 </button>
@@ -2732,6 +2845,37 @@ export function OsceStudio({
           </div>
         </div>
 
+        {/* ── ChatGPT-style Live Voice Overlay ────────────────── */}
+        <AnimatePresence>
+          {voiceOn && voiceOverlayOpen && (
+            <LiveVoiceOverlay
+              speakerName={isDataInterp ? activeCase.examiner?.name || t("osce.session.examiner") : speakerName}
+              speakerRole={
+                isDataInterp
+                  ? activeCase.examiner?.title || activeCase.specialty
+                  : `${p.age}y · ${p.gender} · ${activeCase.specialty}`
+              }
+              orbState={presenceOrbState}
+              voicePhase={voicePhase}
+              thinking={thinking}
+              thinkingPhases={thinkingPhases}
+              interimText={interimText}
+              lastModelText={(() => {
+                for (let i = transcript.length - 1; i >= 0; i--) {
+                  if (transcript[i].role === "model") return transcript[i].text;
+                }
+                return "";
+              })()}
+              transcriptsOn={isLiveTranscriptsOn()}
+              onToggleTranscripts={toggleLiveTranscripts}
+              onMinimise={() => setVoiceOverlayOpen(false)}
+              onEndCall={endVoiceCall}
+              onInterrupt={interruptSpeaking}
+              error={error}
+            />
+          )}
+        </AnimatePresence>
+
         {/* Reset Modal */}
         <AnimatePresence>
           {resetModalOpen && (
@@ -2764,7 +2908,7 @@ export function OsceStudio({
                   <button
                     onClick={() => {
                       stopTimer();
-                      if (voiceOn) stopSpeaking();
+                      if (voiceOn) endVoiceCall();
                       setTranscript([]);
                       setRenderedCount(0);
                       resetTimer(activeCase?.time || EXAM_TIME);
@@ -3300,84 +3444,283 @@ function OsceImageViewer({
   );
 }
 
-/* ── Speaker presence (live orb) ───────────────────────────────────── */
+/* ── Live Voice Overlay (ChatGPT-style full-screen voice UI) ──────── */
 
-function SpeakerPresence({
-  name,
-  role,
+/**
+ * A full-screen voice experience modelled on ChatGPT's voice mode.
+ *
+ * Design intent:
+ * - The orb is the single tappable surface. Tap to interrupt while the
+ *   professor is speaking; tap to indicate you're done talking while the
+ *   system is listening.
+ * - Subtitles are off by default. A small captions badge in the top
+ *   bar shows the current state and toggles via the settings, but when
+ *   transcripts are off only a thin hint line is shown — the focus is on
+ *   the audio, not the text.
+ * - Three controls: minimise (returns to the text view while keeping
+ *   the call alive), toggle captions, end call. No other UI chrome —
+ *   the orb fills the screen.
+ */
+function LiveVoiceOverlay({
+  speakerName,
+  speakerRole,
   orbState,
-  isSpeaking,
-  isThinking,
-  isListening,
-  status,
-  onOrbClick,
-  orbHint,
+  voicePhase,
+  thinking,
+  thinkingPhases,
+  interimText,
+  lastModelText,
+  transcriptsOn,
+  onToggleTranscripts,
+  onMinimise,
+  onEndCall,
+  onInterrupt,
+  error,
 }: {
-  name: string;
-  role: string;
+  speakerName: string;
+  speakerRole: string;
   orbState: OrbState;
-  isSpeaking: boolean;
-  isThinking: boolean;
-  isListening: boolean;
-  status: React.ReactNode;
-  onOrbClick: () => void;
-  orbHint: string;
+  voicePhase: "idle" | "listening" | "speaking";
+  thinking: boolean;
+  thinkingPhases: ThinkingPhase[];
+  interimText: string;
+  lastModelText: string;
+  transcriptsOn: boolean;
+  onToggleTranscripts: () => void;
+  onMinimise: () => void;
+  onEndCall: () => void;
+  onInterrupt: () => void;
+  error: string | null;
 }) {
   const { t } = useI18n();
   const reduce = useReducedMotion();
+
+  const isSpeaking = voicePhase === "speaking";
+  const isListening = voicePhase === "listening";
+
+  // Phase copy under the orb
+  const phaseLabel = isSpeaking
+    ? t("osce.session.voiceOverlay.speaking")
+    : isListening
+      ? t("osce.session.voiceOverlay.listening")
+      : thinking
+        ? t("osce.session.voiceOverlay.thinking")
+        : t("osce.session.voiceOverlay.tapToTalk");
+
+  // The orb is tapped to: interrupt while speaking, otherwise just
+  // visually pulse — Gemini Live's VAD picks up the user's voice
+  // automatically, no explicit "tap to talk" needed.
+  const handleOrbTap = () => {
+    if (isSpeaking) onInterrupt();
+  };
+
   return (
-    <div className="shrink-0 px-3 md:px-4 py-3 flex items-center gap-3 border-b border-border bg-card/60 backdrop-blur-md">
-      <button
-        type="button"
-        onClick={onOrbClick}
-        title={orbHint}
-        aria-label={orbHint}
-        className="relative size-24 shrink-0 rounded-full flex items-center justify-center active:scale-95 transition-transform"
-      >
-        {isSpeaking && !reduce && (
-          <motion.span
-            className="absolute inset-0 rounded-full border-2 border-primary/30"
-            animate={{ scale: [1, 1.18, 1], opacity: [0.5, 0, 0.5] }}
-            transition={{ duration: 1.8, repeat: Infinity, ease: "easeInOut" }}
-            aria-hidden="true"
-          />
-        )}
-        <span
-          className={cn(
-            "absolute inset-0 rounded-full",
-            isSpeaking ? "shadow-glow" : "shadow-e1"
-          )}
-          aria-hidden="true"
-        />
-        <ThinkingOrb state={orbState} size={64} className="scale-150" aria-hidden="true" />
-      </button>
-      <div className="min-w-0 flex-1">
-        <div className="flex items-center gap-2">
-          <span className="text-sm font-semibold truncate">{name}</span>
-          {isSpeaking && (
-            <span className="hidden sm:inline-flex items-center gap-1 text-[10px] font-medium text-primary shrink-0">
-              <Volume2 className="size-3" />
-              {t("osce.session.speaking")}
-            </span>
-          )}
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.25 }}
+      className="fixed inset-0 z-50 flex flex-col bg-gradient-to-b from-background via-background to-card/40 backdrop-blur-xl"
+      // The backdrop is a translucent overlay above the conversation UI.
+      // Tap-to-dismiss is intentionally NOT enabled on the backdrop —
+      // users finish a voice call via the explicit End button.
+      role="dialog"
+      aria-label={t("osce.session.voiceOverlay.title")}
+    >
+      {/* Top bar — speaker name + actions */}
+      <div className="flex items-center justify-between px-4 py-3 shrink-0">
+        <div className="min-w-0 flex items-center gap-2.5">
+          <div className="size-9 rounded-full bg-gradient-to-br from-primary/15 to-primary/5 border border-primary/20 flex items-center justify-center text-primary font-semibold text-xs shrink-0">
+            {speakerName?.[0] || "P"}
+          </div>
+          <div className="min-w-0">
+            <div className="text-sm font-semibold truncate">{speakerName}</div>
+            <div className="text-[10px] text-muted-foreground truncate">{speakerRole}</div>
+          </div>
         </div>
-        <div className="text-[10px] text-muted-foreground truncate mt-0.5">{role}</div>
-        <div className="mt-1 flex items-center gap-1.5 min-w-0">
-          <span
+        <div className="flex items-center gap-1.5 shrink-0">
+          {/* Captions toggle */}
+          <button
+            onClick={onToggleTranscripts}
             className={cn(
-              "size-1.5 rounded-full shrink-0",
-              isSpeaking
-                ? "bg-success animate-pulse"
-                : isListening
-                  ? "bg-destructive animate-pulse"
-                  : isThinking
-                    ? "bg-warning"
-                    : "bg-muted-foreground"
+              "h-8 px-2.5 rounded-lg border flex items-center gap-1.5 text-[11px] font-medium transition-colors",
+              transcriptsOn
+                ? "border-primary/30 bg-primary/10 text-primary"
+                : "border-border text-muted-foreground hover:text-foreground hover:bg-muted/40"
             )}
-          />
-          <span className="text-xs text-muted-foreground min-w-0 truncate">{status}</span>
+            title={transcriptsOn ? t("osce.session.voiceOverlay.transcriptOn") : t("osce.session.voiceOverlay.transcriptOff")}
+            aria-label={transcriptsOn ? t("osce.session.voiceOverlay.transcriptOn") : t("osce.session.voiceOverlay.transcriptOff")}
+          >
+            <Captions className="size-3.5" />
+            <span className="hidden sm:inline">{transcriptsOn ? "On" : "Off"}</span>
+          </button>
+          {/* Minimise */}
+          <button
+            onClick={onMinimise}
+            className="size-8 rounded-lg border border-border text-muted-foreground hover:text-foreground hover:bg-muted/40 flex items-center justify-center transition-colors"
+            title={t("osce.session.voiceOverlay.minimise")}
+            aria-label={t("osce.session.voiceOverlay.minimise")}
+          >
+            <Minimize2 className="size-4" />
+          </button>
+          {/* End call */}
+          <button
+            onClick={onEndCall}
+            className="h-8 px-3 rounded-lg bg-destructive/10 border border-destructive/30 text-destructive hover:bg-destructive/20 flex items-center gap-1.5 text-[11px] font-semibold transition-colors"
+            title={t("osce.session.voiceOverlay.endCall")}
+            aria-label={t("osce.session.voiceOverlay.endCall")}
+          >
+            <PhoneOff className="size-3.5" />
+            <span className="hidden sm:inline">{t("osce.session.voiceOverlay.endCall")}</span>
+          </button>
         </div>
       </div>
-    </div>
+
+      {/* Center stage — the orb */}
+      <div className="flex-1 min-h-0 flex flex-col items-center justify-center gap-6 px-6">
+        {/* Live captions area — only meaningful when transcripts are on OR
+            the system is mid-utterance and we have interim text. When both
+            are off, the area collapses and the orb takes the full vertical
+            space. */}
+        <AnimatePresence>
+          {(transcriptsOn || interimText || lastModelText) && (
+            <motion.div
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -8 }}
+              className="w-full max-w-2xl space-y-2 min-h-[3rem] flex flex-col justify-center"
+            >
+              {/* Professor's last full utterance */}
+              {transcriptsOn && lastModelText && (
+                <div className="self-start max-w-[85%] px-3.5 py-2 rounded-2xl rounded-tl-sm bg-card border border-border text-sm text-foreground/90 leading-relaxed">
+                  {lastModelText}
+                </div>
+              )}
+              {/* User's interim speech */}
+              {interimText && (
+                <div className="self-end max-w-[85%] px-3.5 py-2 rounded-2xl rounded-tr-sm bg-primary/5 border border-primary/10 text-sm text-muted-foreground italic">
+                  {interimText}
+                </div>
+              )}
+              {/* Hint line when transcripts off but we still need to show
+                  something to anchor the orb's gaze */}
+              {!transcriptsOn && !interimText && (
+                <div className="text-center text-[11px] text-muted-foreground/70">
+                  {t("osce.session.voiceOverlay.transcriptOff")}
+                </div>
+              )}
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* The orb */}
+        <button
+          type="button"
+          onClick={handleOrbTap}
+          className={cn(
+            "relative size-44 sm:size-56 rounded-full flex items-center justify-center transition-transform",
+            isSpeaking && "active:scale-95"
+          )}
+          title={isSpeaking ? t("osce.session.voiceOverlay.tapToInterrupt") : phaseLabel}
+          aria-label={isSpeaking ? t("osce.session.voiceOverlay.tapToInterrupt") : phaseLabel}
+        >
+          {/* Pulsing rings when speaking */}
+          {isSpeaking && !reduce && (
+            <>
+              <motion.span
+                className="absolute inset-0 rounded-full border-2 border-primary/40"
+                animate={{ scale: [1, 1.2, 1], opacity: [0.6, 0, 0.6] }}
+                transition={{ duration: 1.8, repeat: Infinity, ease: "easeInOut" }}
+                aria-hidden="true"
+              />
+              <motion.span
+                className="absolute inset-0 rounded-full border border-primary/30"
+                animate={{ scale: [1, 1.35, 1], opacity: [0.4, 0, 0.4] }}
+                transition={{ duration: 1.8, repeat: Infinity, ease: "easeInOut", delay: 0.4 }}
+                aria-hidden="true"
+              />
+            </>
+          )}
+          {/* Pulsing rings when listening — subtler, slower */}
+          {isListening && !reduce && (
+            <motion.span
+              className="absolute inset-0 rounded-full border-2 border-destructive/40"
+              animate={{ scale: [1, 1.15, 1], opacity: [0.5, 0, 0.5] }}
+              transition={{ duration: 2.4, repeat: Infinity, ease: "easeInOut" }}
+              aria-hidden="true"
+            />
+          )}
+          {/* Glow halo */}
+          <span
+            className={cn(
+              "absolute inset-0 rounded-full blur-xl",
+              isSpeaking ? "bg-primary/20" : isListening ? "bg-destructive/15" : "bg-primary/10"
+            )}
+            aria-hidden="true"
+          />
+          {/* The orb itself — scaled up to dominate the center. The base
+              size is 64px (the largest supported by thinking-orbs); we
+              scale it visually with Tailwind to fill the 176px container. */}
+          <ThinkingOrb
+            state={orbState}
+            size={64}
+            className="scale-[2] sm:scale-[2.5] relative z-10"
+            aria-hidden="true"
+          />
+        </button>
+
+        {/* Phase label */}
+        <div className="flex flex-col items-center gap-1 text-center">
+          <div className="flex items-center gap-1.5">
+            <span
+              className={cn(
+                "size-1.5 rounded-full shrink-0",
+                isSpeaking
+                  ? "bg-success animate-pulse"
+                  : isListening
+                    ? "bg-destructive animate-pulse"
+                    : thinking
+                      ? "bg-warning"
+                      : "bg-muted-foreground"
+              )}
+            />
+            <span className="text-sm font-medium text-foreground/90">{phaseLabel}</span>
+          </div>
+          {thinking && (
+            <ThinkingStatus
+              phases={thinkingPhases}
+              size={64}
+              interval={1800}
+              labelClassName="text-xs italic text-muted-foreground"
+            />
+          )}
+        </div>
+      </div>
+
+      {/* Footer — subtitle hint + secondary action */}
+      <div className="px-4 pb-5 pt-2 shrink-0 flex flex-col items-center gap-2">
+        <p className="text-[11px] text-muted-foreground/70 text-center max-w-md leading-relaxed">
+          {isSpeaking
+            ? t("osce.session.voiceOverlay.tapToInterrupt")
+            : t("osce.session.voiceOverlay.subtitle")}
+        </p>
+        {/* Inline error */}
+        <AnimatePresence>
+          {error && (
+            <motion.div
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: "auto" }}
+              exit={{ opacity: 0, height: 0 }}
+              className="max-w-md w-full"
+            >
+              <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-destructive/10 border border-destructive/20 text-xs text-destructive">
+                <AlertCircle className="size-3.5 shrink-0" />
+                <span className="truncate">{error}</span>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
+    </motion.div>
   );
 }
