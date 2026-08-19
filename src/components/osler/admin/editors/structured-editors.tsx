@@ -32,6 +32,7 @@ import {
   Eye,
   Loader2,
   ListChecks,
+  X,
 } from "lucide-react";
 import { useI18n } from "@/components/osler/i18n-provider";
 import { haptic } from "@/lib/osler/native";
@@ -1560,7 +1561,13 @@ export function OsceEditor({ value, onChange, readOnly, r2KeyBase, rawR2Key }: S
               <Field label="Type">
                 <Select
                   value={s.type ?? "history"}
-                  onValueChange={(v) => patchStation(i, { type: v })}
+                  onValueChange={(v) =>
+                    patchStation(i, {
+                      type: v,
+                      dataPresented:
+                        v === "data-interp" ? s.dataPresented ?? {} : s.dataPresented,
+                    })
+                  }
                   disabled={readOnly}
                 >
                   <SelectTrigger>
@@ -1686,6 +1693,41 @@ export function OsceEditor({ value, onChange, readOnly, r2KeyBase, rawR2Key }: S
   placeholder="Patient's first line"
 />
             </Field>
+
+            {s.type === "data-interp" && (
+              <>
+                <SectionLabel>{t("admin.structured.dataPresented")}</SectionLabel>
+                <Field label={t("admin.structured.dataScenario")}>
+                  <MilkdownEditor
+                    value={s.dataPresented?.scenario ?? ""}
+                    onChange={(v) =>
+                      patchStation(i, { dataPresented: { ...(s.dataPresented ?? {}), scenario: v } })
+                    }
+                    readOnly={readOnly}
+                    r2KeyBase={r2KeyBase}
+                    rawR2Key={rawR2Key}
+                    className="min-h-[120px]"
+                    placeholder="The student is handed this clinical vignette…"
+                  />
+                </Field>
+                <DataTablesField
+                  tables={s.dataPresented?.tables ?? []}
+                  onChange={(v) =>
+                    patchStation(i, { dataPresented: { ...(s.dataPresented ?? {}), tables: v } })
+                  }
+                  readOnly={readOnly}
+                />
+                <DataImagesField
+                  images={s.dataPresented?.images ?? []}
+                  onChange={(v) =>
+                    patchStation(i, { dataPresented: { ...(s.dataPresented ?? {}), images: v } })
+                  }
+                  readOnly={readOnly}
+                  r2KeyBase={r2KeyBase}
+                  rawR2Key={rawR2Key}
+                />
+              </>
+            )}
 
             <SectionLabel>{t("admin.structured.hiddenProfile")}</SectionLabel>
             <Field label="Diagnosis">
@@ -1829,6 +1871,360 @@ function OsceQuestionsEditor({
         </Button>
       )}
     </div>
+  );
+}
+
+// ── Data-interpretation "Data presented" editors ──────────────────────────
+
+function DataTablesField({
+  tables,
+  onChange,
+  readOnly,
+}: {
+  tables: any[];
+  onChange: (next: any[]) => void;
+  readOnly?: boolean;
+}) {
+  const { t } = useI18n();
+  const list: any[] = Array.isArray(tables) ? tables : [];
+
+  function patch(i: number, patch: any) {
+    onChange(list.map((tb, idx) => (idx === i ? { ...tb, ...patch } : tb)));
+  }
+  function addTable() {
+    onChange([...list, { title: "", headers: ["Result", "Value"], rows: [["", ""]] }]);
+  }
+  function removeTable(i: number) {
+    onChange(list.filter((_, idx) => idx !== i));
+  }
+  function addRow(i: number) {
+    const n = Math.max(1, (list[i]?.headers || []).length);
+    patch(i, { rows: [...(list[i]?.rows || []), Array.from({ length: n }, () => "")] });
+  }
+  function removeRow(i: number, ri: number) {
+    patch(i, { rows: (list[i]?.rows || []).filter((_: any, idx: number) => idx !== ri) });
+  }
+
+  return (
+    <div className="space-y-2">
+      {list.map((tb, i) => (
+        <div key={i} className="border border-border rounded-xl p-2 space-y-2 bg-card/60">
+          <div className="flex items-center justify-between gap-2">
+            <Input
+              value={tb.title ?? ""}
+              onChange={(e) => patch(i, { title: e.target.value })}
+              readOnly={readOnly}
+              placeholder={t("admin.structured.dataTableTitle")}
+              className="text-xs"
+            />
+            {!readOnly && (
+              <Button
+                size="iconSm"
+                variant="ghost"
+                className="text-destructive hover:text-destructive shrink-0"
+                onClick={() => removeTable(i)}
+              >
+                <Trash2 className="size-3.5" />
+              </Button>
+            )}
+          </div>
+          <TagListField
+            label={t("admin.structured.dataHeaders")}
+            tags={tb.headers ?? []}
+            onChange={(v) => patch(i, { headers: v })}
+            readOnly={readOnly}
+          />
+          {(tb.rows || []).map((row: string[], ri: number) => (
+            <div key={ri} className="flex items-center gap-1.5">
+              {row.map((cell, ci) => (
+                <Input
+                  key={ci}
+                  value={cell ?? ""}
+                  onChange={(e) =>
+                    patch(i, {
+                      rows: (tb.rows || []).map((r: string[], ridx: number) =>
+                        ridx === ri ? r.map((c, cidx) => (cidx === ci ? e.target.value : c)) : r
+                      ),
+                    })
+                  }
+                  readOnly={readOnly}
+                  className="text-xs flex-1 min-w-0"
+                />
+              ))}
+              {!readOnly && (
+                <Button
+                  size="iconSm"
+                  variant="ghost"
+                  className="text-destructive hover:text-destructive shrink-0"
+                  onClick={() => removeRow(i, ri)}
+                >
+                  <X className="size-3.5" />
+                </Button>
+              )}
+            </div>
+          ))}
+          {!readOnly && (
+            <div className="flex gap-1.5">
+              <Button size="sm" variant="ghost" onClick={() => addRow(i)} className="text-xs">
+                <Plus className="size-3 me-1" /> {t("admin.structured.addRow")}
+              </Button>
+            </div>
+          )}
+        </div>
+      ))}
+      {!readOnly && (
+        <Button size="sm" variant="ghost" onClick={addTable} className="text-xs">
+          <Plus className="size-3 me-1" /> {t("admin.structured.addTable")}
+        </Button>
+      )}
+    </div>
+  );
+}
+
+function DataImagesField({
+  images,
+  onChange,
+  readOnly,
+  r2KeyBase,
+  rawR2Key,
+}: {
+  images: any;
+  onChange: (next: any) => void;
+  readOnly?: boolean;
+  r2KeyBase?: string;
+  rawR2Key?: string;
+}) {
+  const { t } = useI18n();
+  const { toast } = useToast();
+  const arr: Array<{ title?: string; caption?: string; alt?: string; src?: string }> = React.useMemo(() => {
+    if (!images) return [];
+    if (Array.isArray(images)) return images.map((im: any) => ({ ...im }));
+    if (typeof images === "object") return [{ ...images }];
+    return [];
+  }, [images]);
+
+  function commit(next: Array<{ title?: string; caption?: string; alt?: string; src?: string }>) {
+    if (next.length === 0) onChange(undefined);
+    else if (next.length === 1) onChange(next[0]);
+    else onChange(next);
+  }
+  function patchField(i: number, field: string, v: string) {
+    commit(arr.map((im, idx) => (idx === i ? { ...im, [field]: v } : im)));
+  }
+
+  const [previewIdx, setPreviewIdx] = React.useState<number | null>(null);
+  const fileRef = React.useRef<HTMLInputElement>(null);
+  const [dragActive, setDragActive] = React.useState(false);
+  const [uploading, setUploading] = React.useState(false);
+  const canUpload = !!(r2KeyBase || rawR2Key);
+
+  async function handleUpload(file: File): Promise<void> {
+    if (!isImageFile(file)) {
+      toast({ title: t("admin.markdown.notAnImage"), variant: "destructive" });
+      return;
+    }
+    if (!canUpload) {
+      toast({ title: t("admin.structured.cannotUpload"), variant: "destructive" });
+      return;
+    }
+    setUploading(true);
+    try {
+      const result = await uploadImageForEditor(file, { r2KeyBase, rawR2Key });
+      commit([...arr, { src: result.ref, title: file.name.replace(/\.[^.]+$/, ""), alt: file.name.replace(/\.[^.]+$/, "") }]);
+      toast({
+        title: result.converted
+          ? t("admin.markdown.optimized", {
+              before: formatBytes(result.originalBytes),
+              after: formatBytes(result.optimizedBytes),
+            })
+          : t("admin.markdown.uploaded", { name: file.name }),
+        description: result.key,
+      });
+    } catch (err: any) {
+      toast({
+        title: t("admin.markdown.uploadFailed"),
+        description: err?.message ?? String(err),
+        variant: "destructive",
+      });
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  async function handleFiles(files: File[] | FileList): Promise<void> {
+    const imgs = Array.from(files).filter(isImageFile);
+    if (imgs.length === 0) {
+      toast({ title: t("admin.markdown.notAnImage"), variant: "destructive" });
+      return;
+    }
+    for (const f of imgs) await handleUpload(f);
+  }
+
+  return (
+    <Field label={t("admin.structured.dataImages")} hint={canUpload ? t("admin.structured.dropOrPasteHint") : undefined}>
+      <div
+        className={cn(
+          "space-y-1.5 relative rounded transition-colors",
+          dragActive && "ring-2 ring-inset ring-primary/60 bg-primary/5"
+        )}
+        onDrop={(e) => {
+          if (readOnly || !e.dataTransfer?.files?.length) return;
+          if (!Array.from(e.dataTransfer.files).some(isImageFile)) return;
+          e.preventDefault();
+          setDragActive(false);
+          void handleFiles(e.dataTransfer.files);
+        }}
+        onDragOver={(e) => {
+          if (readOnly || !e.dataTransfer) return;
+          if (!Array.from(e.dataTransfer.types).includes("Files")) return;
+          e.preventDefault();
+          setDragActive(true);
+        }}
+        onDragLeave={(e) => {
+          if (e.currentTarget === e.target) setDragActive(false);
+        }}
+        onPaste={(e) => {
+          if (readOnly) return;
+          const items = e.clipboardData?.items;
+          if (!items) return;
+          const imgs: File[] = [];
+          for (let i = 0; i < items.length; i++) {
+            const it = items[i];
+            if (it.kind === "file" && it.type.startsWith("image/")) {
+              const f = it.getAsFile();
+              if (f) imgs.push(f);
+            }
+          }
+          if (imgs.length === 0) return;
+          e.preventDefault();
+          void handleFiles(imgs);
+        }}
+      >
+        {arr.map((img, i) => (
+          <div key={i} className="grid grid-cols-[1fr_1fr_auto] gap-1.5 items-start">
+            <Input
+              value={img.title ?? ""}
+              onChange={(e) => patchField(i, "title", e.target.value)}
+              readOnly={readOnly}
+              placeholder={t("admin.structured.imageTitle")}
+              className="text-xs"
+            />
+            <Input
+              value={img.src ?? ""}
+              onChange={(e) => patchField(i, "src", e.target.value)}
+              readOnly={readOnly}
+              placeholder="ecg.png or images/ecg.png"
+              className="text-xs font-mono"
+            />
+            {!readOnly && (
+              <Button
+                size="iconSm"
+                variant="ghost"
+                className="text-destructive hover:text-destructive"
+                onClick={() => commit(arr.filter((_, idx) => idx !== i))}
+              >
+                <Trash2 className="size-3.5" />
+              </Button>
+            )}
+            <Input
+              value={img.caption ?? ""}
+              onChange={(e) => patchField(i, "caption", e.target.value)}
+              readOnly={readOnly}
+              placeholder={t("admin.structured.imageCaption")}
+              className="text-xs"
+            />
+            <Input
+              value={img.alt ?? ""}
+              onChange={(e) => patchField(i, "alt", e.target.value)}
+              readOnly={readOnly}
+              placeholder={t("admin.structured.imageAlt")}
+              className="text-xs"
+            />
+            <span />
+            {img.src && (
+              <div className="col-span-3 -mt-1 mb-1">
+                <button
+                  type="button"
+                  onClick={() => setPreviewIdx(i)}
+                  disabled={readOnly}
+                  className="group relative block h-20 w-full overflow-hidden rounded-xl border border-border bg-muted/40"
+                  aria-label={t("admin.preview.previewImage")}
+                  title={t("admin.preview.previewImage")}
+                >
+                  <img
+                    src={resolveImageForPreview(img.src, { r2KeyBase, rawR2Key })}
+                    alt={img.alt ?? ""}
+                    className="h-full w-full object-contain transition-transform group-hover:scale-105"
+                    onError={(e) => {
+                      const el = e.currentTarget as HTMLImageElement;
+                      el.style.opacity = "0.3";
+                      el.style.background = "oklch(0.92 0 0)";
+                    }}
+                  />
+                  <span className="absolute inset-0 flex items-center justify-center bg-primary/0 text-primary opacity-0 transition-opacity group-hover:bg-primary/10 group-hover:opacity-100">
+                    <Eye className="size-5" />
+                  </span>
+                </button>
+              </div>
+            )}
+          </div>
+        ))}
+        {!readOnly && (
+          <div className="flex gap-1.5 flex-wrap items-center">
+            <Button size="sm" variant="ghost" onClick={() => commit([...arr, { title: "", src: "" }])} className="text-xs">
+              <Plus className="size-3 me-1" /> {t("admin.structured.addImage")}
+            </Button>
+            {canUpload && (
+              <>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => fileRef.current?.click()}
+                  disabled={uploading}
+                  className="text-xs"
+                >
+                  {uploading
+                    ? <Loader2 className="size-3 me-1 animate-spin" />
+                    : <ImagePlus className="size-3 me-1" />}
+                  {t("admin.structured.uploadImage")}
+                </Button>
+                <input
+                  ref={fileRef}
+                  type="file"
+                  accept="image/*"
+                  multiple
+                  className="hidden"
+                  onChange={(e) => {
+                    if (e.target.files && e.target.files.length > 0) {
+                      void handleFiles(e.target.files);
+                    }
+                    e.target.value = "";
+                  }}
+                />
+              </>
+            )}
+          </div>
+        )}
+        {dragActive && (
+          <div className="absolute inset-0 z-10 flex items-center justify-center bg-primary/10 border-2 border-dashed border-primary/60 rounded pointer-events-none">
+            <div className="flex flex-col items-center gap-1 text-primary">
+              <ImagePlus className="size-5" />
+              <span className="text-[11px] font-medium">{t("admin.markdown.dropToUpload")}</span>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {previewIdx != null && arr[previewIdx]?.src && (
+        <ImageLightbox
+          open={previewIdx != null}
+          onOpenChange={(open) => { if (!open) setPreviewIdx(null); }}
+          src={resolveImageForPreview(arr[previewIdx].src, { r2KeyBase, rawR2Key })}
+          alt={arr[previewIdx].alt}
+          fileName={arr[previewIdx].src.split("/").pop()}
+        />
+      )}
+    </Field>
   );
 }
 
