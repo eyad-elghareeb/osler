@@ -178,6 +178,13 @@ export interface CloudConfig {
   syncContent: boolean;
 }
 
+/** Optional transactional email service (password resets + email verification). */
+export interface EmailConfig {
+  /** Master switch for transactional email. When false, the reset/verify
+   *  forms are hidden in the UI and the worker refuses to send. */
+  enabled: boolean;
+}
+
 /** First-time wizard state. */
 export interface WizardConfig {
   /** Has the wizard been completed (either in admin or in-app)? */
@@ -232,6 +239,8 @@ export interface OslerConfig {
   };
   /** Optional cloud accounts and cross-device progress sync. */
   cloud: CloudConfig;
+  /** Optional transactional email service (password resets + verification). */
+  email: EmailConfig;
   /** First-time wizard state. */
   wizard: WizardConfig;
 }
@@ -607,6 +616,9 @@ export const DEFAULT_CONFIG: OslerConfig = {
     syncFlashcards: true,
     syncContent: true,
   },
+  email: {
+    enabled: true,
+  },
   wizard: {
     completed: false,
     version: 1,
@@ -690,6 +702,11 @@ function mergeConfig(user: unknown): OslerConfig {
 
   if (u.cloud && typeof u.cloud === "object") {
     out.cloud = { ...out.cloud, ...u.cloud };
+  }
+
+  // email
+  if (u.email && typeof u.email === "object") {
+    out.email = { ...out.email, ...u.email };
   }
 
   // wizard

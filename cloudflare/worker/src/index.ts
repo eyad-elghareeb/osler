@@ -515,6 +515,23 @@ async function verifyTurnstile(token: string | undefined, env: Env): Promise<boo
   return payload.success === true;
 }
 
+/**
+ * Whether the instance owner has enabled transactional email (password
+ * resets + email verification). Reads the worker's own config at the R2
+ * root (`_osler.config.json`); a missing or malformed file defaults to
+ * enabled, so instances that never configure it keep working.
+ */
+async function emailEnabled(env: Env): Promise<boolean> {
+  const obj = await env.CONTENT!.get("_osler.config.json");
+  if (!obj) return true;
+  try {
+    const config = JSON.parse(await obj.text());
+    return config?.email?.enabled !== false;
+  } catch {
+    return true;
+  }
+}
+
 // ─── Validation helpers ──────────────────────────────────────────────────────
 
 function validUsername(value: unknown): value is string { return typeof value === "string" && /^[a-zA-Z0-9_.-]{3,32}$/.test(value); }
@@ -3621,6 +3638,7 @@ export default {
         // can't probe or mail-bomb the endpoint without first solving
         // Turnstile. Account existence is still never revealed (ok:true below).
         if (!await verifyTurnstile(body.turnstileToken, env)) return json({ error: "Verification failed" }, 400, origin, log);
+        if (!(await emailEnabled(env))) return json({ error: "Email is disabled" }, 400, origin, log);
         if (validEmail(email)) {
           const user = await env.DB.prepare("SELECT * FROM users WHERE email = ? COLLATE NOCASE").bind(email).first<any>();
           if (user && env.RESEND_API_KEY && env.EMAIL_FROM && env.APP_ORIGIN) {
@@ -3673,6 +3691,7 @@ export default {
         // victim — gate it on the challenge like every other unauthenticated
         // mail-triggering endpoint.
         if (!await verifyTurnstile(body.turnstileToken, env)) return json({ error: "Verification failed" }, 400, origin, log);
+        if (!(await emailEnabled(env))) return json({ error: "Email is disabled" }, 400, origin, log);
         const email = String(body.email || "").trim().toLowerCase();
         if (!validEmail(email)) return json({ error: "Invalid email" }, 400, origin, log);
         const user = await env.DB.prepare("SELECT * FROM users WHERE email = ? COLLATE NOCASE AND email_verified_at IS NULL").bind(email).first<any>();

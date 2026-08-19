@@ -132,6 +132,7 @@ export function LoginScreen({ onLogin, cloudAuthError }: LoginScreenProps) {
   // challenge lives in the guest dialog. Mirror the main widget's render logic
   // but scoped to the dialog's container (rendered only while it's open).
   const guestTurnstileEnabled = cloudActive && !!getConfig().cloud.turnstileSiteKey;
+  const emailEnabled = getConfig().email?.enabled !== false;
 
   React.useEffect(() => {
     const sitekey = getConfig().cloud.turnstileSiteKey;
@@ -766,7 +767,7 @@ export function LoginScreen({ onLogin, cloudAuthError }: LoginScreenProps) {
               <Button type="button" variant="link" size="sm" onClick={() => { setCloudMode(cloudMode === "register" ? "login" : "register"); setCloudError(""); }}>
                 {cloudMode === "register" ? t("login.haveAccount") : t("login.createAccount")}
               </Button>
-              {cloudMode === "login" && (
+              {cloudMode === "login" && emailEnabled && (
                 <>
                   <Button type="button" variant="link" size="sm" onClick={() => { setCloudMode("reset"); setCloudError(""); setVerifyState("idle"); setVerifySent(false); }}>
                     {t("login.forgotPassword")}
