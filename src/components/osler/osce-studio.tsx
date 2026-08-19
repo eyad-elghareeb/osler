@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
 import {
   Mic,
   MicOff,
@@ -59,6 +59,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { ContentCacheButton } from "./content-cache-button";
 import { ContentLangFilter } from "./qbank-studio";
 import { useSwipeBackDismiss } from "@/hooks/use-swipe-back-dismiss";
+import { ThinkingStatus, type ThinkingPhase } from "@/components/osler/thinking-status";
+import { ThinkingOrb, type OrbState } from "thinking-orbs";
 
 /* ── Constants ─────────────────────────────────────────────────────── */
 
@@ -2088,6 +2090,33 @@ export function OsceStudio({
     })();
     const speakerName = getSpeakerName(activeCase);
 
+    // Orb phase sets — the professor/presenter alternates between them while
+    // composing a reply, mirroring the AI assistant's orb vocabulary.
+    const thinkingPhases: ThinkingPhase[] = isDataInterp
+      ? [
+          { label: t("osce.session.listening"), state: "listening" },
+          { label: t("osce.session.orb.evaluating"), state: "searching" },
+          { label: t("osce.session.orb.scoring"), state: "solving" },
+          { label: t("osce.session.orb.composing"), state: "composing" },
+        ]
+      : [
+          { label: t("osce.session.orb.thinking"), state: "working" },
+          { label: t("osce.session.orb.recalling"), state: "searching" },
+          { label: t("osce.session.orb.composing"), state: "composing" },
+          { label: t("osce.session.orb.responding"), state: "solving" },
+        ];
+    const isSpeaking = voiceOn && voicePhase === "speaking";
+    const isListening = voiceOn && voicePhase === "listening";
+    const presenceOrbState: OrbState = isSpeaking
+      ? "composing"
+      : isListening
+        ? "listening"
+        : thinking
+          ? isDataInterp
+            ? "searching"
+            : "working"
+          : "breathing";
+
     async function handleSend() {
       const text = inputText.trim();
       if (!text || !activeCase) return;
@@ -2238,6 +2267,41 @@ export function OsceStudio({
             </motion.div>
           )}
         </AnimatePresence>
+
+        {/* Speaker presence — the living orb that tracks the patient/professor
+            through listening → thinking → speaking */}
+        <SpeakerPresence
+          name={isDataInterp ? activeCase.examiner?.name || t("osce.session.examiner") : speakerName}
+          role={
+            isDataInterp
+              ? activeCase.examiner?.title || activeCase.specialty
+              : `${p.age}y · ${p.gender} · ${activeCase.specialty}`
+          }
+          orbState={presenceOrbState}
+          isSpeaking={isSpeaking}
+          status={
+            thinking ? (
+              <ThinkingStatus
+                phases={thinkingPhases}
+                size={20}
+                interval={1800}
+                labelClassName="text-xs"
+              />
+            ) : isSpeaking ? (
+              t("osce.session.speaking")
+            ) : isListening ? (
+              t("osce.session.listening")
+            ) : voiceOn ? (
+              t("osce.session.voiceReady")
+            ) : (
+              t("osce.session.orb.ready")
+            )
+          }
+          onOrbClick={isSpeaking ? interruptSpeaking : toggleVoice}
+          orbHint={isSpeaking ? t("osce.session.stopSpeaking") : t("osce.session.toggleVoice")}
+        isThinking={thinking}
+        isListening={isListening}
+/>
 
         {/* Body */}
         <div className="flex-1 min-h-0 flex overflow-hidden">
@@ -2468,15 +2532,13 @@ export function OsceStudio({
                       <Stethoscope className="size-2.5" />
                       {isDataInterp ? activeCase.examiner?.name || "Examiner" : speakerName}
                     </div>
-                    <div className="bg-card border border-border rounded-2xl rounded-tl-sm px-4 py-2.5 inline-flex items-center gap-2">
-                      <div className="flex gap-1">
-                        <span className="size-1.5 rounded-full bg-primary/50 animate-bounce" style={{ animationDelay: "0s" }} />
-                        <span className="size-1.5 rounded-full bg-primary/50 animate-bounce" style={{ animationDelay: "0.15s" }} />
-                        <span className="size-1.5 rounded-full bg-primary/50 animate-bounce" style={{ animationDelay: "0.3s" }} />
-                      </div>
-                      <span className="text-xs text-muted-foreground italic">
-                        {isDataInterp ? "evaluating…" : "typing…"}
-                      </span>
+                    <div className="bg-card border border-border rounded-2xl rounded-tl-sm px-4 py-3 flex items-center gap-3">
+                      <ThinkingStatus
+                        size={64}
+                        interval={1800}
+                        phases={thinkingPhases}
+                        labelClassName="text-xs italic text-muted-foreground"
+                      />
                     </div>
                   </motion.div>
                 )}
@@ -2519,18 +2581,19 @@ export function OsceStudio({
               {/* Voice status */}
               {voiceOn && (
                 <div className="flex items-center gap-2 mb-2 px-1">
-                  <div
-                    className={cn(
-                      "size-1.5 rounded-full",
-                      voicePhase === "speaking" ? "bg-sky-500 animate-pulse" :
-                      voicePhase === "listening" ? "bg-destructive animate-pulse" :
-                      "bg-muted-foreground"
-                    )}
-                  />
+                  {voicePhase === "idle" ? (
+                    <div className="size-1.5 rounded-full bg-muted-foreground" />
+                  ) : (
+                    <ThinkingOrb
+                      state={voicePhase === "speaking" ? "composing" : "listening"}
+                      size={20}
+                      aria-hidden="true"
+                    />
+                  )}
                   <span className="text-[10px] text-muted-foreground flex-1 min-w-0">
-                    {voicePhase === "speaking" ? "Speaking…" :
-                     voicePhase === "listening" ? "Listening…" :
-                     "Voice ready"}
+                    {voicePhase === "speaking" ? t("osce.session.speaking") :
+                     voicePhase === "listening" ? t("osce.session.listening") :
+                     t("osce.session.voiceReady")}
                   </span>
                   {voicePhase === "speaking" && (
                     <Button
@@ -3205,5 +3268,87 @@ function OsceImageViewer({
         )}
       </DialogContent>
     </Dialog>
+  );
+}
+
+/* ── Speaker presence (live orb) ───────────────────────────────────── */
+
+function SpeakerPresence({
+  name,
+  role,
+  orbState,
+  isSpeaking,
+  isThinking,
+  isListening,
+  status,
+  onOrbClick,
+  orbHint,
+}: {
+  name: string;
+  role: string;
+  orbState: OrbState;
+  isSpeaking: boolean;
+  isThinking: boolean;
+  isListening: boolean;
+  status: React.ReactNode;
+  onOrbClick: () => void;
+  orbHint: string;
+}) {
+  const { t } = useI18n();
+  const reduce = useReducedMotion();
+  return (
+    <div className="shrink-0 px-3 md:px-4 py-3 flex items-center gap-3 border-b border-border bg-card/60 backdrop-blur-md">
+      <button
+        type="button"
+        onClick={onOrbClick}
+        title={orbHint}
+        aria-label={orbHint}
+        className="relative size-24 shrink-0 rounded-full flex items-center justify-center active:scale-95 transition-transform"
+      >
+        {isSpeaking && !reduce && (
+          <motion.span
+            className="absolute inset-0 rounded-full border-2 border-primary/30"
+            animate={{ scale: [1, 1.18, 1], opacity: [0.5, 0, 0.5] }}
+            transition={{ duration: 1.8, repeat: Infinity, ease: "easeInOut" }}
+            aria-hidden="true"
+          />
+        )}
+        <span
+          className={cn(
+            "absolute inset-0 rounded-full",
+            isSpeaking ? "shadow-glow" : "shadow-e1"
+          )}
+          aria-hidden="true"
+        />
+        <ThinkingOrb state={orbState} size={64} className="scale-150" aria-hidden="true" />
+      </button>
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-2">
+          <span className="text-sm font-semibold truncate">{name}</span>
+          {isSpeaking && (
+            <span className="hidden sm:inline-flex items-center gap-1 text-[10px] font-medium text-primary shrink-0">
+              <Volume2 className="size-3" />
+              {t("osce.session.speaking")}
+            </span>
+          )}
+        </div>
+        <div className="text-[10px] text-muted-foreground truncate mt-0.5">{role}</div>
+        <div className="mt-1 flex items-center gap-1.5 min-w-0">
+          <span
+            className={cn(
+              "size-1.5 rounded-full shrink-0",
+              isSpeaking
+                ? "bg-success animate-pulse"
+                : isListening
+                  ? "bg-destructive animate-pulse"
+                  : isThinking
+                    ? "bg-warning"
+                    : "bg-muted-foreground"
+            )}
+          />
+          <span className="text-xs text-muted-foreground min-w-0 truncate">{status}</span>
+        </div>
+      </div>
+    </div>
   );
 }
