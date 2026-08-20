@@ -938,28 +938,6 @@ export function MermaidEditorModal({ open, initialCode, onSave, onClose }: Merma
               />
             </div>
 
-            <div className="px-4 pb-2.5">
-              <span className="text-[10px] uppercase tracking-wider font-medium block mb-1.5 text-muted-foreground">
-                {t("admin.mermaid.quickStart")}
-              </span>
-              <div className="flex gap-1.5 flex-wrap">
-                {PRESETS.map((p) => {
-                  const PIcon = p.icon;
-                  return (
-                    <button
-                      type="button"
-                      key={p.id}
-                      onClick={() => loadPreset(p.id)}
-                      className={cn("flex items-center gap-1 px-2.5 py-1.5 rounded-lg border text-[10px] font-medium transition-all hover:brightness-125 border-border/60", p.color, p.bg)}
-                    >
-                      <PIcon className="w-3 h-3 shrink-0" />
-                      {t(p.labelKey)}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-
             <div className="mx-4 border-t border-border opacity-40" />
 
             <div className="flex-1 min-h-0 overflow-y-auto osler-scroll-y">

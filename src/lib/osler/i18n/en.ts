@@ -2062,7 +2062,6 @@ export const en = {
     "admin.mermaid.flowBuilderSub": "Draw your diagram step by step",
     "admin.mermaid.diagramTitle": "Diagram Title",
     "admin.mermaid.titlePlaceholder": "e.g., Acute Heart Failure Pathway",
-    "admin.mermaid.quickStart": "Quick Start",
     "admin.mermaid.presetPathway": "Clinical Pathway",
     "admin.mermaid.presetAlgorithm": "Decision Tree",
     "admin.mermaid.presetProtocol": "Protocol",

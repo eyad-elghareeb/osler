@@ -2058,7 +2058,6 @@ export const ar = {
     "admin.mermaid.flowBuilderSub": "ارسم مخططك خطوة بخطوة",
     "admin.mermaid.diagramTitle": "عنوان المخطط",
     "admin.mermaid.titlePlaceholder": "مثال: مسار قصور القلب الحاد",
-    "admin.mermaid.quickStart": "بداية سريعة",
     "admin.mermaid.presetPathway": "مسار سريري",
     "admin.mermaid.presetAlgorithm": "شجرة قرار",
     "admin.mermaid.presetProtocol": "بروتوكول",
