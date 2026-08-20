@@ -211,6 +211,29 @@ function loadMermaid(): Promise<typeof import("mermaid")> {
   return mermaidPromise;
 }
 
+/**
+ * Render mermaid source to an SVG string. Shared by the modal preview and the
+ * inline editor rendering. Re-initializes mermaid with the current theme
+ * before each render so a theme switch is picked up immediately.
+ */
+export async function renderMermaidToSvg(code: string): Promise<string> {
+  const mod = await loadMermaid();
+  const m = mod.default;
+  m.initialize({
+    startOnLoad: false,
+    theme: getTheme(),
+    securityLevel: "loose",
+    fontFamily: "var(--font-sans, Geist, system-ui, sans-serif)",
+  });
+  const renderId = `mermaid-render-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  try {
+    const { svg } = await m.render(renderId, code.trim() || "graph TD\n  A --> B");
+    return svg;
+  } finally {
+    document.getElementById(renderId)?.remove();
+  }
+}
+
 // ── Component ──────────────────────────────────────────────────────────────
 
 export interface MermaidEditorModalProps {
@@ -259,22 +282,11 @@ export function MermaidEditorModal({ open, initialCode, onSave, onClose }: Merma
     setLoading(true);
     const timer = setTimeout(async () => {
       try {
-        const mod = await loadMermaid();
-        const m = mod.default;
-        m.initialize({
-          startOnLoad: false,
-          theme: getTheme(),
-          securityLevel: "loose",
-          fontFamily: "var(--font-sans, Geist, system-ui, sans-serif)",
-        });
-        const renderId = `mermaid-admin-${id}-${Date.now()}`;
-        const { svg: out } = await m.render(renderId, code.trim() || "graph TD\n  A --> B");
+        const out = await renderMermaidToSvg(code);
         if (id === renderIdRef.current) {
           setSvg(out);
           setError("");
         }
-        // Clean up any leftover DOM node mermaid may have created on error
-        document.getElementById(renderId)?.remove();
       } catch (err: any) {
         if (id === renderIdRef.current) {
           setError(String(err?.message ?? err ?? "Parse error").replace(/\u001b\[[0-9;]*m/g, "").slice(0, 300));

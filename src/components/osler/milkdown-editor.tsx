@@ -16,8 +16,9 @@
  *   • `enableMermaid?: boolean` — enable mermaid diagram support
  *     (default: false — only enable for article editor + notes). When
  *     `enableTopBar` is also set, a mermaid button appears in the top
- *     bar's Insert group; otherwise the chips bar shows an "insert
- *     diagram" entry.
+ *     bar's Insert group. Mermaid code blocks render inline as diagrams
+ *     inside the editor (via the CodeMirror preview); click a rendered
+ *     diagram to open the edit modal.
  *   • `enableTopBar?: boolean` — show Crepe's always-visible top formatting
  *     bar (default: false — only enable for article editor + notes where
  *     long-form writing benefits from persistent controls; compact answer
@@ -28,10 +29,9 @@ import * as React from "react";
 import { Crepe } from "@milkdown/crepe";
 import { Milkdown, MilkdownProvider, useEditor } from "@milkdown/react";
 import { replaceAll } from "@milkdown/utils";
-import { ImagePlus, Loader2, Workflow } from "lucide-react";
+import { ImagePlus, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useI18n } from "@/components/osler/i18n-provider";
-import type { StringKey } from "@/lib/osler/i18n";
 import { useToast } from "@/hooks/use-toast";
 import {
   uploadImageForEditor,
@@ -40,7 +40,10 @@ import {
   formatBytes,
   type UploadImageResult,
 } from "@/components/osler/admin/editors/image-upload";
-import { useMermaidModal } from "@/components/osler/admin/editors/mermaid-editor";
+import {
+  useMermaidModal,
+  renderMermaidToSvg,
+} from "@/components/osler/admin/editors/mermaid-editor";
 
 // ── Mermaid top-bar icon ─────────────────────────────────────────────────
 
@@ -166,6 +169,33 @@ function InnerMilkdownEditor({
   );
 
   useEditor((root) => {
+    // Inline mermaid preview: renders `mermaid` code blocks to SVG via the
+    // CodeMirror block preview hook (same pattern as the built-in Latex
+    // feature). Debounced + sequence-guarded so rapid edits cancel stale
+    // renders instead of racing. Only the last render applies.
+    let previewSeq = 0;
+    let previewTimer: number | null = null;
+    const renderMermaidPreview = (
+      language: string,
+      content: string,
+      applyPreview: (value: null | string | HTMLElement) => void,
+    ) => {
+      if (language !== "mermaid" || !content.trim()) return null;
+      const seq = ++previewSeq;
+      if (previewTimer) window.clearTimeout(previewTimer);
+      previewTimer = window.setTimeout(() => {
+        void renderMermaidToSvg(content)
+          .then((svg) => {
+            if (seq !== previewSeq) return;
+            applyPreview(`<div class="osler-mermaid-render">${svg}</div>`);
+          })
+          .catch(() => {
+            if (seq === previewSeq) applyPreview(null);
+          });
+      }, 200);
+      return undefined;
+    };
+
     const crepe = new Crepe({
       root,
       defaultValue: value,
@@ -201,6 +231,21 @@ function InnerMilkdownEditor({
           blockUploadPlaceholderText: t("editor.uploading"),
           inlineUploadPlaceholderText: t("editor.uploading"),
         },
+        // Mermaid code blocks render inline as diagrams. Only enabled when
+        // mermaid support is on; for every other language renderPreview
+        // returns null so the default code-block rendering is untouched.
+        [Crepe.Feature.CodeMirror]: enableMermaid
+          ? {
+              previewOnlyByDefault: true,
+              renderPreview: renderMermaidPreview,
+              previewLabel: t("editor.mermaid.previewLabel"),
+              previewLoading: t("editor.mermaid.previewLoading"),
+              previewToggleText: (previewOnlyMode: boolean) =>
+                previewOnlyMode
+                  ? t("editor.mermaid.previewEdit")
+                  : t("editor.mermaid.previewHide"),
+            }
+          : undefined,
         // When both the top bar and mermaid are enabled, surface a
         // mermaid button in the top bar's Insert group — the natural
         // affordance in long-form editors (article editor, notes).
@@ -299,53 +344,6 @@ function findMermaidBlocks(md: string): MermaidBlock[] {
     }
   }
   return out;
-}
-
-function MermaidChips({
-  blocks,
-  onEdit,
-  onInsert,
-  showInsert = true,
-  t,
-}: {
-  blocks: MermaidBlock[];
-  onEdit: (block: MermaidBlock) => void;
-  onInsert: () => void;
-  /** Show the "insert diagram" entry (hidden when the top bar already
-   *  hosts the mermaid button). */
-  showInsert?: boolean;
-  t: (key: StringKey, params?: Record<string, string | number>) => string;
-}) {
-  return (
-    <div className="shrink-0 flex flex-wrap items-center gap-1.5 px-2.5 py-1 border-t border-border bg-muted/20">
-      <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground me-1 inline-flex items-center gap-1">
-        <Workflow className="size-3" />
-        {t("editor.mermaid.label")}
-      </span>
-      {blocks.map((block) => (
-        <button
-          key={block.index}
-          type="button"
-          onClick={() => onEdit(block)}
-          className="inline-flex items-center gap-1 rounded-full border border-border bg-card px-2 py-0.5 text-[11px] font-medium text-foreground hover:border-primary/40 hover:bg-primary/5 transition-colors"
-          title={t("editor.mermaid.editDiagramN", { n: block.index + 1 })}
-        >
-          <Workflow className="size-2.5" />
-          {block.index + 1}
-        </button>
-      ))}
-      {showInsert && (
-        <button
-          type="button"
-          onClick={onInsert}
-          className="ms-auto inline-flex items-center gap-1 rounded-full border border-dashed border-border px-2 py-0.5 text-[11px] text-muted-foreground hover:border-primary/40 hover:text-primary transition-colors"
-          title={t("editor.mermaid.insertMermaidBlock")}
-        >
-          {t("editor.mermaid.insertDiagram")}
-        </button>
-      )}
-    </div>
-  );
 }
 
 // ── Outer wrapper ─────────────────────────────────────────────────────────
@@ -458,12 +456,7 @@ export function MilkdownEditor({
     [readOnly, enableImageUpload, handleImageFiles],
   );
 
-  const mermaidBlocks = React.useMemo(
-    () => (enableMermaid ? findMermaidBlocks(value) : []),
-    [value, enableMermaid],
-  );
-
-  const handleEditMermaid = React.useCallback(
+  const handleEditMermaidBlock = React.useCallback(
     (block: MermaidBlock) => {
       openModal(block.code, (newCode: string) => {
         const lines = value.split("\n");
@@ -476,6 +469,24 @@ export function MilkdownEditor({
       });
     },
     [openModal, value, onChange],
+  );
+
+  // Click a rendered diagram to edit it. Rendered previews carry the
+  // .osler-mermaid-render class; delegate clicks on the wrapper to the
+  // matching markdown block by document order.
+  const handleMermaidClick = React.useCallback(
+    (e: React.MouseEvent<HTMLDivElement>) => {
+      if (readOnly || !enableMermaid) return;
+      const renderEl = (e.target as HTMLElement).closest<HTMLElement>(".osler-mermaid-render");
+      if (!renderEl || !wrapperRef.current) return;
+      const all = Array.from(wrapperRef.current.querySelectorAll<HTMLElement>(".osler-mermaid-render"));
+      const idx = all.indexOf(renderEl);
+      if (idx < 0) return;
+      const block = findMermaidBlocks(value)[idx];
+      if (!block) return;
+      handleEditMermaidBlock(block);
+    },
+    [readOnly, enableMermaid, handleEditMermaidBlock, value],
   );
 
   const handleInsertMermaid = React.useCallback(() => {
@@ -497,6 +508,7 @@ export function MilkdownEditor({
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       onPaste={handlePaste}
+      onClick={handleMermaidClick}
       className={cn(
         "osler-milkdown-editor relative flex flex-col rounded-lg border border-border bg-card overflow-visible",
         "focus-within:border-primary/40 transition-colors",
@@ -557,23 +569,7 @@ export function MilkdownEditor({
             registerCrepe={registerCrepe}
           />
         </MilkdownProvider>
-      </div>
-
-      {/* Mermaid chips — only when enableMermaid is true.
-          shrink-0 prevents this bar from expanding to fill unused
-          flex space when the editor body is short. When the top bar is
-          enabled, insertion lives in the top bar, so the chips bar only
-          shows once a diagram exists (edit affordance for existing
-          blocks) and the dashed insert chip is hidden. */}
-      {enableMermaid && !readOnly && (!enableTopBar || mermaidBlocks.length > 0) && (
-        <MermaidChips
-          blocks={mermaidBlocks}
-          onEdit={handleEditMermaid}
-          onInsert={handleInsertMermaid}
-          showInsert={!enableTopBar}
-          t={t}
-        />
-      )}
+</div>
 
       {/* Minimal word count — just the number, right-aligned, very subtle.
           shrink-0 prevents this from expanding. */}

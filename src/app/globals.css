@@ -3195,6 +3195,24 @@ html.osler-ar body,
   outline-color: var(--primary) !important;
 }
 
+/* Inline mermaid diagram preview — the renderPreview wrapper. Clicking a
+   rendered diagram opens the edit modal (handled in milkdown-editor.tsx). */
+.osler-milkdown-editor .osler-mermaid-render {
+  cursor: pointer;
+  max-width: 100%;
+  margin-inline: auto;
+  border-radius: var(--radius-md);
+  transition: box-shadow 0.15s ease;
+}
+.osler-milkdown-editor .osler-mermaid-render:hover {
+  box-shadow: 0 0 0 1.5px var(--primary);
+}
+.osler-milkdown-editor .osler-mermaid-render svg {
+  max-width: 100%;
+  height: auto;
+  vertical-align: middle;
+}
+
 /* ── 9. Link tooltip ─────────────────────────────────────────────────── */
 .osler-milkdown-editor .milkdown .milkdown-link-preview,
 .osler-milkdown-editor .milkdown .milkdown-link-edit {
@@ -3227,8 +3245,7 @@ html.osler-ar body,
   font-size: 0.85rem;
 }
 
-/* ── 10. Top bar (when enabled — currently disabled in MilkdownEditor,
- *        but styled here for completeness / future use) ─────────────── */
+/* ── 10. Top bar (article editor + notes panel) ─────────────────────── */
 .osler-milkdown-editor .milkdown .milkdown-top-bar {
   background: var(--muted) !important;
   border-bottom: 1px solid var(--border) !important;
