@@ -13,8 +13,9 @@
  *   • Image upload via drag-drop, paste, file picker, or the Crepe
  *     ImageBlock slash command — wired to `uploadImageForEditor` with
  *     the same R2 routing (`r2KeyBase` / `rawR2Key`).
- *   • Mermaid diagram editing — chips below the editor open the
- *     `MermaidEditorModal`, and "Insert diagram" creates a new block.
+ *   • Mermaid diagram editing — GUI-driven visual flow builder
+ *     (`MermaidEditorModal`); the top-bar button and slash menu open it.
+ *     Clicking a rendered diagram re-opens it for editing.
  *   • Word / char / line counters in the footer.
  *   • Read-only mode.
  *

@@ -1,197 +1,321 @@
 "use client";
 
 /**
- * Mermaid modal editor — React port of
- * tauri-admin/frontend/views/mermaid-editor.js.
+ * Mermaid visual diagram editor (flow builder) + shared render helper.
  *
- * Lazy-loads mermaid from the npm dep (no CDN). Three-column layout:
- *   left   — template / diagram-type picker
- *   center — monospace textarea for source
- *   right  — live-rendered SVG preview (debounced 500ms)
+ * This is an osler-adapted port of NoteTool's MermaidMakerGUI — a guided,
+ * code-free flow builder: a vertical stack of step cards (start / process /
+ * decision / milestone / end) with inline label editing, insert-on-hover
+ * between cards, decision branches that connect to any other step, three
+ * medical presets, and a live mermaid preview. The generated source is always
+ * valid (mermaid does the layout), so the UX is deterministic — no freeform
+ * canvas, no fragile graph library.
+ *
+ * Adaptation notes (vs. the NoteTool original):
+ *   • Hardcoded palette colors (`text-emerald-400`, `bg-blue-500/10`,
+ *     `--color-sb-*` vars) are mapped to osler semantic tokens
+ *     (`text-success` / `text-warning` / `text-destructive` / `text-info`,
+ *     `bg-card` / `bg-muted` / `border-border`).
+ *   • Every user-facing string goes through `t()` (en + ar).
+ *   • The builder round-trips existing diagrams: `parseFlowchart` reads a
+ *     flowchart source back into steps (preserving shapes, labels, branch
+ *     targets, direction and the `%% title:` comment), so editing an existing
+ *     diagram is lossless. Non-flowchart diagrams are flagged with a notice.
+ *
+ * The `%% title:` comment and the flowchart direction survive save→edit→save
+ * round-trips. `renderMermaidToSvg` is shared by the inline editor rendering
+ * and this modal's live preview.
  */
 
 import * as React from "react";
 import {
-  X,
+  Plus,
+  Trash2,
+  Save,
+  Activity,
+  HeartPulse,
+  Stethoscope,
+  Play,
+  CircleDot,
+  Diamond,
+  Square,
+  GitMerge,
+  CornerDownRight,
   Check,
-  Loader2,
+  X,
+  ArrowRight,
   AlertTriangle,
-  Workflow,
+  Loader2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { useI18n } from "@/components/osler/i18n-provider";
 
-// ── Diagram templates ──────────────────────────────────────────────────────
+// ── Data model ─────────────────────────────────────────────────────────────
 
-interface Template {
+type StepKind = "start" | "process" | "decision" | "end" | "milestone";
+
+interface FlowStep {
+  id: string;
+  kind: StepKind;
   label: string;
-  code: string;
+  /** For decisions: the branches coming out. */
+  branches: Branch[];
+  /** ID of the next step in the main flow (null = end). */
+  nextId: string | null;
+  /** Original mermaid shape delimiters — preserved for lossless round-trips. */
+  shape?: [string, string];
 }
 
-const TEMPLATE_GROUPS: Array<{ group: string; items: Template[] }> = [
-  {
-    group: "Flow",
-    items: [
-      {
-        label: "Flowchart",
-        code: `flowchart TD
-    A([Start]) --> B{Decision?}
-    B -- Yes --> C[Process A]
-    B -- No  --> D[Process B]
-    C --> E([End])
-    D --> E`,
-      },
-      {
-        label: "Sequence",
-        code: `sequenceDiagram
-    participant Patient
-    participant Doctor
-    Patient->>Doctor: Presents with symptoms
-    Doctor->>Doctor: Examines patient
-    Doctor-->>Patient: Diagnosis & treatment plan`,
-      },
-      {
-        label: "State",
-        code: `stateDiagram-v2
-    [*] --> Idle
-    Idle --> Running : start
-    Running --> Paused : pause
-    Paused --> Running : resume
-    Running --> [*] : stop`,
-      },
-    ],
-  },
-  {
-    group: "Structural",
-    items: [
-      {
-        label: "Class",
-        code: `classDiagram
-    class Patient {
-        +String name
-        +int age
-        +diagnose()
-    }
-    class Doctor {
-        +String specialty
-        +treat(Patient p)
-    }
-    Doctor "1" --> "*" Patient : treats`,
-      },
-      {
-        label: "Entity-Relation",
-        code: `erDiagram
-    PATIENT ||--o{ VISIT : has
-    VISIT }o--|| DOCTOR : "seen by"
-    VISIT {
-        string date
-        string notes
-    }`,
-      },
-    ],
-  },
-  {
-    group: "Planning",
-    items: [
-      {
-        label: "Gantt",
-        code: `gantt
-    title Project Timeline
-    dateFormat YYYY-MM-DD
-    section Phase 1
-    Research    :a1, 2024-01-01, 14d
-    Analysis    :after a1, 7d
-    section Phase 2
-    Development :2024-01-22, 21d`,
-      },
-      {
-        label: "Timeline",
-        code: `timeline
-    title Medical History
-    2020 : Hypertension diagnosed
-         : Started antihypertensives
-    2022 : Developed T2DM
-    2024 : Cardiac event
-         : Stenting performed`,
-      },
-      {
-        label: "Journey",
-        code: `journey
-    title Patient Journey
-    section Presentation
-        Symptom onset : 3 : Patient
-        GP visit      : 5 : Patient, GP
-    section Investigation
-        Blood tests   : 4 : GP, Lab
-        Imaging       : 4 : Radiologist`,
-      },
-    ],
-  },
-  {
-    group: "Data",
-    items: [
-      {
-        label: "Pie chart",
-        code: `pie title Aetiology of Stroke
-    "Ischaemic (thrombotic)"  : 40
-    "Ischaemic (embolic)"     : 30
-    "Ischaemic (lacunar)"     : 15
-    "Haemorrhagic"            : 10
-    "Other / unknown"         : 5`,
-      },
-      {
-        label: "Mindmap",
-        code: `mindmap
-  root((Hypertension))
-    Causes
-      Primary
-      Secondary
-        Renal
-        Endocrine
-    Complications
-      Stroke
-      MI
-      CKD
-    Management
-      Lifestyle
-      Pharmacology`,
-      },
-    ],
-  },
-];
+interface Branch {
+  id: string;
+  label: string;
+  /** null = not connected yet. */
+  targetId: string | null;
+}
 
-const DIAGRAM_LABELS: Record<string, string> = {
-  flowchart: "Flowchart",
-  graph: "Flowchart",
-  sequencediagram: "Sequence",
-  statediagram: "State",
-  "statediagram-v2": "State",
-  classdiagram: "Class",
-  erdiagram: "ER Diagram",
-  gantt: "Gantt",
-  timeline: "Timeline",
-  journey: "Journey",
-  pie: "Pie Chart",
-  mindmap: "Mindmap",
-  gitgraph: "Git Graph",
-  xychart: "XY Chart",
-  quadrantchart: "Quadrant",
-  block: "Block",
-  sankey: "Sankey",
+const SHAPES: Record<StepKind, [string, string]> = {
+  start: ["(", ")"],
+  process: ["[", "]"],
+  decision: ["{", "}"],
+  milestone: ["([", "])"],
+  end: ["(", ")"],
 };
 
-function detectDiagramType(code: string): string {
-  const first = (code || "").trim().split("\n")[0].trim().toLowerCase().split(/\s/)[0];
-  return DIAGRAM_LABELS[first] ?? "Diagram";
+// ── Step kind config ───────────────────────────────────────────────────────
+
+const STEP_KINDS: { value: StepKind; labelKey: string; medicalKey: string; icon: typeof Play; color: string; bg: string }[] = [
+  { value: "start", labelKey: "admin.mermaid.stepStart", medicalKey: "admin.mermaid.stepMedStart", icon: Play, color: "text-success", bg: "bg-success/10" },
+  { value: "process", labelKey: "admin.mermaid.stepProcess", medicalKey: "admin.mermaid.stepMedProcess", icon: Square, color: "text-primary", bg: "bg-primary/10" },
+  { value: "decision", labelKey: "admin.mermaid.stepDecision", medicalKey: "admin.mermaid.stepMedDecision", icon: Diamond, color: "text-warning", bg: "bg-warning/10" },
+  { value: "milestone", labelKey: "admin.mermaid.stepMilestone", medicalKey: "admin.mermaid.stepMedMilestone", icon: CircleDot, color: "text-info", bg: "bg-info/10" },
+  { value: "end", labelKey: "admin.mermaid.stepEnd", medicalKey: "admin.mermaid.stepMedEnd", icon: Check, color: "text-destructive", bg: "bg-destructive/10" },
+];
+
+function kindCardClass(kind: StepKind): string {
+  switch (kind) {
+    case "decision": return "border-warning/25 bg-warning/5";
+    case "start": return "border-success/25 bg-success/5";
+    case "end": return "border-destructive/25 bg-destructive/5";
+    case "milestone": return "border-info/25 bg-info/5";
+    default: return "border-primary/20 bg-primary/5";
+  }
 }
+
+function kindChipClass(kind: StepKind): string {
+  switch (kind) {
+    case "decision": return "bg-warning/10 text-warning";
+    case "start": return "bg-success/10 text-success";
+    case "end": return "bg-destructive/10 text-destructive";
+    default: return "bg-primary/10 text-primary";
+  }
+}
+
+// ── Presets ────────────────────────────────────────────────────────────────
+
+const PRESETS = [
+  { id: "pathway", labelKey: "admin.mermaid.presetPathway", titleKey: "admin.mermaid.presetPathwayTitle", icon: HeartPulse, color: "text-destructive", bg: "bg-destructive/10" },
+  { id: "algorithm", labelKey: "admin.mermaid.presetAlgorithm", titleKey: "admin.mermaid.presetAlgorithmTitle", icon: Activity, color: "text-warning", bg: "bg-warning/10" },
+  { id: "protocol", labelKey: "admin.mermaid.presetProtocol", titleKey: "admin.mermaid.presetProtocolTitle", icon: Stethoscope, color: "text-info", bg: "bg-info/10" },
+] as const;
+
+// ── Helpers ────────────────────────────────────────────────────────────────
+
+let _idCounter = 0;
+function nextId(): string {
+  _idCounter++;
+  return `S${_idCounter}`;
+}
+function nextBranchId(): string {
+  return `B${Date.now()}${Math.random().toString(36).slice(2, 5)}`;
+}
+
+function stripQuotes(s: string): string {
+  return s.trim().replace(/^["']|["']$/g, "");
+}
+
+function detectShape(text: string): [string, string] | null {
+  const t = text.trim();
+  if (t.startsWith("([") && t.endsWith("])")) return SHAPES.milestone;
+  if (t.startsWith("(") && t.endsWith(")")) return SHAPES.start;
+  if (t.startsWith("{") && t.endsWith("}")) return SHAPES.decision;
+  if (t.startsWith("[") && t.endsWith("]")) return SHAPES.process;
+  return null;
+}
+
+function shapeLabel(shapeStr: string, shape: [string, string]): string {
+  return stripQuotes(shapeStr.slice(shape[0].length, -shape[1].length));
+}
+
+function kindFromShape(shape: [string, string]): StepKind {
+  if (shape[0] === "{") return "decision";
+  if (shape[0] === "[") return "process";
+  if (shape[0] === "([") return "milestone";
+  return "start";
+}
+
+function parseNodeRef(ref: string): { id: string; shape: [string, string] | null; label: string } | null {
+  const t = ref.trim();
+  const m = t.match(/^([A-Za-z0-9_\-]+)\s*([({\[].*[)}\]])\s*$/);
+  if (m) {
+    const shape = detectShape(m[2]);
+    if (!shape) return null;
+    return { id: m[1], shape, label: shapeLabel(m[2], shape) };
+  }
+  if (/^[A-Za-z0-9_\-]+$/.test(t)) return { id: t, shape: null, label: t };
+  return null;
+}
+
+function matchEdge(line: string): { fromRaw: string; toRaw: string; label: string } | null {
+  const t = line.trim();
+  let m = t.match(/^(.+?)\s*-->\|([^|]*)\|\s*(.+?)\s*$/);
+  if (m) return { fromRaw: m[1], toRaw: m[3], label: stripQuotes(m[2]) };
+  m = t.match(/^(.+?)\s*--\s*([^-]+?)\s*-->\s*(.+?)\s*$/);
+  if (m) return { fromRaw: m[1], toRaw: m[3], label: stripQuotes(m[2]) };
+  m = t.match(/^(.+?)\s*(-->|---|-.->|==>|--o|--x)\s*(.+?)\s*$/);
+  if (m) return { fromRaw: m[1], toRaw: m[3], label: "" };
+  return null;
+}
+
+export interface ParsedFlow {
+  steps: FlowStep[];
+  title: string;
+  direction: string;
+}
+
+function extractTitle(lines: string[]): string {
+  for (const l of lines) {
+    const m = l.trim().match(/^%%\s*title:\s*(.*)$/i);
+    if (m) return m[1].trim();
+  }
+  return "";
+}
+
+/**
+ * Parse a mermaid flowchart source back into builder steps. Returns null when
+ * the source isn't a supported flowchart (different diagram type, subgraphs,
+ * unsupported node shapes, branching processes, or unrecognized lines).
+ */
+export function parseFlowchart(code: string): ParsedFlow | null {
+  const raw = (code || "").split("\n");
+  const title = extractTitle(raw);
+  let body = raw.map((l) => l.replace(/\s*%%.*$/, "").trim()).filter((l) => l && !/^(flowchart|graph)\b/i.test(l));
+  if (body.length > 0 && body[0] === "---") {
+    const end = body.indexOf("---", 1);
+    body = end === -1 ? [] : body.slice(end + 1);
+  }
+  const dirLine = raw.map((l) => l.trim()).find((l) => /^(flowchart|graph)\s+(TD|TB|LR|RL|BT)\b/i.test(l)) || "";
+  const dirMatch = dirLine.match(/^(?:flowchart|graph)\s+(TD|TB|LR|RL|BT)\b/i);
+  const direction = dirMatch ? dirMatch[1].toUpperCase() : "TD";
+  if (body.some((l) => /^(subgraph|end)\b/i.test(l))) return null;
+
+  const nodes = new Map<string, FlowStep>();
+  const order: string[] = [];
+  const edges: { from: string; to: string; label: string }[] = [];
+
+  const ensureNode = (id: string, shape: [string, string] | null) => {
+    if (nodes.has(id)) return;
+    const kind = shape ? kindFromShape(shape) : "process";
+    nodes.set(id, { id, kind, label: id, branches: [], nextId: null, shape: shape ?? SHAPES.process });
+    order.push(id);
+  };
+
+  for (const line of body) {
+    if (/-->|---|-\.->|==>|--o|--x/.test(line)) {
+      const edge = matchEdge(line);
+      if (!edge) return null;
+      const f = parseNodeRef(edge.fromRaw);
+      const tgt = parseNodeRef(edge.toRaw);
+      if (!f || !tgt) return null;
+      ensureNode(f.id, f.shape);
+      ensureNode(tgt.id, tgt.shape);
+      if (f.shape) nodes.get(f.id)!.label = f.label;
+      if (tgt.shape) nodes.get(tgt.id)!.label = tgt.label;
+      edges.push({ from: f.id, to: tgt.id, label: edge.label });
+    } else {
+      const decl = line.match(/^([A-Za-z0-9_\-]+)\s*(.*?)\s*$/);
+      if (!decl) return null;
+      const id = decl[1];
+      const shape = decl[2] ? detectShape(decl[2]) : null;
+      if (decl[2] && !shape) return null;
+      ensureNode(id, shape);
+      const node = nodes.get(id)!;
+      node.shape = shape ?? node.shape;
+      node.label = shape ? shapeLabel(decl[2], shape) : id;
+    }
+  }
+
+  const incoming = new Map<string, number>();
+  const outgoing = new Map<string, string[]>();
+  for (const e of edges) {
+    outgoing.set(e.from, [...(outgoing.get(e.from) ?? []), e.to]);
+    incoming.set(e.to, (incoming.get(e.to) ?? 0) + 1);
+  }
+
+  for (const n of nodes.values()) {
+    if (n.shape && (n.shape[0] === "(" || n.shape[0] === "([")) {
+      const isStart = (incoming.get(n.id) ?? 0) === 0;
+      const isEnd = (outgoing.get(n.id)?.length ?? 0) === 0;
+      if (isStart) n.kind = "start";
+      else if (isEnd) n.kind = "end";
+      else if (n.shape[0] === "([") n.kind = "milestone";
+      else n.kind = "process";
+    }
+  }
+
+  for (const n of nodes.values()) {
+    const outs = outgoing.get(n.id) ?? [];
+    if (n.kind === "decision") {
+      for (const to of outs) {
+        const e = edges.find((x) => x.from === n.id && x.to === to);
+        n.branches.push({ id: nextBranchId(), label: e?.label ?? "", targetId: to });
+      }
+    } else {
+      if (outs.length === 0) n.nextId = null;
+      else if (outs.length === 1) n.nextId = outs[0];
+      else return null;
+    }
+  }
+
+  const steps = order.filter((id) => nodes.has(id)).map((id) => nodes.get(id)!);
+  return { steps, title, direction };
+}
+
+/** Serialize builder steps back into a mermaid flowchart source. */
+export function stepsToMermaid(steps: FlowStep[], title = "", direction = "TD"): string {
+  const lines: string[] = [];
+  if (title.trim()) lines.push(`%% title: ${title.trim()}`);
+  lines.push(`flowchart ${direction}`);
+  const stepMap = new Map(steps.map((s) => [s.id, s]));
+  for (const step of steps) {
+    const [open, close] = step.shape ?? SHAPES[step.kind];
+    lines.push(`    ${step.id}${open}"${step.label}"${close}`);
+  }
+  for (const step of steps) {
+    if (step.kind === "decision") {
+      const anyConnected = step.branches.some((b) => b.targetId && stepMap.has(b.targetId));
+      if (!anyConnected && step.nextId && stepMap.has(step.nextId)) {
+        lines.push(`    ${step.id} --> ${step.nextId}`);
+      }
+      for (const branch of step.branches) {
+        if (branch.targetId && stepMap.has(branch.targetId)) {
+          lines.push(`    ${step.id} -->|"${branch.label}"| ${branch.targetId}`);
+        }
+      }
+    } else if (step.nextId && stepMap.has(step.nextId)) {
+      lines.push(`    ${step.id} --> ${step.nextId}`);
+    }
+  }
+  return lines.join("\n");
+}
+
+// ── Mermaid lazy loader + render helper ────────────────────────────────────
 
 function getTheme(): "default" | "dark" {
   if (typeof document === "undefined") return "default";
   return document.documentElement.classList.contains("dark") ? "dark" : "default";
 }
-
-// ── Mermaid lazy loader ────────────────────────────────────────────────────
 
 let mermaidPromise: Promise<typeof import("mermaid")> | null = null;
 
@@ -234,7 +358,257 @@ export async function renderMermaidToSvg(code: string): Promise<string> {
   }
 }
 
-// ── Component ──────────────────────────────────────────────────────────────
+// ── Inline editable label ──────────────────────────────────────────────────
+
+function InlineEdit({ value, onChange, className, placeholder, labelKey }: {
+  value: string;
+  onChange: (v: string) => void;
+  className?: string;
+  placeholder?: string;
+  labelKey: string;
+}) {
+  const { t } = useI18n();
+  const [editing, setEditing] = React.useState(false);
+  const [draft, setDraft] = React.useState(value);
+  const inputRef = React.useRef<HTMLInputElement>(null);
+
+  React.useEffect(() => {
+    if (editing && inputRef.current) {
+      inputRef.current.focus();
+      inputRef.current.select();
+    }
+  }, [editing]);
+
+  const commit = () => {
+    if (draft.trim()) onChange(draft.trim());
+    else setDraft(value);
+    setEditing(false);
+  };
+
+  if (editing) {
+    return (
+      <input
+        ref={inputRef}
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={commit}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") commit();
+          if (e.key === "Escape") {
+            setDraft(value);
+            setEditing(false);
+            e.stopPropagation();
+          }
+        }}
+        className={cn("bg-transparent border-b border-primary outline-none text-xs", className)}
+        placeholder={placeholder}
+      />
+    );
+  }
+
+  return (
+    <span
+      className={cn("cursor-text hover:border-b hover:border-primary/30", className)}
+      onClick={() => {
+        setDraft(value);
+        setEditing(true);
+      }}
+      title={t(labelKey as any)}
+    >
+      {value}
+    </span>
+  );
+}
+
+// ── Step card in the flow ──────────────────────────────────────────────────
+
+function StepCard({
+  step,
+  allSteps,
+  onUpdate,
+  onDelete,
+  onAddAfter,
+  onSetBranchTarget,
+  onAddBranch,
+  onRemoveBranch,
+  onUpdateBranchLabel,
+  isLast,
+}: {
+  step: FlowStep;
+  allSteps: FlowStep[];
+  onUpdate: (id: string, patch: Partial<FlowStep>) => void;
+  onDelete: (id: string) => void;
+  onAddAfter: (afterId: string, kind: StepKind, label: string) => void;
+  onSetBranchTarget: (stepId: string, branchId: string, targetId: string | null) => void;
+  onAddBranch: (stepId: string) => void;
+  onRemoveBranch: (stepId: string, branchId: string) => void;
+  onUpdateBranchLabel: (stepId: string, branchId: string, label: string) => void;
+  isLast: boolean;
+}) {
+  const { t } = useI18n();
+  const [showInsert, setShowInsert] = React.useState(false);
+  const [showBranchTarget, setShowBranchTarget] = React.useState<string | null>(null);
+  const kindMeta = STEP_KINDS.find((k) => k.value === step.kind)!;
+  const Icon = kindMeta.icon;
+  const availableTargets = allSteps.filter((s) => s.id !== step.id);
+
+  return (
+    <div className="flex flex-col items-center w-full">
+      <div className={cn("w-full rounded-xl border p-3.5 transition-all group relative", kindCardClass(step.kind))}>
+        <div className="flex items-center gap-2.5">
+          <div className={cn("shrink-0 w-7 h-7 rounded-lg flex items-center justify-center", kindMeta.bg)}>
+            <Icon className={cn("w-3.5 h-3.5", kindMeta.color)} />
+          </div>
+          <div className="flex-1 min-w-0">
+            <InlineEdit
+              value={step.label}
+              onChange={(label) => onUpdate(step.id, { label })}
+              className={cn("text-xs font-medium truncate block", step.kind === "decision" ? "text-warning" : "text-foreground")}
+              placeholder={t("admin.mermaid.stepNamePlaceholder")}
+              labelKey="admin.mermaid.clickToEdit"
+            />
+            <span className="text-[9px] uppercase tracking-wider font-medium text-muted-foreground">
+              {t(kindMeta.medicalKey as any)}
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={() => onDelete(step.id)}
+            className="shrink-0 w-6 h-6 rounded-md flex items-center justify-center opacity-0 group-hover:opacity-100 text-destructive hover:bg-destructive/10 transition-all"
+            title={t("admin.mermaid.deleteStep")}
+            aria-label={t("admin.mermaid.deleteStep")}
+          >
+            <Trash2 className="w-3 h-3" />
+          </button>
+        </div>
+
+        {step.kind === "decision" && (
+          <div className="mt-3 space-y-2 ps-2 border-s-2 border-warning/15">
+            {step.branches.map((branch) => (
+              <div key={branch.id} className="flex items-center gap-2 group/branch">
+                <CornerDownRight className="w-3 h-3 text-warning/40 shrink-0" />
+                <InlineEdit
+                  value={branch.label}
+                  onChange={(label) => onUpdateBranchLabel(step.id, branch.id, label)}
+                  className="text-[11px] text-warning font-medium"
+                  placeholder={t("admin.mermaid.conditionPlaceholder")}
+                  labelKey="admin.mermaid.clickToEdit"
+                />
+                {branch.targetId ? (
+                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-primary/10 text-primary border border-primary/20 truncate max-w-[100px]">
+                    {allSteps.find((s) => s.id === branch.targetId)?.label || branch.targetId}
+                  </span>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setShowBranchTarget(showBranchTarget === branch.id ? null : branch.id)}
+                    className="text-[10px] px-1.5 py-0.5 rounded border border-dashed border-border text-muted-foreground hover:text-primary hover:border-primary/30 transition-colors flex items-center gap-0.5"
+                  >
+                    {t("admin.mermaid.connect")}
+                    <ArrowRight className="w-2.5 h-2.5 rtl-flip-x" />
+                  </button>
+                )}
+                {branch.targetId && (
+                  <button
+                    type="button"
+                    onClick={() => onSetBranchTarget(step.id, branch.id, null)}
+                    className="w-4 h-4 rounded flex items-center justify-center text-muted-foreground hover:text-destructive opacity-0 group-hover/branch:opacity-100 transition-opacity"
+                    title={t("admin.mermaid.disconnect")}
+                    aria-label={t("admin.mermaid.disconnect")}
+                  >
+                    <X className="w-2.5 h-2.5" />
+                  </button>
+                )}
+                {step.branches.length > 2 && (
+                  <button
+                    type="button"
+                    onClick={() => onRemoveBranch(step.id, branch.id)}
+                    className="w-4 h-4 rounded flex items-center justify-center text-muted-foreground hover:text-destructive opacity-0 group-hover/branch:opacity-100 transition-opacity"
+                    title={t("admin.mermaid.removeBranch")}
+                    aria-label={t("admin.mermaid.removeBranch")}
+                  >
+                    <Trash2 className="w-2.5 h-2.5" />
+                  </button>
+                )}
+              </div>
+            ))}
+            {step.branches.length < 5 && (
+              <button
+                type="button"
+                onClick={() => onAddBranch(step.id)}
+                className="flex items-center gap-1 text-[10px] text-muted-foreground hover:text-warning transition-colors ps-5"
+              >
+                <Plus className="w-2.5 h-2.5" /> {t("admin.mermaid.addBranch")}
+              </button>
+            )}
+          </div>
+        )}
+
+        {showBranchTarget && (
+          <div className="absolute start-0 end-0 top-full mt-1 z-30 rounded-lg border border-border bg-card shadow-e2 max-h-40 overflow-y-auto osler-scroll-y">
+            {availableTargets.length === 0 ? (
+              <div className="p-3 text-[10px] text-muted-foreground text-center">{t("admin.mermaid.addMoreStepsFirst")}</div>
+            ) : (
+              availableTargets.map((target) => (
+                <button
+                  type="button"
+                  key={target.id}
+                  onClick={() => {
+                    onSetBranchTarget(step.id, showBranchTarget, target.id);
+                    setShowBranchTarget(null);
+                  }}
+                  className="w-full flex items-center gap-2 px-3 py-2 text-xs text-foreground hover:bg-primary/10 hover:text-primary transition-colors text-start"
+                >
+                  <span className={cn("w-4 h-4 rounded flex items-center justify-center text-[8px] shrink-0", kindChipClass(target.kind))}>
+                    {target.id.charAt(0)}
+                  </span>
+                  <span className="truncate">{target.label}</span>
+                </button>
+              ))
+            )}
+          </div>
+        )}
+      </div>
+
+      {!isLast && (
+        <div
+          className="relative flex flex-col items-center w-full"
+          onMouseEnter={() => setShowInsert(true)}
+          onMouseLeave={() => setShowInsert(false)}
+        >
+          <div className="w-px h-4 bg-muted-foreground/25" />
+          {showInsert && (
+            <div className="flex items-center gap-1.5 z-20 py-1.5 px-3 rounded-lg bg-card border border-border">
+              {STEP_KINDS.filter((k) => k.value !== "start").map((kind) => {
+                const KIcon = kind.icon;
+                return (
+                  <button
+                    type="button"
+                    key={kind.value}
+                    onClick={() => onAddAfter(step.id, kind.value, t(kind.medicalKey as any))}
+                    className={cn(
+                      "flex items-center gap-1 px-2 py-1 rounded-md text-[9px] font-medium border transition-all whitespace-nowrap",
+                      kind.bg,
+                      kind.color,
+                      "border-border/30 hover:brightness-125",
+                    )}
+                    title={t("admin.mermaid.insertKind", { kind: t(kind.medicalKey as any) })}
+                  >
+                    <KIcon className="w-2.5 h-2.5" />
+                    {t(kind.medicalKey as any)}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+          <div className="w-px h-4 bg-muted-foreground/25" />
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Main GUI component ─────────────────────────────────────────────────────
 
 export interface MermaidEditorModalProps {
   open: boolean;
@@ -244,159 +618,434 @@ export interface MermaidEditorModalProps {
 }
 
 export function MermaidEditorModal({ open, initialCode, onSave, onClose }: MermaidEditorModalProps) {
-  const { t } = useI18n();
-  const [code, setCode] = React.useState(initialCode || "graph TD\n  A --> B");
-  const [svg, setSvg] = React.useState<string>("");
-  const [error, setError] = React.useState<string>("");
-  const [loading, setLoading] = React.useState(false);
-  const renderIdRef = React.useRef(0);
+  const { t, rtl } = useI18n();
 
-  // Reset code when modal opens
-  React.useEffect(() => {
-    if (open) {
-      setCode(initialCode || "graph TD\n  A --> B");
-      setError("");
-      setSvg("");
+  const buildInitial = React.useCallback(() => {
+    if (initialCode.trim()) {
+      const parsed = parseFlowchart(initialCode);
+      if (parsed) {
+        return { steps: parsed.steps, title: parsed.title, direction: parsed.direction, unsupported: false };
+      }
+      return { steps: makeDefaultSteps(t), title: "", direction: "TD", unsupported: true };
     }
-  }, [open, initialCode]);
+    return { steps: makeDefaultSteps(t), title: "", direction: "TD", unsupported: false };
+  }, [initialCode, t]);
 
-  // Keyboard shortcuts (Esc to close, Ctrl+S to save)
+  const [state, setState] = React.useState(buildInitial);
+  const { steps, title, direction, unsupported } = state;
+
+  React.useEffect(() => {
+    if (open) setState(buildInitial());
+  }, [open, buildInitial]);
+
+  const [addingStep, setAddingStep] = React.useState(false);
+  const [newStepLabel, setNewStepLabel] = React.useState("");
+  const [newStepKind, setNewStepKind] = React.useState<StepKind>("process");
+  const addInputRef = React.useRef<HTMLInputElement>(null);
+  const scrollRef = React.useRef<HTMLDivElement>(null);
+
+  const generatedCode = React.useMemo(() => stepsToMermaid(steps, title, direction), [steps, title, direction]);
+
+  const [preview, setPreview] = React.useState<string>("");
+  const [rendering, setRendering] = React.useState(false);
+  const previewSeqRef = React.useRef(0);
+
+  React.useEffect(() => {
+    if (!open) return;
+    const seq = ++previewSeqRef.current;
+    setRendering(true);
+    const timer = window.setTimeout(() => {
+      void renderMermaidToSvg(generatedCode)
+        .then((svg) => {
+          if (seq === previewSeqRef.current) setPreview(svg);
+        })
+        .catch(() => {
+          if (seq === previewSeqRef.current) setPreview("");
+        })
+        .finally(() => {
+          if (seq === previewSeqRef.current) setRendering(false);
+        });
+    }, 300);
+    return () => window.clearTimeout(timer);
+  }, [generatedCode, open]);
+
   React.useEffect(() => {
     if (!open) return;
     const handler = (e: KeyboardEvent) => {
-      if (e.key === "Escape") { e.preventDefault(); onClose(); }
       if ((e.ctrlKey || e.metaKey) && e.key === "s") {
         e.preventDefault();
-        onSave(code.trim());
+        handleSave();
+      } else if (e.key === "Escape") {
+        const target = e.target as HTMLElement | null;
+        if (target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable)) return;
+        e.preventDefault();
         onClose();
       }
     };
     document.addEventListener("keydown", handler);
     return () => document.removeEventListener("keydown", handler);
-  }, [open, code, onSave, onClose]);
+  });
 
-  // Debounced render
-  React.useEffect(() => {
-    if (!open) return;
-    const id = ++renderIdRef.current;
-    setLoading(true);
-    const timer = setTimeout(async () => {
-      try {
-        const out = await renderMermaidToSvg(code);
-        if (id === renderIdRef.current) {
-          setSvg(out);
-          setError("");
-        }
-      } catch (err: any) {
-        if (id === renderIdRef.current) {
-          setError(String(err?.message ?? err ?? "Parse error").replace(/\u001b\[[0-9;]*m/g, "").slice(0, 300));
-          setSvg("");
-        }
-      } finally {
-        if (id === renderIdRef.current) setLoading(false);
+  const setSteps = (updater: (prev: FlowStep[]) => FlowStep[]) => setState((s) => ({ ...s, steps: updater(s.steps) }));
+
+  const updateStep = React.useCallback((id: string, patch: Partial<FlowStep>) => {
+    setSteps((prev) => prev.map((s) => (s.id === id ? { ...s, ...patch } : s)));
+  }, []);
+
+  const deleteStep = React.useCallback((id: string) => {
+    setSteps((prev) =>
+      prev
+        .filter((s) => s.id !== id)
+        .map((s) => {
+          if (s.nextId === id) return { ...s, nextId: null };
+          if (s.kind === "decision") {
+            return { ...s, branches: s.branches.map((b) => (b.targetId === id ? { ...b, targetId: null } : b)) };
+          }
+          return s;
+        }),
+    );
+  }, []);
+
+  const addAfter = React.useCallback((afterId: string, kind: StepKind, label: string) => {
+    const newStep: FlowStep = { id: nextId(), kind, label, branches: [], nextId: null, shape: SHAPES[kind] };
+    setSteps((prev) => {
+      const idx = prev.findIndex((s) => s.id === afterId);
+      if (idx === -1) return prev;
+      const afterStep = prev[idx];
+      newStep.nextId = afterStep.nextId;
+      const updated = [...prev];
+      updated[idx] = { ...afterStep, nextId: newStep.id };
+      updated.splice(idx + 1, 0, newStep);
+      return updated;
+    });
+  }, []);
+
+  const addStepAtEnd = React.useCallback(() => {
+    if (!newStepLabel.trim()) return;
+    const newStep: FlowStep = { id: nextId(), kind: newStepKind, label: newStepLabel.trim(), branches: [], nextId: null, shape: SHAPES[newStepKind] };
+    if (newStepKind === "decision") {
+      newStep.branches = [
+        { id: nextBranchId(), label: t("admin.mermaid.presYes"), targetId: null },
+        { id: nextBranchId(), label: t("admin.mermaid.presNo"), targetId: null },
+      ];
+    }
+    setSteps((prev) => {
+      if (prev.length === 0) return [newStep];
+      const lastStep = prev[prev.length - 1];
+      const updated = [...prev];
+      updated[updated.length - 1] = { ...lastStep, nextId: newStep.id };
+      updated.push(newStep);
+      return updated;
+    });
+    setNewStepLabel("");
+    setAddingStep(false);
+    window.setTimeout(() => {
+      scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
+    }, 100);
+  }, [newStepLabel, newStepKind, t]);
+
+  const setBranchTarget = React.useCallback((stepId: string, branchId: string, targetId: string | null) => {
+    setSteps((prev) =>
+      prev.map((s) => (s.id !== stepId ? s : { ...s, branches: s.branches.map((b) => (b.id === branchId ? { ...b, targetId } : b)) })),
+    );
+  }, []);
+
+  const addBranchToStep = React.useCallback((stepId: string) => {
+    setSteps((prev) =>
+      prev.map((s) => (s.id !== stepId || s.kind !== "decision" ? s : { ...s, branches: [...s.branches, { id: nextBranchId(), label: t("admin.mermaid.branchMaybe"), targetId: null }] })),
+    );
+  }, [t]);
+
+  const removeBranchFromStep = React.useCallback((stepId: string, branchId: string) => {
+    setSteps((prev) =>
+      prev.map((s) => (s.id !== stepId ? s : { ...s, branches: s.branches.filter((b) => b.id !== branchId) })),
+    );
+  }, []);
+
+  const updateBranchLabel = React.useCallback((stepId: string, branchId: string, label: string) => {
+    setSteps((prev) =>
+      prev.map((s) => (s.id !== stepId ? s : { ...s, branches: s.branches.map((b) => (b.id === branchId ? { ...b, label } : b)) })),
+    );
+  }, []);
+
+  const loadPreset = React.useCallback(
+    (presetId: (typeof PRESETS)[number]["id"]) => {
+      const meta = PRESETS.find((p) => p.id === presetId)!;
+      _idCounter = 0;
+      const s = () => nextId();
+      const br = (labelKey: string, target: string): Branch => ({ id: nextBranchId(), label: t(labelKey as any), targetId: target });
+      const s1 = s(), s2 = s(), s3 = s(), s4 = s(), s5 = s(), s6 = s();
+      let next: FlowStep[] = [];
+      if (presetId === "pathway") {
+        next = [
+          { id: s1, kind: "start", label: t("admin.mermaid.presPatientPresentation"), branches: [], nextId: s2, shape: SHAPES.start },
+          { id: s2, kind: "decision", label: t("admin.mermaid.presInitialAssessment"), branches: [br("admin.mermaid.presHighRisk", s3), br("admin.mermaid.presLowRisk", s4)], nextId: null, shape: SHAPES.decision },
+          { id: s3, kind: "process", label: t("admin.mermaid.presUrgentIntervention"), branches: [], nextId: s5, shape: SHAPES.process },
+          { id: s4, kind: "process", label: t("admin.mermaid.presConservativeManagement"), branches: [], nextId: s5, shape: SHAPES.process },
+          { id: s5, kind: "process", label: t("admin.mermaid.presReevaluate"), branches: [], nextId: s6, shape: SHAPES.process },
+          { id: s6, kind: "end", label: t("admin.mermaid.presDischargePlan"), branches: [], nextId: null, shape: SHAPES.end },
+        ];
+      } else if (presetId === "algorithm") {
+        next = [
+          { id: s1, kind: "start", label: t("admin.mermaid.presSignsSymptoms"), branches: [], nextId: s2, shape: SHAPES.start },
+          { id: s2, kind: "decision", label: t("admin.mermaid.presLabResults"), branches: [br("admin.mermaid.presAbnormal", s3), br("admin.mermaid.presNormal", s4)], nextId: null, shape: SHAPES.decision },
+          { id: s3, kind: "decision", label: t("admin.mermaid.presImagingRequired"), branches: [br("admin.mermaid.presYes", s5), br("admin.mermaid.presNo", s6)], nextId: null, shape: SHAPES.decision },
+          { id: s4, kind: "process", label: t("admin.mermaid.presMonitorReassess"), branches: [], nextId: null, shape: SHAPES.process },
+          { id: s5, kind: "process", label: t("admin.mermaid.presCtMri"), branches: [], nextId: null, shape: SHAPES.process },
+          { id: s6, kind: "end", label: t("admin.mermaid.presEmpiricalTreatment"), branches: [], nextId: null, shape: SHAPES.end },
+        ];
+      } else {
+        next = [
+          { id: s1, kind: "start", label: t("admin.mermaid.presStartProtocol"), branches: [], nextId: s2, shape: SHAPES.start },
+          { id: s2, kind: "process", label: t("admin.mermaid.presStabilization"), branches: [], nextId: s3, shape: SHAPES.process },
+          { id: s3, kind: "process", label: t("admin.mermaid.presMedication"), branches: [], nextId: s4, shape: SHAPES.process },
+          { id: s4, kind: "decision", label: t("admin.mermaid.presResponse"), branches: [br("admin.mermaid.presAdequate", s5), br("admin.mermaid.presInadequate", s6)], nextId: null, shape: SHAPES.decision },
+          { id: s5, kind: "process", label: t("admin.mermaid.presMaintenance"), branches: [], nextId: null, shape: SHAPES.process },
+          { id: s6, kind: "process", label: t("admin.mermaid.presEscalateTherapy"), branches: [], nextId: s4, shape: SHAPES.process },
+        ];
       }
-    }, 500);
-    return () => clearTimeout(timer);
-  }, [code, open]);
+      setState((prev) => ({ ...prev, steps: next, title: t(meta.titleKey), unsupported: false }));
+    },
+    [t],
+  );
+
+  const handleSave = () => {
+    onSave(stepsToMermaid(steps, title, direction));
+    onClose();
+  };
+
+  const isNewDiagram = !initialCode.trim();
 
   if (!open) return null;
 
   return (
     <div
+      dir={rtl ? "rtl" : "ltr"}
       className="fixed inset-0 z-[100] bg-background/80 backdrop-blur-sm flex items-center justify-center p-4"
-      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
     >
-      <div className="w-full max-w-7xl h-[90vh] bg-card border border-border rounded-xl shadow-2xl flex flex-col overflow-hidden">
+      <div className="w-full max-w-6xl h-[90vh] bg-card border border-border rounded-xl shadow-2xl flex flex-col overflow-hidden">
         {/* Header */}
-        <div className="flex items-center gap-3 px-4 py-3 border-b border-border bg-muted/30">
-          <Workflow className="size-5 text-primary" />
-          <span className="font-semibold">{t("admin.mermaid.editDiagram")}</span>
-          <span className="text-xs px-2 py-0.5 rounded-full bg-primary/10 text-primary border border-primary/30">
-            {detectDiagramType(code)}
-          </span>
-          <div className="ms-auto">
-            <Button variant="ghost" size="iconSm" onClick={onClose} aria-label={t("common.close")}>
-              <X className="size-4" />
+        <div className="flex items-center gap-3 px-4 py-3 shrink-0 border-b border-border bg-muted/30">
+          <div className="w-8 h-8 rounded-xl flex items-center justify-center bg-primary/10 shrink-0">
+            <GitMerge className="w-4 h-4 text-primary" />
+          </div>
+          <div className="min-w-0">
+            <h3 className="font-semibold text-sm text-foreground">{t("admin.mermaid.flowBuilder")}</h3>
+            <span className="text-[10px] uppercase tracking-wider font-medium text-muted-foreground">
+              {t("admin.mermaid.flowBuilderSub")}
+            </span>
+          </div>
+          <div className="ms-auto flex items-center gap-2">
+            <Button variant="ghost" size="sm" onClick={onClose} className="h-8 px-3">
+              {t("common.cancel")}
             </Button>
+            <Button size="sm" onClick={handleSave} className="gap-2 h-8 px-3">
+              <Save className="h-3.5 w-3.5" /> {isNewDiagram ? t("admin.mermaid.insertDiagram") : t("admin.mermaid.saveDiagram")}
+            </Button>
+            <div className="w-px h-5 mx-1 bg-border" />
+            <button
+              type="button"
+              onClick={onClose}
+              className="shrink-0 w-8 h-8 rounded-lg flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors"
+              title={t("common.close")}
+              aria-label={t("common.close")}
+            >
+              <X className="w-4 h-4" />
+            </button>
           </div>
         </div>
 
-        {/* Layout */}
-        <div className="flex-1 min-h-0 grid grid-cols-[200px_1fr_1fr] divide-x divide-border">
-          {/* Sidebar — templates */}
-          <div className="overflow-y-auto osler-scroll-y p-3 bg-muted/10">
-            <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">
-              {t("admin.mermaid.templates")}
-            </div>
-            {TEMPLATE_GROUPS.map((g) => (
-              <div key={g.group} className="mb-3">
-                <div className="text-xs font-bold text-foreground/80 mb-1">{g.group}</div>
-                <div className="space-y-1">
-                  {g.items.map((t) => (
-                    <button
-                      key={t.label}
-                      type="button"
-                      onClick={() => setCode(t.code.trim())}
-                      className="w-full text-start px-2 py-1.5 rounded text-xs hover:bg-primary/10 hover:text-primary border border-transparent hover:border-primary/30 transition-colors"
-                    >
-                      {t.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            ))}
-          </div>
-
-          {/* Center — source */}
-          <div className="flex flex-col min-h-0">
-            <div className="px-3 py-1.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground border-b border-border bg-muted/10">
-              {t("admin.mermaid.source")}
-            </div>
-            <textarea
-              value={code}
-              onChange={(e) => setCode(e.target.value)}
-              spellCheck={false}
-              placeholder="graph TD\n  A --> B"
-              className="flex-1 min-h-0 w-full p-3 font-mono text-sm bg-transparent resize-none focus:outline-none border-0"
-            />
-            {error && (
-              <div className="px-3 py-2 border-t border-destructive/30 bg-destructive/10 text-xs text-destructive flex items-start gap-2">
-                <AlertTriangle className="size-3.5 mt-0.5 shrink-0" />
-                <span className="break-words">{error}</span>
+        <div className="flex flex-1 overflow-hidden">
+          {/* Left panel — flow builder */}
+          <div className="w-[300px] sm:w-[340px] shrink-0 flex flex-col min-h-0 border-e border-border bg-muted/10">
+            {unsupported && (
+              <div className="mx-3 mt-3 px-3 py-2 rounded-lg border border-warning/30 bg-warning/10 text-warning text-[11px] flex items-start gap-2">
+                <AlertTriangle className="w-3.5 h-3.5 mt-0.5 shrink-0" />
+                <span className="break-words">{t("admin.mermaid.notSupported")}</span>
               </div>
             )}
+
+            <div className="px-4 pt-3 pb-2.5">
+              <span className="text-[10px] uppercase tracking-wider font-medium block mb-1.5 text-muted-foreground">
+                {t("admin.mermaid.diagramTitle")}
+              </span>
+              <Input
+                value={title}
+                onChange={(e) => setState((s) => ({ ...s, title: e.target.value }))}
+                placeholder={t("admin.mermaid.titlePlaceholder")}
+                className="h-8 text-xs bg-background border-border"
+              />
+            </div>
+
+            <div className="px-4 pb-2.5">
+              <span className="text-[10px] uppercase tracking-wider font-medium block mb-1.5 text-muted-foreground">
+                {t("admin.mermaid.quickStart")}
+              </span>
+              <div className="flex gap-1.5 flex-wrap">
+                {PRESETS.map((p) => {
+                  const PIcon = p.icon;
+                  return (
+                    <button
+                      type="button"
+                      key={p.id}
+                      onClick={() => loadPreset(p.id)}
+                      className={cn("flex items-center gap-1 px-2.5 py-1.5 rounded-lg border text-[10px] font-medium transition-all hover:brightness-125 border-border/60", p.color, p.bg)}
+                    >
+                      <PIcon className="w-3 h-3 shrink-0" />
+                      {t(p.labelKey)}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="mx-4 border-t border-border opacity-40" />
+
+            <div className="flex-1 min-h-0 overflow-y-auto osler-scroll-y">
+              <div ref={scrollRef} className="px-4 py-3 space-y-1.5">
+                {steps.map((step, idx) => (
+                  <StepCard
+                    key={step.id}
+                    step={step}
+                    allSteps={steps}
+                    onUpdate={updateStep}
+                    onDelete={deleteStep}
+                    onAddAfter={addAfter}
+                    onSetBranchTarget={setBranchTarget}
+                    onAddBranch={addBranchToStep}
+                    onRemoveBranch={removeBranchFromStep}
+                    onUpdateBranchLabel={updateBranchLabel}
+                    isLast={idx === steps.length - 1}
+                  />
+                ))}
+
+                {!addingStep ? (
+                  <div className="flex items-center justify-center pt-4">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setAddingStep(true);
+                        window.setTimeout(() => addInputRef.current?.focus(), 50);
+                      }}
+                      className="flex items-center gap-1.5 px-4 py-2 rounded-xl border border-dashed border-border text-[11px] font-medium text-muted-foreground hover:text-primary hover:border-primary/30 transition-colors"
+                    >
+                      <Plus className="w-3.5 h-3.5" /> {t("admin.mermaid.addNextStep")}
+                    </button>
+                  </div>
+                ) : (
+                  <div className="mt-2 p-3 rounded-xl border border-border bg-background">
+                    <div className="flex gap-1.5 mb-2.5 flex-wrap">
+                      {STEP_KINDS.filter((k) => k.value !== "start").map((kind) => {
+                        const KIcon = kind.icon;
+                        return (
+                          <button
+                            type="button"
+                            key={kind.value}
+                            onClick={() => setNewStepKind(kind.value)}
+                            className={cn(
+                              "flex items-center gap-1 px-2 py-1 rounded-md text-[9px] font-medium border transition-all",
+                              newStepKind === kind.value
+                                ? cn(kind.bg, kind.color, "border-border/60")
+                                : "text-muted-foreground border-border hover:text-foreground",
+                            )}
+                          >
+                            <KIcon className="w-2.5 h-2.5" />
+                            {t(kind.medicalKey as any)}
+                          </button>
+                        );
+                      })}
+                    </div>
+                    <div className="flex gap-1.5">
+                      <input
+                        ref={addInputRef}
+                        value={newStepLabel}
+                        onChange={(e) => setNewStepLabel(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") addStepAtEnd();
+                          if (e.key === "Escape") {
+                            setAddingStep(false);
+                            setNewStepLabel("");
+                          }
+                        }}
+                        placeholder={t("admin.mermaid.addStepPlaceholder")}
+                        className="flex-1 h-8 px-2.5 rounded-lg text-xs border border-border bg-muted/30 outline-none focus:border-primary/40 min-w-0"
+                      />
+                      <button
+                        type="button"
+                        onClick={addStepAtEnd}
+                        className="shrink-0 w-8 h-8 rounded-lg bg-primary/10 text-primary hover:bg-primary/20 flex items-center justify-center transition-colors"
+                        title={t("admin.mermaid.addStep")}
+                        aria-label={t("admin.mermaid.addStep")}
+                      >
+                        <Check className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setAddingStep(false);
+                          setNewStepLabel("");
+                        }}
+                        className="shrink-0 w-8 h-8 rounded-lg hover:bg-destructive/10 text-muted-foreground hover:text-destructive flex items-center justify-center transition-colors"
+                        title={t("common.cancel")}
+                        aria-label={t("common.cancel")}
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="px-4 py-2 border-t border-border flex items-center justify-between shrink-0 gap-2">
+              <span className="text-[10px] text-muted-foreground tabular-nums">
+                {steps.length} {t(steps.length === 1 ? "admin.mermaid.stepSingular" : "admin.mermaid.stepPlural")}
+              </span>
+              <span className="text-[10px] text-muted-foreground hidden sm:block">{t("admin.mermaid.hint")}</span>
+            </div>
           </div>
 
-          {/* Right — preview */}
-          <div className="flex flex-col min-h-0">
-            <div className="px-3 py-1.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground border-b border-border bg-muted/10">
-              {t("admin.mermaid.preview")}
+          {/* Right panel — live preview */}
+          <div className="flex-1 flex flex-col min-w-0 bg-background">
+            <div className="flex items-center px-4 py-2 shrink-0 border-b border-border">
+              <div className="flex items-center gap-2">
+                <div className="w-1.5 h-1.5 rounded-full bg-success animate-pulse" />
+                <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                  {t("admin.mermaid.livePreview")}
+                </span>
+              </div>
             </div>
-            <div className="flex-1 min-h-0 overflow-auto osler-scroll-y p-4 flex items-center justify-center">
-              {loading ? (
-                <div className="text-muted-foreground flex items-center gap-2 text-sm">
-                  <Loader2 className="size-4 animate-spin" /> {t("admin.mermaid.rendering")}
+
+            <div className="flex-1 p-3 flex flex-col min-h-0">
+              <div className="flex-1 rounded-xl overflow-hidden flex flex-col min-h-0 border border-border bg-muted/20">
+                <div className="flex-1 min-h-0 overflow-auto osler-scroll-y p-4 flex items-center justify-center">
+                  {rendering ? (
+                    <div className="text-muted-foreground flex items-center gap-2 text-sm">
+                      <Loader2 className="size-4 animate-spin" /> {t("admin.mermaid.rendering")}
+                    </div>
+                  ) : preview ? (
+                    <div
+                      className="w-full flex items-center justify-center [&_svg]:max-w-full [&_svg]:h-auto"
+                      dangerouslySetInnerHTML={{ __html: preview }}
+                    />
+                  ) : (
+                    <div className="text-muted-foreground text-sm">{t("admin.mermaid.fixSource")}</div>
+                  )}
                 </div>
-              ) : svg ? (
-                <div
-                  className="mermaid-preview w-full flex items-center justify-center [&_svg]:max-w-full [&_svg]:h-auto"
-                  dangerouslySetInnerHTML={{ __html: svg }}
-                />
-              ) : (
-                <div className="text-muted-foreground text-sm">{t("admin.mermaid.fixSource")}</div>
-              )}
+              </div>
             </div>
-          </div>
-        </div>
 
-        {/* Footer */}
-        <div className="flex items-center gap-3 px-4 py-3 border-t border-border bg-muted/30">
-          <span className="text-xs text-muted-foreground">{t("admin.mermaid.shortcuts")}</span>
-          <div className="ms-auto flex items-center gap-2">
-            <Button variant="ghost" onClick={onClose}>{t("common.cancel")}</Button>
-            <Button onClick={() => { onSave(code.trim()); onClose(); }}>
-              <Check className="size-4 me-1.5" /> {t("admin.mermaid.saveDiagram")}
-            </Button>
+            <div className="mx-3 mb-3 p-2.5 rounded-xl shrink-0 border border-border bg-muted/10">
+              <span className="text-[10px] uppercase tracking-wider font-medium mb-1 block text-muted-foreground">
+                {t("admin.mermaid.generatedSyntax")}
+              </span>
+              <code className="text-[10px] font-[var(--font-code)] block whitespace-pre overflow-x-auto leading-relaxed text-primary">
+                {generatedCode}
+              </code>
+            </div>
           </div>
         </div>
       </div>
@@ -404,8 +1053,17 @@ export function MermaidEditorModal({ open, initialCode, onSave, onClose }: Merma
   );
 }
 
+function makeDefaultSteps(t: (k: any, p?: any) => string): FlowStep[] {
+  const s1 = nextId();
+  const s2 = nextId();
+  return [
+    { id: s1, kind: "start", label: t("admin.mermaid.stepStart"), branches: [], nextId: s2, shape: SHAPES.start },
+    { id: s2, kind: "process", label: t("admin.mermaid.defaultInitialStep"), branches: [], nextId: null, shape: SHAPES.process },
+  ];
+}
+
 /**
- * Convenience hook for opening the Mermaid modal from any component.
+ * Convenience hook for opening the Mermaid visual builder from any component.
  * Returns `{ open, openModal, closeModal, modal }` — render `modal` somewhere
  * in your tree to actually display the modal.
  */

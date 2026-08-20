@@ -18,8 +18,10 @@
  *     `enableTopBar` is also set, a mermaid button appears in the top
  *     bar's Insert group. Mermaid code blocks render inline as diagrams
  *     inside the editor (via the CodeMirror preview); click a rendered
- *     diagram to open the edit modal. A mermaid item also appears in the
- *     slash menu ("/" menu) to insert a diagram at the cursor.
+ *     diagram to open the visual flow builder. A mermaid item also appears
+ *     in the slash menu ("/" menu) to open the builder and insert the
+ *     diagram at the cursor. Editing is GUI-driven only — the standalone
+ *     mermaid code editor is not available (see MermaidEditorModal).
  *   • `enableTopBar?: boolean` — show Crepe's always-visible top formatting
  *     bar (default: false — only enable for article editor + notes where
  *     long-form writing benefits from persistent controls; compact answer
@@ -515,8 +517,7 @@ export function MilkdownEditor({
   );
 
   const handleInsertMermaid = React.useCallback(() => {
-    const template = "flowchart TD\n    A([Start]) --> B{Decision?}\n    B -- Yes --> C[Process A]\n    B -- No  --> D[Process B]\n    C --> E([End])\n    D --> E";
-    openModal(template, (newCode: string) => {
+    openModal("", (newCode: string) => {
       const insertion = `\n\n\`\`\`mermaid\n${newCode.trim()}\n\`\`\`\n\n`;
       onChange(value + insertion);
     });
@@ -527,8 +528,7 @@ export function MilkdownEditor({
   // the fenced block via the milkdown parser (replaces the empty paragraph).
   const handleSlashInsertMermaid = React.useCallback(
     (ctx: Ctx) => {
-      const template = "flowchart TD\n    A([Start]) --> B{Decision?}\n    B -- Yes --> C[Process A]\n    B -- No  --> D[Process B]\n    C --> E([End])\n    D --> E";
-      openModal(template, (newCode: string) => {
+      openModal("", (newCode: string) => {
         const commands = ctx.get(commandsCtx);
         commands.call(clearTextInCurrentBlockCommand.key);
         insert(`\`\`\`mermaid\n${newCode.trim()}\n\`\`\``)(ctx);
