@@ -62,7 +62,6 @@ import { HubSkeleton, EmptyState } from "./ui-primitives";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { ContentCacheButton } from "./content-cache-button";
-import { ContentLangFilter } from "./qbank-studio";
 import { useSwipeBackDismiss } from "@/hooks/use-swipe-back-dismiss";
 import { ThinkingStatus, type ThinkingPhase } from "@/components/osler/thinking-status";
 import { ThinkingOrb, type OrbState } from "thinking-orbs";
@@ -785,7 +784,7 @@ export function OsceStudio({
   const onOpenPack = propOnOpenPack || ((item: ContentTreeNode) => navigate("osce", { uid: item.uid }));
   const onNavigateBack = propOnNavigateBack || (() => navigate("learn"));
   const isMobile = useIsMobile();
-  const { t, rtl, contentFilter } = useI18n();
+  const { t, rtl } = useI18n();
 
   /* ── State ── */
   const [allPacks, setAllPacks] = React.useState<Array<{ node: ContentTreeNode; content: OsceContent | null }>>([]);
@@ -1809,21 +1808,6 @@ export function OsceStudio({
     [collectLeafUids, allPacks],
   );
 
-  // Apply content-language filter to *root* nodes only — branches are kept
-  // intact so the user can still drill into them; their leaves are filtered
-  // naturally by the lang check at the pack-card level (no-op for OSCE today
-  // since the bundled content is English-only, but ready for future AR packs).
-  const filteredRootTree = React.useMemo(() => {
-    if (contentFilter === "all") return allTree;
-    return allTree.filter((node) => {
-      // Branches: keep them — leaves inside may still match.
-      if (node.items.length > 0) return true;
-      // Leaves: filter by lang.
-      const content = contentByUid.get(node.uid);
-      return (node.lang ?? content?.meta.lang ?? "en") === contentFilter;
-    });
-  }, [allTree, contentFilter, contentByUid]);
-
   /** Render a single OSCE leaf pack as a clickable card. Shared by the root
    *  grid and the subfolder grid so the look is identical everywhere. */
   const renderOscePackCard = (node: ContentTreeNode, idx: number) => {
@@ -1845,6 +1829,7 @@ export function OsceStudio({
         initial={{ opacity: 0, y: 8 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.2, delay: idx * 0.04 }}
+        className="h-full"
       >
         <div
           role="button"
@@ -1857,7 +1842,7 @@ export function OsceStudio({
             }
           }}
           className={cn(
-            "w-full text-start group relative overflow-hidden bg-card border border-border rounded-xl p-5 hover:border-primary/40 hover:shadow-md transition-all duration-200 active:scale-[0.99] cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
+            "w-full h-full text-start group relative overflow-hidden bg-card border border-border rounded-xl p-5 hover:border-primary/40 hover:shadow-md transition-all duration-200 active:scale-[0.99] cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 flex flex-col",
             lang === "ar" && "osler-content-ar",
           )}
           dir={lang === "ar" ? "rtl" : undefined}
@@ -1885,7 +1870,7 @@ export function OsceStudio({
             </p>
           )}
           {tags.length > 0 && (
-            <div className="flex flex-wrap gap-1">
+            <div className="flex flex-wrap gap-1 mt-auto pt-3">
               {tags.map((tag) => (
                 <span
                   key={tag}
@@ -1913,6 +1898,7 @@ export function OsceStudio({
         initial={{ opacity: 0, y: 8 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.2, delay: idx * 0.04 }}
+        className="h-full"
       >
         <button
           type="button"
@@ -1921,7 +1907,7 @@ export function OsceStudio({
             setSelectedFolders((folders) => [...folders, node]);
 
           }}
-          className="osler-fade-in h-auto w-full min-w-0 justify-start text-start bg-card border border-border rounded-xl p-5 hover:border-primary/40 hover:shadow-md hover:bg-card transition-all group flex items-center gap-3.5 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+          className="osler-fade-in h-full w-full min-w-0 justify-start text-start bg-card border border-border rounded-xl p-5 hover:border-primary/40 hover:shadow-md hover:bg-card transition-all group flex items-center gap-3.5 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
         >
           <div className="size-11 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-center shrink-0">
             <Folder className="size-5 text-primary" />
@@ -1985,8 +1971,6 @@ export function OsceStudio({
             </div>
           </div>
 
-          <ContentLangFilter />
-
           {/* Inline error banner — shown if a lazy pack fetch fails */}
           {error && phase === "select" && (
             <div className="mb-3 flex items-start gap-2 rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive">
@@ -2008,7 +1992,7 @@ export function OsceStudio({
               <Loader2 className="size-6 animate-spin text-primary" />
               <span className="text-sm">Loading scenarios…</span>
             </div>
-          ) : filteredRootTree.length === 0 ? (
+          ) : allTree.length === 0 ? (
             <div className="osler-empty">
               <div className="osler-empty__icon">
                 <Stethoscope className="size-6" />
@@ -2027,8 +2011,8 @@ export function OsceStudio({
               </button>
             </div>
           ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              {filteredRootTree.map((node, idx) =>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 auto-rows-fr">
+              {allTree.map((node, idx) =>
                 node.items.length > 0
                   ? renderOsceFolderCard(node, idx)
                   : renderOscePackCard(node, idx),
@@ -2091,7 +2075,7 @@ export function OsceStudio({
                 </div>
               </div>
             ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 auto-rows-fr">
                 {childTree.map((child, idx) =>
                   child.items.length > 0
                     ? renderOsceFolderCard(child, idx)
