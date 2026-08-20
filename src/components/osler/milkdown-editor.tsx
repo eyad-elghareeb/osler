@@ -18,7 +18,8 @@
  *     `enableTopBar` is also set, a mermaid button appears in the top
  *     bar's Insert group. Mermaid code blocks render inline as diagrams
  *     inside the editor (via the CodeMirror preview); click a rendered
- *     diagram to open the edit modal.
+ *     diagram to open the edit modal. A mermaid item also appears in the
+ *     slash menu ("/" menu) to insert a diagram at the cursor.
  *   • `enableTopBar?: boolean` — show Crepe's always-visible top formatting
  *     bar (default: false — only enable for article editor + notes where
  *     long-form writing benefits from persistent controls; compact answer
@@ -27,8 +28,11 @@
 
 import * as React from "react";
 import { Crepe } from "@milkdown/crepe";
+import type { Ctx } from "@milkdown/kit/ctx";
+import { commandsCtx } from "@milkdown/kit/core";
+import { clearTextInCurrentBlockCommand } from "@milkdown/kit/preset/commonmark";
 import { Milkdown, MilkdownProvider, useEditor } from "@milkdown/react";
-import { replaceAll } from "@milkdown/utils";
+import { insert, replaceAll } from "@milkdown/utils";
 import { ImagePlus, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useI18n } from "@/components/osler/i18n-provider";
@@ -100,6 +104,10 @@ interface InnerEditorProps extends MilkdownEditorProps {
   /** Opens the mermaid modal to insert a new diagram. Wired into the
    *  top-bar Insert group when `enableMermaid` + `enableTopBar` are set. */
   onTopBarInsertMermaid?: () => void;
+  /** Opens the mermaid modal and inserts the authored diagram as a mermaid
+   *  code block at the cursor. Wired into the slash menu ("/" menu) when
+   *  `enableMermaid` is set. */
+  onSlashInsertMermaid?: (ctx: Ctx) => void;
 }
 
 function InnerMilkdownEditor({
@@ -114,6 +122,7 @@ function InnerMilkdownEditor({
   enableImageUpload = true,
   registerCrepe,
   onTopBarInsertMermaid,
+  onSlashInsertMermaid,
 }: InnerEditorProps) {
   const { t } = useI18n();
   const { toast } = useToast();
@@ -127,6 +136,8 @@ function InnerMilkdownEditor({
   r2Ref.current = { r2KeyBase, rawR2Key };
   const onTopBarInsertRef = React.useRef(onTopBarInsertMermaid);
   onTopBarInsertRef.current = onTopBarInsertMermaid;
+  const onSlashInsertRef = React.useRef(onSlashInsertMermaid);
+  onSlashInsertRef.current = onSlashInsertMermaid;
   const [uploading, setUploading] = React.useState(false);
 
   // ── Image upload handler ──────────────────────────────────────────────
@@ -276,6 +287,20 @@ function InnerMilkdownEditor({
           slashMenu: {
             floatingUIOptions: { strategy: "fixed" },
           },
+          // Mermaid also lands in the slash menu ("/" menu) as an
+          // "Advanced" item — it opens the authoring modal, then drops
+          // the diagram at the cursor as a `mermaid` code block.
+          ...(enableMermaid
+            ? {
+                buildMenu: (builder) => {
+                  builder.getGroup("advanced").addItem("mermaid", {
+                    label: t("editor.mermaid.insertSlash"),
+                    icon: mermaidIcon,
+                    onRun: (ctx) => onSlashInsertRef.current?.(ctx),
+                  });
+                },
+              }
+            : {}),
         },
       },
     });
@@ -497,6 +522,21 @@ export function MilkdownEditor({
     });
   }, [openModal, value, onChange]);
 
+  // Slash-menu ("/" menu) variant: insert the authored diagram as a mermaid
+  // code block at the cursor. Clears the "/" trigger text first, then inserts
+  // the fenced block via the milkdown parser (replaces the empty paragraph).
+  const handleSlashInsertMermaid = React.useCallback(
+    (ctx: Ctx) => {
+      const template = "flowchart TD\n    A([Start]) --> B{Decision?}\n    B -- Yes --> C[Process A]\n    B -- No  --> D[Process B]\n    C --> E([End])\n    D --> E";
+      openModal(template, (newCode: string) => {
+        const commands = ctx.get(commandsCtx);
+        commands.call(clearTextInCurrentBlockCommand.key);
+        insert(`\`\`\`mermaid\n${newCode.trim()}\n\`\`\``)(ctx);
+      });
+    },
+    [openModal],
+  );
+
   // Minimal word count — just the number, no "words" suffix, no chars/lines.
   const words = value.trim() ? value.trim().split(/\s+/).length : 0;
 
@@ -566,6 +606,7 @@ export function MilkdownEditor({
             enableMermaid={enableMermaid}
             enableImageUpload={enableImageUpload}
             onTopBarInsertMermaid={handleInsertMermaid}
+            onSlashInsertMermaid={handleSlashInsertMermaid}
             registerCrepe={registerCrepe}
           />
         </MilkdownProvider>

@@ -2113,6 +2113,7 @@ export const en = {
     "editor.mermaid.previewLoading": "Rendering diagram…",
     "editor.mermaid.previewEdit": "Edit",
     "editor.mermaid.previewHide": "Hide preview",
+    "editor.mermaid.insertSlash": "Mermaid",
     "editor.wordCount": "{n}",
     "editor.dropToUpload": "Drop images to upload",
 

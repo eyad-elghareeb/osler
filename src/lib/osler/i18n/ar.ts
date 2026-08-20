@@ -2109,6 +2109,7 @@ export const ar = {
     "editor.mermaid.previewLoading": "جارٍ عرض المخطط…",
     "editor.mermaid.previewEdit": "تحرير",
     "editor.mermaid.previewHide": "إخفاء المعاينة",
+    "editor.mermaid.insertSlash": "مخطط ميرميد",
     "editor.wordCount": "{n}",
     "editor.dropToUpload": "أفلت الصور للرفع",
 
