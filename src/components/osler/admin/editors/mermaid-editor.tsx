@@ -7,7 +7,8 @@
  * code-free flow builder: a vertical stack of step cards (start / process /
  * decision / milestone / end) with inline label editing, insert-on-hover
  * between cards, decision branches that connect to any other step, three
- * medical presets, and a live mermaid preview. The generated source is always
+ * medical templates plus a blank canvas to start from, a guided hint strip,
+ * and a live preview with zoom controls. The generated source is always
  * valid (mermaid does the layout), so the UX is deterministic — no freeform
  * canvas, no fragile graph library.
  *
@@ -46,7 +47,12 @@ import {
   ArrowRight,
   AlertTriangle,
   Loader2,
+  ZoomIn,
+  ZoomOut,
+  ChevronDown,
+  Sparkles,
 } from "lucide-react";
+import { AnimatePresence, motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
@@ -115,9 +121,9 @@ function kindChipClass(kind: StepKind): string {
 // ── Presets ────────────────────────────────────────────────────────────────
 
 const PRESETS = [
-  { id: "pathway", labelKey: "admin.mermaid.presetPathway", titleKey: "admin.mermaid.presetPathwayTitle", icon: HeartPulse, color: "text-destructive", bg: "bg-destructive/10" },
-  { id: "algorithm", labelKey: "admin.mermaid.presetAlgorithm", titleKey: "admin.mermaid.presetAlgorithmTitle", icon: Activity, color: "text-warning", bg: "bg-warning/10" },
-  { id: "protocol", labelKey: "admin.mermaid.presetProtocol", titleKey: "admin.mermaid.presetProtocolTitle", icon: Stethoscope, color: "text-info", bg: "bg-info/10" },
+  { id: "pathway", labelKey: "admin.mermaid.presetPathway", titleKey: "admin.mermaid.presetPathwayTitle", descKey: "admin.mermaid.presetPathwayDesc", icon: HeartPulse, color: "text-destructive", bg: "bg-destructive/10" },
+  { id: "algorithm", labelKey: "admin.mermaid.presetAlgorithm", titleKey: "admin.mermaid.presetAlgorithmTitle", descKey: "admin.mermaid.presetAlgorithmDesc", icon: Activity, color: "text-warning", bg: "bg-warning/10" },
+  { id: "protocol", labelKey: "admin.mermaid.presetProtocol", titleKey: "admin.mermaid.presetProtocolTitle", descKey: "admin.mermaid.presetProtocolDesc", icon: Stethoscope, color: "text-info", bg: "bg-info/10" },
 ] as const;
 
 // ── Helpers ────────────────────────────────────────────────────────────────
@@ -572,36 +578,48 @@ function StepCard({
 
       {!isLast && (
         <div
-          className="relative flex flex-col items-center w-full"
+          className="relative h-8 w-full flex items-center justify-center"
           onMouseEnter={() => setShowInsert(true)}
           onMouseLeave={() => setShowInsert(false)}
         >
-          <div className="w-px h-4 bg-muted-foreground/25" />
-          {showInsert && (
-            <div className="flex items-center gap-1.5 z-20 py-1.5 px-3 rounded-lg bg-card border border-border">
-              {STEP_KINDS.filter((k) => k.value !== "start").map((kind) => {
-                const KIcon = kind.icon;
-                return (
-                  <button
-                    type="button"
-                    key={kind.value}
-                    onClick={() => onAddAfter(step.id, kind.value, t(kind.medicalKey as any))}
-                    className={cn(
-                      "flex items-center gap-1 px-2 py-1 rounded-md text-[9px] font-medium border transition-all whitespace-nowrap",
-                      kind.bg,
-                      kind.color,
-                      "border-border/30 hover:brightness-125",
-                    )}
-                    title={t("admin.mermaid.insertKind", { kind: t(kind.medicalKey as any) })}
-                  >
-                    <KIcon className="w-2.5 h-2.5" />
-                    {t(kind.medicalKey as any)}
-                  </button>
-                );
-              })}
-            </div>
-          )}
-          <div className="w-px h-4 bg-muted-foreground/25" />
+          <div
+            className={cn(
+              "absolute inset-y-0 start-1/2 w-px -translate-x-1/2 rtl-flip-x transition-colors duration-200",
+              showInsert ? "bg-primary/40" : "bg-muted-foreground/25",
+            )}
+          />
+          <AnimatePresence>
+            {showInsert && (
+              <motion.div
+                initial={{ opacity: 0, scale: 0.85, y: -4 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.85, y: -4 }}
+                transition={{ type: "spring", stiffness: 500, damping: 30 }}
+                className="relative z-20 flex items-center gap-1.5 py-1.5 px-3 rounded-lg bg-card border border-border shadow-e2"
+              >
+                {STEP_KINDS.filter((k) => k.value !== "start").map((kind) => {
+                  const KIcon = kind.icon;
+                  return (
+                    <button
+                      type="button"
+                      key={kind.value}
+                      onClick={() => onAddAfter(step.id, kind.value, t(kind.medicalKey as any))}
+                      className={cn(
+                        "flex items-center gap-1 px-2 py-1 rounded-md text-[9px] font-medium border transition-all whitespace-nowrap",
+                        kind.bg,
+                        kind.color,
+                        "border-border/30 hover:brightness-125",
+                      )}
+                      title={t("admin.mermaid.insertKind", { kind: t(kind.medicalKey as any) })}
+                    >
+                      <KIcon className="w-2.5 h-2.5" />
+                      {t(kind.medicalKey as any)}
+                    </button>
+                  );
+                })}
+              </motion.div>
+            )}
+          </AnimatePresence>
         </div>
       )}
     </div>
@@ -634,9 +652,21 @@ export function MermaidEditorModal({ open, initialCode, onSave, onClose }: Merma
   const [state, setState] = React.useState(buildInitial);
   const { steps, title, direction, unsupported } = state;
 
+  const isNewDiagram = !initialCode.trim();
+  const [pickedTemplate, setPickedTemplate] = React.useState(!isNewDiagram);
+  const [showGuide, setShowGuide] = React.useState(true);
+  const [zoom, setZoom] = React.useState(1);
+  const [showSyntax, setShowSyntax] = React.useState(false);
+
   React.useEffect(() => {
-    if (open) setState(buildInitial());
-  }, [open, buildInitial]);
+    if (open) {
+      setState(buildInitial());
+      setPickedTemplate(!isNewDiagram);
+      setShowGuide(true);
+      setZoom(1);
+      setShowSyntax(false);
+    }
+  }, [open, buildInitial, isNewDiagram]);
 
   const [addingStep, setAddingStep] = React.useState(false);
   const [newStepLabel, setNewStepLabel] = React.useState("");
@@ -782,17 +812,14 @@ export function MermaidEditorModal({ open, initialCode, onSave, onClose }: Merma
           { id: s2, kind: "decision", label: t("admin.mermaid.presInitialAssessment"), branches: [br("admin.mermaid.presHighRisk", s3), br("admin.mermaid.presLowRisk", s4)], nextId: null, shape: SHAPES.decision },
           { id: s3, kind: "process", label: t("admin.mermaid.presUrgentIntervention"), branches: [], nextId: s5, shape: SHAPES.process },
           { id: s4, kind: "process", label: t("admin.mermaid.presConservativeManagement"), branches: [], nextId: s5, shape: SHAPES.process },
-          { id: s5, kind: "process", label: t("admin.mermaid.presReevaluate"), branches: [], nextId: s6, shape: SHAPES.process },
-          { id: s6, kind: "end", label: t("admin.mermaid.presDischargePlan"), branches: [], nextId: null, shape: SHAPES.end },
+          { id: s5, kind: "end", label: t("admin.mermaid.presDischargePlan"), branches: [], nextId: null, shape: SHAPES.end },
         ];
       } else if (presetId === "algorithm") {
         next = [
           { id: s1, kind: "start", label: t("admin.mermaid.presSignsSymptoms"), branches: [], nextId: s2, shape: SHAPES.start },
           { id: s2, kind: "decision", label: t("admin.mermaid.presLabResults"), branches: [br("admin.mermaid.presAbnormal", s3), br("admin.mermaid.presNormal", s4)], nextId: null, shape: SHAPES.decision },
-          { id: s3, kind: "decision", label: t("admin.mermaid.presImagingRequired"), branches: [br("admin.mermaid.presYes", s5), br("admin.mermaid.presNo", s6)], nextId: null, shape: SHAPES.decision },
-          { id: s4, kind: "process", label: t("admin.mermaid.presMonitorReassess"), branches: [], nextId: null, shape: SHAPES.process },
-          { id: s5, kind: "process", label: t("admin.mermaid.presCtMri"), branches: [], nextId: null, shape: SHAPES.process },
-          { id: s6, kind: "end", label: t("admin.mermaid.presEmpiricalTreatment"), branches: [], nextId: null, shape: SHAPES.end },
+          { id: s3, kind: "process", label: t("admin.mermaid.presCtMri"), branches: [], nextId: s4, shape: SHAPES.process },
+          { id: s4, kind: "end", label: t("admin.mermaid.presEmpiricalTreatment"), branches: [], nextId: null, shape: SHAPES.end },
         ];
       } else {
         next = [
@@ -801,31 +828,39 @@ export function MermaidEditorModal({ open, initialCode, onSave, onClose }: Merma
           { id: s3, kind: "process", label: t("admin.mermaid.presMedication"), branches: [], nextId: s4, shape: SHAPES.process },
           { id: s4, kind: "decision", label: t("admin.mermaid.presResponse"), branches: [br("admin.mermaid.presAdequate", s5), br("admin.mermaid.presInadequate", s6)], nextId: null, shape: SHAPES.decision },
           { id: s5, kind: "process", label: t("admin.mermaid.presMaintenance"), branches: [], nextId: null, shape: SHAPES.process },
-          { id: s6, kind: "process", label: t("admin.mermaid.presEscalateTherapy"), branches: [], nextId: s4, shape: SHAPES.process },
+          { id: s6, kind: "process", label: t("admin.mermaid.presEscalateTherapy"), branches: [], nextId: s3, shape: SHAPES.process },
         ];
       }
       setState((prev) => ({ ...prev, steps: next, title: t(meta.titleKey), unsupported: false }));
+      setPickedTemplate(true);
     },
     [t],
   );
+
+  const startBlank = React.useCallback(() => {
+    _idCounter = 0;
+    setState((prev) => ({ ...prev, steps: makeDefaultSteps(t), title: "", unsupported: false }));
+    setPickedTemplate(true);
+  }, [t]);
 
   const handleSave = () => {
     onSave(stepsToMermaid(steps, title, direction));
     onClose();
   };
 
-  const isNewDiagram = !initialCode.trim();
-
   if (!open) return null;
 
   return (
     <div
       dir={rtl ? "rtl" : "ltr"}
-      className="fixed inset-0 z-[100] bg-background/80 backdrop-blur-sm flex items-center justify-center p-4"
+      className="fixed inset-0 z-[100] bg-black/50 flex items-center justify-center p-4"
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
     >
+      {isNewDiagram && !pickedTemplate ? (
+        <MermaidTemplateGallery onPickPreset={loadPreset} onStartBlank={startBlank} onClose={onClose} />
+      ) : (
       <div className="w-full max-w-6xl h-[90vh] bg-card border border-border rounded-xl shadow-2xl flex flex-col overflow-hidden">
         {/* Header */}
         <div className="flex items-center gap-3 px-4 py-3 shrink-0 border-b border-border bg-muted/30">
@@ -865,6 +900,29 @@ export function MermaidEditorModal({ open, initialCode, onSave, onClose }: Merma
               <div className="mx-3 mt-3 px-3 py-2 rounded-lg border border-warning/30 bg-warning/10 text-warning text-[11px] flex items-start gap-2">
                 <AlertTriangle className="w-3.5 h-3.5 mt-0.5 shrink-0" />
                 <span className="break-words">{t("admin.mermaid.notSupported")}</span>
+              </div>
+            )}
+
+            {showGuide && (
+              <div className="mx-3 mt-3 px-3 py-2 rounded-lg border border-primary/15 bg-primary/5 relative">
+                <button
+                  type="button"
+                  onClick={() => setShowGuide(false)}
+                  className="absolute top-1.5 end-1.5 w-5 h-5 rounded flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors"
+                  title={t("common.close")}
+                  aria-label={t("common.close")}
+                >
+                  <X className="w-3 h-3" />
+                </button>
+                <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wider font-semibold text-primary mb-1">
+                  <Sparkles className="w-3 h-3 shrink-0" />
+                  {t("admin.mermaid.guideTitle")}
+                </div>
+                <ul className="text-[10px] text-muted-foreground leading-relaxed space-y-0.5">
+                  <li>1. {t("admin.mermaid.guideTip1")}</li>
+                  <li>2. {t("admin.mermaid.guideTip2")}</li>
+                  <li>3. {t("admin.mermaid.guideTip3")}</li>
+                </ul>
               </div>
             )}
 
@@ -1010,13 +1068,34 @@ export function MermaidEditorModal({ open, initialCode, onSave, onClose }: Merma
 
           {/* Right panel — live preview */}
           <div className="flex-1 flex flex-col min-w-0 bg-background">
-            <div className="flex items-center px-4 py-2 shrink-0 border-b border-border">
-              <div className="flex items-center gap-2">
-                <div className="w-1.5 h-1.5 rounded-full bg-success animate-pulse" />
-                <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-                  {t("admin.mermaid.livePreview")}
-                </span>
-              </div>
+            <div className="flex items-center justify-end px-3 py-1.5 shrink-0 border-b border-border gap-1">
+              <button
+                type="button"
+                onClick={() => setZoom((z) => Math.max(0.5, +(z - 0.25).toFixed(2)))}
+                className="shrink-0 w-7 h-7 rounded-md flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors"
+                title={t("admin.mermaid.zoomOut")}
+                aria-label={t("admin.mermaid.zoomOut")}
+              >
+                <ZoomOut className="w-3.5 h-3.5" />
+              </button>
+              <button
+                type="button"
+                onClick={() => setZoom(1)}
+                className="shrink-0 min-w-11 h-7 px-1.5 rounded-md flex items-center justify-center text-[10px] font-medium tabular-nums text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors"
+                title={t("admin.mermaid.zoomReset")}
+                aria-label={t("admin.mermaid.zoomReset")}
+              >
+                {Math.round(zoom * 100)}%
+              </button>
+              <button
+                type="button"
+                onClick={() => setZoom((z) => Math.min(2.5, +(z + 0.25).toFixed(2)))}
+                className="shrink-0 w-7 h-7 rounded-md flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors"
+                title={t("admin.mermaid.zoomIn")}
+                aria-label={t("admin.mermaid.zoomIn")}
+              >
+                <ZoomIn className="w-3.5 h-3.5" />
+              </button>
             </div>
 
             <div className="flex-1 p-3 flex flex-col min-h-0">
@@ -1028,7 +1107,8 @@ export function MermaidEditorModal({ open, initialCode, onSave, onClose }: Merma
                     </div>
                   ) : preview ? (
                     <div
-                      className="w-full flex items-center justify-center [&_svg]:max-w-full [&_svg]:h-auto"
+                      className="w-full flex items-center justify-center"
+                      style={{ transform: `scale(${zoom})`, transition: "transform 0.15s ease" }}
                       dangerouslySetInnerHTML={{ __html: preview }}
                     />
                   ) : (
@@ -1038,17 +1118,35 @@ export function MermaidEditorModal({ open, initialCode, onSave, onClose }: Merma
               </div>
             </div>
 
-            <div className="mx-3 mb-3 p-2.5 rounded-xl shrink-0 border border-border bg-muted/10">
-              <span className="text-[10px] uppercase tracking-wider font-medium mb-1 block text-muted-foreground">
+            <div className="mx-3 mb-3 rounded-xl shrink-0 overflow-hidden border border-border bg-muted/10">
+              <button
+                type="button"
+                onClick={() => setShowSyntax((s) => !s)}
+                className="w-full flex items-center gap-1.5 px-2.5 py-2 text-[10px] uppercase tracking-wider font-semibold text-muted-foreground hover:text-foreground transition-colors"
+              >
+                <ChevronDown className={cn("w-3 h-3 transition-transform", showSyntax && "rotate-180")} />
                 {t("admin.mermaid.generatedSyntax")}
-              </span>
-              <code className="text-[10px] font-[var(--font-code)] block whitespace-pre overflow-x-auto leading-relaxed text-primary">
-                {generatedCode}
-              </code>
+              </button>
+              <AnimatePresence initial={false}>
+                {showSyntax && (
+                  <motion.div
+                    initial={{ height: 0, opacity: 0 }}
+                    animate={{ height: "auto", opacity: 1 }}
+                    exit={{ height: 0, opacity: 0 }}
+                    transition={{ duration: 0.18, ease: "easeInOut" }}
+                    className="overflow-hidden"
+                  >
+                    <code className="text-[10px] font-[var(--font-code)] block whitespace-pre overflow-x-auto px-3 pb-2.5 leading-relaxed text-primary">
+                      {generatedCode}
+                    </code>
+                  </motion.div>
+                )}
+              </AnimatePresence>
             </div>
           </div>
         </div>
       </div>
+      )}
     </div>
   );
 }
@@ -1060,6 +1158,93 @@ function makeDefaultSteps(t: (k: any, p?: any) => string): FlowStep[] {
     { id: s1, kind: "start", label: t("admin.mermaid.stepStart"), branches: [], nextId: s2, shape: SHAPES.start },
     { id: s2, kind: "process", label: t("admin.mermaid.defaultInitialStep"), branches: [], nextId: null, shape: SHAPES.process },
   ];
+}
+
+interface MermaidTemplateGalleryProps {
+  onPickPreset: (id: (typeof PRESETS)[number]["id"]) => void;
+  onStartBlank: () => void;
+  onClose: () => void;
+}
+
+function MermaidTemplateGallery({ onPickPreset, onStartBlank, onClose }: MermaidTemplateGalleryProps) {
+  const { t, rtl } = useI18n();
+
+  const blankId = "blank";
+
+  const cards = [
+    ...PRESETS.map((p) => ({ id: p.id, icon: p.icon, color: p.color, bg: p.bg, name: t(p.labelKey), desc: t((p.descKey ?? "") as any) })),
+    {
+      id: blankId,
+      icon: Plus,
+      color: "text-foreground",
+      bg: "bg-muted/60",
+      name: t("admin.mermaid.blankCanvas"),
+      desc: t("admin.mermaid.blankCanvasDesc"),
+    },
+  ];
+
+  return (
+    <div className="w-full max-w-2xl bg-card border border-border rounded-xl shadow-2xl flex flex-col overflow-hidden">
+      <div className="flex items-center gap-3 px-4 py-3 shrink-0 border-b border-border bg-muted/30">
+        <div className="w-8 h-8 rounded-xl flex items-center justify-center bg-primary/10 shrink-0">
+          <GitMerge className="w-4 h-4 text-primary" />
+        </div>
+        <div className="min-w-0">
+          <h3 className="font-semibold text-sm text-foreground">{t("admin.mermaid.startWithTemplate")}</h3>
+          <span className="text-[10px] uppercase tracking-wider font-medium text-muted-foreground">
+            {t("admin.mermaid.startWithTemplateSub")}
+          </span>
+        </div>
+        <button
+          type="button"
+          onClick={onClose}
+          className="ms-auto shrink-0 w-8 h-8 rounded-lg flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors"
+          title={t("common.close")}
+          aria-label={t("common.close")}
+        >
+          <X className="w-4 h-4" />
+        </button>
+      </div>
+
+      <div className="flex-1 min-h-0 overflow-y-auto osler-scroll-y p-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          {cards.map((card, idx) => {
+            const CIcon = card.icon;
+            return (
+              <motion.button
+                key={card.id}
+                type="button"
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.2, delay: idx * 0.05 }}
+                onClick={() => (card.id === blankId ? onStartBlank() : onPickPreset(card.id as (typeof PRESETS)[number]["id"]))}
+                className="group flex flex-col items-start gap-2.5 p-4 rounded-xl border border-border bg-background text-start hover:border-primary/40 hover:shadow-e2 transition-all"
+              >
+                <div className={cn("w-10 h-10 rounded-xl flex items-center justify-center transition-transform group-hover:scale-105", card.bg)}>
+                  <CIcon className={cn("w-5 h-5", card.color)} />
+                </div>
+                <div>
+                  <div className="text-sm font-semibold text-foreground">{card.name}</div>
+                  <div className="text-xs text-muted-foreground mt-0.5 leading-relaxed">{card.desc}</div>
+                </div>
+                <div className="mt-auto flex items-center gap-1 text-[10px] font-medium uppercase tracking-wider text-primary/80 group-hover:text-primary transition-colors">
+                  {t("admin.mermaid.useTemplate")}
+                  <ArrowRight className="w-3 h-3 rtl-flip-x" />
+                </div>
+              </motion.button>
+            );
+          })}
+        </div>
+      </div>
+
+      <div className="px-4 py-3 shrink-0 border-t border-border flex items-center justify-between gap-2">
+        <span className="text-[10px] text-muted-foreground hidden sm:block">{t("admin.mermaid.hint")}</span>
+        <Button variant="outline" size="sm" onClick={onClose} className="h-8 px-3 ms-auto">
+          {t("common.cancel")}
+        </Button>
+      </div>
+    </div>
+  );
 }
 
 /**
