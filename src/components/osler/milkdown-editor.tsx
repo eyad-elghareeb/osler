@@ -13,8 +13,11 @@
  *   • `r2KeyBase?: string` — managed content_object R2 base for image uploads.
  *   • `rawR2Key?: string` — raw content-files R2 key for in-place editing.
  *   • `showCounters?: boolean` — show minimal word count footer (default: true).
- *   • `enableMermaid?: boolean` — show mermaid chips + "insert diagram"
- *     (default: false — only enable for article editor + notes).
+ *   • `enableMermaid?: boolean` — enable mermaid diagram support
+ *     (default: false — only enable for article editor + notes). When
+ *     `enableTopBar` is also set, a mermaid button appears in the top
+ *     bar's Insert group; otherwise the chips bar shows an "insert
+ *     diagram" entry.
  *   • `enableTopBar?: boolean` — show Crepe's always-visible top formatting
  *     bar (default: false — only enable for article editor + notes where
  *     long-form writing benefits from persistent controls; compact answer
@@ -38,6 +41,24 @@ import {
   type UploadImageResult,
 } from "@/components/osler/admin/editors/image-upload";
 import { useMermaidModal } from "@/components/osler/admin/editors/mermaid-editor";
+
+// ── Mermaid top-bar icon ─────────────────────────────────────────────────
+
+// Material "account tree" glyph — nodes connected in a flowchart, the
+// universal mermaid/diagram affordance. Matches Crepe's icon format
+// (fill comes from CSS, `currentColor` via the top-bar item rule).
+const mermaidIcon = `
+  <svg
+    xmlns="http://www.w3.org/2000/svg"
+    width="24"
+    height="24"
+    viewBox="0 0 24 24"
+  >
+    <path
+      d="M22 11V3h-7v3H9V3H2v8h7V8h2v10h4v3h7v-8h-7v3h-2V8h2v3z"
+    />
+  </svg>
+`;
 
 // ── Types ─────────────────────────────────────────────────────────────────
 
@@ -73,6 +94,9 @@ export interface MilkdownEditorProps {
 
 interface InnerEditorProps extends MilkdownEditorProps {
   registerCrepe: (crepe: Crepe | null) => void;
+  /** Opens the mermaid modal to insert a new diagram. Wired into the
+   *  top-bar Insert group when `enableMermaid` + `enableTopBar` are set. */
+  onTopBarInsertMermaid?: () => void;
 }
 
 function InnerMilkdownEditor({
@@ -83,8 +107,10 @@ function InnerMilkdownEditor({
   r2KeyBase,
   rawR2Key,
   enableTopBar = false,
+  enableMermaid = false,
   enableImageUpload = true,
   registerCrepe,
+  onTopBarInsertMermaid,
 }: InnerEditorProps) {
   const { t } = useI18n();
   const { toast } = useToast();
@@ -96,6 +122,8 @@ function InnerMilkdownEditor({
   const crepeRef = React.useRef<Crepe | null>(null);
   const r2Ref = React.useRef<{ r2KeyBase?: string; rawR2Key?: string }>({ r2KeyBase, rawR2Key });
   r2Ref.current = { r2KeyBase, rawR2Key };
+  const onTopBarInsertRef = React.useRef(onTopBarInsertMermaid);
+  onTopBarInsertRef.current = onTopBarInsertMermaid;
   const [uploading, setUploading] = React.useState(false);
 
   // ── Image upload handler ──────────────────────────────────────────────
@@ -173,6 +201,20 @@ function InnerMilkdownEditor({
           blockUploadPlaceholderText: t("editor.uploading"),
           inlineUploadPlaceholderText: t("editor.uploading"),
         },
+        // When both the top bar and mermaid are enabled, surface a
+        // mermaid button in the top bar's Insert group — the natural
+        // affordance in long-form editors (article editor, notes).
+        [Crepe.Feature.TopBar]: enableMermaid
+          ? {
+              buildTopBar: (builder) => {
+                builder.getGroup("insert").addItem("mermaid", {
+                  icon: mermaidIcon,
+                  active: () => false,
+                  onRun: () => onTopBarInsertRef.current?.(),
+                });
+              },
+            }
+          : undefined,
         [Crepe.Feature.BlockEdit]: {
           // Minimize the block handle offset so it sits close to the
           // text (just inside the editor card's left padding). The
@@ -263,11 +305,15 @@ function MermaidChips({
   blocks,
   onEdit,
   onInsert,
+  showInsert = true,
   t,
 }: {
   blocks: MermaidBlock[];
   onEdit: (block: MermaidBlock) => void;
   onInsert: () => void;
+  /** Show the "insert diagram" entry (hidden when the top bar already
+   *  hosts the mermaid button). */
+  showInsert?: boolean;
   t: (key: StringKey, params?: Record<string, string | number>) => string;
 }) {
   return (
@@ -288,14 +334,16 @@ function MermaidChips({
           {block.index + 1}
         </button>
       ))}
-      <button
-        type="button"
-        onClick={onInsert}
-        className="ms-auto inline-flex items-center gap-1 rounded-full border border-dashed border-border px-2 py-0.5 text-[11px] text-muted-foreground hover:border-primary/40 hover:text-primary transition-colors"
-        title={t("editor.mermaid.insertMermaidBlock")}
-      >
-        {t("editor.mermaid.insertDiagram")}
-      </button>
+      {showInsert && (
+        <button
+          type="button"
+          onClick={onInsert}
+          className="ms-auto inline-flex items-center gap-1 rounded-full border border-dashed border-border px-2 py-0.5 text-[11px] text-muted-foreground hover:border-primary/40 hover:text-primary transition-colors"
+          title={t("editor.mermaid.insertMermaidBlock")}
+        >
+          {t("editor.mermaid.insertDiagram")}
+        </button>
+      )}
     </div>
   );
 }
@@ -503,7 +551,9 @@ export function MilkdownEditor({
             r2KeyBase={r2KeyBase}
             rawR2Key={rawR2Key}
             enableTopBar={enableTopBar}
+            enableMermaid={enableMermaid}
             enableImageUpload={enableImageUpload}
+            onTopBarInsertMermaid={handleInsertMermaid}
             registerCrepe={registerCrepe}
           />
         </MilkdownProvider>
@@ -511,12 +561,16 @@ export function MilkdownEditor({
 
       {/* Mermaid chips — only when enableMermaid is true.
           shrink-0 prevents this bar from expanding to fill unused
-          flex space when the editor body is short. */}
-      {enableMermaid && !readOnly && (
+          flex space when the editor body is short. When the top bar is
+          enabled, insertion lives in the top bar, so the chips bar only
+          shows once a diagram exists (edit affordance for existing
+          blocks) and the dashed insert chip is hidden. */}
+      {enableMermaid && !readOnly && (!enableTopBar || mermaidBlocks.length > 0) && (
         <MermaidChips
           blocks={mermaidBlocks}
           onEdit={handleEditMermaid}
           onInsert={handleInsertMermaid}
+          showInsert={!enableTopBar}
           t={t}
         />
       )}
