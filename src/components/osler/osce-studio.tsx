@@ -66,6 +66,7 @@ import { useSwipeBackDismiss } from "@/hooks/use-swipe-back-dismiss";
 import { ThinkingStatus, type ThinkingPhase } from "@/components/osler/thinking-status";
 import { ThinkingOrb, type OrbState } from "thinking-orbs";
 import FluidOrb from "@/components/ui/fluid-orb";
+import { useTypewriter } from "@/hooks/use-typewriter";
 
 /* ── Constants ─────────────────────────────────────────────────────── */
 
@@ -830,6 +831,53 @@ function getSpeakerGender(c: OsceStation): string {
   return c.patient.gender;
 }
 
+/* ── Streaming reply bubble ────────────────────────────────────────── */
+
+/**
+ * Paints an in-flight reply with a typewriter reveal. Network deltas can
+ * arrive faster than they can be read — a flash-lite model finishes a
+ * short answer in a few hundred ms — so arrival alone doesn't read as
+ * "being written". The reveal decouples display from arrival. onSettled
+ * fires once the full text is visible: the parent defers committing the
+ * message (transcript append, session save, TTS) until then so the
+ * bubble never jumps from partial to complete.
+ */
+function OsceStreamBubble({
+  label,
+  text,
+  onSettled,
+}: {
+  label: string;
+  text: string;
+  onSettled?: () => void;
+}) {
+  const shown = useTypewriter(text, true);
+  const settledRef = React.useRef(false);
+  React.useEffect(() => {
+    if (!settledRef.current && text && shown === text) {
+      settledRef.current = true;
+      onSettled?.();
+    }
+  }, [shown, text, onSettled]);
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 6 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
+      className="flex flex-col gap-1 max-w-[80%] md:max-w-[640px] self-start"
+    >
+      <div className="text-[10px] font-semibold uppercase tracking-wider text-primary/70 flex items-center gap-1">
+        <Stethoscope className="size-2.5" />
+        {label}
+      </div>
+      <div
+        className="px-3.5 py-2.5 rounded-2xl rounded-tl-sm bg-card border border-border text-sm leading-relaxed shadow-e1"
+        dangerouslySetInnerHTML={{ __html: md(shown) + '<span class="osler-stream-caret"></span>' }}
+      />
+    </motion.div>
+  );
+}
+
 /* ── OSCE Studio Component ───────────────────────────────────────── */
 
 export function OsceStudio({
@@ -951,6 +999,14 @@ export function OsceStudio({
   });
 
   const abortRef = React.useRef<AbortController | null>(null);
+  // Deferred commit for a streamed reply — the streaming bubble calls it
+  // once the typewriter reveal has caught up (see OsceStreamBubble).
+  const streamSettleRef = React.useRef<(() => void) | null>(null);
+  const handleStreamSettled = React.useCallback(() => {
+    const settle = streamSettleRef.current;
+    streamSettleRef.current = null;
+    settle?.();
+  }, []);
   const transcriptRef = React.useRef<TranscriptEntry[]>([]);
   const inputRef = React.useRef<HTMLTextAreaElement>(null);
   const scrollRef = React.useRef<HTMLDivElement>(null);
@@ -1092,15 +1148,20 @@ export function OsceStudio({
             setStreamingText(full);
           }
         );
+        const cleanReply = sanitizeModelText(reply);
+        const updated = [{ role: "model" as const, text: cleanReply }];
+        streamSettleRef.current = () => {
+          setStreamingText(null);
+          setTranscript(updated);
+          setRenderedCount(1);
+          saveSession(updated);
+          if (voiceOn) speakText(cleanReply);
+        };
         setThinking(false);
-        setStreamingText(null);
-        const updated = [{ role: "model" as const, text: sanitizeModelText(reply) }];
-        setTranscript(updated);
-        setRenderedCount(1);
-        saveSession(updated);
-        if (voiceOn) speakText(updated[0].text);
+        setStreamingText(cleanReply);
       } catch (err: unknown) {
         setThinking(false);
+        streamSettleRef.current = null;
         setStreamingText(null);
         if (err instanceof Error && err.name === "AbortError") return;
         setError(err instanceof Error ? err.message : "Failed to get response");
@@ -2461,6 +2522,9 @@ export function OsceStudio({
     async function handleSend() {
       const text = inputText.trim();
       if (!text || !activeCase) return;
+      // A reply is still being revealed — finish writing before accepting
+      // the next question so transcript order and session saves stay sane.
+      if (streamingText !== null) return;
       if (!hasApiKey()) {
         setError("Configure your Gemini API key in Settings first.");
         return;
@@ -2492,16 +2556,22 @@ export function OsceStudio({
           activeCase.type === "data-interp"
             ? await askExaminer(activeCase, newTranscript, abortRef.current.signal, activePackPath, onDelta)
             : await askPatient(activeCase, newTranscript, abortRef.current.signal, onDelta);
-        setThinking(false);
-        setStreamingText(null);
         const cleanReply = sanitizeModelText(reply);
         const updated = [...newTranscript, { role: "model" as const, text: cleanReply }];
-        setTranscript(updated);
-        setRenderedCount((prev) => prev + 2);
-        saveSession(updated);
-        if (voiceOn) speakText(cleanReply);
+        // Defer the commit until the typewriter reveal catches up so the
+        // answer visibly finishes writing instead of snapping to full.
+        streamSettleRef.current = () => {
+          setStreamingText(null);
+          setTranscript(updated);
+          setRenderedCount((prev) => prev + 2);
+          saveSession(updated);
+          if (voiceOn) speakText(cleanReply);
+        };
+        setThinking(false);
+        setStreamingText(cleanReply);
       } catch (err: unknown) {
         setThinking(false);
+        streamSettleRef.current = null;
         setStreamingText(null);
         if (err instanceof Error && err.name === "AbortError") {
           // Keep whatever streamed before the abort so the student still
@@ -2552,6 +2622,8 @@ export function OsceStudio({
     function handleReset() {
       stopTimer();
       if (voiceOn) stopSpeaking();
+      streamSettleRef.current = null;
+      setStreamingText(null);
       setTranscript([]);
       setRenderedCount(0);
       autoOpenRef.current = false;
@@ -2884,24 +2956,14 @@ export function OsceStudio({
               })}
 
               {/* Streaming reply — painted token-by-token while the model
-                  writes, with a blinking caret. Replaces the old
-                  spawn-all-at-once behaviour. */}
+                  writes, with a blinking caret; commits when the reveal
+                  finishes (see OsceStreamBubble). */}
               {streamingText !== null && (
-                <motion.div
-                  initial={{ opacity: 0, y: 6 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
-                  className="flex flex-col gap-1 max-w-[80%] md:max-w-[640px] self-start"
-                >
-                  <div className="text-[10px] font-semibold uppercase tracking-wider text-primary/70 flex items-center gap-1">
-                    <Stethoscope className="size-2.5" />
-                    {isDataInterp ? activeCase.examiner?.name || t("osce.session.examiner") : speakerName}
-                  </div>
-                  <div
-                    className="px-3.5 py-2.5 rounded-2xl rounded-tl-sm bg-card border border-border text-sm leading-relaxed shadow-e1"
-                    dangerouslySetInnerHTML={{ __html: md(streamingText) + '<span class="osler-stream-caret"></span>' }}
-                  />
-                </motion.div>
+                <OsceStreamBubble
+                  label={isDataInterp ? activeCase.examiner?.name || t("osce.session.examiner") : speakerName}
+                  text={streamingText}
+                  onSettled={handleStreamSettled}
+                />
               )}
 
               {/* Thinking indicator */}
@@ -3047,7 +3109,7 @@ export function OsceStudio({
 
                 <button
                   onClick={handleSend}
-                  disabled={sending || !inputText.trim()}
+                  disabled={sending || streamingText !== null || !inputText.trim()}
                   className="h-10 px-4 rounded-xl bg-primary text-primary-foreground font-medium text-sm hover:bg-primary/90 transition-all disabled:opacity-30 disabled:cursor-not-allowed active:scale-95 shrink-0 flex items-center gap-1.5"
                 >
                   {sending ? <Loader2 className="size-4 animate-spin" /> : <><Send className="size-3.5" />Send</>}
@@ -3181,6 +3243,8 @@ export function OsceStudio({
                     onClick={() => {
                       stopTimer();
                       if (voiceOn) endVoiceCall();
+                      streamSettleRef.current = null;
+                      setStreamingText(null);
                       setTranscript([]);
                       setRenderedCount(0);
                       resetTimer(activeCase?.time || EXAM_TIME);

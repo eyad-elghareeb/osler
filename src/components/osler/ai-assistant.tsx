@@ -26,6 +26,7 @@ import { useSwipeBackDismiss } from "@/hooks/use-swipe-back-dismiss";
 import { GEMINI_CLOUD_SYNCED_FLAG } from "@/lib/osler/cloud";
 import { Combobox } from "@/components/osler/ui-primitives";
 import { ThinkingStatus } from "@/components/osler/thinking-status";
+import { useTypewriter } from "@/hooks/use-typewriter";
 
 const MODELS = [
   ["gemini-3.5-flash-lite", "Gemini 3.5 Flash-Lite (default, fastest & cost-efficient)"],
@@ -704,6 +705,13 @@ function EmptyState({ onSuggestion }: { onSuggestion: (s: string) => void }) {
 function ChatBubble({ msg, isStreaming }: { msg: Message; isStreaming?: boolean }) {
   const { t } = useI18n();
   const isUser = msg.role === "user";
+  // Only messages that arrived live get the typewriter reveal; history
+  // loaded from storage renders in full. The latch keeps the animation
+  // running until it catches up even after `loading` flips false.
+  const everStreamedRef = React.useRef(isStreaming === true);
+  if (isStreaming) everStreamedRef.current = true;
+  const shown = useTypewriter(msg.content, !isUser && everStreamedRef.current);
+  const revealing = shown.length < msg.content.length;
   return (
     <motion.div
       initial={{ opacity: 0, y: 6 }}
@@ -735,9 +743,9 @@ function ChatBubble({ msg, isStreaming }: { msg: Message; isStreaming?: boolean 
         {isUser ? (
           <p>{msg.content}</p>
         ) : (
-          <div className="ai-chat-msg" dangerouslySetInnerHTML={{ __html: renderMarkdown(msg.content) }} />
+          <div className="ai-chat-msg" dangerouslySetInnerHTML={{ __html: renderMarkdown(shown) }} />
         )}
-        {isStreaming && <span className="osler-stream-caret" />}
+        {(isStreaming || revealing) && <span className="osler-stream-caret" />}
       </div>
     </motion.div>
   );
