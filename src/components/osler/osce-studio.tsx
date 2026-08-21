@@ -784,7 +784,7 @@ export function OsceStudio({
   const onOpenPack = propOnOpenPack || ((item: ContentTreeNode) => navigate("osce", { uid: item.uid }));
   const onNavigateBack = propOnNavigateBack || (() => navigate("learn"));
   const isMobile = useIsMobile();
-  const { t, rtl } = useI18n();
+  const { t, rtl, contentFilter } = useI18n();
 
   /* ── State ── */
   const [allPacks, setAllPacks] = React.useState<Array<{ node: ContentTreeNode; content: OsceContent | null }>>([]);
@@ -1780,6 +1780,16 @@ export function OsceStudio({
     return map;
   }, [allPacks]);
 
+  // Universal content-language filter (Settings → Language): root leaves are
+  // filtered by lang; branches stay intact so the user can still drill in.
+  const filteredRootTree = React.useMemo(() => {
+    if (contentFilter === "all") return allTree;
+    return allTree.filter((node) => {
+      if (node.items.length > 0) return true;
+      return (node.lang ?? contentByUid.get(node.uid)?.meta.lang ?? "en") === contentFilter;
+    });
+  }, [allTree, contentFilter, contentByUid]);
+
   /** Recursively collect every leaf uid under a node (used for folder stats). */
   const collectLeafUids = React.useCallback((node: ContentTreeNode): string[] => {
     if (node.items.length === 0) return [node.uid];
@@ -1992,7 +2002,7 @@ export function OsceStudio({
               <Loader2 className="size-6 animate-spin text-primary" />
               <span className="text-sm">Loading scenarios…</span>
             </div>
-          ) : allTree.length === 0 ? (
+          ) : filteredRootTree.length === 0 ? (
             <div className="osler-empty">
               <div className="osler-empty__icon">
                 <Stethoscope className="size-6" />
@@ -2012,7 +2022,7 @@ export function OsceStudio({
             </div>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 auto-rows-fr">
-              {allTree.map((node, idx) =>
+              {filteredRootTree.map((node, idx) =>
                 node.items.length > 0
                   ? renderOsceFolderCard(node, idx)
                   : renderOscePackCard(node, idx),

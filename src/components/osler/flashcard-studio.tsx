@@ -45,7 +45,6 @@ import { setImmersiveMode } from "./immersive-mode";
 import { useI18n } from "./i18n-provider";
 import { ContentCacheButton } from "./content-cache-button";
 import { EmptyState } from "./ui-primitives";
-import { ContentLangFilter } from "./qbank-studio";
 import { NavigationStack } from "./navigation-stack";
 import { useSwipeBackDismiss } from "@/hooks/use-swipe-back-dismiss";
 import { useOslerRouter, routeFor } from "@/lib/osler/navigation";
@@ -326,7 +325,7 @@ export function FlashcardStudio({
   const onNavigateHome = propOnNavigateHome || (() => navigate("dashboard"));
   const onNavigateBack = propOnNavigateBack || (() => navigate("learn"));
 
-  const { t, rtl } = useI18n();
+  const { t, rtl, contentFilter } = useI18n();
   const {
     trees,
     leafContent,
@@ -338,6 +337,15 @@ export function FlashcardStudio({
   } = useContentTree({ types: ["flashcard"] });
 
   const tree = trees.flashcard ?? [];
+
+  // Universal content-language filter (Settings → Language): root leaves are
+  // filtered by lang; branches stay intact so the user can still drill in.
+  const filteredTree = React.useMemo(() => {
+    if (contentFilter === "all") return tree;
+    return tree.filter(
+      (node) => node.items.length > 0 || (node.lang ?? "en") === contentFilter,
+    );
+  }, [tree, contentFilter]);
 
   const [mode, setMode] = React.useState<ViewMode>("decks");
 
@@ -878,10 +886,8 @@ export function FlashcardStudio({
           </div>
         </div>
 
-        <ContentLangFilter />
-
         {/* Deck grid */}
-        {tree.length === 0 ? (
+        {filteredTree.length === 0 ? (
           <EmptyState
             icon={Layers}
             title={t("flash.home.empty")}
@@ -889,7 +895,7 @@ export function FlashcardStudio({
           />
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {tree.map((node, idx) => {
+            {filteredTree.map((node, idx) => {
               const isBranch = node.items.length > 0;
               const totalCards = mergeCards(collectLeafUids(node)).length;
               const dueCount = nodeDueCount(node);

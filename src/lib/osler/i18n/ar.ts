@@ -224,10 +224,6 @@ export const ar = {
     "qbank.home.cards": "{n} بطاقة",
     "qbank.home.stations": "{n} محطة",
     "qbank.home.prompts": "{n} مطالبة",
-    "qbank.home.langAny": "أي لغة",
-    "qbank.home.langEn": "الإنجليزية فقط",
-    "qbank.home.langAr": "العربية فقط",
-    "qbank.home.filterLang": "اللغة",
     "qbank.home.filterType": "النوع",
     "qbank.home.search": "ابحث عن حزمة…",
 
@@ -882,7 +878,7 @@ export const ar = {
       "اختر اللغة المستخدمة في التنقل والأزرار والعناوين عبر أوسلر.",
     "settings.language.contentLang": "فلتر لغة المحتوى",
     "settings.language.contentLangDesc":
-      "يُفلتر الحزم الظاهرة في بنك الأسئلة والبطاقات والمكتبة. تُعرض الحزم دائمًا باللغة التي أُنشئت بها — هذا الفلتر يُخفيها أو يُظهرها فقط.",
+      "فلتر شامل لجميع مراكز المحتوى — بنك الأسئلة والبطاقات والمحاكاة السريرية والفيديوهات. تُعرض الحزم دائمًا باللغة التي أُنشئت بها — هذا الفلتر يُخفيها أو يُظهرها فقط.",
     "settings.language.contentLangAll": "إظهار كل اللغات",
     "settings.language.contentLangOnly": "محتوى {name} فقط",
     "settings.language.contentLangEn": "محتوى إنجليزي فقط",

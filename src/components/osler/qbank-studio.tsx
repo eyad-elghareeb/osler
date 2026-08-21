@@ -48,7 +48,6 @@ import {
   Video as VideoIcon,
   Search,
   SlidersHorizontal,
-  Languages,
   ArrowLeft,
   ArrowRight,
   ArrowUpDown,
@@ -1795,9 +1794,6 @@ function HomeView({
                 );
               })}
             </nav>
-            <div className="flex justify-end items-center py-3">
-              {homeTab === "content" && <ContentLangFilterPopover />}
-            </div>
           </div>
         </div>
 
@@ -2353,67 +2349,6 @@ function PackCard({
     </div>
   );
 }
-
-/**
- * Compact language filter popover — lives in the tab bar on the trailing edge.
- * Only rendered when the Content tab is active.
- */
-export function ContentLangFilterPopover() {
-  const { t, contentFilter, setContentFilter } = useI18n();
-  const pills: Array<{ id: "all" | "en" | "ar"; label: string }> = [
-    { id: "all", label: t("settings.language.contentLangAll") },
-    { id: "en", label: t("settings.language.enName") },
-    { id: "ar", label: t("settings.language.arName") },
-  ];
-  const isFiltered = contentFilter !== "all";
-  return (
-    <Popover>
-      <PopoverTrigger asChild>
-        <button
-          className={cn(
-            "mb-px flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors",
-            isFiltered
-              ? "bg-primary/10 text-primary border border-primary/30"
-              : "text-muted-foreground hover:text-foreground hover:bg-muted/60",
-          )}
-          aria-label={t("qbank.home.filterLang")}
-        >
-          <Languages className="size-3.5" />
-          {isFiltered && (
-            <span className="hidden sm:inline">
-              {pills.find((p) => p.id === contentFilter)?.label}
-            </span>
-          )}
-        </button>
-      </PopoverTrigger>
-      <PopoverContent align="end" className="w-44 p-2">
-        <p className="text-[11px] uppercase tracking-wider text-muted-foreground px-2 pb-1.5">
-          {t("qbank.home.filterLang")}
-        </p>
-        <div className="flex flex-col gap-0.5">
-          {pills.map((p) => (
-            <button
-              key={p.id}
-              onClick={() => { haptic("selection"); setContentFilter(p.id); }}
-              className={cn(
-                "w-full text-start px-2 py-1.5 rounded-md text-sm transition-colors",
-                contentFilter === p.id
-                  ? "bg-primary/10 text-primary font-medium"
-                  : "text-foreground hover:bg-muted/60",
-              )}
-              dir={p.id === "ar" ? "rtl" : undefined}
-            >
-              {p.label}
-            </button>
-          ))}
-        </div>
-      </PopoverContent>
-    </Popover>
-  );
-}
-
-/** Backward-compat alias — flashcard, osce, and videos studios import this name. */
-export { ContentLangFilterPopover as ContentLangFilter };
 
 function ContentTab({
   data,

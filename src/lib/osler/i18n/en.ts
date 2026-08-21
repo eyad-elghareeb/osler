@@ -223,10 +223,6 @@ export const en = {
     "qbank.home.cards": "{n} cards",
     "qbank.home.stations": "{n} stations",
     "qbank.home.prompts": "{n} prompts",
-    "qbank.home.langAny": "Any language",
-    "qbank.home.langEn": "English only",
-    "qbank.home.langAr": "Arabic only",
-    "qbank.home.filterLang": "Language",
     "qbank.home.filterType": "Type",
     "qbank.home.search": "Search packs…",
 
@@ -881,7 +877,7 @@ export const en = {
       "Choose the language used for navigation, buttons, and headings across Osler.",
     "settings.language.contentLang": "Content language filter",
     "settings.language.contentLangDesc":
-      "Filter the content packs shown in Q-Bank, Flashcards, and Library. Content packs always render in the language they were authored in — this filter only hides/shows them.",
+      "Universal filter for all content hubs — Q-Bank, Flashcards, OSCE, and Videos. Content packs always render in the language they were authored in — this filter only hides/shows them.",
     "settings.language.contentLangAll": "Show all languages",
     "settings.language.contentLangOnly": "{name} content only",
     "settings.language.contentLangEn": "English content only",

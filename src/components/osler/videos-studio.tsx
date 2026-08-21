@@ -38,7 +38,6 @@ import { useIsMobile } from "@/hooks/use-mobile";
 import { setImmersiveMode } from "./immersive-mode";
 import { useShortcutListener } from "@/hooks/use-shortcuts";
 import { useI18n } from "./i18n-provider";
-import { ContentLangFilter } from "./qbank-studio";
 import { FolderTreeNav } from "./folder-tree-nav";
 import { HubSkeleton, EmptyState } from "./ui-primitives";
 import { ContentCacheButton } from "./content-cache-button";
@@ -289,8 +288,6 @@ export function VideosStudio({
             <p className="osler-page-header__subtitle">{t("videos.subtitle")}</p>
           </div>
         </motion.div>
-
-        <ContentLangFilter />
 
         {/* Two-pane layout: folder tree (desktop) + video grid */}
         <div className="flex flex-col md:flex-row gap-4 mt-4">
