@@ -318,46 +318,6 @@ export function VideosStudio({
           </div>
         </motion.div>
 
-        {/* Sort toolbar */}
-        <div className="flex items-center gap-2 mt-4">
-          <div className="flex-1 min-w-0" />
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="outline" size="sm" className="h-9 shrink-0 gap-1.5">
-                <ArrowDownUp className="size-3.5" />
-                <span className="hidden sm:inline">
-                  {sortMode === "default"
-                    ? t("videos.sortDefault")
-                    : sortMode === "longest"
-                      ? t("videos.sortLongest")
-                      : sortMode === "shortest"
-                        ? t("videos.sortShortest")
-                        : t("videos.sortTitle")}
-                </span>
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              {([
-                ["default", t("videos.sortDefault")],
-                ["longest", t("videos.sortLongest")],
-                ["shortest", t("videos.sortShortest")],
-                ["title", t("videos.sortTitle")],
-              ] as const).map(([mode, label]) => (
-                <DropdownMenuItem
-                  key={mode}
-                  onClick={() => {
-                    haptic("selection");
-                    setSortMode(mode);
-                  }}
-                >
-                  {label}
-                  {sortMode === mode && <Check className="size-3.5 ms-auto" />}
-                </DropdownMenuItem>
-              ))}
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </div>
-
         {/* Two-pane layout: folder tree (desktop) + video grid */}
         <div className="flex flex-col md:flex-row gap-4 mt-4">
           {/* Desktop sidebar: folder tree */}
@@ -413,7 +373,44 @@ export function VideosStudio({
                 )}
               </div>
               {selectedNode && (
-                <ContentCacheButton packId={selectedNode.uid} urls={collectPackUrls(selectedNode)} />
+                <div className="flex items-center gap-2 shrink-0">
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button variant="outline" size="sm" className="h-8 shrink-0 gap-1.5" aria-label={t("videos.sort")}>
+                        <ArrowDownUp className="size-3.5" />
+                        <span className="hidden sm:inline">
+                          {sortMode === "default"
+                            ? t("videos.sortDefault")
+                            : sortMode === "longest"
+                              ? t("videos.sortLongest")
+                              : sortMode === "shortest"
+                                ? t("videos.sortShortest")
+                                : t("videos.sortTitle")}
+                        </span>
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                      {([
+                        ["default", t("videos.sortDefault")],
+                        ["longest", t("videos.sortLongest")],
+                        ["shortest", t("videos.sortShortest")],
+                        ["title", t("videos.sortTitle")],
+                      ] as const).map(([mode, label]) => (
+                        <DropdownMenuItem
+                          key={mode}
+                          onClick={() => {
+                            haptic("selection");
+                            setSortMode(mode);
+                          }}
+                        >
+                          {label}
+                          {sortMode === mode && <Check className="size-3.5 ms-auto" />}
+                        </DropdownMenuItem>
+                      ))}
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                  <ContentCacheButton packId={selectedNode.uid} urls={collectPackUrls(selectedNode)} />
+                </div>
               )}
             </div>
 
