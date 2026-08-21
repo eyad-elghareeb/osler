@@ -65,6 +65,7 @@ import {
 } from "lucide-react";
 import { loadCategoryTree, loadContentByUid, loadNodeByUid, ENGINE_META, flattenTree, packBasePath, nodeUrls } from "@/lib/osler/content";
 import { toast } from "@/hooks/use-toast";
+import { useCountUp } from "@/hooks/use-count-up";
 import { MilkdownEditor } from "@/components/osler/milkdown-editor";
 import { MarkdownPreview } from "@/components/osler/admin/editors/markdown-preview";
 import { ThinkingOrb } from "thinking-orbs";
@@ -5194,14 +5195,18 @@ function QuizView({
                   stateClass = "border-border bg-card opacity-60";
                 }
               } else if (isSelected) {
-                stateClass = "border-primary bg-primary/5";
+                stateClass = "border-primary bg-primary/5 ring-2 ring-primary/15";
                 letterBg = "bg-primary text-primary-foreground border-primary";
               }
 
               return (
-                <button
+                <motion.button
                   key={idx}
                   data-choice-idx={idx}
+                  initial={{ opacity: 0, y: 6 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.2, delay: Math.min(idx * 0.04, 0.24), ease: "easeOut" }}
+                  whileTap={qSubmitted || !interactive ? undefined : { scale: 0.99 }}
                   disabled={qSubmitted || !interactive}
                   onClick={() => {
                     if (!interactive) return;
@@ -5223,7 +5228,7 @@ function QuizView({
                   onTouchStart={(e) => interactive && startLongPress(idx, e)}
                   onTouchEnd={cancelLongPress}
                   onTouchMove={onChoiceTouchMove}
-                  className={`w-full text-start p-3 sm:p-3.5 rounded-xl border-2 transition-all flex items-start gap-3 ${stateClass} ${
+                  className={`w-full text-start p-3 sm:p-3.5 rounded-xl border-2 transition-colors flex items-start gap-3 ${stateClass} ${
                     qSubmitted ? "cursor-default" : "cursor-pointer"
                   } ${hasStrikethrough ? "opacity-60" : ""} osler-touch-target`}
                 >
@@ -5253,7 +5258,7 @@ function QuizView({
                       </div>
                     )}
                   </div>
-                </button>
+                </motion.button>
               );
             })}
           </div>
@@ -7930,8 +7935,7 @@ function ResultsView({
 }) {
   const { t } = useI18n();
   const [pdfDialogOpen, setPdfDialogOpen] = React.useState(false);
-  const total = session.questions.length;
-  const answeredCount = Object.keys(session.answers).filter(
+  const total = session.questions.length;  const answeredCount = Object.keys(session.answers).filter(
     (k) => session.answers[+k] !== undefined
   ).length;
   const correctCount = session.questions.filter(
@@ -7959,6 +7963,10 @@ function ResultsView({
   );
   const avgTimeSec = answeredCount ? Math.round(totalTimeSec / answeredCount) : 0;
   const percentile = Math.min(99, Math.max(1, Math.round(pct * 0.9 + 5)));
+
+  // Count-up animation for the two hero numbers (reduced-motion safe).
+  const scoreCount = useCountUp(pct, { suffix: "%" });
+  const percentileCount = useCountUp(percentile);
 
   const handleExportPdf = async (opts: PdfExportOptions) => {
     const questions = session.questions.map((q) => ({
@@ -8002,7 +8010,7 @@ function ResultsView({
       <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-4">
         <div className="flex items-center justify-between flex-wrap gap-3">
           <div>
-            <h1 className="text-2xl font-semibold text-foreground">{t("qbank.home.testResults")}</h1>
+            <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-foreground">{t("qbank.home.testResults")}</h1>
             <p className="text-sm text-muted-foreground mt-1">
               {item.title} · {t("qbank.home.questions", { n: total })} ·{" "}
               {session.mode === "timed" ? t("qbank.session.timedMode") : t("qbank.session.tutorMode")}
@@ -8029,6 +8037,7 @@ function ResultsView({
               </div>
               <div className="flex items-baseline justify-center gap-1">
                 <span
+                  ref={scoreCount.ref as React.RefObject<HTMLSpanElement>}
                   className={cn(
                     "text-5xl font-bold tabular-nums",
                     pct >= 70
@@ -8038,7 +8047,7 @@ function ResultsView({
                       : "text-destructive"
                   )}
                 >
-                  {pct}%
+                  {scoreCount.display}
                 </span>
               </div>
               <div className="text-xs text-muted-foreground mt-1">
@@ -8051,7 +8060,7 @@ function ResultsView({
                 {t("qbank.home.percentileRank")}
               </div>
               <div className="text-5xl font-bold tabular-nums text-primary">
-                {percentile}
+                <span ref={percentileCount.ref as React.RefObject<HTMLSpanElement>}>{percentileCount.display}</span>
                 <span className="text-2xl font-normal text-muted-foreground">{t("qbank.home.percentileSuffix")}</span>
               </div>
               <div className="text-xs text-muted-foreground mt-1">
