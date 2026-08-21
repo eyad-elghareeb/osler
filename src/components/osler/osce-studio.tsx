@@ -272,6 +272,7 @@ function buildPatientSysPrompt(c: OsceStation): string {
     "6. Show emotion consistent with the complaint but do not over-act.",
     "7. Never break character, never mention being an AI.",
     "8. NEVER include medical disclaimers.",
+    "9. Reply in the SAME language the student uses (Arabic, English, or a mix). If they code-switch, mirror their mix naturally; clinical terms may stay in English.",
   ].join("\n");
 }
 
@@ -288,6 +289,7 @@ function buildExaminerSysPrompt(): string {
     '  "feedback"   : string — 2-3 sentences',
     "",
     "Each mustAsk item covered ≈ a large share of the score. Credit paraphrases.",
+    'Write "feedback" in the language the student used most; keep "asked"/"missed" items in the rubric\'s wording.',
     "Domain scores should sum to approximately the overall score.",
   ].join("\n");
 }
@@ -353,7 +355,7 @@ function buildDataInterpSysPrompt(c: OsceStation): string {
     });
   }
   lines.push(
-    "Match the student's language (Arabic or English). Clinical terms stay in English.",
+    "Match the student's language exactly (Arabic, English, or their natural mix). Clinical terms stay in English.",
     "Keep a mental score out of 100. Do NOT share it."
   );
   return lines.join("\n");
@@ -367,6 +369,7 @@ function buildDataInterpScoreSysPrompt(): string {
     '"domains": { "knowledge": 0-30, "interpretation": 0-30, "reasoning": 0-25, "communication": 0-15 },',
     '"asked" (string[]), "missed" (string[]), "feedback" (string).',
     "Mixing Arabic and English is normal. Do NOT penalise code-switching.",
+    'Write "feedback" in the language the student used most.',
   ].join("\n");
 }
 
@@ -540,12 +543,15 @@ async function printedImageParts(
 async function callGemini(
   systemPrompt: string,
   contents: GeminiContent[],
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  onDelta?: (fullText: string) => void
 ): Promise<string> {
   const key = getApiKey();
   const model = getModel();
   if (!key) throw new Error("API key not configured");
-  const url = `${GEMINI_BASE}/models/${model}:generateContent?key=${key}`;
+  // streamGenerateContent + alt=sse yields token-level deltas so replies can
+  // be painted as they are written instead of spawning in one block.
+  const url = `${GEMINI_BASE}/models/${model}:streamGenerateContent?alt=sse&key=${key}`;
   const res = await fetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -560,25 +566,81 @@ async function callGemini(
     const err = await res.text().catch(() => "");
     throw new Error(`Gemini API error ${res.status}: ${err.slice(0, 200)}`);
   }
-  const data = await res.json();
-  const text = data?.candidates?.[0]?.content?.parts?.[0]?.text || "";
-  if (!text) throw new Error("Empty response from Gemini");
-  return text;
+  if (!res.body) {
+    const data = await res.json();
+    const text = data?.candidates?.[0]?.content?.parts?.[0]?.text || "";
+    if (!text) throw new Error("Empty response from Gemini");
+    return text;
+  }
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let full = "";
+  let buf = "";
+  // Mirrors @googleapis/js-genai's processStreamResponse(): SSE events are
+  // `data: {json}` lines; a chunk may carry a top-level {"error": ...} whose
+  // message must surface; and the final event can arrive without a trailing
+  // newline, so the buffer is flushed after the read loop ends.
+  const handleDataLine = (line: string) => {
+    if (!line.startsWith("data:")) return;
+    const json = line.slice(5).trim();
+    if (!json) return;
+    let chunk: {
+      error?: { message?: string };
+      candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
+    };
+    try {
+      chunk = JSON.parse(json);
+    } catch {
+      return;
+    }
+    if (chunk && typeof chunk === "object" && chunk.error) {
+      throw new Error(chunk.error.message || "Gemini stream error");
+    }
+    const parts = chunk?.candidates?.[0]?.content?.parts;
+    const piece = Array.isArray(parts)
+      ? parts.map((p) => p.text ?? "").join("")
+      : "";
+    if (piece) {
+      full += piece;
+      onDelta?.(full);
+    }
+  };
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buf += decoder.decode(value, { stream: true });
+      const lines = buf.split("\n");
+      buf = lines.pop() ?? "";
+      for (const line of lines) handleDataLine(line.trim());
+    }
+    for (const line of buf.split("\n")) handleDataLine(line.trim());
+  } finally {
+    reader.releaseLock();
+  }
+  if (!full.trim()) throw new Error("Empty response from Gemini");
+  return full;
 }
 
-async function askPatient(c: OsceStation, transcript: TranscriptEntry[], signal?: AbortSignal): Promise<string> {
+async function askPatient(
+  c: OsceStation,
+  transcript: TranscriptEntry[],
+  signal?: AbortSignal,
+  onDelta?: (fullText: string) => void
+): Promise<string> {
   const contents = transcript.map((m) => ({
     role: m.role === "model" ? "model" : "user",
     parts: [{ text: m.text }],
   }));
-  return callGemini(buildPatientSysPrompt(c), contents, signal);
+  return callGemini(buildPatientSysPrompt(c), contents, signal, onDelta);
 }
 
 async function askExaminer(
   c: OsceStation,
   transcript: TranscriptEntry[],
   signal?: AbortSignal,
-  packPath = ""
+  packPath = "",
+  onDelta?: (fullText: string) => void
 ): Promise<string> {
   // The professor sees the printed materials the student was handed as a
   // leading context turn (vision via inlineData). It never appears in the
@@ -806,6 +868,10 @@ export function OsceStudio({
   const [inputText, setInputText] = React.useState("");
   const [sending, setSending] = React.useState(false);
   const [thinking, setThinking] = React.useState(false);
+  // In-flight streamed reply — non-null while tokens are arriving; painted
+  // as a live model bubble so the answer "writes itself" instead of
+  // spawning in one block after a silent wait.
+  const [streamingText, setStreamingText] = React.useState<string | null>(null);
   const [error, setError] = React.useState<string | null>(null);
   const [result, setResult] = React.useState<ExamResult | null>(null);
   const [voiceOn, setVoiceOn] = React.useState(false);
@@ -1013,16 +1079,29 @@ export function OsceStudio({
       setThinking(true);
       setError(null);
       abortRef.current = new AbortController();
+      let streamed = "";
       try {
-        const reply = await askExaminer(activeCase, [], abortRef.current.signal, activePackPath);
+        const reply = await askExaminer(
+          activeCase,
+          [],
+          abortRef.current.signal,
+          activePackPath,
+          (full) => {
+            streamed = full;
+            setThinking(false);
+            setStreamingText(full);
+          }
+        );
         setThinking(false);
+        setStreamingText(null);
         const updated = [{ role: "model" as const, text: sanitizeModelText(reply) }];
         setTranscript(updated);
         setRenderedCount(1);
-        saveSession();
+        saveSession(updated);
         if (voiceOn) speakText(updated[0].text);
       } catch (err: unknown) {
         setThinking(false);
+        setStreamingText(null);
         if (err instanceof Error && err.name === "AbortError") return;
         setError(err instanceof Error ? err.message : "Failed to get response");
       } finally {
@@ -1037,10 +1116,24 @@ export function OsceStudio({
   const liveAudioCtxRef = React.useRef<AudioContext | null>(null);
   const liveMicStreamRef = React.useRef<MediaStream | null>(null);
   const liveMicProcessorRef = React.useRef<AudioNode | null>(null);
+  // Actual AudioContext rate, discovered on mic start — iOS Safari may
+  // silently ignore a requested 16000Hz and open at 48000.
+  const liveMicSampleRateRef = React.useRef(16000);
   const livePlayCtxRef = React.useRef<AudioContext | null>(null);
   const livePlayScheduleTimeRef = React.useRef(0);
   const liveInterimTextRef = React.useRef("");
   const liveModelAccumTextRef = React.useRef("");
+  // Live-mode output transcription painted as a growing ghost bubble while
+  // the professor speaks (only when transcripts are enabled).
+  const [modelInterim, setModelInterim] = React.useState("");
+
+  /** Clear the accumulating output-transcription buffer AND its on-screen
+      ghost bubble. Every path that resets the accumulator must use this so
+      the partial caption never outlives its audio. */
+  function resetModelAccum() {
+    liveModelAccumTextRef.current = "";
+    setModelInterim("");
+  }
 
   /* Commit the professor's (partial) spoken text as a model transcript entry. */
   function finalizeModelText(text: string) {
@@ -1051,8 +1144,8 @@ export function OsceStudio({
     const updated = [...transcriptNow, { role: "model" as const, text: sanitizeModelText(text) }];
     setTranscript(updated);
     setRenderedCount((prev) => prev + 1);
-    liveModelAccumTextRef.current = "";
-    saveSession();
+    resetModelAccum();
+    saveSession(updated);
   }
 
   function getGenderVoice(): string {
@@ -1181,6 +1274,9 @@ export function OsceStudio({
             } else {
               liveModelAccumTextRef.current += (liveModelAccumTextRef.current ? " " : "") + modelText;
             }
+            // Stream the partial transcription into the ghost bubble so the
+            // professor's words appear as they are spoken, not after.
+            setModelInterim(liveModelAccumTextRef.current);
           }
         }
         if (sc.modelTurn && sc.modelTurn.parts && sc.modelTurn.parts.length) {
@@ -1224,7 +1320,7 @@ export function OsceStudio({
             if (accumulated) {
               finalizeModelText(accumulated);
             }
-            liveModelAccumTextRef.current = "";
+            resetModelAccum();
             setVoicePhase("listening");
           }
           // else: stutter artifact — keep speaking, do nothing
@@ -1281,7 +1377,7 @@ export function OsceStudio({
     stopLiveMic();
     livePlayScheduleTimeRef.current = 0;
     liveInterimTextRef.current = "";
-    liveModelAccumTextRef.current = "";
+    resetModelAccum();
     if (liveSessionRef.current) {
       try { liveSessionRef.current.close(); } catch {}
       liveSessionRef.current = null;
@@ -1324,6 +1420,27 @@ export function OsceStudio({
     return 0;
   }
 
+  /** Encode one Float32 PCM chunk and stream it to the Live socket.
+      Shared by the AudioWorklet and ScriptProcessor mic paths. */
+  function sendLiveAudioChunk(samples: Float32Array): boolean {
+    const ws = liveSessionRef.current;
+    if (!ws || ws.readyState !== WebSocket.OPEN) return false;
+    const pcm = new Int16Array(samples.length);
+    for (let i = 0; i < samples.length; i++) pcm[i] = Math.max(-32768, Math.min(32767, Math.round(samples[i] * 32767)));
+    const bytes = new Uint8Array(pcm.buffer);
+    // Chunked base64 encoding — String.fromCharCode.apply(null, ...)
+    // processes ~32KB at a time and is O(n) instead of the previous
+    // O(n^2) string-concatenation loop, which stalled the audio
+    // thread on long chunks and caused glitchy playback.
+    const CHUNK = 0x8000;
+    let binary = "";
+    for (let i = 0; i < bytes.length; i += CHUNK) {
+      binary += String.fromCharCode.apply(null, bytes.subarray(i, i + CHUNK) as unknown as number[]);
+    }
+    ws.send(JSON.stringify({ realtimeInput: { audio: { data: btoa(binary), mimeType: "audio/pcm;rate=" + liveMicSampleRateRef.current } } }));
+    return true;
+  }
+
   function startLiveMic() {
     navigator.mediaDevices
       .getUserMedia({ audio: true })
@@ -1336,6 +1453,7 @@ export function OsceStudio({
         // we hard-code rate=16000 in the mime but the PCM is actually at
         // 48000, Gemini's VAD hears chipmunk-speed audio and never fires.
         const micSampleRate = actx.sampleRate;
+        liveMicSampleRateRef.current = micSampleRate;
         const source = actx.createMediaStreamSource(stream);
         // Guard `inputs[0][0]` — when the mic is briefly disconnected
         // (e.g., iOS Safari backgrounding, Bluetooth headset swap) the
@@ -1347,28 +1465,37 @@ export function OsceStudio({
         const url = URL.createObjectURL(blob);
         actx.audioWorklet.addModule(url).then(() => {
           const node = new AudioWorkletNode(actx, "mic-processor");
+          // The worklet fires every 128-frame quantum (~375 msgs/sec at
+          // 48kHz). Encoding + JSON.stringify + ws.send at that rate floods
+          // the main thread and was the main cause of voice-mode stutter.
+          // Batch quanta into ~2048-sample chunks (~43ms) before sending —
+          // still far below Live's latency floor, but ~16x fewer main-thread
+          // roundtrips, which also steadies the orb's level input.
+          const MIC_CHUNK_SAMPLES = 2048;
+          let micBuf = new Float32Array(MIC_CHUNK_SAMPLES);
+          let micBufFill = 0;
           node.port.onmessage = (e) => {
-            if (!liveSessionRef.current || liveSessionRef.current.readyState !== WebSocket.OPEN) return;
+            if (!liveSessionRef.current || liveSessionRef.current.readyState !== WebSocket.OPEN) {
+              micBufFill = 0;
+              return;
+            }
             // Microphone audio is streamed continuously — including while the
             // model speaks — so Gemini Live's VAD can hear the student talk
             // over the professor and emit sc.interrupted (auto-interruption).
             const input = e.data as Float32Array;
             if (!input || !input.length) return;
             micLevelRef.current = rmsLevel(input);
-            const pcm = new Int16Array(input.length);
-            for (let i = 0; i < input.length; i++) pcm[i] = Math.max(-32768, Math.min(32767, Math.round(input[i] * 32767)));
-            const bytes = new Uint8Array(pcm.buffer);
-            // Chunked base64 encoding — String.fromCharCode.apply(null, ...)
-            // processes ~32KB at a time and is O(n) instead of the previous
-            // O(n^2) string-concatenation loop, which stalled the audio
-            // thread on long chunks and caused glitchy playback.
-            const CHUNK = 0x8000;
-            let binary = "";
-            for (let i = 0; i < bytes.length; i += CHUNK) {
-              binary += String.fromCharCode.apply(null, bytes.subarray(i, i + CHUNK) as unknown as number[]);
+            let offset = 0;
+            while (offset < input.length) {
+              const n = Math.min(MIC_CHUNK_SAMPLES - micBufFill, input.length - offset);
+              micBuf.set(input.subarray(offset, offset + n), micBufFill);
+              micBufFill += n;
+              offset += n;
+              if (micBufFill === MIC_CHUNK_SAMPLES) {
+                sendLiveAudioChunk(micBuf);
+                micBufFill = 0;
+              }
             }
-            const b64 = btoa(binary);
-            liveSessionRef.current.send(JSON.stringify({ realtimeInput: { audio: { data: b64, mimeType: "audio/pcm;rate=" + micSampleRate } } }));
           };
           source.connect(node);
           liveMicProcessorRef.current = node;
@@ -1389,23 +1516,14 @@ export function OsceStudio({
       if (!actx) return;
       // Mirror the worklet path: use the ACTUAL context sample rate, not
       // a hard-coded 16000 — see startLiveMic() for the iOS rationale.
-      const micSampleRate = actx.sampleRate;
+      liveMicSampleRateRef.current = actx.sampleRate;
       const processor = actx.createScriptProcessor(4096, 1, 1);
       processor.onaudioprocess = (e) => {
-        if (!liveSessionRef.current || liveSessionRef.current.readyState !== WebSocket.OPEN) return;
         // Streamed continuously — see the AudioWorklet mic path above.
         const input = e.inputBuffer.getChannelData(0);
         if (!input || !input.length) return;
         micLevelRef.current = rmsLevel(input);
-        const pcm = new Int16Array(input.length);
-        for (let i = 0; i < input.length; i++) pcm[i] = Math.max(-32768, Math.min(32767, Math.round(input[i] * 32767)));
-        const bytes = new Uint8Array(pcm.buffer);
-        const CHUNK = 0x8000;
-        let binary = "";
-        for (let i = 0; i < bytes.length; i += CHUNK) {
-          binary += String.fromCharCode.apply(null, bytes.subarray(i, i + CHUNK) as unknown as number[]);
-        }
-        liveSessionRef.current.send(JSON.stringify({ realtimeInput: { audio: { data: btoa(binary), mimeType: "audio/pcm;rate=" + micSampleRate } } }));
+        sendLiveAudioChunk(input);
       };
       const source = actx.createMediaStreamSource(stream);
       source.connect(processor);
@@ -1598,7 +1716,7 @@ export function OsceStudio({
       if (accumulated) {
         finalizeModelText(accumulated);
       }
-      liveModelAccumTextRef.current = "";
+      resetModelAccum();
       setVoicePhase(voiceOnRef.current ? "listening" : "idle");
     }
   }
@@ -1672,10 +1790,11 @@ export function OsceStudio({
     return STORAGE.session + (activeItem?.uid || selectedPackUid || "osce");
   }
 
-  function saveSession() {
-    if (!activeCase || !transcript.length) return;
+  function saveSession(list?: TranscriptEntry[]) {
+    const entries = list ?? transcript;
+    if (!activeCase || !entries.length) return;
     try {
-      localStorage.setItem(sessionKey(), JSON.stringify({ transcript, timerRemaining }));
+      localStorage.setItem(sessionKey(), JSON.stringify({ transcript: entries, timerRemaining }));
     } catch {}
   }
 
@@ -1693,7 +1812,7 @@ export function OsceStudio({
   /* Scroll to bottom */
   React.useEffect(() => {
     if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-  }, [transcript, thinking]);
+  }, [transcript, thinking, streamingText, modelInterim]);
 
   /* Keyboard Escape */
   React.useEffect(() => {
@@ -1915,7 +2034,6 @@ export function OsceStudio({
           aria-label={node.title}
           onClick={() => {
             setSelectedFolders((folders) => [...folders, node]);
-
           }}
           className="osler-fade-in h-full w-full min-w-0 justify-start text-start bg-card border border-border rounded-xl p-5 hover:border-primary/40 hover:shadow-md hover:bg-card transition-all group flex items-center gap-3.5 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
         >
@@ -2050,29 +2168,30 @@ export function OsceStudio({
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.3 }}
           >
-            {/* Back button + breadcrumb */}
-            <button
-              onClick={() => {
-                setSelectedFolders((folders) => folders.slice(0, -1));
-    
-              }}
-              className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors mb-3"
-            >
-              <ArrowLeft className={cn("size-3.5", rtl && "rtl-flip-x")} />
-              {t("osce.home.title")}
-            </button>
+            {/* Header block — back button + breadcrumb + title + stats,
+                wrapped in mb-6 so the child grid breathes (mirrors qbank). */}
+            <div className="mb-6">
+              <button
+                onClick={() => {
+                  setSelectedFolders((folders) => folders.slice(0, -1));
+                }}
+                className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors mb-3"
+              >
+                <ArrowLeft className={cn("size-3.5", rtl && "rtl-flip-x")} />
+                {t("osce.home.title")}
+              </button>
 
-            {/* Folder header */}
-            <div className="flex items-center gap-2 text-xs text-muted-foreground mb-1">
-              <Folder className="size-3.5 text-primary" />
-              <span className="text-primary">{t("osce.home.title")}</span>
+              <div className="flex items-center gap-2 text-xs text-muted-foreground mb-1">
+                <Folder className="size-3.5 text-primary" />
+                <span className="text-primary">{t("osce.home.title")}</span>
+              </div>
+              <h1 className="text-2xl md:text-3xl font-bold tracking-tight mb-1">
+                {selectedFolder.title}
+              </h1>
+              <p className="text-sm text-muted-foreground">
+                {fs.packs} {fs.packs === 1 ? "pack" : "packs"} · {fs.stations} {fs.stations === 1 ? "station" : "stations"}
+              </p>
             </div>
-            <h1 className="text-2xl md:text-3xl font-bold tracking-tight mb-1">
-              {selectedFolder.title}
-            </h1>
-            <p className="text-sm text-muted-foreground">
-              {fs.packs} {fs.packs === 1 ? "pack" : "packs"} · {fs.stations} {fs.stations === 1 ? "station" : "stations"}
-            </p>
 
             {/* Child grid */}
             {childTree.length === 0 ? (
@@ -2120,7 +2239,6 @@ export function OsceStudio({
           subpage={subfolderView}
           onBack={() => {
             setSelectedFolders((folders) => folders.slice(0, -1));
-
           }}
         />
       </motion.div>
@@ -2164,7 +2282,7 @@ export function OsceStudio({
             {/* Back */}
             <button
               onClick={() => setPhase("select")}
-              className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground mb-5 transition-colors"
+              className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground mb-4 transition-colors"
             >
               <ChevronLeft className="size-3.5" />
               All scenarios
@@ -2362,21 +2480,40 @@ export function OsceStudio({
       setRenderedCount((prev) => prev + 1);
       setThinking(true);
       abortRef.current = new AbortController();
+      let streamed = "";
       try {
+        const onDelta = (full: string) => {
+          streamed = full;
+          // First token flips the thinking card into a live writing bubble.
+          setThinking(false);
+          setStreamingText(full);
+        };
         const reply =
           activeCase.type === "data-interp"
-            ? await askExaminer(activeCase, newTranscript, abortRef.current.signal, activePackPath)
-            : await askPatient(activeCase, newTranscript, abortRef.current.signal);
+            ? await askExaminer(activeCase, newTranscript, abortRef.current.signal, activePackPath, onDelta)
+            : await askPatient(activeCase, newTranscript, abortRef.current.signal, onDelta);
         setThinking(false);
+        setStreamingText(null);
         const cleanReply = sanitizeModelText(reply);
         const updated = [...newTranscript, { role: "model" as const, text: cleanReply }];
         setTranscript(updated);
         setRenderedCount((prev) => prev + 2);
-        saveSession();
+        saveSession(updated);
         if (voiceOn) speakText(cleanReply);
       } catch (err: unknown) {
         setThinking(false);
-        if (err instanceof Error && err.name === "AbortError") return;
+        setStreamingText(null);
+        if (err instanceof Error && err.name === "AbortError") {
+          // Keep whatever streamed before the abort so the student still
+          // sees the partial answer instead of it vanishing.
+          if (streamed.trim()) {
+            const updated = [...newTranscript, { role: "model" as const, text: sanitizeModelText(streamed) }];
+            setTranscript(updated);
+            setRenderedCount((prev) => prev + 2);
+            saveSession(updated);
+          }
+          return;
+        }
         setError(err instanceof Error ? err.message : "Failed to get response");
       } finally {
         setSending(false);
@@ -2746,6 +2883,27 @@ export function OsceStudio({
                 );
               })}
 
+              {/* Streaming reply — painted token-by-token while the model
+                  writes, with a blinking caret. Replaces the old
+                  spawn-all-at-once behaviour. */}
+              {streamingText !== null && (
+                <motion.div
+                  initial={{ opacity: 0, y: 6 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
+                  className="flex flex-col gap-1 max-w-[80%] md:max-w-[640px] self-start"
+                >
+                  <div className="text-[10px] font-semibold uppercase tracking-wider text-primary/70 flex items-center gap-1">
+                    <Stethoscope className="size-2.5" />
+                    {isDataInterp ? activeCase.examiner?.name || t("osce.session.examiner") : speakerName}
+                  </div>
+                  <div
+                    className="px-3.5 py-2.5 rounded-2xl rounded-tl-sm bg-card border border-border text-sm leading-relaxed shadow-e1"
+                    dangerouslySetInnerHTML={{ __html: md(streamingText) + '<span class="osler-stream-caret"></span>' }}
+                  />
+                </motion.div>
+              )}
+
               {/* Thinking indicator */}
               <AnimatePresence>
                 {thinking && (
@@ -2783,6 +2941,21 @@ export function OsceStudio({
                     {interimText}
                   </div>
                 </motion.div>
+              )}
+
+              {/* Live-mode professor ghost caption — grows while the
+                  professor speaks, only when transcripts are enabled. */}
+              {voiceOn && isLiveTranscriptsOn() && modelInterim && (
+                <div className="self-start flex flex-col gap-1 max-w-[80%] md:max-w-[640px]">
+                  <div className="text-[10px] font-semibold uppercase tracking-wider text-primary/70 flex items-center gap-1">
+                    <Stethoscope className="size-2.5" />
+                    {isDataInterp ? activeCase.examiner?.name || t("osce.session.examiner") : speakerName}
+                  </div>
+                  <div className="px-3.5 py-2.5 rounded-2xl rounded-tl-sm bg-card/60 border border-dashed border-border text-sm leading-relaxed text-muted-foreground italic">
+                    {modelInterim}
+                    <span className="osler-stream-caret" />
+                  </div>
+                </div>
               )}
             </div>
 
@@ -2951,6 +3124,7 @@ export function OsceStudio({
                 }
                 return "";
               })()}
+              partialModelText={modelInterim}
               transcriptsOn={isLiveTranscriptsOn()}
               onToggleTranscripts={toggleLiveTranscripts}
               onMinimise={() => setVoiceOverlayOpen(false)}
@@ -3617,6 +3791,7 @@ function LiveVoiceOverlay({
   thinkingPhases,
   interimText,
   lastModelText,
+  partialModelText,
   transcriptsOn,
   onToggleTranscripts,
   onMinimise,
@@ -3634,6 +3809,8 @@ function LiveVoiceOverlay({
   thinkingPhases: ThinkingPhase[];
   interimText: string;
   lastModelText: string;
+  /** In-flight output transcription — grows while the professor speaks. */
+  partialModelText: string;
   transcriptsOn: boolean;
   onToggleTranscripts: () => void;
   onMinimise: () => void;
@@ -3732,17 +3909,26 @@ function LiveVoiceOverlay({
             are off, the area collapses and the orb takes the full vertical
             space. */}
         <AnimatePresence>
-          {(transcriptsOn || interimText || lastModelText) && (
+          {(transcriptsOn || interimText || lastModelText || partialModelText) && (
             <motion.div
               initial={{ opacity: 0, y: 8 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -8 }}
               className="w-full max-w-2xl space-y-2 min-h-[3rem] flex flex-col justify-center"
             >
-              {/* Professor's last full utterance */}
-              {transcriptsOn && lastModelText && (
-                <div className="self-start max-w-[85%] px-3.5 py-2 rounded-2xl rounded-tl-sm bg-card border border-border text-sm text-foreground/90 leading-relaxed">
-                  {lastModelText}
+              {/* Professor's last full utterance — or the in-flight partial
+                  transcription, streamed word-by-word as it is spoken. */}
+              {transcriptsOn && (partialModelText || lastModelText) && (
+                <div
+                  className={cn(
+                    "self-start max-w-[85%] px-3.5 py-2 rounded-2xl rounded-tl-sm border text-sm leading-relaxed",
+                    partialModelText
+                      ? "bg-card/60 border-dashed border-border text-muted-foreground italic"
+                      : "bg-card border-border text-foreground/90"
+                  )}
+                >
+                  {partialModelText || lastModelText}
+                  {partialModelText && <span className="osler-stream-caret" />}
                 </div>
               )}
               {/* User's interim speech */}

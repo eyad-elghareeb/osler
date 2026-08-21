@@ -1553,6 +1553,26 @@ html[dir="rtl"] {
   border-bottom-left-radius: 4px;
 }
 
+/* ── Streaming-text caret — blinking bar appended to in-flight AI replies
+   (OSCE conversation, AI assistant). Honours prefers-reduced-motion. ── */
+.osler-stream-caret {
+  display: inline-block;
+  width: 2px;
+  height: 1em;
+  margin-inline-start: 2px;
+  vertical-align: -0.15em;
+  border-radius: 1px;
+  background: var(--primary);
+  animation: osler-caret-blink 0.9s ease-in-out infinite;
+}
+@keyframes osler-caret-blink {
+  0%, 100% { opacity: 0.75; }
+  50% { opacity: 0.15; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .osler-stream-caret { animation: none; }
+}
+
 /* ── Tracker stat cards ─────────────────────────────────────────────────── */
 .osler-stat {
   background: var(--card);
