@@ -14,11 +14,9 @@ import {
   Folder,
   Video as VideoIcon,
   ListVideo,
-  X,
   BookOpen,
   ExternalLink,
   Sun,
-  Search,
   ArrowDownUp,
   Check,
 } from "lucide-react";
@@ -28,7 +26,6 @@ import {
   loadVideoTree,
   loadNodeVideos,
   listAllVideos,
-  searchVideos,
   resolveThumbnail,
   formatDuration,
 } from "@/lib/osler/videos";
@@ -37,7 +34,6 @@ import { settings } from "@/lib/osler/storage";
 import type { VideoResource, ContentTreeNode } from "@/lib/osler/types";
 import { cn } from "@/lib/utils";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
