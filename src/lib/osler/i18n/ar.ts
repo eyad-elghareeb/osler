@@ -197,11 +197,13 @@ export const ar = {
 
     "dash.streak.title": "أيام متتالية",
     "dash.streak.longest": "الأطول: {n} يوم",
-    "dash.streak.keepGoing": "ذاكر اليوم لتحافظ على سلسلتك!",
+    "dash.streak.keepGoing": "ذاكر قبل انتهاء النافذة لتحافظ على سلسلتك!",
     "dash.streak.today": "اليوم",
     "dash.streak.questions": "{n} سؤال",
     "dash.streak.activity": "نشاط 14 يوم",
     "dash.streak.dayLabel": "سلسلة {n} يوم",
+    "dash.streak.riskTitle": "السلسلة في خطر",
+    "dash.streak.timeLeft": "متبقٍ {time}",
 
     "profile.streak.title": "الاستمرارية ورصيد الأيام المتتالية",
     "profile.streak.days30": "30 يومًا",
@@ -210,6 +212,10 @@ export const ar = {
     "profile.streak.avgDaily": "المتوسط / اليوم النشط",
     "profile.streak.peakDay": "أعلى نشاط",
     "profile.streak.best": "الأفضل {n} يوم",
+    "profile.activity.title": "نشاط المذاكرة",
+    "profile.activity.subtitle": "الأسئلة المُجابة يوميًا خلال آخر 6 أشهر",
+    "profile.activity.less": "أقل",
+    "profile.activity.more": "أكثر",
 
     "qbank.home.title": "استوديو بنك الأسئلة",
     "qbank.home.subtitle":

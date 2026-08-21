@@ -2,12 +2,13 @@
 
 import * as React from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Flame, TrendingUp, CalendarCheck } from "lucide-react";
+import { TrendingUp, CalendarCheck, Hourglass } from "lucide-react";
 import { streak, type StreakData, type DailyActivity } from "@/lib/osler/storage";
 import { useI18n } from "@/components/osler/i18n-provider";
 import { cn } from "@/lib/utils";
 import { useChartTooltip } from "@/hooks/use-chart-tooltip";
 import { OslerCard } from "./ui-primitives";
+import { AnimatedFlame } from "./animated-icons";
 
 /* ── Bar chart ────────────────────────────────────────────────────────── */
 
@@ -180,7 +181,7 @@ function FlameCounter({ count, active }: { count: number; active: boolean }) {
             : "bg-muted/40 border-border text-muted-foreground/40"
         )}
       >
-        <Flame className={cn("size-6", active && "fill-warning/20")} />
+        <AnimatedFlame active={active} className={cn("size-6", active && "fill-warning/20")} />
       </motion.div>
 
       <div>
@@ -240,16 +241,6 @@ export function StreakCard() {
             <div className="text-xs text-muted-foreground">
               {t("dash.streak.longest", { n: data.longest })}
             </div>
-            {!data.activeToday && data.current > 0 && (
-              <motion.div
-                initial={{ opacity: 0, x: -4 }}
-                animate={{ opacity: 1, x: 0 }}
-                className="flex items-center gap-1 text-[11px] text-warning font-medium mt-0.5"
-              >
-                <Flame className="size-3" />
-                {t("dash.streak.keepGoing")}
-              </motion.div>
-            )}
           </div>
         </div>
 
@@ -260,9 +251,65 @@ export function StreakCard() {
         </div>
       </div>
 
+      {/* 48h restore-window indicator when the streak is at risk */}
+      {!data.activeToday && data.current > 0 && data.restoreDeadlineMs != null && (
+        <StreakRestoreBanner deadline={data.restoreDeadlineMs} />
+      )}
+
       {/* Bar chart */}
       <ActivityBarChart activity={activity} today={today} />
     </OslerCard>
+  );
+}
+
+/* ── 48h restore window ────────────────────────────────────────────────── */
+
+function useNow(intervalMs = 30_000): number {
+  const [now, setNow] = React.useState(() => Date.now());
+  React.useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), intervalMs);
+    return () => clearInterval(id);
+  }, [intervalMs]);
+  return now;
+}
+
+/**
+ * Countdown banner for the 48h streak restore window. Shown while the user
+ * has an alive streak but hasn't studied today — drains toward empty as the
+ * window closes.
+ */
+export function StreakRestoreBanner({ deadline }: { deadline: number }) {
+  const { t } = useI18n();
+  const now = useNow();
+  const remainingMs = Math.max(0, deadline - now);
+  if (remainingMs <= 0) return null;
+
+  const totalMin = Math.ceil(remainingMs / 60_000);
+  const h = Math.floor(totalMin / 60);
+  const m = totalMin % 60;
+  const time = h > 0 ? `${h}h ${m}m` : `${m}m`;
+  const fraction = Math.max(0.02, Math.min(1, remainingMs / (48 * 3_600_000)));
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: -4 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.25 }}
+      className="mb-4 rounded-xl border border-warning/30 bg-warning/10 px-3 py-2.5"
+    >
+      <div className="flex items-center gap-2 text-xs font-semibold text-warning">
+        <Hourglass className="size-3.5 shrink-0" />
+        <span>{t("dash.streak.riskTitle")}</span>
+        <span className="ms-auto tabular-nums">{t("dash.streak.timeLeft", { time })}</span>
+      </div>
+      <div className="mt-2 h-1 rounded-full bg-warning/20 overflow-hidden">
+        <div
+          className="h-full rounded-full bg-warning transition-[width] duration-500"
+          style={{ width: `${Math.round(fraction * 100)}%` }}
+        />
+      </div>
+      <p className="mt-1.5 text-[11px] text-warning/80">{t("dash.streak.keepGoing")}</p>
+    </motion.div>
   );
 }
 

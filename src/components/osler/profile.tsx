@@ -71,6 +71,8 @@ import { useOslerRouter } from "@/lib/osler/navigation";
 import { useOslerSession } from "@/lib/osler/session-context";
 import { useChartTooltip } from "@/hooks/use-chart-tooltip";
 import { SparkTrend } from "./analytics-primitives";
+import { AnimatedFlame } from "./animated-icons";
+import { StreakRestoreBanner } from "./streak-card";
 
 interface ProfileProps {
   username?: string;
@@ -215,7 +217,7 @@ export function Profile({
               </div>
               <div className="hidden sm:flex flex-col items-end gap-1">
                 <Badge variant="secondary" className="text-[10px]">
-                  <Flame className="size-3 me-1" />
+                  <AnimatedFlame className="size-3 me-1" />
                   {progress.length > 0 ? t("profile.activeLearner") : t("profile.newHere")}
                 </Badge>
                 <span className="text-[10px] text-muted-foreground">
@@ -661,7 +663,7 @@ function ProfileStreakSection() {
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
           <div className="bg-card border border-border rounded-xl p-3 text-start">
             <div className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5 mb-1">
-              <Flame className="size-3.5 text-warning" />
+              <AnimatedFlame className="size-3.5 text-warning" />
               <span>{t("dash.streak.title")}</span>
             </div>
             <div className="text-2xl font-extrabold tabular-nums flex items-baseline gap-1">
@@ -703,6 +705,11 @@ function ProfileStreakSection() {
             </div>
           </div>
         </div>
+
+        {/* 48h restore-window indicator when the streak is at risk */}
+        {!streakData.activeToday && streakData.current > 0 && streakData.restoreDeadlineMs != null && (
+          <StreakRestoreBanner deadline={streakData.restoreDeadlineMs} />
+        )}
 
         {/* Detailed SVG Graph */}
         <div className="relative select-none w-full" ref={wrapRef}>

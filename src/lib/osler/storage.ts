@@ -1838,7 +1838,7 @@ function collectActiveDaysFromCache(): Set<string> {
 }
 
 export interface StreakData {
-  /** Current consecutive-day streak count (with 24h grace window). */
+  /** Current consecutive-day streak count (with 48h restore window). */
   current: number;
   /** All-time longest streak. */
   longest: number;
@@ -1846,6 +1846,14 @@ export interface StreakData {
   activeDays: Set<string>;
   /** Whether the user has been active today (or in the last 24h). */
   activeToday: boolean;
+  /**
+   * Epoch ms deadline by which the user must study to keep `current` alive,
+   * or null when the streak is safe (active today) or already broken.
+   * The restore window spans 48h from UTC midnight of the first missed day,
+   * so the user can skip one full day and still have all of the next day
+   * to restore the chain.
+   */
+  restoreDeadlineMs: number | null;
 }
 
 export interface DailyActivity {
@@ -1859,9 +1867,10 @@ export const streak = {
   /**
    * Compute streak metrics from the in-memory cache.
    *
-   * Grace window: a gap of exactly 1 missed day is tolerated when computing
-   * the current streak — the user has until midnight of the day AFTER a miss
-   * to study before the streak breaks (equivalent to a ~24-48h window).
+   * Restore window: a gap of exactly 1 missed day is tolerated when computing
+   * the current streak — the user has a 48h window (from UTC midnight of the
+   * first missed day) to study before the streak breaks. Concretely: skip one
+   * full day and you can still restore on the next day.
    *
    * Concretely: when walking backwards we allow one "skip" in the chain.
    * The skip token is consumed the first time we see a missing day, and the
@@ -1872,7 +1881,8 @@ export const streak = {
     const today = todayUtc();
     const activeToday = activeDays.has(today);
 
-    if (activeDays.size === 0) return { current: 0, longest: 0, activeDays, activeToday: false };
+    if (activeDays.size === 0)
+      return { current: 0, longest: 0, activeDays, activeToday: false, restoreDeadlineMs: null };
 
     // Sort all active days ascending.
     const sorted = Array.from(activeDays).sort();
@@ -1892,10 +1902,10 @@ export const streak = {
       }
     }
 
-    // ── Compute current streak (with 1-day grace window) ────────────────
+    // ── Compute current streak (with 48h restore window) ────────────────
     // Walk backwards from today. We allow the chain to skip exactly one
-    // missing day (the grace skip). The starting cursor is "today" —
-    // if the user hasn't studied today the grace window covers that gap.
+    // missing day (the restore window). The starting cursor is "today" —
+    // if the user hasn't studied today the window covers that gap.
     let current = 0;
     let graceUsed = !activeToday; // if not active today, grace is pre-consumed
     let cursorMs = new Date(today + "T00:00:00Z").getTime();
@@ -1914,7 +1924,25 @@ export const streak = {
       }
     }
 
-    return { current, longest, activeDays, activeToday };
+    // ── Restore deadline ─────────────────────────────────────────────────
+    // When the streak is alive but today is still empty, the user has until
+    // 48h after UTC midnight of the first missed day to study. Anchoring at
+    // midnight (not "now") keeps the deadline stable across refreshes.
+    let restoreDeadlineMs: number | null = null;
+    if (!activeToday && current > 0) {
+      let lastActive: string | null = null;
+      for (const d of sorted) {
+        if (d < today) lastActive = d;
+        else break;
+      }
+      if (lastActive) {
+        const firstMissedMs = new Date(lastActive + "T00:00:00Z").getTime() + 86_400_000;
+        const deadline = firstMissedMs + 2 * 86_400_000;
+        if (deadline > Date.now()) restoreDeadlineMs = deadline;
+      }
+    }
+
+    return { current, longest, activeDays, activeToday, restoreDeadlineMs };
   },
 
   /**

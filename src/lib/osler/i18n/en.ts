@@ -196,11 +196,13 @@ export const en = {
 
     "dash.streak.title": "Day Streak",
     "dash.streak.longest": "Longest: {n} days",
-    "dash.streak.keepGoing": "Study today to keep your streak!",
+    "dash.streak.keepGoing": "Study before the window runs out to keep your streak!",
     "dash.streak.today": "Today",
     "dash.streak.questions": "{n} questions",
     "dash.streak.activity": "14-Day Activity",
     "dash.streak.dayLabel": "{n} day streak",
+    "dash.streak.riskTitle": "Streak at risk",
+    "dash.streak.timeLeft": "{time} left",
 
     "profile.streak.title": "Consistency & Study Streak",
     "profile.streak.days30": "30 Days",
@@ -209,6 +211,10 @@ export const en = {
     "profile.streak.avgDaily": "Avg / Active Day",
     "profile.streak.peakDay": "Peak Daily",
     "profile.streak.best": "Best {n} days",
+    "profile.activity.title": "Study Activity",
+    "profile.activity.subtitle": "Questions answered per day over the last 6 months",
+    "profile.activity.less": "Less",
+    "profile.activity.more": "More",
 
     "qbank.home.title": "Q-Bank Studio",
     "qbank.home.subtitle":
