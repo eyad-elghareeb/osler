@@ -1124,6 +1124,7 @@ export const en = {
 
     /* AI Assistant */
     "ai.title": "AI Assistant",
+    "ai.label.you": "You",
     "ai.subtitle.context": "Context: {engine} question",
     "ai.subtitle.general": "Ask about any medical topic",
     "ai.settings": "Settings",

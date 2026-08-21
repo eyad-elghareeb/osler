@@ -1120,6 +1120,7 @@ export const ar = {
 
     /* AI Assistant */
     "ai.title": "المساعد الذكي",
+    "ai.label.you": "أنت",
     "ai.subtitle.context": "السياق: سؤال {engine}",
     "ai.subtitle.general": "اسأل عن أي موضوع طبي",
     "ai.settings": "الإعدادات",

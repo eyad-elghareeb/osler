@@ -92,6 +92,7 @@ function buildSystemPrompt(): string {
     "- If you need more information to give a precise answer, ask a focused follow-up question.",
     "- Always maintain an encouraging, educational tone.",
     "- Use clear language appropriate for medical students.",
+    "- Reply in the same language the student writes in (Arabic, English, or a natural mix); clinical terms may stay in English.",
     "",
     "Scope:",
     "- Focus on medical and health sciences education.",
@@ -254,7 +255,20 @@ export function AiAssistant({
       content: trimmed,
       timestamp: Date.now(),
     };
-    setMessages((m) => [...m, userMsg]);
+    // The assistant reply is appended immediately and grows in place as
+    // SSE tokens arrive — the answer writes itself instead of spawning.
+    const assistantId = crypto.randomUUID();
+    setMessages((m) => [
+      ...m,
+      userMsg,
+      { id: assistantId, role: "assistant", content: "", timestamp: Date.now() },
+    ]);
+
+    let streamed = "";
+    const paintStreamed = () =>
+      setMessages((prev) =>
+        prev.map((m) => (m.id === assistantId ? { ...m, content: streamed } : m))
+      );
 
     try {
       const chatMessages = messages.map((m) => ({
@@ -274,10 +288,16 @@ export function AiAssistant({
 
       const controller = new AbortController();
       const timeoutMs = parseInt(maxWait) * 1000 || 30000;
-      const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+      // Idle timeout — reset on every chunk so a long healthy stream is
+      // never cut off; maxWait now bounds silence, not total duration.
+      let timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+      const resetIdleTimeout = () => {
+        clearTimeout(timeoutId);
+        timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+      };
 
       const res = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
+        `https://generativelanguage.googleapis.com/v1beta/models/${model}:streamGenerateContent?alt=sse&key=${apiKey}`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -289,23 +309,68 @@ export function AiAssistant({
           signal: controller.signal,
         }
       );
-      clearTimeout(timeoutId);
 
       if (!res.ok) {
+        clearTimeout(timeoutId);
         const errBody = await res.text().catch(() => "");
         throw new Error(errBody || `HTTP ${res.status}`);
       }
+      if (!res.body) throw new Error(t("ai.error.noResponse"));
 
-      const data = await res.json();
-      const reply =
-        data?.candidates?.[0]?.content?.parts?.[0]?.text || t("ai.error.noResponse");
-      setMessages((prev) => [...prev, {
-        id: crypto.randomUUID(),
-        role: "assistant",
-        content: reply,
-        timestamp: Date.now(),
-      }]);
+      // Same SSE contract as the OSCE studio (mirrors js-genai's
+      // processStreamResponse): data:-prefixed JSON events, mid-stream
+      // {"error": ...} chunks surface their message, final event may lack
+      // a trailing newline so the buffer is flushed after the loop.
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buf = "";
+      const handleDataLine = (line: string) => {
+        if (!line.startsWith("data:")) return;
+        const json = line.slice(5).trim();
+        if (!json) return;
+        let chunk: {
+          error?: { message?: string };
+          candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
+        };
+        try {
+          chunk = JSON.parse(json);
+        } catch {
+          return;
+        }
+        if (chunk && typeof chunk === "object" && chunk.error) {
+          throw new Error(chunk.error.message || "Gemini stream error");
+        }
+        const parts = chunk?.candidates?.[0]?.content?.parts;
+        const piece = Array.isArray(parts)
+          ? parts.map((p) => p.text ?? "").join("")
+          : "";
+        if (piece) {
+          streamed += piece;
+          paintStreamed();
+        }
+      };
+      try {
+        for (;;) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          resetIdleTimeout();
+          buf += decoder.decode(value, { stream: true });
+          const lines = buf.split("\n");
+          buf = lines.pop() ?? "";
+          for (const line of lines) handleDataLine(line.trim());
+        }
+        for (const line of buf.split("\n")) handleDataLine(line.trim());
+      } finally {
+        clearTimeout(timeoutId);
+        reader.releaseLock();
+      }
+
+      if (!streamed.trim()) throw new Error(t("ai.error.noResponse"));
     } catch (err: any) {
+      // Drop the empty placeholder on failure; keep any partial answer.
+      if (!streamed.trim()) {
+        setMessages((prev) => prev.filter((m) => m.id !== assistantId));
+      }
       if (err.name === "AbortError") {
         setError(t("ai.error.timeout"));
       } else {
@@ -478,14 +543,22 @@ export function AiAssistant({
       {/* Messages */}
       <div
         ref={scrollRef}
-        className="flex-1 overflow-y-auto osler-scroll px-4 md:px-6 py-4 space-y-3"
+        className="flex-1 overflow-y-auto osler-scroll px-4 md:px-6 py-4 flex flex-col gap-3"
       >
         {messages.length === 0 ? (
           <EmptyState onSuggestion={(s) => send(s)} />
         ) : (
-          messages.map((m) => <ChatBubble key={m.id} msg={m} />)
+          messages.map((m, i) => (
+            <ChatBubble
+              key={m.id}
+              msg={m}
+              isStreaming={loading && m.role === "assistant" && i === messages.length - 1}
+            />
+          ))
         )}
-        {loading && (
+        {/* Orb shows until the first streamed token lands; afterwards the
+            growing bubble itself signals progress. */}
+        {loading && !(messages.at(-1)?.role === "assistant" && messages.at(-1)!.content) && (
           <div className="flex gap-2 items-center text-muted-foreground text-sm">
             <div className="w-7 h-7 rounded-full bg-primary/15 text-primary flex items-center justify-center shrink-0">
               <Bot className="size-4" />
@@ -628,35 +701,43 @@ function EmptyState({ onSuggestion }: { onSuggestion: (s: string) => void }) {
   );
 }
 
-function ChatBubble({ msg }: { msg: Message }) {
+function ChatBubble({ msg, isStreaming }: { msg: Message; isStreaming?: boolean }) {
+  const { t } = useI18n();
   const isUser = msg.role === "user";
   return (
     <motion.div
-      initial={{ opacity: 0, y: 4 }}
+      initial={{ opacity: 0, y: 6 }}
       animate={{ opacity: 1, y: 0 }}
-      className={cn("flex gap-2", isUser && "flex-row-reverse")}
+      transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
+      className={cn(
+        "flex flex-col gap-1 max-w-[85%]",
+        isUser ? "self-end items-end" : "self-start"
+      )}
     >
+      {/* Speaker label — mirrors the OSCE conversation bubbles */}
       <div
         className={cn(
-          "w-7 h-7 rounded-full flex items-center justify-center shrink-0 mt-0.5",
-          isUser
-            ? "bg-primary text-primary-foreground"
-            : "bg-primary/15 text-primary"
+          "text-[10px] font-semibold uppercase tracking-wider flex items-center gap-1",
+          isUser ? "text-muted-foreground" : "text-primary/70"
         )}
       >
-        {isUser ? <UserIcon className="size-4" /> : <Bot className="size-4" />}
+        {isUser ? <UserIcon className="size-2.5" /> : <Bot className="size-2.5" />}
+        {isUser ? t("ai.label.you") : t("ai.title")}
       </div>
       <div
         className={cn(
-          "osler-chat-bubble ai-chat-msg",
-          isUser ? "user" : "assistant"
+          "px-3.5 py-2.5 rounded-2xl text-sm leading-relaxed",
+          isUser
+            ? "bg-primary/10 border border-primary/20 text-foreground rounded-tr-sm"
+            : "bg-card border border-border text-foreground rounded-tl-sm shadow-e1"
         )}
       >
         {isUser ? (
           <p>{msg.content}</p>
         ) : (
-          <div dangerouslySetInnerHTML={{ __html: renderMarkdown(msg.content) }} />
+          <div className="ai-chat-msg" dangerouslySetInnerHTML={{ __html: renderMarkdown(msg.content) }} />
         )}
+        {isStreaming && <span className="osler-stream-caret" />}
       </div>
     </motion.div>
   );
