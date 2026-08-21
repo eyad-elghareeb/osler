@@ -861,9 +861,7 @@ function OsceStreamBubble({
       <div
         className="px-3.5 py-2.5 rounded-2xl rounded-tl-sm bg-card border border-border text-sm leading-relaxed shadow-e1"
       >
-        {/* ▍ rides inline with the last text node while writing — a span
-            caret would land on its own line below block-level markdown. */}
-        <AiMarkdown text={shown.length < text.length ? shown + "▍" : shown} />
+        <AiMarkdown text={shown} writing={shown.length < text.length} />
       </div>
     </motion.div>
   );

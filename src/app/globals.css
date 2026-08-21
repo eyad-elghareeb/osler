@@ -887,6 +887,21 @@ button.osler-stat-tile--compact:hover {
 .ai-chat-msg hr { border: none; border-top: 1px solid var(--border); margin: 0.5rem 0; }
 .ai-chat-msg img { max-width: 100%; border-radius: 8px; }
 .ai-chat-msg a { color: var(--primary); text-decoration: underline; text-underline-offset: 2px; }
+/* Pulsing ▍ while a reply is being written — injected after the last
+   block's text so it rides inline (inside the last item for lists). */
+.ai-chat-msg.is-writing > :last-child:not(ul, ol)::after,
+.ai-chat-msg.is-writing > ul:last-child > li:last-child::after,
+.ai-chat-msg.is-writing > ol:last-child > li:last-child::after {
+  content: "▍";
+  margin-inline-start: 1px;
+  color: var(--primary);
+  animation: osler-caret-blink 0.9s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .ai-chat-msg.is-writing > :last-child:not(ul, ol)::after,
+  .ai-chat-msg.is-writing > ul:last-child > li:last-child::after,
+  .ai-chat-msg.is-writing > ol:last-child > li:last-child::after { animation: none; }
+}
 
 /* ═══════════════════════════════════════════════════════════════════════════
  * Mobile / Tauri-mobile responsive layer

@@ -18,9 +18,9 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { cn } from "@/lib/utils";
 
-export function AiMarkdown({ text, className }: { text: string; className?: string }) {
+export function AiMarkdown({ text, className, writing }: { text: string; className?: string; writing?: boolean }) {
   return (
-    <div className={cn("ai-chat-msg", className)}>
+    <div className={cn("ai-chat-msg", writing && "is-writing", className)}>
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
         components={{

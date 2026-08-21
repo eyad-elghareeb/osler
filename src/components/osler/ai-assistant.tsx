@@ -721,9 +721,7 @@ function ChatBubble({ msg, isStreaming }: { msg: Message; isStreaming?: boolean 
         {isUser ? (
           <p>{msg.content}</p>
         ) : (
-          // ▍ rides inline with the last text node while writing — a span
-          // caret would land on its own line below block-level markdown.
-          <AiMarkdown text={isStreaming || revealing ? shown + "▍" : shown} />
+          <AiMarkdown text={shown} writing={isStreaming || revealing} />
         )}
       </div>
     </motion.div>
