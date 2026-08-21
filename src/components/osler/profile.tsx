@@ -574,8 +574,6 @@ function PerformanceInsights({ metrics }: { metrics: MetricsSummary }) {
     };
   }, [metrics, t]);
 
-  const maxDayMinutes = Math.max(...metrics.byDay.map((d) => d.minutes), 1);
-
   return (
     <div className="mb-6">
       <SectionHeading icon={LineChart}>{t("profile.insights.title")}</SectionHeading>
@@ -631,6 +629,11 @@ function PerformanceInsights({ metrics }: { metrics: MetricsSummary }) {
               value={metrics.totalStudyMs > 0 ? formatStudyTime(metrics.totalStudyMs) : "—"}
               icon={Clock}
               color="warning"
+              trend={
+                metrics.byDay.some((d) => d.minutes > 0) ? (
+                  <SparkTrend data={metrics.byDay.map((d) => d.minutes)} tone="neutral" />
+                ) : undefined
+              }
             />
           </div>
 
@@ -706,37 +709,6 @@ function PerformanceInsights({ metrics }: { metrics: MetricsSummary }) {
               )}
             </OslerCard>
           </div>
-
-          {/* Daily study time */}
-          <OslerCard padding="default">
-            <div className="flex items-center justify-between mb-3">
-              <h4 className="text-sm font-semibold">{t("profile.insights.studyChart")}</h4>
-              <span className="text-xs text-muted-foreground tabular-nums">
-                {metrics.byDay.some((d) => d.minutes > 0)
-                  ? formatStudyTime(metrics.byDay.reduce((sum, d) => sum + d.minutes, 0) * 60_000)
-                  : "—"}
-              </span>
-            </div>
-            <div className="flex items-end gap-1 h-24" role="img" aria-label={t("profile.insights.studyChart")}>
-              {metrics.byDay.map((d) => (
-                <div
-                  key={d.date}
-                  className="flex-1 flex flex-col items-center gap-1"
-                  title={`${d.date} · ${d.minutes}m`}
-                >
-                  <div
-                    className={cn(
-                      "w-full rounded-sm transition-all",
-                      d.minutes > 0 ? "bg-primary/70" : "bg-muted/40",
-                    )}
-                    style={{
-                      height: `${d.minutes > 0 ? Math.max(8, Math.round((d.minutes / maxDayMinutes) * 100)) : 3}%`,
-                    }}
-                  />
-                </div>
-              ))}
-            </div>
-          </OslerCard>
         </div>
       )}
     </div>

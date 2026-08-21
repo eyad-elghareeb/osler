@@ -801,7 +801,6 @@ export const en = {
     "profile.insights.byDifficulty": "Accuracy by difficulty",
     "profile.insights.byDifficultyHint": "Correct / attempts per difficulty level.",
     "profile.insights.noDifficulty": "No difficulty data yet.",
-    "profile.insights.studyChart": "Active study time — last 14 days",
     "profile.insights.focusTitle": "Focus on the gaps",
     "profile.insights.focusBody": "Your overall accuracy is {n}%. Start your next review with the weakest topics below — aim for 60%+ before moving on.",
     "profile.insights.reviewTitle": "Review is working",

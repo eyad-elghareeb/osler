@@ -802,7 +802,6 @@ export const ar = {
     "profile.insights.byDifficulty": "الدقة حسب الصعوبة",
     "profile.insights.byDifficultyHint": "الصحيح / المحاولات لكل مستوى صعوبة.",
     "profile.insights.noDifficulty": "لا بيانات عن الصعوبة بعد.",
-    "profile.insights.studyChart": "وقت الدراسة النشط — آخر 14 يومًا",
     "profile.insights.focusTitle": "ركّز على الفجوات",
     "profile.insights.focusBody": "دقّتك الإجمالية {n}%. ابدأ مراجعتك القادمة بأضعف المواضيع أدناه — واهدف إلى 60% فأكثر قبل الانتقال.",
     "profile.insights.reviewTitle": "المراجعة تؤتي ثمارها",
