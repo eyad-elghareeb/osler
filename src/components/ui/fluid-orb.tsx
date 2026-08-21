@@ -198,6 +198,7 @@ const FluidOrb = ({
   const glRef = useRef<WebGLRenderingContext | null>(null)
   const levelRef = useRef<FluidOrbLevel | undefined>(level)
   const smoothedLevelRef = useRef(0)
+  const lastFrameRef = useRef(0)
 
   useEffect(() => {
     levelRef.current = level
@@ -266,7 +267,11 @@ const FluidOrb = ({
     uColorLocRef.current = uColor
     gl.uniform3f(uColor, ...colorRef.current)
 
-    const dpr = Math.min(window.devicePixelRatio || 1, 2)
+    const dpr = Math.min(window.devicePixelRatio || 1, size >= 160 ? 1.5 : 2)
+    // The fluid is soft-edged by nature — 1.5x DPR on large orbs is
+    // visually indistinguishable from 2x but halves the fragment cost,
+    // which matters on integrated GPUs where full-rate fbm at 2x DPR
+    // was the main source of voice-mode stutter.
     const px = Math.round(size * dpr)
     canvas.width = px
     canvas.height = px
@@ -275,7 +280,15 @@ const FluidOrb = ({
 
     const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches
     const start = performance.now()
+    lastFrameRef.current = start
     let raf = 0
+
+    // Attack/release envelope rates (per second), normalised by elapsed
+    // time so the feel is identical at 60/120/144Hz. Speech onsets rise
+    // quickly (responsive); decays trail off slowly (calm — no flicker
+    // between syllables, which read as stuttering before).
+    const ATTACK_PER_SEC = 16
+    const RELEASE_PER_SEC = 4.5
 
     const render = (now: number) => {
       // Resolve the current level: explicit number, a getter (read fresh
@@ -287,9 +300,14 @@ const FluidOrb = ({
       else if (typeof raw === 'number') target = raw
       else target = 0.12 + 0.06 * Math.sin(now / 1400)
       target = Math.max(0, Math.min(1, target))
+      // Perceptual curve: quiet speech still lifts the surface while loud
+      // peaks don't slam it — keeps motion composed across mic gains.
+      target = Math.sqrt(target)
 
-      // Exponential smoothing so level changes feel fluid, not jittery.
-      smoothedLevelRef.current += (target - smoothedLevelRef.current) * 0.18
+      const dt = Math.min(0.05, Math.max(0.001, (now - lastFrameRef.current) / 1000))
+      lastFrameRef.current = now
+      const rate = target > smoothedLevelRef.current ? ATTACK_PER_SEC : RELEASE_PER_SEC
+      smoothedLevelRef.current += (target - smoothedLevelRef.current) * Math.min(1, rate * dt)
       const lvl = smoothedLevelRef.current
 
       gl.uniform1f(uTime, reduce ? 0 : (now - start) / 1000)
