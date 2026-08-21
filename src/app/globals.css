@@ -828,14 +828,25 @@ button.osler-stat-tile--compact:hover {
   app-region: no-drag;
 }
 
-/* ── AI Assistant chat styles ─────────────────────────────────────────────── */
+/* ── AI chat markdown (AI assistant + OSCE replies, via AiMarkdown) ──────── */
+.ai-chat-msg { unicode-bidi: plaintext; }
 .ai-chat-msg p { margin: 0.15rem 0; }
 .ai-chat-msg p:first-child { margin-top: 0; }
 .ai-chat-msg p:last-child { margin-bottom: 0; }
-.ai-chat-msg ul, .ai-chat-msg ol { margin: 0.2rem 0; padding-left: 1.2rem; }
+.ai-chat-msg h1, .ai-chat-msg h2, .ai-chat-msg h3, .ai-chat-msg h4 {
+  font-weight: 600; line-height: 1.35; margin: 0.5rem 0 0.25rem;
+}
+.ai-chat-msg h1 { font-size: 1.05rem; }
+.ai-chat-msg h2 { font-size: 1rem; }
+.ai-chat-msg h3, .ai-chat-msg h4 { font-size: 0.925rem; }
+.ai-chat-msg > :first-child { margin-top: 0; }
+.ai-chat-msg > :last-child { margin-bottom: 0; }
+.ai-chat-msg ul, .ai-chat-msg ol { margin: 0.2rem 0; padding-inline-start: 1.2rem; }
 .ai-chat-msg li { margin-bottom: 0.1rem; }
+.ai-chat-msg li > p { margin: 0; }
 .ai-chat-msg strong { font-weight: 600; }
 .ai-chat-msg code {
+  font-family: var(--font-code), ui-monospace, monospace;
   background: color-mix(in oklch, var(--muted) 60%, transparent);
   padding: 0.08rem 0.3rem;
   border-radius: 4px;
@@ -851,11 +862,30 @@ button.osler-stat-tile--compact:hover {
 }
 .ai-chat-msg pre code { background: none; padding: 0; }
 .ai-chat-msg blockquote {
-  border-left: 3px solid var(--primary);
-  padding-left: 0.6rem;
+  border-inline-start: 3px solid var(--primary);
+  padding-inline-start: 0.6rem;
   margin: 0.25rem 0;
   opacity: 0.85;
 }
+.ai-chat-msg table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 0.4rem 0;
+  font-size: 0.8rem;
+  display: block;
+  overflow-x: auto;
+}
+.ai-chat-msg th, .ai-chat-msg td {
+  border: 1px solid var(--border);
+  padding: 0.25rem 0.5rem;
+  text-align: start;
+}
+.ai-chat-msg th {
+  background: color-mix(in oklch, var(--muted) 60%, transparent);
+  font-weight: 600;
+}
+.ai-chat-msg hr { border: none; border-top: 1px solid var(--border); margin: 0.5rem 0; }
+.ai-chat-msg img { max-width: 100%; border-radius: 8px; }
 .ai-chat-msg a { color: var(--primary); text-decoration: underline; text-underline-offset: 2px; }
 
 /* ═══════════════════════════════════════════════════════════════════════════

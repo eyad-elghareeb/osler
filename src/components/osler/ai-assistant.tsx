@@ -27,6 +27,7 @@ import { GEMINI_CLOUD_SYNCED_FLAG } from "@/lib/osler/cloud";
 import { Combobox } from "@/components/osler/ui-primitives";
 import { ThinkingStatus } from "@/components/osler/thinking-status";
 import { useTypewriter } from "@/hooks/use-typewriter";
+import { AiMarkdown } from "@/components/osler/ai-markdown";
 
 const MODELS = [
   ["gemini-3.5-flash-lite", "Gemini 3.5 Flash-Lite (default, fastest & cost-efficient)"],
@@ -115,29 +116,6 @@ function buildUserPrompt(context: NonNullable<AiAssistantProps["questionContext"
   }
   ctx += "\n\n## My Question\n" + userQuery;
   return ctx;
-}
-
-function renderMarkdown(text: string): string {
-  if (!text) return "";
-  let t = String(text);
-  t = t.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-  t = t.replace(/```(\w*)\n?([\s\S]*?)```/g, (_, _lang, code) => {
-    const c = code.replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-    return `<pre class="bg-muted p-3 rounded-lg overflow-x-auto text-xs my-2"><code>${c}</code></pre>`;
-  });
-  t = t.replace(/`([^`]+)`/g, '<code class="bg-muted px-1.5 py-0.5 rounded text-xs">$1</code>');
-  t = t.replace(/^### (.+)$/gm, '<h4 class="text-sm font-semibold mt-3 mb-1">$1</h4>');
-  t = t.replace(/^## (.+)$/gm, '<h3 class="text-base font-semibold mt-3 mb-1">$1</h3>');
-  t = t.replace(/^# (.+)$/gm, '<h2 class="text-lg font-semibold mt-3 mb-1">$1</h2>');
-  t = t.replace(/^&gt; (.+)$/gm, '<blockquote class="border-l-2 border-primary pl-3 my-2 text-muted-foreground text-sm">$1</blockquote>');
-  t = t.replace(/\*\*(.+?)\*\*/g, '<strong class="font-semibold">$1</strong>');
-  t = t.replace(/\*([^*]+)\*/g, '<em class="italic">$1</em>');
-  t = t.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener" class="text-primary underline">$1</a>');
-  t = t.replace(/^- (.+)$/gm, '<li class="text-sm ml-4 list-disc">$1</li>');
-  t = t.replace(/^\d+\. (.+)$/gm, '<li class="text-sm ml-4 list-decimal">$1</li>');
-  t = t.replace(/\n\n/g, '</p><p class="my-1.5">');
-  t = '<p class="my-1.5">' + t + "</p>";
-  return t;
 }
 
 export function AiAssistant({
@@ -743,9 +721,10 @@ function ChatBubble({ msg, isStreaming }: { msg: Message; isStreaming?: boolean 
         {isUser ? (
           <p>{msg.content}</p>
         ) : (
-          <div className="ai-chat-msg" dangerouslySetInnerHTML={{ __html: renderMarkdown(shown) }} />
+          // ▍ rides inline with the last text node while writing — a span
+          // caret would land on its own line below block-level markdown.
+          <AiMarkdown text={isStreaming || revealing ? shown + "▍" : shown} />
         )}
-        {(isStreaming || revealing) && <span className="osler-stream-caret" />}
       </div>
     </motion.div>
   );

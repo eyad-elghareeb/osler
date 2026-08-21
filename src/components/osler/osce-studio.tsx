@@ -67,6 +67,7 @@ import { ThinkingStatus, type ThinkingPhase } from "@/components/osler/thinking-
 import { ThinkingOrb, type OrbState } from "thinking-orbs";
 import FluidOrb from "@/components/ui/fluid-orb";
 import { useTypewriter } from "@/hooks/use-typewriter";
+import { AiMarkdown } from "@/components/osler/ai-markdown";
 
 /* ── Constants ─────────────────────────────────────────────────────── */
 
@@ -170,19 +171,6 @@ function sanitizeModelText(text: string): string {
 
 function isPediatric(age: number): boolean {
   return age < 16;
-}
-
-function md(text: string): string {
-  if (!text) return "";
-  let h = text
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
-  h = h.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
-  h = h.replace(/`([^`]+)`/g, "<code>$1</code>");
-  h = h.replace(/\n/g, "<br>");
-  return h;
 }
 
 /* ── Normalization ─────────────────────────────────────────────────── */
@@ -872,8 +860,11 @@ function OsceStreamBubble({
       </div>
       <div
         className="px-3.5 py-2.5 rounded-2xl rounded-tl-sm bg-card border border-border text-sm leading-relaxed shadow-e1"
-        dangerouslySetInnerHTML={{ __html: md(shown) + '<span class="osler-stream-caret"></span>' }}
-      />
+      >
+        {/* ▍ rides inline with the last text node while writing — a span
+            caret would land on its own line below block-level markdown. */}
+        <AiMarkdown text={shown.length < text.length ? shown + "▍" : shown} />
+      </div>
     </motion.div>
   );
 }
@@ -2949,8 +2940,9 @@ export function OsceStudio({
                           ? "bg-card border border-border text-foreground rounded-tl-sm shadow-e1"
                           : "bg-primary/10 border border-primary/20 text-foreground rounded-tr-sm"
                       )}
-                      dangerouslySetInnerHTML={{ __html: md(m.text) }}
-                    />
+                    >
+                      <AiMarkdown text={m.text} />
+                    </div>
                   </motion.div>
                 );
               })}
@@ -3413,7 +3405,7 @@ export function OsceStudio({
               <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-bold mb-2 flex items-center gap-1.5">
                 <Lightbulb className="size-3" /> Examiner Feedback
               </p>
-              <p className="text-sm leading-relaxed" dangerouslySetInnerHTML={{ __html: md(result.feedback) }} />
+              <AiMarkdown text={result.feedback} className="text-sm leading-relaxed" />
               {hp.diagnosis && (
                 <div className="mt-3 flex items-start gap-2 px-3 py-2 rounded-lg bg-primary/5 border border-primary/20 text-xs">
                   <Stethoscope className="size-3.5 text-primary shrink-0 mt-0.5" />
