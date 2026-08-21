@@ -206,13 +206,11 @@ export const en = {
 
     "profile.streak.title": "Consistency & Study Streak",
     "profile.streak.days30": "30 Days",
-    "profile.streak.days60": "60 Days",
+    "profile.streak.modeActivity": "Activity",
     "profile.streak.activeRatio": "Active Days",
     "profile.streak.avgDaily": "Avg / Active Day",
     "profile.streak.peakDay": "Peak Daily",
     "profile.streak.best": "Best {n} days",
-    "profile.activity.title": "Study Activity",
-    "profile.activity.subtitle": "Questions answered per day over the last 6 months",
     "profile.activity.less": "Less",
     "profile.activity.more": "More",
 

@@ -207,13 +207,11 @@ export const ar = {
 
     "profile.streak.title": "الاستمرارية ورصيد الأيام المتتالية",
     "profile.streak.days30": "30 يومًا",
-    "profile.streak.days60": "60 يومًا",
+    "profile.streak.modeActivity": "النشاط",
     "profile.streak.activeRatio": "الأيام النشطة",
     "profile.streak.avgDaily": "المتوسط / اليوم النشط",
     "profile.streak.peakDay": "أعلى نشاط",
     "profile.streak.best": "الأفضل {n} يوم",
-    "profile.activity.title": "نشاط المذاكرة",
-    "profile.activity.subtitle": "الأسئلة المُجابة يوميًا خلال آخر 6 أشهر",
     "profile.activity.less": "أقل",
     "profile.activity.more": "أكثر",
 

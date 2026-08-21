@@ -297,9 +297,6 @@ export function Profile({
         {/* Detailed Streak & Consistency Section */}
         <ProfileStreakSection />
 
-        {/* GitHub-style activity tracker */}
-        <ActivityHeatmap />
-
         {/* Performance Insights */}
         <PerformanceInsights metrics={metrics} />
 
@@ -352,7 +349,11 @@ const HEATMAP_LEVELS = [
   "bg-primary",
 ] as const;
 
-function ActivityHeatmap() {
+/**
+ * GitHub-style activity heatmap body — self-contained data subscription,
+ * no card chrome of its own so it can live inside the consistency card.
+ */
+function ActivityHeatmapGrid() {
   const { t } = useI18n();
   const [activity, setActivity] = React.useState<DailyActivity[]>(() =>
     streak.dailyActivity(HEATMAP_DAYS),
@@ -412,26 +413,8 @@ function ActivityHeatmap() {
     return 4;
   };
 
-  const totalQuestions = activity.reduce((sum, a) => sum + a.count, 0);
-
   return (
-    <div className="mb-6">
-      <SectionHeading
-        icon={CalendarDays}
-        actions={
-          <span className="text-xs text-muted-foreground tabular-nums">
-            {t("dash.streak.questions", { n: totalQuestions })}
-          </span>
-        }
-      >
-        {t("profile.activity.title")}
-      </SectionHeading>
-
-      <OslerCard padding="default">
-        <p className="text-xs text-muted-foreground mb-4 text-center">
-          {t("profile.activity.subtitle")}
-        </p>
-        <div className="overflow-x-auto osler-scroll-x pb-1" dir="ltr">
+    <div className="overflow-x-auto osler-scroll-x pb-1" dir="ltr">
           <div className="flex flex-col items-center min-w-max mx-auto">
             {/* Weekday + month label gutter */}
             <div className="flex gap-[3px]">
@@ -500,8 +483,6 @@ function ActivityHeatmap() {
             </div>
           </div>
         </div>
-      </OslerCard>
-    </div>
   );
 }
 
@@ -760,20 +741,25 @@ function PerformanceInsights({ metrics }: { metrics: MetricsSummary }) {
   );
 }
 
-function ProfileStreakSection() {  const { t } = useI18n();
-  const [horizon, setHorizon] = React.useState<30 | 60>(30);
+const PROFILE_STREAK_DAYS = 30;
+
+function ProfileStreakSection() {
+  const { t } = useI18n();
+  const [view, setView] = React.useState<"chart" | "heatmap">("chart");
   const [streakData, setStreakData] = React.useState(() => streak.compute());
-  const [activity, setActivity] = React.useState(() => streak.dailyActivity(horizon));
+  const [activity, setActivity] = React.useState(() =>
+    streak.dailyActivity(PROFILE_STREAK_DAYS),
+  );
 
   React.useEffect(() => {
     const update = () => {
       setStreakData(streak.compute());
-      setActivity(streak.dailyActivity(horizon));
+      setActivity(streak.dailyActivity(PROFILE_STREAK_DAYS));
     };
     update();
     const unsub = streak.subscribe(update);
     return unsub;
-  }, [horizon]);
+  }, []);
 
   const activeDaysCount = activity.filter((a) => a.count > 0).length;
   const totalQuestions = activity.reduce((sum, a) => sum + a.count, 0);
@@ -783,8 +769,8 @@ function ProfileStreakSection() {  const { t } = useI18n();
 
   const chartW = 560;
   const chartH = 110;
-  const barGap = horizon === 30 ? 4 : 2;
-  const barW = Math.max(4, Math.floor((chartW - barGap * (horizon - 1)) / horizon));
+  const barGap = 4;
+  const barW = Math.max(4, Math.floor((chartW - barGap * (PROFILE_STREAK_DAYS - 1)) / PROFILE_STREAK_DAYS));
   const maxCount = Math.max(peakDay, 1);
 
   const { wrapRef, svgRef, tipRef, hovered, left, show, hide } = useChartTooltip({
@@ -802,23 +788,23 @@ function ProfileStreakSection() {  const { t } = useI18n();
           <div className="flex items-center gap-1 bg-muted/60 p-0.5 rounded-lg border border-border">
             <button
               type="button"
-              onClick={() => { haptic("selection"); setHorizon(30); }}
+              onClick={() => { haptic("selection"); setView("chart"); }}
               className={cn(
                 "px-2.5 py-0.5 text-xs font-semibold rounded-md transition-colors cursor-pointer",
-                horizon === 30 ? "bg-primary text-primary-foreground shadow-xs" : "text-muted-foreground hover:text-foreground"
+                view === "chart" ? "bg-primary text-primary-foreground shadow-xs" : "text-muted-foreground hover:text-foreground"
               )}
             >
               {t("profile.streak.days30")}
             </button>
             <button
               type="button"
-              onClick={() => { haptic("selection"); setHorizon(60); }}
+              onClick={() => { haptic("selection"); setView("heatmap"); }}
               className={cn(
                 "px-2.5 py-0.5 text-xs font-semibold rounded-md transition-colors cursor-pointer",
-                horizon === 60 ? "bg-primary text-primary-foreground shadow-xs" : "text-muted-foreground hover:text-foreground"
+                view === "heatmap" ? "bg-primary text-primary-foreground shadow-xs" : "text-muted-foreground hover:text-foreground"
               )}
             >
-              {t("profile.streak.days60")}
+              {t("profile.streak.modeActivity")}
             </button>
           </div>
         }
@@ -849,7 +835,7 @@ function ProfileStreakSection() {  const { t } = useI18n();
             </div>
             <div className="text-2xl font-extrabold tabular-nums flex items-baseline gap-1">
               <span>{activeDaysCount}</span>
-              <span className="text-xs font-normal text-muted-foreground">/ {horizon}d ({Math.round((activeDaysCount / horizon) * 100)}%)</span>
+              <span className="text-xs font-normal text-muted-foreground">/ {PROFILE_STREAK_DAYS}d ({Math.round((activeDaysCount / PROFILE_STREAK_DAYS) * 100)}%)</span>
             </div>
           </div>
 
@@ -879,7 +865,9 @@ function ProfileStreakSection() {  const { t } = useI18n();
           <StreakRestoreBanner deadline={streakData.restoreDeadlineMs} />
         )}
 
-        {/* Detailed SVG Graph */}
+        {view === "heatmap" ? (
+          <ActivityHeatmapGrid />
+        ) : (
         <div className="relative select-none w-full" ref={wrapRef}>
           <svg
             ref={svgRef}
@@ -1003,6 +991,7 @@ function ProfileStreakSection() {  const { t } = useI18n();
             </span>
           </div>
         </div>
+        )}
       </OslerCard>
     </div>
   );
