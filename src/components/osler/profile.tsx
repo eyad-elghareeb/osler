@@ -9,6 +9,7 @@ import {
   Clock,
   TrendingUp,
   Calendar,
+  CalendarDays,
   Zap,
   Flame,
   Star,
@@ -41,6 +42,7 @@ import {
   flashcardReview,
   streak,
   type NoteRecord,
+  type DailyActivity,
 } from "@/lib/osler/storage";
 import {
   ACHIEVEMENTS,
@@ -295,6 +297,9 @@ export function Profile({
         {/* Detailed Streak & Consistency Section */}
         <ProfileStreakSection />
 
+        {/* GitHub-style activity tracker */}
+        <ActivityHeatmap />
+
         {/* Performance Insights */}
         <PerformanceInsights metrics={metrics} />
 
@@ -332,6 +337,141 @@ export function Profile({
           onOpenSettingsSection?.("sync");
         }}
       />
+    </div>
+  );
+}
+
+/* ── GitHub-style Activity Heatmap ───────────────────────────────────── */
+
+const HEATMAP_DAYS = 182;
+const HEATMAP_LEVELS = [
+  "bg-muted/60",
+  "bg-primary/25",
+  "bg-primary/45",
+  "bg-primary/65",
+  "bg-primary",
+] as const;
+
+function ActivityHeatmap() {
+  const { t } = useI18n();
+  const [activity, setActivity] = React.useState<DailyActivity[]>(() =>
+    streak.dailyActivity(HEATMAP_DAYS),
+  );
+
+  React.useEffect(() => {
+    const update = () => setActivity(streak.dailyActivity(HEATMAP_DAYS));
+    update();
+    const unsub = streak.subscribe(update);
+    return unsub;
+  }, []);
+
+  const maxCount = Math.max(...activity.map((a) => a.count), 1);
+
+  // Align days into week columns (rows = Sun..Sat), padding the head so the
+  // first column starts on Sunday. Timeline stays LTR in RTL locales.
+  const weeks = React.useMemo(() => {
+    if (activity.length === 0) return [];
+    const shift = new Date(activity[0].date + "T00:00:00Z").getUTCDay();
+    const cells: (DailyActivity | null)[] = [
+      ...Array.from({ length: shift }, () => null),
+      ...activity,
+    ];
+    while (cells.length % 7 !== 0) cells.push(null);
+    const out: (DailyActivity | null)[][] = [];
+    for (let i = 0; i < cells.length; i += 7) out.push(cells.slice(i, i + 7));
+    return out;
+  }, [activity]);
+
+  const monthLabels = React.useMemo(() => {
+    const labels: { week: number; label: string }[] = [];
+    let lastMonth = -1;
+    weeks.forEach((week, wi) => {
+      const first = week.find(Boolean);
+      if (!first) return;
+      const month = new Date(first.date + "T00:00:00Z").getUTCMonth();
+      if (month !== lastMonth && wi < weeks.length - 1) {
+        labels.push({
+          week: wi,
+          label: new Date(first.date + "T00:00:00Z").toLocaleDateString(undefined, { month: "short" }),
+        });
+        lastMonth = month;
+      }
+    });
+    return labels;
+  }, [weeks]);
+
+  const levelOf = (count: number): number => {
+    if (count <= 0) return 0;
+    const q = count / maxCount;
+    if (q <= 0.25) return 1;
+    if (q <= 0.5) return 2;
+    if (q <= 0.75) return 3;
+    return 4;
+  };
+
+  const totalQuestions = activity.reduce((sum, a) => sum + a.count, 0);
+
+  return (
+    <div className="mb-6">
+      <SectionHeading
+        icon={CalendarDays}
+        actions={
+          <span className="text-xs text-muted-foreground tabular-nums">
+            {t("dash.streak.questions", { n: totalQuestions })}
+          </span>
+        }
+      >
+        {t("profile.activity.title")}
+      </SectionHeading>
+
+      <OslerCard padding="default">
+        <p className="text-xs text-muted-foreground mb-3">{t("profile.activity.subtitle")}</p>
+        <div className="overflow-x-auto osler-scroll-x pb-1" dir="ltr">
+          <div className="inline-flex flex-col gap-1 min-w-max">
+            {/* Month labels */}
+            <div className="flex gap-[3px] text-[10px] font-medium text-muted-foreground">
+              {weeks.map((_, wi) => {
+                const label = monthLabels.find((m) => m.week === wi);
+                return (
+                  <div key={wi} className="w-3 shrink-0 relative">
+                    {label && <span className="absolute whitespace-nowrap start-0">{label.label}</span>}
+                  </div>
+                );
+              })}
+            </div>
+            {/* Week columns × 7 day rows */}
+            <div className="flex gap-[3px]">
+              {weeks.map((week, wi) => (
+                <div key={wi} className="flex flex-col gap-[3px]">
+                  {week.map((day, di) =>
+                    day ? (
+                      <div
+                        key={day.date}
+                        title={`${day.date} · ${t("dash.streak.questions", { n: day.count })}`}
+                        className={cn(
+                          "size-3 rounded-[3px] transition-colors",
+                          HEATMAP_LEVELS[levelOf(day.count)],
+                          day.count === 0 && "ring-1 ring-inset ring-border/50",
+                        )}
+                      />
+                    ) : (
+                      <div key={`pad-${wi}-${di}`} className="size-3 rounded-[3px]" />
+                    ),
+                  )}
+                </div>
+              ))}
+            </div>
+            {/* Legend */}
+            <div className="flex items-center gap-1.5 mt-2 text-[11px] text-muted-foreground self-end">
+              <span>{t("profile.activity.less")}</span>
+              {HEATMAP_LEVELS.map((cls) => (
+                <div key={cls} className={cn("size-3 rounded-[3px]", cls)} />
+              ))}
+              <span>{t("profile.activity.more")}</span>
+            </div>
+          </div>
+        </div>
+      </OslerCard>
     </div>
   );
 }
@@ -591,8 +731,7 @@ function PerformanceInsights({ metrics }: { metrics: MetricsSummary }) {
   );
 }
 
-function ProfileStreakSection() {
-  const { t } = useI18n();
+function ProfileStreakSection() {  const { t } = useI18n();
   const [horizon, setHorizon] = React.useState<30 | 60>(30);
   const [streakData, setStreakData] = React.useState(() => streak.compute());
   const [activity, setActivity] = React.useState(() => streak.dailyActivity(horizon));
