@@ -498,21 +498,49 @@ export function QBankStudio({
   const { t } = useI18n();
   const { openLightbox } = useLightbox();
 
-  // ── Per-question timing (pause-adjusted) ─────────────────────────
-  // Each unanswered question gets a timer { start, pausedMs } in a ref so
-  // re-renders don't disturb it. When the answer is revealed, the elapsed
-  // time (minus paused intervals) is stamped onto session.questionTimes and
-  // passed through to storage.recordAnswer for the analytics layer.
-  const qTimersRef = React.useRef<Record<number, { start: number; pausedMs: number }>>({});
+  // ── Per-question timing (pause-adjusted, idle-aware) ────────────────
+  // Each unanswered question gets a timer { start, pausedMs, idleMs } in a
+  // ref so re-renders don't disturb it. When the answer is revealed, the
+  // elapsed time (minus paused intervals and idle stretches) is stamped onto
+  // session.questionTimes and passed through to storage.recordAnswer for the
+  // analytics layer.
+  const qTimersRef = React.useRef<Record<number, { start: number; pausedMs: number; idleMs: number }>>({});
   const pauseStartRef = React.useRef<number | null>(null);
+  // Gaps longer than this with zero pointer/key input don't count toward
+  // "active" study time — only the first minute of each gap does, so normal
+  // quiet thinking still accrues but an abandoned tab doesn't.
+  const IDLE_GAP_MS = 60_000;
+  const lastActivityRef = React.useRef<number>(Date.now());
 
   // Seed a timer whenever we land on a new, unanswered question.
   React.useEffect(() => {
     if (!session) return;
     const idx = session.current;
     if (session.revealed[idx]) return;
-    qTimersRef.current[idx] ??= { start: Date.now(), pausedMs: 0 };
+    qTimersRef.current[idx] ??= { start: Date.now(), pausedMs: 0, idleMs: 0 };
   }, [session?.current, session?.revealed, session?.isReview]);
+
+  // Track idle stretches so unattended time never counts toward a question.
+  // Only timers that already existed when a gap began are discounted.
+  React.useEffect(() => {
+    const markActivity = () => {
+      const now = Date.now();
+      const gapStart = lastActivityRef.current;
+      const gap = now - gapStart;
+      if (gap > IDLE_GAP_MS) {
+        for (const timer of Object.values(qTimersRef.current)) {
+          if (timer.start <= gapStart) timer.idleMs += gap - IDLE_GAP_MS;
+        }
+      }
+      lastActivityRef.current = now;
+    };
+    window.addEventListener("pointerdown", markActivity, true);
+    window.addEventListener("keydown", markActivity, true);
+    return () => {
+      window.removeEventListener("pointerdown", markActivity, true);
+      window.removeEventListener("keydown", markActivity, true);
+    };
+  }, []);
 
   // Track pause intervals so paused time never counts toward a question.
   React.useEffect(() => {

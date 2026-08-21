@@ -712,7 +712,9 @@ function PerformanceInsights({ metrics }: { metrics: MetricsSummary }) {
             <div className="flex items-center justify-between mb-3">
               <h4 className="text-sm font-semibold">{t("profile.insights.studyChart")}</h4>
               <span className="text-xs text-muted-foreground tabular-nums">
-                {metrics.totalStudyMs > 0 ? formatStudyTime(metrics.totalStudyMs) : "—"}
+                {metrics.byDay.some((d) => d.minutes > 0)
+                  ? formatStudyTime(metrics.byDay.reduce((sum, d) => sum + d.minutes, 0) * 60_000)
+                  : "—"}
               </span>
             </div>
             <div className="flex items-end gap-1 h-24" role="img" aria-label={t("profile.insights.studyChart")}>
