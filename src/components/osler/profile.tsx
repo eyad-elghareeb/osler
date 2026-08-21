@@ -382,19 +382,22 @@ function ActivityHeatmap() {
     return out;
   }, [activity]);
 
+  // Month labels follow GitHub's convention: a week is labeled by the month
+  // of its MIDDLE day (Thursday), and a new label only appears once the
+  // month actually changes — never twice within three weeks of each other.
   const monthLabels = React.useMemo(() => {
     const labels: { week: number; label: string }[] = [];
     let lastMonth = -1;
+    let lastLabelWeek = -3;
     weeks.forEach((week, wi) => {
-      const first = week.find(Boolean);
-      if (!first) return;
-      const month = new Date(first.date + "T00:00:00Z").getUTCMonth();
-      if (month !== lastMonth && wi < weeks.length - 1) {
-        labels.push({
-          week: wi,
-          label: new Date(first.date + "T00:00:00Z").toLocaleDateString(undefined, { month: "short" }),
-        });
-        lastMonth = month;
+      if (wi >= weeks.length - 1) return; // skip the trailing partial week
+      const mid = week[4] ?? week.find(Boolean);
+      if (!mid) return;
+      const d = new Date(mid.date + "T00:00:00Z");
+      if (d.getUTCMonth() !== lastMonth && wi - lastLabelWeek >= 3) {
+        labels.push({ week: wi, label: d.toLocaleDateString(undefined, { month: "short" }) });
+        lastMonth = d.getUTCMonth();
+        lastLabelWeek = wi;
       }
     });
     return labels;
@@ -425,44 +428,70 @@ function ActivityHeatmap() {
       </SectionHeading>
 
       <OslerCard padding="default">
-        <p className="text-xs text-muted-foreground mb-3">{t("profile.activity.subtitle")}</p>
+        <p className="text-xs text-muted-foreground mb-4 text-center">
+          {t("profile.activity.subtitle")}
+        </p>
         <div className="overflow-x-auto osler-scroll-x pb-1" dir="ltr">
-          <div className="inline-flex flex-col gap-1 min-w-max">
-            {/* Month labels */}
-            <div className="flex gap-[3px] text-[10px] font-medium text-muted-foreground">
-              {weeks.map((_, wi) => {
-                const label = monthLabels.find((m) => m.week === wi);
-                return (
-                  <div key={wi} className="w-3 shrink-0 relative">
-                    {label && <span className="absolute whitespace-nowrap start-0">{label.label}</span>}
-                  </div>
-                );
-              })}
-            </div>
-            {/* Week columns × 7 day rows */}
+          <div className="flex flex-col items-center min-w-max mx-auto">
+            {/* Weekday + month label gutter */}
             <div className="flex gap-[3px]">
-              {weeks.map((week, wi) => (
-                <div key={wi} className="flex flex-col gap-[3px]">
-                  {week.map((day, di) =>
-                    day ? (
-                      <div
-                        key={day.date}
-                        title={`${day.date} · ${t("dash.streak.questions", { n: day.count })}`}
-                        className={cn(
-                          "size-3 rounded-[3px] transition-colors",
-                          HEATMAP_LEVELS[levelOf(day.count)],
-                          day.count === 0 && "ring-1 ring-inset ring-border/50",
+              {/* Weekday gutter (rows Sun..Sat — label Mon/Wed/Fri like GitHub) */}
+              <div className="flex flex-col gap-[3px] me-1.5 w-7 shrink-0">
+                {[...Array(7)].map((_, di) => (
+                  <div
+                    key={di}
+                    className="h-3 flex items-center text-[10px] font-medium text-muted-foreground"
+                  >
+                    {[1, 3, 5].includes(di)
+                      ? new Date(Date.UTC(2024, 0, 7 + di)).toLocaleDateString(undefined, { weekday: "short" })
+                      : ""}
+                  </div>
+                ))}
+              </div>
+              <div className="flex flex-col gap-1">
+                {/* Month labels */}
+                <div className="flex gap-[3px] h-4 text-[10px] font-medium text-muted-foreground">
+                  {weeks.map((_, wi) => {
+                    const label = monthLabels.find((m) => m.week === wi);
+                    return (
+                      <div key={wi} className="w-3 shrink-0 relative">
+                        {label && (
+                          <span className="absolute whitespace-nowrap start-0">{label.label}</span>
                         )}
-                      />
-                    ) : (
-                      <div key={`pad-${wi}-${di}`} className="size-3 rounded-[3px]" />
-                    ),
-                  )}
+                      </div>
+                    );
+                  })}
                 </div>
-              ))}
+                {/* Week columns × 7 day rows */}
+                <div className="flex gap-[3px]">
+                  {weeks.map((week, wi) => (
+                    <div key={wi} className="flex flex-col gap-[3px]">
+                      {week.map((day, di) =>
+                        day ? (
+                          <div
+                            key={day.date}
+                            title={new Date(day.date + "T00:00:00Z").toLocaleDateString(undefined, {
+                              weekday: "short",
+                              month: "short",
+                              day: "numeric",
+                            }) + ` · ${t("dash.streak.questions", { n: day.count })}`}
+                            className={cn(
+                              "size-3 rounded-[3px] transition-all duration-150 hover:scale-125 hover:ring-1 hover:ring-primary/50",
+                              HEATMAP_LEVELS[levelOf(day.count)],
+                              day.count === 0 && "ring-1 ring-inset ring-border/50",
+                            )}
+                          />
+                        ) : (
+                          <div key={`pad-${wi}-${di}`} className="size-3 rounded-[3px]" />
+                        ),
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
             </div>
             {/* Legend */}
-            <div className="flex items-center gap-1.5 mt-2 text-[11px] text-muted-foreground self-end">
+            <div className="flex items-center gap-1.5 mt-3 text-[11px] text-muted-foreground">
               <span>{t("profile.activity.less")}</span>
               {HEATMAP_LEVELS.map((cls) => (
                 <div key={cls} className={cn("size-3 rounded-[3px]", cls)} />

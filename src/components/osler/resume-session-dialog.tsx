@@ -212,28 +212,30 @@ export function ResumeSessionDialog({ open, onOpenChange }: ResumeSessionDialogP
             <RotateCcw className="size-5 text-primary" />
             {t("dash.resumeSession")}
           </AlertDialogTitle>
-          <AlertDialogDescription>
-            {activeSession ? (
-              <div className="space-y-3 mt-2">
-                <p className="text-sm text-foreground font-medium">{activeSession.itemTitle}</p>
-                <div className="flex items-center gap-3 text-xs text-muted-foreground flex-wrap">
-                  <span>
-                    {t("dash.sessionProgress", {
-                      n: activeSession.current + 1,
-                      total: activeSession.total,
-                    })}
-                  </span>
-                  <span aria-hidden>·</span>
-                  <span className="capitalize">{activeSession.mode}</span>
-                  <span aria-hidden>·</span>
-                  <span className="flex items-center gap-1">
-                    <Clock className="size-3" />
-                    {timeAgoLabel(activeSession.startedAt, t as (k: string, p?: Record<string, unknown>) => string)}
-                  </span>
-                </div>
-                <p className="text-xs text-muted-foreground mt-1">{t("dash.resumePrompt")}</p>
+          {/* Meta lives OUTSIDE AlertDialogDescription (a <p>) — block
+              elements nested inside it caused hydration errors. */}
+          {activeSession && (
+            <div className="space-y-2 mt-2 text-start">
+              <div className="text-sm text-foreground font-medium">{activeSession.itemTitle}</div>
+              <div className="flex items-center gap-3 text-xs text-muted-foreground flex-wrap">
+                <span>
+                  {t("dash.sessionProgress", {
+                    n: activeSession.current + 1,
+                    total: activeSession.total,
+                  })}
+                </span>
+                <span aria-hidden>·</span>
+                <span className="capitalize">{activeSession.mode}</span>
+                <span aria-hidden>·</span>
+                <span className="flex items-center gap-1">
+                  <Clock className="size-3" />
+                  {timeAgoLabel(activeSession.startedAt, t as (k: string, p?: Record<string, unknown>) => string)}
+                </span>
               </div>
-            ) : null}
+            </div>
+          )}
+          <AlertDialogDescription>
+            {t("dash.resumePrompt")}
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter className="flex-col-reverse sm:flex-row sm:items-center sm:justify-between">
