@@ -70,6 +70,8 @@
 
 19. **Follow the Design System.** Every new view, card, button, or status indicator must use the shared design tokens, primitives, and CSS utility classes defined in [Design System](#design-system) below. Never hand-roll a Tailwind recipe for a page header, section heading, stat tile, empty state, loading state, card, or status color when a canonical version already exists. Never use hardcoded Tailwind palette colors (`text-emerald-500`, `text-amber-500`, `text-red-500`, `bg-orange-500/10`, etc.) — use the semantic `success` / `warning` / `destructive` / `info` tokens instead.
 
+20. **Content search lives in the global search bar only.** The AppShell's global search (`GlobalSearchPanel` + `@/lib/osler/search`) is the single search surface — its index already covers articles, QBank packs, flashcard decks, OSCE stations, videos, settings, and nav. Never add per-view search inputs, filter boxes, or local search state to individual views/hubs; if a content kind isn't findable globally, extend the index in `@/lib/osler/search.ts` instead.
+
 ---
 
 ## Design System

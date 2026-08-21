@@ -18,7 +18,9 @@ import {
   BookOpen,
   ExternalLink,
   Sun,
-  Download,
+  Search,
+  ArrowDownUp,
+  Check,
 } from "lucide-react";
 import Plyr from "plyr";
 import "plyr/dist/plyr.css";
@@ -26,6 +28,7 @@ import {
   loadVideoTree,
   loadNodeVideos,
   listAllVideos,
+  searchVideos,
   resolveThumbnail,
   formatDuration,
 } from "@/lib/osler/videos";
@@ -34,6 +37,14 @@ import { settings } from "@/lib/osler/storage";
 import type { VideoResource, ContentTreeNode } from "@/lib/osler/types";
 import { cn } from "@/lib/utils";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+} from "@/components/ui/dropdown-menu";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { setImmersiveMode } from "./immersive-mode";
 import { useShortcutListener } from "@/hooks/use-shortcuts";
@@ -48,7 +59,6 @@ import {
   haptic,
 } from "@/lib/osler/native";
 import { useSwipeBackDismiss } from "@/hooks/use-swipe-back-dismiss";
-import { COBALT_API } from "@/lib/osler/cobalt";
 
 /* ── Constants ─────────────────────────────────────────────────────── */
 
@@ -102,6 +112,9 @@ export function VideosStudio({
   const [selectedNodeUid, setSelectedNodeUid] = React.useState<string | null>(null);
   const [folderVideos, setFolderVideos] = React.useState<VideoResource[]>([]);
   const [folderLoading, setFolderLoading] = React.useState(false);
+  // Sort ("more options" layer). Content search lives in the global
+  // search bar (AppShell → GlobalSearchPanel), not per-view.
+  const [sortMode, setSortMode] = React.useState<"default" | "longest" | "shortest" | "title">("default");
 
   // The active video being played (or null = hub view).
   const [activeVideo, setActiveVideo] = React.useState<(VideoResource & { nodeUid: string; nodePath: string }) | null>(null);
@@ -139,7 +152,10 @@ export function VideosStudio({
     })();
   }, []);
 
-  // Load videos in the selected folder.
+  // Load videos in the selected folder. Branch nodes aggregate every
+  // descendant leaf (nested folders act as playlists). Each video is
+  // stamped with its leaf's uid/path so the player can rebuild the
+  // playlist for "Up next".
   React.useEffect(() => {
     if (!selectedNodeUid) {
       setFolderVideos([]);
@@ -154,10 +170,16 @@ export function VideosStudio({
     const leaves = collectLeaves(node);
     Promise.all(leaves.map(loadNodeVideos))
       .then((arrays) => {
-        const all = arrays.flat();
-        // Apply content-language filter
+        const all = arrays.flatMap((vids, i) =>
+          vids.map((v) => ({
+            ...v,
+            nodeUid: leaves[i].uid,
+            nodePath: leaves[i].path,
+            lang: v.lang ?? leaves[i].lang ?? "en",
+          })),
+        );
         if (contentFilter !== "all") {
-          setFolderVideos(all.filter((v) => (v.lang ?? "en") === contentFilter));
+          setFolderVideos(all.filter((v) => v.lang === contentFilter));
         } else {
           setFolderVideos(all);
         }
@@ -227,6 +249,16 @@ export function VideosStudio({
     openVideo({ ...playlist[idx - 1], nodeUid: activeVideo.nodeUid, nodePath: activeVideo.nodePath });
   }
 
+  // Sorted view of the current folder's videos (hooks stay above the
+  // player/skeleton early returns).
+  const displayVideos = React.useMemo(() => {
+    const sorted = [...folderVideos];
+    if (sortMode === "longest") sorted.sort((a, b) => (b.duration ?? 0) - (a.duration ?? 0));
+    else if (sortMode === "shortest") sorted.sort((a, b) => (a.duration ?? Infinity) - (b.duration ?? Infinity));
+    else if (sortMode === "title") sorted.sort((a, b) => a.title.localeCompare(b.title));
+    return sorted;
+  }, [folderVideos, sortMode]);
+
   /* ── Render: Player view ── */
   if (activeVideo) {
     return (
@@ -249,6 +281,7 @@ export function VideosStudio({
 
   /* ── Render: Hub view ── */
   const selectedNode = selectedNodeUid ? findNodeByUid(tree, selectedNodeUid) : null;
+  const breadcrumb = selectedNodeUid ? findPath(tree, selectedNodeUid) : [];
 
   // Per-pack content URLs (for the offline download button).
   function collectPackUrls(node: ContentTreeNode): string[] {
@@ -289,6 +322,46 @@ export function VideosStudio({
           </div>
         </motion.div>
 
+        {/* Sort toolbar */}
+        <div className="flex items-center gap-2 mt-4">
+          <div className="flex-1 min-w-0" />
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" size="sm" className="h-9 shrink-0 gap-1.5">
+                <ArrowDownUp className="size-3.5" />
+                <span className="hidden sm:inline">
+                  {sortMode === "default"
+                    ? t("videos.sortDefault")
+                    : sortMode === "longest"
+                      ? t("videos.sortLongest")
+                      : sortMode === "shortest"
+                        ? t("videos.sortShortest")
+                        : t("videos.sortTitle")}
+                </span>
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              {([
+                ["default", t("videos.sortDefault")],
+                ["longest", t("videos.sortLongest")],
+                ["shortest", t("videos.sortShortest")],
+                ["title", t("videos.sortTitle")],
+              ] as const).map(([mode, label]) => (
+                <DropdownMenuItem
+                  key={mode}
+                  onClick={() => {
+                    haptic("selection");
+                    setSortMode(mode);
+                  }}
+                >
+                  {label}
+                  {sortMode === mode && <Check className="size-3.5 ms-auto" />}
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+
         {/* Two-pane layout: folder tree (desktop) + video grid */}
         <div className="flex flex-col md:flex-row gap-4 mt-4">
           {/* Desktop sidebar: folder tree */}
@@ -301,16 +374,16 @@ export function VideosStudio({
               <FolderTreeNav
                 tree={tree}
                 selected={selectedNodeUid}
-                onSelect={(node) => {
-                  if (node.items.length === 0) {
-                    setSelectedNodeUid(node.uid);
-                  }
-                }}
+                selectBranches
+                onSelect={(node) => setSelectedNodeUid(node.uid)}
                 defaultExpanded={tree.length > 0 ? [tree[0].uid] : []}
-                renderExtra={(node) => {
-                  if (node.items.length > 0) return null;
-                  return null;
-                }}
+                renderExtra={(node) =>
+                  node.itemCount != null && node.itemCount > 0 ? (
+                    <span className="ml-auto text-[10px] text-muted-foreground/60 tabular-nums">
+                      {node.itemCount}
+                    </span>
+                  ) : null
+                }
               />
             </div>
           </aside>
@@ -318,10 +391,27 @@ export function VideosStudio({
           {/* Main: video grid */}
           <main className="flex-1 min-w-0">
             {/* Header row */}
-            <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center justify-between mb-3 min-h-8">
               <div className="min-w-0">
-                {selectedNode ? (
-                  <h2 className="text-sm font-semibold truncate">{selectedNode.title}</h2>
+                {breadcrumb.length > 0 ? (
+                  <h2 className="text-sm font-semibold truncate flex items-center gap-1.5">
+                    {breadcrumb.map((node, i) => (
+                      <React.Fragment key={node.uid}>
+                        {i > 0 && <ChevronRight className={cn("size-3 text-muted-foreground", rtl && "rotate-180")} />}
+                        {i === breadcrumb.length - 1 ? (
+                          <span>{node.title}</span>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => { haptic("selection"); setSelectedNodeUid(node.uid); }}
+                            className="text-muted-foreground hover:text-primary transition-colors"
+                          >
+                            {node.title}
+                          </button>
+                        )}
+                      </React.Fragment>
+                    ))}
+                  </h2>
                 ) : (
                   <h2 className="text-sm font-semibold truncate">{t("videos.allVideos")}</h2>
                 )}
@@ -362,11 +452,11 @@ export function VideosStudio({
                   </div>
                 ))}
               </div>
-            ) : folderVideos.length === 0 ? (
+            ) : displayVideos.length === 0 ? (
               <EmptyState icon={VideoIcon} title={t("videos.empty")} />
             ) : (
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                {folderVideos.map((video, idx) => {
+                {displayVideos.map((video, idx) => {
                   const thumbnail = resolveThumbnail(video);
                   const lang = video.lang ?? "en";
                   return (
@@ -488,7 +578,14 @@ function VideoPlayerView({
   const [invidiousMode, setInvidiousMode] = React.useState<boolean>(Boolean(INVIDIOUS_HOST));
   const [invidiousStart, setInvidiousStart] = React.useState<number | undefined>(undefined);
   const [showFullDescription, setShowFullDescription] = React.useState(false);
-  const [copied, setCopied] = React.useState(false);
+  const [autoplay, setAutoplay] = React.useState(true);
+
+  // Latest auto-advance behavior for the player event callbacks (which are
+  // bound once at player init and would otherwise capture stale props).
+  const autoAdvanceRef = React.useRef<() => void>(() => {});
+  autoAdvanceRef.current = () => {
+    if (autoplay) onNext();
+  };
 
   React.useEffect(() => {
     let cancelled = false;
@@ -496,10 +593,21 @@ function VideoPlayerView({
       if (cancelled || val == null) return;
       setInvidiousMode(val === "true");
     });
+    settings.get("video-autoplay").then((val) => {
+      if (cancelled || val == null) return;
+      setAutoplay(val === "true");
+    });
     return () => {
       cancelled = true;
     };
   }, []);
+
+  const toggleAutoplay = () => {
+    haptic("selection");
+    const next = !autoplay;
+    setAutoplay(next);
+    void settings.set("video-autoplay", String(next));
+  };
 
   const isYouTube = video.source.type === "youtube";
   const videoId = isYouTube ? video.source.id : undefined;
@@ -546,9 +654,10 @@ function VideoPlayerView({
         tooltips: { controls: true, seek: true },
         seekTime: 10,
         disableContextMenu: true,
-        resetOnEnd: true,
+        resetOnEnd: false,
         autoplay: true,
       });
+      p.on("ended", () => autoAdvanceRef.current());
       plyrRef.current = p;
       requestAnimationFrame(() => {
         const el = containerRef.current?.querySelector<HTMLElement>(".plyr");
@@ -603,6 +712,10 @@ function VideoPlayerView({
           events: {
             onReady: () => {
               if (!destroyed) player.playVideo();
+            },
+            onStateChange: (event: { data: number }) => {
+              // 0 === YT.PlayerState.ENDED
+              if (event.data === 0) autoAdvanceRef.current();
             },
           },
         });
@@ -702,39 +815,40 @@ function VideoPlayerView({
         </div>
 
         {onPrev && (
-          <button
-            onClick={() => { haptic('selection'); onPrev(); }}
-            className="size-8 rounded-md flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors"
-            title="Previous (P)"
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => { haptic("selection"); onPrev(); }}
+            title={t("videos.prevTitle")}
           >
             <ChevronLeft className={cn("size-4", rtl && "rtl-flip-x")} />
-          </button>
+          </Button>
         )}
         {onNext && (
-          <button
-            onClick={() => { haptic('selection'); onNext(); }}
-            className="size-8 rounded-md flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors"
-            title="Next (N)"
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => { haptic("selection"); onNext(); }}
+            title={t("videos.nextTitle")}
           >
             <ChevronRight className={cn("size-4", rtl && "rtl-flip-x")} />
-          </button>
+          </Button>
         )}
-        {isYouTube && (
+        {playlist.length > 1 && (
           <button
-            onClick={() => {
-              haptic("light");
-              const url = `https://www.youtube.com/watch?v=${videoId}`;
-              void navigator.clipboard.writeText(url).then(() => {
-                setCopied(true);
-                setTimeout(() => setCopied(false), 2000);
-              }).catch(() => {});
-              const webUrl = COBALT_API.replace("-api.", ".");
-              window.open(webUrl, "_blank", "noopener,noreferrer");
-            }}
-            className="size-8 rounded-md flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors"
-            title={t("videos.downloadHint")}
+            type="button"
+            onClick={toggleAutoplay}
+            aria-pressed={autoplay}
+            className={cn(
+              "px-2.5 h-8 rounded-md text-xs font-medium flex items-center gap-1.5 transition-colors border",
+              autoplay
+                ? "bg-primary/10 text-primary border-primary/30"
+                : "text-muted-foreground hover:text-foreground hover:bg-muted/60 border-border"
+            )}
+            title={t("videos.autoplay")}
           >
-            <Download className={cn("size-4", copied && "text-success")} />
+            <ListVideo className="size-3.5" />
+            <span className="hidden md:inline">{t("videos.autoplay")}</span>
           </button>
         )}
         {isYouTube && INVIDIOUS_HOST && (
@@ -966,6 +1080,16 @@ function findNodeByUid(nodes: ContentTreeNode[], uid: string): ContentTreeNode |
     if (c) return c;
   }
   return null;
+}
+
+/** Root-to-node path for breadcrumbs, or [] when the uid is unknown. */
+function findPath(nodes: ContentTreeNode[], uid: string): ContentTreeNode[] {
+  for (const n of nodes) {
+    if (n.uid === uid) return [n];
+    const sub = findPath(n.items, uid);
+    if (sub.length > 0) return [n, ...sub];
+  }
+  return [];
 }
 
 function collectLeaves(node: ContentTreeNode): ContentTreeNode[] {

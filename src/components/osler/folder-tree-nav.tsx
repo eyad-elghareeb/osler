@@ -17,6 +17,11 @@ interface FolderTreeNavProps {
   defaultExpanded?: string[];
   /** Extra rendering in each item slot */
   renderExtra?: (node: ContentTreeNode) => React.ReactNode;
+  /**
+   * When true, clicking a branch row also fires onSelect (aggregated view)
+   * while the chevron stays expand/collapse-only.
+   */
+  selectBranches?: boolean;
   /** Additional class name */
   className?: string;
 }
@@ -27,6 +32,7 @@ export function FolderTreeNav({
   onSelect,
   defaultExpanded,
   renderExtra,
+  selectBranches,
   className,
 }: FolderTreeNavProps) {
   return (
@@ -40,6 +46,7 @@ export function FolderTreeNav({
           onSelect={onSelect}
           defaultExpanded={defaultExpanded}
           renderExtra={renderExtra}
+          selectBranches={selectBranches}
         />
       ))}
     </nav>
@@ -53,6 +60,7 @@ function TreeNodeItem({
   onSelect,
   defaultExpanded,
   renderExtra,
+  selectBranches,
 }: {
   node: ContentTreeNode;
   depth: number;
@@ -60,6 +68,7 @@ function TreeNodeItem({
   onSelect?: (node: ContentTreeNode) => void;
   defaultExpanded?: string[];
   renderExtra?: (node: ContentTreeNode) => React.ReactNode;
+  selectBranches?: boolean;
 }) {
   const isBranch = node.items.length > 0;
   const [expanded, setExpanded] = React.useState(
@@ -68,11 +77,12 @@ function TreeNodeItem({
 
   const toggle = React.useCallback(() => {
     if (isBranch) {
+      if (selectBranches) onSelect?.(node);
       setExpanded((e) => !e);
     } else {
       onSelect?.(node);
     }
-  }, [isBranch, node, onSelect]);
+  }, [isBranch, node, onSelect, selectBranches]);
 
   const handleKeyDown = React.useCallback(
     (e: React.KeyboardEvent) => {
@@ -100,12 +110,22 @@ function TreeNodeItem({
         style={{ paddingLeft: `${12 + depth * 16}px` }}
       >
         {isBranch ? (
-          <ChevronRight
-            className={cn(
-              "size-3.5 shrink-0 text-muted-foreground transition-transform",
-              expanded && "rotate-90",
-            )}
-          />
+          <span
+            role="button"
+            tabIndex={-1}
+            onClick={(e) => {
+              e.stopPropagation();
+              setExpanded((e2) => !e2);
+            }}
+            className="shrink-0 rounded p-0.5 -m-0.5 hover:bg-muted"
+          >
+            <ChevronRight
+              className={cn(
+                "size-3.5 shrink-0 text-muted-foreground transition-transform",
+                expanded && "rotate-90",
+              )}
+            />
+          </span>
         ) : (
           <FileText className="size-3.5 shrink-0 text-muted-foreground" />
         )}
@@ -136,6 +156,7 @@ function TreeNodeItem({
                 onSelect={onSelect}
                 defaultExpanded={defaultExpanded}
                 renderExtra={renderExtra}
+                selectBranches={selectBranches}
               />
             ))}
           </motion.div>

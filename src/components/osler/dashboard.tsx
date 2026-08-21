@@ -96,7 +96,12 @@ export function Dashboard({
           folders.map((type) => loadCategoryTree(type).catch(() => [] as ContentTreeNode[]))
         );
         if (cancelled) return;
-        setLeaves(trees.flatMap((tree) => flattenTree(tree)));
+        // quiz/bank/written share the qbank manifest, so the same leaf uid
+        // can appear once per engine type — dedupe to keep keys unique.
+        const byUid = new Map(
+          trees.flatMap((tree) => flattenTree(tree)).map((n) => [n.uid, n]),
+        );
+        setLeaves([...byUid.values()]);
       } catch {
         if (!cancelled) setLeaves([]);
       }
