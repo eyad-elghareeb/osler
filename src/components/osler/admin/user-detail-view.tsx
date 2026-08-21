@@ -16,10 +16,23 @@ import {
   BrainCircuit,
   Monitor,
   ScrollText,
+  KeyRound,
+  Trash2,
+  ChevronDown,
   type LucideIcon,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -58,6 +71,53 @@ export function UserDetailView({ userId }: UserDetailViewProps) {
   const [error, setError] = React.useState<string | null>(null);
   const [clearKeyOpen, setClearKeyOpen] = React.useState(false);
   const [clearing, setClearing] = React.useState(false);
+  const [resetOpen, setResetOpen] = React.useState(false);
+  const [newPassword, setNewPassword] = React.useState("");
+  const [resetting, setResetting] = React.useState(false);
+  const [deleteOpen, setDeleteOpen] = React.useState(false);
+  const [deleting, setDeleting] = React.useState(false);
+
+  async function changeRole(role: string) {
+    if (!user || role === user.role) return;
+    haptic("light");
+    try {
+      const updated = await adminApi.updateUser(user.id, { role });
+      setUser((prev) => (prev ? { ...prev, role: updated.role } : prev));
+      toast({ title: t("admin.users.changeRole"), description: `${updated.displayName} → ${t(`admin.users.roles.${role}` as any)}` });
+    } catch {
+      toast({ title: t("admin.toast.failedUpdateRole"), variant: "destructive" });
+    }
+  }
+
+  async function confirmReset() {
+    if (!user) return;
+    haptic("light");
+    setResetting(true);
+    try {
+      await adminApi.resetUserPassword(user.id, newPassword);
+      toast({ title: t("admin.users.resetSuccess") });
+      setResetOpen(false);
+      setNewPassword("");
+    } catch {
+      toast({ title: t("admin.toast.failedResetPassword"), variant: "destructive" });
+    } finally {
+      setResetting(false);
+    }
+  }
+
+  async function confirmDelete() {
+    if (!user) return;
+    haptic("warning");
+    setDeleting(true);
+    try {
+      await adminApi.deleteUser(user.id);
+      toast({ title: t("admin.users.deleteUser") });
+      router.push("/admin/users");
+    } catch {
+      toast({ title: t("admin.toast.failedDeleteUser"), variant: "destructive" });
+      setDeleting(false);
+    }
+  }
 
   React.useEffect(() => {
     setLoading(true);
@@ -321,14 +381,37 @@ export function UserDetailView({ userId }: UserDetailViewProps) {
       <div className="rounded-xl border border-border bg-card p-5 md:p-6 space-y-4">
         <SectionHeading icon={ScrollText}>{t("admin.userDetail.actions")}</SectionHeading>
         <div className="flex flex-wrap gap-3">
-          <Button variant="outline" size="sm" disabled title="Coming soon">
-            {t("admin.userDetail.actions.changeRole")}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" size="sm">
+                <ShieldCheck className="size-3.5 me-1.5" />
+                {t("admin.users.changeRole")}
+                <ChevronDown className="size-3.5 ms-1 opacity-60" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start">
+              <DropdownMenuLabel>{t("admin.users.col.role")}</DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              {(["student", "content_admin", "admin"] as const).map((r) => (
+                <DropdownMenuItem
+                  key={r}
+                  disabled={user.role === r}
+                  onClick={() => changeRole(r)}
+                >
+                  {t(`admin.users.roles.${r}` as any)}
+                  {user.role === r && <span className="ms-auto text-[10px] text-muted-foreground">✓</span>}
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
+
+          <Button variant="outline" size="sm" onClick={() => { setNewPassword(""); setResetOpen(true); }}>
+            <KeyRound className="size-3.5 me-1.5" />
+            {t("admin.users.resetPassword")}
           </Button>
-          <Button variant="outline" size="sm" disabled title="Coming soon">
-            {t("admin.userDetail.actions.resetPassword")}
-          </Button>
-          <Button variant="destructive" size="sm" disabled title="Coming soon">
-            {t("admin.userDetail.actions.deleteUser")}
+          <Button variant="destructive" size="sm" onClick={() => setDeleteOpen(true)}>
+            <Trash2 className="size-3.5 me-1.5" />
+            {t("admin.users.deleteUser")}
           </Button>
         </div>
       </div>
@@ -350,6 +433,60 @@ export function UserDetailView({ userId }: UserDetailViewProps) {
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
               {clearing ? t("common.loading") : t("admin.userDetail.gemini.clearKey")}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Reset password dialog */}
+      <AlertDialog open={resetOpen} onOpenChange={(o) => { if (!o) { setResetOpen(false); setNewPassword(""); } }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{t("admin.users.resetPassword")}</AlertDialogTitle>
+            <AlertDialogDescription>
+              {t("admin.users.resetSubtitle", { name: user.displayName })}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="py-3">
+            <Label htmlFor="detail-reset-password" className="text-sm font-medium">
+              {t("admin.users.newPassword")}
+            </Label>
+            <Input
+              id="detail-reset-password"
+              type="text"
+              value={newPassword}
+              onChange={(e) => setNewPassword(e.target.value)}
+              placeholder={t("admin.users.passwordPlaceholder")}
+              className="mt-1.5"
+              autoFocus
+            />
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setNewPassword("")}>{t("common.cancel")}</AlertDialogCancel>
+            <AlertDialogAction disabled={newPassword.length < 8 || resetting} onClick={confirmReset}>
+              {resetting ? t("common.loading") : t("admin.users.resetPassword")}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Delete confirmation dialog */}
+      <AlertDialog open={deleteOpen} onOpenChange={(o) => !o && setDeleteOpen(false)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{t("admin.users.deleteUser")}</AlertDialogTitle>
+            <AlertDialogDescription>
+              {t("admin.users.deleteConfirm", { name: user.displayName })}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>{t("common.cancel")}</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={confirmDelete}
+              disabled={deleting}
+              className="bg-destructive text-white hover:bg-destructive/90"
+            >
+              {deleting ? t("common.loading") : t("admin.users.deleteUser")}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

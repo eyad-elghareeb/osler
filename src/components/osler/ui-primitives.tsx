@@ -331,6 +331,8 @@ export interface StatTileProps {
    * is additive polish, not a required part of the tile.
    */
   trend?: React.ReactNode;
+  /** Optional content pinned below the value row (e.g. a `<MetricBar>`). */
+  footer?: React.ReactNode;
   onClick?: () => void;
   className?: string;
 }
@@ -350,6 +352,7 @@ export function StatTile({
   color = "primary",
   compact = false,
   trend,
+  footer,
   onClick,
   className,
 }: StatTileProps) {
@@ -386,6 +389,7 @@ export function StatTile({
         <div className="osler-stat-tile__value min-w-0">{value}</div>
         {trend && <div className="shrink-0 pb-0.5">{trend}</div>}
       </div>
+      {footer}
     </Container>
   );
 }

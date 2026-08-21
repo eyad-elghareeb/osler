@@ -16,8 +16,9 @@ const username = process.argv[2] || "admin";
 const password = process.argv[3] || "12345678aa";
 const iterations = 100_000;
 
+// Must match the worker's deriveBits(…, 256) — 256 BITS = 32 bytes.
 const salt = randomBytes(16);
-const hash = pbkdf2Sync(password, salt, iterations, 256, "sha256");
+const hash = pbkdf2Sync(password, salt, iterations, 32, "sha256");
 
 const b64url = (buf: Buffer): string =>
   buf

@@ -87,21 +87,22 @@ export function StatsOverview() {
   return (
     <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
       {tiles.map((tile) => (
-        <div key={tile.label} className="osler-stat-tile">
-          <StatTile
-            label={tile.label}
-            value={tile.value}
-            icon={tile.icon}
-            color={tile.color}
-          />
-          <MetricBar
-            value={tile.value}
-            max={max}
-            color={tile.color}
-            label={tile.label}
-            className="mt-3"
-          />
-        </div>
+        <StatTile
+          key={tile.label}
+          label={tile.label}
+          value={tile.value}
+          icon={tile.icon}
+          color={tile.color}
+          footer={
+            <MetricBar
+              value={tile.value}
+              max={max}
+              color={tile.color}
+              label={tile.label}
+              className="mt-3"
+            />
+          }
+        />
       ))}
     </div>
   );
