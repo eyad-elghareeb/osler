@@ -707,6 +707,7 @@ export const storage = {
   ): Promise<void> {
     const progressEntries = Object.entries(progress ?? {})
       .filter(([key, incoming]) => {
+        if (!isSafeImportKey(key)) return false;
         const local = getCached<QuestionRecord>("progress", key);
         return !!incoming && (!local || incoming.timestamp > local.timestamp);
       })
@@ -718,6 +719,7 @@ export const storage = {
     }
 
     const flashcardEntries = Object.entries(flashcards ?? {}).filter(([key, incoming]) => {
+      if (!isSafeImportKey(key)) return false;
       const local = getCached<FlashcardReviewRecord>("flashcardReviews", key);
       return !!incoming && (!local || incoming.lastReviewed > local.lastReviewed);
     }).map(([key, value]) => ({ key, value }));
@@ -815,7 +817,7 @@ export const storage = {
     if (sessionRecords && typeof sessionRecords === "object") {
       const entries = Object.entries(sessionRecords)
         .filter(([id, incoming]) => {
-          if (id === "__active__") return false;
+          if (id === "__active__" || !isSafeImportKey(id)) return false;
           const local = getCached<SavedSession>("sessions", sessionKey(id));
           return !!incoming && typeof incoming === "object" && (!local || sessionVersion(incoming as SavedSession) > sessionVersion(local));
         })

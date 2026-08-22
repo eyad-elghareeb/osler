@@ -46,9 +46,13 @@ function isDarkMode(): boolean {
 }
 
 // Resolve a stored highlight color. Stored values are either a palette key
-// (theme-aware) or a legacy raw hex (returned unchanged for backwards compat).
+// (theme-aware) or a legacy raw hex (validated — synced highlights are
+// untrusted, and this string lands in an inline style attribute).
 export function resolveHighlightColor(value: string, dark?: boolean): string {
-  if (!isHighlightColorKey(value)) return value;
+  if (!isHighlightColorKey(value)) {
+    // Legacy passthrough: only accept well-formed hex colors.
+    return /^#[0-9a-fA-F]{3,8}$/.test(value) ? value : "";
+  }
   const swatch = HIGHLIGHT_PALETTE[value];
   const darkMode = dark ?? isDarkMode();
   return darkMode ? swatch.dark : swatch.light;

@@ -98,6 +98,23 @@ self.addEventListener("message", (event: ExtendableMessageEvent) => {
   }
 });
 
+/** A compromised/buggy page script could ask the SW to fetch and persist
+ *  arbitrary URLs. Restrict precaching to same-origin paths and the
+ *  osler-content /v1/content keyspaces the app actually uses. */
+function isPrecacheAllowed(rawUrl: string): boolean {
+  try {
+    const u = new URL(rawUrl, self.location.origin);
+    if (u.origin !== self.location.origin) return false;
+    return (
+      u.pathname.startsWith("/osler-content/") ||
+      u.pathname.startsWith("/v1/content/") ||
+      u.pathname.startsWith("/v1/content-manifests/")
+    );
+  } catch {
+    return false;
+  }
+}
+
 async function precacheContent(
   client: Client | null,
   packId: string,
@@ -109,6 +126,11 @@ async function precacheContent(
   const results: { url: string; ok: boolean; status?: number; error?: string }[] = [];
 
   for (const url of urls) {
+    if (!isPrecacheAllowed(url)) {
+      results.push({ url, ok: false, error: "URL not allowed for precache" });
+      done++;
+      continue;
+    }
     try {
       const existing = await cache.match(url);
       if (existing) await cache.delete(url);
@@ -168,7 +190,11 @@ async function removeContent(
   urls: string[]
 ) {
   const cache = await caches.open(CONTENT_CACHE);
-  await Promise.all(urls.map((url) => cache.delete(url)));
+  await Promise.all(
+    urls
+      .filter((url) => isPrecacheAllowed(url))
+      .map((url) => cache.delete(url))
+  );
   const allClients = await self.clients.matchAll();
   for (const c of allClients) {
     c.postMessage({ type: "CONTENT_REMOVED", packId });
