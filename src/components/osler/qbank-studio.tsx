@@ -5138,10 +5138,11 @@ function QuizView({
 
         {/* Stem */}
         <div className="relative">
-          <div className="osler-prose" style={stemStyle} dir="auto">
+          <div className="osler-prose" style={stemStyle} dir="auto" data-hl-region="stem">
             <HighlightedContent
               html={renderQuestionText(question.stem, question, activeItem)}
               highlights={qHighlights}
+              target="stem"
             />
           </div>
         </div>
@@ -5242,6 +5243,7 @@ function QuizView({
                     <HighlightedContent
                       html={renderQuestionText(choice, question, activeItem)}
                       highlights={qHighlights}
+                      target={`choice-${idx}`}
                     />
                     {imageListOf(question.choiceImages?.[idx]).length > 0 && (
                       <div className="flex flex-col gap-2 mt-2">
@@ -5512,30 +5514,41 @@ function QuizView({
       if (!text) return;
 
       const range = sel.getRangeAt(0);
+      // Identify the region the selection lives in by walking up to the
+      // nearest marker — the stem wrapper, a choice button, or the
+      // explanation card. Ranges are then measured against that region's
+      // *rendered* text (the same text painting matches against), so
+      // markdown syntax in the raw source can never shift offsets.
       let target = "stem";
-      let targetText = q.stem;
-
       let el: HTMLElement | null = range.startContainer instanceof Text
         ? range.startContainer.parentElement
         : (range.startContainer as HTMLElement);
+      let regionEl: HTMLElement | null = null;
       while (el) {
+        if (!regionEl && el.getAttribute?.("data-hl-region") === "stem") regionEl = el;
         const ci = el.getAttribute("data-choice-idx");
         if (ci !== null) {
           const idx = parseInt(ci, 10);
           target = `choice-${idx}`;
-          targetText = q.choices[idx] ?? "";
+          regionEl = el;
           break;
         }
         if (el.getAttribute("data-explanation") !== null) {
           target = "explanation";
-          targetText = q.explanation;
+          regionEl = el;
           break;
         }
         el = el.parentElement;
       }
 
-      const idx = targetText.indexOf(text);
-      const ranges = idx >= 0 ? [{ start: idx, end: idx + text.length }] : [];
+      // Absolute offsets inside the region's rendered text.
+      const head = document.createRange();
+      head.selectNodeContents(regionEl ?? document.body);
+      const endRange = range.cloneRange();
+      endRange.collapse(false);
+      head.setEnd(endRange.startContainer, endRange.startOffset);
+      const absEnd = head.toString().length;
+      const ranges = [{ start: absEnd - text.length, end: absEnd }];
 
       const hl: HighlightItem = {
         id: crypto.randomUUID(),
@@ -7818,6 +7831,7 @@ function ExplanationCard({
             <HighlightedContent
               html={renderQuestionText(q.explanation || t("qbank.explanation.noExplanation"), q, item)}
               highlights={hl}
+              target="explanation"
             />
           </div>
           {imageListOf(q.explanationImages).length > 0 && (
@@ -7883,6 +7897,7 @@ function ExplanationCard({
           <HighlightedContent
             html={renderQuestionText(q.explanation || t("qbank.explanation.noExplanation"), q, item)}
             highlights={hl}
+            target="explanation"
           />
         </div>
         {imageListOf(q.explanationImages).length > 0 && (

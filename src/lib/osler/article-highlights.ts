@@ -13,7 +13,7 @@ export interface ArticleHighlightItem {
   id: string;
   color: string;
   text: string;
-  target: string;
+  target?: string;
   ranges?: ArticleHighlightRange[];
   createdAt?: string;
 }
@@ -29,7 +29,8 @@ export const ARTICLE_HIGHLIGHT_COLORS = [
 
 export function applyHighlightsToHtml(
   html: string,
-  highlights: ArticleHighlightItem[]
+  highlights: ArticleHighlightItem[],
+  target?: string
 ): string {
   if (!highlights.length || !html || typeof document === "undefined") return html;
   const doc = new DOMParser().parseFromString(
@@ -38,6 +39,14 @@ export function applyHighlightsToHtml(
   );
   const root = doc.getElementById("__hl_root");
   if (!root) return html;
+
+  // QBank scopes highlights per region (stem / choice-N / explanation).
+  // When a target filter is supplied, skip highlights recorded against
+  // another region — otherwise identical text bleeds across the stem,
+  // every matching choice, and the explanation.
+  if (target) {
+    highlights = highlights.filter((hl) => !hl.target || hl.target === target);
+  }
 
   const collect = (): { node: Text; start: number; end: number }[] => {
     const nodes: { node: Text; start: number; end: number }[] = [];
@@ -110,8 +119,9 @@ export function escapeHtml(str: string): string {
 
 export function applyHighlightsToText(
   text: string,
-  highlights: ArticleHighlightItem[]
+  highlights: ArticleHighlightItem[],
+  target?: string
 ): string {
   const html = escapeHtml(text);
-  return applyHighlightsToHtml(html, highlights);
+  return applyHighlightsToHtml(html, highlights, target);
 }

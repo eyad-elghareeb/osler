@@ -12,7 +12,7 @@ import {
   resolveHighlightColor,
 } from "@/lib/osler/highlight-palette";
 import { useOslerTheme } from "@/components/osler/theme-provider";
-import { articleHighlights } from "@/lib/osler/storage";
+import { articleHighlights, storage } from "@/lib/osler/storage";
 
 interface UseArticleHighlighterOptions {
   source: ArticleSource;
@@ -54,7 +54,6 @@ export function useArticleHighlighter(
 
   const iframeRef = React.useRef<HTMLIFrameElement | null>(null);
   const attachedRef = React.useRef<HTMLDocument | null>(null);
-  const loadIdRef = React.useRef(0);
 
   const toolRef = React.useRef(tool);
   toolRef.current = tool;
@@ -68,10 +67,31 @@ export function useArticleHighlighter(
       setHighlights([]);
       return;
     }
-    const myLoadId = ++loadIdRef.current;
     const aid = String(articleId);
-    setHighlights(articleHighlights.get(aid));
-    if (myLoadId !== loadIdRef.current) return;
+    // Reads go through the storage singleton's hydration gate: on a cold
+    // deep-link the IDB cache may not be populated yet, and reading it
+    // synchronously returned [] — saved highlights silently didn't render
+    // until the user added another one.
+    let cancelled = false;
+    const load = () => { if (!cancelled) setHighlights(articleHighlights.get(aid)); };
+    if (storage.isHydrated()) {
+      load();
+    } else {
+      setHighlights([]);
+      const unsub = storage.onHydrated(load);
+      return () => { cancelled = true; unsub(); };
+    }
+    return () => { cancelled = true; };
+  }, [articleId]);
+
+  // Re-read when another tab/device (or the eraser in a sibling view)
+  // rewrites the same article's highlights.
+  React.useEffect(() => {
+    if (articleId == null) return;
+    const aid = String(articleId);
+    const reload = () => setHighlights(articleHighlights.get(aid));
+    window.addEventListener("osler-article-highlights-changed", reload);
+    return () => window.removeEventListener("osler-article-highlights-changed", reload);
   }, [articleId]);
 
   const applyHighlightsToIframe = React.useCallback(() => {

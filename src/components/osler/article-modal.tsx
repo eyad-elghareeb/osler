@@ -6,6 +6,7 @@ import { BookOpen, X, Clock, ChevronRight, Bookmark, BookmarkCheck, FileText, Ex
 import { loadArticleContent, listAllArticles, type Article, type ArticleMeta } from "@/lib/osler/articles";
 import { cn } from "@/lib/utils";
 import { useArticleHighlighter } from "@/hooks/use-article-highlighter";
+import { applyHighlightsToHtml } from "@/lib/osler/article-highlights";
 import { useI18n } from "@/components/osler/i18n-provider";
 import { HighlighterToolbar } from "./highlighter-toolbar";
 import { usePlatform } from "@/hooks/use-platform";
@@ -35,6 +36,90 @@ export function FloatingArticleModal({
     articleId: activeId,
     enabled: true,
   });
+
+  // Article body ref — selection capture + eraser need a stable container.
+  const bodyRef = React.useRef<HTMLDivElement | null>(null);
+
+  // Paint saved highlights into the rendered HTML before injection
+  // (same string-level approach as library.tsx — the hook's iframe
+  // machinery is unused by both consumers).
+  const processedHtml = React.useMemo(() => {
+    if (!article || article.contentType !== "md") return article?.html ?? "";
+    return applyHighlightsToHtml(article.html, hlCtrl.highlights as any);
+  }, [article, hlCtrl.highlights]);
+
+  // Capture text selections while a highlight tool is active. Mirrors the
+  // library reader: `selectionchange` debounced so mouse and touch both
+  // land after the OS finalises the range.
+  React.useEffect(() => {
+    if (!hlCtrl.highlightMode || !activeId) return;
+    const el = bodyRef.current;
+    if (!el) return;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+
+    const applySelection = () => {
+      const sel = window.getSelection();
+      if (!sel || sel.isCollapsed || sel.rangeCount === 0) return;
+      const range = sel.getRangeAt(0);
+      if (!el.contains(range.commonAncestorContainer)) return;
+      const text = sel.toString().trim();
+      if (!text) return;
+
+      const headRange = document.createRange();
+      headRange.selectNodeContents(el);
+      const endRange = range.cloneRange();
+      endRange.collapse(false);
+      headRange.setEnd(endRange.startContainer, endRange.startOffset);
+      const absEnd = headRange.toString().length;
+      const ranges = [{ start: absEnd - text.length, end: absEnd }];
+
+      hlCtrl.onAdd(text, hlCtrl.highlightColor, ranges);
+      sel.removeAllRanges();
+    };
+
+    const onSelectionChange = () => {
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(applySelection, 350);
+    };
+    document.addEventListener("selectionchange", onSelectionChange);
+    return () => {
+      if (timer) clearTimeout(timer);
+      document.removeEventListener("selectionchange", onSelectionChange);
+    };
+  }, [hlCtrl.highlightMode, hlCtrl.highlightColor, hlCtrl.onAdd, activeId]);
+
+  // Eraser: click/tap a highlight span to remove it.
+  React.useEffect(() => {
+    if (!activeId) return;
+    const el = bodyRef.current;
+    if (!el) return;
+    el.classList.toggle("osler-hl-eraser", hlCtrl.tool === "eraser" && !hlCtrl.highlightMode);
+
+    const handleTarget = (t: EventTarget | null): boolean => {
+      const span = (t as HTMLElement)?.closest?.("[data-osler-hl-id]") as HTMLElement | null;
+      const id = span?.getAttribute("data-osler-hl-id");
+      if (id) { hlCtrl.onRemove(id); return true; }
+      return false;
+    };
+    const onClick = (e: MouseEvent) => {
+      if (hlCtrl.highlightMode) return;
+      if (handleTarget(e.target)) { e.preventDefault(); e.stopPropagation(); }
+    };
+    const onTouchEnd = (e: TouchEvent) => {
+      if (hlCtrl.highlightMode) return;
+      const touch = e.changedTouches[0];
+      if (!touch) return;
+      const t = document.elementFromPoint(touch.clientX, touch.clientY);
+      if (t && handleTarget(t)) e.preventDefault();
+    };
+    el.addEventListener("click", onClick);
+    el.addEventListener("touchend", onTouchEnd);
+    return () => {
+      el.removeEventListener("click", onClick);
+      el.removeEventListener("touchend", onTouchEnd);
+      el.classList.remove("osler-hl-eraser");
+    };
+  }, [hlCtrl.tool, hlCtrl.highlightMode, hlCtrl.onRemove, activeId]);
 
   React.useEffect(() => {
     setActiveId(articleId);
@@ -263,7 +348,7 @@ export function FloatingArticleModal({
                     />
                   ) : (
                     <div className="library-article p-8 max-w-[920px] mx-auto">
-                      <div dangerouslySetInnerHTML={{ __html: article.html }} />
+                      <div ref={bodyRef} dangerouslySetInnerHTML={{ __html: processedHtml }} />
                     </div>
                   )
                 ) : (

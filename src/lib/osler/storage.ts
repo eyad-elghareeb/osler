@@ -355,7 +355,9 @@ export interface HighlightItem {
   id: string;
   color: string;
   text: string;
-  target: string;
+  /** Region the highlight was recorded against — QBank scopes per
+   *  stem / choice-N / explanation; library highlights use "body". */
+  target?: string;
   ranges?: { start: number; end: number }[];
   createdAt?: string;
 }

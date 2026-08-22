@@ -9,6 +9,9 @@ interface HighlightedContentProps {
   html?: string;
   text?: string;
   highlights: HighlightItem[];
+  /** Only paint highlights recorded against this region (QBank stem /
+   *  choice-N / explanation scoping — see storage.highlights). */
+  target?: string;
   onHighlightClick?: (id: string) => void;
   className?: string;
   style?: React.CSSProperties;
@@ -20,6 +23,7 @@ export const HighlightedContent = React.memo(function HighlightedContent({
   html,
   text,
   highlights,
+  target,
   onHighlightClick,
   className = "",
   style,
@@ -29,13 +33,13 @@ export const HighlightedContent = React.memo(function HighlightedContent({
   const processedHtml = React.useMemo(() => {
     if (typeof document === "undefined") return html ?? escapeHtmlSimple(text ?? "");
     if (html) {
-      return applyHighlightsToHtml(html, highlights as any);
+      return applyHighlightsToHtml(html, highlights as any, target);
     }
     if (text) {
-      return applyHighlightsToText(text, highlights as any);
+      return applyHighlightsToText(text, highlights as any, target);
     }
     return "";
-  }, [html, text, highlights, theme]);
+  }, [html, text, highlights, target, theme]);
 
   const ref = React.useRef<HTMLDivElement>(null);
 
