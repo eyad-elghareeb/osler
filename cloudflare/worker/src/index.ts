@@ -45,8 +45,9 @@ const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 // /v1/auth/refresh as long as the D1 session row is no older than this grace
 // window. Every successful refresh issues a brand-new 7-day session, so an
 // active user is never forced to re-enter their password; an abandoned
-// session dies out naturally ~GRACE after its last refresh.
-const SESSION_REFRESH_GRACE_MS = 30 * 24 * 60 * 60 * 1000;
+// session dies out naturally ~GRACE after its last refresh. Kept short: a
+// stolen token that expires must not remain a live credential for weeks.
+const SESSION_REFRESH_GRACE_MS = 48 * 60 * 60 * 1000;
 const RESET_TTL_MS = 30 * 60 * 1000;
 // Hard ceiling for a single merged sync document's raw JSON. D1 caps each
 // string/BLOB/row at 2MB, so a doc can never exceed that. Payload is stored
@@ -71,6 +72,7 @@ const RATE_LIMIT_MAX: Record<string, number> = {
   "auth:login": 12,
   "auth:register": 6,
   "auth:reset": 6,
+  "auth:google:start": 10,
   "auth:google:consume": 12,
   "auth:refresh": 30,
   "guest": 12,
@@ -199,6 +201,14 @@ async function sha256(value: string): Promise<string> {
 async function hmac(value: string, secret: string): Promise<string> {
   const key = await crypto.subtle.importKey("raw", encoder.encode(secret), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
   return b64url(await crypto.subtle.sign("HMAC", key, encoder.encode(value)));
+}
+
+/** Constant-time string comparison (used for HMAC signatures). */
+function timingSafeEqual(a: string, b: string): boolean {
+  if (a.length !== b.length) return false;
+  let mismatch = 0;
+  for (let i = 0; i < a.length; i += 1) mismatch |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  return mismatch === 0;
 }
 
 async function passwordHash(password: string, salt?: string) {
@@ -494,6 +504,44 @@ function pruneRateLimitBuckets(t: number): void {
   }
 }
 
+// ─── Distributed login lockout (D1-backed) ──────────────────────────────────
+//
+// The per-IP in-memory rate limiter is per-isolate, so it can't stop
+// distributed credential stuffing. Login failures are counted per
+// identifier+IP in D1 (shared across all isolates); after MAX_LOGIN_FAILURES
+// consecutive failures the pair is locked for LOGIN_LOCKOUT_MS even if every
+// subsequent password guess is correct. A successful login clears the count.
+
+const MAX_LOGIN_FAILURES = 8;
+const LOGIN_LOCKOUT_MS = 15 * 60 * 1000;
+
+async function loginLockoutCheck(env: Env, identifier: string, ip: string): Promise<boolean> {
+  const row = await env.DB.prepare("SELECT locked_until FROM login_failures WHERE identifier = ? AND ip = ?")
+    .bind(identifier.toLowerCase(), ip).first<{ locked_until: number | null }>();
+  return !row?.locked_until || row.locked_until <= now();
+}
+
+async function loginFailureRecord(env: Env, identifier: string, ip: string): Promise<void> {
+  const key = identifier.toLowerCase();
+  const t = now();
+  await env.DB.prepare(`
+    INSERT INTO login_failures (identifier, ip, failures, updated_at)
+    VALUES (?, ?, 1, ?)
+    ON CONFLICT (identifier, ip) DO UPDATE SET
+      failures = CASE WHEN locked_until IS NOT NULL AND locked_until > ? THEN failures ELSE failures + 1 END,
+      locked_until = CASE
+        WHEN locked_until IS NOT NULL AND locked_until > ? THEN locked_until
+        WHEN failures + 1 >= ? THEN ? + ?
+        ELSE NULL END,
+      updated_at = ?
+  `).bind(key, ip, t, t, t, MAX_LOGIN_FAILURES, t + LOGIN_LOCKOUT_MS, t).run();
+}
+
+async function loginFailureClear(env: Env, identifier: string, ip: string): Promise<void> {
+  await env.DB.prepare("DELETE FROM login_failures WHERE identifier = ? AND ip = ?")
+    .bind(identifier.toLowerCase(), ip).run();
+}
+
 // ─── Turnstile ───────────────────────────────────────────────────────────────
 // Single source of truth for bot verification. Fail-closed: when Turnstile is
 // enabled (TURNSTILE_ENABLED === "true") the challenge MUST verify — a missing
@@ -576,7 +624,7 @@ async function requireUser(request: Request, env: Env): Promise<SessionRow | nul
   const token = request.headers.get("authorization")?.replace(/^Bearer\s+/i, "");
   if (!token || !env.JWT_SECRET) return null;
   const [payload, signature] = token.split(".");
-  if (!payload || !signature || signature !== await hmac(payload, env.JWT_SECRET)) return null;
+  if (!payload || !signature || !timingSafeEqual(signature, await hmac(payload, env.JWT_SECRET))) return null;
   let claims: any;
   try { claims = JSON.parse(decoder.decode(unb64url(payload))); } catch { return null; }
   if (!claims?.sub || !claims?.sid || Number(claims.exp) * 1000 <= now()) return null;
@@ -603,7 +651,7 @@ async function refreshSession(request: Request, env: Env): Promise<{ token: stri
   const token = request.headers.get("authorization")?.replace(/^Bearer\s+/i, "");
   if (!token || !env.JWT_SECRET) return null;
   const [payload, signature] = token.split(".");
-  if (!payload || !signature || signature !== await hmac(payload, env.JWT_SECRET)) return null;
+  if (!payload || !signature || !timingSafeEqual(signature, await hmac(payload, env.JWT_SECRET))) return null;
   let claims: any;
   try { claims = JSON.parse(decoder.decode(unb64url(payload))); } catch { return null; }
   if (!claims?.sub || !claims?.sid) return null;
@@ -764,7 +812,10 @@ async function auditLog(env: Env, actorId: string, action: string, targetId: str
     const auditKey = env.AUDIT_HMAC_KEY || env.JWT_SECRET;
     const auditId = id();
     const detailJson = detail ? JSON.stringify(detail) : null;
-    const prev = await env.DB.prepare("SELECT row_hash FROM admin_audit ORDER BY created_at DESC LIMIT 1").first<{ row_hash: string }>();
+    // Order by rowid (strict insert order), not created_at — two entries in
+    // the same millisecond would otherwise fork the hash chain and trip a
+    // false "chain broken" in verifyAuditChain.
+    const prev = await env.DB.prepare("SELECT row_hash FROM admin_audit ORDER BY rowid DESC LIMIT 1").first<{ row_hash: string }>();
     const prevHash = prev?.row_hash || "";
     const chainInput = prevHash + action + (targetId || "") + (detailJson || "") + String(now());
     const rowHash = await hmac(chainInput, auditKey);
@@ -778,7 +829,8 @@ async function auditLog(env: Env, actorId: string, action: string, targetId: str
 
 async function verifyAuditChain(env: Env): Promise<{ valid: boolean; totalRows: number; checkedRows: number; firstBreak: number | null }> {
   const auditKey = env.AUDIT_HMAC_KEY || env.JWT_SECRET;
-  const rows = await env.DB.prepare("SELECT id, action, target_id, detail, prev_hash, row_hash, created_at FROM admin_audit ORDER BY created_at ASC").all<any>();
+  // rowid order = insert order; created_at ties must not fork the chain.
+  const rows = await env.DB.prepare("SELECT id, action, target_id, detail, prev_hash, row_hash, created_at FROM admin_audit ORDER BY rowid ASC").all<any>();
   const all = rows.results || [];
   if (all.length === 0) return { valid: true, totalRows: 0, checkedRows: 0, firstBreak: null };
   let expectedPrev = "";
@@ -805,7 +857,9 @@ const WEBHOOK_EVENTS = {
 /** Webhook delivery URLs are fetched by the Worker, so a stored hook pointing
  *  at a loopback/private address becomes an SSRF primitive. Webhooks are
  *  admin-created, but defense-in-depth: require HTTPS and reject internal
- *  hostnames and RFC1918/link-local/reserved IP literals. */
+ *  hostnames, RFC1918/link-local/reserved IP literals — in every textual
+ *  encoding (decimal/hex/octal integer forms like 2130706433 or 0x7f000001,
+ *  dotted variants, and IPv6-mapped IPv4). */
 function validWebhookUrl(raw: string): { ok: true } | { ok: false; reason: string } {
   if (raw.length > 2048) return { ok: false, reason: "Webhook URL is too long" };
   let url: URL;
@@ -816,15 +870,25 @@ function validWebhookUrl(raw: string): { ok: true } | { ok: false; reason: strin
   for (const suffix of [".local", ".internal", ".lan", ".home", ".corp", ".intranet"]) {
     if (host.endsWith(suffix)) return { ok: false, reason: "Internal webhook hostnames are not allowed" };
   }
+  // Reject any hostname that is purely digits/hex/dots — decimal ("2130706433"),
+  // hex ("0x7f000001"), octal ("0177.0.0.1") and mixed-form IPv4 encodings all
+  // slip past a dotted-quad regex and resolve to attacker-chosen addresses.
+  // A legitimate webhook host always contains an alpha DNS label.
+  const isDottedQuad = /^\d{1,3}(\.\d{1,3}){3}$/.test(host);
+  if (!isDottedQuad && /^[0-9a-fx.:]+$/.test(host) && /\d/.test(host) && !host.includes(":")) {
+    return { ok: false, reason: "Numeric IP encodings are not allowed; use a DNS name" };
+  }
   if (host.includes(":")) {
-    if (host === "::" || host === "::1" || host.startsWith("fe80") || host.startsWith("fc") || host.startsWith("fd") || host.startsWith("::ffff:10.") || host.startsWith("::ffff:127.")) {
+    if (host === "::" || host === "::1" || host.startsWith("fe80") || host.startsWith("fc") || host.startsWith("fd") || host.startsWith("::ffff:")) {
       return { ok: false, reason: "Private or reserved webhook addresses are not allowed" };
     }
     return { ok: true };
   }
   const v4 = host.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
   if (v4) {
-    const [a, b] = [Number(v4[1]), Number(v4[2])];
+    const octets = [Number(v4[1]), Number(v4[2]), Number(v4[3]), Number(v4[4])];
+    if (octets.some((o) => o > 255)) return { ok: false, reason: "Invalid webhook address" };
+    const [a, b] = octets;
     const privateOrReserved = a === 0 || a === 10 || a === 127 || a >= 224 ||
       (a === 169 && b === 254) || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168);
     if (privateOrReserved) return { ok: false, reason: "Private or reserved webhook addresses are not allowed" };
@@ -877,6 +941,8 @@ async function cleanupStale(env: Env, _log?: Logger): Promise<void> {
       env.DB.prepare("DELETE FROM email_verify_tokens WHERE expires_at < ?").bind(now()),
       env.DB.prepare("DELETE FROM biometric_sessions WHERE expires_at < ? OR used_at IS NOT NULL").bind(now()),
       env.DB.prepare("DELETE FROM sessions WHERE expires_at < ? OR revoked_at IS NOT NULL").bind(now()),
+      // Lockout rows past their lock window are dead weight - drop them.
+      env.DB.prepare("DELETE FROM login_failures WHERE locked_until IS NOT NULL AND locked_until < ?").bind(now() - LOGIN_LOCKOUT_MS),
       env.DB.prepare("DELETE FROM admin_audit WHERE created_at < ?").bind(cutoff),
       env.DB.prepare("DELETE FROM analytics_events WHERE created_at < ?").bind(analyticsCutoff),
     ]);
@@ -1215,7 +1281,9 @@ async function regenerateManifestForCategory(env: Env, category: string): Promis
   const keys: string[] = [];
   // list() returns at most 1000 keys per page — a category with more files
   // than that would silently drop entries from the manifest if we only
-  // fetched the first page. Page through the keyspace (capped at 10k).
+  // fetched the first page. Page through the keyspace; each page is one
+  // subrequest and Workers Free allows 50 per invocation, so cap at 10 pages
+  // (10k keys) and let the caller re-invoke for larger keyspaces.
   let cursor: string | undefined = undefined;
   for (let page = 0; page < 10; page++) {
     const listed: any = await env.CONTENT.list({ prefix, limit: 1000, cursor });
@@ -1490,7 +1558,15 @@ async function handleBiometricRegisterComplete(request: Request, env: Env, sessi
   if (cdj.challenge !== storedB64url) return json({ error: "Challenge mismatch" }, 400, "", log);
   const rpOrigin = env.ALLOWED_ORIGIN.replace(/\/$/, "");
   if (cdj.origin !== rpOrigin) return json({ error: "Origin mismatch" }, 400, "", log);
-  await env.DB.prepare("INSERT INTO biometric_credentials (id, user_id, credential_id, credential_data_json, device_name, created_at) VALUES (?, ?, ?, ?, ?, ?)").bind(id(), session.user.id, rawId, JSON.stringify({ clientDataJSON, attestationObject, rawId }), typeof body.deviceName === "string" ? body.deviceName.trim().slice(0, 100) : "Unknown device", now()).run();
+  // Seed the rollback detector with the authenticator's initial counter.
+  let seedSignCount = 0;
+  try {
+    const attBytes = unb64url(attestationObject);
+    if (attBytes.length > 37) {
+      seedSignCount = ((attBytes[33] << 24) | (attBytes[34] << 16) | (attBytes[35] << 8) | attBytes[36]) >>> 0;
+    }
+  } catch {}
+  await env.DB.prepare("INSERT INTO biometric_credentials (id, user_id, credential_id, credential_data_json, sign_count, device_name, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)").bind(id(), session.user.id, rawId, JSON.stringify({ clientDataJSON, attestationObject, rawId }), seedSignCount, typeof body.deviceName === "string" ? body.deviceName.trim().slice(0, 100) : "Unknown device", now()).run();
   return json({ ok: true }, 200, "", log);
 }
 
@@ -1565,6 +1641,25 @@ async function handleBiometricAuthenticateComplete(request: Request, env: Env, _
   const storedCred: { attestationObject?: string } = (() => { try { return JSON.parse(credential.credential_data_json ?? "{}"); } catch { return {}; } })();
   const verified = await verifyAssertion(storedCred.attestationObject ?? "", rpId, authenticatorData, assertionSignature, clientDataJSON);
   if (!verified) return json({ error: "Biometric verification failed" }, 401, "", log);
+  // Sign-count rollback detection: a genuine hardware authenticator
+  // increments its counter on every assertion. A counter that goes backwards
+  // (or never moves from a non-zero seed) indicates a cloned key — reject and
+  // force re-enrollment. Software passkeys that legitimately always report 0
+  // are exempt (counter stays 0 from enrollment onward).
+  try {
+    const authDataBytes = unb64url(authenticatorData);
+    const currentCount = ((authDataBytes[33] << 24) | (authDataBytes[34] << 16) | (authDataBytes[35] << 8) | authDataBytes[36]) >>> 0;
+    const storedCount = Number(credential.sign_count ?? 0) >>> 0;
+    if (storedCount > 0 && (currentCount === 0 || currentCount < storedCount)) {
+      await env.DB.prepare("DELETE FROM biometric_credentials WHERE id = ?").bind(credential.id).run();
+      return json({ error: "Credential failed integrity check — re-enroll this device" }, 401, "", log);
+    }
+    if (currentCount !== storedCount) {
+      await env.DB.prepare("UPDATE biometric_credentials SET sign_count = ? WHERE id = ?").bind(currentCount, credential.id).run();
+    }
+  } catch {
+    // Malformed counter bytes already fail signature verification above.
+  }
 
   const user = await env.DB.prepare("SELECT * FROM users WHERE id = ?").bind(bs.user_id).first<any>();
   if (!user) return json({ error: "User not found" }, 404, "", log);
@@ -2755,12 +2850,13 @@ async function handleAdmin(request: Request, env: Env, session: Session, url: UR
       if (!prefix || prefix.includes("..") || prefix.includes("\\")) return json({ error: "Invalid prefix" }, 400, origin, log);
       const cat = prefix.split("/")[0];
       if (!cat || !(cat in CATEGORY_TYPE_MAP)) return json({ error: "Invalid prefix" }, 400, origin, log);
-      // Each delete is one subrequest; a qbank-scale folder (~300 files +
-      // images) can exceed the free-plan 1,000-subrequest cap in a single
-      // invocation, so bound each run and let the caller re-invoke until
+      // Each delete is one subrequest; Workers Free caps subrequests at
+      // 50 per invocation (Paid: 1,000), and the list() calls above count too.
+      // A qbank-scale folder (~300 files + images) can never finish in one run,
+      // so bound each run well under the cap and let the caller re-invoke until
       // complete — already-deleted keys vanish from the list, so resuming is
       // idempotent. The manifest is regenerated only once the run completes.
-      const MAX_DELETE_PER_RUN = 500;
+      const MAX_DELETE_PER_RUN = 35;
       let deleted = 0;
       let remaining = 0;
       for (const scope of ["content-files", "content-staging"]) {
@@ -2793,12 +2889,13 @@ async function handleAdmin(request: Request, env: Env, session: Session, url: UR
       if (!cat || !(cat in CATEGORY_TYPE_MAP)) return json({ error: "Invalid prefix" }, 400, origin, log);
       const toCat = to.split("/")[0];
       if (toCat !== cat) return json({ error: "Cannot move across categories" }, 400, origin, log);
-      // Each rename costs 3 subrequests (get, put, delete) — a qbank-scale
-      // folder can exceed the free-plan 1,000-subrequest cap in one
-      // invocation, so bound each run and let the caller re-invoke until
-      // complete. Moved keys leave the source prefix, so resuming is
-      // idempotent. The manifest is regenerated only once the run completes.
-      const MAX_RENAME_PER_RUN = 200;
+      // Each rename costs 3 subrequests (get, put, delete) and Workers Free
+      // caps subrequests at 50 per invocation — so a qbank-scale folder can
+      // never complete in one invocation. Bound each run well under the cap
+      // and let the caller re-invoke until complete. Moved keys leave the
+      // source prefix, so resuming is idempotent. The manifest is regenerated
+      // only once the run completes.
+      const MAX_RENAME_PER_RUN = 12;
       let moved = 0;
       let remaining = 0;
       for (const scope of ["content-files", "content-staging"]) {
@@ -2849,11 +2946,12 @@ async function handleAdmin(request: Request, env: Env, session: Session, url: UR
       let stoppedEarly = false;
       const errors: string[] = [];
       const BATCH_SIZE = 25;
-      // Free-plan Workers cap subrequests at 1,000 per invocation; a full backfill
+      // Workers Free caps subrequests at 50 per invocation; a full backfill
       // costs ~4 subrequests per file (get, 2 puts, image list), so a full run
-      // (~476 files) can never complete in one invocation. Bound each run and let
-      // the caller re-invoke until complete — the published_r2_key check resumes.
-      const MAX_FILES_PER_RUN = 180;
+      // (~476 files) can never complete in one invocation. Bound each run to
+      // stay under the cap and let the caller re-invoke until complete — the
+      // published_r2_key check resumes.
+      const MAX_FILES_PER_RUN = 8;
 
       for (const cat of categories) {
         const dbStatements: any[] = [];
@@ -2982,12 +3080,11 @@ async function handleAdmin(request: Request, env: Env, session: Session, url: UR
       const rows = await env.DB.prepare("SELECT r2_key_base FROM content_objects WHERE r2_key_base IS NOT NULL").all<any>();
       const referenced = new Set<string>();
       for (const row of rows.results || []) if (row.r2_key_base) referenced.add(row.r2_key_base);
-      // Managed objects live at content/<type>/<uuid>/; any base without a
-      // content_objects row is orphaned debris (failed backfill runs write
-      // fresh uuids before the DB batch commits). Deletes are bounded per
-      // invocation (free-plan 1,000-subrequest cap); already-deleted orphans
-      // vanish from the list, so re-invoking until complete is idempotent.
-      const MAX_ORPHAN_DELETES = 400;
+      // Workers Free caps subrequests at 50 per invocation (each delete is
+      // one subrequest and the list() scans above count too). Deletes are
+      // bounded per invocation; already-deleted orphans vanish from the list,
+      // so re-invoking until complete is idempotent.
+      const MAX_ORPHAN_DELETES = 30;
       const prefixes = ["content/quiz/", "content/bank/", "content/written/", "content/flashcard/", "content/osce/", "content/library/", "content/video/"];
       let scanned = 0;
       let deleted = 0;
@@ -3278,11 +3375,16 @@ async function handleAdmin(request: Request, env: Env, session: Session, url: UR
         const asset = await env.CONTENT.get(r2Key);
         if (!asset) return json({ error: "Asset not found" }, 404, origin, log);
         const buf = await asset.arrayBuffer();
+        // Executable content types must download, never render inline —
+        // mirrors the public /v1/content/ endpoint's force-download rule.
+        const assetExt = rel.split(".").pop()?.toLowerCase() ?? "";
+        const assetForceDownload = ["html", "htm", "svg", "js", "mjs", "xml", "xhtml"].includes(assetExt);
         return new Response(buf, {
           status: 200,
           headers: {
             "content-type": asset.httpMetadata?.contentType ?? guessImageContentType(rel),
             "cache-control": "no-cache",
+            ...(assetForceDownload ? { "content-disposition": `attachment; filename="${rel.split("/").pop()?.replace(/[^\w.-]/g, "_") || "download"}"` } : {}),
             ...cors(origin),
             ...SECURITY_HEADERS,
           } as any,
@@ -3482,20 +3584,30 @@ export default {
       // SECURITY_HEADERS has CORP=same-origin, which would block these reads.
       if (request.method === "GET" && url.pathname.startsWith("/v1/content/")) {
         let contentPath = url.pathname.slice("/v1/content/".length).replace(/\/{2,}/g, "/");
-        if (!contentPath || contentPath.includes("..") || contentPath.includes("\\") || contentPath.startsWith("/")) return json({ error: "Not found" }, 404, origin, log);
         // Paths can carry percent-encoded characters (folder names with spaces,
-        // e.g. "Cardiology AR" → "Cardiology%20AR"). Decode before building the
-        // R2 key so the lookup matches the literal key stored in the bucket.
+        // e.g. "Cardiology AR" → "Cardiology%20AR"). Decode BEFORE validating so
+        // encoded traversal (%2e%2e%2f) can't slip past the ".." check.
         try {
           contentPath = decodeURIComponent(contentPath);
         } catch {
           return json({ error: "Not found" }, 404, origin, log);
         }
+        if (!contentPath || contentPath.includes("..") || contentPath.includes("\\") || contentPath.startsWith("/") || /[\u0000-\u001f]/.test(contentPath)) return json({ error: "Not found" }, 404, origin, log);
         if (!env.CONTENT) return json({ error: "Content storage not configured" }, 503, origin, log);
         const r2Key = `content-files/${contentPath}`;
+        const ext = contentPath.split(".").pop()?.toLowerCase() ?? "";
+        const cacheable = ext !== "json" && ext !== "md";
+        // Edge-cache lookup first — an immutable asset served from cache bills
+        // neither a Worker subrequest nor an R2 read. Cache hits skip the R2
+        // round-trip entirely, protecting the free-tier request budget.
+        if (cacheable) {
+          try {
+            const cached = await caches.default.match(new Request(request.url, { method: "GET" }));
+            if (cached) return cached;
+          } catch {}
+        }
         const obj = await env.CONTENT.get(r2Key);
         if (!obj) return json({ error: "Not found" }, 404, origin, log);
-        const ext = contentPath.split(".").pop()?.toLowerCase() ?? "";
         const contentType =
           ext === "json" ? "application/json" : ext === "md" ? "text/markdown; charset=utf-8"
           : ext === "html" || ext === "htm" ? "text/html; charset=utf-8" : ext === "pdf" ? "application/pdf"
@@ -3507,26 +3619,45 @@ export default {
           : ext === "webm" ? "video/webm" : ext === "m3u8" ? "application/vnd.apple.mpegurl"
           : ext === "css" ? "text/css" : ext === "js" ? "application/javascript"
           : "application/octet-stream";
-        const cacheable = ext !== "json" && ext !== "md";
+        // HTML/SVG/JS/XML served from the Worker origin could execute script
+        // in a browsing context (same-origin <script src> is allowed by this
+        // endpoint's CSP). Force them to download instead of render so a
+        // malicious/compromised content upload can never turn the Worker into
+        // a script host. Images, PDFs and data files stay inline.
+        const forceDownload = ["html", "htm", "svg", "js", "mjs", "xml", "xhtml"].includes(ext);
+        const cacheControl = cacheable ? "public, max-age=86400, immutable" : "public, max-age=300, s-maxage=3600, stale-while-revalidate=86400";
         const contentHeaders: Record<string, string> = {
           "content-type": contentType,
-          "cache-control": cacheable ? "public, max-age=86400, immutable" : "public, max-age=300, s-maxage=3600, stale-while-revalidate=86400",
+          "cache-control": cacheControl,
+          ...(forceDownload ? { "content-disposition": `attachment; filename="${contentPath.split("/").pop()?.replace(/[^\w.-]/g, "_") || "download"}"` } : {}),
           ...cors(origin),
           ...SECURITY_HEADERS,
           // Override CORP so the Pages site (different origin) can read this.
           "cross-origin-resource-policy": "cross-origin",
         };
-        return new Response(obj.body, { status: 200, headers: contentHeaders as any });
+        const response = new Response(obj.body, { status: 200, headers: contentHeaders as any });
+        // Cache immutable assets at the Cloudflare edge. Workers responses are
+        // NOT auto-cached from cache-control headers alone; without an explicit
+        // Cache API put, every pack fetch bills a Worker request + an R2 read,
+        // which can exhaust the free-tier 100k requests/day under classroom load.
+        if (cacheable) {
+          const req = new Request(request.url, { method: "GET" });
+          try { await caches.default.put(req, response.clone()); } catch {}
+        }
+        return response;
       }
 
       // ── Public content manifests (R2-backed) ──
       if (request.method === "GET" && url.pathname.startsWith("/v1/content-manifests/")) {
-        const manifestPath = url.pathname.slice("/v1/content-manifests/".length).replace(/\/{2,}/g, "/");
+        let manifestPath = url.pathname.slice("/v1/content-manifests/".length).replace(/\/{2,}/g, "/");
         if (!env.CONTENT) return json({ error: "Content storage not configured" }, 503, origin, log);
         // Only the known category manifests are public — never let a path
         // escape the content-manifests keyspace or reach non-manifest keys.
+        // Decode first so encoded traversal can't slip past the ".." check.
+        try { manifestPath = decodeURIComponent(manifestPath); } catch { return json({ error: "Not found" }, 404, origin, log); }
         const category = manifestPath.split("/")[0];
-        if (!manifestPath || !category || !(category in CATEGORY_TYPE_MAP)) return json({ error: "Not found" }, 404, origin, log);
+        const knownFile = /^manifest\.json$/i.test(manifestPath.split("/").slice(1).join("/"));
+        if (!manifestPath || !category || !knownFile || !(category in CATEGORY_TYPE_MAP)) return json({ error: "Not found" }, 404, origin, log);
         if (manifestPath.includes("..") || manifestPath.includes("\\")) return json({ error: "Not found" }, 404, origin, log);
         const r2Key = `content-manifests/${manifestPath}`;
         const obj = await env.CONTENT.get(r2Key);
@@ -3544,6 +3675,10 @@ export default {
       // ── Google OAuth ──
       if (request.method === "GET" && url.pathname === "/v1/auth/google/start") {
         if (!googleReady(env)) return json({ error: "Google sign-in is not configured" }, 503, origin, log);
+        // Each call inserts an oauth_states row - a D1 WRITE. Unthrottled, an
+        // attacker could exhaust the free-tier daily write quota in hours,
+        // taking down login/sync/audit for the whole instance.
+        if (!rateLimit(ip, "auth:google:start")) return json({ error: "Too many attempts" }, 429, origin, log);
         const returnTo = url.searchParams.get("returnTo") || "";
         let validatedReturnTo: URL;
         try { validatedReturnTo = new URL(returnTo); } catch { return json({ error: "Invalid return URL" }, 400, origin, log); }
@@ -3613,13 +3748,24 @@ export default {
         if (!rateLimit(ip, "auth:login")) return json({ error: "Too many login attempts" }, 429, origin, log);
         const body = await readJson(request); const identifier = String(body.identifier || "").trim();
         if (!identifier || !validPassword(body.password)) return json({ error: "Invalid username or password" }, 401, origin, log);
+        // Distributed brute-force guard: identifier+IP pairs locked in D1
+        // after repeated consecutive failures (shared across all isolates).
+        if (!(await loginLockoutCheck(env, identifier, ip))) {
+          await verifyDummyPassword(body.password);
+          return json({ error: "Too many failed attempts — try again later" }, 429, origin, log);
+        }
         if (!await verifyTurnstile(body.turnstileToken, env)) return json({ error: "Verification failed" }, 400, origin, log);
         const user = await env.DB.prepare("SELECT * FROM users WHERE has_password = 1 AND (username = ? COLLATE NOCASE OR email = ? COLLATE NOCASE)").bind(identifier, identifier).first<any>();
         if (!user) {
           await verifyDummyPassword(body.password);
+          await loginFailureRecord(env, identifier, ip);
           return json({ error: "Invalid username or password" }, 401, origin, log);
         }
-        if (!await passwordMatches(body.password, user.password_salt, user.password_hash)) return json({ error: "Invalid username or password" }, 401, origin, log);
+        if (!(await passwordMatches(body.password, user.password_salt, user.password_hash))) {
+          await loginFailureRecord(env, identifier, ip);
+          return json({ error: "Invalid username or password" }, 401, origin, log);
+        }
+        await loginFailureClear(env, identifier, ip);
         return json(await issueSession(user, env), 200, origin, log);
       }
 
@@ -3723,6 +3869,7 @@ export default {
         return json({ ok: true }, 200, origin, log);
       }
       if (request.method === "POST" && url.pathname === "/v1/auth/verify/confirm") {
+        if (!rateLimit(ip, "auth:register")) return json({ error: "Too many attempts" }, 429, origin, log);
         const body = await readJson(request);
         if (typeof body.token !== "string" || !body.token) return json({ error: "Invalid verification request" }, 400, origin, log);
         const row = await env.DB.prepare("SELECT * FROM email_verify_tokens WHERE token_hash = ? AND used_at IS NULL AND expires_at > ?").bind(await sha256(body.token), now()).first<any>();
@@ -3776,6 +3923,12 @@ export default {
       if (request.method === "GET" && url.pathname === "/v1/search") {
         const session = await requireUser(request, env);
         if (!session) return json({ error: "Authentication required" }, 401, origin, log);
+        // users/audit scopes are privileged recon — students get content only.
+        const requestedTypes = (url.searchParams.get("types") || "content").split(",");
+        const privileged = isAdmin(session);
+        const types = requestedTypes.filter((t) => t === "content" || (privileged && (t === "users" || t === "audit")));
+        if (!types.includes("content")) url.searchParams.set("types", privileged ? requestedTypes.join(",") : "");
+        else url.searchParams.set("types", types.join(","));
         if (!rateLimit(ip, "search")) return json({ error: "Too many requests" }, 429, origin, log);
         return handleSearch(request, env, session, log);
       }
