@@ -158,6 +158,13 @@ async function idbClear(storeName: string): Promise<void> {
   }));
 }
 
+/** Imported sync keys (P2P / QR / file) are untrusted. "__proto__" etc. as
+ *  data keys would set object prototypes when records are merged into plain
+ *  objects later — never let them into IndexedDB. */
+function isSafeImportKey(key: string): boolean {
+  return key !== "__proto__" && key !== "constructor" && key !== "prototype";
+}
+
 async function idbPutBatch(storeName: string, entries: Array<{ key: string; value: unknown }>): Promise<void> {
   const db = await openDB();
   return trackWrite(new Promise((resolve, reject) => {
@@ -921,7 +928,7 @@ export const storage = {
     const rawProgress = data["osler_raw_progress"] as Record<string, QuestionRecord> | undefined;
     if (rawProgress && typeof rawProgress === "object") {
       const entries = Object.entries(rawProgress)
-        .filter(([, v]) => v && typeof v === "object" && "uid" in v && "qid" in v)
+        .filter(([key, v]) => isSafeImportKey(key) && v && typeof v === "object" && "uid" in v && "qid" in v)
         .map(([key, value]) => ({ key, value }));
       if (entries.length > 0) {
         await idbPutBatch("progress", entries);
@@ -953,7 +960,7 @@ export const storage = {
     const flashcards = data["osler_flashcard_reviews"] as Record<string, FlashcardReviewRecord> | undefined;
     if (flashcards && typeof flashcards === "object") {
       const entries = Object.entries(flashcards)
-        .filter(([, v]) => v && typeof v === "object" && "dueDate" in v)
+        .filter(([key, v]) => isSafeImportKey(key) && v && typeof v === "object" && "dueDate" in v)
         .map(([key, value]) => ({ key, value }));
       if (entries.length > 0) {
         await idbPutBatch("flashcardReviews", entries);
@@ -971,7 +978,7 @@ export const storage = {
         key: key.replace("osler_article_highlights_", ""),
         value: value as HighlightItem[],
       }))
-      .filter((e) => Array.isArray(e.value));
+      .filter((e) => isSafeImportKey(e.key) && Array.isArray(e.value));
     if (articleHlEntries.length > 0) {
       await idbPutBatch("articleHighlights", articleHlEntries);
       for (const e of articleHlEntries) {

@@ -41,6 +41,13 @@ const TIMESTAMP_KIND: Record<string, { field: string; fallback?: string }> = {
   achievements: { field: "unlockedAt" },
 };
 
+/** Record keys from sync payloads are attacker-controllable (P2P import,
+ *  cloud PUT). "__proto__"/"constructor"/"prototype" as data keys would
+ *  silently drop records during merge (or set object prototypes) — skip them. */
+function isSafeRecordKey(key: string): boolean {
+  return key !== "__proto__" && key !== "constructor" && key !== "prototype";
+}
+
 function itemTime(value: any, cfg: { field: string; fallback?: string }): number {
   let t = value?.[cfg.field];
   if ((t === undefined || t === null || t === 0) && cfg.fallback) t = value?.[cfg.fallback];
@@ -51,6 +58,7 @@ function mergeBy(remote: Record<string, any>, local: Record<string, any>, cfg: {
   const out: Record<string, any> = { ...remote };
   let changed = false;
   for (const [key, value] of Object.entries(local || {})) {
+    if (!isSafeRecordKey(key)) continue;
     if (!value || typeof value !== "object") continue;
     const existing = out[key];
     if (!existing) {
@@ -108,6 +116,7 @@ function mergeItemArrays(remote: Record<string, any>, local: Record<string, any>
   const out: Record<string, any> = { ...remote };
   let changed = false;
   for (const [key, incoming] of Object.entries(local || {})) {
+    if (!isSafeRecordKey(key)) continue;
     if (!Array.isArray(incoming)) continue;
     const current = Array.isArray(out[key]) ? out[key] : [];
     const merged = mergeItemLists(current, incoming);
@@ -127,6 +136,7 @@ function mergeUnion(remote: Record<string, any>, local: Record<string, any>): Me
   const out: Record<string, any> = { ...remote };
   let changed = false;
   for (const [k, v] of Object.entries(local || {})) {
+    if (!isSafeRecordKey(k)) continue;
     if (!(k in out) || JSON.stringify(out[k]) !== JSON.stringify(v)) {
       out[k] = v;
       changed = true;
@@ -146,6 +156,7 @@ function mergeDictDeep(remote: Record<string, any>, local: Record<string, any>, 
   const out: Record<string, any> = { ...remote };
   let changed = false;
   for (const [k, v] of Object.entries(local || {})) {
+    if (!isSafeRecordKey(k)) continue;
     if (v && typeof v === "object" && !Array.isArray(v) && out[k] && typeof out[k] === "object" && !Array.isArray(out[k])) {
       const sub = mergeDictDeep(out[k], v, depth + 1);
       if (sub.changed) { out[k] = sub.records; changed = true; }

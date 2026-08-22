@@ -2763,10 +2763,14 @@ async function handleAdmin(request: Request, env: Env, session: Session, url: UR
       // Dedupe (a folder's staged children can be collected more than once)
       // and skip folder placeholders that carry no student-facing content.
       const unique = [...new Set(keys)].filter((k): k is string => typeof k === "string" && !k.endsWith("/") && !k.endsWith("/.keep"));
+      // Each key costs 3 subrequests (get, put, delete) and Workers Free caps
+      // subrequests at 50 per invocation — bound the batch and report the
+      // remainder so the admin UI can re-invoke.
+      const MAX_PUBLISH_PER_RUN = 14;
       const categories = new Set<string>();
       const published: string[] = [];
       let failed = 0;
-      for (const key of unique) {
+      for (const key of unique.slice(0, MAX_PUBLISH_PER_RUN)) {
         const rel = key.slice("content-staging/".length);
         const cat = rel.split("/")[0];
         // Guard against staged keys whose top-level segment isn't a content
@@ -2793,8 +2797,9 @@ async function handleAdmin(request: Request, env: Env, session: Session, url: UR
       for (const cat of categories) {
         try { await regenerateManifestForCategory(env, cat); } catch (e) { console.error("manifest regen failed:", e); }
       }
+      const remainingKeys = Math.max(0, unique.length - MAX_PUBLISH_PER_RUN);
       await auditLog(env, session.user.id, "publish_staged", null, { keys: unique.length, published: published.length, failed }, log);
-      return json({ ok: true, published }, 200, origin, log);
+      return json({ ok: true, published, remaining: remainingKeys, complete: remainingKeys === 0 && failed === 0 }, 200, origin, log);
     }
     if (request.method === "POST" && path === "/v1/admin/content/discard-staged") {
       if (!isAdmin(session)) return json({ error: "Forbidden" }, 403, origin, log);
@@ -2803,13 +2808,17 @@ async function handleAdmin(request: Request, env: Env, session: Session, url: UR
       const body = await readJson(request);
       const keys: string[] = Array.isArray(body.keys) ? body.keys.filter((k: any): k is string => typeof k === "string" && k.startsWith("content-staging/") && !k.includes("..") && !k.includes("\\")) : [];
       if (!keys.length) return json({ error: "keys required" }, 400, origin, log);
+      // One delete subrequest per key — bound the run to stay under the
+      // Workers Free 50-subrequest cap and report the remainder.
+      const MAX_DISCARD_PER_RUN = 40;
       let deleted = 0;
-      for (const key of [...new Set(keys)]) {
+      for (const key of [...new Set(keys)].slice(0, MAX_DISCARD_PER_RUN)) {
         await env.CONTENT.delete(key);
         deleted += 1;
       }
+      const discardRemaining = Math.max(0, keys.length - deleted);
       await auditLog(env, session.user.id, "discard_staged", null, { keys: keys.length, deleted }, log);
-      return json({ ok: true, deleted }, 200, origin, log);
+      return json({ ok: true, deleted, remaining: discardRemaining, complete: discardRemaining === 0 }, 200, origin, log);
     }
     if (request.method === "POST" && path === "/v1/admin/content/r2-rename") {
       if (!isAdmin(session)) return json({ error: "Forbidden" }, 403, origin, log);
@@ -3605,6 +3614,10 @@ export default {
       // the browser allows the Pages site to read the body. The default
       // SECURITY_HEADERS has CORP=same-origin, which would block these reads.
       if (request.method === "GET" && url.pathname.startsWith("/v1/content/")) {
+        // Public but billed: every miss costs a Worker request + an R2 read.
+        // 240/min/IP is far above real study traffic, while capping the
+        // blast radius of cache-busting junk requests on the free tier.
+        if (!rateLimit(ip, "content")) return json({ error: "Too many requests" }, 429, origin, log);
         let contentPath = url.pathname.slice("/v1/content/".length).replace(/\/{2,}/g, "/");
         // Paths can carry percent-encoded characters (folder names with spaces,
         // e.g. "Cardiology AR" → "Cardiology%20AR"). Decode BEFORE validating so
@@ -3774,22 +3787,28 @@ export default {
         if (!identifier || !validPassword(body.password)) return json({ error: "Invalid username or password" }, 401, origin, log);
         // Distributed brute-force guard: identifier+IP pairs locked in D1
         // after repeated consecutive failures (shared across all isolates).
-        if (!(await loginLockoutCheck(env, identifier, ip))) {
+        // The identifier is lowercased for both the lockout key AND the user
+        // lookup below, so "Admin"/"ADMIN" rotations can't spread attempts
+        // across separate lockout rows for the same account.
+        const identifierKey = identifier.toLowerCase();
+        if (!(await loginLockoutCheck(env, identifierKey, ip))) {
           await verifyDummyPassword(body.password);
-          return json({ error: "Too many failed attempts — try again later" }, 429, origin, log);
+          return json({ error: "Too many failed attempts - try again later" }, 429, origin, log);
         }
         if (!await verifyTurnstile(body.turnstileToken, env)) return json({ error: "Verification failed" }, 400, origin, log);
-        const user = await env.DB.prepare("SELECT * FROM users WHERE has_password = 1 AND (username = ? COLLATE NOCASE OR email = ? COLLATE NOCASE)").bind(identifier, identifier).first<any>();
+        // COLLATE NOCASE handles ASCII case-insensitivity; lowercasing first
+        // keeps the lookup consistent with the lockout key.
+        const user = await env.DB.prepare("SELECT * FROM users WHERE has_password = 1 AND (username = ? COLLATE NOCASE OR email = ? COLLATE NOCASE)").bind(identifierKey, identifierKey).first<any>();
         if (!user) {
           await verifyDummyPassword(body.password);
-          await loginFailureRecord(env, identifier, ip);
+          await loginFailureRecord(env, identifierKey, ip);
           return json({ error: "Invalid username or password" }, 401, origin, log);
         }
         if (!(await passwordMatches(body.password, user.password_salt, user.password_hash))) {
-          await loginFailureRecord(env, identifier, ip);
+          await loginFailureRecord(env, identifierKey, ip);
           return json({ error: "Invalid username or password" }, 401, origin, log);
         }
-        await loginFailureClear(env, identifier, ip);
+        await loginFailureClear(env, identifierKey, ip);
         return json(await issueSession(user, env), 200, origin, log);
       }
 
@@ -3898,6 +3917,16 @@ export default {
         if (typeof body.token !== "string" || !body.token) return json({ error: "Invalid verification request" }, 400, origin, log);
         const row = await env.DB.prepare("SELECT * FROM email_verify_tokens WHERE token_hash = ? AND used_at IS NULL AND expires_at > ?").bind(await sha256(body.token), now()).first<any>();
         if (!row) return json({ error: "This verification link is invalid or expired" }, 400, origin, log);
+        // The token proves ownership of row.email — not of whatever address
+        // the user has since switched to. If the account's current email no
+        // longer matches, the link is stale: reject instead of marking an
+        // address the user may not own as verified.
+        const user = await env.DB.prepare("SELECT email FROM users WHERE id = ?").bind(row.user_id).first<{ email: string | null }>();
+        const currentEmail = (user?.email ?? "").toLowerCase();
+        const tokenEmail = String(row.email ?? "").toLowerCase();
+        if (!currentEmail || !tokenEmail || currentEmail !== tokenEmail) {
+          return json({ error: "This verification link was issued for a different email address" }, 400, origin, log);
+        }
         await env.DB.batch([
           env.DB.prepare("UPDATE users SET email_verified_at = ? WHERE id = ?").bind(now(), row.user_id),
           env.DB.prepare("UPDATE email_verify_tokens SET used_at = ? WHERE id = ?").bind(now(), row.id),
