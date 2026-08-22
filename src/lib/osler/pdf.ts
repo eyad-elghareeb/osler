@@ -222,6 +222,18 @@ function clamp(val: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, val));
 }
 
+/** English ordinal suffix — 1st / 2nd / 3rd / 4th / 11th-13th → "th". */
+function ordinalSuffix(n: number): string {
+  const v = n % 100;
+  if (v >= 11 && v <= 13) return "th";
+  switch (n % 10) {
+    case 1: return "st";
+    case 2: return "nd";
+    case 3: return "rd";
+    default: return "th";
+  }
+}
+
 /** Small-caps tracking via inter-character spacing (no kerning API in core PDF text). */
 function tracked(text: string): string {
   return text.split("").join(" ");
@@ -602,7 +614,9 @@ class PdfDoc {
     d.setFillColor(...C.GOLD);
     d.rect(0, 0, pw, 0.85, "F");
 
-    // Document title, tracked small caps, left aligned.
+    // Document title, tracked small caps — left for LTR docs, right for
+    // Arabic ones (the section pill mirrors to the opposite corner so the
+    // two never collide).
     const baseline = hh * 0.58;
     const titleRaw = trunc(this.title, 52);
     const titleAr = hasArabic(titleRaw);
@@ -615,7 +629,7 @@ class PdfDoc {
       d.text(tracked(titleRaw.toUpperCase()), ms, baseline);
     }
 
-    // Section pill, right aligned.
+    // Section pill — opposite corner from the title.
     if (this.headerLabel) {
       const headerAr = hasArabic(this.headerLabel);
       const label = headerAr ? this.headerLabel : tracked(this.headerLabel.toUpperCase());
@@ -625,7 +639,7 @@ class PdfDoc {
       const padX = 3.2;
       const pillW = tw + padX * 2;
       const pillH = 5.6 * typeScale;
-      const pillX = pw - ms - pillW;
+      const pillX = titleAr ? ms : pw - ms - pillW;
       const pillY = baseline - pillH * 0.72;
       d.setFillColor(...tint.bg);
       d.roundedRect(pillX, pillY, pillW, pillH, pillH / 2, pillH / 2, "F");
@@ -655,18 +669,27 @@ class PdfDoc {
 
     const footerBaseline = ph - fh * 0.34;
 
-    // Brand wordmark, bottom-left.
+    // Footer mirrors with the header: brand wordmark on the reading-start
+    // corner, short doc title on the opposite edge.
     d.setFont(F.Hl, hs("normal"));
     d.setFontSize(6.2 * typeScale);
     d.setTextColor(...C.MUTED);
-    d.text(tracked("OSLER"), ms, footerBaseline);
+    if (titleAr) {
+      d.text(tracked("OSLER"), pw - ms, footerBaseline, { align: "right" });
+    } else {
+      d.text(tracked("OSLER"), ms, footerBaseline);
+    }
 
-    // Short doc title, bottom-right (helps loose printed pages find their way home).
+    // Short doc title (helps loose printed pages find their way home).
     const shortTitle = trunc(this.title, 34);
     d.setFont(hasArabic(shortTitle) ? "Cairo" : F.Hl, hs("normal"));
     d.setFontSize(6.2 * typeScale);
     d.setTextColor(...C.MUTED);
-    d.text(shortTitle, pw - ms, footerBaseline, { align: "right" });
+    if (titleAr) {
+      d.text(shortTitle, ms, footerBaseline);
+    } else {
+      d.text(shortTitle, pw - ms, footerBaseline, { align: "right" });
+    }
 
     // Page-number slot is intentionally left blank — stamped in finalize()
     // once the true page count is known.
@@ -980,7 +1003,7 @@ class PdfDoc {
     d.setFont(titleIsAr ? "Cairo" : F.H, hs("bold"));
     d.setFontSize(titleSize);
     d.setTextColor(...C.WHITE);
-    const titleLines: string[] = d.splitTextToSize(normalizeText(cfg.title || "Report"), pw * 0.76);
+    const titleLines: string[] = d.splitTextToSize(normalizeText(cfg.title || this.t("pdf.tpl.report")), pw * 0.76);
     d.text(titleLines, pw / 2, cy, { align: "center" });
     cy += titleLines.length * lh(titleSize, titleIsAr ? 1.25 : 1.08) + 6;
 
@@ -1100,7 +1123,12 @@ class PdfDoc {
     d.setFont(F.Hn, hs("normal"));
     d.setFontSize(7.6 * this.L.typeScale);
     d.setTextColor(...C.MUTED);
-    d.text(`${qCount} Q`, this.L.ms + this.L.fw, this.y, { align: "right" });
+    const qLabel = `${qCount} ${this.t("pdf.tpl.q")}`;
+    const qLabelAr = hasArabic(qLabel);
+    if (qLabelAr) {
+      d.setFont("Cairo", hs("normal"));
+    }
+    d.text(qLabel, this.L.ms + this.L.fw, this.y, { align: "right" });
 
     const linkH = desc ? 15 : 10;
     d.link(this.L.ms, entryTop - 5, this.L.fw, linkH, { pageNumber: targetPage });
@@ -1137,8 +1165,8 @@ class PdfDoc {
         d.setFontSize(20 * this.L.typeScale);
         d.setTextColor(...C.INK);
         const lines: string[] = d.splitTextToSize(title, fw);
-        if (titleIsAr) d.text(lines, this.L.ms + fw, this.y, { align: "right" });
-        else d.text(lines, this.L.ms + fw / 2, this.y, { align: "center" });
+        // Both scripts center — a lone chapter opener reads as a title page.
+        d.text(lines, this.L.ms + fw / 2, this.y, { align: "center" });
         this.y += lines.length * lh(20 * this.L.typeScale, 1.2) + sp(1.5, density);
       }
       if (desc) {
@@ -1147,8 +1175,7 @@ class PdfDoc {
         d.setFontSize(9.5 * this.L.typeScale);
         d.setTextColor(...C.MUTED);
         const lines: string[] = d.splitTextToSize(stripMd(desc), fw - 10);
-        if (descIsAr) d.text(lines, this.L.ms + fw, this.y, { align: "right" });
-        else d.text(lines, this.L.ms + fw / 2, this.y, { align: "center" });
+        d.text(lines, this.L.ms + fw / 2, this.y, { align: "center" });
         this.y += lines.length * lh(9.5 * this.L.typeScale) + sp(2.5, density);
       }
       this.y = this.hRule(this.y, fw * 0.28, 0.6, C.GOLD, this.L.ms + fw * 0.36);
@@ -1264,6 +1291,13 @@ class PdfDoc {
         const bl = d.splitTextToSize(normalizeText(mRaw), cw - pad * 2).length;
       h += sp(4, density) + bl * lh(8.6 * ts, mAr ? 1.3 : 1.45) + sp(1.5, density) + sp(1.5, density);
     }
+
+    // "See Answer Key" pointer line + trailing hairline — previously
+    // omitted, which made checkPage break columns a few mm too early.
+    if ((am === "endchapter" || am === "endbook") && !written) {
+      h += sp(1.5, density) + 3;
+    }
+    h += sp(0.75, density);
 
     d.setFont(saveFont.fontName, saveFont.fontStyle);
     d.setFontSize(saveSize);
@@ -1452,10 +1486,12 @@ class PdfDoc {
 
     d.setFillColor(...C.EMERALD);
     d.roundedRect(this.L.ms, this.y, fw, bannerH, 1.2, 1.2, "F");
-    d.setFillColor(...C.GOLD);
-    d.rect(this.L.ms, this.y, 1.6, bannerH, "F");
 
     const titleAr = hasArabic(title);
+    // Accent edge sits on the reading-start side of the banner.
+    d.setFillColor(...C.GOLD);
+    d.rect(titleAr ? this.L.ms + fw - 1.6 : this.L.ms, this.y, 1.6, bannerH, "F");
+
     d.setFont(titleAr ? "Cairo" : F.H, hs("bold"));
     d.setFontSize(11 * this.L.typeScale);
     d.setTextColor(...C.WHITE);
@@ -1565,9 +1601,13 @@ class PdfDoc {
     d.setTextColor(...C.ROYAL);
     d.text(`${score.percentile}`, cx, this.y + cardH * 0.6, { align: "center" });
     const numW = d.getTextWidth(`${score.percentile}`);
-    d.setFont(F.Hn, hs("normal"));
-    d.setFontSize(7.5 * ts);
-    d.text(this.t("pdf.tpl.th"), cx + numW / 2 + 2, this.y + cardH * 0.5);
+    // English ordinals decline (1st/2nd/3rd/4th); Arabic omits the marker.
+    const ordinal = this.lang === "ar" ? "" : ordinalSuffix(score.percentile);
+    if (ordinal) {
+      d.setFont(F.Hn, hs("normal"));
+      d.setFontSize(7.5 * ts);
+      d.text(ordinal, cx + numW / 2 + 2, this.y + cardH * 0.5);
+    }
 
     d.setFontSize(6.6 * ts);
     d.setTextColor(...C.MUTED);
@@ -2344,7 +2384,7 @@ export function generateArticlePdf(cfg: ArticlePdfConfig): jsPDF {
           d.setFont(isAr ? "Cairo" : F.H, hs("bold"));
           d.setFontSize(14 * ts);
           d.setTextColor(...C.INK);
-          const hLines: string[] = d.splitTextToSize(block.text, fw);
+          const hLines: string[] = d.splitTextToSize(normalizeText(block.text), fw);
           if (isAr) d.text(hLines, x + fw, doc.y, { align: "right" });
           else d.text(hLines, x, doc.y);
           doc.y += hLines.length * lh(14 * ts, isAr ? 1.3 : 1.45) + sp(0.5, density);
@@ -2361,7 +2401,7 @@ export function generateArticlePdf(cfg: ArticlePdfConfig): jsPDF {
           d.setFont(isAr ? "Cairo" : F.H, hs("bold"));
           d.setFontSize(11.5 * ts);
           d.setTextColor(...C.COBALT);
-          const hLines: string[] = d.splitTextToSize(block.text, fw);
+          const hLines: string[] = d.splitTextToSize(normalizeText(block.text), fw);
           if (isAr) d.text(hLines, x + fw, doc.y, { align: "right" });
           else d.text(hLines, x, doc.y);
           doc.y += hLines.length * lh(11.5 * ts, isAr ? 1.3 : 1.45) + sp(1.2, density);
@@ -2376,7 +2416,7 @@ export function generateArticlePdf(cfg: ArticlePdfConfig): jsPDF {
           d.setFont(isAr ? "Cairo" : F.Hm, hs("bold"));
           d.setFontSize(9.8 * ts);
           d.setTextColor(...C.SLATE);
-          const hLines: string[] = d.splitTextToSize(block.text, fw);
+          const hLines: string[] = d.splitTextToSize(normalizeText(block.text), fw);
           if (isAr) d.text(hLines, x + fw, doc.y, { align: "right" });
           else d.text(hLines, x, doc.y);
           doc.y += hLines.length * lh(9.8 * ts, isAr ? 1.3 : 1.45) + sp(0.8, density);
@@ -2386,26 +2426,26 @@ export function generateArticlePdf(cfg: ArticlePdfConfig): jsPDF {
       case "blockquote": {
         doc.checkPage(sp(5, density));
         doc.y += sp(0.5, density);
-        // Draw blockquote bar
-        d.setFillColor(...C.PALE_BLUE);
-        d.rect(x, doc.y, 1.6, 0, "F");
-        d.setDrawColor(...C.COBALT);
-        d.setLineWidth(0.5);
         // Estimate height
         const bqFontSize = 8.8 * ts;
         const bqIsAr = hasArabic(block.text);
         d.setFont(bqIsAr ? "Cairo" : F.Bi, hs(bqIsAr ? "normal" : "italic"));
         d.setFontSize(bqFontSize);
-        const bqLines: string[] = d.splitTextToSize(block.text, fw - 6);
+        const bqLines: string[] = d.splitTextToSize(normalizeText(block.text), fw - 6);
         const bqH = bqLines.length * lh(bqFontSize, bqIsAr ? 1.3 : 1.45) + sp(2, density);
         d.setFillColor(...C.PALE_BLUE);
         d.setDrawColor(...C.COBALT);
         d.setLineWidth(0.5);
         d.rect(x, doc.y, fw, bqH, "FD");
         d.setFillColor(255, 255, 255);
-        d.rect(x, doc.y, 1.6, bqH, "F");
-        d.setDrawColor(...C.COBALT);
-        d.line(x, doc.y, x, doc.y + bqH);
+        // Quote accent sits on the reading-start side.
+        if (bqIsAr) {
+          d.rect(x + fw - 1.6, doc.y, 1.6, bqH, "F");
+          d.line(x + fw, doc.y, x + fw, doc.y + bqH);
+        } else {
+          d.rect(x, doc.y, 1.6, bqH, "F");
+          d.line(x, doc.y, x, doc.y + bqH);
+        }
         d.setTextColor(...C.SLATE);
         if (bqIsAr) d.text(bqLines, x + fw - 2, doc.y + sp(1, density), { align: "right" });
         else d.text(bqLines, x + 4, doc.y + sp(1, density));
@@ -2420,14 +2460,18 @@ export function generateArticlePdf(cfg: ArticlePdfConfig): jsPDF {
         d.setTextColor(...C.SLATE);
         // Code blocks are virtually always LTR — keep them LTR even if they
         // contain an Arabic string literal, so the indentation reads correctly.
-        const codeLines: string[] = d.splitTextToSize(block.text, fw - 8);
+        const codeLines: string[] = d.splitTextToSize(normalizeText(block.text), fw - 10);
         const codeH = codeLines.length * lh(7.8 * ts, 1.3) + sp(2, density);
+        // Panel styling: darker fill + accent edge so code reads as a
+        // distinct block even without an embedded mono font.
         d.setFillColor(...C.RULE_SOFT);
         d.setDrawColor(...C.RULE);
         d.setLineWidth(0.3);
         d.roundedRect(x, doc.y, fw, codeH, 1, 1, "FD");
+        d.setFillColor(...C.COBALT);
+        d.rect(x, doc.y, 1.2, codeH, "F");
         d.setTextColor(...C.CHARCOAL);
-        d.text(codeLines, x + 4, doc.y + sp(1, density));
+        d.text(codeLines, x + 5, doc.y + sp(1, density));
         doc.y += codeH + sp(2, density);
         break;
       }
@@ -2448,7 +2492,7 @@ export function generateArticlePdf(cfg: ArticlePdfConfig): jsPDF {
             d.setTextColor(...C.CHARCOAL);
             const marker = block.isOrdered ? `${i + 1}.` : "\u2022";
             const markerW = d.getTextWidth(marker) + 2;
-            const lines: string[] = d.splitTextToSize(itemRaw, fw - 4 - markerW);
+            const lines: string[] = d.splitTextToSize(normalizeText(itemRaw), fw - 4 - markerW);
             doc.checkPage(lines.length * lh(9 * ts, 1.3));
             // Marker flush-right at the column edge.
             d.setTextColor(...C.COBALT);
@@ -2463,7 +2507,7 @@ export function generateArticlePdf(cfg: ArticlePdfConfig): jsPDF {
             d.setTextColor(...C.CHARCOAL);
             const prefix = block.isOrdered ? `${i + 1}. ` : "  \u2022  ";
             const itemText = `${prefix}${itemRaw}`;
-            const lines: string[] = d.splitTextToSize(itemText, fw - 4);
+            const lines: string[] = d.splitTextToSize(normalizeText(itemText), fw - 4);
             doc.checkPage(lines.length * lh(9 * ts));
             d.text(lines, x + 2, doc.y);
             doc.y += lines.length * lh(9 * ts) + sp(0.3, density);
@@ -2481,10 +2525,9 @@ export function generateArticlePdf(cfg: ArticlePdfConfig): jsPDF {
           const colW = fw / colCount;
           d.setFontSize(7.2 * ts);
           // Pre-measure every cell so each row is as tall as its tallest
-          // wrapped line — the old fixed-height + char-estimate truncated
-          // real content.
+          // wrapped line — fixed-height rows truncated real content.
           const measured = rows.map((row) =>
-            row.map((cellText, ci) => {
+            row.map((cellText) => {
               const cellIsAr = hasArabic(cellText);
               d.setFont(cellIsAr ? "Cairo" : F.Hm, hs("normal"));
               return {
@@ -2494,29 +2537,24 @@ export function generateArticlePdf(cfg: ArticlePdfConfig): jsPDF {
               };
             }),
           );
+          let headerRow = measured[0];
+          const rowHeight = (row: typeof measured[number]) =>
+            Math.max(5.5 * ts, Math.max(...row.map((c) => Math.min(c.lines.length, 4))) * 3.6 * ts + 2);
           for (let ri = 0; ri < rows.length; ri++) {
             const row = measured[ri];
             const isHeader = ri === 0;
-            const maxLineLines = Math.max(...row.map((c) => Math.min(c.lines.length, 4)));
-            const cellH = Math.max(5.5 * ts, maxLineLines * 3.6 * ts + 2);
+            const cellH = rowHeight(row);
+            // A page/column break mid-table loses the column labels —
+            // detect the jump and re-draw the header row first.
+            const beforePage = doc.page;
+            const beforeCol = doc.col;
+            const beforeY = doc.y;
             doc.checkPage(cellH + 2);
-            for (let ci = 0; ci < colCount; ci++) {
-              const cellX = x + ci * colW;
-              const cell = row[ci] ?? { text: "", isAr: false, lines: [] as string[] };
-              d.setFillColor(...(isHeader ? C.PALE_BLUE : C.WHITE));
-              d.setDrawColor(...C.RULE);
-              d.setLineWidth(0.2);
-              d.rect(cellX, doc.y, colW, cellH, "FD");
-              d.setFont(cell.isAr ? "Cairo" : F.Hm, hs(isHeader ? "bold" : "normal"));
-              d.setFontSize(isHeader ? 7.6 * ts : 7.2 * ts);
-              d.setTextColor(...(isHeader ? C.COBALT : C.CHARCOAL));
-              const shown = cell.lines.slice(0, 4);
-              if (cell.isAr) {
-                d.text(shown, cellX + colW - 1.5, doc.y + 3.4, { align: "right" });
-              } else {
-                d.text(shown, cellX + 1.5, doc.y + 3.4);
-              }
+            if ((doc.page !== beforePage || doc.col !== beforeCol || doc.y < beforeY - 1) && !isHeader) {
+              drawTableRow(doc, headerRow, true, x, colW, colCount, rowHeight(headerRow));
+              doc.y += rowHeight(headerRow);
             }
+            drawTableRow(doc, row, isHeader, x, colW, colCount, cellH);
             doc.y += cellH;
           }
           doc.y += sp(1.5, density);
@@ -2535,6 +2573,37 @@ export function generateArticlePdf(cfg: ArticlePdfConfig): jsPDF {
 
   doc.finalize(contentStartPage);
   return doc.doc;
+}
+
+/** One table row for the article renderer — cells pre-measured by the caller. */
+function drawTableRow(
+  doc: PdfDoc,
+  row: Array<{ text: string; isAr: boolean; lines: string[] }>,
+  isHeader: boolean,
+  x: number,
+  colW: number,
+  colCount: number,
+  cellH: number,
+): void {
+  const d = doc.doc;
+  const ts = doc.L.typeScale;
+  for (let ci = 0; ci < colCount; ci++) {
+    const cellX = x + ci * colW;
+    const cell = row[ci] ?? { text: "", isAr: false, lines: [] as string[] };
+    d.setFillColor(...(isHeader ? C.PALE_BLUE : C.WHITE));
+    d.setDrawColor(...C.RULE);
+    d.setLineWidth(0.2);
+    d.rect(cellX, doc.y, colW, cellH, "FD");
+    d.setFont(cell.isAr ? "Cairo" : F.Hm, hs(isHeader ? "bold" : "normal"));
+    d.setFontSize(isHeader ? 7.6 * ts : 7.2 * ts);
+    d.setTextColor(...(isHeader ? C.COBALT : C.CHARCOAL));
+    const shown = cell.lines.slice(0, 4);
+    if (cell.isAr) {
+      d.text(shown, cellX + colW - 1.5, doc.y + 3.4, { align: "right" });
+    } else {
+      d.text(shown, cellX + 1.5, doc.y + 3.4);
+    }
+  }
 }
 
 // ═══════════════════════════════════════════════════════════════
