@@ -1893,6 +1893,7 @@ function HomeView({
           onOpenChange={setExportDialogOpen}
           node={contextMenuNode}
           items={data?.items ?? []}
+          onLoadPack={loadPack}
         />
       )}
     </div>
@@ -1907,11 +1908,16 @@ function PackExportDialog({
   onOpenChange,
   node,
   items,
+  onLoadPack,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   node: ContentTreeNode;
   items: PackEntry[];
+  /** Lazily fetch pack content the user never opened — without this every
+   *  fresh session exports nothing ("No packs selected") because packs sit
+   *  at content:null until visited. */
+  onLoadPack?: (node: ContentTreeNode) => Promise<AnyContent | null>;
 }) {
   const { t } = useI18n();
   const [styleMode, setStyleMode] = React.useState<"standard" | "compact" | "mcqnotes">("standard");
@@ -1947,38 +1953,55 @@ function PackExportDialog({
   };
 
   const handleExport = async () => {
+    const selected = leafPacks.filter((p) => selectedUids.has(p.uid));
+    if (selected.length === 0) {
+      haptic("error");
+      toast({ title: t("pdf.context.noPacks"), variant: "destructive" });
+      return;
+    }
     setExporting(true);
     try {
-      const selected = leafPacks.filter((p) => selectedUids.has(p.uid));
-      const chapters = selected
-        .map((p) => {
-          const entry = items.find((i) => i.node.uid === p.uid);
-          if (!entry?.content) return null;
-          const questions = toQuestions(entry.content);
-          return {
-            title: p.title,
-            description: entry.content.meta.description ?? "",
-            questions: questions.map((q) => ({
-              stem: q.stem,
-              choices: q.choices ?? [],
-              // Written prompts (correct < 0) must keep their flag — the
-              // old `?? 0` coerced them to "choice A is correct" and drew
-              // a false answer badge on every written question.
-              correct: q.correct ?? 0,
-              explanation: q.explanation ?? "",
-              modelAnswer: (q as any).modelAnswer,
-              rubric: (q as any).rubric,
-              isWritten: q.correct !== undefined && q.correct < 0,
-              difficulty: (q as any).difficulty,
-              tags: (q as any).tags,
-            })),
-          };
-        })
-        .filter(Boolean) as PdfExportConfig["chapters"];
+      // Resolve content for every selected pack — unopened packs sit at
+      // content:null until now, which used to filter out ALL chapters and
+      // surface a misleading "No packs selected" error.
+      const chapters: PdfExportConfig["chapters"] = [];
+      let skipped = 0;
+      for (const p of selected) {
+        const entry = items.find((i) => i.node.uid === p.uid);
+        let content = entry?.content ?? null;
+        if (!content && onLoadPack) content = await onLoadPack(p);
+        if (!content || countQuestions(content) === 0) {
+          skipped += 1;
+          continue;
+        }
+        const questions = toQuestions(content);
+        chapters.push({
+          title: p.title,
+          description: content.meta.description ?? "",
+          questions: questions.map((q) => ({
+            stem: q.stem,
+            choices: q.choices ?? [],
+            // Written prompts (correct < 0) must keep their flag — the
+            // old `?? 0` coerced them to "choice A is correct" and drew
+            // a false answer badge on every written question.
+            correct: q.correct ?? 0,
+            explanation: q.explanation ?? "",
+            modelAnswer: (q as any).modelAnswer,
+            rubric: (q as any).rubric,
+            isWritten: q.correct !== undefined && q.correct < 0,
+            difficulty: (q as any).difficulty,
+            tags: (q as any).tags,
+          })),
+        });
+      }
 
       if (chapters.length === 0) {
-        toast({ title: t("pdf.context.noPacks"), variant: "destructive" });
-        setExporting(false);
+        haptic("error");
+        toast({
+          title: t("pdf.context.exportFailed"),
+          description: t("pdf.context.contentUnavailable"),
+          variant: "destructive",
+        });
         return;
       }
 
@@ -1997,8 +2020,13 @@ function PackExportDialog({
       };
       const doc = generateQuizCompilationPdf(cfg);
       downloadPdf(doc, node.title ?? t("pdf.exportQuiz"));
-      toast({ title: t("pdf.pdfReady"), description: t("pdf.pdfReadyDesc") });
+      haptic("success");
+      toast({
+        title: t("pdf.pdfReady"),
+        description: skipped > 0 ? t("pdf.context.skipped", { n: String(skipped) }) : t("pdf.pdfReadyDesc"),
+      });
     } catch (e) {
+      haptic("error");
       toast({ title: t("pdf.context.exportFailed"), description: String(e), variant: "destructive" });
     } finally {
       setExporting(false);
@@ -2531,6 +2559,13 @@ function ContentTab({
                   aria-label={node.title}
                   key={node.uid}
                   onClick={() => setSelectedFolders([node])}
+                  onContextMenu={(e) => {
+                    // Folders export too — the dialog collects every leaf
+                    // pack under the target.
+                    e.preventDefault();
+                    haptic("selection");
+                    onContextMenu?.(e, node);
+                  }}
                   className="osler-fade-in text-start bg-card border border-border rounded-xl p-5 hover:border-primary/40 hover:shadow-md transition-all group flex flex-col gap-3 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 w-full"
                   style={{ animationDelay: `${idx * 0.04}s` }}
                 >
@@ -2661,6 +2696,11 @@ function ContentTab({
                     aria-label={child.title}
                     key={child.uid}
                     onClick={() => setSelectedFolders((folders) => [...folders, child])}
+                    onContextMenu={(e) => {
+                      e.preventDefault();
+                      haptic("selection");
+                      onContextMenu?.(e, child);
+                    }}
                     className="osler-fade-in text-start bg-card border border-border rounded-xl p-5 hover:border-primary/40 hover:shadow-md transition-all group flex flex-col gap-3 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 w-full"
                     style={{ animationDelay: `${idx * 0.04}s` }}
                   >
@@ -2706,7 +2746,7 @@ function ContentTab({
 
               // Leaf child — pack card
               const childContent = contentByUid.get(child.uid);
-              return <PackCard key={child.uid} node={child} content={childContent} index={idx} onLoadPack={onLoadPack} onOpenPack={handleNodeClick} />;
+              return <PackCard key={child.uid} node={child} content={childContent} index={idx} onLoadPack={onLoadPack} onOpenPack={handleNodeClick} onContextMenu={onContextMenu} />;
             })}
           </div>
         )}

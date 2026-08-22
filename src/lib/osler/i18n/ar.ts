@@ -1512,6 +1512,8 @@ export const ar = {
     "pdf.context.questions": "{n} أسئلة",
     "pdf.context.noPacks": "لم يتم تحديد أي حزم",
     "pdf.context.exportFailed": "فشل التصدير",
+    "pdf.context.contentUnavailable": "تعذر تحميل محتوى الحزمة.",
+    "pdf.context.skipped": "تم تخطي {n} حزمة — تعذر تحميل المحتوى",
 
     /* ── سلاسل قالب PDF (تُعرض داخل ملف PDF نفسه) ─────────────────── */
     "pdf.tpl.question": "السؤال",

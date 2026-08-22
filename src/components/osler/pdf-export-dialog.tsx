@@ -318,8 +318,8 @@ export function PdfExportDialog({
                 </div>
               )}
 
-              {/* Two-column toggle (booklets only) */}
-              {variant === "quiz" && (
+              {/* Two-column toggle (any question-bearing document) */}
+              {(variant === "quiz" || variant === "results") && (
                 <div className="flex items-center justify-between">
                   <Label className="text-xs">{t("pdf.twoColumn")}</Label>
                   <Switch checked={twoCol} onCheckedChange={(v) => { haptic("selection"); setTwoCol(v); }} disabled={exporting} aria-label={t("pdf.twoColumn")} />

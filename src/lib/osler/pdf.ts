@@ -1071,13 +1071,16 @@ class PdfDoc {
       cy += 10;
     }
 
-    // Feature checklist.
+    // Feature checklist — capped so a very long title/subtitle stack can
+    // never run the list into the pinned footer note.
     const features = cfg.features ?? [];
+    const featureFloor = ph - inset - 24;
     if (features.length) {
       cy += 3;
       d.setFont(F.Hn, hs("normal"));
       d.setFontSize(8.6);
       for (const f of features) {
+        if (cy >= featureFloor) break;
         const ft = tlabel(f);
         const fw = d.getTextWidth(ft);
         const fx = pw / 2 - fw / 2;
@@ -1259,7 +1262,7 @@ class PdfDoc {
         const isAr = hasArabic(raw);
         d.setFont(isAr ? "Cairo" : F.B, hs("normal"));
         d.setFontSize(8.6 * ts);
-        const cl = d.splitTextToSize(normalizeText(raw), cw - 15).length;
+        const cl = d.splitTextToSize(normalizeText(raw), cw - (isAr ? 13 : 15)).length;
         h += cl * lh(8.6 * ts, isAr ? 1.3 : 1.45) + sp(0.4, density);
       }
     }
@@ -1370,7 +1373,9 @@ class PdfDoc {
           this.y = this.text(choiceText, x, this.y, {
             font: "B", size: 8.6,
             color: (highlight ? C.EMERALD : C.SLATE),
-            maxW: cw - 18,
+            // Mirrors the LTR letter column: text right edge lands beside
+            // the check/letter zone instead of 15mm short of it.
+            maxW: cw - 13,
             align: "right",
           });
         } else {

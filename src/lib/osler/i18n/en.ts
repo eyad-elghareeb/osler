@@ -1516,6 +1516,8 @@ export const en = {
     "pdf.context.questions": "{n} questions",
     "pdf.context.noPacks": "No packs selected",
     "pdf.context.exportFailed": "Export failed",
+    "pdf.context.contentUnavailable": "Pack content could not be loaded.",
+    "pdf.context.skipped": "{n} pack(s) skipped — content unavailable",
 
     /* ── PDF template strings (rendered inside the PDF itself) ─────── */
     "pdf.tpl.question": "QUESTION",
