@@ -65,24 +65,48 @@ Set `ALLOWED_ORIGIN` in `wrangler.toml` to the exact origin hosting the Osler we
 
 To enable Google Sign-In:
 
-1. Create an OAuth 2.0 Client ID in the Google Cloud Console (Web Application).
-2. Set Authorized Redirect URI: `https://<your-worker-domain>.workers.dev/v1/auth/google/callback`.
-3. Set secrets on Cloudflare Worker:
+1. Create an OAuth 2.0 Client ID in [Google Cloud Console](https://console.cloud.google.com) (Google Auth Platform → Credentials → Create credentials → OAuth client ID, type **Web application**).
+   - **Authorized JavaScript origin:** `https://<your-pages-domain>` (e.g. `https://osler-demo.pages.dev`)
+   - **Authorized redirect URI:** `https://<your-worker-domain>.workers.dev/v1/auth/google/callback` — must match `<WORKER_URL>/v1/auth/google/callback` byte-for-byte; the Worker derives it from `WORKER_URL`.
+2. Set secrets on Cloudflare Worker (**never commit them to wrangler.toml**, and paste only the bare values — a client ID pasted with an `https://` prefix will be sent to Google verbatim and rejected):
    ```bash
-   npx wrangler secret put GOOGLE_CLIENT_ID
-   npx wrangler secret put GOOGLE_CLIENT_SECRET
+   npx wrangler secret put GOOGLE_CLIENT_ID      # e.g. 1234567890-abc123.apps.googleusercontent.com
+   npx wrangler secret put GOOGLE_CLIENT_SECRET  # e.g. GOCSPX-...
    ```
-4. Set `WORKER_URL = "https://<your-worker-domain>.workers.dev"` in `wrangler.toml`.
+3. Set `WORKER_URL = "https://<your-worker-domain>.workers.dev"` in `wrangler.toml`.
+4. Verify: `GET /v1/health` should report `"googleEnabled":true`, then test the "Continue with Google" button on the login screen.
 
-When a user clicks "Continue with Google", the Worker generates a cryptographically signed OAuth state with PKCE nonce, redirects to Google's consent screen, verifies Google's ID token server-side upon return, links or creates the account, and performs a single-use secure ticket handoff back to the app.
+When a user clicks "Continue with Google", the Worker generates a cryptographically signed OAuth state with PKCE nonce, redirects to Google's consent screen, verifies Google's ID token server-side upon return, links or creates the account, and performs a single-use secure ticket handoff back to the app (the ticket travels in the URL fragment so it never reaches server logs or Referer).
+
+### Email verification & linking (important for instances without email)
+
+A Google identity can only link onto an **existing password account** when that
+account's email is verified — registration never proves email ownership, so an
+unverified pre-registered address must not absorb someone else's Google login
+(anti-account-jacking guard). Without linking, signing in with Google on such an
+address fails with *"This email is already linked to a password account that has
+not been verified."*
+
+Instances **without** a transactional email provider (`RESEND_API_KEY` unset —
+reset/verification emails then silently no-op) have no self-serve way to verify.
+For those cases an admin can vouch for the address manually:
+
+- **Admin panel → Users → open user → "Email verified" row → Mark verified.**
+  The action is audited (`verify_email` / `unverify_email`) and reversible.
+- API equivalent: `PATCH /v1/admin/users/:id/email-verification` with body
+  `{ "verified": true }` (admin role required).
+
+Only do this for addresses you control or can otherwise confirm — marking an
+address verified asserts its ownership.
 
 ## Accounts & Security
 
-- **PBKDF2 Password Hashing**: Passwords use Web Crypto PBKDF2-SHA-256 with 16-byte random salt and 310,000 iterations.
-- **Password Policy**: Minimum 10 characters, must contain at least 2 character classes (lowercase / uppercase / digit / symbol). Same policy enforced on registration, password change, password reset, and admin-initiated reset.
+- **PBKDF2 Password Hashing**: Passwords use Web Crypto PBKDF2-SHA-256 with 16-byte random salt and 100,000 iterations, compared in constant time.
+- **Password Policy**: Minimum 8 characters, must contain at least 2 character classes (lowercase / uppercase / digit / symbol). Same policy enforced on registration, password change, password reset, and admin-initiated reset.
 - **Account Management**: Users can update their display name and email, set/change password, export account data as JSON, and permanently delete their account with password confirmation.
 - **Roles**: `student` (default), `content_admin` (can create and edit their own content but not approve/publish), and `admin` (full access: manage users, approve/reject/publish content, view audit logs, revoke sessions). Admin role allows accessing administrative features.
-- **Sessions**: HMAC-SHA-256 signed session tokens with server-side revocation in D1. Session tokens are kept in `sessionStorage` (per-tab fast path) mirrored to `localStorage` (cross-tab / cross-restart persistence), with sliding expiry via `POST /v1/auth/refresh` (rotation; 30-day grace on top of the 7-day token TTL). Per-user session cap of 12 concurrent sessions; oldest is auto-revoked when the cap is exceeded. The frontend is a static export — route gating is client-side (`RouteGuard`), no httpOnly cookie — see [`security.md`](./security.md#route-gating-client-side-no-middleware).
+- **Sessions**: HMAC-SHA-256 signed session tokens with server-side revocation in D1. Session tokens are kept in `sessionStorage` (per-tab fast path) mirrored to `localStorage` (cross-tab / cross-restart persistence), with sliding expiry via `POST /v1/auth/refresh` (rotation; 48-hour grace on top of the 7-day token TTL). Per-user session cap of 12 concurrent sessions; oldest is auto-revoked when the cap is exceeded. The frontend is a static export - route gating is client-side (`RouteGuard`), no httpOnly cookie - see [`security.md`](./security.md#route-gating-client-side-no-middleware).
+- **Brute-force protection**: Login failures are counted per identifier+IP in D1 (`login_failures`, migration 0017) — 8 consecutive failures lock the pair for 15 minutes, shared across all worker isolates. The per-IP in-memory rate limiter bounds request bursts; enable Turnstile for full protection against distributed stuffing.
 - **Password Recovery**: Supported via optional Resend API key (`RESEND_API_KEY`, `EMAIL_FROM`, `APP_ORIGIN`). Reset links are valid for 30 minutes and single-use.
 - **Rate Limiting**: Auth endpoints (login, register, reset, google/consume, username-available) are rate-limited per IP using an in-memory LRU bucket, as is admin content management (600/min). Global per-IP cap of 600 requests/min across all rate-limited routes. Returns HTTP 429 when exceeded. For harder guarantees, front the Worker with Cloudflare Rate Limiting Rules in the dashboard.
 - **Audit Log**: Every administrative action (role change, user delete, password reset, session revocation, content create/submit/approve/reject/publish/unpublish/delete) is recorded in `admin_audit`. Retained for 1 year (365 days), pruned by the hourly cron trigger. Viewable at `/admin/audit`.

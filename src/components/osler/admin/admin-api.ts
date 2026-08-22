@@ -19,6 +19,7 @@ export interface AdminUser {
 export interface AdminUserDetail extends AdminUser {
   hasPassword: boolean;
   hasGeminiKey: boolean;
+  emailVerified: boolean;
   activeSessionCount: number;
   content: Array<{
     id: string;
@@ -224,6 +225,7 @@ export const adminApi = {
   deleteUser:      (id: string)                  => req<{ ok: boolean }>(`/v1/admin/users/${id}`, "DELETE"),
   getUserProgress: (id: string)                  => req<UserProgressSummary>(`/v1/admin/users/${id}/progress`),
   clearUserGeminiKey: (id: string)               => req<{ ok: boolean }>(`/v1/admin/users/${id}/gemini-key`, "DELETE"),
+  setUserEmailVerified: (id: string, verified: boolean) => req<{ ok: boolean; emailVerifiedAt: number | null }>(`/v1/admin/users/${id}/email-verification`, "PATCH", { verified }),
 
   // Session management (admin only)
   userSessions:    (id: string)                  => req<{ sessions: AdminSession[] }>(`/v1/admin/users/${id}/sessions`),

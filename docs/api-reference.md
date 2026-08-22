@@ -51,6 +51,7 @@ This is the complete HTTP API reference for the Osler Cloud Worker backend (`clo
    - [PATCH /v1/admin/users/:id](#patch-v1adminusersid)
    - [DELETE /v1/admin/users/:id](#delete-v1adminusersid)
    - [POST /v1/admin/users/:id/reset-password](#post-v1adminusersidreset-password)
+   - [PATCH /v1/admin/users/:id/email-verification](#patch-v1adminusersidemail-verification)
    - [GET /v1/admin/users/:id/sessions](#get-v1adminusersidsessions)
    - [DELETE /v1/admin/users/:id/sessions](#delete-v1adminusersidsessions)
    - [GET /v1/admin/content](#get-v1admincontent)
@@ -1568,6 +1569,8 @@ The following actions are written to the audit log:
 | `change_role` | `PATCH /v1/admin/users/:id` (when role changes) |
 | `delete_user` | `DELETE /v1/admin/users/:id` |
 | `reset_password` | `POST /v1/admin/users/:id/reset-password` |
+| `verify_email` | `PATCH /v1/admin/users/:id/email-verification { verified: true }` |
+| `unverify_email` | `PATCH /v1/admin/users/:id/email-verification { verified: false }` |
 | `revoke_sessions` | `DELETE /v1/admin/users/:id/sessions` |
 | `create_content` | `POST /v1/admin/content` |
 | `submit_content` | `POST /v1/admin/content/:id/submit` |
@@ -1979,17 +1982,63 @@ User not found — `404`:
 { "error": "User not found" }
 ```
 
-Not an admin — `403`:
+Not an admin - `403`:
 
 ```json
 { "error": "Forbidden" }
 ```
 
-Missing or invalid token — `401`:
+Missing or invalid token - `401`:
 
 ```json
 { "error": "Authentication required" }
 ```
+
+---
+
+### PATCH /v1/admin/users/:id/email-verification
+
+Manually set the user's email verification status. Intended for instances **without** a transactional email provider: an unverified email blocks Google sign-in linking (anti-account-jacking guard), and without email delivery there is no self-serve way to verify. The admin vouches for the address instead.
+
+- **Auth**: `admin` only
+- **Body**: JSON
+
+#### Path parameters
+
+| Name | Type | Required | Notes |
+| --- | --- | --- | --- |
+| `id` | string (UUID) | yes | The target user's `users.id` |
+
+#### Request body schema
+
+| Field | Type | Required | Notes |
+| --- | --- | --- | --- |
+| `verified` | boolean | yes | `true` marks the address verified (sets `email_verified_at`), `false` clears it |
+
+#### Example request
+
+```bash
+curl -s -X PATCH https://osler-cloud.example.workers.dev/v1/admin/users/9c7e2f1a-3b4d-4e5f-8a9b-0c1d2e3f4a5b/email-verification \
+  -H "authorization: Bearer eyJhbGciOiJIUzI1NiJ9...." \
+  -H "content-type: application/json" \
+  -d '{"verified":true}'
+```
+
+#### Example success response (200 OK)
+
+```json
+{ "ok": true, "emailVerifiedAt": 1755000000000 }
+```
+
+`emailVerifiedAt` is `null` when marking unverified.
+
+#### Side effects & audit
+
+An audit log entry with action `verify_email` or `unverify_email` is written, including the target's username and email. Verifying an address allows Google sign-in to link onto that password account; un-verifying blocks it again.
+
+#### Example error responses
+
+Missing field / non-boolean - `400`; user without an email address (cannot verify) - `400`; user not found - `404`; non-admin - `403`.
 
 ---
 

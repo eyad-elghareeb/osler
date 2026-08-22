@@ -2574,6 +2574,7 @@ async function handleAdmin(request: Request, env: Env, session: Session, url: UR
     const userIdMatch = path.match(/^\/v1\/admin\/users\/([^/]+)$/);
     const resetPasswordMatch = path.match(/^\/v1\/admin\/users\/([^/]+)\/reset-password$/);
     const geminiKeyMatch = path.match(/^\/v1\/admin\/users\/([^/]+)\/gemini-key$/);
+    const emailVerifyMatch = path.match(/^\/v1\/admin\/users\/([^/]+)\/email-verification$/);
     if (userIdMatch) {
       const targetId = userIdMatch[1];
       if (request.method === "GET") {
@@ -2583,7 +2584,7 @@ async function handleAdmin(request: Request, env: Env, session: Session, url: UR
           env.DB.prepare("SELECT COUNT(*) as n FROM sessions WHERE user_id = ? AND revoked_at IS NULL AND expires_at > ?").bind(targetId, now()).first(),
           env.DB.prepare("SELECT id, title, status, content_type, updated_at FROM content_objects WHERE created_by = ? ORDER BY updated_at DESC LIMIT 25").bind(targetId).all(),
         ]);
-        return json({ ...adminPublicUser(user), hasPassword: !!user.has_password, hasGeminiKey: !!user.gemini_api_key, activeSessionCount: (sessions as any)?.n ?? 0, content: (content.results || []).map((c: any) => ({ id: c.id, title: c.title, status: c.status, contentType: c.content_type, updatedAt: c.updated_at })) }, 200, origin, log);
+        return json({ ...adminPublicUser(user), hasPassword: !!user.has_password, hasGeminiKey: !!user.gemini_api_key, emailVerified: !!user.email_verified_at && user.email_verified_at > 0, activeSessionCount: (sessions as any)?.n ?? 0, content: (content.results || []).map((c: any) => ({ id: c.id, title: c.title, status: c.status, contentType: c.content_type, updatedAt: c.updated_at })) }, 200, origin, log);
       }
       if (request.method === "PATCH") {
         const body = await readJson(request);
@@ -2639,6 +2640,22 @@ async function handleAdmin(request: Request, env: Env, session: Session, url: UR
       await env.DB.prepare("UPDATE users SET gemini_api_key = NULL, gemini_model = NULL, gemini_max_wait = NULL, updated_at = ? WHERE id = ?").bind(now(), targetId).run();
       await auditLog(env, session.user.id, "clear_gemini_key", targetId, { username: user.username }, log);
       return json({ ok: true }, 200, origin, log);
+    }
+    // Manual email-verification flip. The operator vouches for the address —
+    // for instances without a transactional email provider (Resend) there is
+    // no other way to mark an address verified, and an unverified email
+    // blocks Google sign-in linking (anti-account-jacking guard).
+    if (emailVerifyMatch && request.method === "PATCH") {
+      const targetId = emailVerifyMatch[1];
+      const body = await readJson(request);
+      if (typeof body.verified !== "boolean") return json({ error: "verified boolean required" }, 400, origin, log);
+      const user = await env.DB.prepare("SELECT * FROM users WHERE id = ?").bind(targetId).first<any>();
+      if (!user) return json({ error: "User not found" }, 404, origin, log);
+      if (!user.email && body.verified) return json({ error: "User has no email address to verify" }, 400, origin, log);
+      const verifiedAt = body.verified ? now() : null;
+      await env.DB.prepare("UPDATE users SET email_verified_at = ?, updated_at = ? WHERE id = ?").bind(verifiedAt, now(), targetId).run();
+      await auditLog(env, session.user.id, body.verified ? "verify_email" : "unverify_email", targetId, { username: user.username, email: user.email }, log);
+      return json({ ok: true, emailVerifiedAt: verifiedAt }, 200, origin, log);
     }
   }
 

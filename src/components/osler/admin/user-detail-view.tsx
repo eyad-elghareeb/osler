@@ -19,6 +19,8 @@ import {
   KeyRound,
   Trash2,
   ChevronDown,
+  MailCheck,
+  Loader2,
   type LucideIcon,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -76,6 +78,23 @@ export function UserDetailView({ userId }: UserDetailViewProps) {
   const [resetting, setResetting] = React.useState(false);
   const [deleteOpen, setDeleteOpen] = React.useState(false);
   const [deleting, setDeleting] = React.useState(false);
+  const [verifying, setVerifying] = React.useState(false);
+
+  async function toggleEmailVerification() {
+    if (!user || !user.email) return;
+    haptic("light");
+    setVerifying(true);
+    const next = !user.emailVerified;
+    try {
+      await adminApi.setUserEmailVerified(user.id, next);
+      setUser((prev) => (prev ? { ...prev, emailVerified: next } : prev));
+      toast({ title: next ? t("admin.userDetail.field.emailVerifiedToast") : t("admin.userDetail.field.emailUnverifiedToast") });
+    } catch {
+      toast({ title: t("admin.userDetail.field.emailVerifyFailed"), variant: "destructive" });
+    } finally {
+      setVerifying(false);
+    }
+  }
 
   async function changeRole(role: string) {
     if (!user || role === user.role) return;
@@ -234,6 +253,38 @@ export function UserDetailView({ userId }: UserDetailViewProps) {
                 ? t("admin.userDetail.field.hasPasswordYes")
                 : t("admin.userDetail.field.hasPasswordNo")}
             </span>
+          </div>
+          <div className="flex items-center gap-2 text-sm">
+            <MailCheck className={cn("size-4", user.emailVerified ? "text-success" : "text-muted-foreground")} />
+            <span className="text-muted-foreground">{t("admin.userDetail.field.emailVerified")}:</span>
+            <Badge
+              variant="outline"
+              className={cn(
+                "text-xs",
+                user.emailVerified
+                  ? "border-success/30 text-success"
+                  : "border-warning/30 text-warning",
+              )}
+            >
+              {user.emailVerified ? t("admin.userDetail.field.emailVerifiedYes") : t("admin.userDetail.field.emailVerifiedNo")}
+            </Badge>
+            {user.email && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-7 text-xs"
+                disabled={verifying}
+                onClick={() => {
+                  haptic("light");
+                  void toggleEmailVerification();
+                }}
+              >
+                {verifying ? (
+                  <Loader2 className="size-3 me-1.5 animate-spin" />
+                ) : null}
+                {user.emailVerified ? t("admin.userDetail.field.unverifyEmail") : t("admin.userDetail.field.verifyEmail")}
+              </Button>
+            )}
           </div>
           <div className="flex items-center gap-2 text-sm">
             <BrainCircuit className="size-4 text-info" />

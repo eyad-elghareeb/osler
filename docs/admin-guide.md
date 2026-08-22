@@ -367,7 +367,7 @@ There is no manual refresh button and no auto-refresh. To refresh, navigate away
 
 **Route:** `/admin/users`
 **Access:** `admin` only
-**API:** `GET /v1/admin/users`, `GET /v1/admin/users/:id`, `PATCH /v1/admin/users/:id`, `POST /v1/admin/users/:id/reset-password`, `DELETE /v1/admin/users/:id`, `GET /v1/admin/users/:id/sessions`, `DELETE /v1/admin/users/:id/sessions`
+**API:** `GET /v1/admin/users`, `GET /v1/admin/users/:id`, `PATCH /v1/admin/users/:id`, `POST /v1/admin/users/:id/reset-password`, `PATCH /v1/admin/users/:id/email-verification`, `DELETE /v1/admin/users/:id`, `GET /v1/admin/users/:id/sessions`, `DELETE /v1/admin/users/:id/sessions`
 
 The Users page is your directory and control panel for every registered account. It's the most powerful page in the panel — every action here is audit-logged, and most are irreversible.
 
@@ -441,7 +441,20 @@ On submit:
 4. An `admin_audit` row is written with `action = 'reset_password'`.
 5. The user must sign in again with the new password.
 
-The user is not notified by email — that's a deliberate choice (we don't want to leak the fact that an admin reset their password to anyone who can read their inbox). Communicate the new password to them out-of-band.
+The user is not notified by email - that's a deliberate choice (we don't want to leak the fact that an admin reset their password to anyone who can read their inbox). Communicate the new password to them out-of-band.
+
+### Email verification (manual flip)
+
+The user's detail view shows an **Email verified** badge next to the profile fields, with a *Mark verified / Mark unverified* button. This exists for instances **without** a transactional email provider: an unverified email blocks Google sign-in from linking onto the password account ("This email is already linked to a password account that has not been verified"), and without email delivery there is no self-serve verification path.
+
+When you mark an address verified:
+
+1. `PATCH /v1/admin/users/:id/email-verification { verified: true }` is called.
+2. `users.email_verified_at` is set (or cleared when un-verifying).
+3. An `admin_audit` row is written with action `verify_email` or `unverify_email`.
+4. The user can immediately sign in with Google on that address; existing sessions are unaffected.
+
+Only vouch for addresses you control or can confirm - marking an address verified asserts its ownership. If you later add Resend (`RESEND_API_KEY`, `EMAIL_FROM`, `APP_ORIGIN`), prefer the normal emailed verification flow and use this button only as a fallback.
 
 ### Delete user
 
@@ -1456,6 +1469,7 @@ The admin panel uses the same Osler session as the main app, but the Worker enfo
 | GET | `/v1/admin/users/:id` | admin | User detail with sessions + content |
 | PATCH | `/v1/admin/users/:id` | admin | Change role / display name |
 | POST | `/v1/admin/users/:id/reset-password` | admin | Reset password (revokes sessions) |
+| PATCH | `/v1/admin/users/:id/email-verification` | admin | Manually flip email verification (enables Google linking) |
 | DELETE | `/v1/admin/users/:id` | admin | Delete user (cannot be self) |
 | GET | `/v1/admin/users/:id/sessions` | admin | List user's sessions |
 | DELETE | `/v1/admin/users/:id/sessions` | admin | Revoke all user's sessions |
