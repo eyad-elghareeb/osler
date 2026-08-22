@@ -16,6 +16,7 @@ import {
   ShieldAlert,
   PackagePlus,
   AlertTriangle,
+  X,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
@@ -760,7 +761,9 @@ export function ContentEditor({ id, rawR2Key, capabilities }: ContentEditorProps
               </ul>
             </details>
           )}
-          <Button variant="ghost" size="iconSm" onClick={() => setShowValidation(false)}>×</Button>
+          <Button variant="ghost" size="iconSm" onClick={() => setShowValidation(false)} aria-label={t("common.close")}>
+            <X className="size-3.5" />
+          </Button>
         </div>
       )}
 

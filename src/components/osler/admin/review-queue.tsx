@@ -143,7 +143,14 @@ export function ReviewQueue() {
     const ok: string[] = [];
     for (let i = 0; i < ids.length; i++) {
       try {
-        await adminApi.approveContent(ids[i]);
+        // Re-approvals keep the item's previous student-facing location
+        // instead of relocating it to <objectId>.<ext> at the category root.
+        const prev = items.find((it) => it.id === ids[i]);
+        const pubKey = prev?.published_r2_key ?? undefined;
+        const targetPath = pubKey
+          ? pubKey.replace(/^content-files\//, "").split("/").slice(1).join("/")
+          : undefined;
+        await adminApi.approveContent(ids[i], targetPath || undefined);
         ok.push(ids[i]);
       } catch {}
       setProgress({ kind: "approve", done: i + 1, total: ids.length, currentId: ids[i + 1] });
@@ -193,6 +200,9 @@ export function ReviewQueue() {
     return stagedGroups.filter((g) => set.has(g.dir));
   }
 
+  // The worker bounds each run (free-plan subrequest cap) and reports the
+  // remainder — loop each group until complete, otherwise large folders
+  // publish/discard partially while being marked as done.
   async function publishMany(dirs: string[]) {
     const groups = groupsForDirs(dirs);
     if (groups.length === 0 || groups.every((g) => g.keys.length === 0)) return;
@@ -202,11 +212,16 @@ export function ReviewQueue() {
     const okDirs = new Set<string>();
     for (let i = 0; i < groups.length; i++) {
       const keys = groups[i].keys.map((k) => k.key);
+      let groupPublished = 0;
       if (keys.length > 0) {
         try {
-          const res = await adminApi.publishStaged(keys);
-          published += res.published.length;
-          okDirs.add(groups[i].dir);
+          for (let run = 0; run < 50; run++) {
+            const res = await adminApi.publishStaged(keys);
+            groupPublished += res.published.length;
+            if (res.complete || res.remaining === 0 || res.published.length === 0) break;
+          }
+          published += groupPublished;
+          if (groupPublished > 0) okDirs.add(groups[i].dir);
         } catch {}
       }
       setProgress({ kind: "publish", done: i + 1, total: groups.length, currentDir: groups[i + 1]?.dir });
@@ -234,11 +249,16 @@ export function ReviewQueue() {
     const okDirs = new Set<string>();
     for (let i = 0; i < groups.length; i++) {
       const keys = groups[i].keys.map((k) => k.key);
+      let groupDeleted = 0;
       if (keys.length > 0) {
         try {
-          const res = await adminApi.discardStaged(keys);
-          deleted += res.deleted;
-          okDirs.add(groups[i].dir);
+          for (let run = 0; run < 50; run++) {
+            const res = await adminApi.discardStaged(keys);
+            groupDeleted += res.deleted;
+            if (res.complete || res.remaining === 0 || res.deleted === 0) break;
+          }
+          deleted += groupDeleted;
+          if (groupDeleted > 0) okDirs.add(groups[i].dir);
         } catch {}
       }
       setProgress({ kind: "discard", done: i + 1, total: groups.length, currentDir: groups[i + 1]?.dir });

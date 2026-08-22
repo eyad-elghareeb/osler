@@ -316,17 +316,17 @@ export function ExplorerToolbar(props: ExplorerToolbarProps) {
 
       {/* Primary actions */}
       <div className="flex items-center gap-1.5">
-        <Button size="sm" variant="outline" onClick={onUpload} title="Upload files (Ctrl+U)" className="h-8 shadow-2xs">
+        <Button size="sm" variant="outline" onClick={onUpload} title={t("admin.studio.uploadTip")} className="h-8 shadow-2xs">
           <Upload className="size-3.5 text-muted-foreground" />
           <span className="hidden sm:inline">{t("admin.studio.upload")}</span>
         </Button>
         {canManage && (
           <>
-            <Button size="sm" variant="outline" onClick={onNewFolder} title="New folder (Ctrl+Shift+N)" className="h-8 shadow-2xs">
+            <Button size="sm" variant="outline" onClick={onNewFolder} title={t("admin.studio.newFolderTip")} className="h-8 shadow-2xs">
               <FolderPlus className="size-3.5 text-muted-foreground" />
               <span className="hidden sm:inline">{t("admin.studio.newFolder")}</span>
             </Button>
-            <Button size="sm" onClick={onNewContent} title="New content (Ctrl+N)" className="h-8 shadow-2xs font-medium">
+            <Button size="sm" onClick={onNewContent} title={t("admin.studio.newContentTip")} className="h-8 shadow-2xs font-medium">
               <Plus className="size-3.5" />
               <span className="hidden sm:inline">{t("admin.studio.newContent")}</span>
             </Button>
