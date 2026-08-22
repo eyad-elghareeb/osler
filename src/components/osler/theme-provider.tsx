@@ -41,20 +41,47 @@ function applyThemeClass(id: string, customThemes: CustomThemeConfig[]) {
   // Strip every theme class we might have added previously.
   root.classList.remove("dark", "light");
   for (const ct of customThemes) {
-    root.classList.remove(`theme-${ct.id}`);
+    root.classList.remove(`theme-${CSS.escape(ct.id)}`);
   }
 
+  // Only known custom themes can apply their class; the id is escaped so a
+  // hostile config id can't inject classes into <html>.
   const custom = customThemes.find((t) => t.id === id);
   if (custom) {
     // Custom theme: add the .theme-<id> class so the injected CSS overrides
     // take effect, and ALSO add the variant class so any code that checks
     // `.dark` / `.light` (e.g. Mermaid) still works.
-    root.classList.add(`theme-${custom.id}`);
+    root.classList.add(`theme-${CSS.escape(custom.id)}`);
     root.classList.add(custom.variant);
   } else {
     // Built-in: just add the variant class.
     root.classList.add(id === "light" ? "light" : "dark");
   }
+}
+
+/**
+ * Custom-theme color values land inside a <style> block's declarations, and
+ * theme ids become class names. Both come from osler.config.json (which the
+ * admin config editor can rewrite), so treat them as untrusted: a crafted
+ * "color" like `red;} body{background:url(...)` could otherwise break out of
+ * the declaration and append arbitrary CSS.
+ */
+function isSafeThemeColor(value: string): boolean {
+  // oklch()/oklab(), hex (#rgb #rrggbb #rrggbbaa), rgb()/rgba(), hsl()/hsla(),
+  // or a plain identifier (css color keywords). No braces, semicolons,
+  // parentheses imbalance tricks survive these patterns.
+  if (value.length > 100) return false;
+  if (/[{};@\\/]/.test(value)) return false;
+  return (
+    /^#[0-9a-fA-F]{3,8}$/.test(value) ||
+    /^(oklch|oklab|rgb|hsl)a?\([^\)]*\)$/.test(value) ||
+    /^[a-zA-Z]+$/.test(value)
+  );
+}
+
+function safeColor(value: string | undefined): string | null {
+  if (!value || !isSafeThemeColor(value)) return null;
+  return value;
 }
 
 /**
@@ -72,36 +99,40 @@ function injectCustomThemeStyles(customThemes: CustomThemeConfig[]) {
   const lines: string[] = [];
   for (const t of customThemes) {
     const vars: string[] = [];
-    if (t.background) vars.push(`--background: ${t.background};`);
-    if (t.foreground) vars.push(`--foreground: ${t.foreground};`);
-    if (t.primary) vars.push(`--primary: ${t.primary};`);
-    if (t.primaryForeground) vars.push(`--primary-foreground: ${t.primaryForeground};`);
-    if (t.accent) vars.push(`--accent: ${t.accent};`);
-    if (t.card) vars.push(`--card: ${t.card};`);
-    if (t.cardForeground) vars.push(`--card-foreground: ${t.cardForeground};`);
-    if (t.popover) vars.push(`--popover: ${t.popover};`);
-    if (t.popoverForeground) vars.push(`--popover-foreground: ${t.popoverForeground};`);
-    if (t.secondary) vars.push(`--secondary: ${t.secondary};`);
-    if (t.secondaryForeground) vars.push(`--secondary-foreground: ${t.secondaryForeground};`);
-    if (t.muted) vars.push(`--muted: ${t.muted};`);
-    if (t.mutedForeground) vars.push(`--muted-foreground: ${t.mutedForeground};`);
-    if (t.destructive) vars.push(`--destructive: ${t.destructive};`);
-    if (t.success) vars.push(`--success: ${t.success};`);
-    if (t.warning) vars.push(`--warning: ${t.warning};`);
-    if (t.info) vars.push(`--info: ${t.info};`);
-    if (t.border) vars.push(`--border: ${t.border};`);
-    if (t.input) vars.push(`--input: ${t.input};`);
-    if (t.ring) vars.push(`--ring: ${t.ring};`);
-    if (t.primary) vars.push(`--sidebar-primary: ${t.primary};`);
-    if (t.ring) vars.push(`--sidebar-ring: ${t.ring};`);
-    if (t.sidebar) vars.push(`--sidebar: ${t.sidebar};`);
-    if (t.sidebarForeground) vars.push(`--sidebar-foreground: ${t.sidebarForeground};`);
-    if (t.sidebarPrimary) vars.push(`--sidebar-primary: ${t.sidebarPrimary};`);
-    if (t.sidebarPrimaryForeground) vars.push(`--sidebar-primary-foreground: ${t.sidebarPrimaryForeground};`);
-    if (t.sidebarAccent) vars.push(`--sidebar-accent: ${t.sidebarAccent};`);
-    if (t.sidebarAccentForeground) vars.push(`--sidebar-accent-foreground: ${t.sidebarAccentForeground};`);
-    if (t.sidebarBorder) vars.push(`--sidebar-border: ${t.sidebarBorder};`);
-    if (t.sidebarRing) vars.push(`--sidebar-ring: ${t.sidebarRing};`);
+    const push = (name: string, raw: string | undefined) => {
+      const color = safeColor(raw);
+      if (color) vars.push(`--${name}: ${color};`);
+    };
+    push("background", t.background);
+    push("foreground", t.foreground);
+    push("primary", t.primary);
+    push("primary-foreground", t.primaryForeground);
+    push("accent", t.accent);
+    push("card", t.card);
+    push("card-foreground", t.cardForeground);
+    push("popover", t.popover);
+    push("popover-foreground", t.popoverForeground);
+    push("secondary", t.secondary);
+    push("secondary-foreground", t.secondaryForeground);
+    push("muted", t.muted);
+    push("muted-foreground", t.mutedForeground);
+    push("destructive", t.destructive);
+    push("success", t.success);
+    push("warning", t.warning);
+    push("info", t.info);
+    push("border", t.border);
+    push("input", t.input);
+    push("ring", t.ring);
+    push("sidebar-primary", t.primary);
+    push("sidebar-ring", t.ring);
+    push("sidebar", t.sidebar);
+    push("sidebar-foreground", t.sidebarForeground);
+    push("sidebar-primary", t.sidebarPrimary);
+    push("sidebar-primary-foreground", t.sidebarPrimaryForeground);
+    push("sidebar-accent", t.sidebarAccent);
+    push("sidebar-accent-foreground", t.sidebarAccentForeground);
+    push("sidebar-border", t.sidebarBorder);
+    push("sidebar-ring", t.sidebarRing);
     if (vars.length === 0) continue;
     lines.push(`.theme-${CSS.escape(t.id)} {`);
     lines.push(`  ${vars.join("\n  ")}`);

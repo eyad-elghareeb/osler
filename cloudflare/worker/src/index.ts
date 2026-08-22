@@ -3574,7 +3574,18 @@ async function handleAdmin(request: Request, env: Env, session: Session, url: UR
       return new Response(text, { status: 200, headers: { "content-type": "application/json; charset=utf-8", ...cors(origin), ...SECURITY_HEADERS, "x-request-id": log.requestId } as any });
     }
     if (request.method === "PUT") {
+      // The config drives theme CSS injection, engine enablement, and default
+      // URLs on every client — validate the envelope before storing: object
+      // shape, bounded nesting depth, and a sane top-level key allowlist so a
+      // typo'd or hostile write can't smuggle arbitrary sections in.
       const body = await readJson(request);
+      const text = JSON.stringify(body ?? {});
+      if (!body || typeof body !== "object" || Array.isArray(body)) return json({ error: "Config must be a JSON object" }, 400, origin, log);
+      const CONFIG_KEYS = new Set(["site", "engines", "themes", "defaults", "cloud", "email", "wizard", "sync", "schemaVersion", "$schema", "$comment"]);
+      for (const key of Object.keys(body)) {
+        if (!CONFIG_KEYS.has(key)) return json({ error: `Unknown config section: ${key}` }, 400, origin, log);
+      }
+      if (jsonDepth(text) > 16) return json({ error: "Config is too deeply nested" }, 400, origin, log);
       await env.CONTENT.put("_osler.config.json", JSON.stringify(body, null, 2), { httpMetadata: { contentType: "application/json" } });
       await auditLog(env, session.user.id, "update_config", null, { updatedKeys: Object.keys(body) }, log);
       return json({ ok: true }, 200, origin, log);
