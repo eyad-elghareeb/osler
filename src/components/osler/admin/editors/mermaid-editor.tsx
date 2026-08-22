@@ -332,7 +332,7 @@ function loadMermaid(): Promise<typeof import("mermaid")> {
       m.initialize({
         startOnLoad: false,
         theme: getTheme(),
-        securityLevel: "loose",
+        securityLevel: "strict",
         fontFamily: "var(--font-sans, Geist, system-ui, sans-serif)",
       });
       return mod;
@@ -352,7 +352,7 @@ export async function renderMermaidToSvg(code: string): Promise<string> {
   m.initialize({
     startOnLoad: false,
     theme: getTheme(),
-    securityLevel: "loose",
+    securityLevel: "strict",
     fontFamily: "var(--font-sans, Geist, system-ui, sans-serif)",
   });
   const renderId = `mermaid-render-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;

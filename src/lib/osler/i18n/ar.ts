@@ -1302,6 +1302,8 @@ export const ar = {
     "qbank.home.createTest": "إنشاء اختبار",
     "qbank.home.tip": "نصيحة",
     "qbank.home.tipContent": "استخدم <strong>وضع المعلم</strong> للمذاكرة الأولى — تشاهد الشرح فور الإرسال. واستخدم <strong>الوضع الموقوت</strong> للتمرّن على السرعة تحت ظروف الامتحان الحقيقية.",
+    "qbank.home.tipTutor": "استخدم وضع المعلم للمذاكرة الأولى — تشاهد الشرح فور الإرسال.",
+    "qbank.home.tipTimed": "استخدم الوضع الموقوت للتمرّن على السرعة تحت ظروف الامتحان الحقيقية.",
     "qbank.home.selectAll": "اختيار الكل",
     "qbank.home.noItems": "لا توجد عناصر متاحة.",
     "qbank.home.clearSearch": "مسح البحث",

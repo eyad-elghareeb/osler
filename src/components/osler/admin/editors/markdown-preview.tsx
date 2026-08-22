@@ -72,7 +72,7 @@ function MermaidPreviewBlock({ code }: { code: string }) {
         m.initialize({
           startOnLoad: false,
           theme: document.documentElement.classList.contains("dark") ? "dark" : "default",
-          securityLevel: "loose",
+          securityLevel: "strict",
         });
         const id = `preview-md-${Math.random().toString(36).slice(2, 10)}`;
         const { svg: out } = await m.render(id, code.trim());

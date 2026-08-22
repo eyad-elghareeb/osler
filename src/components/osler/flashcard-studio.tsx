@@ -89,10 +89,14 @@ function renderCardMarkdown(text: string): string {
   // Bold, then italic.
   h = h.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
   h = h.replace(/(^|[^*])\*(?!\*)([^*]+?)\*(?!\*)/g, "$1<em>$2</em>");
-  // Markdown links [label](url).
+  // Markdown links [label](url). The text was escaped above so the href
+  // can't break out of its attribute; the scheme check is defense-in-depth.
   h = h.replace(
     /\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g,
-    '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>',
+    (_m, label: string, url: string) =>
+      /^https?:\/\//i.test(url)
+        ? `<a href="${url}" target="_blank" rel="noopener noreferrer nofollow">${label}</a>`
+        : label,
   );
   h = h.replace(/\n/g, "<br>");
   return h;
@@ -151,7 +155,8 @@ function markdownToAnkiHtml(text: string, packPath: string): string {
   let src = text.replace(
     /!\[([^\]]*)\]\(([^\s)]+)\)/g,
     (_full, alt: string, url: string) => {
-      const ref = ankiMediaRef(resolveAsset(url, packPath));
+      if (!safeContentUrl(url)) return "";
+      const ref = escapeHtmlAttr(ankiMediaRef(resolveAsset(url, packPath)));
       const altAttr = alt.replace(/"/g, "&quot;");
       imgTokens.push(`<img src="${ref}" alt="${altAttr}">`);
       return `\u0000IMG${imgTokens.length - 1}\u0000`;
@@ -161,6 +166,22 @@ function markdownToAnkiHtml(text: string, packPath: string): string {
   // Restore the image tokens.
   h = h.replace(/\u0000IMG(\d+)\u0000/g, (_m, i: string) => imgTokens[Number(i)] ?? "");
   return h;
+}
+
+/** Escape a string for safe use inside a double-quoted HTML attribute. */
+function escapeHtmlAttr(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+/** Only allow http(s), mailto and image data: URIs in authored image/link URLs. */
+function safeContentUrl(url: string): boolean {
+  const trimmed = url.trim();
+  return /^(https?:|mailto:)/i.test(trimmed)
+    || /^data:image\/(png|jpeg|jpg|gif|webp|avif|bmp);/i.test(trimmed);
 }
 
 /**
@@ -198,7 +219,8 @@ function appendImagesHtml(html: string, images: FlashcardImage[], packPath: stri
   if (images.length === 0) return html;
   const imgs = images
     .map((img) => {
-      const ref = ankiMediaRef(resolveAsset(img.src, packPath));
+      if (!safeContentUrl(img.src)) return "";
+      const ref = escapeHtmlAttr(ankiMediaRef(resolveAsset(img.src, packPath)));
       const alt = (img.alt ?? "").replace(/"/g, "&quot;");
       const caption = img.caption
         ? `<div>${markdownToAnkiHtml(img.caption, packPath)}</div>`

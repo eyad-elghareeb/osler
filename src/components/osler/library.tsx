@@ -313,7 +313,9 @@ export function Library({ initialArticleId, onNavigateBack: propOnNavigateBack }
         mermaid.initialize({
           startOnLoad: false,
           theme: isDark ? "dark" : "default",
-          securityLevel: "loose",
+          // "strict" sanitizes diagram output and blocks click-callbacks —
+          // diagrams are authored content and must never execute script.
+          securityLevel: "strict",
           fontFamily: "inherit",
         });
 

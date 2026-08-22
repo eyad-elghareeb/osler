@@ -3480,10 +3480,9 @@ function CreateTestTab({
               <Lightbulb className="size-4 text-warning" />
               {t("qbank.home.tip")}
             </h3>
-            <p
-              className="text-xs text-muted-foreground mt-2 leading-relaxed"
-              dangerouslySetInnerHTML={{ __html: t("qbank.home.tipContent") }}
-            />
+            <p className="text-xs text-muted-foreground mt-2 leading-relaxed">
+              {t("qbank.home.tipTutor")} {t("qbank.home.tipTimed")}
+            </p>
           </OslerCard>
         </div>
       </div>

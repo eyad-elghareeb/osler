@@ -3,6 +3,7 @@ import remarkParse from "remark-parse";
 import remarkGfm from "remark-gfm";
 import remarkRehype from "remark-rehype";
 import rehypeRaw from "rehype-raw";
+import rehypeSanitize, { defaultSchema } from "rehype-sanitize";
 import rehypeStringify from "rehype-stringify";
 import type { Plugin } from "unified";
 import { loadCategoryTree, fetchWithLocalFallback } from "./content";
@@ -157,12 +158,51 @@ const rehypeArticleImages: Plugin<[string]> = (articleDir: string) => (tree: any
   walk(tree);
 };
 
+/**
+ * Sanitizer schema: extends GitHub's default with everything the article
+ * pipeline actually renders — GFM tables/strikethrough/tasklists, code
+ * attributes used by syntax highlighting, and the mermaid placeholder div
+ * produced by rehypeMermaid (its data-diagram payload is re-encoded text,
+ * decoded only for diagram rendering, never injected as HTML). Raw HTML in
+ * authored content is parsed by rehypeRaw but every tag not listed here and
+ * every on* / javascript: URL is dropped before it can reach the DOM.
+ */
+const ARTICLE_SANITIZE_SCHEMA = {
+  ...defaultSchema,
+  tagNames: [
+    ...(defaultSchema.tagNames ?? []),
+    "div",
+    "figure",
+    "figcaption",
+    "details",
+    "summary",
+    "video",
+    "audio",
+    "source",
+  ],
+  attributes: {
+    ...defaultSchema.attributes,
+    "*": [...(defaultSchema.attributes?.["*"] ?? []), "className", "dir", "lang"],
+    div: ["className", "data-diagram"],
+    span: ["className"],
+    code: [...(defaultSchema.attributes?.code ?? []), "className"],
+    th: ["style", "align"],
+    td: ["style", "align"],
+    video: ["src", "controls", "poster", "width", "height", "preload"],
+    audio: ["src", "controls"],
+    source: ["src", "type"],
+    img: [...(defaultSchema.attributes?.img ?? []), "loading", "decoding"],
+  },
+  protocols: { ...defaultSchema.protocols, src: ["http", "https", "mailto"] },
+};
+
 async function mdToHtml(md: string, articleDir: string): Promise<string> {
   const result = await unified()
     .use(remarkParse)
     .use(remarkGfm)
     .use(remarkRehype, { allowDangerousHtml: true })
     .use(rehypeRaw)
+    .use(rehypeSanitize, ARTICLE_SANITIZE_SCHEMA)
     .use(rehypeMermaid)
     .use(rehypeArticleImages, articleDir)
     .use(rehypeStringify)

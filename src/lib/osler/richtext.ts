@@ -30,11 +30,31 @@ export function resolveContentAsset(
   return contentFileUrl(category, `${packPath}${base}`);
 }
 
+/** Escape a string for safe use inside a double-quoted HTML attribute. */
+function escapeAttr(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+/** Block dangerous URL schemes; anything not http(s)/mailto/data:image is dropped. */
+function safeUrl(url: string): string | null {
+  const trimmed = url.trim();
+  if (/^(https?:|mailto:)/i.test(trimmed)) return trimmed;
+  if (/^data:image\/(png|jpeg|jpg|gif|webp|avif|bmp);/i.test(trimmed)) return trimmed;
+  return null;
+}
+
 /**
  * Render a small, safe markdown subset to HTML. Escapes first, then applies
  * bold / italic / inline-code / links / line-breaks. Inline images
  * `![alt](src)` are extracted before escaping so their markup survives, then
- * resolved against the pack folder.
+ * resolved against the pack folder. The resolved src is attribute-escaped and
+ * scheme-checked so a hostile pack can't break out of the attribute or inject
+ * markup through the unescaped URL path.
  */
 export function renderRichText(
   text: string,
@@ -47,14 +67,11 @@ export function renderRichText(
   const src = text.replace(
     /!\[([^\]]*)\]\(([^\s)]+)\)/g,
     (_full, alt: string, url: string) => {
-      const resolved = resolveContentAsset(url, category, packPath);
-      const altAttr = (alt ?? "").replace(/"/g, "&quot;");
-      const titleAttr = url.includes(' "')
-        ? ""
-        : "";
-      imgTokens.push(
-        `<img src="${resolved}" alt="${altAttr}"${titleAttr}>`,
-      );
+      const checked = safeUrl(url);
+      if (!checked) return "";
+      const resolved = escapeAttr(resolveContentAsset(checked, category, packPath));
+      const altAttr = escapeAttr(alt ?? "");
+      imgTokens.push(`<img src="${resolved}" alt="${altAttr}" loading="lazy">`);
       return `\u0000IMG${imgTokens.length - 1}\u0000`;
     },
   );
@@ -69,10 +86,18 @@ export function renderRichText(
   // Bold, then italic.
   h = h.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
   h = h.replace(/(^|[^*])\*(?!\*)([^*]+?)\*(?!\*)/g, "$1<em>$2</em>");
-  // Markdown links [label](url).
+  // Markdown links [label](url). The escaped text can't contain raw quotes,
+  // but the URL itself is still scheme-checked before being href'd.
   h = h.replace(
-    /\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g,
-    '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>',
+    /\[([^\]]+)\]\((https?:&#47;&#47;[^\s)]+|https?:\/\/[^\s)]+)\)/g,
+    (_m, label: string, url: string) => {
+      // The text was HTML-escaped above, so a plain "https://" may have
+      // survived verbatim; entity-encoded slashes come from authored input.
+      const candidate = url.replaceAll("&#47;", "/");
+      return safeUrl(candidate)
+        ? `<a href="${escapeAttr(candidate)}" target="_blank" rel="noopener noreferrer nofollow">${label}</a>`
+        : label;
+    },
   );
   h = h.replace(/\n/g, "<br>");
   // Restore the image tokens.
