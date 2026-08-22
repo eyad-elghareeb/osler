@@ -392,6 +392,21 @@ export function ContentEditor({ id, rawR2Key, capabilities }: ContentEditorProps
     return () => window.removeEventListener("keydown", handler);
   }, [saving, body, isRawMode, rawR2Key, id]);
 
+  /** Best-effort manifest rebuild for the category a published key belongs
+   *  to — keeps student-facing manifests in sync after editor-side deletes
+   *  and publishes. */
+  const autoRebuildForCategory = React.useCallback((categoryOrKey: string) => {
+    const clean = categoryOrKey
+      .replace(/^content-files\//, "")
+      .replace(/^content-staging\//, "")
+      .replace(/^content\//, "")
+      .replace(/^\/+/, "");
+    const cat = clean.split("/")[0];
+    if (cat && ["library", "qbank", "flashcard", "osce", "videos"].includes(cat)) {
+      adminApi.regenerateManifest(cat).catch(() => {});
+    }
+  }, []);
+
   // ── Unsaved-changes guard ──
   React.useEffect(() => {
     function beforeUnload(e: BeforeUnloadEvent) {
@@ -501,7 +516,12 @@ export function ContentEditor({ id, rawR2Key, capabilities }: ContentEditorProps
     if (!id) return;
     haptic("warning");
     try {
+      // Snapshot the hybrid key before deletion so we can rebuild that
+      // category's manifest after the object (and its student-facing copy)
+      // is gone.
+      const pubKey = obj?.published_r2_key ?? null;
       await adminApi.deleteContent(id);
+      if (pubKey) autoRebuildForCategory(pubKey);
       router.push("/admin/content");
     } catch {
       toast({ title: t("admin.toast.deleteFailed"), variant: "destructive" });
@@ -566,24 +586,33 @@ export function ContentEditor({ id, rawR2Key, capabilities }: ContentEditorProps
   }
 
   // Compute a suggested target path for publishing (used as the default in
-  // the publish dialog). Based on the content type and (if available) the
-  // title. For library articles uses the selected artifact content type extension.
+  // the publish dialog). Prefers the object's existing student-facing
+  // location (published_r2_key) so re-publishing keeps the file in its
+  // original folder; falls back to a title-slug path for never-published
+  // drafts. Library articles use the selected artifact extension.
   const suggestedPath = (() => {
     if (isRawMode) return rawR2Key?.replace(/^content-files\//, "") ?? "";
     if (!obj) return "";
+    // Strip the leading category — the worker re-prepends it from
+    // content_type. Keeps "qbank/cardiology/questions.json" as
+    // "cardiology/questions.json".
+    const fromPublished = (obj.published_r2_key ?? "").replace(/^content-files\//, "").split("/").slice(1).join("/");
+    if (fromPublished) return fromPublished;
+    // Category-relative slugs — hybridPublish() already prepends the
+    // category folder from content_type.
     const slug = (obj.title ?? obj.id).toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
     switch (obj.content_type) {
       case "library": {
         const ext = artifactContentType === "pdf" ? ".pdf" : artifactContentType === "html" ? ".html" : ".md";
-        return `library/${slug}${ext}`;
+        return `${slug}${ext}`;
       }
-      case "flashcard": return `flashcard/${slug}/cards.json`;
-      case "osce": return `osce/${slug}/stations.json`;
-      case "video": return `videos/${slug}/videos.json`;
-      case "bank": return `qbank/${slug}/passages.json`;
-      case "written": return `qbank/${slug}/prompts.json`;
+      case "flashcard": return `${slug}/cards.json`;
+      case "osce": return `${slug}/stations.json`;
+      case "video": return `${slug}/videos.json`;
+      case "bank": return `${slug}/passages.json`;
+      case "written": return `${slug}/prompts.json`;
       case "quiz":
-      default: return `qbank/${slug}/questions.json`;
+      default: return `${slug}/questions.json`;
     }
   })();
 
@@ -1097,10 +1126,11 @@ function isFormSupported(contentType: ContentType, parsed: any): boolean {
 }
 
 /** Best-effort contentType inference for raw R2 keys (used in raw editor mode).
- *  Returns undefined for library articles (.md, .html, .pdf) — those can't
- *  be validated standalone, the validator returns no errors for them. */
+ *  Returns null for library articles (.md, .html, .pdf) — those can't be
+ *  validated standalone; returning a truthy type here made the validator
+ *  JSON.parse markdown and report bogus syntax errors. */
 function inferContentTypeFromR2Key(key: string, body: string): ContentType | null {
-  if (key.endsWith(".md") || key.endsWith(".html") || key.endsWith(".pdf")) return "library";
+  if (key.endsWith(".md") || key.endsWith(".html") || key.endsWith(".pdf")) return null;
   if (!key.endsWith(".json")) return null;
   try {
     const j = JSON.parse(body);
