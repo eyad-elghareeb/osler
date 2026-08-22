@@ -303,6 +303,7 @@ function ContentImageFigure({
 }
 
 import { routeFor, useOslerRouter } from "@/lib/osler/navigation";
+import { useOslerSession } from "@/lib/osler/session-context";
 import { markSessionDismissed, isSessionDismissed, clearSessionDismissed } from "./resume-session-dialog";
 
 function nodeFromPack(uid: string, content: AnyContent): ContentTreeNode {
@@ -1960,8 +1961,14 @@ function PackExportDialog({
             questions: questions.map((q) => ({
               stem: q.stem,
               choices: q.choices ?? [],
+              // Written prompts (correct < 0) must keep their flag — the
+              // old `?? 0` coerced them to "choice A is correct" and drew
+              // a false answer badge on every written question.
               correct: q.correct ?? 0,
               explanation: q.explanation ?? "",
+              modelAnswer: (q as any).modelAnswer,
+              rubric: (q as any).rubric,
+              isWritten: q.correct !== undefined && q.correct < 0,
               difficulty: (q as any).difficulty,
               tags: (q as any).tags,
             })),
@@ -1977,7 +1984,7 @@ function PackExportDialog({
 
       const cfg: PdfExportConfig = {
         page: { pageSize: "a4", orientation: "portrait" },
-        cover: { title: node.title ?? "QBank Export", subtitle: `${chapters.length} pack(s) · ${chapters.reduce((a, c) => a + c.questions.length, 0)} questions` },
+        cover: { title: node.title ?? t("pdf.exportQuiz"), subtitle: `${chapters.length} ${t("pdf.tpl.chapters")}  ·  ${chapters.reduce((a, c) => a + c.questions.length, 0)} ${t("pdf.tpl.questionsPlural")}` },
         includeCover,
         styleMode,
         answersMode,
@@ -1989,7 +1996,7 @@ function PackExportDialog({
         chapters,
       };
       const doc = generateQuizCompilationPdf(cfg);
-      downloadPdf(doc, (node.title ?? "").replace(/[^a-zA-Z0-9\s\-_]/g, "").trim() || "export");
+      downloadPdf(doc, node.title ?? t("pdf.exportQuiz"));
       toast({ title: t("pdf.pdfReady"), description: t("pdf.pdfReadyDesc") });
     } catch (e) {
       toast({ title: t("pdf.context.exportFailed"), description: String(e), variant: "destructive" });
@@ -1999,7 +2006,7 @@ function PackExportDialog({
     }
   };
 
-  function toQuestions(content: AnyContent): Array<{ stem: string; choices?: string[]; correct?: number; explanation?: string }> {
+  function toQuestions(content: AnyContent): Array<{ stem: string; choices?: string[]; correct?: number; explanation?: string; modelAnswer?: string; rubric?: string[] }> {
     const c = content as any;
     if (c.questions) {
       return c.questions.map((q: any) => ({
@@ -2007,6 +2014,8 @@ function PackExportDialog({
         choices: q.options ?? q.choices ?? [],
         correct: q.correct ?? 0,
         explanation: q.explanation ?? "",
+        modelAnswer: q.modelAnswer,
+        rubric: q.rubric,
         difficulty: q.difficulty,
         tags: q.tags,
       }));
@@ -2014,21 +2023,27 @@ function PackExportDialog({
     if (c.passages) {
       return c.passages.flatMap((p: any) =>
         (p.questions ?? []).map((q: any) => ({
-          stem: `${p.title ? p.title + " — " : ""}${q.question ?? q.stem ?? ""}`,
+          stem: `${p.title ? p.title + " - " : ""}${q.question ?? q.stem ?? ""}`,
           choices: q.options ?? q.choices ?? [],
           correct: q.correct ?? 0,
           explanation: q.explanation ?? "",
+          modelAnswer: q.modelAnswer,
+          rubric: q.rubric,
           difficulty: q.difficulty,
           tags: q.tags,
         }))
       );
     }
     if (c.prompts) {
+      // Written prompts have no correct choice index — mark them so the
+      // booklet renders a model-answer/rubric block instead of MCQ choices.
       return c.prompts.map((q: any) => ({
         stem: q.question ?? q.stem ?? "",
-        choices: q.options ?? q.choices ?? [],
-        correct: q.correct ?? 0,
+        choices: [],
+        correct: -1,
         explanation: q.explanation ?? "",
+        modelAnswer: q.modelAnswer,
+        rubric: q.rubric,
         difficulty: q.difficulty,
         tags: q.tags,
       }));
@@ -3610,6 +3625,7 @@ function TrackerTab({
 }) {
   const { t } = useI18n();
   const router = useRouter();
+  const { username } = useOslerSession();
   const [, force] = React.useReducer((x) => x + 1, 0);
   React.useEffect(() => {
     const unsub = storage.subscribe(force);
@@ -4172,43 +4188,48 @@ function TrackerTab({
 
   const handleExportSession = React.useCallback(
     async (s: SavedSession, opts: PdfExportOptions) => {
-      const totalTimeSec = Math.floor(((s.completedAt ?? Date.now()) - s.startedAt) / 1000);
-      const avgTimeSec = s.answeredCount ? Math.round(totalTimeSec / s.answeredCount) : 0;
-      const pct = s.totalQuestions ? Math.round((s.correctCount / s.totalQuestions) * 100) : 0;
-      const pool = await buildPoolForSession(s, false);
-      const questions: FullQuestion[] = pool.map((q) => ({
-        stem: q.stem,
-        choices: q.choices,
-        correct: q.correct,
-        explanation: q.explanation,
-        modelAnswer: q.modelAnswer,
-        isWritten: q.correct < 0,
-        difficulty: q.difficulty,
-        tags: q.tags,
-        rubric: q.rubric,
-      }));
-      const doc = generateResultsPdf({
-        packTitle: s.packTitle,
-        mode: s.mode,
-        score: {
-          pct,
-          correct: s.correctCount,
-          total: s.totalQuestions,
-          answered: s.answeredCount,
-          incorrect: s.incorrectCount,
-          flagged: s.flaggedCount,
-          percentile: Math.min(99, Math.max(1, Math.round(pct * 0.9 + 5))),
-          totalTime: formatTime(totalTimeSec),
-          avgTime: formatTime(avgTimeSec),
-        },
-        questions,
-        userAnswers: s.answers,
-        revealed: s.revealed,
-        flagged: s.flagged,
-        opts,
-      });
-      downloadPdf(doc, `${s.packTitle} — Results`);
-      toast({ title: t("pdf.pdfReady"), description: t("pdf.pdfReadyDesc") });
+      try {
+        const totalTimeSec = Math.floor(((s.completedAt ?? Date.now()) - s.startedAt) / 1000);
+        const avgTimeSec = s.answeredCount ? Math.round(totalTimeSec / s.answeredCount) : 0;
+        const pct = s.totalQuestions ? Math.round((s.correctCount / s.totalQuestions) * 100) : 0;
+        const pool = await buildPoolForSession(s, false);
+        const questions: FullQuestion[] = pool.map((q) => ({
+          stem: q.stem,
+          choices: q.choices,
+          correct: q.correct,
+          explanation: q.explanation,
+          modelAnswer: q.modelAnswer,
+          isWritten: q.correct < 0,
+          difficulty: q.difficulty,
+          tags: q.tags,
+          rubric: q.rubric,
+        }));
+        const doc = generateResultsPdf({
+          packTitle: s.packTitle,
+          mode: s.mode,
+          score: {
+            pct,
+            correct: s.correctCount,
+            total: s.totalQuestions,
+            answered: s.answeredCount,
+            incorrect: s.incorrectCount,
+            flagged: s.flaggedCount,
+            percentile: Math.min(99, Math.max(1, Math.round(pct * 0.9 + 5))),
+            totalTime: formatTime(totalTimeSec),
+            avgTime: formatTime(avgTimeSec),
+          },
+          questions,
+          userAnswers: s.answers,
+          revealed: s.revealed,
+          flagged: s.flagged,
+          opts,
+        });
+        downloadPdf(doc, `${s.packTitle} - ${t("pdf.tpl.results")}`);
+        toast({ title: t("pdf.pdfReady"), description: t("pdf.pdfReadyDesc") });
+      } catch (err) {
+        console.error("[osler/pdf] session export failed:", err);
+        toast({ title: t("pdf.exportFailed"), description: String(err), variant: "destructive" });
+      }
     },
     [buildPoolForSession, t],
   );
@@ -4217,7 +4238,7 @@ function TrackerTab({
 
   const handleExportTrackerPdf = React.useCallback((opts: PdfExportOptions) => {
     const doc = generateDashboardPdf({
-      username: "Tracker Report",
+      username: username || t("pdf.tpl.report"),
       stats: {
         packs: new Set(sessionList.map((session) => session.packUid)).size,
         attempted: overall.attempted,
@@ -4233,10 +4254,9 @@ function TrackerTab({
         })),
       opts,
     });
-    downloadPdf(doc, "Tracker Report");
+    downloadPdf(doc, t("pdf.exportReport"));
     toast({ title: t("pdf.pdfReady"), description: t("pdf.pdfReadyDesc") });
-    setTrackerPdfOpen(false);
-  }, [overall, sessionList, t]);
+  }, [overall, sessionList, t, username]);
 
   if (!data) {
     return <LoadingState label={t("qbank.tracker.loading")} />;
@@ -7983,40 +8003,45 @@ function ResultsView({
   const percentileCount = useCountUp(percentile);
 
   const handleExportPdf = async (opts: PdfExportOptions) => {
-    const questions = session.questions.map((q) => ({
-      stem: q.stem,
-      choices: q.choices,
-      correct: q.correct,
-      explanation: q.explanation,
-      modelAnswer: q.modelAnswer,
-      isWritten: q.correct < 0,
-      difficulty: q.difficulty,
-      tags: q.tags,
-      rubric: q.rubric,
-    }));
+    try {
+      const questions = session.questions.map((q) => ({
+        stem: q.stem,
+        choices: q.choices,
+        correct: q.correct,
+        explanation: q.explanation,
+        modelAnswer: q.modelAnswer,
+        isWritten: q.correct < 0,
+        difficulty: q.difficulty,
+        tags: q.tags,
+        rubric: q.rubric,
+      }));
 
-    const doc = generateResultsPdf({
-      packTitle: item.title,
-      mode: session.mode,
-      score: {
-        pct,
-        correct: totalCorrect,
-        total,
-        answered: answeredCount,
-        incorrect: incorrectCount,
-        flagged: flaggedCount,
-        percentile,
-        totalTime: formatTime(totalTimeSec),
-        avgTime: formatTime(avgTimeSec),
-      },
-      questions,
-      userAnswers: session.answers,
-      revealed: session.revealed,
-      flagged: session.flagged,
-      opts,
-    });
-    downloadPdf(doc, `${item.title} — Results`);
-    toast({ title: t("pdf.pdfReady"), description: t("pdf.pdfReadyDesc") });
+      const doc = generateResultsPdf({
+        packTitle: item.title,
+        mode: session.mode,
+        score: {
+          pct,
+          correct: totalCorrect,
+          total,
+          answered: answeredCount,
+          incorrect: incorrectCount,
+          flagged: flaggedCount,
+          percentile,
+          totalTime: formatTime(totalTimeSec),
+          avgTime: formatTime(avgTimeSec),
+        },
+        questions,
+        userAnswers: session.answers,
+        revealed: session.revealed,
+        flagged: session.flagged,
+        opts,
+      });
+      downloadPdf(doc, `${item.title} - ${t("pdf.tpl.results")}`);
+      toast({ title: t("pdf.pdfReady"), description: t("pdf.pdfReadyDesc") });
+    } catch (err) {
+      console.error("[osler/pdf] results export failed:", err);
+      toast({ title: t("pdf.exportFailed"), description: String(err), variant: "destructive" });
+    }
   };
 
   return (

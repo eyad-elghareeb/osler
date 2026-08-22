@@ -377,9 +377,12 @@ export function SessionHistoryView() {
           revealed: s.revealed,
           flagged: s.flagged,
           opts,
-        } as ResultsPdfConfig);
-        downloadPdf(doc, `${s.packTitle} — Results`);
+        });
+        downloadPdf(doc, `${s.packTitle} - ${t("pdf.tpl.results")}`);
         toast({ title: t("pdf.pdfReady"), description: t("pdf.pdfReadyDesc") });
+      } catch (err) {
+        console.error("[osler/pdf] session export failed:", err);
+        toast({ title: t("pdf.exportFailed"), description: String(err), variant: "destructive" });
       } finally {
         setPdfBusy(null);
       }

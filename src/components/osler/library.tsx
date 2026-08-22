@@ -264,9 +264,9 @@ export function Library({ initialArticleId, onNavigateBack: propOnNavigateBack }
     <div class="meta">
       ${activeArticle.specialty ? `<span>${activeArticle.specialty}</span>` : ""}
       ${activeArticle.system ? `<span>${activeArticle.system}</span>` : ""}
-      ${activeArticle.readTimeMin ? `<span>${activeArticle.readTimeMin} min read</span>` : ""}
+      ${activeArticle.readTimeMin ? `<span>${t("library.readTime", { n: activeArticle.readTimeMin })}</span>` : ""}
       ${activeArticle.tags?.length ? `<span>${activeArticle.tags.join(", ")}</span>` : ""}
-      <span>Printed ${new Date().toLocaleDateString()}</span>
+      <span>${t("pdf.tpl.printedOn")} ${new Date().toLocaleDateString(activeArticle.lang === "ar" ? "ar" : "en-US")}</span>
     </div>
   </div>
   <div class="article-body">${processedArticleHtml}</div>
@@ -285,16 +285,21 @@ export function Library({ initialArticleId, onNavigateBack: propOnNavigateBack }
   const { toast } = useToast();
   const handleExportArticlePdf = React.useCallback(async (opts: PdfExportOptions) => {
     if (!activeArticle) return;
-    const doc = generateArticlePdf({
-      title: activeArticle.title,
-      subtitle: activeArticle.specialty,
-      author: opts.author,
-      content: processedArticleHtml,
-      opts,
-    });
-    downloadPdf(doc, activeArticle.title);
-    toast({ title: t("pdf.pdfReady"), description: t("pdf.pdfReadyDesc") });
-  }, [activeArticle, processedArticleHtml, toast]);
+    try {
+      const doc = generateArticlePdf({
+        title: activeArticle.title,
+        subtitle: activeArticle.specialty,
+        author: opts.author,
+        content: processedArticleHtml,
+        opts,
+      });
+      downloadPdf(doc, activeArticle.title);
+      toast({ title: t("pdf.pdfReady"), description: t("pdf.pdfReadyDesc") });
+    } catch (err) {
+      console.error("[osler/pdf] article export failed:", err);
+      toast({ title: t("pdf.exportFailed"), description: String(err), variant: "destructive" });
+    }
+  }, [activeArticle, processedArticleHtml, toast, t]);
 
   // Mermaid post-processing: find placeholders, dynamically render SVG
   React.useEffect(() => {
@@ -552,9 +557,9 @@ export function Library({ initialArticleId, onNavigateBack: propOnNavigateBack }
         <PdfExportDialog
           open={pdfDialogOpen}
           onOpenChange={setPdfDialogOpen}
-          defaultTitle={activeArticle?.title ?? "Article"}
+          defaultTitle={activeArticle?.title ?? t("pdf.tpl.article")}
           defaultSubtitle={activeArticle?.specialty}
-          variant="quiz"
+          variant="article"
           onExport={handleExportArticlePdf}
         />
       </>
@@ -701,9 +706,9 @@ export function Library({ initialArticleId, onNavigateBack: propOnNavigateBack }
       <PdfExportDialog
         open={pdfDialogOpen}
         onOpenChange={setPdfDialogOpen}
-        defaultTitle={activeArticle?.title ?? "Article"}
+        defaultTitle={activeArticle?.title ?? t("pdf.tpl.article")}
         defaultSubtitle={activeArticle?.specialty}
-        variant="quiz"
+        variant="article"
         onExport={handleExportArticlePdf}
       />
     </motion.div>
