@@ -293,10 +293,12 @@ export function useContentActions({
     if (!capabilities.manageUsers || !d.pathMode || mutating) return;
     const pathErr = pathError(d.pathInput);
     if (pathErr) {
+      haptic("error");
       toast({ title: t("admin.content.invalidPath"), description: pathErr, variant: "destructive" });
       return;
     }
     const cleaned = d.pathInput.replace(/^\/+/, "");
+    haptic("light");
     setMutating(true);
     try {
       if (d.pathMode === "newFile") {
@@ -414,6 +416,7 @@ export function useContentActions({
   async function confirmDelete() {
     const node = dialogRef.current.deleteNode;
     if (!node || mutating) return;
+    haptic("warning");
     setMutating(true);
     try {
       if (node.kind === "folder") {

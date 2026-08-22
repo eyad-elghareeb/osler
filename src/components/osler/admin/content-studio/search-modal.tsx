@@ -245,6 +245,7 @@ export function ContentSearchModal({
               variant="ghost"
               size="iconSm"
               onClick={() => setQuery("")}
+              aria-label={t("common.reset")}
               className="text-muted-foreground hover:text-foreground"
             >
               <X className="size-3.5" />
