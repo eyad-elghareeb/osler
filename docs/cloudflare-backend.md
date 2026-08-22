@@ -15,6 +15,7 @@ For the **full HTTP API reference**, see [`api-reference.md`](./api-reference.md
 | `migrations/0002_accounts_and_google.sql` | Google identity links (`auth_identities`), OAuth state tokens (`oauth_states`), and single-use handoffs (`auth_handoffs`). |
 | `migrations/0003_admin.sql` | R2-backed content objects (`content_objects` with draft/pending/published/rejected workflow) and admin audit log (`admin_audit`). |
 | `migrations/0004_security_indexes.sql` | Performance & security indexes for session enumeration, audit-log reads, and per-user content listing. |
+| `migrations/0018_content_origin_key.sql` | `content_objects.origin_r2_key` + index — records the loose file a managed object was adopted from so adopt() is exactly idempotent (one file ↔ one object). |
 | `wrangler.toml` | Workers, D1 + R2 config, and hourly cron trigger for cleanup. |
 | `.dev.vars.example` | Secret names template (never commit `.dev.vars`). |
 | `.env.example` | Same reference, suitable for documentation purposes. |
@@ -252,3 +253,30 @@ npm run db:list              # list applied/pending migrations
 ```
 
 Always run `npm run db:migrate:local` first when developing new migrations to catch syntax errors before touching production.
+
+> **Note:** after applying `0018_content_origin_key.sql`, existing adopted
+> drafts keep working — only *new* adoptions persist their origin key, and
+> the adopt endpoint falls back gracefully if the column is missing (the
+> lookup is wrapped in try/catch).
+
+### Content lifecycle guarantees
+
+The Worker keeps student-facing content consistent with the managed workflow:
+
+- **Publish** (`POST /v1/admin/content/:id/publish`) writes both the managed
+  published copy and a hybrid student-facing copy under
+  `content-files/<category>/<targetPath>`, then regenerates that category's
+  manifest. `published_r2_key` remembers where it landed.
+- **Unpublish** deletes the hybrid copy and regenerates the manifest — status
+  flips alone would leave students serving stale files.
+- **Delete** removes the managed base, the hybrid copy, and regenerates the
+  manifest.
+- **Folder delete** (`POST /v1/admin/content/r2-delete-prefix`) cascades:
+  every R2 key under the prefix in both `content-files/` and
+  `content-staging/`, plus any managed object whose `published_r2_key` lives
+  under the prefix. All bounded per-run for Workers Free; clients loop on
+  `remaining`/`complete`.
+- **Adopt** (`POST /v1/admin/content/adopt`) is idempotent via
+  `origin_r2_key` → `published_r2_key` → basename reconstruction, in that
+  order.
+

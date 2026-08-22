@@ -620,11 +620,12 @@ This bypasses the review queue entirely. Use it for trusted admin-authored conte
 
 `POST /v1/admin/content/:id/unpublish` reverts published content back to draft. It does:
 
-1. Sets `status = 'draft'`.
-2. Writes `admin_audit` with `action = 'unpublish'`.
-3. **Leaves the `published.json` in R2 untouched.** The published copy is retained so that re-publishing doesn't require re-uploading.
+1. Deletes the student-facing hybrid copy from `content-files/` (if the object was hybrid-published).
+2. Sets `status = 'draft'` and clears `published_r2_key`.
+3. Regenerates the category manifest so students stop being served the file.
+4. Writes `admin_audit` with `action = 'unpublish'`.
 
-Students stop seeing the content immediately because the app reads `status` from D1, not R2. To re-publish, hit "Publish directly" again — the current draft body is what goes live.
+The managed `published.json` under `<r2_key_base>/` is retained so re-publishing doesn't require re-uploading. Students stop seeing the content immediately — both because the app reads `status` from D1 and because the student-facing R2 copy is gone.
 
 #### Delete
 
@@ -632,6 +633,8 @@ Students stop seeing the content immediately because the app reads `status` from
 
 - The `content_objects` row from D1.
 - All R2 objects at `<r2_key_base>/` (draft, pending, published).
+- The student-facing hybrid copy at `published_r2_key` (if any).
+- Regenerates the category manifest so the pack disappears from students immediately.
 
 Deletion is irreversible. An `admin_audit` row with `action = 'delete_content'` is written. Admins can delete any content; `content_admin`s can only delete their own.
 
