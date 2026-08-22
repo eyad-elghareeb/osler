@@ -512,10 +512,10 @@ export function SessionHistoryView() {
           }}
           defaultTitle={
             pdfTargetId
-              ? previewSessions.find((s) => s.id === pdfTargetId)?.packTitle ?? "Session"
-              : "Session"
+              ? previewSessions.find((s) => s.id === pdfTargetId)?.packTitle ?? t("pdf.tpl.results")
+              : t("pdf.tpl.results")
           }
-          variant="quiz"
+          variant="results"
           onExport={(opts) => {
             const s = previewSessions.find((sess) => sess.id === pdfTargetId);
             if (s) void handleExportSession(s, opts);

@@ -4659,7 +4659,8 @@ function TrackerTab({
       <PdfExportDialog
         open={trackerPdfOpen}
         onOpenChange={setTrackerPdfOpen}
-        defaultTitle="Tracker Report"
+        defaultTitle={t("pdf.exportReport")}
+        defaultAuthor={username ?? undefined}
         variant="dashboard"
         onExport={handleExportTrackerPdf}
       />
@@ -4670,8 +4671,9 @@ function TrackerTab({
           setSessionPdfOpen(open);
           if (!open) setSessionPdfTargetId(null);
         }}
-        defaultTitle={sessionPdfTargetId ? sessionList.find((s) => s.id === sessionPdfTargetId)?.packTitle ?? "Session" : "Session"}
-        variant="quiz"
+        defaultTitle={sessionPdfTargetId ? sessionList.find((s) => s.id === sessionPdfTargetId)?.packTitle ?? t("qbank.tracker.title") : t("qbank.tracker.title")}
+        defaultAuthor={username ?? undefined}
+        variant="results"
         onExport={(opts) => {
           const s = sessionList.find((s) => s.id === sessionPdfTargetId);
           if (s) handleExportSession(s, opts);
@@ -8215,7 +8217,7 @@ function ResultsView({
         onOpenChange={setPdfDialogOpen}
         defaultTitle={item.title}
         defaultSubtitle={session.mode === "timed" ? t("qbank.session.timedMode") : t("qbank.session.tutorMode")}
-        variant="quiz"
+        variant="results"
         onExport={handleExportPdf}
       />
     </div>
