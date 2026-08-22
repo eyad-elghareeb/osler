@@ -25,6 +25,19 @@ export type ConnectionStatus =
   | "connected"
   | "error";
 
+export interface SyncPreviewSummary {
+  senderName: string;
+  packCount: number;
+  progressCount: number;
+}
+
+export interface IncomingSyncRequest {
+  peerId: string;
+  label: string;
+  preview: SyncPreviewSummary;
+  receivedAt: number;
+}
+
 export interface TransportCallbacks {
   onStatusChanged: (status: ConnectionStatus, message: string) => void;
   onSyncComplete: (method: "p2p") => void;
@@ -33,6 +46,9 @@ export interface TransportCallbacks {
   onConnectionsChanged: (connections: ConnectionInfo[]) => void;
   onDevicesChanged: (devices: DiscoveredDevice[]) => void;
   onRoomId: (roomId: string) => void;
+  /** Fired when a peer pushes sync data over the channel. Nothing is
+   *  merged until the user calls {@link NetworkTransport.acceptIncoming}. */
+  onIncomingRequest: (request: IncomingSyncRequest) => void;
 }
 
 /* ── Device identity ─────────────────────────────────────────────────── */
@@ -78,6 +94,9 @@ export class NetworkTransport {
   private connections: Map<string, { conn: import("peerjs").DataConnection; info: ConnectionInfo }> = new Map();
   private started = false;
   private discovering = false;
+
+  /** Data received but not yet accepted/rejected by the user. */
+  private pending: { peerId: string; label: string; payload: SyncProtocol.SyncPayload } | null = null;
 
   /* MQTT discovery */
   private mqttClient: unknown = null;
@@ -168,22 +187,16 @@ export class NetworkTransport {
     this.callbacks.onStatusChanged("discovering", "Discovering devices...");
 
     try {
-      // Room is derived from the current hostname (origin) so that every
-      // device opening the same domain lands in the same room — even if
-      // they sit behind different NATs or report different WebRTC ICE
-      // candidates. The previous implementation used the public IP from
-      // STUN, which is unreliable: two devices on the same network can
-      // resolve different ICE candidates (different NAT paths, IPv4 vs
-      // IPv6, mDNS hostnames on Chrome, etc.) and end up in different
-      // rooms. Domain-based room assignment is deterministic and matches
-      // the user mental model: "same site = same room".
-      const host =
-        typeof window !== "undefined" && window.location
-          ? (window.location.hostname || window.location.host || "default")
-          : "default";
-      const hash = this.hashString(`osler-sync-v3-${host}`);
-      this.roomHash = hash.substring(0, 8).toUpperCase();
-      this.callbacks.onRoomId(this.roomHash);
+      // The MQTT room is opt-in per session: a random code shown to the user.
+      // The previous hostname-derived room put every visitor of a deployment
+      // into one shared discovery space, where any peer could silently push
+      // its full export onto every other device. Two devices sync only when
+      // both type the same room code (or connect via QR / manual Peer ID).
+      const code = Array.from(crypto.getRandomValues(new Uint8Array(4)))
+        .map((b) => "23456789ABCDEFGHJKMNPQRSTUVWXYZ"[b % 29])
+        .join("");
+      this.roomHash = code;
+      this.callbacks.onRoomId(code);
 
       await this.connectMQTT();
       this.broadcastPresence();
@@ -193,11 +206,48 @@ export class NetworkTransport {
         this.pruneStaleDevices();
       }, 5000);
 
-      this.callbacks.onStatusChanged("connected", "Ready — devices will appear automatically");
+      this.callbacks.onStatusChanged("connected", "Ready - share the room code or scan the QR");
     } catch (e) {
       console.error("Network discovery failed:", e);
       this.discovering = false;
       this.callbacks.onStatusChanged("connected", `Your ID: ${this.localPeerId} (share with other device)`);
+    }
+  }
+
+  /** Join the room another device advertised. Both sides must use the same
+   *  code for discovery to find each other; data still requires explicit
+   *  consent on the receiving side. */
+  async joinRoom(code: string): Promise<void> {
+    const normalized = code.trim().toUpperCase();
+    if (!/^[A-Z2-9]{4,10}$/.test(normalized)) {
+      this.callbacks.onStatusChanged("error", "Invalid room code");
+      return;
+    }
+    if (!this.started) await this.start();
+    if (!this.peer) return;
+    // Leave the old room's MQTT subscription behind.
+    if (this.mqttClient) {
+      try { (this.mqttClient as { disconnect: () => void }).disconnect(); } catch {}
+      this.mqttClient = null;
+    }
+    if (this.heartbeatTimer) {
+      clearInterval(this.heartbeatTimer);
+      this.heartbeatTimer = null;
+    }
+    this.devices = {};
+    this.callbacks.onDevicesChanged([]);
+    this.roomHash = normalized;
+    this.callbacks.onRoomId(normalized);
+    try {
+      await this.connectMQTT();
+      this.broadcastPresence();
+      this.heartbeatTimer = setInterval(() => {
+        this.broadcastPresence();
+        this.pruneStaleDevices();
+      }, 5000);
+      this.callbacks.onStatusChanged("connected", `Joined room ${normalized}`);
+    } catch (e) {
+      this.callbacks.onStatusChanged("error", `Join failed: ${(e as Error).message}`);
     }
   }
 
@@ -247,8 +297,7 @@ export class NetworkTransport {
     if (this.connections.has(remotePeerId)) {
       const entry = this.connections.get(remotePeerId)!;
       if (entry.info.status === "connected") {
-        this.callbacks.onStatusChanged("connected", "Re-sending data...");
-        await this.sendExport(entry.conn);
+        this.callbacks.onStatusChanged("connected", `Connected to ${label} - waiting for their approval`);
       }
       return;
     }
@@ -259,8 +308,10 @@ export class NetworkTransport {
     this.trackConnection(conn, remotePeerId);
 
     conn.on("open", () => {
-      this.callbacks.onStatusChanged("connected", `Syncing with ${label}...`);
-      this.sendExport(conn);
+      // Opening the channel no longer pushes data. Both sides now land in
+      // "connected" and the receiver explicitly accepts before anything is
+      // merged; the initiator sends its export only after the receiver asks.
+      this.callbacks.onStatusChanged("connected", `Connected to ${label}`);
     });
 
     setTimeout(() => {
@@ -322,27 +373,55 @@ export class NetworkTransport {
     }
   }
 
-  private async handleIncomingData(_conn: import("peerjs").DataConnection, raw: string): Promise<void> {
-    this.callbacks.onStatusChanged("connected", "Received data — importing...");
+  private async handleIncomingData(conn: import("peerjs").DataConnection, raw: string): Promise<void> {
     try {
       const payload = SyncProtocol.decode(raw);
-      await mergePayloadIntoStorage(payload);
+      const summary = SyncProtocol.preview(raw);
+      // Hold the payload for user review — nothing touches storage until
+      // acceptIncoming() is called. A peer that connects and pushes
+      // uninvited can no longer mutate this device's data.
+      this.pending = { peerId: conn.peer, label: conn.peer, payload };
+      this.callbacks.onIncomingRequest({
+        peerId: conn.peer,
+        label: this.connections.get(conn.peer)?.info.label ?? conn.peer,
+        preview: {
+          senderName: String(payload.senderName ?? "Unknown device"),
+          packCount: summary?.packCount ?? 0,
+          progressCount: summary?.progressCount ?? 0,
+        },
+        receivedAt: Date.now(),
+      });
+      this.callbacks.onStatusChanged("connected", `Sync offer from ${payload.senderName || "device"} - review to accept`);
+    } catch (err) {
+      this.callbacks.onStatusChanged("error", `Import failed: ${(err as Error).message}`);
+    }
+  }
+
+  /** Merge the pending incoming payload into local storage. */
+  async acceptIncoming(): Promise<void> {
+    const pending = this.pending;
+    if (!pending) return;
+    this.pending = null;
+    this.callbacks.onStatusChanged("connected", "Received data - importing...");
+    try {
+      await mergePayloadIntoStorage(pending.payload);
       this.callbacks.onSyncComplete("p2p");
     } catch (err) {
       this.callbacks.onStatusChanged("error", `Import failed: ${(err as Error).message}`);
     }
   }
 
-  /* ── MQTT discovery ────────────────────────────────────────────────── */
-
-  private hashString(str: string): string {
-    let h = 0;
-    for (let i = 0; i < str.length; i++) {
-      h = ((h << 5) - h) + str.charCodeAt(i);
-      h |= 0;
-    }
-    return Math.abs(h).toString(16).toUpperCase();
+  /** Discard the pending incoming payload without importing. */
+  rejectIncoming(): void {
+    this.pending = null;
+    this.callbacks.onStatusChanged("connected", "Sync offer declined");
   }
+
+  get hasPendingIncoming(): boolean {
+    return this.pending !== null;
+  }
+
+  /* ── MQTT discovery ────────────────────────────────────────────────── */
 
   private async connectMQTT(): Promise<void> {
     const client = new Paho.Client("broker.emqx.io", 8084, "/mqtt", `osler-${this.localPeerId}-${Date.now()}`) as unknown as Record<string, unknown>;

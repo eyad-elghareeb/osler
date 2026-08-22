@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import {
   Wifi,
   Smartphone,
@@ -21,6 +21,7 @@ import {
   type ConnectionInfo,
   type ConnectionStatus,
   type DiscoveredDevice,
+  type IncomingSyncRequest,
 } from "@/lib/osler/sync";
 import { cn } from "@/lib/utils";
 import { useI18n } from "@/components/osler/i18n-provider";
@@ -38,6 +39,8 @@ export function NetworkSyncPanel() {
   const [connections, setConnections] = React.useState<ConnectionInfo[]>([]);
   const [peerId, setPeerId] = React.useState("");
   const [manualId, setManualId] = React.useState("");
+  const [roomInput, setRoomInput] = React.useState("");
+  const [incoming, setIncoming] = React.useState<IncomingSyncRequest | null>(null);
 
   React.useEffect(() => {
     const tr = new NetworkTransport({
@@ -54,6 +57,10 @@ export function NetworkSyncPanel() {
       onConnectionsChanged: (c) => setConnections([...c]),
       onDevicesChanged: (d) => setDevices([...d]),
       onRoomId: (id) => setRoomId(id),
+      onIncomingRequest: (req) => {
+        haptic("warning");
+        setIncoming(req);
+      },
     });
     setTransport(tr);
     return () => {
@@ -72,6 +79,15 @@ export function NetworkSyncPanel() {
     if (transport) {
       haptic("warning");
       transport.stop();
+    }
+  };
+
+  const handleJoinRoom = () => {
+    const code = roomInput.trim();
+    if (transport && code) {
+      haptic("light");
+      void transport.joinRoom(code);
+      setRoomInput("");
     }
   };
 
@@ -170,7 +186,103 @@ export function NetworkSyncPanel() {
         </div>
       </Card>
 
-      {/* Peer-link QR — always visible so the user can scan-and-connect even
+      {/* Incoming sync offer - nothing is merged until the user accepts. */}
+      <AnimatePresence>
+        {incoming && (
+          <motion.div
+            initial={{ opacity: 0, y: 8, scale: 0.98 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -6 }}
+            transition={{ duration: 0.2 }}
+          >
+            <Card className="p-5 border-warning/40 bg-warning/5">
+              <div className="flex items-start gap-4">
+                <div className="size-10 rounded-lg flex items-center justify-center shrink-0 bg-warning/15 text-warning">
+                  <AlertTriangle className="size-5" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <h3 className="text-sm font-semibold mb-1">{t("sync.network.incomingTitle")}</h3>
+                  <p className="text-xs text-muted-foreground mb-1">
+                    {t("sync.network.incomingFrom", { name: incoming.preview.senderName })}
+                  </p>
+                  <p className="text-xs text-muted-foreground mb-3">
+                    {t("sync.network.incomingSummary", {
+                      packs: incoming.preview.packCount,
+                      progress: incoming.preview.progressCount,
+                    })}
+                  </p>
+                  <div className="flex gap-2">
+                    <Button
+                      size="sm"
+                      variant="default"
+                      className="h-8 text-xs"
+                      onClick={() => {
+                        haptic("success");
+                        transport?.acceptIncoming();
+                        setIncoming(null);
+                      }}
+                    >
+                      <Check className="size-3 me-1.5" /> {t("sync.network.accept")}
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-8 text-xs"
+                      onClick={() => {
+                        haptic("light");
+                        transport?.rejectIncoming();
+                        setIncoming(null);
+                      }}
+                    >
+                      {t("sync.network.decline")}
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            </Card>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Room code - discovery is opt-in per session; both sides must enter
+          the same code to see each other. */}
+      <Card className="p-4">
+        <div className="flex items-center gap-2 mb-2">
+          <Radio className="size-3.5 text-primary" />
+          <span className="text-xs font-semibold">{t("sync.network.roomCode")}</span>
+        </div>
+        {roomId ? (
+          <div className="flex items-center justify-between gap-2">
+            <span className="font-[var(--font-code)] text-lg font-bold tracking-widest text-primary select-all">{roomId}</span>
+            <span className="text-[10px] text-muted-foreground hidden sm:block">{t("sync.network.roomHint")}</span>
+          </div>
+        ) : (
+          <p className="text-xs text-muted-foreground">{t("sync.network.roomStartHint")}</p>
+        )}
+        <div className="flex gap-2 mt-3">
+          <Input
+            placeholder={t("sync.network.roomPlaceholder")}
+            value={roomInput}
+            onChange={(e) => setRoomInput(e.target.value.toUpperCase())}
+            className="h-9 text-xs font-[var(--font-code)] uppercase"
+            maxLength={10}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") handleJoinRoom();
+            }}
+          />
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-9 text-xs shrink-0"
+            onClick={handleJoinRoom}
+            disabled={!roomInput.trim() || status === "connecting"}
+          >
+            {t("sync.network.joinRoom")}
+          </Button>
+        </div>
+      </Card>
+
+      {/* Peer-link QR - always visible so the user can scan-and-connect even
           before MQTT discovery finds anyone (e.g. across VLANs / VPNs). */}
       <PeerLinkQrPanel
         transport={transport}
