@@ -28,6 +28,10 @@ crons = ["0 * * * *"]
 # (scheme + host + port) the browser uses to load your app.
 ALLOWED_ORIGIN = "http://localhost:3000"
 # Set to true after configuring TURNSTILE_SECRET_KEY and publishing its site key.
+# PRODUCTION INSTANCES SHOULD ENABLE THIS: with the flag off, login brute-force
+# protection relies only on rate limits + the D1 lockout. Turnstile adds a
+# free human-verification gate on register/login/reset that distributed
+# attackers cannot parallelize.
 TURNSTILE_ENABLED = "false"
 # The Worker callback base URL. Replace after first deployment.
 WORKER_URL = "http://localhost:8787"
