@@ -75,7 +75,6 @@ export interface ExplorerToolbarProps {
   onToggleDetail: () => void;
   className?: string;
 }
-
 export function ExplorerToolbar(props: ExplorerToolbarProps) {
   const { t } = useI18n();
   const {
@@ -253,6 +252,20 @@ export function ExplorerToolbar(props: ExplorerToolbarProps) {
         size="iconSm"
         className={cn(loading && "[&_svg]:animate-spin")}
       />
+
+      {/* Maintenance busy chip — Radix dropdowns close on select, so the
+          per-menu spinners were invisible. This stays visible for the whole
+          (potentially multi-round-trip) operation. */}
+      {(regenerating || backfilling || gcRunning) && (
+        <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-primary/30 bg-primary/10 px-2 py-1 text-[11px] font-medium text-primary">
+          <Loader2 className="size-3 animate-spin" />
+          {regenerating
+            ? t("admin.studio.rebuildingManifests")
+            : backfilling
+              ? t("admin.studio.backfilling")
+              : t("admin.studio.sweepingOrphans")}
+        </span>
+      )}
 
       {/* More actions (admin only) — overflow for secondary commands */}
       {canManage && (

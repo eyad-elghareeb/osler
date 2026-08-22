@@ -30,6 +30,20 @@ import { collectStagedKeys, folderPathOf } from "./types";
 
 // ── Types ───────────────────────────────────────────────────────────────────
 
+/** Best-effort student-facing target path for a managed node, derived from
+ *  the location it's already published to (or browsed at). Keeps quick
+ *  publishes inside the file's original folder instead of letting the
+ *  worker fall back to "<objectId>.<ext>" at the category root. */
+export function deriveTargetPath(node: ContentTreeNode): string | undefined {
+  const key = node.cloudObject?.published_r2_key ?? node.r2Key;
+  if (!key || !key.startsWith("content-files/")) return undefined;
+  const rel = key.slice("content-files/".length);
+  if (!rel || !rel.includes("/")) return undefined;
+  // Strip the leading category folder — hybridPublish re-prepends it.
+  const withoutCat = rel.slice(rel.indexOf("/") + 1);
+  return withoutCat || undefined;
+}
+
 export interface DialogState {
   /** The path shown in the PathInputDialog (new-file / new-folder / rename). */
   pathInput: string;
@@ -105,6 +119,8 @@ export interface ContentActions {
   gcOrphans: () => Promise<void>;
   /** Whether an orphan sweep is in flight. */
   gcRunning: boolean;
+  /** Whether a confirm-dialog mutation (delete / path submit) is in flight. */
+  mutating: boolean;
 }
 
 export interface UseContentActionsArgs {
@@ -145,10 +161,13 @@ export function useContentActions({
   const [regenerating, setRegenerating] = React.useState(false);
   const [backfilling, setBackfilling] = React.useState(false);
   const [gcRunning, setGcRunning] = React.useState(false);
+  /** A confirm-dialog mutation (delete / path submit) is in flight — used to
+   *  disable the dialog's submit button and prevent double-submits. */
+  const [mutating, setMutating] = React.useState(false);
 
   // ── Auto-rebuild helper ───────────────────────────────────────────────
   const autoRebuildForCategory = React.useCallback((categoryOrKey: string) => {
-    if (!capabilities.manageUsers || !categoryOrKey) return;
+    if (!capabilities.manageContent || !categoryOrKey) return;
     const clean = categoryOrKey
       .replace(/^content-files\//, "")
       .replace(/^content-staging\//, "")
@@ -156,11 +175,13 @@ export function useContentActions({
       .replace(/^\/+/, "");
     const cat = clean.split("/")[0];
     if (cat && ["library", "qbank", "flashcard", "osce", "videos"].includes(cat)) {
-      adminApi.regenerateManifest(cat).catch(() => {
-        // Background silent failure log
+      adminApi.regenerateManifest(cat).catch((err) => {
+        // Background best-effort — surface briefly so failures aren't
+        // silently swallowed (students would keep serving stale manifests).
+        console.warn("manifest regen failed:", cat, err);
       });
     }
-  }, [capabilities.manageUsers]);
+  }, [capabilities.manageContent]);
 
   // ── Backfill ──────────────────────────────────────────────────────────
   async function backfill() {
@@ -260,48 +281,59 @@ export function useContentActions({
   }
 
   // ── PathInputDialog submit ────────────────────────────────────────────
+  // `dialog` is read through a ref: the actions object is memoized, so a
+  // closure over the state variable would go stale between the dialog
+  // opening (setDialog) and the user clicking submit — leaving pathMode
+  // null and silently no-op-ing every New file / New folder / Rename.
+  const dialogRef = React.useRef(dialog);
+  dialogRef.current = dialog;
+
   async function submitPathDialog() {
-    if (!capabilities.manageUsers || !dialog.pathMode) return;
-    const pathErr = pathError(dialog.pathInput);
+    const d = dialogRef.current;
+    if (!capabilities.manageUsers || !d.pathMode || mutating) return;
+    const pathErr = pathError(d.pathInput);
     if (pathErr) {
       toast({ title: t("admin.content.invalidPath"), description: pathErr, variant: "destructive" });
       return;
     }
-    const cleaned = dialog.pathInput.replace(/^\/+/, "");
+    const cleaned = d.pathInput.replace(/^\/+/, "");
+    setMutating(true);
     try {
-      if (dialog.pathMode === "newFile") {
+      if (d.pathMode === "newFile") {
         const key = `content-files/${cleaned}`;
         const isJson = key.endsWith(".json");
         const isMd = key.endsWith(".md");
         const body = isJson ? "{}" : isMd ? "# New article\n" : "";
         await adminApi.uploadFile(key, body);
-        toast({ title: t("admin.toast.created", { path: dialog.pathInput }) });
+        toast({ title: t("admin.toast.created", { path: d.pathInput }) });
         autoRebuildForCategory(cleaned);
-      } else if (dialog.pathMode === "newFolder") {
+      } else if (d.pathMode === "newFolder") {
         await adminApi.createR2Folder(`content-files/${cleaned}`);
-        toast({ title: t("admin.toast.createdFolder", { path: dialog.pathInput }) });
+        toast({ title: t("admin.toast.createdFolder", { path: d.pathInput }) });
         autoRebuildForCategory(cleaned);
-      } else if (dialog.pathMode === "rename") {
+      } else if (d.pathMode === "rename") {
         const to = `content-files/${cleaned}`;
-        if (dialog.renameIsFolder) {
-          await adminApi.renameR2Folder(dialog.pathParent, to);
-          toast({ title: t("admin.toast.renamedFolder", { path: dialog.pathInput }) });
+        if (d.renameIsFolder) {
+          await adminApi.renameR2Folder(d.pathParent, to);
+          toast({ title: t("admin.toast.renamedFolder", { path: d.pathInput }) });
         } else {
-          await adminApi.renameR2Key(dialog.pathParent, to);
-          toast({ title: t("admin.toast.renamed", { path: dialog.pathInput }) });
+          await adminApi.renameR2Key(d.pathParent, to);
+          toast({ title: t("admin.toast.renamed", { path: d.pathInput }) });
         }
-        autoRebuildForCategory(dialog.pathParent);
+        autoRebuildForCategory(d.pathParent);
         autoRebuildForCategory(cleaned);
       }
-      setDialog((d) => ({ ...d, pathMode: null }));
+      setDialog((s) => ({ ...s, pathMode: null }));
       onMutated();
     } catch (err) {
-      const key = dialog.pathMode === "newFile"
+      const key = d.pathMode === "newFile"
         ? "admin.toast.createFailed"
-        : dialog.pathMode === "newFolder"
+        : d.pathMode === "newFolder"
           ? "admin.toast.createFolderFailed"
           : "admin.toast.renameFailed";
       toast({ title: t(key as any, { error: String(err) }), variant: "destructive" });
+    } finally {
+      setMutating(false);
     }
   }
 
@@ -376,11 +408,16 @@ export function useContentActions({
   function closeDeleteDialog() {
     setDialog((d) => ({ ...d, deleteOpen: false, deleteNode: null }));
   }
+  // Reads dialog state through dialogRef (see submitPathDialog) — a direct
+  // closure went stale inside the memoized actions object, so every
+  // context-menu / detail-panel delete silently early-returned.
   async function confirmDelete() {
-    const node = dialog.deleteNode;
-    if (!node) return;
+    const node = dialogRef.current.deleteNode;
+    if (!node || mutating) return;
+    setMutating(true);
     try {
       if (node.kind === "folder") {
+        if (node.id.endsWith("__drafts__")) return; // synthetic folder — nothing to delete on R2
         const path = folderPathOf(node);
         const res = await adminApi.deleteR2Folder(path);
         toast({ title: t("admin.toast.deletedFolder", { name: node.name, n: String(res.deleted) }) });
@@ -399,6 +436,8 @@ export function useContentActions({
       onMutated();
     } catch (err) {
       toast({ title: t("admin.toast.deleteFailedR2", { error: String(err) }), variant: "destructive" });
+    } finally {
+      setMutating(false);
     }
   }
 
@@ -456,7 +495,7 @@ export function useContentActions({
       URL.revokeObjectURL(objUrl);
     } catch (err) {
       console.error("Download failed:", err);
-      toast({ title: "Download failed", variant: "destructive" });
+      toast({ title: t("admin.toast.downloadFailed"), variant: "destructive" });
     }
   }
 
@@ -481,13 +520,21 @@ export function useContentActions({
   }
 
   // ── Staged publish / discard ──────────────────────────────────────────
+  // The worker bounds each run (free-plan subrequest cap) and reports the
+  // remainder — loop until complete so large staged folders don't publish
+  // or discard partially.
   async function publishStaged(node: ContentTreeNode) {
     if (!capabilities.manageUsers) return;
     const keys = collectStagedKeys(node);
     if (keys.length === 0) return;
     try {
-      const res = await adminApi.publishStaged(keys);
-      toast({ title: t("admin.toast.publishedStaged", { n: res.published.length }) });
+      let published = 0;
+      for (let run = 0; run < 50; run++) {
+        const res = await adminApi.publishStaged(keys);
+        published += res.published.length;
+        if (res.complete || res.remaining === 0 || res.published.length === 0) break;
+      }
+      toast({ title: t("admin.toast.publishedStaged", { n: String(published) }) });
       keys.forEach((k) => autoRebuildForCategory(k));
       onMutated();
     } catch (err: any) {
@@ -499,8 +546,13 @@ export function useContentActions({
     const keys = collectStagedKeys(node);
     if (keys.length === 0) return;
     try {
-      const res = await adminApi.discardStaged(keys);
-      toast({ title: t("admin.toast.discardedStaged", { n: res.deleted }) });
+      let deleted = 0;
+      for (let run = 0; run < 50; run++) {
+        const res = await adminApi.discardStaged(keys);
+        deleted += res.deleted;
+        if (res.complete || res.remaining === 0 || res.deleted === 0) break;
+      }
+      toast({ title: t("admin.toast.discardedStaged", { n: String(deleted) }) });
       onMutated();
     } catch (err: any) {
       toast({ title: t("admin.toast.discardStagedFailed", { error: String(err?.message ?? err) }), variant: "destructive" });
@@ -511,9 +563,13 @@ export function useContentActions({
   async function publish(node: ContentTreeNode) {
     if (!node.cloudObject) return;
     try {
-      await adminApi.publishDirect(node.cloudObject.id);
+      // Preserve the object's existing student-facing location: without a
+      // targetPath the worker falls back to "<objectId>.<ext>" at the
+      // category root, which orphans the file's original folder.
+      const targetPath = deriveTargetPath(node);
+      await adminApi.publishDirect(node.cloudObject.id, targetPath ? { targetPath } : {});
       toast({ title: t("admin.content.published") });
-      if (node.r2Key) autoRebuildForCategory(node.r2Key);
+      autoRebuildForCategory(targetPath || node.r2Key || "");
       onMutated();
     } catch (err: any) {
       toast({ title: t("admin.toast.publishFailed"), description: String(err?.message ?? err), variant: "destructive" });
@@ -523,11 +579,12 @@ export function useContentActions({
     if (!node.cloudObject) return;
     try {
       await adminApi.unpublish(node.cloudObject.id);
-      toast({ title: "Unpublished" });
-      if (node.r2Key) autoRebuildForCategory(node.r2Key);
+      toast({ title: t("admin.toast.unpublished") });
+      if (node.cloudObject.published_r2_key) autoRebuildForCategory(node.cloudObject.published_r2_key);
+      else if (node.r2Key) autoRebuildForCategory(node.r2Key);
       onMutated();
     } catch (err: any) {
-      toast({ title: "Unpublish failed", description: String(err?.message ?? err), variant: "destructive" });
+      toast({ title: t("admin.toast.unpublishFailed", { error: String(err?.message ?? err) }), variant: "destructive" });
     }
   }
 
@@ -579,7 +636,8 @@ export function useContentActions({
     backfilling,
     gcOrphans,
     gcRunning,
-  }), [capabilities, onMutated, onPromoted, adopting, regenerating, backfilling, gcRunning, t, toast, router, autoRebuildForCategory]);
+    mutating,
+  }), [capabilities, onMutated, onPromoted, adopting, regenerating, backfilling, gcRunning, mutating, t, toast, router, autoRebuildForCategory]);
 
   return { actions, dialog, setDialog };
 }

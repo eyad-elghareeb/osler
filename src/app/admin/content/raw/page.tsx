@@ -1,72 +1,59 @@
 "use client";
 
 import * as React from "react";
+import { Suspense } from "react";
+import dynamic from "next/dynamic";
 import { useRouter, useSearchParams } from "next/navigation";
+import { FileX2 } from "lucide-react";
 import { useAdminIdentity } from "@/components/osler/admin/admin-context";
-import { AdminPageFrame } from "@/components/osler/admin/admin-page-frame";
-import { useI18n } from "@/components/osler/i18n-provider";
-import { AlertCircle, Loader2 } from "lucide-react";
 import { EmptyState, LoadingState } from "@/components/osler/ui-primitives";
-import { adminApi } from "@/components/osler/admin/admin-api";
+import { useI18n } from "@/components/osler/i18n-provider";
 import { Button } from "@/components/ui/button";
 
-export default function AdminRawContentEditorPage() {
-  const { t } = useI18n();
-  const router = useRouter();
+// The structured-editor dependency tree only loads once a raw key is
+// actually opened — landing on the studio pulls nothing extra.
+const ContentEditor = dynamic(
+  () => import("@/components/osler/admin/content-editor").then((m) => ({ default: m.ContentEditor })),
+  { ssr: false, loading: () => <LoadingState className="h-full" /> },
+);
+
+/**
+ * Raw R2 file editor — `/admin/content/raw?key=<r2-key>`.
+ *
+ * Edits the loose file in place (save via upload-file, optional explicit
+ * "Promote to managed" via the adopt button in the editor sidebar). It
+ * deliberately does NOT auto-adopt: opening a file must never create a
+ * managed draft as a side effect — promotion is a user decision.
+ */
+function AdminRawContentView() {
   const identity = useAdminIdentity();
   const params = useSearchParams();
   const key = params.get("key") ?? "";
 
-  const [loading, setLoading] = React.useState(true);
-  const [error, setError] = React.useState<string | null>(null);
+  if (!key) return <MissingKeyView />;
 
-  React.useEffect(() => {
-    if (!key) {
-      setLoading(false);
-      return;
-    }
-    let active = true;
-    (async () => {
-      try {
-        const res = await adminApi.lookupByR2Key(key);
-        if (!active) return;
-        if (res.found && res.object) {
-          router.replace(`/admin/content?id=${res.object.id}`);
-        } else {
-          // Adopt automatically into managed object
-          const adoptRes = await adminApi.adoptR2Key(key);
-          if (active && adoptRes.id) {
-            router.replace(`/admin/content?id=${adoptRes.id}`);
-          } else if (active) {
-            setLoading(false);
-          }
-        }
-      } catch (err: any) {
-        if (active) {
-          setError(String(err?.message ?? err));
-          setLoading(false);
-        }
-      }
-    })();
-    return () => { active = false; };
-  }, [key, router]);
+  return <ContentEditor rawR2Key={key} capabilities={identity.capabilities} />;
+}
 
-  if (loading) {
-    return <LoadingState className="h-full" label={t("admin.content.adopting")} />;
-  }
-
+export default function AdminRawContentEditorPage() {
   return (
-    <AdminPageFrame title={t("admin.content.title")} subtitle={t("admin.content.managedWorkflowNotice")}>
+    <Suspense fallback={<LoadingState className="h-full" />}>
+      <AdminRawContentView />
+    </Suspense>
+  );
+}
+
+function MissingKeyView() {
+  const { t } = useI18n();
+  const router = useRouter();
+  return (
+    <div className="h-full flex items-center justify-center">
       <EmptyState
-        icon={AlertCircle}
-        title={t("admin.content.managedWorkflowNotice")}
-        description={error || t("admin.content.managedWorkflowNoticeDesc")}
-        actions={
-          <Button onClick={() => router.push("/admin/content")}>
-            {t("admin.content.backToStudio")}
-          </Button>
-        }
+        icon={FileX2}
+        title={t("admin.content.raw.missingKeyTitle")}
+        description={t("admin.content.raw.missingKeyDesc")}
+        actions={<Button onClick={() => router.push("/admin/content")}>{t("admin.content.backToStudio")}</Button>}
       />
-    </AdminPageFrame>
+    </div>
   );
 }

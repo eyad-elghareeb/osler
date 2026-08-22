@@ -270,10 +270,13 @@ export const adminApi = {
   /** Delete an R2 key (content-files/, content-staging/ and content-manifests/ allowed). */
   deleteR2Key:     (key: string)                 => req<{ ok: boolean }>(`/v1/admin/content/r2-key?key=${encodeURIComponent(key)}`, "DELETE"),
   /** Move staged keys (content-staging/) into content-files/ so students can
-   *  see them, then rebuild manifests for the affected categories. */
-  publishStaged:   (keys: string[])              => req<{ ok: boolean; published: string[] }>("/v1/admin/content/publish-staged", "POST", { keys }),
-  /** Delete staged keys (content-staging/) without publishing them. */
-  discardStaged:   (keys: string[])              => req<{ ok: boolean; deleted: number }>("/v1/admin/content/discard-staged", "POST", { keys }),
+   *  see them, then rebuild manifests for the affected categories. The worker
+   *  bounds each run (free-plan subrequest cap) and reports the remainder —
+   *  loop until `complete` for large staged folders. */
+  publishStaged:   (keys: string[])            => req<{ ok: boolean; published: string[]; remaining: number; complete: boolean }>("/v1/admin/content/publish-staged", "POST", { keys }),
+  /** Delete staged keys (content-staging/) without publishing them. Bounded
+   *  per run — loop until `complete`. */
+  discardStaged:   (keys: string[])            => req<{ ok: boolean; deleted: number; remaining: number; complete: boolean }>("/v1/admin/content/discard-staged", "POST", { keys }),
   /** Fetch the raw body of an R2 key (content-files/, content-staging/ or
    *  content-manifests/). Admin only — used to preview/edit staged files
    *  that aren't yet served by the public /v1/content/* endpoint. */

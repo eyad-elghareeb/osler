@@ -307,7 +307,12 @@ export function ContentStudio({ capabilities }: ContentStudioProps) {
   // stampeding the Worker with all requests at once.
   React.useEffect(() => {
     if (!capabilities.manageContent) return;
-    const managedInView = currentFolderItems.filter((n) => n.managed && n.cloudObject);
+    // Library articles (.md) aren't JSON — the server validator only checks
+    // JSON pack shapes, so validating them here would flag every article
+    // invalid. Skip them; the editor's markdown preview is the check.
+    const managedInView = currentFolderItems.filter(
+      (n) => n.managed && n.cloudObject && n.cloudObject.content_type !== "library"
+    );
     if (managedInView.length === 0) return;
 
     setValidationStates((prev) => {
@@ -839,12 +844,14 @@ export function ContentStudio({ capabilities }: ContentStudioProps) {
         onPathChange={(path) => setDialog((d) => ({ ...d, pathInput: path }))}
         onClose={actions.closePathDialog}
         onSubmit={actions.submitPathDialog}
+        busy={actions.mutating}
       />
       <DeleteConfirmDialog
         node={dialog.deleteNode}
         open={dialog.deleteOpen}
         onClose={actions.closeDeleteDialog}
         onConfirm={actions.confirmDelete}
+        busy={actions.mutating}
       />
       <ConvertDialog
         open={dialog.convertOpen}

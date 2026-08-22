@@ -79,11 +79,13 @@ export function PathInputDialog({
   onPathChange,
   onClose,
   onSubmit,
+  busy,
 }: {
   dialog: DialogState;
   onPathChange: (path: string) => void;
   onClose: () => void;
   onSubmit: () => Promise<void>;
+  busy?: boolean;
 }) {
   const { t } = useI18n();
   const open = dialog.pathMode !== null;
@@ -121,12 +123,17 @@ export function PathInputDialog({
                 : ""}
             className="font-mono text-xs"
             autoFocus
+            disabled={busy}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !busy && dialog.pathInput.trim()) onSubmit();
+            }}
           />
         </div>
         <DialogFooter>
-          <Button variant="outline" size="sm" onClick={onClose}>{t("common.cancel")}</Button>
-          <Button size="sm" onClick={onSubmit} disabled={!dialog.pathInput.trim()}>
-            <Icon className="me-1.5 size-3.5" /> {t(actionKey as any)}
+          <Button variant="outline" size="sm" onClick={onClose} disabled={busy}>{t("common.cancel")}</Button>
+          <Button size="sm" onClick={onSubmit} disabled={busy || !dialog.pathInput.trim()}>
+            {busy ? <Loader2 className="me-1.5 size-3.5 animate-spin" /> : <Icon className="me-1.5 size-3.5" />}
+            {t(actionKey as any)}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -141,15 +148,24 @@ export function DeleteConfirmDialog({
   open,
   onClose,
   onConfirm,
+  busy,
 }: {
   node: ContentTreeNode | null;
   open: boolean;
   onClose: () => void;
   onConfirm: () => Promise<void>;
+  busy?: boolean;
 }) {
   const { t } = useI18n();
   return (
-    <AlertDialog open={open} onOpenChange={(o) => !o && onClose()}>
+    <AlertDialog
+      open={open}
+      onOpenChange={(o) => {
+        // Keep the dialog pinned while the delete request is in flight so a
+        // stray Escape / backdrop click can't dismiss it mid-operation.
+        if (!o && !busy) onClose();
+      }}
+    >
       <AlertDialogContent>
         <AlertDialogHeader>
           <AlertDialogTitle>
@@ -164,12 +180,13 @@ export function DeleteConfirmDialog({
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
-          <AlertDialogCancel onClick={onClose}>{t("common.cancel")}</AlertDialogCancel>
+          <AlertDialogCancel onClick={onClose} disabled={busy}>{t("common.cancel")}</AlertDialogCancel>
           <AlertDialogAction
             onClick={onConfirm}
+            disabled={busy}
             className="bg-destructive text-white hover:bg-destructive/90"
           >
-            <Trash2 className="me-1.5 size-3.5" />
+            {busy ? <Loader2 className="me-1.5 size-3.5 animate-spin" /> : <Trash2 className="me-1.5 size-3.5" />}
             {t("admin.content.delete")}
           </AlertDialogAction>
         </AlertDialogFooter>
