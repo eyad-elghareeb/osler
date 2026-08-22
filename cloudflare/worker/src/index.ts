@@ -2899,6 +2899,23 @@ async function handleAdmin(request: Request, env: Env, session: Session, url: UR
         }
         remaining += Math.max(0, keys.length - budget);
       }
+      // Cascade to managed objects whose student-facing copy lived under
+      // this folder — otherwise they survive as orphaned drafts and reappear
+      // in the tree after reload. Bounded like the R2 deletes above.
+      const fullPrefix = `content-files/${prefix}`;
+      try {
+        const rows = await env.DB.prepare("SELECT id, r2_key_base, published_r2_key FROM content_objects WHERE published_r2_key LIKE ?").bind(fullPrefix + "/%").all<any>();
+        const doomed = (rows.results || []).slice(0, Math.max(0, MAX_DELETE_PER_RUN - deleted));
+        remaining += Math.max(0, (rows.results || []).length - doomed.length);
+        for (const row of doomed) {
+          if (row.r2_key_base) await deleteManagedBase(env, row.r2_key_base);
+          await env.DB.prepare("DELETE FROM content_objects WHERE id = ?").bind(row.id).run();
+          await auditLog(env, session.user.id, "delete_content", row.id, { cascadeOf: fullPrefix }, log);
+        }
+      } catch (e) {
+        // origin/published columns may predate migration — best-effort.
+        console.error("folder-delete managed cascade failed:", e);
+      }
       const complete = remaining === 0;
       if (complete) {
         try { await regenerateManifestForCategory(env, cat); } catch (e) { console.error("manifest regen failed:", e); }
@@ -3170,6 +3187,10 @@ async function handleAdmin(request: Request, env: Env, session: Session, url: UR
       const body = await readJson(request);
       const ct = typeof body.contentType === "string" ? body.contentType : "";
       if (!["quiz","bank","flashcard","written","osce","library","video"].includes(ct)) return json({ error: "Invalid content type" }, 400, origin, log);
+      // Library articles are markdown/html/pdf, not JSON — validating them
+      // here reported every article as "Invalid JSON". Nothing structural
+      // to check server-side yet; treat them as valid.
+      if (ct === "library") return json({ errors: [] }, 200, origin, log);
       let parsed: any;
       try { parsed = JSON.parse(typeof body.body === "string" ? body.body : "{}"); } catch (e: any) { return json({ errors: ["Invalid JSON: " + e.message] }, 200, origin, log); }
       return json({ errors: validateContent(ct, parsed) }, 200, origin, log);
@@ -3301,6 +3322,17 @@ async function handleAdmin(request: Request, env: Env, session: Session, url: UR
       const tail = fileSegment.split("/").pop() ?? fileSegment;
       const idBase = tail.replace(/\.[^.]+$/, "");
       const expectedKeyFor = (ct: string, oid: string) => ct === "library" ? `${oid}.md` : `${oid}.json`;
+      // Idempotency check 1 — an object previously adopted from this exact
+      // key (origin_r2_key). Without this, re-adopting an adopted draft
+      // created another content_object every time: drafts have
+      // published_r2_key = NULL and never match the basename shape below.
+      try {
+        const byOrigin = await env.DB.prepare("SELECT * FROM content_objects WHERE origin_r2_key = ?").bind(key).first<any>();
+        if (byOrigin) {
+          return json({ id: byOrigin.id, r2KeyBase: byOrigin.r2_key_base, status: byOrigin.status, adopted: false, alreadyExisted: true }, 200, origin, log);
+        }
+      } catch {}
+      // Idempotency check 2 — an object that published to this exact key.
       try {
         const byPublished = await env.DB.prepare("SELECT * FROM content_objects WHERE published_r2_key = ?").bind(key).first<any>();
         if (byPublished) {
@@ -3348,7 +3380,7 @@ async function handleAdmin(request: Request, env: Env, session: Session, url: UR
       const title = (typeof body.title === "string" ? body.title.trim() : "") || idBase.replace(/[-_]+/g, " ").replace(/\b\w/g, (c: string) => c.toUpperCase());
       const language = (typeof body.language === "string" ? body.language.trim() : "") || "en";
       await r2Put(env, r2Draft(r2Base), text);
-      await env.DB.prepare("INSERT INTO content_objects (id, r2_key_base, content_type, title, language, status, created_by, created_at, updated_at) VALUES (?, ?, ?, ?, ?, 'draft', ?, ?, ?)").bind(objectId, r2Base, contentType, title.slice(0, 200), language, session.user.id, now(), now()).run();
+      await env.DB.prepare("INSERT INTO content_objects (id, r2_key_base, content_type, title, language, status, created_by, created_at, updated_at, origin_r2_key) VALUES (?, ?, ?, ?, ?, 'draft', ?, ?, ?, ?)").bind(objectId, r2Base, contentType, title.slice(0, 200), language, session.user.id, now(), now(), key).run();
       await auditLog(env, session.user.id, "adopt_content", objectId, { key, contentType, title }, log);
       return json({ id: objectId, r2KeyBase: r2Base, status: "draft", adopted: true, alreadyExisted: false }, 201, origin, log);
     }
@@ -3504,6 +3536,9 @@ async function handleAdmin(request: Request, env: Env, session: Session, url: UR
         return json({ ok: true, status: "published", hybridKeys }, 200, origin, log);
       }
       if (request.method === "POST" && action === "validate") {
+        // Library content is markdown/html/pdf — not JSON-parseable, and
+        // validating it reported every article as invalid.
+        if (obj.content_type === "library") return json({ errors: [] }, 200, origin, log);
         let body: string | null = null;
         try { const parsed: any = await request.clone().json(); if (typeof parsed.body === "string") body = parsed.body; } catch {}
         if (body == null) body = await r2Get(env, r2Draft(obj.r2_key_base));
@@ -3514,14 +3549,39 @@ async function handleAdmin(request: Request, env: Env, session: Session, url: UR
       }
       if (request.method === "POST" && action === "unpublish") {
         if (!isAdmin(session)) return json({ error: "Forbidden" }, 403, origin, log);
+        // Drop the student-facing hybrid copy too — flipping status alone
+        // left content-files/<cat>/<path> live and students kept serving it.
+        const staleKey = obj.published_r2_key;
+        if (staleKey && env.CONTENT) {
+          try { await env.CONTENT.delete(staleKey); } catch (e) { console.error("unpublish r2 cleanup failed:", e); }
+        }
         await env.DB.prepare("UPDATE content_objects SET status = 'draft', published_r2_key = NULL, updated_at = ? WHERE id = ?").bind(now(), objectId).run();
+        if (staleKey) {
+          const cat = staleKey.slice("content-files/".length).split("/")[0];
+          if (staleKey.startsWith("content-files/") && cat && cat in CATEGORY_TYPE_MAP) {
+            try { await regenerateManifestForCategory(env, cat); } catch (e) { console.error("manifest regen failed:", e); }
+          }
+        }
         await auditLog(env, session.user.id, "unpublish", objectId, { title: obj.title }, log);
         return json({ ok: true, status: "draft" }, 200, origin, log);
       }
       if (request.method === "DELETE" && !action) {
         if (!isAdmin(session)) return json({ error: "Forbidden" }, 403, origin, log);
+        // Snapshot before deletion — needed for the manifest rebuild below.
+        const pubKey = obj.published_r2_key;
         if (obj.r2_key_base) await deleteManagedBase(env, obj.r2_key_base);
+        // Remove the student-facing hybrid copy so a deleted object stops
+        // being served from content-files/.
+        if (pubKey && env.CONTENT) {
+          try { await env.CONTENT.delete(pubKey); } catch (e) { console.error("delete r2 cleanup failed:", e); }
+        }
         await env.DB.prepare("DELETE FROM content_objects WHERE id = ?").bind(objectId).run();
+        if (pubKey) {
+          const cat = pubKey.slice("content-files/".length).split("/")[0];
+          if (pubKey.startsWith("content-files/") && cat && cat in CATEGORY_TYPE_MAP) {
+            try { await regenerateManifestForCategory(env, cat); } catch (e) { console.error("manifest regen failed:", e); }
+          }
+        }
         await auditLog(env, session.user.id, "delete_content", objectId, { title: obj.title }, log);
         return json({ ok: true }, 200, origin, log);
       }
