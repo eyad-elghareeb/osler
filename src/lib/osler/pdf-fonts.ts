@@ -84,13 +84,21 @@ async function loadAllFonts(): Promise<FontCache> {
  * (e.g. on app mount and again right before an export) — concurrent calls
  * share one in-flight request, and once fonts are cached this resolves
  * immediately.
+ *
+ * A fully-failed load (e.g. offline at first launch) is NOT cached — the
+ * next call retries, so exports recover instead of silently falling back
+ * to core fonts (which cannot render Arabic) for the whole session.
  */
 export async function loadPdfFonts(): Promise<void> {
-  if (cache) return;
+  if (cache && cache.size > 0) return;
   if (inFlight) return inFlight;
+  cache = null;
   inFlight = loadAllFonts()
     .then((result) => {
-      cache = result;
+      // Only persist partial results when at least one font arrived;
+      // an empty map means every fetch failed — leave `cache` null so
+      // the next attempt retries.
+      if (result.size > 0) cache = result;
     })
     .finally(() => {
       inFlight = null;
@@ -99,7 +107,7 @@ export async function loadPdfFonts(): Promise<void> {
 }
 
 export function pdfFontsLoaded(): boolean {
-  return cache !== null;
+  return cache !== null && cache.size > 0;
 }
 
 /**

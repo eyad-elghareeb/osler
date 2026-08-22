@@ -7,8 +7,11 @@ import {
   Settings2,
   ChevronDown,
   ChevronUp,
+  Loader2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Switch } from "@/components/ui/switch";
 import {
   Dialog,
   DialogContent,
@@ -46,7 +49,13 @@ interface PdfExportDialogProps {
   onOpenChange: (open: boolean) => void;
   defaultTitle: string;
   defaultSubtitle?: string;
-  variant?: "quiz" | "results" | "dashboard";
+  /** Controls which option groups make sense for the document being exported:
+   *  - quiz: answers mode + two-column (question booklets)
+   *  - results: score summary + question review toggles
+   *  - dashboard: stats report only
+   *  - article: typography only (no question-specific options) */
+  variant?: "quiz" | "results" | "dashboard" | "article";
+  defaultAuthor?: string;
   onExport: (options: PdfExportOptions) => void | Promise<void>;
 }
 
@@ -54,18 +63,57 @@ const STYLE_MODES = ["standard", "compact", "mcqnotes"] as const;
 const ANSWER_MODES = ["inline", "endchapter", "endbook", "none"] as const;
 const PAGE_SIZES = ["a4", "a3", "a5", "letter"] as const;
 
+/** Shared pill row — one canonical recipe for the option pills. */
+function PillRow<T extends string>({
+  value,
+  onChange,
+  options,
+}: {
+  value: T;
+  onChange: (v: T) => void;
+  options: Array<{ value: T; label: string; className?: string }>;
+}) {
+  return (
+    <div className="flex gap-1.5 flex-wrap">
+      {options.map((opt) => (
+        <button
+          key={opt.value}
+          type="button"
+          role="radio"
+          aria-checked={value === opt.value}
+          onClick={() => {
+            if (opt.value === value) return;
+            haptic("selection");
+            onChange(opt.value);
+          }}
+          className={cn(
+            "px-3 h-7 rounded-full text-xs font-medium transition-colors",
+            value === opt.value
+              ? "bg-primary text-primary-foreground"
+              : "bg-muted/60 text-muted-foreground hover:text-foreground",
+            opt.className,
+          )}
+        >
+          {opt.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 export function PdfExportDialog({
   open,
   onOpenChange,
   defaultTitle,
   defaultSubtitle,
   variant = "quiz",
+  defaultAuthor,
   onExport,
 }: PdfExportDialogProps) {
   const { t } = useI18n();
   const [title, setTitle] = React.useState(defaultTitle);
   const [subtitle, setSubtitle] = React.useState(defaultSubtitle ?? "");
-  const [author, setAuthor] = React.useState("Osler");
+  const [author, setAuthor] = React.useState(defaultAuthor ?? "Osler");
   const [includeCover, setIncludeCover] = React.useState(true);
   const [pageSize, setPageSize] = React.useState<"a4" | "a3" | "a5" | "letter">("a4");
   const [orientation, setOrientation] = React.useState<"portrait" | "landscape">("portrait");
@@ -88,7 +136,7 @@ export function PdfExportDialog({
   }, [open, defaultTitle, defaultSubtitle]);
 
   const handleExport = async () => {
-    haptic("success");
+    if (exporting) return;
     setExporting(true);
     try {
       await onExport({
@@ -107,20 +155,22 @@ export function PdfExportDialog({
         fontType,
         lang: loadUiLang(),
       });
+      // Success feedback lives here — the old pre-export haptic fired even
+      // when generation threw.
+      haptic("success");
+      onOpenChange(false);
+    } catch (err) {
+      haptic("error");
+      // Keep the dialog open with the user's configured options intact.
+      console.error("[osler/pdf] export failed:", err);
+      throw err; // caller owns the user-facing toast
     } finally {
       setExporting(false);
-      onOpenChange(false);
     }
   };
 
-  const styleLabels: Record<string, () => string> = {
-    standard: () => t("pdf.style.standard"),
-    compact: () => t("pdf.style.compact"),
-    mcqnotes: () => t("pdf.style.mcqnotes"),
-  };
-
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={(o) => !exporting && onOpenChange(o)}>
       <DialogContent className="sm:max-w-lg max-h-[85vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
@@ -130,106 +180,66 @@ export function PdfExportDialog({
           <DialogDescription>{t("pdf.export.desc")}</DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-4 py-2">
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            handleExport();
+          }}
+          className="space-y-4 py-2"
+        >
           {/* Title */}
           <div className="space-y-1.5">
             <Label className="text-xs">{t("pdf.coverTitle")}</Label>
-            <input
-              type="text"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              className="w-full h-9 px-3 rounded-lg border border-border bg-background text-sm"
-            />
+            <Input value={title} onChange={(e) => setTitle(e.target.value)} disabled={exporting} />
           </div>
 
           {/* Subtitle */}
           <div className="space-y-1.5">
             <Label className="text-xs">{t("pdf.coverSubtitle")}</Label>
-            <input
-              type="text"
-              value={subtitle}
-              onChange={(e) => setSubtitle(e.target.value)}
-              className="w-full h-9 px-3 rounded-lg border border-border bg-background text-sm"
-            />
+            <Input value={subtitle} onChange={(e) => setSubtitle(e.target.value)} disabled={exporting} />
           </div>
 
           {/* Author */}
           <div className="space-y-1.5">
             <Label className="text-xs">{t("pdf.author")}</Label>
-            <input
-              type="text"
-              value={author}
-              onChange={(e) => setAuthor(e.target.value)}
-              className="w-full h-9 px-3 rounded-lg border border-border bg-background text-sm"
-            />
+            <Input value={author} onChange={(e) => setAuthor(e.target.value)} disabled={exporting} />
           </div>
 
           {/* Cover toggle */}
           <div className="flex items-center justify-between">
             <Label className="text-xs">{t("pdf.includeCover")}</Label>
-            <button
-              type="button"
-              onClick={() => { haptic("selection"); setIncludeCover(!includeCover); }}
-              className={cn(
-                "w-10 h-5.5 rounded-full transition-colors relative",
-                includeCover ? "bg-primary" : "bg-muted"
-              )}
-            >
-              <span
-                className={cn(
-                  "absolute top-0.5 size-4.5 rounded-full bg-white transition-transform",
-                  includeCover ? "left-5" : "left-0.5"
-                )}
-              />
-            </button>
+            <Switch checked={includeCover} onCheckedChange={(v) => { haptic("selection"); setIncludeCover(v); }} disabled={exporting} aria-label={t("pdf.includeCover")} />
           </div>
 
           {/* Style mode pills */}
           <div className="space-y-1.5">
             <Label className="text-xs">{t("pdf.styleMode")}</Label>
-            <div className="flex gap-1.5 flex-wrap">
-              {STYLE_MODES.map((mode) => (
-                <button
-                  key={mode}
-                  type="button"
-                  onClick={() => { haptic("selection"); setStyleMode(mode); }}
-                  className={cn(
-                    "px-3 h-7 rounded-full text-xs font-medium transition-colors",
-                    styleMode === mode
-                      ? "bg-primary text-primary-foreground"
-                      : "bg-muted/60 text-muted-foreground hover:text-foreground"
-                  )}
-                >
-                  {styleLabels[mode]()}
-                </button>
-              ))}
-            </div>
+            <PillRow
+              value={styleMode}
+              onChange={setStyleMode}
+              options={STYLE_MODES.map((mode) => ({
+                value: mode,
+                label: t(`pdf.style.${mode}` as "pdf.style.standard"),
+              }))}
+            />
           </div>
 
           {/* Answers mode (quiz only) */}
           {variant === "quiz" && (
             <div className="space-y-1.5">
               <Label className="text-xs">{t("pdf.answersMode")}</Label>
-              <div className="flex gap-1.5 flex-wrap">
-                {ANSWER_MODES.map((mode) => (
-                  <button
-                    key={mode}
-                    type="button"
-                    onClick={() => { haptic("selection"); setAnswersMode(mode); }}
-                    className={cn(
-                      "px-3 h-7 rounded-full text-xs font-medium transition-colors capitalize",
-                      answersMode === mode
-                        ? "bg-primary text-primary-foreground"
-                        : "bg-muted/60 text-muted-foreground hover:text-foreground"
-                    )}
-                  >
-                    {mode === "endbook" ? t("pdf.answer.endbook") :
-                     mode === "endchapter" ? t("pdf.answer.endchapter") :
-                     mode === "inline" ? t("pdf.answer.inline") :
-                     t("pdf.answer.none")}
-                  </button>
-                ))}
-              </div>
+              <PillRow
+                value={answersMode}
+                onChange={setAnswersMode}
+                options={ANSWER_MODES.map((mode) => ({
+                  value: mode,
+                  label:
+                    mode === "endbook" ? t("pdf.answer.endbook") :
+                    mode === "endchapter" ? t("pdf.answer.endchapter") :
+                    mode === "inline" ? t("pdf.answer.inline") :
+                    t("pdf.answer.none"),
+                }))}
+              />
             </div>
           )}
 
@@ -245,136 +255,74 @@ export function PdfExportDialog({
           </button>
 
           {showAdvanced && (
-            <div className="space-y-3 pl-1 border-l-2 border-border ml-1">
+            <div className="space-y-3 ps-1 border-s-2 border-border ms-1">
               {/* Page size */}
               <div className="space-y-1.5">
                 <Label className="text-xs">{t("pdf.pageSize")}</Label>
-                <div className="flex gap-1.5">
-                  {PAGE_SIZES.map((ps) => (
-                    <button
-                      key={ps}
-                      type="button"
-                      onClick={() => { haptic("selection"); setPageSize(ps); }}
-                      className={cn(
-                        "px-2.5 h-6 rounded-md text-xs font-medium uppercase transition-colors",
-                        pageSize === ps
-                          ? "bg-primary text-primary-foreground"
-                          : "bg-muted/60 text-muted-foreground"
-                      )}
-                    >
-                      {t(`pdf.pageSize.${ps}` as "pdf.pageSize.a4")}
-                    </button>
-                  ))}
-                </div>
+                <PillRow
+                  value={pageSize}
+                  onChange={setPageSize}
+                  options={PAGE_SIZES.map((ps) => ({
+                    value: ps,
+                    label: t(`pdf.pageSize.${ps}` as "pdf.pageSize.a4"),
+                    className: "px-2.5 h-6 uppercase",
+                  }))}
+                />
               </div>
 
               {/* Orientation */}
               <div className="space-y-1.5">
                 <Label className="text-xs">{t("pdf.orientation")}</Label>
-                <div className="flex gap-1.5">
-                  {(["portrait", "landscape"] as const).map((o) => (
-                    <button
-                      key={o}
-                      type="button"
-                      onClick={() => { haptic("selection"); setOrientation(o); }}
-                      className={cn(
-                        "px-3 h-6 rounded-md text-xs font-medium transition-colors capitalize",
-                        orientation === o
-                          ? "bg-primary text-primary-foreground"
-                          : "bg-muted/60 text-muted-foreground"
-                      )}
-                    >
-                      {o === "portrait" ? t("pdf.portrait") : t("pdf.landscape")}
-                    </button>
-                  ))}
-                </div>
+                <PillRow
+                  value={orientation}
+                  onChange={setOrientation}
+                  options={[
+                    { value: "portrait" as const, label: t("pdf.portrait") },
+                    { value: "landscape" as const, label: t("pdf.landscape") },
+                  ]}
+                />
               </div>
 
               {/* Font size option */}
               <div className="space-y-1.5">
                 <Label className="text-xs">{t("pdf.fontSize")}</Label>
-                <div className="flex gap-1.5">
-                  {(["small", "medium", "large"] as const).map((sz) => (
-                    <button
-                      key={sz}
-                      type="button"
-                      onClick={() => { haptic("selection"); setFontSize(sz); }}
-                      className={cn(
-                        "px-2.5 h-6 rounded-md text-xs font-medium transition-colors capitalize",
-                        fontSize === sz
-                          ? "bg-primary text-primary-foreground"
-                          : "bg-muted/60 text-muted-foreground"
-                      )}
-                    >
-                      {sz === "small" ? t("pdf.fontSize.small") : sz === "large" ? t("pdf.fontSize.large") : t("pdf.fontSize.medium")}
-                    </button>
-                  ))}
-                </div>
+                <PillRow
+                  value={fontSize}
+                  onChange={setFontSize}
+                  options={(["small", "medium", "large"] as const).map((sz) => ({
+                    value: sz,
+                    label: sz === "small" ? t("pdf.fontSize.small") : sz === "large" ? t("pdf.fontSize.large") : t("pdf.fontSize.medium"),
+                    className: "px-2.5 h-6",
+                  }))}
+                />
               </div>
 
               {/* Font type option */}
               <div className="space-y-1.5">
                 <Label className="text-xs">{t("pdf.fontType")}</Label>
-                <div className="flex gap-1.5">
-                  {(["serif", "sans"] as const).map((ft) => (
-                    <button
-                      key={ft}
-                      type="button"
-                      onClick={() => { haptic("selection"); setFontType(ft); }}
-                      className={cn(
-                        "px-2.5 h-6 rounded-md text-xs font-medium transition-colors capitalize",
-                        fontType === ft
-                          ? "bg-primary text-primary-foreground"
-                          : "bg-muted/60 text-muted-foreground"
-                      )}
-                    >
-                      {ft === "serif" ? t("pdf.fontType.serif") : t("pdf.fontType.sans")}
-                    </button>
-                  ))}
-                </div>
+                <PillRow
+                  value={fontType}
+                  onChange={setFontType}
+                  options={[
+                    { value: "serif" as const, label: t("pdf.fontType.serif") },
+                    { value: "sans" as const, label: t("pdf.fontType.sans") },
+                  ]}
+                />
               </div>
 
-              {/* Show explanations toggle */}
-              {variant !== "dashboard" && (
+              {/* Show explanations toggle (quiz + results only — articles have no explanations) */}
+              {(variant === "quiz" || variant === "results") && (
                 <div className="flex items-center justify-between">
                   <Label className="text-xs">{t("pdf.showExplanations")}</Label>
-                  <button
-                    type="button"
-                    onClick={() => { haptic("selection"); setShowExplanations(!showExplanations); }}
-                    className={cn(
-                      "w-10 h-5.5 rounded-full transition-colors relative",
-                      showExplanations ? "bg-primary" : "bg-muted"
-                    )}
-                  >
-                    <span
-                      className={cn(
-                        "absolute top-0.5 size-4.5 rounded-full bg-white transition-transform",
-                        showExplanations ? "left-5" : "left-0.5"
-                      )}
-                    />
-                  </button>
+                  <Switch checked={showExplanations} onCheckedChange={(v) => { haptic("selection"); setShowExplanations(v); }} disabled={exporting} aria-label={t("pdf.showExplanations")} />
                 </div>
               )}
 
-              {/* Two-column toggle */}
+              {/* Two-column toggle (booklets only) */}
               {variant === "quiz" && (
                 <div className="flex items-center justify-between">
                   <Label className="text-xs">{t("pdf.twoColumn")}</Label>
-                  <button
-                    type="button"
-                    onClick={() => { haptic("selection"); setTwoCol(!twoCol); }}
-                    className={cn(
-                      "w-10 h-5.5 rounded-full transition-colors relative",
-                      twoCol ? "bg-primary" : "bg-muted"
-                    )}
-                  >
-                    <span
-                      className={cn(
-                        "absolute top-0.5 size-4.5 rounded-full bg-white transition-transform",
-                        twoCol ? "left-5" : "left-0.5"
-                      )}
-                    />
-                  </button>
+                  <Switch checked={twoCol} onCheckedChange={(v) => { haptic("selection"); setTwoCol(v); }} disabled={exporting} aria-label={t("pdf.twoColumn")} />
                 </div>
               )}
 
@@ -382,21 +330,7 @@ export function PdfExportDialog({
               {variant === "results" && (
                 <div className="flex items-center justify-between">
                   <Label className="text-xs">{t("pdf.showScoreSummary")}</Label>
-                  <button
-                    type="button"
-                    onClick={() => { haptic("selection"); setShowScoreSummary(!showScoreSummary); }}
-                    className={cn(
-                      "w-10 h-5.5 rounded-full transition-colors relative",
-                      showScoreSummary ? "bg-primary" : "bg-muted"
-                    )}
-                  >
-                    <span
-                      className={cn(
-                        "absolute top-0.5 size-4.5 rounded-full bg-white transition-transform",
-                        showScoreSummary ? "left-5" : "left-0.5"
-                      )}
-                    />
-                  </button>
+                  <Switch checked={showScoreSummary} onCheckedChange={(v) => { haptic("selection"); setShowScoreSummary(v); }} disabled={exporting} aria-label={t("pdf.showScoreSummary")} />
                 </div>
               )}
 
@@ -404,44 +338,22 @@ export function PdfExportDialog({
               {variant === "results" && (
                 <div className="flex items-center justify-between">
                   <Label className="text-xs">{t("pdf.showReview")}</Label>
-                  <button
-                    type="button"
-                    onClick={() => { haptic("selection"); setShowReview(!showReview); }}
-                    className={cn(
-                      "w-10 h-5.5 rounded-full transition-colors relative",
-                      showReview ? "bg-primary" : "bg-muted"
-                    )}
-                  >
-                    <span
-                      className={cn(
-                        "absolute top-0.5 size-4.5 rounded-full bg-white transition-transform",
-                        showReview ? "left-5" : "left-0.5"
-                      )}
-                    />
-                  </button>
+                  <Switch checked={showReview} onCheckedChange={(v) => { haptic("selection"); setShowReview(v); }} disabled={exporting} aria-label={t("pdf.showReview")} />
                 </div>
               )}
             </div>
           )}
-        </div>
 
-        <DialogFooter>
-          <Button
-            variant="outline"
-            onClick={() => onOpenChange(false)}
-            className="rounded-xl"
-          >
-            {t("common.cancel")}
-          </Button>
-          <Button
-            onClick={handleExport}
-            disabled={exporting || !title.trim()}
-            className="rounded-xl"
-          >
-            <Download className="size-4 mr-1.5" />
-            {exporting ? t("pdf.generating") : t("pdf.export.button")}
-          </Button>
-        </DialogFooter>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={exporting}>
+              {t("common.cancel")}
+            </Button>
+            <Button type="submit" loading={exporting} disabled={!title.trim()}>
+              {!exporting && <Download className="size-4 me-1.5" />}
+              {exporting ? t("pdf.generating") : t("pdf.export.button")}
+            </Button>
+          </DialogFooter>
+        </form>
       </DialogContent>
     </Dialog>
   );
