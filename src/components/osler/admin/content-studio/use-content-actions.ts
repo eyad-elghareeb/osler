@@ -243,9 +243,9 @@ export function useContentActions({
   // ── Path validation ───────────────────────────────────────────────────
   function pathError(raw: string): string | null {
     const p = raw.replace(/^\/+/, "");
-    if (!p) return "Required";
+    if (!p) return t("admin.content.pathRequired");
     if (p.split("/").some((seg) => seg === "..") || p.includes("\\") || p.startsWith("/")) {
-      return "Invalid path — cannot contain '..' or '\\'";
+      return t("admin.content.pathInvalidChars");
     }
     return null;
   }

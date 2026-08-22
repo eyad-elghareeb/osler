@@ -1098,11 +1098,11 @@ export function AiSettingsSection() {
                   onChange={(e) => { localStorage.setItem(OSCE_STORAGE_KEYS.ttsRate, e.target.value); }}
                   className="w-full h-9 rounded-lg border border-border bg-card px-3 text-sm outline-none focus:border-primary"
                 >
-                  <option value="0.5">Very Slow (0.5x)</option>
-                  <option value="0.75">Slow (0.75x)</option>
-                  <option value="0.95">Normal (0.95x)</option>
-                  <option value="1.2">Fast (1.2x)</option>
-                  <option value="1.5">Very Fast (1.5x)</option>
+                  <option value="0.5">{t("settings.ai.ttsRate.slow")}</option>
+                  <option value="0.75">{t("settings.ai.ttsRate.slowPlus")}</option>
+                  <option value="0.95">{t("settings.ai.ttsRate.normal")}</option>
+                  <option value="1.2">{t("settings.ai.ttsRate.fast")}</option>
+                  <option value="1.5">{t("settings.ai.ttsRate.fastest")}</option>
                 </select>
                 <p className="text-[11px] text-muted-foreground">
                   {t("settings.ai.ttsRateDesc")}
