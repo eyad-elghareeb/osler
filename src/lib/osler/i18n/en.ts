@@ -1552,7 +1552,6 @@ export const en = {
     "pdf.tpl.timedMode": "Timed Mode",
     "pdf.tpl.tutorMode": "Tutor Mode",
     "pdf.tpl.questionsCount": "{n} Questions",
-    "pdf.tpl.th": "th",
     "pdf.tpl.of": "of",
     "pdf.tpl.correctCount": "correct",
     "pdf.tpl.feature.scoreAnalysis": "Score analysis & percentile rank",

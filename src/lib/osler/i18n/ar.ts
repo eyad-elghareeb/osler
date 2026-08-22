@@ -1548,7 +1548,6 @@ export const ar = {
     "pdf.tpl.timedMode": "الوضع الموقوت",
     "pdf.tpl.tutorMode": "الوضع التوجيهي",
     "pdf.tpl.questionsCount": "{n} أسئلة",
-    "pdf.tpl.th": "",
     "pdf.tpl.of": "من",
     "pdf.tpl.correctCount": "صحيحة",
     "pdf.tpl.feature.scoreAnalysis": "تحليل النتائج والنسبة المئوية",
