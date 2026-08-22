@@ -157,11 +157,14 @@ export function OslerSessionProvider({ children }: { children: React.ReactNode }
     };
   }, []);
 
-  // Handle Google Auth ticket flow (?cloudAuth=<ticket>).
+  // Handle Google Auth ticket flow (#cloudAuth=<ticket> — fragment, not query,
+  // so the ticket never reaches server logs or the Referer header).
   React.useEffect(() => {
     if (typeof window === "undefined") return;
-    const ticket = new URLSearchParams(window.location.search).get("cloudAuth");
-    if (!ticket) return;
+    const hash = window.location.hash;
+    const match = hash.match(/^#cloudAuth=([^&]+)/);
+    if (!match) return;
+    const ticket = decodeURIComponent(match[1]);
 
     let cancelled = false;
     void consumeGoogleLogin(ticket)
@@ -170,22 +173,19 @@ export function OslerSessionProvider({ children }: { children: React.ReactNode }
         setCloudSession(session);
         setUsername(session.user.displayName);
         // Clean up the URL.
-        const url = new URL(window.location.href);
-        url.searchParams.delete("cloudAuth");
-        router.replace(`${url.pathname}${url.search}`);
+        history.replaceState(null, "", window.location.pathname + window.location.search);
       })
       .catch(() => {
         if (cancelled) return;
         const url = new URL(window.location.href);
-        url.searchParams.delete("cloudAuth");
         url.searchParams.set("cloudAuthError", "google");
-        router.replace(`${url.pathname}${url.search}`);
+        history.replaceState(null, "", `${url.pathname}?${url.searchParams.toString()}`);
       });
 
     return () => {
       cancelled = true;
     };
-  }, [router]);
+  }, []);
 
   // Start cloud sync only when we have a real CloudSession with a token.
   React.useEffect(() => {

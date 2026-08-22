@@ -1576,20 +1576,25 @@ async function handleBiometricAuthenticate(request: Request, env: Env, _session:
   if (!uid) {
     const body = await readJson(request);
     let userId = typeof body.userId === "string" ? body.userId.trim() : "";
+    // Uniform no-challenge response for unknown users/ids: returning
+    // distinct 404s here would leak which usernames have accounts.
+    const NOT_REGISTERED = () => json({ error: "Biometric unlock is not available for this account" }, 404, "", log);
     if (!userId && typeof body.username === "string" && body.username.trim()) {
       // The login screen's quick unlock only knows the locally-stored
       // username, not the account's row id — resolve it case-insensitively.
       const byName = await env.DB.prepare("SELECT id FROM users WHERE username = ? COLLATE NOCASE").bind(body.username.trim()).first<any>();
-      if (!byName) return json({ error: "User not found" }, 404, "", log);
+      if (!byName) return NOT_REGISTERED();
       userId = byName.id;
     }
     if (!userId) return json({ error: "userId or username required" }, 400, "", log);
     const user = await env.DB.prepare("SELECT id FROM users WHERE id = ?").bind(userId).first();
-    if (!user) return json({ error: "User not found" }, 404, "", log);
+    if (!user) return NOT_REGISTERED();
     uid = userId;
   }
   const creds = await env.DB.prepare("SELECT * FROM biometric_credentials WHERE user_id = ?").bind(uid).all<any>();
-  if (!creds.results?.length) return json({ error: "No biometric credentials registered" }, 400, "", log);
+  if (!creds.results?.length) {
+    return json({ error: "Biometric unlock is not available for this account" }, 404, "", log);
+  }
   const challenge = new Uint8Array(32);
   crypto.getRandomValues(challenge);
   const b64Challenge = btoa(String.fromCharCode(...challenge));
@@ -3704,7 +3709,9 @@ export default {
         const user = await googleUser(env, claims);
         if (!user) return Response.redirect(`${authState.return_to.replace(/\/$/, "")}/?cloudAuthError=email_claimed`, 302);
         const ticket = await createAuthHandoff(env, user.id);
-        return Response.redirect(`${authState.return_to.replace(/\/$/, "")}/?cloudAuth=${encodeURIComponent(ticket)}`, 302);
+        // Ticket travels in the URL fragment, not the query — fragments are
+        // never sent to servers (no access logs, no Referer leakage).
+        return Response.redirect(`${authState.return_to.replace(/\/$/, "")}/#cloudAuth=${encodeURIComponent(ticket)}`, 302);
       }
       if (request.method === "POST" && url.pathname === "/v1/auth/google/consume") {
         if (!rateLimit(ip, "auth:google:consume")) return json({ error: "Too many attempts" }, 429, origin, log);

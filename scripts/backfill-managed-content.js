@@ -8,8 +8,16 @@
  */
 
 const API = (process.argv[2] || process.env.CLOUD_API_URL || "http://localhost:8787").replace(/\/$/, "");
-const USERNAME = process.argv[3] || process.env.OSLER_ADMIN_USER || "admin";
-const PASSWORD = process.argv[4] || process.env.OSLER_ADMIN_PASS || "123";
+// Credentials are required - no defaults. A predictable admin pair in a
+// public repo is a credential-stuffing hint and a self-hosting footgun.
+const USERNAME = process.argv[3] || process.env.OSLER_ADMIN_USER;
+const PASSWORD = process.argv[4] || process.env.OSLER_ADMIN_PASS;
+
+if (!USERNAME || !PASSWORD) {
+  console.error("Usage: node scripts/backfill-managed-content.js [api_url] <admin_user> <admin_pass>");
+  console.error("Credentials are required (argv or OSLER_ADMIN_USER / OSLER_ADMIN_PASS).");
+  process.exit(1);
+}
 
 async function main() {
   console.log(`\n📦 Backfilling raw content into managed objects on ${API}...`);

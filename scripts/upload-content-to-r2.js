@@ -17,8 +17,14 @@ const fs = require("fs");
 const path = require("path");
 
 const API = process.argv[2] || "http://localhost:8787";
-const USERNAME = process.argv[3] || "admin";
-const PASSWORD = process.argv[4] || "123";
+// Credentials are required for remote mode - no defaults (see SECURITY.md).
+const USERNAME = process.argv[3] || process.env.OSLER_ADMIN_USER;
+const PASSWORD = process.argv[4] || process.env.OSLER_ADMIN_PASS;
+if (!process.argv.includes("--local") && (!USERNAME || !PASSWORD)) {
+  console.error("Usage: node scripts/upload-content-to-r2.js [api_url] <user> <pass>  (or --local)");
+  console.error("Remote mode requires credentials (argv or OSLER_ADMIN_USER / OSLER_ADMIN_PASS).");
+  process.exit(1);
+}
 const CONTENT_DIR = path.join(__dirname, "..", "public", "osler-content");
 
 // Check for --local flag
