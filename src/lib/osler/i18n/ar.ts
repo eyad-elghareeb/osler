@@ -1175,6 +1175,7 @@ export const ar = {
     "highlighter.clearConfirmDesc":
       "سيؤدي هذا إلى إزالة كل {count} تظليل من هذا العنصر. لا يمكن التراجع عن هذا الإجراء.",
     "highlighter.clearConfirm": "مسح الكل",
+    "highlighter.done": "تم",
 
     /* PWA install */
     "pwa.installApp": "تثبيت التطبيق",

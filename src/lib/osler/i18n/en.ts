@@ -1179,6 +1179,7 @@ export const en = {
     "highlighter.clearConfirmDesc":
       "This removes all {count} highlight(s) on this item. This action cannot be undone.",
     "highlighter.clearConfirm": "Clear all",
+    "highlighter.done": "Done",
 
     /* PWA install */
     "pwa.installApp": "Install app",
