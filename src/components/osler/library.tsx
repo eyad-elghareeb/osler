@@ -85,12 +85,20 @@ export function Library({ initialArticleId, onNavigateBack: propOnNavigateBack }
   const [sidebarOpen, setSidebarOpen] = React.useState(false);
   const isMobile = useIsMobile();
 
-  // Swipe-back gesture to navigate to Learn hub (disabled when an article is open on mobile)
+  const hlCtrl = useArticleHighlighter({
+    source: "library",
+    articleId: activeFile,
+    enabled: true,
+  });
+
+  // Swipe-back gesture to navigate to Learn hub (disabled when an article is
+  // open on mobile, or whenever a highlighter tool is active — the drag-to-
+  // select gesture of text selection must never dismiss the page).
   const swipeDismissProps = useSwipeBackDismiss({
     onDismiss: () => onNavigateBack?.(),
     direction: "horizontal",
     rtl,
-    disabled: isMobile ? !!activeFile : false,
+    disabled: (isMobile ? !!activeFile : false) || hlCtrl.tool !== null,
   });
 
   React.useEffect(() => {
@@ -107,12 +115,6 @@ export function Library({ initialArticleId, onNavigateBack: propOnNavigateBack }
 
   const [loading, setLoading] = React.useState(false);
   const [sidebarTab, setSidebarTab] = React.useState<SidebarTab>("toc");
-
-  const hlCtrl = useArticleHighlighter({
-    source: "library",
-    articleId: activeFile,
-    enabled: true,
-  });
 
   // Paint the folder tree from the manifest immediately; article metadata
   // (titles, read times) enriches the file list in the background.
@@ -532,6 +534,7 @@ export function Library({ initialArticleId, onNavigateBack: propOnNavigateBack }
         ) : null
       }
       onBack={closeArticle}
+      swipeDisabled={hlCtrl.tool !== null}
     />
   ) : null;
 

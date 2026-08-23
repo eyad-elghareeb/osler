@@ -76,6 +76,13 @@ export interface NavigationStackProps {
   onBack: () => void;
   /** Right-to-left layout. Subpages enter from the left and drag-left goes back. */
   rtl?: boolean;
+  /**
+   * Force-disable the drag-to-dismiss gesture even when a subpage is open.
+   * Used by readers while an immersive mode owns horizontal touch gestures
+   * (e.g. the article highlighter — swiping to move text-selection handles
+   * must never dismiss the page).
+   */
+  swipeDisabled?: boolean;
   /** Additional className for the outer container. */
   className?: string;
   /** Additional className for the home layer. */
@@ -89,6 +96,7 @@ export function NavigationStack({
   subpage,
   onBack,
   rtl = false,
+  swipeDisabled = false,
   className,
   homeClassName,
   subpageClassName,
@@ -117,7 +125,7 @@ export function NavigationStack({
     onDismiss: onBack,
     direction: "horizontal",
     rtl,
-    disabled: !hasPages,
+    disabled: !hasPages || swipeDisabled,
   });
 
   return (
