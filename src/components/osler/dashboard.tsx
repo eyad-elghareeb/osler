@@ -25,12 +25,13 @@ import {
   flattenTree,
   loadNodeContent,
   getEngineMeta,
+  getCachedAllCategoryLeaves,
 } from "@/lib/osler/content";
 import { enabledEngines } from "@/lib/osler/config";
 import type { AnyContent, ContentTreeNode } from "@/lib/osler/types";
 import { storage } from "@/lib/osler/storage";
-import { listAllArticles, loadArticleContent } from "@/lib/osler/articles";
-import { listAllVideos } from "@/lib/osler/videos";
+import { listAllArticles, loadArticleContent, getCachedAllArticles } from "@/lib/osler/articles";
+import { listAllVideos, getCachedVideoCount } from "@/lib/osler/videos";
 import type { Article } from "@/lib/osler/articles";
 import type { OslerView } from "./app-shell";
 import { useI18n } from "./i18n-provider";
@@ -84,7 +85,7 @@ export function Dashboard({
   // Manifest-only content tree — loaded from category manifests (fast, no
   // pack JSON fetched). Recent packs + continue card need node metadata, so
   // the dashboard no longer waits for every pack's data files to hydrate.
-  const [leaves, setLeaves] = React.useState<ContentTreeNode[] | null>(null);
+  const [leaves, setLeaves] = React.useState<ContentTreeNode[] | null>(() => getCachedAllCategoryLeaves());
 
   React.useEffect(() => {
     let cancelled = false;
@@ -111,7 +112,14 @@ export function Dashboard({
     };
   }, []);
 
-  const [stats, setStats] = React.useState({ attempted: 0, correct: 0, packs: 0 });
+  const [stats, setStats] = React.useState(() => {
+    const all = storage.allProgress();
+    return {
+      attempted: all.reduce((a, b) => a + b.attempted, 0),
+      correct: all.reduce((a, b) => a + b.correct, 0),
+      packs: all.length,
+    };
+  });
   const [hydrated, setHydrated] = React.useState(storage.isHydrated());
 
   React.useEffect(() => {
@@ -184,8 +192,8 @@ export function Dashboard({
     : 0;
 
   const [featuredArticles, setFeaturedArticles] = React.useState<Article[]>([]);
-  const [articleCount, setArticleCount] = React.useState(0);
-  const [videoCount, setVideoCount] = React.useState(0);
+  const [articleCount, setArticleCount] = React.useState(() => getCachedAllArticles()?.length ?? 0);
+  const [videoCount, setVideoCount] = React.useState(() => getCachedVideoCount() ?? 0);
   const [featuredLoading, setFeaturedLoading] = React.useState(true);
 
   React.useEffect(() => {

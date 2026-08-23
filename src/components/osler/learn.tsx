@@ -14,7 +14,7 @@ import {
 import { useI18n } from "./i18n-provider";
 import type { OslerView } from "./app-shell";
 import { cn } from "@/lib/utils";
-import { flattenTree, getEngineMeta, loadCategoryTree } from "@/lib/osler/content";
+import { flattenTree, getEngineMeta, loadCategoryTree, getCachedCategoryTree } from "@/lib/osler/content";
 import type { ContentTreeNode } from "@/lib/osler/types";
 import { storage } from "@/lib/osler/storage";
 import { fadeUp, staggerContainer } from "@/lib/osler/motion";
@@ -114,11 +114,15 @@ export function Learn({ onNavigate: propOnNavigate }: LearnProps = {}) {
   );
 
   // Manifest counts and titles arrive without downloading every pack body.
-  const [counts, setCounts] = React.useState<Record<string, number | null>>({
-    library: null,
-    flashcards: null,
-    osce: null,
-    videos: null,
+  const [counts, setCounts] = React.useState<Record<string, number | null>>(() => {
+    const sumCounts = (nodes: ContentTreeNode[] | null) =>
+      nodes ? flattenTree(nodes).reduce((total, node) => total + (node.itemCount ?? node.questionCount ?? node.files?.length ?? 0), 0) : null;
+    return {
+      library: sumCounts(getCachedCategoryTree("library")),
+      flashcards: sumCounts(getCachedCategoryTree("flashcard")),
+      osce: sumCounts(getCachedCategoryTree("osce")),
+      videos: sumCounts(getCachedCategoryTree("video")),
+    };
   });
 
   React.useEffect(() => {

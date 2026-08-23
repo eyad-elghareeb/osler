@@ -70,8 +70,11 @@ export async function loadNodeVideos(node: ContentTreeNode): Promise<VideoResour
   return merged;
 }
 
+let cachedAllVideosList: Array<VideoResource & { nodeUid: string; nodePath: string }> | null = null;
+
 /** Return all videos across all leaf nodes (flattened). */
 export async function listAllVideos(): Promise<Array<VideoResource & { nodeUid: string; nodePath: string }>> {
+  if (cachedAllVideosList) return cachedAllVideosList;
   const leaves = await listVideoLeafNodes();
   const all: Array<VideoResource & { nodeUid: string; nodePath: string }> = [];
   for (const leaf of leaves) {
@@ -85,7 +88,13 @@ export async function listAllVideos(): Promise<Array<VideoResource & { nodeUid: 
       });
     }
   }
+  cachedAllVideosList = all;
   return all;
+}
+
+/** Synchronous getter for video count if already loaded. */
+export function getCachedVideoCount(): number | null {
+  return cachedAllVideosList ? cachedAllVideosList.length : null;
 }
 
 /**

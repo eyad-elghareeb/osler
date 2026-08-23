@@ -63,7 +63,7 @@ import {
   Tag,
   type LucideIcon,
 } from "lucide-react";
-import { loadCategoryTree, loadContentByUid, loadNodeByUid, ENGINE_META, flattenTree, packBasePath, nodeUrls } from "@/lib/osler/content";
+import { loadCategoryTree, getCachedCategoryTree, loadContentByUid, loadNodeByUid, ENGINE_META, flattenTree, packBasePath, nodeUrls } from "@/lib/osler/content";
 import { toast } from "@/hooks/use-toast";
 import { useCountUp } from "@/hooks/use-count-up";
 import { MilkdownEditor } from "@/components/osler/milkdown-editor";
@@ -1721,13 +1721,76 @@ function HomeView({
   const [data, setData] = React.useState<{
     items: PackEntry[];
     trees: Record<string, ContentTreeNode[]>;
-  } | null>(null);
+  } | null>(() => {
+    const cachedTree = getCachedCategoryTree("quiz");
+    if (!cachedTree) return null;
+    const leaves = flattenTree(cachedTree).filter(
+      (node) => node.type === "quiz" || node.type === "bank" || node.type === "written",
+    );
+    return {
+      items: leaves.map((node) => ({ node, content: null })),
+      trees: { quiz: cachedTree, bank: cachedTree, written: cachedTree },
+    };
+  });
   const [, force] = React.useReducer((x) => x + 1, 0);
   const { t } = useI18n();
   const [savedSessions, setSavedSessions] = React.useState<SavedSession[]>([]);
   const [exportDialogOpen, setExportDialogOpen] = React.useState(false);
   const [contextMenuNode, setContextMenuNode] = React.useState<ContentTreeNode | null>(null);
   const [contextMenuPos, setContextMenuPos] = React.useState<{ x: number; y: number } | null>(null);
+
+  // Hide-on-scroll / collapsible app bar logic for mobile viewports
+  const [headerCollapsed, setHeaderCollapsed] = React.useState(false);
+  const lastScrollYRef = React.useRef(0);
+
+  React.useEffect(() => {
+    let scrollEl: HTMLElement | null = null;
+    let rafId = 0;
+
+    const findContainer = () => {
+      const el = document.querySelector(".osler-page") as HTMLElement | null;
+      if (el && el.scrollHeight > el.clientHeight) return el;
+      return null;
+    };
+
+    const onScroll = () => {
+      cancelAnimationFrame(rafId);
+      rafId = requestAnimationFrame(() => {
+        if (!scrollEl) return;
+        const y = scrollEl.scrollTop;
+        const delta = y - lastScrollYRef.current;
+        if (y < 15) {
+          setHeaderCollapsed(false);
+        } else if (delta > 4 && y > 30) {
+          setHeaderCollapsed(true);
+        } else if (delta < -4) {
+          setHeaderCollapsed(false);
+        }
+        lastScrollYRef.current = y;
+      });
+    };
+
+    const attach = () => {
+      const next = findContainer();
+      if (next !== scrollEl) {
+        if (scrollEl) scrollEl.removeEventListener("scroll", onScroll);
+        scrollEl = next;
+        if (scrollEl) {
+          scrollEl.addEventListener("scroll", onScroll, { passive: true });
+          lastScrollYRef.current = scrollEl.scrollTop;
+        }
+      }
+    };
+
+    const interval = setInterval(attach, 300);
+    attach();
+
+    return () => {
+      cancelAnimationFrame(rafId);
+      clearInterval(interval);
+      if (scrollEl) scrollEl.removeEventListener("scroll", onScroll);
+    };
+  }, [homeTab]);
 
   const handleContextMenu = React.useCallback((e: React.MouseEvent, node: ContentTreeNode) => {
     e.preventDefault();
@@ -1782,8 +1845,13 @@ function HomeView({
   return (
     <div className="flex h-full overflow-hidden bg-background">
       <div className="flex-1 min-w-0 flex flex-col overflow-hidden">
-        {/* Page header */}
-        <div className="px-4 md:px-6 lg:px-8 w-full max-w-7xl mx-auto pt-3 md:pt-4 pb-2">
+        {/* Page header (collapsible on mobile scroll down) */}
+        <div
+          className={cn(
+            "px-4 md:px-6 lg:px-8 w-full max-w-7xl mx-auto pt-3 md:pt-4 pb-2 transition-all duration-300 ease-out origin-top",
+            headerCollapsed && "max-md:-translate-y-full max-md:h-0 max-md:opacity-0 max-md:py-0 max-md:overflow-hidden"
+          )}
+        >
           <PageHeader
             inline
             inlineIcon={ClipboardCheck}
@@ -1791,8 +1859,8 @@ function HomeView({
             subtitle={t("qbank.home.subtitle")}
           />
         </div>
-        {/* Tab bar — fixed below header */}
-        <div className="shrink-0 border-b border-border w-full max-w-7xl mx-auto px-4 md:px-6 lg:px-8">
+        {/* Tab bar — sticky with backdrop blur to prevent harsh card clipping */}
+        <div className="shrink-0 border-b border-border w-full max-w-7xl mx-auto px-4 md:px-6 lg:px-8 bg-background/85 backdrop-blur-md supports-[backdrop-filter]:bg-background/70 z-20 shadow-xs transition-colors">
           {/* 3-col grid: [spacer | centered tabs | filter]
               The 1fr cols balance each other so the auto center is always
               geometrically centred. items-end aligns the border-b-2 underline
@@ -2308,7 +2376,7 @@ function SessionToolRow({
   );
 }
 
-function PackCard({
+const PackCard = React.memo(function PackCard({
   node,
   content,
   index,
@@ -2420,7 +2488,7 @@ function PackCard({
       </div>
     </div>
   );
-}
+});
 
 function ContentTab({
   data,

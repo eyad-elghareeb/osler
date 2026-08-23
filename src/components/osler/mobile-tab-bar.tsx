@@ -59,8 +59,13 @@ export function MobileTabBar({ view: propView, onViewChange }: MobileTabBarProps
   const currentView = useCurrentView();
   const { navigate } = useOslerRouter();
 
-  const activeView = propView ?? currentView;
+  const [pendingView, setPendingView] = React.useState<OslerView | null>(null);
+  const activeView = pendingView ?? propView ?? currentView;
   const handleNav = onViewChange ?? navigate;
+
+  React.useEffect(() => {
+    setPendingView(null);
+  }, [currentView, propView]);
 
   return (
     <nav
@@ -83,6 +88,7 @@ export function MobileTabBar({ view: propView, onViewChange }: MobileTabBarProps
             aria-label={t(tab.labelKey)}
             onClick={() => {
               if (active) return;
+              setPendingView(tab.id);
               handleNav(tab.id);
             }}
             className={`osler-tabbar-item osler-no-select ${active ? "active" : ""}`}

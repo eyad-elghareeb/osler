@@ -1012,19 +1012,25 @@ interface SkeletonCardProps {
   className?: string;
 }
 
-export function SkeletonCard({ header = true, lines = 3, className }: SkeletonCardProps) {
+export function SkeletonCard({ header = true, lines = 2, className }: SkeletonCardProps) {
   return (
-    <div className={cn("osler-card--default", className)}>
-      {header && (
-        <div className="flex items-center gap-2 mb-3">
-          <Skeleton className="size-8 rounded-lg" />
-          <div className="flex flex-col gap-1.5 flex-1">
-            <Skeleton className="h-3 w-1/3" />
-            <Skeleton className="h-2.5 w-1/2" />
+    <div className={cn("osler-card--roomy min-h-[168px] flex flex-col justify-between", className)}>
+      <div>
+        {header && (
+          <div className="flex items-center gap-3.5 mb-3">
+            <Skeleton className="size-12 rounded-xl shrink-0" />
+            <div className="flex flex-col gap-2 flex-1 min-w-0">
+              <Skeleton className="h-4 w-3/5 max-w-[180px]" />
+              <Skeleton className="h-3 w-2/5 max-w-[100px]" />
+            </div>
           </div>
-        </div>
-      )}
-      {lines > 0 && <SkeletonText lines={lines} />}
+        )}
+        {lines > 0 && <SkeletonText lines={lines} />}
+      </div>
+      <div className="pt-3 border-t border-border/40 flex items-center justify-between">
+        <Skeleton className="h-3 w-1/4 max-w-[80px]" />
+        <Skeleton className="size-4 rounded shrink-0" />
+      </div>
     </div>
   );
 }
@@ -1079,11 +1085,11 @@ export function HubSkeleton({
           </div>
         )}
         {hero && (
-          <Skeleton className="h-32 w-full rounded-xl mb-6" />
+          <Skeleton className="h-36 w-full rounded-xl mb-6 min-h-[144px]" />
         )}
         <div className={cn("grid gap-3 mb-6", statCols)}>
           {Array.from({ length: statCount }).map((_, i) => (
-            <div key={i} className="osler-stat-tile">
+            <div key={i} className="osler-stat-tile min-h-[82px] flex flex-col justify-between">
               <div className="flex items-center justify-between mb-2">
                 <Skeleton className="h-3 w-3/4 max-w-16" />
                 <Skeleton className="size-4 rounded shrink-0" />
@@ -1093,9 +1099,9 @@ export function HubSkeleton({
           ))}
         </div>
         <Skeleton className="h-4 w-32 mb-3" />
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {Array.from({ length: cardCount }).map((_, i) => (
-            <SkeletonCard key={i} lines={3} />
+            <SkeletonCard key={i} lines={2} />
           ))}
         </div>
       </div>

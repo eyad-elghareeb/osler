@@ -421,18 +421,15 @@ export function AppShell({ children }: AppShellProps) {
           onSignOut={logout}
         />
         <LightboxProvider>
-          <AnimatePresence mode="sync" initial={false}>
-            <motion.div
-              key={view}
-              initial={vtActive ? false : { opacity: 0, y: 4 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={vtActive ? undefined : { opacity: 0, y: -4 }}
-              transition={{ duration: 0.25 }}
-              className="h-full w-full flex-1 flex flex-col min-h-0"
-            >
-              {children}
-            </motion.div>
-          </AnimatePresence>
+          <motion.div
+            key={view}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ duration: 0.18, ease: [0.25, 1, 0.5, 1] }}
+            className="h-full w-full flex-1 flex flex-col min-h-0"
+          >
+            {children}
+          </motion.div>
         </LightboxProvider>
       </main>
 

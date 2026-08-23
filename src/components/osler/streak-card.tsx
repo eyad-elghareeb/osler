@@ -15,7 +15,7 @@ import { AnimatedFlame } from "./animated-icons";
 const CHART_DAYS = 14;
 const BAR_GAP = 4;
 
-function ActivityBarChart({ activity, today }: { activity: DailyActivity[]; today: string }) {
+const ActivityBarChart = React.memo(function ActivityBarChart({ activity, today }: { activity: DailyActivity[]; today: string }) {
   const { t } = useI18n();
 
   const maxCount = Math.max(...activity.map((d) => d.count), 1);
@@ -156,7 +156,7 @@ function ActivityBarChart({ activity, today }: { activity: DailyActivity[]; toda
       </svg>
     </div>
   );
-}
+});
 
 /* ── Flame badge ──────────────────────────────────────────────────────── */
 
@@ -204,7 +204,7 @@ function FlameCounter({ count, active }: { count: number; active: boolean }) {
 
 /* ── StreakCard ────────────────────────────────────────────────────────── */
 
-export function StreakCard() {
+export const StreakCard = React.memo(function StreakCard() {
   const { t } = useI18n();
   const [data, setData] = React.useState<StreakData>(() => streak.compute());
   const [activity, setActivity] = React.useState<DailyActivity[]>(() =>
@@ -260,7 +260,7 @@ export function StreakCard() {
       <ActivityBarChart activity={activity} today={today} />
     </OslerCard>
   );
-}
+});
 
 /* ── 48h restore window ────────────────────────────────────────────────── */
 

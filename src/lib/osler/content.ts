@@ -113,9 +113,13 @@ export function nodeUrls(node: ContentTreeNode): string[] {
 
 /** Shared in-flight and resolved manifest requests for the current session. */
 const manifestTreeMemo = new Map<string, Promise<ContentTreeNode[]>>();
+const manifestTreeSyncCache = new Map<string, ContentTreeNode[]>();
 
 async function loadManifestTree(folder: string): Promise<ContentTreeNode[]> {
   await loadConfig();
+  const cachedSync = manifestTreeSyncCache.get(folder);
+  if (cachedSync) return cachedSync;
+
   const cached = manifestTreeMemo.get(folder);
   if (cached) return cached;
 
@@ -123,13 +127,17 @@ async function loadManifestTree(folder: string): Promise<ContentTreeNode[]> {
     const res = await fetchWithLocalFallback(manifestUrl(folder), localManifestUrl(folder));
     if (!res.ok) throw new Error(`Failed to load ${folder}/manifest.json: ${res.status}`);
     const manifest = (await res.json()) as CategoryManifest;
+    manifestTreeSyncCache.set(folder, manifest.items);
     return manifest.items;
   })();
   manifestTreeMemo.set(folder, promise);
   try {
-    return await promise;
+    const items = await promise;
+    manifestTreeSyncCache.set(folder, items);
+    return items;
   } catch (error) {
     manifestTreeMemo.delete(folder);
+    manifestTreeSyncCache.delete(folder);
     throw error;
   }
 }
@@ -141,6 +149,32 @@ async function loadManifestTree(folder: string): Promise<ContentTreeNode[]> {
  */
 export async function loadCategoryTree(type: EngineType): Promise<ContentTreeNode[]> {
   return loadManifestTree(categoryFolder(type));
+}
+
+/**
+ * Synchronous getter for category trees already resolved into memory.
+ * Used by tab views on mount to render immediately without flashing a skeleton.
+ */
+export function getCachedCategoryTree(type: EngineType): ContentTreeNode[] | null {
+  return manifestTreeSyncCache.get(categoryFolder(type)) ?? null;
+}
+
+/**
+ * Synchronously retrieve all enabled leaf nodes if their trees are in memory.
+ */
+export function getCachedAllCategoryLeaves(): ContentTreeNode[] | null {
+  const types = enabledEngines().filter((t) => t !== "library");
+  const folders = [...new Set(types.map(categoryFolder))];
+  const allCached = folders.every((f) => manifestTreeSyncCache.has(f));
+  if (!allCached) return null;
+  const byUid = new Map<string, ContentTreeNode>();
+  for (const f of folders) {
+    const items = manifestTreeSyncCache.get(f) ?? [];
+    for (const leaf of flattenTree(items)) {
+      byUid.set(leaf.uid, leaf);
+    }
+  }
+  return [...byUid.values()];
 }
 
 /**

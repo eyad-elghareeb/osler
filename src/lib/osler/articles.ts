@@ -403,6 +403,12 @@ export async function listAllArticles(): Promise<ArticleMeta[]> {
   return all;
 }
 
+/** Synchronous getter for articles already loaded into memory. */
+export function getCachedAllArticles(): ArticleMeta[] | null {
+  if (!leafArticleCache) return null;
+  return Array.from(leafArticleCache.values()).flat();
+}
+
 /** Fetch and parse a single file into an Article (with html). */
 export async function loadArticleContent(filePath: string): Promise<Article | null> {
   await loadConfig();

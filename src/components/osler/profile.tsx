@@ -512,7 +512,7 @@ const CALLOUT_TONES = {
 
 type CalloutTone = keyof typeof CALLOUT_TONES;
 
-function PerformanceInsights({ metrics }: { metrics: MetricsSummary }) {
+const PerformanceInsights = React.memo(function PerformanceInsights({ metrics }: { metrics: MetricsSummary }) {
   const { t } = useI18n();
 
   const weak = React.useMemo(
@@ -698,7 +698,11 @@ function PerformanceInsights({ metrics }: { metrics: MetricsSummary }) {
                         <div
                           className={cn(
                             "h-full rounded-full transition-all",
-                            (s.accuracy ?? 0) >= 70 ? "bg-success" : (s.accuracy ?? 0) >= 50 ? "bg-warning" : "bg-destructive",
+                            s.accuracy != null && s.accuracy < 50
+                              ? "bg-destructive"
+                              : s.accuracy != null && s.accuracy < 75
+                                ? "bg-warning"
+                                : "bg-success",
                           )}
                           style={{ width: `${s.accuracy ?? 0}%` }}
                         />
@@ -713,11 +717,11 @@ function PerformanceInsights({ metrics }: { metrics: MetricsSummary }) {
       )}
     </div>
   );
-}
+});
 
 const PROFILE_STREAK_DAYS = 30;
 
-function ProfileStreakSection() {
+const ProfileStreakSection = React.memo(function ProfileStreakSection() {
   const { t } = useI18n();
   const [view, setView] = React.useState<"chart" | "heatmap">("chart");
   const [streakData, setStreakData] = React.useState(() => streak.compute());
@@ -969,7 +973,7 @@ function ProfileStreakSection() {
       </OslerCard>
     </div>
   );
-}
+});
 
 function StatTile({
   label,

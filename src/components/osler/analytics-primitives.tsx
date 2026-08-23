@@ -301,7 +301,7 @@ interface ChartLegendProps {
  * labels. Pair with `chartSeries(index)` on the chart's series colors so
  * the legend swatch always matches the bar / line color.
  */
-export function ChartLegend({ items, className }: ChartLegendProps) {
+export const ChartLegend = React.memo(function ChartLegend({ items, className }: ChartLegendProps) {
   return (
     <div className={cn("flex flex-wrap items-center gap-x-3 gap-y-1.5", className)}>
       {items.map((item, i) => (
@@ -315,7 +315,7 @@ export function ChartLegend({ items, className }: ChartLegendProps) {
       ))}
     </div>
   );
-}
+});
 
 /* ─── SparkTrend ─────────────────────────────────────────────────────── */
 
@@ -366,7 +366,7 @@ export function defaultSparkDelta(first: number, last: number): string {
   return `${sign}${Math.abs(diff).toFixed(diff % 1 === 0 ? 0 : 1)}`;
 }
 
-export function SparkTrend({
+export const SparkTrend = React.memo(function SparkTrend({
   data,
   variant = "area",
   tone = "auto",
@@ -436,5 +436,5 @@ export function SparkTrend({
       )}
     </div>
   );
-}
+});
 
