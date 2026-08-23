@@ -542,6 +542,7 @@ The UI language selector and the content-language filter both derive their optio
 - **Multiple `.json` files per leaf folder**: all files fetched and merged (arrays concatenated)
 - **Branch nodes** (folders with subfolders) → grouping decks; **Leaf nodes** (no subfolders) → content items
 - **Images**: a leaf node may declare an `images: [...]` file list and ship an `images/` subfolder. Bare filenames in rich text / card fields resolve against the node's `images/` subfolder automatically (`src/lib/osler/richtext.ts`, `articles.ts`). Library article images live in `<articleDir>/images/`.
+- **Article metadata sidecar**: library article metadata (title, specialty, system, read time, tags, lang) lives OUTSIDE the .md body — in `<article>.meta.json` next to the file (raw/published) or the managed object's `assets/meta.json` draft asset. The student app merges sidecar fields over frontmatter (`articles.ts`, negative-cached); the admin editor's Metadata panel writes it on every save and mirrors it next to the published copy at publish time. `.meta.json` files are excluded from both manifest generators, the worker backfill walk, and the studio explorer tree — never treat one as a content data file.
 - **Flashcard types**: `basic` (front/back) and `cloze` (Anki `{{c1::answer::hint}}` syntax). Cloze cards split into one review unit per distinct cloze index; SM-2 tracks each separately. Markdown is supported in all fields; images resolve via the pack's `images/` subfolder. Anki export (`.txt`) is available for basic + cloze decks.
 - Auto-generate manifests via `npm run generate-manifests` (script: `scripts/generate-content-manifests.js`) — re-run after adding/removing content or images
 
@@ -603,7 +604,7 @@ Learn sub-views (Library, Flashcards, OSCE, Videos) support iOS-style swipe-back
 - **Disable the gesture** during immersive states where swipe conflicts with content interaction:
   - Flashcards: `disabled: mode === "study" || mode === "complete"`
   - Videos: `disabled: !!activeVideo`
-  - Library: `disabled: isMobile ? !!activeFile : false` (disable when reading an article on mobile)
+  - Library: `disabled: (isMobile ? !!activeFile : false) || hlCtrl.tool !== null` (disable when reading on mobile, and whenever a highlighter tool is armed — text-selection drags must never dismiss)
   - OSCE: `disabled: phase !== "select"` (only enable on the scenario picker)
 - The hook already handles RTL, haptic feedback, velocity-aware dismiss, and snap-to-origin.
 - Do NOT add edge-zone detection — the existing hook works from anywhere on the page.
