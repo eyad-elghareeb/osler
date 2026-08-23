@@ -721,7 +721,7 @@ export function ContentEditor({ id, rawR2Key, capabilities }: ContentEditorProps
             {isRawMode ? (rawR2Key ?? "").replace(/^content-files\//, "") : (obj?.title ?? t("admin.content.untitled"))}
           </span>
           {isRawMode ? (
-            <span className="ms-2 inline-flex items-center gap-1 text-xs text-warning">
+            <span className="ms-2 hidden items-center gap-1 text-xs text-warning sm:inline-flex">
               <AlertTriangle className="size-3" />
               {t("admin.content.editor.rawBadge")}
             </span>
@@ -736,11 +736,11 @@ export function ContentEditor({ id, rawR2Key, capabilities }: ContentEditorProps
               title={t("admin.content.editor.dirty")}
             >
               <span className="size-1.5 rounded-full bg-warning" />
-              {t("admin.content.editor.dirty")}
+              <span className="hidden sm:inline">{t("admin.content.editor.dirty")}</span>
             </span>
           )}
           {!dirty && lastSavedAt && (
-            <span className="ms-2 inline-flex items-center gap-1 text-xs text-muted-foreground/70">
+            <span className="ms-2 hidden items-center gap-1 text-xs text-muted-foreground/70 sm:inline-flex">
               <CheckCircle2 className="size-3" />
               {t("admin.content.editor.lastSaved", { time: new Date(lastSavedAt).toLocaleTimeString() })}
             </span>
@@ -748,21 +748,22 @@ export function ContentEditor({ id, rawR2Key, capabilities }: ContentEditorProps
         </div>
         <div className="flex items-center gap-1">
           {/* Raw mode: Save + Promote to managed. No submit/publish/delete
-              (those require a backing content_object). */}
+              (those require a backing content_object). Labels collapse to
+              icons below sm so the toolbar fits a phone. */}
           {isRawMode && (
             <>
               <Button variant="outline" size="xs" onClick={runValidation} disabled={validating} title={t("admin.content.editor.validate")}>
-                {validating ? <Loader2 className="me-1 size-3 animate-spin" /> : <ShieldCheck className="me-1 size-3" />}
-                {t("admin.content.editor.validate")}
+                {validating ? <Loader2 className="size-3 sm:me-1 animate-spin" /> : <ShieldCheck className="size-3 sm:me-1" />}
+                <span className="hidden sm:inline">{t("admin.content.editor.validate")}</span>
               </Button>
               <Button variant="outline" size="xs" onClick={saveDraft} disabled={saving || !dirty}>
-                {saving ? <Loader2 className="me-1 size-3 animate-spin" /> : <Save className="me-1 size-3" />}
-                {t("admin.content.saveDraft")}
+                {saving ? <Loader2 className="size-3 sm:me-1 animate-spin" /> : <Save className="size-3 sm:me-1" />}
+                <span className="hidden sm:inline">{t("admin.content.saveDraft")}</span>
               </Button>
               {capabilities.manageContent && (
-                <Button size="xs" onClick={promoteToManaged} disabled={adopting}>
-                  {adopting ? <Loader2 className="me-1 size-3 animate-spin" /> : <PackagePlus className="me-1 size-3" />}
-                  {t("admin.content.editor.promote")}
+                <Button size="xs" onClick={promoteToManaged} disabled={adopting} title={t("admin.content.editor.promote")}>
+                  {adopting ? <Loader2 className="size-3 sm:me-1 animate-spin" /> : <PackagePlus className="size-3 sm:me-1" />}
+                  <span className="hidden sm:inline">{t("admin.content.editor.promote")}</span>
                 </Button>
               )}
             </>
@@ -771,21 +772,21 @@ export function ContentEditor({ id, rawR2Key, capabilities }: ContentEditorProps
           {!isRawMode && !isPending && (
             <>
               <Button variant="outline" size="xs" onClick={runValidation} disabled={validating} title={t("admin.content.editor.validate")}>
-                {validating ? <Loader2 className="me-1 size-3 animate-spin" /> : <ShieldCheck className="me-1 size-3" />}
-                {t("admin.content.editor.validate")}
+                {validating ? <Loader2 className="size-3 sm:me-1 animate-spin" /> : <ShieldCheck className="size-3 sm:me-1" />}
+                <span className="hidden sm:inline">{t("admin.content.editor.validate")}</span>
               </Button>
-              <Button variant="outline" size="xs" onClick={saveDraft} disabled={saving}>
-                {saving ? <Loader2 className="me-1 size-3 animate-spin" /> : <Save className="me-1 size-3" />}
-                {t("admin.content.saveDraft")}
+              <Button variant="outline" size="xs" onClick={saveDraft} disabled={saving} title={t("admin.content.saveDraft")}>
+                {saving ? <Loader2 className="size-3 sm:me-1 animate-spin" /> : <Save className="size-3 sm:me-1" />}
+                <span className="hidden sm:inline">{t("admin.content.saveDraft")}</span>
               </Button>
-              <Button variant="outline" size="xs" onClick={submit}>
-                <Send className="me-1 size-3" />
-                {t("admin.content.submit")}
+              <Button variant="outline" size="xs" onClick={submit} title={t("admin.content.submit")}>
+                <Send className="size-3 sm:me-1" />
+                <span className="hidden sm:inline">{t("admin.content.submit")}</span>
               </Button>
               {capabilities.publishDirect && (
-                <Button size="xs" onClick={() => { setPublishTargetPath(suggestedPath); setPublishOpen(true); }}>
-                  <Upload className="me-1 size-3" />
-                  {t("admin.content.publishDirect")}
+                <Button size="xs" onClick={() => { setPublishTargetPath(suggestedPath); setPublishOpen(true); }} title={t("admin.content.publishDirect")}>
+                  <Upload className="size-3 sm:me-1" />
+                  <span className="hidden sm:inline">{t("admin.content.publishDirect")}</span>
                 </Button>
               )}
             </>
