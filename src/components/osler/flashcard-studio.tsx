@@ -24,7 +24,6 @@ import {
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { ENGINE_META, loadContentByUid, packBasePath } from "@/lib/osler/content";
-import { contentFileUrl } from "@/lib/osler/content-url";
 import type {
   FlashcardContent,
   FlashcardSubdeck,
@@ -32,6 +31,7 @@ import type {
   Flashcard,
   FlashcardImage,
 } from "@/lib/osler/types";
+import { renderRichText, resolveContentAsset } from "@/lib/osler/richtext";
 import { flashcardReview, storage } from "@/lib/osler/storage";
 import { useContentTree } from "@/hooks/use-content-tree";
 import { useShortcutBindings } from "@/hooks/use-shortcuts";
@@ -70,52 +70,15 @@ const SUBDECK_ICONS: Record<string, string> = {
   gastroenterology: "stomach",
 };
 
-/* ── Rich-text rendering (markdown subset, shared with OSCE/AI chat) ──── */
+/* ── Rich-text rendering (shared renderer) ────────────────────────────── */
 
 /**
- * Render a small, safe markdown subset to HTML. Escapes first, then applies
- * bold / italic / inline-code / links / line-breaks. Deliberately narrow so
- * card content stays trustworthy without a full markdown pipeline.
+ * Card markdown goes through the same safe subset renderer as QBank/OSCE
+ * (`renderRichText`): bold / italic / inline-code / links / line-breaks plus
+ * inline `![alt](src)` images resolved against the pack's `images/` folder.
  */
-function renderCardMarkdown(text: string): string {
-  if (!text) return "";
-  let h = text
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
-  // Inline code (before other inline rules so its content isn't re-processed).
-  h = h.replace(/`([^`]+)`/g, "<code>$1</code>");
-  // Bold, then italic.
-  h = h.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
-  h = h.replace(/(^|[^*])\*(?!\*)([^*]+?)\*(?!\*)/g, "$1<em>$2</em>");
-  // Markdown links [label](url). The text was escaped above so the href
-  // can't break out of its attribute; the scheme check is defense-in-depth.
-  h = h.replace(
-    /\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g,
-    (_m, label: string, url: string) =>
-      /^https?:\/\//i.test(url)
-        ? `<a href="${url}" target="_blank" rel="noopener noreferrer nofollow">${label}</a>`
-        : label,
-  );
-  h = h.replace(/\n/g, "<br>");
-  return h;
-}
-
-/**
- * Resolve a card asset (image / audio) src against the pack folder. Absolute
- * URLs and data URIs are returned untouched; bare filenames are prefixed with
- * the pack's public path.
- */
-function resolveAsset(src: string, packPath: string): string {
-  if (!src) return src;
-  if (/^(https?:)?\/\//.test(src) || src.startsWith("data:") || src.startsWith("/")) {
-    return src;
-  }
-  // Bare filename → resolve against the pack's images/ subfolder (the
-  // content-asset convention shared with QBank/OSCE via resolveContentAsset).
-  const base = src.includes("/") ? src : `images/${src}`;
-  return contentFileUrl("flashcard", `${packPath}${base}`);
+function renderCardMarkdown(text: string, packPath: string): string {
+  return renderRichText(text ?? "", "flashcard", packPath);
 }
 
 /** Normalize the `image` / `backImage` field (single or array) to an array. */
@@ -142,30 +105,13 @@ function ankiMediaRef(resolved: string): string {
 }
 
 /**
- * Convert a card's markdown (bold/italic/code/links/line-breaks + inline
- * `![alt](src)` images) to HTML suitable for an Anki field. Images are
- * rewritten to `<img src="filename">` using {@link ankiMediaRef} so they line
- * up with files placed in Anki's media folder. `packPath` resolves bare
- * filenames the same way the in-app renderer does.
+ * Convert a card's markdown to HTML suitable for an Anki field. Delegates to
+ * the shared renderer with an `imageSrc` hook that rewrites resolved image
+ * URLs to bare media filenames ({@link ankiMediaRef}) so they line up with
+ * files placed in Anki's collection.media folder.
  */
 function markdownToAnkiHtml(text: string, packPath: string): string {
-  if (!text) return "";
-  // Pull inline images out first so the escaping pass doesn't mangle them.
-  const imgTokens: string[] = [];
-  let src = text.replace(
-    /!\[([^\]]*)\]\(([^\s)]+)\)/g,
-    (_full, alt: string, url: string) => {
-      if (!safeContentUrl(url)) return "";
-      const ref = escapeHtmlAttr(ankiMediaRef(resolveAsset(url, packPath)));
-      const altAttr = alt.replace(/"/g, "&quot;");
-      imgTokens.push(`<img src="${ref}" alt="${altAttr}">`);
-      return `\u0000IMG${imgTokens.length - 1}\u0000`;
-    },
-  );
-  let h = renderCardMarkdown(src);
-  // Restore the image tokens.
-  h = h.replace(/\u0000IMG(\d+)\u0000/g, (_m, i: string) => imgTokens[Number(i)] ?? "");
-  return h;
+  return renderRichText(text ?? "", "flashcard", packPath, { imageSrc: ankiMediaRef });
 }
 
 /** Escape a string for safe use inside a double-quoted HTML attribute. */
@@ -220,7 +166,7 @@ function appendImagesHtml(html: string, images: FlashcardImage[], packPath: stri
   const imgs = images
     .map((img) => {
       if (!safeContentUrl(img.src)) return "";
-      const ref = escapeHtmlAttr(ankiMediaRef(resolveAsset(img.src, packPath)));
+      const ref = escapeHtmlAttr(ankiMediaRef(resolveContentAsset(img.src, "flashcard", packPath)));
       const alt = (img.alt ?? "").replace(/"/g, "&quot;");
       const caption = img.caption
         ? `<div>${markdownToAnkiHtml(img.caption, packPath)}</div>`
@@ -266,7 +212,7 @@ function clozeIndices(text: string): number[] {
  *  - reveal=true  → the active deletion shows its highlighted answer, others
  *    show plain answer text.
  */
-function renderCloze(text: string, activeIdx: number, reveal: boolean): string {
+function renderCloze(text: string, activeIdx: number, reveal: boolean, packPath: string): string {
   // Extract each cloze so its braces survive markdown escaping/rendering,
   // then render markdown on the surrounding (non-cloze) text too. Cloze
   // braces MUST survive untouched — they are not markdown.
@@ -275,15 +221,15 @@ function renderCloze(text: string, activeIdx: number, reveal: boolean): string {
     /\{\{c(\d+)::(.*?)(?:::(.*?))?\}\}/g,
     (_full, idxStr: string, answer: string, hint?: string) => {
       const idx = parseInt(idxStr, 10);
-      const inner = renderCardMarkdown(answer);
+      const inner = renderCardMarkdown(answer, packPath);
       const token = hint
-        ? `{{c${idx}::${inner}::${renderCardMarkdown(hint)}}}`
+        ? `{{c${idx}::${inner}::${renderCardMarkdown(hint, packPath)}}}`
         : `{{c${idx}::${inner}}}`;
       clozeTokens.push(token);
       return `\u0000CLZ${clozeTokens.length - 1}\u0000`;
     },
   );
-  let h = renderCardMarkdown(withoutCloze);
+  let h = renderCardMarkdown(withoutCloze, packPath);
   h = h.replace(/\u0000CLZ(\d+)\u0000/g, (_m, i: string) => {
     const token = clozeTokens[Number(i)] ?? "";
     const m = token.match(/\{\{c(\d+)::(.*?)(?:::(.*?))?\}\}/);
@@ -621,7 +567,7 @@ export function FlashcardStudio({
         {images.map((img, i) => (
           <figure key={i} className="flex flex-col items-center max-w-full">
             <img
-              src={resolveAsset(img.src, packPath)}
+              src={resolveContentAsset(img.src, "flashcard", packPath)}
               alt={img.alt ?? ""}
               className="max-h-[38vh] max-w-full rounded-lg border border-border object-contain"
               loading="lazy"
@@ -658,7 +604,7 @@ export function FlashcardStudio({
 
     // ── Cloze card ──────────────────────────────────────────────────
     if (clozeIdx !== null && card.text) {
-      const html = renderCloze(card.text, clozeIdx, isFlipped);
+      const html = renderCloze(card.text, clozeIdx, isFlipped, packPath);
       return (
         <div className="relative w-full h-full overflow-hidden rounded-xl border border-border shadow-lg bg-card">
           <div className="absolute inset-0 flex flex-col">
@@ -678,7 +624,7 @@ export function FlashcardStudio({
                 <div className="mt-5 pt-4 border-t border-border w-full max-w-2xl">
                   <div
                     className="text-sm leading-relaxed text-muted-foreground osler-prose text-center"
-                    dangerouslySetInnerHTML={{ __html: renderCardMarkdown(card.extra) }}
+                    dangerouslySetInnerHTML={{ __html: renderCardMarkdown(card.extra, packPath) }}
                   />
                 </div>
               )}
@@ -706,7 +652,7 @@ export function FlashcardStudio({
             </div>
             <div
               className="text-xs sm:text-sm leading-snug max-w-lg osler-prose text-muted-foreground line-clamp-3"
-              dangerouslySetInnerHTML={{ __html: renderCardMarkdown(card.front ?? "") }}
+              dangerouslySetInnerHTML={{ __html: renderCardMarkdown(card.front ?? "", packPath) }}
             />
           </div>
           <div className="flex-1 min-h-0 flex flex-col items-center justify-center p-4 sm:p-6 bg-[color-mix(in_oklch,var(--primary)_4%,var(--card))] rounded-b-xl overflow-y-auto osler-scroll">
@@ -716,7 +662,7 @@ export function FlashcardStudio({
             </div>
             <div
               className="text-sm sm:text-base leading-relaxed max-w-lg osler-prose text-center"
-              dangerouslySetInnerHTML={{ __html: renderCardMarkdown(card.back ?? "") }}
+              dangerouslySetInnerHTML={{ __html: renderCardMarkdown(card.back ?? "", packPath) }}
             />
             {renderImages(backImages, packPath)}
           </div>
@@ -738,7 +684,7 @@ export function FlashcardStudio({
           {renderImages(frontImages, packPath)}
           <div
             className="text-lg sm:text-xl leading-relaxed max-w-lg osler-prose text-center"
-            dangerouslySetInnerHTML={{ __html: renderCardMarkdown(card.front ?? "") }}
+            dangerouslySetInnerHTML={{ __html: renderCardMarkdown(card.front ?? "", packPath) }}
           />
           <div className="mt-auto pt-6 text-xs text-muted-foreground/60">
             {t("flash.tapToReveal")}

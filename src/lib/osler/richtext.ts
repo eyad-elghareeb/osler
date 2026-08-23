@@ -55,12 +55,18 @@ function safeUrl(url: string): string | null {
  * resolved against the pack folder. The resolved src is attribute-escaped and
  * scheme-checked so a hostile pack can't break out of the attribute or inject
  * markup through the unescaped URL path.
+ *
+ * `opts.imageSrc`, when provided, rewrites each resolved image URL right
+ * before it is attribute-escaped — used by the Anki exporter to map resolved
+ * URLs to bare media filenames.
  */
 export function renderRichText(
   text: string,
   category: string,
   packPath: string,
+  opts?: { imageSrc?: (url: string) => string },
 ): string {
+  const imageSrc = opts?.imageSrc;
   if (!text) return "";
   // Pull inline images out first so the escaping pass doesn't mangle them.
   const imgTokens: string[] = [];
@@ -69,9 +75,10 @@ export function renderRichText(
     (_full, alt: string, url: string) => {
       const checked = safeUrl(url);
       if (!checked) return "";
-      const resolved = escapeAttr(resolveContentAsset(checked, category, packPath));
+      const resolved = resolveContentAsset(checked, category, packPath);
+      const finalSrc = escapeAttr(imageSrc ? imageSrc(resolved) : resolved);
       const altAttr = escapeAttr(alt ?? "");
-      imgTokens.push(`<img src="${resolved}" alt="${altAttr}" loading="lazy">`);
+      imgTokens.push(`<img src="${finalSrc}" alt="${altAttr}" loading="lazy">`);
       return `\u0000IMG${imgTokens.length - 1}\u0000`;
     },
   );
