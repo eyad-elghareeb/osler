@@ -415,6 +415,7 @@ export function AppShell({ children }: AppShellProps) {
           username={username}
           syncStatus={syncStatus}
           isDark={isDark}
+          isAdminUser={isAdminUser}
           onSearchOpen={() => setSearchOpen(true)}
           onToggleTheme={toggleTheme}
           onSignOut={logout}
@@ -580,6 +581,7 @@ function MobileScrollAwayBar({
   username,
   syncStatus,
   isDark,
+  isAdminUser = false,
   onSearchOpen,
   onToggleTheme,
   onSignOut,
@@ -588,6 +590,8 @@ function MobileScrollAwayBar({
   username?: string | null;
   syncStatus: "synced" | "syncing" | "offline";
   isDark: boolean;
+  /** Admins get the same shield shortcut the desktop top bar shows. */
+  isAdminUser?: boolean;
   onSearchOpen: () => void;
   onToggleTheme: () => void;
   onSignOut: () => void;
@@ -713,6 +717,22 @@ function MobileScrollAwayBar({
             <span className={cn("size-2 rounded-full shrink-0", syncStatus === "synced" ? "bg-success animate-pulse" : syncStatus === "syncing" ? "bg-warning animate-spin" : "bg-muted")} />
             <Cloud className="size-3.5 text-muted-foreground" />
           </button>
+        )}
+
+        {/* Admin panel shortcut — mirrors the desktop top-bar shield.
+            Access itself is enforced by the admin route guard + the Worker's
+            role checks; this button merely surfaces the entrance. */}
+        {isAdminUser && (
+          <Link
+            href="/admin"
+            prefetch={false}
+            onClick={() => haptic("selection")}
+            aria-label={t("nav.adminPanel")}
+            title={t("nav.adminPanel")}
+            className="flex items-center justify-center size-8 rounded-md border border-border bg-muted/40 hover:bg-muted/60 transition-colors shrink-0"
+          >
+            <ShieldCheck className="size-3.5 text-primary" />
+          </Link>
         )}
 
         {/* PWA install */}
