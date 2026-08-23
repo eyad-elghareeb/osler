@@ -49,6 +49,72 @@ export interface ArticleMeta {
   contentType?: ArticleContentType;
 }
 
+/**
+ * Sidecar metadata stored NEXT TO the article file as
+ * `<basename>.meta.json` — lets the admin editor manage metadata through
+ * form fields without ever touching the .md body (frontmatter conflicts
+ * with the WYSIWYG editor). When present, sidecar fields override
+ * frontmatter.
+ */
+export interface ArticleSidecarMeta {
+  title?: string;
+  specialty?: string;
+  system?: string;
+  readTimeMin?: number;
+  tags?: string[];
+  lang?: ContentLang;
+}
+
+/** R2/URL path of an article's sidecar meta file. */
+export function articleSidecarPathFor(filePath: string): string {
+  const slash = filePath.lastIndexOf("/");
+  const dir = slash >= 0 ? filePath.slice(0, slash + 1) : "";
+  const base = slash >= 0 ? filePath.slice(slash + 1) : filePath;
+  const dot = base.lastIndexOf(".");
+  return `${dir}${dot > 0 ? base.slice(0, dot) : base}.meta.json`;
+}
+
+// Negative-cached sidecar lookups — most articles have no sidecar yet and
+// we don't want every listAllArticles() run to re-request the same 404s.
+const sidecarCache = new Map<string, ArticleSidecarMeta | null>();
+
+async function fetchSidecarMeta(filePath: string): Promise<ArticleSidecarMeta | null> {
+  const sidePath = articleSidecarPathFor(filePath);
+  if (sidecarCache.has(sidePath)) return sidecarCache.get(sidePath)!;
+  let result: ArticleSidecarMeta | null = null;
+  try {
+    const res = await fetchWithLocalFallback(
+      contentFileUrl("library", sidePath),
+      localContentUrl("library", sidePath),
+    );
+    if (res.ok) {
+      const parsed = JSON.parse(await res.text());
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+        result = parsed as ArticleSidecarMeta;
+      }
+    }
+  } catch {}
+  sidecarCache.set(sidePath, result);
+  return result;
+}
+
+/** Merge sidecar fields over frontmatter-derived meta (sidecar wins). */
+function applySidecarMeta(meta: ArticleMeta, side: ArticleSidecarMeta | null): void {
+  if (!side) return;
+  if (typeof side.title === "string" && side.title.trim()) meta.title = side.title.trim();
+  if (typeof side.specialty === "string" && side.specialty.trim()) meta.specialty = side.specialty.trim();
+  if (typeof side.system === "string" && side.system.trim()) meta.system = side.system.trim();
+  if (Number.isFinite(side.readTimeMin) && (side.readTimeMin as number) > 0) meta.readTimeMin = Number(side.readTimeMin);
+  if (Array.isArray(side.tags)) meta.tags = side.tags.map(String).filter(Boolean);
+  if (side.lang === "ar" || side.lang === "en") meta.lang = side.lang;
+}
+
+/** Invalidate cached sidecar lookups (called after admin edits). */
+export function clearSidecarCache(sidePath?: string): void {
+  if (sidePath) sidecarCache.delete(sidePath);
+  else sidecarCache.clear();
+}
+
 export interface Article extends ArticleMeta {
   content: string;
   html: string;
@@ -274,7 +340,7 @@ async function loadLeafMeta(node: ContentTreeNode): Promise<ArticleMeta[]> {
       if (!res.ok) return null;
       const text = await res.text();
       const { meta } = parseFrontmatter(text);
-      return {
+      const articleMeta: ArticleMeta = {
         file: filePath,
         title: (meta.title as string) ?? file.replace(/\.md$/, ""),
         specialty: meta.specialty as string | undefined,
@@ -282,8 +348,10 @@ async function loadLeafMeta(node: ContentTreeNode): Promise<ArticleMeta[]> {
         readTimeMin: meta.readTimeMin ? Number(meta.readTimeMin) : undefined,
         tags: meta.tags as string[] | undefined,
         lang: (meta.lang === "ar" || meta.lang === "en") ? meta.lang : (node.lang ?? "en"),
-        contentType: "md" as ArticleContentType,
-      } as ArticleMeta;
+        contentType: "md",
+      };
+      applySidecarMeta(articleMeta, await fetchSidecarMeta(filePath));
+      return articleMeta;
     })
   );
   return results.filter((r): r is ArticleMeta => r !== null);
@@ -378,7 +446,7 @@ export async function loadArticleContent(filePath: string): Promise<Article | nu
     : "";
   const html = await mdToHtml(body, articleDir);
   const nodeLang = await lookupNodeLangForFile(filePath);
-  return {
+  const article: Article = {
     file: filePath.split("/").pop() ?? "",
     title: (meta.title as string) ?? "Untitled",
     specialty: meta.specialty as string | undefined,
@@ -392,6 +460,8 @@ export async function loadArticleContent(filePath: string): Promise<Article | nu
     html,
     contentType: "md",
   };
+  applySidecarMeta(article, await fetchSidecarMeta(filePath));
+  return article;
 }
 
 /** Best-effort lookup of a content node's `lang` for a given article path. */
@@ -429,4 +499,5 @@ export async function searchArticles(query: string): Promise<ArticleMeta[]> {
 export function clearArticleCache(): void {
   treeCache = null;
   leafArticleCache = null;
+  sidecarCache.clear();
 }

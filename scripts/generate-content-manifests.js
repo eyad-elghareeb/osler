@@ -260,14 +260,22 @@ function buildUid(type, segments) {
 }
 
 /**
- * Get list of data JSON filenames in a directory (excluding manifest).
+ * Get list of data JSON filenames in a directory (excluding manifest and
+ * article sidecar meta files).
  */
 function getDataFileNames(dirPath) {
   if (!fs.existsSync(dirPath)) return [];
   return fs.readdirSync(dirPath, { withFileTypes: true })
     .filter((e) => e.isFile() && (e.name.endsWith(".json") || e.name.endsWith(".md") || e.name.endsWith(".pdf") || e.name.endsWith(".html")) && e.name !== MANIFEST_NAME)
     .map((e) => e.name)
+    .filter((name) => !isArticleMetaFile(name))
     .sort();
+}
+
+/** Sidecar metadata for library articles (`<article>.meta.json`) — never a
+ *  content data file; the client merges it over frontmatter at load time. */
+function isArticleMetaFile(name) {
+  return /\.meta\.json$/i.test(name);
 }
 
 /**
@@ -296,7 +304,7 @@ function scanDirectory(dirPath, relativePath, parentType) {
 
   const subdirs = entries.filter((e) => e.isDirectory() && !ASSET_FOLDERS.has(e.name));
   const dataFiles = entries.filter(
-    (e) => e.isFile() && (e.name.endsWith(".json") || e.name.endsWith(".md") || e.name.endsWith(".pdf") || e.name.endsWith(".html"))
+    (e) => e.isFile() && (e.name.endsWith(".json") || e.name.endsWith(".md") || e.name.endsWith(".pdf") || e.name.endsWith(".html")) && !isArticleMetaFile(e.name)
   );
 
   const nodes = [];

@@ -1171,6 +1171,11 @@ function guessImageContentType(filename: string): string {
 }
 
 const ASSET_FOLDERS = new Set(["images", "assets"]);
+/** Library article sidecar metadata (`<article>.meta.json`) — client-merged
+ *  over frontmatter; excluded from manifests and the backfill walk. */
+function isArticleMetaFileName(name: string): boolean {
+  return /\.meta\.json$/i.test(name);
+}
 const CATEGORY_TYPE_MAP: Record<string, string | null> = { qbank: null, flashcard: "flashcard", osce: "osce", library: "library", videos: "video" };
 const FILE_TYPE_KEYS: Record<string, string> = { questions: "quiz", passages: "bank", prompts: "written", cards: "flashcard", videos: "video", stations: "osce" };
 
@@ -1302,7 +1307,10 @@ async function regenerateManifestForCategory(env: Env, category: string): Promis
     if (!folders.has(folderPath)) folders.set(folderPath, { files: [], images: [] });
     const f = folders.get(folderPath)!;
     if (file) {
-      if (file.toLowerCase().endsWith(".json") || file.toLowerCase().endsWith(".md") || file.toLowerCase().endsWith(".html") || file.toLowerCase().endsWith(".pdf")) {
+      if (isArticleMetaFileName(file)) {
+        // Library article sidecar metadata — merged client-side over
+        // frontmatter, never listed as a content data file.
+      } else if (file.toLowerCase().endsWith(".json") || file.toLowerCase().endsWith(".md") || file.toLowerCase().endsWith(".html") || file.toLowerCase().endsWith(".pdf")) {
         f.files.push(file);
       } else if (file.match(/\.(png|jpe?g|gif|svg|webp|avif|bmp|mp3|m4a|mp4)$/i)) {
         f.images.push(file);
@@ -3015,6 +3023,9 @@ async function handleAdmin(request: Request, env: Env, session: Session, url: UR
             if (!rel || rel.endsWith("/") || rel.endsWith("/.keep") || rel === "manifest.json" || rel.includes("/images/")) {
               continue;
             }
+            // Sidecar article metadata is not standalone content — it rides
+            // along with its .md sibling and must never be adopted.
+            if (isArticleMetaFileName(rel)) continue;
             if (!rel.endsWith(".json") && !rel.endsWith(".md") && !rel.endsWith(".html") && !rel.endsWith(".pdf")) {
               continue;
             }

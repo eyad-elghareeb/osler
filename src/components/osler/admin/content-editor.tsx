@@ -50,6 +50,7 @@ import { useAdminSettings } from "@/components/osler/admin/admin-settings-contex
 import { haptic } from "@/lib/osler/native";
 import { cn } from "@/lib/utils";
 import { LoadingState } from "@/components/osler/ui-primitives";
+import { clearSidecarCache } from "@/lib/osler/articles";
 import {
   adminApi,
   type ContentObject,
@@ -116,6 +117,15 @@ export function ContentEditor({ id, rawR2Key, capabilities }: ContentEditorProps
   const [mode, setMode] = React.useState<EditorMode>("form");
   const [artifactContentType, setArtifactContentType] = React.useState<"md" | "pdf" | "html">("md");
   const [adopting, setAdopting] = React.useState(false);
+  /**
+   * Article sidecar metadata (library .md only). Lives OUTSIDE the markdown
+   * body — persisted as `<article>.meta.json` (raw / published) or the
+   * object's `assets/meta.json` draft asset (managed), so the WYSIWYG editor
+   * never has to touch frontmatter.
+   */
+  const [articleMeta, setArticleMeta] = React.useState<Record<string, unknown> | null>(null);
+  const articleMetaRef = React.useRef<Record<string, unknown> | null>(null);
+  articleMetaRef.current = articleMeta;
   const debounceRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
   // Latest body, kept in a ref so the debounced autosave and a manual save
   // always write the most recent content — never a stale snapshot captured
@@ -223,6 +233,22 @@ export function ContentEditor({ id, rawR2Key, capabilities }: ContentEditorProps
           // served directly by the Worker's public content endpoint; staged
           // keys (content-staging/) are private and go through the
           // admin-gated endpoint instead.
+          const loadSidecar = async () => {
+            const sideKey = sidecarKeyForR2Key(rawR2Key);
+            try {
+              let text: string | null = null;
+              if (rawR2Key.startsWith("content-staging/")) {
+                text = (await adminApi.getR2Content(sideKey)).body;
+              } else {
+                const url = r2KeyToWorkerUrl(sideKey);
+                if (url) {
+                  const res = await fetch(url);
+                  if (res.ok) text = await res.text();
+                }
+              }
+              if (!cancelled && text) setArticleMeta(JSON.parse(text));
+            } catch {}
+          };
           if (rawR2Key.startsWith("content-staging/")) {
             const res = await adminApi.getR2Content(rawR2Key);
             if (cancelled) return;
@@ -233,6 +259,7 @@ export function ContentEditor({ id, rawR2Key, capabilities }: ContentEditorProps
               computeParse(text);
             }
             inferModeFromBody(text, parsedRef.current, rawR2Key);
+            await loadSidecar();
             return;
           }
           const url = r2KeyToWorkerUrl(rawR2Key);
@@ -247,6 +274,7 @@ export function ContentEditor({ id, rawR2Key, capabilities }: ContentEditorProps
             computeParse(text);
           }
           inferModeFromBody(text, parsedRef.current, rawR2Key);
+          if (rawR2Key.endsWith(".md")) await loadSidecar();
         } else if (id) {
           // Managed mode — fetch the content_object + body from the admin API.
           const c = await adminApi.getContent(id);
@@ -256,6 +284,23 @@ export function ContentEditor({ id, rawR2Key, capabilities }: ContentEditorProps
           bodyRef.current = text;
           setBody(text);
           if (c.content_type !== "library") computeParse(text);
+          // Library sidecar: draft asset first, then the published copy.
+          if (c.content_type === "library") {
+            try {
+              let sideText: string | null = null;
+              try {
+                sideText = await (await adminApi.getAssetBlob(id, "assets/meta.json")).text();
+              } catch {}
+              if (!sideText && c.published_r2_key) {
+                const pubUrl = r2KeyToWorkerUrl(sidecarKeyForR2Key(c.published_r2_key));
+                if (pubUrl) {
+                  const res = await fetch(pubUrl);
+                  if (res.ok) sideText = await res.text();
+                }
+              }
+              if (!cancelled && sideText) setArticleMeta(JSON.parse(sideText));
+            } catch {}
+          }
         }
       } catch {
         if (!cancelled) toast({ title: t("admin.toast.contentNotFound"), variant: "destructive" });
@@ -349,7 +394,33 @@ export function ContentEditor({ id, rawR2Key, capabilities }: ContentEditorProps
     flushFormBody();
     try {
       await adminApi.saveDraft(id, bodyRef.current);
+      await persistArticleMeta();
       setLastSavedAt(Date.now());
+    } catch {}
+  }
+
+  /**
+   * Persist the sidecar metadata alongside the body. Raw mode writes the
+   * `.meta.json` next to the article file; managed mode writes the draft
+   * asset and mirrors it next to the published copy when one exists.
+   * Best-effort — a metadata write failure must not fail the body save.
+   */
+  async function persistArticleMeta(): Promise<void> {
+    const meta = articleMetaRef.current;
+    if (meta === null) return;
+    const json = JSON.stringify(meta);
+    try {
+      if (isRawMode && rawR2Key) {
+        await adminApi.uploadFile(sidecarKeyForR2Key(rawR2Key), json);
+        clearSidecarCache();
+      } else if (id) {
+        await adminApi.uploadAsset(id, "assets/meta.json", json, "application/json");
+        const pub = obj?.published_r2_key;
+        if (pub) {
+          await adminApi.uploadFile(sidecarKeyForR2Key(pub), json);
+          clearSidecarCache();
+        }
+      }
     } catch {}
   }
 
@@ -365,8 +436,10 @@ export function ContentEditor({ id, rawR2Key, capabilities }: ContentEditorProps
         // Save raw R2 key directly. The upload-file endpoint accepts a text
         // body or a data URI for binary assets — text is the common case.
         await adminApi.uploadFile(rawR2Key, latest);
+        await persistArticleMeta();
       } else if (id) {
         await adminApi.saveDraft(id, latest);
+        await persistArticleMeta();
       } else {
         throw new Error("Nothing to save");
       }
@@ -448,6 +521,7 @@ export function ContentEditor({ id, rawR2Key, capabilities }: ContentEditorProps
     haptic("light");
     flushFormBody();
     await adminApi.saveDraft(id, bodyRef.current).catch(() => {});
+    await persistArticleMeta();
     try {
       const res = await adminApi.submitForReview(id);
       setObj((o) => (o ? { ...o, status: res.status as any } : o));
@@ -464,8 +538,16 @@ export function ContentEditor({ id, rawR2Key, capabilities }: ContentEditorProps
     haptic("light");
     flushFormBody();
     await adminApi.saveDraft(id, bodyRef.current).catch(() => {});
+    await persistArticleMeta();
     try {
       const res = await adminApi.publishDirect(id, targetPath ? { targetPath } : {});
+      // Mirror the sidecar next to the freshly published article so the
+      // student app merges it over frontmatter without a republish.
+      const pubKey = obj?.published_r2_key ?? null;
+      if (pubKey && articleMetaRef.current !== null && obj?.content_type === "library" && artifactContentType === "md") {
+        await adminApi.uploadFile(sidecarKeyForR2Key(pubKey), JSON.stringify(articleMetaRef.current)).catch(() => {});
+        clearSidecarCache();
+      }
       setObj((o) => (o ? { ...o, status: res.status as any } : o));
       setDirty(false);
       setLastSavedAt(Date.now());
@@ -547,12 +629,14 @@ export function ContentEditor({ id, rawR2Key, capabilities }: ContentEditorProps
 
   function handleFormChange(next: any) {
     if (isLibrary) {
-      // next can be a string (markdown) or { body, contentType }
+      // next can be a string (legacy) or { body, contentType, meta? } —
+      // `meta` carries the sidecar metadata for markdown articles.
       const nextBody = typeof next === "string" ? next : (next?.body ?? "");
       // Route through handleBodyChange so dirty state, autosave, and the
       // unsaved-changes guard all fire for library edits too (raw mode's
       // Save button depends on `dirty` being set).
       handleBodyChange(nextBody);
+      if (typeof next === "object") setArticleMeta(next.meta ?? null);
       // Store contentType on the component for publish path logic
       if (typeof next === "object" && next?.contentType) {
         setArtifactContentType(next.contentType);
@@ -943,6 +1027,7 @@ export function ContentEditor({ id, rawR2Key, capabilities }: ContentEditorProps
                   readOnly={isPending}
                   r2KeyBase={isRawMode ? undefined : obj?.r2_key_base}
                   rawR2Key={isRawMode ? rawR2Key : undefined}
+                  meta={articleMeta}
                 />
               ) : parseState.parsing ? (
                 <LoadingState label={t("admin.content.editor.parsing")} />
@@ -1080,6 +1165,16 @@ export function ContentEditor({ id, rawR2Key, capabilities }: ContentEditorProps
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────────
+
+/** R2 key of an article's sidecar metadata file
+ *  ("content-files/library/a/b.md" → "content-files/library/a/b.meta.json"). */
+function sidecarKeyForR2Key(r2Key: string): string {
+  const slash = r2Key.lastIndexOf("/");
+  const dir = slash >= 0 ? r2Key.slice(0, slash + 1) : "";
+  const base = slash >= 0 ? r2Key.slice(slash + 1) : r2Key;
+  const dot = base.lastIndexOf(".");
+  return `${dir}${dot > 0 ? base.slice(0, dot) : base}.meta.json`;
+}
 
 function ModeButton({
   active,

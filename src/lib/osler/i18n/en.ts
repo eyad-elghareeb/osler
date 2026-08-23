@@ -1873,6 +1873,15 @@ export const en = {
     "admin.content.editor.url": "URL",
 
     "admin.content.editor.articleType": "Article type",
+    "admin.content.editor.metaTitle": "Article metadata",
+    "admin.content.editor.metaHint":
+      "Stored beside the article as a <name>.meta.json file — overrides frontmatter without ever touching the markdown body.",
+    "admin.content.editor.metaTitleField": "Title",
+    "admin.content.editor.metaSpecialty": "Specialty",
+    "admin.content.editor.metaSystem": "System",
+    "admin.content.editor.metaReadTime": "Read time (min)",
+    "admin.content.editor.metaTags": "Tags",
+    "admin.content.editor.metaTagPlaceholder": "Add tag…",
     "admin.content.editor.pdfDropHint": "Drop a PDF file here or click to upload",
     "admin.content.editor.uploadPdf": "Upload PDF",
 

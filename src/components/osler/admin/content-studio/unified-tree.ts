@@ -81,6 +81,10 @@ export function buildUnifiedTree(
       .replace(/^\/+/, "");
   };
 
+  // Article sidecar metadata (`<article>.meta.json`) is managed by the
+  // article editor's Metadata panel — never shown as a standalone file.
+  const isMetaFile = (fileName: string): boolean => /\.meta\.json$/i.test(fileName);
+
   const isInCategory = (normalized: string): boolean => {
     return normalized.startsWith(catPrefix) || normalized === categoryFolder;
   };
@@ -134,6 +138,7 @@ export function buildUnifiedTree(
       ensureFolderChain(parts.join("/"));
       continue;
     }
+    if (isMetaFile(fileName)) continue;
     if (managed.some((o) => (o.published_r2_key && normalizeKey(o.published_r2_key) === normalized) && consumedObjectIds.has(o.id))) continue;
 
     const fileNode: ContentTreeNode = {
@@ -158,6 +163,7 @@ export function buildUnifiedTree(
     const parts = rel.split("/").filter(Boolean);
     const fileName = parts.pop() ?? "";
     if (fileName === ".keep") continue;
+    if (isMetaFile(fileName)) continue;
 
     const fileNode: ContentTreeNode = {
       id: `staged-file-${rel}`,

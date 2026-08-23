@@ -1869,6 +1869,15 @@ export const ar = {
     "admin.content.editor.url": "الرابط",
 
     "admin.content.editor.articleType": "نوع المقال",
+    "admin.content.editor.metaTitle": "بيانات المقال الوصفية",
+    "admin.content.editor.metaHint":
+      "تُحفظ بجانب المقال في ملف <name>.meta.json — وتتجاوز بيانات الترويسة دون المساس بمتن المقال.",
+    "admin.content.editor.metaTitleField": "العنوان",
+    "admin.content.editor.metaSpecialty": "التخصص",
+    "admin.content.editor.metaSystem": "الجهاز",
+    "admin.content.editor.metaReadTime": "زمن القراءة (دقيقة)",
+    "admin.content.editor.metaTags": "الوسوم",
+    "admin.content.editor.metaTagPlaceholder": "أضف وسماً…",
     "admin.content.editor.pdfDropHint": "أسقط ملف PDF هنا أو انقر للرفع",
     "admin.content.editor.uploadPdf": "رفع PDF",
 

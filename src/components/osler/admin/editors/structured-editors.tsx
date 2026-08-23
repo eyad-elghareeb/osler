@@ -32,6 +32,7 @@ import {
   Eye,
   Loader2,
   ListChecks,
+  Tags,
   X,
 } from "lucide-react";
 import { useI18n } from "@/components/osler/i18n-provider";
@@ -68,6 +69,7 @@ const MilkdownEditor = dynamic(
 );
 import { useToast } from "@/hooks/use-toast";
 import { ImageLightbox } from "@/components/osler/admin/image-lightbox";
+import { AnimatedDisclosure } from "@/components/osler/ui-primitives";
 import {
   uploadImageForEditor,
   resolveImageForPreview,
@@ -93,6 +95,10 @@ export interface StructuredEditorProps {
    *  without a managed content_object. Used to resolve image uploads when
    *  `r2KeyBase` is not provided. */
   rawR2Key?: string;
+  /** Library article sidecar metadata (`.meta.json` merged view). Only used
+   *  by LibraryArticleEditor; edited through the Metadata panel and persisted
+   *  by the parent alongside the body. */
+  meta?: Record<string, unknown> | null;
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────────
@@ -3036,7 +3042,80 @@ export function EditorNavigator({
 
 // ── Library / article editor (markdown) ────────────────────────────────────
 
-export function LibraryArticleEditor({ value, onChange, readOnly, r2KeyBase, rawR2Key }: StructuredEditorProps) {
+// ── Library article editor ─────────────────────────────────────────────────
+
+/** Split YAML-ish frontmatter from an article body (same simple line parser
+ *  the student app uses — see src/lib/osler/articles.ts). */
+function splitFrontmatter(md: string): { fields: Record<string, unknown>; body: string } {
+  const lines = md.split("\n");
+  if (lines[0]?.trim() !== "---") return { fields: {}, body: md };
+  let end = 1;
+  while (end < lines.length && lines[end]?.trim() !== "---") end++;
+  if (end >= lines.length) return { fields: {}, body: md };
+  const fields: Record<string, unknown> = {};
+  let lastKey = "";
+  for (let i = 1; i < end; i++) {
+    const line = lines[i];
+    const kv = line.match(/^(\w+):\s*(.*)$/);
+    if (kv) {
+      lastKey = kv[1];
+      fields[lastKey] = kv[2].trim();
+    } else if (lastKey && /^\s+-\s+/.test(line)) {
+      if (!Array.isArray(fields[lastKey])) fields[lastKey] = [];
+      (fields[lastKey] as unknown[]).push(line.replace(/^\s+-\s+/, "").trim());
+    }
+  }
+  return { fields, body: lines.slice(end + 1).join("\n").trim() };
+}
+
+interface ArticleMetaDraft {
+  title: string;
+  specialty: string;
+  system: string;
+  readTimeMin: string;
+  tags: string[];
+  lang: "en" | "ar";
+}
+
+const EMPTY_META_DRAFT: ArticleMetaDraft = {
+  title: "",
+  specialty: "",
+  system: "",
+  readTimeMin: "",
+  tags: [],
+  lang: "en",
+};
+
+function metaDraftFrom(fields: Record<string, unknown>, sidecar: Record<string, unknown> | null | undefined): ArticleMetaDraft {
+  const pick = (key: string) => String(sidecar?.[key] ?? fields[key] ?? "").trim();
+  const rt = sidecar?.readTimeMin ?? fields.readTimeMin;
+  return {
+    title: pick("title"),
+    specialty: pick("specialty"),
+    system: pick("system"),
+    readTimeMin: Number.isFinite(Number(rt)) && Number(rt) > 0 ? String(Number(rt)) : "",
+    tags: Array.isArray(sidecar?.tags)
+      ? (sidecar!.tags as unknown[]).map(String)
+      : Array.isArray(fields.tags)
+        ? (fields.tags as unknown[]).map(String)
+        : [],
+    lang: pick("lang") === "ar" ? "ar" : "en",
+  };
+}
+
+/** Strip empty fields so the sidecar only carries what the admin set. */
+function cleanMetaDraft(m: ArticleMetaDraft): Record<string, unknown> {
+  const out: Record<string, unknown> = { lang: m.lang };
+  if (m.title.trim()) out.title = m.title.trim();
+  if (m.specialty.trim()) out.specialty = m.specialty.trim();
+  if (m.system.trim()) out.system = m.system.trim();
+  const rt = Number(m.readTimeMin);
+  if (Number.isFinite(rt) && rt > 0) out.readTimeMin = Math.round(rt);
+  if (m.tags.length > 0) out.tags = m.tags;
+  return out;
+}
+
+export function LibraryArticleEditor({ value, onChange, readOnly, r2KeyBase, rawR2Key, meta }: StructuredEditorProps) {
   const { t } = useI18n();
   const { toast } = useToast();
 
@@ -3056,13 +3135,32 @@ export function LibraryArticleEditor({ value, onChange, readOnly, r2KeyBase, raw
   // Store content type in the value object so content-editor.tsx can read it
   const currentBody = typeof value === "string" ? rawValue : (value?.body ?? "");
 
-  function update(next: string, ct?: "md" | "pdf" | "html") {
-    const ct2 = ct ?? contentType;
-    if (typeof value === "string") {
-      onChange(ct2 === "md" ? next : { body: next, contentType: ct2 });
-    } else {
-      onChange({ ...value, body: next, contentType: ct2 });
+  // Markdown articles keep their metadata OUT of the editable surface: the
+  // frontmatter block is parsed off and shown as form fields instead, merged
+  // with the sidecar `.meta.json` (sidecar wins per-field).
+  const fmSplit = React.useMemo(() => splitFrontmatter(rawValue), [rawValue]);
+  const [metaDraft, setMetaDraft] = React.useState<ArticleMetaDraft>(() =>
+    metaDraftFrom(splitFrontmatter(rawValue).fields, meta),
+  );
+  // Re-seed when the parent loads a different article's sidecar (the identity
+  // of `meta` changes on every load; keystrokes never change it).
+  React.useEffect(() => {
+    setMetaDraft(metaDraftFrom(fmSplit.fields, meta));
+  }, [meta]);
+
+  function emit(nextBody: string, ct: "md" | "pdf" | "html") {
+    if (ct === "md") {
+      onChange({ body: nextBody, contentType: ct, meta: cleanMetaDraft(metaDraft) });
+      return;
     }
+    onChange({ body: nextBody, contentType: ct });
+  }
+
+  /** Patch one metadata field and re-emit with the current displayed body. */
+  function patchMeta(patch: Partial<ArticleMetaDraft>) {
+    const next = { ...metaDraft, ...patch };
+    setMetaDraft(next);
+    onChange({ body: fmSplit.body, contentType: "md", meta: cleanMetaDraft(next) });
   }
 
   async function handlePdfUpload(file: File) {
@@ -3078,10 +3176,23 @@ export function LibraryArticleEditor({ value, onChange, readOnly, r2KeyBase, raw
     }
   }
 
-  const words = contentType === "md" && currentBody.trim()
-    ? currentBody.trim().split(/\s+/).length : 0;
-  const chars = currentBody.length;
-  const lines = currentBody.split("\n").length;
+  function update(next: string, ct?: "md" | "pdf" | "html") {
+    const ct2 = ct ?? contentType;
+    if (ct2 === "md") {
+      emit(next, "md");
+      return;
+    }
+    if (typeof value === "string") {
+      onChange({ body: next, contentType: ct2 });
+    } else {
+      onChange({ ...value, body: next, contentType: ct2 });
+    }
+  }
+
+  const words = contentType === "md" && fmSplit.body.trim()
+    ? fmSplit.body.trim().split(/\s+/).length : 0;
+  const chars = fmSplit.body.length;
+  const lines = fmSplit.body.split("\n").length;
 
   return (
     <div className="space-y-2 h-full flex flex-col">
@@ -3113,6 +3224,87 @@ export function LibraryArticleEditor({ value, onChange, readOnly, r2KeyBase, raw
           </button>
         ))}
       </div>
+
+      {/* Metadata panel — markdown articles only. Edits persist through the
+          same Save flow as the body, into the `.meta.json` sidecar. */}
+      {contentType === "md" && (
+        <AnimatedDisclosure
+          icon={Tags}
+          label={t("admin.content.editor.metaTitle")}
+          defaultOpen={metaDraft.title === "" || !rawValue.includes("title:")}
+        >
+          <p className="text-[11px] text-muted-foreground leading-relaxed">
+            {t("admin.content.editor.metaHint")}
+          </p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-3 gap-y-2.5">
+            <Field label={t("admin.content.editor.metaTitleField")}>
+              <Input
+                value={metaDraft.title}
+                onChange={(e) => patchMeta({ title: e.target.value })}
+                readOnly={readOnly}
+                className="h-8 text-sm bg-background"
+              />
+            </Field>
+            <Field label={t("admin.content.editor.metaSpecialty")}>
+              <Input
+                value={metaDraft.specialty}
+                onChange={(e) => patchMeta({ specialty: e.target.value })}
+                readOnly={readOnly}
+                className="h-8 text-sm bg-background"
+              />
+            </Field>
+            <Field label={t("admin.content.editor.metaSystem")}>
+              <Input
+                value={metaDraft.system}
+                onChange={(e) => patchMeta({ system: e.target.value })}
+                readOnly={readOnly}
+                className="h-8 text-sm bg-background"
+              />
+            </Field>
+            <Field label={t("admin.content.editor.metaReadTime")}>
+              <Input
+                type="number"
+                min={1}
+                value={metaDraft.readTimeMin}
+                onChange={(e) => patchMeta({ readTimeMin: e.target.value })}
+                readOnly={readOnly}
+                className="h-8 text-sm bg-background tabular-nums"
+              />
+            </Field>
+            <Field label={t("admin.content.language")}>
+              <div className="flex items-center gap-1.5 h-8">
+                {(["en", "ar"] as const).map((lg) => (
+                  <button
+                    key={lg}
+                    type="button"
+                    disabled={readOnly}
+                    onClick={() => {
+                      haptic("selection");
+                      patchMeta({ lang: lg });
+                    }}
+                    className={cn(
+                      "px-3 h-8 rounded-lg text-xs font-medium transition-colors border",
+                      metaDraft.lang === lg
+                        ? "bg-primary/10 text-primary border-primary/30"
+                        : "text-muted-foreground border-border hover:text-foreground hover:bg-muted/60",
+                      lg === "ar" && "font-[var(--font-cairo)]",
+                    )}
+                  >
+                    {lg === "en" ? "English" : "العربية"}
+                  </button>
+                ))}
+              </div>
+            </Field>
+            <TagListField
+              label={t("admin.content.editor.metaTags")}
+              tags={metaDraft.tags}
+              onChange={(tags) => patchMeta({ tags })}
+              readOnly={readOnly}
+              placeholder={t("admin.content.editor.metaTagPlaceholder")}
+            />
+          </div>
+        </AnimatedDisclosure>
+      )}
 
       {contentType === "pdf" ? (
         <div className="flex-1 flex flex-col items-center justify-center bg-muted/20 rounded-xl border-2 border-dashed border-border p-8">
@@ -3179,7 +3371,7 @@ export function LibraryArticleEditor({ value, onChange, readOnly, r2KeyBase, raw
             <span>{t("admin.content.editor.lineCount", { n: lines })}</span>
           </div>
           <MilkdownEditor
-            value={currentBody}
+            value={fmSplit.body}
             onChange={(next) => update(next, "md")}
             readOnly={readOnly}
             r2KeyBase={r2KeyBase}
