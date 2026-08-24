@@ -4,7 +4,7 @@ import * as React from "react";
 import { usePathname, useRouter } from "next/navigation";
 import type { OslerView } from "@/components/osler/app-shell";
 import {
-  withViewTransition,
+  pushWithViewTransition,
   haptic,
   type ViewTransitionDirection,
 } from "@/lib/osler/native";
@@ -151,9 +151,10 @@ export function useOslerRouter() {
         return;
       }
 
-      withViewTransition(() => {
-        router.push(targetPath);
-      }, direction);
+      // Cross-view: transition old→new (not old→old). pushWithViewTransition
+      // awaits the actual route commit + paint before letting the browser
+      // capture the "new" snapshot, so the crossfade never blanks the page.
+      pushWithViewTransition((p) => router.push(p), targetPath, direction);
     },
     [currentView, router]
   );
