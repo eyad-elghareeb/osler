@@ -495,7 +495,7 @@ export function LoginScreen({ onLogin, cloudAuthError }: LoginScreenProps) {
         >
           <motion.div
             variants={{
-              hidden: { scale: 0.8, opacity: 0, y: 6 },
+              hidden: { scale: 0.9, opacity: 0, y: 6 },
               visible: {
                 scale: 1,
                 opacity: 1,

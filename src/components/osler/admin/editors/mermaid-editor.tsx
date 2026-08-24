@@ -592,9 +592,9 @@ function StepCard({
           <AnimatePresence>
             {showInsert && (
               <motion.div
-                initial={{ opacity: 0, scale: 0.85, y: -4 }}
+                initial={{ opacity: 0, scale: 0.94, y: -4 }}
                 animate={{ opacity: 1, scale: 1, y: 0 }}
-                exit={{ opacity: 0, scale: 0.85, y: -4 }}
+                exit={{ opacity: 0, scale: 0.94, y: -4 }}
                 transition={MOTION_SPRING.pop}
                 className="relative z-20 flex items-center gap-1.5 py-1.5 px-3 rounded-lg bg-card border border-border shadow-e2"
               >

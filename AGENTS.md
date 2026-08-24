@@ -430,7 +430,6 @@ The shared primitives below were added to raise the craft of the existing app wi
 - `staggerContainer` / `staggerContainerSlow` — stagger parents (`0.04/0.02` and `0.08/0.04`).
 - `tabIndicator` — spring for shared-layout tab thumbs (`MOTION_SPRING.snappy`).
 - `disclosureVariants` — height + opacity for accordion / expandable panels.
-- `feedbackPulse` — single soft ring for acknowledging primary actions.
 - `pressFeedback` — 0.97 scale on tap.
 - `stackedPanelEnter(edge)` — directional enter/exit for sheets, drawers, stacked modals.
 - `pageEnter` / `carouselSlide(dir,rtl)` — page and carousel transitions.
@@ -440,6 +439,8 @@ The shared primitives below were added to raise the craft of the existing app wi
 - `<Stagger slow={false}>` + `<StaggerItem variant="listItem"|"fadeUp">` — staggered list entrance. Replaces `delay: idx*0.04` loops.
 - `<Pressable>` — button/div that scales to 0.97 on tap (`pressFeedback`). Replaces hand-rolled `whileTap`.
 - `<HoverLift>` — subtle hover scale for interactive icons/cards.
+
+*Scroll-aware chrome*: `useHideOnScroll(retryKey)` from `@/hooks/use-hide-on-scroll.ts` is the only sanctioned hide-on-scroll implementation (mobile scroll-away bar, QBank header). Its hysteresis band (~24px down to hide, ~48px up to reveal, always visible near top) prevents the bar from flapping on short scrolls and momentum jitter — never re-implement delta-threshold scroll listeners.
 
 All primitives animate only `opacity`/`transform` (compositor-friendly) and respect `prefers-reduced-motion` via `AnimationsProvider` + `data-animations="off"`. No component may define a new duration/easing/spring locally — add it to the token table first with a rationale.
 

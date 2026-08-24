@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { motion } from "framer-motion";
 import {
   LayoutDashboard,
   ListChecks,
@@ -12,6 +13,7 @@ import { type OslerView, LEARN_SUBVIEWS } from "./app-shell";
 import { useI18n } from "./i18n-provider";
 import { cn } from "@/lib/utils";
 import { useImmersiveMode } from "./immersive-mode";
+import { MOTION_SPRING } from "@/lib/osler/motion";
 
 import { useCurrentView, useOslerRouter } from "@/lib/osler/navigation";
 
@@ -93,6 +95,13 @@ export function MobileTabBar({ view: propView, onViewChange }: MobileTabBarProps
             }}
             className={`osler-tabbar-item osler-no-select ${active ? "active" : ""}`}
           >
+            {active && (
+              <motion.span
+                layoutId="mobile-tab-indicator"
+                className="osler-tabbar-indicator"
+                transition={MOTION_SPRING.snappy}
+              />
+            )}
             <Icon className="size-5" />
             <span>{t(tab.labelKey)}</span>
           </button>

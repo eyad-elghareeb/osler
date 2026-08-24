@@ -213,20 +213,6 @@ export const disclosureVariants: Variants = {
   },
 };
 
-/** Feedback pulse — a single soft ring used to acknowledge a primary
- * action (e.g. flashcard rating, save). Apply to a motion.div with
- * `initial="rest"` and trigger via `animate="pulse"` on tap. */
-export const feedbackPulse: Variants = {
-  rest: { boxShadow: "0 0 0 0 color-mix(in oklch, var(--primary) 0%, transparent)" },
-  pulse: {
-    boxShadow: [
-      "0 0 0 0 color-mix(in oklch, var(--primary) 45%, transparent)",
-      "0 0 0 8px color-mix(in oklch, var(--primary) 0%, transparent)",
-    ],
-    transition: MOTION_TRANSITION.slow,
-  },
-};
-
 /** Press feedback — a 0.97 scale on tap, restored on release.
  * Use on `motion.button` with `whileTap="press"`. */
 export const pressFeedback: Variants = {

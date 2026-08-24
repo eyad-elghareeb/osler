@@ -1054,12 +1054,14 @@ input, textarea, [contenteditable="true"], .osler-prose, .ai-chat-msg {
 .osler-tabbar-item.active {
   color: var(--primary);
 }
-.osler-tabbar-item.active::before {
-  content: "";
+/* Sliding active pill — rendered by <MobileTabBar> as a motion.span with
+   layoutId="mobile-tab-indicator" so it glides between tabs (matching the
+   desktop nav's shared-layout indicator). Same visuals as the old ::before. */
+.osler-tabbar-indicator {
   position: absolute;
   top: 0;
   left: 50%;
-  transform: translateX(-50%);
+  margin-left: -14px;
   width: 28px;
   height: 2px;
   border-radius: 0 0 2px 2px;

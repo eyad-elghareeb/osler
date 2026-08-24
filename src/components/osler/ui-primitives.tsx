@@ -352,9 +352,9 @@ export function StatTile({
     <Container
       type={onClick ? "button" : undefined}
       onClick={onClick}
-      initial={{ scale: 0.88, opacity: 0 }}
-      animate={{ scale: 1, opacity: 1 }}
-      transition={MOTION_SPRING.pop}
+      initial={{ opacity: 0, y: 4 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={MOTION_TRANSITION.base}
       whileHover="hover"
       whileTap={onClick ? { scale: 0.98 } : undefined}
       className={cn(
@@ -369,8 +369,8 @@ export function StatTile({
         {Icon && (
           <motion.span
             className="inline-flex"
-            variants={{ hover: { scale: 1.22, rotate: -10 } }}
-            transition={MOTION_SPRING.pop}
+            variants={{ hover: { scale: 1.12 } }}
+            transition={MOTION_SPRING.snappy}
           >
             <Icon className={cn("size-4", STAT_TILE_COLOR[color])} />
           </motion.span>
