@@ -68,6 +68,7 @@ import { ThinkingOrb, type OrbState } from "thinking-orbs";
 import FluidOrb from "@/components/ui/fluid-orb";
 import { useTypewriter } from "@/hooks/use-typewriter";
 import { AiMarkdown } from "@/components/osler/ai-markdown";
+import { MOTION_TRANSITION, MOTION_SPRING } from "@/lib/osler/motion";
 
 /* ── Constants ─────────────────────────────────────────────────────── */
 
@@ -851,7 +852,7 @@ function OsceStreamBubble({
     <motion.div
       initial={{ opacity: 0, y: 6 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
+      transition={MOTION_TRANSITION.quick}
       className="flex flex-col gap-1 max-w-[80%] md:max-w-[640px] self-start"
     >
       <div className="text-[10px] font-semibold uppercase tracking-wider text-primary/70 flex items-center gap-1">
@@ -2010,7 +2011,7 @@ export function OsceStudio({
         key={node.uid}
         initial={{ opacity: 0, y: 8 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.2, delay: idx * 0.04 }}
+        transition={{ ...MOTION_TRANSITION.quick, delay: idx * 0.04 }}
         className="h-full"
       >
         <div
@@ -2079,7 +2080,7 @@ export function OsceStudio({
         key={node.uid}
         initial={{ opacity: 0, y: 8 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.2, delay: idx * 0.04 }}
+        transition={{ ...MOTION_TRANSITION.quick, delay: idx * 0.04 }}
         className="h-full"
       >
         <button
@@ -2137,7 +2138,7 @@ export function OsceStudio({
         <motion.div
           initial={{ opacity: 0, y: 8 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.3 }}
+          transition={MOTION_TRANSITION.slow}
         >
           {/* Page header */}
           <div className="osler-page-header--inline">
@@ -2219,7 +2220,7 @@ export function OsceStudio({
           <motion.div
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.3 }}
+            transition={MOTION_TRANSITION.slow}
           >
             {/* Header block — back button + breadcrumb + title + stats,
                 wrapped in mb-6 so the child grid breathes (mirrors qbank). */}
@@ -2330,7 +2331,7 @@ export function OsceStudio({
           <motion.div
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.3 }}
+            transition={MOTION_TRANSITION.slow}
           >
             {/* Back */}
             <button
@@ -2919,7 +2920,7 @@ export function OsceStudio({
                     key={i}
                     initial={{ opacity: 0, y: 6 }}
                     animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
+                    transition={MOTION_TRANSITION.quick}
                     className={cn(
                       "flex flex-col gap-1 max-w-[80%] md:max-w-[640px]",
                       isModel ? "self-start" : "self-end items-end"
@@ -3217,7 +3218,7 @@ export function OsceStudio({
                 initial={{ opacity: 0, scale: 0.95, y: 12 }}
                 animate={{ opacity: 1, scale: 1, y: 0 }}
                 exit={{ opacity: 0, scale: 0.95, y: 12 }}
-                transition={{ type: "spring", stiffness: 380, damping: 30 }}
+                transition={MOTION_SPRING.snappy}
                 className="bg-card border border-border rounded-xl p-6 max-w-sm w-full shadow-lg"
                 onClick={(e) => e.stopPropagation()}
               >
@@ -3300,7 +3301,7 @@ export function OsceStudio({
           <motion.div
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.3 }}
+            transition={MOTION_TRANSITION.slow}
             className="space-y-4"
           >
             {/* Back */}
@@ -3902,7 +3903,7 @@ function LiveVoiceOverlay({
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      transition={{ duration: 0.25 }}
+      transition={MOTION_TRANSITION.normal}
       className="fixed inset-0 z-50 flex flex-col bg-gradient-to-b from-background via-background to-card/40 backdrop-blur-xl"
       // The backdrop is a translucent overlay above the conversation UI.
       // Tap-to-dismiss is intentionally NOT enabled on the backdrop —

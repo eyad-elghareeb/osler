@@ -57,6 +57,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { useI18n } from "@/components/osler/i18n-provider";
+import { MOTION_TRANSITION, MOTION_SPRING } from "@/lib/osler/motion";
 
 // ── Data model ─────────────────────────────────────────────────────────────
 
@@ -594,7 +595,7 @@ function StepCard({
                 initial={{ opacity: 0, scale: 0.85, y: -4 }}
                 animate={{ opacity: 1, scale: 1, y: 0 }}
                 exit={{ opacity: 0, scale: 0.85, y: -4 }}
-                transition={{ type: "spring", stiffness: 500, damping: 30 }}
+                transition={MOTION_SPRING.pop}
                 className="relative z-20 flex items-center gap-1.5 py-1.5 px-3 rounded-lg bg-card border border-border shadow-e2"
               >
                 {STEP_KINDS.filter((k) => k.value !== "start").map((kind) => {
@@ -1111,7 +1112,7 @@ export function MermaidEditorModal({ open, initialCode, onSave, onClose }: Merma
                     initial={{ height: 0, opacity: 0 }}
                     animate={{ height: "auto", opacity: 1 }}
                     exit={{ height: 0, opacity: 0 }}
-                    transition={{ duration: 0.18, ease: "easeInOut" }}
+                    transition={MOTION_TRANSITION.quick}
                     className="overflow-hidden"
                   >
                     <code className="text-[10px] font-[var(--font-code)] block whitespace-pre overflow-x-auto px-3 pb-2.5 leading-relaxed text-primary">
@@ -1194,7 +1195,7 @@ function MermaidTemplateGallery({ onPickPreset, onStartBlank, onClose }: Mermaid
                 type="button"
                 initial={{ opacity: 0, y: 8 }}
                 animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.2, delay: idx * 0.05 }}
+                transition={{ ...MOTION_TRANSITION.quick, delay: idx * 0.05 }}
                 onClick={() => (card.id === blankId ? onStartBlank() : onPickPreset(card.id as (typeof PRESETS)[number]["id"]))}
                 className="group flex flex-col items-start gap-2.5 p-4 rounded-xl border border-border bg-background text-start hover:border-primary/40 hover:shadow-e2 transition-all"
               >

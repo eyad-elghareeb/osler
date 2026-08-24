@@ -55,6 +55,7 @@ import type { StringKey } from "@/lib/osler/i18n";
 import { isTextInput } from "@/lib/osler/shortcuts";
 import { cn } from "@/lib/utils";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { MOTION_TRANSITION, MOTION_SPRING } from "@/lib/osler/motion";
 import {
   withViewTransition,
   isViewTransitionsSupported,
@@ -451,7 +452,7 @@ export function AppShell({ children }: AppShellProps) {
             key={view}
             initial={vtActive ? false : { opacity: 0 }}
             animate={{ opacity: 1 }}
-            transition={{ duration: 0.18, ease: [0.25, 1, 0.5, 1] }}
+            transition={MOTION_TRANSITION.quick}
             className="h-full w-full flex-1 flex flex-col min-h-0"
           >
             {children}
@@ -503,7 +504,7 @@ function NavButton({
         <motion.div
           layoutId={layoutId}
           className="absolute inset-0 rounded-md bg-primary/10 border border-primary/30 -z-10"
-          transition={{ type: "spring", stiffness: 380, damping: 30 }}
+          transition={MOTION_SPRING.snappy}
         />
       )}
     </button>
@@ -702,7 +703,7 @@ function MobileScrollAwayBar({
         height: hidden || immersive ? 0 : 52,
         opacity: hidden || immersive ? 0 : 1,
       }}
-      transition={{ duration: 0.25, ease: [0.32, 0.72, 0, 1] }}
+      transition={MOTION_TRANSITION.normal}
       className={cn(
         "md:hidden shrink-0 overflow-hidden",
         "bg-background/80 backdrop-blur-md supports-[backdrop-filter]:bg-background/60",

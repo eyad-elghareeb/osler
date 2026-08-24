@@ -76,6 +76,7 @@ import {
 import {
   isAnimationsEnabled,
   setAnimationsEnabled,
+  MOTION_TRANSITION,
 } from "@/lib/osler/motion";
 import { getConfig, getGithubRepo, getSiteName, getSiteTagline } from "@/lib/osler/config";
 import { loadCategoryTrees, getEngineMeta, nodeUrls } from "@/lib/osler/content";
@@ -364,7 +365,7 @@ export function Settings({
         <motion.div
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.28 }}
+          transition={MOTION_TRANSITION.slow}
         >
           <div className="osler-page-header--inline">
             <div className="size-10 rounded-xl bg-primary/15 border border-primary/30 flex items-center justify-center shrink-0">
@@ -418,7 +419,7 @@ export function Settings({
                 }}
                 initial="enter"
                 animate="center"
-                transition={{ duration: 0.18, ease: [0.32, 0.72, 0, 1] }}
+                transition={MOTION_TRANSITION.quick}
               >
                 {renderSection(section)}
               </motion.div>

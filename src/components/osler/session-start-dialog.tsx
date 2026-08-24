@@ -39,7 +39,7 @@ import type {
 } from "@/lib/osler/session-options";
 import { sessions, storage } from "@/lib/osler/storage";
 import { haptic } from "@/lib/osler/native";
-import { easeOut, staggerContainer, fadeUp } from "@/lib/osler/motion";
+import { MOTION_TRANSITION } from "@/lib/osler/motion";
 import { useI18n } from "./i18n-provider";
 import {
   MetricBar,
@@ -152,7 +152,7 @@ export function SessionStartDialog({
         <motion.div
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={easeOut}
+          transition={MOTION_TRANSITION.normal}
           className="flex min-h-0 flex-1 flex-col"
         >
           {/* Scrollable body — stagger-animated so each section fades + lifts in sequence */}
@@ -227,7 +227,7 @@ export function SessionStartDialog({
                       initial={{ opacity: 0, height: 0, marginTop: 0 }}
                       animate={{ opacity: 1, height: "auto", marginTop: 8 }}
                       exit={{ opacity: 0, height: 0, marginTop: 0 }}
-                      transition={{ duration: 0.2, ease: easeOut.ease }}
+                      transition={MOTION_TRANSITION.quick}
                       className="overflow-hidden"
                     >
                       <div className="flex items-center gap-2 rounded-lg border border-border bg-muted/20 px-3 py-2.5">

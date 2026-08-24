@@ -12,6 +12,7 @@ import { haptic } from "@/lib/osler/native";
 import type { AdminIdentity } from "@/components/osler/admin/admin-api";
 import { adminApi, AdminApiError } from "@/components/osler/admin/admin-api";
 import { OslerCard } from "@/components/osler/ui-primitives";
+import { MOTION_TRANSITION } from "@/lib/osler/motion";
 
 interface AdminLoginPromptProps {
   onSuccess: (identity: AdminIdentity) => void;
@@ -56,7 +57,7 @@ export function AdminLoginPrompt({ onSuccess }: AdminLoginPromptProps) {
       <motion.div
         initial={{ opacity: 0, y: 16 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.25 }}
+        transition={MOTION_TRANSITION.normal}
         className="w-full max-w-md"
       >
         <OslerCard padding="roomy">

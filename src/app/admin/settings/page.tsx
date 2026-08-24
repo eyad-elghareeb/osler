@@ -21,6 +21,7 @@ import {
 } from "@/components/osler/admin/admin-settings-context";
 import { haptic } from "@/lib/osler/native";
 import { useAdminIdentity } from "@/components/osler/admin/admin-context";
+import { MOTION_TRANSITION } from "@/lib/osler/motion";
 import { OslerCard, PageHeader } from "@/components/osler/ui-primitives";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -221,7 +222,7 @@ export default function AdminSettingsPage() {
                     initial={{ opacity: 0, y: 6 }}
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, y: -6 }}
-                    transition={{ duration: 0.18, ease: [0.32, 0.72, 0, 1] }}
+                    transition={MOTION_TRANSITION.quick}
                   >
                     {renderSection(section)}
                   </motion.div>

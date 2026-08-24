@@ -36,7 +36,8 @@ import type { Article } from "@/lib/osler/articles";
 import type { OslerView } from "./app-shell";
 import { useI18n } from "./i18n-provider";
 import { cn } from "@/lib/utils";
-import { fadeUp, staggerContainer, staggerContainerSlow } from "@/lib/osler/motion";
+import { MOTION_TRANSITION, fadeUp, staggerContainer, staggerContainerSlow } from "@/lib/osler/motion";
+import { FadeIn, Stagger, StaggerItem } from "@/components/osler/motion-primitives";
 import {
   PageHeader,
   SectionHeading,
@@ -248,12 +249,8 @@ export function Dashboard({
   return (
     <div className="osler-page">
       <div className="osler-page__inner--wide">
-        {/* Hero */}
-        <motion.div
-          initial={{ opacity: 0, y: 8 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.3 }}
-        >
+        {/* Hero — uses shared FadeIn so the same rhythm as every other page header */}
+        <FadeIn y={8} preset="slow">
           <PageHeader
             eyebrow={greeting}
             eyebrowIcon={Flame}
@@ -261,7 +258,7 @@ export function Dashboard({
             subtitle={t("dash.intro")}
             actions={undefined}
           />
-        </motion.div>
+        </FadeIn>
 
         {/* Resume session dialog — controlled by the "Continue learning"
             card below. The dashboard does NOT auto-pop this modal (the
@@ -281,7 +278,7 @@ export function Dashboard({
             type="button"
             initial={{ opacity: 0, y: 6 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.3, delay: 0.05 }}
+            transition={{ ...MOTION_TRANSITION.slow, delay: 0.05 }}
             onClick={() => setResumeDialogOpen(true)}
             className="osler-surface-hero mb-6 p-5 md:p-6 text-start w-full hover:shadow-e2 transition-shadow"
           >
@@ -343,7 +340,7 @@ export function Dashboard({
           <motion.div
             initial={{ opacity: 0, y: 6 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.3, delay: 0.05 }}
+            transition={{ ...MOTION_TRANSITION.slow, delay: 0.05 }}
             className="osler-surface-hero mb-6 p-5 md:p-6"
           >
             <div className="flex items-start justify-between gap-4 flex-wrap">
@@ -423,45 +420,50 @@ export function Dashboard({
         {/* Streak & Consistency Graph */}
         <StreakCard />
 
-        {/* Quick actions */}
+        {/* Quick actions — Stagger so the whole grid sweeps in as one rhythm */}
         <SectionHeading>{t("dash.quickActions")}</SectionHeading>
-        <motion.div
-          variants={staggerContainer}
-          initial="hidden"
-          animate="visible"
-          className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-8"
-        >
-          <QuickAction
-            icon={ListChecks}
-            title={t("dash.qa.qbank.title")}
-            subtitle={t("dash.qa.qbank.sub")}
-            onClick={() => onViewChange("qbank")}
-          />
-          <QuickAction
-            icon={Layers}
-            title={t("dash.qa.flashcards.title")}
-            subtitle={t("dash.qa.flashcards.sub")}
-            onClick={() => onViewChange("flashcards")}
-          />
-          <QuickAction
-            icon={BookOpen}
-            title={t("dash.qa.library.title")}
-            subtitle={t("dash.qa.library.sub", { n: articleCount || "…" })}
-            onClick={() => onViewChange("library")}
-          />
-          <QuickAction
-            icon={PlayCircle}
-            title={t("dash.qa.videos.title")}
-            subtitle={t("dash.qa.videos.sub", { n: videoCount || "…" })}
-            onClick={() => onViewChange("videos")}
-          />
-          <QuickAction
-            icon={BarChart3}
-            title={t("dash.qa.profile.title")}
-            subtitle={t("dash.qa.profile.sub")}
-            onClick={() => onViewChange("profile")}
-          />
-        </motion.div>
+        <Stagger className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-8">
+          <StaggerItem>
+            <QuickAction
+              icon={ListChecks}
+              title={t("dash.qa.qbank.title")}
+              subtitle={t("dash.qa.qbank.sub")}
+              onClick={() => onViewChange("qbank")}
+            />
+          </StaggerItem>
+          <StaggerItem>
+            <QuickAction
+              icon={Layers}
+              title={t("dash.qa.flashcards.title")}
+              subtitle={t("dash.qa.flashcards.sub")}
+              onClick={() => onViewChange("flashcards")}
+            />
+          </StaggerItem>
+          <StaggerItem>
+            <QuickAction
+              icon={BookOpen}
+              title={t("dash.qa.library.title")}
+              subtitle={t("dash.qa.library.sub", { n: articleCount || "…" })}
+              onClick={() => onViewChange("library")}
+            />
+          </StaggerItem>
+          <StaggerItem>
+            <QuickAction
+              icon={PlayCircle}
+              title={t("dash.qa.videos.title")}
+              subtitle={t("dash.qa.videos.sub", { n: videoCount || "…" })}
+              onClick={() => onViewChange("videos")}
+            />
+          </StaggerItem>
+          <StaggerItem>
+            <QuickAction
+              icon={BarChart3}
+              title={t("dash.qa.profile.title")}
+              subtitle={t("dash.qa.profile.sub")}
+              onClick={() => onViewChange("profile")}
+            />
+          </StaggerItem>
+        </Stagger>
 
         {/* Featured articles */}
         <SectionHeading

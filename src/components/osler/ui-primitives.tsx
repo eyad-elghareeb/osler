@@ -43,7 +43,14 @@ import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/lib/utils";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
-import { easeOut, fadeUp, staggerContainer, pressFeedback } from "@/lib/osler/motion";
+import {
+  MOTION_TRANSITION,
+  MOTION_SPRING,
+  easeOut,
+  fadeUp,
+  staggerContainer,
+  pressFeedback,
+} from "@/lib/osler/motion";
 import { useSwipeBackDismiss } from "@/hooks/use-swipe-back-dismiss";
 
 /* ─── PageHeader ─────────────────────────────────────────────────────── */
@@ -97,15 +104,7 @@ export function PageHeader({
         <div className="min-w-0 flex-1">
           {eyebrow && (
             <p className="osler-page-header__eyebrow">
-              {EyebrowIcon && (
-                <motion.span
-                  className="inline-flex"
-                  animate={{ scale: [1, 1.25, 1] }}
-                  transition={{ duration: 2.2, repeat: Infinity, ease: "easeInOut" }}
-                >
-                  <EyebrowIcon className="size-3" />
-                </motion.span>
-              )}
+              {EyebrowIcon && <EyebrowIcon className="size-3" />}
               {eyebrow}
             </p>
           )}
@@ -121,15 +120,7 @@ export function PageHeader({
     <div className={cn("osler-page-header", className)}>
       {eyebrow && (
         <p className="osler-page-header__eyebrow">
-          {EyebrowIcon && (
-            <motion.span
-              className="inline-flex"
-              animate={{ scale: [1, 1.25, 1] }}
-              transition={{ duration: 2.2, repeat: Infinity, ease: "easeInOut" }}
-            >
-              <EyebrowIcon className="size-3" />
-            </motion.span>
-          )}
+          {EyebrowIcon && <EyebrowIcon className="size-3" />}
           {eyebrow}
         </p>
       )}
@@ -247,7 +238,7 @@ export function EmptyState({ icon: Icon, title, description, actions, className 
               opacity: 1,
               scale: 1,
               y: 0,
-              transition: { type: "spring", stiffness: 280, damping: 22 },
+              transition: MOTION_SPRING.soft,
             },
           }}
         >
@@ -258,7 +249,7 @@ export function EmptyState({ icon: Icon, title, description, actions, className 
         className="osler-empty__title"
         variants={{
           hidden: { opacity: 0, y: 4 },
-          visible: { opacity: 1, y: 0, transition: { duration: 0.22, ease: [0.32, 0.72, 0, 1] } },
+          visible: { opacity: 1, y: 0, transition: MOTION_TRANSITION.base },
         }}
       >
         {title}
@@ -268,7 +259,7 @@ export function EmptyState({ icon: Icon, title, description, actions, className 
           className="osler-empty__body"
           variants={{
             hidden: { opacity: 0, y: 4 },
-            visible: { opacity: 1, y: 0, transition: { duration: 0.22, ease: [0.32, 0.72, 0, 1] } },
+            visible: { opacity: 1, y: 0, transition: MOTION_TRANSITION.base },
           }}
         >
           {description}
@@ -279,7 +270,7 @@ export function EmptyState({ icon: Icon, title, description, actions, className 
           className="flex items-center gap-2 mt-2"
           variants={{
             hidden: { opacity: 0, y: 4 },
-            visible: { opacity: 1, y: 0, transition: { duration: 0.22, ease: [0.32, 0.72, 0, 1] } },
+            visible: { opacity: 1, y: 0, transition: MOTION_TRANSITION.base },
           }}
         >
           {actions}
@@ -306,7 +297,7 @@ export function LoadingState({ label, size = "md", className }: LoadingStateProp
       className={cn("osler-loading", className)}
       initial={{ opacity: 0, y: 4 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.22, ease: [0.32, 0.72, 0, 1] }}
+      transition={MOTION_TRANSITION.base}
     >
       <Loader2 className={cn(sz, "animate-spin text-muted-foreground")} />
       {label && <span className="text-sm text-muted-foreground">{label}</span>}
@@ -363,7 +354,7 @@ export function StatTile({
       onClick={onClick}
       initial={{ scale: 0.88, opacity: 0 }}
       animate={{ scale: 1, opacity: 1 }}
-      transition={{ type: "spring", stiffness: 450, damping: 24 }}
+      transition={MOTION_SPRING.pop}
       whileHover="hover"
       whileTap={onClick ? { scale: 0.98 } : undefined}
       className={cn(
@@ -379,7 +370,7 @@ export function StatTile({
           <motion.span
             className="inline-flex"
             variants={{ hover: { scale: 1.22, rotate: -10 } }}
-            transition={{ type: "spring", stiffness: 500, damping: 14 }}
+            transition={MOTION_SPRING.pop}
           >
             <Icon className={cn("size-4", STAT_TILE_COLOR[color])} />
           </motion.span>
@@ -507,7 +498,7 @@ export function SegmentedControl<T extends string = string>({
               <motion.span
                 layoutId={`seg-thumb-${label ?? "anon"}`}
                 className="osler-segmented__thumb"
-                transition={{ type: "spring", stiffness: 380, damping: 30 }}
+                transition={MOTION_SPRING.snappy}
               />
             )}
             {Icon && <Icon className="size-3.5" />}
@@ -951,7 +942,7 @@ export function AnimatedDisclosure({
           <span className="text-sm font-semibold truncate">{label}</span>
           <motion.span
             animate={{ rotate: open ? 90 : 0 }}
-            transition={{ duration: 0.2, ease: [0.32, 0.72, 0, 1] }}
+            transition={MOTION_TRANSITION.quick}
             className="ms-auto text-muted-foreground shrink-0"
             aria-hidden
           >
@@ -967,7 +958,7 @@ export function AnimatedDisclosure({
             initial={{ opacity: 0, height: 0 }}
             animate={{ opacity: 1, height: "auto" }}
             exit={{ opacity: 0, height: 0 }}
-            transition={{ duration: 0.25, ease: [0.32, 0.72, 0, 1] }}
+            transition={MOTION_TRANSITION.normal}
             className="overflow-hidden"
           >
             <div className="mt-3 pt-3 border-t border-border">{children}</div>

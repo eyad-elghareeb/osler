@@ -9,6 +9,7 @@ import { cn } from "@/lib/utils";
 import { useChartTooltip } from "@/hooks/use-chart-tooltip";
 import { OslerCard } from "./ui-primitives";
 import { AnimatedFlame } from "./animated-icons";
+import { MOTION_TRANSITION, MOTION_SPRING } from "@/lib/osler/motion";
 
 /* ── Bar chart ────────────────────────────────────────────────────────── */
 
@@ -43,7 +44,7 @@ const ActivityBarChart = React.memo(function ActivityBarChart({ activity, today 
             initial={{ opacity: 0, y: 4, scale: 0.95 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 4, scale: 0.95 }}
-            transition={{ duration: 0.12 }}
+            transition={MOTION_TRANSITION.fast}
             className="absolute -top-12 z-30 pointer-events-none -translate-x-1/2"
             style={{
               left: `${left}px`,
@@ -189,7 +190,7 @@ function FlameCounter({ count, active }: { count: number; active: boolean }) {
           key={count}
           initial={{ scale: 0.7, opacity: 0 }}
           animate={{ scale: 1, opacity: 1 }}
-          transition={{ type: "spring", stiffness: 300, damping: 20 }}
+          transition={MOTION_SPRING.snappy}
           className={cn(
             "text-4xl font-extrabold tabular-nums leading-none tracking-tight",
             active ? "text-foreground" : "text-muted-foreground/40"
@@ -294,7 +295,7 @@ export function StreakRestoreBanner({ deadline }: { deadline: number }) {
     <motion.div
       initial={{ opacity: 0, y: -4 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.25 }}
+      transition={MOTION_TRANSITION.normal}
       className="mb-4 rounded-xl border border-warning/30 bg-warning/10 px-3 py-2.5"
     >
       <div className="flex items-center gap-2 text-xs font-semibold text-warning">

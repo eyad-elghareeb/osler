@@ -40,6 +40,7 @@ import { cn } from "@/lib/utils";
 import { LoadingState } from "@/components/osler/ui-primitives";
 import { AdminLoginPrompt } from "@/components/osler/admin/admin-login-prompt";
 import { AdminProvider } from "@/components/osler/admin/admin-context";
+import { MOTION_TRANSITION, MOTION_SPRING } from "@/lib/osler/motion";
 import {
   AdminSettingsProvider,
   useAdminSettings,
@@ -450,7 +451,7 @@ function AdminShellInner({ children }: AdminShellProps) {
             key={pathname}
             initial={vtActive ? false : { opacity: 0 }}
             animate={{ opacity: 1 }}
-            transition={{ duration: 0.18, ease: [0.25, 1, 0.5, 1] }}
+            transition={MOTION_TRANSITION.quick}
             className="h-full"
           >
             <AdminProvider identity={identity}>{children}</AdminProvider>
@@ -607,7 +608,7 @@ function SidebarLink({
         <motion.span
           layoutId={collapsed ? "admin-nav-active-tint-collapsed" : "admin-nav-active-tint"}
           className="absolute inset-0 rounded-lg bg-primary/10 border border-primary/20"
-          transition={{ type: "spring", stiffness: 380, damping: 30 }}
+          transition={MOTION_SPRING.snappy}
         />
       )}
       <Icon className="size-4 shrink-0 relative" />

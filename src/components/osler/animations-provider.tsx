@@ -15,7 +15,12 @@
 
 import * as React from "react";
 import { MotionConfig } from "framer-motion";
-import { useAnimationsEnabled, applyAnimationsFlag, isAnimationsEnabled } from "@/lib/osler/motion";
+import {
+  useAnimationsEnabled,
+  applyAnimationsFlag,
+  isAnimationsEnabled,
+  MOTION_TRANSITION,
+} from "@/lib/osler/motion";
 
 export function AnimationsProvider({ children }: { children: React.ReactNode }) {
   const enabled = useAnimationsEnabled();
@@ -32,7 +37,7 @@ export function AnimationsProvider({ children }: { children: React.ReactNode }) 
   }, []);
 
   return (
-    <MotionConfig reducedMotion={enabled ? "user" : "always"} transition={{ duration: 0.25 }}>
+    <MotionConfig reducedMotion={enabled ? "user" : "always"} transition={MOTION_TRANSITION.normal}>
       {children}
     </MotionConfig>
   );

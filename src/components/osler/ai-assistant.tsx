@@ -28,6 +28,7 @@ import { Combobox } from "@/components/osler/ui-primitives";
 import { ThinkingStatus } from "@/components/osler/thinking-status";
 import { useTypewriter } from "@/hooks/use-typewriter";
 import { AiMarkdown } from "@/components/osler/ai-markdown";
+import { MOTION_TRANSITION, MOTION_SPRING } from "@/lib/osler/motion";
 
 const MODELS = [
   ["gemini-3.5-flash-lite", "Gemini 3.5 Flash-Lite (default, fastest & cost-efficient)"],
@@ -617,9 +618,7 @@ export function AiAssistant({
             initial={isPhone ? { y: "100%", opacity: 0 } : { x: rtl ? -360 : 360, opacity: 0 }}
             animate={isPhone ? { y: 0, opacity: 1 } : { x: 0, opacity: 1 }}
             exit={isPhone ? { y: "100%", opacity: 0 } : { x: rtl ? -360 : 360, opacity: 0 }}
-            transition={isPhone
-              ? { type: "spring", damping: 32, stiffness: 320 }
-              : { type: "spring", damping: 28, stiffness: 300 }}
+            transition={isPhone ? MOTION_SPRING.snappy : MOTION_SPRING.soft}
             {...dismissProps}
             className={isPhone
               ? "fixed inset-0 z-50 bg-card flex flex-col"
@@ -694,7 +693,7 @@ function ChatBubble({ msg, isStreaming }: { msg: Message; isStreaming?: boolean 
     <motion.div
       initial={{ opacity: 0, y: 6 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
+      transition={MOTION_TRANSITION.quick}
       className={cn(
         "flex flex-col gap-1 max-w-[85%]",
         isUser ? "self-end items-end" : "self-start"

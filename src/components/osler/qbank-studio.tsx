@@ -181,7 +181,7 @@ import {
 import { SparkTrend, defaultSparkDelta } from "./analytics-primitives";
 import { TrackerTree, type TrackerTreeNode } from "./tracker-tree";
 import { TrackerPreviewSheet, type TrackerPreviewItem } from "./tracker-preview";
-import { easeOut, fadeUp, staggerContainer, springSoft } from "@/lib/osler/motion";
+import { MOTION_TRANSITION, easeOut, fadeUp, staggerContainer, springSoft } from "@/lib/osler/motion";
 import type { StringKey } from "@/lib/osler/i18n";
 import { loadUiLang } from "@/lib/osler/i18n";
 import { generateResultsPdf, generateDashboardPdf, generateQuizCompilationPdf, downloadPdf, type FullQuestion, type PdfExportConfig } from "@/lib/osler/pdf";
@@ -1910,7 +1910,7 @@ function HomeView({
             key={homeTab}
             initial={{ opacity: 0, y: 4 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.2, ease: easeOut.ease }}
+            transition={MOTION_TRANSITION.quick}
             className="h-full"
           >
               {homeTab === "content" && (
@@ -5338,7 +5338,7 @@ function QuizView({
                   data-choice-idx={idx}
                   initial={{ opacity: 0, y: 6 }}
                   animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.2, delay: Math.min(idx * 0.04, 0.24), ease: "easeOut" }}
+                  transition={{ ...MOTION_TRANSITION.quick, delay: Math.min(idx * 0.04, 0.24) }}
                   whileTap={qSubmitted || !interactive ? undefined : { scale: 0.99 }}
                   disabled={qSubmitted || !interactive}
                   onClick={() => {
@@ -7941,7 +7941,7 @@ function ExplanationCard({
       <motion.div
         initial={{ opacity: 0, y: 6 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.25, ease: [0.32, 0.72, 0, 1] }}
+        transition={MOTION_TRANSITION.normal}
         className="rounded-xl border-2 border-success overflow-hidden"
       >
         <div className="px-4 py-3 flex items-center gap-3 bg-success-soft text-success">
@@ -8002,7 +8002,7 @@ function ExplanationCard({
     <motion.div
       initial={{ opacity: 0, y: 6 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.25, ease: [0.32, 0.72, 0, 1] }}
+      transition={MOTION_TRANSITION.normal}
       className={`rounded-xl border-2 overflow-hidden ${isCorrect ? "border-success" : "border-destructive"}`}
     >
       <div className={`px-4 py-3 flex items-center gap-3 ${isCorrect ? "bg-success-soft text-success" : "bg-destructive-soft text-destructive"}`}>

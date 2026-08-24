@@ -15,6 +15,7 @@ import { useI18n } from "@/components/osler/i18n-provider";
 import type { StringKey } from "@/lib/osler/i18n";
 import { haptic } from "@/lib/osler/native";
 import { EmptyState, LoadingState, SectionHeading } from "@/components/osler/ui-primitives";
+import { MOTION_TRANSITION } from "@/lib/osler/motion";
 import { adminApi, type ContentObject } from "@/components/osler/admin/admin-api";
 import { formatSize } from "@/components/osler/admin/content-tree-pane";
 import {
@@ -417,7 +418,7 @@ export function ReviewQueue() {
                   key={item.id}
                   initial={{ opacity: 0, y: 8 }}
                   animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: i * 0.04 }}
+                  transition={{ ...MOTION_TRANSITION.quick, delay: i * 0.04 }}
                   className={cn(
                     "rounded-xl border bg-card p-4 flex items-start gap-3 transition-colors",
                     active ? "border-primary/40 ring-1 ring-primary/20" : "border-border",
@@ -564,7 +565,7 @@ export function ReviewQueue() {
                     key={group.dir}
                     initial={{ opacity: 0, y: 8 }}
                     animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: i * 0.04 }}
+                    transition={{ ...MOTION_TRANSITION.quick, delay: i * 0.04 }}
                     className={cn(
                       "rounded-xl border bg-card p-4 flex items-start gap-3 transition-colors",
                       active ? "border-primary/40 ring-1 ring-primary/20" : "border-border",

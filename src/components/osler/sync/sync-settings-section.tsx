@@ -6,6 +6,7 @@ import { Smartphone } from "lucide-react";
 import { NetworkSyncPanel } from "./network-sync-panel";
 import { CloudSyncStatusCard } from "./cloud-sync-status";
 import { useI18n } from "@/components/osler/i18n-provider";
+import { MOTION_TRANSITION } from "@/lib/osler/motion";
 
 export function SyncSettingsSection() {
   const { t } = useI18n();
@@ -26,7 +27,7 @@ export function SyncSettingsSection() {
       <motion.div
         initial={{ opacity: 0, y: 8 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.18 }}
+        transition={MOTION_TRANSITION.quick}
       >
         <CloudSyncStatusCard />
       </motion.div>
@@ -37,7 +38,7 @@ export function SyncSettingsSection() {
       <motion.div
         initial={{ opacity: 0, y: 8 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.18 }}
+        transition={MOTION_TRANSITION.quick}
       >
         <NetworkSyncPanel />
       </motion.div>

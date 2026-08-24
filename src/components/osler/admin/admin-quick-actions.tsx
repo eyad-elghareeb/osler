@@ -16,6 +16,7 @@ import { useI18n } from "@/components/osler/i18n-provider";
 import { SectionHeading } from "@/components/osler/ui-primitives";
 import { haptic } from "@/lib/osler/native";
 import { cn } from "@/lib/utils";
+import { MOTION_TRANSITION } from "@/lib/osler/motion";
 
 /**
  * AdminQuickActions — shortcut cards to the admin sections an admin
@@ -54,7 +55,7 @@ export function AdminQuickActions() {
               key={a.href}
               initial={{ opacity: 0, y: 4 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.2, delay: i * 0.04 }}
+              transition={{ ...MOTION_TRANSITION.quick, delay: i * 0.04 }}
               whileHover={{ y: -2 }}
               whileTap={{ scale: 0.99 }}
             >

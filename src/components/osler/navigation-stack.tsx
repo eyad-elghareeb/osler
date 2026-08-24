@@ -55,6 +55,7 @@ import * as React from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/lib/utils";
 import { useSwipeBackDismiss } from "@/hooks/use-swipe-back-dismiss";
+import { MOTION_SPRING } from "@/lib/osler/motion";
 
 export interface NavigationStackProps {
   /** The home layer — always rendered underneath. */
@@ -137,7 +138,7 @@ export function NavigationStack({
       <motion.div
         initial={false}
         animate={{ opacity: hasPages ? 0.65 : 1 }}
-        transition={{ type: "spring", stiffness: 380, damping: 36, mass: 0.8 }}
+        transition={MOTION_SPRING.snappy}
         className={cn("absolute inset-0", homeClassName)}
       >
         {home}
@@ -156,7 +157,7 @@ export function NavigationStack({
               initial={{ x: enterX }}
               animate={{ x: 0 }}
               exit={{ x: enterX }}
-              transition={{ type: "spring", stiffness: 380, damping: 36, mass: 0.8 }}
+              transition={MOTION_SPRING.snappy}
               {...(isTop ? dismissProps : {})}
               className={cn(
                 "absolute inset-0 bg-background shadow-2xl",

@@ -18,6 +18,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useI18n } from "@/components/osler/i18n-provider";
 import { haptic } from "@/lib/osler/native";
 import { cn } from "@/lib/utils";
+import { MOTION_TRANSITION } from "@/lib/osler/motion";
 import { adminApi, type AdminUser } from "@/components/osler/admin/admin-api";
 import { Label } from "@/components/ui/label";
 import { EmptyState } from "@/components/osler/ui-primitives";
@@ -186,7 +187,7 @@ export function UsersTable() {
                 key={user.id}
                 initial={{ opacity: 0, y: 4 }}
                 animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: Math.min(i * 0.03, 0.3), duration: 0.2 }}
+                transition={{ ...MOTION_TRANSITION.quick, delay: Math.min(i * 0.03, 0.3) }}
                 className="group rounded-xl border border-border bg-card hover:border-primary/40 hover:shadow-md transition-all"
               >
                 <div className="flex items-center gap-3 p-3">

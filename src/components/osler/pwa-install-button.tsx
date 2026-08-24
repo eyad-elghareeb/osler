@@ -7,6 +7,7 @@ import { cn } from "@/lib/utils";
 import { Checkbox } from "@/components/ui/checkbox";
 import { settings } from "@/lib/osler/storage";
 import { useI18n } from "@/components/osler/i18n-provider";
+import { MOTION_TRANSITION } from "@/lib/osler/motion";
 
 type BeforeInstallPromptEvent = Event & {
   prompt: () => Promise<void>;
@@ -122,7 +123,7 @@ export function PwaInstallButton({ className }: { className?: string }) {
             initial={{ opacity: 0, y: 6, scale: 0.96 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 6, scale: 0.96 }}
-            transition={{ duration: 0.18 }}
+            transition={MOTION_TRANSITION.quick}
             className="absolute right-0 top-11 z-50 w-64 rounded-lg border border-border bg-popover p-3 text-xs shadow-lg"
           >
             <div className="mb-2 flex items-center justify-between">

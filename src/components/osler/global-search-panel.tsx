@@ -42,6 +42,7 @@ import type { StringKey } from "@/lib/osler/i18n";
 import { cn } from "@/lib/utils";
 import { haptic } from "@/lib/osler/native";
 import { Skeleton } from "@/components/ui/skeleton";
+import { MOTION_TRANSITION } from "@/lib/osler/motion";
 
 interface GlobalSearchPanelProps {
   /** Controlled query — parent persists it across open/close. */
@@ -253,7 +254,7 @@ export function GlobalSearchPanel({
                     initial={{ opacity: 0, y: 4 }}
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0 }}
-                    transition={{ duration: 0.12 }}
+                    transition={MOTION_TRANSITION.fast}
                   >
                     <div className="text-[10px] uppercase tracking-wider text-muted-foreground px-2 py-1.5 flex items-center gap-1.5">
                       <Icon className="size-3" />

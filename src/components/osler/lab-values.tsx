@@ -10,6 +10,7 @@ import {
 } from "@/hooks/use-resizable-sidebar";
 import { useSwipeBackDismiss } from "@/hooks/use-swipe-back-dismiss";
 import { useI18n } from "./i18n-provider";
+import { MOTION_SPRING } from "@/lib/osler/motion";
 
 type LabCategory = "chem" | "hem" | "abg" | "coag" | "other";
 
@@ -187,9 +188,7 @@ export function LabValuesSidebar({ open, onClose }: { open?: boolean; onClose: (
             initial={isPhone ? { y: "100%", opacity: 0 } : { x: rtl ? -360 : 360, opacity: 0 }}
             animate={isPhone ? { y: 0, opacity: 1 } : { x: 0, opacity: 1 }}
             exit={isPhone ? { y: "100%", opacity: 0 } : { x: rtl ? -360 : 360, opacity: 0 }}
-            transition={isPhone
-              ? { type: "spring", damping: 32, stiffness: 320 }
-              : { type: "spring", damping: 28, stiffness: 300 }}
+            transition={isPhone ? MOTION_SPRING.snappy : MOTION_SPRING.soft}
             {...dismissProps}
             className={isPhone
               ? "fixed inset-0 z-50 bg-card flex flex-col"

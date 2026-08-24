@@ -16,7 +16,7 @@ import {
 } from "lucide-react";
 import type { EngineType } from "@/lib/osler/types";
 import { ENGINE_META } from "@/lib/osler/content";
-import { easeOut, disclosureVariants } from "@/lib/osler/motion";
+import { disclosureVariants, MOTION_TRANSITION } from "@/lib/osler/motion";
 import { useI18n } from "./i18n-provider";
 import { cn } from "@/lib/utils";
 
@@ -82,7 +82,7 @@ const Caret = React.memo(function Caret({ open, rtl }: { open: boolean; rtl: boo
     <motion.div
       initial={false}
       animate={{ rotate: open ? (rtl ? -90 : 90) : 0 }}
-      transition={{ duration: 0.18, ease: easeOut.ease }}
+      transition={MOTION_TRANSITION.quick}
       className="size-4 shrink-0 text-muted-foreground"
       aria-hidden="true"
     >

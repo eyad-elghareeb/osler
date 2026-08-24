@@ -8,6 +8,7 @@ import { NetworkSyncPanel } from "./network-sync-panel";
 import { useI18n } from "@/components/osler/i18n-provider";
 import { haptic } from "@/lib/osler/native";
 import { useSwipeBackDismiss } from "@/hooks/use-swipe-back-dismiss";
+import { MOTION_TRANSITION } from "@/lib/osler/motion";
 
 export function SyncModal({
   open,
@@ -51,7 +52,7 @@ export function SyncModal({
             initial={{ opacity: 0, scale: 0.96, y: 12 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.96, y: 12 }}
-            transition={{ duration: 0.18 }}
+            transition={MOTION_TRANSITION.quick}
             onClick={(e) => e.stopPropagation()}
             {...dismissProps}
           >

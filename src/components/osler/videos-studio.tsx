@@ -55,6 +55,7 @@ import {
   haptic,
 } from "@/lib/osler/native";
 import { useSwipeBackDismiss } from "@/hooks/use-swipe-back-dismiss";
+import { MOTION_TRANSITION } from "@/lib/osler/motion";
 
 /* ── Constants ─────────────────────────────────────────────────────── */
 
@@ -299,7 +300,7 @@ export function VideosStudio({
         <motion.div
           initial={{ opacity: 0, y: 8 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.3 }}
+          transition={MOTION_TRANSITION.slow}
           className="osler-page-header--inline"
         >
           <div
@@ -461,7 +462,7 @@ export function VideosStudio({
                       onClick={() => { haptic("light"); openVideo(video); }}
                       initial={{ opacity: 0, y: 8 }}
                       animate={{ opacity: 1, y: 0 }}
-                      transition={{ duration: 0.2, delay: Math.min(idx * 0.04, 0.4) }}
+                      transition={{ ...MOTION_TRANSITION.quick, delay: Math.min(idx * 0.04, 0.4) }}
                       dir={lang === "ar" ? "rtl" : undefined}
                       lang={lang}
                       className={cn(

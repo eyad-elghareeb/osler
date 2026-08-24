@@ -4,6 +4,7 @@ import React from "react";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { ThinkingOrb, type OrbSize, type OrbState } from "thinking-orbs";
 import { cn } from "@/lib/utils";
+import { MOTION_TRANSITION } from "@/lib/osler/motion";
 
 export interface ThinkingPhase {
   label: string;
@@ -42,7 +43,7 @@ export function ThinkingStatus({
           initial={reduce ? false : { opacity: 0, y: 3 }}
           animate={{ opacity: 1, y: 0 }}
           exit={reduce ? undefined : { opacity: 0, y: -3 }}
-          transition={{ duration: 0.18, ease: "easeOut" }}
+          transition={MOTION_TRANSITION.quick}
           className={cn("text-muted-foreground", labelClassName)}
         >
           {active.label}

@@ -6,6 +6,7 @@ import { X, ZoomIn, ZoomOut, Download, Maximize2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useI18n } from "./i18n-provider";
 import { haptic } from "@/lib/osler/native";
+import { MOTION_TRANSITION } from "@/lib/osler/motion";
 
 interface MermaidModalProps {
   svg: string;
@@ -69,7 +70,7 @@ export function MermaidModal({ svg, title, onClose }: MermaidModalProps) {
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      transition={{ duration: 0.2 }}
+      transition={MOTION_TRANSITION.quick}
       className="fixed inset-0 z-[80] flex flex-col bg-background/95 backdrop-blur-xl safe-screen"
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
     >

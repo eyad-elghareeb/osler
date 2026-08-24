@@ -415,14 +415,33 @@ The shared primitives below were added to raise the craft of the existing app wi
 - `--primary-soft` / `--success-soft` / `--warning-soft` / `--destructive-soft` / `--info-soft` — semantic soft tints for badges, callouts, and accent backgrounds. Use via `bg-primary-soft`, `bg-success-soft`, etc.
 - `--radius-2xl` — extra-large radius for hero surfaces.
 
-**Motion recipes** added in `@/lib/osler/motion.ts` (Motion Primitives-inspired, all ≤0.3s):
+**Animation system** — single source of truth in `@/lib/osler/motion.ts` + `@/components/osler/motion-primitives.tsx`:
 
-- `listItemEnter` — subtle fade + 4px lift for card grids.
-- `tabIndicator` — spring for shared-layout tab thumbs.
+*Tokens* (never hardcode durations/easings/springs inline — read from these):
+- `MOTION_DURATION` — `fast:0.15` / `quick:0.20` / `base:0.22` / `normal:0.25` / `slow:0.28` (all ≤0.3s; ambient loops like skeleton shimmer are the only exception).
+- `MOTION_EASE.standard` — `[0.32, 0.72, 0, 1]`, the one curve for all UI motion.
+- `MOTION_SPRING` — `snappy(380/30)` for layout/tabs/nav, `soft(280/26)` for cards/lists, `pop(450/24)` for bouncy entrances.
+- `MOTION_TRANSITION` — presets `fast`/`quick`/`base`/`normal`/`slow` that combine duration + standard ease.
+- Legacy aliases `springSnappy`, `springSoft`, `easeOut` remain for backward compat but new code should prefer the `MOTION_*` tokens.
+
+*Variants* (Motion Primitives-inspired, all ≤0.3s):
+- `fadeUp` / `fadeSlideStart` / `fadeSlideEnd` / `fade` / `scaleIn` — directional fades.
+- `listItemEnter` — subtle fade + 4px lift for card grids (use inside `Stagger`).
+- `staggerContainer` / `staggerContainerSlow` — stagger parents (`0.04/0.02` and `0.08/0.04`).
+- `tabIndicator` — spring for shared-layout tab thumbs (`MOTION_SPRING.snappy`).
 - `disclosureVariants` — height + opacity for accordion / expandable panels.
 - `feedbackPulse` — single soft ring for acknowledging primary actions.
 - `pressFeedback` — 0.97 scale on tap.
 - `stackedPanelEnter(edge)` — directional enter/exit for sheets, drawers, stacked modals.
+- `pageEnter` / `carouselSlide(dir,rtl)` — page and carousel transitions.
+
+*Shared components* in `@/components/osler/motion-primitives.tsx` (use these instead of hand-rolling `initial`/`animate`):
+- `<FadeIn y={8} delay={0} preset="normal">` — fade + lift on mount. `y=4` for dense grids, `8` for cards, `12` for heroes.
+- `<Stagger slow={false}>` + `<StaggerItem variant="listItem"|"fadeUp">` — staggered list entrance. Replaces `delay: idx*0.04` loops.
+- `<Pressable>` — button/div that scales to 0.97 on tap (`pressFeedback`). Replaces hand-rolled `whileTap`.
+- `<HoverLift>` — subtle hover scale for interactive icons/cards.
+
+All primitives animate only `opacity`/`transform` (compositor-friendly) and respect `prefers-reduced-motion` via `AnimationsProvider` + `data-animations="off"`. No component may define a new duration/easing/spring locally — add it to the token table first with a rationale.
 
 **Button enhancements** in `@/components/ui/button.tsx`:
 

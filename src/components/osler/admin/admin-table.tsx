@@ -9,6 +9,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import { useI18n } from "@/components/osler/i18n-provider";
 import { EmptyState } from "@/components/osler/ui-primitives";
+import { MOTION_TRANSITION } from "@/lib/osler/motion";
 
 interface Column<T> {
   key: string;
@@ -149,7 +150,7 @@ export function AdminTable<T>({
                   key={rowKey(item)}
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
-                  transition={{ delay: i * 0.025 }}
+                  transition={{ ...MOTION_TRANSITION.quick, delay: i * 0.025 }}
                   className="border-b border-border last:border-0 hover:bg-muted/30 transition-colors"
                 >
                   {columns.map((col) => (

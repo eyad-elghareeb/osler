@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { ChevronRight, Folder, FileText } from "lucide-react";
 import type { ContentTreeNode } from "@/lib/osler/types";
 import { cn } from "@/lib/utils";
+import { MOTION_TRANSITION } from "@/lib/osler/motion";
 
 interface FolderTreeNavProps {
   /** The tree nodes to render */
@@ -144,7 +145,7 @@ function TreeNodeItem({
             initial={{ height: 0, opacity: 0 }}
             animate={{ height: "auto", opacity: 1 }}
             exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: 0.15, ease: "easeOut" }}
+            transition={MOTION_TRANSITION.fast}
             className="overflow-hidden"
           >
             {node.items.map((child) => (

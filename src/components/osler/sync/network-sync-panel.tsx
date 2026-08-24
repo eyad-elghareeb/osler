@@ -28,6 +28,7 @@ import { useI18n } from "@/components/osler/i18n-provider";
 import { PeerLinkQrPanel } from "./qr-sync-panel";
 import { NetworkInfoBadge } from "./network-info-badge";
 import { haptic } from "@/lib/osler/native";
+import { MOTION_TRANSITION } from "@/lib/osler/motion";
 
 export function NetworkSyncPanel() {
   const { t } = useI18n();
@@ -193,7 +194,7 @@ export function NetworkSyncPanel() {
             initial={{ opacity: 0, y: 8, scale: 0.98 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: -6 }}
-            transition={{ duration: 0.2 }}
+            transition={MOTION_TRANSITION.quick}
           >
             <Card className="p-5 border-warning/40 bg-warning/5">
               <div className="flex items-start gap-4">

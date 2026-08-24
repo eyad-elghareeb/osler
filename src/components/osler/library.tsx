@@ -57,6 +57,7 @@ import { generateArticlePdf, downloadPdf } from "@/lib/osler/pdf";
 import { useSwipeBackDismiss } from "@/hooks/use-swipe-back-dismiss";
 
 import { useOslerRouter } from "@/lib/osler/navigation";
+import { MOTION_TRANSITION, MOTION_SPRING } from "@/lib/osler/motion";
 
 interface LibraryProps {
   initialArticleId?: string;
@@ -585,7 +586,7 @@ export function Library({ initialArticleId, onNavigateBack: propOnNavigateBack }
               initial={{ x: -300 }}
               animate={{ x: 0 }}
               exit={{ x: -300 }}
-              transition={{ type: "spring", damping: 28, stiffness: 280 }}
+              transition={MOTION_SPRING.soft}
               className={cn(
                 "absolute left-0 top-0 bottom-0 bg-sidebar flex flex-col",
                 activeFile ? "w-80 max-w-[85vw]" : "w-full"
@@ -668,7 +669,7 @@ export function Library({ initialArticleId, onNavigateBack: propOnNavigateBack }
                   key={activeFile}
                   initial={{ opacity: 0, y: 6 }}
                   animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.25 }}
+                  transition={MOTION_TRANSITION.normal}
                   className={cn(
                     "library-article relative",
                     activeArticle?.lang === "ar" ? "osler-content-ar" : "osler-content-en",
@@ -1109,7 +1110,7 @@ function MobileReader({
             key={article.file}
             initial={{ opacity: 0, y: 6 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.25 }}
+            transition={MOTION_TRANSITION.normal}
             className={cn(
               "library-article px-4 py-5",
               article.lang === "ar" ? "osler-content-ar" : "osler-content-en",

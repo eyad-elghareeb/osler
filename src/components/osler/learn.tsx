@@ -17,7 +17,7 @@ import { cn } from "@/lib/utils";
 import { flattenTree, getEngineMeta, loadCategoryTree, getCachedCategoryTree } from "@/lib/osler/content";
 import type { ContentTreeNode } from "@/lib/osler/types";
 import { storage } from "@/lib/osler/storage";
-import { fadeUp, staggerContainer } from "@/lib/osler/motion";
+import { fadeUp, staggerContainer, MOTION_TRANSITION } from "@/lib/osler/motion";
 import { isEngineEnabled } from "@/lib/osler/config";
 import { PageHeader } from "./ui-primitives";
 
@@ -204,7 +204,7 @@ export function Learn({ onNavigate: propOnNavigate }: LearnProps = {}) {
         <motion.div
           initial={{ opacity: 0, y: 8 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.3 }}
+          transition={MOTION_TRANSITION.slow}
         >
           <PageHeader
             eyebrow={t("nav.learn")}

@@ -13,6 +13,7 @@ import {
   ERASER_TOOL,
   resolveHighlightColor,
 } from "@/lib/osler/highlight-palette";
+import { MOTION_TRANSITION } from "@/lib/osler/motion";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -187,7 +188,7 @@ export function HighlighterToolbar({
       initial={{ opacity: 0, scale: 0.96, y: -4 }}
       animate={{ opacity: 1, scale: 1, y: 0 }}
       exit={{ opacity: 0, scale: 0.96, y: -4 }}
-      transition={{ duration: 0.15 }}
+      transition={MOTION_TRANSITION.fast}
       className={cn(panelClass, "absolute top-full mt-2 end-0 z-50 w-[17.5rem] p-2 flex flex-col gap-1.5")}
     >
       <div className="flex items-center justify-between gap-1">
@@ -239,7 +240,7 @@ export function HighlighterToolbar({
       initial={{ opacity: 0, scale: 0.94 }}
       animate={{ opacity: 1, scale: 1 }}
       exit={{ opacity: 0, scale: 0.94 }}
-      transition={{ duration: 0.12 }}
+      transition={MOTION_TRANSITION.fast}
       className={cn(panelClass, "hidden md:flex items-center gap-1 p-1")}
     >
       {HIGHLIGHT_COLOR_KEYS.map(renderSwatch)}

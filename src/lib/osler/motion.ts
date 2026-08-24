@@ -55,25 +55,65 @@ export function useAnimationsEnabled(): boolean {
   return enabled;
 }
 
+/* ───────────────────────── Canonical tokens ─────────────────────
+ * Single source of truth for every animation in the app. Components must
+ * read from these tokens — never hardcode durations, easings, or spring
+ * configs inline. This is what makes the whole site share one rhythm.
+ *
+ * Durations are ≤0.28s (≤0.3s rule) except for ambient loops (skeleton
+ * shimmer, voice orb) which are exempt. One easing curve everywhere so
+ * fades, slides, and disclosures feel like the same system.
+ */
+
+export const MOTION_DURATION = {
+  /** Micro-interactions, icon pops, tooltip fades. */
+  fast: 0.15,
+  /** Quick fades, disclosure chevrons, inline feedback. */
+  quick: 0.2,
+  /** Default for cards, list items, loading states. */
+  base: 0.22,
+  /** Standard for fades and slides. */
+  normal: 0.25,
+  /** Hero, page-level, or larger surfaces. */
+  slow: 0.28,
+} as const;
+
+export const MOTION_EASE = {
+  /** The one easing curve for all UI motion. */
+  standard: [0.32, 0.72, 0, 1] as const,
+} as const;
+
+export const MOTION_SPRING = {
+  /** Layout, tab indicators, nav — snappy and precise. */
+  snappy: { type: "spring" as const, stiffness: 380, damping: 30 },
+  /** Cards and list items — softer settle. */
+  soft: { type: "spring" as const, stiffness: 280, damping: 26 },
+  /** Bouncy entrances — stat tiles, disclosure icons. */
+  pop: { type: "spring" as const, stiffness: 450, damping: 24 },
+} as const;
+
+export const MOTION_TRANSITION = {
+  fast: { duration: MOTION_DURATION.fast, ease: MOTION_EASE.standard } as Transition,
+  quick: { duration: MOTION_DURATION.quick, ease: MOTION_EASE.standard } as Transition,
+  base: { duration: MOTION_DURATION.base, ease: MOTION_EASE.standard } as Transition,
+  normal: { duration: MOTION_DURATION.normal, ease: MOTION_EASE.standard } as Transition,
+  slow: { duration: MOTION_DURATION.slow, ease: MOTION_EASE.standard } as Transition,
+} as const;
+
 /* ───────────────────────── Shared variants ────────────────────── */
 
 /** Smooth, slightly-snappy spring used for layout-level animations. */
-export const springSnappy: Transition = {
-  type: "spring",
-  stiffness: 380,
-  damping: 30,
-};
+export const springSnappy: Transition = MOTION_SPRING.snappy;
 
 /** Soft spring for cards / list items. */
-export const springSoft: Transition = {
-  type: "spring",
-  stiffness: 280,
-  damping: 26,
-};
+export const springSoft: Transition = MOTION_SPRING.soft;
+
+/** Bouncy spring for entrances that need a little pop. */
+export const springPop: Transition = MOTION_SPRING.pop;
 
 /** Standard ease for fades and slides. */
-export const easeOut: Transition = { duration: 0.25, ease: [0.32, 0.72, 0, 1] };
-export const easeOutSlow: Transition = { duration: 0.32, ease: [0.32, 0.72, 0, 1] };
+export const easeOut: Transition = MOTION_TRANSITION.normal;
+export const easeOutSlow: Transition = MOTION_TRANSITION.slow;
 
 /** Fade + lift up. Use for cards / list items entering the viewport. */
 export const fadeUp: Variants = {
@@ -164,12 +204,12 @@ export const disclosureVariants: Variants = {
   visible: {
     opacity: 1,
     height: "auto",
-    transition: { duration: 0.25, ease: [0.32, 0.72, 0, 1] },
+    transition: MOTION_TRANSITION.normal,
   },
   exit: {
     opacity: 0,
     height: 0,
-    transition: { duration: 0.2, ease: [0.32, 0.72, 0, 1] },
+    transition: MOTION_TRANSITION.quick,
   },
 };
 
@@ -183,7 +223,7 @@ export const feedbackPulse: Variants = {
       "0 0 0 0 color-mix(in oklch, var(--primary) 45%, transparent)",
       "0 0 0 8px color-mix(in oklch, var(--primary) 0%, transparent)",
     ],
-    transition: { duration: 0.45, ease: "easeOut" },
+    transition: MOTION_TRANSITION.slow,
   },
 };
 
@@ -191,7 +231,7 @@ export const feedbackPulse: Variants = {
  * Use on `motion.button` with `whileTap="press"`. */
 export const pressFeedback: Variants = {
   rest: { scale: 1 },
-  press: { scale: 0.97, transition: { duration: 0.08, ease: "easeOut" } },
+  press: { scale: 0.97, transition: MOTION_TRANSITION.fast },
 };
 
 /** Stacked panel enter — used by `<AnimatePresence>` for sheets, drawers,
@@ -205,8 +245,8 @@ export function stackedPanelEnter(edge: "start" | "end" | "bottom" | "top" = "bo
   return {
     initial: { opacity: 0, ...dir },
     animate: { opacity: 1, x: 0, y: 0 },
-    exit: { opacity: 0, ...dir, transition: { duration: 0.18 } },
-    transition: { duration: 0.25, ease: [0.32, 0.72, 0, 1] as const },
+    exit: { opacity: 0, ...dir, transition: MOTION_TRANSITION.quick },
+    transition: MOTION_TRANSITION.normal,
   };
 }
 
@@ -216,8 +256,8 @@ export function stackedPanelEnter(edge: "start" | "end" | "bottom" | "top" = "bo
  */
 export const pageEnter: Variants = {
   initial: { opacity: 0, y: 6 },
-  animate: { opacity: 1, y: 0 },
-  exit: { opacity: 0, y: -6 },
+  animate: { opacity: 1, y: 0, transition: MOTION_TRANSITION.normal },
+  exit: { opacity: 0, y: -6, transition: MOTION_TRANSITION.quick },
 };
 
 /**
@@ -235,6 +275,6 @@ export function carouselSlide(dir: "next" | "prev", rtl: boolean) {
     initial: { opacity: 0, scale: 0.92, x: enterX },
     animate: { opacity: 1, scale: 1, x: 0 },
     exit: { opacity: 0, scale: 0.92, x: -enterX },
-    transition: { type: "spring" as const, stiffness: 380, damping: 32, mass: 0.8 },
+    transition: MOTION_SPRING.snappy,
   };
 }

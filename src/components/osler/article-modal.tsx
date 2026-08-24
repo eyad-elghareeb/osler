@@ -11,6 +11,7 @@ import { useI18n } from "@/components/osler/i18n-provider";
 import { HighlighterToolbar } from "./highlighter-toolbar";
 import { usePlatform } from "@/hooks/use-platform";
 import { useSwipeBackDismiss } from "@/hooks/use-swipe-back-dismiss";
+import { MOTION_TRANSITION, MOTION_SPRING } from "@/lib/osler/motion";
 
 const BOOKMARKS_KEY = "osler-article-bookmarks";
 
@@ -230,9 +231,7 @@ export function FloatingArticleModal({
             initial={isPhone ? { y: "100%", opacity: 0 } : { scale: 0.95, opacity: 0, y: 12 }}
             animate={isPhone ? { y: 0, opacity: 1 } : { scale: 1, opacity: 1, y: 0 }}
             exit={isPhone ? { y: "100%", opacity: 0 } : { scale: 0.95, opacity: 0, y: 12 }}
-            transition={isPhone
-              ? { type: "spring", damping: 32, stiffness: 320 }
-              : { type: "spring", damping: 25, stiffness: 300 }}
+            transition={isPhone ? MOTION_SPRING.snappy : MOTION_SPRING.soft}
             onClick={(e) => e.stopPropagation()}
             {...dismissProps}
             className={isPhone
@@ -306,7 +305,7 @@ export function FloatingArticleModal({
                     initial={{ width: 0, opacity: 0 }}
                     animate={{ width: 280, opacity: 1 }}
                     exit={{ width: 0, opacity: 0 }}
-                    transition={{ duration: 0.2 }}
+                    transition={MOTION_TRANSITION.quick}
                     className="border-r border-border bg-sidebar overflow-hidden flex flex-col"
                   >
                     <div className="flex-1 overflow-y-auto osler-scroll p-2 space-y-0.5">

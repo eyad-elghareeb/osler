@@ -75,6 +75,7 @@ import { useChartTooltip } from "@/hooks/use-chart-tooltip";
 import { SparkTrend } from "./analytics-primitives";
 import { AnimatedFlame } from "./animated-icons";
 import { StreakRestoreBanner } from "./streak-card";
+import { MOTION_TRANSITION } from "@/lib/osler/motion";
 
 interface ProfileProps {
   username?: string;
@@ -931,7 +932,7 @@ const ProfileStreakSection = React.memo(function ProfileStreakSection() {
                 initial={{ opacity: 0, y: 4, scale: 0.95 }}
                 animate={{ opacity: 1, y: 0, scale: 1 }}
                 exit={{ opacity: 0, y: 4, scale: 0.95 }}
-                transition={{ duration: 0.12 }}
+                transition={MOTION_TRANSITION.fast}
                 className="absolute -top-11 z-20 pointer-events-none -translate-x-1/2"
                 style={{
                   left: `${left}px`,

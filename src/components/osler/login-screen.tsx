@@ -32,6 +32,7 @@ import {
   haptic,
 } from "@/lib/osler/native";
 import { cn } from "@/lib/utils";
+import { MOTION_SPRING, MOTION_TRANSITION } from "@/lib/osler/motion";
 import { getConfig } from "@/lib/osler/config";
 import {
   CloudApiError,
@@ -479,7 +480,7 @@ export function LoginScreen({ onLogin, cloudAuthError }: LoginScreenProps) {
       <motion.div
         initial={{ opacity: 0, y: 12 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.35, ease: [0.32, 0.72, 0, 1] }}
+        transition={MOTION_TRANSITION.slow}
         className="w-full max-w-md relative"
       >
         {/* Brand header — Motion Primitives staggered entrance */}
@@ -499,7 +500,7 @@ export function LoginScreen({ onLogin, cloudAuthError }: LoginScreenProps) {
                 scale: 1,
                 opacity: 1,
                 y: 0,
-                transition: { type: "spring", stiffness: 240, damping: 18 },
+                transition: MOTION_SPRING.pop,
               },
             }}
             className="w-16 h-16 rounded-2xl bg-primary flex items-center justify-center text-primary-foreground mx-auto mb-4 shadow-e2 relative overflow-hidden"
@@ -518,7 +519,7 @@ export function LoginScreen({ onLogin, cloudAuthError }: LoginScreenProps) {
           <motion.h1
             variants={{
               hidden: { opacity: 0, y: 6 },
-              visible: { opacity: 1, y: 0, transition: { duration: 0.25, ease: [0.32, 0.72, 0, 1] } },
+              visible: { opacity: 1, y: 0, transition: MOTION_TRANSITION.normal },
             }}
             className="text-2xl md:text-3xl font-bold tracking-tight"
           >
@@ -527,7 +528,7 @@ export function LoginScreen({ onLogin, cloudAuthError }: LoginScreenProps) {
           <motion.p
             variants={{
               hidden: { opacity: 0, y: 6 },
-              visible: { opacity: 1, y: 0, transition: { duration: 0.25, ease: [0.32, 0.72, 0, 1] } },
+              visible: { opacity: 1, y: 0, transition: MOTION_TRANSITION.normal },
             }}
             className="text-sm text-muted-foreground mt-1 max-w-md mx-auto"
           >
@@ -542,7 +543,7 @@ export function LoginScreen({ onLogin, cloudAuthError }: LoginScreenProps) {
           <motion.div
             initial={{ opacity: 0, y: -8 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.15, duration: 0.25, ease: [0.32, 0.72, 0, 1] }}
+            transition={{ ...MOTION_TRANSITION.normal, delay: 0.15 }}
             className="mb-3"
           >
             <Button
