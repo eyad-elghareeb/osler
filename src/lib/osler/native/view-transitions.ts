@@ -75,11 +75,15 @@ export function withViewTransition<T>(
     });
 
     // Clean up the direction attribute after the transition finishes so it
-    // doesn't leak into the next navigation.
+    // doesn't leak into the next navigation. Skipped transitions reject
+    // `finished` with an AbortError (a newer navigation superseded this one)
+    // — swallow it so it never surfaces as an unhandled rejection.
     if (transition?.finished) {
-      transition.finished.finally(() => {
-        root.removeAttribute(VT_DIR_ATTR);
-      });
+      transition.finished
+        .catch(() => {})
+        .finally(() => {
+          root.removeAttribute(VT_DIR_ATTR);
+        });
     }
   } catch {
     // Any failure — just run the callback directly.
