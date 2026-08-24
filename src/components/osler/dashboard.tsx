@@ -479,48 +479,57 @@ export function Dashboard({
         >
           {t("dash.featuredArticles")}
         </SectionHeading>
-        <motion.div
-          variants={staggerContainer}
-          initial="hidden"
-          animate="visible"
-          className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-8"
-        >
-          {featuredLoading
-            ? Array.from({ length: 3 }).map((_, i) => (
-                <div key={i} className="osler-card--default">
-                  <SkeletonCard lines={3} />
-                </div>
-              ))
-            : featuredArticles.map((a) => (
-            <motion.button
-              key={a.file}
-              type="button"
-              variants={fadeUp}
-              whileHover={{ y: -2 }}
-              whileTap={{ scale: 0.99 }}
-              onClick={() => onOpenArticle?.(a.file)}
-              className="text-start osler-card--default group hover:border-primary/40 hover:shadow-e2 transition-all"
-            >
-              <div className="flex items-center gap-2 mb-2 text-xs text-muted-foreground">
-                <BookOpen className="size-3.5" />
-                <span>{a.specialty}</span>
-                <span>·</span>
-                <span className="flex items-center gap-1">
-                  <Clock className="size-3" />
-                  {a.readTimeMin} min
-                </span>
+        {/* Featured articles — the loading skeleton sits OUTSIDE the stagger
+            container so placeholders never animate in/out; when previews
+            arrive they mount into their own container and stagger up exactly
+            once (swapping children inside an animated container re-ran the
+            entrance on every article, reading as a double flash). */}
+        {featuredLoading ? (
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-8">
+            {Array.from({ length: 3 }).map((_, i) => (
+              <div key={i} className="osler-card--default">
+                <SkeletonCard lines={3} />
               </div>
-              <h3 className="text-sm font-semibold mb-1 line-clamp-2 group-hover:text-primary transition-colors">
-                {a.title}
-              </h3>
-              <p className="text-xs text-muted-foreground line-clamp-2">
-                {/* Strip HTML for preview */}
-                {a.html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim().slice(0, 120)}
-                …
-              </p>
-            </motion.button>
-          ))}
-        </motion.div>
+            ))}
+          </div>
+        ) : featuredArticles.length > 0 ? (
+          <motion.div
+            variants={staggerContainer}
+            initial="hidden"
+            animate="visible"
+            className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-8"
+          >
+            {featuredArticles.map((a) => (
+              <motion.button
+                key={a.file}
+                type="button"
+                variants={fadeUp}
+                whileHover={{ y: -2 }}
+                whileTap={{ scale: 0.99 }}
+                onClick={() => onOpenArticle?.(a.file)}
+                className="text-start osler-card--default group hover:border-primary/40 hover:shadow-e2 transition-all"
+              >
+                <div className="flex items-center gap-2 mb-2 text-xs text-muted-foreground">
+                  <BookOpen className="size-3.5" />
+                  <span>{a.specialty}</span>
+                  <span>·</span>
+                  <span className="flex items-center gap-1">
+                    <Clock className="size-3" />
+                    {a.readTimeMin} min
+                  </span>
+                </div>
+                <h3 className="text-sm font-semibold mb-1 line-clamp-2 group-hover:text-primary transition-colors">
+                  {a.title}
+                </h3>
+                <p className="text-xs text-muted-foreground line-clamp-2">
+                  {/* Strip HTML for preview */}
+                  {a.html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim().slice(0, 120)}
+                  …
+                </p>
+              </motion.button>
+            ))}
+          </motion.div>
+        ) : null}
 
         {/* Recent packs */}
         {recentPacks.length > 0 ? (
