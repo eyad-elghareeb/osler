@@ -1800,11 +1800,19 @@ function HomeView({
   return (
     <div className="flex h-full overflow-hidden bg-background">
       <div className="flex-1 min-w-0 flex flex-col overflow-hidden">
-        {/* Page header — mobile: snaps away entirely on scroll-down (single
-            hysteresis-gated reflow, no height animation = no per-frame
-            reflow) leaving only the lean 3-tab strip. Desktop: static. */}
-        {!headerCollapsed && (
-          <div className="osler-fade-in px-4 md:px-6 lg:px-8 w-full max-w-7xl mx-auto pt-3 md:pt-4 pb-2">
+        {/* Page header — mobile: animates away on scroll-down exactly like
+            the app scroll-away bar (height + opacity via framer), leaving
+            the lean 3-tab strip. Desktop: static. */}
+        <motion.div
+          initial={false}
+          animate={{
+            height: headerCollapsed ? 0 : "auto",
+            opacity: headerCollapsed ? 0 : 1,
+          }}
+          transition={MOTION_TRANSITION.normal}
+          className="overflow-hidden shrink-0"
+        >
+          <div className="px-4 md:px-6 lg:px-8 w-full max-w-7xl mx-auto pt-3 md:pt-4 pb-2">
             <PageHeader
               inline
               inlineIcon={ClipboardCheck}
@@ -1812,7 +1820,7 @@ function HomeView({
               subtitle={t("qbank.home.subtitle")}
             />
           </div>
-        )}
+        </motion.div>
         {/* Tab bar — sticky with backdrop blur to prevent harsh card clipping */}
         <div className={cn(
           "shrink-0 border-b border-border w-full max-w-7xl mx-auto px-4 md:px-6 lg:px-8 bg-background/85 backdrop-blur-md supports-[backdrop-filter]:bg-background/70 z-20 transition-[box-shadow,background-color]",

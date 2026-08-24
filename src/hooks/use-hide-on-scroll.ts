@@ -13,17 +13,19 @@ import * as React from "react";
  * Collapse rules (the anti-oscillation contract):
  *  - Always expanded at/near the top (`SHOW_AT_TOP`).
  *  - Collapsing requires the page to have real scroll depth
- *    (`MIN_HIDE_RANGE`) at the moment of collapse — this filters out the
- *    rubber-band flapping of short pages.
- *  - ONE-SIDED on purpose: reclaiming chrome shrinks the scroller's range,
- *    so a collapsing page can dip under `MIN_HIDE_RANGE` right after
- *    hiding. Auto-expanding on that recreated a hide→shrink→expand loop.
- *    Therefore a low range never reveals the bar by itself — only upward
- *    intent (`UP_THRESHOLD`), reaching the top, or the page becoming
- *    genuinely unscrollable does (ResizeObserver safety net).
+ *    (`MIN_HIDE_RANGE`) at the moment of collapse.
+ *  - **Layout-shift filtering is the core defense.** Collapsing/revealing
+ *    the chrome resizes the scroller, which lowers/raises its max scroll
+ *    position; the browser then CLAMPS scrollTop without any user input,
+ *    emitting a large phantom counter-delta that reads as a reverse swipe
+ *    (this — not threshold tuning — is what caused persistent oscillation
+ *    on just-tall-enough pages). Any event whose scrollable range changed
+ *    is therefore treated as layout noise: resync and ignore.
  *  - Asymmetric bands (`DOWN_THRESHOLD` vs the larger `UP_THRESHOLD`),
  *    direction-change accumulator resets, and a `TOGGLE_COOLDOWN_MS`
- *    lockout absorb gesture settling.
+ *    lockout absorb gesture settling. A ResizeObserver expands the bar if
+ *    the page becomes genuinely unscrollable while hidden (no scroll
+ *    events fire to reveal through).
  *
  * @param retryKey change to reset state when the scroller is replaced
  * (active view / tab).
@@ -41,6 +43,7 @@ export function useHideOnScroll(retryKey: string | number = "default"): boolean 
   React.useEffect(() => {
     let el: HTMLElement | null = null;
     let lastY = 0;
+    let lastMax = 0;
     let down = 0;
     let up = 0;
     let lastToggle = 0;
@@ -58,7 +61,8 @@ export function useHideOnScroll(retryKey: string | number = "default"): boolean 
       typeof ResizeObserver !== "undefined"
         ? new ResizeObserver(() => {
             if (!el) return;
-            if (el.scrollHeight - el.clientHeight < UNSCROLLABLE_RANGE) {
+            lastMax = el.scrollHeight - el.clientHeight;
+            if (lastMax < UNSCROLLABLE_RANGE) {
               lastY = el.scrollTop;
               expand();
             }
@@ -71,9 +75,26 @@ export function useHideOnScroll(retryKey: string | number = "default"): boolean 
       if (target !== el) {
         el = target;
         ro?.observe(target);
+        lastY = el.scrollTop;
+        lastMax = el.scrollHeight - el.clientHeight;
+        down = 0;
+        up = 0;
       }
 
       const y = target.scrollTop;
+      const max = target.scrollHeight - target.clientHeight;
+
+      // Layout noise filter: a changed scrollable range means the browser
+      // clamped/adjusted scrollTop because content or chrome resized — not
+      // a gesture. Resync instead of feeding phantom deltas to hysteresis.
+      if (max !== lastMax) {
+        lastMax = max;
+        lastY = y;
+        down = 0;
+        up = 0;
+        return;
+      }
+
       if (y <= SHOW_AT_TOP) {
         lastY = y;
         expand();
@@ -97,9 +118,7 @@ export function useHideOnScroll(retryKey: string | number = "default"): boolean 
 
       if (down >= DOWN_THRESHOLD) {
         down = 0;
-        // Require real scroll depth to collapse — this is the only place
-        // range is consulted, so a post-collapse range dip can't loop us.
-        if (target.scrollHeight - target.clientHeight >= MIN_HIDE_RANGE) {
+        if (max >= MIN_HIDE_RANGE) {
           lastToggle = now;
           setHidden(true);
         }
