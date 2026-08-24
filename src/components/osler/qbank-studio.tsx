@@ -156,7 +156,7 @@ import { useLightbox } from "./lightbox-provider";
 import { useSwipeTabs } from "@/hooks/use-swipe-tabs";
 import { useQuizSettings } from "@/hooks/use-quiz-settings";
 import { setImmersiveMode } from "./immersive-mode";
-import { haptic, withViewTransition } from "@/lib/osler/native";
+import { haptic } from "@/lib/osler/native";
 import { gradeWithAI, createManualEvaluation, transcribePhoto } from "@/lib/osler/grading";
 import { useI18n } from "./i18n-provider";
 import { NavigationStack } from "./navigation-stack";
