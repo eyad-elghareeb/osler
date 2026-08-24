@@ -631,16 +631,19 @@ function MobileScrollAwayBar({
   // flapping the previous ±4px delta check suffered from.
   const hidden = useHideOnScroll(view);
 
+  // Snap away by unmounting instead of animating height: a height animation
+  // on a backdrop-blurred bar re-laid-out and re-rasterized the blur every
+  // frame for the whole page — the source of the choppy feel. One hysteresis-
+  // gated reflow + a compositor-only entrance fade reads just as native.
+  if (hidden || immersive) return null;
+
   return (
     <motion.div
-      initial={false}
-      animate={{
-        height: hidden || immersive ? 0 : 52,
-        opacity: hidden || immersive ? 0 : 1,
-      }}
-      transition={MOTION_TRANSITION.normal}
+      initial={{ opacity: 0, y: -6 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={MOTION_TRANSITION.fast}
       className={cn(
-        "md:hidden shrink-0 overflow-hidden",
+        "md:hidden shrink-0",
         "bg-background/80 backdrop-blur-md supports-[backdrop-filter]:bg-background/60",
         "border-b border-border",
       )}

@@ -1741,9 +1741,11 @@ function HomeView({
   const [contextMenuPos, setContextMenuPos] = React.useState<{ x: number; y: number } | null>(null);
 
   // Hide-on-scroll / collapsible app bar — shared hysteresis hook (re-runs
-  // its container lookup per tab) so short scrolls and momentum jitter
-  // can't flap the header.
-  const headerCollapsed = useHideOnScroll(homeTab);
+  // its container lookup per tab). Mobile only: when scrolled down, the
+  // header unmounts entirely so the lean tab strip is all that remains.
+  const isMobileHome = useIsMobile();
+  const scrolledDown = useHideOnScroll(homeTab);
+  const headerCollapsed = isMobileHome && scrolledDown;
 
   const handleContextMenu = React.useCallback((e: React.MouseEvent, node: ContentTreeNode) => {
     e.preventDefault();
@@ -1798,22 +1800,24 @@ function HomeView({
   return (
     <div className="flex h-full overflow-hidden bg-background">
       <div className="flex-1 min-w-0 flex flex-col overflow-hidden">
-        {/* Page header (collapsible on mobile scroll down) */}
-        <div
-          className={cn(
-            "px-4 md:px-6 lg:px-8 w-full max-w-7xl mx-auto pt-3 md:pt-4 pb-2 transition-all duration-300 ease-out origin-top",
-            headerCollapsed && "max-md:-translate-y-full max-md:h-0 max-md:opacity-0 max-md:py-0 max-md:overflow-hidden"
-          )}
-        >
-          <PageHeader
-            inline
-            inlineIcon={ClipboardCheck}
-            title={t("qbank.home.title")}
-            subtitle={t("qbank.home.subtitle")}
-          />
-        </div>
+        {/* Page header — mobile: snaps away entirely on scroll-down (single
+            hysteresis-gated reflow, no height animation = no per-frame
+            reflow) leaving only the lean 3-tab strip. Desktop: static. */}
+        {!headerCollapsed && (
+          <div className="osler-fade-in px-4 md:px-6 lg:px-8 w-full max-w-7xl mx-auto pt-3 md:pt-4 pb-2">
+            <PageHeader
+              inline
+              inlineIcon={ClipboardCheck}
+              title={t("qbank.home.title")}
+              subtitle={t("qbank.home.subtitle")}
+            />
+          </div>
+        )}
         {/* Tab bar — sticky with backdrop blur to prevent harsh card clipping */}
-        <div className="shrink-0 border-b border-border w-full max-w-7xl mx-auto px-4 md:px-6 lg:px-8 bg-background/85 backdrop-blur-md supports-[backdrop-filter]:bg-background/70 z-20 shadow-xs transition-colors">
+        <div className={cn(
+          "shrink-0 border-b border-border w-full max-w-7xl mx-auto px-4 md:px-6 lg:px-8 bg-background/85 backdrop-blur-md supports-[backdrop-filter]:bg-background/70 z-20 transition-[box-shadow,background-color]",
+          headerCollapsed ? "shadow-e1 bg-background" : "shadow-xs"
+        )}>
           {/* 3-col grid: [spacer | centered tabs | filter]
               The 1fr cols balance each other so the auto center is always
               geometrically centred. items-end aligns the border-b-2 underline
