@@ -1,54 +1,71 @@
 import * as React from "react";
 
 /**
- * useHideOnScroll — hide-on-scroll with hysteresis.
+ * useHideOnScroll — hide-on-scroll with hysteresis, for scroll-away chrome
+ * (mobile app bar, QBank collapsible header). Returns `true` when the bar
+ * should be collapsed.
  *
- * Returns `true` when the app bar should collapse (user is scrolling down),
- * `false` when it should expand. Replaces the previous per-component
- * implementations whose ±4px delta checks flapped the bar on short pages,
- * trackpad jitter, and iOS momentum bounce — any tiny alternating scroll
- * toggled the bar every frame ("freaking out").
+ * Attachment: one capture-phase `scroll` listener on `document` that reacts
+ * only to events from `.osler-page` elements. This sees every descendant
+ * scroller no matter when it mounts — skeleton→content swaps, lazy pack
+ * grids, tab switches — with zero polling/retry machinery. (The previous
+ * querySelector+rAF-retry version permanently gave up when the container
+ * appeared late or wasn't scrollable yet, which read as "the bar stopped
+ * working on some pages".)
  *
- * Behavior:
- *  - Always visible at/near the top of the page (`SHOW_AT_TOP`).
- *  - Hides only after ~24px of accumulated downward scroll; reveals after
- *    ~48px accumulated upward scroll. The asymmetric thresholds are the
- *    hysteresis band: small jitters never cross them, and direction changes
- *    reset the accumulators so mixed micro-scrolls can't add up.
- *  - Attaches to `.osler-page` only when it actually overflows — on short
- *    non-scrolling pages the bar stays put instead of chasing phantom
- *    fallback containers.
+ * Collapse rules (the anti-oscillation contract):
+ *  - Always expanded at/near the top (`SHOW_AT_TOP`).
+ *  - Never collapses on short pages: if the scrollable range is under
+ *    `MIN_RANGE`, rubber-band bounce dominates and hiding buys nothing —
+ *    this is what made short scrolls oscillate before.
+ *  - Hides after `DOWN_THRESHOLD` of sustained downward scroll; reveals
+ *    after the larger `UP_THRESHOLD` upward (asymmetric hysteresis band).
+ *    Direction changes reset the accumulators.
+ *  - A `TOGGLE_COOLDOWN_MS` lockout after each flip kills residual
+ *    flip-flopping from gesture settling.
  *
- * @param retryKey change this to re-find the scroll container (e.g. the
- * active view or tab) after it has been replaced in the DOM.
+ * @param retryKey change to reset state when the scroller is replaced
+ * (active view / tab).
  */
 const SHOW_AT_TOP = 40;
+const MIN_RANGE = 140;
 const DOWN_THRESHOLD = 24;
 const UP_THRESHOLD = 48;
-const RETRY_FRAMES = 30;
+const TOGGLE_COOLDOWN_MS = 280;
 
 export function useHideOnScroll(retryKey: string | number = "default"): boolean {
   const [hidden, setHidden] = React.useState(false);
 
   React.useEffect(() => {
-    let el: HTMLElement | null = null;
-    let rafId = 0;
     let lastY = 0;
     let down = 0;
     let up = 0;
-    let attempts = 0;
+    let lastToggle = 0;
 
-    const onScroll = () => {
-      if (!el) return;
-      const y = el.scrollTop;
-      // Near the top the bar always expands — it carries brand + search.
+    const expand = () => {
+      down = 0;
+      up = 0;
+      setHidden(false);
+    };
+
+    const onScroll = (e: Event) => {
+      const target = e.target as HTMLElement | null;
+      if (!target || !target.classList || !target.classList.contains("osler-page")) return;
+
+      const y = target.scrollTop;
       if (y <= SHOW_AT_TOP) {
-        down = 0;
-        up = 0;
-        setHidden(false);
         lastY = y;
+        expand();
         return;
       }
+
+      // Short page — nothing meaningful to scroll past; keep chrome stable.
+      if (target.scrollHeight - target.clientHeight < MIN_RANGE) {
+        lastY = y;
+        expand();
+        return;
+      }
+
       const delta = y - lastY;
       lastY = y;
       if (delta > 0) {
@@ -60,46 +77,25 @@ export function useHideOnScroll(retryKey: string | number = "default"): boolean 
       } else {
         return;
       }
+
+      const now = performance.now();
+      if (now - lastToggle < TOGGLE_COOLDOWN_MS) return;
       if (down >= DOWN_THRESHOLD) {
         down = 0;
+        lastToggle = now;
         setHidden(true);
       } else if (up >= UP_THRESHOLD) {
         up = 0;
+        lastToggle = now;
         setHidden(false);
       }
     };
 
-    const findContainer = () => {
-      const node = document.querySelector(".osler-page") as HTMLElement | null;
-      return node && node.scrollHeight > node.clientHeight ? node : null;
-    };
+    document.addEventListener("scroll", onScroll, { capture: true, passive: true });
+    // Fresh view/tab always starts expanded, whatever scroll depth restores.
+    expand();
 
-    const attach = () => {
-      const next = findContainer();
-      if (next !== el) {
-        if (el) el.removeEventListener("scroll", onScroll);
-        el = next;
-        if (el) {
-          el.addEventListener("scroll", onScroll, { passive: true });
-          lastY = el.scrollTop;
-          setHidden(false);
-        }
-      }
-    };
-
-    // Attach now and retry a few frames until the freshly mounted view's
-    // container appears — bounded work, no observers or intervals.
-    const retry = () => {
-      attach();
-      if (el || ++attempts > RETRY_FRAMES) return;
-      rafId = requestAnimationFrame(retry);
-    };
-    retry();
-
-    return () => {
-      cancelAnimationFrame(rafId);
-      if (el) el.removeEventListener("scroll", onScroll);
-    };
+    return () => document.removeEventListener("scroll", onScroll, { capture: true });
   }, [retryKey]);
 
   return hidden;

@@ -440,7 +440,7 @@ The shared primitives below were added to raise the craft of the existing app wi
 - `<Pressable>` — button/div that scales to 0.97 on tap (`pressFeedback`). Replaces hand-rolled `whileTap`.
 - `<HoverLift>` — subtle hover scale for interactive icons/cards.
 
-*Scroll-aware chrome*: `useHideOnScroll(retryKey)` from `@/hooks/use-hide-on-scroll.ts` is the only sanctioned hide-on-scroll implementation (mobile scroll-away bar, QBank header). Its hysteresis band (~24px down to hide, ~48px up to reveal, always visible near top) prevents the bar from flapping on short scrolls and momentum jitter — never re-implement delta-threshold scroll listeners.
+*Scroll-aware chrome*: `useHideOnScroll(retryKey)` from `@/hooks/use-hide-on-scroll.ts` is the only sanctioned hide-on-scroll implementation (mobile scroll-away bar, QBank header). It listens in capture phase for `.osler-page` scrollers (works with late-mounted/growing content — no polling), always stays expanded near the top and on short pages (<140px scroll range), hides after ~24px sustained down-scroll, reveals after ~48px up, with a 280ms toggle cooldown. Bars themselves snap (conditional render) + 0.15s compositor-only entrance — never animate their height, and never re-implement delta-threshold scroll listeners.
 
 All primitives animate only `opacity`/`transform` (compositor-friendly) and respect `prefers-reduced-motion` via `AnimationsProvider` + `data-animations="off"`. No component may define a new duration/easing/spring locally — add it to the token table first with a rationale.
 
