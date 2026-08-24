@@ -14,9 +14,10 @@ import {
 } from "lucide-react";
 import { useI18n } from "@/components/osler/i18n-provider";
 import { SectionHeading } from "@/components/osler/ui-primitives";
+import { Stagger } from "@/components/osler/motion-primitives";
 import { haptic } from "@/lib/osler/native";
 import { cn } from "@/lib/utils";
-import { MOTION_TRANSITION } from "@/lib/osler/motion";
+import { listItemEnter } from "@/lib/osler/motion";
 
 /**
  * AdminQuickActions — shortcut cards to the admin sections an admin
@@ -47,21 +48,20 @@ export function AdminQuickActions() {
   return (
     <section>
       <SectionHeading>{t("admin.dashboard.quickActions")}</SectionHeading>
-      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
-        {ACTIONS.map((a, i) => {
+      {/* Stagger container drives the entrance; variants live on each card
+          div so the grid children keep their sizing (see dashboard precedent). */}
+      <Stagger className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
+        {ACTIONS.map((a) => {
           const Icon = a.icon;
           return (
             <motion.div
               key={a.href}
-              initial={{ opacity: 0, y: 4 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ ...MOTION_TRANSITION.quick, delay: i * 0.04 }}
+              variants={listItemEnter}
               whileHover={{ y: -2 }}
               whileTap={{ scale: 0.99 }}
             >
               <Link
                 href={a.href}
-                prefetch={false}
                 onClick={() => haptic("selection")}
                 className="text-start osler-card--default group flex items-center gap-3 hover:border-primary/40 hover:shadow-e2 transition-all"
               >
@@ -82,7 +82,7 @@ export function AdminQuickActions() {
             </motion.div>
           );
         })}
-      </div>
+      </Stagger>
     </section>
   );
 }
