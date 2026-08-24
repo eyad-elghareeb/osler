@@ -154,6 +154,7 @@ import { useIsMobile } from "@/hooks/use-mobile";
 import { VerticalSnapGallery } from "./vertical-snap-gallery";
 import { useLightbox } from "./lightbox-provider";
 import { useSwipeTabs } from "@/hooks/use-swipe-tabs";
+import { useHideOnScroll } from "@/hooks/use-hide-on-scroll";
 import { useQuizSettings } from "@/hooks/use-quiz-settings";
 import { setImmersiveMode } from "./immersive-mode";
 import { haptic } from "@/lib/osler/native";
@@ -1739,64 +1740,10 @@ function HomeView({
   const [contextMenuNode, setContextMenuNode] = React.useState<ContentTreeNode | null>(null);
   const [contextMenuPos, setContextMenuPos] = React.useState<{ x: number; y: number } | null>(null);
 
-  // Hide-on-scroll / collapsible app bar logic for mobile viewports
-  const [headerCollapsed, setHeaderCollapsed] = React.useState(false);
-  const lastScrollYRef = React.useRef(0);
-
-  React.useEffect(() => {
-    let scrollEl: HTMLElement | null = null;
-    let rafId = 0;
-
-    const findContainer = () => {
-      const el = document.querySelector(".osler-page") as HTMLElement | null;
-      if (el && el.scrollHeight > el.clientHeight) return el;
-      return null;
-    };
-
-    const onScroll = () => {
-      cancelAnimationFrame(rafId);
-      rafId = requestAnimationFrame(() => {
-        if (!scrollEl) return;
-        const y = scrollEl.scrollTop;
-        const delta = y - lastScrollYRef.current;
-        if (y < 15) {
-          setHeaderCollapsed(false);
-        } else if (delta > 4 && y > 30) {
-          setHeaderCollapsed(true);
-        } else if (delta < -4) {
-          setHeaderCollapsed(false);
-        }
-        lastScrollYRef.current = y;
-      });
-    };
-
-    const attach = () => {
-      const next = findContainer();
-      if (next !== scrollEl) {
-        if (scrollEl) scrollEl.removeEventListener("scroll", onScroll);
-        scrollEl = next;
-        if (scrollEl) {
-          scrollEl.addEventListener("scroll", onScroll, { passive: true });
-          lastScrollYRef.current = scrollEl.scrollTop;
-        }
-      }
-    };
-
-    // Attach now and retry for a few frames until the scroll container
-    // appears — no permanent polling interval.
-    let attempts = 0;
-    const retry = () => {
-      attach();
-      if (scrollEl || ++attempts > 30) return;
-      rafId = requestAnimationFrame(retry);
-    };
-    retry();
-
-    return () => {
-      cancelAnimationFrame(rafId);
-      if (scrollEl) scrollEl.removeEventListener("scroll", onScroll);
-    };
-  }, [homeTab]);
+  // Hide-on-scroll / collapsible app bar — shared hysteresis hook (re-runs
+  // its container lookup per tab) so short scrolls and momentum jitter
+  // can't flap the header.
+  const headerCollapsed = useHideOnScroll(homeTab);
 
   const handleContextMenu = React.useCallback((e: React.MouseEvent, node: ContentTreeNode) => {
     e.preventDefault();

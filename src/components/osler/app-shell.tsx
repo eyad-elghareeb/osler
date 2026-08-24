@@ -45,6 +45,7 @@ import { useOslerTheme } from "./theme-provider";
 import { useI18n } from "./i18n-provider";
 import { MobileTabBar } from "./mobile-tab-bar";
 import { useImmersiveMode } from "./immersive-mode";
+import { useHideOnScroll } from "@/hooks/use-hide-on-scroll";
 import { PwaInstallButton } from "./pwa-install-button";
 import { LightboxProvider } from "./lightbox-provider";
 import { GlobalSearchPanel } from "./global-search-panel";
@@ -626,75 +627,9 @@ function MobileScrollAwayBar({
   const { t } = useI18n();
   const { navigate } = useOslerRouter();
   const immersive = useImmersiveMode();
-  const lastScrollY = React.useRef(0);
-  const [hidden, setHidden] = React.useState(false);
-
-  React.useEffect(() => {
-    let scrollEl: HTMLElement | null = null;
-    let rafId = 0;
-    let attempts = 0;
-
-    const findScrollContainer = () => {
-      // Search the document for .osler-page (the canonical scroll container).
-      // The bar is a sibling of .osler-page inside <main>, so we can't search
-      // downward from the bar's own ref — we search from document.
-      const el = document.querySelector(".osler-page") as HTMLElement | null;
-      if (el && el.scrollHeight > el.clientHeight) return el;
-      // Also try any element with overflow-y auto/scroll that's a descendant of main
-      const main = document.querySelector("main");
-      if (main) {
-        const scrollable = main.querySelector("[class*='overflow-y-auto'], [class*='overflow-auto']") as HTMLElement | null;
-        if (scrollable && scrollable.scrollHeight > scrollable.clientHeight) return scrollable;
-      }
-      return null;
-    };
-
-    const onScroll = () => {
-      cancelAnimationFrame(rafId);
-      rafId = requestAnimationFrame(() => {
-        if (!scrollEl) return;
-        const y = scrollEl.scrollTop;
-        const delta = y - lastScrollY.current;
-        if (y < 40) {
-          setHidden(false);
-        } else if (delta > 4) {
-          setHidden(true);
-        } else if (delta < -4) {
-          setHidden(false);
-        }
-        lastScrollY.current = y;
-      });
-    };
-
-    const attach = () => {
-      const next = findScrollContainer();
-      if (next !== scrollEl) {
-        if (scrollEl) scrollEl.removeEventListener("scroll", onScroll);
-        scrollEl = next;
-        if (scrollEl) {
-          scrollEl.addEventListener("scroll", onScroll, { passive: true });
-          lastScrollY.current = scrollEl.scrollTop;
-          setHidden(false);
-        }
-      }
-    };
-
-    // Attach now and retry for a few frames until the freshly mounted view's
-    // scroll container appears. The previous body-wide MutationObserver +
-    // setInterval re-ran document-wide querySelectors on every DOM mutation
-    // batch and every 500ms, stalling exactly when navigation was busiest.
-    const retry = () => {
-      attach();
-      if (scrollEl || ++attempts > 30) return;
-      rafId = requestAnimationFrame(retry);
-    };
-    retry();
-
-    return () => {
-      cancelAnimationFrame(rafId);
-      if (scrollEl) scrollEl.removeEventListener("scroll", onScroll);
-    };
-  }, [view]);
+  // Hysteresis hide-on-scroll — immune to the short-scroll / momentum-jitter
+  // flapping the previous ±4px delta check suffered from.
+  const hidden = useHideOnScroll(view);
 
   return (
     <motion.div
