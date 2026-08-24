@@ -1782,12 +1782,18 @@ function HomeView({
       }
     };
 
-    const interval = setInterval(attach, 300);
-    attach();
+    // Attach now and retry for a few frames until the scroll container
+    // appears — no permanent polling interval.
+    let attempts = 0;
+    const retry = () => {
+      attach();
+      if (scrollEl || ++attempts > 30) return;
+      rafId = requestAnimationFrame(retry);
+    };
+    retry();
 
     return () => {
       cancelAnimationFrame(rafId);
-      clearInterval(interval);
       if (scrollEl) scrollEl.removeEventListener("scroll", onScroll);
     };
   }, [homeTab]);

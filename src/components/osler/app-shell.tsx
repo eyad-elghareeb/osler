@@ -18,6 +18,7 @@ import {
   ShieldCheck,
 } from "lucide-react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { readCloudSession, syncGeminiKeyFromCloud, type CloudSession } from "@/lib/osler/cloud";
 
 import {
@@ -126,7 +127,7 @@ function directionFor(from: OslerView, to: OslerView): ViewTransitionDirection {
 }
 
 import { useOslerSession } from "@/lib/osler/session-context";
-import { useCurrentView, useOslerRouter } from "@/lib/osler/navigation";
+import { useCurrentView, useOslerRouter, prefetchTopLevelRoutes } from "@/lib/osler/navigation";
 import { loadContentByUid } from "@/lib/osler/content";
 import { AutoResumeSessionDialog } from "./resume-session-dialog";
 
@@ -174,6 +175,22 @@ export function AppShell({ children }: AppShellProps) {
   React.useEffect(() => {
     setVtActive(isViewTransitionsSupported());
   }, []);
+
+  // Warm the router cache for every top-level route once the shell is idle.
+  // Programmatic navigation (buttons → router.push) never gets <Link>-style
+  // prefetching, so without this the first push to each view pays a payload
+  // fetch + chunk load while a view transition holds the page frozen.
+  const navRouter = useRouter();
+  React.useEffect(() => {
+    const idle = (cb: () => void) => {
+      if (typeof window.requestIdleCallback === "function") {
+        window.requestIdleCallback(cb, { timeout: 2000 });
+      } else {
+        setTimeout(cb, 1200);
+      }
+    };
+    idle(() => prefetchTopLevelRoutes((href) => navRouter.prefetch(href)));
+  }, [navRouter]);
 
   const handleViewChange = React.useCallback(
     (next: OslerView) => {
@@ -413,6 +430,7 @@ export function AppShell({ children }: AppShellProps) {
             on scroll up. Instagram-style collapse. Desktop uses the full top
             bar above. */}
         <MobileScrollAwayBar
+          view={view}
           cloudSession={cloudSession}
           username={username}
           syncStatus={syncStatus}
@@ -576,6 +594,7 @@ function UserMenu({
  * inside <main>, not a parent, so we search from the document root).
  */
 function MobileScrollAwayBar({
+  view,
   cloudSession,
   username,
   syncStatus,
@@ -585,6 +604,8 @@ function MobileScrollAwayBar({
   onToggleTheme,
   onSignOut,
 }: {
+  /** Active view — re-finds the scroll container whenever it changes. */
+  view: OslerView;
   cloudSession: CloudSession | null;
   username?: string | null;
   syncStatus: "synced" | "syncing" | "offline";
@@ -604,6 +625,7 @@ function MobileScrollAwayBar({
   React.useEffect(() => {
     let scrollEl: HTMLElement | null = null;
     let rafId = 0;
+    let attempts = 0;
 
     const findScrollContainer = () => {
       // Search the document for .osler-page (the canonical scroll container).
@@ -650,18 +672,22 @@ function MobileScrollAwayBar({
       }
     };
 
-    // Re-find the scroll container on DOM mutations (view swaps) + poll.
-    const observer = new MutationObserver(() => attach());
-    observer.observe(document.body, { childList: true, subtree: true });
-    const interval = setInterval(attach, 500);
+    // Attach now and retry for a few frames until the freshly mounted view's
+    // scroll container appears. The previous body-wide MutationObserver +
+    // setInterval re-ran document-wide querySelectors on every DOM mutation
+    // batch and every 500ms, stalling exactly when navigation was busiest.
+    const retry = () => {
+      attach();
+      if (scrollEl || ++attempts > 30) return;
+      rafId = requestAnimationFrame(retry);
+    };
+    retry();
 
     return () => {
       cancelAnimationFrame(rafId);
-      observer.disconnect();
-      clearInterval(interval);
       if (scrollEl) scrollEl.removeEventListener("scroll", onScroll);
     };
-  }, []);
+  }, [view]);
 
   return (
     <motion.div
