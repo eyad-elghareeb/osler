@@ -128,6 +128,7 @@ function directionFor(from: OslerView, to: OslerView): ViewTransitionDirection {
 
 import { useOslerSession } from "@/lib/osler/session-context";
 import { useCurrentView, useOslerRouter, prefetchTopLevelRoutes } from "@/lib/osler/navigation";
+import { loadCategoryTrees } from "@/lib/osler/content";
 import { loadContentByUid } from "@/lib/osler/content";
 import { AutoResumeSessionDialog } from "./resume-session-dialog";
 
@@ -179,7 +180,9 @@ export function AppShell({ children }: AppShellProps) {
   // Warm the router cache for every top-level route once the shell is idle.
   // Programmatic navigation (buttons → router.push) never gets <Link>-style
   // prefetching, so without this the first push to each view pays a payload
-  // fetch + chunk load while a view transition holds the page frozen.
+  // fetch + chunk load while a view transition holds the page frozen. The
+  // same idle pass warms every enabled engine's manifest tree, so first
+  // hub visits paint entries instead of a skeleton flash.
   const navRouter = useRouter();
   React.useEffect(() => {
     const idle = (cb: () => void) => {
@@ -189,7 +192,10 @@ export function AppShell({ children }: AppShellProps) {
         setTimeout(cb, 1200);
       }
     };
-    idle(() => prefetchTopLevelRoutes((href) => navRouter.prefetch(href)));
+    idle(() => {
+      prefetchTopLevelRoutes((href) => navRouter.prefetch(href));
+      void loadCategoryTrees().catch(() => {});
+    });
   }, [navRouter]);
 
   const handleViewChange = React.useCallback(

@@ -24,6 +24,15 @@ export type ViewTransitionDirection = "forward" | "backward" | "none";
 
 const VT_DIR_ATTR = "data-vt-direction";
 
+/**
+ * True while a view transition is capturing/animating. A newer
+ * startViewTransition auto-skips an in-flight one, but every skip still pays
+ * a full-page snapshot capture — under rapid taps that cost lands right in
+ * the middle of navigation and shows up as jank. While this flag is set we
+ * run updates directly: an instant swap beats a queued transition.
+ */
+let vtInFlight = false;
+
 function prefersReducedMotion(): boolean {
   if (typeof window === "undefined" || !window.matchMedia) return false;
   try {
@@ -56,8 +65,9 @@ export function withViewTransition<T>(
   cb: () => T | Promise<T>,
   direction: ViewTransitionDirection = "none",
 ): void {
-  // Reduced motion / unsupported: run directly, no snapshot roundtrip.
-  if (prefersReducedMotion() || !isViewTransitionsSupported()) {
+  // Reduced motion / unsupported / transition already settling: run
+  // directly, no snapshot roundtrip.
+  if (prefersReducedMotion() || !isViewTransitionsSupported() || vtInFlight) {
     void Promise.resolve(cb());
     return;
   }
@@ -70,6 +80,7 @@ export function withViewTransition<T>(
       root.removeAttribute(VT_DIR_ATTR);
     }
 
+    vtInFlight = true;
     const transition = (document as any).startViewTransition(async () => {
       await cb();
     });
@@ -82,10 +93,14 @@ export function withViewTransition<T>(
       transition.finished
         .catch(() => {})
         .finally(() => {
+          vtInFlight = false;
           root.removeAttribute(VT_DIR_ATTR);
         });
+    } else {
+      vtInFlight = false;
     }
   } catch {
+    vtInFlight = false;
     // Any failure — just run the callback directly.
     void Promise.resolve(cb());
   }

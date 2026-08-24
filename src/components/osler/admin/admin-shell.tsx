@@ -575,7 +575,6 @@ function SidebarLink({
   return (
     <Link
       href={item.href}
-      prefetch={false}
       onClick={(e) => {
         // Let modified clicks / middle clicks / non-left clicks keep native
         // link behavior (new tab, etc.).
