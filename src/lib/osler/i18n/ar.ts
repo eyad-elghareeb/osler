@@ -627,6 +627,8 @@ export const ar = {
     "osce.home.title": "OSCE",
     "osce.home.subtitle": "محطات المهارات السريرية مع مرضى افتراضيين.",
     "osce.home.empty": "لا توجد محطات OSCE متاحة.",
+    "osce.home.loading": "جارٍ تحميل المحطات…",
+    "osce.folder.stats": "{packs} حزمة · {stations} محطات",
     "osce.home.start": "ابدأ المحطة",
     "osce.home.time": "{n} د",
     "osce.home.examiner": "الممتحن",

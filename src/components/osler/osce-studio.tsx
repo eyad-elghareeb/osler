@@ -38,7 +38,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { loadCategoryTree, loadContentByUid, flattenTree, packBasePath } from "@/lib/osler/content";
+import { loadCategoryTree, loadContentByUid, flattenTree, packBasePath, getCachedCategoryTree } from "@/lib/osler/content";
 import { resolveContentAsset } from "@/lib/osler/richtext";
 import { NavigationStack } from "./navigation-stack";
 import type {
@@ -887,7 +887,9 @@ export function OsceStudio({
 
   /* ── State ── */
   const [allPacks, setAllPacks] = React.useState<Array<{ node: ContentTreeNode; content: OsceContent | null }>>([]);
-  const [packsLoading, setPacksLoading] = React.useState(true);
+  // Seeded from the sync manifest cache so a warm revisit paints the hub
+  // instantly instead of flashing the loading spinner.
+  const [packsLoading, setPacksLoading] = React.useState(() => getCachedCategoryTree("osce") === null);
   const [stations, setStations] = React.useState<OsceStation[]>([]);
   const [activeIdx, setActiveIdx] = React.useState(0);
   const [phase, setPhase] = React.useState<OscePhase>("select");
@@ -1041,7 +1043,8 @@ export function OsceStudio({
    * which is exactly the set of packs that can be loaded by uid.
    */
   React.useEffect(() => {
-    setPacksLoading(true);
+    // packsLoading's lazy initializer already reflects cold vs warm cache;
+    // only flip it off when the (possibly cached) tree resolves.
     loadCategoryTree("osce")
       .then((nodes) => {
         // Preserve the full folder tree for the hub's folder-by-folder
@@ -2093,7 +2096,7 @@ export function OsceStudio({
           <div className="min-w-0 flex-1">
             <h3 className="font-semibold text-sm truncate">{node.title}</h3>
             <p className="text-xs text-muted-foreground mt-0.5">
-              {fs.packs} {fs.packs === 1 ? "pack" : "packs"} · {fs.stations} {fs.stations === 1 ? "station" : "stations"}
+              {t("osce.folder.stats", { packs: fs.packs, stations: fs.stations })}
             </p>
           </div>
           <ChevronRight className="size-4 text-muted-foreground/40 group-hover:text-primary transition-colors shrink-0" />
@@ -2158,7 +2161,7 @@ export function OsceStudio({
                 className="text-destructive/80 hover:text-destructive text-[11px] font-medium underline"
                 onClick={() => setError(null)}
               >
-                Dismiss
+                {t("common.dismiss")}
               </button>
             </div>
           )}
@@ -2168,7 +2171,7 @@ export function OsceStudio({
           {packsLoading ? (
             <div className="osler-loading">
               <Loader2 className="size-6 animate-spin text-primary" />
-              <span className="text-sm">Loading scenarios…</span>
+              <span className="text-sm">{t("osce.home.loading")}</span>
             </div>
           ) : filteredRootTree.length === 0 ? (
             <div className="osler-empty">

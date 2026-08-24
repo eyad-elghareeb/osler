@@ -626,6 +626,8 @@ export const en = {
     "osce.home.title": "OSCE",
     "osce.home.subtitle": "Clinical skills stations with virtual patients.",
     "osce.home.empty": "No OSCE stations available.",
+    "osce.home.loading": "Loading scenarios…",
+    "osce.folder.stats": "{packs} packs · {stations} stations",
     "osce.home.start": "Start station",
     "osce.home.time": "{n} min",
     "osce.home.examiner": "Examiner",

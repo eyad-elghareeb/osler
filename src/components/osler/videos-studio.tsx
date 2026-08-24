@@ -29,7 +29,7 @@ import {
   resolveThumbnail,
   formatDuration,
 } from "@/lib/osler/videos";
-import { packBasePath } from "@/lib/osler/content";
+import { packBasePath, getCachedCategoryTree } from "@/lib/osler/content";
 import { settings } from "@/lib/osler/storage";
 import type { VideoResource, ContentTreeNode } from "@/lib/osler/types";
 import { cn } from "@/lib/utils";
@@ -99,12 +99,14 @@ export function VideosStudio({
   const onNavigateBack = propOnNavigateBack || (() => navigate("learn"));
   const onOpenArticle = propOnOpenArticle || ((id: string) => navigate("library", { article: id }));
 
-  const [tree, setTree] = React.useState<ContentTreeNode[]>([]);
+  const [tree, setTree] = React.useState<ContentTreeNode[]>(() => getCachedCategoryTree("video") ?? []);
   // Tracks the initial tree/video-list fetch only (not per-folder loads,
   // which already have their own `folderLoading` shimmer grid) — without
   // this the hub previously rendered as if it were genuinely empty for a
-  // frame before data arrived. See design-library-roadmap.md.
-  const [treeLoading, setTreeLoading] = React.useState(true);
+  // frame before data arrived. Seeded from the sync manifest cache so a
+  // warm revisit paints instantly instead of flashing the skeleton.
+  // See design-library-roadmap.md.
+  const [treeLoading, setTreeLoading] = React.useState(() => getCachedCategoryTree("video") === null);
   const [selectedNodeUid, setSelectedNodeUid] = React.useState<string | null>(null);
   const [folderVideos, setFolderVideos] = React.useState<VideoResource[]>([]);
   const [folderLoading, setFolderLoading] = React.useState(false);
