@@ -120,9 +120,22 @@ export function waitForRouteChange(beforeUrl: string, maxFrames = 40): Promise<v
 }
 
 /**
+ * How long a view transition may hold the frozen pre-navigation snapshot
+ * while waiting for the router to commit the new route. Warm (prefetched)
+ * commits land in 1–3 frames, so the wait is invisible; beyond this budget
+ * we start the animation anyway and let the new page paint when it's ready —
+ * holding the page inert any longer reads as a hang.
+ */
+const COMMIT_BUDGET_MS = 280;
+
+/**
  * Push a new SPA route inside a view transition, waiting for the router to
  * actually render it so the browser crossfades old→new (not old→old).
  * Falls back to a plain push when VT is unsupported or reduced motion is on.
+ *
+ * The commit wait races COMMIT_BUDGET_MS: if the route is slow (cold cache,
+ * dev compile), the transition starts without it instead of freezing the
+ * page until the cap.
  *
  * `push` is typically Next.js's router.push — any synchronous kick-off of an
  * async client-side navigation works.
@@ -135,7 +148,10 @@ export function pushWithViewTransition(
   withViewTransition(async () => {
     const before = window.location.pathname + window.location.search;
     push(path);
-    await waitForRouteChange(before);
+    await Promise.race([
+      waitForRouteChange(before),
+      new Promise<void>((resolve) => setTimeout(resolve, COMMIT_BUDGET_MS)),
+    ]);
   }, direction);
 }
 
