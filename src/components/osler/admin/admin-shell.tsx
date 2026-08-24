@@ -3,7 +3,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
 import {
   Activity,
   LayoutDashboard,
@@ -35,7 +35,7 @@ import { Badge } from "@/components/ui/badge";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { useI18n } from "@/components/osler/i18n-provider";
 import { readCloudSession, clearCloudSession } from "@/lib/osler/cloud";
-import { haptic } from "@/lib/osler/native";
+import { haptic, pushWithViewTransition, isViewTransitionsSupported } from "@/lib/osler/native";
 import { cn } from "@/lib/utils";
 import { LoadingState } from "@/components/osler/ui-primitives";
 import { AdminLoginPrompt } from "@/components/osler/admin/admin-login-prompt";
@@ -82,6 +82,14 @@ function AdminShellInner({ children }: AdminShellProps) {
   const [loading, setLoading] = React.useState(true);
   const [pendingCount, setPendingCount] = React.useState(0);
   const [mobileNavOpen, setMobileNavOpen] = React.useState(false);
+
+  // When the browser can run View Transitions, the keyed page container
+  // skips its framer fade (the VT crossfade handles it) — same contract as
+  // the main AppShell.
+  const [vtActive, setVtActive] = React.useState(false);
+  React.useEffect(() => {
+    setVtActive(isViewTransitionsSupported());
+  }, []);
 
   // Try to restore session on mount.
   // In dev mode (NODE_ENV !== production), if no cloud session and no cloud
@@ -240,7 +248,6 @@ function AdminShellInner({ children }: AdminShellProps) {
   ];
 
   const sidebarCollapsed = settings.sidebarCollapsed;
-  const reducedMotion = settings.reducedMotion;
 
   // ── Render: full shell
   return (
@@ -431,26 +438,23 @@ function AdminShellInner({ children }: AdminShellProps) {
           </SheetContent>
         </Sheet>
 
-        {/* Main content */}
+        {/* Main content — keyed by pathname so each admin page mounts fresh.
+            Enter-only fade (no exit): AnimatePresence mode="wait" faded the
+            outgoing page out completely before mounting the incoming one,
+            which blanked the viewport between every sidebar navigation. The
+            swap is instant; a short fade-in on the new page is the only
+            animation. Sidebar links run through pushWithViewTransition, which
+            crossfades old→new via the View Transitions API when supported. */}
         <main className="flex-1 min-h-0 overflow-y-auto osler-scroll-y">
-          {reducedMotion ? (
-            <div key={pathname} className="h-full">
-              <AdminProvider identity={identity}>{children}</AdminProvider>
-            </div>
-          ) : (
-            <AnimatePresence mode="wait">
-              <motion.div
-                key={pathname}
-                initial={{ opacity: 0, y: 6 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0 }}
-                transition={{ duration: 0.18 }}
-                className="h-full"
-              >
-                <AdminProvider identity={identity}>{children}</AdminProvider>
-              </motion.div>
-            </AnimatePresence>
-          )}
+          <motion.div
+            key={pathname}
+            initial={vtActive ? false : { opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ duration: 0.18, ease: [0.25, 1, 0.5, 1] }}
+            className="h-full"
+          >
+            <AdminProvider identity={identity}>{children}</AdminProvider>
+          </motion.div>
         </main>
       </div>
     </div>
@@ -564,15 +568,29 @@ function SidebarLink({
   onNavigate?: () => void;
 }) {
   const { t } = useI18n();
+  const router = useRouter();
+  const { settings } = useAdminSettings();
   const Icon = item.icon;
   const label = t(item.labelKey as any);
   return (
     <Link
       href={item.href}
       prefetch={false}
-      onClick={() => {
+      onClick={(e) => {
+        // Let modified clicks / middle clicks / non-left clicks keep native
+        // link behavior (new tab, etc.).
+        if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) return;
+        e.preventDefault();
         haptic("selection");
         onNavigate?.();
+        // The admin reduced-motion setting forces near-zero CSS transitions
+        // via .admin-reduced-motion, which can't reach ::view-transition
+        // pseudo-elements — skip the snapshot roundtrip entirely there.
+        if (settings.reducedMotion) {
+          router.push(item.href);
+          return;
+        }
+        pushWithViewTransition((p) => router.push(p), item.href);
       }}
       title={collapsed ? label : undefined}
       className={cn(
