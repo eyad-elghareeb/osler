@@ -405,25 +405,23 @@ export function Settings({
               </nav>
             </aside>
 
-            {/* Content pane */}
+            {/* Content pane — keyed motion.div with a direction-aware
+                enter slide only; no exit animation (mode="wait" blanked the
+                pane between section switches). */}
             <div className="min-w-0">
-              <AnimatePresence mode="wait" custom={sectionDirection}>
-                <motion.div
-                  key={section}
-                  custom={sectionDirection}
-                  variants={{
-                    enter: (dir: 1 | -1) => ({ opacity: 0, y: 10 * dir }),
-                    center: { opacity: 1, y: 0 },
-                    exit: (dir: 1 | -1) => ({ opacity: 0, y: -10 * dir }),
-                  }}
-                  initial="enter"
-                  animate="center"
-                  exit="exit"
-                  transition={{ duration: 0.18, ease: [0.32, 0.72, 0, 1] }}
-                >
-                  {renderSection(section)}
-                </motion.div>
-              </AnimatePresence>
+              <motion.div
+                key={section}
+                custom={sectionDirection}
+                variants={{
+                  enter: (dir: 1 | -1) => ({ opacity: 0, y: 10 * dir }),
+                  center: { opacity: 1, y: 0 },
+                }}
+                initial="enter"
+                animate="center"
+                transition={{ duration: 0.18, ease: [0.32, 0.72, 0, 1] }}
+              >
+                {renderSection(section)}
+              </motion.div>
             </div>
           </div>
         </motion.div>

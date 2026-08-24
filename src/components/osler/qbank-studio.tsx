@@ -1897,18 +1897,16 @@ function HomeView({
 
         {/* Content zone — fills remaining height; each tab owns its own
             padding and scroll so we don't double-apply horizontal padding.
-            AnimatePresence + keyed motion.div cross-fades between tabs so
-            switching feels like a native push instead of an instant swap. */}
+            Keyed motion.div gives an enter-only fade on tab switch — no exit
+            animation, which blanked the pane between tabs. */}
         <div className="flex-1 min-h-0 overflow-hidden">
-          <AnimatePresence mode="wait">
-            <motion.div
-              key={homeTab}
-              initial={{ opacity: 0, y: 4 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -4 }}
-              transition={{ duration: 0.2, ease: easeOut.ease }}
-              className="h-full"
-            >
+          <motion.div
+            key={homeTab}
+            initial={{ opacity: 0, y: 4 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.2, ease: easeOut.ease }}
+            className="h-full"
+          >
               {homeTab === "content" && (
                 <ContentTab
                   data={data}
@@ -1949,8 +1947,7 @@ function HomeView({
                   </div>
                 </div>
               )}
-            </motion.div>
-          </AnimatePresence>
+          </motion.div>
         </div>
       </div>
 
