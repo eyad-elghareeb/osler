@@ -91,6 +91,12 @@ const RATE_LIMIT_MAX: Record<string, number> = {
   // rotating IPs to bypass the per-IP limit. Uses a separate bucket name
   // so the rateLimit() function doesn't double-count against ip:global.
   "analytics_user": 12,
+  // QBank choice stats: reports are one POST per finished session, reads are
+  // one GET per review view (cached client-side). Generous read budget since
+  // the response is served from a single indexed query.
+  "qstats": 10,
+  "qstats_user": 10,
+  "qstats_read": 120,
 };
 
 const MAX_SESSIONS_PER_USER = 12;
@@ -113,6 +119,18 @@ const ANALYTICS_MAX_DETAIL_BYTES = 512;
 // instance for 60s to avoid a COUNT(*) on every request.
 const ANALYTICS_DAILY_WRITE_CAP = 50_000;
 const ANALYTICS_DAILY_CAP_CACHE_TTL_MS = 60_000;
+
+// Per-question choice stats ("62% of users chose B") — pre-aggregated counters
+// in question_choice_stats, one upsert row per answered question per finished
+// session. Caps bound the shared D1 write quota independently of analytics.
+const QBANK_STATS_MAX_BATCH = 250;
+const QBANK_STATS_MAX_OPTIONS = 12;
+const QBANK_STATS_ID_MAX_LEN = 160;
+// Percentages are hidden below this respondent count so individuals in small
+// cohorts can't be identified from an unusual choice.
+const QBANK_STATS_MIN_SAMPLE = 5;
+const QBANK_STATS_DAILY_WRITE_CAP = 25_000;
+const QBANK_STATS_DAILY_CAP_CACHE_TTL_MS = 60_000;
 
 let googleKeys: { expiresAt: number; keys: JsonWebKey[] } = { expiresAt: 0, keys: [] };
 
@@ -1970,6 +1988,144 @@ async function handleAnalyticsIngest(request: Request, env: Env, origin: string,
     return json({ error: "Failed to store analytics events" }, 500, origin, log);
   }
   return json({ ok: true, accepted }, 200, origin, log);
+}
+
+/* ── QBank choice stats ──
+ * POST /v1/qbank/stats   — one aggregated report per finished session
+ *   Body: { uid, answers: [[qid, choiceIndex, optionsCount?], ...] }
+ * GET  /v1/qbank/stats?uid=… — peer choice percentages for review mode
+ *
+ * The worker stores ONLY pre-aggregated counters (question_choice_stats) —
+ * never who chose what. No user id / session id is accepted or persisted,
+ * so counts can't be joined back to users (same privacy stance as the
+ * analytics ingest above). Guests are included because the deployed app
+ * runs most sessions as local guests; abuse is bounded by the per-IP /
+ * per-user rate limits and QBANK_STATS_DAILY_WRITE_CAP.
+ */
+
+let qstatsDailyCount: { date: string; count: number; checkedAt: number } = {
+  date: "",
+  count: 0,
+  checkedAt: 0,
+};
+
+/** Same pattern as analyticsDailyCapOk: cached COUNT guard protecting the D1
+ *  daily row-write quota from being exhausted by choice-stats reports. */
+async function qstatsDailyCapOk(env: Env): Promise<boolean> {
+  const t = now();
+  const today = new Date(t).toISOString().slice(0, 10);
+  if (
+    qstatsDailyCount.date === today &&
+    t - qstatsDailyCount.checkedAt < QBANK_STATS_DAILY_CAP_CACHE_TTL_MS
+  ) {
+    return qstatsDailyCount.count < QBANK_STATS_DAILY_WRITE_CAP;
+  }
+  const row = await env.DB
+    .prepare("SELECT COUNT(*) AS n FROM question_choice_stats WHERE updated_at >= ?")
+    .bind(t - 24 * 60 * 60 * 1000)
+    .first<{ n: number }>();
+  // Note: this counts rows TOUCHED in the window, not writes — a hot (uid,qid,
+  // choice) counter updated many times counts once. That under-counts, but the
+  // per-question write volume is inherently small (first attempts only), so
+  // the guard still catches flooding while staying cheap.
+  qstatsDailyCount = { date: today, count: row?.n ?? 0, checkedAt: t };
+  return qstatsDailyCount.count < QBANK_STATS_DAILY_WRITE_CAP;
+}
+
+function sanitizeStatsId(raw: unknown): string | null {
+  if (typeof raw !== "string" || raw.length === 0) return null;
+  const v = raw.slice(0, QBANK_STATS_ID_MAX_LEN);
+  if (/[\x00-\x1f\x7f]/.test(v)) return null;
+  return v;
+}
+
+async function handleQuestionStatsReport(request: Request, env: Env, origin: string, log: Logger): Promise<Response> {
+  const contentLength = Number(request.headers.get("content-length") || "0");
+  if (contentLength > 100_000) {
+    return json({ error: "Request body too large" }, 413, origin, log);
+  }
+  if (!(await qstatsDailyCapOk(env))) {
+    return json({ error: "Choice stats daily write cap reached" }, 429, origin, log);
+  }
+
+  const body = await readJson(request);
+  const uid = sanitizeStatsId(body?.uid);
+  const answers = Array.isArray(body?.answers) ? body.answers : null;
+  if (!uid || !answers) return json({ error: "Missing uid or answers" }, 400, origin, log);
+  if (answers.length > QBANK_STATS_MAX_BATCH) {
+    return json({ error: `Too many answers (max ${QBANK_STATS_MAX_BATCH} per report)` }, 413, origin, log);
+  }
+  if (answers.length === 0) return json({ ok: true, accepted: 0 }, 200, origin, log);
+
+  const t = now();
+  const seen = new Set<string>();
+  const stmts: D1PreparedStatement[] = [];
+  for (const pair of answers) {
+    if (!Array.isArray(pair) || pair.length < 2) continue;
+    const qid = sanitizeStatsId(pair[0]);
+    const choice = pair[1];
+    const optionsCount = typeof pair[2] === "number" && isFinite(pair[2])
+      ? Math.max(0, Math.min(QBANK_STATS_MAX_OPTIONS, Math.floor(pair[2])))
+      : 0;
+    if (!qid || !Number.isInteger(choice) || (choice as number) < 0 || (choice as number) >= QBANK_STATS_MAX_OPTIONS) continue;
+    const key = `${qid}:${choice}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    stmts.push(
+      env.DB.prepare(
+        "INSERT INTO question_choice_stats (uid, qid, choice, options_count, count, updated_at) VALUES (?, ?, ?, ?, 1, ?) ON CONFLICT(uid, qid, choice) DO UPDATE SET count = count + 1, options_count = excluded.options_count, updated_at = excluded.updated_at"
+      ).bind(uid, qid, choice, optionsCount, t)
+    );
+  }
+
+  if (stmts.length === 0) return json({ ok: true, accepted: 0 }, 200, origin, log);
+  try {
+    await env.DB.batch(stmts);
+  } catch (error: any) {
+    log.error("choice stats report failed", { error: error.message, count: stmts.length });
+    return json({ error: "Failed to store choice stats" }, 500, origin, log);
+  }
+  return json({ ok: true, accepted: stmts.length }, 200, origin, log);
+}
+
+async function handleQuestionStatsGet(url: URL, env: Env, origin: string, log: Logger): Promise<Response> {
+  const uid = sanitizeStatsId(url.searchParams.get("uid"));
+  if (!uid) return json({ error: "Missing uid" }, 400, origin, log);
+
+  interface StatsRow { qid: string; choice: number; options_count: number; count: number }
+  let rows: StatsRow[];
+  try {
+    ({ results: rows } = await env.DB.prepare(
+      "SELECT qid, choice, options_count, count FROM question_choice_stats WHERE uid = ?"
+    ).bind(uid).all<StatsRow>());
+  } catch (error: any) {
+    log.error("choice stats read failed", { error: error.message });
+    return json({ error: "Failed to read choice stats" }, 500, origin, log);
+  }
+
+  // Group rows into dense per-choice arrays; drop questions below the minimum
+  // sample so percentages can't single out individuals in tiny cohorts.
+  const grouped = new Map<string, Map<number, number>>();
+  const optionCounts = new Map<string, number>();
+  for (const row of rows) {
+    if (!row || typeof row.qid !== "string") continue;
+    let counts = grouped.get(row.qid);
+    if (!counts) grouped.set(row.qid, (counts = new Map()));
+    counts.set(row.choice, (counts.get(row.choice) ?? 0) + (row.count ?? 0));
+    if ((row.options_count ?? 0) > (optionCounts.get(row.qid) ?? 0)) {
+      optionCounts.set(row.qid, row.options_count);
+    }
+  }
+  const stats: Record<string, { c: number[]; t: number; oc: number }> = {};
+  for (const [qid, counts] of grouped) {
+    const choices = [...counts.keys()].sort((a, b) => a - b);
+    if (choices.length === 0 || choices[choices.length - 1] >= QBANK_STATS_MAX_OPTIONS) continue;
+    const c = choices.map((i) => counts.get(i) ?? 0);
+    const total = c.reduce((sum, n) => sum + n, 0);
+    if (total < QBANK_STATS_MIN_SAMPLE) continue;
+    stats[qid] = { c, t: total, oc: optionCounts.get(qid) ?? 0 };
+  }
+  return json({ stats }, 200, origin, log);
 }
 
 /* ── Analytics read (admin only) ──
@@ -4094,6 +4250,25 @@ export default {
           return json({ error: "Too many requests" }, 429, origin, log);
         }
         return handleAnalyticsIngest(request, env, origin, log);
+      }
+
+      // ── QBank choice stats (pre-auth) ──
+      // POST /v1/qbank/stats — one aggregated report per finished session.
+      // GET  /v1/qbank/stats?uid=… — peer choice percentages for review mode.
+      // Guests are included (local sessions have no account); no identity is
+      // stored either way, so there is nothing to distinguish or leak. Abuse
+      // is bounded by per-IP/per-user limits + the daily write cap.
+      if (request.method === "POST" && url.pathname === "/v1/qbank/stats") {
+        if (!rateLimit(ip, "qstats")) return json({ error: "Too many requests" }, 429, origin, log);
+        const statsSession = await requireUser(request, env);
+        if (statsSession && !rateLimit(statsSession.user.id, "qstats_user")) {
+          return json({ error: "Too many requests" }, 429, origin, log);
+        }
+        return handleQuestionStatsReport(request, env, origin, log);
+      }
+      if (request.method === "GET" && url.pathname === "/v1/qbank/stats") {
+        if (!rateLimit(ip, "qstats_read")) return json({ error: "Too many requests" }, 429, origin, log);
+        return handleQuestionStatsGet(url, env, origin, log);
       }
 
       // ── From here on: authenticated routes ──
