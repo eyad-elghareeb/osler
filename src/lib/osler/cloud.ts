@@ -518,6 +518,40 @@ export async function logoutCloudAccount(session: CloudSession | null): Promise<
   }
 }
 
+/* ── QBank choice stats ──
+ * Aggregated peer-answer percentages (see question-stats.ts for the client
+ * buffer/cache). Auth is optional — guests contribute and read too; the
+ * worker stores only anonymous aggregate counts.
+ */
+
+export interface QuestionChoiceStats {
+  /** Choice counts, indexed by choice position. */
+  c: number[];
+  /** Total respondents across all choices. */
+  t: number;
+  /** Option count recorded when the counter was written — lets the client
+   *  detect aggregates that went stale after the pack was edited. */
+  oc: number;
+}
+
+/** Report first-attempt choices for a finished session. `answers` entries are
+ *  [questionId, chosenIndex, optionsCount]. Throws CloudApiError on failure. */
+export async function reportQuestionStats(uid: string, answers: Array<[string, number, number]>): Promise<void> {
+  const session = readCloudSession();
+  await request("/v1/qbank/stats", { method: "POST", body: JSON.stringify({ uid, answers }) }, session?.token);
+}
+
+/** Fetch aggregated choice stats for every question in a pack. Throws on failure. */
+export async function fetchQuestionStats(uid: string): Promise<Record<string, QuestionChoiceStats>> {
+  const session = readCloudSession();
+  const result = await request<{ stats: Record<string, QuestionChoiceStats> }>(
+    `/v1/qbank/stats?uid=${encodeURIComponent(uid)}`,
+    { method: "GET" },
+    session?.token,
+  );
+  return result.stats;
+}
+
 let stopSync: (() => void) | null = null;
 let forceSync: (() => void) | null = null;
 
