@@ -22,6 +22,11 @@ import { NetworkFirst, Serwist } from "serwist";
 
 declare const self: ServiceWorkerGlobalScope;
 
+/** Injected by scripts/build-sw.js — changes on every build so the browser
+ *  always detects a new worker after a deploy. NOT part of cache names:
+ *  the content cache must survive deploys to keep downloaded packs. */
+declare const __OSLER_SW_BUILD_ID__: string;
+
 const CONTENT_CACHE = "osler-content-v1";
 
 const runtimeCaching: RuntimeCaching[] = [
@@ -78,6 +83,9 @@ self.addEventListener("message", (event: ExtendableMessageEvent) => {
   const source = event.source as Client | null;
 
   switch (data.type) {
+    case "GET_SW_BUILD":
+      source?.postMessage({ type: "SW_BUILD", buildId: __OSLER_SW_BUILD_ID__ });
+      break;
     case "PRECACHE_CONTENT":
       event.waitUntil(precacheContent(source, data.packId, data.urls));
       break;

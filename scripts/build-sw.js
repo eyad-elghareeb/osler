@@ -34,6 +34,26 @@ if (!fs.existsSync(OUTDIR)) {
 
 const isProd = process.env.NODE_ENV === "production";
 
+/**
+ * Per-build identity baked into sw.js. Every `npm run build` produces
+ * different SW bytes, so browsers (and any intermediate cache) always see
+ * a "new" worker and activate it immediately — no stale-worker window
+ * after a deploy. Content caches are NOT keyed by this id (rotating them
+ * would wipe users' downloaded packs); it exists purely for update
+ * detection and diagnostics.
+ */
+function gitShortSha() {
+  try {
+    return require("node:child_process")
+      .execSync("git rev-parse --short HEAD", { cwd: ROOT, stdio: ["ignore", "pipe", "ignore"] })
+      .toString()
+      .trim();
+  } catch {
+    return "nogit";
+  }
+}
+const BUILD_ID = `${new Date().toISOString().replace(/[-:.TZ]/g, "").slice(0, 12)}-${gitShortSha()}`;
+
 /** @type {import('esbuild').BuildOptions} */
 const options = {
   entryPoints: [ENTRY],
@@ -45,11 +65,15 @@ const options = {
   sourcemap: !isProd ? "linked" : false,
   minify: isProd,
   logLevel: "info",
+  banner: {
+    js: `/* osler service worker — build ${BUILD_ID} */`,
+  },
   // serwist uses `process.env.NODE_ENV` to toggle dev logs.
   define: {
     "process.env.NODE_ENV": JSON.stringify(isProd ? "production" : "development"),
+    "__OSLER_SW_BUILD_ID__": JSON.stringify(BUILD_ID),
   },
-  // Don't bundle the serwist package — bundle it inline. The `serwist`
+  // Don't bundle the serwist package - bundle it inline. The `serwist`
   // package is ESM and esbuild handles the interop.
   mainFields: ["browser", "module", "main"],
   conditions: ["browser", "import", "module", "default"],
