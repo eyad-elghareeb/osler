@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { ChevronRight, ListChecks, Folder, Grid3x3, Search, ArrowLeft } from "lucide-react";
-import { ENGINE_META, nodeUrls } from "@/lib/osler/content";
+import { ENGINE_META, nodeUrls, collectLeafUids } from "@/lib/osler/content";
 import type { AnyContent, EngineType, ContentTreeNode } from "@/lib/osler/types";
 import { storage } from "@/lib/osler/storage";
 import { cn } from "@/lib/utils";
@@ -234,14 +234,6 @@ export function ContentTab({
   }, [qbankTree, contentFilter, contentByUid]);
 
   /**
-   * Recursively collect all leaf uids under a tree node.
-   */
-  const collectLeafUids = React.useCallback((node: ContentTreeNode): string[] => {
-    if (node.items.length === 0) return [node.uid];
-    return node.items.flatMap(collectLeafUids);
-  }, []);
-
-/**
    * Per-folder stat rollup - aggregates all leaf packs under a node.
    * Question counts come straight from the manifest (`node.questionCount` is
    * rolled up by the generator), so no pack JSON needs to load for the hub

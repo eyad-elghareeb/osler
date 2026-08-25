@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { loadCategoryTree, loadContentByUid, flattenTree as flattenContentTree } from "@/lib/osler/content";
+import { loadCategoryTree, loadContentByUid, flattenTree, collectLeafUids } from "@/lib/osler/content";
 import { loadConfig, enabledEngines } from "@/lib/osler/config";
 import type {
   ContentTreeNode,
@@ -85,7 +85,7 @@ export function useContentTree(options?: UseContentTreeOptions): UseContentTreeR
       setLoading(false);
 
       const leaves = engineTypes.flatMap((type) =>
-        flattenContentTree(nextTrees[type] ?? [])
+        flattenTree(nextTrees[type] ?? [])
       );
       for (const leaf of leaves) {
         loadContentByUid(leaf.uid, leaf.type)
@@ -116,17 +116,12 @@ export function useContentTree(options?: UseContentTreeOptions): UseContentTreeR
   const items = React.useMemo<LeafItem[]>(() => {
     const list: LeafItem[] = [];
     for (const nodes of Object.values(trees)) {
-      for (const leaf of flattenContentTree(nodes)) {
+      for (const leaf of flattenTree(nodes)) {
         list.push({ node: leaf, content: leafContent.get(leaf.uid) ?? null });
       }
     }
     return list;
   }, [trees, leafContent]);
-
-  function collectLeafUids(node: ContentTreeNode): string[] {
-    if (node.items.length === 0) return [node.uid];
-    return node.items.flatMap(collectLeafUids);
-  }
 
   function mergeCards(uids: string[]): FlashcardContent["cards"] {
     const allCards: FlashcardContent["cards"] = [];
@@ -159,25 +154,8 @@ export function useContentTree(options?: UseContentTreeOptions): UseContentTreeR
     return sum;
   }
 
-  function flattenTree(nodes: ContentTreeNode[]): ContentTreeNode[] {
-    const leaves: ContentTreeNode[] = [];
-    function walk(list: ContentTreeNode[]) {
-      for (const node of list) {
-        if (node.items.length === 0) leaves.push(node);
-        else walk(node.items);
-      }
-    }
-    walk(nodes);
-    return leaves;
-  }
-
   async function ensureLoaded(node: ContentTreeNode): Promise<void> {
-    const leaves: ContentTreeNode[] = [];
-    const walk = (n: ContentTreeNode) => {
-      if (n.items.length === 0) leaves.push(n);
-      else n.items.forEach(walk);
-    };
-    walk(node);
+    const leaves = flattenTree([node]);
 
     await Promise.all(
       leaves.map(async (leaf) => {

@@ -120,6 +120,15 @@ export function collectPackUrls(node: ContentTreeNode): string[] {
   return urls;
 }
 
+/**
+ * Uids of every leaf under a node (or the node itself when it is a leaf).
+ * Used for progress rollups and flashcard due-count aggregation.
+ */
+export function collectLeafUids(node: ContentTreeNode): string[] {
+  if (node.items.length === 0) return [node.uid];
+  return node.items.flatMap(collectLeafUids);
+}
+
 /* ── Tree loading ─────────────────────────────────────────────────── */
 
 /** Shared in-flight and resolved manifest requests for the current session. */
