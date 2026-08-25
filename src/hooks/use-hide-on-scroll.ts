@@ -14,13 +14,17 @@ import * as React from "react";
  *  - Always expanded at/near the top (`SHOW_AT_TOP`).
  *  - Collapsing requires the page to have real scroll depth
  *    (`MIN_HIDE_RANGE`) at the moment of collapse.
- *  - **Layout-shift filtering is the core defense.** Collapsing/revealing
- *    the chrome resizes the scroller, which lowers/raises its max scroll
- *    position; the browser then CLAMPS scrollTop without any user input,
- *    emitting a large phantom counter-delta that reads as a reverse swipe
- *    (this — not threshold tuning — is what caused persistent oscillation
- *    on just-tall-enough pages). Any event whose scrollable range changed
- *    is therefore treated as layout noise: resync and ignore.
+ *  - **Clamp-signature filtering is the core defense.** Collapsing the
+ *    chrome resizes the scroller, which lowers its max scroll position;
+ *    the browser then CLAMPS scrollTop without any user input, emitting a
+ *    phantom counter-delta that reads as a reverse swipe (this — not
+ *    threshold tuning — caused persistent oscillation on just-tall-enough
+ *    pages). Only events matching that exact signature (range shrank AND
+ *    scrollTop is pinned to the new max) are discarded as noise; a range
+ *    change alone is not enough, since late images, lazy-loaded grids, and
+ *    growing/filtered lists change the range too without any clamp — and
+ *    treating those as noise zeroed the accumulators and made the bar
+ *    unable to ever collapse on those pages.
  *  - Asymmetric bands (`DOWN_THRESHOLD` vs the larger `UP_THRESHOLD`),
  *    direction-change accumulator resets, and a `TOGGLE_COOLDOWN_MS`
  *    lockout absorb gesture settling. A ResizeObserver expands the bar if
@@ -84,15 +88,34 @@ export function useHideOnScroll(retryKey: string | number = "default"): boolean 
       const y = target.scrollTop;
       const max = target.scrollHeight - target.clientHeight;
 
-      // Layout noise filter: a changed scrollable range means the browser
-      // clamped/adjusted scrollTop because content or chrome resized — not
-      // a gesture. Resync instead of feeding phantom deltas to hysteresis.
+      // Layout noise filter — but only for the specific signature of a
+      // browser-forced clamp: the range SHRANK (chrome collapsing gave the
+      // scroller more room) AND scrollTop is pinned at/near the new, smaller
+      // max. That pinning is what the browser does when it yanks scrollTop
+      // down without user input; a genuine gesture never lands exactly on
+      // the new boundary by coincidence.
+      //
+      // A range change on its own is NOT noise — it also fires for entirely
+      // legitimate reasons (late images finishing layout, a lazy pack grid
+      // appending rows, a filtered list growing) where scrollTop is
+      // untouched and the in-flight gesture is real. Treating every range
+      // change as noise silently zeroed the accumulators on those pages, so
+      // `down`/`up` could never cross their thresholds and the bar simply
+      // never collapsed. Only resync-and-discard the clamp case; for any
+      // other range change, just rebase `lastMax` and let the delta below
+      // flow through normally.
       if (max !== lastMax) {
+        const wasClamped = max < lastMax && y >= max - 1;
         lastMax = max;
-        lastY = y;
-        down = 0;
-        up = 0;
-        return;
+        if (wasClamped) {
+          lastY = y;
+          down = 0;
+          up = 0;
+          return;
+        }
+        // Range grew/shrank without a clamp — not noise, keep processing
+        // this event's real delta below (lastY is still the pre-change
+        // scrollTop, which is what we want to diff against).
       }
 
       if (y <= SHOW_AT_TOP) {
