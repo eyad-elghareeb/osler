@@ -415,6 +415,11 @@
   scrollbar-width: thin;
   scrollbar-color: color-mix(in oklch, var(--ring) 20%, transparent) transparent;
   padding-bottom: env(safe-area-inset-bottom, 0px);
+  /* Disable browser scroll anchoring: its silent scrollTop adjustments read
+   * as phantom reverse-scroll deltas to useHideOnScroll (images/lazy rows
+   * settling mid-momentum), which could expand the bars right after a
+   * collapse. Content here grows below the fold, so anchoring buys little. */
+  overflow-anchor: none;
 }
 .osler-page::-webkit-scrollbar { width: 6px; height: 6px; }
 .osler-page::-webkit-scrollbar-track { background: transparent; }

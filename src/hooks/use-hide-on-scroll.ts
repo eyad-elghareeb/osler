@@ -126,6 +126,11 @@ export function useHideOnScroll(
     const onScroll = (e: Event) => {
       const target = e.target as HTMLElement | null;
       if (!target || !target.classList || !target.classList.contains("osler-page")) return;
+      // A brand-new scroller becoming active means a view/folder navigation,
+      // not a gesture on the page the user was reading. NavigationStack
+      // mounts subpage layers at scrollTop 0 — without this guard their
+      // first event would pop the bars open mid-read.
+      const isNewActive = target !== activeEl;
       activeEl = target;
       const st = stateFor(target);
 
@@ -150,7 +155,7 @@ export function useHideOnScroll(
       if (y <= SHOW_AT_TOP) {
         st.lastY = y;
         resetAccumulators();
-        setHidden(false);
+        if (!isNewActive) setHidden(false);
         return;
       }
 
