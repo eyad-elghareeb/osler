@@ -127,10 +127,20 @@ const QBANK_STATS_MAX_BATCH = 250;
 const QBANK_STATS_MAX_OPTIONS = 12;
 const QBANK_STATS_ID_MAX_LEN = 160;
 // Percentages are hidden below this respondent count so individuals in small
-// cohorts can't be identified from an unusual choice.
-const QBANK_STATS_MIN_SAMPLE = 5;
+// cohorts can't be identified from an unusual choice. Instances can override
+// it per-deployment via the QBANK_STATS_MIN_SAMPLE env var (e.g. "1" on a
+// small self-hosted instance, where the default would hide all data).
+const QBANK_STATS_DEFAULT_MIN_SAMPLE = 5;
 const QBANK_STATS_DAILY_WRITE_CAP = 25_000;
 const QBANK_STATS_DAILY_CAP_CACHE_TTL_MS = 60_000;
+
+/** Resolve the effective student-facing minimum sample from the environment.
+ *  Invalid/absent values fall back to the privacy-safe default of 5. */
+function qstatsMinSample(env: Env): number {
+  const raw = Number(env.QBANK_STATS_MIN_SAMPLE);
+  if (!Number.isFinite(raw) || raw < 0) return QBANK_STATS_DEFAULT_MIN_SAMPLE;
+  return Math.min(50, Math.floor(raw));
+}
 
 let googleKeys: { expiresAt: number; keys: JsonWebKey[] } = { expiresAt: 0, keys: [] };
 
@@ -154,6 +164,8 @@ interface Env {
   WEBAUTHN_RP_NAME?: string;
   WEBAUTHN_RP_ID?: string;
   CONTENT_ONLY_MANAGED?: string | boolean;
+  /** Minimum respondents before students see peer percentages (default 5). */
+  QBANK_STATS_MIN_SAMPLE?: string;
 }
 
 function isManagedOnly(env: Env): boolean {
@@ -2105,7 +2117,7 @@ async function handleQuestionStatsGet(url: URL, env: Env, origin: string, log: L
 
   // Drop questions below the minimum sample so percentages can't single out
   // individuals in tiny cohorts (the admin endpoint sees raw numbers).
-  return json({ stats: groupChoiceRows(rows || [], QBANK_STATS_MIN_SAMPLE) }, 200, origin, log);
+  return json({ stats: groupChoiceRows(rows || [], qstatsMinSample(env)) }, 200, origin, log);
 }
 
 /** Group raw counter rows into dense per-choice arrays. Rows with an
