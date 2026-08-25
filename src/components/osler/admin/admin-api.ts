@@ -555,6 +555,32 @@ export const analyticsApi = {
   content:         (limit = 20)                   => req<AnalyticsContent>(`/v1/admin/analytics/content?limit=${limit}`),
 };
 
+/* ── Question choice stats (per-question answer distribution, all-time) ── */
+
+export interface QuestionStatsPack {
+  uid: string;
+  responses: number;
+  questions: number;
+}
+
+/** Per-question choice counts — same shape the students' GET returns,
+ *  but WITHOUT the minimum-sample gate. */
+export type AdminQuestionStatsMap = Record<string, { c: number[]; t: number; oc: number }>;
+
+export interface AdminQuestionStatsPacks {
+  packs: QuestionStatsPack[];
+}
+
+export interface AdminQuestionStatsDetail {
+  pack: string;
+  stats: AdminQuestionStatsMap;
+}
+
+export const questionStatsApi = {
+  packs:   ()            => req<AdminQuestionStatsPacks>("/v1/admin/analytics/question-stats"),
+  detail:  (uid: string) => req<AdminQuestionStatsDetail>(`/v1/admin/analytics/question-stats?uid=${encodeURIComponent(uid)}`),
+};
+
 // ── Gemini key management (per-user, stored in D1) ──────────────────────────
 //
 // These endpoints live on /v1/account/* (not /v1/admin/*) so any signed-in

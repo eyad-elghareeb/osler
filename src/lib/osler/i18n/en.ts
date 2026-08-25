@@ -2643,6 +2643,12 @@ export const en = {
     "admin.analytics.topPages.desc": "Most viewed routes in the selected range, by unique session.",
     "admin.analytics.topPages.unique": "{n} sessions",
 
+    "admin.analytics.qstats.title": "Question Choice Breakdown",
+    "admin.analytics.qstats.desc": "How respondents distributed across each question's options (all-time, raw counts).",
+    "admin.analytics.qstats.select": "Select a pack",
+    "admin.analytics.qstats.respondents": "{n} respondents",
+    "admin.analytics.qstats.responses": "{n} responses",
+
     "admin.analytics.errors.title": "JavaScript Errors",
     "admin.analytics.errors.desc": "Recent client-side errors grouped by message.",
     "admin.analytics.errors.none": "No JS errors recorded — all clear.",

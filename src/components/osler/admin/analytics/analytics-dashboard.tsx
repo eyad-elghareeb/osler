@@ -6,6 +6,7 @@ import { useToast } from "@/hooks/use-toast";
 import {
   AdminApiError,
   analyticsApi,
+  questionStatsApi,
   type AnalyticsApiPerformance,
   type AnalyticsContent,
   type AnalyticsErrors,
@@ -23,6 +24,8 @@ import { AnalyticsTopPagesPanel } from "./analytics-top-pages";
 import { AnalyticsErrorsPanel } from "./analytics-errors";
 import { AnalyticsApiPerformancePanel } from "./analytics-api-performance";
 import { AnalyticsContentPanel } from "./analytics-content";
+import { AnalyticsQuestionStatsPanel } from "./analytics-question-stats";
+import type { QuestionStatsPack } from "@/components/osler/admin/admin-api";
 
 interface AnalyticsState {
   overview: AnalyticsOverview | null;
@@ -32,6 +35,7 @@ interface AnalyticsState {
   errors: AnalyticsErrors | null;
   apiPerformance: AnalyticsApiPerformance | null;
   content: AnalyticsContent | null;
+  qstatsPacks: QuestionStatsPack[] | null;
 }
 
 const EMPTY_STATE: AnalyticsState = {
@@ -42,6 +46,7 @@ const EMPTY_STATE: AnalyticsState = {
   errors: null,
   apiPerformance: null,
   content: null,
+  qstatsPacks: null,
 };
 
 export function AnalyticsDashboard() {
@@ -55,7 +60,7 @@ export function AnalyticsDashboard() {
   const load = useCallback(async (r: AnalyticsRange, isRefresh = false) => {
     if (isRefresh) setRefreshing(true); else setLoading(true);
     try {
-      const [overview, timeseries, webVitals, topPages, errors, apiPerformance, content] = await Promise.all([
+      const [overview, timeseries, webVitals, topPages, errors, apiPerformance, content, qstatsPacks] = await Promise.all([
         analyticsApi.overview(r),
         analyticsApi.timeseries(r),
         analyticsApi.webVitals(r),
@@ -63,8 +68,9 @@ export function AnalyticsDashboard() {
         analyticsApi.errors(r, 15),
         analyticsApi.apiPerformance(r, 15),
         analyticsApi.content(15),
+        questionStatsApi.packs(),
       ]);
-      setData({ overview, timeseries, webVitals, topPages, errors, apiPerformance, content });
+      setData({ overview, timeseries, webVitals, topPages, errors, apiPerformance, content, qstatsPacks: qstatsPacks.packs });
     } catch (err) {
       // 503 = cloud backend not configured (typical in local dev preview).
       // Show a softer message in that case.
@@ -110,6 +116,8 @@ export function AnalyticsDashboard() {
       </div>
 
       <AnalyticsContentPanel data={data.content} loading={loading} />
+
+      <AnalyticsQuestionStatsPanel packs={data.qstatsPacks} loading={loading} />
     </div>
   );
 }

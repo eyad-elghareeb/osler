@@ -2103,8 +2103,15 @@ async function handleQuestionStatsGet(url: URL, env: Env, origin: string, log: L
     return json({ error: "Failed to read choice stats" }, 500, origin, log);
   }
 
-  // Group rows into dense per-choice arrays; drop questions below the minimum
-  // sample so percentages can't single out individuals in tiny cohorts.
+  // Drop questions below the minimum sample so percentages can't single out
+  // individuals in tiny cohorts (the admin endpoint sees raw numbers).
+  return json({ stats: groupChoiceRows(rows || [], QBANK_STATS_MIN_SAMPLE) }, 200, origin, log);
+}
+
+/** Group raw counter rows into dense per-choice arrays. Rows with an
+ *  out-of-range choice are dropped defensively; questions whose total is
+ *  below `minSample` are omitted (pass 0 for raw/admin views). */
+function groupChoiceRows(rows: Array<{ qid: string; choice: number; options_count: number; count: number }>, minSample: number): Record<string, { c: number[]; t: number; oc: number }> {
   const grouped = new Map<string, Map<number, number>>();
   const optionCounts = new Map<string, number>();
   for (const row of rows) {
@@ -2122,10 +2129,10 @@ async function handleQuestionStatsGet(url: URL, env: Env, origin: string, log: L
     if (choices.length === 0 || choices[choices.length - 1] >= QBANK_STATS_MAX_OPTIONS) continue;
     const c = choices.map((i) => counts.get(i) ?? 0);
     const total = c.reduce((sum, n) => sum + n, 0);
-    if (total < QBANK_STATS_MIN_SAMPLE) continue;
+    if (total < minSample) continue;
     stats[qid] = { c, t: total, oc: optionCounts.get(qid) ?? 0 };
   }
-  return json({ stats }, 200, origin, log);
+  return stats;
 }
 
 /* ── Analytics read (admin only) ──
@@ -2602,6 +2609,30 @@ async function handleAnalytics(request: Request, env: Env, url: URL, origin: str
   /* ── Content (who solved what, how many times) ── */
   if (request.method === "GET" && path === "/v1/admin/analytics/content") {
     return json(await contentAnalytics(env, url), 200, origin, log);
+  }
+
+  /* ── Question choice stats (raw aggregates from question_choice_stats) ──
+   * No uid → pack rollup. With uid → raw per-question breakdown WITHOUT the
+   * student-facing minimum-sample gate (admins may inspect small cohorts). */
+  if (request.method === "GET" && path === "/v1/admin/analytics/question-stats") {
+    const uid = sanitizeStatsId(url.searchParams.get("uid"));
+    if (!uid) {
+      const packs = await env.DB.prepare(
+        "SELECT uid, SUM(count) AS responses, COUNT(DISTINCT qid) AS questions FROM question_choice_stats GROUP BY uid ORDER BY responses DESC LIMIT 50"
+      ).all<{ uid: string; responses: number; questions: number }>();
+      return json({
+        packs: (packs.results || []).map((r) => ({
+          uid: r.uid,
+          responses: Number(r.responses) || 0,
+          questions: Number(r.questions) || 0,
+        })),
+      }, 200, origin, log);
+    }
+    interface StatsRow { qid: string; choice: number; options_count: number; count: number }
+    const rows = await env.DB.prepare(
+      "SELECT qid, choice, options_count, count FROM question_choice_stats WHERE uid = ?"
+    ).bind(uid).all<StatsRow>();
+    return json({ pack: uid, stats: groupChoiceRows(rows.results || [], 0) }, 200, origin, log);
   }
 
   return null;

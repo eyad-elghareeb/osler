@@ -2639,6 +2639,12 @@ export const ar = {
     "admin.analytics.topPages.desc": "أكثر المسارات مشاهدة في النطاق المختار، حسب الجلسات الفريدة.",
     "admin.analytics.topPages.unique": "{n} جلسة",
 
+    "admin.analytics.qstats.title": "تفصيل اختيارات الأسئلة",
+    "admin.analytics.qstats.desc": "توزيع إجابات المجيبين على خيارات كل سؤال (كل الفترات، أرقام خام).",
+    "admin.analytics.qstats.select": "اختر حزمة",
+    "admin.analytics.qstats.respondents": "{n} مجيب",
+    "admin.analytics.qstats.responses": "{n} استجابة",
+
     "admin.analytics.errors.title": "أخطاء JavaScript",
     "admin.analytics.errors.desc": "أحدث الأخطاء من جانب العميل مجمّعة حسب الرسالة.",
     "admin.analytics.errors.none": "لا أخطاء JS مسجّلة — كل شيء سليم.",
