@@ -339,6 +339,8 @@ export const en = {
     "qbank.explanation.yourAnswer": "Your answer: {letter}",
     "qbank.explanation.correctAnswer": "Correct answer: {letter}",
 
+    "qbank.stats.chosenBy": "Chosen by {n}% of test-takers",
+
     "qbank.written.yourResponse": "Your Response",
     "qbank.written.words": "{n} words",
     "qbank.written.placeholder": "Type your answer here\u2026",

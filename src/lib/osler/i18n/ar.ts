@@ -340,6 +340,8 @@ export const ar = {
     "qbank.explanation.yourAnswer": "إجابتك: {letter}",
     "qbank.explanation.correctAnswer": "الإجابة الصحيحة: {letter}",
 
+    "qbank.stats.chosenBy": "اختارها {n}% من المختبرين",
+
     "qbank.written.yourResponse": "إجابتك",
     "qbank.written.words": "{n} كلمة",
     "qbank.written.placeholder": "اكتب إجابتك هنا…",

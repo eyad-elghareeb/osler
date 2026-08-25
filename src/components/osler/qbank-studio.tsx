@@ -31,6 +31,8 @@ import { EmptyState } from "@/components/osler/ui-primitives";
 import type { SessionMode, SessionOrder, SessionStartOptions } from "@/lib/osler/session-options";
 import { routeFor, useOslerRouter } from "@/lib/osler/navigation";
 import { markSessionDismissed, isSessionDismissed, clearSessionDismissed } from "@/components/osler/resume-session-dialog";
+import { queueChoiceStat, flushQuestionStats, type QuestionChoiceStats } from "@/lib/osler/question-stats";
+import { useQuestionStats } from "@/hooks/use-question-stats";
 import { HomeView } from "./qbank/home-view";
 import { ResultsView } from "./qbank/results-view";
 import { QuizView } from "./qbank/quiz-view";
@@ -808,6 +810,9 @@ export function QBankStudio({
       return completed;
     });
     sessions.clearActive();
+    // Flush buffered first-attempt choice stats — one small POST per pack,
+    // exactly once per finished session.
+    void flushQuestionStats();
     // P3-1: review sessions skip the results view and exit straight to home
     // (no score to show — answers were already known at save time).
     if (session?.isReview) {
@@ -896,6 +901,8 @@ export function QBankStudio({
     const uid = q.sourceUid ?? activeItem?.uid ?? session.itemId;
     if (!uid) return;
     const selected = session.answers[idx];
+    // Peer choice stats count first attempts only — read the pre-write record.
+    const isFirstAttempt = !storage.getRecord(uid, q.id)?.attempts;
     const correct = selected === q.correct;
     // P5-6: dismiss-after-correct semantics — if the session was started
     // with dismissAfterCorrect=true and the answer is correct, mark the
@@ -912,8 +919,30 @@ export function QBankStudio({
       tags: q.tags,
       difficulty: q.difficulty,
     });
+    if (isFirstAttempt && selected !== undefined && q.correct >= 0) {
+      queueChoiceStat(uid, q.id, selected, q.choices.length);
+    }
     force();
   };
+
+  // Peer choice stats — resolve once per session across the questions'
+  // distinct source packs, then flatten to a `${uid}::${qid}` map for
+  // QuizView's choice rows.
+  const statsUids = React.useMemo(
+    () =>
+      session
+        ? [...new Set(session.questions.map((q) => q.sourceUid ?? activeItem?.uid ?? session.itemId))]
+        : [],
+    [session, activeItem?.uid]
+  );
+  const packStatsMap = useQuestionStats(statsUids);
+  const peerStats = React.useMemo(() => {
+    const out: Record<string, QuestionChoiceStats> = {};
+    for (const [uid, pack] of Object.entries(packStatsMap)) {
+      for (const [qid, s] of Object.entries(pack)) out[`${uid}::${qid}`] = s;
+    }
+    return out;
+  }, [packStatsMap]);
 
   if ((mode === "quiz" || mode === "review") && session) {
     return (
@@ -921,6 +950,7 @@ export function QBankStudio({
         <QuizView
           session={session}
           activeItem={activeItem ?? undefined}
+          peerStats={peerStats}
           calculatorOpen={calculatorOpen}
           labValuesOpen={labValuesOpen}
           aiAssistantOpen={aiAssistantOpen}
@@ -960,6 +990,7 @@ export function QBankStudio({
               const correct = idx === q.correct;
               // P2-5: route through sourceUid if present (merged/custom sessions).
               const uid = q.sourceUid ?? activeItem?.uid ?? session.itemId;
+              const isFirstAttempt = !storage.getRecord(uid, q.id)?.attempts;
               const shouldDismiss = !!session.dismissAfterCorrect && correct;
               storage.recordAnswer(uid, q.id, session.engine, {
                 selected: idx,
@@ -970,6 +1001,7 @@ export function QBankStudio({
                 tags: q.tags,
                 difficulty: q.difficulty,
               });
+              if (isFirstAttempt) queueChoiceStat(uid, q.id, idx, q.choices.length);
               force();
             }
           }}

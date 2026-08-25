@@ -30,6 +30,8 @@ import type { StringKey } from "@/lib/osler/i18n";
 import { choiceLetter, matchSingleChordBinding, questionAssetBase, renderQuestionText, imageListOf, ContentImageFigure, TestMode, SessionData, SessionQuestion, SessionToolRow, formatTime, formatMs } from "./shared";
 import { QuestionNavigatorSheet } from "./navigator-sheet";
 import { ExplanationCard } from "./explanation-card";
+import { PeerChoicePercent } from "./peer-choice-percent";
+import type { QuestionChoiceStats } from "@/lib/osler/question-stats";
 import { WrittenEngineView, WrittenEvaluationPanel } from "./written-engine";
 import { OsceEngineView } from "./osce-engine-view";
 
@@ -201,6 +203,7 @@ export function QuizView({
   onFinish,
   onTimeUp,
   onExitRequest,
+  peerStats,
 }: {
   session: SessionData;
   activeItem?: ContentTreeNode;
@@ -236,6 +239,9 @@ export function QuizView({
   onSaveAndExit: () => void;
   onFinish: () => void;
   onExitRequest: () => void;
+  /** Aggregated peer-choice stats keyed `${sourceUid}::${questionId}`.
+   *  Optional — absent/empty renders no percentage labels. */
+  peerStats?: Record<string, QuestionChoiceStats>;
 }) {
   const q = session.questions[session.current];
   const isLast = session.current >= session.questions.length - 1;
@@ -544,6 +550,10 @@ export function QuizView({
     const qRating = session.ratings[question.id];
     const qRubricState = session.rubricState[question.id] ?? (question.rubric ? question.rubric.map(() => false) : []);
     const qTimeMs = session.questionTimes?.[question.id] ?? null;
+    // Peer stats are per-question — resolve once, shared across all choice rows.
+    const peerStat = qSubmitted
+      ? peerStats?.[`${question.sourceUid ?? activeItem.uid}::${question.id}`]
+      : undefined;
 
     // Per-question written verdict (for the inline explanation in continuous mode).
     const qWrittenVerdict: "pass" | "fail" | null =
@@ -699,6 +709,9 @@ export function QuizView({
                       </div>
                     )}
                   </div>
+                  {showResult && (
+                    <PeerChoicePercent stat={peerStat} idx={idx} optionsCount={question.choices.length} />
+                  )}
                 </motion.button>
               );
             })}
