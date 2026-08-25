@@ -46,11 +46,9 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { toast } from "@/hooks/use-toast";
-import {
-  LanguageSettingsSection,
-  ThemeSettingsSection,
-  AiSettingsSection,
-} from "@/components/osler/settings";
+import { LanguageSettingsSection } from "@/components/osler/settings/language-section";
+import { ThemeSettingsSection } from "@/components/osler/settings/theme-section";
+import { AiSettingsSection } from "@/components/osler/settings/ai-section";
 import { NavigationStack } from "@/components/osler/navigation-stack";
 import { useIsMobile } from "@/hooks/use-mobile";
 import type { LucideIcon } from "lucide-react";
