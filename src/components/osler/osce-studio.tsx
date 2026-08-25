@@ -4,7 +4,7 @@ import * as React from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Send, RotateCcw, Stethoscope, Clock, Check, X, ChevronLeft, ChevronRight, Home, Activity, Lightbulb, RefreshCw, Loader2, AlertCircle, AlignLeft, Tag, BarChart3, ArrowRight, ArrowLeft, Folder, Play, Phone, PhoneOff, Maximize2 } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { loadCategoryTree, loadContentByUid, flattenTree, packBasePath, getCachedCategoryTree } from "@/lib/osler/content";
+import { loadCategoryTree, loadContentByUid, flattenTree, collectPackUrls, getCachedCategoryTree } from "@/lib/osler/content";
 import { NavigationStack } from "@/components/osler/navigation-stack";
 import type { ContentTreeNode, OsceContent, OsceStation } from "@/lib/osler/types";
 import { cn } from "@/lib/utils";
@@ -1170,9 +1170,7 @@ export function OsceStudio({
       || 0;
     const tags = content?.meta.tags?.slice(0, 4) || node.tags?.slice(0, 4) || [];
     const description = content?.meta.description || node.description;
-    const packBase = packBasePath(node);
-    const packUrls = (node.files ?? []).map((f) => `${packBase}${f}`);
-    for (const img of node.images ?? []) packUrls.push(`${packBase}images/${img}`);
+    const packUrls = collectPackUrls(node);
     const lang = node.lang ?? content?.meta.lang;
     return (
       <motion.div

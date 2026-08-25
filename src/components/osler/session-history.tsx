@@ -47,6 +47,7 @@ import { TrackerTree, type TrackerTreeNode } from "./tracker-tree";
 import { useI18n } from "./i18n-provider";
 import { haptic } from "@/lib/osler/native";
 import { toast } from "@/hooks/use-toast";
+import { formatTime } from "@/lib/osler/format";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -74,15 +75,6 @@ import { cn } from "@/lib/utils";
  * ───────────────────────────────────────────────────────────────────────── */
 
 const ORPHAN_UID = "__osler_orphan_sessions__";
-
-function formatTime(sec: number): string {
-  if (sec < 0) sec = 0;
-  const h = Math.floor(sec / 3600);
-  const m = Math.floor((sec % 3600) / 60);
-  const s = sec % 60;
-  if (h > 0) return `${h}:${m.toString().padStart(2, "0")}:${s.toString().padStart(2, "0")}`;
-  return `${m.toString().padStart(2, "0")}:${s.toString().padStart(2, "0")}`;
-}
 
 interface PackSessionsState {
   packByUid: Map<string, ContentTreeNode>;

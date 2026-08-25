@@ -23,7 +23,7 @@ import {
   GraduationCap,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { ENGINE_META, loadContentByUid, packBasePath } from "@/lib/osler/content";
+import { ENGINE_META, loadContentByUid, collectPackUrls } from "@/lib/osler/content";
 import type {
   FlashcardContent,
   FlashcardSubdeck,
@@ -871,20 +871,9 @@ export function FlashcardStudio({
               const pct = totalCards > 0
                 ? Math.round(((totalCards - dueCount) / totalCards) * 100)
                 : 0;
-              // Per-pack content URLs (for the offline download button).
-              // For branch nodes (folders), include all leaf descendant files.
+              // Per-pack content URLs for the offline download button —
+              // branch nodes include all leaf descendant files.
               // Computed inline (cheap) to avoid hook-in-loop violations.
-              const collectPackUrls = (n: ContentTreeNode): string[] => {
-                const ownBase = packBasePath(n);
-                const own = (n.files ?? []).map((f) => `${ownBase}${f}`);
-                for (const img of n.images ?? []) own.push(`${ownBase}images/${img}`);
-                if (n.items.length === 0) return own;
-                const childUrls: string[] = [];
-                for (const child of n.items) {
-                  childUrls.push(...collectPackUrls(child));
-                }
-                return [...own, ...childUrls];
-              };
               const packUrls = collectPackUrls(node);
               return (
                 <div

@@ -130,8 +130,7 @@ function directionFor(from: OslerView, to: OslerView): ViewTransitionDirection {
 
 import { useOslerSession } from "@/lib/osler/session-context";
 import { useCurrentView, useOslerRouter, prefetchTopLevelRoutes } from "@/lib/osler/navigation";
-import { loadCategoryTrees } from "@/lib/osler/content";
-import { loadContentByUid } from "@/lib/osler/content";
+import { loadCategoryTrees, loadContentByUid } from "@/lib/osler/content";
 import { AutoResumeSessionDialog } from "./resume-session-dialog";
 
 interface AppShellProps {

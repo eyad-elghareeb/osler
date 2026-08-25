@@ -17,6 +17,8 @@ import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { useI18n } from "./i18n-provider";
 import { EmptyState, PackSheetHeader, PackSheetFooter, SwipeableSideSheet } from "./ui-primitives";
 import { disclosureVariants } from "@/lib/osler/motion";
+import { formatMs } from "@/lib/osler/format";
+import { choiceLetter } from "@/components/osler/qbank/shared";
 import { cn } from "@/lib/utils";
 
 export interface TrackerPreviewItem {
@@ -41,18 +43,6 @@ interface TrackerPreviewSheetProps {
   onToggleRecord: (key: string) => void;
   onToggleAll: () => void;
   onStartReview: () => void;
-}
-
-const LETTERS = ["A", "B", "C", "D", "E", "F", "G", "H"];
-const ARABIC_LETTERS = ["أ", "ب", "ج", "د", "ه", "و", "ز", "ح", "ط", "ي"];
-const choiceLetter = (idx: number, lang?: string): string =>
-  (lang && lang.startsWith("ar") ? ARABIC_LETTERS : LETTERS)[idx] ?? "?";
-
-function formatMs(ms: number): string {
-  const total = Math.max(0, Math.round(ms / 1000));
-  const m = Math.floor(total / 60);
-  const s = total % 60;
-  return m > 0 ? `${m}m ${s}s` : `${s}s`;
 }
 
 function previewHtml(text: string, q: PoolQuestion): string {

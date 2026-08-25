@@ -29,7 +29,7 @@ import {
   resolveThumbnail,
   formatDuration,
 } from "@/lib/osler/videos";
-import { packBasePath, getCachedCategoryTree } from "@/lib/osler/content";
+import { collectPackUrls, findNodeByUid, getCachedCategoryTree } from "@/lib/osler/content";
 import { settings } from "@/lib/osler/storage";
 import type { VideoResource, ContentTreeNode } from "@/lib/osler/types";
 import { cn } from "@/lib/utils";
@@ -282,16 +282,8 @@ export function VideosStudio({
   const selectedNode = selectedNodeUid ? findNodeByUid(tree, selectedNodeUid) : null;
   const breadcrumb = selectedNodeUid ? findPath(tree, selectedNodeUid) : [];
 
-  // Per-pack content URLs (for the offline download button).
-  function collectPackUrls(node: ContentTreeNode): string[] {
-    const ownBase = packBasePath(node);
-    const own = (node.files ?? []).map((f) => `${ownBase}${f}`);
-    for (const img of node.images ?? []) own.push(`${ownBase}images/${img}`);
-    if (node.items.length === 0) return own;
-    const childUrls: string[] = [];
-    for (const child of node.items) childUrls.push(...collectPackUrls(child));
-    return [...own, ...childUrls];
-  }
+  // Per-pack content URLs for the offline download button (lib helper —
+  // branch nodes collect every leaf descendant).
 
   return (
     <motion.div {...swipeDismissProps} className="osler-page">
@@ -1065,15 +1057,6 @@ function findFirstLeaf(nodes: ContentTreeNode[]): ContentTreeNode | null {
     if (n.items.length === 0) return n;
     const child = findFirstLeaf(n.items);
     if (child) return child;
-  }
-  return null;
-}
-
-function findNodeByUid(nodes: ContentTreeNode[], uid: string): ContentTreeNode | null {
-  for (const n of nodes) {
-    if (n.uid === uid) return n;
-    const c = findNodeByUid(n.items, uid);
-    if (c) return c;
   }
   return null;
 }

@@ -109,6 +109,17 @@ export function nodeUrls(node: ContentTreeNode): string[] {
   return urls;
 }
 
+/**
+ * All cacheable URLs for a node and — for branch nodes — every leaf
+ * descendant: data files plus images/ entries. Single source of truth for
+ * the offline download buttons and the session precache path.
+ */
+export function collectPackUrls(node: ContentTreeNode): string[] {
+  const urls = nodeUrls(node);
+  for (const child of node.items) urls.push(...collectPackUrls(child));
+  return urls;
+}
+
 /* ── Tree loading ─────────────────────────────────────────────────── */
 
 /** Shared in-flight and resolved manifest requests for the current session. */
@@ -494,7 +505,7 @@ export async function loadContentByUid(uid: string, engineHint?: EngineType): Pr
 /**
  * Search a tree for a node by uid.
  */
-function findNodeByUid(nodes: ContentTreeNode[], uid: string): ContentTreeNode | null {
+export function findNodeByUid(nodes: ContentTreeNode[], uid: string): ContentTreeNode | null {
   for (const node of nodes) {
     if (node.uid === uid) return node;
     if (node.items.length > 0) {

@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { ChevronRight, ListChecks, Folder, Grid3x3, Search, ArrowLeft } from "lucide-react";
-import { ENGINE_META, packBasePath } from "@/lib/osler/content";
+import { ENGINE_META, nodeUrls } from "@/lib/osler/content";
 import type { AnyContent, EngineType, ContentTreeNode } from "@/lib/osler/types";
 import { storage } from "@/lib/osler/storage";
 import { cn } from "@/lib/utils";
@@ -102,12 +102,7 @@ export const PackCard = React.memo(function PackCard({
   const packProgress = storage.packProgress(node.uid);
   const isAr = (content?.meta.lang ?? node.lang) === "ar";
 
-  const packUrls = React.useMemo(() => {
-    const base = packBasePath(node);
-    const urls = (node.files ?? []).map((f) => `${base}${f}`);
-    for (const img of node.images ?? []) urls.push(`${base}images/${img}`);
-    return urls;
-  }, [node]);
+  const packUrls = React.useMemo(() => nodeUrls(node), [node]);
 
   const handleCardClick = async () => {
     haptic("light");
