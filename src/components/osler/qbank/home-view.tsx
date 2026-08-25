@@ -154,15 +154,15 @@ export function HomeView({
     <div className="flex h-full overflow-hidden bg-background">
       <div className="flex-1 min-w-0 flex flex-col overflow-hidden">
         {/* Page header — mobile: animates away on scroll-down exactly like
-            the app scroll-away bar (height + opacity via framer), leaving
-            the lean 3-tab strip. Desktop: static. */}
+            the app scroll-away bar (height + staggered opacity via the
+            collapseBar preset), leaving the lean 3-tab strip. Desktop: static. */}
         <motion.div
           initial={false}
           animate={{
             height: headerCollapsed ? 0 : "auto",
             opacity: headerCollapsed ? 0 : 1,
           }}
-          transition={MOTION_TRANSITION.fast}
+          transition={MOTION_TRANSITION.collapseBar}
           className="overflow-hidden shrink-0"
         >
           <div className="px-4 md:px-6 lg:px-8 w-full max-w-7xl mx-auto pt-3 md:pt-4 pb-2">
@@ -174,10 +174,12 @@ export function HomeView({
             />
           </div>
         </motion.div>
-        {/* Tab bar — sticky with backdrop blur to prevent harsh card clipping */}
+        {/* Tab bar — in-flow sibling above the scroller (nothing renders
+            behind it), so it stays opaque; no backdrop blur to pay for on
+            every frame of the collapse. */}
         <div className={cn(
-          "shrink-0 border-b border-border w-full max-w-7xl mx-auto px-4 md:px-6 lg:px-8 bg-background/85 backdrop-blur-md supports-[backdrop-filter]:bg-background/70 z-20 transition-[box-shadow,background-color]",
-          headerCollapsed ? "shadow-e1 bg-background" : "shadow-xs"
+          "shrink-0 border-b border-border w-full max-w-7xl mx-auto px-4 md:px-6 lg:px-8 bg-background z-20 transition-[box-shadow]",
+          headerCollapsed ? "shadow-e1" : "shadow-xs"
         )}>
           {/* 3-col grid: [spacer | centered tabs | filter]
               The 1fr cols balance each other so the auto center is always

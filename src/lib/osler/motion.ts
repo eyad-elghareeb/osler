@@ -98,6 +98,16 @@ export const MOTION_TRANSITION = {
   base: { duration: MOTION_DURATION.base, ease: MOTION_EASE.standard } as Transition,
   normal: { duration: MOTION_DURATION.normal, ease: MOTION_EASE.standard } as Transition,
   slow: { duration: MOTION_DURATION.slow, ease: MOTION_EASE.standard } as Transition,
+  /**
+   * Scroll-away chrome (app bar, QBank hub header). Height does the layout
+   * work on a slightly longer, eased curve so the reclaim reads as one
+   * smooth motion; opacity finishes earlier so content is gone before it
+   * would be visible mid-squish.
+   */
+  collapseBar: {
+    height: { duration: MOTION_DURATION.quick, ease: MOTION_EASE.standard },
+    opacity: { duration: MOTION_DURATION.fast, ease: MOTION_EASE.standard },
+  } as Transition,
 } as const;
 
 /* ───────────────────────── Shared variants ────────────────────── */

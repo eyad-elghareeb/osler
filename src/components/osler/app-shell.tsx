@@ -281,7 +281,9 @@ export function AppShell({ children }: AppShellProps) {
           The header stays mounted (just CSS-hidden) so the global search
           sheet + user dropdown state isn't reset on view changes. */}
       <header className={cn(
-        "z-40 shrink-0 h-14 border-b border-border bg-background/80 backdrop-blur-md supports-[backdrop-filter]:bg-background/60 safe-pt",
+        // In-flow bar — nothing scrolls behind it; opaque background avoids
+        // a pointless backdrop-filter pass every frame.
+        "z-40 shrink-0 h-14 border-b border-border bg-background safe-pt",
         "hidden md:flex",
         isMobile && immersive && "hidden",
       )}>
@@ -639,10 +641,12 @@ function MobileScrollAwayBar({
         height: hidden || immersive ? 0 : "auto",
         opacity: hidden || immersive ? 0 : 1,
       }}
-      transition={MOTION_TRANSITION.fast}
+      transition={MOTION_TRANSITION.collapseBar}
       className={cn(
         "md:hidden shrink-0 overflow-hidden",
-        "bg-background/80 backdrop-blur-md supports-[backdrop-filter]:bg-background/60",
+        // In-flow sibling above the scroller — nothing renders behind it, so
+        // a backdrop blur would cost GPU time for no visual effect.
+        "bg-background",
         "border-b border-border",
       )}
     >
