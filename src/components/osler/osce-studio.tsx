@@ -26,35 +26,7 @@ import { nodeFromPack, buildAchievements, launchConfetti, getSpeakerName, OsceSt
 import { DataTablesRenderer, DataImagesRenderer, PrintedMaterialsModal, LiveVoiceOverlay } from "./osce/renderers";
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 /* ── Component Props ───────────────────────────────────────────────── */
-
 
 
 interface OsceStudioProps {
