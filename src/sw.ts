@@ -99,14 +99,18 @@ self.addEventListener("message", (event: ExtendableMessageEvent) => {
 });
 
 /** A compromised/buggy page script could ask the SW to fetch and persist
- *  arbitrary URLs. Restrict precaching to same-origin paths and the
- *  osler-content /v1/content keyspaces the app actually uses. */
+ *  arbitrary URLs. Restrict precaching to the two content keyspaces the
+ *  app actually uses: bundled same-origin /osler-content/, and the Worker's
+ *  /v1/content* endpoints — which are CROSS-ORIGIN on cloud instances
+ *  (that's how all content is served there), so the /v1 keyspaces are
+ *  allowed by path shape regardless of origin. Everything else is refused. */
 function isPrecacheAllowed(rawUrl: string): boolean {
   try {
-    const u = new URL(rawUrl, self.location.origin);
-    if (u.origin !== self.location.origin) return false;
+    const u = new URL(rawUrl);
+    if (u.pathname.startsWith("/osler-content/")) {
+      return u.origin === self.location.origin;
+    }
     return (
-      u.pathname.startsWith("/osler-content/") ||
       u.pathname.startsWith("/v1/content/") ||
       u.pathname.startsWith("/v1/content-manifests/")
     );
