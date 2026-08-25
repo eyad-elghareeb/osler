@@ -142,6 +142,12 @@ function qstatsMinSample(env: Env): number {
   return Math.min(50, Math.floor(raw));
 }
 
+// Contributor dedup: each (contributor, question) pair increments the
+// aggregate counters exactly once, ever. Respondent rows are pruned after
+// this window by the hourly cron.
+const QBANK_STATS_RESPONDENT_RETENTION_MS = 90 * 24 * 60 * 60 * 1000;
+const QBANK_STATS_AID_MAX_LEN = 64;
+
 let googleKeys: { expiresAt: number; keys: JsonWebKey[] } = { expiresAt: 0, keys: [] };
 
 // ─── Env type ────────────────────────────────────────────────────────────────
@@ -975,6 +981,9 @@ async function cleanupStale(env: Env, _log?: Logger): Promise<void> {
       env.DB.prepare("DELETE FROM login_failures WHERE locked_until IS NOT NULL AND locked_until < ?").bind(now() - LOGIN_LOCKOUT_MS),
       env.DB.prepare("DELETE FROM admin_audit WHERE created_at < ?").bind(cutoff),
       env.DB.prepare("DELETE FROM analytics_events WHERE created_at < ?").bind(analyticsCutoff),
+      // Choice-stats respondent rows: only needed to dedup contributors;
+      // past this window a contributor may legitimately count again.
+      env.DB.prepare("DELETE FROM question_choice_respondents WHERE created_at < ?").bind(now() - QBANK_STATS_RESPONDENT_RETENTION_MS),
     ]);
     log.info("cleanupStale completed");
   } catch (error: any) {
@@ -2004,15 +2013,21 @@ async function handleAnalyticsIngest(request: Request, env: Env, origin: string,
 
 /* ── QBank choice stats ──
  * POST /v1/qbank/stats   — one aggregated report per finished session
- *   Body: { uid, answers: [[qid, choiceIndex, optionsCount?], ...] }
+ *   Body: { uid, aid?, answers: [[qid, choiceIndex, optionsCount?], ...] }
  * GET  /v1/qbank/stats?uid=… — peer choice percentages for review mode
  *
- * The worker stores ONLY pre-aggregated counters (question_choice_stats) —
- * never who chose what. No user id / session id is accepted or persisted,
- * so counts can't be joined back to users (same privacy stance as the
- * analytics ingest above). Guests are included because the deployed app
- * runs most sessions as local guests; abuse is bounded by the per-IP /
- * per-user rate limits and QBANK_STATS_DAILY_WRITE_CAP.
+ * The client reports EVERY answered MCQ of the finished session; the worker
+ * counts each contributor exactly once per question via
+ * question_choice_respondents, so retakes, repeat sessions, cleared local
+ * progress, and extra devices never inflate the aggregates. Signed-in users
+ * are keyed by a server-side hash of their account id; guests by a random
+ * client-generated UUID.
+ *
+ * The worker stores ONLY pre-aggregated counters — never who chose what
+ * (the respondent table records THAT a question was answered, not the
+ * choice). Guests are included because the deployed app runs most sessions
+ * as local guests; abuse is bounded by the per-IP / per-user rate limits
+ * and QBANK_STATS_DAILY_WRITE_CAP.
  */
 
 let qstatsDailyCount: { date: string; count: number; checkedAt: number } = {
@@ -2051,7 +2066,7 @@ function sanitizeStatsId(raw: unknown): string | null {
   return v;
 }
 
-async function handleQuestionStatsReport(request: Request, env: Env, origin: string, log: Logger): Promise<Response> {
+async function handleQuestionStatsReport(request: Request, env: Env, session: Session | null, origin: string, log: Logger): Promise<Response> {
   const contentLength = Number(request.headers.get("content-length") || "0");
   if (contentLength > 100_000) {
     return json({ error: "Request body too large" }, 413, origin, log);
@@ -2064,6 +2079,26 @@ async function handleQuestionStatsReport(request: Request, env: Env, origin: str
   const uid = sanitizeStatsId(body?.uid);
   const answers = Array.isArray(body?.answers) ? body.answers : null;
   if (!uid || !answers) return json({ error: "Missing uid or answers" }, 400, origin, log);
+
+  // Contributor id — the dedup key that makes each user count exactly once
+  // per question regardless of retakes, cleared progress, or extra devices:
+  //   * signed-in → HMAC-style SHA-256(user.id + server secret), computed
+  //     server-side so the client never learns a linkable id.
+  //   * guest → client-generated random UUID from localStorage. Not linked to
+  //     any account; losing it (cleared browser data) just means the guest may
+  //     contribute again, which is acceptable for anonymous aggregates.
+  let aid: string;
+  if (session) {
+    const digest = await crypto.subtle.digest(
+      "SHA-256",
+      new TextEncoder().encode(`${env.JWT_SECRET}:qstats:${session.user.id}`),
+    );
+    aid = [...new Uint8Array(digest)].slice(0, 16).map((b) => b.toString(16).padStart(2, "0")).join("");
+  } else {
+    const clientAid = typeof body?.aid === "string" ? body.aid.slice(0, QBANK_STATS_AID_MAX_LEN) : "";
+    aid = /^[A-Za-z0-9_-]+$/.test(clientAid) ? clientAid : id(); // invalid/missing ⇒ ephemeral id (counts once, dedups never)
+  }
+
   if (answers.length > QBANK_STATS_MAX_BATCH) {
     return json({ error: `Too many answers (max ${QBANK_STATS_MAX_BATCH} per report)` }, 413, origin, log);
   }
@@ -2083,21 +2118,38 @@ async function handleQuestionStatsReport(request: Request, env: Env, origin: str
     const key = `${qid}:${choice}`;
     if (seen.has(key)) continue;
     seen.add(key);
+    // Dedup + count in ONE atomic D1 batch. Statement ORDER matters: the
+    // counter's NOT EXISTS guard runs BEFORE this batch's respondent insert,
+    // so it reads only previously-COMMITTED state — a first-ever answer
+    // increments once; any repeat (retake, cleared progress, second device)
+    // finds the committed respondent row and becomes a no-op. The batch is
+    // a single transaction, so the pair succeeds or fails together.
     stmts.push(
       env.DB.prepare(
-        "INSERT INTO question_choice_stats (uid, qid, choice, options_count, count, updated_at) VALUES (?, ?, ?, ?, 1, ?) ON CONFLICT(uid, qid, choice) DO UPDATE SET count = count + 1, options_count = excluded.options_count, updated_at = excluded.updated_at"
-      ).bind(uid, qid, choice, optionsCount, t)
+        `INSERT INTO question_choice_stats (uid, qid, choice, options_count, count, updated_at)
+         SELECT ?, ?, ?, ?, 1, ?
+         WHERE NOT EXISTS (SELECT 1 FROM question_choice_respondents WHERE aid = ? AND uid = ? AND qid = ?)
+         ON CONFLICT(uid, qid, choice) DO UPDATE SET count = count + 1, options_count = excluded.options_count, updated_at = excluded.updated_at`
+      ).bind(uid, qid, choice, optionsCount, t, aid, uid, qid)
+    );
+    stmts.push(
+      env.DB.prepare(
+        "INSERT INTO question_choice_respondents (aid, uid, qid, created_at) VALUES (?, ?, ?, ?) ON CONFLICT(aid, uid, qid) DO NOTHING"
+      ).bind(aid, uid, qid, t)
     );
   }
 
   if (stmts.length === 0) return json({ ok: true, accepted: 0 }, 200, origin, log);
   try {
-    await env.DB.batch(stmts);
+    const results = await env.DB.batch(stmts);
+    // Odd-indexed results are the respondent inserts; changes === 1 means
+    // this contributor's first-ever answer to that question was counted.
+    const accepted = results.filter((_, i) => i % 2 === 1).reduce((sum, r) => sum + (r.meta?.changes ?? 0), 0);
+    return json({ ok: true, accepted }, 200, origin, log);
   } catch (error: any) {
     log.error("choice stats report failed", { error: error.message, count: stmts.length });
     return json({ error: "Failed to store choice stats" }, 500, origin, log);
   }
-  return json({ ok: true, accepted: stmts.length }, 200, origin, log);
 }
 
 async function handleQuestionStatsGet(url: URL, env: Env, origin: string, log: Logger): Promise<Response> {
@@ -2139,7 +2191,10 @@ function groupChoiceRows(rows: Array<{ qid: string; choice: number; options_coun
   for (const [qid, counts] of grouped) {
     const choices = [...counts.keys()].sort((a, b) => a - b);
     if (choices.length === 0 || choices[choices.length - 1] >= QBANK_STATS_MAX_OPTIONS) continue;
-    const c = choices.map((i) => counts.get(i) ?? 0);
+    // DENSE array indexed by choice position — unchosen options must occupy
+    // (and report as) 0, or the client's c[idx] lookup would misalign.
+    const maxIdx = choices[choices.length - 1];
+    const c = Array.from({ length: maxIdx + 1 }, (_, i) => counts.get(i) ?? 0);
     const total = c.reduce((sum, n) => sum + n, 0);
     if (total < minSample) continue;
     stats[qid] = { c, t: total, oc: optionCounts.get(qid) ?? 0 };
@@ -4307,7 +4362,7 @@ export default {
         if (statsSession && !rateLimit(statsSession.user.id, "qstats_user")) {
           return json({ error: "Too many requests" }, 429, origin, log);
         }
-        return handleQuestionStatsReport(request, env, origin, log);
+        return handleQuestionStatsReport(request, env, statsSession, origin, log);
       }
       if (request.method === "GET" && url.pathname === "/v1/qbank/stats") {
         if (!rateLimit(ip, "qstats_read")) return json({ error: "Too many requests" }, 429, origin, log);

@@ -901,8 +901,6 @@ export function QBankStudio({
     const uid = q.sourceUid ?? activeItem?.uid ?? session.itemId;
     if (!uid) return;
     const selected = session.answers[idx];
-    // Peer choice stats count first attempts only — read the pre-write record.
-    const isFirstAttempt = !storage.getRecord(uid, q.id)?.attempts;
     const correct = selected === q.correct;
     // P5-6: dismiss-after-correct semantics — if the session was started
     // with dismissAfterCorrect=true and the answer is correct, mark the
@@ -919,7 +917,9 @@ export function QBankStudio({
       tags: q.tags,
       difficulty: q.difficulty,
     });
-    if (isFirstAttempt && selected !== undefined && q.correct >= 0) {
+    // Peer stats: report every answered MCQ — the worker dedupes per
+    // contributor, so repeats never inflate the aggregates.
+    if (selected !== undefined && q.correct >= 0) {
       queueChoiceStat(uid, q.id, selected, q.choices.length);
     }
     force();
@@ -990,7 +990,6 @@ export function QBankStudio({
               const correct = idx === q.correct;
               // P2-5: route through sourceUid if present (merged/custom sessions).
               const uid = q.sourceUid ?? activeItem?.uid ?? session.itemId;
-              const isFirstAttempt = !storage.getRecord(uid, q.id)?.attempts;
               const shouldDismiss = !!session.dismissAfterCorrect && correct;
               storage.recordAnswer(uid, q.id, session.engine, {
                 selected: idx,
@@ -1001,7 +1000,7 @@ export function QBankStudio({
                 tags: q.tags,
                 difficulty: q.difficulty,
               });
-              if (isFirstAttempt) queueChoiceStat(uid, q.id, idx, q.choices.length);
+              queueChoiceStat(uid, q.id, idx, q.choices.length);
               force();
             }
           }}

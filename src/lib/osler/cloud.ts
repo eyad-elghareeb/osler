@@ -534,11 +534,13 @@ export interface QuestionChoiceStats {
   oc: number;
 }
 
-/** Report first-attempt choices for a finished session. `answers` entries are
- *  [questionId, chosenIndex, optionsCount]. Throws CloudApiError on failure. */
-export async function reportQuestionStats(uid: string, answers: Array<[string, number, number]>): Promise<void> {
+/** Report answered choices for a finished session. `answers` entries are
+ *  [questionId, chosenIndex, optionsCount]. Every answered MCQ is reported;
+ *  the worker dedupes per contributor (signed-in account hash or guest
+ *  UUID), so retakes/repeats never inflate aggregates. Throws on failure. */
+export async function reportQuestionStats(uid: string, aid: string, answers: Array<[string, number, number]>): Promise<void> {
   const session = readCloudSession();
-  await request("/v1/qbank/stats", { method: "POST", body: JSON.stringify({ uid, answers }) }, session?.token);
+  await request("/v1/qbank/stats", { method: "POST", body: JSON.stringify({ uid, aid, answers }) }, session?.token);
 }
 
 /** Fetch aggregated choice stats for every question in a pack. Throws on failure. */
