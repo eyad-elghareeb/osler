@@ -41,7 +41,8 @@ import {
   type FullQuestion,
   type ResultsPdfConfig,
 } from "@/lib/osler/pdf";
-import { PdfExportDialog, type PdfExportOptions } from "./pdf-export-dialog";
+import { type PdfExportOptions } from "./pdf-export-dialog";
+import { PdfExportDialog } from "./lazy-tools";
 import { TrackerTree, type TrackerTreeNode } from "./tracker-tree";
 import { useI18n } from "./i18n-provider";
 import { haptic } from "@/lib/osler/native";

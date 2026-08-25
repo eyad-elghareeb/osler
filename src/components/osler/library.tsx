@@ -52,7 +52,8 @@ import { setImmersiveMode } from "./immersive-mode";
 import { MermaidModal } from "./mermaid-modal";
 import { haptic } from "@/lib/osler/native";
 import { useToast } from "@/hooks/use-toast";
-import { PdfExportDialog, type PdfExportOptions } from "./pdf-export-dialog";
+import { type PdfExportOptions } from "./pdf-export-dialog";
+import { PdfExportDialog } from "./lazy-tools";
 import { generateArticlePdf, downloadPdf } from "@/lib/osler/pdf";
 import { useSwipeBackDismiss } from "@/hooks/use-swipe-back-dismiss";
 

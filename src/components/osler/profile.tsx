@@ -58,7 +58,7 @@ import type { StringKey } from "@/lib/osler/i18n";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { NotesPanel } from "./notes-panel";
+import { NotesPanel } from "./lazy-tools";
 import { SyncModal } from "./sync/sync-modal";
 import { haptic } from "@/lib/osler/native";
 import {

@@ -13,19 +13,21 @@ import { listAllArticles } from "@/lib/osler/articles";
 import type { ArticleMeta } from "@/lib/osler/articles";
 import { Button } from "@/components/ui/button";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
-import { LabValuesSidebar } from "@/components/osler/lab-values";
-import { CalculatorModal } from "@/components/osler/calculator";
-import { FloatingArticleModal } from "@/components/osler/article-modal";
-import { AiAssistant } from "@/components/osler/ai-assistant";
-import { QuizSettingsPanel } from "@/components/osler/quiz-settings-panel";
-import { NotesPanel } from "@/components/osler/notes-panel";
+import {
+  LabValuesSidebar,
+  CalculatorModal,
+  FloatingArticleModal,
+  AiAssistant,
+  QuizSettingsPanel,
+  NotesPanel,
+} from "@/components/osler/lazy-tools";
 import { useContentCache } from "@/hooks/use-content-cache";
 import { useLightbox } from "@/components/osler/lightbox-provider";
 import { setImmersiveMode } from "@/components/osler/immersive-mode";
 import { haptic } from "@/lib/osler/native";
 import { useI18n } from "@/components/osler/i18n-provider";
 import { EmptyState } from "@/components/osler/ui-primitives";
-import { SessionStartDialog } from "@/components/osler/session-start-dialog";
+import { SessionStartDialog } from "@/components/osler/lazy-tools";
 import type { SessionMode, SessionOrder, SessionStartOptions } from "@/lib/osler/session-options";
 import { routeFor, useOslerRouter } from "@/lib/osler/navigation";
 import { markSessionDismissed, isSessionDismissed, clearSessionDismissed } from "@/components/osler/resume-session-dialog";

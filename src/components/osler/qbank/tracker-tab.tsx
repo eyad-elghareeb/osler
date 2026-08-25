@@ -19,7 +19,8 @@ import { SparkTrend, defaultSparkDelta } from "@/components/osler/analytics-prim
 import { TrackerTree, type TrackerTreeNode } from "@/components/osler/tracker-tree";
 import { TrackerPreviewSheet, type TrackerPreviewItem } from "@/components/osler/tracker-preview";
 import { generateResultsPdf, generateDashboardPdf, downloadPdf, type FullQuestion } from "@/lib/osler/pdf";
-import { PdfExportDialog, type PdfExportOptions } from "@/components/osler/pdf-export-dialog";
+import { type PdfExportOptions } from "@/components/osler/pdf-export-dialog";
+import { PdfExportDialog } from "@/components/osler/lazy-tools";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useOslerSession } from "@/lib/osler/session-context";
 import { RECENT_SESSION_PREVIEW_COUNT, TestMode, SessionData, PackEntry, formatTime, formatMs } from "./shared";

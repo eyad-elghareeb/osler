@@ -11,7 +11,8 @@ import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { useI18n } from "@/components/osler/i18n-provider";
 import { generateResultsPdf, downloadPdf } from "@/lib/osler/pdf";
-import { PdfExportDialog, type PdfExportOptions } from "@/components/osler/pdf-export-dialog";
+import { type PdfExportOptions } from "@/components/osler/pdf-export-dialog";
+import { PdfExportDialog } from "@/components/osler/lazy-tools";
 import { choiceLetter, SessionData, SummaryRow, formatTime } from "./shared";
 
 
