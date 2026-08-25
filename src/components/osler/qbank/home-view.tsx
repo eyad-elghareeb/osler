@@ -163,7 +163,12 @@ export function HomeView({
             opacity: headerCollapsed ? 0 : 1,
           }}
           transition={MOTION_TRANSITION.collapseBar}
-          className="overflow-hidden shrink-0"
+          className={cn(
+            "overflow-hidden shrink-0",
+            // Same containment + hit-test skip as the app scroll-away bar.
+            "[contain:layout_paint]",
+            headerCollapsed && "pointer-events-none",
+          )}
         >
           <div className="px-4 md:px-6 lg:px-8 w-full max-w-7xl mx-auto pt-3 md:pt-4 pb-2">
             <PageHeader
@@ -176,9 +181,11 @@ export function HomeView({
         </motion.div>
         {/* Tab bar — in-flow sibling above the scroller (nothing renders
             behind it), so it stays opaque; no backdrop blur to pay for on
-            every frame of the collapse. */}
+            every frame of the collapse. Shadow flips instantly rather than
+            transitioning — an animating box-shadow repaints the full-width
+            strip every frame and competes with the height tween. */}
         <div className={cn(
-          "shrink-0 border-b border-border w-full max-w-7xl mx-auto px-4 md:px-6 lg:px-8 bg-background z-20 transition-[box-shadow]",
+          "shrink-0 border-b border-border w-full max-w-7xl mx-auto px-4 md:px-6 lg:px-8 bg-background z-20",
           headerCollapsed ? "shadow-e1" : "shadow-xs"
         )}>
           {/* 3-col grid: [spacer | centered tabs | filter]

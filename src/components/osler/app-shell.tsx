@@ -648,6 +648,11 @@ function MobileScrollAwayBar({
         // a backdrop blur would cost GPU time for no visual effect.
         "bg-background",
         "border-b border-border",
+        // contain scopes the per-frame layout invalidation of the height
+        // tween to this subtree; pointer-events-none keeps the collapsed
+        // (invisible) content out of hit-testing.
+        "[contain:layout_paint]",
+        (hidden || immersive) && "pointer-events-none",
       )}
     >
       <div className="h-13 flex items-center gap-2 px-3 sm:px-4">
