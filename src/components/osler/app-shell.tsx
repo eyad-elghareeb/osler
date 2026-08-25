@@ -628,8 +628,10 @@ function MobileScrollAwayBar({
   const { navigate } = useOslerRouter();
   const immersive = useImmersiveMode();
   // Hysteresis hide-on-scroll — immune to short-scroll flapping, phantom
-  // clamp deltas, and momentum jitter (see useHideOnScroll).
-  const hidden = useHideOnScroll(view);
+  // clamp deltas, and momentum jitter (see useHideOnScroll). reservePx is
+  // this bar's layout height (h-13 + border): collapse is skipped when the
+  // page would become unscrollable without it (spring-back band).
+  const hidden = useHideOnScroll(view, { reservePx: 54 });
 
   return (
     <motion.div
@@ -638,7 +640,7 @@ function MobileScrollAwayBar({
         height: hidden || immersive ? 0 : "auto",
         opacity: hidden || immersive ? 0 : 1,
       }}
-      transition={MOTION_TRANSITION.normal}
+      transition={MOTION_TRANSITION.fast}
       className={cn(
         "md:hidden shrink-0 overflow-hidden",
         "bg-background/80 backdrop-blur-md supports-[backdrop-filter]:bg-background/60",

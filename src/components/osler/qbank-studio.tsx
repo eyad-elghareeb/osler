@@ -1743,8 +1743,11 @@ function HomeView({
   // Hide-on-scroll / collapsible app bar — shared hysteresis hook (re-runs
   // its container lookup per tab). Mobile only: when scrolled down, the
   // header unmounts entirely so the lean tab strip is all that remains.
+  // reservePx covers this header (~95px) PLUS the app shell's scroll-away
+  // bar (54px) — both collapse on the same down-scroll, so the hook needs
+  // the combined reclaim to avoid collapsing pages into unscrollability.
   const isMobileHome = useIsMobile();
-  const scrolledDown = useHideOnScroll(homeTab);
+  const scrolledDown = useHideOnScroll(homeTab, { reservePx: 150 });
   const headerCollapsed = isMobileHome && scrolledDown;
 
   const handleContextMenu = React.useCallback((e: React.MouseEvent, node: ContentTreeNode) => {
@@ -1809,7 +1812,7 @@ function HomeView({
             height: headerCollapsed ? 0 : "auto",
             opacity: headerCollapsed ? 0 : 1,
           }}
-          transition={MOTION_TRANSITION.normal}
+          transition={MOTION_TRANSITION.fast}
           className="overflow-hidden shrink-0"
         >
           <div className="px-4 md:px-6 lg:px-8 w-full max-w-7xl mx-auto pt-3 md:pt-4 pb-2">

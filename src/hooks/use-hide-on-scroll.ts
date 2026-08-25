@@ -30,9 +30,23 @@ import * as React from "react";
  *    lockout absorb gesture settling. A ResizeObserver expands the bar if
  *    the page becomes genuinely unscrollable while hidden (no scroll
  *    events fire to reveal through).
+ *  - **Post-collapse headroom guard.** Collapsing chrome gives the
+ *    scroller more room, which SHRINKS its scrollable range. On pages
+ *    whose range barely clears `MIN_HIDE_RANGE`, hiding the bars makes
+ *    the page unscrollable, the browser clamps scrollTop to the top, and
+ *    the ResizeObserver safety net expands the bars right back — felt as
+ *    a spring/bounce. Callers therefore declare how much layout space
+ *    their collapsible chrome reclaims (`reservePx`); collapse is only
+ *    allowed while the predicted post-collapse range still has real
+ *    scroll depth. When several collapsible surfaces share one scroller
+ *    (app bar + view header), each caller passes the COMBINED reclaim so
+ *    they collapse together or not at all.
  *
  * @param retryKey change to reset state when the scroller is replaced
  * (active view / tab).
+ * @param options.reservePx layout px reclaimed when the chrome collapses
+ * (defaults to 0). Pass the total across ALL collapsible chrome on the
+ * same scroller.
  */
 const SHOW_AT_TOP = 40;
 const MIN_HIDE_RANGE = 140;
@@ -41,8 +55,12 @@ const DOWN_THRESHOLD = 24;
 const UP_THRESHOLD = 48;
 const TOGGLE_COOLDOWN_MS = 280;
 
-export function useHideOnScroll(retryKey: string | number = "default"): boolean {
+export function useHideOnScroll(
+  retryKey: string | number = "default",
+  options?: { reservePx?: number },
+): boolean {
   const [hidden, setHidden] = React.useState(false);
+  const reservePx = Math.max(0, options?.reservePx ?? 0);
 
   React.useEffect(() => {
     let el: HTMLElement | null = null;
@@ -141,7 +159,10 @@ export function useHideOnScroll(retryKey: string | number = "default"): boolean 
 
       if (down >= DOWN_THRESHOLD) {
         down = 0;
-        if (max >= MIN_HIDE_RANGE) {
+        // Collapse only if the page will STILL be scrollable once the
+        // chrome's layout space is handed back to the scroller (see the
+        // post-collapse headroom guard note above).
+        if (max - reservePx >= UNSCROLLABLE_RANGE && max >= MIN_HIDE_RANGE) {
           lastToggle = now;
           setHidden(true);
         }
@@ -160,7 +181,7 @@ export function useHideOnScroll(retryKey: string | number = "default"): boolean 
       document.removeEventListener("scroll", onScroll, { capture: true });
       ro?.disconnect();
     };
-  }, [retryKey]);
+  }, [retryKey, reservePx]);
 
   return hidden;
 }
