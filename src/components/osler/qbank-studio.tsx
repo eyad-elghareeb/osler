@@ -20,6 +20,7 @@ import {
   AiAssistant,
   QuizSettingsPanel,
   NotesPanel,
+  SessionStartDialog,
 } from "@/components/osler/lazy-tools";
 import { useContentCache } from "@/hooks/use-content-cache";
 import { useLightbox } from "@/components/osler/lightbox-provider";
@@ -27,7 +28,6 @@ import { setImmersiveMode } from "@/components/osler/immersive-mode";
 import { haptic } from "@/lib/osler/native";
 import { useI18n } from "@/components/osler/i18n-provider";
 import { EmptyState } from "@/components/osler/ui-primitives";
-import { SessionStartDialog } from "@/components/osler/lazy-tools";
 import type { SessionMode, SessionOrder, SessionStartOptions } from "@/lib/osler/session-options";
 import { routeFor, useOslerRouter } from "@/lib/osler/navigation";
 import { markSessionDismissed, isSessionDismissed, clearSessionDismissed } from "@/components/osler/resume-session-dialog";
@@ -35,75 +35,6 @@ import { HomeView } from "./qbank/home-view";
 import { ResultsView } from "./qbank/results-view";
 import { QuizView } from "./qbank/quiz-view";
 import { nodeFromPack, QuizMode, TestMode, HomeTab, SessionData, SessionQuestion, contentToQuestions, archiveDisplacedActive, saveSession } from "./qbank/shared";
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 interface QBankStudioProps {

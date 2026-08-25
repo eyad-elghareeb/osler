@@ -38,7 +38,7 @@ import { notes as notesStore, type NoteRecord } from "@/lib/osler/storage";
 import { isTextInput } from "@/lib/osler/shortcuts";
 import { haptic } from "@/lib/osler/native";
 import { useI18n } from "./i18n-provider";
-import { MilkdownEditor } from "./lazy-tools";
+import { MilkdownEditor } from "./milkdown-editor";
 
 /* ── Time-ago formatter ─────────────────────────────────────────────── */
 function timeAgo(ts: number, t: (k: any, p?: any) => string): string {

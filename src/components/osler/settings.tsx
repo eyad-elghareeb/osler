@@ -15,31 +15,6 @@ import { MOTION_TRANSITION } from "@/lib/osler/motion";
 import dynamic from "next/dynamic";
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 /* ─── Section catalog ─────────────────────────────────────────────── */
 
 export type SettingsSection = "account" | "appearance" | "language" | "ai" | "shortcuts" | "downloads" | "sync" | "backup" | "native" | "about" | "danger";
@@ -67,8 +42,6 @@ const SECTIONS: SectionMeta[] = [
 ];
 
 
-
-
 /* Sections are code-split: each settings pane loads its own chunk when the
  * user opens it, keeping the app shell lean. Fallback matches LoadingState. */
 const SectionFallback = (
@@ -76,7 +49,9 @@ const SectionFallback = (
     <Loader2 className="size-6 animate-spin text-muted-foreground" />
   </div>
 );
-const mkSection = (loader) => dynamic(loader, { ssr: false, loading: () => SectionFallback });
+const mkSection = (
+  loader: () => Promise<{ default: React.ComponentType<Record<string, unknown>> }>,
+) => dynamic(loader, { ssr: false, loading: () => SectionFallback });
 
 const ThemeSettingsSection = mkSection(() => import("@/components/osler/settings/theme-section").then((m) => ({ default: m.ThemeSettingsSection })));
 const LanguageSettingsSection = mkSection(() => import("@/components/osler/settings/language-section").then((m) => ({ default: m.LanguageSettingsSection })));
@@ -357,4 +332,3 @@ export function Settings({
   );
 }
 
-/* ─── Theme / Appearance section ─────────────────────────────────────── */

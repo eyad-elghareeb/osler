@@ -14,6 +14,12 @@ import * as React from "react";
  *  - Always expanded at/near the top (`SHOW_AT_TOP`).
  *  - Collapsing requires the page to have real scroll depth
  *    (`MIN_HIDE_RANGE`) at the moment of collapse.
+ *  - **Per-element gesture state.** Views built on NavigationStack (QBank /
+ *    folder browsers) keep TWO `.osler-page` scrollers mounted at once —
+ *    the home list underneath and the subpage overlay. Hysteresis state is
+ *    tracked per element (WeakMap), so deltas, clamp filtering, and
+ *    accumulators from one layer never pollute or reset the other's;
+ *    `hidden` itself remains global chrome state.
  *  - **Clamp-signature filtering is the core defense.** Collapsing the
  *    chrome resizes the scroller, which lowers its max scroll position;
  *    the browser then CLAMPS scrollTop without any user input, emitting a
@@ -21,26 +27,22 @@ import * as React from "react";
  *    threshold tuning — caused persistent oscillation on just-tall-enough
  *    pages). Only events matching that exact signature (range shrank AND
  *    scrollTop is pinned to the new max) are discarded as noise; a range
- *    change alone is not enough, since late images, lazy-loaded grids, and
- *    growing/filtered lists change the range too without any clamp — and
- *    treating those as noise zeroed the accumulators and made the bar
- *    unable to ever collapse on those pages.
+ *    change alone is not enough, since late images, lazy grids, and
+ *    growing/filtered lists change the range too without any clamp.
+ *  - **Post-collapse headroom guard.** Hiding chrome gives the scroller
+ *    more room, shrinking its range. Callers declare how much layout space
+ *    their collapsible chrome reclaims (`reservePx`, summed across ALL
+ *    collapsible surfaces sharing the scroller); collapse is allowed only
+ *    when the predicted post-collapse range clears POST_COLLAPSE_MIN_RANGE
+ *    — deep enough that the resulting clamp can never land scrollTop at or
+ *    under SHOW_AT_TOP (which would instantly re-expand the bars: the
+ *    "spring back" felt on just-tall-enough pages and folder subpages).
  *  - Asymmetric bands (`DOWN_THRESHOLD` vs the larger `UP_THRESHOLD`),
  *    direction-change accumulator resets, and a `TOGGLE_COOLDOWN_MS`
- *    lockout absorb gesture settling. A ResizeObserver expands the bar if
- *    the page becomes genuinely unscrollable while hidden (no scroll
- *    events fire to reveal through).
- *  - **Post-collapse headroom guard.** Collapsing chrome gives the
- *    scroller more room, which SHRINKS its scrollable range. On pages
- *    whose range barely clears `MIN_HIDE_RANGE`, hiding the bars makes
- *    the page unscrollable, the browser clamps scrollTop to the top, and
- *    the ResizeObserver safety net expands the bars right back — felt as
- *    a spring/bounce. Callers therefore declare how much layout space
- *    their collapsible chrome reclaims (`reservePx`); collapse is only
- *    allowed while the predicted post-collapse range still has real
- *    scroll depth. When several collapsible surfaces share one scroller
- *    (app bar + view header), each caller passes the COMBINED reclaim so
- *    they collapse together or not at all.
+ *    lockout absorb gesture settling. A ResizeObserver watches EVERY seen
+ *    scroller but only expands when the ACTIVE (most recently scrolled)
+ *    one becomes genuinely unscrollable while hidden — an inactive
+ *    NavigationStack layer shrinking must not pop the bars back.
  *
  * @param retryKey change to reset state when the scroller is replaced
  * (active view / tab).
@@ -51,9 +53,20 @@ import * as React from "react";
 const SHOW_AT_TOP = 40;
 const MIN_HIDE_RANGE = 140;
 const UNSCROLLABLE_RANGE = 36;
+/** Minimum predicted scroll range AFTER the chrome collapses. Must exceed
+ * SHOW_AT_TOP with margin so the post-collapse clamp can't park scrollTop
+ * inside the always-expanded zone. */
+const POST_COLLAPSE_MIN_RANGE = 80;
 const DOWN_THRESHOLD = 24;
 const UP_THRESHOLD = 48;
 const TOGGLE_COOLDOWN_MS = 280;
+
+interface ScrollGestureState {
+  lastY: number;
+  lastMax: number;
+  down: number;
+  up: number;
+}
 
 export function useHideOnScroll(
   retryKey: string | number = "default",
@@ -63,87 +76,86 @@ export function useHideOnScroll(
   const reservePx = Math.max(0, options?.reservePx ?? 0);
 
   React.useEffect(() => {
-    let el: HTMLElement | null = null;
-    let lastY = 0;
-    let lastMax = 0;
+    let activeEl: HTMLElement | null = null;
+    const states = new WeakMap<HTMLElement, ScrollGestureState>();
+    const observed = new Set<HTMLElement>();
     let down = 0;
     let up = 0;
     let lastToggle = 0;
 
-    const expand = () => {
+    const resetAccumulators = () => {
       down = 0;
       up = 0;
-      setHidden(false);
     };
 
-    // Safety net: if the page becomes unscrollable while the bar is hidden
-    // (filter shrinks the list, orientation change), there will be no scroll
-    // events to reveal it — watch the container's size instead.
-    const ro =
-      typeof ResizeObserver !== "undefined"
-        ? new ResizeObserver(() => {
-            if (!el) return;
-            lastMax = el.scrollHeight - el.clientHeight;
-            if (lastMax < UNSCROLLABLE_RANGE) {
-              lastY = el.scrollTop;
-              expand();
-            }
-          })
-        : undefined;
+    let ro: ResizeObserver | undefined;
+    if (typeof ResizeObserver !== "undefined") {
+      ro = new ResizeObserver((entries) => {
+        for (const entry of entries) {
+          const el = entry.target as HTMLElement;
+          const st = states.get(el);
+          if (!st) continue;
+          st.lastMax = el.scrollHeight - el.clientHeight;
+          // Safety net: if the page the user is actually reading becomes
+          // unscrollable while the bar is hidden (filter shrinks the list,
+          // orientation change), no scroll event will reveal it through —
+          // watch container sizes instead. Inactive NavigationStack layers
+          // are ignored: their shrink must not pop the bars back.
+          if (el === activeEl && st.lastMax < UNSCROLLABLE_RANGE) {
+            st.lastY = el.scrollTop;
+            resetAccumulators();
+            setHidden(false);
+          }
+        }
+      });
+    }
+
+    const stateFor = (el: HTMLElement): ScrollGestureState => {
+      let st = states.get(el);
+      if (!st) {
+        st = { lastY: el.scrollTop, lastMax: el.scrollHeight - el.clientHeight, down: 0, up: 0 };
+        states.set(el, st);
+        if (ro && !observed.has(el)) {
+          observed.add(el);
+          ro.observe(el);
+        }
+      }
+      return st;
+    };
 
     const onScroll = (e: Event) => {
       const target = e.target as HTMLElement | null;
       if (!target || !target.classList || !target.classList.contains("osler-page")) return;
-      if (target !== el) {
-        el = target;
-        ro?.observe(target);
-        lastY = el.scrollTop;
-        lastMax = el.scrollHeight - el.clientHeight;
-        down = 0;
-        up = 0;
-      }
+      activeEl = target;
+      const st = stateFor(target);
 
       const y = target.scrollTop;
       const max = target.scrollHeight - target.clientHeight;
 
-      // Layout noise filter — but only for the specific signature of a
-      // browser-forced clamp: the range SHRANK (chrome collapsing gave the
-      // scroller more room) AND scrollTop is pinned at/near the new, smaller
-      // max. That pinning is what the browser does when it yanks scrollTop
-      // down without user input; a genuine gesture never lands exactly on
-      // the new boundary by coincidence.
-      //
-      // A range change on its own is NOT noise — it also fires for entirely
-      // legitimate reasons (late images finishing layout, a lazy pack grid
-      // appending rows, a filtered list growing) where scrollTop is
-      // untouched and the in-flight gesture is real. Treating every range
-      // change as noise silently zeroed the accumulators on those pages, so
-      // `down`/`up` could never cross their thresholds and the bar simply
-      // never collapsed. Only resync-and-discard the clamp case; for any
-      // other range change, just rebase `lastMax` and let the delta below
-      // flow through normally.
-      if (max !== lastMax) {
-        const wasClamped = max < lastMax && y >= max - 1;
-        lastMax = max;
+      // Clamp-signature filter (see docblock): swallow only events that
+      // match a browser-forced clamp on THIS element — range shrank AND
+      // scrollTop is pinned at/near the new, smaller max. Any other range
+      // change (late images, lazy grids, filtered lists) rebases lastMax
+      // and lets the real delta flow through.
+      if (max !== st.lastMax) {
+        const wasClamped = max < st.lastMax && y >= max - 1;
+        st.lastMax = max;
         if (wasClamped) {
-          lastY = y;
-          down = 0;
-          up = 0;
+          st.lastY = y;
+          resetAccumulators();
           return;
         }
-        // Range grew/shrank without a clamp — not noise, keep processing
-        // this event's real delta below (lastY is still the pre-change
-        // scrollTop, which is what we want to diff against).
       }
 
       if (y <= SHOW_AT_TOP) {
-        lastY = y;
-        expand();
+        st.lastY = y;
+        resetAccumulators();
+        setHidden(false);
         return;
       }
 
-      const delta = y - lastY;
-      lastY = y;
+      const delta = y - st.lastY;
+      st.lastY = y;
       if (delta > 0) {
         down += delta;
         up = 0;
@@ -159,10 +171,10 @@ export function useHideOnScroll(
 
       if (down >= DOWN_THRESHOLD) {
         down = 0;
-        // Collapse only if the page will STILL be scrollable once the
-        // chrome's layout space is handed back to the scroller (see the
-        // post-collapse headroom guard note above).
-        if (max - reservePx >= UNSCROLLABLE_RANGE && max >= MIN_HIDE_RANGE) {
+        // Collapse only if the page will STILL be scrollable — with real
+        // depth beyond the always-expanded zone — once the chrome's layout
+        // space is handed back (post-collapse headroom guard).
+        if (max >= MIN_HIDE_RANGE && max - reservePx >= POST_COLLAPSE_MIN_RANGE) {
           lastToggle = now;
           setHidden(true);
         }
@@ -175,7 +187,7 @@ export function useHideOnScroll(
 
     document.addEventListener("scroll", onScroll, { capture: true, passive: true });
     // Fresh view/tab always starts expanded, whatever scroll depth restores.
-    expand();
+    setHidden(false);
 
     return () => {
       document.removeEventListener("scroll", onScroll, { capture: true });
