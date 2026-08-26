@@ -626,12 +626,12 @@ function SidebarLink({
       <Icon className="size-4 shrink-0 relative" />
       {!collapsed && <span className="flex-1 truncate relative">{label}</span>}
       {!collapsed && item.badge != null && item.badge > 0 && (
-        <Badge variant="destructive" className="h-5 min-w-5 px-1 text-xs relative">
+        <Badge variant="outline" className="relative h-5 min-w-5 border-border bg-muted/60 px-1.5 text-xs font-medium tabular-nums text-muted-foreground">
           {item.badge > 99 ? "99+" : item.badge}
         </Badge>
       )}
       {collapsed && item.badge != null && item.badge > 0 && (
-        <span className="absolute top-1 end-1 size-2 rounded-full bg-destructive" />
+        <span className="absolute top-1 end-1 size-1.5 rounded-full bg-muted-foreground/50" />
       )}
     </Link>
   );

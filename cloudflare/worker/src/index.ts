@@ -2755,7 +2755,9 @@ async function handleSupportTicketCreate(request: Request, env: Env, session: Se
   if (!tid || !category || !source || !subject || !message) return json({ error: "Invalid ticket payload" }, 400, origin, log);
   let context: string | null = null;
   if (body.context && typeof body.context === "object") {
-    try { context = JSON.stringify(body.context).slice(0, 4000); } catch { context = null; }
+    // QBank reports attach the full question (stem + choices + explanation),
+    // which can reach a few KB of text — cap generously but bounded.
+    try { context = JSON.stringify(body.context).slice(0, 16_000); } catch { context = null; }
   }
   const t = now();
   try {
@@ -2882,6 +2884,16 @@ async function handleAdmin(request: Request, env: Env, session: Session, url: UR
       ).bind(nextStatus, nextReply, t, nextStatus === "resolved" ? t : null, tid).run();
       await auditLog(env, session.user.id, "ticket.update", ticketPatch[1], { status: nextStatus, replied: nextReply != null });
       return json({ ticket: mapTicketRow({ ...existing, status: nextStatus, reply: nextReply, updated_at: t, resolved_at: nextStatus === "resolved" ? t : null }) }, 200, origin, log);
+    }
+    if (request.method === "DELETE" && ticketPatch) {
+      // Only resolved tickets may be deleted — an open report is actionable.
+      const tid = decodeURIComponent(ticketPatch[1]);
+      const existing = await env.DB.prepare("SELECT status FROM support_tickets WHERE id = ?").bind(tid).first<{ status: string }>();
+      if (!existing) return json({ error: "Ticket not found" }, 404, origin, log);
+      if (existing.status !== "resolved") return json({ error: "Only resolved tickets can be deleted" }, 409, origin, log);
+      await env.DB.prepare("DELETE FROM support_tickets WHERE id = ?").bind(tid).run();
+      await auditLog(env, session.user.id, "ticket.delete", ticketPatch[1], null);
+      return json({ ok: true }, 200, origin, log);
     }
     if (request.method === "GET" && path === "/v1/admin/tickets") {
       const page = Math.max(1, Number(url.searchParams.get("page") || 1));

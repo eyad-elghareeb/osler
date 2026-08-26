@@ -289,7 +289,8 @@ export function QuizView({
   const bindings = useShortcutBindings();
 
   // Auto-attached report context: pack identity, question id, a plain-text
-  // stem excerpt and the reporter's chosen answer at report time.
+  // stem excerpt for the summary line, and the FULL question (same shape the
+  // AI assistant receives) so admins can see exactly what was wrong.
   const reportContext = React.useMemo(() => {
     if (!q) return undefined;
     return {
@@ -298,6 +299,13 @@ export function QuizView({
       qid: q.id,
       questionExcerpt: (q.stem || "").replace(/[#*`_[\]()!>]/g, " ").replace(/\s+/g, " ").trim().slice(0, 140),
       selectedAnswer: selected !== undefined ? q.choices[selected] : undefined,
+      question: {
+        stem: q.stem || "",
+        choices: q.choices?.length ? q.choices : undefined,
+        correct: q.correct,
+        explanation: q.explanation || undefined,
+        selected,
+      },
     };
   }, [q, session.itemId, session.itemTitle, selected]);
 

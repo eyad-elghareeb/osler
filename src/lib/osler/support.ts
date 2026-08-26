@@ -17,6 +17,18 @@ export type TicketStatus = "open" | "in_progress" | "resolved";
 export type TicketSource = "settings" | "qbank" | "library";
 export type TicketCategory = "bug" | "content" | "feature" | "other";
 
+/** Full question payload attached to QBank reports — mirrors the AI
+ *  assistant's questionContext (stem + choices + correct) plus the fields
+ *  admins need to fix content: the explanation and the reporter's choice. */
+export interface TicketQuestionContext {
+  stem: string;
+  choices?: string[];
+  correct?: number;
+  explanation?: string;
+  /** Index of the reporter's chosen choice at report time. */
+  selected?: number;
+}
+
 export interface TicketContext {
   packUid?: string;
   packTitle?: string;
@@ -26,6 +38,7 @@ export interface TicketContext {
   selectedAnswer?: string;
   articleTitle?: string;
   articleFile?: string;
+  question?: TicketQuestionContext;
 }
 
 export interface SupportTicket {

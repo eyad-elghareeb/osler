@@ -97,6 +97,7 @@ export function ReportTicketDialog({
   if (context?.questionExcerpt) contextLines.push(`${t("support.contextQuestion")}: "${context.questionExcerpt}"`);
   if (context?.selectedAnswer) contextLines.push(`${t("support.contextAnswer")}: ${context.selectedAnswer}`);
   if (context?.articleTitle) contextLines.push(`${t("support.contextArticle")}: ${context.articleTitle}`);
+  if (context?.question?.stem) contextLines.push(t("support.attachFullQuestion"));
 
   return (
     <Dialog open={open} onOpenChange={(next) => { if (!submitting) onOpenChange(next); }}>

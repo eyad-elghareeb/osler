@@ -94,6 +94,13 @@ export interface AdminSupportTicket {
     selectedAnswer?: string;
     articleTitle?: string;
     articleFile?: string;
+    question?: {
+      stem: string;
+      choices?: string[];
+      correct?: number;
+      explanation?: string;
+      selected?: number;
+    };
   } | null;
   status: "open" | "in_progress" | "resolved";
   reply: string | null;
@@ -413,6 +420,7 @@ export const adminApi = {
                                                    req<AdminTicketPage>(`/v1/admin/tickets?page=${page}${status !== "all" ? `&status=${status}` : ""}`),
   updateTicket:    (id: string, patch: { status?: AdminSupportTicket["status"]; reply?: string | null }) =>
                                                    req<{ ticket: AdminSupportTicket | null }>(`/v1/admin/tickets/${encodeURIComponent(id)}`, "PATCH", patch),
+  deleteTicket:    (id: string)                  => req<{ ok: boolean }>(`/v1/admin/tickets/${encodeURIComponent(id)}`, "DELETE"),
 };
 
 // ── Analytics API (admin only) ──────────────────────────────────────────────

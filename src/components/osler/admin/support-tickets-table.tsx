@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import {
   BookOpen,
+  CheckCircle2,
   ChevronLeft,
   ChevronRight,
   CircleCheck,
@@ -11,7 +12,12 @@ import {
   Loader2,
   Save,
   Settings2,
+  Trash2,
 } from "lucide-react";
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -33,21 +39,70 @@ const STATUS_BADGE_CLASS: Record<AdminSupportTicket["status"], string> = {
   resolved: "bg-success-soft text-success border-success/30",
 };
 const PAGE_SIZE = 25;
+const CHOICE_KEYS = ["A", "B", "C", "D", "E", "F", "G", "H"];
+
+/** The full question a QBank report attached (same payload the AI assistant
+ *  sees): stem, choices with correct/user marks, and the explanation. */
+function ReportedQuestion({ question }: {
+  question: NonNullable<AdminSupportTicket["context"]>["question"];
+}) {
+  const { t } = useI18n();
+  if (!question?.stem) return null;
+  return (
+    <div className="rounded-lg border border-border bg-muted/40 p-3 grid gap-2">
+      <div className="text-xs font-semibold text-muted-foreground">{t("admin.tickets.question")}</div>
+      <p className="text-sm whitespace-pre-wrap break-words">{question.stem}</p>
+      {!!question.choices?.length && (
+        <ul className="grid gap-1">
+          {question.choices.map((choice, i) => {
+            const isCorrect = question.correct === i;
+            const isSelected = question.selected === i;
+            return (
+              <li
+                key={i}
+                className={cn(
+                  "flex items-start gap-1.5 rounded-md px-2 py-1 text-sm",
+                  isCorrect && "bg-success-soft text-success",
+                  isSelected && !isCorrect && "bg-warning-soft text-warning",
+                  !isCorrect && !isSelected && "text-muted-foreground",
+                )}
+              >
+                <span className="font-mono text-xs mt-0.5 shrink-0">{CHOICE_KEYS[i] ?? i}.</span>
+                <span className="min-w-0 break-words">{choice}</span>
+                {isCorrect && <span className="ms-auto shrink-0 text-[11px] font-medium">{t("admin.tickets.correct")}</span>}
+                {isSelected && <span className="ms-auto shrink-0 text-[11px] font-medium">{t("support.contextAnswer")}</span>}
+              </li>
+            );
+          })}
+        </ul>
+      )}
+      {question.explanation && (
+        <div className="border-t border-border pt-2">
+          <div className="text-xs font-semibold text-muted-foreground mb-0.5">{t("admin.tickets.explanation")}</div>
+          <p className="text-sm text-muted-foreground whitespace-pre-wrap break-words">{question.explanation}</p>
+        </div>
+      )}
+    </div>
+  );
+}
 
 function formatDate(ts: number): string {
   return new Date(ts).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
 }
 
 /** One ticket card: context details + status/reply triage controls. */
-function TicketCard({ ticket, onUpdated }: {
+function TicketCard({ ticket, onUpdated, onDeleted }: {
   ticket: AdminSupportTicket;
   onUpdated: (t: AdminSupportTicket) => void;
+  onDeleted: (id: string) => void;
 }) {
   const { t } = useI18n();
   const { toast } = useToast();
   const [status, setStatus] = useState(ticket.status);
   const [reply, setReply] = useState(ticket.reply ?? "");
   const [saving, setSaving] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const SourceIcon = SOURCE_ICON[ticket.source] ?? Settings2;
 
   // Re-sync local fields when the parent list refreshes.
@@ -84,6 +139,22 @@ function TicketCard({ ticket, onUpdated }: {
       ]
     : [];
 
+  const deleteTicket = async () => {
+    setDeleting(true);
+    try {
+      await adminApi.deleteTicket(ticket.id);
+      haptic("success");
+      toast({ title: t("admin.tickets.deletedToast") });
+      onDeleted(ticket.id);
+    } catch {
+      haptic("error");
+      toast({ title: t("admin.tickets.deleteFailed"), variant: "destructive" });
+    } finally {
+      setDeleting(false);
+      setConfirmDelete(false);
+    }
+  };
+
   return (
     <Card className="p-4 space-y-3">
       <div className="flex flex-wrap items-start justify-between gap-2">
@@ -103,16 +174,29 @@ function TicketCard({ ticket, onUpdated }: {
             <Badge variant="outline" className="px-1.5 py-0 text-[11px]">{t(TICKET_CATEGORY_I18N[ticket.category])}</Badge>
           </div>
         </div>
-        <Select value={status} onValueChange={(v) => { haptic("selection"); setStatus(v as AdminSupportTicket["status"]); }}>
-          <SelectTrigger size="sm" className={cn("w-36 shrink-0", STATUS_BADGE_CLASS[status])}>
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {(Object.keys(TICKET_STATUS_I18N) as AdminSupportTicket["status"][]).map((s) => (
-              <SelectItem key={s} value={s}>{t(TICKET_STATUS_I18N[s])}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        <div className="flex items-center gap-1 shrink-0">
+          <Select value={status} onValueChange={(v) => { haptic("selection"); setStatus(v as AdminSupportTicket["status"]); }}>
+            <SelectTrigger size="sm" className={cn("w-36", STATUS_BADGE_CLASS[status])}>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {(Object.keys(TICKET_STATUS_I18N) as AdminSupportTicket["status"][]).map((s) => (
+                <SelectItem key={s} value={s}>{t(TICKET_STATUS_I18N[s])}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          {ticket.status === "resolved" && (
+            <Button
+              variant="ghost" size="iconSm"
+              onClick={() => { haptic("light"); setConfirmDelete(true); }}
+              className="text-muted-foreground hover:text-destructive"
+              title={t("admin.tickets.delete")}
+              aria-label={t("admin.tickets.delete")}
+            >
+              <Trash2 className="size-3.5" />
+            </Button>
+          )}
+        </div>
       </div>
 
       <p className="text-sm whitespace-pre-wrap break-words">{ticket.message}</p>
@@ -126,6 +210,8 @@ function TicketCard({ ticket, onUpdated }: {
           ))}
         </div>
       )}
+
+      <ReportedQuestion question={ctx?.question} />
 
       <div className="grid gap-2">
         <Textarea
@@ -142,6 +228,26 @@ function TicketCard({ ticket, onUpdated }: {
           </Button>
         </div>
       </div>
+
+      <AlertDialog open={confirmDelete} onOpenChange={setConfirmDelete}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{t("admin.tickets.deleteTitle")}</AlertDialogTitle>
+            <AlertDialogDescription>{t("admin.tickets.deleteDesc")}</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>{t("common.cancel")}</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(e) => { e.preventDefault(); deleteTicket(); }}
+              disabled={deleting}
+              className="bg-destructive text-white hover:bg-destructive/90"
+            >
+              {deleting ? <Loader2 className="size-4 animate-spin" /> : <Trash2 className="size-4" />}
+              {t("admin.tickets.delete")}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </Card>
   );
 }
@@ -204,7 +310,16 @@ export function SupportTicketsTable() {
       ) : (
         <div className="space-y-3">
           {tickets.map((tk) => (
-            <TicketCard key={tk.id} ticket={tk} onUpdated={(u) => setTickets((prev) => prev.map((x) => (x.id === u.id ? u : x)))} />
+            <TicketCard
+              key={tk.id}
+              ticket={tk}
+              onUpdated={(u) => setTickets((prev) => prev.map((x) => (x.id === u.id ? u : x)))}
+              onDeleted={(id) => {
+                // Deleted tickets are always resolved — only the total moves.
+                setTickets((prev) => prev.filter((x) => x.id !== id));
+                setTotal((n) => Math.max(0, n - 1));
+              }}
+            />
           ))}
         </div>
       )}
