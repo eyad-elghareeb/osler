@@ -2784,4 +2784,5 @@ export const ar = {
     "admin.tickets.deleteDesc": "ستُحذف التذكرة وردّها نهائيًا. يمكن حذف التذاكر التي تم حلها فقط.",
     "admin.tickets.deletedToast": "تم حذف التذكرة",
     "admin.tickets.deleteFailed": "تعذر حذف التذكرة",
+    "admin.tickets.open": "فتح التذكرة",
 } as const;

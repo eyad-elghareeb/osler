@@ -2788,4 +2788,5 @@ export const en = {
     "admin.tickets.deleteDesc": "The ticket and its reply will be permanently removed. Only resolved tickets can be deleted.",
     "admin.tickets.deletedToast": "Ticket deleted",
     "admin.tickets.deleteFailed": "Could not delete the ticket",
+    "admin.tickets.open": "Open ticket",
 } as const;
