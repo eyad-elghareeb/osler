@@ -97,6 +97,10 @@ const RATE_LIMIT_MAX: Record<string, number> = {
   "qstats": 10,
   "qstats_user": 10,
   "qstats_read": 120,
+  // Support tickets: filing is a deliberate user action (a form submit), not a
+  // background loop — a handful per minute is far above legitimate usage.
+  "ticket": 5,
+  "ticket_user": 5,
 };
 
 const MAX_SESSIONS_PER_USER = 12;
@@ -2705,6 +2709,74 @@ async function handleAnalytics(request: Request, env: Env, url: URL, origin: str
   return null;
 }
 
+/* ── Support tickets ─────────────────────────────────────────────────────
+ *
+ * Users report problems from Settings, QBank (per-question) and the Library
+ * article reader. Submission is pre-auth (local guests have no account);
+ * signed-in reporters get their account attached so admins can identify them.
+ * The client generates the ticket id so its local receipt merges cleanly
+ * with server status updates later.
+ */
+
+const TICKET_SOURCES = new Set(["settings", "qbank", "library"]);
+const TICKET_CATEGORIES = new Set(["bug", "content", "feature", "other"]);
+const TICKET_STATUSES = new Set(["open", "in_progress", "resolved"]);
+
+function mapTicketRow(r: any) {
+  let context: unknown = null;
+  try { context = r.context ? JSON.parse(r.context) : null; } catch { context = null; }
+  return {
+    id: r.id,
+    userId: r.user_id ?? null,
+    username: r.username ?? null,
+    source: r.source,
+    category: r.category,
+    subject: r.subject,
+    message: r.message,
+    context,
+    status: r.status,
+    reply: r.reply ?? null,
+    createdAt: r.created_at,
+    updatedAt: r.updated_at,
+    resolvedAt: r.resolved_at ?? null,
+  };
+}
+
+async function handleSupportTicketCreate(request: Request, env: Env, session: Session | null, origin: string, log: Logger): Promise<Response> {
+  const contentLength = Number(request.headers.get("content-length") || "0");
+  if (contentLength > 32_000) return json({ error: "Request body too large" }, 413, origin, log);
+  const body = await readJson(request);
+  if (!body || typeof body !== "object") return json({ error: "Invalid request" }, 400, origin, log);
+  const tid = typeof body.id === "string" && body.id.length > 0 && body.id.length <= 64 && !/[\x00-\x1f\x7f]/.test(body.id) ? body.id : null;
+  const category = typeof body.category === "string" && TICKET_CATEGORIES.has(body.category) ? body.category : null;
+  const source = typeof body.source === "string" && TICKET_SOURCES.has(body.source) ? body.source : null;
+  const subject = typeof body.subject === "string" ? body.subject.trim().slice(0, 200) : "";
+  const message = typeof body.message === "string" ? body.message.trim().slice(0, 5000) : "";
+  if (!tid || !category || !source || !subject || !message) return json({ error: "Invalid ticket payload" }, 400, origin, log);
+  let context: string | null = null;
+  if (body.context && typeof body.context === "object") {
+    try { context = JSON.stringify(body.context).slice(0, 4000); } catch { context = null; }
+  }
+  const t = now();
+  try {
+    await env.DB.prepare(
+      "INSERT INTO support_tickets (id, user_id, username, source, category, subject, message, context, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'open', ?, ?)"
+    ).bind(tid, session?.user.id ?? null, session ? String(session.user.display_name || session.user.username || "").slice(0, 80) : null, source, category, subject, message, context, t, t).run();
+  } catch (error: any) {
+    log.error("support ticket insert failed", { error: error.message });
+    // Idempotent re-try from a client that already delivered this ticket is fine.
+    return json({ ok: true }, 200, origin, log);
+  }
+  return json({ ok: true }, 200, origin, log);
+}
+
+async function handleSupportTicketsMine(env: Env, session: Session, origin: string, log: Logger): Promise<Response> {
+  const rows = await env.DB.prepare(
+    "SELECT * FROM support_tickets WHERE user_id = ? ORDER BY created_at DESC LIMIT 100"
+  ).bind(session.user.id).all();
+  return json({ tickets: (rows.results || []).map(mapTicketRow) }, 200, origin, log);
+}
+
 /* ── Admin handler ── */
 async function handleAdmin(request: Request, env: Env, session: Session, url: URL, origin: string, log: Logger): Promise<Response | null> {
   const path = url.pathname;
@@ -2786,6 +2858,50 @@ async function handleAdmin(request: Request, env: Env, session: Session, url: UR
     const result = await verifyAuditChain(env);
     return json(result, 200, origin, log);
   }
+
+  /* ── Support tickets ── */
+  if (path.startsWith("/v1/admin/tickets")) {
+    if (!isAdminOrContent(session)) return json({ error: "Forbidden" }, 403, origin, log);
+    const ticketPatch = path.match(/^\/v1\/admin\/tickets\/([^/]+)$/);
+    if (request.method === "PATCH" && ticketPatch) {
+      const body = await readJson(request);
+      const status = typeof body.status === "string" && TICKET_STATUSES.has(body.status) ? body.status : null;
+      const reply = body.reply === null || body.reply === undefined ? null : typeof body.reply === "string" ? body.reply.trim().slice(0, 2000) || null : undefined;
+      if (!status && reply === undefined) return json({ error: "Nothing to update" }, 400, origin, log);
+      const tid = decodeURIComponent(ticketPatch[1]);
+      const existing = await env.DB.prepare("SELECT * FROM support_tickets WHERE id = ?").bind(tid).first<any>();
+      if (!existing) return json({ error: "Ticket not found" }, 404, origin, log);
+      const nextStatus = status ?? existing.status;
+      const nextReply = reply === undefined ? existing.reply ?? null : reply;
+      const t = now();
+      await env.DB.prepare(
+        "UPDATE support_tickets SET status = ?, reply = ?, updated_at = ?, resolved_at = ? WHERE id = ?"
+      ).bind(nextStatus, nextReply, t, nextStatus === "resolved" ? t : null, tid).run();
+      await auditLog(env, session.user.id, "ticket.update", ticketPatch[1], { status: nextStatus, replied: nextReply != null });
+      return json({ ticket: mapTicketRow({ ...existing, status: nextStatus, reply: nextReply, updated_at: t, resolved_at: nextStatus === "resolved" ? t : null }) }, 200, origin, log);
+    }
+    if (request.method === "GET" && path === "/v1/admin/tickets") {
+      const page = Math.max(1, Number(url.searchParams.get("page") || 1));
+      const statusParam = url.searchParams.get("status") || "";
+      const limit = 25;
+      const offset = (page - 1) * limit;
+      const where = TICKET_STATUSES.has(statusParam) ? "WHERE status = ?" : "";
+      const binds: unknown[] = TICKET_STATUSES.has(statusParam) ? [statusParam] : [];
+      const [rows, total, openCount] = await Promise.all([
+        env.DB.prepare(`SELECT * FROM support_tickets ${where} ORDER BY created_at DESC LIMIT ? OFFSET ?`).bind(...binds, limit, offset).all(),
+        env.DB.prepare(`SELECT COUNT(*) as n FROM support_tickets ${where}`).bind(...binds).first(),
+        env.DB.prepare("SELECT COUNT(*) as n FROM support_tickets WHERE status = 'open'").first(),
+      ]);
+      return json({
+        items: (rows.results || []).map(mapTicketRow),
+        total: (total as any)?.n ?? 0,
+        openCount: (openCount as any)?.n ?? 0,
+        page,
+        limit,
+      }, 200, origin, log);
+    }
+  }
+
 
   /* ── Users ── */
   if (path.startsWith("/v1/admin/users")) {
@@ -4367,6 +4483,24 @@ export default {
       if (request.method === "GET" && url.pathname === "/v1/qbank/stats") {
         if (!rateLimit(ip, "qstats_read")) return json({ error: "Too many requests" }, 429, origin, log);
         return handleQuestionStatsGet(url, env, origin, log);
+      }
+
+      // ── Support tickets ──
+      // POST /v1/support/tickets — file a report. Pre-auth so local guests can
+      // report too; signed-in reporters get their account attached server-side
+      // (never trusted from the body). GET returns the caller's own tickets.
+      if (request.method === "POST" && url.pathname === "/v1/support/tickets") {
+        if (!rateLimit(ip, "ticket")) return json({ error: "Too many requests" }, 429, origin, log);
+        const ticketSession = await requireUser(request, env).catch(() => null);
+        if (ticketSession && !rateLimit(ticketSession.user.id, "ticket_user")) {
+          return json({ error: "Too many requests" }, 429, origin, log);
+        }
+        return handleSupportTicketCreate(request, env, ticketSession, origin, log);
+      }
+      if (request.method === "GET" && url.pathname === "/v1/support/tickets") {
+        const session = await requireUser(request, env);
+        if (!session) return json({ error: "Authentication required" }, 401, origin, log);
+        return handleSupportTicketsMine(env, session, origin, log);
       }
 
       // ── From here on: authenticated routes ──
