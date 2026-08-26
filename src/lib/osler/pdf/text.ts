@@ -49,6 +49,11 @@ export function normalizeText(text: string): string {
     .replace(/\u2717|\u2718/g, "[x]")
     .replace(/\u25BA|\u25B6/g, ">")
     .replace(/\u2002|\u2003|\u00A0/g, " ")
+    // Emoji & pictographs have no glyphs in the embedded fonts and print as
+    // empty boxes — drop them (plus variation selectors / ZWJ glue), then
+    // collapse the gaps they leave behind.
+    .replace(/[\u{1F000}-\u{1FFFF}\u{2600}-\u{27BF}\u{2B00}-\u{2BFF}\u{2300}-\u{23FF}\u{FE00}-\u{FE0F}\u{200D}\u{20E3}]/gu, "")
+    .replace(/ {2,}/g, " ")
     // Insert ZWNJ between Arabic letters and Arabic punctuation so that
     // jsPDF's processArabic does not treat punctuation as a connecting letter.
     .replace(/([\u0621-\u064A\u0671-\u06D3])([\u060C\u061B\u061F\u066A-\u066D])/g, '$1\u200C$2')

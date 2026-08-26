@@ -5,6 +5,7 @@
  * RTL/Arabic runs, two-column flow, written questions, review lists.
  */
 import { generateQuizCompilationPdf, generateResultsPdf, generateDashboardPdf, generateArticlePdf } from "../src/lib/osler/pdf/index";
+import { normalizeText } from "../src/lib/osler/pdf/text";
 
 function assert(cond: unknown, msg: string): void {
   if (!cond) {
@@ -52,8 +53,8 @@ async function main(): Promise<void> {
   assert(size > 20_000, `results PDF has substance (${size} bytes)`);
 
   // Per-question hyperlinks: parse the serialized PDF — every /Dest link must
-  // point at a valid page object, and the three answered questions' links
-  // must NOT all collapse onto the key's first page.
+  // point at a valid page object, carry the XYZ top anchor of its answer
+  // block, and NOT all collapse onto the key's first page.
   const rawPdf = Buffer.from(resultsDoc.output("arraybuffer")).toString("latin1");
   const pageIdByIndex = new Map<string, number>();
   let idx = 0;
@@ -62,10 +63,18 @@ async function main(): Promise<void> {
     pageIdByIndex.set(m[1], idx);
   }
   assert(pageIdByIndex.size === pages, `serialized page objects match page count (${pageIdByIndex.size})`);
-  const dests = [...rawPdf.matchAll(/\/Subtype \/Link[^[]*\/Rect \[[^\]]*\] ?\/Border \[0 0 0\] ?\/Dest \[(\d+) 0 R/g)]
-    .map((m) => pageIdByIndex.get(m[1]));
-  assert(dests.length === 3 && dests.every((p) => p !== undefined), `three question->answer links, all valid (got ${JSON.stringify(dests)})`);
-  assert(new Set(dests).size >= 2, `links resolve to distinct answer pages (${JSON.stringify(dests)})`);
+  const dests = [...rawPdf.matchAll(/\/Subtype \/Link[^[]*\/Rect \[[^\]]*\] ?\/Border \[0 0 0\] ?\/Dest \[(\d+) 0 R ?([^\]]*)\]/g)]
+    .map((m) => ({ page: pageIdByIndex.get(m[1]), dest: m[2] }));
+  assert(dests.length === 3 && dests.every((d) => d.page !== undefined), `three question->answer links, all valid (got ${JSON.stringify(dests)})`);
+  assert(new Set(dests.map((d) => d.page)).size >= 2, `links resolve to distinct answer pages (${JSON.stringify(dests)})`);
+  assert(dests.every((d) => d.dest.includes("/XYZ")), "every link carries an XYZ top anchor (lands at the block)");
+
+  // Emoji stripping: pictographs are dropped, surrounding text survives.
+  assert(
+    normalizeText("Heart failure \u{1F9E0} with dyspnea \u{1F600}\u{FE0F} \u2014 next step?") === "Heart failure with dyspnea - next step?",
+    "emoji + variation selector stripped, punctuation normalized",
+  );
+
 
   // ── Compilation PDF: multi-chapter, TOC, endchapter keys, Arabic title
   const compDoc = await generateQuizCompilationPdf({

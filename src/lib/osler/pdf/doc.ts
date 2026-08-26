@@ -55,8 +55,8 @@ export class PdfDoc {
    */
   pendingAnswerKeyLinks: Array<{ page: number; x: number; y: number; w: number; h: number; chapterIdx: number; qNum: number }> = [];
 
-  /** Question number → physical page its answer block was drawn on. */
-  answerPages: Record<number, number> = {};
+  /** Question number → page + vertical anchor of its answer block. */
+  answerPages: Record<number, { page: number; top: number }> = {};
 
   constructor(cfg: PdfPageConfig, title: string, styleMode: StyleMode, fontSizeOpt?: "small" | "medium" | "large", fontTypeOpt?: "serif" | "sans", lang: PdfLang = "en", theme: PdfDocTheme = "content") {
     this.L = computeLayout(cfg, styleMode, fontSizeOpt, fontTypeOpt);
@@ -581,7 +581,11 @@ export class PdfDoc {
     d.setFillColor(...C.EMERALD);
     d.roundedRect(x, boxY, w, badgeH, 1.2, 1.2, "F");
 
-    const iconCx = x + pad + 1.6;
+    // All horizontal metrics are OFFSETS within the box (never absolute
+    // coordinates mixed into widths) — mixing them produced a negative
+    // text width that corrupted the badge in the second column.
+    const iconOffset = pad + 1.6;
+    const iconCx = x + iconOffset;
     const iconCy = boxY + badgeH / 2;
     d.setFillColor(255, 255, 255);
     d.circle(iconCx, iconCy, 2.1, "F");
@@ -593,7 +597,7 @@ export class PdfDoc {
       style: "bold",
       size: 8.4,
       color: C.WHITE,
-      maxW: w - (iconCx + 10),
+      maxW: w - iconOffset - 5 - pad,
     });
 
     return boxY + badgeH + sp(1.5, density);
@@ -929,11 +933,6 @@ export class PdfDoc {
       }
     }
 
-    // ── Session status line (your answer vs. correct answer) ──
-    if ((opts.revealed ?? false) && !written && q.correct >= 0 && q.correct < q.choices.length) {
-      h += sp(1.6, density) + lh(7 * ts, 1.25);
-    }
-
     // ── Inline answer + explanation ──
     if (am === "inline" && !written) {
       if (showExpl && q.correct >= 0 && q.correct < q.choices.length) {
@@ -1077,39 +1076,6 @@ export class PdfDoc {
       }
     }
 
-    // ── Session report — the user's chosen answer next to the key ──
-    if ((opts.revealed ?? false) && !isWritten && q.correct >= 0 && q.correct < q.choices.length) {
-      this.y += sp(1.2, density);
-      cw = opts.twoCol ? this.L.cw : this.L.fw;
-      x = this.colX;
-      const stSize = 7 * this.L.typeScale;
-      const ua = opts.userAnswer;
-      if (ua === undefined || ua === null) {
-        const lbl = this.t("pdf.tpl.notAnswered");
-        const lblAr = hasArabic(lbl);
-        d.setFont(lblAr ? "Cairo" : F.Hm, hs("normal"));
-        d.setFontSize(stSize);
-        d.setTextColor(...C.MUTED);
-        if (lblAr) d.text(lbl, x + cw, this.y, { align: "right" });
-        else d.text(tlabel(lbl), x, this.y);
-      } else {
-        const ok = ua === q.correct;
-        const color: RGB = ok ? C.EMERALD : C.CRIMSON;
-        const label = ok
-          ? `${this.t("pdf.tpl.yourAnswer")}: ${LETTERS[ua] ?? String(ua + 1)}`
-          : `${this.t("pdf.tpl.yourAnswer")}: ${LETTERS[ua] ?? String(ua + 1)}   ·   ${this.t("pdf.tpl.correctAnswer")}: ${LETTERS[q.correct]}`;
-        const labelAr = hasArabic(label);
-        if (ok) drawCheck(d, labelAr ? x + cw - 1.6 : x + 1.6, this.y - 1.1, 2.4, C.EMERALD);
-        else drawCross(d, labelAr ? x + cw - 1.6 : x + 1.6, this.y - 1.1, 2.4, C.CRIMSON);
-        d.setFont(labelAr ? "Cairo" : F.H, hs("bold"));
-        d.setFontSize(stSize);
-        d.setTextColor(...color);
-        if (labelAr) d.text(label, x + cw - 4.6, this.y, { align: "right" });
-        else d.text(tlabel(label), x + 4.6, this.y);
-      }
-      this.y += lh(stSize, 1.25) + sp(0.4, density);
-    }
-
     // ── Inline answer + explanation ──
     if (answersMode === "inline" && !isWritten) {
       if (showExpl && q.correct >= 0 && q.correct < q.choices.length) {
@@ -1191,11 +1157,19 @@ export class PdfDoc {
     const d = this.doc;
     for (const link of this.pendingAnswerKeyLinks) {
       if (chapterIdx === -1 || link.chapterIdx === chapterIdx) {
-        // Each question links straight to ITS answer block; fall back to the
-        // key's first page only when the block wasn't drawn (edge cases).
-        const targetPage = this.answerPages[link.qNum] ?? fallbackPage;
+        // Each question jumps straight to ITS answer block — the recorded
+        // XYZ anchor lands the view at the block itself, not the page top.
+        const target = this.answerPages[link.qNum];
         d.setPage(link.page);
-        d.link(link.x, link.y, link.w, link.h, { pageNumber: targetPage });
+        d.link(
+          link.x,
+          link.y,
+          link.w,
+          link.h,
+          target
+            ? { pageNumber: target.page, top: target.top, magFactor: "XYZ" }
+            : { pageNumber: fallbackPage },
+        );
         d.setPage(fallbackPage);
       }
     }
@@ -1242,9 +1216,10 @@ export class PdfDoc {
     let cw = this.twoColEnabled ? this.L.cw : this.L.fw;
     let x = this.colX;
 
-    // Remember where THIS question's answer landed so its "See Answer Key"
-    // link can target it directly.
-    this.answerPages[qNum] = this.page;
+    // Remember where THIS question's answer landed (page + vertical anchor)
+    // so its "See Answer Key" link can jump to the block itself. A little
+    // headroom above the header line keeps the label in view.
+    this.answerPages[qNum] = { page: this.page, top: Math.max(this.L.mt - 4, this.y - 8) };
 
     this.y = this.trackedLabel(`${this.t("pdf.tpl.answers")} ${qNum}`, x, this.y, 9.5, C.EMERALD, cw);
     this.y = this.hRule(this.y, cw, 1.1, C.SAGE);
