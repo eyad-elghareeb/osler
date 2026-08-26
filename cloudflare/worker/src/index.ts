@@ -1239,11 +1239,71 @@ async function hybridPublish(env: Env, obj: any, body: string, targetPath?: stri
   }
 
   try {
-    await regenerateManifestForCategory(env, category);
+    await updateManifestIncremental(env, category, [fileSegment]);
   } catch (e) {
-    console.error("manifest regen failed:", e);
+    try { await regenerateManifestForCategory(env, category); } catch (e2) { console.error("manifest regen failed:", e2); }
   }
   return hybridKeys;
+}
+
+/** Helper for publishing a content object from MCP or API. */
+async function publishContentObject(env: Env, objectId: string, reviewerId: string, targetPath?: string | null): Promise<{ ok: boolean; hybridKeys: string[] }> {
+  if (!env.CONTENT) throw new Error("Content storage not configured");
+  const obj = await env.DB.prepare("SELECT * FROM content_objects WHERE id = ?").bind(objectId).first<any>();
+  if (!obj) throw new Error("Content object not found");
+  const draft = (await r2Get(env, r2Draft(obj.r2_key_base))) ?? (await r2Get(env, r2Pending(obj.r2_key_base)));
+  if (!draft) throw new Error("Draft content is empty");
+  await r2Put(env, r2Published(obj.r2_key_base), draft);
+  if (targetPath) {
+    try {
+      await env.DB.prepare("UPDATE content_objects SET target_path = ? WHERE id = ?").bind(targetPath, objectId).run();
+      obj.target_path = targetPath;
+    } catch {}
+  }
+  const hybridKeys = await hybridPublish(env, obj, draft, targetPath);
+  await env.DB.prepare("UPDATE content_objects SET status = 'published', reviewed_by = ?, reviewed_at = ?, rejection_reason = NULL, updated_at = ? WHERE id = ?")
+    .bind(reviewerId, now(), now(), objectId)
+    .run();
+  return { ok: true, hybridKeys };
+}
+
+/** Helper for unpublishing a content object from MCP or API. */
+async function unpublishContentObject(env: Env, objectId: string, actorId: string): Promise<{ ok: boolean }> {
+  const obj = await env.DB.prepare("SELECT * FROM content_objects WHERE id = ?").bind(objectId).first<any>();
+  if (!obj) throw new Error("Content object not found");
+  const staleKey = obj.published_r2_key;
+  if (staleKey && env.CONTENT) {
+    try { await env.CONTENT.delete(staleKey); } catch (e) { console.error("unpublish r2 cleanup failed:", e); }
+  }
+  await env.DB.prepare("UPDATE content_objects SET status = 'draft', published_r2_key = NULL, updated_at = ? WHERE id = ?").bind(now(), objectId).run();
+  if (staleKey && staleKey.startsWith("content-files/")) {
+    const rel = staleKey.slice("content-files/".length);
+    const cat = rel.split("/")[0];
+    if (cat && cat in CATEGORY_TYPE_MAP) {
+      try { await updateManifestIncremental(env, cat, [rel]); } catch (e) { console.error("manifest regen failed:", e); }
+    }
+  }
+  return { ok: true };
+}
+
+/** Helper for deleting a content object from MCP or API. */
+async function deleteContentObject(env: Env, objectId: string, actorId: string): Promise<{ ok: boolean }> {
+  const obj = await env.DB.prepare("SELECT * FROM content_objects WHERE id = ?").bind(objectId).first<any>();
+  if (!obj) throw new Error("Content object not found");
+  const pubKey = obj.published_r2_key;
+  if (obj.r2_key_base) await deleteManagedBase(env, obj.r2_key_base);
+  if (pubKey && env.CONTENT) {
+    try { await env.CONTENT.delete(pubKey); } catch (e) { console.error("delete r2 cleanup failed:", e); }
+  }
+  await env.DB.prepare("DELETE FROM content_objects WHERE id = ?").bind(objectId).run();
+  if (pubKey && pubKey.startsWith("content-files/")) {
+    const rel = pubKey.slice("content-files/".length);
+    const cat = rel.split("/")[0];
+    if (cat && cat in CATEGORY_TYPE_MAP) {
+      try { await updateManifestIncremental(env, cat, [rel]); } catch (e) { console.error("manifest regen failed:", e); }
+    }
+  }
+  return { ok: true };
 }
 
 /** Map a file extension to a Content-Type for binary assets uploaded via
@@ -1548,6 +1608,189 @@ async function regenerateManifestForCategory(env: Env, category: string): Promis
     httpMetadata: { contentType: "application/json" },
   });
   return manifest;
+}
+
+/**
+ * Smart incremental manifest updater: updates or prunes specific folder nodes in
+ * the category manifest without full keyspace re-scanning.
+ * Automatically runs after any content mutation so admins never need to manually rebuild.
+ */
+async function updateManifestIncremental(env: Env, category: string, touchedPaths?: string[]): Promise<any> {
+  if (!env.CONTENT) return null;
+  if (!touchedPaths || touchedPaths.length === 0) {
+    return regenerateManifestForCategory(env, category);
+  }
+  const manifestKey = `content-manifests/${category}/manifest.json`;
+  const existingObj = await env.CONTENT.get(manifestKey);
+  if (!existingObj) return regenerateManifestForCategory(env, category);
+  let manifest: any;
+  try {
+    manifest = JSON.parse(await existingObj.text());
+  } catch {
+    return regenerateManifestForCategory(env, category);
+  }
+  if (!manifest || !Array.isArray(manifest.items)) return regenerateManifestForCategory(env, category);
+
+  const parentType = CATEGORY_TYPE_MAP[category] || null;
+
+  // Flatten existing tree into a map of path -> node
+  const flatNodes = new Map<string, any>();
+  const collectNodes = (nodeList: any[]) => {
+    for (const n of nodeList) {
+      const p = n.path ? n.path.replace(/\/$/, "") : "";
+      flatNodes.set(p, n);
+      if (Array.isArray(n.items)) collectNodes(n.items);
+    }
+  };
+  collectNodes(manifest.items);
+
+  // Normalize touched folder paths
+  const targetFolders = new Set<string>();
+  for (const raw of touchedPaths) {
+    let clean = raw.trim().replace(/^\/+|\/+$/g, "");
+    if (clean.startsWith(`content-files/${category}/`)) {
+      clean = clean.slice(`content-files/${category}/`.length);
+    } else if (clean.startsWith(`${category}/`)) {
+      clean = clean.slice(`${category}/`.length);
+    }
+    if (clean.includes(".")) {
+      const slash = clean.lastIndexOf("/");
+      clean = slash >= 0 ? clean.slice(0, slash) : "";
+    }
+    targetFolders.add(clean);
+  }
+
+  for (const fp of targetFolders) {
+    const prefix = fp ? `content-files/${category}/${fp}/` : `content-files/${category}/`;
+    const listed: any = await env.CONTENT.list({ prefix, limit: 1000 });
+    const keys: string[] = (listed?.objects || []).map((o: any) => o.key);
+
+    const directFiles: string[] = [];
+    const directImages: string[] = [];
+    for (const k of keys) {
+      const rel = k.slice(prefix.length);
+      if (!rel) continue;
+      if (rel.startsWith("images/") || rel.startsWith("assets/")) {
+        const imgName = rel.split("/").pop();
+        if (imgName) directImages.push(imgName);
+      } else if (!rel.includes("/")) {
+        if (!isArticleMetaFileName(rel)) {
+          if (rel.match(/\.(json|md|html|htm|pdf)$/i)) directFiles.push(rel);
+          else if (rel.match(/\.(png|jpe?g|gif|svg|webp|avif|bmp|mp3|m4a|mp4)$/i)) directImages.push(rel);
+        }
+      }
+    }
+
+    if (directFiles.length > 0) {
+      const byName = parentType || inferTypeFromFileName(directFiles);
+      const byContent = !byName && category === "qbank" ? await inferTypeFromContent(env, category, fp, directFiles) : null;
+      const inferredType = byName || byContent || "quiz";
+      const segments = fp ? fp.split("/") : [];
+      const uid = buildUid(inferredType, segments);
+      const metadata = await manifestMetadataForFiles(env, category, fp, directFiles);
+
+      let existing = flatNodes.get(fp);
+      if (!existing) {
+        existing = {
+          uid,
+          title: fp ? fp.split("/").pop()!.replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()) : category,
+          type: inferredType,
+          path: fp ? `${fp}/` : "",
+          files: directFiles.sort(),
+          images: directImages.sort(),
+          items: [],
+          packCount: 1,
+          ...metadata,
+        };
+        flatNodes.set(fp, existing);
+      } else {
+        existing.uid = uid;
+        existing.type = inferredType;
+        existing.files = directFiles.sort();
+        existing.images = directImages.sort();
+        existing.packCount = 1;
+        Object.assign(existing, metadata);
+      }
+    } else {
+      const existing = flatNodes.get(fp);
+      if (existing && (!existing.items || existing.items.length === 0)) {
+        flatNodes.delete(fp);
+      }
+    }
+  }
+
+  // Ensure intermediate branch folders exist for all paths
+  for (const fp of [...flatNodes.keys()]) {
+    if (!fp) continue;
+    const parts = fp.split("/");
+    for (let depth = 1; depth < parts.length; depth++) {
+      const branchPath = parts.slice(0, depth).join("/");
+      if (flatNodes.has(branchPath)) continue;
+      const branchType = parentType || "quiz";
+      flatNodes.set(branchPath, {
+        uid: buildUid(branchType, parts.slice(0, depth)),
+        title: parts[depth - 1].replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()),
+        type: branchType,
+        path: `${branchPath}/`,
+        files: [],
+        images: [],
+        items: [],
+      });
+    }
+  }
+
+  // Rebuild tree
+  for (const n of flatNodes.values()) n.items = [];
+  const roots: any[] = [];
+  for (const [fp, node] of flatNodes.entries()) {
+    if (!fp) { roots.push(node); continue; }
+    const parent = fp.includes("/") ? fp.slice(0, fp.lastIndexOf("/")) : "";
+    if (flatNodes.has(parent)) {
+      flatNodes.get(parent)!.items.push(node);
+    } else {
+      roots.push(node);
+    }
+  }
+
+  const summarizeNode = (node: any): { questionCount: number; itemCount: number; packCount: number } => {
+    node.items.sort((a: any, b: any) => a.title.localeCompare(b.title));
+    if (node.items.length === 0) return node;
+    const summary = node.items.reduce(
+      (total: any, child: any) => {
+        const childSummary = summarizeNode(child);
+        return {
+          questionCount: total.questionCount + (childSummary.questionCount || 0),
+          itemCount: total.itemCount + (childSummary.itemCount || 0),
+          packCount: total.packCount + (childSummary.packCount || 0),
+          stationSummary: total.stationSummary.concat(Array.isArray(child.stationSummary) ? child.stationSummary : []),
+          stationSpecialties: new Set([...total.stationSpecialties, ...(child.stationSpecialties ?? [])]),
+          stationDifficulties: new Set([...total.stationDifficulties, ...(child.stationDifficulties ?? [])]),
+          stationTypes: new Set([...total.stationTypes, ...(child.stationTypes ?? [])]),
+          stationTimeMax: Math.max(total.stationTimeMax, child.stationTimeMax ?? 0),
+        };
+      },
+      { questionCount: 0, itemCount: 0, packCount: 0, stationSummary: [], stationSpecialties: new Set<string>(), stationDifficulties: new Set<string>(), stationTypes: new Set<string>(), stationTimeMax: 0 }
+    );
+    Object.assign(node, summary);
+    if (summary.stationSummary.length > 0) {
+      node.stationSummary = summary.stationSummary;
+      node.stationSpecialties = [...summary.stationSpecialties].sort();
+      node.stationDifficulties = [...summary.stationDifficulties].sort();
+      node.stationTypes = [...summary.stationTypes].sort();
+      if (summary.stationTimeMax > 0) node.stationTimeMax = summary.stationTimeMax;
+    }
+    return summary;
+  };
+
+  for (const root of roots) summarizeNode(root);
+  const updatedManifest = {
+    type: parentType || (roots.length > 0 ? roots[0].type : "quiz"),
+    items: roots.sort((a, b) => a.title.localeCompare(b.title)),
+  };
+  await env.CONTENT.put(manifestKey, JSON.stringify(updatedManifest, null, 2), {
+    httpMetadata: { contentType: "application/json" },
+  });
+  return updatedManifest;
 }
 
 /* Content validators */
@@ -4053,10 +4296,11 @@ async function handleAdmin(request: Request, env: Env, session: Session, url: UR
           try { await env.CONTENT.delete(staleKey); } catch (e) { console.error("unpublish r2 cleanup failed:", e); }
         }
         await env.DB.prepare("UPDATE content_objects SET status = 'draft', published_r2_key = NULL, updated_at = ? WHERE id = ?").bind(now(), objectId).run();
-        if (staleKey) {
-          const cat = staleKey.slice("content-files/".length).split("/")[0];
-          if (staleKey.startsWith("content-files/") && cat && cat in CATEGORY_TYPE_MAP) {
-            try { await regenerateManifestForCategory(env, cat); } catch (e) { console.error("manifest regen failed:", e); }
+        if (staleKey && staleKey.startsWith("content-files/")) {
+          const rel = staleKey.slice("content-files/".length);
+          const cat = rel.split("/")[0];
+          if (cat && cat in CATEGORY_TYPE_MAP) {
+            try { await updateManifestIncremental(env, cat, [rel]); } catch (e) { try { await regenerateManifestForCategory(env, cat); } catch {} }
           }
         }
         await auditLog(env, session.user.id, "unpublish", objectId, { title: obj.title }, log);
@@ -4073,10 +4317,11 @@ async function handleAdmin(request: Request, env: Env, session: Session, url: UR
           try { await env.CONTENT.delete(pubKey); } catch (e) { console.error("delete r2 cleanup failed:", e); }
         }
         await env.DB.prepare("DELETE FROM content_objects WHERE id = ?").bind(objectId).run();
-        if (pubKey) {
-          const cat = pubKey.slice("content-files/".length).split("/")[0];
-          if (pubKey.startsWith("content-files/") && cat && cat in CATEGORY_TYPE_MAP) {
-            try { await regenerateManifestForCategory(env, cat); } catch (e) { console.error("manifest regen failed:", e); }
+        if (pubKey && pubKey.startsWith("content-files/")) {
+          const rel = pubKey.slice("content-files/".length);
+          const cat = rel.split("/")[0];
+          if (cat && cat in CATEGORY_TYPE_MAP) {
+            try { await updateManifestIncremental(env, cat, [rel]); } catch (e) { try { await regenerateManifestForCategory(env, cat); } catch {} }
           }
         }
         await auditLog(env, session.user.id, "delete_content", objectId, { title: obj.title }, log);
@@ -4131,8 +4376,9 @@ async function handleAdmin(request: Request, env: Env, session: Session, url: UR
       if (!name || name.length > 80) return json({ error: "Token name required (max 80 chars)" }, 400, origin, log);
       const days = Number(body.expiresInDays);
       const expiresInDays = Number.isFinite(days) && days > 0 ? Math.min(3650, Math.floor(days)) : null;
-      const { token, view } = await mintApiToken(env, session.user.id, name, expiresInDays);
-      await auditLog(env, session.user.id, "create_api_token", view.id, { name: view.name, expiresAt: view.expiresAt }, log);
+      const requestedScope = body.scope === "admin" ? "admin" : "content_admin";
+      const { token, view } = await mintApiToken(env, session.user.id, session.user.role, name, expiresInDays, requestedScope);
+      await auditLog(env, session.user.id, "create_api_token", view.id, { name: view.name, scope: view.scope, expiresAt: view.expiresAt }, log);
       return json({ token, ...view }, 201, origin, log);
     }
   }
@@ -4626,6 +4872,82 @@ export default {
         return handleQuestionStatsGet(url, env, origin, log);
       }
 
+      // ── Dynamic OG social card generator ──────────────────────────────────
+      // GET /og?title=…&type=quiz|bank|flashcard|osce|library|video&sub=…&site=…
+      // Returns a branded SVG social card for use as og:image on shared links.
+      // Public, no auth, safe for open sharing.
+      if (request.method === "GET" && url.pathname === "/og") {
+        const title = (url.searchParams.get("title") || "Osler").slice(0, 100);
+        const sub = (url.searchParams.get("sub") || "").slice(0, 80);
+        const type = url.searchParams.get("type") || "quiz";
+        const site = (url.searchParams.get("site") || "Osler").slice(0, 40);
+
+        const esc = (s: string) => s.replace(/[<>&"]/g, (c: string) => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;", '"': "&quot;" }[c] || c));
+
+        const ENGINE: Record<string, { bg: string; border: string; text: string; label: string }> = {
+          quiz:      { bg: "#1e293b", border: "#3b82f6", text: "#93c5fd", label: "Quiz" },
+          bank:      { bg: "#1e293b", border: "#2563eb", text: "#93c5fd", label: "Question Bank" },
+          flashcard: { bg: "#1e293b", border: "#16a34a", text: "#86efac", label: "Flashcards" },
+          osce:      { bg: "#1e293b", border: "#dc2626", text: "#fca5a5", label: "OSCE Station" },
+          library:   { bg: "#1e293b", border: "#7c3aed", text: "#d8b4fe", label: "Clinical Library" },
+          video:     { bg: "#1e293b", border: "#0891b2", text: "#67e8f9", label: "Video Lesson" },
+          written:   { bg: "#1e293b", border: "#d97706", text: "#fcd34d", label: "Written Cases" },
+        };
+        const meta = ENGINE[type] || ENGINE.quiz;
+
+        // Truncate title to ~40 chars to fit within the card
+        const displayTitle = title.length > 42 ? title.slice(0, 40) + "…" : title;
+        const displaySub = sub.length > 60 ? sub.slice(0, 58) + "…" : sub;
+
+        const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 630" width="1200" height="630">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#090d16"/>
+      <stop offset="50%" stop-color="#0f172a"/>
+      <stop offset="100%" stop-color="#1e3a8a"/>
+    </linearGradient>
+    <linearGradient id="ac" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#93c5fd"/><stop offset="100%" stop-color="#3b82f6"/>
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="630" fill="url(#bg)"/>
+  <g opacity="0.04" stroke="#fff" stroke-width="1">
+    <line x1="0" y1="105" x2="1200" y2="105"/><line x1="0" y1="210" x2="1200" y2="210"/>
+    <line x1="0" y1="315" x2="1200" y2="315"/><line x1="0" y1="420" x2="1200" y2="420"/>
+    <line x1="0" y1="525" x2="1200" y2="525"/>
+    <line x1="200" y1="0" x2="200" y2="630"/><line x1="400" y1="0" x2="400" y2="630"/>
+    <line x1="600" y1="0" x2="600" y2="630"/><line x1="800" y1="0" x2="800" y2="630"/>
+    <line x1="1000" y1="0" x2="1000" y2="630"/>
+  </g>
+  <!-- Logo mark -->
+  <g transform="translate(120,105)">
+    <rect x="0" y="0" width="70" height="70" rx="18" fill="#1e3a8a" stroke="#3b82f6" stroke-width="2"/>
+    <path d="M12 35 L22 35 L28 20 L35 50 L42 27 L49 35 L58 35" stroke="url(#ac)" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+  </g>
+  <text x="210" y="150" font-family="system-ui,-apple-system,sans-serif" font-size="32" font-weight="800" fill="#ffffff">${esc(site)}</text>
+  <!-- Engine badge -->
+  <g transform="translate(120,210)">
+    <rect x="0" y="0" width="168" height="38" rx="19" fill="${meta.bg}" stroke="${meta.border}" stroke-width="1.5"/>
+    <text x="84" y="24" font-family="system-ui,sans-serif" font-size="15" font-weight="700" fill="${meta.text}" text-anchor="middle">${esc(meta.label)}</text>
+  </g>
+  <!-- Main title -->
+  <text x="120" y="330" font-family="system-ui,-apple-system,sans-serif" font-size="56" font-weight="800" fill="#f8fafc" letter-spacing="-0.02em">${esc(displayTitle)}</text>
+  ${displaySub ? `<text x="120" y="395" font-family="system-ui,-apple-system,sans-serif" font-size="26" font-weight="400" fill="#94a3b8">${esc(displaySub)}</text>` : ""}
+  <!-- Footer -->
+  <line x1="120" y1="520" x2="1080" y2="520" stroke="#334155" stroke-width="1"/>
+  <text x="120" y="560" font-family="system-ui,sans-serif" font-size="16" font-weight="500" fill="#64748b">Adaptive Medical Study · Offline Ready · Open Source</text>
+</svg>`;
+
+        return new Response(svg, {
+          status: 200,
+          headers: {
+            "content-type": "image/svg+xml; charset=utf-8",
+            "cache-control": "public, max-age=86400",
+            ...cors(origin),
+          } as any,
+        });
+      }
+
       // ── Support tickets ──
       // POST /v1/support/tickets — file a report. Pre-auth so local guests can
       // report too; signed-in reporters get their account attached server-side
@@ -4653,7 +4975,26 @@ export default {
       // traffic. Shares the admin rate bucket.
       if (url.pathname === "/v1/mcp") {
         if (!rateLimit(ip, "admin")) return json({ error: "Too many requests" }, 429, origin, log);
-        return handleMcpRequest(request, env, origin, log, { auditLog, r2Get, r2Put, validateContent });
+        return handleMcpRequest(request, env, origin, log, {
+          auditLog,
+          r2Get,
+          r2Put,
+          r2Delete: async (e, k) => { if (e.CONTENT) await e.CONTENT.delete(k); },
+          validateContent,
+          publishObject: async (e, id, rev, target) => publishContentObject(e, id, rev, target),
+          unpublishObject: async (e, id, act) => unpublishContentObject(e, id, act),
+          deleteObject: async (e, id, act) => deleteContentObject(e, id, act),
+          updateManifestIncremental: async (e, cat, paths) => updateManifestIncremental(e, cat, paths),
+          getConfig: async (e) => {
+            if (!e.CONTENT) throw new Error("Content storage not configured");
+            const obj = await e.CONTENT.get("_osler.config.json");
+            return obj ? JSON.parse(await obj.text()) : null;
+          },
+          putConfig: async (e, cfg) => {
+            if (!e.CONTENT) throw new Error("Content storage not configured");
+            await e.CONTENT.put("_osler.config.json", JSON.stringify(cfg, null, 2), { httpMetadata: { contentType: "application/json" } });
+          },
+        });
       }
 
       // ── From here on: authenticated routes ──

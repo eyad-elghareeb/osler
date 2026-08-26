@@ -109,14 +109,16 @@ export const metadata: Metadata = {
   },
   openGraph: {
     title: `${siteName} — ${siteTagline}`,
-    description: "Quiz, Bank, Flashcards, Written, OSCE — one app.",
+    description: `${siteName} — High-yield question bank, active recall flashcards, OSCE simulation, and clinical reference library. Adaptive, offline-ready, and open-source.`,
     siteName: siteName,
     type: "website",
+    images: [{ url: "/assets/og-image.svg", width: 1200, height: 630, alt: `${siteName} — ${siteTagline}` }],
   },
   twitter: {
     card: "summary_large_image",
     title: `${siteName} — ${siteTagline}`,
-    description: "Quiz, Bank, Flashcards, Written, OSCE — one app.",
+    description: `${siteName} — High-yield question bank, active recall flashcards, OSCE simulation, and clinical reference library.`,
+    images: ["/assets/og-image.svg"],
   },
 };
 
@@ -145,6 +147,7 @@ export const viewport = {
 
 import { OslerSessionProvider } from "@/lib/osler/session-context";
 import { RouteGuard } from "@/components/osler/route-guard";
+import { CookieConsentBanner } from "@/components/osler/cookie-consent-banner";
 
 export default function RootLayout({
   children,
@@ -181,6 +184,7 @@ export default function RootLayout({
             </OslerI18nProvider>
           </OslerThemeProvider>
         </SerwistProvider>
+        <CookieConsentBanner />
         <Toaster />
       </body>
     </html>

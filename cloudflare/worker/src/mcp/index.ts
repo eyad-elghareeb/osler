@@ -19,12 +19,20 @@ export { SERVER_NAME, SERVER_VERSION };
 export interface McpHost {
   auditLog(env: any, actorId: string, action: string, targetId: string | null, detail: Record<string, unknown> | null): Promise<void>;
   r2Get(env: any, key: string): Promise<string | null>;
-  r2Put(env: any, key: string, text: string, contentType?: string): Promise<void>;
+  r2Put(env: any, key: string, text: string | Uint8Array, contentType?: string): Promise<void>;
+  r2Delete?(env: any, key: string): Promise<void>;
   validateContent(contentType: string, parsed: unknown): string[];
+  publishObject?(env: any, objectId: string, reviewerId: string, targetPath?: string | null): Promise<{ ok: boolean; hybridKeys: string[] }>;
+  unpublishObject?(env: any, objectId: string, actorId: string): Promise<{ ok: boolean }>;
+  deleteObject?(env: any, objectId: string, actorId: string): Promise<{ ok: boolean }>;
+  updateManifestIncremental?(env: any, category: string, touchedPaths?: string[]): Promise<any>;
+  getConfig?(env: any): Promise<any>;
+  putConfig?(env: any, config: any): Promise<void>;
 }
 
 const draftKey = (base: string) => `${base}/draft.json`;
 const pendingKey = (base: string) => `${base}/pending.json`;
+const publishedKey = (base: string) => `${base}/published.json`;
 
 function rpcResponse(payload: unknown[] | null, origin: string): Response {
   if (!payload) return new Response(null, { status: 202 });
@@ -69,17 +77,26 @@ export async function handleMcpRequest(request: Request, env: any & McpEnv, orig
     userId: auth.userId,
     username: auth.username,
     tokenId: auth.tokenId,
+    scope: auth.scope,
     log,
     audit: (action, targetId, detail) => host.auditLog(env, auth.userId, action, targetId, detail),
     r2Get: (key) => host.r2Get(env, key),
     r2Put: (key, text, contentType) => host.r2Put(env, key, text, contentType),
+    r2Delete: (key) => (host.r2Delete ? host.r2Delete(env, key) : env.CONTENT?.delete(key) ?? Promise.resolve()),
     draftKey,
     pendingKey,
+    publishedKey,
     validateContent: host.validateContent,
+    publishObject: host.publishObject ? (objectId, targetPath) => host.publishObject!(env, objectId, auth.userId, targetPath) : undefined,
+    unpublishObject: host.unpublishObject ? (objectId) => host.unpublishObject!(env, objectId, auth.userId) : undefined,
+    deleteObject: host.deleteObject ? (objectId) => host.deleteObject!(env, objectId, auth.userId) : undefined,
+    updateManifestIncremental: host.updateManifestIncremental ? (category, paths) => host.updateManifestIncremental!(env, category, paths) : undefined,
+    getConfig: host.getConfig ? () => host.getConfig!(env) : undefined,
+    putConfig: host.putConfig ? (cfg) => host.putConfig!(env, cfg) : undefined,
     uuid: () => crypto.randomUUID(),
   };
 
-  log.info("mcp_request", { tokenId: auth.tokenId, username: auth.username });
+  log.info("mcp_request", { tokenId: auth.tokenId, username: auth.username, scope: auth.scope });
   const payload = await handleRpc(ctx, body).catch((e: any) => [
     { jsonrpc: "2.0", id: null, error: { code: -32000, message: String(e?.message ?? "Internal error") } },
   ]);
@@ -92,6 +109,7 @@ export interface ApiTokenView {
   id: string;
   name: string;
   prefix: string;
+  scope: "admin" | "content_admin";
   createdAt: number;
   lastUsedAt: number | null;
   expiresAt: number | null;
@@ -100,7 +118,7 @@ export interface ApiTokenView {
 
 export async function listApiTokens(env: McpEnv, userId: string): Promise<ApiTokenView[]> {
   const rows = await env.DB.prepare(
-    "SELECT id, name, prefix, created_at, last_used_at, expires_at, revoked_at FROM api_tokens WHERE user_id = ? ORDER BY created_at DESC"
+    "SELECT id, name, prefix, scopes, created_at, last_used_at, expires_at, revoked_at FROM api_tokens WHERE user_id = ? ORDER BY created_at DESC"
   )
     .bind(userId)
     .all<any>();
@@ -108,6 +126,7 @@ export async function listApiTokens(env: McpEnv, userId: string): Promise<ApiTok
     id: r.id,
     name: r.name,
     prefix: r.prefix,
+    scope: (r.scopes === "admin" || r.scopes === "full_admin" ? "admin" : "content_admin") as "admin" | "content_admin",
     createdAt: r.created_at,
     lastUsedAt: r.last_used_at ?? null,
     expiresAt: r.expires_at ?? null,
@@ -116,17 +135,30 @@ export async function listApiTokens(env: McpEnv, userId: string): Promise<ApiTok
 }
 
 /** Mints a token for the user; the plaintext is returned exactly once. */
-export async function mintApiToken(env: McpEnv, userId: string, name: string, expiresInDays: number | null): Promise<{ view: ApiTokenView; token: string }> {
+export async function mintApiToken(
+  env: McpEnv,
+  userId: string,
+  userRole: string,
+  name: string,
+  expiresInDays: number | null,
+  requestedScope: string = "content_admin"
+): Promise<{ view: ApiTokenView; token: string }> {
   const { token, prefix, tokenHash } = await generateApiToken();
   const tokenId = crypto.randomUUID();
   const t = Date.now();
   const expiresAt = expiresInDays && expiresInDays > 0 ? t + expiresInDays * 86_400_000 : null;
-  await env.DB.prepare("INSERT INTO api_tokens (id, user_id, name, prefix, token_hash, scopes, created_at, expires_at) VALUES (?, ?, ?, ?, ?, 'content', ?, ?)")
-    .bind(tokenId, userId, name.slice(0, 80), prefix, tokenHash, t, expiresAt)
+  // If user is not super admin, they can ONLY mint content_admin tokens.
+  const scope: "admin" | "content_admin" =
+    userRole === "admin" && (requestedScope === "admin" || requestedScope === "full_admin")
+      ? "admin"
+      : "content_admin";
+
+  await env.DB.prepare("INSERT INTO api_tokens (id, user_id, name, prefix, token_hash, scopes, created_at, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
+    .bind(tokenId, userId, name.slice(0, 80), prefix, tokenHash, scope, t, expiresAt)
     .run();
   return {
     token,
-    view: { id: tokenId, name: name.slice(0, 80), prefix, createdAt: t, lastUsedAt: null, expiresAt, revokedAt: null },
+    view: { id: tokenId, name: name.slice(0, 80), prefix, scope, createdAt: t, lastUsedAt: null, expiresAt, revokedAt: null },
   };
 }
 

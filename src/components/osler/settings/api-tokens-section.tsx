@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { Bot, Copy, Check, KeyRound, Plus, Trash2, Loader2 } from "lucide-react";
+import { Bot, Copy, Check, KeyRound, Plus, Trash2, Loader2, ShieldCheck, Shield } from "lucide-react";
 import { useI18n } from "@/components/osler/i18n-provider";
 import { haptic } from "@/lib/osler/native";
 import { toast } from "@/hooks/use-toast";
@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
+import { useOslerSession } from "@/lib/osler/session-context";
 import {
   Select,
   SelectContent,
@@ -46,9 +47,13 @@ export function ApiTokensSection() {
   const [endpoint, setEndpoint] = React.useState("");
   const [name, setName] = React.useState("");
   const [expiry, setExpiry] = React.useState("90");
+  const [scope, setScope] = React.useState<"admin" | "content_admin">("content_admin");
   const [creating, setCreating] = React.useState(false);
   const [createdToken, setCreatedToken] = React.useState<string | null>(null);
   const [copied, setCopied] = React.useState<string | null>(null);
+
+  const { cloudSession } = useOslerSession();
+  const isAdminUser = cloudSession?.user?.role === "admin";
 
   const refresh = React.useCallback(async () => {
     try {
@@ -77,7 +82,8 @@ export function ApiTokensSection() {
     haptic("medium");
     setCreating(true);
     try {
-      const res = await apiTokens.create(name.trim(), Number(expiry) || null);
+      const selectedScope = isAdminUser ? scope : "content_admin";
+      const res = await apiTokens.create(name.trim(), Number(expiry) || null, selectedScope);
       setCreatedToken(res.token);
       setName("");
       haptic("success");
@@ -130,7 +136,7 @@ export function ApiTokensSection() {
 
         {/* Create */}
         <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{t("admin.tokens.new")}</Label>
-        <div className="mt-1.5 grid grid-cols-1 sm:grid-cols-[1fr_140px_auto] gap-2">
+        <div className={cn("mt-1.5 grid gap-2", isAdminUser ? "grid-cols-1 sm:grid-cols-[1fr_150px_130px_auto]" : "grid-cols-1 sm:grid-cols-[1fr_140px_auto]")}>
           <Input
             value={name}
             onChange={(e) => setName(e.target.value)}
@@ -138,6 +144,15 @@ export function ApiTokensSection() {
             maxLength={80}
             onKeyDown={(e) => e.key === "Enter" && create()}
           />
+          {isAdminUser && (
+            <Select value={scope} onValueChange={(v) => { haptic("selection"); setScope(v as any); }}>
+              <SelectTrigger><SelectValue placeholder={t("admin.tokens.scope.label")} /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="admin">{t("admin.tokens.scope.admin")}</SelectItem>
+                <SelectItem value="content_admin">{t("admin.tokens.scope.contentAdmin")}</SelectItem>
+              </SelectContent>
+            </Select>
+          )}
           <Select value={expiry} onValueChange={(v) => { haptic("selection"); setExpiry(v); }}>
             <SelectTrigger><SelectValue /></SelectTrigger>
             <SelectContent>
@@ -183,15 +198,26 @@ export function ApiTokensSection() {
             {tokens.map((tok) => {
               const expired = tok.expiresAt != null && tok.expiresAt < Date.now();
               const status = tok.revokedAt != null ? "revoked" : expired ? "expired" : "active";
+              const isFullAdmin = tok.scope === "admin";
               return (
                 <li key={tok.id} className="flex items-center gap-3 py-2.5">
                   <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 flex-wrap">
                       <span className="text-sm font-medium truncate">{tok.name}</span>
                       <Badge
                         variant="outline"
                         className={cn(
-                          "text-[11px] shrink-0",
+                          "text-[10px] shrink-0 font-medium",
+                          isFullAdmin ? "border-primary/40 bg-primary/10 text-primary" : "border-border bg-muted/40 text-muted-foreground"
+                        )}
+                      >
+                        {isFullAdmin ? <ShieldCheck className="size-3 me-1" /> : <Shield className="size-3 me-1" />}
+                        {t(isFullAdmin ? "admin.tokens.scope.badgeAdmin" : "admin.tokens.scope.badgeContentAdmin")}
+                      </Badge>
+                      <Badge
+                        variant="outline"
+                        className={cn(
+                          "text-[10px] shrink-0",
                           status === "active" && "border-success/30 text-success",
                           status === "revoked" && "border-destructive/30 text-destructive",
                           status === "expired" && "border-warning/30 text-warning",

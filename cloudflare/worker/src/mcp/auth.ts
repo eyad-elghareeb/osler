@@ -36,6 +36,7 @@ export interface TokenAuthResult {
   username: string;
   displayName: string;
   role: string;
+  scope: "admin" | "content_admin";
 }
 
 function b64url(bytes: ArrayBuffer | Uint8Array): string {
@@ -66,7 +67,7 @@ export async function verifyApiToken(env: McpEnv, request: Request): Promise<Tok
   const raw = bearerToken(request);
   if (!raw || !raw.startsWith(TOKEN_PREFIX)) return null;
   const row = await env.DB.prepare(
-    "SELECT t.id AS token_id, t.expires_at, t.revoked_at, u.id, u.username, u.display_name, u.role" +
+    "SELECT t.id AS token_id, t.scopes, t.expires_at, t.revoked_at, u.id, u.username, u.display_name, u.role" +
       " FROM api_tokens t JOIN users u ON u.id = t.user_id WHERE t.token_hash = ?"
   )
     .bind(await sha256B64Url(raw))
@@ -75,7 +76,11 @@ export async function verifyApiToken(env: McpEnv, request: Request): Promise<Tok
   const t = nowMs();
   if (row.revoked_at != null || (row.expires_at != null && row.expires_at < t)) return null;
   if (!ADMIN_ROLES.has(row.role)) return null;
-  return { tokenId: row.token_id, userId: row.id, username: row.username, displayName: row.display_name, role: row.role };
+  const scope: "admin" | "content_admin" =
+    row.role === "admin" && (row.scopes === "admin" || row.scopes === "full_admin")
+      ? "admin"
+      : "content_admin";
+  return { tokenId: row.token_id, userId: row.id, username: row.username, displayName: row.display_name, role: row.role, scope };
 }
 
 const nowMs = () => Date.now();

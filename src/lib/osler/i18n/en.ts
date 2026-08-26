@@ -1785,6 +1785,11 @@ export const en = {
     "admin.tokens.expiry.d90": "90 days",
     "admin.tokens.expiry.d365": "1 year",
     "admin.tokens.create": "Create",
+    "admin.tokens.scope.label": "Privilege",
+    "admin.tokens.scope.admin": "Full Admin (Full Editing)",
+    "admin.tokens.scope.contentAdmin": "Content Admin (Author only)",
+    "admin.tokens.scope.badgeAdmin": "Admin (Full)",
+    "admin.tokens.scope.badgeContentAdmin": "Content Admin",
     "admin.tokens.createdNotice": "Copy this token now — it will not be shown again.",
     "admin.tokens.copy": "Copy",
     "admin.tokens.list": "Your tokens",
@@ -2821,4 +2826,19 @@ export const en = {
     "admin.tickets.deletedToast": "Ticket deleted",
     "admin.tickets.deleteFailed": "Could not delete the ticket",
     "admin.tickets.open": "Open ticket",
+
+    // ── Cookie Consent ─────────────────────────────────────────────────────
+    "consent.title": "Privacy Notice",
+    "consent.description": "Osler stores data locally on your device (IndexedDB) to power your study progress, offline access, and session state. No tracking cookies or third-party analytics are used. By continuing, you agree to our Terms of Service and Privacy Policy.",
+    "consent.accept": "Got it",
+    "consent.dismiss": "Dismiss",
+
+    // ── Terms of Service & Privacy Policy ─────────────────────────────────
+    "legal.tos": "Terms of Service",
+    "legal.privacy": "Privacy Policy",
+    "legal.tosShort": "Terms",
+    "legal.privacyShort": "Privacy",
+    "legal.openTos": "View Terms of Service",
+    "legal.openPrivacy": "View Privacy Policy",
+    "legal.closeDialog": "Close",
 } as const;

@@ -1,0 +1,12 @@
+User-agent: *
+Allow: /
+Allow: /qbank/
+Allow: /flashcards/
+Allow: /osce/
+Allow: /library/
+Allow: /videos/
+Allow: /learn/
+Disallow: /admin/
+Disallow: /v1/
+
+Sitemap: /sitemap.xml
