@@ -701,3 +701,28 @@ export const geminiApi = {
   /** Convenience: test that the saved key works by listing models. */
   test:   ()                          => authedFetch<{ models?: Array<{ name: string }> }>("/v1/account/gemini/proxy", "POST", { endpoint: "models" }),
 };
+
+// ── API tokens (MCP access for AI agents) ───────────────────────────────────
+
+export interface AdminApiToken {
+  id: string;
+  name: string;
+  prefix: string;
+  createdAt: number;
+  lastUsedAt: number | null;
+  expiresAt: number | null;
+  revokedAt: number | null;
+}
+
+export const apiTokens = {
+  list: () => req<{ items: AdminApiToken[] }>("/v1/admin/tokens"),
+  /** The `token` plaintext is returned exactly once, at creation. */
+  create: (name: string, expiresInDays?: number | null) =>
+    req<AdminApiToken & { token: string }>("/v1/admin/tokens", "POST", { name, expiresInDays: expiresInDays ?? null }),
+  revoke: (id: string) => req<{ ok: boolean }>(`/v1/admin/tokens/${id}`, "DELETE"),
+};
+
+/** Full URL agents should connect to (shown in the admin tokens UI). */
+export async function getMcpEndpoint(): Promise<string> {
+  return `${await getApiBase()}/v1/mcp`;
+}

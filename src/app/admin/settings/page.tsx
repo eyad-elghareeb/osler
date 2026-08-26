@@ -12,6 +12,7 @@ import {
   ShieldAlert,
   ArrowLeft,
   ChevronRight,
+  Bot,
 } from "lucide-react";
 import { useI18n } from "@/components/osler/i18n-provider";
 import { AdminRouteGuard } from "@/components/osler/admin/admin-route-guard";
@@ -49,6 +50,7 @@ import { toast } from "@/hooks/use-toast";
 import { LanguageSettingsSection } from "@/components/osler/settings/language-section";
 import { ThemeSettingsSection } from "@/components/osler/settings/theme-section";
 import { AiSettingsSection } from "@/components/osler/settings/ai-section";
+import { ApiTokensSection } from "@/components/osler/settings/api-tokens-section";
 import { NavigationStack } from "@/components/osler/navigation-stack";
 import { useIsMobile } from "@/hooks/use-mobile";
 import type { LucideIcon } from "lucide-react";
@@ -63,6 +65,7 @@ const SECTIONS: AdminSectionDef[] = [
   { id: "appearance", labelKey: "admin.settings.section.appearance", icon: Palette },
   { id: "language", labelKey: "admin.settings.section.language", icon: Languages },
   { id: "ai", labelKey: "admin.settings.section.ai", icon: Sparkles },
+  { id: "apiTokens", labelKey: "admin.settings.section.apiTokens", icon: Bot },
   { id: "behavior", labelKey: "admin.settings.section.behavior", icon: RotateCcw },
   { id: "about", labelKey: "admin.settings.section.about", icon: Info },
   { id: "danger", labelKey: "admin.settings.section.danger", icon: ShieldAlert },
@@ -76,6 +79,8 @@ function renderSection(id: string) {
       return <LanguageSettingsSection />;
     case "ai":
       return <AiSettingsSection />;
+    case "apiTokens":
+      return <ApiTokensSection />;
     case "behavior":
       return <BehaviorSettingsSection />;
     case "about":
