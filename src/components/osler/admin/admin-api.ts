@@ -77,6 +77,16 @@ export interface AdminAuditPage {
   limit: number;
 }
 
+/** Account info joined server-side from users (admin list only). Absent on
+ *  other responses; null when the report was filed by a guest. */
+export interface TicketUserInfo {
+  displayName: string | null;
+  username: string | null;
+  email: string | null;
+  role: string | null;
+  createdAt: number | null;
+}
+
 /** A user-reported support ticket (see cloudflare/worker/migrations/0021_support_tickets.sql). */
 export interface AdminSupportTicket {
   id: string;
@@ -107,6 +117,7 @@ export interface AdminSupportTicket {
   createdAt: number;
   updatedAt: number;
   resolvedAt: number | null;
+  userInfo?: TicketUserInfo | null;
 }
 
 export type TicketStatusFilter = "all" | AdminSupportTicket["status"];

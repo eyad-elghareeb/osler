@@ -28,6 +28,7 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { useI18n } from "@/components/osler/i18n-provider";
+import type { StringKey } from "@/lib/osler/i18n";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import { haptic } from "@/lib/osler/native";
@@ -42,6 +43,11 @@ const STATUS_BADGE_CLASS: Record<AdminSupportTicket["status"], string> = {
 };
 const PAGE_SIZE = 25;
 const CHOICE_KEYS = ["A", "B", "C", "D", "E", "F", "G", "H"];
+const ROLE_I18N: Record<string, StringKey> = {
+  student: "admin.users.roles.student",
+  content_admin: "admin.users.roles.content_admin",
+  admin: "admin.users.roles.admin",
+};
 
 function formatDate(ts: number): string {
   return new Date(ts).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
@@ -212,6 +218,29 @@ function TicketDetailDialog({ ticket, onClose, onUpdated, onDeleted }: {
         </DialogHeader>
 
         <div className="grid gap-3">
+          {ticket.userInfo ? (
+            <div className="flex items-center gap-3 rounded-lg border border-border bg-muted/40 p-3">
+              <span className="size-9 rounded-full bg-primary-soft border border-primary/20 flex items-center justify-center shrink-0 text-sm font-semibold text-primary">
+                {(ticket.userInfo.displayName || ticket.userInfo.username || "?").charAt(0).toUpperCase()}
+              </span>
+              <div className="min-w-0 flex-1 grid gap-0.5">
+                <span className="text-sm font-medium truncate">
+                  {ticket.userInfo.displayName || ticket.userInfo.username || t("support.contextGuest")}
+                  {ticket.userInfo.username && ticket.userInfo.displayName ? (
+                    <span className="text-xs text-muted-foreground font-normal"> @{ticket.userInfo.username}</span>
+                  ) : null}
+                </span>
+                <span className="text-xs text-muted-foreground truncate">
+                  {[
+                    ticket.userInfo.email,
+                    ticket.userInfo.role ? t(ROLE_I18N[ticket.userInfo.role] ?? "admin.users.roles.student") : null,
+                    ticket.userInfo.createdAt ? `${t("admin.users.col.joined")} ${new Date(ticket.userInfo.createdAt).toLocaleDateString(undefined, { dateStyle: "medium" })}` : null,
+                  ].filter(Boolean).join(" · ")}
+                </span>
+              </div>
+            </div>
+          ) : null}
+
           <p className="text-sm whitespace-pre-wrap break-words">{ticket.message}</p>
 
           {ctxEntries.some(([, v]) => v) && (

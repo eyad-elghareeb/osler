@@ -2739,6 +2739,14 @@ function mapTicketRow(r: any) {
     createdAt: r.created_at,
     updatedAt: r.updated_at,
     resolvedAt: r.resolved_at ?? null,
+    // Joined account info (admin list only — undefined when not joined).
+    userInfo: r.acct_username === undefined ? undefined : r.user_id ? {
+      displayName: r.acct_display_name ?? null,
+      username: r.acct_username ?? null,
+      email: r.acct_email ?? null,
+      role: r.acct_role ?? null,
+      createdAt: r.acct_created_at ?? null,
+    } : null,
   };
 }
 
@@ -2883,7 +2891,11 @@ async function handleAdmin(request: Request, env: Env, session: Session, url: UR
         "UPDATE support_tickets SET status = ?, reply = ?, updated_at = ?, resolved_at = ? WHERE id = ?"
       ).bind(nextStatus, nextReply, t, nextStatus === "resolved" ? t : null, tid).run();
       await auditLog(env, session.user.id, "ticket.update", ticketPatch[1], { status: nextStatus, replied: nextReply != null });
-      return json({ ticket: mapTicketRow({ ...existing, status: nextStatus, reply: nextReply, updated_at: t, resolved_at: nextStatus === "resolved" ? t : null }) }, 200, origin, log);
+      const joined = await env.DB.prepare(
+        `SELECT t.*, u.username AS acct_username, u.display_name AS acct_display_name, u.email AS acct_email, u.role AS acct_role, u.created_at AS acct_created_at
+         FROM support_tickets t LEFT JOIN users u ON u.id = t.user_id WHERE t.id = ?`
+      ).bind(tid).first<any>();
+      return json({ ticket: mapTicketRow(joined ? { ...joined, status: nextStatus, reply: nextReply, updated_at: t, resolved_at: nextStatus === "resolved" ? t : null } : { ...existing, status: nextStatus, reply: nextReply, updated_at: t }) }, 200, origin, log);
     }
     if (request.method === "DELETE" && ticketPatch) {
       // Only resolved tickets may be deleted — an open report is actionable.
@@ -2900,11 +2912,14 @@ async function handleAdmin(request: Request, env: Env, session: Session, url: UR
       const statusParam = url.searchParams.get("status") || "";
       const limit = 25;
       const offset = (page - 1) * limit;
-      const where = TICKET_STATUSES.has(statusParam) ? "WHERE status = ?" : "";
+      const where = TICKET_STATUSES.has(statusParam) ? "WHERE t.status = ?" : "";
       const binds: unknown[] = TICKET_STATUSES.has(statusParam) ? [statusParam] : [];
       const [rows, total, openCount] = await Promise.all([
-        env.DB.prepare(`SELECT * FROM support_tickets ${where} ORDER BY created_at DESC LIMIT ? OFFSET ?`).bind(...binds, limit, offset).all(),
-        env.DB.prepare(`SELECT COUNT(*) as n FROM support_tickets ${where}`).bind(...binds).first(),
+        env.DB.prepare(
+          `SELECT t.*, u.username AS acct_username, u.display_name AS acct_display_name, u.email AS acct_email, u.role AS acct_role, u.created_at AS acct_created_at
+           FROM support_tickets t LEFT JOIN users u ON u.id = t.user_id ${where} ORDER BY t.created_at DESC LIMIT ? OFFSET ?`
+        ).bind(...binds, limit, offset).all(),
+        env.DB.prepare(`SELECT COUNT(*) as n FROM support_tickets ${TICKET_STATUSES.has(statusParam) ? "WHERE status = ?" : ""}`).bind(...binds).first(),
         env.DB.prepare("SELECT COUNT(*) as n FROM support_tickets WHERE status = 'open'").first(),
       ]);
       return json({
