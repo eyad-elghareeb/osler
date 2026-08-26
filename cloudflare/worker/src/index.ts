@@ -1103,7 +1103,8 @@ const CATEGORY_TO_DEFAULT_TYPE: Record<string, string | undefined> = {
 };
 
 function slugifyTitle(input: string): string {
-  return input.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 80) || "untitled";
+  const s = input.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 80);
+  return s || "untitled";
 }
 
 const TYPE_CANONICAL_FILE: Record<string, string> = {
@@ -1119,23 +1120,26 @@ const TYPE_CANONICAL_FILE: Record<string, string> = {
 async function hybridPublish(env: Env, obj: any, body: string, targetPath?: string | null): Promise<string[]> {
   if (!env.CONTENT) return [];
   const category = CONTENT_TYPE_TO_CATEGORY[obj.content_type] ?? obj.content_type;
-  // Prefer an explicit targetPath, otherwise the author's stored intent
-  // (target_path column), otherwise derive a subfolder from the title so
-  // both admin and MCP packs land under "<slug>/<canonical-file>" instead
-  // of flat "<uuid>.json" at the category root.
-  const rawTarget = (targetPath ?? (obj as any).target_path ?? "") as string;
+  // Single source of truth for publish location: explicit targetPath >
+  // stored target_path > derived "<slug>/<canonical-file>" (subfolder, never root).
+  const explicit = typeof targetPath === "string" ? targetPath.trim().replace(/^\/+|\/+$/g, "") : "";
+  const stored = typeof (obj as any).target_path === "string" ? (obj as any).target_path.trim().replace(/^\/+|\/+$/g, "") : "";
+  const rawTarget = explicit || stored || "";
   const safePath = rawTarget.replace(/^\/+|\/+$/g, "");
   if (safePath.includes("..") || safePath.includes("\\")) throw new Error("Invalid targetPath");
   let fileSegment: string;
+  let derived = false;
   if (safePath && /\.[a-z0-9]+$/i.test(safePath)) {
     fileSegment = safePath;
   } else if (safePath) {
     const fileName = TYPE_CANONICAL_FILE[obj.content_type] ?? (obj.content_type === "library" ? "index.md" : "content.json");
     fileSegment = safePath.replace(/\/+$/g, "") + "/" + fileName;
   } else {
+    derived = true;
     const tail = obj.r2_key_base.split("/").pop() || "untitled";
     const rawTitle = typeof obj.title === "string" && obj.title.trim() ? obj.title.trim() : tail;
-    const slug = slugifyTitle(rawTitle);
+    let slug = slugifyTitle(rawTitle);
+    if (slug === "untitled") slug = `untitled-${tail.slice(0, 8).toLowerCase()}`;
     if (obj.content_type === "library") {
       fileSegment = `${slug}.md`;
     } else {
@@ -1143,7 +1147,32 @@ async function hybridPublish(env: Env, obj: any, body: string, targetPath?: stri
       fileSegment = `${slug}/${fileName}`;
     }
   }
-  const r2Key = `content-files/${category}/${fileSegment}`;
+  let r2Key = `content-files/${category}/${fileSegment}`;
+  // Collision hardening: derived slug may clash with an existing published pack
+  // (same title). Make it unique by appending short id, then persist the
+  // resolved target for future publishes so the location is stable.
+  if (derived) {
+    try {
+      const clash = await env.DB.prepare("SELECT id FROM content_objects WHERE published_r2_key = ? AND id != ?").bind(r2Key, obj.id).first<any>();
+      if (clash) {
+        const tail = obj.r2_key_base.split("/").pop() || "x";
+        const suffix = tail.slice(0, 8).toLowerCase();
+        if (obj.content_type === "library") {
+          fileSegment = fileSegment.replace(/\.md$/, `-${suffix}.md`);
+        } else {
+          const parts = fileSegment.split("/");
+          const slugPart = parts[0];
+          fileSegment = `${slugPart}-${suffix}/${parts.slice(1).join("/")}`;
+        }
+        r2Key = `content-files/${category}/${fileSegment}`;
+      }
+    } catch {}
+    const toStore = obj.content_type === "library" ? fileSegment : fileSegment.split("/").slice(0, -1).join("/");
+    try {
+      await env.DB.prepare("UPDATE content_objects SET target_path = ? WHERE id = ?").bind(toStore, obj.id).run();
+      (obj as any).target_path = toStore;
+    } catch {}
+  }
   const ct = obj.content_type === "library" ? "text/markdown" : "application/json";
   await env.CONTENT.put(r2Key, body, { httpMetadata: { contentType: ct } });
 
