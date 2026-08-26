@@ -49,6 +49,27 @@ claude mcp add --transport http osler-admin https://<worker-host>/v1/mcp \
 }
 ```
 
+### Codex (OpenAI)
+
+Codex reads the bearer token from an environment variable, never from the
+config file. In **Settings → Connect to a custom MCP**: pick the **Streamable
+HTTP** type, paste the endpoint URL, and put a variable *name* (e.g.
+`OSLER_MCP_TOKEN`) in **Bearer token env var** — leave the Headers rows empty.
+Equivalent `~/.codex/config.toml`:
+
+```toml
+[mcp_servers.osler-admin]
+url = "https://<worker-host>/v1/mcp"
+bearer_token_env_var = "OSLER_MCP_TOKEN"
+```
+
+Then point that variable at the token and restart Codex (env vars are read at
+process start):
+
+```powershell
+setx OSLER_MCP_TOKEN "osler_mcp_..."
+```
+
 ## Tools
 
 | Tool | Purpose |
