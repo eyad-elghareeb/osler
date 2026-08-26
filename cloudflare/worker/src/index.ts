@@ -39,6 +39,7 @@ const decoder = new TextDecoder();
 import { SYNC_KINDS, mergeKind, gzipString, gunzipBytes, gunzipBytesBounded, base64ToBytes } from "./sync-docs";
 import { verifyAssertion } from "./cose";
 import { sendEmail, passwordResetEmail, verifyEmail } from "./email";
+import { handleMcpRequest, listApiTokens, mintApiToken, revokeApiToken } from "./mcp";
 const PASSWORD_ITERATIONS = 100_000;
 const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 // After a session token's JWT `exp` passes, it may still be rotated through
@@ -4033,6 +4034,31 @@ async function handleAdmin(request: Request, env: Env, session: Session, url: UR
     return json({ ok: true }, 200, origin, log);
   }
 
+  /* ── API tokens (MCP access) — users manage their own tokens only.
+   * Tokens authenticate AI agents against POST /v1/mcp and are capped at the
+   * content-authoring surface regardless of the owner's role. The plaintext
+   * is returned exactly once, at creation; only a hash is stored. ── */
+  if (path === "/v1/admin/tokens") {
+    if (request.method === "GET") return json({ items: await listApiTokens(env, session.user.id) }, 200, origin, log);
+    if (request.method === "POST") {
+      const body = await readJson(request);
+      const name = typeof body.name === "string" ? body.name.trim() : "";
+      if (!name || name.length > 80) return json({ error: "Token name required (max 80 chars)" }, 400, origin, log);
+      const days = Number(body.expiresInDays);
+      const expiresInDays = Number.isFinite(days) && days > 0 ? Math.min(3650, Math.floor(days)) : null;
+      const { token, view } = await mintApiToken(env, session.user.id, name, expiresInDays);
+      await auditLog(env, session.user.id, "create_api_token", view.id, { name: view.name, expiresAt: view.expiresAt }, log);
+      return json({ token, ...view }, 201, origin, log);
+    }
+  }
+  const atm = path.match(/^\/v1\/admin\/tokens\/([^/]+)$/);
+  if (atm && request.method === "DELETE") {
+    const ok = await revokeApiToken(env, session.user.id, atm[1]);
+    if (!ok) return json({ error: "Token not found" }, 404, origin, log);
+    await auditLog(env, session.user.id, "revoke_api_token", atm[1], null, log);
+    return json({ ok: true }, 200, origin, log);
+  }
+
   /* ── Config ── */
   if (path === "/v1/admin/config") {
     if (!isAdmin(session)) return json({ error: "Forbidden" }, 403, origin, log);
@@ -4531,6 +4557,18 @@ export default {
         const session = await requireUser(request, env);
         if (!session) return json({ error: "Authentication required" }, 401, origin, log);
         return handleSupportTicketsMine(env, session, origin, log);
+      }
+
+      // ── MCP endpoint for AI agents ──
+      // Authenticated with dedicated API tokens (not sessions) minted from
+      // the web admin panel; capped at the content-authoring surface —
+      // agents can create/upload/submit but never publish. Non-browser
+      // clients send no Origin header, which requestOrigin() maps to
+      // ALLOWED_ORIGIN, so they pass the same origin gate as first-party
+      // traffic. Shares the admin rate bucket.
+      if (url.pathname === "/v1/mcp") {
+        if (!rateLimit(ip, "admin")) return json({ error: "Too many requests" }, 429, origin, log);
+        return handleMcpRequest(request, env, origin, log, { auditLog, r2Get, r2Put, validateContent });
       }
 
       // ── From here on: authenticated routes ──
