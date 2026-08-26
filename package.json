@@ -15,7 +15,8 @@
     "cloudflare:init": "node scripts/cloudflare-init.js",
     "lint": "eslint .",
     "generate-manifests": "node scripts/generate-content-manifests.js",
-    "db:push": "echo 'Osler does not use Prisma — skipping db:push'"
+    "db:push": "echo 'Osler does not use Prisma — skipping db:push'",
+    "smoke:pdf": "esbuild scripts/pdf-smoke.ts --bundle --platform=node --format=cjs --outfile=out/.pdf-smoke.cjs --log-level=error && node out/.pdf-smoke.cjs"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

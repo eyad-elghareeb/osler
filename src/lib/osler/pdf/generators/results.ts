@@ -71,8 +71,10 @@ export function generateResultsPdf(cfg: ResultsPdfConfig): jsPDF {
     doc.newPage({ header: { label: t("pdf.tpl.answerKey").toUpperCase(), section: "answers" } });
     doc.addBookmark(t("pdf.tpl.answerKey"));
     doc.drawAnswerKeyBanner(t("pdf.tpl.completeAnswerKey"));
-    doc.resolveAnswerKeyLinks(-1);
     for (const entry of allAnswers) doc.drawAnswerBlock(entry.q, entry.num, opts.showExplanations);
+    // Resolve AFTER the blocks are drawn — each block records the page it
+    // landed on, so every question's link can target its own answer.
+    doc.resolveAnswerKeyLinks(-1);
   }
 
   if (opts.showReview !== false) {

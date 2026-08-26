@@ -99,9 +99,10 @@ function renderCompilation(cfg: PdfExportConfig, knownChapterPages: number[] | n
       doc.newPage({ header: { label: t("pdf.tpl.answerKey").toUpperCase(), section: "answers" } });
       doc.addBookmark(t("pdf.tpl.answerKey"), chapterItem);
       doc.drawAnswerKeyBanner(t("pdf.tpl.chapterAnswerKey", { n: ci + 1 }));
-      // Resolve all pending "See Answer Key" links for this chapter.
-      doc.resolveAnswerKeyLinks(ci);
       for (const entry of chapterAnswers) doc.drawAnswerBlock(entry.q, entry.num, cfg.showExplanations);
+      // Resolve AFTER the blocks are drawn — each block records the page it
+      // landed on, so every question's link can target its own answer.
+      doc.resolveAnswerKeyLinks(ci);
     }
   });
 
@@ -109,9 +110,9 @@ function renderCompilation(cfg: PdfExportConfig, knownChapterPages: number[] | n
     doc.newPage({ header: { label: t("pdf.tpl.answerKey").toUpperCase(), section: "answers" } });
     doc.addBookmark(t("pdf.tpl.answerKey"));
     doc.drawAnswerKeyBanner(t("pdf.tpl.completeAnswerKey"));
-    // Resolve ALL pending links (endbook mode — all chapters point here).
-    doc.resolveAnswerKeyLinks(-1);
     for (const entry of allAnswers) doc.drawAnswerBlock(entry.q, entry.num, cfg.showExplanations);
+    // Resolve ALL pending links (endbook mode) once every block's page is known.
+    doc.resolveAnswerKeyLinks(-1);
   }
 
   doc.finalize(contentStartPage);
