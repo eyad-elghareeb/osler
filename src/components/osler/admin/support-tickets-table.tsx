@@ -20,7 +20,9 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
+import {
+  Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
+} from "@/components/ui/dialog";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
@@ -40,6 +42,10 @@ const STATUS_BADGE_CLASS: Record<AdminSupportTicket["status"], string> = {
 };
 const PAGE_SIZE = 25;
 const CHOICE_KEYS = ["A", "B", "C", "D", "E", "F", "G", "H"];
+
+function formatDate(ts: number): string {
+  return new Date(ts).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
+}
 
 /** The full question a QBank report attached (same payload the AI assistant
  *  sees): stem, choices with correct/user marks, and the explanation. */
@@ -86,13 +92,43 @@ function ReportedQuestion({ question }: {
   );
 }
 
-function formatDate(ts: number): string {
-  return new Date(ts).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
+/** Compact list row — opens the triage modal on click. */
+function TicketRow({ ticket, onOpen }: {
+  ticket: AdminSupportTicket;
+  onOpen: (ticket: AdminSupportTicket) => void;
+}) {
+  const { t } = useI18n();
+  const SourceIcon = SOURCE_ICON[ticket.source] ?? Settings2;
+  return (
+    <button
+      onClick={() => { haptic("light"); onOpen(ticket); }}
+      aria-label={t("admin.tickets.open")}
+      title={ticket.subject}
+      className="group w-full flex items-center gap-3 rounded-lg border border-border bg-card px-3 py-2 text-start transition-colors hover:border-primary/40 hover:bg-primary/[0.02] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+    >
+      <span className="size-7 rounded-md bg-muted flex items-center justify-center shrink-0 group-hover:bg-primary-soft transition-colors">
+        <SourceIcon className="size-3.5 text-muted-foreground" />
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="block text-sm font-medium truncate">{ticket.subject}</span>
+        <span className="block text-xs text-muted-foreground truncate">
+          {ticket.username || t("support.contextGuest")} · {formatDate(ticket.createdAt)} · {ticket.source} · {t(TICKET_CATEGORY_I18N[ticket.category])}
+        </span>
+      </span>
+      <span className={cn("shrink-0 rounded-full border px-2 py-0.5 text-[11px] font-medium", STATUS_BADGE_CLASS[ticket.status])}>
+        {t(TICKET_STATUS_I18N[ticket.status])}
+      </span>
+      {ticket.reply ? <CircleCheck className="size-3.5 shrink-0 text-success" /> : null}
+      <ChevronRight className="size-4 shrink-0 text-muted-foreground rtl-flip-x" />
+    </button>
+  );
 }
 
-/** One ticket card: context details + status/reply triage controls. */
-function TicketCard({ ticket, onUpdated, onDeleted }: {
+/** Full triage surface: message + context + attached question, with status,
+ *  reply and delete controls. */
+function TicketDetailDialog({ ticket, onClose, onUpdated, onDeleted }: {
   ticket: AdminSupportTicket;
+  onClose: () => void;
   onUpdated: (t: AdminSupportTicket) => void;
   onDeleted: (id: string) => void;
 }) {
@@ -105,11 +141,11 @@ function TicketCard({ ticket, onUpdated, onDeleted }: {
   const [deleting, setDeleting] = useState(false);
   const SourceIcon = SOURCE_ICON[ticket.source] ?? Settings2;
 
-  // Re-sync local fields when the parent list refreshes.
+  // Re-sync local fields whenever another ticket is opened or the list refreshes.
   useEffect(() => {
     setStatus(ticket.status);
     setReply(ticket.reply ?? "");
-  }, [ticket.status, ticket.reply]);
+  }, [ticket]);
 
   const dirty = status !== ticket.status || reply !== (ticket.reply ?? "");
 
@@ -128,17 +164,6 @@ function TicketCard({ ticket, onUpdated, onDeleted }: {
     }
   };
 
-  const ctx = ticket.context;
-  const ctxEntries: Array<[string, string | undefined]> = ctx
-    ? [
-        [t("support.contextPack"), ctx.packTitle],
-        [t("support.contextQuestionId"), ctx.qid],
-        [t("support.contextQuestion"), ctx.questionExcerpt],
-        [t("support.contextAnswer"), ctx.selectedAnswer],
-        [t("support.contextArticle"), ctx.articleTitle],
-      ]
-    : [];
-
   const deleteTicket = async () => {
     setDeleting(true);
     try {
@@ -155,100 +180,112 @@ function TicketCard({ ticket, onUpdated, onDeleted }: {
     }
   };
 
+  const ctx = ticket.context;
+  // Full question (stem/choices/explanation) renders below via
+  // ReportedQuestion — only pack/article pointers remain as summary lines.
+  const ctxEntries: Array<[string, string | undefined]> = ctx
+    ? [
+        [t("support.contextPack"), ctx.packTitle],
+        [t("support.contextQuestionId"), ctx.qid],
+        [t("support.contextArticle"), ctx.articleTitle],
+      ]
+    : [];
+
   return (
-    <Card className="p-4 space-y-3">
-      <div className="flex flex-wrap items-start justify-between gap-2">
-        <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2">
-            <span className="size-7 rounded-lg bg-muted flex items-center justify-center shrink-0">
-              <SourceIcon className="size-3.5 text-muted-foreground" />
+    <Dialog open onOpenChange={(next) => { if (!next) onClose(); }}>
+      <DialogContent className="sm:max-w-xl max-h-[85vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2 pe-6">
+            <span className="size-7 rounded-md bg-primary-soft border border-primary/20 flex items-center justify-center shrink-0">
+              <SourceIcon className="size-3.5 text-primary" />
             </span>
-            <span className="text-sm font-semibold truncate">{ticket.subject}</span>
-          </div>
-          <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
+            <span className="min-w-0 break-words">{ticket.subject}</span>
+          </DialogTitle>
+          <DialogDescription className="flex flex-wrap items-center gap-x-2 gap-y-1">
             <span>{ticket.username || t("support.contextGuest")}</span>
             <span>·</span>
             <span>{formatDate(ticket.createdAt)}</span>
             <span>·</span>
             <Badge variant="outline" className="px-1.5 py-0 text-[11px]">{ticket.source}</Badge>
             <Badge variant="outline" className="px-1.5 py-0 text-[11px]">{t(TICKET_CATEGORY_I18N[ticket.category])}</Badge>
-          </div>
-        </div>
-        <div className="flex items-center gap-1 shrink-0">
-          <Select value={status} onValueChange={(v) => { haptic("selection"); setStatus(v as AdminSupportTicket["status"]); }}>
-            <SelectTrigger size="sm" className={cn("w-36", STATUS_BADGE_CLASS[status])}>
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {(Object.keys(TICKET_STATUS_I18N) as AdminSupportTicket["status"][]).map((s) => (
-                <SelectItem key={s} value={s}>{t(TICKET_STATUS_I18N[s])}</SelectItem>
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="grid gap-3">
+          <p className="text-sm whitespace-pre-wrap break-words">{ticket.message}</p>
+
+          {ctxEntries.some(([, v]) => v) && (
+            <div className="rounded-lg border border-border bg-muted/40 p-3 grid gap-1">
+              {ctxEntries.filter(([, v]) => v).map(([label, v]) => (
+                <div key={label} className="text-xs text-muted-foreground truncate">
+                  <span className="font-medium text-foreground">{label}:</span> {v}
+                </div>
               ))}
-            </SelectContent>
-          </Select>
-          {ticket.status === "resolved" && (
-            <Button
-              variant="ghost" size="iconSm"
-              onClick={() => { haptic("light"); setConfirmDelete(true); }}
-              className="text-muted-foreground hover:text-destructive"
-              title={t("admin.tickets.delete")}
-              aria-label={t("admin.tickets.delete")}
-            >
-              <Trash2 className="size-3.5" />
-            </Button>
-          )}
-        </div>
-      </div>
-
-      <p className="text-sm whitespace-pre-wrap break-words">{ticket.message}</p>
-
-      {ctxEntries.some(([, v]) => v) && (
-        <div className="rounded-lg border border-border bg-muted/40 p-3 grid gap-1">
-          {ctxEntries.filter(([, v]) => v).map(([label, v]) => (
-            <div key={label} className="text-xs text-muted-foreground truncate">
-              <span className="font-medium text-foreground">{label}:</span> {v}
             </div>
-          ))}
+          )}
+
+          <ReportedQuestion question={ctx?.question} />
+
+          <Textarea
+            value={reply}
+            onChange={(e) => setReply(e.target.value)}
+            placeholder={t("admin.tickets.replyPlaceholder")}
+            rows={3}
+            maxLength={2000}
+          />
         </div>
-      )}
 
-      <ReportedQuestion question={ctx?.question} />
-
-      <div className="grid gap-2">
-        <Textarea
-          value={reply}
-          onChange={(e) => setReply(e.target.value)}
-          placeholder={t("admin.tickets.replyPlaceholder")}
-          rows={2}
-          maxLength={2000}
-        />
-        <div className="flex justify-end">
+        <DialogFooter className="items-center gap-2 sm:justify-between">
+          <div className="flex items-center gap-2">
+            <Select value={status} onValueChange={(v) => { haptic("selection"); setStatus(v as AdminSupportTicket["status"]); }}>
+              <SelectTrigger size="sm" className={cn("w-36", STATUS_BADGE_CLASS[status])}>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {(Object.keys(TICKET_STATUS_I18N) as AdminSupportTicket["status"][]).map((s) => (
+                  <SelectItem key={s} value={s}>{t(TICKET_STATUS_I18N[s])}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {ticket.status === "resolved" && (
+              <Button
+                variant="ghost" size="iconSm"
+                onClick={() => { haptic("light"); setConfirmDelete(true); }}
+                className="text-muted-foreground hover:text-destructive"
+                title={t("admin.tickets.delete")}
+                aria-label={t("admin.tickets.delete")}
+              >
+                <Trash2 className="size-4" />
+              </Button>
+            )}
+          </div>
           <Button size="sm" onClick={save} disabled={!dirty || saving} loading={saving}>
             {!saving && <Save className="size-3.5" />}
             {t("admin.tickets.save")}
           </Button>
-        </div>
-      </div>
+        </DialogFooter>
 
-      <AlertDialog open={confirmDelete} onOpenChange={setConfirmDelete}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>{t("admin.tickets.deleteTitle")}</AlertDialogTitle>
-            <AlertDialogDescription>{t("admin.tickets.deleteDesc")}</AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>{t("common.cancel")}</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={(e) => { e.preventDefault(); deleteTicket(); }}
-              disabled={deleting}
-              className="bg-destructive text-white hover:bg-destructive/90"
-            >
-              {deleting ? <Loader2 className="size-4 animate-spin" /> : <Trash2 className="size-4" />}
-              {t("admin.tickets.delete")}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-    </Card>
+        <AlertDialog open={confirmDelete} onOpenChange={setConfirmDelete}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>{t("admin.tickets.deleteTitle")}</AlertDialogTitle>
+              <AlertDialogDescription>{t("admin.tickets.deleteDesc")}</AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>{t("common.cancel")}</AlertDialogCancel>
+              <AlertDialogAction
+                onClick={(e) => { e.preventDefault(); deleteTicket(); }}
+                disabled={deleting}
+                className="bg-destructive text-white hover:bg-destructive/90"
+              >
+                {deleting ? <Loader2 className="size-4 animate-spin" /> : <Trash2 className="size-4" />}
+                {t("admin.tickets.delete")}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -261,6 +298,7 @@ export function SupportTicketsTable() {
   const [page, setPage] = useState(1);
   const [filter, setFilter] = useState<TicketStatusFilter>("all");
   const [loading, setLoading] = useState(true);
+  const [activeTicketId, setActiveTicketId] = useState<string | null>(null);
 
   const load = useCallback(() => {
     setLoading(true);
@@ -277,6 +315,7 @@ export function SupportTicketsTable() {
   useEffect(() => { load(); }, [load]);
 
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  const activeTicket = tickets.find((tk) => tk.id === activeTicketId) ?? null;
 
   return (
     <div className="space-y-4">
@@ -308,18 +347,9 @@ export function SupportTicketsTable() {
           <p className="text-sm text-muted-foreground">{t("admin.tickets.empty")}</p>
         </div>
       ) : (
-        <div className="space-y-3">
+        <div className="space-y-2">
           {tickets.map((tk) => (
-            <TicketCard
-              key={tk.id}
-              ticket={tk}
-              onUpdated={(u) => setTickets((prev) => prev.map((x) => (x.id === u.id ? u : x)))}
-              onDeleted={(id) => {
-                // Deleted tickets are always resolved — only the total moves.
-                setTickets((prev) => prev.filter((x) => x.id !== id));
-                setTotal((n) => Math.max(0, n - 1));
-              }}
-            />
+            <TicketRow key={tk.id} ticket={tk} onOpen={(tk2) => setActiveTicketId(tk2.id)} />
           ))}
         </div>
       )}
@@ -336,6 +366,20 @@ export function SupportTicketsTable() {
             <ChevronRight className="size-4 rtl-flip-x" />
           </Button>
         </div>
+      )}
+
+      {activeTicket && (
+        <TicketDetailDialog
+          key={activeTicket.id}
+          ticket={activeTicket}
+          onClose={() => setActiveTicketId(null)}
+          onUpdated={(u) => setTickets((prev) => prev.map((x) => (x.id === u.id ? u : x)))}
+          onDeleted={(id) => {
+            setTickets((prev) => prev.filter((x) => x.id !== id));
+            setTotal((n) => Math.max(0, n - 1));
+            setActiveTicketId(null);
+          }}
+        />
       )}
     </div>
   );

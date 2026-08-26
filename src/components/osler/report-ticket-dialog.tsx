@@ -94,8 +94,6 @@ export function ReportTicketDialog({
   else contextLines.push(t("support.contextGuest"));
   if (context?.packTitle) contextLines.push(`${t("support.contextPack")}: ${context.packTitle}`);
   if (context?.qid) contextLines.push(`${t("support.contextQuestionId")}: ${context.qid}`);
-  if (context?.questionExcerpt) contextLines.push(`${t("support.contextQuestion")}: "${context.questionExcerpt}"`);
-  if (context?.selectedAnswer) contextLines.push(`${t("support.contextAnswer")}: ${context.selectedAnswer}`);
   if (context?.articleTitle) contextLines.push(`${t("support.contextArticle")}: ${context.articleTitle}`);
   if (context?.question?.stem) contextLines.push(t("support.attachFullQuestion"));
 
