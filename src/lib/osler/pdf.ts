@@ -80,11 +80,72 @@ export const C = {
     questions: { bg: [230, 237, 246], fg: [37, 78, 124] },
     answers: { bg: [227, 242, 235], fg: [17, 100, 68] },
     report: { bg: [246, 238, 224], fg: [138, 100, 26] },
-    article: { bg: [234, 236, 240], fg: [63, 71, 87] },
+    article: { bg: [243, 233, 235], fg: [124, 62, 76] },
   } as Record<string, { bg: RGB; fg: RGB }>,
 };
 
 type SectionKey = keyof typeof C.SECTION;
+
+// ═══════════════════════════════════════════════════════════════
+// § 1a  DOCUMENT THEMES  —  per-export accent identity
+// ═══════════════════════════════════════════════════════════════
+
+/**
+ * Each export family carries its own subtle cover/accent palette so a
+ * printed stack is identifiable at a glance:
+ *   · content — quiz booklets & packs (navy + gold, the classic Osler look)
+ *   · session — session results & performance reports (indigo + champagne)
+ *   · article — library article exports (wine + rose gold)
+ */
+export type PdfDocTheme = "content" | "session" | "article";
+
+interface ThemePalette {
+  base: RGB;
+  baseDeep: RGB;
+  baseSoft: RGB;
+  accent: RGB;
+  accentSoft: RGB;
+  accentDeep: RGB;
+  pulseRing: RGB;
+  coverMeta: RGB;
+  coverBody: RGB;
+}
+
+const DOC_THEMES: Record<PdfDocTheme, ThemePalette> = {
+  content: {
+    base: C.NAVY,
+    baseDeep: C.NAVY_DEEP,
+    baseSoft: C.NAVY_SOFT,
+    accent: C.GOLD,
+    accentSoft: C.GOLD_SOFT,
+    accentDeep: C.GOLD_DEEP,
+    pulseRing: [90, 118, 148],
+    coverMeta: [160, 182, 208],
+    coverBody: [206, 222, 240],
+  },
+  session: {
+    base: [25, 25, 55],
+    baseDeep: [14, 14, 34],
+    baseSoft: [42, 42, 86],
+    accent: [118, 106, 176],
+    accentSoft: [186, 178, 220],
+    accentDeep: [88, 78, 138],
+    pulseRing: [112, 112, 164],
+    coverMeta: [166, 166, 202],
+    coverBody: [212, 210, 236],
+  },
+  article: {
+    base: [44, 16, 26],
+    baseDeep: [27, 9, 16],
+    baseSoft: [72, 29, 44],
+    accent: [172, 106, 94],
+    accentSoft: [218, 164, 148],
+    accentDeep: [134, 78, 68],
+    pulseRing: [148, 102, 94],
+    coverMeta: [204, 170, 162],
+    coverBody: [234, 208, 200],
+  },
+};
 
 // ═══════════════════════════════════════════════════════════════
 // § 1b  I18N HELPERS
@@ -434,6 +495,9 @@ class PdfDoc {
   headerLabel = "";
   section: SectionKey = "questions";
 
+  /** Accent palette for this document family (see `PdfDocTheme`). */
+  T: ThemePalette;
+
   colX = 0;
   col: 0 | 1 = 0;
   colTopY = 0;
@@ -444,17 +508,22 @@ class PdfDoc {
 
   /**
    * Pending "See Answer Key" link annotations. Each entry records the
-   * position of a "See Answer Key" text on a question page. When the
-   * matching answer key page is known, `resolveAnswerKeyLinks()` adds
-   * `doc.link()` annotations pointing to it.
+   * position of a "See Answer Key" text on a question page plus the
+   * question number it belongs to. When the matching answer block's page
+   * is known, `resolveAnswerKeyLinks()` adds `doc.link()` annotations
+   * pointing at that question's answer directly.
    */
-  pendingAnswerKeyLinks: Array<{ page: number; x: number; y: number; w: number; h: number; chapterIdx: number }> = [];
+  pendingAnswerKeyLinks: Array<{ page: number; x: number; y: number; w: number; h: number; chapterIdx: number; qNum: number }> = [];
 
-  constructor(cfg: PdfPageConfig, title: string, styleMode: StyleMode, fontSizeOpt?: "small" | "medium" | "large", fontTypeOpt?: "serif" | "sans", lang: PdfLang = "en") {
+  /** Question number → physical page its answer block was drawn on. */
+  answerPages: Record<number, number> = {};
+
+  constructor(cfg: PdfPageConfig, title: string, styleMode: StyleMode, fontSizeOpt?: "small" | "medium" | "large", fontTypeOpt?: "serif" | "sans", lang: PdfLang = "en", theme: PdfDocTheme = "content") {
     this.L = computeLayout(cfg, styleMode, fontSizeOpt, fontTypeOpt);
     this.title = title;
     this.lang = lang;
     this.t = makeT(lang);
+    this.T = DOC_THEMES[theme] ?? DOC_THEMES.content;
     this.doc = new jsPDF({ orientation: cfg.orientation, unit: "mm", format: cfg.pageSize });
     (this.doc as any).internal.events.subscribe("preProcessText", (args: any) => {
       const t = args.text;
@@ -604,13 +673,16 @@ class PdfDoc {
     const { pw, ph, ms, hh, fh, typeScale } = this.L;
     const tint = C.SECTION[this.section];
 
-    // Top hairline — the one saturated line on every content page.
-    d.setFillColor(...C.GOLD);
+    // Top hairline — the one saturated line on every content page (theme accent).
+    d.setFillColor(...this.T.accent);
     d.rect(0, 0, pw, 0.85, "F");
 
-    // Section pill — opposite corner from the title. Measured FIRST so the
-    // title knows exactly how much width it may occupy.
-    const baseline = hh * 0.58;
+    // Header band = space between the accent hairline and the header rule.
+    // The pill floats exactly midway in that band; label & title baselines
+    // are offset by half their cap height so both read optically centered.
+    const bandCenter = (0.85 + hh) / 2;
+    const capMm = (fontPx: number) => (fontPx * 0.3528 * 0.72) / 2;
+
     const titleAr = hasArabic(this.title);
 
     let pillW = 0;
@@ -623,17 +695,18 @@ class PdfDoc {
       pillW = d.getTextWidth(label) + padX * 2;
       const pillH = 5.6 * typeScale;
       const pillX = titleAr ? ms : pw - ms - pillW;
-      const pillY = baseline - pillH * 0.72;
+      const pillY = bandCenter - pillH / 2;
       d.setFillColor(...tint.bg);
       d.roundedRect(pillX, pillY, pillW, pillH, pillH / 2, pillH / 2, "F");
       d.setTextColor(...tint.fg);
-      d.text(label, pillX + pillW / 2, pillY + pillH * 0.68, { align: "center" });
+      d.text(label, pillX + pillW / 2, bandCenter + capMm(6.4 * typeScale), { align: "center" });
     }
 
     // Document title, tracked small caps — left for LTR docs, right for
     // Arabic ones. Truncated to the space that actually remains next to the
     // pill: tracked caps expand ~2×, which previously let long titles run
     // underneath it.
+    const baseline = bandCenter + capMm(7.4 * typeScale);
     const maxTitleW = this.L.fw - (pillW ? pillW + 5 : 0);
     d.setFont(titleAr ? "Cairo" : F.Hm, hs("normal"));
     d.setFontSize(7.4 * typeScale);
@@ -881,7 +954,7 @@ class PdfDoc {
 
   doubleRule(y: number, w: number): number {
     const d = this.doc;
-    d.setDrawColor(...C.GOLD);
+    d.setDrawColor(...this.T.accent);
     d.setLineWidth(1.6);
     d.line(this.L.ms, y, this.L.ms + w, y);
     d.setLineWidth(0.5);
@@ -923,6 +996,9 @@ class PdfDoc {
     const totalH = labelH + bodyH + sp(1.5, density);
 
     this.checkPage(totalH + 6);
+    // checkPage may have flipped to the other column — the box must draw
+    // there, not at the caller's now-stale x.
+    x = this.colX;
     const boxY = this.y;
 
     d.setFillColor(...bg);
@@ -958,6 +1034,9 @@ class PdfDoc {
     const badgeH = sp(4.5, density);
 
     this.checkPage(badgeH + 4);
+    // checkPage may have flipped to the other column — the badge must draw
+    // there, not at the caller's now-stale x.
+    x = this.colX;
     const boxY = this.y;
     d.setFillColor(...C.EMERALD);
     d.roundedRect(x, boxY, w, badgeH, 1.2, 1.2, "F");
@@ -987,7 +1066,7 @@ class PdfDoc {
     const { pw, ph } = this.L;
 
     // Base fill.
-    d.setFillColor(...C.NAVY);
+    d.setFillColor(...this.T.base);
     d.rect(0, 0, pw, ph, "F");
 
     // Simulated vertical vignette — soft light center, deep edges.
@@ -995,7 +1074,7 @@ class PdfDoc {
     for (let i = 0; i < bands; i++) {
       const t = i / (bands - 1);
       const curve = Math.sin(Math.PI * t); // 0 at edges, 1 at center
-      const color = lerp(C.NAVY_DEEP, C.NAVY_SOFT, curve * 0.55);
+      const color = lerp(this.T.baseDeep, this.T.baseSoft, curve * 0.55);
       const bandH = ph / bands;
       d.setFillColor(...color);
       d.rect(0, i * bandH, pw, bandH + 0.4, "F");
@@ -1004,10 +1083,10 @@ class PdfDoc {
     // Hairline double frame, inset from the edge.
     const inset = pw * 0.045;
     const inset2 = inset + 1.1;
-    d.setDrawColor(...C.GOLD_DEEP);
+    d.setDrawColor(...this.T.accentDeep);
     d.setLineWidth(0.35);
     d.rect(inset, inset, pw - inset * 2, ph - inset * 2, "S");
-    d.setDrawColor(...C.GOLD_SOFT);
+    d.setDrawColor(...this.T.accentSoft);
     d.setLineWidth(0.25);
     d.rect(inset2, inset2, pw - inset2 * 2, ph - inset2 * 2, "S");
 
@@ -1019,7 +1098,7 @@ class PdfDoc {
       [inset, ph - inset, 1, -1],
       [pw - inset, ph - inset, -1, -1],
     ];
-    d.setDrawColor(...C.GOLD_SOFT);
+    d.setDrawColor(...this.T.accentSoft);
     d.setLineWidth(0.3);
     for (const [cx, cy, dx, dy] of corners) {
       d.line(cx, cy, cx - dx * tick, cy);
@@ -1031,13 +1110,13 @@ class PdfDoc {
     // Eyebrow.
     d.setFont(F.Hl, hs("normal"));
     d.setFontSize(8.2);
-    d.setTextColor(...C.GOLD_SOFT);
+    d.setTextColor(...this.T.accentSoft);
     const eyebrow = cfg.eyebrow ?? this.t("pdf.tpl.oslerReport");
     d.text(tlabel(eyebrow), pw / 2, cy, { align: "center" });
     cy += 13;
 
     // Brand mark.
-    drawPulseMark(d, pw / 2, cy, pw * 0.028, [90, 118, 148], C.GOLD_SOFT);
+    drawPulseMark(d, pw / 2, cy, pw * 0.028, this.T.pulseRing, this.T.accentSoft);
     cy += pw * 0.028 + 12;
 
     // Title.
@@ -1056,7 +1135,7 @@ class PdfDoc {
       const subIsAr = hasArabic(cfg.subtitle);
       d.setFont(subIsAr ? "Cairo" : F.Bi, hs(subIsAr ? "normal" : "italic"));
       d.setFontSize(subSize);
-      d.setTextColor(198, 214, 232);
+      d.setTextColor(...this.T.coverBody);
       const subLines: string[] = d.splitTextToSize(normalizeText(cfg.subtitle), pw * 0.62);
       d.text(subLines, pw / 2, cy, { align: "center" });
       cy += subLines.length * lh(subSize, subIsAr ? 1.25 : 1.45) + 5;
@@ -1064,7 +1143,7 @@ class PdfDoc {
 
     // Divider.
     cy += 3;
-    d.setDrawColor(...C.GOLD);
+    d.setDrawColor(...this.T.accent);
     d.setLineWidth(1.4);
     d.line(pw * 0.32, cy, pw * 0.68, cy);
     d.setLineWidth(0.4);
@@ -1074,7 +1153,7 @@ class PdfDoc {
     // Metadata.
     d.setFont(F.Hl, hs("normal"));
     d.setFontSize(9.5);
-    d.setTextColor(160, 182, 208);
+    d.setTextColor(...this.T.coverMeta);
     const metaBits = [cfg.author, cfg.date].filter(Boolean) as string[];
     if (metaBits.length) {
       const metaStr = metaBits.join("   ·   ");
@@ -1101,11 +1180,11 @@ class PdfDoc {
       const totalW = labeledParts.reduce((a, b) => a + b.w, 0) + sepW * (parts.length - 1);
       let sx = pw / 2 - totalW / 2;
       for (let i = 0; i < labeledParts.length; i++) {
-        d.setTextColor(...C.GOLD_SOFT);
+        d.setTextColor(...this.T.accentSoft);
         d.text(labeledParts[i].text, sx, cy, { align: "left" });
         sx += labeledParts[i].w;
         if (i < parts.length - 1) {
-          d.setDrawColor(120, 140, 164);
+          d.setDrawColor(...this.T.pulseRing);
           d.setLineWidth(0.3);
           d.line(sx + sepW / 2, cy - 3, sx + sepW / 2, cy - 3 + 4.2);
           sx += sepW;
@@ -1127,8 +1206,8 @@ class PdfDoc {
         const ft = tlabel(f);
         const fw = d.getTextWidth(ft);
         const fx = pw / 2 - fw / 2;
-        drawCheck(d, fx - 6, cy - 1.6, 3, C.GOLD_SOFT);
-        d.setTextColor(206, 222, 240);
+        drawCheck(d, fx - 6, cy - 1.6, 3, this.T.accentSoft);
+        d.setTextColor(...this.T.coverBody);
         d.text(ft, fx, cy, { align: "left" });
         cy += 6.4;
       }
@@ -1151,7 +1230,7 @@ class PdfDoc {
     const entryTop = this.y;
     d.setFont(F.H, hs("bold"));
     d.setFontSize(7.6 * this.L.typeScale);
-    d.setTextColor(...C.GOLD);
+    d.setTextColor(...this.T.accent);
     d.text(tlabel(`${this.t("pdf.tpl.ch")} ${String(chNum).padStart(2, "0")}`), this.L.ms, this.y);
     this.y += sp(2.6, density);
 
@@ -1224,13 +1303,13 @@ class PdfDoc {
         d.text(lines, this.L.ms + fw / 2, this.y, { align: "center" });
         this.y += lines.length * lh(9.5 * this.L.typeScale) + sp(2.5, density);
       }
-      this.y = this.hRule(this.y, fw * 0.28, 0.6, C.GOLD, this.L.ms + fw * 0.36);
+      this.y = this.hRule(this.y, fw * 0.28, 0.6, this.T.accent, this.L.ms + fw * 0.36);
       this.y += sp(1.5, density);
     } else {
       this.checkPage(34);
       d.setFont(F.H, hs("bold"));
       d.setFontSize(7.6 * this.L.typeScale);
-      d.setTextColor(...C.GOLD);
+      d.setTextColor(...this.T.accent);
       d.text(tlabel(`${this.t("pdf.tpl.chapter")} ${String(chNum).padStart(2, "0")}`), this.L.ms, this.y);
       this.y += sp(3, density);
 
@@ -1258,7 +1337,7 @@ class PdfDoc {
         else d.text(lines, this.L.ms, this.y);
         this.y += lines.length * lh(8.6 * this.L.typeScale, descIsAr ? 1.3 : 1.45) + sp(2.5, density);
       }
-      this.y = this.hRule(this.y, fw, 1, C.GOLD);
+      this.y = this.hRule(this.y, fw, 1, this.T.accent);
       this.y += sp(2.5, density);
     }
   }
@@ -1406,22 +1485,33 @@ class PdfDoc {
     // ── Options ──
     if (!isWritten && q.choices.length > 0) {
       const showInline = answersMode === "inline";
+      const revealedQ = opts.revealed ?? false;
       for (let i = 0; i < q.choices.length; i++) {
+        // The stem may have paginated across a column/page break — re-derive
+        // the drawing column before every choice.
+        cw = opts.twoCol ? this.L.cw : this.L.fw;
+        x = this.colX;
         const letter = LETTERS[i] ?? String(i + 1);
         const isCorrect = i === q.correct;
-        const highlight = showInline && isCorrect;
+        // Tutor-style marking: correct choice always emerald; in session
+        // reports a wrong pick is additionally crossed out in crimson.
+        const markCorrect = isCorrect && (showInline || revealedQ);
+        const markWrong = revealedQ && opts.userAnswer === i && !isCorrect;
+        const highlight = markCorrect || markWrong;
+        const markColor: RGB = markWrong ? C.CRIMSON : C.EMERALD;
         const choiceText = q.choices[i];
         const isChoiceArabic = hasArabic(stripMd(choiceText));
 
         if (isChoiceArabic) {
           d.setFont("Cairo", hs("bold"));
           d.setFontSize(8.4 * this.L.typeScale);
-          d.setTextColor(...(highlight ? C.EMERALD : C.ROYAL));
+          d.setTextColor(...(highlight ? markColor : C.ROYAL));
           d.text(`${letter}`, x + cw - 3.2, this.y, { align: "right" });
-          if (highlight) drawCheck(d, x + cw - 8.6, this.y - 1.4, 2.4, C.EMERALD);
+          if (markCorrect) drawCheck(d, x + cw - 8.6, this.y - 1.4, 2.4, C.EMERALD);
+          else if (markWrong) drawCross(d, x + cw - 8.6, this.y - 1.4, 2.4, C.CRIMSON);
           this.y = this.text(choiceText, x, this.y, {
             font: "B", size: 8.6,
-            color: (highlight ? C.EMERALD : C.SLATE),
+            color: (highlight ? markColor : C.SLATE),
             // Mirrors the LTR letter column: text right edge lands beside
             // the check/letter zone instead of 15mm short of it.
             maxW: cw - 13,
@@ -1431,13 +1521,14 @@ class PdfDoc {
         } else {
           d.setFont(F.H, hs("bold"));
           d.setFontSize(8.4 * this.L.typeScale);
-          d.setTextColor(...(highlight ? C.EMERALD : C.ROYAL));
+          d.setTextColor(...(highlight ? markColor : C.ROYAL));
           d.text(`${letter}`, x + 3.2, this.y);
-          if (highlight) drawCheck(d, x + 8.6, this.y - 1.4, 2.4, C.EMERALD);
+          if (markCorrect) drawCheck(d, x + 8.6, this.y - 1.4, 2.4, C.EMERALD);
+          else if (markWrong) drawCross(d, x + 8.6, this.y - 1.4, 2.4, C.CRIMSON);
           this.y = this.text(choiceText, x + 13, this.y, {
             font: highlight ? "Bb" : "B",
             size: 8.6,
-            color: (highlight ? C.EMERALD : C.SLATE),
+            color: (highlight ? markColor : C.SLATE),
             maxW: cw - 15,
             paginate: true,
           });
@@ -1514,6 +1605,10 @@ class PdfDoc {
     }
 
     if ((answersMode === "endchapter" || answersMode === "endbook") && !isWritten) {
+      // Choices may have paginated across a column break — re-derive here so
+      // both the link rect and the text land in the active column.
+      cw = opts.twoCol ? this.L.cw : this.L.fw;
+      x = this.colX;
       const seeAnswerText = this.t("pdf.tpl.seeAnswerKey");
       const arrow = this.lang === "ar" ? " ←" : " ->";
       const fullText = seeAnswerText + arrow;
@@ -1522,10 +1617,10 @@ class PdfDoc {
       d.setFontSize(7 * this.L.typeScale);
       d.setTextColor(...C.LINK);
       const textW = d.getTextWidth(fullText);
-      // Record the position of this "See Answer Key" text so we can
-      // add a hyperlink annotation once the answer key page is known.
-      // The text is right-aligned at (x + cw), so the clickable rect
-      // spans from (x + cw - textW) to (x + cw).
+      // Record the position of this "See Answer Key" text plus its question
+      // number, so a hyperlink to THAT question's answer block can be added
+      // once its page is known. The text is right-aligned at (x + cw), so
+      // the clickable rect spans from (x + cw - textW) to (x + cw).
       this.pendingAnswerKeyLinks.push({
         page: this.page,
         x: x + cw - textW - 1,
@@ -1533,6 +1628,7 @@ class PdfDoc {
         w: textW + 2,
         h: 5,
         chapterIdx: opts.chapterIdx ?? -1,
+        qNum,
       });
       d.text(fullText, x + cw, this.y, { align: "right" });
       this.y += sp(1.5, density);
@@ -1551,13 +1647,16 @@ class PdfDoc {
    * target page, so that `this.page` is the answer key's page number.
    */
   resolveAnswerKeyLinks(chapterIdx: number): void {
-    const targetPage = this.page;
+    const fallbackPage = this.page;
     const d = this.doc;
     for (const link of this.pendingAnswerKeyLinks) {
       if (chapterIdx === -1 || link.chapterIdx === chapterIdx) {
+        // Each question links straight to ITS answer block; fall back to the
+        // key's first page only when the block wasn't drawn (edge cases).
+        const targetPage = this.answerPages[link.qNum] ?? fallbackPage;
         d.setPage(link.page);
         d.link(link.x, link.y, link.w, link.h, { pageNumber: targetPage });
-        d.setPage(targetPage);
+        d.setPage(fallbackPage);
       }
     }
     // Remove resolved links
@@ -1578,7 +1677,7 @@ class PdfDoc {
 
     const titleAr = hasArabic(title);
     // Accent edge sits on the reading-start side of the banner.
-    d.setFillColor(...C.GOLD);
+    d.setFillColor(...this.T.accent);
     d.rect(titleAr ? this.L.ms + fw - 1.6 : this.L.ms, this.y, 1.6, bannerH, "F");
 
     d.setFont(titleAr ? "Cairo" : F.H, hs("bold"));
@@ -1602,6 +1701,10 @@ class PdfDoc {
     // Must read column state AFTER checkPage — it may have switched columns
     let cw = this.twoColEnabled ? this.L.cw : this.L.fw;
     let x = this.colX;
+
+    // Remember where THIS question's answer landed so its "See Answer Key"
+    // link can target it directly.
+    this.answerPages[qNum] = this.page;
 
     this.y = this.trackedLabel(`${this.t("pdf.tpl.answers")} ${qNum}`, x, this.y, 9.5, C.EMERALD, cw);
     this.y = this.hRule(this.y, cw, 1.1, C.SAGE);
@@ -1668,7 +1771,7 @@ class PdfDoc {
     d.setTextColor(...C.MUTED);
     d.text(tlabel(this.t("pdf.tpl.yourScore")), cx, this.y + cardH * 0.22, { align: "center" });
 
-    const scoreCol: RGB = score.pct >= 70 ? C.EMERALD : score.pct >= 50 ? C.GOLD_DEEP : C.CRIMSON;
+    const scoreCol: RGB = score.pct >= 70 ? C.EMERALD : score.pct >= 50 ? this.T.accentDeep : C.CRIMSON;
     d.setFont(F.H, hs("bold"));
     d.setFontSize(25 * ts);
     d.setTextColor(...scoreCol);
@@ -1959,7 +2062,7 @@ interface CompilationResult {
 
 function renderCompilation(cfg: PdfExportConfig, knownChapterPages: number[] | null): CompilationResult {
   const lang = cfg.lang ?? "en";
-  const doc = new PdfDoc(cfg.page, cfg.cover.title, cfg.styleMode, cfg.fontSize, cfg.fontType, lang);
+  const doc = new PdfDoc(cfg.page, cfg.cover.title, cfg.styleMode, cfg.fontSize, cfg.fontType, lang, "content");
   const L = doc.L;
   const t = doc.t;
   const multiChapter = cfg.chapters.length > 1;
@@ -2081,7 +2184,7 @@ export function generateQuizCompilationPdf(cfg: PdfExportConfig): jsPDF {
 export function generateResultsPdf(cfg: ResultsPdfConfig): jsPDF {
   const opts = cfg.opts;
   const lang = opts.lang ?? "en";
-  const doc = new PdfDoc(opts.page, cfg.packTitle, opts.styleMode, opts.fontSize, opts.fontType, lang);
+  const doc = new PdfDoc(opts.page, cfg.packTitle, opts.styleMode, opts.fontSize, opts.fontType, lang, "session");
   const L = doc.L;
   const t = doc.t;
   doc.setMeta({ title: opts.title || cfg.packTitle, author: opts.author, subject: t("pdf.meta.quizResults") });
@@ -2173,7 +2276,7 @@ export function generateResultsPdf(cfg: ResultsPdfConfig): jsPDF {
 export function generateDashboardPdf(cfg: DashboardPdfConfig): jsPDF {
   const opts = cfg.opts;
   const lang = opts.lang ?? "en";
-  const doc = new PdfDoc(opts.page, opts.title || makeT(lang)("pdf.tpl.defaultReportTitle"), opts.styleMode, opts.fontSize, opts.fontType, lang);
+  const doc = new PdfDoc(opts.page, opts.title || makeT(lang)("pdf.tpl.defaultReportTitle"), opts.styleMode, opts.fontSize, opts.fontType, lang, "session");
   const L = doc.L;
   const t = doc.t;
   doc.setMeta({ title: opts.title || t("pdf.tpl.userProgress", { name: cfg.username }), author: opts.author || cfg.username, subject: t("pdf.meta.performanceReport") });
@@ -2561,7 +2664,7 @@ function renderRichParagraph(
 ): void {
   const d = doc.doc;
   const px = sizePt * doc.L.typeScale * doc.L.fontSizeMultiplier;
-  const lineH = lh(px, 1.55);
+  const lineH = lh(px, 1.5);
   const plain = runs.map((r) => r.text).join("");
 
   if (hasArabic(plain)) {
@@ -2575,19 +2678,48 @@ function renderRichParagraph(
     return;
   }
 
+  // Word space advance is measured once in the base body font — per-run
+  // measurement made gaps visibly uneven between regular and bold words.
+  d.setFont(F.B, "normal");
+  const spaceW = Math.max(d.getTextWidth(" "), px * 0.09);
+
   type Tok = { t: string; font: string; style: string; color: RGB; w: number };
   const toks: Tok[] = [];
   for (const raw of runs) {
     const r: ArticleRun = { ...raw, italic: raw.italic || !!styleOpts?.italicAll };
-    const font = r.code ? F.Hn : F.B;
-    const styl = hs(r.bold && r.italic ? "bolditalic" : r.bold ? "bold" : r.italic ? "italic" : "normal");
+    // Lora ships without a bold weight — bold emphasis uses the sans
+    // medium face (the established inline-emphasis style); bold+italic
+    // falls back to the registered Poppins bolditalic.
+    let font: string;
+    let styl: string;
+    if (r.code) {
+      font = F.Hn;
+      styl = "normal";
+    } else if (r.bold && r.italic) {
+      font = "Poppins";
+      styl = "bolditalic";
+    } else if (r.bold) {
+      font = F.Bb;
+      styl = "normal";
+    } else if (r.italic) {
+      font = F.Bi;
+      styl = "italic";
+    } else {
+      font = F.B;
+      styl = "normal";
+    }
     const rc: RGB = r.code ? C.COBALT : color;
     r.text.split("\n").forEach((seg, idx) => {
       if (idx > 0) toks.push({ t: "\n", font, style: styl, color: rc, w: 0 });
       for (const wd of seg.split(/(\s+)/)) {
         if (!wd) continue;
-        d.setFont(font, styl);
-        toks.push({ t: wd, font, style: styl, color: rc, w: d.getTextWidth(wd) });
+        const isSpace = wd.trim() === "";
+        if (isSpace) {
+          toks.push({ t: " ", font, style: styl, color: rc, w: spaceW });
+        } else {
+          d.setFont(font, styl);
+          toks.push({ t: wd, font, style: styl, color: rc, w: d.getTextWidth(wd) });
+        }
       }
     });
   }
@@ -2636,7 +2768,7 @@ function renderRichParagraph(
 export async function generateArticlePdf(cfg: ArticlePdfConfig): Promise<jsPDF> {
   const opts = cfg.opts;
   const lang = opts.lang ?? "en";
-  const doc = new PdfDoc(opts.page, cfg.title, opts.styleMode, opts.fontSize, opts.fontType, lang);
+  const doc = new PdfDoc(opts.page, cfg.title, opts.styleMode, opts.fontSize, opts.fontType, lang, "article");
   const L = doc.L;
   const density = L.density;
   const ts = L.typeScale;
@@ -2724,7 +2856,7 @@ export async function generateArticlePdf(cfg: ArticlePdfConfig): Promise<jsPDF> 
       case "p": {
         doc.checkPage(sp(3, density));
         renderRichParagraph(doc, block.runs, x, fw, 9.4, C.CHARCOAL);
-        doc.y += sp(0.9, density);
+        doc.y += sp(1.2, density);
         break;
       }
       case "list": {
@@ -2735,22 +2867,22 @@ export async function generateArticlePdf(cfg: ArticlePdfConfig): Promise<jsPDF> 
           const indent = 4 + item.depth * 4;
           const marker = block.ordered ? `${i + 1}.` : "\u2022";
           d.setFont(itemIsAr ? "Cairo" : F.Hm, hs("normal"));
-          d.setFontSize(8.6 * ts);
+          d.setFontSize(8.4 * ts);
           d.setTextColor(...C.COBALT);
           const markerW = d.getTextWidth(marker) + 2;
           // Reserve room for at least two body lines so a marker is never
           // stranded at a column/page bottom.
-          doc.checkPage(lh(9 * ts, 1.55) * 2);
+          doc.checkPage(lh(9.4 * ts, 1.5) * 2);
           if (itemIsAr) {
             d.text(marker, x + fw - indent, doc.y, { align: "right" });
-            renderRichParagraph(doc, item.runs, x, fw - indent - markerW, 9, C.CHARCOAL);
+            renderRichParagraph(doc, item.runs, x, fw - indent - markerW, 9.4, C.CHARCOAL);
           } else {
             d.text(marker, x + indent, doc.y);
-            renderRichParagraph(doc, item.runs, x + indent + markerW, fw - indent - markerW - 2, 9, C.CHARCOAL);
+            renderRichParagraph(doc, item.runs, x + indent + markerW, fw - indent - markerW - 2, 9.4, C.CHARCOAL);
           }
           doc.y += sp(0.35, density);
         });
-        doc.y += sp(1, density);
+        doc.y += sp(1.2, density);
         break;
       }
       case "quote": {
