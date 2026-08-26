@@ -5,7 +5,7 @@ import { LifeBuoy, MessageCircleReply, Plus, RefreshCw } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { SectionHeading, EmptyState } from "@/components/osler/ui-primitives";
+import { SectionHeading, EmptyState, LoadingState } from "@/components/osler/ui-primitives";
 import { useI18n } from "@/components/osler/i18n-provider";
 import { haptic } from "@/lib/osler/native";
 import {
@@ -66,7 +66,7 @@ export function SupportSettingsSection() {
       <SectionHeading>{t("support.section.history")}</SectionHeading>
 
       {tickets === null ? (
-        <div className="py-16" />
+        <LoadingState />
       ) : tickets.length === 0 ? (
         <EmptyState
           icon={MessageCircleReply}

@@ -2763,9 +2763,12 @@ async function handleSupportTicketCreate(request: Request, env: Env, session: Se
       "INSERT INTO support_tickets (id, user_id, username, source, category, subject, message, context, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'open', ?, ?)"
     ).bind(tid, session?.user.id ?? null, session ? String(session.user.display_name || session.user.username || "").slice(0, 80) : null, source, category, subject, message, context, t, t).run();
   } catch (error: any) {
-    log.error("support ticket insert failed", { error: error.message });
-    // Idempotent re-try from a client that already delivered this ticket is fine.
-    return json({ ok: true }, 200, origin, log);
+    const msg = String(error?.message || "");
+    // A client retry for a ticket that already landed is success, not failure —
+    // only a genuine insert error (disk, constraint other than PK) is a 500.
+    if (/UNIQUE/i.test(msg)) return json({ ok: true }, 200, origin, log);
+    log.error("support ticket insert failed", { error: msg });
+    return json({ error: "Could not file the ticket" }, 500, origin, log);
   }
   return json({ ok: true }, 200, origin, log);
 }

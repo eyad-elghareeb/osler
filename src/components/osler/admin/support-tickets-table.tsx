@@ -212,13 +212,13 @@ export function SupportTicketsTable() {
       {totalPages > 1 && (
         <div className="flex items-center justify-end gap-2">
           <Button variant="outline" size="sm" disabled={page <= 1 || loading} onClick={() => setPage((p) => Math.max(1, p - 1))}>
-            <ChevronLeft className="size-4" />
+            <ChevronLeft className="size-4 rtl-flip-x" />
             {t("common.previous")}
           </Button>
           <span className="text-sm tabular-nums text-muted-foreground px-1">{page} / {totalPages}</span>
           <Button variant="outline" size="sm" disabled={page >= totalPages || loading} onClick={() => setPage((p) => p + 1)}>
             {t("common.next")}
-            <ChevronRight className="size-4" />
+            <ChevronRight className="size-4 rtl-flip-x" />
           </Button>
         </div>
       )}
