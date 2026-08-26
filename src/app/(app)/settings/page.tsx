@@ -23,6 +23,7 @@ const VALID_SECTIONS: ReadonlySet<string> = new Set([
   "sync",
   "backup",
   "native",
+  "support",
   "about",
   "danger",
 ]);

@@ -554,6 +554,34 @@ export async function fetchQuestionStats(uid: string): Promise<Record<string, Qu
   return result.stats;
 }
 
+/* ── Support tickets ──
+ * Filed from Settings / QBank question reports / Library article reports.
+ * The client generates the id so its local receipt merges cleanly with the
+ * server's status updates. Delivery requires cloud to be configured; the
+ * support lib keeps an offline receipt and marks it unsynced otherwise.
+ */
+
+export async function submitSupportTicket(input: {
+  id: string;
+  source: string;
+  category: string;
+  subject: string;
+  message: string;
+  context?: Record<string, unknown>;
+}): Promise<void> {
+  const session = readCloudSession();
+  await request("/v1/support/tickets", { method: "POST", body: JSON.stringify(input) }, session?.token);
+}
+
+/** The signed-in user's tickets. Returns null when there is no cloud session
+ *  (guests keep their receipts locally only). Throws on transport failure. */
+export async function fetchMySupportTickets(): Promise<unknown[] | null> {
+  const session = readCloudSession();
+  if (!session) return null;
+  const result = await request<{ tickets: unknown[] }>("/v1/support/tickets", { method: "GET" }, session.token);
+  return result.tickets;
+}
+
 let stopSync: (() => void) | null = null;
 let forceSync: (() => void) | null = null;
 

@@ -99,6 +99,7 @@ export const SETTINGS_CATALOG: SettingCatalogItem[] = [
   { section: "downloads", labelKey: "settings.section.downloads", keywords: "downloads offline cache storage service worker" },
   { section: "sync", labelKey: "settings.section.sync", keywords: "sync peer webrtc qr sync devices" },
   { section: "native", labelKey: "settings.section.native", keywords: "native haptics biometric fingerprint view transitions wake lock network" },
+  { section: "support", labelKey: "settings.section.support", descKey: "support.section.desc", keywords: "support help report problem bug ticket feedback contact admin issue" },
   { section: "backup", labelKey: "settings.section.backup", keywords: "backup restore export import file" },
   { section: "danger", labelKey: "settings.section.danger", keywords: "danger reset clear data delete wipe progress" },
 ];

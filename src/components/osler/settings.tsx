@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Settings as SettingsIcon, Sparkles, AlertTriangle, Keyboard, Languages, Download, Smartphone, FileArchive, Fingerprint, ArrowLeft, ChevronRight, Info, Palette, User, Loader2 } from "lucide-react";
+import { Settings as SettingsIcon, Sparkles, AlertTriangle, Keyboard, Languages, Download, Smartphone, FileArchive, Fingerprint, ArrowLeft, ChevronRight, Info, Palette, User, Loader2, LifeBuoy } from "lucide-react";
 import { storage } from "@/lib/osler/storage";
 import { SyncSettingsSection } from "@/components/osler/sync/sync-settings-section";
 import { useI18n } from "@/components/osler/i18n-provider";
@@ -17,7 +17,7 @@ import dynamic from "next/dynamic";
 
 /* ─── Section catalog ─────────────────────────────────────────────── */
 
-export type SettingsSection = "account" | "appearance" | "language" | "ai" | "shortcuts" | "downloads" | "sync" | "backup" | "native" | "about" | "danger";
+export type SettingsSection = "account" | "appearance" | "language" | "ai" | "shortcuts" | "downloads" | "sync" | "backup" | "native" | "support" | "about" | "danger";
 
 interface SectionMeta {
   id: SettingsSection;
@@ -36,6 +36,7 @@ const SECTIONS: SectionMeta[] = [
   { id: "downloads", labelKey: "settings.section.downloads", icon: Download,     keywords: "downloads offline cache storage service worker" },
   { id: "sync",      labelKey: "settings.section.sync",      icon: Smartphone,   keywords: "sync peer webrtc qr sync devices" },
   { id: "native",    labelKey: "settings.section.native",    icon: Fingerprint,  keywords: "native haptics biometric fingerprint view transitions wake lock network animations" },
+  { id: "support",   labelKey: "settings.section.support",   icon: LifeBuoy,     keywords: "support help report problem bug ticket feedback contact admin issue" },
   { id: "backup",    labelKey: "settings.section.backup",    icon: FileArchive,  keywords: "backup restore export import file" },
   { id: "about",     labelKey: "settings.section.about",     icon: Info,         keywords: "about github repo version site name theme plugins config" },
   { id: "danger",    labelKey: "settings.section.danger",    icon: AlertTriangle, keywords: "danger reset clear data delete wipe progress" },
@@ -60,6 +61,7 @@ const ShortcutsSettingsSection = mkSection(() => import("@/components/osler/sett
 const DownloadsSettingsSection = mkSection(() => import("@/components/osler/settings/downloads-section").then((m) => ({ default: m.DownloadsSettingsSection })));
 const NativeSettingsSection = mkSection(() => import("@/components/osler/settings/backup-native-section").then((m) => ({ default: m.NativeSettingsSection })));
 const BackupSettingsSection = mkSection(() => import("@/components/osler/settings/backup-native-section").then((m) => ({ default: m.BackupSettingsSection })));
+const SupportSettingsSection = mkSection(() => import("@/components/osler/settings/support-section").then((m) => ({ default: m.SupportSettingsSection })));
 const AboutSettingsSection = mkSection(() => import("@/components/osler/settings/about-section").then((m) => ({ default: m.AboutSettingsSection })));
 const DangerZoneSection = mkSection(() => import("@/components/osler/settings/danger-section").then((m) => ({ default: m.DangerZoneSection })));
 const AccountSettingsSection = mkSection(() => import("@/components/osler/settings/account-section").then((m) => ({ default: m.AccountSettingsSection })));
@@ -74,6 +76,7 @@ function renderSection(id: SettingsSection) {
     case "downloads": return <DownloadsSettingsSection />;
     case "sync":      return <SyncSettingsSection />;
     case "native":    return <NativeSettingsSection />;
+    case "support":   return <SupportSettingsSection />;
     case "backup":    return <BackupSettingsSection />;
     case "about":     return <AboutSettingsSection />;
     case "danger":    return <DangerZoneSection />;
