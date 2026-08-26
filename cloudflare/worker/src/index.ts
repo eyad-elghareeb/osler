@@ -1102,19 +1102,46 @@ const CATEGORY_TO_DEFAULT_TYPE: Record<string, string | undefined> = {
   videos: "video",
 };
 
+function slugifyTitle(input: string): string {
+  return input.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 80) || "untitled";
+}
+
+const TYPE_CANONICAL_FILE: Record<string, string> = {
+  quiz: "questions.json",
+  bank: "passages.json",
+  written: "prompts.json",
+  flashcard: "cards.json",
+  osce: "stations.json",
+  video: "videos.json",
+  library: "index.md",
+};
+
 async function hybridPublish(env: Env, obj: any, body: string, targetPath?: string | null): Promise<string[]> {
   if (!env.CONTENT) return [];
   const category = CONTENT_TYPE_TO_CATEGORY[obj.content_type] ?? obj.content_type;
-  const safePath = (targetPath || "").replace(/^\/+|\/+$/g, "");
+  // Prefer an explicit targetPath, otherwise the author's stored intent
+  // (target_path column), otherwise derive a subfolder from the title so
+  // both admin and MCP packs land under "<slug>/<canonical-file>" instead
+  // of flat "<uuid>.json" at the category root.
+  const rawTarget = (targetPath ?? (obj as any).target_path ?? "") as string;
+  const safePath = rawTarget.replace(/^\/+|\/+$/g, "");
   if (safePath.includes("..") || safePath.includes("\\")) throw new Error("Invalid targetPath");
   let fileSegment: string;
   if (safePath && /\.[a-z0-9]+$/i.test(safePath)) {
     fileSegment = safePath;
   } else if (safePath) {
-    fileSegment = safePath + (obj.content_type === "library" ? "/index.md" : "/content.json");
+    const fileName = TYPE_CANONICAL_FILE[obj.content_type] ?? (obj.content_type === "library" ? "index.md" : "content.json");
+    fileSegment = safePath.replace(/\/+$/g, "") + "/" + fileName;
   } else {
-    const tail = obj.r2_key_base.split("/").pop();
-    fileSegment = obj.content_type === "library" ? `${tail}.md` : `${tail}.json`;
+    const tail = obj.r2_key_base.split("/").pop() || "untitled";
+    const rawTitle = typeof obj.title === "string" && obj.title.trim() ? obj.title.trim() : tail;
+    const slug = slugifyTitle(rawTitle);
+    if (obj.content_type === "library") {
+      fileSegment = `${slug}.md`;
+    } else {
+      const fileName = TYPE_CANONICAL_FILE[obj.content_type] ?? "content.json";
+      fileSegment = `${slug}/${fileName}`;
+    }
   }
   const r2Key = `content-files/${category}/${fileSegment}`;
   const ct = obj.content_type === "library" ? "text/markdown" : "application/json";
@@ -1227,6 +1254,23 @@ function inferTypeFromFileName(files: string[]): string | null {
   for (const f of files) {
     const base = f.replace(/\.[^.]+$/, "");
     if (FILE_TYPE_KEYS[base]) return FILE_TYPE_KEYS[base];
+  }
+  return null;
+}
+
+async function inferTypeFromContent(env: Env, category: string, folderPath: string, files: string[]): Promise<string | null> {
+  for (const f of files.filter((n) => n.endsWith(".json"))) {
+    try {
+      const obj = await env.CONTENT!.get(`content-files/${category}/${folderPath ? `${folderPath}/` : ""}${f}`);
+      if (!obj) continue;
+      const data = JSON.parse(await obj.text()) as Record<string, any>;
+      if (Array.isArray(data.questions) && data.questions.length) return "quiz";
+      if (Array.isArray(data.passages) && data.passages.length) return "bank";
+      if (Array.isArray(data.prompts) && data.prompts.length) return "written";
+      if (Array.isArray(data.cards) && data.cards.length) return "flashcard";
+      if (Array.isArray(data.stations) && data.stations.length) return "osce";
+      if (Array.isArray(data.videos) && data.videos.length) return "video";
+    } catch {}
   }
   return null;
 }
@@ -1377,7 +1421,9 @@ async function regenerateManifestForCategory(env: Env, category: string): Promis
   const parentType = CATEGORY_TYPE_MAP[category] || null;
   const nodes = new Map<string, any>();
   for (const [fp, info] of folders.entries()) {
-    const inferredType = parentType || inferTypeFromFileName(info.files) || "quiz";
+    const byName = parentType || inferTypeFromFileName(info.files);
+    const byContent = !byName && category === "qbank" ? await inferTypeFromContent(env, category, fp, info.files) : null;
+    const inferredType = byName || byContent || "quiz";
     // Uid = <type>-<segments> (no category prefix) — must match the local
     // manifest generator (scripts/generate-content-manifests.js) and its Rust
     // port (tauri-admin/src/manifest.rs) so progress/cache keys stay stable
@@ -3638,9 +3684,17 @@ async function handleAdmin(request: Request, env: Env, session: Session, url: UR
       const objectId = id();
       const r2Base = "content/" + body.contentType + "/" + objectId;
       const title = typeof body.title === "string" ? body.title.trim().slice(0, 200) : null;
+      const rawTarget = typeof body.targetPath === "string" ? body.targetPath.trim().replace(/^\/+|\/+$/g, "") : "";
+      if (rawTarget.includes("..") || rawTarget.includes("\\")) return json({ error: "Invalid targetPath" }, 400, origin, log);
+      const targetPathVal = rawTarget || null;
       await r2Put(env, r2Draft(r2Base), body.content || JSON.stringify({ title: title || "Untitled" }, null, 2));
-      await env.DB.prepare("INSERT INTO content_objects (id, r2_key_base, content_type, title, language, status, created_by, created_at, updated_at) VALUES (?, ?, ?, ?, ?, 'draft', ?, ?, ?)").bind(objectId, r2Base, body.contentType, title, body.language || "en", session.user.id, now(), now()).run();
-      await auditLog(env, session.user.id, "create_content", objectId, { title, contentType: body.contentType }, log);
+      try {
+        await env.DB.prepare("INSERT INTO content_objects (id, r2_key_base, content_type, title, language, status, target_path, created_by, created_at, updated_at) VALUES (?, ?, ?, ?, ?, 'draft', ?, ?, ?, ?)").bind(objectId, r2Base, body.contentType, title, body.language || "en", targetPathVal, session.user.id, now(), now()).run();
+      } catch {
+        // Pre-migration DB without target_path column — fall back to the old shape.
+        await env.DB.prepare("INSERT INTO content_objects (id, r2_key_base, content_type, title, language, status, created_by, created_at, updated_at) VALUES (?, ?, ?, ?, ?, 'draft', ?, ?, ?)").bind(objectId, r2Base, body.contentType, title, body.language || "en", session.user.id, now(), now()).run();
+      }
+      await auditLog(env, session.user.id, "create_content", objectId, { title, contentType: body.contentType, targetPath: targetPathVal }, log);
       return json({ id: objectId, r2KeyBase: r2Base, status: "draft" }, 201, origin, log);
     }
 
@@ -3923,7 +3977,8 @@ async function handleAdmin(request: Request, env: Env, session: Session, url: UR
         if (!draft) return json({ error: "Draft is empty" }, 400, origin, log);
         await r2Put(env, r2Published(obj.r2_key_base), draft);
         let targetPath: string | null = null; let doHybrid = true;
-        try { const b: any = await request.clone().json(); if (typeof b.targetPath === "string") targetPath = b.targetPath.trim(); if (b.hybrid === false) doHybrid = false; } catch {}
+        try { const b: any = await request.clone().json(); if (typeof b.targetPath === "string") targetPath = b.targetPath.trim().replace(/^\/+|\/+$/g, ""); if (targetPath && (targetPath.includes("..") || targetPath.includes("\\"))) return json({ error: "Invalid targetPath" }, 400, origin, log); if (b.hybrid === false) doHybrid = false; } catch {}
+        if (targetPath) { try { await env.DB.prepare("UPDATE content_objects SET target_path = ? WHERE id = ?").bind(targetPath, objectId).run(); (obj as any).target_path = targetPath; } catch {} }
         const hybridKeys = doHybrid ? await hybridPublish(env, obj, draft, targetPath) : [];
         if (!doHybrid) {
           // Publishing without a student-facing copy — drop any stale key
@@ -3941,7 +3996,8 @@ async function handleAdmin(request: Request, env: Env, session: Session, url: UR
         if (!pending) return json({ error: "No pending snapshot found" }, 400, origin, log);
         await r2Put(env, r2Published(obj.r2_key_base), pending);
         let targetPath: string | null = null;
-        try { const b: any = await request.clone().json(); if (typeof b.targetPath === "string") targetPath = b.targetPath.trim(); } catch {}
+        try { const b: any = await request.clone().json(); if (typeof b.targetPath === "string") targetPath = b.targetPath.trim().replace(/^\/+|\/+$/g, ""); if (targetPath && (targetPath.includes("..") || targetPath.includes("\\"))) return json({ error: "Invalid targetPath" }, 400, origin, log); } catch {}
+        if (targetPath) { try { await env.DB.prepare("UPDATE content_objects SET target_path = ? WHERE id = ?").bind(targetPath, objectId).run(); (obj as any).target_path = targetPath; } catch {} }
         const hybridKeys = await hybridPublish(env, obj, pending, targetPath);
         await env.DB.prepare("UPDATE content_objects SET status = 'published', reviewed_by = ?, reviewed_at = ?, rejection_reason = NULL, updated_at = ? WHERE id = ?").bind(session.user.id, now(), now(), objectId).run();
         await auditLog(env, session.user.id, "approve", objectId, { title: obj.title, hybridKeys }, log);

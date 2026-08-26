@@ -147,6 +147,10 @@ export interface ContentObject {
    *  "content-files/qbank/cardiology/questions.json"). Set at publish time
    *  when a hybrid copy was written; null for drafts / non-hybrid publishes. */
   published_r2_key?: string | null;
+  /** Author's desired student-facing location inside the category (e.g.
+   *  "cardiology/acute-coronary"). Stored at creation so MCP and admin
+   *  drafts both land in a subfolder, not the category root. */
+  target_path?: string | null;
   content_type: ContentType;
   title: string | null;
   language: string;
@@ -288,7 +292,7 @@ export const adminApi = {
   listContent:     (status: string, q?: string, page = 1, limit = 50)  => req<{ items: ContentObject[]; total: number; page: number; limit: number }>(`/v1/admin/content?status=${status}${q ? `&q=${encodeURIComponent(q)}` : ""}&page=${page}&limit=${limit}`),
   listAllContent:  (status = "all") => listAllContent(status),
   getContent:      (id: string)                  => req<ContentObject>(`/v1/admin/content/${id}`),
-  createContent:   (payload: { contentType: ContentType; title: string; language: string; content?: string }) =>
+  createContent:   (payload: { contentType: ContentType; title: string; language: string; content?: string; targetPath?: string }) =>
                                                     req<{ id: string; r2KeyBase: string; status: string }>("/v1/admin/content", "POST", payload),
   saveDraft:       (id: string, body: string)    => req<{ ok: boolean }>(`/v1/admin/content/${id}/draft`, "PUT", body),
   submitForReview: (id: string)                  => req<{ ok: boolean; status: string }>(`/v1/admin/content/${id}/submit`, "POST"),

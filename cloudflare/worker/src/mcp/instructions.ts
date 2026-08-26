@@ -55,9 +55,18 @@ the review step uses.
 
 ## Conventions
 
-- Folder name = display title; file names should be Title-Case-with-spaces or
-  kebab-case; images referenced from rich text resolve against the pack's
+- Folder name = display title; file names are canonical per type
+  (quiz: questions.json, bank: passages.json, written: prompts.json,
+  flashcard: cards.json, osce: stations.json, video: videos.json,
+  library: index.md). The server derives "<slug>/<file>" from your title
+  when you omit targetPath, so the pack lands in a subfolder (e.g.
+  content-files/qbank/my-pack/questions.json), not the category root.
+  Pass targetPath="cardiology/acute-coronary" to control the folder
+  explicitly; bare filenames in rich text resolve against the pack's
   \`images/\` subfolder.
+- Managed vs student view: you write to content/<type>/<uuid>/ (draft);
+  students read content-files/<category>/... after an admin approves.
+  list_content_files only sees student-facing files.
 - Arabic content: set language "ar"; keep UI strings untranslated otherwise.
 - IDs inside arrays must be non-empty unique strings.`;
 

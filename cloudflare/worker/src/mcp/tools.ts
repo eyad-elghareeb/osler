@@ -120,6 +120,14 @@ function safeRelPath(input: unknown, imagesPrefix = true): string {
   return rel;
 }
 
+function sanitizeTargetPath(input: unknown): string | null {
+  if (typeof input !== "string" || !input.trim()) return null;
+  const p = input.trim().replace(/^\/+|\/+$/g, "");
+  if (!p || p.includes("..") || p.includes("\\")) throw new ToolError("Invalid targetPath");
+  if (p.length > 200) throw new ToolError("targetPath too long");
+  return p;
+}
+
 const draftTitle = (body: string): string | null => {
   try {
     const j = JSON.parse(body);
@@ -195,6 +203,7 @@ export const TOOLS: ToolDef[] = [
         title: str("Display title (folder-name convention)") ,
         language: str('"en" or "ar"'),
         content: str("Optional initial JSON/markdown body"),
+        targetPath: str('Optional subfolder/file path inside the category (e.g. "cardiology/acute-coronary" or "cardiology/acute-coronary/questions.json"). When omitted the server derives "<slug>/<canonical-file>" from the title so the pack lands in a subfolder, not the category root.'),
       },
       required: ["contentType"],
     },
@@ -205,12 +214,19 @@ export const TOOLS: ToolDef[] = [
       const r2Base = `content/${contentType}/${objectId}`;
       const title = typeof args?.title === "string" ? args.title.trim().slice(0, 200) : null;
       const initial = typeof args?.content === "string" && args.content.length <= 1_000_000 ? args.content : JSON.stringify({ title: title || "Untitled" }, null, 2);
+      const targetPath = sanitizeTargetPath(args?.targetPath);
       await ctx.r2Put(ctx.draftKey(r2Base), initial);
-      await ctx.env.DB.prepare("INSERT INTO content_objects (id, r2_key_base, content_type, title, language, status, created_by, created_at, updated_at) VALUES (?, ?, ?, ?, ?, 'draft', ?, ?, ?)")
-        .bind(objectId, r2Base, contentType, title, args?.language === "ar" ? "ar" : "en", ctx.userId, now(), now())
-        .run();
-      await ctx.audit("mcp_create_content", objectId, { title, contentType, via: "mcp" });
-      return { id: objectId, r2KeyBase: r2Base, status: "draft" };
+      try {
+        await ctx.env.DB.prepare("INSERT INTO content_objects (id, r2_key_base, content_type, title, language, status, target_path, created_by, created_at, updated_at) VALUES (?, ?, ?, ?, ?, 'draft', ?, ?, ?, ?)")
+          .bind(objectId, r2Base, contentType, title, args?.language === "ar" ? "ar" : "en", targetPath, ctx.userId, now(), now())
+          .run();
+      } catch {
+        await ctx.env.DB.prepare("INSERT INTO content_objects (id, r2_key_base, content_type, title, language, status, created_by, created_at, updated_at) VALUES (?, ?, ?, ?, ?, 'draft', ?, ?, ?)")
+          .bind(objectId, r2Base, contentType, title, args?.language === "ar" ? "ar" : "en", ctx.userId, now(), now())
+          .run();
+      }
+      await ctx.audit("mcp_create_content", objectId, { title, contentType, targetPath, via: "mcp" });
+      return { id: objectId, r2KeyBase: r2Base, status: "draft", targetPath: targetPath ?? undefined };
     },
   },
   {
@@ -376,6 +392,7 @@ export const TOOLS: ToolDef[] = [
             required: ["path"],
           },
         },
+        targetPath: str('Optional subfolder/file path inside the category (e.g. "cardiology/acute-coronary" or "cardiology/acute-coronary/questions.json"). When omitted the server derives "<slug>/<canonical-file>" from the title so the pack lands in a subfolder, not the category root.'),
         validateFirst: { type: "boolean", description: "Validate body before writing (library always passes)" },
         submit: { type: "boolean", description: "Submit for admin review after upload" },
       },
@@ -406,10 +423,17 @@ export const TOOLS: ToolDef[] = [
 
       const objectId = ctx.uuid();
       const r2Base = `content/${contentType}/${objectId}`;
+      const targetPath = sanitizeTargetPath(args?.targetPath);
       await ctx.r2Put(ctx.draftKey(r2Base), args.body);
-      await ctx.env.DB.prepare("INSERT INTO content_objects (id, r2_key_base, content_type, title, language, status, created_by, created_at, updated_at) VALUES (?, ?, ?, ?, ?, 'draft', ?, ?, ?)")
-        .bind(objectId, r2Base, contentType, title, args?.language === "ar" ? "ar" : "en", ctx.userId, now(), now())
-        .run();
+      try {
+        await ctx.env.DB.prepare("INSERT INTO content_objects (id, r2_key_base, content_type, title, language, status, target_path, created_by, created_at, updated_at) VALUES (?, ?, ?, ?, ?, 'draft', ?, ?, ?, ?)")
+          .bind(objectId, r2Base, contentType, title, args?.language === "ar" ? "ar" : "en", targetPath, ctx.userId, now(), now())
+          .run();
+      } catch {
+        await ctx.env.DB.prepare("INSERT INTO content_objects (id, r2_key_base, content_type, title, language, status, created_by, created_at, updated_at) VALUES (?, ?, ?, ?, ?, 'draft', ?, ?, ?)")
+          .bind(objectId, r2Base, contentType, title, args?.language === "ar" ? "ar" : "en", ctx.userId, now(), now())
+          .run();
+      }
 
       const uploaded: string[] = [];
       const failed: { path: string; error: string }[] = [];
@@ -437,7 +461,7 @@ export const TOOLS: ToolDef[] = [
         await ctx.env.DB.prepare("UPDATE content_objects SET status = 'pending', submitted_at = ?, updated_at = ? WHERE id = ?").bind(now(), now(), objectId).run();
         submitted = true;
       }
-      await ctx.audit(submitted ? "mcp_submit_content" : "mcp_create_content", objectId, { title, contentType, assets: uploaded.length, failed: failed.length, via: "mcp" });
+      await ctx.audit(submitted ? "mcp_submit_content" : "mcp_create_content", objectId, { title, contentType, targetPath, assets: uploaded.length, failed: failed.length, via: "mcp" });
       return {
         ok: failed.length === 0,
         id: objectId,
@@ -445,6 +469,7 @@ export const TOOLS: ToolDef[] = [
         assetsUploaded: uploaded.length,
         failedAssets: failed,
         status: submitted ? "pending" : "draft",
+        targetPath: targetPath ?? undefined,
         note: submitted ? "Awaiting human admin approval in the web admin panel." : undefined,
       };
     },
