@@ -1530,6 +1530,8 @@ export const en = {
     "pdf.tpl.modelAnswer": "MODEL ANSWER",
     "pdf.tpl.rubricCriteria": "RUBRIC CRITERIA",
     "pdf.tpl.correctAnswer": "Correct Answer",
+    "pdf.tpl.yourAnswer": "Your Answer",
+    "pdf.tpl.notAnswered": "Not answered",
     "pdf.tpl.seeAnswerKey": "See Answer Key",
     "pdf.tpl.chapter": "CHAPTER",
     "pdf.tpl.ch": "CH",

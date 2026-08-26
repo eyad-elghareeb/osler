@@ -186,13 +186,7 @@ function stripHtml(text: string): string {
   return s.replace(/\n{3,}/g, "\n\n").trim();
 }
 
-function detectHtmlHeading(line: string): { level: number; text: string } | null {
-  const m = line.match(/^<h([2-3])\b[^>]*>(.+?)<\/h[2-3]>/i);
-  if (m) return { level: parseInt(m[1], 10), text: m[2].replace(/<[^>]+>/g, "") };
-  return null;
-}
-
-// hasArabic, shapeArabic, shapeArabicLetters, bidiReorder, fallbackArabicPres imported from @/lib/osler/arabic
+// hasArabic, shapeArabic, shapeArabicLetters, bidiReorder imported from @/lib/osler/arabic
 
 /**
  * Split text into lines for a given max width, then BiDi-reorder each
@@ -614,30 +608,19 @@ class PdfDoc {
     d.setFillColor(...C.GOLD);
     d.rect(0, 0, pw, 0.85, "F");
 
-    // Document title, tracked small caps — left for LTR docs, right for
-    // Arabic ones (the section pill mirrors to the opposite corner so the
-    // two never collide).
+    // Section pill — opposite corner from the title. Measured FIRST so the
+    // title knows exactly how much width it may occupy.
     const baseline = hh * 0.58;
-    const titleRaw = trunc(this.title, 52);
-    const titleAr = hasArabic(titleRaw);
-    d.setFont(titleAr ? "Cairo" : F.Hm, hs("normal"));
-    d.setFontSize(7.4 * typeScale);
-    d.setTextColor(...C.INK);
-    if (titleAr) {
-      d.text(titleRaw, ms + this.L.fw, baseline, { align: "right" });
-    } else {
-      d.text(tracked(titleRaw.toUpperCase()), ms, baseline);
-    }
+    const titleAr = hasArabic(this.title);
 
-    // Section pill — opposite corner from the title.
+    let pillW = 0;
     if (this.headerLabel) {
       const headerAr = hasArabic(this.headerLabel);
       const label = headerAr ? this.headerLabel : tracked(this.headerLabel.toUpperCase());
       d.setFont(headerAr ? "Cairo" : F.H, hs("bold"));
       d.setFontSize(6.4 * typeScale);
-      const tw = d.getTextWidth(label);
-      const padX = 3.2;
-      const pillW = tw + padX * 2;
+      const padX = 4.2;
+      pillW = d.getTextWidth(label) + padX * 2;
       const pillH = 5.6 * typeScale;
       const pillX = titleAr ? ms : pw - ms - pillW;
       const pillY = baseline - pillH * 0.72;
@@ -647,15 +630,40 @@ class PdfDoc {
       d.text(label, pillX + pillW / 2, pillY + pillH * 0.68, { align: "center" });
     }
 
+    // Document title, tracked small caps — left for LTR docs, right for
+    // Arabic ones. Truncated to the space that actually remains next to the
+    // pill: tracked caps expand ~2×, which previously let long titles run
+    // underneath it.
+    const maxTitleW = this.L.fw - (pillW ? pillW + 5 : 0);
+    d.setFont(titleAr ? "Cairo" : F.Hm, hs("normal"));
+    d.setFontSize(7.4 * typeScale);
+    d.setTextColor(...C.INK);
+    let titleRaw = trunc(this.title, 52);
+    if (titleAr) {
+      while (titleRaw.length > 2 && d.getTextWidth(`${titleRaw}\u2026`) > maxTitleW) {
+        titleRaw = titleRaw.slice(0, -1);
+      }
+      d.text(d.getTextWidth(titleRaw) > maxTitleW ? `${titleRaw}\u2026` : titleRaw, ms + this.L.fw, baseline, { align: "right" });
+    } else {
+      const fitsTracked = (s: string) => d.getTextWidth(tracked(s.toUpperCase())) <= maxTitleW;
+      if (!fitsTracked(titleRaw)) {
+        while (titleRaw.length > 2 && !fitsTracked(`${titleRaw}\u2026`)) {
+          titleRaw = titleRaw.slice(0, -1);
+        }
+        titleRaw = `${titleRaw}\u2026`;
+      }
+      d.text(tracked(titleRaw.toUpperCase()), ms, baseline);
+    }
+
     // Header rule.
     d.setDrawColor(...C.RULE);
     d.setLineWidth(0.3);
     d.line(ms, hh, pw - ms, hh);
 
-    // Two-column divider — drawn only on question-content pages (not
-    // cover, TOC, answer key, or report sections) so early/section-break
-    // pages never get a stray divider.
-    if (this.twoColEnabled) {
+    // Two-column divider — drawn only while a two-column question flow is
+    // actually active. Full-width sections (chapter openers, answer key,
+    // review, report) must never get a stray divider through their content.
+    if (this.twoColEnabled && this.section === "questions") {
       d.setDrawColor(...C.RULE_SOFT);
       d.setLineWidth(0.25);
       d.line(ms + this.L.cw + this.L.gu / 2, this.L.mt, ms + this.L.cw + this.L.gu / 2, ph - this.L.mb);
@@ -738,17 +746,25 @@ class PdfDoc {
    * Questions → Answer Key, etc. — from drawing two overlapping header
    * pills on the same page.
    */
-  newPage(opts: { skipOutgoing?: boolean; header?: { label: string; section: SectionKey } } = {}): void {
-    if (!opts.skipOutgoing) this.drawChrome();
+  /**
+   * Starts a fresh page and draws its chrome exactly once. The previous
+   * "redraw chrome on page exit" pass double-printed every hairline/text
+   * stroke and made flowing layout flags impossible to change cleanly at
+   * section boundaries. `twoCol` explicitly sets the column-flow mode for
+   * the new page; any non-question section always flows single-column.
+   */
+  newPage(opts: { header?: { label: string; section: SectionKey }; twoCol?: boolean } = {}): void {
     this.doc.addPage();
     this.page++;
     this.col = 0;
     this.colX = this.L.ms;
     this.y = this.L.mt;
     this.colTopY = this.L.mt;
+    if (opts.twoCol !== undefined) this.twoColEnabled = opts.twoCol;
     if (opts.header) {
       this.headerLabel = opts.header.label;
       this.section = opts.header.section;
+      if (opts.header.section !== "questions") this.twoColEnabled = false;
     }
     this.drawChrome();
   }
@@ -792,6 +808,13 @@ class PdfDoc {
       align?: "left" | "center" | "right";
       maxW?: number;
       lineFactor?: number;
+      /**
+       * Flowing mode: chunk lines through `checkPage` so long stems /
+       * paragraphs break at the column bottom instead of overrunning the
+       * footer margin (the classic two-column overflow bug). Requires the
+       * caller to have positioned `this.y` at `y`.
+       */
+      paginate?: boolean;
     } = {},
   ): number {
     const d = this.doc;
@@ -820,13 +843,33 @@ class PdfDoc {
     // (via arabic.ts's shapeArabicLetters + bidiReorder) before jsPDF
     // ever sees them, so no per-call bidi flags are needed here.
     const normalized = normalizeText(raw);
-    const lines = d.splitTextToSize(normalized, maxW);
+    const lines: string[] = d.splitTextToSize(normalized, maxW);
+    const lineH = lh(size, isArabic ? 1.3 : (opts.lineFactor ?? 1.45));
+
+    if (opts.paginate && lines.length > 1) {
+      this.y = y;
+      let cx = x;
+      for (let i = 0; i < lines.length; ) {
+        const fit = Math.max(1, Math.floor((this.L.ph - this.L.mb - this.y) / lineH));
+        const chunk = lines.slice(i, i + fit);
+        if (isArabic) d.text(chunk, cx + maxW, this.y, { align: "right" });
+        else d.text(chunk, cx, this.y, { align: opts.align ?? "left" });
+        i += chunk.length;
+        this.y += chunk.length * lineH;
+        if (i < lines.length) {
+          this.checkPage(lineH * 2);
+          cx = this.colX;
+        }
+      }
+      return this.y;
+    }
+
     if (isArabic) {
       d.text(lines, x + maxW, y, { align: "right" });
     } else {
       d.text(lines, x, y, { align: opts.align ?? "left" });
     }
-    return y + lines.length * lh(size, isArabic ? 1.3 : (opts.lineFactor ?? 1.45));
+    return y + lines.length * lineH;
   }
 
   hRule(y: number, w: number, thick = 0.3, color: RGB = C.RULE, x?: number): number {
@@ -1267,6 +1310,11 @@ class PdfDoc {
       }
     }
 
+    // ── Session status line (your answer vs. correct answer) ──
+    if ((opts.revealed ?? false) && !written && q.correct >= 0 && q.correct < q.choices.length) {
+      h += sp(1.6, density) + lh(7 * ts, 1.25);
+    }
+
     // ── Inline answer + explanation ──
     if (am === "inline" && !written) {
       if (showExpl && q.correct >= 0 && q.correct < q.choices.length) {
@@ -1350,6 +1398,7 @@ class PdfDoc {
         size: stemSize,
         color: C.CHARCOAL,
         maxW: cw - 2,
+        paginate: true,
       });
       this.y += sp(1.5, density);
     }
@@ -1377,6 +1426,7 @@ class PdfDoc {
             // the check/letter zone instead of 15mm short of it.
             maxW: cw - 13,
             align: "right",
+            paginate: true,
           });
         } else {
           d.setFont(F.H, hs("bold"));
@@ -1389,10 +1439,44 @@ class PdfDoc {
             size: 8.6,
             color: (highlight ? C.EMERALD : C.SLATE),
             maxW: cw - 15,
+            paginate: true,
           });
         }
         this.y += sp(0.4, density);
       }
+    }
+
+    // ── Session report — the user's chosen answer next to the key ──
+    if ((opts.revealed ?? false) && !isWritten && q.correct >= 0 && q.correct < q.choices.length) {
+      this.y += sp(1.2, density);
+      cw = opts.twoCol ? this.L.cw : this.L.fw;
+      x = this.colX;
+      const stSize = 7 * this.L.typeScale;
+      const ua = opts.userAnswer;
+      if (ua === undefined || ua === null) {
+        const lbl = this.t("pdf.tpl.notAnswered");
+        const lblAr = hasArabic(lbl);
+        d.setFont(lblAr ? "Cairo" : F.Hm, hs("normal"));
+        d.setFontSize(stSize);
+        d.setTextColor(...C.MUTED);
+        if (lblAr) d.text(lbl, x + cw, this.y, { align: "right" });
+        else d.text(tlabel(lbl), x, this.y);
+      } else {
+        const ok = ua === q.correct;
+        const color: RGB = ok ? C.EMERALD : C.CRIMSON;
+        const label = ok
+          ? `${this.t("pdf.tpl.yourAnswer")}: ${LETTERS[ua] ?? String(ua + 1)}`
+          : `${this.t("pdf.tpl.yourAnswer")}: ${LETTERS[ua] ?? String(ua + 1)}   ·   ${this.t("pdf.tpl.correctAnswer")}: ${LETTERS[q.correct]}`;
+        const labelAr = hasArabic(label);
+        if (ok) drawCheck(d, labelAr ? x + cw - 1.6 : x + 1.6, this.y - 1.1, 2.4, C.EMERALD);
+        else drawCross(d, labelAr ? x + cw - 1.6 : x + 1.6, this.y - 1.1, 2.4, C.CRIMSON);
+        d.setFont(labelAr ? "Cairo" : F.H, hs("bold"));
+        d.setFontSize(stSize);
+        d.setTextColor(...color);
+        if (labelAr) d.text(label, x + cw - 4.6, this.y, { align: "right" });
+        else d.text(tlabel(label), x + 4.6, this.y);
+      }
+      this.y += lh(stSize, 1.25) + sp(0.4, density);
     }
 
     // ── Inline answer + explanation ──
@@ -1528,6 +1612,7 @@ class PdfDoc {
       size: 8,
       color: C.MUTED,
       maxW: cw,
+      paginate: true,
     });
     this.y += sp(1.5, density);
 
@@ -1541,7 +1626,7 @@ class PdfDoc {
       cw = this.twoColEnabled ? this.L.cw : this.L.fw;
       x = this.colX;
       this.y += sp(0.5, density);
-      this.y = this.text(q.explanation, x, this.y, { font: "B", size: 8.8, color: C.CHARCOAL, maxW: cw });
+      this.y = this.text(q.explanation, x, this.y, { font: "B", size: 8.8, color: C.CHARCOAL, maxW: cw, paginate: true });
       this.y += sp(1, density);
     }
 
@@ -1727,6 +1812,7 @@ class PdfDoc {
         size: 7.6,
         color: C.CHARCOAL,
         maxW: this.L.fw - 14,
+        paginate: true,
       });
       this.y += rowH;
     }
@@ -1805,6 +1891,10 @@ interface QuestionDrawOpts {
   twoCol: boolean;
   /** Index of the chapter this question belongs to (for answer-key links). */
   chapterIdx?: number;
+  /** Index of the user's chosen choice (session reports) — undefined when untaken. */
+  userAnswer?: number;
+  /** Whether the question was submitted/revealed in the exported session. */
+  revealed?: boolean;
 }
 
 export interface PdfExportConfig {
@@ -1882,7 +1972,6 @@ function renderCompilation(cfg: PdfExportConfig, knownChapterPages: number[] | n
     doc.drawCover(cfg.cover, totalQ, cfg.chapters.length);
     doc.addBookmark(t("pdf.tpl.cover"));
     doc.newPage({
-      skipOutgoing: true,
       header: showToc ? { label: t("pdf.tpl.contents").toUpperCase(), section: "contents" } : { label: t("pdf.tpl.questions"), section: "questions" },
     });
   } else {
@@ -1928,7 +2017,12 @@ function renderCompilation(cfg: PdfExportConfig, knownChapterPages: number[] | n
       twoCol: cfg.twoCol,
       chapterIdx: ci,
     };
-    if (ci > 0) doc.newPage({ header: { label: t("pdf.tpl.questions"), section: "questions" } });
+    if (ci > 0) {
+      // Chapter openers are full-width — suspend the column flow so the
+      // fresh page's chrome doesn't draw the divider through the title.
+      doc.twoColEnabled = false;
+      doc.newPage({ header: { label: t("pdf.tpl.questions"), section: "questions" } });
+    }
     const chapterItem = doc.addBookmark(`${String(ci + 1).padStart(2, "0")}. ${ch.title}`);
     doc.drawChapterHeader(ci + 1, ch.title, ch.description ?? "", !multiChapter);
     doc.beginFlow(cfg.twoCol);
@@ -2016,7 +2110,7 @@ export function generateResultsPdf(cfg: ResultsPdfConfig): jsPDF {
       1,
     );
     doc.addBookmark(t("pdf.tpl.cover"));
-    doc.newPage({ skipOutgoing: true, header: { label: t("pdf.tpl.questions"), section: "questions" } });
+    doc.newPage({ header: { label: t("pdf.tpl.questions"), section: "questions" } });
   } else {
     doc.setHeader(t("pdf.tpl.questions"), "questions");
     doc.y = L.mt;
@@ -2039,7 +2133,7 @@ export function generateResultsPdf(cfg: ResultsPdfConfig): jsPDF {
   };
 
   cfg.questions.forEach((q, i) => {
-    doc.drawQuestion(q, i + 1, drawOpts);
+    doc.drawQuestion(q, i + 1, { ...drawOpts, userAnswer: cfg.userAnswers[i], revealed: !!cfg.revealed[i] });
     if (opts.answersMode !== "inline" && opts.answersMode !== "none" && !q.isWritten) {
       allAnswers.push({ num: i + 1, q });
     }
@@ -2054,7 +2148,8 @@ export function generateResultsPdf(cfg: ResultsPdfConfig): jsPDF {
   }
 
   if (opts.showReview !== false) {
-    doc.newPage({ header: { label: t("pdf.tpl.questionReview").toUpperCase(), section: "questions" } });
+    // Review rows are full-width — force single-column flow for this section.
+    doc.newPage({ header: { label: t("pdf.tpl.questionReview").toUpperCase(), section: "questions" }, twoCol: false });
     doc.addBookmark(t("pdf.tpl.questionReview"));
 
     const reviewItems: QuestionReviewItem[] = cfg.questions.map((q, i) => {
@@ -2098,7 +2193,7 @@ export function generateDashboardPdf(cfg: DashboardPdfConfig): jsPDF {
       cfg.stats.packs,
     );
     doc.addBookmark(t("pdf.tpl.cover"));
-    doc.newPage({ skipOutgoing: true, header: { label: t("pdf.tpl.report"), section: "report" } });
+    doc.newPage({ header: { label: t("pdf.tpl.report"), section: "report" } });
   } else {
     doc.setHeader(t("pdf.tpl.report"), "report");
     doc.y = L.mt;
@@ -2185,10 +2280,360 @@ export function generateDashboardPdf(cfg: DashboardPdfConfig): jsPDF {
 }
 
 // ═══════════════════════════════════════════════════════════════
-// § 12  LIBRARY ARTICLE PDF  —  HTML-aware, serif body typography
+// § 12  LIBRARY ARTICLE PDF  —  DOM-based renderer mirroring print output
 // ═══════════════════════════════════════════════════════════════
 
-export function generateArticlePdf(cfg: ArticlePdfConfig): jsPDF {
+/** Inline formatting run parsed from article HTML. */
+interface ArticleRun {
+  text: string;
+  bold?: boolean;
+  italic?: boolean;
+  code?: boolean;
+}
+
+type ArticleBlock =
+  | { type: "h"; level: 2 | 3 | 4; runs: ArticleRun[] }
+  | { type: "p"; runs: ArticleRun[] }
+  | { type: "list"; ordered: boolean; items: Array<{ runs: ArticleRun[]; depth: number }> }
+  | { type: "quote"; text: string }
+  | { type: "code"; lines: string[] }
+  | { type: "image"; src: string; alt: string }
+  | { type: "table"; rows: string[][]; header: boolean }
+  | { type: "hr" };
+
+function mergeRuns(runs: ArticleRun[]): ArticleRun[] {
+  const out: ArticleRun[] = [];
+  for (const r of runs) {
+    if (!r.text) continue;
+    const last = out[out.length - 1];
+    if (last && !!last.bold === !!r.bold && !!last.italic === !!r.italic && !!last.code === !!r.code) last.text += r.text;
+    else out.push({ ...r });
+  }
+  return out;
+}
+
+/**
+ * Parse rendered article HTML into typed blocks using the browser's own
+ * parser — headings, rich-text paragraphs, nested lists, quotes, code,
+ * tables, images, hr and mermaid placeholders — so the PDF matches what
+ * the reader (and the print view) actually shows.
+ */
+function parseArticleBlocks(html: string): ArticleBlock[] {
+  const blocks: ArticleBlock[] = [];
+
+  // Non-DOM fallback: flat paragraph split (structure only).
+  if (typeof DOMParser === "undefined") {
+    for (const para of stripHtml(html).split(/\n{2,}/)) {
+      const s = para.trim();
+      if (!s) continue;
+      if (/^###\s/.test(s)) blocks.push({ type: "h", level: 3, runs: [{ text: s.replace(/^###\s+/, "") }] });
+      else if (/^##\s/.test(s)) blocks.push({ type: "h", level: 2, runs: [{ text: s.replace(/^##\s+/, "") }] });
+      else blocks.push({ type: "p", runs: [{ text: stripMd(s) }] });
+    }
+    return blocks;
+  }
+
+  const dom = new DOMParser().parseFromString(html, "text/html");
+
+  const collectRuns = (node: Node, inh: ArticleRun, out: ArticleRun[], imgs: string[], alts: string[]): void => {
+    if (node.nodeType === 3) {
+      out.push({ ...inh, text: (node.textContent ?? "").replace(/\s+/g, " ") });
+      return;
+    }
+    if (node.nodeType !== 1) return;
+    const el = node as Element;
+    const tag = el.tagName.toLowerCase();
+    if (tag === "br") {
+      out.push({ ...inh, text: "\n" });
+      return;
+    }
+    if (tag === "img") {
+      const src = el.getAttribute("src");
+      if (src) {
+        imgs.push(src);
+        alts.push(el.getAttribute("alt") ?? "");
+      }
+      return;
+    }
+    const nxt: ArticleRun = {
+      ...inh,
+      bold: inh.bold || tag === "strong" || tag === "b",
+      italic: inh.italic || tag === "em" || tag === "i",
+      code: inh.code || tag === "code",
+    };
+    el.childNodes.forEach((c) => collectRuns(c, nxt, out, imgs, alts));
+  };
+
+  const collectInline = (el: Element, forceItalic = false) => {
+    const runs: ArticleRun[] = [];
+    const imgs: string[] = [];
+    const alts: string[] = [];
+    el.childNodes.forEach((c) => collectRuns(c, { text: "" }, runs, imgs, alts));
+    const merged = mergeRuns(forceItalic ? runs.map((r) => ({ ...r, italic: true })) : runs);
+    imgs.forEach((src, i) => blocks.push({ type: "image", src, alt: alts[i] ?? "" }));
+    return merged;
+  };
+
+  const pushHeading = (el: Element, level: 2 | 3 | 4): void => {
+    const runs = collectInline(el);
+    if (runs.some((r) => r.text.trim())) blocks.push({ type: "h", level, runs });
+  };
+
+  const pushParagraph = (el: Element, forceItalic = false): void => {
+    const runs = collectInline(el, forceItalic);
+    if (runs.some((r) => r.text.trim())) blocks.push({ type: "p", runs });
+  };
+
+  const emitList = (listEl: Element, ordered: boolean, depth: number): void => {
+    const items: Array<{ runs: ArticleRun[]; depth: number }> = [];
+    const nested: Array<[Element, boolean]> = [];
+    const imgs: string[] = [];
+    const alts: string[] = [];
+    for (const li of Array.from(listEl.children)) {
+      if (li.tagName.toLowerCase() !== "li") continue;
+      const runs: ArticleRun[] = [];
+      for (const child of Array.from(li.childNodes)) {
+        if (child.nodeType === 1) {
+          const ct = (child as Element).tagName.toLowerCase();
+          if (ct === "ul" || ct === "ol") {
+            nested.push([child as Element, ct === "ol"]);
+            continue;
+          }
+        }
+        collectRuns(child, { text: "" }, runs, imgs, alts);
+      }
+      const merged = mergeRuns(runs);
+      if (merged.some((r) => r.text.trim())) items.push({ runs: merged, depth });
+    }
+    if (items.length) blocks.push({ type: "list", ordered, items });
+    imgs.forEach((src, i) => blocks.push({ type: "image", src, alt: alts[i] ?? "" }));
+    for (const [el, o] of nested) emitList(el, o, depth + 1);
+  };
+
+  const hasBlockDescendant = (el: Element): boolean =>
+    !!el.querySelector("p,h1,h2,h3,h4,h5,h6,ul,ol,table,pre,blockquote,hr,figure,.osler-mermaid");
+
+  const walk = (el: Element): void => {
+    switch (el.tagName.toLowerCase()) {
+      case "h2":
+        pushHeading(el, 2);
+        return;
+      case "h3":
+        pushHeading(el, 3);
+        return;
+      case "h4":
+      case "h5":
+      case "h6":
+        pushHeading(el, 4);
+        return;
+      case "p":
+        pushParagraph(el);
+        return;
+      case "ul":
+        emitList(el, false, 0);
+        return;
+      case "ol":
+        emitList(el, true, 0);
+        return;
+      case "blockquote":
+        blocks.push({ type: "quote", text: (el.textContent ?? "").replace(/\s+/g, " ").trim() });
+        return;
+      case "pre":
+        blocks.push({ type: "code", lines: (el.textContent ?? "").replace(/\n{3,}/g, "\n\n").split("\n") });
+        return;
+      case "table": {
+        const rows: string[][] = [];
+        let header = false;
+        for (const tr of Array.from(el.querySelectorAll("tr"))) {
+          const cells = Array.from(tr.querySelectorAll("th,td")).map((c) => (c.textContent ?? "").replace(/\s+/g, " ").trim());
+          if (cells.length) rows.push(cells);
+          if (tr.querySelector("th")) header = true;
+        }
+        if (rows.length) blocks.push({ type: "table", rows, header });
+        return;
+      }
+      case "hr":
+        blocks.push({ type: "hr" });
+        return;
+      case "figure": {
+        const img = el.querySelector("img");
+        const src = img?.getAttribute("src");
+        if (src) blocks.push({ type: "image", src, alt: img?.getAttribute("alt") ?? "" });
+        const cap = el.querySelector("figcaption");
+        if (cap) pushParagraph(cap, true);
+        return;
+      }
+      case "details": {
+        const sum = el.querySelector("summary");
+        if (sum) pushParagraph(sum);
+        el.childNodes.forEach((c) => {
+          if (c.nodeType === 1 && (c as Element).tagName.toLowerCase() !== "summary") walk(c as Element);
+        });
+        return;
+      }
+      case "div": {
+        if (el.classList.contains("osler-mermaid")) {
+          const encoded = el.getAttribute("data-diagram");
+          if (encoded) {
+            try {
+              blocks.push({ type: "code", lines: decodeURIComponent(encoded).split("\n") });
+            } catch {
+              // undecodable diagram source — skip
+            }
+          }
+          return;
+        }
+        if (hasBlockDescendant(el)) {
+          el.childNodes.forEach((c) => {
+            if (c.nodeType === 1) walk(c as Element);
+          });
+        } else {
+          pushParagraph(el);
+        }
+        return;
+      }
+      case "script":
+      case "style":
+      case "button":
+      case "video":
+      case "audio":
+      case "source":
+        return;
+      default: {
+        if (hasBlockDescendant(el)) {
+          el.childNodes.forEach((c) => {
+            if (c.nodeType === 1) walk(c as Element);
+          });
+        } else {
+          pushParagraph(el);
+        }
+      }
+    }
+  };
+
+  dom.body.childNodes.forEach((c) => {
+    if (c.nodeType === 1) walk(c as Element);
+    else if ((c.textContent ?? "").trim()) blocks.push({ type: "p", runs: [{ text: (c.textContent ?? "").replace(/\s+/g, " ") }] });
+  });
+  return blocks;
+}
+
+/** Rasterize an article image into a PNG data URL jsPDF can embed. */
+async function fetchImageDataUrl(src: string): Promise<{ data: string; w: number; h: number } | null> {
+  try {
+    const res = await fetch(src);
+    if (!res.ok) return null;
+    const blob = await res.blob();
+    if (!/^image\/(png|jpeg|jpg|webp|gif)/.test(blob.type)) return null;
+    const bmp = await createImageBitmap(blob);
+    const canvas = document.createElement("canvas");
+    canvas.width = bmp.width;
+    canvas.height = bmp.height;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) {
+      bmp.close();
+      return null;
+    }
+    ctx.drawImage(bmp, 0, 0);
+    const data = canvas.toDataURL("image/png");
+    const dims = { data, w: bmp.width, h: bmp.height };
+    bmp.close();
+    return dims;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Draw mixed bold/italic/code runs with greedy word-wrap, flowing through
+ * `checkPage` so long paragraphs survive column/page breaks. Arabic
+ * paragraphs fall back to the RTL-aware `text()` primitive — word-by-word
+ * Latin-style placement would scramble visual RTL order.
+ */
+function renderRichParagraph(
+  doc: PdfDoc,
+  runs: ArticleRun[],
+  xIn: number,
+  maxW: number,
+  sizePt: number,
+  color: RGB,
+  styleOpts?: { barColor?: RGB; italicAll?: boolean },
+): void {
+  const d = doc.doc;
+  const px = sizePt * doc.L.typeScale * doc.L.fontSizeMultiplier;
+  const lineH = lh(px, 1.55);
+  const plain = runs.map((r) => r.text).join("");
+
+  if (hasArabic(plain)) {
+    doc.y = doc.text(plain, xIn, doc.y, {
+      font: styleOpts?.italicAll ? "Bi" : "B",
+      size: sizePt,
+      color,
+      maxW,
+      paginate: true,
+    });
+    return;
+  }
+
+  type Tok = { t: string; font: string; style: string; color: RGB; w: number };
+  const toks: Tok[] = [];
+  for (const raw of runs) {
+    const r: ArticleRun = { ...raw, italic: raw.italic || !!styleOpts?.italicAll };
+    const font = r.code ? F.Hn : F.B;
+    const styl = hs(r.bold && r.italic ? "bolditalic" : r.bold ? "bold" : r.italic ? "italic" : "normal");
+    const rc: RGB = r.code ? C.COBALT : color;
+    r.text.split("\n").forEach((seg, idx) => {
+      if (idx > 0) toks.push({ t: "\n", font, style: styl, color: rc, w: 0 });
+      for (const wd of seg.split(/(\s+)/)) {
+        if (!wd) continue;
+        d.setFont(font, styl);
+        toks.push({ t: wd, font, style: styl, color: rc, w: d.getTextWidth(wd) });
+      }
+    });
+  }
+
+  const off = xIn - doc.colX;
+  let line: Tok[] = [];
+  let lineW = 0;
+  const flushLine = () => {
+    while (line.length && line[line.length - 1].t.trim() === "") line.pop();
+    if (!line.length) return;
+    doc.checkPage(lineH);
+    if (styleOpts?.barColor) {
+      d.setFillColor(...styleOpts.barColor);
+      d.rect(doc.colX + off - 3.4, doc.y - px * 0.28, 1.4, lineH, "F");
+    }
+    let tx = doc.colX + off;
+    for (const tok of line) {
+      d.setFont(tok.font, tok.style);
+      d.setTextColor(...tok.color);
+      d.text(tok.t, tx, doc.y);
+      tx += tok.w;
+    }
+    doc.y += lineH;
+    line = [];
+    lineW = 0;
+  };
+
+  for (const tok of toks) {
+    if (tok.t === "\n") {
+      flushLine();
+    } else if (tok.t.trim() === "") {
+      if (line.length && lineW + tok.w <= maxW) {
+        line.push(tok);
+        lineW += tok.w;
+      }
+    } else {
+      if (lineW + tok.w > maxW && line.some((tk) => tk.t.trim() !== "")) flushLine();
+      line.push(tok);
+      lineW += tok.w;
+    }
+  }
+  flushLine();
+}
+
+
+export async function generateArticlePdf(cfg: ArticlePdfConfig): Promise<jsPDF> {
   const opts = cfg.opts;
   const lang = opts.lang ?? "en";
   const doc = new PdfDoc(opts.page, cfg.title, opts.styleMode, opts.fontSize, opts.fontType, lang);
@@ -2212,7 +2657,7 @@ export function generateArticlePdf(cfg: ArticlePdfConfig): jsPDF {
       0,
     );
     doc.addBookmark(t("pdf.tpl.cover"));
-    doc.newPage({ skipOutgoing: true });
+    doc.newPage();
   }
   const contentStartPage = opts.includeCover ? 2 : 1;
 
@@ -2250,285 +2695,136 @@ export function generateArticlePdf(cfg: ArticlePdfConfig): jsPDF {
   doc.y = doc.hRule(doc.y, fw, 0.4, C.RULE);
   doc.y += sp(2, density);
 
-  // Pass 1 — extract structured elements (headings, paragraphs, lists, tables, blockquotes)
-  // from the raw HTML for richer rendering that matches the print-button output.
-  interface ArticleBlock {
-    type: "h2" | "h3" | "h4" | "p" | "blockquote" | "code" | "list" | "table";
-    text: string;
-    rows?: string[][];
-    items?: string[];
-    isOrdered?: boolean;
-  }
+  const blocks = parseArticleBlocks(cfg.content);
 
-  const blocks: ArticleBlock[] = [];
-  // Try to parse HTML structure first
-  const htmlContent = cfg.content;
-  let remaining = htmlContent.trim();
-
-  // Simple HTML-aware block parser
-  const tagRx = /<\/?(h[2-4]|p|blockquote|pre|ul|ol|li|table|thead|tbody|tr|th|td|br|div|strong|em|b|i|code|span|a|img|figure|figcaption)[^>]*>/gi;
-  // Split by block-level tags
-  const blockParts = remaining.split(/(<(?:h[2-4]|p|blockquote|pre|ul|ol|table)[^>]*>[\s\S]*?<\/(?:h[2-4]|p|blockquote|pre|ul|ol|table)>)/i);
-
-  for (const part of blockParts) {
-    const trimmed = part.trim();
-    if (!trimmed) continue;
-
-    // H2
-    const h2m = trimmed.match(/^<h2\b[^>]*>(.+?)<\/h2>/i);
-    if (h2m) {
-      blocks.push({ type: "h2", text: stripHtml(h2m[1]).trim() });
-      continue;
-    }
-
-    // H3
-    const h3m = trimmed.match(/^<h3\b[^>]*>(.+?)<\/h3>/i);
-    if (h3m) {
-      blocks.push({ type: "h3", text: stripHtml(h3m[1]).trim() });
-      continue;
-    }
-
-    // H4 (styled as h3 variant)
-    const h4m = trimmed.match(/^<h4\b[^>]*>(.+?)<\/h4>/i);
-    if (h4m) {
-      blocks.push({ type: "h4", text: stripHtml(h4m[1]).trim() });
-      continue;
-    }
-
-    // Blockquote
-    const bqm = trimmed.match(/^<blockquote[^>]*>([\s\S]*?)<\/blockquote>/i);
-    if (bqm) {
-      blocks.push({ type: "blockquote", text: stripHtml(bqm[1]).trim() });
-      continue;
-    }
-
-    // Pre/Code block
-    const cm = trimmed.match(/^<pre[^>]*>(?:<code[^>]*>)?([\s\S]*?)(?:<\/code>)?<\/pre>/i);
-    if (cm) {
-      blocks.push({ type: "code", text: stripHtml(cm[1]).trim() });
-      continue;
-    }
-
-    // Lists
-    const ulm = trimmed.match(/^<ul[^>]*>([\s\S]*?)<\/ul>/i);
-    if (ulm) {
-      const items = ulm[1].match(/<li[^>]*>([\s\S]*?)<\/li>/gi) || [];
-      blocks.push({
-        type: "list",
-        text: "",
-        items: items.map((li: string) => stripHtml(li).trim()),
-        isOrdered: false,
-      });
-      continue;
-    }
-    const olm = trimmed.match(/^<ol[^>]*>([\s\S]*?)<\/ol>/i);
-    if (olm) {
-      const items = olm[1].match(/<li[^>]*>([\s\S]*?)<\/li>/gi) || [];
-      blocks.push({
-        type: "list",
-        text: "",
-        items: items.map((li: string) => stripHtml(li).trim()),
-        isOrdered: true,
-      });
-      continue;
-    }
-
-    // Table
-    const tm = trimmed.match(/^<table[^>]*>([\s\S]*?)<\/table>/i);
-    if (tm) {
-      const rows: string[][] = [];
-      const trs = tm[1].match(/<tr[^>]*>([\s\S]*?)<\/tr>/gi) || [];
-      for (const tr of trs) {
-        const cells: string[] = [];
-        const ths = tr.match(/<th[^>]*>([\s\S]*?)<\/th>/gi) || [];
-        const tds = tr.match(/<td[^>]*>([\s\S]*?)<\/td>/gi) || [];
-        for (const cell of [...ths, ...tds]) {
-          cells.push(stripHtml(cell).trim());
-        }
-        if (cells.length > 0) rows.push(cells);
-      }
-      blocks.push({ type: "table", text: "", rows });
-      continue;
-    }
-
-    // Plain paragraph or div
-    let cleanText = trimmed
-      .replace(/^<p[^>]*>/i, "")
-      .replace(/<\/p>$/i, "")
-      .replace(/^<div[^>]*>/i, "")
-      .replace(/<\/div>$/i, "")
-      .replace(/<br\s*\/?>/gi, "\n");
-    cleanText = stripHtml(cleanText).trim();
-    if (cleanText) blocks.push({ type: "p", text: cleanText });
-  }
-
-  // Fallback: if HTML parser didn't produce blocks, split on double-newlines
-  if (blocks.length === 0) {
-    const paragraphs = stripHtml(cfg.content).split(/\n{2,}/).filter((p) => p.trim());
-    for (const para of paragraphs) {
-      const t = para.trim();
-      if (!t) continue;
-      if (/^##\s/.test(t)) {
-        blocks.push({ type: "h2", text: t.replace(/^##\s+/, "") });
-      } else if (/^###\s/.test(t)) {
-        blocks.push({ type: "h3", text: t.replace(/^###\s+/, "") });
-      } else {
-        blocks.push({ type: "p", text: t });
-      }
-    }
-  }
-
-  // Render blocks — matches the print-button CSS hierarchy
+  // Render blocks — DOM-derived structure mirrors the print view.
   for (const block of blocks) {
     switch (block.type) {
-      case "h2": {
-        doc.checkPage(sp(6, density));
-        doc.y += sp(2, density);
-        {
-          const isAr = hasArabic(block.text);
-          d.setFont(isAr ? "Cairo" : F.H, hs("bold"));
-          d.setFontSize(14 * ts);
-          d.setTextColor(...C.INK);
-          const hLines: string[] = d.splitTextToSize(normalizeText(block.text), fw);
-          if (isAr) d.text(hLines, x + fw, doc.y, { align: "right" });
-          else d.text(hLines, x, doc.y);
-          doc.y += hLines.length * lh(14 * ts, isAr ? 1.3 : 1.45) + sp(0.5, density);
-        }
-        doc.y = doc.hRule(doc.y, fw, 0.4, C.RULE);
+      case "h": {
+        const style = { 2: { size: 14, font: F.H, color: C.INK, rule: true }, 3: { size: 11.5, font: F.H, color: C.COBALT, rule: false }, 4: { size: 9.8, font: F.Hm, color: C.SLATE, rule: false } }[block.level];
+        doc.checkPage(sp(style.size * 0.55, density));
         doc.y += sp(1.5, density);
-        break;
-      }
-      case "h3": {
-        doc.checkPage(sp(4.5, density));
-        doc.y += sp(1, density);
-        {
-          const isAr = hasArabic(block.text);
-          d.setFont(isAr ? "Cairo" : F.H, hs("bold"));
-          d.setFontSize(11.5 * ts);
-          d.setTextColor(...C.COBALT);
-          const hLines: string[] = d.splitTextToSize(normalizeText(block.text), fw);
-          if (isAr) d.text(hLines, x + fw, doc.y, { align: "right" });
-          else d.text(hLines, x, doc.y);
-          doc.y += hLines.length * lh(11.5 * ts, isAr ? 1.3 : 1.45) + sp(1.2, density);
-        }
-        break;
-      }
-      case "h4": {
-        doc.checkPage(sp(3.5, density));
-        doc.y += sp(0.5, density);
-        {
-          const isAr = hasArabic(block.text);
-          d.setFont(isAr ? "Cairo" : F.Hm, hs("bold"));
-          d.setFontSize(9.8 * ts);
-          d.setTextColor(...C.SLATE);
-          const hLines: string[] = d.splitTextToSize(normalizeText(block.text), fw);
-          if (isAr) d.text(hLines, x + fw, doc.y, { align: "right" });
-          else d.text(hLines, x, doc.y);
-          doc.y += hLines.length * lh(9.8 * ts, isAr ? 1.3 : 1.45) + sp(0.8, density);
-        }
-        break;
-      }
-      case "blockquote": {
-        doc.checkPage(sp(5, density));
-        doc.y += sp(0.5, density);
-        // Estimate height
-        const bqFontSize = 8.8 * ts;
-        const bqIsAr = hasArabic(block.text);
-        d.setFont(bqIsAr ? "Cairo" : F.Bi, hs(bqIsAr ? "normal" : "italic"));
-        d.setFontSize(bqFontSize);
-        const bqLines: string[] = d.splitTextToSize(normalizeText(block.text), fw - 6);
-        const bqH = bqLines.length * lh(bqFontSize, bqIsAr ? 1.3 : 1.45) + sp(2, density);
-        d.setFillColor(...C.PALE_BLUE);
-        d.setDrawColor(...C.COBALT);
-        d.setLineWidth(0.5);
-        d.rect(x, doc.y, fw, bqH, "FD");
-        d.setFillColor(255, 255, 255);
-        // Quote accent sits on the reading-start side.
-        if (bqIsAr) {
-          d.rect(x + fw - 1.6, doc.y, 1.6, bqH, "F");
-          d.line(x + fw, doc.y, x + fw, doc.y + bqH);
+        const hText = normalizeText(block.runs.map((r) => r.text).join("").trim());
+        const hIsAr = hasArabic(hText);
+        d.setFont(hIsAr ? "Cairo" : style.font, hs("bold"));
+        d.setFontSize(style.size * ts);
+        d.setTextColor(...style.color);
+        const hLines: string[] = d.splitTextToSize(hText, fw);
+        if (hIsAr) d.text(hLines, x + fw, doc.y, { align: "right" });
+        else d.text(hLines, x, doc.y);
+        doc.y += hLines.length * lh(style.size * ts, hIsAr ? 1.3 : 1.45);
+        if (style.rule) {
+          doc.y = doc.hRule(doc.y, fw, 0.4, C.RULE);
+          doc.y += sp(1, density);
         } else {
-          d.rect(x, doc.y, 1.6, bqH, "F");
-          d.line(x, doc.y, x, doc.y + bqH);
+          doc.y += sp(1.2, density);
         }
-        d.setTextColor(...C.SLATE);
-        if (bqIsAr) d.text(bqLines, x + fw - 2, doc.y + sp(1, density), { align: "right" });
-        else d.text(bqLines, x + 4, doc.y + sp(1, density));
-        doc.y += bqH + sp(2, density);
         break;
       }
-      case "code": {
-        doc.checkPage(sp(5, density));
-        doc.y += sp(0.5, density);
-        d.setFont(F.Hn, hs("normal"));
-        d.setFontSize(7.8 * ts);
-        d.setTextColor(...C.SLATE);
-        // Code blocks are virtually always LTR — keep them LTR even if they
-        // contain an Arabic string literal, so the indentation reads correctly.
-        const codeLines: string[] = d.splitTextToSize(normalizeText(block.text), fw - 10);
-        const codeH = codeLines.length * lh(7.8 * ts, 1.3) + sp(2, density);
-        // Panel styling: darker fill + accent edge so code reads as a
-        // distinct block even without an embedded mono font.
-        d.setFillColor(...C.RULE_SOFT);
-        d.setDrawColor(...C.RULE);
-        d.setLineWidth(0.3);
-        d.roundedRect(x, doc.y, fw, codeH, 1, 1, "FD");
-        d.setFillColor(...C.COBALT);
-        d.rect(x, doc.y, 1.2, codeH, "F");
-        d.setTextColor(...C.CHARCOAL);
-        d.text(codeLines, x + 5, doc.y + sp(1, density));
-        doc.y += codeH + sp(2, density);
+      case "p": {
+        doc.checkPage(sp(3, density));
+        renderRichParagraph(doc, block.runs, x, fw, 9.4, C.CHARCOAL);
+        doc.y += sp(0.9, density);
         break;
       }
       case "list": {
-        doc.checkPage(sp(3, density));
+        doc.checkPage(sp(4, density));
         doc.y += sp(0.5, density);
-        const items = block.items ?? [];
-        for (let i = 0; i < items.length; i++) {
-          // For an Arabic list item, render the bullet/number on the RIGHT
-          // (Arabic readers expect list markers at the right edge) and the
-          // text right-aligned. For LTR items, keep the original left-aligned
-          // prefix-on-the-left layout.
-          const itemRaw = items[i];
-          const itemIsAr = hasArabic(itemRaw);
+        block.items.forEach((item, i) => {
+          const itemIsAr = item.runs.some((r) => hasArabic(r.text));
+          const indent = 4 + item.depth * 4;
+          const marker = block.ordered ? `${i + 1}.` : "\u2022";
+          d.setFont(itemIsAr ? "Cairo" : F.Hm, hs("normal"));
+          d.setFontSize(8.6 * ts);
+          d.setTextColor(...C.COBALT);
+          const markerW = d.getTextWidth(marker) + 2;
+          // Reserve room for at least two body lines so a marker is never
+          // stranded at a column/page bottom.
+          doc.checkPage(lh(9 * ts, 1.55) * 2);
           if (itemIsAr) {
-            d.setFont("Cairo", hs("normal"));
-            d.setFontSize(9 * ts);
-            d.setTextColor(...C.CHARCOAL);
-            const marker = block.isOrdered ? `${i + 1}.` : "\u2022";
-            const markerW = d.getTextWidth(marker) + 2;
-            const lines: string[] = d.splitTextToSize(normalizeText(itemRaw), fw - 4 - markerW);
-            doc.checkPage(lines.length * lh(9 * ts, 1.3));
-            // Marker flush-right at the column edge.
-            d.setTextColor(...C.COBALT);
-            d.text(marker, x + fw - 2, doc.y, { align: "right" });
-            // Text right-aligned, indented from the marker.
-            d.setTextColor(...C.CHARCOAL);
-            d.text(lines, x + fw - 2 - markerW, doc.y, { align: "right" });
-            doc.y += lines.length * lh(9 * ts, 1.3) + sp(0.3, density);
+            d.text(marker, x + fw - indent, doc.y, { align: "right" });
+            renderRichParagraph(doc, item.runs, x, fw - indent - markerW, 9, C.CHARCOAL);
           } else {
-            d.setFont(F.B, hs("normal"));
-            d.setFontSize(9 * ts);
-            d.setTextColor(...C.CHARCOAL);
-            const prefix = block.isOrdered ? `${i + 1}. ` : "  \u2022  ";
-            const itemText = `${prefix}${itemRaw}`;
-            const lines: string[] = d.splitTextToSize(normalizeText(itemText), fw - 4);
-            doc.checkPage(lines.length * lh(9 * ts));
-            d.text(lines, x + 2, doc.y);
-            doc.y += lines.length * lh(9 * ts) + sp(0.3, density);
+            d.text(marker, x + indent, doc.y);
+            renderRichParagraph(doc, item.runs, x + indent + markerW, fw - indent - markerW - 2, 9, C.CHARCOAL);
           }
-        }
+          doc.y += sp(0.35, density);
+        });
         doc.y += sp(1, density);
+        break;
+      }
+      case "quote": {
+        doc.checkPage(sp(5, density));
+        doc.y += sp(0.5, density);
+        renderRichParagraph(doc, [{ text: stripMd(block.text) }], x + 5, fw - 7, 8.8, C.SLATE, {
+          barColor: C.COBALT,
+          italicAll: !hasArabic(block.text),
+        });
+        doc.y += sp(1.5, density);
+        break;
+      }
+      case "code": {
+        const codeLineH = lh(7.8 * ts, 1.35);
+        let li = 0;
+        while (li < block.lines.length) {
+          doc.checkPage(codeLineH * 2 + 4);
+          const avail = L.ph - L.mb - doc.y - 5;
+          const fit = Math.max(1, Math.floor((avail - 3) / codeLineH));
+          const chunk = block.lines.slice(li, li + fit).map(normalizeText);
+          const panelH = chunk.length * codeLineH + 3;
+          d.setFillColor(...C.RULE_SOFT);
+          d.setDrawColor(...C.RULE);
+          d.setLineWidth(0.3);
+          d.roundedRect(x, doc.y, fw, panelH, 1, 1, "FD");
+          d.setFillColor(...C.COBALT);
+          d.rect(x, doc.y, 1.2, panelH, "F");
+          d.setFont(F.Hn, hs("normal"));
+          d.setFontSize(7.8 * ts);
+          d.setTextColor(...C.CHARCOAL);
+          d.text(chunk, x + 5, doc.y + 2.8);
+          doc.y += panelH + sp(0.5, density);
+          li += chunk.length;
+        }
+        doc.y += sp(1.5, density);
+        break;
+      }
+      case "image": {
+        const img = await fetchImageDataUrl(block.src);
+        if (!img || img.w === 0 || img.h === 0) break;
+        const sc = Math.min((fw - 10) / img.w, (L.ph * 0.45) / img.h, 1);
+        const drawW = img.w * sc;
+        const drawH = img.h * sc;
+        doc.checkPage(drawH + 10);
+        d.setFillColor(255, 255, 255);
+        d.setDrawColor(...C.RULE);
+        d.setLineWidth(0.3);
+        d.rect(doc.colX + (fw - drawW) / 2, doc.y, drawW, drawH, "FD");
+        try {
+          d.addImage(img.data, "PNG", doc.colX + (fw - drawW) / 2 + 0.3, doc.y + 0.3, drawW - 0.6, drawH - 0.6);
+        } catch {
+          // corrupt/unsupported bitmap — leave the framed placeholder empty
+        }
+        doc.y += drawH + 1.5;
+        if (block.alt) {
+          const altIsAr = hasArabic(block.alt);
+          d.setFont(altIsAr ? "Cairo" : F.Bi, hs("italic"));
+          d.setFontSize(7.6 * ts);
+          d.setTextColor(...C.MUTED);
+          const capLines: string[] = d.splitTextToSize(normalizeText(stripMd(block.alt)), fw - 20);
+          if (altIsAr) d.text(capLines, x + fw, doc.y, { align: "right" });
+          else d.text(capLines, x + fw / 2, doc.y, { align: "center" });
+          doc.y += capLines.length * lh(7.6 * ts);
+        }
+        doc.y += sp(1.5, density);
         break;
       }
       case "table": {
         doc.checkPage(sp(8, density));
         doc.y += sp(1, density);
-        const rows = block.rows ?? [];
+        const rows = block.rows;
         if (rows.length > 0) {
           const colCount = Math.max(...rows.map((r) => r.length));
           const colW = fw / colCount;
-          d.setFontSize(7.2 * ts);
           // Pre-measure every cell so each row is as tall as its tallest
           // wrapped line — fixed-height rows truncated real content.
           const measured = rows.map((row) =>
@@ -2542,12 +2838,11 @@ export function generateArticlePdf(cfg: ArticlePdfConfig): jsPDF {
               };
             }),
           );
-          let headerRow = measured[0];
           const rowHeight = (row: typeof measured[number]) =>
-            Math.max(5.5 * ts, Math.max(...row.map((c) => Math.min(c.lines.length, 4))) * 3.6 * ts + 2);
+            Math.max(5.5 * ts, Math.min(Math.max(...row.map((c) => c.lines.length)), 4) * 3.6 * ts + 2);
+          const headerRow = block.header ? measured[0] : null;
           for (let ri = 0; ri < rows.length; ri++) {
             const row = measured[ri];
-            const isHeader = ri === 0;
             const cellH = rowHeight(row);
             // A page/column break mid-table loses the column labels —
             // detect the jump and re-draw the header row first.
@@ -2555,22 +2850,22 @@ export function generateArticlePdf(cfg: ArticlePdfConfig): jsPDF {
             const beforeCol = doc.col;
             const beforeY = doc.y;
             doc.checkPage(cellH + 2);
-            if ((doc.page !== beforePage || doc.col !== beforeCol || doc.y < beforeY - 1) && !isHeader) {
+            if ((doc.page !== beforePage || doc.col !== beforeCol || doc.y < beforeY - 1) && headerRow && ri !== 0) {
               drawTableRow(doc, headerRow, true, x, colW, colCount, rowHeight(headerRow));
               doc.y += rowHeight(headerRow);
             }
-            drawTableRow(doc, row, isHeader, x, colW, colCount, cellH);
+            drawTableRow(doc, row, !!headerRow && ri === 0, x, colW, colCount, cellH);
             doc.y += cellH;
           }
           doc.y += sp(1.5, density);
         }
         break;
       }
-      case "p":
-      default: {
+      case "hr": {
         doc.checkPage(sp(3, density));
-        doc.y = doc.text(block.text, x, doc.y, { font: "B", size: 9.4, color: C.CHARCOAL, maxW: fw });
-        doc.y += sp(0.75, density);
+        doc.y += sp(1, density);
+        doc.y = doc.hRule(doc.y, fw, 0.4, C.RULE);
+        doc.y += sp(1, density);
         break;
       }
     }

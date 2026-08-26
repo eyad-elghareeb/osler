@@ -304,7 +304,7 @@ export function Library({ initialArticleId, onNavigateBack: propOnNavigateBack }
   const handleExportArticlePdf = React.useCallback(async (opts: PdfExportOptions) => {
     if (!activeArticle) return;
     try {
-      const doc = generateArticlePdf({
+      const doc = await generateArticlePdf({
         title: activeArticle.title,
         subtitle: activeArticle.specialty,
         author: opts.author,

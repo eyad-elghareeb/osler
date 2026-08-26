@@ -1526,6 +1526,8 @@ export const ar = {
     "pdf.tpl.modelAnswer": "الإجابة النموذجية",
     "pdf.tpl.rubricCriteria": "معايير التقييم",
     "pdf.tpl.correctAnswer": "الإجابة الصحيحة",
+    "pdf.tpl.yourAnswer": "إجابتك",
+    "pdf.tpl.notAnswered": "لم تتم الإجابة",
     "pdf.tpl.seeAnswerKey": "انظر مفتاح الإجابة",
     "pdf.tpl.chapter": "الفصل",
     "pdf.tpl.ch": "ف",
