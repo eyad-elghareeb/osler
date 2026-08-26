@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { motion, AnimatePresence, useMotionValue, animate } from "framer-motion";
-import { ChevronLeft, ChevronRight, Flag, Check, X, Clock, Pause, Play, GraduationCap, RotateCcw, ListChecks, Timer, Sparkles, FileText, Calculator as CalcIcon, FlaskConical, BookOpen, NotebookPen, Sliders, Eye, Keyboard, Wrench, LogOut } from "lucide-react";
+import { ChevronLeft, ChevronRight, Flag, Check, X, Clock, Pause, Play, GraduationCap, RotateCcw, ListChecks, Timer, Sparkles, FileText, Calculator as CalcIcon, FlaskConical, BookOpen, NotebookPen, Sliders, Eye, Keyboard, Wrench, LogOut, MessageSquareWarning } from "lucide-react";
 import { ENGINE_META } from "@/lib/osler/content";
 import { toast } from "@/hooks/use-toast";
 import type { ContentTreeNode } from "@/lib/osler/types";
@@ -34,6 +34,7 @@ import { PeerChoicePercent } from "./peer-choice-percent";
 import type { QuestionChoiceStats } from "@/lib/osler/question-stats";
 import { WrittenEngineView, WrittenEvaluationPanel } from "./written-engine";
 import { OsceEngineView } from "./osce-engine-view";
+import { ReportTicketDialog } from "@/components/osler/report-ticket-dialog";
 
 
 
@@ -281,10 +282,24 @@ export function QuizView({
   const { settings: quizSettingsState } = useQuizSettings();
   const [articleSearchOpen, setArticleSearchOpen] = React.useState(false);
   const [toolsOpen, setToolsOpen] = React.useState(false);
+  const [reportOpen, setReportOpen] = React.useState(false);
   const isMobile = useIsMobile();
   const [mobileTutorTab, setMobileTutorTab] = React.useState<"question" | "answer">("question");
   const [showShortcuts, setShowShortcuts] = React.useState(false);
   const bindings = useShortcutBindings();
+
+  // Auto-attached report context: pack identity, question id, a plain-text
+  // stem excerpt and the reporter's chosen answer at report time.
+  const reportContext = React.useMemo(() => {
+    if (!q) return undefined;
+    return {
+      packUid: q.sourceUid ?? session.itemId,
+      packTitle: q.sourceTitle ?? session.itemTitle,
+      qid: q.id,
+      questionExcerpt: (q.stem || "").replace(/[#*`_[\]()!>]/g, " ").replace(/\s+/g, " ").trim().slice(0, 140),
+      selectedAnswer: selected !== undefined ? q.choices[selected] : undefined,
+    };
+  }, [q, session.itemId, session.itemTitle, selected]);
 
   // Map settings → CSS
   const fontFamilyCss = React.useMemo(() => {
@@ -1678,6 +1693,16 @@ export function QuizView({
                   <span className="hidden sm:inline ms-1">{session.flagged[session.current] ? t("qbank.session.flagged") : t("qbank.session.flag")}</span>
                 </Button>
 
+                <Button
+                  variant="outline" size="sm"
+                  onClick={() => { haptic("light"); setReportOpen(true); }}
+                  className="h-9 rounded-lg"
+                  title={t("support.reportQuestion")}
+                >
+                  <MessageSquareWarning className="size-4" />
+                  <span className="hidden lg:inline ms-1">{t("support.reportShort")}</span>
+                </Button>
+
                 <div className="h-5 w-px bg-border mx-1 hidden sm:block" aria-hidden="true" />
 
                 {!submitted && isMCQ && (
@@ -1737,6 +1762,16 @@ export function QuizView({
                   title={session.flagged[session.current] ? t("qbank.session.unflagShort") : t("qbank.session.flag")}
                 >
                   <Flag className={`size-4 ${session.flagged[session.current] ? "fill-warning text-warning" : ""}`} />
+                </Button>
+
+                <Button
+                  variant="outline" size="icon"
+                  onClick={() => { haptic("light"); setReportOpen(true); }}
+                  className="size-10 rounded-lg shrink-0 osler-touch-target"
+                  title={t("support.reportQuestion")}
+                  aria-label={t("support.reportQuestion")}
+                >
+                  <MessageSquareWarning className="size-4" />
                 </Button>
 
                 {/* Tools menu for mobile - bottom sheet with tool shortcuts
@@ -1934,6 +1969,8 @@ export function QuizView({
           </motion.div>
         )}
       </AnimatePresence>
+
+      <ReportTicketDialog open={reportOpen} onOpenChange={setReportOpen} source="qbank" context={reportContext} />
     </div>
   );
 }

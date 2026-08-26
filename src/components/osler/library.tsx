@@ -24,6 +24,7 @@ import {
   Code2,
   ExternalLink,
   Download,
+  MessageSquareWarning,
 } from "lucide-react";
 import {
   loadArticleTree,
@@ -56,6 +57,8 @@ import { type PdfExportOptions } from "./pdf-export-dialog";
 import { PdfExportDialog } from "./lazy-tools";
 import { generateArticlePdf, downloadPdf } from "@/lib/osler/pdf";
 import { useSwipeBackDismiss } from "@/hooks/use-swipe-back-dismiss";
+import { ReportTicketDialog } from "@/components/osler/report-ticket-dialog";
+import type { TicketContext } from "@/lib/osler/support";
 
 import { useOslerRouter } from "@/lib/osler/navigation";
 import { MOTION_TRANSITION, MOTION_SPRING } from "@/lib/osler/motion";
@@ -286,6 +289,17 @@ export function Library({ initialArticleId, onNavigateBack: propOnNavigateBack }
   }, [activeArticle, processedArticleHtml]);
 
   const [pdfDialogOpen, setPdfDialogOpen] = React.useState(false);
+  const [reportOpen, setReportOpen] = React.useState(false);
+  const reportContext: TicketContext | undefined = activeArticle
+    ? { articleTitle: activeArticle.title, articleFile: activeFile ?? activeArticle.file }
+    : undefined;
+  const reportDialog = (
+    <ReportTicketDialog open={reportOpen} onOpenChange={setReportOpen} source="library" context={reportContext} />
+  );
+  const onReportProblem = React.useCallback(() => {
+    haptic("light");
+    setReportOpen(true);
+  }, []);
   const { toast } = useToast();
   const handleExportArticlePdf = React.useCallback(async (opts: PdfExportOptions) => {
     if (!activeArticle) return;
@@ -532,6 +546,7 @@ export function Library({ initialArticleId, onNavigateBack: propOnNavigateBack }
             hlCtrl={hlCtrl}
             onPrint={printArticle}
             onExportPdf={() => setPdfDialogOpen(true)}
+            onReport={onReportProblem}
           />
         ) : null
       }
@@ -567,6 +582,7 @@ export function Library({ initialArticleId, onNavigateBack: propOnNavigateBack }
           variant="article"
           onExport={handleExportArticlePdf}
         />
+        {reportDialog}
       </>
     );
   }
@@ -644,6 +660,7 @@ export function Library({ initialArticleId, onNavigateBack: propOnNavigateBack }
               hlCtrl={hlCtrl}
               onPrint={printArticle}
               onExportPdf={() => setPdfDialogOpen(true)}
+              onReport={onReportProblem}
             />
             <div className="flex-1 overflow-y-auto osler-scroll osler-tabbar-pad md:pb-0 relative flex flex-col">
               {loading ? (
@@ -716,6 +733,7 @@ export function Library({ initialArticleId, onNavigateBack: propOnNavigateBack }
         variant="article"
         onExport={handleExportArticlePdf}
       />
+      {reportDialog}
     </motion.div>
   );
 }
@@ -902,6 +920,7 @@ function MobileReader({
   hlCtrl,
   onPrint,
   onExportPdf,
+  onReport,
 }: {
   article: Article;
   isBookmarked: boolean;
@@ -919,6 +938,7 @@ function MobileReader({
   hlCtrl: ReturnType<typeof useArticleHighlighter>;
   onPrint: () => void;
   onExportPdf: () => void;
+  onReport: () => void;
 }) {
   const [fontPopoverOpen, setFontPopoverOpen] = React.useState(false);
   const { t } = useI18n();
@@ -1037,6 +1057,15 @@ function MobileReader({
                 onClearAll: hlCtrl.clearAll,
               }}
             />
+
+            <button
+              onClick={onReport}
+              className="size-9 rounded-lg flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors"
+              title={t("support.reportProblem")}
+              aria-label={t("support.reportProblem")}
+            >
+              <MessageSquareWarning className="size-4" />
+            </button>
 
             <button
               onClick={onToggleBookmark}
@@ -1274,6 +1303,7 @@ function ArticleHeader({
   hlCtrl,
   onPrint,
   onExportPdf,
+  onReport,
 }: {
   article: Article;
   isBookmarked: boolean;
@@ -1287,6 +1317,7 @@ function ArticleHeader({
   hlCtrl: ReturnType<typeof useArticleHighlighter>;
   onPrint: () => void;
   onExportPdf: () => void;
+  onReport: () => void;
 }) {
   const [fontPopoverOpen, setFontPopoverOpen] = React.useState(false);
   const { t } = useI18n();
@@ -1418,6 +1449,15 @@ function ArticleHeader({
             <ExternalLink className="size-4" />
           </a>
         )}
+
+        <button
+          onClick={onReport}
+          className="osler-icon-btn size-8"
+          title={t("support.reportProblem")}
+          aria-label={t("support.reportProblem")}
+        >
+          <MessageSquareWarning className="size-4" />
+        </button>
 
         <button
           onClick={onToggleBookmark}
