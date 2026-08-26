@@ -10,6 +10,7 @@ import {
   Users,
   FileText,
   ClipboardList,
+  LifeBuoy,
   ScrollText,
   LogOut,
   Moon,
@@ -82,6 +83,7 @@ function AdminShellInner({ children }: AdminShellProps) {
   const [identity, setIdentity] = React.useState<AdminIdentity | null>(null);
   const [loading, setLoading] = React.useState(true);
   const [pendingCount, setPendingCount] = React.useState(0);
+  const [openTicketCount, setOpenTicketCount] = React.useState(0);
   const [mobileNavOpen, setMobileNavOpen] = React.useState(false);
 
   // When the browser can run View Transitions, the keyed page container
@@ -144,6 +146,15 @@ function AdminShellInner({ children }: AdminShellProps) {
     adminApi
       .pendingQueue()
       .then((r) => setPendingCount(r.items.length))
+      .catch(() => {});
+  }, [identity]);
+
+  // Fetch open support-ticket count for the tickets nav badge.
+  React.useEffect(() => {
+    if (!identity?.user.role) return;
+    adminApi
+      .tickets(1, "open")
+      .then((r) => setOpenTicketCount(r.openCount))
       .catch(() => {});
   }, [identity]);
 
@@ -231,6 +242,7 @@ function AdminShellInner({ children }: AdminShellProps) {
           },
         ]
       : []),
+    { href: "/admin/tickets", icon: LifeBuoy, labelKey: "admin.nav.tickets", badge: openTicketCount },
   ];
   const systemItems: NavItemDef[] = [
     ...(isAdmin

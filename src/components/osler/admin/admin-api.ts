@@ -77,6 +77,41 @@ export interface AdminAuditPage {
   limit: number;
 }
 
+/** A user-reported support ticket (see cloudflare/worker/migrations/0021_support_tickets.sql). */
+export interface AdminSupportTicket {
+  id: string;
+  userId: string | null;
+  username: string | null;
+  source: "settings" | "qbank" | "library";
+  category: "bug" | "content" | "feature" | "other";
+  subject: string;
+  message: string;
+  context: {
+    packUid?: string;
+    packTitle?: string;
+    qid?: string;
+    questionExcerpt?: string;
+    selectedAnswer?: string;
+    articleTitle?: string;
+    articleFile?: string;
+  } | null;
+  status: "open" | "in_progress" | "resolved";
+  reply: string | null;
+  createdAt: number;
+  updatedAt: number;
+  resolvedAt: number | null;
+}
+
+export type TicketStatusFilter = "all" | AdminSupportTicket["status"];
+
+export interface AdminTicketPage {
+  items: AdminSupportTicket[];
+  total: number;
+  openCount: number;
+  page: number;
+  limit: number;
+}
+
 export interface AdminSession {
   id: string;
   expires_at: number;
@@ -372,6 +407,12 @@ export const adminApi = {
   approveContent:  (id: string, targetPath?: string) =>
                                                     req<{ ok: boolean; status: string; hybridKeys: string[] }>(`/v1/admin/content/${id}/approve`, "POST", targetPath ? { targetPath } : {}),
   rejectContent:   (id: string, reason: string)  => req<{ ok: boolean; status: string }>(`/v1/admin/content/${id}/reject`, "POST", { reason }),
+
+  // Support tickets (admin + content_admin)
+  tickets:         (page: number, status: TicketStatusFilter) =>
+                                                   req<AdminTicketPage>(`/v1/admin/tickets?page=${page}${status !== "all" ? `&status=${status}` : ""}`),
+  updateTicket:    (id: string, patch: { status?: AdminSupportTicket["status"]; reply?: string | null }) =>
+                                                   req<{ ticket: AdminSupportTicket | null }>(`/v1/admin/tickets/${encodeURIComponent(id)}`, "PATCH", patch),
 };
 
 // ── Analytics API (admin only) ──────────────────────────────────────────────
