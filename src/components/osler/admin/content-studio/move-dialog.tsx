@@ -126,109 +126,113 @@ export function MoveContentDialog({
 
   return (
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="max-w-md gap-3 p-4">
-        <DialogHeader>
+      <DialogContent className="max-w-md max-h-[85dvh] flex flex-col gap-0 p-0 overflow-hidden">
+        <DialogHeader className="shrink-0 p-4 pb-3">
           <DialogTitle className="flex items-center gap-2 text-base">
             <FolderInput className="size-4 text-primary" />
             {t("admin.studio.move.title")}
           </DialogTitle>
         </DialogHeader>
 
-        <p className="text-xs text-muted-foreground">
-          {isBatch
-            ? t("admin.studio.move.batchDesc", { n: String(targetNodes.length) })
-            : t("admin.studio.move.desc", { name: singleName })}
-        </p>
+        <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden osler-scroll-y px-4 space-y-3 py-1">
+          <p className="text-xs text-muted-foreground">
+            {isBatch
+              ? t("admin.studio.move.batchDesc", { n: String(targetNodes.length) })
+              : t("admin.studio.move.desc", { name: singleName })}
+          </p>
 
-        {/* Category Selector */}
-        <div className="space-y-1.5">
-          <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-            {t("admin.studio.categoryLibrary")}
-          </label>
-          <Select value={selectedCategory} onValueChange={(val) => { setSelectedCategory(val); setSubfolderPath(""); }}>
-            <SelectTrigger className="h-8 text-xs">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {CATEGORIES.map((cat) => (
-                <SelectItem key={cat.folder} value={cat.folder}>
-                  {t(cat.labelKey as any)}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
+          {/* Category Selector */}
+          <div className="space-y-1.5">
+            <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              {t("admin.studio.categoryLibrary")}
+            </label>
+            <Select value={selectedCategory} onValueChange={(val) => { setSelectedCategory(val); setSubfolderPath(""); }}>
+              <SelectTrigger className="h-8 text-xs">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {CATEGORIES.map((cat) => (
+                  <SelectItem key={cat.folder} value={cat.folder}>
+                    {t(cat.labelKey as any)}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
 
-        {/* Existing Folder Quick Picker */}
-        <div className="space-y-1.5">
-          <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-            {t("admin.studio.move.selectExisting")}
-          </label>
-          <div className="max-h-36 overflow-y-auto osler-scroll-y rounded-md border border-border bg-card p-1 space-y-0.5">
-            {/* Category Root Option */}
-            <Button
-              type="button"
-              variant="ghost"
-              size="xs"
-              onClick={() => {
-                haptic("selection");
-                setSubfolderPath("");
-              }}
-              className={cn(
-                "w-full justify-start h-6 text-xs font-normal",
-                !cleanDestination ? "bg-primary/10 text-primary font-medium" : "text-muted-foreground hover:bg-muted/60",
-              )}
-            >
-              <Folder className="me-1.5 size-3 text-primary" />
-              {t("admin.studio.move.rootFolder")}
-              {!cleanDestination && <Check className="ms-auto size-3 text-primary" />}
-            </Button>
+          {/* Existing Folder Quick Picker */}
+          <div className="space-y-1.5 min-w-0">
+            <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              {t("admin.studio.move.selectExisting")}
+            </label>
+            <div className="max-h-44 overflow-y-auto overflow-x-hidden osler-scroll-y rounded-md border border-border bg-card p-1 space-y-0.5">
+              {/* Category Root Option */}
+              <Button
+                type="button"
+                variant="ghost"
+                size="xs"
+                onClick={() => {
+                  haptic("selection");
+                  setSubfolderPath("");
+                }}
+                className={cn(
+                  "w-full justify-start h-7 min-w-0 overflow-hidden text-xs font-normal",
+                  !cleanDestination ? "bg-primary/10 text-primary font-medium" : "text-muted-foreground hover:bg-muted/60",
+                )}
+              >
+                <Folder className="size-3 shrink-0 text-primary" />
+                <span className="min-w-0 flex-1 truncate text-start">{t("admin.studio.move.rootFolder")}</span>
+                {!cleanDestination && <Check className="ms-auto size-3 shrink-0 text-primary" />}
+              </Button>
 
-            {categoryFolders.map((f) => {
-              const active = cleanDestination === f.path;
-              return (
-                <Button
-                  key={f.path}
-                  type="button"
-                  variant="ghost"
-                  size="xs"
-                  onClick={() => {
-                    haptic("selection");
-                    setSubfolderPath(f.path);
-                  }}
-                  className={cn(
-                    "w-full justify-start h-6 text-xs font-normal truncate",
-                    active ? "bg-primary/10 text-primary font-medium" : "hover:bg-muted/60 text-foreground/80",
-                  )}
-                  style={{ paddingInlineStart: `${16 + f.depth * 12}px` }}
-                >
-                  <FolderOpen className={cn("me-1.5 size-3 shrink-0", folderRowCls)} />
-                  <span className="truncate">{f.label}</span>
-                  <span className="ms-1 font-mono text-[10px] text-muted-foreground opacity-60">({f.path})</span>
-                  {active && <Check className="ms-auto size-3 text-primary shrink-0" />}
-                </Button>
-              );
-            })}
+              {categoryFolders.map((f) => {
+                const active = cleanDestination === f.path;
+                return (
+                  <Button
+                    key={f.path}
+                    type="button"
+                    variant="ghost"
+                    size="xs"
+                    onClick={() => {
+                      haptic("selection");
+                      setSubfolderPath(f.path);
+                    }}
+                    className={cn(
+                      "w-full justify-start h-7 min-w-0 overflow-hidden text-xs font-normal",
+                      active ? "bg-primary/10 text-primary font-medium" : "hover:bg-muted/60 text-foreground/80",
+                    )}
+                    style={{ paddingInlineStart: `${8 + f.depth * 12}px` }}
+                  >
+                    <FolderOpen className={cn("size-3 shrink-0", folderRowCls)} />
+                    <span className="min-w-0 flex-1 truncate text-start">{f.label}</span>
+                    <span className="hidden sm:inline shrink-0 font-mono text-[10px] text-muted-foreground opacity-60 truncate max-w-[45%] text-end">
+                      {f.path}
+                    </span>
+                    {active && <Check className="ms-auto size-3 shrink-0 text-primary" />}
+                  </Button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Destination Path Input */}
+          <div className="space-y-1.5 min-w-0">
+            <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              {t("admin.studio.move.destinationFolder")}
+            </label>
+            <div className="flex items-center gap-1 min-w-0 overflow-hidden rounded-md border border-border bg-background px-2 py-1 font-mono text-xs text-muted-foreground">
+              <span className="shrink-0 text-primary font-semibold">{selectedCategory}/</span>
+              <Input
+                value={subfolderPath}
+                onChange={(e) => setSubfolderPath(e.target.value)}
+                placeholder="e.g. cardiology/acute-coronary"
+                className="h-6 min-w-0 flex-1 border-0 bg-transparent p-0 text-xs text-foreground font-mono focus-visible:ring-0 shadow-none"
+              />
+            </div>
           </div>
         </div>
 
-        {/* Destination Path Input */}
-        <div className="space-y-1.5">
-          <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-            {t("admin.studio.move.destinationFolder")}
-          </label>
-          <div className="flex items-center gap-1 rounded-md border border-border bg-background px-2 py-1 font-mono text-xs text-muted-foreground">
-            <span className="shrink-0 text-primary font-semibold">{selectedCategory}/</span>
-            <Input
-              value={subfolderPath}
-              onChange={(e) => setSubfolderPath(e.target.value)}
-              placeholder="e.g. cardiology/acute-coronary"
-              className="h-6 flex-1 border-0 bg-transparent p-0 text-xs text-foreground font-mono focus-visible:ring-0 shadow-none"
-            />
-          </div>
-        </div>
-
-        <DialogFooter className="pt-2">
+        <DialogFooter className="shrink-0 border-t bg-background p-4 pt-3">
           <Button variant="outline" size="sm" onClick={onClose} disabled={busy}>
             {t("common.cancel")}
           </Button>
