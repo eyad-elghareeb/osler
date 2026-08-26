@@ -198,7 +198,7 @@ export function PackExportDialog({
         lang: loadUiLang(),
         chapters,
       };
-      const doc = generateQuizCompilationPdf(cfg);
+      const doc = await generateQuizCompilationPdf(cfg);
       downloadPdf(doc, node.title ?? t("pdf.exportQuiz"));
       haptic("success");
       toast({

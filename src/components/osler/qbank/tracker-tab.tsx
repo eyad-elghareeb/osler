@@ -712,7 +712,7 @@ export function TrackerTab({
           tags: q.tags,
           rubric: q.rubric,
         }));
-        const doc = generateResultsPdf({
+        const doc = await generateResultsPdf({
           packTitle: s.packTitle,
           mode: s.mode,
           score: {
@@ -744,8 +744,8 @@ export function TrackerTab({
 
   const [trackerPdfOpen, setTrackerPdfOpen] = React.useState(false);
 
-  const handleExportTrackerPdf = React.useCallback((opts: PdfExportOptions) => {
-    const doc = generateDashboardPdf({
+  const handleExportTrackerPdf = React.useCallback(async (opts: PdfExportOptions) => {
+    const doc = await generateDashboardPdf({
       username: username || t("pdf.tpl.report"),
       stats: {
         packs: new Set(sessionList.map((session) => session.packUid)).size,

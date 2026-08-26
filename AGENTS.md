@@ -39,7 +39,7 @@
     - **framer-motion** — for any animation. Never raw `requestAnimationFrame` transitions.
     - **lucide-react** — for icons. Never inline SVGs.
     - **`@/lib/osler/native`** — for Vibration, View Transitions, WebAuthn, Network Information, Wake Lock. Never call `navigator.vibrate()` / `navigator.credentials.*` / `navigator.wakeLock.*` directly — go through the wrappers.
-    - **`@/lib/osler/pdf`** — for PDF exports (QBank test papers, Flashcard notes, Dashboard stats, Articles). Never instantiate `jsPDF` or handle Arabic shaping manually — go through `pdf.ts`, `arabic.ts`, and `pdf-export-dialog.tsx`.
+    - **`@/lib/osler/pdf/`** — for PDF exports (QBank test papers, Flashcard notes, Dashboard stats, Articles). Import only from the module's public barrel `@/lib/osler/pdf`; engines are lazy-loaded so jsPDF is fetched on first export. Never instantiate `jsPDF` or handle Arabic shaping manually — go through the PDF module, `arabic.ts`, and `pdf-export-dialog.tsx`.
     - **`@/lib/osler/storage`** — for any persistent state. Never touch `localStorage` or IndexedDB directly (biometric credential ID is the documented exception, see `biometric.ts`).
     - **`@/lib/osler/cloud`** — for Cloudflare Worker account sessions, Google OAuth, profile/password updates, data export, account deletion, and automated cloud sync. Never bypass `cloud.ts` or make direct fetch calls to the Worker endpoints outside of it.
     - **`@/lib/osler/sync`** — for P2P cross-device sync. Never open a new PeerJS / MQTT channel outside the existing `NetworkTransport`.
@@ -71,6 +71,13 @@
 19. **Follow the Design System.** Every new view, card, button, or status indicator must use the shared design tokens, primitives, and CSS utility classes defined in [Design System](#design-system) below. Never hand-roll a Tailwind recipe for a page header, section heading, stat tile, empty state, loading state, card, or status color when a canonical version already exists. Never use hardcoded Tailwind palette colors (`text-emerald-500`, `text-amber-500`, `text-red-500`, `bg-orange-500/10`, etc.) — use the semantic `success` / `warning` / `destructive` / `info` tokens instead.
 
 20. **Content search lives in the global search bar only.** The AppShell's global search (`GlobalSearchPanel` + `@/lib/osler/search`) is the single search surface — its index already covers articles, QBank packs, flashcard decks, OSCE stations, videos, settings, and nav. Never add per-view search inputs, filter boxes, or local search state to individual views/hubs; if a content kind isn't findable globally, extend the index in `@/lib/osler/search.ts` instead.
+
+21. **One module, one responsibility (Unix philosophy).** A subsystem that outgrows a single file becomes a folder module under `src/lib/osler/<domain>/` with one file per concern — each file does one thing and does it well. This is the general pattern for all new subsystems (canonical example: `src/lib/osler/pdf/`):
+    - **Structure**: a single public barrel (`index.ts`) + focused internal files. Layer strictly: `tokens` (colors / spacing / type-scale / durations) → stateless helpers (`text`, `fonts`, `layout`, …) → shared primitives or classes (`doc`) → per-feature engines (`generators/*`). Never import "up" the layers; never reach past the barrel from outside the module.
+    - **Tokenize**: shared magic values (palette entries, spacing steps, font sizes, animation durations) live in the module's token table and are imported everywhere — never re-inlined as literals across files.
+    - **Lazy-load heavy dependencies**: the barrel stays free of static engine/dependency imports; expose thin `async` wrapper functions that `await import("./engines/…")` so heavy libraries (jsPDF, mermaid, editors…) are fetched only when the feature actually runs. Callers treat these wrappers as promises.
+    - **File size is a smell, not a goal**: when a file passes ~400 lines or accumulates a second concern, split it along its natural seams (the PDF split followed its own section structure). Keep behavior identical during splits — mechanical moves, no drive-by rewrites.
+    - **Public API = barrel exports only**: functions and types via `index.ts`; internals are private to the module and may be restructured freely without breaking consumers.
 
 ---
 
@@ -528,7 +535,7 @@ The UI language selector and the content-language filter both derive their optio
 
 - `src/components/osler/` — app-specific components (including `pdf-export-dialog.tsx` for PDF customization)
 - `src/components/ui/` — shadcn/ui primitives (49 files, do not add custom logic here)
-- `src/lib/osler/` — business logic, types, data loading, storage, grading, PDF engine (`pdf.ts`, `arabic.ts`, `pdf-fonts.ts`)
+- `src/lib/osler/` — business logic, types, data loading, storage, grading. Larger subsystems are folder modules with a single public barrel — e.g. the PDF engine lives in `src/lib/osler/pdf/` (`tokens` / `text` / `fonts` / `icons` / `layout` / `types` / `doc` / `generators/*`, lazy-loaded via `index.ts`). See also `arabic.ts`, `pdf-fonts.ts`.
 - `src/hooks/` — shared React hooks: `useContentTree`, `useArticleHighlighter`, `useGestures`, `useContentCache`, `useQuizSettings`, `useResizableSidebar`, `useDisableBlur`, `useShortcuts` (`useShortcutBindings` / `useShortcutListener` / `useShortcutSequenceReset`), `useSwipeBackDismiss`, `useSwipeTabs`, `useSwipeGallery`, `useToast`, `usePlatform`, `useMobile`, `useNative`, `useCountUp`
 - `public/osler-content/` — folder-based content (see Content system)
 - `scripts/` — manifest generator and build helpers

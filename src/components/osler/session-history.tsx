@@ -351,7 +351,7 @@ export function SessionHistoryView() {
           tags: q.tags,
           rubric: q.rubric,
         }));
-        const doc = generateResultsPdf({
+        const doc = await generateResultsPdf({
           packTitle: s.packTitle,
           mode: s.mode,
           score: {

@@ -142,7 +142,7 @@ export function ResultsView({
         rubric: q.rubric,
       }));
 
-      const doc = generateResultsPdf({
+      const doc = await generateResultsPdf({
         packTitle: item.title,
         mode: session.mode,
         score: {
