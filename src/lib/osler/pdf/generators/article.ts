@@ -290,7 +290,8 @@ function renderRichParagraph(
 ): void {
   const d = doc.doc;
   const px = sizePt * doc.L.typeScale * doc.L.fontSizeMultiplier;
-  const lineH = lh(px, 1.5);
+  // Compact editorial leading — 1.5 read as double-spaced next to the UI.
+  const lineH = lh(px, 1.36);
   const plain = runs.map((r) => r.text).join("");
 
   if (hasArabic(plain)) {
@@ -437,7 +438,7 @@ export async function generateArticlePdf(cfg: ArticlePdfConfig): Promise<jsPDF> 
     const titleLines: string[] = d.splitTextToSize(cfg.title, fw);
     if (titleIsAr) d.text(titleLines, x + fw, doc.y, { align: "right" });
     else d.text(titleLines, x, doc.y);
-    doc.y += titleLines.length * lh(17 * ts, titleIsAr ? 1.3 : 1.45) + sp(2, density);
+    doc.y += titleLines.length * lh(17 * ts, titleIsAr ? 1.2 : 1.25) + sp(1.2, density);
   }
 
   const metaParts: string[] = [];
@@ -447,10 +448,10 @@ export async function generateArticlePdf(cfg: ArticlePdfConfig): Promise<jsPDF> 
   d.setFontSize(8 * ts);
   d.setTextColor(...C.MUTED);
   d.text(tlabel(metaParts.join("   ·   ")), x, doc.y);
-  doc.y += sp(2, density);
+  doc.y += sp(1, density);
 
   doc.y = doc.hRule(doc.y, fw, 0.4, C.RULE);
-  doc.y += sp(2, density);
+  doc.y += sp(1.4, density);
 
   const blocks = parseArticleBlocks(cfg.content);
 
@@ -460,7 +461,7 @@ export async function generateArticlePdf(cfg: ArticlePdfConfig): Promise<jsPDF> 
       case "h": {
         const style = { 2: { size: 14, font: F.H, color: C.INK, rule: true }, 3: { size: 11.5, font: F.H, color: C.COBALT, rule: false }, 4: { size: 10.4, font: F.Hm, color: C.SLATE, rule: false } }[block.level];
         doc.checkPage(sp(style.size * 0.55, density));
-        doc.y += sp(1.5, density);
+        doc.y += sp(1, density);
         const hText = normalizeText(block.runs.map((r) => r.text).join("").trim());
         const hIsAr = hasArabic(hText);
         d.setFont(hIsAr ? "Cairo" : style.font, hs("bold"));
@@ -469,24 +470,24 @@ export async function generateArticlePdf(cfg: ArticlePdfConfig): Promise<jsPDF> 
         const hLines: string[] = d.splitTextToSize(hText, fw);
         if (hIsAr) d.text(hLines, x + fw, doc.y, { align: "right" });
         else d.text(hLines, x, doc.y);
-        doc.y += hLines.length * lh(style.size * ts, hIsAr ? 1.3 : 1.45);
+        doc.y += hLines.length * lh(style.size * ts, hIsAr ? 1.2 : 1.3);
         if (style.rule) {
           doc.y = doc.hRule(doc.y, fw, 0.4, C.RULE);
-          doc.y += sp(1, density);
+          doc.y += sp(0.7, density);
         } else {
-          doc.y += sp(1.2, density);
+          doc.y += sp(0.8, density);
         }
         break;
       }
       case "p": {
         doc.checkPage(sp(3, density));
         renderRichParagraph(doc, block.runs, x, fw, 10, C.CHARCOAL);
-        doc.y += sp(1.5, density);
+        doc.y += sp(1, density);
         break;
       }
       case "list": {
         doc.checkPage(sp(4, density));
-        doc.y += sp(0.5, density);
+        doc.y += sp(0.3, density);
         block.items.forEach((item, i) => {
           const itemIsAr = item.runs.some((r) => hasArabic(r.text));
           const indent = 4 + item.depth * 4;
@@ -497,7 +498,7 @@ export async function generateArticlePdf(cfg: ArticlePdfConfig): Promise<jsPDF> 
           const markerW = d.getTextWidth(marker) + 2;
           // Reserve room for at least two body lines so a marker is never
           // stranded at a column/page bottom.
-          doc.checkPage(lh(10 * ts, 1.5) * 2);
+          doc.checkPage(lh(10 * ts, 1.36) * 2);
           if (itemIsAr) {
             d.text(marker, x + fw - indent, doc.y, { align: "right" });
             renderRichParagraph(doc, item.runs, x, fw - indent - markerW, 10, C.CHARCOAL);
@@ -505,19 +506,19 @@ export async function generateArticlePdf(cfg: ArticlePdfConfig): Promise<jsPDF> 
             d.text(marker, x + indent, doc.y);
             renderRichParagraph(doc, item.runs, x + indent + markerW, fw - indent - markerW - 2, 10, C.CHARCOAL);
           }
-          doc.y += sp(0.9, density);
+          doc.y += sp(0.45, density);
         });
-        doc.y += sp(1.6, density);
+        doc.y += sp(1.1, density);
         break;
       }
       case "quote": {
         doc.checkPage(sp(5, density));
-        doc.y += sp(0.5, density);
+        doc.y += sp(0.3, density);
         renderRichParagraph(doc, [{ text: stripMd(block.text) }], x + 5, fw - 7, 9.4, C.SLATE, {
           barColor: C.COBALT,
           italicAll: !hasArabic(block.text),
         });
-        doc.y += sp(1.8, density);
+        doc.y += sp(1.1, density);
         break;
       }
       case "code": {
@@ -539,10 +540,10 @@ export async function generateArticlePdf(cfg: ArticlePdfConfig): Promise<jsPDF> 
           d.setFontSize(8.2 * ts);
           d.setTextColor(...C.CHARCOAL);
           d.text(chunk, x + 5, doc.y + 2.8);
-          doc.y += panelH + sp(0.5, density);
+          doc.y += panelH + sp(0.4, density);
           li += chunk.length;
         }
-        doc.y += sp(1.5, density);
+        doc.y += sp(1.1, density);
         break;
       }
       case "image": {
@@ -551,7 +552,7 @@ export async function generateArticlePdf(cfg: ArticlePdfConfig): Promise<jsPDF> 
         const sc = Math.min((fw - 10) / img.w, (L.ph * 0.45) / img.h, 1);
         const drawW = img.w * sc;
         const drawH = img.h * sc;
-        doc.checkPage(drawH + 10);
+        doc.checkPage(drawH + 8);
         d.setFillColor(255, 255, 255);
         d.setDrawColor(...C.RULE);
         d.setLineWidth(0.3);
@@ -572,12 +573,12 @@ export async function generateArticlePdf(cfg: ArticlePdfConfig): Promise<jsPDF> 
           else d.text(capLines, x + fw / 2, doc.y, { align: "center" });
           doc.y += capLines.length * lh(8 * ts);
         }
-        doc.y += sp(1.5, density);
+        doc.y += sp(1.2, density);
         break;
       }
       case "table": {
         doc.checkPage(sp(8, density));
-        doc.y += sp(1, density);
+        doc.y += sp(0.6, density);
         const rows = block.rows;
         if (rows.length > 0) {
           const colCount = Math.max(...rows.map((r) => r.length));
@@ -614,15 +615,15 @@ export async function generateArticlePdf(cfg: ArticlePdfConfig): Promise<jsPDF> 
             drawTableRow(doc, row, !!headerRow && ri === 0, x, colW, colCount, cellH);
             doc.y += cellH;
           }
-          doc.y += sp(1.5, density);
+          doc.y += sp(1.1, density);
         }
         break;
       }
       case "hr": {
         doc.checkPage(sp(3, density));
-        doc.y += sp(1, density);
+        doc.y += sp(0.6, density);
         doc.y = doc.hRule(doc.y, fw, 0.4, C.RULE);
-        doc.y += sp(1, density);
+        doc.y += sp(0.6, density);
         break;
       }
     }
