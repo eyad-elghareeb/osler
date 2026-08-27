@@ -181,10 +181,10 @@ export default function RootLayout({
                   </AnalyticsProvider>
                 </RouteGuard>
               </OslerSessionProvider>
+              <CookieConsentBanner />
             </OslerI18nProvider>
           </OslerThemeProvider>
         </SerwistProvider>
-        <CookieConsentBanner />
         <Toaster />
       </body>
     </html>

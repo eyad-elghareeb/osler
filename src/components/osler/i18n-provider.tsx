@@ -120,33 +120,33 @@ export function OslerI18nProvider({ children }: { children: React.ReactNode }) {
 export function useI18n(): I18nContextValue {
   const ctx = React.useContext(I18nContext);
   if (!ctx) {
-    // Fall back to a no-op default so components rendered outside the provider
-    // (e.g. during SSR or in tests) don't crash.
+    // Fall back to translating with the active/default language so components
+    // rendered outside the provider (e.g. during SSR, early mount, or tests)
+    // always render human-readable translations instead of raw token strings.
+    const fallbackLang = typeof window !== "undefined" ? loadUiLang() : DEFAULT_UI_LANG;
     return {
-      lang: DEFAULT_UI_LANG,
+      lang: fallbackLang,
       contentFilter: DEFAULT_CONTENT_LANG_FILTER,
-      dir: "ltr",
-      rtl: false,
-      t: (k) => {
-        // Same overlay as above — so SSR / pre-provider renders also see the
-        // config-driven site name when available.
+      dir: dirFor(fallbackLang),
+      rtl: isRtl(fallbackLang),
+      t: (k, params) => {
         if (k === "app.name") {
           try {
-            return getSiteName() || (k as string);
+            return getSiteName() || translate(fallbackLang, k, params);
           } catch {
-            return k as string;
+            return translate(fallbackLang, k, params);
           }
         }
         if (k === "app.tagline") {
           try {
-            return getSiteTagline() || (k as string);
+            return getSiteTagline() || translate(fallbackLang, k, params);
           } catch {
-            return k as string;
+            return translate(fallbackLang, k, params);
           }
         }
-        return k as string;
+        return translate(fallbackLang, k, params);
       },
-      tList: () => [],
+      tList: (k) => translateList(fallbackLang, k),
       setLang: () => {},
       setContentFilter: () => {},
     };
