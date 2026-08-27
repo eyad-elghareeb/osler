@@ -1,19 +1,22 @@
 "use client";
 
 import * as React from "react";
-import { motion, AnimatePresence } from "framer-motion";
-import { Highlighter, Eraser, Trash2, X, Check } from "lucide-react";
+import { Highlighter, Eraser, Trash2, Power, Check } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useI18n } from "@/components/osler/i18n-provider";
-import { useIsMobile } from "@/hooks/use-mobile";
 import { haptic } from "@/lib/osler/native";
 import {
   HIGHLIGHT_COLOR_KEYS,
   HIGHLIGHT_PALETTE,
   ERASER_TOOL,
   resolveHighlightColor,
+  type HighlightColorKey,
 } from "@/lib/osler/highlight-palette";
-import { MOTION_TRANSITION } from "@/lib/osler/motion";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -46,16 +49,13 @@ interface HighlighterToolbarProps {
 }
 
 /**
- * HighlighterToolbar — touch-first highlighter control.
+ * HighlighterToolbar — compact, top-bar integrated highlighter control.
  *
- * Off state: a single compact toggle with a count pip when highlights exist.
- *
- * On state: an elevated palette panel anchored under the trigger. Mobile
- * gets a roomy two-row layout (≥36px swatch targets, labelled eraser,
- * count chip + clear, explicit Done button) because header rows are too
- * cramped for precise touch input; desktop (md+) keeps a one-row inline
- * pill. The palette never blocks article interactions — it closes via the
- * trigger, the Done button, or Escape (wired by each consumer).
+ * Compact trigger in the top bar indicates active state, selected color dot,
+ * or eraser mode. Clicking opens a sleek floating palette. Picking a color
+ * or tool immediately auto-compacts back into the top bar, allowing effortless
+ * text selection or erasing without cluttering the screen. Clicking the trigger
+ * again re-opens the palette.
  */
 export function HighlighterToolbar({
   control,
@@ -63,234 +63,182 @@ export function HighlighterToolbar({
   className = "",
 }: HighlighterToolbarProps) {
   const { t } = useI18n();
-  const isMobile = useIsMobile();
   const { tool, color, count, onToolChange, onColorChange, onClearAll } = control;
 
+  const [open, setOpen] = React.useState(false);
   const [confirmOpen, setConfirmOpen] = React.useState(false);
 
   const active = tool !== null;
   const isEraser = tool === ERASER_TOOL;
   const header = tone === "header";
+  const activeColorKey = !isEraser && tool ? tool : color || HIGHLIGHT_COLOR_KEYS[0];
 
-  /* ── Interactions (haptic on every pick, per the native-feel rule) ──── */
-  const handleToggle = () => {
+  /* ── Actions ────────────────────────────────────────────────────────── */
+  const handleTriggerClick = () => {
     haptic("selection");
-    if (active) onToolChange(null);
-    else onToolChange(color || HIGHLIGHT_COLOR_KEYS[0]);
+    if (!open && !active) {
+      onToolChange(activeColorKey);
+    }
+    setOpen((prev) => !prev);
   };
 
-  const handleColor = (key: string) => {
+  const handleColorPick = (key: HighlightColorKey) => {
     haptic("light");
     onColorChange(key);
     onToolChange(key);
+    setOpen(false); // Auto-compacts immediately upon selection
   };
 
-  const handleEraser = () => {
+  const handleEraserPick = () => {
     haptic("selection");
     onToolChange(isEraser ? null : ERASER_TOOL);
+    setOpen(false); // Auto-compacts immediately upon selection
   };
 
-  /* ── Toggle button ────────────────────────────────────────────────── */
+  const handleTurnOff = () => {
+    haptic("selection");
+    onToolChange(null);
+    setOpen(false);
+  };
 
-  const toggleClass = cn(
-    "relative flex items-center justify-center rounded-lg transition-colors shrink-0",
-    isMobile ? "size-9" : "size-7",
+  /* ── Trigger button styling ─────────────────────────────────────────── */
+  const triggerClass = cn(
+    "relative size-7 rounded-lg flex items-center justify-center transition-colors shrink-0 outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
     active
       ? header
-        ? "bg-primary-foreground/25 text-primary-foreground ring-1 ring-inset ring-primary-foreground/30"
+        ? "bg-primary-foreground/30 text-primary-foreground ring-1 ring-inset ring-primary-foreground/40"
         : "bg-primary/15 text-primary ring-1 ring-inset ring-primary/25"
       : header
         ? "bg-primary-foreground/15 text-primary-foreground hover:bg-primary-foreground/25"
         : "text-muted-foreground hover:text-foreground hover:bg-muted",
   );
 
-  /* ── Color swatch ──────────────────────────────────────────────────── */
-
-  const swatchSize = isMobile ? "size-9" : "size-6";
-
-  const renderSwatch = (key: (typeof HIGHLIGHT_COLOR_KEYS)[number]) => {
-    const selected = tool === key;
-    return (
-      <button
-        key={key}
-        type="button"
-        onClick={() => handleColor(key)}
-        className={cn(
-          "flex items-center justify-center rounded-lg transition-all shrink-0",
-          swatchSize,
-          selected
-            ? cn("scale-105 ring-2", header ? "ring-primary-foreground ring-offset-1 ring-offset-primary" : "ring-foreground/70 ring-offset-2 ring-offset-card")
-            : cn("hover:scale-110 ring-1", header ? "ring-primary-foreground/30" : "ring-border"),
-        )}
-        style={{ backgroundColor: resolveHighlightColor(key) }}
-        title={t("highlighter.color", { label: HIGHLIGHT_PALETTE[key].label })}
-        aria-label={t("highlighter.color", { label: HIGHLIGHT_PALETTE[key].label })}
-        aria-pressed={selected}
-      >
-        {selected && (
-          <Check className="size-3.5 text-white/95 drop-shadow-[0_1px_1px_rgba(0,0,0,0.5)]" />
-        )}
-      </button>
-    );
-  };
-
-  /* ── Eraser / clear / done actions ─────────────────────────────────── */
-
-  const actionBtnSize = isMobile ? "size-9" : "size-7";
-
-  const eraserClass = cn(
-    "flex items-center justify-center rounded-lg transition-colors shrink-0",
-    actionBtnSize,
-    isEraser
-      ? header
-        ? "bg-destructive/30 text-white ring-1 ring-inset ring-destructive/50"
-        : "bg-destructive/15 text-destructive ring-1 ring-inset ring-destructive/30"
-      : header
-        ? "text-destructive/80 hover:text-destructive hover:bg-primary-foreground/15"
-        : "text-muted-foreground hover:text-destructive hover:bg-destructive/10",
-  );
-
-  const clearClass = cn(
-    "flex items-center justify-center rounded-lg transition-colors shrink-0",
-    actionBtnSize,
-    header
-      ? "text-primary-foreground/80 hover:text-white hover:bg-primary-foreground/20"
-      : "text-muted-foreground hover:text-destructive hover:bg-destructive/10",
-  );
-
-  const countChip = count > 0 && (
-    <span
-      className={cn(
-        "inline-flex h-6 min-w-7 items-center justify-center rounded-md px-1.5 text-xs font-semibold tabular-nums",
-        header ? "bg-primary-foreground/15 text-primary-foreground" : "bg-muted text-muted-foreground",
-      )}
-      title={t("highlighter.clearAllLabel")}
-    >
-      {count > 99 ? "99+" : count}
-    </span>
-  );
-
-  const divider = <div className={cn("w-px shrink-0", header ? "bg-primary-foreground/20" : "bg-border", isMobile ? "h-8" : "h-5")} />;
-
-  /* ── Palette panel ──────────────────────────────────────────────────── */
-
-  const panelClass = cn(
-    "rounded-xl border shadow-e3 backdrop-blur-md",
-    header
-      ? "border-primary-foreground/15 bg-primary/80 text-primary-foreground"
-      : "border-border bg-card/95",
-  );
-
-  // Mobile: two rows — colors on top, tools below — so every target stays
-  // ≥36px without overflowing narrow headers.
-  const mobilePanel = (
-    <motion.div
-      initial={{ opacity: 0, scale: 0.96, y: -4 }}
-      animate={{ opacity: 1, scale: 1, y: 0 }}
-      exit={{ opacity: 0, scale: 0.96, y: -4 }}
-      transition={MOTION_TRANSITION.fast}
-      className={cn(panelClass, "absolute top-full mt-2 end-0 z-50 w-[17.5rem] p-2 flex flex-col gap-1.5")}
-    >
-      <div className="flex items-center justify-between gap-1">
-        {HIGHLIGHT_COLOR_KEYS.map(renderSwatch)}
-      </div>
-      <div className="flex items-center gap-1">
-        <button
-          type="button"
-          onClick={handleEraser}
-          className={cn(eraserClass, "w-auto px-2 gap-1.5 text-xs font-medium")}
-          aria-pressed={isEraser}
-        >
-          <Eraser className="size-4" />
-          <span>{t("highlighter.eraserLabel")}</span>
-        </button>
-        <div className="ms-auto flex items-center gap-1">
-          {countChip}
-          {count > 0 && (
-            <button
-              type="button"
-              onClick={() => setConfirmOpen(true)}
-              className={clearClass}
-              title={t("highlighter.clearAllLabel")}
-              aria-label={t("highlighter.clearAllLabel")}
-            >
-              <Trash2 className="size-4" />
-            </button>
-          )}
-          <Button
-            size="sm"
-            variant={header ? "secondary" : "default"}
-            className="h-8 px-3 text-xs"
-            onClick={() => {
-              haptic("light");
-              onToolChange(null);
-            }}
-          >
-            <X className="size-3.5" />
-            {t("highlighter.done")}
-          </Button>
-        </div>
-      </div>
-    </motion.div>
-  );
-
-  // Desktop (md+): one-row inline pill rendered next to the toggle.
-  const desktopPanel = (
-    <motion.div
-      initial={{ opacity: 0, scale: 0.94 }}
-      animate={{ opacity: 1, scale: 1 }}
-      exit={{ opacity: 0, scale: 0.94 }}
-      transition={MOTION_TRANSITION.fast}
-      className={cn(panelClass, "hidden md:flex items-center gap-1 p-1")}
-    >
-      {HIGHLIGHT_COLOR_KEYS.map(renderSwatch)}
-      {divider}
-      <button
-        type="button"
-        onClick={handleEraser}
-        className={eraserClass}
-        title={t("highlighter.eraser")}
-        aria-label={t("highlighter.eraserLabel")}
-        aria-pressed={isEraser}
-      >
-        <Eraser className="size-3.5" />
-      </button>
-      {count > 0 && (
-        <>
-          {countChip}
+  return (
+    <div className={cn("relative inline-flex items-center", className)}>
+      <Popover open={open} onOpenChange={setOpen}>
+        <PopoverTrigger asChild>
           <button
             type="button"
-            onClick={() => setConfirmOpen(true)}
-            className={clearClass}
-            title={t("highlighter.clearAllLabel")}
-            aria-label={t("highlighter.clearAllLabel")}
+            onClick={handleTriggerClick}
+            className={triggerClass}
+            title={active ? t("highlighter.toggleOn") : t("highlighter.toggleOff")}
+            aria-label={active ? t("highlighter.toggleOn") : t("highlighter.toggleOff")}
+            aria-pressed={active}
           >
-            <Trash2 className="size-3.5" />
+            {isEraser ? (
+              <Eraser className="size-3.5 text-destructive" />
+            ) : (
+              <Highlighter className="size-3.5" />
+            )}
+
+            {/* Active color dot indicator */}
+            {active && !isEraser && (
+              <span
+                className="absolute bottom-0.5 end-0.5 size-2 rounded-full ring-1 ring-background shadow-xs pointer-events-none"
+                style={{ backgroundColor: resolveHighlightColor(activeColorKey) }}
+              />
+            )}
+
+            {/* Count pip when inactive but highlights exist */}
+            {!active && count > 0 && (
+              <span className="absolute -top-0.5 -end-0.5 size-2 rounded-full bg-primary ring-2 ring-background pointer-events-none" />
+            )}
           </button>
-        </>
-      )}
-    </motion.div>
-  );
+        </PopoverTrigger>
 
-  return (
-    <div className={cn("relative flex items-center gap-1", className)}>
-      <button
-        type="button"
-        onClick={handleToggle}
-        className={toggleClass}
-        title={active ? t("highlighter.toggleOn") : t("highlighter.toggleOff")}
-        aria-pressed={active}
-      >
-        <Highlighter className="size-4" />
-        {!active && count > 0 && (
-          <span className="absolute -top-0.5 -end-0.5 size-2 rounded-full bg-primary ring-2 ring-background" />
-        )}
-      </button>
+        <PopoverContent
+          side="bottom"
+          align="end"
+          sideOffset={6}
+          className="w-auto p-1.5 rounded-xl border border-border bg-popover/95 backdrop-blur-md shadow-lg flex items-center gap-1.5 z-50 animate-in fade-in-0 zoom-in-95"
+        >
+          {/* Swatches */}
+          <div className="flex items-center gap-1">
+            {HIGHLIGHT_COLOR_KEYS.map((key) => {
+              const isSelected = tool === key;
+              const swatch = HIGHLIGHT_PALETTE[key];
+              const bg = resolveHighlightColor(key);
+              return (
+                <button
+                  key={key}
+                  type="button"
+                  onClick={() => handleColorPick(key)}
+                  className={cn(
+                    "size-6 sm:size-6.5 rounded-md transition-all flex items-center justify-center shrink-0",
+                    isSelected
+                      ? "scale-105 ring-2 ring-foreground/80 ring-offset-1 ring-offset-popover"
+                      : "hover:scale-110 ring-1 ring-border/60",
+                  )}
+                  style={{ backgroundColor: bg }}
+                  title={t("highlighter.color", { label: swatch.label })}
+                  aria-label={t("highlighter.color", { label: swatch.label })}
+                  aria-pressed={isSelected}
+                >
+                  {isSelected && (
+                    <Check className="size-3 text-white drop-shadow-[0_1px_1px_rgba(0,0,0,0.6)]" />
+                  )}
+                </button>
+              );
+            })}
+          </div>
 
-      <AnimatePresence>
-        {active && (isMobile ? mobilePanel : desktopPanel)}
-      </AnimatePresence>
+          <div className="w-px h-5 bg-border shrink-0" />
 
+          {/* Eraser Tool */}
+          <button
+            type="button"
+            onClick={handleEraserPick}
+            className={cn(
+              "size-6 sm:size-6.5 rounded-md flex items-center justify-center transition-colors shrink-0",
+              isEraser
+                ? "bg-destructive/20 text-destructive ring-1 ring-inset ring-destructive/40"
+                : "text-muted-foreground hover:text-destructive hover:bg-destructive/10",
+            )}
+            title={t("highlighter.eraser")}
+            aria-label={t("highlighter.eraserLabel")}
+            aria-pressed={isEraser}
+          >
+            <Eraser className="size-3.5" />
+          </button>
+
+          {/* Turn Off / Power Button (when active) */}
+          {active && (
+            <button
+              type="button"
+              onClick={handleTurnOff}
+              className="size-6 sm:size-6.5 rounded-md flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors shrink-0"
+              title={t("highlighter.turnOff")}
+              aria-label={t("highlighter.turnOff")}
+            >
+              <Power className="size-3.5" />
+            </button>
+          )}
+
+          {/* Highlights Count & Clear All */}
+          {count > 0 && (
+            <>
+              <div className="w-px h-5 bg-border shrink-0" />
+              <span
+                className="inline-flex h-5 min-w-5 items-center justify-center rounded px-1 text-[11px] font-semibold tabular-nums bg-muted text-muted-foreground"
+                title={t("highlighter.clearAllLabel")}
+              >
+                {count > 99 ? "99+" : count}
+              </span>
+              <button
+                type="button"
+                onClick={() => setConfirmOpen(true)}
+                className="size-6 sm:size-6.5 rounded-md flex items-center justify-center text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors shrink-0"
+                title={t("highlighter.clearAllLabel")}
+                aria-label={t("highlighter.clearAllLabel")}
+              >
+                <Trash2 className="size-3.5" />
+              </button>
+            </>
+          )}
+        </PopoverContent>
+      </Popover>
+
+      {/* Clear All Confirmation Dialog */}
       <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>

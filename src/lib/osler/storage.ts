@@ -432,6 +432,8 @@ export interface SavedSession {
   tagsFilter?: string[];
   /** Progress-mode filter that was active when the session was built. */
   onlyMode?: "all" | "wrong" | "flagged" | "new";
+  /** Session-bound highlights captured per question index. */
+  highlights?: Record<number, HighlightItem[]>;
 }
 
 /* ── Progress (question-level) ──────────────────────────────────────── */

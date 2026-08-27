@@ -1180,6 +1180,7 @@ export const ar = {
       "سيؤدي هذا إلى إزالة كل {count} تظليل من هذا العنصر. لا يمكن التراجع عن هذا الإجراء.",
     "highlighter.clearConfirm": "مسح الكل",
     "highlighter.done": "تم",
+    "highlighter.turnOff": "إيقاف التظليل",
 
     /* PWA install */
     "pwa.installApp": "تثبيت التطبيق",

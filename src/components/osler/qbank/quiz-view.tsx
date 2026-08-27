@@ -6,7 +6,7 @@ import { ChevronLeft, ChevronRight, Flag, Check, X, Clock, Pause, Play, Graduati
 import { ENGINE_META } from "@/lib/osler/content";
 import { toast } from "@/hooks/use-toast";
 import type { ContentTreeNode } from "@/lib/osler/types";
-import { sessions, highlights, writtenDrafts, type HighlightItem, type WrittenDraft } from "@/lib/osler/storage";
+import { sessions, writtenDrafts, type HighlightItem, type WrittenDraft } from "@/lib/osler/storage";
 import type { ArticleMeta } from "@/lib/osler/articles";
 import { HIGHLIGHT_COLOR_KEYS, ERASER_TOOL } from "@/lib/osler/highlight-palette";
 import { cn } from "@/lib/utils";
@@ -205,6 +205,9 @@ export function QuizView({
   onTimeUp,
   onExitRequest,
   peerStats,
+  onHighlightAdd,
+  onHighlightRemove,
+  onHighlightClearAll,
 }: {
   session: SessionData;
   activeItem?: ContentTreeNode;
@@ -243,6 +246,10 @@ export function QuizView({
   /** Aggregated peer-choice stats keyed `${sourceUid}::${questionId}`.
    *  Optional — absent/empty renders no percentage labels. */
   peerStats?: Record<string, QuestionChoiceStats>;
+  /** Session-bound highlight callbacks — all mutations go through these. */
+  onHighlightAdd: (questionIdx: number, item: HighlightItem) => void;
+  onHighlightRemove: (questionIdx: number, id: string) => void;
+  onHighlightClearAll: () => void;
 }) {
   const q = session.questions[session.current];
   const isLast = session.current >= session.questions.length - 1;
@@ -277,7 +284,6 @@ export function QuizView({
   const highlightMode = tool !== null && tool !== ERASER_TOOL;
   const eraserMode = tool === ERASER_TOOL;
   const highlightColor = tool !== null && tool !== ERASER_TOOL ? tool : color;
-  const [hlVersion, setHlVersion] = React.useState(0);
   // Live quiz settings (font, weight, line height, auto-submit, layout, alignment)
   const { settings: quizSettingsState } = useQuizSettings();
   const [articleSearchOpen, setArticleSearchOpen] = React.useState(false);
@@ -564,7 +570,7 @@ export function QuizView({
     // (handles mixed sessions where both quiz and written coexist).
     const qIsWritten = !qIsMCQ && (!!question.rubric?.length || !!question.modelAnswer);
     const qStrikethroughs = session.strikethroughs[qIdx] ?? [];
-    const qHighlights = highlights.get(activeItem.uid, qIdx);
+    const qHighlights = session.highlights?.[qIdx] ?? [];
     const qWrittenDraft = session.writtenDrafts[question.id] ?? {
       text: "",
       rubricChecked: question.rubric ? question.rubric.map(() => false) : [],
@@ -1034,8 +1040,7 @@ export function QuizView({
         ranges,
         createdAt: new Date().toISOString(),
       };
-      highlights.add(activeItem.uid, session.current, hl);
-      setHlVersion((v) => v + 1);
+      onHighlightAdd(session.current, hl);
       window.getSelection()?.removeAllRanges();
     };
 
@@ -1073,8 +1078,7 @@ export function QuizView({
       if (span) {
         const id = span.getAttribute("data-osler-hl-id");
         if (id) {
-          highlights.remove(activeItem.uid, session.current, id);
-          setHlVersion((v) => v + 1);
+          onHighlightRemove(session.current, id);
           return true;
         }
       }
@@ -1171,10 +1175,7 @@ export function QuizView({
     return () => window.removeEventListener("keydown", handler);
   }, [q, isMCQ, submitted, selected, onToggleFlag, goPrev, goNext, onSelect, onSubmit, onToggleAiAssistant, onToggleNotes, onNewNote, onToggleQuizSettings, setTool, readonly, bindings]);
 
-  const currentHighlights = React.useMemo(
-    () => highlights.get(activeItem.uid, session.current),
-    [activeItem.uid, session.current, hlVersion]
-  );
+  const currentHighlights = session.highlights?.[session.current] ?? [];
   const strikethroughs = session.strikethroughs[session.current] ?? [];
 
   // Long-press (touch) to strike through an option — mirrors the desktop
@@ -1351,10 +1352,7 @@ export function QuizView({
                 count: currentHighlights.length,
                 onToolChange: setTool,
                 onColorChange: setColor,
-                onClearAll: () => {
-                  highlights.clearAll(activeItem.uid);
-                  setHlVersion((v) => v + 1);
-                },
+                onClearAll: onHighlightClearAll,
               }}
             />
 
@@ -1564,7 +1562,7 @@ export function QuizView({
                               const eqSelected = session.answers[idx];
                               const eqIsMCQ = eq.correct >= 0;
                               const eqIsWritten = !eqIsMCQ && (!!eq.rubric?.length || !!eq.modelAnswer);
-                              const eqHighlights = highlights.get(activeItem.uid, idx);
+                              const eqHighlights = session.highlights?.[idx] ?? [];
                               return (
                                 <div className="h-full overflow-y-auto osler-scroll p-2 pb-6" style={{ touchAction: "none" }}>
                                    {eqIsWritten ? (

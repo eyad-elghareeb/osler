@@ -4,7 +4,7 @@ import * as React from "react";
 import { ClipboardCheck, Check, Pause, Sparkles, BookOpen, PenTool, Activity, Keyboard, Layers, Video as VideoIcon } from "lucide-react";
 import { contentToQuestions as poolContentToQuestions, countQuestions as poolCountQuestions, buildQuestionPool, type OnlyMode } from "@/lib/osler/qbank-pool";
 import type { AnyContent, ContentImage, EngineType, ContentTreeNode } from "@/lib/osler/types";
-import { sessions, writtenDrafts, type SavedSession, type WrittenDraft } from "@/lib/osler/storage";
+import { sessions, writtenDrafts, type SavedSession, type WrittenDraft, type HighlightItem } from "@/lib/osler/storage";
 import { renderRichText, resolveContentAsset } from "@/lib/osler/richtext";
 import { HIGHLIGHT_COLOR_KEYS } from "@/lib/osler/highlight-palette";
 import { cn } from "@/lib/utils";
@@ -219,6 +219,8 @@ export interface SessionData {
   isReview?: boolean;
   /** Pause-adjusted wall-clock duration (ms) per question id, captured at reveal. */
   questionTimes?: Record<string, number>;
+  /** Session-bound highlights per question index. */
+  highlights?: Record<number, HighlightItem[]>;
 }
 
 export interface SessionQuestionChild {
@@ -445,6 +447,7 @@ export function saveSession(s: SessionData) {
     sources,
     tagsFilter: s.tagsFilter,
     onlyMode: s.onlyMode,
+    highlights: s.highlights,
   };
   sessions.save(saved);
 }

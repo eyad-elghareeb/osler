@@ -8,7 +8,7 @@ import { loadContentByUid, loadNodeByUid, nodeUrls } from "@/lib/osler/content";
 import { toast } from "@/hooks/use-toast";
 import { contentToQuestions as poolContentToQuestions, filterPoolByProgress, pickQuestions, type PoolQuestion, type OnlyMode } from "@/lib/osler/qbank-pool";
 import type { AnyContent, EngineType, ContentTreeNode } from "@/lib/osler/types";
-import { storage, sessions, highlights, writtenDrafts, quizSettings as quizSettingsStore, type SavedSession, type WrittenDraft } from "@/lib/osler/storage";
+import { storage, sessions, writtenDrafts, quizSettings as quizSettingsStore, type SavedSession, type WrittenDraft, type HighlightItem } from "@/lib/osler/storage";
 import { listAllArticles } from "@/lib/osler/articles";
 import type { ArticleMeta } from "@/lib/osler/articles";
 import { Button } from "@/components/ui/button";
@@ -465,7 +465,7 @@ export function QBankStudio({
   );
 
   const startCustomSession = React.useCallback(
-    async (pool: PoolQuestion[], meta: { title: string; engine: EngineType; mode?: TestMode; timerMinutes?: number; dismissAfterCorrect?: boolean; tagsFilter?: string[]; onlyMode?: OnlyMode; isReview?: boolean; savedDrafts?: Record<string, WrittenDraft>; savedRubricState?: Record<string, boolean[]>; savedAnswers?: Record<number, number>; savedRevealed?: Record<number, boolean>; savedFlagged?: Record<number, boolean>; savedRatings?: Record<string, "easy" | "hard" | "unknown">; savedQuestionTimes?: Record<string, number> }) => {
+    async (pool: PoolQuestion[], meta: { title: string; engine: EngineType; mode?: TestMode; timerMinutes?: number; dismissAfterCorrect?: boolean; tagsFilter?: string[]; onlyMode?: OnlyMode; isReview?: boolean; savedDrafts?: Record<string, WrittenDraft>; savedRubricState?: Record<string, boolean[]>; savedAnswers?: Record<number, number>; savedRevealed?: Record<number, boolean>; savedFlagged?: Record<number, boolean>; savedRatings?: Record<string, "easy" | "hard" | "unknown">; savedQuestionTimes?: Record<string, number>; savedHighlights?: Record<number, HighlightItem[]> }) => {
       if (pool.length === 0) return;
       const sessionId = `custom-${Date.now()}`;
       const totalTime = (meta.timerMinutes ?? pool.length) * 60;
@@ -490,6 +490,7 @@ export function QBankStudio({
         rubricState: meta.savedRubricState ?? {},
         ratings: meta.savedRatings ?? {},
         questionTimes: meta.savedQuestionTimes ?? {},
+        highlights: meta.savedHighlights ?? {},
         strikethroughs: {},
         tagsFilter: meta.tagsFilter,
         onlyMode: meta.onlyMode,
@@ -715,6 +716,7 @@ export function QBankStudio({
         rubricState: {},
         ratings: {},
         questionTimes: {},
+        highlights: {},
         strikethroughs: {},
       });
       setMode("quiz");
@@ -825,7 +827,6 @@ export function QBankStudio({
   const restartSession = () => {
     if (activeItem && activeContent) {
       storage.clearPack(activeItem.uid);
-      highlights.clearAll(activeItem.uid);
       writtenDrafts.clear(activeItem.uid);
       startSession(activeItem, activeContent);
     }
@@ -1176,12 +1177,16 @@ export function QBankStudio({
               delete newRatings[q.id];
               const newDrafts = { ...s.writtenDrafts };
               delete newDrafts[q.id];
+              // Clear session-bound highlights for this question on retry
+              const newHighlights = { ...s.highlights };
+              delete newHighlights[s.current];
               return {
                 ...s,
                 answers: newAnswers,
                 revealed: newRevealed,
                 ratings: newRatings,
                 writtenDrafts: newDrafts,
+                highlights: newHighlights,
               };
             });
             // Restart the per-question timer so the retried attempt isn't
@@ -1191,6 +1196,23 @@ export function QBankStudio({
           onGoHome={requestExit}
           onSaveAndExit={saveAndExit}
           onFinish={endSession}
+          onHighlightAdd={(questionIdx, item) => {
+            setSession((s) => {
+              if (!s) return s;
+              const prev = s.highlights?.[questionIdx] ?? [];
+              return { ...s, highlights: { ...s.highlights, [questionIdx]: [...prev, item] } };
+            });
+          }}
+          onHighlightRemove={(questionIdx, id) => {
+            setSession((s) => {
+              if (!s) return s;
+              const prev = s.highlights?.[questionIdx] ?? [];
+              return { ...s, highlights: { ...s.highlights, [questionIdx]: prev.filter((h) => h.id !== id) } };
+            });
+          }}
+          onHighlightClearAll={() => {
+            setSession((s) => s ? { ...s, highlights: {} } : s);
+          }}
         />
         {/* Floating tools */}
         <AnimatePresence>
