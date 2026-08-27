@@ -847,7 +847,12 @@ export function QBankStudio({
     // dialog it was just asked to close. The effect's own `!activeItem`
     // branch clears startPromptUid once the navigation has truly landed.
     setImmersiveMode(false);
-    if (activeItem) {
+    // Always land on the bare /qbank URL: deep-link params (?uid / ?resume /
+    // ?review / ?retake) must not survive an exit, or the next mount replays
+    // them. Sessions resumed via ?resume=1 (and custom sessions) have no
+    // activeItem, which previously skipped the navigation entirely and left
+    // the stale query in the address bar.
+    if (activeItem || (typeof window !== "undefined" && !!window.location.search)) {
       navigate("qbank");
     }
   }, [activeItem?.uid, navigate]);
