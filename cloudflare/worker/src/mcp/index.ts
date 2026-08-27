@@ -28,6 +28,9 @@ export interface McpHost {
   updateManifestIncremental?(env: any, category: string, touchedPaths?: string[]): Promise<any>;
   getConfig?(env: any): Promise<any>;
   putConfig?(env: any, config: any): Promise<void>;
+  /** Read-only observability hooks for the MCP context tools. */
+  readContentVersion?(env: any): Promise<string | null>;
+  getAuditTrail?(env: any, opts: { page?: number; limit?: number; action?: string }): Promise<{ items: any[]; total: number }>;
   /**
    * Registers a promise to keep running after the Response is returned
    * (`ExecutionContext.waitUntil`). When absent, best-effort background work
@@ -154,6 +157,8 @@ export async function handleMcpRequest(request: Request, env: any & McpEnv, orig
     updateManifestIncremental: host.updateManifestIncremental ? (category, paths) => host.updateManifestIncremental!(env, category, paths) : undefined,
     getConfig: host.getConfig ? () => host.getConfig!(env) : undefined,
     putConfig: host.putConfig ? (cfg) => host.putConfig!(env, cfg) : undefined,
+    readContentVersion: host.readContentVersion ? () => host.readContentVersion!(env) : undefined,
+    getAuditTrail: host.getAuditTrail ? (opts) => host.getAuditTrail!(env, opts) : undefined,
     uuid: () => crypto.randomUUID(),
   };
 

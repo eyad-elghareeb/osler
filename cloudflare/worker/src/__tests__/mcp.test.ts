@@ -31,12 +31,15 @@ function makeCtx(overrides: Partial<McpCtx> = {}): McpCtx {
     userId: "user-1",
     username: "tester",
     tokenId: "tok-1",
+    scope: "content_admin",
     log: { info() {}, warn() {}, error() {} },
     audit: async () => {},
     r2Get: async (key) => stored.get(key) ?? null,
-    r2Put: async (key, text) => void stored.set(key, text),
+    r2Put: async (key, text) => void stored.set(key, typeof text === "string" ? text : new TextDecoder().decode(text)),
+    r2Delete: async (key) => void stored.delete(key),
     draftKey: (base) => `${base}/draft.json`,
     pendingKey: (base) => `${base}/pending.json`,
+    publishedKey: (base) => `${base}/published.json`,
     validateContent: () => [],
     uuid: () => "uuid-" + (stored.size + Math.random()).toString(36).slice(2, 8),
     ...overrides,
@@ -55,7 +58,7 @@ describe("MCP protocol", () => {
     expect(r.result.serverInfo.name).toBe("osler-admin");
     expect(r.result.capabilities.tools).toBeDefined();
     expect(r.result.instructions).toContain("content_admin");
-    expect(r.result.instructions).toContain("Authoring & Review Queue only");
+    expect(r.result.instructions).toContain("Authoring & Review Queue");
   });
 
   it("tools/list advertises schemas without handlers", async () => {

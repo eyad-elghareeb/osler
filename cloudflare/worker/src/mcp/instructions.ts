@@ -3,25 +3,63 @@
  *
  * Pure data — returned in the MCP `initialize` response so AI agents understand
  * Osler content schemas, workflows, privilege tiers, tricky metadata rules,
- * HTML article rules, and manifest mechanics.
+ * HTML article rules, safeguards, and manifest mechanics.
  */
 
 export const SERVER_NAME = "osler-admin";
-export const SERVER_VERSION = "2.0.0";
+export const SERVER_VERSION = "2.1.0";
 export const PROTOCOL_VERSION = "2025-06-18";
 
 export const SERVER_INSTRUCTIONS = `# Osler Medical Study Platform — Content Authoring & Admin MCP Server
 
 You are connected to the Osler medical-education platform MCP server.
 
-## 1. Privilege Tiers & Token Scopes
-Your token has one of two privilege levels:
-- **admin**: Full Editing & Publishing abilities. Can directly publish (\`publish_content\`), approve/reject review candidates (\`approve_content\`, \`reject_content\`), unpublish (\`unpublish_content\`), hotfix student-facing files (\`update_published_content\`), delete objects, edit article sidecars, and trigger smart manifest diffs.
-- **content_admin**: Authoring & Review Queue only. Can create drafts, upload assets, validate content schemas, edit own drafts, and submit drafts for review (\`submit_for_review\`).
+## 1. Privilege Tiers & Security Model
+
+Your API token has one of two privilege levels:
+
+1. **content_admin** (Authoring & Review Queue):
+   - Create and edit drafts (\`create_content_draft\`, \`update_draft_body\`, \`create_content_pack\`).
+   - Upload and delete pack assets (\`upload_asset\`, \`delete_asset\`).
+   - Validate JSON payloads against engine schemas (\`validate_content\`).
+   - Submit drafts for human admin review (\`submit_for_review\`).
+   - Read published student files and manifests (\`read_content_file\`, \`list_content_files\`, \`get_content_manifest\`).
+   - View own drafts, review queue, and instance overview.
+
+2. **admin** (Full Unrestricted Access):
+   - **WARNING**: Admin tokens have direct, irreversible write access to production database records, live student files, and platform configuration.
+   - Directly publish content (\`publish_content\`, \`create_content_pack\` with \`publishImmediately: true\`).
+   - Review queue actions: Approve (\`approve_content\`) or reject (\`reject_content\`).
+   - Retract published items (\`unpublish_content\`).
+   - Permanently delete objects and storage files (\`delete_content_object\`).
+   - Hotfix live student files directly (\`update_published_content\`).
+   - Edit library article sidecar metadata (\`update_article_metadata\`).
+   - Read and modify platform site configuration (\`read_config\`, \`update_config\`).
+   - Trigger smart incremental manifest updates (\`smart_update_manifest\`).
+   - Inspect full audit trails (\`get_audit_trail\`).
 
 ---
 
-## 2. Content Engine Types & Exact JSON Schemas
+## 2. Safety Safeguards & Best Practices
+
+1. **Two-Step Confirmation for Deletion (\`delete_content_object\`)**:
+   - Calling \`delete_content_object\` without \`confirm: true\` returns a detailed damage summary and a deterministic \`continueToken\`.
+   - To proceed with deletion, re-invoke \`delete_content_object\` with \`"confirm": true\` and \`"continueToken": "<token>"\`.
+   - Never bypass confirmation; always verify the target object before proceeding.
+
+2. **Optimistic Concurrency on Live Hotfixes (\`update_published_content\`)**:
+   - When modifying a published file under \`content-files/\`, first read it via \`read_content_file\`.
+   - \`read_content_file\` returns a \`bodySha1\` hash of the file.
+   - Pass this hash as \`expectedCurrentBody\` when calling \`update_published_content\`. If another process edited the file in the meantime, the hotfix is safely refused rather than silently overwriting work.
+
+3. **Session Orientation**:
+   - Call \`get_instance_overview\` at the start of a session to check token scope, current content counts, and the live content version stamp.
+   - Call \`list_review_queue\` to inspect pending items awaiting review or rejected items needing revisions.
+   - Call \`get_content_version\` to verify the current client-facing cache-buster stamp.
+
+---
+
+## 3. Content Engine Types & JSON Schemas
 
 ### 1. Quiz (USMLE Best-of-Five MCQs)
 \`\`\`json
@@ -39,11 +77,11 @@ Your token has one of two privilege levels:
   ]
 }
 \`\`\`
-- \`correct\` is zero-based index (e.g. 1 means the 2nd option).
-- Must have at least 2 options (standard: exactly 5).
-- Image references: use \`images/filename.png\` or \`filename.png\` (automatically resolves to the pack's \`images/\` folder).
+- \`correct\` is zero-based index (0 to 4).
+- Must have at least 2 options (standard: 5).
+- Image paths: \`images/filename.png\` or \`filename.png\` (relative to the pack folder).
 
-### 2. Question Bank (Case Passages with Multiple Sub-questions)
+### 2. Question Bank (Case Passages with Sub-questions)
 \`\`\`json
 {
   "passages": [
@@ -82,7 +120,7 @@ Your token has one of two privilege levels:
 }
 \`\`\`
 
-### 4. OSCE Clinical Stations (Patient Simulations & Objective Rubrics)
+### 4. OSCE Clinical Stations (Simulations & Objective Rubrics)
 \`\`\`json
 {
   "stations": [
@@ -114,7 +152,7 @@ Your token has one of two privilege levels:
 }
 \`\`\`
 
-### 5. Written Prompts (Clinical Scenarios & Structured Rubrics)
+### 5. Written Prompts (Clinical Scenarios & Rubrics)
 \`\`\`json
 {
   "prompts": [
@@ -145,11 +183,9 @@ Your token has one of two privilege levels:
 }
 \`\`\`
 
-### 7. Library Articles (Markdown & HTML with Sidecar Metadata)
-Library articles are formatted as Markdown (\`.md\`) or sanitized HTML (\`.html\`).
-
-#### Sidecar Metadata Pattern (\`<filename>.meta.json\`):
-Always maintain sidecar metadata next to the article file:
+### 7. Library Articles with Sidecar Metadata
+- File format: \`<slug>.md\` or \`<slug>.html\`
+- Sidecar file: \`<slug>.meta.json\` located adjacent to the article file.
 \`\`\`json
 {
   "title": "Asthma: Diagnosis & Stepwise Management",
@@ -161,30 +197,13 @@ Always maintain sidecar metadata next to the article file:
 }
 \`\`\`
 
-#### HTML & Markdown Sanitization & Interactive Elements:
-The article renderer supports GFM Markdown plus sanitized HTML elements:
-- Mermaid diagrams: \`\`\`mermaid fenced blocks or \`<div class="osler-mermaid" data-diagram="..."></div>\`
-- Expandable disclosures: \`<details><summary>Clinical Pearl</summary>Content...</details>\`
-- Media tags: \`<video src="..." controls></video>\`, \`<audio src="..." controls></audio>\`, \`<figure><figcaption>...</figcaption></figure>\`
-- Images: Bare filename \`<img src="ecg.png">\` or \`![ECG](ecg.png)\` automatically resolves to the article's \`images/\` folder.
-
 ---
 
-## 3. Smart Incremental Manifest Sync
+## 4. Manifest Versioning & Cache-Busting
+
 - Osler maintains category manifests under \`content-manifests/<category>/manifest.json\`.
-- Whenever content is published, unpublished, deleted, or edited, the smart diff engine automatically recalculates node summaries (\`questionCount\`, \`itemCount\`, \`stationSummary\`, \`tags\`) in-place without requiring manual manifest regeneration.
-
----
-
-## 4. Recommended Authoring Workflows
-
-### Creating a New Pack in One Batch (\`create_content_pack\`):
-1. Prepare the JSON body according to the schema above.
-2. Read binary images as base64 data URIs: \`data:image/png;base64,...\`.
-3. Call \`create_content_pack\`:
-   - Set \`contentType\`, \`title\`, \`body\`, \`assets\`, and \`targetPath\` (e.g. \`"cardiology/acute-mi"\`).
-   - If \`admin\` token: pass \`publishImmediately: true\` to go live instantly.
-   - If \`content_admin\` token: pass \`submit: true\` to place it into the review queue.
+- Whenever content is published, unpublished, deleted, or edited, the smart diff engine automatically updates node summaries and advances the platform content version stamp.
+- Connected student clients poll \`/v1/content-version\` and automatically cache-bust manifest URLs (\`?v=<stamp>\`), making new and updated content available instantly without requiring hard browser refreshes.
 `;
 
 export interface McpPromptDef {

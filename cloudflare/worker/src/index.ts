@@ -1467,6 +1467,41 @@ async function manifestMetadataForFiles(env: Env, category: string, folderPath: 
   return result;
 }
 
+/* ── Content versioning ──
+ * Every manifest write bumps a tiny version document. Students poll
+ * GET /v1/content-version (served no-store, ~40 bytes) and cache-bust their
+ * manifest requests with ?v=<version>, so a publish is picked up on the next
+ * hub load instead of whenever the old max-age expires. Monotonic per-isolate
+ * epoch ms — two writes in the same millisecond collapse to one version,
+ * which is harmless because they'd ship near-identical manifests. */
+const CONTENT_VERSION_KEY = "content-manifests/version.json";
+
+async function readContentVersion(env: Env): Promise<string | null> {
+  if (!env.CONTENT) return null;
+  try {
+    const obj = await env.CONTENT.get(CONTENT_VERSION_KEY);
+    if (!obj) return null;
+    const parsed = JSON.parse(await obj.text()) as { version?: unknown };
+    return typeof parsed.version === "string" ? parsed.version : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Writes a fresh version stamp and returns it; best-effort, never throws. */
+async function bumpContentVersion(env: Env): Promise<string> {
+  const version = `${Date.now()}`;
+  if (!env.CONTENT) return version;
+  try {
+    await env.CONTENT.put(CONTENT_VERSION_KEY, JSON.stringify({ version, updatedAt: Date.now() }), {
+      httpMetadata: { contentType: "application/json", cacheControl: "no-store" },
+    });
+  } catch (e) {
+    console.error("content version bump failed:", e);
+  }
+  return version;
+}
+
 async function regenerateManifestForCategory(env: Env, category: string): Promise<any> {
   if (!env.CONTENT) return null;
   const prefix = `content-files/${category}/`;
@@ -1613,6 +1648,7 @@ async function regenerateManifestForCategory(env: Env, category: string): Promis
   const manifest = {
     type: parentType || (roots.length > 0 ? roots[0].type : "quiz"),
     items: roots.sort((a, b) => a.title.localeCompare(b.title)),
+    version: await bumpContentVersion(env),
   };
   await env.CONTENT.put(`content-manifests/${category}/manifest.json`, JSON.stringify(manifest, null, 2), {
     httpMetadata: { contentType: "application/json" },
@@ -1796,6 +1832,7 @@ async function updateManifestIncremental(env: Env, category: string, touchedPath
   const updatedManifest = {
     type: parentType || (roots.length > 0 ? roots[0].type : "quiz"),
     items: roots.sort((a, b) => a.title.localeCompare(b.title)),
+    version: await bumpContentVersion(env),
   };
   await env.CONTENT.put(manifestKey, JSON.stringify(updatedManifest, null, 2), {
     httpMetadata: { contentType: "application/json" },
@@ -4531,6 +4568,23 @@ export default {
         return response;
       }
 
+      // ── Public content version stamp (drives client manifest cache-busting) ──
+      // Must stay uncached: students poll it and only re-download manifests
+      // when the returned version differs from what they already hold.
+      if (request.method === "GET" && url.pathname === "/v1/content-version") {
+        const version = await readContentVersion(env);
+        return new Response(JSON.stringify({ version }), {
+          status: 200,
+          headers: {
+            "content-type": "application/json",
+            "cache-control": "no-store",
+            ...cors(origin),
+            ...SECURITY_HEADERS,
+            "cross-origin-resource-policy": "cross-origin",
+          },
+        });
+      }
+
       // ── Public content manifests (R2-backed) ──
       if (request.method === "GET" && url.pathname.startsWith("/v1/content-manifests/")) {
         let manifestPath = url.pathname.slice("/v1/content-manifests/".length).replace(/\/{2,}/g, "/");
@@ -4546,9 +4600,17 @@ export default {
         const r2Key = `content-manifests/${manifestPath}`;
         const obj = await env.CONTENT.get(r2Key);
         if (!obj) return json({ error: "Not found" }, 404, origin, log);
+        // Versioned requests (?v=<stamp>) are immutable: the stamp changes on
+        // every content mutation, so the URL itself is the cache key and the
+        // browser/CDN may hold it for a year. Unversioned requests (boot-time
+        // fetch before a version is known) stay nearly uncached so content
+        // changes surface promptly without waiting for max-age to expire.
+        const versioned = url.searchParams.has("v");
         const manifestHeaders: Record<string, string> = {
           "content-type": "application/json",
-          "cache-control": "public, max-age=300, s-maxage=3600, stale-while-revalidate=86400",
+          "cache-control": versioned
+            ? "public, max-age=31536000, immutable"
+            : "public, max-age=30, stale-while-revalidate=300",
           ...cors(origin),
           ...SECURITY_HEADERS,
           "cross-origin-resource-policy": "cross-origin",
@@ -5033,6 +5095,23 @@ export default {
           putConfig: async (e, cfg) => {
             if (!e.CONTENT) throw new Error("Content storage not configured");
             await e.CONTENT.put("_osler.config.json", JSON.stringify(cfg, null, 2), { httpMetadata: { contentType: "application/json" } });
+          },
+          readContentVersion: async (e) => readContentVersion(e),
+          getAuditTrail: async (e, opts) => {
+            const limit = Math.min(100, Math.max(1, opts.limit || 50));
+            const offset = (Math.max(1, opts.page || 1) - 1) * limit;
+            if (opts.action) {
+              const [rows, total] = await Promise.all([
+                e.DB.prepare("SELECT a.*, u.username as actor_username, u.display_name as actor_display_name FROM admin_audit a LEFT JOIN users u ON u.id = a.actor_id WHERE a.action = ? ORDER BY a.created_at DESC LIMIT ? OFFSET ?").bind(opts.action, limit, offset).all(),
+                e.DB.prepare("SELECT COUNT(*) as n FROM admin_audit WHERE action = ?").bind(opts.action).first(),
+              ]);
+              return { items: rows.results || [], total: (total as any)?.n ?? 0 };
+            }
+            const [rows, total] = await Promise.all([
+              e.DB.prepare("SELECT a.*, u.username as actor_username, u.display_name as actor_display_name FROM admin_audit a LEFT JOIN users u ON u.id = a.actor_id ORDER BY a.created_at DESC LIMIT ? OFFSET ?").bind(limit, offset).all(),
+              e.DB.prepare("SELECT COUNT(*) as n FROM admin_audit").first(),
+            ]);
+            return { items: rows.results || [], total: (total as any)?.n ?? 0 };
           },
           waitUntil: (p) => ctx.waitUntil(p),
           rateLimitToken: (tokenId) => rateLimit(tokenId, "mcp_token"),

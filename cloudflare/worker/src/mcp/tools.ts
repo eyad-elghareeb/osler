@@ -24,6 +24,10 @@ export interface McpCtx {
   scope: "admin" | "content_admin";
   log: McpLog;
   audit(action: string, targetId: string | null, detail: Record<string, unknown> | null): Promise<void>;
+  getReviewQueue?(status?: string): Promise<any[]>;
+  getInstanceStats?(): Promise<Record<string, number>>;
+  getAuditTrail?(opts: { page?: number; limit?: number; action?: string }): Promise<{ items: any[]; total: number }>;
+  readContentVersion?(): Promise<string | null>;
   r2Get(key: string): Promise<string | null>;
   r2Put(key: string, text: string | Uint8Array, contentType?: string): Promise<void>;
   r2Delete(key: string): Promise<void>;
@@ -158,6 +162,39 @@ function sanitizeTargetPath(input: unknown): string | null {
   return p;
 }
 
+/**
+ * Two-step confirmation for irreversible actions. An agent's first call comes
+ * without `confirm: true` and receives the exact damage report plus a
+ * continueToken; re-invoking with both proceeds. The token is deterministic
+ * (not random) so it also validates that the agent re-read the warning — a
+ * different token means the target changed between calls, which restarts the
+ * flow and prevents acting on stale information.
+ */
+function confirmationToken(name: string, id: string): string {
+  let hash = 2166136261;
+  const input = `${name}:${id}:${id.length}`;
+  for (let i = 0; i < input.length; i++) {
+    hash ^= input.charCodeAt(i);
+    hash = Math.imul(hash, 16777619);
+  }
+  return (hash >>> 0).toString(36);
+}
+
+async function requireConfirmation(ctx: McpCtx, toolName: string, id: string, args: any, summary: string): Promise<void> {
+  if (args?.confirm === true && args?.continueToken === confirmationToken(toolName, id)) return;
+  throw new ToolError(
+    [
+      `⚠️ DESTRUCTIVE ACTION — ${summary}`,
+      "",
+      "This cannot be undone. To proceed:",
+      `1. Re-call \`${toolName}\` with "confirm": true`,
+      `2. Include "continueToken": "${confirmationToken(toolName, id)}"`,
+      "",
+      "The continueToken proves you re-read this warning for THIS target; if the id changes, the token changes.",
+    ].join("\n"),
+  );
+}
+
 const draftTitle = (body: string): string | null => {
   try {
     const j = JSON.parse(body);
@@ -166,6 +203,12 @@ const draftTitle = (body: string): string | null => {
     return null;
   }
 };
+
+/** SHA-1 hex digest — used only as a change-detection fingerprint, never for security. */
+async function sha1Hex(text: string): Promise<string> {
+  const digest = await crypto.subtle.digest("SHA-1", new TextEncoder().encode(text));
+  return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, "0")).join("");
+}
 
 // ─── Tool definitions ────────────────────────────────────────────────────────
 
@@ -410,7 +453,8 @@ export const TOOLS: ToolDef[] = [
   },
   {
     name: "read_content_file",
-    description: "Read a published student-facing file or manifest from R2. Returns raw text body.",
+    description:
+      "Read a published student-facing file or manifest from R2. Returns the raw body plus bodySha1 — pass that SHA-1 as expectedCurrentBody when later hotfixing the file with update_published_content so a concurrent edit can't be silently overwritten.",
     inputSchema: { type: "object", properties: { key: str('R2 key, e.g. "content-files/qbank/cardiology/ecg/questions.json"') }, required: ["key"] },
     async run(ctx, args) {
       const bucket = requireEnv(ctx);
@@ -422,7 +466,7 @@ export const TOOLS: ToolDef[] = [
       const obj = await bucket.get(key);
       if (!obj) throw new ToolError("Key not found");
       const body = await obj.text();
-      return { key, contentType: obj.httpMetadata?.contentType ?? "application/octet-stream", size: body.length, body };
+      return { key, contentType: obj.httpMetadata?.contentType ?? "application/octet-stream", size: body.length, bodySha1: await sha1Hex(body), body };
     },
   },
   {
@@ -635,13 +679,29 @@ export const TOOLS: ToolDef[] = [
   },
   {
     name: "delete_content_object",
-    description: "Permanently delete a content object, its R2 storage files, and prune student manifests. (Admin or draft owner).",
-    inputSchema: { type: "object", properties: { id: str("Content object id") }, required: ["id"] },
+    description:
+      "Permanently delete a content object, its R2 storage files, and prune student manifests. IRREVERSIBLE — requires two-step confirm (call once without confirm to get the damage report + continueToken, then re-call with confirm:true). (Admin or draft owner).",
+    inputSchema: {
+      type: "object",
+      properties: {
+        id: str("Content object id"),
+        confirm: { type: "boolean", description: "Set true on the second call, together with continueToken, to actually delete" },
+        continueToken: str("Token from the first call's warning message"),
+      },
+      required: ["id"],
+    },
     async run(ctx, args) {
       const obj = await loadOwnedObject(ctx, args?.id, true);
       if (obj.status === "published" && ctx.scope !== "admin") {
         throw new ToolError("Deleting published content requires admin privilege");
       }
+      await requireConfirmation(
+        ctx,
+        "delete_content_object",
+        obj.id,
+        args,
+        `Permanently delete content object "${obj.title ?? obj.id}" (${obj.content_type}, status: ${obj.status}) and every stored file${obj.published_r2_key ? `, including the student-facing ${obj.published_r2_key}` : ""}. Student manifests will be pruned.`,
+      );
       if (ctx.deleteObject) {
         await ctx.deleteObject(obj.id);
       } else {
@@ -655,12 +715,14 @@ export const TOOLS: ToolDef[] = [
   },
   {
     name: "update_published_content",
-    description: "Directly hotfix a student-facing published file (e.g. 'content-files/qbank/Cardiology/questions.json') and trigger smart manifest sync. (Admin only).",
+    description:
+      "Directly hotfix a student-facing published file (e.g. 'content-files/qbank/Cardiology/questions.json') and trigger smart manifest sync. Bypasses the draft→review pipeline — read the current file first (read_content_file) and verify your edit with validate_content. (Admin only).",
     inputSchema: {
       type: "object",
       properties: {
         key: str('Published R2 key under content-files/, e.g. "content-files/qbank/cardiology/questions.json"'),
         body: str("New text / JSON / markdown content"),
+        expectedCurrentBody: str("Safety guard: the SHA-1 of the file's current body. The write is refused if it changed since you read it — re-read and redo your edit. Send the literal string returned by read_content_file's bodySha1 field"),
       },
       required: ["key", "body"],
     },
@@ -673,6 +735,21 @@ export const TOOLS: ToolDef[] = [
       if (typeof args.body !== "string" || !args.body || args.body.length > MAX_PUBLISHED_BODY_BYTES) {
         throw new ToolError(`body must be a non-empty string up to ${MAX_PUBLISHED_BODY_BYTES / 1_000_000} MB`);
       }
+
+      // Optimistic-concurrency guard: the hotfix is a blind overwrite of a
+      // live student file. If the agent read the file a while ago and someone
+      // else edited it since, applying the stale-based diff would silently
+      // revert their work. Refusing on mismatch forces a fresh read.
+      if (typeof args?.expectedCurrentBody === "string" && args.expectedCurrentBody) {
+        const current = await ctx.r2Get(key);
+        const currentSha = current == null ? null : await sha1Hex(current);
+        if (currentSha !== args.expectedCurrentBody) {
+          throw new ToolError(
+            `The published file changed since you last read it (expected SHA-1 ${args.expectedCurrentBody.slice(0, 12)}…, found ${currentSha == null ? "<deleted>" : currentSha.slice(0, 12)}…). Re-read the file with read_content_file and re-apply your edit on the fresh copy.`,
+          );
+        }
+      }
+
       const ct = extContentType(key, "application/json");
       await ctx.r2Put(key, args.body, ct);
 
@@ -892,6 +969,83 @@ export const TOOLS: ToolDef[] = [
       }
       await ctx.audit("mcp_update_config", null, { via: "mcp" });
       return { ok: true };
+    },
+  },
+
+  // ─── Read-only context & observability tools (both tiers) ────────────────
+
+  {
+    name: "get_instance_overview",
+    description:
+      "Instance snapshot for orienting an agent session: token scope + username, content object counts by status, user/session totals (admin scope), and the current student-facing content version stamp. Call this first when unsure what the instance holds. (User counts admin-only.)",
+    inputSchema: { type: "object", properties: {} },
+    async run(ctx) {
+      const [byStatus, users] = await Promise.all([
+        ctx.env.DB.prepare("SELECT status, COUNT(*) AS n FROM content_objects GROUP BY status").all(),
+        ctx.scope === "admin"
+          ? ctx.env.DB.prepare("SELECT COUNT(*) AS n FROM users").first<{ n: number }>()
+          : Promise.resolve(null),
+      ]);
+      const counts: Record<string, number> = {};
+      for (const row of (byStatus.results ?? []) as any[]) counts[row.status] = row.n;
+      return {
+        you: { username: ctx.username, scope: ctx.scope },
+        contentObjects: counts,
+        ...(users ? { users: users?.n ?? 0 } : {}),
+        contentVersion: ctx.readContentVersion ? await ctx.readContentVersion() : null,
+        versioning: "Manifests are stamped with a version; students receive new content within ~90s or on their next hub visit — no republish needed for them to see changes.",
+      };
+    },
+  },
+  {
+    name: "list_review_queue",
+    description:
+      "List content awaiting review (status pending), or recently rejected items (status rejected) whose feedback needs addressing. Start here for triage; approve_content / reject_content act on these ids.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        status: { type: "string", enum: ["pending", "rejected"], description: "Queue to list (default pending)" },
+      },
+    },
+    async run(ctx, args) {
+      const status = args?.status === "rejected" ? "rejected" : "pending";
+      const scopeFilter = ctx.scope === "admin" ? "" : "AND created_by = ?";
+      const params: unknown[] = ctx.scope === "admin" ? [status] : [status, ctx.userId];
+      const rows = await ctx.env.DB.prepare(
+        `SELECT id, content_type, title, language, status, target_path, rejection_reason, submitted_at, updated_at FROM content_objects WHERE status = ? ${scopeFilter} ORDER BY updated_at DESC LIMIT 100`,
+      )
+        .bind(...params)
+        .all();
+      return { status, count: rows.results?.length ?? 0, items: rows.results ?? [] };
+    },
+  },
+  {
+    name: "get_audit_trail",
+    description:
+      "Recent audit entries (all mcp_* actions included) for tracing who changed what and when — the accountability record after any destructive or publish action. Filterable by action name.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        action: str("Filter by exact action name (e.g. mcp_delete_object, mcp_publish_content)"),
+        page: { type: "number", description: "1-based page (50 per page)" },
+      },
+    },
+    async run(ctx, args) {
+      if (!ctx.getAuditTrail) throw new ToolError("Audit trail not wired on this host");
+      const page = Math.max(1, Number(args?.page) || 1);
+      const action = typeof args?.action === "string" && args.action.trim() ? args.action.trim() : undefined;
+      const { items, total } = await ctx.getAuditTrail({ page, action });
+      return { page, total, count: items.length, items };
+    },
+  },
+  {
+    name: "get_content_version",
+    description:
+      "The current content version stamp. It advances on every publish/unpublish/delete/hotfix — students' clients detect the change and cache-bust their manifests, so newly published content reaches them without a hard refresh.",
+    inputSchema: { type: "object", properties: {} },
+    async run(ctx) {
+      const version = ctx.readContentVersion ? await ctx.readContentVersion() : null;
+      return { version, note: "No version yet means no managed manifest write has happened since versioning shipped." };
     },
   },
 ];
