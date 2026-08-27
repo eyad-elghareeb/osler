@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { Highlighter, Eraser, Trash2, Power, Check } from "lucide-react";
+import { Highlighter, Eraser, Trash2, X, Check } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useI18n } from "@/components/osler/i18n-provider";
 import { haptic } from "@/lib/osler/native";
@@ -210,7 +210,7 @@ export function HighlighterToolbar({
               title={t("highlighter.turnOff")}
               aria-label={t("highlighter.turnOff")}
             >
-              <Power className="size-3.5" />
+              <X className="size-3.5" />
             </button>
           )}
 
