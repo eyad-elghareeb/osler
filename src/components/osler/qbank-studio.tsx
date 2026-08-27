@@ -11,7 +11,7 @@ import type { AnyContent, EngineType, ContentTreeNode } from "@/lib/osler/types"
 import { storage, sessions, writtenDrafts, quizSettings as quizSettingsStore, type SavedSession, type WrittenDraft, type HighlightItem } from "@/lib/osler/storage";
 import { listAllArticles } from "@/lib/osler/articles";
 import type { ArticleMeta } from "@/lib/osler/articles";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import {
   LabValuesSidebar,
@@ -27,6 +27,7 @@ import { useLightbox } from "@/components/osler/lightbox-provider";
 import { setImmersiveMode } from "@/components/osler/immersive-mode";
 import { haptic } from "@/lib/osler/native";
 import { useI18n } from "@/components/osler/i18n-provider";
+import { cn } from "@/lib/utils";
 import { EmptyState } from "@/components/osler/ui-primitives";
 import type { SessionMode, SessionOrder, SessionStartOptions } from "@/lib/osler/session-options";
 import { routeFor, useOslerRouter } from "@/lib/osler/navigation";
@@ -1272,14 +1273,14 @@ export function QBankStudio({
               <AlertDialogCancel asChild>
                 <Button variant="ghost">{t("qbank.exit.stay")}</Button>
               </AlertDialogCancel>
-              <AlertDialogAction asChild>
-                <Button
-                  variant="outline"
-                  className="text-destructive hover:text-destructive border-destructive/30 hover:border-destructive"
-                  onClick={exitToHome}
-                >
-                  {t("qbank.exit.discard")}
-                </Button>
+              <AlertDialogAction
+                className={cn(
+                  buttonVariants({ variant: "outline" }),
+                  "text-destructive hover:text-destructive border-destructive/30 hover:border-destructive"
+                )}
+                onClick={exitToHome}
+              >
+                {t("qbank.exit.discard")}
               </AlertDialogAction>
               <AlertDialogAction asChild>
                 <Button onClick={saveAndExit}>
