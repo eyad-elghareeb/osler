@@ -825,13 +825,30 @@ export function QBankStudio({
     setMode("results");
   }, [session?.isReview]);
 
-  const restartSession = () => {
-    if (activeItem && activeContent) {
-      storage.clearPack(activeItem.uid);
-      writtenDrafts.clear(activeItem.uid);
-      startSession(activeItem, activeContent);
-    }
-  };
+  // Restart the finished session with EXACTLY the question set it contained —
+  // same questions, same order, fresh answers/flags/timer. Previously this
+  // relaunched the whole pack (ignoring the session's size and filters) and
+  // custom sessions couldn't restart at all. Progress records are kept: a
+  // restart is just another attempt, same as the tracker's retake flow.
+  const restartSession = React.useCallback(() => {
+    const s = sessionRef.current;
+    if (!s || s.isReview) return;
+    haptic("selection");
+    const pool = s.questions.map((q) => ({
+      ...q,
+      // Defensive stamp for questions missing sourceUid — custom pools must
+      // never fall back to their synthetic custom-<ts> session id.
+      sourceUid: q.sourceUid ?? (s.itemId.startsWith("custom-") ? undefined : s.itemId),
+    }));
+    void startCustomSession(pool, {
+      title: s.itemTitle,
+      engine: s.engine,
+      mode: s.mode,
+      tagsFilter: s.tagsFilter,
+      onlyMode: s.onlyMode,
+      dismissAfterCorrect: s.dismissAfterCorrect,
+    });
+  }, [startCustomSession]);
 
   const exitToHome = React.useCallback(() => {
     sessions.clearActive();
@@ -1297,7 +1314,6 @@ export function QBankStudio({
   }
 
   if (mode === "results" && session) {
-    const isCustom = session.itemId.startsWith("custom-");
     const resultsItem = activeItem ?? {
       uid: session.itemId,
       title: session.itemTitle,
@@ -1310,10 +1326,7 @@ export function QBankStudio({
         session={session}
         item={resultsItem}
         onGoHome={exitToHome}
-        onRestart={isCustom ? () => {
-          // For custom sessions, go back to home since we can't easily rebuild
-          exitToHome();
-        } : restartSession}
+        onRestart={restartSession}
       />
     );
   }
