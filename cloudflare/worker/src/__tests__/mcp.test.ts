@@ -54,7 +54,8 @@ describe("MCP protocol", () => {
     expect(r.result.protocolVersion).toBeTypeOf("string");
     expect(r.result.serverInfo.name).toBe("osler-admin");
     expect(r.result.capabilities.tools).toBeDefined();
-    expect(r.result.instructions).toContain("CANNOT publish");
+    expect(r.result.instructions).toContain("content_admin");
+    expect(r.result.instructions).toContain("Authoring & Review Queue only");
   });
 
   it("tools/list advertises schemas without handlers", async () => {
@@ -130,10 +131,52 @@ describe("MCP tools/call", () => {
     expect(r.error.code).toBe(-32601);
   });
 
+  it("rejects update_published_content bodies over the size cap", async () => {
+    const ctx = makeCtx({ scope: "admin" });
+    const r = await call(ctx, "tools/call", {
+      name: "update_published_content",
+      arguments: { key: "content-files/quiz/x.json", body: "x".repeat(6_000_000) },
+    });
+    expect(JSON.stringify(r.result.content[0].text)).toMatch(/up to 5 MB/);
+  });
+
+  it("rejects update_config payloads over the size cap", async () => {
+    const ctx = makeCtx({ scope: "admin" });
+    const r = await call(ctx, "tools/call", {
+      name: "update_config",
+      arguments: { config: { blob: "x".repeat(2_000_000) } },
+    });
+    expect(JSON.stringify(r.result.content[0].text)).toMatch(/up to 1 MB/);
+  });
+
   it("prompts/get builds the qbank-from-pdf workflow message", async () => {
     const r = await call(makeCtx(), "prompts/get", { name: "qbank_from_pdf", arguments: { sourceDescription: "/docs/cardio.pdf" } });
     const text = r.result.messages[0].content.text;
     expect(text).toContain("/docs/cardio.pdf");
     expect(text).toContain("create_content_pack");
+  });
+});
+
+describe("MCP batch handling", () => {
+  it("rejects a batch over the size cap without executing any of it", async () => {
+    const writes: string[] = [];
+    const ctx = makeCtx({ r2Put: async (key) => void writes.push(key) });
+    const entries = Array.from({ length: 30 }, (_, i) => ({
+      jsonrpc: "2.0",
+      id: i,
+      method: "tools/call",
+      params: { name: "create_content_pack", arguments: { contentType: "quiz", title: `P${i}`, body: VALID_QUIZ } },
+    }));
+    const payload = await handleRpc(ctx, entries);
+    expect(payload).toHaveLength(1);
+    expect((payload as any)[0].error.message).toMatch(/Batch too large/);
+    expect(writes).toHaveLength(0);
+  });
+
+  it("accepts a batch at the cap", async () => {
+    const ctx = makeCtx();
+    const entries = Array.from({ length: 25 }, (_, i) => ({ jsonrpc: "2.0", id: i, method: "tools/list" }));
+    const payload = await handleRpc(ctx, entries);
+    expect(payload).toHaveLength(25);
   });
 });

@@ -8,7 +8,23 @@ import { PROTOCOL_VERSION, PROMPTS, SERVER_INSTRUCTIONS, SERVER_NAME, SERVER_VER
 import { findTool, TOOLS, ToolError, type McpCtx } from "./tools";
 
 const JSON_RPC_VERSION = "2.0";
-const MAX_BODY_BYTES = 30_000_000;
+
+/**
+ * Shared with mcp/index.ts, which enforces this while streaming the request
+ * body (see readLimitedBody there) — this is the single source of truth for
+ * the cap so the two layers can't drift out of sync.
+ */
+export const MAX_BODY_BYTES = 30_000_000;
+
+/**
+ * A JSON-RPC 2.0 payload may be a batch (a JSON array of requests). Without a
+ * cap, a single HTTP request — which only counts once against the per-minute
+ * rate limit — could carry an unbounded number of `tools/call` entries, each
+ * triggering real D1/R2 work. That turns the batch array into a request-count
+ * amplifier that bypasses rate limiting entirely. Capping it keeps the
+ * worst-case cost of one HTTP request bounded and predictable.
+ */
+const MAX_BATCH_SIZE = 25;
 
 interface JsonRpcRequest {
   jsonrpc?: string;
@@ -37,6 +53,9 @@ function toolText(value: unknown): string {
 export async function handleRpc(ctx: McpCtx, body: unknown): Promise<unknown[] | null> {
   const entries = Array.isArray(body) ? body : [body];
   if (!entries.length) return [error(null, ERR_PARSE, "Empty batch")];
+  if (entries.length > MAX_BATCH_SIZE) {
+    return [error(null, ERR_PARAMS, `Batch too large — max ${MAX_BATCH_SIZE} requests per call, got ${entries.length}`)];
+  }
   const responses: unknown[] = [];
   let sawNotification = false;
   for (const entry of entries as JsonRpcRequest[]) {

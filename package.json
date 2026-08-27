@@ -7,7 +7,7 @@
     "dev:worker": "npm run dev --prefix cloudflare/worker",
     "dev:full": "concurrently -n fe,worker -c cyan,yellow \"npm run dev\" \"npm run dev:worker\"",
     "build:sw": "node scripts/build-sw.js",
-    "build": "node scripts/build-sw.js && next build",
+    "build": "node scripts/build-sw.js && node scripts/generate-social-images.js && next build",
     "start": "npx serve out -p 3000",
     "preview:pages": "npx wrangler pages dev out --port 3000",
     "deploy:pages": "npx wrangler pages deploy out --project-name osler",
@@ -15,6 +15,7 @@
     "cloudflare:init": "node scripts/cloudflare-init.js",
     "lint": "eslint .",
     "generate-manifests": "node scripts/generate-content-manifests.js",
+    "generate-social-images": "node scripts/generate-social-images.js",
     "db:push": "echo 'Osler does not use Prisma — skipping db:push'",
     "smoke:pdf": "esbuild scripts/pdf-smoke.ts --bundle --platform=node --format=cjs --outfile=out/.pdf-smoke.cjs --log-level=error && node out/.pdf-smoke.cjs"
   },

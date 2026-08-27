@@ -8,9 +8,10 @@ one batch, run server-side validation, and submit work for review.
 
 ## Approval model
 
-Agents are capped at the **authoring** surface no matter who mints the token:
+By default, tokens are minted with **content_admin** scope, which is capped
+at the authoring surface:
 
-| Agent can | Agent cannot |
+| content_admin token can | content_admin token cannot |
 |---|---|
 | create drafts, write bodies, upload assets | publish / approve |
 | validate against the platform schema | reject / schedule |
@@ -19,7 +20,18 @@ Agents are capped at the **authoring** surface no matter who mints the token:
 
 Submitted packs land in `status = "pending"` and must be approved by an admin
 (role `admin`) through the web admin panel's review queue before students see
-anything.
+anything — **for a content_admin-scoped token**.
+
+A site admin can also mint an **admin**-scoped token from the same panel.
+That's a materially different trust level: `publish_content`,
+`approve_content`, `reject_content`, `unpublish_content`,
+`delete_content_object`, `update_published_content`, and `update_config` are
+all real MCP tools, gated only on the token's scope, not on any
+human-in-the-loop step — an agent holding an admin-scoped token can approve
+and publish its own submissions, delete content, and rewrite the site config
+autonomously. Only mint admin scope for an agent you'd trust with direct
+production write access; use the default content_admin scope for anything
+you want a human to review first.
 
 ## Setup
 
@@ -111,10 +123,26 @@ The server also exposes prompts: `qbank_from_pdf` and `flashcards_from_notes`
 ## Security notes
 
 - Tokens are `osler_mcp_…` opaque strings; only a SHA-256 hash is stored, and
-  usage is stamped (`last_used_at`) and audit-logged (`mcp_*` actions chain
-  into the tamper-evident audit log).
+  usage is stamped (`last_used_at`, reliably — the write is registered with
+  `ExecutionContext.waitUntil` so it survives the response being returned)
+  and audit-logged (`mcp_*` actions chain into the tamper-evident audit log).
 - Revoke instantly from Settings → AI Agents; expiry is enforced per request.
-- Requests share the worker's `admin` rate-limit bucket (600/min/IP) and pass
-  through the same origin gate as first-party traffic.
+- Non-POST requests are rejected before any token lookup, so scans/bots
+  hitting this public path don't cost a D1 round-trip.
+- Rate limiting is layered: requests first pass through the worker's shared
+  `admin` bucket (600/min/IP) — the same gate first-party admin-panel traffic
+  uses — and, once authenticated, each token additionally has its own
+  240/min budget. The per-token layer exists because the per-IP bucket alone
+  means every token that happens to call out from the same egress IP (a
+  hosted agent platform, a shared office NAT) draws from one shared pool —
+  without it, a single busy agent could both exhaust its own budget and
+  crowd out unrelated tokens or the human admin panel on that IP.
+- A single JSON-RPC batch request is capped at 25 entries — without a cap,
+  one HTTP request (which only counts once against the rate limit) could
+  carry an unbounded number of `tools/call` entries, each doing real D1/R2
+  work, turning the batch array into a rate-limit bypass.
+- The request body is capped at 30 MB, enforced while the body is streamed
+  in rather than by trusting the `Content-Length` header, which a request
+  using chunked transfer-encoding can omit or misstate.
 - Free-tier budget: Workers 100k req/day, D1 5M row-reads/day, R2 1M class-A
   ops/month — a bulk import typically costs a handful of requests.

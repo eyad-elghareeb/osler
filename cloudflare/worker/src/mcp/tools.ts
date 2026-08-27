@@ -45,6 +45,16 @@ export class ToolError extends Error {}
 
 const CONTENT_TYPES = ["quiz", "bank", "written", "flashcard", "osce", "library", "video"] as const;
 
+// Draft/pack bodies are capped at 2 MB inline (create_content_draft,
+// update_draft_body, create_content_pack). update_published_content and
+// update_config previously had no size limit at all — an admin token (or a
+// buggy agent driving one) could push an arbitrarily large payload into R2
+// bounded only by the outer 30 MB RPC request cap. These get their own,
+// slightly larger ceilings since hotfixed student files and full site
+// configs are reasonably expected to be bigger than a single content draft.
+const MAX_PUBLISHED_BODY_BYTES = 5_000_000;
+const MAX_CONFIG_BYTES = 1_000_000;
+
 const str = (description: string) => ({ type: "string", description });
 
 export interface ToolDef {
@@ -660,6 +670,9 @@ export const TOOLS: ToolDef[] = [
       if (!key.startsWith("content-files/") || key.includes("..") || key.includes("\\")) {
         throw new ToolError("Key must start with 'content-files/'");
       }
+      if (typeof args.body !== "string" || !args.body || args.body.length > MAX_PUBLISHED_BODY_BYTES) {
+        throw new ToolError(`body must be a non-empty string up to ${MAX_PUBLISHED_BODY_BYTES / 1_000_000} MB`);
+      }
       const ct = extContentType(key, "application/json");
       await ctx.r2Put(key, args.body, ct);
 
@@ -868,10 +881,14 @@ export const TOOLS: ToolDef[] = [
     async run(ctx, args) {
       requireAdmin(ctx, "update_config");
       if (!args.config || typeof args.config !== "object") throw new ToolError("config must be an object");
+      const serialized = JSON.stringify(args.config, null, 2);
+      if (serialized.length > MAX_CONFIG_BYTES) {
+        throw new ToolError(`config too large — up to ${MAX_CONFIG_BYTES / 1_000_000} MB serialized`);
+      }
       if (ctx.putConfig) {
         await ctx.putConfig(args.config);
       } else {
-        await ctx.r2Put("_osler.config.json", JSON.stringify(args.config, null, 2), "application/json");
+        await ctx.r2Put("_osler.config.json", serialized, "application/json");
       }
       await ctx.audit("mcp_update_config", null, { via: "mcp" });
       return { ok: true };

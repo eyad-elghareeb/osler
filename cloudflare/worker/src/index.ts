@@ -83,6 +83,16 @@ const RATE_LIMIT_MAX: Record<string, number> = {
   "admin": 600,
   "sync": 30,
   "search": 30,
+  // Per-MCP-token budget, checked in addition to the shared per-IP "admin"
+  // bucket below. The IP bucket alone means every agent token that happens
+  // to call out from the same egress IP (a hosted agent platform, a shared
+  // office NAT, etc.) draws from one pool — a single busy token can starve
+  // both the human admin panel and every other token on that IP. Keying a
+  // second check by token id contains a noisy/misbehaving token to its own
+  // budget without touching anyone else's. 240/min comfortably covers a
+  // large create_content_pack batch import loop while still bounding worst
+  // case D1/R2 load from a single credential.
+  "mcp_token": 240,
   // Analytics: 12 batches/min per IP. At 20 events/batch that's 240 writes/min
   // = 345K/day worst case — still over the daily cap, but the global cap
   // (ANALYTICS_DAILY_WRITE_CAP) catches it. 12/min is plenty for real user
@@ -4874,13 +4884,42 @@ export default {
 
       // ── Dynamic OG social card generator ──────────────────────────────────
       // GET /og?title=…&type=quiz|bank|flashcard|osce|library|video&sub=…&site=…
-      // Returns a branded SVG social card for use as og:image on shared links.
       // Public, no auth, safe for open sharing.
+      //
+      // IMPORTANT — this always served (and still serves by default) an SVG
+      // body. Most social crawlers that actually render og:image previews —
+      // Facebook/Meta's, Twitter/X's, and others — do not accept SVG there at
+      // all, so a link pointing straight at this URL renders no preview image
+      // on those platforms regardless of how correct the markup is. Rasterizing
+      // to a real PNG at request time needs a renderer this Worker doesn't
+      // carry (no native canvas in the Workers runtime, and adding an
+      // unverified WASM image dependency isn't something to ship blind in a
+      // hardening pass), so instead: ?format=png resolves to the closest
+      // pre-generated static PNG for that content type (see
+      // scripts/generate-social-images.js), which is real, crawler-safe, and
+      // needs no new runtime dependency. The frontend is fully static and has
+      // no per-URL server, so it can't point og:image at this endpoint at all
+      // for individual pages — it uses those same static per-type PNGs
+      // directly (see the per-section layout.tsx files). This endpoint is
+      // kept for direct API consumers who want a titled card and can render
+      // SVG themselves (e.g. the Tauri admin panel), with format=png as an
+      // explicit, working escape hatch to a static image for anyone who can't.
       if (request.method === "GET" && url.pathname === "/og") {
         const title = (url.searchParams.get("title") || "Osler").slice(0, 100);
         const sub = (url.searchParams.get("sub") || "").slice(0, 80);
         const type = url.searchParams.get("type") || "quiz";
         const site = (url.searchParams.get("site") || "Osler").slice(0, 40);
+
+        const STATIC_OG_TYPES = new Set(["quiz", "bank", "flashcard", "osce", "library", "video", "written"]);
+        if ((url.searchParams.get("format") || "").toLowerCase() === "png") {
+          const staticType = STATIC_OG_TYPES.has(type) ? type : "quiz";
+          const staticOrigin = env.ALLOWED_ORIGIN || "";
+          const location = `${staticOrigin}/assets/og/${staticType}.png`;
+          return new Response(null, {
+            status: 302,
+            headers: { location, "cache-control": "public, max-age=86400", ...cors(origin) },
+          });
+        }
 
         const esc = (s: string) => s.replace(/[<>&"]/g, (c: string) => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;", '"': "&quot;" }[c] || c));
 
@@ -4943,6 +4982,7 @@ export default {
           headers: {
             "content-type": "image/svg+xml; charset=utf-8",
             "cache-control": "public, max-age=86400",
+            "x-content-type-options": "nosniff",
             ...cors(origin),
           } as any,
         });
@@ -4994,6 +5034,8 @@ export default {
             if (!e.CONTENT) throw new Error("Content storage not configured");
             await e.CONTENT.put("_osler.config.json", JSON.stringify(cfg, null, 2), { httpMetadata: { contentType: "application/json" } });
           },
+          waitUntil: (p) => ctx.waitUntil(p),
+          rateLimitToken: (tokenId) => rateLimit(tokenId, "mcp_token"),
         });
       }
 

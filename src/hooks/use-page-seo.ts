@@ -8,21 +8,8 @@ import { getConfig } from "@/lib/osler/config";
 export interface PageSeoOptions {
   title?: string;
   description?: string;
-  /** Engine type for dynamic OG image (quiz|bank|flashcard|osce|library|video) */
+  /** Engine type, kept for callers that want it in the derived page title. */
   engineType?: string;
-}
-
-/** Build the dynamic OG image URL pointing at the worker /og endpoint. */
-function buildOgImageUrl(
-  apiBase: string,
-  title: string,
-  type: string,
-  siteName: string,
-  sub?: string
-): string {
-  const params = new URLSearchParams({ title, type, site: siteName });
-  if (sub) params.set("sub", sub);
-  return `${apiBase}/og?${params.toString()}`;
 }
 
 /** Set or create a <meta> tag by attribute=value selector, returning the element. */
@@ -37,9 +24,28 @@ function setMeta(attr: string, key: string, value: string): void {
 }
 
 /**
- * Dynamically updates document.title, meta description, and all OpenGraph/Twitter
- * tags on client navigation — including a dynamic og:image from the worker /og endpoint
- * for content-specific pages (packs, articles, decks, stations).
+ * Dynamically updates `document.title`, the description meta tag, and the
+ * og:title/twitter:title tags on client-side navigation, for the visitor's
+ * own browser tab, history entry, and bookmarks.
+ *
+ * This intentionally does NOT touch og:image/twitter:image, and does not
+ * attempt a per-content (per-article/per-pack) image or title. This app is a
+ * fully static export with no per-request server (see next.config.ts) — the
+ * HTML a social crawler fetches for any URL is whatever was baked in at
+ * build time, and crawlers (Facebook/Meta, Twitter/X, Slack, Discord,
+ * WhatsApp, iMessage) do not execute this hook's JavaScript, so any tag
+ * this effect sets is invisible to them. An earlier version of this hook
+ * did rewrite og:image here anyway; it had no visible effect for real link
+ * previews (nothing called this hook) and, worse, would have pointed
+ * og:image at an SVG endpoint that most of those crawlers don't render as a
+ * preview image even when they can see it.
+ *
+ * What actually reaches crawlers is resolved entirely at build time: the
+ * root layout ships a site-wide default image, and the five section layouts
+ * (qbank, flashcards, osce, library, videos — see
+ * `src/lib/osler/section-metadata.ts`) ship a real, distinct, crawler-safe
+ * static PNG per section. That's the deliberate "resolve to static" fallback
+ * for an app that can't render per-URL metadata server-side.
  */
 export function usePageSeo(options?: PageSeoOptions) {
   const pathname = usePathname();
@@ -56,8 +62,6 @@ export function usePageSeo(options?: PageSeoOptions) {
   React.useEffect(() => {
     let pageTitle = options?.title;
     let pageDesc = options?.description;
-    // Infer engine type from explicit prop or pathname
-    let engineType = options?.engineType;
 
     if (!pageTitle) {
       if (pathname === "/" || pathname === "") {
@@ -66,23 +70,18 @@ export function usePageSeo(options?: PageSeoOptions) {
       } else if (pathname.includes("/qbank")) {
         pageTitle = t("nav.qbank");
         pageDesc = "High-yield medical question bank and practice questions.";
-        engineType ??= "bank";
       } else if (pathname.includes("/flashcards")) {
         pageTitle = t("nav.flashcards");
         pageDesc = "Spaced repetition flashcards and active recall decks.";
-        engineType ??= "flashcard";
       } else if (pathname.includes("/osce")) {
         pageTitle = t("nav.osce");
         pageDesc = "Interactive clinical stations and patient simulations.";
-        engineType ??= "osce";
       } else if (pathname.includes("/library")) {
         pageTitle = t("nav.library");
         pageDesc = "Evidence-based medical reference articles and clinical guidelines.";
-        engineType ??= "library";
       } else if (pathname.includes("/videos")) {
         pageTitle = t("nav.videos");
         pageDesc = "Curated high-yield video lectures and clinical procedures.";
-        engineType ??= "video";
       } else if (pathname.includes("/learn")) {
         pageTitle = t("nav.learn");
         pageDesc = "Personalized learning dashboard and study progress.";
@@ -98,22 +97,22 @@ export function usePageSeo(options?: PageSeoOptions) {
     }
 
     // Content-specific title from query params (e.g. ?pack=Cardiology/STEMI or ?article=Asthma)
+    // — this only ever updates the live tab title, never anything crawler-visible; see the
+    // module doc comment above.
     const queryContent =
       searchParams?.get("pack") ||
       searchParams?.get("deck") ||
       searchParams?.get("article") ||
       searchParams?.get("qbank") ||
       searchParams?.get("station");
-    let contentName: string | undefined;
     if (queryContent) {
-      contentName = queryContent.split("/").pop()?.replace(/[-_]/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+      const contentName = queryContent.split("/").pop()?.replace(/[-_]/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
       if (contentName) pageTitle = `${contentName} · ${pageTitle || siteName}`;
     }
 
     const fullTitle = pageTitle ? `${pageTitle} — ${siteName}` : `${siteName} — ${siteTagline}`;
     document.title = fullTitle;
 
-    // ── Meta & OG tags ─────────────────────────────────────────────────────
     if (pageDesc) {
       setMeta("name", "description", pageDesc);
       setMeta("property", "og:description", pageDesc);
@@ -121,24 +120,6 @@ export function usePageSeo(options?: PageSeoOptions) {
     }
     setMeta("property", "og:title", fullTitle);
     setMeta("name", "twitter:title", fullTitle);
-
-    // ── Dynamic OG image ────────────────────────────────────────────────────
-    // When viewing a specific content piece, point og:image to the worker /og
-    // endpoint which renders a branded SVG with the pack/article name embedded.
-    // Falls back to the static default image for hub pages.
-    const apiUrl = cfg?.cloud?.apiUrl;
-    if (apiUrl && contentName && engineType) {
-      const dynamicOg = buildOgImageUrl(
-        apiUrl,
-        contentName,
-        engineType,
-        siteName,
-        pageDesc
-      );
-      setMeta("property", "og:image", dynamicOg);
-      setMeta("name", "twitter:image", dynamicOg);
-      setMeta("name", "twitter:card", "summary_large_image");
-    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pathname, searchParams?.toString(), options?.title, options?.description, options?.engineType, siteName, siteTagline]);
 }

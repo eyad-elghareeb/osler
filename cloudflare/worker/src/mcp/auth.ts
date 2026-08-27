@@ -85,10 +85,23 @@ export async function verifyApiToken(env: McpEnv, request: Request): Promise<Tok
 
 const nowMs = () => Date.now();
 
-/** Fire-and-forget usage stamp — best-effort, never blocks the RPC response. */
-export function touchToken(env: McpEnv, tokenId: string): void {
-  env.DB.prepare("UPDATE api_tokens SET last_used_at = ? WHERE id = ?")
+/**
+ * Best-effort "last used" usage stamp. Never rejects (a broken update must
+ * never fail the RPC response) and never throws synchronously.
+ *
+ * Returns the underlying promise instead of firing-and-forgetting it: on
+ * Cloudflare Workers, a promise that is neither awaited nor registered with
+ * `ExecutionContext.waitUntil()` can be cancelled by the runtime once the
+ * response has been returned to the client, which would silently drop this
+ * write under load. Callers should pass the returned promise to
+ * `ctx.waitUntil()` (see `McpHost.waitUntil` in `mcp/index.ts`); if no such
+ * hook is available (e.g. tests), the promise is still safe to ignore since
+ * it can never throw.
+ */
+export function touchToken(env: McpEnv, tokenId: string): Promise<void> {
+  return env.DB.prepare("UPDATE api_tokens SET last_used_at = ? WHERE id = ?")
     .bind(nowMs(), tokenId)
     .run()
-    .catch(() => {});
+    .then(() => undefined)
+    .catch(() => undefined);
 }

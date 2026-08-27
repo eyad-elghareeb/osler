@@ -9,8 +9,8 @@
 
 import { generateApiToken, touchToken, verifyApiToken, type McpEnv } from "./auth";
 import { SERVER_NAME, SERVER_VERSION } from "./instructions";
-import { ERR_METHOD, ERR_PARSE, handleRpc } from "./rpc";
-import { findTool, type McpCtx } from "./tools";
+import { ERR_PARSE, handleRpc, MAX_BODY_BYTES } from "./rpc";
+import type { McpCtx } from "./tools";
 
 export { TOKEN_PREFIX } from "./auth";
 export { SERVER_NAME, SERVER_VERSION };
@@ -28,6 +28,22 @@ export interface McpHost {
   updateManifestIncremental?(env: any, category: string, touchedPaths?: string[]): Promise<any>;
   getConfig?(env: any): Promise<any>;
   putConfig?(env: any, config: any): Promise<void>;
+  /**
+   * Registers a promise to keep running after the Response is returned
+   * (`ExecutionContext.waitUntil`). When absent, best-effort background work
+   * (e.g. the token usage stamp) is left un-awaited as before — correct but
+   * not guaranteed to finish under load.
+   */
+  waitUntil?(promise: Promise<unknown>): void;
+  /**
+   * Per-token rate limit, checked once a request is authenticated. Returns
+   * false when the token has exceeded its budget. This is in addition to
+   * (not a replacement for) the host's own per-IP gate: the IP gate protects
+   * the endpoint from pre-auth abuse, while this protects the shared IP
+   * budget from a single noisy or compromised token, and protects a single
+   * token from being starved by unrelated traffic on the same IP.
+   */
+  rateLimitToken?(tokenId: string): boolean;
 }
 
 const draftKey = (base: string) => `${base}/draft.json`;
@@ -53,21 +69,66 @@ function jsonError(status: number, message: string, extra: Record<string, string
 }
 
 /**
+ * Reads a request body up to `maxBytes`, rejecting the request as soon as
+ * that many bytes have been seen rather than trusting the `Content-Length`
+ * header. A header-only check can be bypassed by a request that omits
+ * Content-Length (e.g. chunked transfer-encoding) or simply lies about it —
+ * either way `request.json()` would still buffer the whole body in memory
+ * before any check ran. Streaming the cap instead bounds worst-case memory
+ * and CPU regardless of what the client claims.
+ */
+async function readLimitedBody(request: Request, maxBytes: number): Promise<{ ok: true; text: string } | { ok: false }> {
+  const reader = request.body?.getReader();
+  if (!reader) return { ok: true, text: "" };
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    if (value && value.byteLength) {
+      total += value.byteLength;
+      if (total > maxBytes) {
+        await reader.cancel().catch(() => {});
+        return { ok: false };
+      }
+      chunks.push(value);
+    }
+  }
+  const buf = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    buf.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return { ok: true, text: new TextDecoder().decode(buf) };
+}
+
+/**
  * Handles one MCP HTTP request end-to-end:
- * bearer-token auth → JSON-RPC dispatch → tool execution → response.
+ * method check → bearer-token auth → JSON-RPC dispatch → tool execution → response.
  */
 export async function handleMcpRequest(request: Request, env: any & McpEnv, origin: string, log: any, host: McpHost): Promise<Response> {
+  // Cheap check first: avoids a D1 round-trip (the auth lookup below) for
+  // wrong-method scans/bots hitting this public path, which is the common
+  // case for unsolicited traffic against it.
+  if (request.method !== "POST") return jsonError(405, "MCP transport is POST-only (Streamable HTTP)");
+
   const auth = await verifyApiToken(env, request);
   if (!auth) return jsonError(401, "Valid API token required (Authorization: Bearer osler_mcp_...) — mint one from the web admin panel", { "www-authenticate": "Bearer" });
-  touchToken(env, auth.tokenId);
 
-  if (request.method !== "POST") return jsonError(405, "MCP transport is POST-only (Streamable HTTP)");
+  if (host.rateLimitToken && !host.rateLimitToken(auth.tokenId)) {
+    return jsonError(429, "Too many MCP requests for this token — slow down, or mint a second token to run parallel workloads");
+  }
+
+  const touchPromise = touchToken(env, auth.tokenId);
+  if (host.waitUntil) host.waitUntil(touchPromise);
+
+  const bodyRead = await readLimitedBody(request, MAX_BODY_BYTES);
+  if (!bodyRead.ok) return jsonError(413, "Request body too large");
 
   let body: unknown;
   try {
-    const length = Number(request.headers.get("content-length") ?? "0");
-    if (length > 30_000_000) return jsonError(413, "Request body too large");
-    body = await request.json();
+    body = bodyRead.text ? JSON.parse(bodyRead.text) : {};
   } catch {
     return rpcResponse([{ jsonrpc: "2.0", id: null, error: { code: ERR_PARSE, message: "Invalid JSON body" } }], origin);
   }

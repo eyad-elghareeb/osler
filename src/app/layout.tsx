@@ -8,7 +8,7 @@ import { AnimationsProvider } from "@/components/osler/animations-provider";
 import { SerwistProvider } from "@/components/osler/serwist-provider";
 import { AnalyticsProvider } from "@/components/osler/analytics-provider";
 import { LANG_INIT_SCRIPT } from "@/lib/osler/i18n";
-import { getConfig } from "@/lib/osler/config";
+import { getBuildTimeSiteConfig } from "@/lib/osler/config.server";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -63,16 +63,10 @@ const cairo = Cairo({
  * `t("app.name")` / `t("app.tagline")` so the in-app brand mark and document
  * title stay in sync after hydration.
  */
-const siteConfig = (() => {
-  try {
-    return getConfig();
-  } catch {
-    return null;
-  }
-})();
-const siteName = siteConfig?.site.name ?? "Osler";
-const siteTagline = siteConfig?.site.tagline ?? "Medical Study Platform";
-const siteShortName = siteConfig?.site.shortName ?? "Osler";
+const siteConfig = getBuildTimeSiteConfig();
+const siteName = siteConfig.name;
+const siteTagline = siteConfig.tagline;
+const siteShortName = siteConfig.shortName;
 
 export const metadata: Metadata = {
   title: `${siteName} — ${siteTagline}`,
@@ -87,7 +81,7 @@ export const metadata: Metadata = {
     "OSCE",
     "question bank",
   ],
-  authors: [{ name: siteConfig?.site.organisation ?? "Osler Team" }],
+  authors: [{ name: siteConfig.organisation }],
   manifest: "/manifest.webmanifest",
   applicationName: siteName,
   appleWebApp: {
@@ -112,11 +106,19 @@ export const metadata: Metadata = {
     description: `${siteName} — High-yield question bank, active recall flashcards, OSCE simulation, and clinical reference library. Adaptive, offline-ready, and open-source.`,
     siteName: siteName,
     type: "website",
+    // Relative URL — instance-agnostic, crawlers resolve against page URL.
+    // PNG is used for widest preview support (SVG isn't rendered as an
+    // og:image by most crawlers, including Facebook/Meta's and Twitter/X's).
+    // Section routes (qbank, flashcards, osce, library, videos) override
+    // this with a more specific image via their own layout.tsx metadata —
+    // see scripts/generate-social-images.js for how these are generated.
+    images: [{ url: "/assets/og-image.png", width: 1200, height: 630, alt: `${siteName} — ${siteTagline}`, type: "image/png" }],
   },
   twitter: {
     card: "summary_large_image",
     title: `${siteName} — ${siteTagline}`,
     description: `${siteName} — High-yield question bank, active recall flashcards, OSCE simulation, and clinical reference library.`,
+    images: ["/assets/og-image.png"],
   },
 };
 
@@ -164,13 +166,6 @@ export default function RootLayout({
         <meta name="apple-mobile-web-app-title" content={siteShortName} />
         <meta name="mobile-web-app-title" content={siteShortName} />
         <meta name="format-detection" content="telephone=no" />
-        {/* OG image as relative URL — instance-agnostic, crawlers resolve against page URL. PNG is used for widest preview support. */}
-        <meta property="og:image" content="/assets/og-image.png" />
-        <meta property="og:image:width" content="1200" />
-        <meta property="og:image:height" content="630" />
-        <meta property="og:image:alt" content={`${siteName} — ${siteTagline}`} />
-        <meta property="og:image:type" content="image/png" />
-        <meta name="twitter:image" content="/assets/og-image.png" />
         <script dangerouslySetInnerHTML={{ __html: LANG_INIT_SCRIPT }} />
       </head>
       <body
