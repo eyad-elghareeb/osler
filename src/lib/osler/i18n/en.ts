@@ -1775,7 +1775,9 @@ export const en = {
     // ── Admin settings → AI Agents (MCP tokens) ─────────────────────────
     "admin.settings.section.apiTokens": "AI Agents",
     "admin.tokens.title": "AI agents (MCP)",
-    "admin.tokens.desc": "Mint API tokens that let external AI agents connect over MCP to author content: they can create packs, upload files and submit work for review — publishing always requires a human admin's approval.",
+    "admin.tokens.desc": "Mint API tokens that let external AI agents connect over MCP to author or manage content. Content Admin tokens create drafts safely; Full Admin tokens have unrestricted direct publish and deletion access.",
+    "admin.tokens.adminWarningTitle": "Full Admin Token — Destructive Access",
+    "admin.tokens.adminWarning": "Caution: Admin-scoped tokens have unrestricted access. Agents can directly overwrite live student files, delete content objects permanently, unpublish material, and alter platform settings without prior human approval.",
     "admin.tokens.endpoint": "MCP endpoint",
     "admin.tokens.connectHint": "Point any MCP client (Claude Code, Cursor, …) at this URL and authenticate with one of the tokens below.",
     "admin.tokens.new": "New token",
