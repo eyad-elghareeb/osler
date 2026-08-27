@@ -1274,10 +1274,7 @@ export function QBankStudio({
                 <Button variant="ghost">{t("qbank.exit.stay")}</Button>
               </AlertDialogCancel>
               <AlertDialogAction
-                className={cn(
-                  buttonVariants({ variant: "outline" }),
-                  "text-destructive hover:text-destructive border-destructive/30 hover:border-destructive"
-                )}
+                className={cn(buttonVariants({ variant: "destructive" }))}
                 onClick={exitToHome}
               >
                 {t("qbank.exit.discard")}
