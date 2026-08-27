@@ -16,8 +16,8 @@
 
 import { getConfig } from "./config";
 
-const POLL_INTERVAL_MS = 90_000;
-const MIN_CHECK_GAP_MS = 30_000;
+const POLL_INTERVAL_MS = 180_000;
+const MIN_CHECK_GAP_MS = 5_000;
 
 let currentVersion: string | null = null;
 let started = false;
@@ -131,4 +131,12 @@ export function startContentVersionSync(): void {
   window.addEventListener("focus", check);
   document.addEventListener("visibilitychange", check);
   window.setInterval(check, POLL_INTERVAL_MS);
+}
+
+/**
+ * Force-invalidate local content version and trigger immediate refresh.
+ * Call after admin content mutations (publish, delete, manifest regen).
+ */
+export function invalidateContentVersion(): void {
+  void refreshContentVersion(true);
 }

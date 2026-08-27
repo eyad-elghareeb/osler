@@ -211,22 +211,23 @@ export function OsceStudio({
    * subdirs (images/, assets/) and returns only nodes with no child items,
    * which is exactly the set of packs that can be loaded by uid.
    */
-  React.useEffect(() => {
-    // packsLoading's lazy initializer already reflects cold vs warm cache;
-    // only flip it off when the (possibly cached) tree resolves.
+  const loadOsceData = React.useCallback(() => {
     loadCategoryTree("osce")
       .then((nodes) => {
-        // Preserve the full folder tree for the hub's folder-by-folder
-        // navigation (folder cards → drill-down via NavigationStack).
         setAllTree(nodes);
-        // Also keep a flattened leaf list — used as the lazy content cache
-        // (selectPack writes loaded content back into allPacks by uid).
         const leaves = flattenTree(nodes).filter((node) => node.type === "osce");
         setAllPacks(leaves.map((node) => ({ node, content: null })));
         setPacksLoading(false);
       })
       .catch(() => setPacksLoading(false));
   }, []);
+
+  React.useEffect(() => {
+    loadOsceData();
+    const handler = () => loadOsceData();
+    window.addEventListener("osler-content-invalidated", handler);
+    return () => window.removeEventListener("osler-content-invalidated", handler);
+  }, [loadOsceData]);
 
   /* Self-load a pack from the uid segment so the studio stays mounted */
   const [selfPack, setSelfPack] = React.useState<ReturnType<typeof nodeFromPack> | null>(null);

@@ -62,6 +62,13 @@ export function useContentTree(options?: UseContentTreeOptions): UseContentTreeR
     [typesKey],
   );
 
+  const [versionTick, setVersionTick] = React.useState(0);
+  React.useEffect(() => {
+    const handler = () => setVersionTick((v) => v + 1);
+    window.addEventListener("osler-content-invalidated", handler);
+    return () => window.removeEventListener("osler-content-invalidated", handler);
+  }, []);
+
   React.useEffect(() => {
     let cancelled = false;
     setLoading(true);
@@ -111,7 +118,7 @@ export function useContentTree(options?: UseContentTreeOptions): UseContentTreeR
     return () => {
       cancelled = true;
     };
-  }, [typesKey, types]);
+  }, [typesKey, types, versionTick]);
 
   const items = React.useMemo<LeafItem[]>(() => {
     const list: LeafItem[] = [];

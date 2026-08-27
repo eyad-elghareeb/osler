@@ -26,6 +26,8 @@ import {
 } from "@/components/osler/admin/admin-api";
 import { r2KeyToWorkerUrl } from "@/components/osler/admin/editors/image-upload";
 import type { ContentTreeNode } from "@/components/osler/admin/content-tree-pane";
+import { clearContentCache } from "@/lib/osler/content";
+import { invalidateContentVersion } from "@/lib/osler/content-version";
 import { collectStagedKeys, folderPathOf } from "./types";
 
 // ── Types ───────────────────────────────────────────────────────────────────
@@ -175,7 +177,10 @@ export function useContentActions({
       .replace(/^\/+/, "");
     const cat = clean.split("/")[0];
     if (cat && ["library", "qbank", "flashcard", "osce", "videos"].includes(cat)) {
-      adminApi.regenerateManifest(cat).catch((err) => {
+      adminApi.regenerateManifest(cat).then(() => {
+        clearContentCache();
+        invalidateContentVersion();
+      }).catch((err) => {
         // Background best-effort — surface briefly so failures aren't
         // silently swallowed (students would keep serving stale manifests).
         console.warn("manifest regen failed:", cat, err);
@@ -597,6 +602,8 @@ export function useContentActions({
     setRegenerating(true);
     try {
       const res = await adminApi.regenerateManifest("all");
+      clearContentCache();
+      invalidateContentVersion();
       const failed = Object.entries(res.results).filter(([, v]) => !v.startsWith("ok") && v !== "empty");
       if (failed.length === 0) {
         toast({ title: t("admin.toast.manifestsRegenerated") });

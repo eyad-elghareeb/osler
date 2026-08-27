@@ -115,6 +115,13 @@ export function clearSidecarCache(sidePath?: string): void {
   else sidecarCache.clear();
 }
 
+/** Invalidate all library article caches. */
+export function clearArticlesCache(): void {
+  treeCache = null;
+  leafArticleCache = null;
+  sidecarCache.clear();
+}
+
 export interface Article extends ArticleMeta {
   content: string;
   html: string;

@@ -135,14 +135,13 @@ export function VideosStudio({
   });
 
   /* ── Load tree (manifest) only — folder videos load on demand ── */
-  React.useEffect(() => {
+  const loadTreeData = React.useCallback(() => {
     (async () => {
       try {
         const treeData = await loadVideoTree();
         setTree(treeData);
-        // Auto-select the first leaf folder so the right pane isn't empty.
-        const firstLeaf = findFirstLeaf(treeData);
-        if (firstLeaf) setSelectedNodeUid(firstLeaf.uid);
+        // Auto-select the first leaf folder if none selected
+        setSelectedNodeUid((curr) => curr || findFirstLeaf(treeData)?.uid || null);
       } catch (e) {
         console.error("Failed to load videos tree:", e);
       } finally {
@@ -150,6 +149,13 @@ export function VideosStudio({
       }
     })();
   }, []);
+
+  React.useEffect(() => {
+    loadTreeData();
+    const handler = () => loadTreeData();
+    window.addEventListener("osler-content-invalidated", handler);
+    return () => window.removeEventListener("osler-content-invalidated", handler);
+  }, [loadTreeData]);
 
   // Load videos in the selected folder. Branch nodes aggregate every
   // descendant leaf (nested folders act as playlists). Each video is

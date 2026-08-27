@@ -1475,14 +1475,24 @@ async function manifestMetadataForFiles(env: Env, category: string, folderPath: 
  * epoch ms — two writes in the same millisecond collapse to one version,
  * which is harmless because they'd ship near-identical manifests. */
 const CONTENT_VERSION_KEY = "content-manifests/version.json";
+let memoryCachedContentVersion: { version: string | null; cachedAt: number } | null = null;
 
 async function readContentVersion(env: Env): Promise<string | null> {
   if (!env.CONTENT) return null;
+  const now = Date.now();
+  if (memoryCachedContentVersion && now - memoryCachedContentVersion.cachedAt < 10_000) {
+    return memoryCachedContentVersion.version;
+  }
   try {
     const obj = await env.CONTENT.get(CONTENT_VERSION_KEY);
-    if (!obj) return null;
+    if (!obj) {
+      memoryCachedContentVersion = { version: null, cachedAt: now };
+      return null;
+    }
     const parsed = JSON.parse(await obj.text()) as { version?: unknown };
-    return typeof parsed.version === "string" ? parsed.version : null;
+    const ver = typeof parsed.version === "string" ? parsed.version : null;
+    memoryCachedContentVersion = { version: ver, cachedAt: now };
+    return ver;
   } catch {
     return null;
   }
@@ -1491,6 +1501,7 @@ async function readContentVersion(env: Env): Promise<string | null> {
 /** Writes a fresh version stamp and returns it; best-effort, never throws. */
 async function bumpContentVersion(env: Env): Promise<string> {
   const version = `${Date.now()}`;
+  memoryCachedContentVersion = { version, cachedAt: Date.now() };
   if (!env.CONTENT) return version;
   try {
     await env.CONTENT.put(CONTENT_VERSION_KEY, JSON.stringify({ version, updatedAt: Date.now() }), {
@@ -4587,11 +4598,16 @@ export default {
 
       // ── Public content manifests (R2-backed) ──
       if (request.method === "GET" && url.pathname.startsWith("/v1/content-manifests/")) {
+        const versioned = url.searchParams.has("v");
+        const cacheReq = new Request(request.url, { method: "GET" });
+        if (versioned) {
+          try {
+            const cached = await caches.default.match(cacheReq);
+            if (cached) return cached;
+          } catch {}
+        }
         let manifestPath = url.pathname.slice("/v1/content-manifests/".length).replace(/\/{2,}/g, "/");
         if (!env.CONTENT) return json({ error: "Content storage not configured" }, 503, origin, log);
-        // Only the known category manifests are public — never let a path
-        // escape the content-manifests keyspace or reach non-manifest keys.
-        // Decode first so encoded traversal can't slip past the ".." check.
         try { manifestPath = decodeURIComponent(manifestPath); } catch { return json({ error: "Not found" }, 404, origin, log); }
         const category = manifestPath.split("/")[0];
         const knownFile = /^manifest\.json$/i.test(manifestPath.split("/").slice(1).join("/"));
@@ -4600,22 +4616,20 @@ export default {
         const r2Key = `content-manifests/${manifestPath}`;
         const obj = await env.CONTENT.get(r2Key);
         if (!obj) return json({ error: "Not found" }, 404, origin, log);
-        // Versioned requests (?v=<stamp>) are immutable: the stamp changes on
-        // every content mutation, so the URL itself is the cache key and the
-        // browser/CDN may hold it for a year. Unversioned requests (boot-time
-        // fetch before a version is known) stay nearly uncached so content
-        // changes surface promptly without waiting for max-age to expire.
-        const versioned = url.searchParams.has("v");
         const manifestHeaders: Record<string, string> = {
           "content-type": "application/json",
           "cache-control": versioned
             ? "public, max-age=31536000, immutable"
-            : "public, max-age=30, stale-while-revalidate=300",
+            : "no-cache, no-store, must-revalidate",
           ...cors(origin),
           ...SECURITY_HEADERS,
           "cross-origin-resource-policy": "cross-origin",
         };
-        return new Response(obj.body, { status: 200, headers: manifestHeaders as any });
+        const response = new Response(obj.body, { status: 200, headers: manifestHeaders as any });
+        if (versioned) {
+          try { await caches.default.put(cacheReq, response.clone()); } catch {}
+        }
+        return response;
       }
 
       // ── Google OAuth ──

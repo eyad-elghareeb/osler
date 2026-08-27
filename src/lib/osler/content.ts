@@ -26,6 +26,8 @@ import type {
 } from "./types";
 import { isEngineEnabled, getEngineOverride, enabledEngines, loadConfig } from "./config";
 import { onContentVersionChange } from "./content-version";
+import { clearArticlesCache } from "./articles";
+import { clearVideosCache } from "./videos";
 import {
   manifestUrl,
   contentFileUrl,
@@ -453,10 +455,18 @@ function nodeCacheSet(uid: string, node: ContentTreeNode): void {
 
 /** Clear the content cache (call after admin content changes). */
 export function clearContentCache(): void {
+  remoteContentUnavailable = false;
+  hasWarnedAboutRemoteFallback = false;
   contentCacheMemo.clear();
   nodeCacheMemo.clear();
   manifestTreeMemo.clear();
   manifestTreeSyncCache.clear();
+  try {
+    clearArticlesCache();
+  } catch {}
+  try {
+    clearVideosCache();
+  } catch {}
 }
 
 /* ── Freshness ────────────────────────────────────────────────────── */

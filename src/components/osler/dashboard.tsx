@@ -88,30 +88,27 @@ export function Dashboard({
   // the dashboard no longer waits for every pack's data files to hydrate.
   const [leaves, setLeaves] = React.useState<ContentTreeNode[] | null>(() => getCachedAllCategoryLeaves());
 
-  React.useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const types = enabledEngines().filter((t) => t !== "library");
-        const folders = [...new Set(types)];
-        const trees = await Promise.all(
-          folders.map((type) => loadCategoryTree(type).catch(() => [] as ContentTreeNode[]))
-        );
-        if (cancelled) return;
-        // quiz/bank/written share the qbank manifest, so the same leaf uid
-        // can appear once per engine type — dedupe to keep keys unique.
+  const loadLeavesData = React.useCallback(() => {
+    const types = enabledEngines().filter((t) => t !== "library");
+    const folders = [...new Set(types)];
+    Promise.all(
+      folders.map((type) => loadCategoryTree(type).catch(() => [] as ContentTreeNode[]))
+    )
+      .then((trees) => {
         const byUid = new Map(
           trees.flatMap((tree) => flattenTree(tree)).map((n) => [n.uid, n]),
         );
         setLeaves([...byUid.values()]);
-      } catch {
-        if (!cancelled) setLeaves([]);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
+      })
+      .catch(() => setLeaves([]));
   }, []);
+
+  React.useEffect(() => {
+    loadLeavesData();
+    const handler = () => loadLeavesData();
+    window.addEventListener("osler-content-invalidated", handler);
+    return () => window.removeEventListener("osler-content-invalidated", handler);
+  }, [loadLeavesData]);
 
   const [stats, setStats] = React.useState(() => {
     const all = storage.allProgress();
@@ -197,12 +194,11 @@ export function Dashboard({
   const [videoCount, setVideoCount] = React.useState(() => getCachedVideoCount() ?? 0);
   const [featuredLoading, setFeaturedLoading] = React.useState(true);
 
-  React.useEffect(() => {
+  const loadArticlesData = React.useCallback(() => {
     (async () => {
       try {
         const all = await listAllArticles();
         setArticleCount(all.length);
-        // Load full content for featured articles (need html for preview)
         const previews = await Promise.all(
           all.slice(0, 3).map((a) => loadArticleContent(a.file))
         );
@@ -212,15 +208,25 @@ export function Dashboard({
     })();
   }, []);
 
-  // Load video count (separate effect — independent of articles)
   React.useEffect(() => {
-    (async () => {
-      try {
-        const videos = await listAllVideos();
-        setVideoCount(videos.length);
-      } catch {}
-    })();
+    loadArticlesData();
+    const handler = () => loadArticlesData();
+    window.addEventListener("osler-content-invalidated", handler);
+    return () => window.removeEventListener("osler-content-invalidated", handler);
+  }, [loadArticlesData]);
+
+  const loadVideosData = React.useCallback(() => {
+    listAllVideos()
+      .then((videos) => setVideoCount(videos.length))
+      .catch(() => {});
   }, []);
+
+  React.useEffect(() => {
+    loadVideosData();
+    const handler = () => loadVideosData();
+    window.addEventListener("osler-content-invalidated", handler);
+    return () => window.removeEventListener("osler-content-invalidated", handler);
+  }, [loadVideosData]);
 
   const timeAgo = (ts: number) => {
     const diff = Date.now() - ts;

@@ -107,7 +107,7 @@ export function HomeView({
     setExportDialogOpen(true);
   }, []);
 
-  React.useEffect(() => {
+  const loadTreeData = React.useCallback(() => {
     loadCategoryTree("quiz")
       .then((tree) => {
         const leaves = flattenTree(tree).filter(
@@ -120,6 +120,13 @@ export function HomeView({
       })
       .catch(console.error);
   }, []);
+
+  React.useEffect(() => {
+    loadTreeData();
+    const handler = () => loadTreeData();
+    window.addEventListener("osler-content-invalidated", handler);
+    return () => window.removeEventListener("osler-content-invalidated", handler);
+  }, [loadTreeData]);
 
   const loadPack = React.useCallback(async (node: ContentTreeNode): Promise<AnyContent | null> => {
     const cached = data?.items.find((entry) => entry.node.uid === node.uid)?.content;

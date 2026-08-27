@@ -30,6 +30,12 @@ function videoFileUrl(relativePath: string): string {
 let treeCache: ContentTreeNode[] | null = null;
 const leafVideoCache = new Map<string, VideoResource[]>();
 
+/** Invalidate all video caches. */
+export function clearVideosCache(): void {
+  treeCache = null;
+  leafVideoCache.clear();
+}
+
 /* ── Tree loading ──────────────────────────────────────────────────── */
 
 /** Load the videos content tree. Cached after first call. */

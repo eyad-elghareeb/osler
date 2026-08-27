@@ -125,19 +125,14 @@ export function Learn({ onNavigate: propOnNavigate }: LearnProps = {}) {
     };
   });
 
-  React.useEffect(() => {
-    let cancelled = false;
-
-    (async () => {
-      try {
-        const [libraryTree, flashcardTree, osceTree, videoTree] = await Promise.all([
-          loadCategoryTree("library"),
-          loadCategoryTree("flashcard"),
-          loadCategoryTree("osce"),
-          loadCategoryTree("video"),
-        ]);
-        if (cancelled) return;
-
+  const loadCounts = React.useCallback(() => {
+    Promise.all([
+      loadCategoryTree("library"),
+      loadCategoryTree("flashcard"),
+      loadCategoryTree("osce"),
+      loadCategoryTree("video"),
+    ])
+      .then(([libraryTree, flashcardTree, osceTree, videoTree]) => {
         const sumCounts = (nodes: ContentTreeNode[]) =>
           flattenTree(nodes).reduce(
             (total, node) => total + (node.itemCount ?? node.questionCount ?? node.files?.length ?? 0),
@@ -150,15 +145,16 @@ export function Learn({ onNavigate: propOnNavigate }: LearnProps = {}) {
           osce: sumCounts(osceTree),
           videos: sumCounts(videoTree),
         });
-      } catch {
-        // Keep nulls — the UI shows a non-breaking placeholder.
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-    };
+      })
+      .catch(() => {});
   }, []);
+
+  React.useEffect(() => {
+    loadCounts();
+    const handler = () => loadCounts();
+    window.addEventListener("osler-content-invalidated", handler);
+    return () => window.removeEventListener("osler-content-invalidated", handler);
+  }, [loadCounts]);
 
   // Surface a "Continue" hint on the module the user touched most recently.
   const [recentModule, setRecentModule] = React.useState<

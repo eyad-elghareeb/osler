@@ -51,6 +51,8 @@ import { haptic } from "@/lib/osler/native";
 import { cn } from "@/lib/utils";
 import { LoadingState } from "@/components/osler/ui-primitives";
 import { clearSidecarCache } from "@/lib/osler/articles";
+import { clearContentCache } from "@/lib/osler/content";
+import { invalidateContentVersion } from "@/lib/osler/content-version";
 import {
   adminApi,
   type ContentObject,
@@ -477,7 +479,10 @@ export function ContentEditor({ id, rawR2Key, capabilities }: ContentEditorProps
       .replace(/^\/+/, "");
     const cat = clean.split("/")[0];
     if (cat && ["library", "qbank", "flashcard", "osce", "videos"].includes(cat)) {
-      adminApi.regenerateManifest(cat).catch(() => {});
+      adminApi.regenerateManifest(cat).then(() => {
+        clearContentCache();
+        invalidateContentVersion();
+      }).catch(() => {});
     }
   }, []);
 

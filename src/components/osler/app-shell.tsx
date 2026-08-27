@@ -131,7 +131,7 @@ function directionFor(from: OslerView, to: OslerView): ViewTransitionDirection {
 import { useOslerSession } from "@/lib/osler/session-context";
 import { useCurrentView, useOslerRouter, prefetchTopLevelRoutes } from "@/lib/osler/navigation";
 import { loadCategoryTrees, loadContentByUid } from "@/lib/osler/content";
-import { startContentVersionSync } from "@/lib/osler/content-version";
+import { startContentVersionSync, refreshContentVersion } from "@/lib/osler/content-version";
 import { AutoResumeSessionDialog } from "./resume-session-dialog";
 
 interface AppShellProps {
@@ -209,6 +209,7 @@ export function AppShell({ children }: AppShellProps) {
   const handleViewChange = React.useCallback(
     (next: OslerView) => {
       if (next === view) return;
+      void refreshContentVersion();
       navigate(next);
     },
     [view, navigate],

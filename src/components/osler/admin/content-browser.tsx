@@ -63,6 +63,8 @@ import {
   type ContentType,
   type AdminCapabilities,
 } from "@/components/osler/admin/admin-api";
+import { clearContentCache } from "@/lib/osler/content";
+import { invalidateContentVersion } from "@/lib/osler/content-version";
 import { r2KeyToWorkerUrl, isImageR2Key, formatBytes } from "@/components/osler/admin/editors/image-upload";
 import { ImageLightbox } from "@/components/osler/admin/image-lightbox";
 import { useToast } from "@/hooks/use-toast";
@@ -414,6 +416,8 @@ export function ContentBrowser({ capabilities }: ContentBrowserProps) {
     setRegenerating(true);
     try {
       const res = await adminApi.regenerateManifest("all");
+      clearContentCache();
+      invalidateContentVersion();
       const failed = Object.entries(res.results).filter(([, v]) => !v.startsWith("ok") && v !== "empty");
       if (failed.length === 0) {
         toast({ title: t("admin.toast.manifestsRegenerated"), description: Object.entries(res.results).map(([k, v]) => `${k}: ${v}`).join(", ") });
