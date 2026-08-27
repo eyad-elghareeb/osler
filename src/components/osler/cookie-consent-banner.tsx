@@ -60,6 +60,27 @@ export function CookieConsentBanner() {
                 <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
                   {t("consent.description")}
                 </p>
+                <p className="text-[11px] text-muted-foreground mt-2 leading-relaxed">
+                  {t("consent.agreePrefix")}{" "}
+                  <a
+                    href="/docs/terms-of-service.md"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="underline underline-offset-2 hover:text-foreground"
+                  >
+                    {t("legal.tosShort")}
+                  </a>{" "}
+                  {t("consent.and")}{" "}
+                  <a
+                    href="/docs/privacy-policy.md"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="underline underline-offset-2 hover:text-foreground"
+                  >
+                    {t("legal.privacyShort")}
+                  </a>
+                  .
+                </p>
                 <div className="mt-3 flex items-center gap-2">
                   <Button size="sm" onClick={accept} className="text-xs font-medium">
                     {t("consent.accept")}

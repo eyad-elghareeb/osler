@@ -2829,7 +2829,9 @@ export const en = {
 
     // ── Cookie Consent ─────────────────────────────────────────────────────
     "consent.title": "Privacy Notice",
-    "consent.description": "Osler stores data locally on your device (IndexedDB) to power your study progress, offline access, and session state. No tracking cookies or third-party analytics are used. By continuing, you agree to our Terms of Service and Privacy Policy.",
+    "consent.description": "Osler stores data locally on your device (IndexedDB) to power your study progress, offline access, and session state. No tracking cookies or third-party analytics are used.",
+    "consent.agreePrefix": "By continuing, you agree to our",
+    "consent.and": "and",
     "consent.accept": "Got it",
     "consent.dismiss": "Dismiss",
 

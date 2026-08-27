@@ -112,13 +112,13 @@ export const metadata: Metadata = {
     description: `${siteName} — High-yield question bank, active recall flashcards, OSCE simulation, and clinical reference library. Adaptive, offline-ready, and open-source.`,
     siteName: siteName,
     type: "website",
-    images: [{ url: "/assets/og-image.svg", width: 1200, height: 630, alt: `${siteName} — ${siteTagline}` }],
+    images: [{ url: "/assets/og-image.png", width: 1200, height: 630, alt: `${siteName} — ${siteTagline}` }],
   },
   twitter: {
     card: "summary_large_image",
     title: `${siteName} — ${siteTagline}`,
     description: `${siteName} — High-yield question bank, active recall flashcards, OSCE simulation, and clinical reference library.`,
-    images: ["/assets/og-image.svg"],
+    images: ["/assets/og-image.png"],
   },
 };
 
