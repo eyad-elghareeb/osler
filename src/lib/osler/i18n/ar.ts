@@ -729,8 +729,6 @@ export const ar = {
     "library.noResults": "لا توجد مقالات مطابقة لبحثك",
     "library.noBookmarks": "لا توجد مقالات محفوظة بعد",
     "library.backToLibrary": "العودة إلى المكتبة",
-    "library.print": "طباعة المقال",
-    "library.printDesc": "طباعة بصيغة PDF",
     "library.pdfViewer": "مستند PDF",
     "library.pdfOpen": "فتح في تبويب جديد",
     "library.pdfDownload": "تحميل PDF",

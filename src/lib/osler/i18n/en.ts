@@ -728,8 +728,6 @@ export const en = {
     "library.noResults": "No articles match your search",
     "library.noBookmarks": "No bookmarked articles yet",
     "library.backToLibrary": "Back to library",
-    "library.print": "Print article",
-    "library.printDesc": "Print as PDF",
     "library.pdfViewer": "PDF Document",
     "library.pdfOpen": "Open in new tab",
     "library.pdfDownload": "Download PDF",

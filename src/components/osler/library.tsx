@@ -231,68 +231,6 @@ export function Library({ initialArticleId, onNavigateBack: propOnNavigateBack }
   // Mermaid modal state
   const [mermaidModal, setMermaidModal] = React.useState<{ svg: string; title?: string } | null>(null);
 
-  // Print article handler — opens a clean print window
-  const printArticle = React.useCallback(() => {
-    if (!activeArticle) return;
-    haptic("light");
-    // Inject a minimal print-only page that shows just the article title block + content
-    const printHtml = `<!DOCTYPE html>
-<html lang="${activeArticle.lang ?? "en"}" dir="${activeArticle.lang === "ar" ? "rtl" : "ltr"}">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>${activeArticle.title}</title>
-  <style>
-    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-    html { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 11pt; color: #1a1a1a; background: #fff; }
-    body { max-width: 760px; margin: 0 auto; padding: 1.5cm 1cm; }
-    .title-block { margin-bottom: 1.5rem; padding-bottom: 1rem; border-bottom: 2px solid #1a1a1a; }
-    .title-block h1 { font-size: 22pt; font-weight: 700; margin-bottom: 0.3rem; }
-    .title-block .meta { font-size: 9pt; color: #555; }
-    .title-block .meta span + span::before { content: ' · '; }
-    h1 { font-size: 18pt; font-weight: 700; margin: 1.2rem 0 0.5rem; page-break-after: avoid; }
-    h2 { font-size: 14pt; font-weight: 600; margin: 1rem 0 0.4rem; page-break-after: avoid; border-bottom: 1px solid #ddd; padding-bottom: 3pt; }
-    h3 { font-size: 12pt; font-weight: 600; margin: 0.8rem 0 0.3rem; page-break-after: avoid; }
-    p { margin: 0.55rem 0; line-height: 1.6; }
-    ul, ol { padding-left: 1.4rem; margin: 0.5rem 0; }
-    li { margin: 0.2rem 0; }
-    strong { font-weight: 600; }
-    em { font-style: italic; color: #333; }
-    a { color: #1a1a1a; text-decoration: underline; }
-    code { font-family: monospace; background: #f4f4f4; border: 1px solid #ddd; padding: 1px 4px; font-size: 9pt; border-radius: 3px; }
-    pre { background: #f4f4f4; border: 1px solid #ddd; padding: 0.5rem; margin: 0.5rem 0; white-space: pre-wrap; font-size: 9pt; page-break-inside: avoid; border-radius: 4px; }
-    blockquote { border-left: 3px solid #555; background: #f8f8f8; margin: 0.75rem 0; padding: 0.5rem 1rem; page-break-inside: avoid; }
-    table { border-collapse: collapse; width: 100%; margin: 0.75rem 0; page-break-inside: avoid; }
-    th, td { border: 1px solid #ccc; padding: 4pt 6pt; font-size: 9pt; text-align: left; }
-    th { background: #f0f0f0; font-weight: 600; }
-    img { max-width: 100%; page-break-inside: avoid; }
-    .osler-mermaid-toolbar { display: none; }
-    @page { margin: 1.5cm; }
-  </style>
-</head>
-<body>
-  <div class="title-block">
-    <h1>${activeArticle.title}</h1>
-    <div class="meta">
-      ${activeArticle.specialty ? `<span>${activeArticle.specialty}</span>` : ""}
-      ${activeArticle.system ? `<span>${activeArticle.system}</span>` : ""}
-      ${activeArticle.readTimeMin ? `<span>${t("library.readTime", { n: activeArticle.readTimeMin })}</span>` : ""}
-      ${activeArticle.tags?.length ? `<span>${activeArticle.tags.join(", ")}</span>` : ""}
-      <span>${t("pdf.tpl.printedOn")} ${new Date().toLocaleDateString(activeArticle.lang === "ar" ? "ar" : "en-US")}</span>
-    </div>
-  </div>
-  <div class="article-body">${processedArticleHtml}</div>
-</body>
-</html>`;
-    const win = window.open("", "_blank");
-    if (!win) return;
-    win.document.write(printHtml);
-    win.document.close();
-    win.focus();
-    // Small delay so images load before print dialog
-    setTimeout(() => { win.print(); win.close(); }, 400);
-  }, [activeArticle, processedArticleHtml]);
-
   const [pdfDialogOpen, setPdfDialogOpen] = React.useState(false);
   const [reportOpen, setReportOpen] = React.useState(false);
   const reportContext: TicketContext | undefined = activeArticle
@@ -549,7 +487,6 @@ export function Library({ initialArticleId, onNavigateBack: propOnNavigateBack }
             articleContentRef={articleContentRef}
             processedHtml={processedArticleHtml}
             hlCtrl={hlCtrl}
-            onPrint={printArticle}
             onExportPdf={() => setPdfDialogOpen(true)}
             onReport={onReportProblem}
           />
@@ -663,7 +600,6 @@ export function Library({ initialArticleId, onNavigateBack: propOnNavigateBack }
               fontSize={fontSize}
               onFontSizeChange={setFontSize}
               hlCtrl={hlCtrl}
-              onPrint={printArticle}
               onExportPdf={() => setPdfDialogOpen(true)}
               onReport={onReportProblem}
             />
@@ -923,7 +859,6 @@ function MobileReader({
   articleContentRef,
   processedHtml,
   hlCtrl,
-  onPrint,
   onExportPdf,
   onReport,
 }: {
@@ -941,7 +876,6 @@ function MobileReader({
   articleContentRef: React.RefObject<HTMLDivElement | null>;
   processedHtml: string;
   hlCtrl: ReturnType<typeof useArticleHighlighter>;
-  onPrint: () => void;
   onExportPdf: () => void;
   onReport: () => void;
 }) {
@@ -1022,22 +956,13 @@ function MobileReader({
             </div>
             
             {article.contentType === "md" && (
-              <>
-                <button
-                  onClick={onPrint}
-                  className="size-9 rounded-lg flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors"
-                  title={t("library.print")}
-                >
-                  <Printer className="size-4" />
-                </button>
-                <button
-                  onClick={onExportPdf}
-                  className="size-9 rounded-lg flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors"
-                  title={t("pdf.exportResults")}
-                >
-                  <FileText className="size-4" />
-                </button>
-              </>
+              <button
+                onClick={onExportPdf}
+                className="size-9 rounded-lg flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors"
+                title={t("pdf.exportResults")}
+              >
+                <Printer className="size-4" />
+              </button>
             )}
 
             {article.fileUrl && article.contentType === "pdf" && (
@@ -1306,7 +1231,6 @@ function ArticleHeader({
   fontSize,
   onFontSizeChange,
   hlCtrl,
-  onPrint,
   onExportPdf,
   onReport,
 }: {
@@ -1320,7 +1244,6 @@ function ArticleHeader({
   fontSize: number;
   onFontSizeChange: (s: number) => void;
   hlCtrl: ReturnType<typeof useArticleHighlighter>;
-  onPrint: () => void;
   onExportPdf: () => void;
   onReport: () => void;
 }) {
@@ -1425,22 +1348,13 @@ function ArticleHeader({
         )}
 
         {article.contentType === "md" && (
-          <>
-            <button
-              onClick={onPrint}
-              className="osler-icon-btn size-9 flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors"
-              title={t("library.print")}
-            >
-              <Printer className="size-4" />
-            </button>
-            <button
-              onClick={onExportPdf}
-              className="osler-icon-btn size-9 flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors"
-              title={t("pdf.exportResults")}
-            >
-              <FileText className="size-4" />
-            </button>
-          </>
+          <button
+            onClick={onExportPdf}
+            className="osler-icon-btn size-9 flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors"
+            title={t("pdf.exportResults")}
+          >
+            <Printer className="size-4" />
+          </button>
         )}
 
         {article.fileUrl && article.contentType === "pdf" && (
