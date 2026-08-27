@@ -25,6 +25,7 @@ import type {
   VideoContent,
 } from "./types";
 import { isEngineEnabled, getEngineOverride, enabledEngines, loadConfig } from "./config";
+import { onContentVersionChange } from "./content-version";
 import {
   manifestUrl,
   contentFileUrl,
@@ -455,6 +456,19 @@ export function clearContentCache(): void {
   contentCacheMemo.clear();
   nodeCacheMemo.clear();
   manifestTreeMemo.clear();
+  manifestTreeSyncCache.clear();
+}
+
+/* ── Freshness ────────────────────────────────────────────────────── */
+
+// A moved content version means remote manifests changed: drop every cached
+// tree/pack so the next load re-fetches (with the new ?v= stamp) instead of
+// rendering what the previous version served. Registered once per session —
+// startContentVersionSync() (app shell) drives the version checks.
+if (typeof window !== "undefined") {
+  onContentVersionChange(() => {
+    clearContentCache();
+  });
 }
 
 /**

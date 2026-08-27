@@ -7,6 +7,7 @@
  */
 
 import { getConfig } from "./config";
+import { currentContentVersion } from "./content-version";
 
 /** Collapse runs of `/` in a URL path (except after `://`) to prevent double-slash R2 key mismatches. */
 function normalizeUrl(url: string): string {
@@ -65,11 +66,22 @@ function remotePackBasePath(apiUrl: string, category: string, nodePath: string):
  * Resolve the preferred manifest URL for a given category folder. Cloud-enabled
  * instances get the Worker URL first; callers may use localManifestUrl() when
  * the remote source is unavailable.
+ *
+ * When a content version is known (see content-version.ts) the URL gains a
+ * `?v=<stamp>` cache-buster, so freshly published manifests download instantly
+ * instead of being served from the browser/HTTP cache under the old URL.
  */
 export function manifestUrl(folder: string): string {
   const apiUrl = resolvedApiUrl();
-  if (apiUrl) return normalizeUrl(remoteManifestUrl(apiUrl, folder));
-  return localManifestUrl(folder);
+  if (apiUrl) return cacheBust(normalizeUrl(remoteManifestUrl(apiUrl, folder)));
+  return cacheBust(localManifestUrl(folder));
+}
+
+/** Append the current content-version stamp to a URL that has none yet. */
+function cacheBust(url: string): string {
+  const version = currentContentVersion();
+  if (!version || url.includes("v=")) return url;
+  return `${url}${url.includes("?") ? "&" : "?"}v=${encodeURIComponent(version)}`;
 }
 
 /** Resolve a preferred content file URL (data files, images, articles). */

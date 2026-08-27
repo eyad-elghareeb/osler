@@ -379,6 +379,12 @@ function generate() {
     .filter((e) => e.isDirectory() && !e.name.startsWith("."))
     .map((e) => e.name);
 
+  // Content version stamp — bumped on every generator run so the client can
+  // cache-bust manifest requests (mirrors the Worker's content-manifests/
+  // version.json on cloud instances). Manifest reads go through
+  // /osler-content/content-version.json first, then manifests via ?v=<stamp>.
+  const version = `${Date.now()}`;
+
   for (const category of categories) {
     const categoryPath = path.join(CONTENT_DIR, category);
     const parentType = FOLDER_TYPE_MAP[category] || null; // null = auto-detect per folder
@@ -391,12 +397,20 @@ function generate() {
     const manifest = {
       type: manifestType,
       items,
+      version,
     };
 
     const manifestPath = path.join(categoryPath, MANIFEST_NAME);
     fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2), "utf-8");
     console.log(`✓ Generated ${category}/manifest.json (${countLeaves(items)} leaf items)`);
   }
+
+  fs.writeFileSync(
+    path.join(CONTENT_DIR, "content-version.json"),
+    JSON.stringify({ version, updatedAt: Date.now() }, null, 2),
+    "utf-8"
+  );
+  console.log(`✓ content-version.json (v${version})`);
 
   console.log("\nDone. Run this script after adding or removing content folders.");
 }
