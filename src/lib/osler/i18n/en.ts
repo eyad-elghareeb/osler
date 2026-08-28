@@ -26,6 +26,8 @@ export const en = {
     "common.confirm": "Confirm",
     "common.dismiss": "Dismiss",
     "common.loading": "Loading…",
+    "common.comingSoon": "Coming soon",
+    "common.comingSoonDesc": "This section hasn't been populated with content yet. Check back soon.",
     "common.none": "None",
     "common.remove": "Remove",
     "common.all": "All",

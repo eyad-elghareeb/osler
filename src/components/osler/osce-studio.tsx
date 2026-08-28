@@ -11,7 +11,7 @@ import { cn } from "@/lib/utils";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { setImmersiveMode } from "@/components/osler/immersive-mode";
 import { useI18n } from "@/components/osler/i18n-provider";
-import { HubSkeleton, EmptyState } from "@/components/osler/ui-primitives";
+import { HubSkeleton, EmptyState, ComingSoonState } from "@/components/osler/ui-primitives";
 import { Button } from "@/components/ui/button";
 import { ContentCacheButton } from "@/components/osler/content-cache-button";
 import { useSwipeBackDismiss } from "@/hooks/use-swipe-back-dismiss";
@@ -1341,6 +1341,8 @@ export function OsceStudio({
               <Loader2 className="size-6 animate-spin text-primary" />
               <span className="text-sm">{t("osce.home.loading")}</span>
             </div>
+          ) : allTree.length === 0 ? (
+            <ComingSoonState icon={Stethoscope} />
           ) : filteredRootTree.length === 0 ? (
             <div className="osler-empty">
               <div className="osler-empty__icon">

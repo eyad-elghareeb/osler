@@ -10,7 +10,7 @@ import { ContentCacheButton } from "@/components/osler/content-cache-button";
 import { haptic } from "@/lib/osler/native";
 import { useI18n } from "@/components/osler/i18n-provider";
 import { NavigationStack } from "@/components/osler/navigation-stack";
-import { EmptyState, HubSkeleton, MetricBar } from "@/components/osler/ui-primitives";
+import { EmptyState, ComingSoonState, HubSkeleton, MetricBar } from "@/components/osler/ui-primitives";
 import { PackEntry, ENGINE_ICONS, countQuestions } from "./shared";
 
 
@@ -285,7 +285,7 @@ export function ContentTab({
     return (
       <div className="osler-page">
         <div className="osler-page__inner">
-          <EmptyState icon={Grid3x3} title={t("qbank.home.empty")} />
+          <ComingSoonState icon={Grid3x3} />
         </div>
       </div>
     );
@@ -436,7 +436,7 @@ export function ContentTab({
 
         {/* Child items grid */}
         {childTree.length === 0 ? (
-          <EmptyState icon={Folder} title={t("qbank.home.empty")} />
+          <ComingSoonState icon={Folder} />
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {childTree.map((child, idx) => {

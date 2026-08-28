@@ -45,7 +45,7 @@ import { haptic } from "@/lib/osler/native";
 import { setImmersiveMode } from "./immersive-mode";
 import { useI18n } from "./i18n-provider";
 import { ContentCacheButton } from "./content-cache-button";
-import { EmptyState } from "./ui-primitives";
+import { EmptyState, ComingSoonState } from "./ui-primitives";
 import { NavigationStack } from "./navigation-stack";
 import { useSwipeBackDismiss } from "@/hooks/use-swipe-back-dismiss";
 import { useOslerRouter, routeFor } from "@/lib/osler/navigation";
@@ -856,7 +856,9 @@ export function FlashcardStudio({
         </div>
 
         {/* Deck grid */}
-        {filteredTree.length === 0 ? (
+        {tree.length === 0 ? (
+          <ComingSoonState icon={Layers} />
+        ) : filteredTree.length === 0 ? (
           <EmptyState
             icon={Layers}
             title={t("flash.home.empty")}

@@ -38,7 +38,7 @@ import { contentFileUrl } from "@/lib/osler/content-url";
 import type { ContentTreeNode } from "@/lib/osler/types";
 import { cn } from "@/lib/utils";
 import { Skeleton } from "@/components/ui/skeleton";
-import { SkeletonText, EmptyState as SharedEmptyState } from "./ui-primitives";
+import { SkeletonText, EmptyState as SharedEmptyState, ComingSoonState } from "./ui-primitives";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useArticleHighlighter } from "@/hooks/use-article-highlighter";
 import { useOslerTheme } from "./theme-provider";
@@ -744,13 +744,13 @@ function MobileHub({
       </div>
 
       <div className="px-4 pb-4">
-        {grouped.length === 0 ? (
+        {filter === "all" && allArticles.length === 0 ? (
+          <ComingSoonState icon={BookOpen} className="py-16" />
+        ) : grouped.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-16 text-center">
             <BookOpen className="size-10 text-muted-foreground/30 mb-3" />
             <p className="text-sm text-muted-foreground">
-              {filter === "bookmarked"
-                ? t("library.noBookmarks")
-                : t("library.empty")}
+              {filter === "bookmarked" ? t("library.noBookmarks") : t("library.empty")}
             </p>
           </div>
         ) : (
@@ -1496,6 +1496,13 @@ function EmptyState({
 }) {
   const { t } = useI18n();
   const popular = allArticles.slice(0, 6);
+  if (allArticles.length === 0) {
+    return (
+      <div className="flex-1 flex flex-col items-center justify-center">
+        <ComingSoonState icon={LibraryIcon} />
+      </div>
+    );
+  }
   return (
     <div className="flex-1 flex flex-col items-center justify-center">
       <SharedEmptyState

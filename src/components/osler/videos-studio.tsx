@@ -46,7 +46,7 @@ import { setImmersiveMode } from "./immersive-mode";
 import { useShortcutListener } from "@/hooks/use-shortcuts";
 import { useI18n } from "./i18n-provider";
 import { FolderTreeNav } from "./folder-tree-nav";
-import { HubSkeleton, EmptyState } from "./ui-primitives";
+import { HubSkeleton, EmptyState, ComingSoonState } from "./ui-primitives";
 import { ContentCacheButton } from "./content-cache-button";
 import {
   acquireWakeLock,
@@ -447,7 +447,7 @@ export function VideosStudio({
                 ))}
               </div>
             ) : displayVideos.length === 0 ? (
-              <EmptyState icon={VideoIcon} title={t("videos.empty")} />
+              <ComingSoonState icon={VideoIcon} />
             ) : (
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                 {displayVideos.map((video, idx) => {

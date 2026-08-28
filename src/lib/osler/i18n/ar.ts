@@ -26,6 +26,8 @@ export const ar = {
     "common.confirm": "تأكيد",
     "common.dismiss": "تجاهل",
     "common.loading": "جارٍ التحميل…",
+    "common.comingSoon": "قريبًا",
+    "common.comingSoonDesc": "لم يُضف محتوى إلى هذا القسم بعد. عد لزيارتنا قريبًا.",
     "common.none": "لا شيء",
     "common.remove": "إزالة",
     "common.all": "الكل",

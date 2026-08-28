@@ -29,7 +29,7 @@
  */
 
 import * as React from "react";
-import { Loader2, ChevronRight, Check, ChevronsUpDown, type LucideIcon } from "lucide-react";
+import { Loader2, ChevronRight, Check, ChevronsUpDown, Construction, type LucideIcon } from "lucide-react";
 import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
 import {
   Command,
@@ -52,6 +52,7 @@ import {
   pressFeedback,
 } from "@/lib/osler/motion";
 import { useSwipeBackDismiss } from "@/hooks/use-swipe-back-dismiss";
+import { useI18n } from "./i18n-provider";
 
 /* ─── PageHeader ─────────────────────────────────────────────────────── */
 
@@ -277,6 +278,36 @@ export function EmptyState({ icon: Icon, title, description, actions, className 
         </motion.div>
       )}
     </motion.div>
+  );
+}
+
+/* ─── ComingSoonState ───────────────────────────────────────────────── */
+
+interface ComingSoonStateProps {
+  /** Optional lucide icon override (defaults to Construction). */
+  icon?: LucideIcon;
+  /** Optional title override (defaults to the shared "Coming soon" label). */
+  title?: React.ReactNode;
+  /** Optional description override. */
+  description?: React.ReactNode;
+  className?: string;
+}
+
+/**
+ * ComingSoonState — the canonical empty state for modules/sections whose
+ * content has not been published yet. Distinguishes "this space is empty
+ * because nothing ships here yet" from the user-facing "no results" case
+ * handled by <EmptyState>.
+ */
+export function ComingSoonState({ icon: Icon = Construction, title, description, className }: ComingSoonStateProps) {
+  const { t } = useI18n();
+  return (
+    <EmptyState
+      icon={Icon}
+      title={title ?? t("common.comingSoon")}
+      description={description ?? t("common.comingSoonDesc")}
+      className={className}
+    />
   );
 }
 
