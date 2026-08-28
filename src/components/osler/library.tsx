@@ -73,6 +73,55 @@ type SidebarTab = "toc" | "bookmarks";
 
 const BOOKMARKS_KEY = "osler-article-bookmarks";
 
+/* ── Reader display preferences ──────────────────────────────────── */
+/* Zoom + text size + typeface + line spacing + reading width — one
+ * persisted bundle edited through the unified display menu. */
+
+type FontFamilyPref = "serif" | "sans";
+type LineSpacingPref = "compact" | "cozy" | "relaxed";
+type WidthPref = "normal" | "wide";
+
+interface ReaderDisplayPrefs {
+  fontSize: number;
+  zoom: number;
+  fontFamily: FontFamilyPref;
+  lineSpacing: LineSpacingPref;
+  width: WidthPref;
+}
+
+const LINE_HEIGHTS: Record<LineSpacingPref, number> = {
+  compact: 1.5,
+  cozy: 1.7,
+  relaxed: 2,
+};
+
+const DISPLAY_STORAGE_KEY = "osler-reader-display";
+
+const DEFAULT_DISPLAY: ReaderDisplayPrefs = {
+  fontSize: 15,
+  zoom: 100,
+  fontFamily: "serif",
+  lineSpacing: "cozy",
+  width: "normal",
+};
+
+function loadDisplayPrefs(): ReaderDisplayPrefs {
+  try {
+    const raw = window.localStorage.getItem(DISPLAY_STORAGE_KEY);
+    return raw ? { ...DEFAULT_DISPLAY, ...JSON.parse(raw) } : { ...DEFAULT_DISPLAY };
+  } catch {
+    return { ...DEFAULT_DISPLAY };
+  }
+}
+
+function saveDisplayPrefs(prefs: ReaderDisplayPrefs): void {
+  try {
+    window.localStorage.setItem(DISPLAY_STORAGE_KEY, JSON.stringify(prefs));
+  } catch {
+    // ignore storage failures (private mode)
+  }
+}
+
 export function Library({ initialArticleId, onNavigateBack: propOnNavigateBack }: LibraryProps = {}) {
   const { rtl, t } = useI18n();
   const { navigate } = useOslerRouter();
@@ -85,8 +134,17 @@ export function Library({ initialArticleId, onNavigateBack: propOnNavigateBack }
   );
   const [activeArticle, setActiveArticle] = React.useState<Article | null>(null);
   const [bookmarks, setBookmarks] = React.useState<Set<string>>(new Set());
-  const [zoom, setZoom] = React.useState(100);
-  const [fontSize, setFontSize] = React.useState(15);
+  const [display, setDisplay] = React.useState<ReaderDisplayPrefs>(() => {
+    if (typeof window === "undefined") return { ...DEFAULT_DISPLAY };
+    return loadDisplayPrefs();
+  });
+  const updateDisplay = React.useCallback((patch: Partial<ReaderDisplayPrefs>) => {
+    setDisplay((d) => ({ ...d, ...patch }));
+  }, []);
+
+  React.useEffect(() => {
+    saveDisplayPrefs(display);
+  }, [display]);
   const [sidebarOpen, setSidebarOpen] = React.useState(false);
   const isMobile = useIsMobile();
 
@@ -406,12 +464,8 @@ export function Library({ initialArticleId, onNavigateBack: propOnNavigateBack }
             isBookmarked={bookmarks.has(activeFile)}
             onToggleBookmark={() => toggleBookmark(activeFile)}
             onBack={closeArticle}
-            zoom={zoom}
-            onZoomIn={() => setZoom((z) => Math.min(140, z + 10))}
-            onZoomOut={() => setZoom((z) => Math.max(80, z - 10))}
-            onResetZoom={() => setZoom(100)}
-            fontSize={fontSize}
-            onFontSizeChange={setFontSize}
+            display={display}
+            onDisplayChange={updateDisplay}
             loading={loading}
             articleContentRef={articleContentRef}
             processedHtml={processedArticleHtml}
@@ -513,12 +567,8 @@ export function Library({ initialArticleId, onNavigateBack: propOnNavigateBack }
               article={activeArticle}
               isBookmarked={bookmarks.has(activeFile!)}
               onToggleBookmark={() => activeFile && toggleBookmark(activeFile)}
-              zoom={zoom}
-              onZoomIn={() => setZoom((z) => Math.min(140, z + 10))}
-              onZoomOut={() => setZoom((z) => Math.max(80, z - 10))}
-              onResetZoom={() => setZoom(100)}
-              fontSize={fontSize}
-              onFontSizeChange={setFontSize}
+              display={display}
+              onDisplayChange={updateDisplay}
               hlCtrl={hlCtrl}
               onExportPdf={() => setPdfDialogOpen(true)}
               onReport={onReportProblem}
@@ -563,8 +613,13 @@ export function Library({ initialArticleId, onNavigateBack: propOnNavigateBack }
                     dir={activeArticle?.lang === "ar" ? "rtl" : "ltr"}
                     lang={activeArticle?.lang ?? "en"}
                     style={{
-                      fontSize: `${(zoom / 100) * fontSize}px`,
-                      lineHeight: 1.7,
+                      fontSize: `${(display.zoom / 100) * display.fontSize}px`,
+                      lineHeight: LINE_HEIGHTS[display.lineSpacing],
+                      fontFamily:
+                        display.fontFamily === "sans"
+                          ? "var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif"
+                          : undefined,
+                      maxWidth: display.width === "wide" ? "1200px" : undefined,
                     }}
                   />
                 </motion.div>
@@ -763,12 +818,8 @@ function MobileReader({
   isBookmarked,
   onToggleBookmark,
   onBack,
-  zoom,
-  onZoomIn,
-  onZoomOut,
-  onResetZoom,
-  fontSize,
-  onFontSizeChange,
+  display,
+  onDisplayChange,
   loading,
   articleContentRef,
   processedHtml,
@@ -781,12 +832,8 @@ function MobileReader({
   isBookmarked: boolean;
   onToggleBookmark: () => void;
   onBack: () => void;
-  zoom: number;
-  onZoomIn: () => void;
-  onZoomOut: () => void;
-  onResetZoom: () => void;
-  fontSize: number;
-  onFontSizeChange: (s: number) => void;
+  display: ReaderDisplayPrefs;
+  onDisplayChange: (patch: Partial<ReaderDisplayPrefs>) => void;
   loading: boolean;
   articleContentRef: React.RefObject<HTMLDivElement | null>;
   processedHtml: string;
@@ -794,7 +841,6 @@ function MobileReader({
   onExportPdf: () => void;
   onReport: () => void;
 }) {
-  const [fontPopoverOpen, setFontPopoverOpen] = React.useState(false);
   const { t } = useI18n();
   // NOTE: The swipe-to-go-back gesture is now handled by the parent
   // NavigationStack (which wraps MobileReader as its subpage). MobileReader
@@ -833,42 +879,11 @@ function MobileReader({
           </div>
 
           <div className="flex items-center gap-0.5">
-            <div className="relative">
-              <button
-                onClick={() => setFontPopoverOpen(!fontPopoverOpen)}
-                className="size-9 rounded-lg flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors"
-                title={t("library.fontSize")}
-              >
-                <Type className="size-4" />
-              </button>
-              <AnimatePresence>
-                {fontPopoverOpen && (
-                  <motion.div
-                    initial={{ opacity: 0, y: 4 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: 4 }}
-                    className="absolute right-0 top-full mt-1 z-30 bg-card border border-border rounded-lg shadow-lg p-3 w-auto"
-                  >
-                    <div className="flex items-center gap-2">
-                      <span className="text-[11px] text-muted-foreground w-16">{t("library.fontSize")}</span>
-                      <button
-                        onClick={() => onFontSizeChange(Math.max(12, fontSize - 1))}
-                        className="size-7 rounded bg-muted hover:bg-muted/70 flex items-center justify-center"
-                      >
-                        <Minus className="size-3" />
-                      </button>
-                      <span className="text-xs font-mono tabular-nums w-5 text-center">{fontSize}</span>
-                      <button
-                        onClick={() => onFontSizeChange(Math.min(22, fontSize + 1))}
-                        className="size-7 rounded bg-muted hover:bg-muted/70 flex items-center justify-center"
-                      >
-                        <PlusIcon className="size-3" />
-                      </button>
-                    </div>
-                  </motion.div>
-                )}
-              </AnimatePresence>
-            </div>
+            <DisplayMenu
+              display={display}
+              onChange={onDisplayChange}
+              buttonClassName="size-9 rounded-lg flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors"
+            />
             
             {article.contentType === "md" && (
               <button
@@ -931,36 +946,6 @@ function MobileReader({
           </div>
         </div>
 
-        {/* Zoom controls row — only for markdown articles */}
-        {article.contentType === "md" && (
-          <div className="flex items-center justify-between px-3 pb-2 border-b border-border">
-            <div className="flex items-center gap-0.5">
-              <button
-                onClick={onZoomOut}
-                disabled={zoom <= 80}
-                className="size-7 rounded-md flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors disabled:opacity-30"
-                title="Zoom out"
-              >
-                <ZoomOut className="size-3.5" />
-              </button>
-              <button
-                onClick={onResetZoom}
-                className="text-[10px] font-mono tabular-nums px-1.5 h-7 rounded-md hover:bg-muted text-muted-foreground min-w-[2.5rem]"
-                title="Reset zoom"
-              >
-                {zoom}%
-              </button>
-              <button
-                onClick={onZoomIn}
-                disabled={zoom >= 140}
-                className="size-7 rounded-md flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors disabled:opacity-30"
-                title="Zoom in"
-              >
-                <ZoomIn className="size-3.5" />
-              </button>
-            </div>
-          </div>
-        )}
       </header>
 
       {/* Content */}
@@ -1002,8 +987,12 @@ function MobileReader({
               dir={article.lang === "ar" ? "rtl" : "ltr"}
               lang={article.lang ?? "en"}
               style={{
-                fontSize: `${(zoom / 100) * fontSize}px`,
-                lineHeight: 1.7,
+                fontSize: `${(display.zoom / 100) * display.fontSize}px`,
+                lineHeight: LINE_HEIGHTS[display.lineSpacing],
+                fontFamily:
+                  display.fontFamily === "sans"
+                    ? "var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif"
+                    : undefined,
               }}
             />
           </motion.div>
@@ -1138,16 +1127,225 @@ function SidebarContent({
   );
 }
 
+/* ── Unified display menu ────────────────────────────────────────── */
+/* One popover for everything that shapes the article reading surface:
+ * text size, zoom, typeface, line spacing and reading width. */
+
+function MenuLabel({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+      {children}
+    </div>
+  );
+}
+
+function StepperButton({
+  onClick,
+  disabled,
+  children,
+  label,
+}: {
+  onClick: () => void;
+  disabled?: boolean;
+  children: React.ReactNode;
+  label: string;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      className="size-7 rounded-md bg-muted hover:bg-muted/70 disabled:opacity-40 flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors"
+      aria-label={label}
+      title={label}
+    >
+      {children}
+    </button>
+  );
+}
+
+function DisplayPills<T extends string>({
+  value,
+  onChange,
+  options,
+}: {
+  value: T;
+  onChange: (v: T) => void;
+  options: Array<{ value: T; label: string }>;
+}) {
+  return (
+    <div className="flex gap-1">
+      {options.map((opt) => (
+        <button
+          key={opt.value}
+          type="button"
+          role="radio"
+          aria-checked={value === opt.value}
+          onClick={() => {
+            if (opt.value === value) return;
+            haptic("selection");
+            onChange(opt.value);
+          }}
+          className={cn(
+            "flex-1 h-7 rounded-md text-xs font-medium transition-colors",
+            value === opt.value
+              ? "bg-primary/15 text-primary border border-primary/30"
+              : "bg-muted/60 text-muted-foreground hover:text-foreground border border-transparent",
+          )}
+        >
+          {opt.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function DisplayMenu({
+  display,
+  onChange,
+  buttonClassName = "osler-icon-btn size-8",
+}: {
+  display: ReaderDisplayPrefs;
+  onChange: (patch: Partial<ReaderDisplayPrefs>) => void;
+  /** Button styling override (mobile header uses a larger touch target). */
+  buttonClassName?: string;
+}) {
+  const [open, setOpen] = React.useState(false);
+  const { t } = useI18n();
+
+  return (
+    <div className="relative">
+      <button
+        onClick={() => { haptic("selection"); setOpen((o) => !o); }}
+        className={buttonClassName}
+        title={t("library.display")}
+        aria-label={t("library.display")}
+        aria-expanded={open}
+      >
+        <Type className="size-4" />
+      </button>
+      <AnimatePresence>
+        {open && (
+          <>
+            {/* Invisible backdrop — click-away close */}
+            <div className="fixed inset-0 z-20" onClick={() => setOpen(false)} />
+            <motion.div
+              initial={{ opacity: 0, y: 4 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 4 }}
+              transition={MOTION_TRANSITION.quick}
+              className="absolute end-0 top-full mt-1.5 z-30 bg-card border border-border rounded-xl shadow-lg p-3.5 w-64 space-y-3.5"
+              onClick={(e) => e.stopPropagation()}
+              role="dialog"
+              aria-label={t("library.display")}
+            >
+              {/* Text size */}
+              <div className="space-y-1.5">
+                <MenuLabel>{t("library.fontSize")}</MenuLabel>
+                <div className="flex items-center gap-2">
+                  <StepperButton
+                    onClick={() => { haptic("selection"); onChange({ fontSize: Math.max(12, display.fontSize - 1) }); }}
+                    disabled={display.fontSize <= 12}
+                    label={t("library.textSizeDecrease")}
+                  >
+                    <Minus className="size-3.5" />
+                  </StepperButton>
+                  <span className="text-xs font-mono tabular-nums flex-1 text-center">
+                    {display.fontSize}px
+                  </span>
+                  <StepperButton
+                    onClick={() => { haptic("selection"); onChange({ fontSize: Math.min(22, display.fontSize + 1) }); }}
+                    disabled={display.fontSize >= 22}
+                    label={t("library.textSizeIncrease")}
+                  >
+                    <PlusIcon className="size-3.5" />
+                  </StepperButton>
+                </div>
+              </div>
+
+              {/* Zoom */}
+              <div className="space-y-1.5">
+                <MenuLabel>{t("library.zoom")}</MenuLabel>
+                <div className="flex items-center gap-2">
+                  <StepperButton
+                    onClick={() => { haptic("selection"); onChange({ zoom: Math.max(80, display.zoom - 10) }); }}
+                    disabled={display.zoom <= 80}
+                    label={t("library.zoomOut")}
+                  >
+                    <ZoomOut className="size-3.5" />
+                  </StepperButton>
+                  <button
+                    type="button"
+                    onClick={() => { haptic("selection"); onChange({ zoom: 100 }); }}
+                    disabled={display.zoom === 100}
+                    className="flex-1 h-7 rounded-md text-xs font-mono tabular-nums hover:bg-muted text-muted-foreground hover:text-foreground transition-colors disabled:hover:bg-transparent"
+                    title={t("library.zoomReset")}
+                  >
+                    {display.zoom}%
+                  </button>
+                  <StepperButton
+                    onClick={() => { haptic("selection"); onChange({ zoom: Math.min(140, display.zoom + 10) }); }}
+                    disabled={display.zoom >= 140}
+                    label={t("library.zoomIn")}
+                  >
+                    <ZoomIn className="size-3.5" />
+                  </StepperButton>
+                </div>
+              </div>
+
+              {/* Typeface */}
+              <div className="space-y-1.5">
+                <MenuLabel>{t("library.fontFamily")}</MenuLabel>
+                <DisplayPills
+                  value={display.fontFamily}
+                  onChange={(v) => onChange({ fontFamily: v })}
+                  options={[
+                    { value: "serif" as const, label: t("library.fontSerif") },
+                    { value: "sans" as const, label: t("library.fontSans") },
+                  ]}
+                />
+              </div>
+
+              {/* Line spacing */}
+              <div className="space-y-1.5">
+                <MenuLabel>{t("library.lineSpacing")}</MenuLabel>
+                <DisplayPills
+                  value={display.lineSpacing}
+                  onChange={(v) => onChange({ lineSpacing: v })}
+                  options={[
+                    { value: "compact" as const, label: t("library.lineSpacing.compact") },
+                    { value: "cozy" as const, label: t("library.lineSpacing.cozy") },
+                    { value: "relaxed" as const, label: t("library.lineSpacing.relaxed") },
+                  ]}
+                />
+              </div>
+
+              {/* Reading width */}
+              <div className="space-y-1.5">
+                <MenuLabel>{t("library.readingWidth")}</MenuLabel>
+                <DisplayPills
+                  value={display.width}
+                  onChange={(v) => onChange({ width: v })}
+                  options={[
+                    { value: "normal" as const, label: t("library.readingWidth.normal") },
+                    { value: "wide" as const, label: t("library.readingWidth.wide") },
+                  ]}
+                />
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
+
 function ArticleHeader({
   article,
   isBookmarked,
   onToggleBookmark,
-  zoom,
-  onZoomIn,
-  onZoomOut,
-  onResetZoom,
-  fontSize,
-  onFontSizeChange,
+  display,
+  onDisplayChange,
   hlCtrl,
   onExportPdf,
   onReport,
@@ -1155,17 +1353,12 @@ function ArticleHeader({
   article: Article;
   isBookmarked: boolean;
   onToggleBookmark: () => void;
-  zoom: number;
-  onZoomIn: () => void;
-  onZoomOut: () => void;
-  onResetZoom: () => void;
-  fontSize: number;
-  onFontSizeChange: (s: number) => void;
+  display: ReaderDisplayPrefs;
+  onDisplayChange: (patch: Partial<ReaderDisplayPrefs>) => void;
   hlCtrl: ReturnType<typeof useArticleHighlighter>;
   onExportPdf: () => void;
   onReport: () => void;
 }) {
-  const [fontPopoverOpen, setFontPopoverOpen] = React.useState(false);
   const { t } = useI18n();
 
   return (
@@ -1189,68 +1382,7 @@ function ArticleHeader({
 
         {article.contentType === "md" && (
           <>
-            <div className="relative">
-              <button
-                onClick={() => setFontPopoverOpen(!fontPopoverOpen)}
-                className="osler-icon-btn size-8"
-                title={t("library.fontSize")}
-              >
-                <Type className="size-4" />
-              </button>
-              <AnimatePresence>
-                {fontPopoverOpen && (
-                  <motion.div
-                    initial={{ opacity: 0, y: 4 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: 4 }}
-                    className="absolute right-0 top-full mt-1 z-30 bg-card border border-border rounded-lg shadow-lg p-3 w-auto"
-                  >
-                    <div className="flex items-center gap-2">
-                      <span className="text-[11px] text-muted-foreground w-16">{t("library.fontSize")}</span>
-                      <button
-                        onClick={() => onFontSizeChange(Math.max(12, fontSize - 1))}
-                        className="size-6 rounded bg-muted hover:bg-muted/70 flex items-center justify-center"
-                      >
-                        <Minus className="size-3" />
-                      </button>
-                      <span className="text-xs font-mono tabular-nums w-5 text-center">{fontSize}</span>
-                      <button
-                        onClick={() => onFontSizeChange(Math.min(22, fontSize + 1))}
-                        className="size-6 rounded bg-muted hover:bg-muted/70 flex items-center justify-center"
-                      >
-                        <PlusIcon className="size-3" />
-                      </button>
-                    </div>
-                  </motion.div>
-                )}
-              </AnimatePresence>
-            </div>
-
-            <div className="flex items-center gap-0.5 mr-1">
-              <button
-                onClick={onZoomOut}
-                disabled={zoom <= 80}
-                className="osler-icon-btn size-8 disabled:opacity-40"
-                title="Zoom out"
-              >
-                <ZoomOut className="size-4" />
-              </button>
-              <button
-                onClick={onResetZoom}
-                className="text-xs px-2 h-8 rounded-md hover:bg-muted text-muted-foreground font-mono tabular-nums min-w-[3rem]"
-                title="Reset zoom"
-              >
-                {zoom}%
-              </button>
-              <button
-                onClick={onZoomIn}
-                disabled={zoom >= 140}
-                className="osler-icon-btn size-8 disabled:opacity-40"
-                title="Zoom in"
-              >
-                <ZoomIn className="size-4" />
-              </button>
-            </div>
+            <DisplayMenu display={display} onChange={onDisplayChange} />
 
             <HighlighterToolbar
               control={{
