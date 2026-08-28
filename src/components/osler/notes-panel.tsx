@@ -17,7 +17,6 @@ import {
   ExternalLink,
   Maximize2,
   Minimize2,
-  Search,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -108,11 +107,9 @@ export function NotesPanel({
   // to give a larger writing area.
   const [maximized, setMaximized] = React.useState(false);
 
-  // ── List controls: search / tag filter / sort ─────────────────────────
-  const [search, setSearch] = React.useState("");
+  // ── List controls: tag filter / sort ─────────────────────────
   const [tagFilter, setTagFilter] = React.useState<string | null>(null);
   const [sortMode, setSortMode] = React.useState<SortMode>("recent");
-  const searchInputRef = React.useRef<HTMLInputElement>(null);
 
   // ── Inline delete confirmation (click again within 2.5s to confirm) ──
   const [confirmDeleteId, setConfirmDeleteId] = React.useState<string | null>(null);
@@ -157,26 +154,18 @@ export function NotesPanel({
     return unsub;
   }, [refresh]);
 
-  // Filtered notes — search matches title + body + tags across ALL notes
-  // (searching a single pack while typing a global term is rarely useful),
-  // the tag filter applies within the pack scope.
+  // Filtered notes — the tag filter applies within the pack scope.
   const visibleNotes = React.useMemo(() => {
-    const q = search.trim().toLowerCase();
-    let list = q || showAllPacks || !packUid
+    let list = showAllPacks || !packUid
       ? allNotes
       : allNotes.filter((n) => n.packUid === packUid);
-    if (q) {
-      list = list.filter((n) =>
-        `${n.title}\n${n.body}\n${n.tags.join(" ")}`.toLowerCase().includes(q)
-      );
-    }
     if (tagFilter) list = list.filter((n) => n.tags.includes(tagFilter));
     const sorted = [...list];
     if (sortMode === "recent") sorted.sort((a, b) => b.updatedAt - a.updatedAt);
     else if (sortMode === "oldest") sorted.sort((a, b) => a.updatedAt - b.updatedAt);
     else sorted.sort((a, b) => (a.title || "").localeCompare(b.title || ""));
     return sorted;
-  }, [allNotes, packUid, showAllPacks, search, tagFilter, sortMode]);
+  }, [allNotes, packUid, showAllPacks, tagFilter, sortMode]);
 
   // Tag chips — the most-used tags within the current scope (pre-search).
   const scopeTags = React.useMemo(() => {
@@ -290,7 +279,6 @@ export function NotesPanel({
 
   // ── Keyboard shortcuts (panel-scoped; only while the panel is open) ──
   //   Escape  → editor: back to list (flushing the save) · list: close panel
-  //   /       → focus search (list view)
   //   Ctrl/⌘+Enter → done editing (flush + back to list)
   React.useEffect(() => {
     if (!open) return;
@@ -302,11 +290,6 @@ export function NotesPanel({
         return;
       }
       if (isTextInput(e.target)) return;
-      if (e.key === "/" && view === "list") {
-        e.preventDefault();
-        searchInputRef.current?.focus();
-        return;
-      }
       if (e.key === "Enter" && (e.metaKey || e.ctrlKey) && view === "editor") {
         e.preventDefault();
         backToList();
@@ -419,15 +402,12 @@ export function NotesPanel({
           onOpenInProfile={onOpenInProfile}
           onOpenInQBank={onOpenInQBank}
           controls={{
-            search,
-            onSearchChange: setSearch,
             tagFilter,
             onTagFilterChange: setTagFilter,
             sortMode,
             onSortChange: setSortMode,
             scopeTags,
           }}
-          searchInputRef={searchInputRef}
         />
       ) : (
         <EditorView
@@ -502,8 +482,6 @@ export function NotesPanel({
 /* ── List view ──────────────────────────────────────────────────────── */
 
 interface ListControls {
-  search: string;
-  onSearchChange: (s: string) => void;
   tagFilter: string | null;
   onTagFilterChange: (tag: string | null) => void;
   sortMode: SortMode;
@@ -523,7 +501,6 @@ function ListView({
   onOpenInProfile,
   onOpenInQBank,
   controls,
-  searchInputRef,
 }: {
   notes: NoteRecord[];
   onCreate: () => void;
@@ -536,11 +513,10 @@ function ListView({
   onOpenInProfile?: () => void;
   onOpenInQBank?: (n: NoteRecord) => void;
   controls: ListControls;
-  searchInputRef: React.RefObject<HTMLInputElement | null>;
 }) {
   const { t } = useI18n();
-  const { search, onSearchChange, tagFilter, onTagFilterChange, sortMode, onSortChange, scopeTags } = controls;
-  const searching = search.trim().length > 0;
+  const { tagFilter, onTagFilterChange, sortMode, onSortChange, scopeTags } = controls;
+  const filtering = !!tagFilter;
 
   return (
     <div className="flex flex-col flex-1 min-h-0">
@@ -557,9 +533,7 @@ function ListView({
             <span className="hidden sm:inline">{t("qbank.notes.new")}</span>
           </Button>
           <span className="text-[11px] text-muted-foreground tabular-nums shrink-0">
-            {searching
-              ? t("qbank.notes.searchCount", { n: notes.length })
-              : t("qbank.notes.count", { n: notes.length })}
+            {t("qbank.notes.count", { n: notes.length })}
           </span>
           <div className="ms-auto flex items-center gap-2 shrink-0">
             {onOpenInProfile && (
@@ -588,33 +562,8 @@ function ListView({
           </div>
         </div>
 
-        {/* Search — "/" focuses it from anywhere in the panel */}
-        <div className="relative">
-          <Search className="absolute start-2.5 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground pointer-events-none" />
-          <input
-            ref={searchInputRef}
-            value={search}
-            onChange={(e) => onSearchChange(e.target.value)}
-            placeholder={t("qbank.notes.search")}
-            className="w-full h-9 ps-8 pe-12 rounded-lg border border-border bg-background text-sm outline-none focus:ring-2 focus:ring-primary/30 transition-shadow"
-          />
-          {search ? (
-            <button
-              onClick={() => onSearchChange("")}
-              className="absolute end-2 top-1/2 -translate-y-1/2 size-6 rounded-md hover:bg-muted flex items-center justify-center text-muted-foreground"
-              aria-label={t("common.cancel")}
-            >
-              <X className="size-3.5" />
-            </button>
-          ) : (
-            <kbd className="absolute end-2 top-1/2 -translate-y-1/2 hidden sm:inline-block px-1.5 py-0.5 rounded border border-border bg-muted/50 text-[10px] font-mono text-muted-foreground pointer-events-none">
-              /
-            </kbd>
-          )}
-        </div>
-
-        {/* Tag filter chips — hidden while searching (search already matches tags) */}
-        {scopeTags.length > 0 && !searching && (
+        {/* Tag filter chips */}
+        {scopeTags.length > 0 && (
           <div className="flex flex-wrap items-center gap-1">
             {scopeTags.map((tag) => {
               const active = tagFilter === tag;
@@ -664,7 +613,7 @@ function ListView({
       {/* List */}
       <div className="flex-1 overflow-y-auto osler-scroll p-3 space-y-2">
         {notes.length === 0 ? (
-          <EmptyNotesState onCreate={onCreate} searching={searching || !!tagFilter} />
+          <EmptyNotesState onCreate={onCreate} searching={filtering} />
         ) : (
           notes.map((note) => (
             <NoteCard
