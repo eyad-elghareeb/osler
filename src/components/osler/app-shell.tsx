@@ -49,6 +49,7 @@ import { useHideOnScroll } from "@/hooks/use-hide-on-scroll";
 import { PwaInstallButton } from "./pwa-install-button";
 import { LightboxProvider } from "./lightbox-provider";
 import { GlobalSearchPanel } from "./global-search-panel";
+import { ContentContextMenu } from "./content-context-menu";
 import { SwipeableSheetHandle } from "./ui-primitives";
 import type { SearchResult } from "@/lib/osler/search";
 import { VIEW_PLACEHOLDER_KEY } from "@/lib/osler/search";
@@ -468,6 +469,9 @@ export function AppShell({ children }: AppShellProps) {
             {children}
           </motion.div>
         </LightboxProvider>
+        {/* Custom right-click menu for the content region (export PDF /
+            share / copy link). Inputs and editors keep the native menu. */}
+        <ContentContextMenu />
       </main>
 
       {/* Mobile tab bar — 4 tabs: Dashboard, Q-Bank, Learn, Profile.

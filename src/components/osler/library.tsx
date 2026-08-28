@@ -51,6 +51,7 @@ import { FolderTreeNav } from "./folder-tree-nav";
 import { NavigationStack } from "./navigation-stack";
 import { applyHighlightsToHtml } from "@/lib/osler/article-highlights";
 import { MilkdownArticleView, articleDirOf } from "./milkdown-article-view";
+import { setArticleViewContext, clearArticleViewContext } from "@/lib/osler/article-view-registry";
 import { setImmersiveMode } from "./immersive-mode";
 import { haptic } from "@/lib/osler/native";
 import { useToast } from "@/hooks/use-toast";
@@ -152,6 +153,20 @@ export function Library({ initialArticleId, onNavigateBack: propOnNavigateBack }
   // Notes panel — opened from the reader header button or the reader.notes
   // shortcut ("n"). Shows all notes (no pack scoping on the articles page).
   const [notesOpen, setNotesOpen] = React.useState(false);
+
+  // Register the open article for the global context menu (share / copy
+  // link / export PDF). md readers own the export flow; pdf/html articles
+  // register only their title.
+  React.useEffect(() => {
+    if (!activeArticle) return;
+    const ctx = {
+      title: activeArticle.title,
+      specialty: activeArticle.specialty,
+      requestExportPdf: activeArticle.contentType === "md" ? () => setPdfDialogOpen(true) : undefined,
+    };
+    setArticleViewContext(ctx);
+    return () => clearArticleViewContext(ctx);
+  }, [activeArticle, activeFile]);
   const isMobile = useIsMobile();
 
   useShortcutListener((actionId) => {

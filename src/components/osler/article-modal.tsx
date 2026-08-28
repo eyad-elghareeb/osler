@@ -7,6 +7,7 @@ import { loadArticleContent, listAllArticles, type Article, type ArticleMeta } f
 import { cn } from "@/lib/utils";
 import { useArticleHighlighter } from "@/hooks/use-article-highlighter";
 import { MilkdownArticleView, articleDirOf } from "./milkdown-article-view";
+import { setArticleViewContext, clearArticleViewContext } from "@/lib/osler/article-view-registry";
 import { useI18n } from "@/components/osler/i18n-provider";
 import { HighlighterToolbar } from "./highlighter-toolbar";
 import { usePlatform } from "@/hooks/use-platform";
@@ -118,6 +119,15 @@ export function FloatingArticleModal({
     setActiveId(articleId);
     if (articleId) setShowSidebar(false);
   }, [articleId]);
+
+  // Context-menu registration: the modal contributes its title for
+  // share/copy-link while it is open (no PDF export flow here).
+  React.useEffect(() => {
+    if (!article || !activeId) return;
+    const ctx = { title: article.title, specialty: article.specialty };
+    setArticleViewContext(ctx);
+    return () => clearArticleViewContext(ctx);
+  }, [article, activeId]);
 
   // Load article content when activeId changes
   React.useEffect(() => {
