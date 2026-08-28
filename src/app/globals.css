@@ -101,8 +101,11 @@
 /* Osler — Default = Dark (Navy + Light Blue)
  * Premium dark palette: deep navy with a subtle blue chroma for warmth,
  * elevated cards lifted a half-step above the background, and a refined
- * primary that holds its saturation on small UI accents. */
-:root {
+ * primary that holds its saturation on small UI accents.
+ * `.dark` shares the block so scoped surfaces (theme-preview tiles) pin
+ * these tokens locally instead of inheriting the active theme from <html>. */
+:root,
+.dark {
   --radius: 0.625rem;
   --background: oklch(0.14 0.018 260);
   --foreground: oklch(0.96 0.005 240);

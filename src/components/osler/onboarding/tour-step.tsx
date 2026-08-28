@@ -16,7 +16,7 @@ import {
 } from "lucide-react";
 
 import { useI18n } from "@/components/osler/i18n-provider";
-import { enabledEngines } from "@/lib/osler/config";
+import { enabledEngines, isEngineEnabled } from "@/lib/osler/config";
 import { getEngineMeta } from "@/lib/osler/content";
 import type { EngineType } from "@/lib/osler/types";
 import type { StringKey } from "@/lib/osler/i18n";
@@ -41,7 +41,16 @@ const EXTRAS = [
 
 export function TourStep() {
   const { t } = useI18n();
-  const engines = React.useMemo(() => enabledEngines(), []);
+  // The quiz/bank/written engines all live in the same QBank studio and read
+  // as duplicates side by side — show the quiz card only when it is the only
+  // QBank-family engine enabled.
+  const engines = React.useMemo(
+    () =>
+      enabledEngines().filter(
+        (type) => type !== "quiz" || (!isEngineEnabled("bank") && !isEngineEnabled("written")),
+      ),
+    [],
+  );
 
   return (
     <div>
