@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   ChevronRight,
   BookOpen,
+  NotebookPen,
   Clock,
   Bookmark,
   BookmarkCheck,
@@ -57,6 +58,8 @@ import { type PdfExportOptions } from "./pdf-export-dialog";
 import { PdfExportDialog } from "./lazy-tools";
 import { generateArticlePdf, downloadPdf } from "@/lib/osler/pdf";
 import { useSwipeBackDismiss } from "@/hooks/use-swipe-back-dismiss";
+import { useShortcutListener } from "@/hooks/use-shortcuts";
+import { NotesPanel } from "./lazy-tools";
 import { ReportTicketDialog } from "@/components/osler/report-ticket-dialog";
 import type { TicketContext } from "@/lib/osler/support";
 
@@ -146,7 +149,17 @@ export function Library({ initialArticleId, onNavigateBack: propOnNavigateBack }
     saveDisplayPrefs(display);
   }, [display]);
   const [sidebarOpen, setSidebarOpen] = React.useState(false);
+  // Notes panel — opened from the reader header button or the reader.notes
+  // shortcut ("n"). Shows all notes (no pack scoping on the articles page).
+  const [notesOpen, setNotesOpen] = React.useState(false);
   const isMobile = useIsMobile();
+
+  useShortcutListener((actionId) => {
+    if (actionId === "reader.notes") {
+      haptic("selection");
+      setNotesOpen((o) => !o);
+    }
+  });
 
   const hlCtrl = useArticleHighlighter({
     source: "library",
@@ -435,6 +448,10 @@ export function Library({ initialArticleId, onNavigateBack: propOnNavigateBack }
     [bookmarks, allArticles]
   );
 
+  const notesPanel = (
+    <NotesPanel open={notesOpen} onClose={() => setNotesOpen(false)} variant="sidebar" />
+  );
+
   // Mobile: NavigationStack with MobileHub underneath and MobileReader
   // sliding in on top when an article is open. Drag the reader back
   // (iOS-style) to close the article and return to the hub — the exact
@@ -466,6 +483,7 @@ export function Library({ initialArticleId, onNavigateBack: propOnNavigateBack }
             onBack={closeArticle}
             display={display}
             onDisplayChange={updateDisplay}
+            onToggleNotes={() => setNotesOpen((o) => !o)}
             loading={loading}
             articleContentRef={articleContentRef}
             processedHtml={processedArticleHtml}
@@ -498,6 +516,7 @@ export function Library({ initialArticleId, onNavigateBack: propOnNavigateBack }
           variant="article"
           onExport={handleExportArticlePdf}
         />
+        {notesPanel}
         {reportDialog}
       </>
     );
@@ -569,6 +588,7 @@ export function Library({ initialArticleId, onNavigateBack: propOnNavigateBack }
               onToggleBookmark={() => activeFile && toggleBookmark(activeFile)}
               display={display}
               onDisplayChange={updateDisplay}
+              onToggleNotes={() => setNotesOpen((o) => !o)}
               hlCtrl={hlCtrl}
               onExportPdf={() => setPdfDialogOpen(true)}
               onReport={onReportProblem}
@@ -642,6 +662,7 @@ export function Library({ initialArticleId, onNavigateBack: propOnNavigateBack }
         variant="article"
         onExport={handleExportArticlePdf}
       />
+      {notesPanel}
       {reportDialog}
     </motion.div>
   );
@@ -820,6 +841,7 @@ function MobileReader({
   onBack,
   display,
   onDisplayChange,
+  onToggleNotes,
   loading,
   articleContentRef,
   processedHtml,
@@ -834,6 +856,7 @@ function MobileReader({
   onBack: () => void;
   display: ReaderDisplayPrefs;
   onDisplayChange: (patch: Partial<ReaderDisplayPrefs>) => void;
+  onToggleNotes: () => void;
   loading: boolean;
   articleContentRef: React.RefObject<HTMLDivElement | null>;
   processedHtml: string;
@@ -884,6 +907,15 @@ function MobileReader({
               onChange={onDisplayChange}
               buttonClassName="size-9 rounded-lg flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors"
             />
+
+            <button
+              onClick={onToggleNotes}
+              className="size-9 rounded-lg flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors"
+              title={t("qbank.notes.title")}
+              aria-label={t("qbank.notes.title")}
+            >
+              <NotebookPen className="size-4" />
+            </button>
             
             {article.contentType === "md" && (
               <button
@@ -1346,6 +1378,7 @@ function ArticleHeader({
   onToggleBookmark,
   display,
   onDisplayChange,
+  onToggleNotes,
   hlCtrl,
   onExportPdf,
   onReport,
@@ -1355,6 +1388,7 @@ function ArticleHeader({
   onToggleBookmark: () => void;
   display: ReaderDisplayPrefs;
   onDisplayChange: (patch: Partial<ReaderDisplayPrefs>) => void;
+  onToggleNotes: () => void;
   hlCtrl: ReturnType<typeof useArticleHighlighter>;
   onExportPdf: () => void;
   onReport: () => void;
@@ -1396,6 +1430,15 @@ function ArticleHeader({
             />
           </>
         )}
+
+        <button
+          onClick={onToggleNotes}
+          className="osler-icon-btn size-8"
+          title={t("qbank.notes.title")}
+          aria-label={t("qbank.notes.title")}
+        >
+          <NotebookPen className="size-4" />
+        </button>
 
         {article.contentType === "md" && (
           <button

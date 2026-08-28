@@ -66,6 +66,7 @@ export const SHORTCUT_ACTIONS: readonly ShortcutAction[] = [
   action("flashcard.exit", "flashcard", "escape"),
   action("flashcard.restart", "flashcard", "r"),
   action("reader.close", "reader", "escape"),
+  action("reader.notes", "reader", "n"),
   action("reader.bookmark", "reader", "mod+d"),
   action("reader.zoomIn", "reader", "mod+="),
   action("reader.zoomOut", "reader", "mod+-"),

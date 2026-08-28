@@ -1076,6 +1076,8 @@ export const en = {
     "settings.shortcuts.action.reader.zoomOut.desc": "Decrease article text zoom.",
     "settings.shortcuts.action.reader.zoomReset": "Reset zoom",
     "settings.shortcuts.action.reader.zoomReset.desc": "Reset article text zoom to 100%.",
+    "settings.shortcuts.action.reader.notes": "Notes",
+    "settings.shortcuts.action.reader.notes.desc": "Toggle the notes panel while reading an article.",
     "settings.shortcuts.action.videos.next": "Next video",
     "settings.shortcuts.action.videos.next.desc": "Skip to the next video in the playlist.",
     "settings.shortcuts.action.videos.prev": "Previous video",
