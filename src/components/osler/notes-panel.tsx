@@ -13,6 +13,7 @@ import {
   Clock,
   Check,
   CheckCheck,
+  Download,
   Folder,
   ExternalLink,
   Maximize2,
@@ -53,8 +54,39 @@ function timeAgo(ts: number, t: (k: any, p?: any) => string): string {
   return new Date(ts).toLocaleDateString();
 }
 
-/* ── Sort modes for the notes list ──────────────────────────────────── */
+/* ── Sort modes for the notes list ──────────────────────────── */
 type SortMode = "recent" | "oldest" | "title";
+
+/* ── Markdown export ────────────────────────────────────────── */
+
+/** Slugify a note title into a safe `.md` filename (falls back to a date). */
+function noteFileName(note: NoteRecord): string {
+  const base = (note.title || "")
+    .trim()
+    .replace(/[\\/:*?"<>|]+/g, "")
+    .replace(/\s+/g, "-")
+    .slice(0, 80)
+    .replace(/^-+|-+$/g, "");
+  return `${base || `note-${new Date(note.updatedAt).toISOString().slice(0, 10)}`}.md`;
+}
+
+/** Serialize a note to a portable markdown file (title heading + body). */
+function noteToMarkdown(note: NoteRecord): string {
+  const title = note.title.trim();
+  const body = note.body ?? "";
+  return title ? `# ${title}\n\n${body}` : body;
+}
+
+/** Download a note as a `.md` file (used by the editor + list card buttons). */
+function downloadNoteMarkdown(note: NoteRecord): void {
+  const blob = new Blob([noteToMarkdown(note)], { type: "text/markdown;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = noteFileName(note);
+  a.click();
+  URL.revokeObjectURL(url);
+}
 
 /* ── Main panel component ───────────────────────────────────────────── */
 
@@ -355,6 +387,17 @@ export function NotesPanel({
               <CheckCheck className="size-3.5 me-1" />
               <span className="hidden sm:inline">{t("qbank.notes.editor.done")}</span>
             </Button>
+            <button
+              onClick={() => {
+                haptic("light");
+                downloadNoteMarkdown(activeNote);
+              }}
+              className="size-7 rounded-md hover:bg-muted text-muted-foreground hover:text-foreground flex items-center justify-center transition-colors shrink-0"
+              title={t("qbank.notes.export")}
+              aria-label={t("qbank.notes.export")}
+            >
+              <Download className="size-3.5" />
+            </button>
             <button
               onClick={() => handleDelete(activeNote.id)}
               className="size-7 rounded-md hover:bg-destructive/10 text-muted-foreground hover:text-destructive flex items-center justify-center transition-colors shrink-0"
@@ -761,6 +804,18 @@ function NoteCard({
             {t("qbank.notes.card.openInQBank")}
           </button>
         )}
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            haptic("light");
+            downloadNoteMarkdown(note);
+          }}
+          className="px-2 py-0.5 rounded text-[10px] text-muted-foreground hover:text-foreground hover:bg-muted transition-colors flex items-center gap-1"
+          title={t("qbank.notes.export")}
+        >
+          <Download className="size-3" />
+          {t("qbank.notes.exportShort")}
+        </button>
         <button
           onClick={(e) => {
             e.stopPropagation();

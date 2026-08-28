@@ -457,6 +457,8 @@ export const en = {
     "qbank.notes.editor.saved": "Saved",
     "qbank.notes.editor.placeholder": "Write your note in markdown…",
     "qbank.notes.count": "{n} notes",
+    "qbank.notes.export": "Export as Markdown",
+    "qbank.notes.exportShort": "Export",
     "qbank.notes.sort.label": "Sort notes",
     "qbank.notes.sort.recent": "Recent",
     "qbank.notes.sort.oldest": "Oldest",

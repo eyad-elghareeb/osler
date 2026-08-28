@@ -458,6 +458,8 @@ export const ar = {
     "qbank.notes.editor.saved": "محفوظ",
     "qbank.notes.editor.placeholder": "اكتب ملاحظتك بصيغة ماركداون…",
     "qbank.notes.count": "{n} ملاحظة",
+    "qbank.notes.export": "تصدير كملف ماركداون",
+    "qbank.notes.exportShort": "تصدير",
     "qbank.notes.sort.label": "ترتيب الملاحظات",
     "qbank.notes.sort.recent": "الأحدث",
     "qbank.notes.sort.oldest": "الأقدم",
