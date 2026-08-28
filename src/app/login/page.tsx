@@ -3,6 +3,7 @@
 import * as React from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { LoginScreen } from "@/components/osler/login-screen";
+import { OnboardingWizard, isOnboardingComplete } from "@/components/osler/onboarding/onboarding-wizard";
 import { useOslerSession } from "@/lib/osler/session-context";
 
 /**
@@ -57,11 +58,29 @@ function LoginContent() {
 
   const cloudAuthError = searchParams.get("cloudAuthError");
 
+  // First-run onboarding: device-level flag in localStorage (see
+  // onboarding-wizard.tsx), so logging out and back in never retriggers it.
+  // Bypassed when the visit carries a bearer credential (password reset,
+  // email verify, Google auth ticket) — those must reach the form directly.
+  const [showOnboarding, setShowOnboarding] = React.useState(() => {
+    if (typeof window === "undefined") return false;
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("reset") || params.get("verify")) return false;
+    if (window.location.hash.startsWith("#cloudAuth")) return false;
+    return !isOnboardingComplete();
+  });
+
   return (
-    <LoginScreen
-      onLogin={handleLogin}
-      cloudAuthError={cloudAuthError === "google" || cloudAuthError === "email_claimed" ? cloudAuthError : undefined}
-    />
+    <>
+      {showOnboarding ? (
+        <OnboardingWizard onComplete={() => setShowOnboarding(false)} />
+      ) : (
+        <LoginScreen
+          onLogin={handleLogin}
+          cloudAuthError={cloudAuthError === "google" || cloudAuthError === "email_claimed" ? cloudAuthError : undefined}
+        />
+      )}
+    </>
   );
 }
 

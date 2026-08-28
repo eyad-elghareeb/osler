@@ -10,61 +10,61 @@ import { haptic } from "@/lib/osler/native";
 import { useOslerTheme } from "@/components/osler/theme-provider";
 type ThemeOption = { id: string; name: string; variant: "dark" | "light" };
 
-interface ThemeFamily {
+export interface ThemeFamily {
   id: string;
   name: string;
   variants: ThemeOption[];
 }
 
-export function ThemeSettingsSection() {
-  const { t } = useI18n();
-  const { theme, setThemeId, availableThemes } = useOslerTheme();
-
-  const themeFamilies = React.useMemo<ThemeFamily[]>(() => {
-    const families = new Map<string, ThemeFamily>();
-    for (const option of availableThemes) {
-      const id = option.id === "dark" || option.id === "light"
-        ? "osler-default"
-        : option.id.replace(/-(dark|light)$/i, "");
-      const current = families.get(id);
-      if (current) {
-        current.variants.push(option);
-      } else {
-        families.set(id, {
-          id,
-          name: id === "osler-default" ? t("app.name") : option.name.replace(/\s+(dark|light)$/i, ""),
-          variants: [option],
-        });
-      }
+/**
+ * Group the flat available-themes list into families (dark+light pairs of the
+ * same palette). Shared with the first-run onboarding wizard so both surfaces
+ * render the exact same family structure.
+ */
+export function groupThemeFamilies(
+  availableThemes: Array<{ id: string; name: string; variant: "dark" | "light" }>,
+  appName: string,
+): ThemeFamily[] {
+  const families = new Map<string, ThemeFamily>();
+  for (const option of availableThemes) {
+    const id = option.id === "dark" || option.id === "light"
+      ? "osler-default"
+      : option.id.replace(/-(dark|light)$/i, "");
+    const current = families.get(id);
+    if (current) {
+      current.variants.push(option);
+    } else {
+      families.set(id, {
+        id,
+        name: id === "osler-default" ? appName : option.name.replace(/\s+(dark|light)$/i, ""),
+        variants: [option],
+      });
     }
-    return Array.from(families.values()).map((family) => ({
-      ...family,
-      variants: [...family.variants].sort((a, b) => (a.variant === "dark" ? -1 : 1) - (b.variant === "dark" ? -1 : 1)),
-    }));
-  }, [availableThemes, t]);
+  }
+  return Array.from(families.values()).map((family) => ({
+    ...family,
+    variants: [...family.variants].sort((a, b) => (a.variant === "dark" ? -1 : 1) - (b.variant === "dark" ? -1 : 1)),
+  }));
+}
 
-  const builtinFamilies = themeFamilies.filter((family) => family.id === "osler-default");
-  const customFamilies = themeFamilies.filter((family) => family.id !== "osler-default");
-  const activeFamily = themeFamilies.find((family) => family.variants.some((option) => option.id === theme));
-  const activeOption = activeFamily?.variants.find((option) => option.id === theme);
-  const variantLabel = (variant: "dark" | "light") =>
-    variant === "dark" ? t("settings.theme.darkVariant") : t("settings.theme.lightVariant");
-
-  /**
-   * Mini app-surface preview — a richer alternative to flat color dots.
-   * Renders a scaled-down mock of an app surface: background → card →
-   * primary accent bar → muted text line → secondary tint. Reads as
-   * "this is what the theme looks like" instead of "these are its colors".
-   *
-   * The preview is scoped to the theme's CSS class (`.dark`, `.light`,
-   * or `.theme-<id>`) so the CSS variables resolve to the theme's actual
-   * values. A 1px border separates the preview from the button chrome.
-   */
-  const renderThemePreview = (themeScope: string) => (
+/**
+ * Mini app-surface preview — a richer alternative to flat color dots.
+ * Renders a scaled-down mock of an app surface: background → card →
+ * primary accent bar → muted text line → secondary tint. Reads as
+ * "this is what the theme looks like" instead of "these are its colors".
+ *
+ * The preview is scoped to the theme's CSS class (`.dark`, `.light`,
+ * or `.theme-<id>`) so the CSS variables resolve to the theme's actual
+ * values. A 1px border separates the preview from the button chrome.
+ * Shared with the first-run onboarding wizard.
+ */
+export function ThemePreview({ themeScope, className }: { themeScope: string; className?: string }) {
+  return (
     <div
       className={cn(
         "w-full h-12 rounded-md border border-border overflow-hidden flex flex-col gap-1 p-1.5",
         themeScope,
+        className,
       )}
       style={{ backgroundColor: "var(--background)" }}
       aria-hidden
@@ -105,6 +105,24 @@ export function ThemeSettingsSection() {
       </div>
     </div>
   );
+}
+
+export function ThemeSettingsSection() {
+  const { t } = useI18n();
+  const { theme, setThemeId, availableThemes } = useOslerTheme();
+
+  const themeFamilies = React.useMemo<ThemeFamily[]>(
+    () => groupThemeFamilies(availableThemes, t("app.name")),
+    [availableThemes, t],
+  );
+
+  const builtinFamilies = themeFamilies.filter((family) => family.id === "osler-default");
+  const customFamilies = themeFamilies.filter((family) => family.id !== "osler-default");
+  const variantLabel = (variant: "dark" | "light") =>
+    variant === "dark" ? t("settings.theme.darkVariant") : t("settings.theme.lightVariant");
+
+  const activeFamily = themeFamilies.find((family) => family.variants.some((option) => option.id === theme));
+  const activeOption = activeFamily?.variants.find((option) => option.id === theme);
 
   const renderThemeFamily = (family: ThemeFamily) => (
     <div key={family.id} className="rounded-xl border border-border bg-card p-3">
@@ -131,7 +149,7 @@ export function ThemeSettingsSection() {
                 !active && "bg-background",
               )}
             >
-              {renderThemePreview(themeScope)}
+              <ThemePreview themeScope={themeScope} />
               <span className="flex items-center justify-between gap-2 text-xs font-medium">
                 <span>{variantLabel(option.variant)}</span>
                 {active && <Check className="size-3.5 shrink-0" />}

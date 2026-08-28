@@ -2896,4 +2896,110 @@ export const en = {
     "legal.openTos": "View Terms of Service",
     "legal.openPrivacy": "View Privacy Policy",
     "legal.closeDialog": "Close",
+
+    // ── First-run onboarding wizard (/login) ───────────────────────────────
+    "onboarding.skip": "Skip setup",
+    "onboarding.progress": "Step {current} of {total}",
+    "onboarding.back": "Back",
+    "onboarding.continue": "Continue",
+
+    "onboarding.welcome.title": "Welcome to {name}",
+    "onboarding.welcome.subtitle":
+      "Let\u2019s set things up so the platform feels right from the first tap — it takes about a minute.",
+    "onboarding.welcome.includes": "We\u2019ll cover",
+    "onboarding.welcome.chip.language": "Language",
+    "onboarding.welcome.chip.theme": "Theme",
+    "onboarding.welcome.chip.tour": "Quick tour",
+    "onboarding.welcome.chip.ai": "AI tutor",
+    "onboarding.welcome.chip.install": "Install",
+    "onboarding.welcome.chip.consent": "Privacy",
+
+    "onboarding.tour.title": "What\u2019s inside",
+    "onboarding.tour.subtitle":
+      "Your study material is organized into engines — here\u2019s what this instance ships with.",
+    "onboarding.tour.quiz.name": "QBank",
+    "onboarding.tour.quiz.desc":
+      "Practice questions with exam-style modes, timed tests and instant explanations.",
+    "onboarding.tour.bank.name": "Question Banks",
+    "onboarding.tour.bank.desc":
+      "Large curated question collections organized by subject and system.",
+    "onboarding.tour.written.name": "Written Sets",
+    "onboarding.tour.written.desc":
+      "Long-form written assignments to practice structured answers.",
+    "onboarding.tour.flashcard.name": "Flashcards",
+    "onboarding.tour.flashcard.desc":
+      "Spaced-repetition decks with basic and cloze cards.",
+    "onboarding.tour.osce.name": "OSCE",
+    "onboarding.tour.osce.desc":
+      "Clinical stations with a simulated patient you can interview by voice.",
+    "onboarding.tour.library.name": "Library",
+    "onboarding.tour.library.desc":
+      "Medical articles and reference notes with highlighting and bookmarks.",
+    "onboarding.tour.video.name": "Videos",
+    "onboarding.tour.video.desc":
+      "Clinical video lectures and skills demonstrations.",
+    "onboarding.tour.extra.progress":
+      "Progress, streaks and achievements are tracked automatically.",
+    "onboarding.tour.extra.offline":
+      "Download packs once and keep studying offline.",
+    "onboarding.tour.extra.pdf":
+      "Export question papers, notes and stats as polished PDFs.",
+
+    "onboarding.language.title": "Choose your language",
+    "onboarding.language.subtitle":
+      "Menus, buttons and labels — with full right-to-left support for Arabic.",
+
+    "onboarding.theme.title": "Pick a theme",
+    "onboarding.theme.subtitle":
+      "Light or dark, plus curated color families. Change anytime in Settings \u2192 Appearance.",
+
+    "onboarding.ai.title": "Unlock the AI tutor",
+    "onboarding.ai.subtitle":
+      "Osler\u2019s AI features run on your own free Gemini API key — create one in a minute, stored only on this device.",
+    "onboarding.ai.featQbank":
+      "Explanations for any QBank question, with follow-up questions",
+    "onboarding.ai.featAsk": "Ask about any medical concept, anytime",
+    "onboarding.ai.featOsce":
+      "Voice conversations with a simulated OSCE patient",
+    "onboarding.ai.saved": "Saved",
+    "onboarding.ai.aiStudio": "Get a free key",
+    "onboarding.ai.optional": "Optional — everything else works without it.",
+    "onboarding.ai.manage":
+      "The key stays on this device. You can change it anytime in Settings \u2192 AI Assistant.",
+
+    "onboarding.install.title": "Install Osler on your device",
+    "onboarding.install.subtitle":
+      "Installs like a native app — full screen, offline-ready, no app store needed.",
+    "onboarding.install.installedTitle": "Already installed",
+    "onboarding.install.installedDesc":
+      "Osler is installed on this device. You\u2019re all set.",
+    "onboarding.install.cta": "Install now",
+    "onboarding.install.manualTitle": "Or install manually",
+    "onboarding.install.iosSteps": [
+      "Open this site in Safari.",
+      "Tap the Share icon (the square with an arrow).",
+      "Scroll down and tap \u201cAdd to Home Screen\u201d.",
+    ],
+    "onboarding.install.androidSteps": [
+      "Open the browser menu (\u22ee or \u22ef).",
+      "Tap \u201cInstall app\u201d or \u201cAdd to Home screen\u201d.",
+      "Confirm the installation prompt.",
+    ],
+    "onboarding.install.desktopSteps": [
+      "Open your browser\u2019s menu (\u22ee in Chrome or Edge).",
+      "Choose \u201cInstall app\u201d (or \u201cInstall Osler\u201d).",
+      "Osler opens in its own window, like a native app.",
+    ],
+    "onboarding.install.later":
+      "Not now? You can install anytime from the top bar.",
+
+    "onboarding.consent.title": "Privacy & terms",
+    "onboarding.consent.subtitle": "One last thing before you dive in.",
+    "onboarding.consent.point.local":
+      "Your study data lives in your browser, on this device.",
+    "onboarding.consent.point.noTracking":
+      "No tracking cookies and no third-party analytics — ever.",
+    "onboarding.consent.agree": "Agree & finish",
+    "onboarding.consent.bannerNote":
+      "Agreeing once covers the cookie notice too — you won\u2019t see it again on this device.",
 } as const;

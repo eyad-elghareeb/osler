@@ -2889,4 +2889,110 @@ export const ar = {
     "legal.openTos": "عرض شروط الخدمة",
     "legal.openPrivacy": "عرض سياسة الخصوصية",
     "legal.closeDialog": "إغلاق",
+
+    // ── First-run onboarding wizard (/login) ───────────────────────────────
+    "onboarding.skip": "تخطي الإعداد",
+    "onboarding.progress": "الخطوة {current} من {total}",
+    "onboarding.back": "رجوع",
+    "onboarding.continue": "متابعة",
+
+    "onboarding.welcome.title": "مرحباً بك في {name}",
+    "onboarding.welcome.subtitle":
+      "لنجهّز إعداداتك لتجربة مناسبة من أول لمسة — يستغرق ذلك نحو دقيقة واحدة.",
+    "onboarding.welcome.includes": "سنستعرض",
+    "onboarding.welcome.chip.language": "اللغة",
+    "onboarding.welcome.chip.theme": "المظهر",
+    "onboarding.welcome.chip.tour": "جولة سريعة",
+    "onboarding.welcome.chip.ai": "المساعد الذكي",
+    "onboarding.welcome.chip.install": "التثبيت",
+    "onboarding.welcome.chip.consent": "الخصوصية",
+
+    "onboarding.tour.title": "ماذا يوجد بالداخل",
+    "onboarding.tour.subtitle":
+      "مذاكرتك منظّمة في محركات دراسية — هذا ما تتضمنه هذه النسخة.",
+    "onboarding.tour.quiz.name": "بنك الأسئلة",
+    "onboarding.tour.quiz.desc":
+      "أسئلة تدريبية بأساليب امتحانية واختبارات مؤقتة مع شرح فوري.",
+    "onboarding.tour.bank.name": "بنوك الأسئلة",
+    "onboarding.tour.bank.desc":
+      "مجموعات أسئلة كبيرة ومنسّقة مصنّفة حسب الموضوع والجهاز.",
+    "onboarding.tour.written.name": "الأسئلة المقالية",
+    "onboarding.tour.written.desc":
+      "واجبات كتابية طويلة للتدرّب على الإجابات المنظمة.",
+    "onboarding.tour.flashcard.name": "البطاقات التعليمية",
+    "onboarding.tour.flashcard.desc":
+      "مجموعات مذاكرة بالتكرار المتباعد ببطاقات أساسية ومقسمة.",
+    "onboarding.tour.osce.name": "OSCE",
+    "onboarding.tour.osce.desc":
+      "محطات سريرية مع مريض محاكى يمكنك مقابقته صوتياً.",
+    "onboarding.tour.library.name": "المكتبة",
+    "onboarding.tour.library.desc":
+      "مقالات طبية وملاحظات مرجعية مع التظليل والعلامات المرجعية.",
+    "onboarding.tour.video.name": "الفيديوهات",
+    "onboarding.tour.video.desc":
+      "محاضرات ومهارات سريرية بالفيديو.",
+    "onboarding.tour.extra.progress":
+      "يُتتبَّع تقدّمك وسلاسل مذاكرتك وإنجازاتك تلقائياً.",
+    "onboarding.tour.extra.offline":
+      "نزّل الحزم مرة واحدة وواصل المذاكرة دون اتصال.",
+    "onboarding.tour.extra.pdf":
+      "صدّر أوراق الأسئلة والملاحظات والإحصاءات كملفات PDF أنيقة.",
+
+    "onboarding.language.title": "اختر لغتك",
+    "onboarding.language.subtitle":
+      "القوائم والأزرار والتسميات — مع دعم كامل للاتجاه من اليمين إلى اليسار للعربية.",
+
+    "onboarding.theme.title": "اختر مظهرك",
+    "onboarding.theme.subtitle":
+      "فاتح أو داكن، إضافة إلى عائلات ألوان منتقاة. يمكنك التغيير في أي وقت من الإعدادات ← المظهر.",
+
+    "onboarding.ai.title": "فعّل المساعد الذكي",
+    "onboarding.ai.subtitle":
+      "تعمل ميزات الذكاء الاصطناعي في Osler عبر مفتاح Gemini المجاني الخاص بك — أنشئه خلال دقيقة، ويُحفظ على هذا الجهاز فقط.",
+    "onboarding.ai.featQbank":
+      "شرح لأي سؤال في بنك الأسئلة مع أسئلة متابعة",
+    "onboarding.ai.featAsk": "اسأل عن أي مفهوم طبي في أي وقت",
+    "onboarding.ai.featOsce":
+      "محادثات صوتية مع مريض OSCE محاكى",
+    "onboarding.ai.saved": "تم الحفظ",
+    "onboarding.ai.aiStudio": "احصل على مفتاح مجاني",
+    "onboarding.ai.optional": "اختياري — كل شيء آخر يعمل بدونه.",
+    "onboarding.ai.manage":
+      "يبقى المفتاح على هذا الجهاز. يمكنك تغييره في أي وقت من الإعدادات ← المساعد الذكي.",
+
+    "onboarding.install.title": "ثبّت Osler على جهازك",
+    "onboarding.install.subtitle":
+      "يُثبَّت كتطبيق أصلي — ملء الشاشة وجاهز للعمل دون اتصال، دون الحاجة إلى متجر تطبيقات.",
+    "onboarding.install.installedTitle": "مثبَّت بالفعل",
+    "onboarding.install.installedDesc":
+      "Osler مثبَّت على هذا الجهاز. أنت جاهز تماماً.",
+    "onboarding.install.cta": "ثبّت الآن",
+    "onboarding.install.manualTitle": "أو ثبّته يدوياً",
+    "onboarding.install.iosSteps": [
+      "افتح هذا الموقع في Safari.",
+      "اضغط أيقونة المشاركة (المربع مع السهم).",
+      "مرّر للأسفل واضغط \u201cإضافة إلى الشاشة الرئيسية\u201d.",
+    ],
+    "onboarding.install.androidSteps": [
+      "افتح قائمة المتصفح (\u22ee أو \u22ef).",
+      "اضغط \u201cتثبيت التطبيق\u201d أو \u201cإضافة إلى الشاشة الرئيسية\u201d.",
+      "أكّد نافذة التثبيت.",
+    ],
+    "onboarding.install.desktopSteps": [
+      "افتح قائمة المتصفح (\u22ee في Chrome أو Edge).",
+      "اختر \u201cتثبيت التطبيق\u201d (أو \u201cتثبيت Osler\u201d).",
+      "يفتح Osler في نافذة مستقلة كالتطبيقات الأصلية.",
+    ],
+    "onboarding.install.later":
+      "ليس الآن؟ يمكنك التثبيت في أي وقت من الشريط العلوي.",
+
+    "onboarding.consent.title": "الخصوصية والشروط",
+    "onboarding.consent.subtitle": "أمر أخير قبل أن تبدأ.",
+    "onboarding.consent.point.local":
+      "بيانات مذاكرتك محفوظة في متصفحك، على هذا الجهاز.",
+    "onboarding.consent.point.noTracking":
+      "لا ملفات تتبع ولا تحليلات طرف ثالث — إطلاقاً.",
+    "onboarding.consent.agree": "أوافق وأنهي",
+    "onboarding.consent.bannerNote":
+      "موافقتك هنا تشمل إشعار ملفات الارتباط أيضاً — لن يظهر لك مجدداً على هذا الجهاز.",
 } as const;

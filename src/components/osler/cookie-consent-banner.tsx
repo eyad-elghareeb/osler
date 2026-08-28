@@ -16,14 +16,28 @@ export function CookieConsentBanner() {
   const [visible, setVisible] = React.useState(false);
 
   React.useEffect(() => {
-    try {
-      if (!localStorage.getItem(CONSENT_KEY)) {
-        const timer = setTimeout(() => setVisible(true), 1200);
-        return () => clearTimeout(timer);
+    // Poll instead of a one-shot timer: while the first-run onboarding wizard
+    // is open (data-osler-onboarding on <html>) it owns the consent decision,
+    // so the banner holds. If the user skips the wizard without agreeing, the
+    // banner appears once it closes; if they agreed, consent is set and the
+    // banner never shows.
+    const startedAt = Date.now();
+    const timer = setInterval(() => {
+      try {
+        if (localStorage.getItem(CONSENT_KEY)) {
+          clearInterval(timer);
+          return;
+        }
+      } catch {
+        clearInterval(timer); // Private browsing / storage blocked — skip banner
+        return;
       }
-    } catch {
-      // Private browsing / storage blocked — silently skip banner
-    }
+      if (document.documentElement.hasAttribute("data-osler-onboarding")) return;
+      if (Date.now() - startedAt < 1200) return;
+      setVisible(true);
+      clearInterval(timer);
+    }, 300);
+    return () => clearInterval(timer);
   }, []);
 
   const accept = () => {
