@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   Activity,
   Award,
+  ChevronDown,
   Target,
   Clock,
   TrendingUp,
@@ -57,13 +58,13 @@ import { useI18n } from "./i18n-provider";
 import type { StringKey } from "@/lib/osler/i18n";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Button } from "@/components/ui/button";
 import { NotesPanel } from "./lazy-tools";
 import { SyncModal } from "./sync/sync-modal";
 import { haptic } from "@/lib/osler/native";
 import {
   PageHeader,
-  SectionHeading,
   StatTile as SharedStatTile,
   OslerCard,
   type StatTileProps,
@@ -304,27 +305,9 @@ export function Profile({
         {/* Notes */}
         <ProfileNotesSection onViewChange={onViewChange} />
 
-        {/* Achievements */}
-        <SectionHeading
-          actions={
-            <span className="text-xs text-muted-foreground">
-              {unlockedIds.size}/{ACHIEVEMENTS.length} {t("profile.achievements").toLowerCase()}
-            </span>
-          }
-        >
-          {t("profile.achievements")}
-        </SectionHeading>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
-          {ACHIEVEMENTS.map((a) => (
-            <Achievement
-              key={a.id}
-              icon={ACHIEVEMENT_ICONS[a.icon]}
-              title={t(a.titleKey)}
-              description={t(a.descKey)}
-              unlocked={unlockedIds.has(a.id)}
-            />
-          ))}
-        </div>
+        {/* Achievements — only earned ones are shown; beyond five the rest
+            live behind a Show more toggle. */}
+        <AchievementsSection unlockedIds={unlockedIds} />
       </div>
 
       <SyncModal
@@ -576,9 +559,7 @@ const PerformanceInsights = React.memo(function PerformanceInsights({ metrics }:
   }, [metrics, t]);
 
   return (
-    <div className="mb-6">
-      <SectionHeading icon={LineChart}>{t("profile.insights.title")}</SectionHeading>
-
+    <CollapsibleSection id="insights" icon={LineChart} title={t("profile.insights.title")}>
       {metrics.totalAttempted === 0 ? (
         <div className="osler-card--default text-center text-sm text-muted-foreground py-8">
           {t("profile.insights.empty")}
@@ -716,9 +697,88 @@ const PerformanceInsights = React.memo(function PerformanceInsights({ metrics }:
           </div>
         </div>
       )}
-    </div>
+    </CollapsibleSection>
   );
 });
+
+/* ── Collapsible profile sections ──────────────────────────────────────── */
+/* Every profile section (streak, insights, notes, achievements) collapses.
+ * Open/closed state persists per section in localStorage so the page keeps
+ * the visitor's preferred density. */
+
+const PROFILE_SECTIONS_KEY = "osler-profile-sections";
+
+function loadProfileSectionOpen(id: string): boolean {
+  if (typeof window === "undefined") return true;
+  try {
+    const raw = window.localStorage.getItem(PROFILE_SECTIONS_KEY);
+    const map = raw ? (JSON.parse(raw) as Record<string, boolean>) : {};
+    return map[id] ?? true;
+  } catch {
+    return true;
+  }
+}
+
+function saveProfileSectionOpen(id: string, open: boolean): void {
+  if (typeof window === "undefined") return;
+  try {
+    const raw = window.localStorage.getItem(PROFILE_SECTIONS_KEY);
+    const map = raw ? (JSON.parse(raw) as Record<string, boolean>) : {};
+    map[id] = open;
+    window.localStorage.setItem(PROFILE_SECTIONS_KEY, JSON.stringify(map));
+  } catch {
+    // ignore storage failures (private mode)
+  }
+}
+
+function CollapsibleSection({
+  id,
+  icon: Icon,
+  title,
+  actions,
+  children,
+}: {
+  id: string;
+  icon?: React.ComponentType<{ className?: string }>;
+  title: React.ReactNode;
+  /** Right-aligned extras shown on the heading row (kept visible when collapsed). */
+  actions?: React.ReactNode;
+  children: React.ReactNode;
+}) {
+  const { rtl } = useI18n();
+  const [open, setOpen] = React.useState(() => loadProfileSectionOpen(id));
+
+  return (
+    <Collapsible
+      open={open}
+      onOpenChange={(o) => {
+        haptic("selection");
+        setOpen(o);
+        saveProfileSectionOpen(id, o);
+      }}
+      className="mb-6"
+    >
+      <div className="mb-2 flex items-center gap-1.5">
+        <CollapsibleTrigger className="group flex flex-1 items-center gap-1.5 text-start">
+          <span className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground transition-colors group-hover:text-foreground">
+            {Icon && <Icon className="size-3.5 text-primary" />}
+            <span>{title}</span>
+          </span>
+          <ChevronDown
+            className={cn(
+              "size-3.5 text-muted-foreground transition-transform",
+              open && "rotate-180",
+              rtl && "rtl-flip-x",
+            )}
+            aria-hidden
+          />
+        </CollapsibleTrigger>
+        {actions}
+      </div>
+      <CollapsibleContent>{children}</CollapsibleContent>
+    </Collapsible>
+  );
+}
 
 const PROFILE_STREAK_DAYS = 30;
 
@@ -759,38 +819,33 @@ const ProfileStreakSection = React.memo(function ProfileStreakSection() {
     barGap,
   });
 
-  return (
-    <div className="mb-6">
-      <SectionHeading
-        icon={Flame}
-        actions={
-          <div className="flex items-center gap-1 bg-muted/60 p-0.5 rounded-lg border border-border">
-            <button
-              type="button"
-              onClick={() => { haptic("selection"); setView("chart"); }}
-              className={cn(
-                "px-2.5 py-0.5 text-xs font-semibold rounded-md transition-colors cursor-pointer",
-                view === "chart" ? "bg-primary text-primary-foreground shadow-xs" : "text-muted-foreground hover:text-foreground"
-              )}
-            >
-              {t("profile.streak.days30")}
-            </button>
-            <button
-              type="button"
-              onClick={() => { haptic("selection"); setView("heatmap"); }}
-              className={cn(
-                "px-2.5 py-0.5 text-xs font-semibold rounded-md transition-colors cursor-pointer",
-                view === "heatmap" ? "bg-primary text-primary-foreground shadow-xs" : "text-muted-foreground hover:text-foreground"
-              )}
-            >
-              {t("profile.streak.modeActivity")}
-            </button>
-          </div>
-        }
+  const toggleControls = (
+    <div className="flex items-center gap-1 bg-muted/60 p-0.5 rounded-lg border border-border">
+      <button
+        type="button"
+        onClick={() => { haptic("selection"); setView("chart"); }}
+        className={cn(
+          "px-2.5 py-0.5 text-xs font-semibold rounded-md transition-colors cursor-pointer",
+          view === "chart" ? "bg-primary text-primary-foreground shadow-xs" : "text-muted-foreground hover:text-foreground"
+        )}
       >
-        {t("profile.streak.title")}
-      </SectionHeading>
+        {t("profile.streak.days30")}
+      </button>
+      <button
+        type="button"
+        onClick={() => { haptic("selection"); setView("heatmap"); }}
+        className={cn(
+          "px-2.5 py-0.5 text-xs font-semibold rounded-md transition-colors cursor-pointer",
+          view === "heatmap" ? "bg-primary text-primary-foreground shadow-xs" : "text-muted-foreground hover:text-foreground"
+        )}
+      >
+        {t("profile.streak.modeActivity")}
+      </button>
+    </div>
+  );
 
+  return (
+    <CollapsibleSection id="streak" icon={Flame} title={t("profile.streak.title")} actions={toggleControls}>
       <OslerCard padding="roomy">
         {/* Top metrics summary bar */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
@@ -972,7 +1027,7 @@ const ProfileStreakSection = React.memo(function ProfileStreakSection() {
         </div>
         )}
       </OslerCard>
-    </div>
+    </CollapsibleSection>
   );
 });
 
@@ -997,6 +1052,79 @@ function StatTile({
       color={color}
       trend={trend}
     />
+  );
+}
+
+/* ── Achievements section ─────────────────────────────────────────── */
+/* Locked achievements are hidden entirely. The visible list is capped at
+ * five with a Show more toggle revealing the rest. */
+
+const MAX_VISIBLE_ACHIEVEMENTS = 5;
+
+function AchievementsSection({ unlockedIds }: { unlockedIds: Set<string> }) {
+  const { t } = useI18n();
+  const [showAll, setShowAll] = React.useState(false);
+
+  const unlocked = React.useMemo(
+    () => ACHIEVEMENTS.filter((a) => unlockedIds.has(a.id)),
+    [unlockedIds],
+  );
+  const visible = showAll ? unlocked : unlocked.slice(0, MAX_VISIBLE_ACHIEVEMENTS);
+  const hiddenCount = unlocked.length - MAX_VISIBLE_ACHIEVEMENTS;
+
+  return (
+    <CollapsibleSection
+      id="achievements"
+      icon={Medal}
+      title={t("profile.achievements")}
+      actions={
+        <span className="text-xs text-muted-foreground">
+          {unlocked.length}/{ACHIEVEMENTS.length} {t("profile.achievements").toLowerCase()}
+        </span>
+      }
+    >
+      {unlocked.length === 0 ? (
+        <div className="osler-card--default text-center text-sm text-muted-foreground py-8">
+          {t("profile.achievements.empty")}
+        </div>
+      ) : (
+        <>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            {visible.map((a) => (
+              <Achievement
+                key={a.id}
+                icon={ACHIEVEMENT_ICONS[a.icon]}
+                title={t(a.titleKey)}
+                description={t(a.descKey)}
+                unlocked
+              />
+            ))}
+          </div>
+          {hiddenCount > 0 && (
+            <button
+              type="button"
+              onClick={() => {
+                haptic("selection");
+                setShowAll((v) => !v);
+              }}
+              className="mt-3 mx-auto flex items-center gap-1.5 h-8 px-3 rounded-lg border border-border bg-card text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors"
+            >
+              {showAll ? (
+                <>
+                  <ChevronDown className="size-3.5 rotate-180" />
+                  {t("profile.achievements.showLess")}
+                </>
+              ) : (
+                <>
+                  <ChevronDown className="size-3.5" />
+                  {t("profile.achievements.showMore", { n: hiddenCount })}
+                </>
+              )}
+            </button>
+          )}
+        </>
+      )}
+    </CollapsibleSection>
   );
 }
 
@@ -1115,10 +1243,8 @@ function ProfileNotesSection({
 
   return (
     <>
-      <SectionHeading icon={NotebookPen}>
-        {t("qbank.notes.title")}
-      </SectionHeading>
-      <div className="osler-card--default mb-6">
+      <CollapsibleSection id="notes" icon={NotebookPen} title={t("qbank.notes.title")}>
+      <div className="osler-card--default">
         {/* Toolbar */}
         <div className="flex items-center gap-2 mb-4">
           <Button
@@ -1195,6 +1321,7 @@ function ProfileNotesSection({
           />
         )}
       </AnimatePresence>
+      </CollapsibleSection>
     </>
   );
 }
