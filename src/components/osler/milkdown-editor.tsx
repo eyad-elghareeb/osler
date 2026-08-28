@@ -35,10 +35,14 @@ import { commandsCtx } from "@milkdown/kit/core";
 import { clearTextInCurrentBlockCommand } from "@milkdown/kit/preset/commonmark";
 import { Milkdown, MilkdownProvider, useEditor } from "@milkdown/react";
 import { insert, replaceAll } from "@milkdown/utils";
+import { $prose } from "@milkdown/kit/utils";
+import { Plugin as ProseMirrorPlugin } from "@milkdown/kit/prose/state";
+import { Decoration, DecorationSet } from "@milkdown/kit/prose/view";
 import { ImagePlus, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useI18n } from "@/components/osler/i18n-provider";
 import { useToast } from "@/hooks/use-toast";
+import { parseCalloutMarker } from "@/lib/osler/callouts";
 import {
   uploadImageForEditor,
   resolveImageForPreview,
@@ -50,6 +54,51 @@ import {
   useMermaidModal,
   renderMermaidToSvg,
 } from "@/components/osler/admin/editors/mermaid-editor";
+
+// ── Callout decorations ──────────────────────────────────────────────────
+
+// Obsidian-style callouts: a blockquote whose first paragraph starts with
+// `[!type]` is painted with the shared .osler-callout classes so notes get
+// the same admonition styling as rendered articles (see globals.css and
+// lib/osler/callouts.ts). Decorations are presentation-only — the markdown
+// source keeps the raw `[!type]` marker, so round-tripping is lossless.
+// Pure function of the doc, recomputed on every transaction.
+function calloutBlockquoteDecorations(doc: import("@milkdown/kit/prose/model").Node): DecorationSet {
+  const decorations: Decoration[] = [];
+  doc.descendants((node, pos) => {
+    if (node.type.name !== "blockquote") return;
+    const first = node.firstChild;
+    if (!first || first.type.name !== "paragraph") return;
+    const textNode = first.firstChild;
+    const text = textNode?.isText ? textNode.text ?? "" : textNode?.textContent ?? "";
+    const parsed = parseCalloutMarker(text);
+    if (!parsed) return;
+    decorations.push(
+      Decoration.node(pos, pos + node.nodeSize, {
+        class: `osler-callout osler-callout--${parsed.type}`,
+      }),
+    );
+    // Style the marker paragraph as the callout title row (icon + accent).
+    const paragraphPos = pos + 1;
+    decorations.push(
+      Decoration.node(paragraphPos, paragraphPos + first.nodeSize, {
+        class: "osler-callout-title",
+      }),
+    );
+  });
+  return DecorationSet.create(doc, decorations);
+}
+
+const calloutProsePlugin = $prose(
+  () =>
+    new ProseMirrorPlugin({
+      props: {
+        decorations(state) {
+          return calloutBlockquoteDecorations(state.doc);
+        },
+      },
+    }),
+);
 
 // ── Mermaid top-bar icon ─────────────────────────────────────────────────
 
@@ -313,6 +362,10 @@ function InnerMilkdownEditor({
         onChangeRef.current(markdown);
       });
     });
+
+    // Callout decorations (Obsidian `[!type]` blockquotes) — presentation
+    // only, works across every editor context (notes, answers, admin).
+    crepe.editor.use(calloutProsePlugin);
 
     registerCrepe(crepe);
     crepeRef.current = crepe;

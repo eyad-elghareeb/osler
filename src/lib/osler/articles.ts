@@ -6,6 +6,7 @@ import rehypeRaw from "rehype-raw";
 import rehypeSanitize, { defaultSchema } from "rehype-sanitize";
 import rehypeStringify from "rehype-stringify";
 import type { Plugin } from "unified";
+import { CALLOUT_DEFAULT_TITLES, parseCalloutMarker } from "./callouts";
 import { loadCategoryTree, fetchWithLocalFallback } from "./content";
 import { contentFileUrl, localContentUrl } from "./content-url";
 import { loadConfig } from "./config";
@@ -166,6 +167,69 @@ function parseFrontmatter(md: string): { meta: Record<string, unknown>; body: st
 }
 
 /**
+ * Remark plugin: upgrades Obsidian-style callout blockquotes
+ * (`> [!warning] Title`) into styled `<blockquote class="osler-callout
+ * osler-callout--warning" data-callout="warning">` elements with a title
+ * paragraph. The marker line is stripped from the body; when no custom
+ * title is given, the type's default label (CALLOUT_DEFAULT_TITLES) is
+ * used. Blockquotes that don't carry a marker pass through untouched.
+ */
+const remarkCallouts: Plugin<[]> = () => (tree: any) => {
+  function titleParagraph(text: string) {
+    return {
+      type: "paragraph",
+      data: { hProperties: { className: ["osler-callout-title"] } },
+      children: [{ type: "text", value: text }],
+    };
+  }
+
+  function transformCallout(node: any): void {
+    const first = node.children?.[0];
+    if (!first || first.type !== "paragraph") return;
+    const textNode = first.children?.[0];
+    if (!textNode || textNode.type !== "text") return;
+
+    const [firstLine, ...restLines] = String(textNode.value).split("\n");
+    const parsed = parseCalloutMarker(firstLine);
+    if (!parsed) return;
+
+    const title = parsed.title ?? CALLOUT_DEFAULT_TITLES[parsed.type] ?? parsed.type;
+    const remainder = restLines.join("\n").trim();
+
+    if (!remainder) {
+      // The marker was the paragraph's first line and nothing followed it.
+      if (first.children.length > 1) {
+        // Inline siblings continue the paragraph — drop only the marker text.
+        first.children = [titleParagraph(title), ...first.children.slice(1)];
+      } else {
+        node.children = [titleParagraph(title), ...node.children.slice(1)];
+      }
+    } else {
+      textNode.value = remainder;
+      node.children = [titleParagraph(title), ...node.children];
+    }
+
+    node.data = {
+      ...node.data,
+      hName: "blockquote",
+      hProperties: {
+        ...(node.data?.hProperties ?? {}),
+        className: ["osler-callout", `osler-callout--${parsed.type}`],
+        "data-callout": parsed.type,
+      },
+    };
+  }
+
+  function walk(node: any): void {
+    if (node.type === "blockquote") transformCallout(node);
+    if (Array.isArray(node.children)) {
+      for (const child of node.children) walk(child);
+    }
+  }
+  walk(tree);
+};
+
+/**
  * Rehype plugin: converts ```mermaid fenced blocks into
  * <div class="osler-mermaid" data-diagram="…encoded…"> placeholders.
  * The client-side renderer picks these up after hydration.
@@ -257,6 +321,7 @@ const ARTICLE_SANITIZE_SCHEMA = {
     ...defaultSchema.attributes,
     "*": [...(defaultSchema.attributes?.["*"] ?? []), "className", "dir", "lang"],
     div: ["className", "data-diagram"],
+    blockquote: ["className", "data-callout"],
     span: ["className"],
     code: [...(defaultSchema.attributes?.code ?? []), "className"],
     th: ["style", "align"],
@@ -273,6 +338,7 @@ async function mdToHtml(md: string, articleDir: string): Promise<string> {
   const result = await unified()
     .use(remarkParse)
     .use(remarkGfm)
+    .use(remarkCallouts)
     .use(remarkRehype, { allowDangerousHtml: true })
     .use(rehypeRaw)
     .use(rehypeSanitize, ARTICLE_SANITIZE_SCHEMA)
