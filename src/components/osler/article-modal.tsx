@@ -6,7 +6,7 @@ import { BookOpen, X, Clock, ChevronRight, Bookmark, BookmarkCheck, FileText, Ex
 import { loadArticleContent, listAllArticles, type Article, type ArticleMeta } from "@/lib/osler/articles";
 import { cn } from "@/lib/utils";
 import { useArticleHighlighter } from "@/hooks/use-article-highlighter";
-import { applyHighlightsToHtml } from "@/lib/osler/article-highlights";
+import { MilkdownArticleView, articleDirOf } from "./milkdown-article-view";
 import { useI18n } from "@/components/osler/i18n-provider";
 import { HighlighterToolbar } from "./highlighter-toolbar";
 import { usePlatform } from "@/hooks/use-platform";
@@ -40,14 +40,6 @@ export function FloatingArticleModal({
 
   // Article body ref — selection capture + eraser need a stable container.
   const bodyRef = React.useRef<HTMLDivElement | null>(null);
-
-  // Paint saved highlights into the rendered HTML before injection
-  // (same string-level approach as library.tsx — the hook's iframe
-  // machinery is unused by both consumers).
-  const processedHtml = React.useMemo(() => {
-    if (!article || article.contentType !== "md") return article?.html ?? "";
-    return applyHighlightsToHtml(article.html, hlCtrl.highlights as any);
-  }, [article, hlCtrl.highlights]);
 
   // Capture text selections while a highlight tool is active. Mirrors the
   // library reader: `selectionchange` debounced so mouse and touch both
@@ -347,7 +339,14 @@ export function FloatingArticleModal({
                     />
                   ) : (
                     <div className="library-article p-8 max-w-[920px] mx-auto">
-                      <div ref={bodyRef} dangerouslySetInnerHTML={{ __html: processedHtml }} />
+                      <MilkdownArticleView
+                        markdown={article.content}
+                        articleDir={articleDirOf(activeId ?? "")}
+                        highlights={hlCtrl.highlights}
+                        contentRef={bodyRef}
+                        dir={article.lang === "ar" ? "rtl" : "ltr"}
+                        lang={article.lang ?? "en"}
+                      />
                     </div>
                   )
                 ) : (

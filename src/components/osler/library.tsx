@@ -49,8 +49,8 @@ import { ContentCacheButton } from "./content-cache-button";
 import { FolderTreeNav } from "./folder-tree-nav";
 import { NavigationStack } from "./navigation-stack";
 import { applyHighlightsToHtml } from "@/lib/osler/article-highlights";
+import { MilkdownArticleView, articleDirOf } from "./milkdown-article-view";
 import { setImmersiveMode } from "./immersive-mode";
-import { MermaidModal } from "./mermaid-modal";
 import { haptic } from "@/lib/osler/native";
 import { useToast } from "@/hooks/use-toast";
 import { type PdfExportOptions } from "./pdf-export-dialog";
@@ -228,9 +228,6 @@ export function Library({ initialArticleId, onNavigateBack: propOnNavigateBack }
     return applyHighlightsToHtml(activeArticle.html, hlCtrl.highlights as any);
   }, [activeArticle?.html, hlCtrl.highlights, theme]);
 
-  // Mermaid modal state
-  const [mermaidModal, setMermaidModal] = React.useState<{ svg: string; title?: string } | null>(null);
-
   const [pdfDialogOpen, setPdfDialogOpen] = React.useState(false);
   const [reportOpen, setReportOpen] = React.useState(false);
   const reportContext: TicketContext | undefined = activeArticle
@@ -261,75 +258,6 @@ export function Library({ initialArticleId, onNavigateBack: propOnNavigateBack }
       toast({ title: t("pdf.exportFailed"), description: String(err), variant: "destructive" });
     }
   }, [activeArticle, processedArticleHtml, toast, t]);
-
-  // Mermaid post-processing: find placeholders, dynamically render SVG
-  React.useEffect(() => {
-    if (!activeArticle || activeArticle.contentType !== "md") return;
-    const el = articleContentRef.current;
-    if (!el) return;
-
-    const placeholders = Array.from(el.querySelectorAll<HTMLElement>(".osler-mermaid[data-diagram]"));
-    if (placeholders.length === 0) return;
-
-    let cancelled = false;
-    (async () => {
-      try {
-        const mermaid = (await import("mermaid")).default;
-        const isDark = document.documentElement.classList.contains("dark");
-        mermaid.initialize({
-          startOnLoad: false,
-          theme: isDark ? "dark" : "default",
-          // "strict" sanitizes diagram output and blocks click-callbacks —
-          // diagrams are authored content and must never execute script.
-          securityLevel: "strict",
-          fontFamily: "inherit",
-        });
-
-        for (let i = 0; i < placeholders.length; i++) {
-          if (cancelled) break;
-          const placeholder = placeholders[i];
-          const encoded = placeholder.getAttribute("data-diagram");
-          if (!encoded) continue;
-          const diagram = decodeURIComponent(encoded);
-
-          // Build the card structure
-          const inner = document.createElement("div");
-          inner.className = "osler-mermaid-inner";
-          const toolbar = document.createElement("div");
-          toolbar.className = "osler-mermaid-toolbar";
-
-          try {
-            const id = `osler-mermaid-${i}-${Date.now()}`;
-            const { svg } = await mermaid.render(id, diagram);
-            inner.innerHTML = svg;
-
-            // Expand button
-            const expandBtn = document.createElement("button");
-            expandBtn.className = "osler-icon-btn size-7 text-xs flex items-center gap-1 text-muted-foreground hover:text-foreground transition-colors";
-            expandBtn.title = "Explore diagram";
-            expandBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg><span style="font-size:11px">Explore</span>`;
-            const svgSnapshot = svg;
-            expandBtn.addEventListener("click", () => {
-              setMermaidModal({ svg: svgSnapshot });
-            });
-            toolbar.appendChild(expandBtn);
-          } catch {
-            inner.innerHTML = `<div class="osler-mermaid-error">Failed to render diagram</div>`;
-          }
-
-          placeholder.innerHTML = "";
-          placeholder.appendChild(inner);
-          placeholder.appendChild(toolbar);
-          // Remove the data-diagram attr so re-renders don't re-process
-          placeholder.removeAttribute("data-diagram");
-        }
-      } catch {
-        // mermaid import failed — silently skip
-      }
-    })();
-
-    return () => { cancelled = true; };
-  }, [processedArticleHtml, theme]);
 
   // Reliable cross-platform (mouse + touch) auto-highlighting.
   //
@@ -474,6 +402,7 @@ export function Library({ initialArticleId, onNavigateBack: propOnNavigateBack }
         activeFile && activeArticle ? (
           <MobileReader
             article={activeArticle}
+            articlePath={activeFile ?? ""}
             isBookmarked={bookmarks.has(activeFile)}
             onToggleBookmark={() => toggleBookmark(activeFile)}
             onBack={closeArticle}
@@ -506,15 +435,6 @@ export function Library({ initialArticleId, onNavigateBack: propOnNavigateBack }
           className="h-full"
         >
           {mobileLayout}
-          <AnimatePresence>
-            {mermaidModal && (
-              <MermaidModal
-                svg={mermaidModal.svg}
-                title={mermaidModal.title || activeArticle?.title}
-                onClose={() => setMermaidModal(null)}
-              />
-            )}
-          </AnimatePresence>
         </motion.div>
         <PdfExportDialog
           open={pdfDialogOpen}
@@ -629,20 +549,23 @@ export function Library({ initialArticleId, onNavigateBack: propOnNavigateBack }
                   initial={{ opacity: 0, y: 6 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={MOTION_TRANSITION.normal}
-                  className={cn(
-                    "library-article relative",
-                    activeArticle?.lang === "ar" ? "osler-content-ar" : "osler-content-en",
-                  )}
-                  dir={activeArticle?.lang === "ar" ? "rtl" : "ltr"}
-                  lang={activeArticle?.lang ?? "en"}
-                  style={{
-                    fontSize: `${(zoom / 100) * fontSize}px`,
-                    lineHeight: 1.7,
-                  }}
+                  className="relative"
                 >
-                  <div
-                    ref={articleContentRef}
-                    dangerouslySetInnerHTML={{ __html: processedArticleHtml }}
+                  <MilkdownArticleView
+                    markdown={activeArticle.content}
+                    articleDir={articleDirOf(activeFile ?? "")}
+                    highlights={hlCtrl.highlights}
+                    contentRef={articleContentRef}
+                    className={cn(
+                      "library-article",
+                      activeArticle?.lang === "ar" ? "osler-content-ar" : "osler-content-en",
+                    )}
+                    dir={activeArticle?.lang === "ar" ? "rtl" : "ltr"}
+                    lang={activeArticle?.lang ?? "en"}
+                    style={{
+                      fontSize: `${(zoom / 100) * fontSize}px`,
+                      lineHeight: 1.7,
+                    }}
                   />
                 </motion.div>
               )}
@@ -655,16 +578,6 @@ export function Library({ initialArticleId, onNavigateBack: propOnNavigateBack }
           />
         )}
       </main>
-
-      <AnimatePresence>
-        {mermaidModal && (
-          <MermaidModal
-            svg={mermaidModal.svg}
-            title={mermaidModal.title || activeArticle?.title}
-            onClose={() => setMermaidModal(null)}
-          />
-        )}
-      </AnimatePresence>
 
       <PdfExportDialog
         open={pdfDialogOpen}
@@ -846,6 +759,7 @@ function MobileHub({
 
 function MobileReader({
   article,
+  articlePath,
   isBookmarked,
   onToggleBookmark,
   onBack,
@@ -863,6 +777,7 @@ function MobileReader({
   onReport,
 }: {
   article: Article;
+  articlePath: string;
   isBookmarked: boolean;
   onToggleBookmark: () => void;
   onBack: () => void;
@@ -1071,22 +986,25 @@ function MobileReader({
             initial={{ opacity: 0, y: 6 }}
             animate={{ opacity: 1, y: 0 }}
             transition={MOTION_TRANSITION.normal}
-            className={cn(
-              "library-article px-4 py-5",
-              article.lang === "ar" ? "osler-content-ar" : "osler-content-en",
-            )}
-            dir={article.lang === "ar" ? "rtl" : "ltr"}
-            lang={article.lang ?? "en"}
-            style={{
-              fontSize: `${(zoom / 100) * fontSize}px`,
-              lineHeight: 1.7,
-            }}
+            className="py-5"
           >
             {/* Title at top of content */}
             <h1 className="text-xl font-bold mb-1">{article.title}</h1>
-            <div
-              ref={articleContentRef}
-              dangerouslySetInnerHTML={{ __html: processedHtml }}
+            <MilkdownArticleView
+              markdown={article.content}
+              articleDir={articleDirOf(articlePath)}
+              highlights={hlCtrl.highlights}
+              contentRef={articleContentRef}
+              className={cn(
+                "library-article px-4",
+                article.lang === "ar" ? "osler-content-ar" : "osler-content-en",
+              )}
+              dir={article.lang === "ar" ? "rtl" : "ltr"}
+              lang={article.lang ?? "en"}
+              style={{
+                fontSize: `${(zoom / 100) * fontSize}px`,
+                lineHeight: 1.7,
+              }}
             />
           </motion.div>
         )}

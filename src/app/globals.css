@@ -3618,7 +3618,8 @@ html.osler-ar body,
    ═══════════════════════════════════════════════════════════════════════ */
 
 .osler-callout,
-.osler-milkdown-editor .milkdown .ProseMirror blockquote.osler-callout {
+.osler-milkdown-editor .milkdown .ProseMirror blockquote.osler-callout,
+.osler-milkdown-article .milkdown .ProseMirror blockquote.osler-callout {
   --callout-accent: var(--primary);
   --callout-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/%3E%3Cpath d="m15 5 4 4"/%3E%3C/svg%3E");
   margin: 1rem 0;
@@ -3632,11 +3633,13 @@ html.osler-ar body,
   overflow: hidden;
 }
 /* Kill Crepe's ::before quote bar on callout blockquotes in the editor. */
-.osler-milkdown-editor .milkdown .ProseMirror blockquote.osler-callout::before {
+.osler-milkdown-editor .milkdown .ProseMirror blockquote.osler-callout::before,
+.osler-milkdown-article .milkdown .ProseMirror blockquote.osler-callout::before {
   display: none;
 }
 .osler-callout .osler-callout-title,
-.osler-milkdown-editor .milkdown .ProseMirror blockquote.osler-callout > .osler-callout-title {
+.osler-milkdown-editor .milkdown .ProseMirror blockquote.osler-callout > .osler-callout-title,
+.osler-milkdown-article .milkdown .ProseMirror blockquote.osler-callout > .osler-callout-title {
   display: flex;
   align-items: center;
   gap: 0.4rem;
@@ -3648,7 +3651,8 @@ html.osler-ar body,
   color: var(--callout-accent);
 }
 .osler-callout .osler-callout-title::before,
-.osler-milkdown-editor .milkdown .ProseMirror blockquote.osler-callout > .osler-callout-title::before {
+.osler-milkdown-editor .milkdown .ProseMirror blockquote.osler-callout > .osler-callout-title::before,
+.osler-milkdown-article .milkdown .ProseMirror blockquote.osler-callout > .osler-callout-title::before {
   content: "";
   inline-size: 1em;
   block-size: 1em;
@@ -3734,4 +3738,30 @@ html.osler-ar body,
 .osler-callout--mnemonic {
   --callout-accent: oklch(0.7 0.14 265);
   --callout-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d="M12 5a3 3 0 1 0-5.997.125 4 4 0 0 0-2.526 5.77 4 4 0 0 0 .556 6.588A4 4 0 1 0 12 18Z"/%3E%3Cpath d="M12 5a3 3 0 1 1 5.997.125 4 4 0 0 1 2.526 5.77 4 4 0 0 1-.556 6.588A4 4 0 1 1 12 18Z"/%3E%3C/svg%3E");
+}
+
+
+/* ═══════════════════════════════════════════════════════════════════════
+   Milkdown article view (read-only reader)
+   ────────────────────────────────────────────────────────────────────────
+   The reader renders articles through the same Milkdown/Crepe pipeline as
+   notes (see MilkdownArticleView). Unlike the editor card, the reader
+   inherits the surrounding .library-article typography (font size = zoom ×
+   reader setting, serif family, line height) and drops editor-only chrome:
+   no block-edit gutter padding, no min-height, no editor borders.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+.osler-milkdown-article .milkdown .ProseMirror {
+  font-size: inherit;
+  font-family: inherit;
+  color: inherit;
+  line-height: inherit;
+  min-height: 0;
+  padding: 0 !important; /* no block-edit handle in the read-only reader */
+  unicode-bidi: plaintext;
+}
+/* Read-only callouts render the parsed title; the raw [!type] marker text
+   is hidden (the notes editor keeps it visible for editing). */
+.osler-callout-marker {
+  display: none;
 }
