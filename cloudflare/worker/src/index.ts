@@ -651,21 +651,22 @@ function escapeLike(value: string): string {
 
 // ─── Session management ──────────────────────────────────────────────────────
 
-async function issueSession(user: UserRow, env: Env) {
+async function issueSession(user: UserRow, env: Env, userAgent?: string | null) {
   const sessionId = id();
   const expiresAt = now() + SESSION_TTL_MS;
+  const ua = typeof userAgent === "string" && userAgent.trim() ? userAgent.trim().slice(0, 300) : null;
   const payload = b64url(encoder.encode(JSON.stringify({ sub: user.id, sid: sessionId, role: user.role, exp: Math.floor(expiresAt / 1000) })));
   const token = `${payload}.${await hmac(payload, env.JWT_SECRET)}`;
   const tokenHash = await sha256(token);
   const result = await env.DB.prepare(`
-    INSERT INTO sessions (id, user_id, token_hash, expires_at, created_at)
-    SELECT ?, ?, ?, ?, ?
+    INSERT INTO sessions (id, user_id, token_hash, expires_at, created_at, user_agent, last_seen_at)
+    SELECT ?, ?, ?, ?, ?, ?, ?
     WHERE (SELECT COUNT(*) FROM sessions WHERE user_id = ? AND revoked_at IS NULL AND expires_at > ?) < ?
-  `).bind(sessionId, user.id, tokenHash, expiresAt, now(), user.id, now(), MAX_SESSIONS_PER_USER).run();
+  `).bind(sessionId, user.id, tokenHash, expiresAt, now(), ua, now(), user.id, now(), MAX_SESSIONS_PER_USER).run();
   if ((result.meta?.rows_written ?? 1) === 0) {
     await env.DB.batch([
       env.DB.prepare("UPDATE sessions SET revoked_at = ? WHERE id IN (SELECT id FROM sessions WHERE user_id = ? AND revoked_at IS NULL AND expires_at > ? ORDER BY created_at ASC LIMIT 1)").bind(now(), user.id, now()),
-      env.DB.prepare("INSERT INTO sessions (id, user_id, token_hash, expires_at, created_at) VALUES (?, ?, ?, ?, ?)").bind(sessionId, user.id, tokenHash, expiresAt, now()),
+      env.DB.prepare("INSERT INTO sessions (id, user_id, token_hash, expires_at, created_at, user_agent, last_seen_at) VALUES (?, ?, ?, ?, ?, ?, ?)").bind(sessionId, user.id, tokenHash, expiresAt, now(), ua, now()),
     ]);
   }
   return { token, expiresAt, user: publicUser(user) };
@@ -679,10 +680,16 @@ async function requireUser(request: Request, env: Env): Promise<SessionRow | nul
   let claims: any;
   try { claims = JSON.parse(decoder.decode(unb64url(payload))); } catch { return null; }
   if (!claims?.sub || !claims?.sid || Number(claims.exp) * 1000 <= now()) return null;
-  const row = await env.DB.prepare("SELECT s.id as _sid, u.* FROM sessions s JOIN users u ON u.id = s.user_id WHERE s.id = ? AND s.token_hash = ? AND s.revoked_at IS NULL AND s.expires_at > ?")
+  const row = await env.DB.prepare("SELECT s.id as _sid, s.last_seen_at as _last_seen, u.* FROM sessions s JOIN users u ON u.id = s.user_id WHERE s.id = ? AND s.token_hash = ? AND s.revoked_at IS NULL AND s.expires_at > ?")
     .bind(claims.sid, await sha256(token), now()).first<Record<string, unknown>>();
   if (!row) return null;
-  const { _sid, ...userFields } = row;
+  // Throttled "last seen" heartbeat backing the session/device manager:
+  // at most one UPDATE per session per minute regardless of request volume.
+  const lastSeen = Number(row._last_seen ?? 0);
+  if (!lastSeen || now() - lastSeen > 60_000) {
+    await env.DB.prepare("UPDATE sessions SET last_seen_at = ? WHERE id = ?").bind(now(), claims.sid).run();
+  }
+  const { _sid, _last_seen, ...userFields } = row;
   return { sessionId: claims.sid, user: userFields as unknown as UserRow };
 }
 
@@ -713,7 +720,7 @@ async function refreshSession(request: Request, env: Env): Promise<{ token: stri
   const user = await env.DB.prepare("SELECT * FROM users WHERE id = ?").bind(claims.sub).first<UserRow>();
   if (!user) return null;
   await env.DB.prepare("UPDATE sessions SET revoked_at = ? WHERE id = ?").bind(now(), claims.sid).run();
-  return issueSession(user, env);
+  return issueSession(user, env, request.headers.get("user-agent"));
 }
 
 // ─── Sync merging ────────────────────────────────────────────────────────────
@@ -2096,7 +2103,7 @@ async function handleBiometricAuthenticateComplete(request: Request, env: Env, _
 
   const user = await env.DB.prepare("SELECT * FROM users WHERE id = ?").bind(bs.user_id).first<any>();
   if (!user) return json({ error: "User not found" }, 404, "", log);
-  return json(await issueSession(user, env), 200, "", log);
+  return json(await issueSession(user, env, request.headers.get("user-agent")), 200, "", log);
 }
 
 async function handleBiometricCredentials(request: Request, env: Env, session: Session, log: Logger): Promise<Response> {
@@ -4676,7 +4683,7 @@ export default {
         if (!handoff) return json({ error: "This sign-in link is invalid or expired" }, 400, origin, log);
         await env.DB.prepare("UPDATE auth_handoffs SET used_at = ? WHERE id = ?").bind(now(), handoff.id).run();
         const user = await env.DB.prepare("SELECT * FROM users WHERE id = ?").bind(handoff.user_id).first<any>();
-        return json(await issueSession(user, env), 200, origin, log);
+        return json(await issueSession(user, env, request.headers.get("user-agent")), 200, origin, log);
       }
 
       // ── Username availability ──
@@ -4702,7 +4709,7 @@ export default {
           await env.DB.prepare("INSERT INTO users (id, username, email, display_name, password_hash, password_salt, has_password, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?)").bind(userId, username, email, displayName, password.hash, password.salt, now(), now()).run();
         } catch { return json({ error: "That username or email is already in use" }, 409, origin, log); }
         const user = await env.DB.prepare("SELECT * FROM users WHERE id = ?").bind(userId).first<any>();
-        return json(await issueSession(user, env), 201, origin, log);
+        return json(await issueSession(user, env, request.headers.get("user-agent")), 201, origin, log);
       }
 
       // ── Login ──
@@ -4734,7 +4741,7 @@ export default {
           return json({ error: "Invalid username or password" }, 401, origin, log);
         }
         await loginFailureClear(env, identifierKey, ip);
-        return json(await issueSession(user, env), 200, origin, log);
+        return json(await issueSession(user, env, request.headers.get("user-agent")), 200, origin, log);
       }
 
       // ── Logout ──
@@ -5146,6 +5153,37 @@ export default {
 
       // ── Account routes ──
       if (request.method === "GET" && url.pathname === "/v1/auth/me") return json(await accountPayload(env, session.user), 200, origin, log);
+
+      // ── Session / device management ──
+      // Users can list the devices signed in to their account and revoke
+      // any of them. Revoking the current session behaves like a logout.
+      if (request.method === "GET" && url.pathname === "/v1/account/sessions") {
+        const rows = await env.DB.prepare(
+          "SELECT id, user_agent, created_at, last_seen_at, expires_at FROM sessions WHERE user_id = ? AND revoked_at IS NULL AND expires_at > ? ORDER BY COALESCE(last_seen_at, created_at) DESC LIMIT 50"
+        ).bind(session.user.id, now()).all<any>();
+        const sessions = (rows.results ?? []).map((r) => ({
+          id: r.id,
+          userAgent: typeof r.user_agent === "string" ? r.user_agent : null,
+          createdAt: Number(r.created_at),
+          lastSeenAt: Number(r.last_seen_at ?? r.created_at),
+          expiresAt: Number(r.expires_at),
+          current: r.id === session.sessionId,
+        }));
+        return json({ sessions }, 200, origin, log);
+      }
+      if (request.method === "POST" && url.pathname === "/v1/account/sessions/revoke-others") {
+        await env.DB.prepare("UPDATE sessions SET revoked_at = ? WHERE user_id = ? AND id != ? AND revoked_at IS NULL")
+          .bind(now(), session.user.id, session.sessionId).run();
+        return json({ ok: true }, 200, origin, log);
+      }
+      if (request.method === "DELETE" && url.pathname.startsWith("/v1/account/sessions/")) {
+        const targetId = url.pathname.slice("/v1/account/sessions/".length);
+        if (!targetId || targetId === "revoke-others") return json({ error: "Not found" }, 404, origin, log);
+        const result = await env.DB.prepare("UPDATE sessions SET revoked_at = ? WHERE id = ? AND user_id = ? AND revoked_at IS NULL")
+          .bind(now(), targetId, session.user.id).run();
+        if ((result.meta?.changes ?? 0) === 0) return json({ error: "Session not found" }, 404, origin, log);
+        return json({ ok: true }, 200, origin, log);
+      }
       if (request.method === "PATCH" && url.pathname === "/v1/account") {
         const body = await readJson(request);
         const displayName = typeof body.displayName === "string" ? body.displayName.trim().slice(0, 80) : session.user.display_name;
@@ -5167,7 +5205,7 @@ export default {
           env.DB.prepare("UPDATE users SET password_hash = ?, password_salt = ?, has_password = 1, updated_at = ? WHERE id = ?").bind(password.hash, password.salt, now(), session.user.id),
           env.DB.prepare("UPDATE sessions SET revoked_at = ? WHERE user_id = ? AND revoked_at IS NULL AND id != ?").bind(now(), session.user.id, session.sessionId),
         ]);
-        return json(await issueSession(await env.DB.prepare("SELECT * FROM users WHERE id = ?").bind(session.user.id).first<any>(), env), 200, origin, log);
+        return json(await issueSession(await env.DB.prepare("SELECT * FROM users WHERE id = ?").bind(session.user.id).first<any>(), env, request.headers.get("user-agent")), 200, origin, log);
       }
       if (request.method === "GET" && url.pathname === "/v1/account/export") return json({ account: await accountPayload(env, session.user), progress: await getAllDocuments(env, session.user.id), exportedAt: now() }, 200, origin, log);
       if (request.method === "DELETE" && url.pathname === "/v1/account") {

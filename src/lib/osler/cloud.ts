@@ -489,6 +489,36 @@ export async function exportCloudAccount(session: CloudSession): Promise<unknown
   return request("/v1/account/export", { method: "GET" }, session.token);
 }
 
+/* ── Session / device management ─────────────────────────────────────────── */
+
+/** One active sign-in ("device") for the account. */
+export interface CloudSessionInfo {
+  id: string;
+  /** Raw User-Agent string captured at sign-in (null for legacy rows). */
+  userAgent: string | null;
+  createdAt: number;
+  lastSeenAt: number;
+  expiresAt: number;
+  /** True when this is the session making the request. */
+  current: boolean;
+}
+
+/** List every active session for the account (newest activity first). */
+export async function listCloudSessions(session: CloudSession): Promise<CloudSessionInfo[]> {
+  const result = await request<{ sessions: CloudSessionInfo[] }>("/v1/account/sessions", { method: "GET" }, session.token);
+  return result.sessions ?? [];
+}
+
+/** Revoke one session ("sign out that device"). */
+export async function revokeCloudSession(session: CloudSession, sessionId: string): Promise<void> {
+  await request(`/v1/account/sessions/${encodeURIComponent(sessionId)}`, { method: "DELETE" }, session.token);
+}
+
+/** Revoke every session except the caller's (sign out all other devices). */
+export async function revokeOtherCloudSessions(session: CloudSession): Promise<void> {
+  await request("/v1/account/sessions/revoke-others", { method: "POST" }, session.token);
+}
+
 export async function deleteCloudAccount(session: CloudSession, input: { password?: string }): Promise<void> {
   await request("/v1/account", { method: "DELETE", body: JSON.stringify({ confirm: "DELETE", ...input }) }, session.token);
   clearCloudSession();

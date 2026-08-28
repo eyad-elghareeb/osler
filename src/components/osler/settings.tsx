@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Settings as SettingsIcon, Sparkles, AlertTriangle, Keyboard, Languages, Download, Smartphone, FileArchive, Fingerprint, ArrowLeft, ChevronRight, Info, Palette, User, Loader2, LifeBuoy } from "lucide-react";
+import { Settings as SettingsIcon, Sparkles, AlertTriangle, Keyboard, Languages, Download, Smartphone, FileArchive, Fingerprint, ArrowLeft, ChevronRight, Info, Palette, User, Loader2, LifeBuoy, MonitorSmartphone } from "lucide-react";
 import { storage } from "@/lib/osler/storage";
 import { SyncSettingsSection } from "@/components/osler/sync/sync-settings-section";
 import { useI18n } from "@/components/osler/i18n-provider";
@@ -17,7 +17,7 @@ import dynamic from "next/dynamic";
 
 /* ─── Section catalog ─────────────────────────────────────────────── */
 
-export type SettingsSection = "account" | "appearance" | "language" | "ai" | "shortcuts" | "downloads" | "sync" | "backup" | "native" | "support" | "about" | "danger";
+export type SettingsSection = "account" | "sessions" | "appearance" | "language" | "ai" | "shortcuts" | "downloads" | "sync" | "backup" | "native" | "support" | "about" | "danger";
 
 interface SectionMeta {
   id: SettingsSection;
@@ -29,6 +29,7 @@ interface SectionMeta {
 
 const SECTIONS: SectionMeta[] = [
   { id: "account",    labelKey: "settings.section.account",   icon: User,         keywords: "account profile email password auth google sync status export delete logout cloud" },
+  { id: "sessions",   labelKey: "settings.section.sessions",  icon: MonitorSmartphone, keywords: "sessions devices sign out logout security active login revoke" },
   { id: "appearance", labelKey: "settings.theme.title", icon: Palette, keywords: "theme appearance dark light color palette custom" },
   { id: "language",  labelKey: "settings.section.language",  icon: Languages,    keywords: "language arabic english rtl ui direction locale" },
   { id: "ai",        labelKey: "settings.section.ai",        icon: Sparkles,     keywords: "ai assistant gemini api key model osce voice" },
@@ -65,10 +66,12 @@ const SupportSettingsSection = mkSection(() => import("@/components/osler/settin
 const AboutSettingsSection = mkSection(() => import("@/components/osler/settings/about-section").then((m) => ({ default: m.AboutSettingsSection })));
 const DangerZoneSection = mkSection(() => import("@/components/osler/settings/danger-section").then((m) => ({ default: m.DangerZoneSection })));
 const AccountSettingsSection = mkSection(() => import("@/components/osler/settings/account-section").then((m) => ({ default: m.AccountSettingsSection })));
+const SessionsSettingsSection = mkSection(() => import("@/components/osler/settings/sessions-section").then((m) => ({ default: m.SessionsSettingsSection })));
 
 function renderSection(id: SettingsSection) {
   switch (id) {
     case "account":   return <AccountSettingsSection />;
+    case "sessions":  return <SessionsSettingsSection />;
     case "appearance": return <ThemeSettingsSection />;
     case "language":  return <LanguageSettingsSection />;
     case "ai":        return <AiSettingsSection />;
