@@ -2032,8 +2032,8 @@ html[dir="rtl"] {
 
 .library-article {
   flex: 1;
-  padding: 2rem 2.5rem;
-  max-width: 920px;
+  padding: 1.25rem clamp(1rem, 3vw, 2rem) 2rem;
+  max-width: 1040px;
   margin: 0 auto;
   color: var(--foreground);
   font-family: var(--font-serif);
@@ -3767,4 +3767,231 @@ html.osler-ar body,
    is hidden (the notes editor keeps it visible for editing). */
 .osler-callout-marker {
   display: none;
+}
+
+/* ── Crepe variable mapping for the read-only article reader ────────────
+ * The article view mounts the same Crepe `.milkdown` tree but WITHOUT the
+ * `.osler-milkdown-editor` wrapper, so without this mapping it inherits
+ * Crepe's sepia "classic" palette (beige background, brown primary) instead
+ * of the active Osler theme. Same dual-scope strategy as the editor block:
+ * re-declare on `.osler-milkdown-article .milkdown` (later in the cascade,
+ * same specificity as Crepe's `.milkdown` rule) so Osler tokens win. */
+.osler-milkdown-article,
+.osler-milkdown-article .milkdown {
+  --crepe-color-background: transparent;
+  --crepe-color-on-background: var(--foreground);
+  --crepe-color-surface: var(--muted);
+  --crepe-color-surface-low: var(--muted);
+  --crepe-color-on-surface: var(--foreground);
+  --crepe-color-on-surface-variant: var(--muted-foreground);
+  --crepe-color-outline: var(--muted-foreground);
+  --crepe-color-primary: var(--primary);
+  --crepe-color-secondary: var(--secondary);
+  --crepe-color-on-secondary: var(--secondary-foreground);
+  --crepe-color-inverse: var(--secondary-foreground);
+  --crepe-color-on-inverse: var(--secondary);
+  --crepe-color-inline-code: var(--destructive);
+  --crepe-color-error: var(--destructive);
+  --crepe-color-hover: color-mix(in oklch, var(--muted) 80%, var(--primary) 6%);
+  --crepe-color-selected: color-mix(in oklch, var(--muted) 65%, var(--primary) 18%);
+  --crepe-color-inline-area: var(--border);
+  --crepe-color-diff-added: var(--success);
+  --crepe-color-diff-removed: var(--destructive);
+  --crepe-color-diff-added-text: var(--success);
+  --crepe-color-diff-removed-text: var(--destructive);
+  --crepe-shadow-1: var(--shadow-e2);
+  --crepe-shadow-2: var(--shadow-e3);
+
+  --crepe-font-title: var(--font-playfair), var(--font-newsreader), Georgia, serif;
+  --crepe-font-default: var(--font-newsreader), Georgia, serif;
+  --crepe-font-code: var(--font-jetbrains-mono), var(--font-geist-mono), ui-monospace, monospace;
+}
+.dark .osler-milkdown-article,
+.dark .osler-milkdown-article .milkdown,
+:root:not(.light) .osler-milkdown-article,
+:root:not(.light) .osler-milkdown-article .milkdown {
+  --crepe-color-surface-low: var(--secondary);
+  --crepe-color-hover: color-mix(in oklch, var(--muted) 70%, var(--primary) 10%);
+  --crepe-color-selected: color-mix(in oklch, var(--muted) 55%, var(--primary) 22%);
+  --crepe-color-inline-area: var(--border-strong);
+}
+
+/* ── Article typography inside the Milkdown pipeline ────────────────────
+ * Crepe's reset.css sets document-scale headings (h1 = 2.625em) with
+ * `.milkdown .ProseMirror h1` (0,2,1) — which beats `.library-article h1`
+ * (0,1,1). Re-state the `.library-article` recipe at Crepe's specificity so
+ * the Milkdown-rendered body matches the HTML pipeline exactly. */
+.osler-milkdown-article .milkdown {
+  background: transparent;
+  color: var(--foreground);
+  padding: 0 !important;
+}
+.osler-milkdown-article .milkdown .ProseMirror h1,
+.osler-milkdown-article .milkdown .ProseMirror h2,
+.osler-milkdown-article .milkdown .ProseMirror h3,
+.osler-milkdown-article .milkdown .ProseMirror h4,
+.osler-milkdown-article .milkdown .ProseMirror h5,
+.osler-milkdown-article .milkdown .ProseMirror h6 {
+  font-family: var(--font-playfair), var(--font-newsreader), Georgia, serif;
+  font-weight: 700;
+  color: var(--foreground);
+  line-height: 1.25;
+  padding: 0 !important;
+  text-wrap: balance;
+}
+.osler-milkdown-article .milkdown .ProseMirror h1 {
+  font-size: 1.85rem;
+  margin: 0 0 0.5rem 0;
+  letter-spacing: -0.01em;
+}
+.osler-milkdown-article .milkdown .ProseMirror h2 {
+  font-size: 1.35rem;
+  margin: 1.75rem 0 0.75rem;
+  padding-bottom: 0.35rem !important;
+  border-bottom: 1px solid var(--border);
+}
+.osler-milkdown-article .milkdown .ProseMirror h3 {
+  font-size: 1.1rem;
+  margin: 1.4rem 0 0.5rem;
+  color: var(--primary);
+}
+.osler-milkdown-article .milkdown .ProseMirror h4 {
+  font-size: 1rem;
+  margin: 1.2rem 0 0.5rem;
+}
+.osler-milkdown-article .milkdown .ProseMirror h5 {
+  font-size: 0.925rem;
+  margin: 1rem 0 0.4rem;
+}
+.osler-milkdown-article .milkdown .ProseMirror h6 {
+  font-size: 0.85rem;
+  margin: 1rem 0 0.4rem;
+  color: var(--muted-foreground);
+}
+.osler-milkdown-article .milkdown .ProseMirror p {
+  font-size: 1em;
+  line-height: inherit;
+  padding: 0 !important;
+  margin: 0.65rem 0;
+}
+.osler-milkdown-article .milkdown .ProseMirror ul,
+.osler-milkdown-article .milkdown .ProseMirror ol {
+  margin: 0.5rem 0;
+  padding-inline-start: 1.5rem !important;
+}
+.osler-milkdown-article .milkdown .ProseMirror ul { list-style: disc; }
+.osler-milkdown-article .milkdown .ProseMirror ol { list-style: decimal; }
+.osler-milkdown-article .milkdown .ProseMirror li {
+  margin: 0.25rem 0;
+  padding: 0;
+}
+/* Plain blockquotes (callouts get their own .osler-callout styling). */
+.osler-milkdown-article .milkdown .ProseMirror blockquote {
+  border-inline-start: 3px solid var(--primary);
+  padding: 0.25rem 0 0.25rem 1rem !important;
+  margin: 0.75rem 0;
+  color: var(--muted-foreground);
+  font-style: italic;
+  background: transparent;
+  box-sizing: border-box;
+}
+.osler-milkdown-article .milkdown .ProseMirror blockquote::before {
+  display: none;
+}
+.osler-milkdown-article .milkdown .ProseMirror code {
+  font-family: var(--font-jetbrains-mono), var(--font-geist-mono), ui-monospace, monospace;
+  background: var(--muted);
+  color: var(--foreground);
+  padding: 0.1rem 0.35rem !important;
+  border-radius: 4px;
+  font-size: 0.85em;
+  display: inline;
+  line-height: 1.4;
+}
+.osler-milkdown-article .milkdown .ProseMirror pre {
+  background: var(--muted) !important;
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+  padding: 0.75rem 1rem !important;
+  margin: 0.75rem 0;
+  overflow-x: auto;
+}
+.osler-milkdown-article .milkdown .ProseMirror pre code {
+  background: transparent !important;
+  padding: 0 !important;
+  color: var(--foreground);
+  font-size: 0.85em;
+  display: inline;
+}
+.osler-milkdown-article .milkdown .ProseMirror a {
+  color: var(--primary);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.osler-milkdown-article .milkdown .ProseMirror img {
+  vertical-align: middle;
+  max-width: 100%;
+  height: auto;
+  border-radius: 6px;
+  margin: 0.75rem 0;
+  cursor: zoom-in;
+  transition: opacity 0.15s;
+}
+.osler-milkdown-article .milkdown .ProseMirror img:hover {
+  opacity: 0.85;
+}
+.osler-milkdown-article .milkdown .ProseMirror hr {
+  border: none;
+  background-color: var(--border) !important;
+  border-top: 1px solid var(--border);
+  height: 1px !important;
+  padding: 0 !important;
+  margin: 1.5rem 0;
+}
+.osler-milkdown-article .milkdown .ProseMirror table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 0.75rem 0;
+  font-size: 0.9rem;
+}
+.osler-milkdown-article .milkdown .ProseMirror th,
+.osler-milkdown-article .milkdown .ProseMirror td {
+  border: 1px solid var(--border) !important;
+  padding: 0.4rem 0.6rem;
+  text-align: start;
+  vertical-align: top;
+}
+.osler-milkdown-article .milkdown .ProseMirror th {
+  background: var(--muted);
+  font-weight: 600;
+}
+
+/* Code blocks (mermaid diagrams etc.) render as themed cards in the
+   reader, matching the editor surface. */
+.osler-milkdown-article .milkdown .milkdown-code-block {
+  background: var(--muted) !important;
+  border: 1px solid var(--border) !important;
+  border-radius: var(--radius-md) !important;
+  padding: 8px 12px 12px !important;
+  margin: 0.75rem 0;
+}
+.osler-milkdown-article .milkdown .milkdown-code-block .cm-editor {
+  background: transparent !important;
+}
+.osler-milkdown-article .milkdown .milkdown-code-block .cm-gutters {
+  background: transparent !important;
+}
+
+/* Rendered mermaid diagrams in the reader — sized to the column and
+   theme-tinted (SVG internals are colored by `.osler-mermaid-*` rules). */
+.osler-milkdown-article .osler-mermaid-render {
+  max-width: 100%;
+  margin-inline: auto;
+  border-radius: var(--radius-md);
+  overflow-x: auto;
+}
+.osler-milkdown-article .osler-mermaid-render svg {
+  max-width: 100%;
+  height: auto;
+  vertical-align: middle;
 }
