@@ -171,8 +171,10 @@ export function PdfExportDialog({
 
   return (
     <Dialog open={open} onOpenChange={(o) => !exporting && onOpenChange(o)}>
-      <DialogContent className="sm:max-w-lg max-h-[85vh] overflow-y-auto">
-        <DialogHeader>
+      {/* Compact two-column layout: the whole form (advanced section open)
+          fits inside the viewport without an internal scrollbar. */}
+      <DialogContent className="sm:max-w-xl max-h-[85vh] overflow-y-auto">
+        <DialogHeader className="space-y-1">
           <DialogTitle className="flex items-center gap-2">
             <FileText className="size-5 text-primary" />
             {t("pdf.export.title")}
@@ -185,24 +187,23 @@ export function PdfExportDialog({
             e.preventDefault();
             handleExport();
           }}
-          className="space-y-4 py-2"
+          className="space-y-3 py-1"
         >
-          {/* Title */}
-          <div className="space-y-1.5">
-            <Label className="text-xs">{t("pdf.coverTitle")}</Label>
-            <Input value={title} onChange={(e) => setTitle(e.target.value)} disabled={exporting} />
-          </div>
-
-          {/* Subtitle */}
-          <div className="space-y-1.5">
-            <Label className="text-xs">{t("pdf.coverSubtitle")}</Label>
-            <Input value={subtitle} onChange={(e) => setSubtitle(e.target.value)} disabled={exporting} />
-          </div>
-
-          {/* Author */}
-          <div className="space-y-1.5">
-            <Label className="text-xs">{t("pdf.author")}</Label>
-            <Input value={author} onChange={(e) => setAuthor(e.target.value)} disabled={exporting} />
+          {/* Title + subtitle/author pair — one row each on phones, two
+              columns from sm up */}
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="space-y-1 sm:col-span-2">
+              <Label className="text-xs">{t("pdf.coverTitle")}</Label>
+              <Input value={title} onChange={(e) => setTitle(e.target.value)} disabled={exporting} />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs">{t("pdf.coverSubtitle")}</Label>
+              <Input value={subtitle} onChange={(e) => setSubtitle(e.target.value)} disabled={exporting} />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs">{t("pdf.author")}</Label>
+              <Input value={author} onChange={(e) => setAuthor(e.target.value)} disabled={exporting} />
+            </div>
           </div>
 
           {/* Cover toggle */}
@@ -212,7 +213,7 @@ export function PdfExportDialog({
           </div>
 
           {/* Style mode pills */}
-          <div className="space-y-1.5">
+          <div className="space-y-1">
             <Label className="text-xs">{t("pdf.styleMode")}</Label>
             <PillRow
               value={styleMode}
@@ -226,7 +227,7 @@ export function PdfExportDialog({
 
           {/* Answers mode (quiz only) */}
           {variant === "quiz" && (
-            <div className="space-y-1.5">
+            <div className="space-y-1">
               <Label className="text-xs">{t("pdf.answersMode")}</Label>
               <PillRow
                 value={answersMode}
@@ -255,9 +256,9 @@ export function PdfExportDialog({
           </button>
 
           {showAdvanced && (
-            <div className="space-y-3 ps-1 border-s-2 border-border ms-1">
+            <div className="grid gap-3 ps-1 border-s-2 border-border ms-1 sm:grid-cols-2">
               {/* Page size */}
-              <div className="space-y-1.5">
+              <div className="space-y-1">
                 <Label className="text-xs">{t("pdf.pageSize")}</Label>
                 <PillRow
                   value={pageSize}
@@ -271,7 +272,7 @@ export function PdfExportDialog({
               </div>
 
               {/* Orientation */}
-              <div className="space-y-1.5">
+              <div className="space-y-1">
                 <Label className="text-xs">{t("pdf.orientation")}</Label>
                 <PillRow
                   value={orientation}
@@ -284,7 +285,7 @@ export function PdfExportDialog({
               </div>
 
               {/* Font size option */}
-              <div className="space-y-1.5">
+              <div className="space-y-1">
                 <Label className="text-xs">{t("pdf.fontSize")}</Label>
                 <PillRow
                   value={fontSize}
@@ -298,7 +299,7 @@ export function PdfExportDialog({
               </div>
 
               {/* Font type option */}
-              <div className="space-y-1.5">
+              <div className="space-y-1">
                 <Label className="text-xs">{t("pdf.fontType")}</Label>
                 <PillRow
                   value={fontType}

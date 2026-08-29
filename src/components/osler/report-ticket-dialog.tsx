@@ -99,8 +99,11 @@ export function ReportTicketDialog({
 
   return (
     <Dialog open={open} onOpenChange={(next) => { if (!submitting) onOpenChange(next); }}>
+      {/* Compact rhythm: subject sits beside the category and the context
+          box stays tight so the whole dialog fits without an inner
+          scrollbar. `overflow-y-auto` remains a small-viewport fallback. */}
       <DialogContent className="sm:max-w-md max-h-[85vh] overflow-y-auto">
-        <DialogHeader>
+        <DialogHeader className="space-y-1">
           <DialogTitle className="flex items-center gap-2">
             <LifeBuoy className="size-4 text-primary" />
             {t("support.title")}
@@ -108,33 +111,35 @@ export function ReportTicketDialog({
           <DialogDescription>{t("support.desc")}</DialogDescription>
         </DialogHeader>
 
-        <div className="grid gap-4 py-2">
-          <div className="grid gap-2">
-            <Label htmlFor="ticket-category">{t("support.categoryLabel")}</Label>
-            <Select value={category} onValueChange={(v) => { haptic("selection"); setCategory(v as TicketCategory); }}>
-              <SelectTrigger id="ticket-category" className="w-full">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {TICKET_CATEGORIES.map((c) => (
-                  <SelectItem key={c} value={c}>{t(TICKET_CATEGORY_I18N[c])}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+        <div className="grid gap-3 py-1">
+          <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)]">
+            <div className="grid gap-1.5">
+              <Label htmlFor="ticket-category">{t("support.categoryLabel")}</Label>
+              <Select value={category} onValueChange={(v) => { haptic("selection"); setCategory(v as TicketCategory); }}>
+                <SelectTrigger id="ticket-category" className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {TICKET_CATEGORIES.map((c) => (
+                    <SelectItem key={c} value={c}>{t(TICKET_CATEGORY_I18N[c])}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="grid gap-1.5">
+              <Label htmlFor="ticket-subject">{t("support.subjectLabel")}</Label>
+              <Input
+                id="ticket-subject"
+                value={subject}
+                onChange={(e) => setSubject(e.target.value)}
+                placeholder={t("support.subjectPlaceholder")}
+                maxLength={200}
+              />
+            </div>
           </div>
 
-          <div className="grid gap-2">
-            <Label htmlFor="ticket-subject">{t("support.subjectLabel")}</Label>
-            <Input
-              id="ticket-subject"
-              value={subject}
-              onChange={(e) => setSubject(e.target.value)}
-              placeholder={t("support.subjectPlaceholder")}
-              maxLength={200}
-            />
-          </div>
-
-          <div className="grid gap-2">
+          <div className="grid gap-1.5">
             <Label htmlFor="ticket-message">{t("support.messageLabel")}</Label>
             <Textarea
               id="ticket-message"
@@ -146,8 +151,8 @@ export function ReportTicketDialog({
             />
           </div>
 
-          <div className="rounded-lg border border-border bg-muted/40 p-3">
-            <div className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground mb-1.5">
+          <div className="rounded-lg border border-border bg-muted/40 px-3 py-2">
+            <div className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground mb-1">
               <TriangleAlert className="size-3" />
               {t("support.attachContext")}
             </div>
