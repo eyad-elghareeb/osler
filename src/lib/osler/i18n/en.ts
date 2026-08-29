@@ -775,6 +775,7 @@ export const en = {
     "library.htmlFullscreen": "Fullscreen",
     "library.htmlExitFullscreen": "Exit fullscreen",
     "library.mermaidExpand": "Explore diagram",
+    "library.mermaidTitle": "Diagram",
     "library.mermaidDownload": "Download SVG",
     "library.mermaidZoom": "{n}%",
 

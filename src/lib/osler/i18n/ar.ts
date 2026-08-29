@@ -776,6 +776,7 @@ export const ar = {
     "library.htmlFullscreen": "ملء الشاشة",
     "library.htmlExitFullscreen": "الخروج من ملء الشاشة",
     "library.mermaidExpand": "استكشاف المخطط",
+    "library.mermaidTitle": "مخطط",
     "library.mermaidDownload": "تحميل SVG",
     "library.mermaidZoom": "{n}%",
 

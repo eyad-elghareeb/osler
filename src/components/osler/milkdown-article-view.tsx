@@ -19,6 +19,7 @@
  */
 
 import * as React from "react";
+import { AnimatePresence } from "framer-motion";
 import { Crepe } from "@milkdown/crepe";
 import { Milkdown, MilkdownProvider, useEditor } from "@milkdown/react";
 import { $prose } from "@milkdown/kit/utils";
@@ -30,6 +31,7 @@ import {
 } from "@milkdown/kit/prose/view";
 import { cn } from "@/lib/utils";
 import { useI18n } from "@/components/osler/i18n-provider";
+import { haptic } from "@/lib/osler/native";
 import { parseCalloutMarker } from "@/lib/osler/callouts";
 import { resolveArticleAsset } from "@/lib/osler/articles";
 import {
@@ -38,6 +40,7 @@ import {
 } from "@/lib/osler/article-highlights";
 import { resolveHighlightColor } from "@/lib/osler/highlight-palette";
 import { renderMermaidToSvg } from "@/components/osler/admin/editors/mermaid-editor";
+import { MermaidModal } from "./mermaid-modal";
 
 /* ── Markdown prep ────────────────────────────────────────────────────── */
 
@@ -332,10 +335,25 @@ export function MilkdownArticleView({
   dir,
   lang,
 }: MilkdownArticleViewProps) {
+  const { t } = useI18n();
   const resolved = React.useMemo(
     () => resolveMarkdownImages(markdown, articleDir),
     [markdown, articleDir],
   );
+
+  // Clicking a rendered mermaid diagram opens the fullscreen viewer
+  // (zoom / pan / download). The SVG markup is captured straight from the
+  // rendered preview so it's guaranteed to match what the user clicked.
+  const [mermaidSvg, setMermaidSvg] = React.useState<string | null>(null);
+  const handleMermaidClick = React.useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+    const render = (e.target as HTMLElement).closest<HTMLElement>(".osler-mermaid-render");
+    if (!render) return;
+    const markup = render.querySelector("svg")?.outerHTML;
+    if (!markup) return;
+    e.stopPropagation();
+    haptic("light");
+    setMermaidSvg(markup);
+  }, []);
 
   // The wrapper itself is the content container: every parent listener works
   // on DOM inside it (selection capture, eraser taps, image lightbox).
@@ -353,10 +371,20 @@ export function MilkdownArticleView({
       style={style}
       dir={dir}
       lang={lang}
+      onClick={handleMermaidClick}
     >
       <MilkdownProvider>
         <InnerArticleView markdown={resolved} highlights={highlights} />
       </MilkdownProvider>
+      <AnimatePresence>
+        {mermaidSvg && (
+          <MermaidModal
+            svg={mermaidSvg}
+            title={t("library.mermaidTitle")}
+            onClose={() => setMermaidSvg(null)}
+          />
+        )}
+      </AnimatePresence>
     </div>
   );
 }

@@ -3982,13 +3982,27 @@ html.osler-ar body,
   background: transparent !important;
 }
 
+/* The reader is read-only: the code block's hover chrome (language
+   selector + preview/edit toggle) is editor-only affordance — hide it so
+   diagrams render as clean, non-editable figures. */
+.osler-milkdown-article .milkdown .milkdown-code-block .tools,
+.osler-milkdown-article .milkdown .milkdown-code-block .language-picker {
+  display: none !important;
+}
+
 /* Rendered mermaid diagrams in the reader — sized to the column and
-   theme-tinted (SVG internals are colored by `.osler-mermaid-*` rules). */
+   theme-tinted (SVG internals are colored by `.osler-mermaid-*` rules).
+   Clicking one opens the fullscreen viewer (wired in MilkdownArticleView). */
 .osler-milkdown-article .osler-mermaid-render {
   max-width: 100%;
   margin-inline: auto;
   border-radius: var(--radius-md);
   overflow-x: auto;
+  cursor: zoom-in;
+  transition: box-shadow 0.15s ease;
+}
+.osler-milkdown-article .osler-mermaid-render:hover {
+  box-shadow: 0 0 0 1.5px var(--primary);
 }
 .osler-milkdown-article .osler-mermaid-render svg {
   max-width: 100%;
