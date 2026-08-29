@@ -31,7 +31,7 @@
 import * as React from "react";
 import { Crepe } from "@milkdown/crepe";
 import type { Ctx } from "@milkdown/kit/ctx";
-import { commandsCtx } from "@milkdown/kit/core";
+import { commandsCtx, editorViewCtx } from "@milkdown/kit/core";
 import { clearTextInCurrentBlockCommand } from "@milkdown/kit/preset/commonmark";
 import { Milkdown, MilkdownProvider, useEditor } from "@milkdown/react";
 import { insert, replaceAll } from "@milkdown/utils";
@@ -42,7 +42,8 @@ import { ImagePlus, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useI18n } from "@/components/osler/i18n-provider";
 import { useToast } from "@/hooks/use-toast";
-import { parseCalloutMarker } from "@/lib/osler/callouts";
+import { CALLOUT_DEFAULT_TITLES, parseCalloutMarker } from "@/lib/osler/callouts";
+import { CALLOUT_MENU_TYPES, calloutIconSvg } from "@/lib/osler/callout-icons";
 import {
   uploadImageForEditor,
   resolveImageForPreview,
@@ -54,6 +55,52 @@ import {
   useMermaidModal,
   renderMermaidToSvg,
 } from "@/components/osler/admin/editors/mermaid-editor";
+
+// ── Callout authoring helpers ────────────────────────────────────────────
+
+const CALLOUT_MARKER_PREFIX_RE = /^\[![a-zA-Z-]+\][+-]?\s*/;
+
+/** The callout wrapping the cursor, if any. */
+function currentCallout(ctx: Ctx): { blockquoteFrom: number; text: string } | null {
+  const view = ctx.get(editorViewCtx);
+  const { $from } = view.state.selection;
+  for (let d = $from.depth; d > 0; d--) {
+    if ($from.node(d).type.name !== "blockquote") continue;
+    const first = $from.node(d).firstChild;
+    const textNode = first?.firstChild;
+    return {
+      blockquoteFrom: $from.before(d),
+      text: textNode?.isText ? textNode.text ?? "" : "",
+    };
+  }
+  return null;
+}
+
+/**
+ * Apply a callout type at the cursor: inside a blockquote, swap (or inject)
+ * the `[!type]` marker of its first paragraph; outside one, insert a fresh
+ * callout blockquote with the type's default title. Pure markdown-round-trip
+ * — the source keeps a standard blockquote so serialization stays lossless.
+ */
+function applyCalloutType(ctx: Ctx, typeId: string): void {
+  const view = ctx.get(editorViewCtx);
+  const { state } = view;
+  const callout = currentCallout(ctx);
+  if (!callout) {
+    const title = CALLOUT_DEFAULT_TITLES[typeId] ?? typeId;
+    insert(`> [!${typeId}] ${title}\n> `)(ctx);
+    return;
+  }
+  const paragraphContentFrom = callout.blockquoteFrom + 2;
+  const marker = CALLOUT_MARKER_PREFIX_RE.exec(callout.text);
+  if (marker) {
+    view.dispatch(
+      state.tr.insertText(`[!${typeId}] `, paragraphContentFrom, paragraphContentFrom + marker[0].length),
+    );
+  } else {
+    view.dispatch(state.tr.insertText(`[!${typeId}] `, paragraphContentFrom));
+  }
+}
 
 // ── Callout decorations ──────────────────────────────────────────────────
 
@@ -308,16 +355,33 @@ function InnerMilkdownEditor({
                   : t("editor.mermaid.previewHide"),
             }
           : undefined,
-        // When both the top bar and mermaid are enabled, surface a
-        // mermaid button in the top bar's Insert group — the natural
-        // affordance in long-form editors (article editor, notes).
-        [Crepe.Feature.TopBar]: enableMermaid
+        // When the top bar is enabled, surface the callout type selector
+        // (a dropdown, like the heading picker) plus a mermaid button in
+        // the Insert group when mermaid support is on.
+        [Crepe.Feature.TopBar]: enableTopBar
           ? {
               buildTopBar: (builder) => {
-                builder.getGroup("insert").addItem("mermaid", {
-                  icon: mermaidIcon,
-                  active: () => false,
-                  onRun: () => onTopBarInsertRef.current?.(),
+                if (enableMermaid) {
+                  builder.getGroup("insert").addItem("mermaid", {
+                    icon: mermaidIcon,
+                    active: () => false,
+                    onRun: () => onTopBarInsertRef.current?.(),
+                  });
+                }
+                const calloutGroup = builder.addGroup("callout", t("editor.callout.group"));
+                calloutGroup.addItem("callout-selector", {
+                  icon: calloutIconSvg("note"),
+                  active: (ctx) => currentCallout(ctx) !== null,
+                  selector: {
+                    activeLabel: (ctx) => {
+                      const parsed = parseCalloutMarker(currentCallout(ctx)?.text ?? "");
+                      return parsed ? t(`editor.callout.${parsed.type}` as "editor.callout.note") : t("editor.callout.topbarDefault");
+                    },
+                    options: CALLOUT_MENU_TYPES.map((typeId) => ({
+                      label: t(`editor.callout.${typeId}` as "editor.callout.note"),
+                      onSelect: (ctx) => applyCalloutType(ctx, typeId),
+                    })),
+                  },
                 });
               },
             }
@@ -338,20 +402,27 @@ function InnerMilkdownEditor({
           slashMenu: {
             floatingUIOptions: { strategy: "fixed" },
           },
-          // Mermaid also lands in the slash menu ("/" menu) as an
-          // "Advanced" item — it opens the authoring modal, then drops
-          // the diagram at the cursor as a `mermaid` code block.
-          ...(enableMermaid
-            ? {
-                buildMenu: (builder) => {
-                  builder.getGroup("advanced").addItem("mermaid", {
-                    label: t("editor.mermaid.insertSlash"),
-                    icon: mermaidIcon,
-                    onRun: (ctx) => onSlashInsertRef.current?.(ctx),
-                  });
-                },
-              }
-            : {}),
+          // Slash menu: a dedicated "Callouts" group (one item per type —
+          // runs applyCalloutType, which inserts a fresh callout or converts
+          // the enclosing blockquote), plus the mermaid item in Advanced
+          // when mermaid support is on.
+          buildMenu: (builder) => {
+            const calloutGroup = builder.addGroup("callouts", t("editor.callout.group"));
+            for (const typeId of CALLOUT_MENU_TYPES) {
+              calloutGroup.addItem(`callout-${typeId}`, {
+                label: t(`editor.callout.${typeId}` as "editor.callout.note"),
+                icon: calloutIconSvg(typeId),
+                onRun: (ctx) => applyCalloutType(ctx, typeId),
+              });
+            }
+            if (enableMermaid) {
+              builder.getGroup("advanced").addItem("mermaid", {
+                label: t("editor.mermaid.insertSlash"),
+                icon: mermaidIcon,
+                onRun: (ctx) => onSlashInsertRef.current?.(ctx),
+              });
+            }
+          },
         },
       },
     });
