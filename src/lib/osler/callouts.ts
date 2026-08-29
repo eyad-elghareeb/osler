@@ -80,18 +80,24 @@ export interface ParsedCallout {
   title: string | null;
 }
 
-const MARKER_RE = /^\[!([a-zA-Z-]+)\]([+-]?)\s*(.*)$/;
+const MARKER_RE = /^\[!([a-zA-Z-]+)\]([+-]?)[ \t]*(.*)$/;
 
 /**
  * Parse a blockquote's first-line text as a callout marker.
  * Accepts `[!type]`, `[!type]+` (foldable), `[!type]-` (folded) and an
  * optional title after the marker, mirroring Obsidian's grammar (the
  * foldable flags are accepted and ignored — rendering is always expanded).
+ * Only the FIRST line is examined: Milkdown paragraphs carry lazy
+ * blockquote continuations inline (`Title\nbody…`), and `.` never matches
+ * `\n`, so running the regex across the whole text would reject every
+ * callout whose body shares its paragraph.
  * Returns null when the text is not a callout marker.
  */
 export function parseCalloutMarker(text: string | null | undefined): ParsedCallout | null {
   if (!text) return null;
-  const match = MARKER_RE.exec(text.trim());
+  const firstLine = text.split("\n")[0]?.trim() ?? "";
+  if (!firstLine) return null;
+  const match = MARKER_RE.exec(firstLine);
   if (!match) return null;
   const type = canonicalCalloutType(match[1]);
   if (!type) return null;

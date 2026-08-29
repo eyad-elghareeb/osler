@@ -126,18 +126,19 @@ function calloutBlockquoteDecorations(doc: import("@milkdown/kit/prose/model").N
     // Style only the title RUN — lazy-continuation lines share this
     // paragraph, so a paragraph-level decoration would wrap the whole body
     // in the title's uppercase accent styling. The marker stays visible in
-    // the editor (authors need the raw `[!type]` text).
-    const paragraphStart = pos + 1;
-    let titleEnd = paragraphStart + first.content.size;
+    // the editor (authors need the raw `[!type]` text). Inline positions
+    // address the paragraph's CONTENT — pos+2, not the node edge at pos+1.
+    const contentStart = pos + 2;
+    let titleEnd = contentStart + first.content.size;
     let breakAt = -1;
     first.forEach((child, offset) => {
       if (breakAt < 0 && child.type.name === "hardbreak") {
         breakAt = offset;
-        titleEnd = paragraphStart + offset;
+        titleEnd = contentStart + offset;
       }
     });
     decorations.push(
-      Decoration.inline(paragraphStart, titleEnd, { class: "osler-callout-title" }),
+      Decoration.inline(contentStart, titleEnd, { class: "osler-callout-title" }),
     );
     if (breakAt >= 0) {
       decorations.push(

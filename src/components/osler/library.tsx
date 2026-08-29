@@ -694,10 +694,14 @@ export function Library({ initialArticleId, onNavigateBack: propOnNavigateBack }
                         display.fontFamily === "sans"
                           ? "var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif"
                           : undefined,
-                      // Sans mode carries into headings via the CSS var;
+                      // Sans mode carries into headings via the CSS var
+                      // (an explicit stack — CSS-wide keywords like
+                      // `inherit` are invalid as custom-property values);
                       // serif mode falls back to the Playfair default.
                       "--osler-reader-heading-font":
-                        display.fontFamily === "sans" ? "inherit" : undefined,
+                        display.fontFamily === "sans"
+                          ? "var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif"
+                          : undefined,
                       maxWidth: display.width === "wide" ? "1200px" : undefined,
                     } as React.CSSProperties}
                   />
@@ -1097,7 +1101,9 @@ function MobileReader({
                     ? "var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif"
                     : undefined,
                 "--osler-reader-heading-font":
-                  display.fontFamily === "sans" ? "inherit" : undefined,
+                  display.fontFamily === "sans"
+                    ? "var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif"
+                    : undefined,
               } as React.CSSProperties}
             />
           </motion.div>
@@ -1318,6 +1324,9 @@ function DisplayMenu({
 }) {
   const [open, setOpen] = React.useState(false);
   const { t } = useI18n();
+  // Reading width is a desktop-only control — on phones the column is the
+  // viewport, so the option does nothing.
+  const isMobile = useIsMobile();
 
   // Radix Popover portals the panel to <body>, so it escapes the header's
   // backdrop-blur stacking context — the article body can no longer paint
@@ -1424,18 +1433,20 @@ function DisplayMenu({
           />
         </div>
 
-        {/* Reading width */}
-        <div className="space-y-1.5">
-          <MenuLabel>{t("library.readingWidth")}</MenuLabel>
-          <DisplayPills
-            value={display.width}
-            onChange={(v) => onChange({ width: v })}
-            options={[
-              { value: "normal" as const, label: t("library.readingWidth.normal") },
-              { value: "wide" as const, label: t("library.readingWidth.wide") },
-            ]}
-          />
-        </div>
+        {/* Reading width — desktop only (on phones the column is the viewport) */}
+        {!isMobile && (
+          <div className="space-y-1.5">
+            <MenuLabel>{t("library.readingWidth")}</MenuLabel>
+            <DisplayPills
+              value={display.width}
+              onChange={(v) => onChange({ width: v })}
+              options={[
+                { value: "normal" as const, label: t("library.readingWidth.normal") },
+                { value: "wide" as const, label: t("library.readingWidth.wide") },
+              ]}
+            />
+          </div>
+        )}
       </PopoverContent>
     </Popover>
   );

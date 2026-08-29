@@ -719,7 +719,7 @@ button.osler-stat-tile--compact:hover {
 }
 .osler-prose h1, .osler-prose h2, .osler-prose h3 {
   color: var(--foreground);
-  font-family: var(--font-display, var(--font-serif));
+  font-family: var(--font-playfair), var(--font-newsreader), Georgia, serif;
   font-weight: 700;
   margin: 1rem 0 0.5rem;
   text-wrap: balance;
@@ -854,7 +854,7 @@ button.osler-stat-tile--compact:hover {
 .ai-chat-msg li > p { margin: 0; }
 .ai-chat-msg strong { font-weight: 600; }
 .ai-chat-msg code {
-  font-family: var(--font-code), ui-monospace, monospace;
+  font-family: var(--font-jetbrains-mono), var(--font-geist-mono), ui-monospace, monospace;
   background: color-mix(in oklch, var(--muted) 60%, transparent);
   padding: 0.08rem 0.3rem;
   border-radius: 4px;
@@ -2036,7 +2036,7 @@ html[dir="rtl"] {
   max-width: 1040px;
   margin: 0 auto;
   color: var(--foreground);
-  font-family: var(--font-serif);
+  font-family: var(--font-newsreader), Georgia, serif;
   font-size: 0.95rem;
   line-height: 1.7;
 }
@@ -2052,7 +2052,7 @@ html[dir="rtl"] {
   opacity: 0.85;
 }
 .library-article h1 {
-  font-family: var(--font-display, var(--font-serif));
+  font-family: var(--font-playfair), var(--font-newsreader), Georgia, serif;
   font-size: 1.85rem;
   font-weight: 700;
   margin: 0 0 0.5rem 0;
@@ -2060,7 +2060,7 @@ html[dir="rtl"] {
   text-wrap: balance;
 }
 .library-article h2 {
-  font-family: var(--font-display, var(--font-serif));
+  font-family: var(--font-playfair), var(--font-newsreader), Georgia, serif;
   font-size: 1.35rem;
   font-weight: 700;
   margin: 1.75rem 0 0.75rem;
@@ -2069,7 +2069,7 @@ html[dir="rtl"] {
   text-wrap: balance;
 }
 .library-article h3 {
-  font-family: var(--font-display, var(--font-serif));
+  font-family: var(--font-playfair), var(--font-newsreader), Georgia, serif;
   font-size: 1.1rem;
   font-weight: 700;
   margin: 1.4rem 0 0.5rem;
@@ -2639,7 +2639,7 @@ html.osler-ar body,
 /* --- Pull quote variant — editorial break, no decorative border --- */
 .osler-prose .pullquote,
 .library-article .pullquote {
-  font-family: var(--font-display, var(--font-serif));
+  font-family: var(--font-playfair), var(--font-newsreader), Georgia, serif;
   font-size: 1.25rem;
   line-height: 1.5;
   font-weight: 400;
@@ -2666,7 +2666,7 @@ html.osler-ar body,
 .osler-prose code,
 .ai-chat-msg code,
 .library-article code {
-  font-family: var(--font-code, var(--font-mono), ui-monospace, monospace);
+  font-family: var(--font-jetbrains-mono), var(--font-geist-mono), ui-monospace, monospace;
   font-size: 0.825em;
   background: color-mix(in oklch, var(--muted) 80%, transparent);
   border: 1px solid color-mix(in oklch, var(--border) 60%, transparent);
@@ -3630,11 +3630,18 @@ html.osler-ar body,
    be single quotes — a double quote would terminate url("…") and the
    declaration would be dropped, killing the icon. */
 
+/* Defaults live in a LOW-specificity rule: the per-type modifiers below are
+   single-class selectors, so declaring these custom properties in the
+   4-class scoped layout rule would beat every one of them and every callout
+   would render with the note accent. */
+.osler-callout {
+  --callout-accent: var(--primary);
+  --callout-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3Cpath d='m15 5 4 4' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+}
+
 .osler-callout,
 .osler-milkdown-editor .milkdown .ProseMirror blockquote.osler-callout,
 .osler-milkdown-article .milkdown .ProseMirror blockquote.osler-callout {
-  --callout-accent: var(--primary);
-  --callout-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3Cpath d='m15 5 4 4' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
   margin: 1rem 0;
   padding: 0.75rem 1rem !important;
   border: 1px solid color-mix(in oklch, var(--callout-accent) 22%, transparent);
@@ -3827,8 +3834,11 @@ html.osler-ar body,
   /* Reader scaling: code surfaces derive their sizes from this base —
      `1em` ties them to the reader's inline font size / zoom setting. */
   --crepe-base-font-size: 1em;
-  /* Typeface preference — the reader sets it to `inherit` when the user
-     picks Sans, so headings follow the body instead of staying Playfair. */
+}
+/* Heading typeface default lives on the WRAPPER only — the reader's Sans
+   option overrides it inline, and re-declaring it on .milkdown would
+   shadow that override for every heading. */
+.osler-milkdown-article {
   --osler-reader-heading-font: var(--font-playfair), var(--font-newsreader), Georgia, serif;
 }
 .dark .osler-milkdown-article,
@@ -3850,6 +3860,12 @@ html.osler-ar body,
   background: transparent;
   color: var(--foreground);
   padding: 0 !important;
+  /* Crepe's reset pins font-family / font-size on .milkdown itself —
+     inherit the reader wrapper's typography instead, or the display
+     options (font size, zoom, typeface) never reach the content. */
+  font-family: inherit;
+  font-size: inherit;
+  line-height: inherit;
 }
 .osler-milkdown-article .milkdown .ProseMirror h1,
 .osler-milkdown-article .milkdown .ProseMirror h2,

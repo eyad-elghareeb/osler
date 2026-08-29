@@ -32,7 +32,7 @@ import {
 import { cn } from "@/lib/utils";
 import { useI18n } from "@/components/osler/i18n-provider";
 import { haptic } from "@/lib/osler/native";
-import { parseCalloutMarker } from "@/lib/osler/callouts";
+import { parseCalloutMarker, CALLOUT_DEFAULT_TITLES } from "@/lib/osler/callouts";
 import { resolveArticleAsset } from "@/lib/osler/articles";
 import {
   HL_CLASS,
@@ -112,7 +112,9 @@ function resolveHighlightOffsets(
   return { start: idx, end: idx + hl.text.length };
 }
 
-const MARKER_PREFIX_RE = /^(\[![a-zA-Z-]+\][+-]?\s*)/;
+// `[ \t]*` (not `\s*`) — the paragraph text may continue past a newline,
+// and the marker span must never swallow the line break itself.
+const MARKER_PREFIX_RE = /^(\[![a-zA-Z-]+\][+-]?[ \t]*)/;
 
 /**
  * Build the article-view decoration set:
@@ -123,13 +125,16 @@ const MARKER_PREFIX_RE = /^(\[![a-zA-Z-]+\][+-]?\s*)/;
  * 1:1 without conversion.
  */
 function buildArticleDecorations(
-  view: EditorView,
+  doc: import("@milkdown/kit/prose/model").Node,
+  view: EditorView | null,
   highlights: ArticleHighlightItem[],
 ): DecorationSet {
   const decorations: Decoration[] = [];
 
-  // 1. Callout blockquotes — node decoration + title-run styling.
-  view.state.doc.descendants((node, pos) => {
+  // 1. Callout blockquotes — node decoration + title-run styling. Pure
+  // function of the document (no view needed), so callouts paint even on
+  // the construction-time decoration pass.
+  doc.descendants((node, pos) => {
     if (node.type.name !== "blockquote") return;
     const first = node.firstChild;
     if (!first || first.type.name !== "paragraph") return;
@@ -140,22 +145,51 @@ function buildArticleDecorations(
         class: `osler-callout osler-callout--${parsed.type}`,
       }),
     );
-    // Style only the title RUN (marker + title text before the first
-    // hard break). Lazy-continuation lines share this paragraph, so a
+    // Style only the title RUN (the title text before the first hard
+    // break). Lazy-continuation lines share this paragraph, so a
     // paragraph-level decoration would wrap the whole body in the title's
     // uppercase accent styling and lay it out beside the title.
-    const paragraphStart = pos + 1;
-    let titleEnd = paragraphStart + first.content.size;
+    // Inline positions address the paragraph's CONTENT — pos+2, not the
+    // paragraph node edge at pos+1. Marker and title get SEPARATE spans:
+    // overlapping decorations merge into one element, where the title's
+    // display:block would override the marker's display:none.
+    const contentStart = pos + 2;
+    let titleEnd = contentStart + first.content.size;
     let breakAt = -1;
     first.forEach((child, offset) => {
       if (breakAt < 0 && child.type.name === "hardbreak") {
         breakAt = offset;
-        titleEnd = paragraphStart + offset;
+        titleEnd = contentStart + offset;
       }
     });
-    decorations.push(
-      Decoration.inline(paragraphStart, titleEnd, { class: "osler-callout-title" }),
-    );
+    const markerLen = MARKER_PREFIX_RE.exec(first.textContent ?? "")?.[1].length ?? 0;
+    const markerEnd = Math.min(contentStart + markerLen, titleEnd);
+    if (markerLen > 0) {
+      decorations.push(
+        Decoration.inline(contentStart, markerEnd, { class: "osler-callout-marker" }),
+      );
+    }
+    if (titleEnd > markerEnd) {
+      decorations.push(
+        Decoration.inline(markerEnd, titleEnd, { class: "osler-callout-title" }),
+      );
+    } else {
+      // Titleless callout — the marker is hidden, so inject the type's
+      // default title as a widget (decorations cannot style text that
+      // isn't there).
+      decorations.push(
+        Decoration.widget(
+          contentStart,
+          () => {
+            const el = document.createElement("span");
+            el.className = "osler-callout-title";
+            el.textContent = CALLOUT_DEFAULT_TITLES[parsed.type] ?? parsed.type;
+            return el;
+          },
+          { side: 1 },
+        ),
+      );
+    }
     // The break that ends the title line disappears under the block-level
     // title span — keep it, or the body starts with a blank line.
     if (breakAt >= 0) {
@@ -163,19 +197,12 @@ function buildArticleDecorations(
         Decoration.inline(titleEnd, titleEnd + 1, { class: "osler-callout-title-break" }),
       );
     }
-    // Hide the raw `[!type]` marker (first text child of the paragraph).
-    const markerLen = MARKER_PREFIX_RE.exec(first.textContent ?? "")?.[1].length;
-    if (markerLen) {
-      decorations.push(
-        Decoration.inline(paragraphStart, paragraphStart + markerLen, {
-          class: "osler-callout-marker",
-        }),
-      );
-    }
   });
 
   // 2. Highlights — inline spans over DOM text segments.
-  if (highlights.length > 0) {
+  // Highlights need the rendered DOM (DOM-offset → doc-position mapping) —
+  // skip until the view exists; the post-init dispatch covers the first pass.
+  if (view && highlights.length > 0) {
     const segments = collectDomTextSegments(view.dom);
     const fullText = segments.map((s) => s.node.data).join("");
     for (const hl of highlights) {
@@ -205,7 +232,7 @@ function buildArticleDecorations(
   }
 
   return decorations.length > 0
-    ? DecorationSet.create(view.state.doc, decorations)
+    ? DecorationSet.create(doc, decorations)
     : DecorationSet.empty;
 }
 
@@ -232,6 +259,16 @@ function InnerArticleView({ markdown, highlights }: InnerArticleViewProps) {
           new ProseMirrorPlugin({
             view(view) {
               viewRef.current = view;
+              // The editor materializes asynchronously AFTER React's effects
+              // ran (viewRef was still null when the highlights effect
+              // skipped), and a quiet read-only article may never dispatch
+              // another transaction — force one decoration pass now that the
+              // view exists, or callouts never paint on first load.
+              Promise.resolve().then(() => {
+                if (viewRef.current === view && !view.isDestroyed) {
+                  view.dispatch(view.state.tr);
+                }
+              });
               return {
                 destroy() {
                   if (viewRef.current === view) viewRef.current = null;
@@ -241,8 +278,11 @@ function InnerArticleView({ markdown, highlights }: InnerArticleViewProps) {
             props: {
               decorations(state) {
                 const view = viewRef.current;
-                if (!view || view.state !== state) return DecorationSet.empty;
-                return buildArticleDecorations(view, highlightsRef.current);
+                // Only bail for a STALE view (editor swapped under us).
+                // Callout decorations don't need the view at all, so the
+                // construction-time pass (view still null) must build them.
+                if (view && view.state !== state) return DecorationSet.empty;
+                return buildArticleDecorations(state.doc, view, highlightsRef.current);
               },
             },
           }),
