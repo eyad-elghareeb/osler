@@ -95,7 +95,7 @@ interface ReaderDisplayPrefs {
 }
 
 const LINE_HEIGHTS: Record<LineSpacingPref, number> = {
-  compact: 1.5,
+  compact: 1.35,
   cozy: 1.7,
   relaxed: 2,
 };
@@ -233,7 +233,26 @@ export function Library({ initialArticleId, onNavigateBack: propOnNavigateBack }
   // Enrich tree: turn leaf nodes with files into branch nodes with virtual children
   const displayTree = React.useMemo(() => {
     function enrich(nodes: ContentTreeNode[]): ContentTreeNode[] {
-      return nodes.map((node) => {
+      const out: ContentTreeNode[] = [];
+      for (const node of nodes) {
+        // Cloud manifests group articles uploaded at the category ROOT into
+        // one catch-all node titled after the category ("library", path="")
+        // — explode it into individual article entries so nothing nests
+        // under a pseudo folder. Real subfolders stay top-level siblings.
+        if (!node.path && (node.files?.length ?? 0) > 0) {
+          for (const file of node.files ?? []) {
+            const meta = allArticles.find((a) => a.file === file);
+            out.push({
+              uid: file,
+              title: meta?.title ?? file.replace(/\.(md|pdf|html)$/, "").replace(/-/g, " "),
+              type: "library" as const,
+              path: "",
+              items: [],
+            });
+          }
+          if (node.items.length > 0) out.push(...enrich(node.items));
+          continue;
+        }
         if (node.items.length === 0 && (node.files?.length ?? 0) > 0) {
           const fileChildren: ContentTreeNode[] = (node.files ?? []).map((file) => {
             const filePath = `${node.path}${file}`;
@@ -246,13 +265,16 @@ export function Library({ initialArticleId, onNavigateBack: propOnNavigateBack }
               items: [],
             };
           });
-          return { ...node, items: fileChildren };
+          out.push({ ...node, items: fileChildren });
+          continue;
         }
         if (node.items.length > 0) {
-          return { ...node, items: enrich(node.items) };
+          out.push({ ...node, items: enrich(node.items) });
+          continue;
         }
-        return node;
-      });
+        out.push(node);
+      }
+      return out;
     }
     return enrich(tree);
   }, [tree, allArticles]);
@@ -683,6 +705,7 @@ export function Library({ initialArticleId, onNavigateBack: propOnNavigateBack }
                     contentRef={articleContentRef}
                     className={cn(
                       "library-article",
+                      display.lineSpacing === "compact" && "osler-compact-spacing",
                       activeArticle?.lang === "ar" ? "osler-content-ar" : "osler-content-en",
                     )}
                     dir={activeArticle?.lang === "ar" ? "rtl" : "ltr"}
@@ -1089,6 +1112,7 @@ function MobileReader({
               contentRef={articleContentRef}
               className={cn(
                 "library-article px-4",
+                display.lineSpacing === "compact" && "osler-compact-spacing",
                 article.lang === "ar" ? "osler-content-ar" : "osler-content-en",
               )}
               dir={article.lang === "ar" ? "rtl" : "ltr"}

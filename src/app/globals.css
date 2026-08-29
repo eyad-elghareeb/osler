@@ -3995,7 +3995,8 @@ html.osler-ar body,
   width: 100%;
   border-collapse: collapse;
   margin: 0.75rem 0;
-  font-size: 0.9rem;
+  /* em — table text scales with the reader's font size / zoom options. */
+  font-size: 0.9em;
 }
 .osler-milkdown-article .milkdown .ProseMirror th,
 .osler-milkdown-article .milkdown .ProseMirror td {
@@ -4007,6 +4008,54 @@ html.osler-ar body,
 .osler-milkdown-article .milkdown .ProseMirror th {
   background: var(--muted);
   font-weight: 600;
+}
+
+/* ── Collapsible sections (Notion-style) ──────────────────────────────
+   h2/h3 headings toggle the collapse of every block between them and the
+   next heading of the same or higher level (wired in MilkdownArticleView).
+   A chevron marks the affordance: hidden at rest, visible on hover and
+   while the section is collapsed (rotated to point "closed"). */
+.osler-milkdown-article .milkdown .ProseMirror :is(h2, h3) {
+  cursor: pointer;
+}
+.osler-milkdown-article .milkdown .ProseMirror :is(h2, h3)::after {
+  content: "";
+  display: inline-block;
+  inline-size: 0.75em;
+  block-size: 0.75em;
+  margin-inline-start: 0.45em;
+  vertical-align: 0.08em;
+  background-color: var(--muted-foreground);
+  opacity: 0;
+  transition: opacity 0.15s ease, transform 0.15s ease;
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='m6 9 6 6 6-6' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center / contain no-repeat;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='m6 9 6 6 6-6' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center / contain no-repeat;
+}
+.osler-milkdown-article .milkdown .ProseMirror :is(h2, h3):hover::after,
+.osler-milkdown-article .milkdown .ProseMirror :is(h2, h3):focus-visible::after {
+  opacity: 1;
+}
+.osler-milkdown-article .milkdown .ProseMirror :is(h2, h3).osler-heading-collapsed::after {
+  opacity: 1;
+  transform: rotate(-90deg);
+}
+html[dir="rtl"] .osler-milkdown-article .milkdown .ProseMirror :is(h2, h3).osler-heading-collapsed::after {
+  transform: rotate(90deg);
+}
+.osler-milkdown-article .osler-section-hidden {
+  display: none !important;
+}
+
+/* ── Compact line-spacing — tighter block rhythm on top of the reduced
+   line-height the reader style already applies. */
+.osler-milkdown-article.osler-compact-spacing .milkdown .ProseMirror p {
+  margin: 0.3rem 0;
+}
+.osler-milkdown-article.osler-compact-spacing .milkdown .ProseMirror li {
+  margin: 0.1rem 0;
+}
+.osler-milkdown-article.osler-compact-spacing .milkdown .ProseMirror blockquote {
+  margin: 0.5rem 0;
 }
 
 /* Code blocks (mermaid diagrams etc.) render as themed cards in the

@@ -409,6 +409,25 @@ export function MilkdownArticleView({
     setMermaidSvg(markup);
   }, []);
 
+  // Notion-style collapsible sections: clicking an h2/h3 hides every block
+  // between it and the next heading of the same or higher level. Headings
+  // inside callouts or lists are content, not sections — ignored.
+  const handleHeadingToggle = React.useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+    const heading = (e.target as HTMLElement).closest<HTMLElement>("h2, h3");
+    if (!heading || !heading.closest(".osler-milkdown-article")) return;
+    if (heading.closest("blockquote, li")) return;
+    haptic("selection");
+    const level = Number(heading.tagName.slice(1));
+    const collapsed = heading.classList.toggle("osler-heading-collapsed");
+    heading.setAttribute("aria-expanded", collapsed ? "false" : "true");
+    let node = heading.nextElementSibling;
+    while (node && node.parentElement === heading.parentElement) {
+      if (/^H[1-6]$/.test(node.tagName) && Number(node.tagName.slice(1)) <= level) break;
+      node.classList.toggle("osler-section-hidden", collapsed);
+      node = node.nextElementSibling;
+    }
+  }, []);
+
   // The wrapper itself is the content container: every parent listener works
   // on DOM inside it (selection capture, eraser taps, image lightbox).
   const setContainer = React.useCallback(
@@ -425,7 +444,10 @@ export function MilkdownArticleView({
       style={style}
       dir={dir}
       lang={lang}
-      onClick={handleMermaidClick}
+      onClick={(e) => {
+        handleMermaidClick(e);
+        handleHeadingToggle(e);
+      }}
     >
       <MilkdownProvider>
         <InnerArticleView markdown={resolved} highlights={highlights} />
