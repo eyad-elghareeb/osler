@@ -766,6 +766,7 @@ export const ar = {
     "library.oneArticle": "مقال واحد",
     "library.noResults": "لا توجد مقالات مطابقة لبحثك",
     "library.noBookmarks": "لا توجد مقالات محفوظة بعد",
+    "library.readerToolbar": "إجراءات القارئ",
     "library.backToLibrary": "العودة إلى المكتبة",
     "library.pdfViewer": "مستند PDF",
     "library.pdfOpen": "فتح في تبويب جديد",

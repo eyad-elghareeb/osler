@@ -40,6 +40,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { SkeletonText, EmptyState as SharedEmptyState, ComingSoonState } from "./ui-primitives";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { useHideOnScroll } from "@/hooks/use-hide-on-scroll";
 import { useArticleHighlighter } from "@/hooks/use-article-highlighter";
 import { useOslerTheme } from "./theme-provider";
 import { useI18n } from "./i18n-provider";
@@ -961,9 +962,17 @@ function MobileReader({
   // The `rtl` prop is also no longer needed here since the parent passes
   // it to NavigationStack directly.
 
+  // All reader actions live in the floating bottom toolbar; the top bar
+  // stays title-only. The toolbar hides on scroll down and returns on
+  // scroll up through the shared hide-on-scroll controller — as fixed
+  // chrome it reclaims no layout space (reservePx 0).
+  const toolbarHidden = useHideOnScroll(articlePath, { reservePx: 0 });
+  const toolbarBtn =
+    "size-9 rounded-full flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors";
+
   return (
     <div className="absolute inset-0 bg-background flex flex-col">
-      {/* Top bar */}
+      {/* Top bar — title only; every action moved to the floating toolbar */}
       <header className="shrink-0 border-b border-border bg-card backdrop-blur-sm safe-pt relative z-20">
         <div className="flex items-center gap-2 px-3 h-12">
           <button
@@ -989,97 +998,19 @@ function MobileReader({
               )}
             </div>
           </div>
-
-          <div className="flex items-center gap-0.5">
-            <DisplayMenu
-              display={display}
-              onChange={onDisplayChange}
-              buttonClassName="size-9 rounded-lg flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors"
-            />
-
-            <button
-              onClick={onShare}
-              className="size-9 rounded-lg flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors"
-              title={t("contextMenu.share")}
-              aria-label={t("contextMenu.share")}
-            >
-              <Share2 className="size-4" />
-            </button>
-
-            <button
-              onClick={onToggleNotes}
-              className="size-9 rounded-lg flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors"
-              title={t("qbank.notes.title")}
-              aria-label={t("qbank.notes.title")}
-            >
-              <NotebookPen className="size-4" />
-            </button>
-            
-            {article.contentType === "md" && (
-              <button
-                onClick={onExportPdf}
-                className="size-9 rounded-lg flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors"
-                title={t("pdf.exportResults")}
-              >
-                <Printer className="size-4" />
-              </button>
-            )}
-
-            {article.fileUrl && article.contentType === "pdf" && (
-              <a
-                href={article.fileUrl}
-                target="_blank"
-                rel="noreferrer"
-                className="size-9 rounded-lg flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors"
-                title={t("library.pdfOpen")}
-              >
-                <ExternalLink className="size-4" />
-              </a>
-            )}
-
-            <HighlighterToolbar
-              control={{
-                tool: hlCtrl.tool,
-                color: hlCtrl.color,
-                count: hlCtrl.highlights.length,
-                onToolChange: hlCtrl.setTool,
-                onColorChange: hlCtrl.setColor,
-                onClearAll: hlCtrl.clearAll,
-              }}
-            />
-
-            <button
-              onClick={onReport}
-              className="size-9 rounded-lg flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors"
-              title={t("support.reportProblem")}
-              aria-label={t("support.reportProblem")}
-            >
-              <MessageSquareWarning className="size-4" />
-            </button>
-
-            <button
-              onClick={onToggleBookmark}
-              className={cn(
-                "size-9 rounded-lg flex items-center justify-center transition-colors",
-                isBookmarked
-                  ? "text-primary bg-primary/10 hover:bg-primary/15"
-                  : "text-muted-foreground hover:bg-muted/60"
-              )}
-              title={isBookmarked ? "Remove bookmark" : "Bookmark article"}
-            >
-              {isBookmarked ? (
-                <BookmarkCheck className="size-4" />
-              ) : (
-                <Bookmark className="size-4" />
-              )}
-            </button>
-          </div>
         </div>
-
       </header>
 
-      {/* Content */}
-      <div className="flex-1 overflow-y-auto osler-scroll safe-pb flex flex-col" style={{ touchAction: "pan-y" }}>
+      {/* Content — `osler-page` puts the scroller on the shared hide-on-scroll
+          controller; the bottom padding clears the floating toolbar (plus the
+          safe area) so the pill never covers the end of the article. */}
+      <div
+        className="flex-1 osler-page osler-scroll flex flex-col"
+        style={{
+          touchAction: "pan-y",
+          paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 5.25rem)",
+        }}
+      >
         {loading ? (
           <div className="flex items-center justify-center py-20">
             <Loader2 className="size-6 animate-spin text-muted-foreground" />
@@ -1133,6 +1064,87 @@ function MobileReader({
           </motion.div>
         )}
       </div>
+
+      {/* Floating reader toolbar — every action in one thumb-reachable pill
+          while the top bar stays title-only. Slides away on scroll down and
+          returns on scroll up (the platform-standard reading pattern); the
+          outer frame only centers, so the pill's enter/exit transform never
+          fights the centering. */}
+      <AnimatePresence>
+        {!toolbarHidden && (
+          <motion.div
+            initial={{ y: 64, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            exit={{ y: 64, opacity: 0 }}
+            transition={MOTION_TRANSITION.quick}
+            className="fixed inset-x-0 bottom-[calc(env(safe-area-inset-bottom,0px)+0.625rem)] z-30 flex justify-center pointer-events-none"
+          >
+            <nav
+              aria-label={t("library.readerToolbar")}
+              className="pointer-events-auto flex items-center gap-0.5 rounded-full border border-border bg-card/95 backdrop-blur-md shadow-e3 p-1"
+            >
+              <DisplayMenu display={display} onChange={onDisplayChange} buttonClassName={toolbarBtn} />
+
+              <HighlighterToolbar
+                control={{
+                  tool: hlCtrl.tool,
+                  color: hlCtrl.color,
+                  count: hlCtrl.highlights.length,
+                  onToolChange: hlCtrl.setTool,
+                  onColorChange: hlCtrl.setColor,
+                  onClearAll: hlCtrl.clearAll,
+                }}
+              />
+
+              <button onClick={onShare} className={toolbarBtn} title={t("contextMenu.share")} aria-label={t("contextMenu.share")}>
+                <Share2 className="size-4" />
+              </button>
+
+              <button onClick={onToggleNotes} className={toolbarBtn} title={t("qbank.notes.title")} aria-label={t("qbank.notes.title")}>
+                <NotebookPen className="size-4" />
+              </button>
+
+              {article.contentType === "md" && (
+                <button onClick={onExportPdf} className={toolbarBtn} title={t("pdf.exportResults")} aria-label={t("pdf.exportResults")}>
+                  <Printer className="size-4" />
+                </button>
+              )}
+
+              {article.fileUrl && article.contentType === "pdf" && (
+                <a
+                  href={article.fileUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className={toolbarBtn}
+                  title={t("library.pdfOpen")}
+                  aria-label={t("library.pdfOpen")}
+                >
+                  <ExternalLink className="size-4" />
+                </a>
+              )}
+
+              <button onClick={onReport} className={toolbarBtn} title={t("support.reportProblem")} aria-label={t("support.reportProblem")}>
+                <MessageSquareWarning className="size-4" />
+              </button>
+
+              <button
+                onClick={onToggleBookmark}
+                className={cn(
+                  "size-9 rounded-full flex items-center justify-center transition-colors",
+                  isBookmarked
+                    ? "text-primary bg-primary/15 hover:bg-primary/25"
+                    : "text-muted-foreground hover:text-foreground hover:bg-muted/60",
+                )}
+                title={isBookmarked ? t("article.bookmarkRemove") : t("article.bookmarkAdd")}
+                aria-label={isBookmarked ? t("article.bookmarkRemove") : t("article.bookmarkAdd")}
+                aria-pressed={isBookmarked}
+              >
+                {isBookmarked ? <BookmarkCheck className="size-4" /> : <Bookmark className="size-4" />}
+              </button>
+            </nav>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

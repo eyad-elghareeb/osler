@@ -765,6 +765,7 @@ export const en = {
     "library.oneArticle": "1 article",
     "library.noResults": "No articles match your search",
     "library.noBookmarks": "No bookmarked articles yet",
+    "library.readerToolbar": "Reader actions",
     "library.backToLibrary": "Back to library",
     "library.pdfViewer": "PDF Document",
     "library.pdfOpen": "Open in new tab",
