@@ -11,17 +11,22 @@
 import type { ContentTreeNode } from "./types";
 import { routeFor } from "./navigation";
 
-/** Canonical route for a content-tree node, by engine type. */
-export function routeForContentNode(node: Pick<ContentTreeNode, "type" | "uid">): string {
+/**
+ * Canonical route for a content-tree node, by engine type. Returns null for
+ * video nodes: a videos-tree node is a *folder* that can hold several videos,
+ * and `/videos?video=` matches the video resource id — so only video *cards*
+ * (which know their resource id) can produce a deep link.
+ */
+export function routeForContentNode(node: Pick<ContentTreeNode, "type" | "uid">): string | null {
   switch (node.type) {
     case "library":
       return routeFor("library", { article: node.uid });
-    case "video":
-      return routeFor("videos", { video: node.uid });
     case "flashcard":
       return routeFor("flashcards", { uid: node.uid });
     case "osce":
       return routeFor("osce", { uid: node.uid });
+    case "video":
+      return null;
     default:
       return routeFor("qbank", { uid: node.uid });
   }
@@ -46,11 +51,13 @@ export function resolveContentLink(target: EventTarget | null): ResolvedContentL
   };
 }
 
-/** Mark an element (attribute value + optional share title) as linkable. */
+/** Mark an element as linkable; returns `{}` (no-op spread) when `link` is
+ *  null/undefined so callers can spread unconditionally. */
 export function ctxLinkAttrs(
-  link: string,
+  link: string | null | undefined,
   title?: string,
-): { "data-ctx-link": string; "data-ctx-title"?: string } {
+): { "data-ctx-link"?: string; "data-ctx-title"?: string } {
+  if (!link) return {};
   return title
     ? { "data-ctx-link": link, "data-ctx-title": title }
     : { "data-ctx-link": link };

@@ -20,19 +20,32 @@ export function MermaidModal({ svg, title, onClose }: MermaidModalProps) {
   const [isPanning, setIsPanning] = React.useState(false);
   const [offset, setOffset] = React.useState({ x: 0, y: 0 });
   const panStartRef = React.useRef<{ mouseX: number; mouseY: number; offX: number; offY: number } | null>(null);
+  const canvasRef = React.useRef<HTMLDivElement | null>(null);
 
-  // Close on Escape
+  // Close on Escape — capture phase + stopPropagation so the reader/modal
+  // underneath (which also listens on window) doesn't close with it.
   React.useEffect(() => {
-    const handler = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
-    window.addEventListener("keydown", handler);
-    return () => window.removeEventListener("keydown", handler);
+    const handler = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      e.stopPropagation();
+      onClose();
+    };
+    window.addEventListener("keydown", handler, true);
+    return () => window.removeEventListener("keydown", handler, true);
   }, [onClose]);
 
-  // Wheel zoom
-  const onWheel = (e: React.WheelEvent) => {
-    e.preventDefault();
-    setScale((s) => Math.min(5, Math.max(0.3, s - e.deltaY * 0.001)));
-  };
+  // Wheel zoom — a native non-passive listener, because React's delegated
+  // `onWheel` is passive and its preventDefault() would be ignored.
+  React.useEffect(() => {
+    const el = canvasRef.current;
+    if (!el) return;
+    const onWheelNative = (e: WheelEvent) => {
+      e.preventDefault();
+      setScale((s) => Math.min(5, Math.max(0.3, s - e.deltaY * 0.001)));
+    };
+    el.addEventListener("wheel", onWheelNative, { passive: false });
+    return () => el.removeEventListener("wheel", onWheelNative);
+  }, []);
 
   // Mouse pan
   const onMouseDown = (e: React.MouseEvent) => {
@@ -133,11 +146,11 @@ export function MermaidModal({ svg, title, onClose }: MermaidModalProps) {
 
       {/* Canvas */}
       <div
+        ref={canvasRef}
         className={cn(
           "flex-1 overflow-hidden relative select-none",
           isPanning ? "cursor-grabbing" : "cursor-grab"
         )}
-        onWheel={onWheel}
         onMouseDown={onMouseDown}
         onMouseMove={onMouseMove}
         onMouseUp={onMouseUp}

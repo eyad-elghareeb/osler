@@ -5,7 +5,8 @@
     "shortName": "Osler",
     "tagline": "Medical Study Platform",
     "githubRepo": "https://github.com/eyad-elghareeb/osler",
-    "organisation": "Osler Team"
+    "organisation": "Osler Team",
+    "url": ""
   },
   "engines": {
     "quiz":      { "enabled": true,  "label": "Quiz",           "singular": "Quiz",     "color": "oklch(0.62 0.16 250)", "icon": "clipboard" },

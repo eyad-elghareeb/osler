@@ -91,12 +91,13 @@ export function ContentContextMenu() {
   // Touch long-press → same menu (iOS Safari never fires `contextmenu`).
   // The gesture is cancelled by movement (scroll / swipe) or lifting early,
   // and the synthetic click that follows the hold is swallowed so the card
-  // underneath doesn't navigate.
+  // underneath doesn't navigate. The swallow self-expires: on Android the
+  // native long-press contextmenu means no click follows at all, so the
+  // blocker must not eat the user's next deliberate tap.
   React.useEffect(() => {
     let timer: number | null = null;
     let startX = 0;
     let startY = 0;
-    let fired = false;
 
     const swallowNextClick = () => {
       const block = (e: MouseEvent) => {
@@ -104,6 +105,7 @@ export function ContentContextMenu() {
         e.stopPropagation();
       };
       document.addEventListener("click", block, { capture: true, once: true });
+      window.setTimeout(() => document.removeEventListener("click", block, { capture: true }), 600);
     };
 
     const clearTimer = () => {
@@ -117,12 +119,10 @@ export function ContentContextMenu() {
       if (e.touches.length !== 1) return;
       const target = e.target as HTMLElement | null;
       if (shouldKeepNativeMenu(target) || !target?.closest("main")) return;
-      fired = false;
       startX = e.touches[0].clientX;
       startY = e.touches[0].clientY;
       timer = window.setTimeout(() => {
         timer = null;
-        fired = true;
         openAt(startX, startY, e.target);
         swallowNextClick();
       }, LONG_PRESS_MS);
@@ -136,10 +136,7 @@ export function ContentContextMenu() {
       }
     };
 
-    const onTouchEnd = () => {
-      if (timer !== null) clearTimer();
-      if (fired) fired = false;
-    };
+    const onTouchEnd = () => clearTimer();
 
     document.addEventListener("touchstart", onTouchStart, { passive: true });
     document.addEventListener("touchmove", onTouchMove, { passive: true });
