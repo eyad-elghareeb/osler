@@ -39,6 +39,7 @@ import { contentFileUrl } from "@/lib/osler/content-url";
 import type { ContentTreeNode } from "@/lib/osler/types";
 import { cn } from "@/lib/utils";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { SkeletonText, EmptyState as SharedEmptyState, ComingSoonState } from "./ui-primitives";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useArticleHighlighter } from "@/hooks/use-article-highlighter";
@@ -890,7 +891,7 @@ function MobileReader({
   return (
     <div className="absolute inset-0 bg-background flex flex-col">
       {/* Top bar */}
-      <header className="shrink-0 border-b border-border bg-card backdrop-blur-sm safe-pt">
+      <header className="shrink-0 border-b border-border bg-card backdrop-blur-sm safe-pt relative z-20">
         <div className="flex items-center gap-2 px-3 h-12">
           <button
             onClick={onBack}
@@ -1260,130 +1261,125 @@ function DisplayMenu({
   const [open, setOpen] = React.useState(false);
   const { t } = useI18n();
 
+  // Radix Popover portals the panel to <body>, so it escapes the header's
+  // backdrop-blur stacking context — the article body can no longer paint
+  // over the menu (the old absolute-positioned panel sat underneath it).
   return (
-    <div className="relative">
-      <button
-        onClick={() => { haptic("selection"); setOpen((o) => !o); }}
-        className={buttonClassName}
-        title={t("library.display")}
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <button
+          onClick={() => haptic("selection")}
+          className={buttonClassName}
+          title={t("library.display")}
+          aria-label={t("library.display")}
+          aria-expanded={open}
+        >
+          <Type className="size-4" />
+        </button>
+      </PopoverTrigger>
+      <PopoverContent
+        align="end"
+        sideOffset={6}
+        className="w-64 space-y-3.5 rounded-xl p-3.5"
+        role="dialog"
         aria-label={t("library.display")}
-        aria-expanded={open}
+        onClick={(e) => e.stopPropagation()}
       >
-        <Type className="size-4" />
-      </button>
-      <AnimatePresence>
-        {open && (
-          <>
-            {/* Invisible backdrop — click-away close */}
-            <div className="fixed inset-0 z-20" onClick={() => setOpen(false)} />
-            <motion.div
-              initial={{ opacity: 0, y: 4 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: 4 }}
-              transition={MOTION_TRANSITION.quick}
-              className="absolute end-0 top-full mt-1.5 z-30 bg-card border border-border rounded-xl shadow-lg p-3.5 w-64 space-y-3.5"
-              onClick={(e) => e.stopPropagation()}
-              role="dialog"
-              aria-label={t("library.display")}
+        {/* Text size */}
+        <div className="space-y-1.5">
+          <MenuLabel>{t("library.fontSize")}</MenuLabel>
+          <div className="flex items-center gap-2">
+            <StepperButton
+              onClick={() => { haptic("selection"); onChange({ fontSize: Math.max(12, display.fontSize - 1) }); }}
+              disabled={display.fontSize <= 12}
+              label={t("library.textSizeDecrease")}
             >
-              {/* Text size */}
-              <div className="space-y-1.5">
-                <MenuLabel>{t("library.fontSize")}</MenuLabel>
-                <div className="flex items-center gap-2">
-                  <StepperButton
-                    onClick={() => { haptic("selection"); onChange({ fontSize: Math.max(12, display.fontSize - 1) }); }}
-                    disabled={display.fontSize <= 12}
-                    label={t("library.textSizeDecrease")}
-                  >
-                    <Minus className="size-3.5" />
-                  </StepperButton>
-                  <span className="text-xs font-mono tabular-nums flex-1 text-center">
-                    {display.fontSize}px
-                  </span>
-                  <StepperButton
-                    onClick={() => { haptic("selection"); onChange({ fontSize: Math.min(22, display.fontSize + 1) }); }}
-                    disabled={display.fontSize >= 22}
-                    label={t("library.textSizeIncrease")}
-                  >
-                    <PlusIcon className="size-3.5" />
-                  </StepperButton>
-                </div>
-              </div>
+              <Minus className="size-3.5" />
+            </StepperButton>
+            <span className="text-xs font-mono tabular-nums flex-1 text-center">
+              {display.fontSize}px
+            </span>
+            <StepperButton
+              onClick={() => { haptic("selection"); onChange({ fontSize: Math.min(22, display.fontSize + 1) }); }}
+              disabled={display.fontSize >= 22}
+              label={t("library.textSizeIncrease")}
+            >
+              <PlusIcon className="size-3.5" />
+            </StepperButton>
+          </div>
+        </div>
 
-              {/* Zoom */}
-              <div className="space-y-1.5">
-                <MenuLabel>{t("library.zoom")}</MenuLabel>
-                <div className="flex items-center gap-2">
-                  <StepperButton
-                    onClick={() => { haptic("selection"); onChange({ zoom: Math.max(80, display.zoom - 10) }); }}
-                    disabled={display.zoom <= 80}
-                    label={t("library.zoomOut")}
-                  >
-                    <ZoomOut className="size-3.5" />
-                  </StepperButton>
-                  <button
-                    type="button"
-                    onClick={() => { haptic("selection"); onChange({ zoom: 100 }); }}
-                    disabled={display.zoom === 100}
-                    className="flex-1 h-7 rounded-md text-xs font-mono tabular-nums hover:bg-muted text-muted-foreground hover:text-foreground transition-colors disabled:hover:bg-transparent"
-                    title={t("library.zoomReset")}
-                  >
-                    {display.zoom}%
-                  </button>
-                  <StepperButton
-                    onClick={() => { haptic("selection"); onChange({ zoom: Math.min(140, display.zoom + 10) }); }}
-                    disabled={display.zoom >= 140}
-                    label={t("library.zoomIn")}
-                  >
-                    <ZoomIn className="size-3.5" />
-                  </StepperButton>
-                </div>
-              </div>
+        {/* Zoom */}
+        <div className="space-y-1.5">
+          <MenuLabel>{t("library.zoom")}</MenuLabel>
+          <div className="flex items-center gap-2">
+            <StepperButton
+              onClick={() => { haptic("selection"); onChange({ zoom: Math.max(80, display.zoom - 10) }); }}
+              disabled={display.zoom <= 80}
+              label={t("library.zoomOut")}
+            >
+              <ZoomOut className="size-3.5" />
+            </StepperButton>
+            <button
+              type="button"
+              onClick={() => { haptic("selection"); onChange({ zoom: 100 }); }}
+              disabled={display.zoom === 100}
+              className="flex-1 h-7 rounded-md text-xs font-mono tabular-nums hover:bg-muted text-muted-foreground hover:text-foreground transition-colors disabled:hover:bg-transparent"
+              title={t("library.zoomReset")}
+            >
+              {display.zoom}%
+            </button>
+            <StepperButton
+              onClick={() => { haptic("selection"); onChange({ zoom: Math.min(140, display.zoom + 10) }); }}
+              disabled={display.zoom >= 140}
+              label={t("library.zoomIn")}
+            >
+              <ZoomIn className="size-3.5" />
+            </StepperButton>
+          </div>
+        </div>
 
-              {/* Typeface */}
-              <div className="space-y-1.5">
-                <MenuLabel>{t("library.fontFamily")}</MenuLabel>
-                <DisplayPills
-                  value={display.fontFamily}
-                  onChange={(v) => onChange({ fontFamily: v })}
-                  options={[
-                    { value: "serif" as const, label: t("library.fontSerif") },
-                    { value: "sans" as const, label: t("library.fontSans") },
-                  ]}
-                />
-              </div>
+        {/* Typeface */}
+        <div className="space-y-1.5">
+          <MenuLabel>{t("library.fontFamily")}</MenuLabel>
+          <DisplayPills
+            value={display.fontFamily}
+            onChange={(v) => onChange({ fontFamily: v })}
+            options={[
+              { value: "serif" as const, label: t("library.fontSerif") },
+              { value: "sans" as const, label: t("library.fontSans") },
+            ]}
+          />
+        </div>
 
-              {/* Line spacing */}
-              <div className="space-y-1.5">
-                <MenuLabel>{t("library.lineSpacing")}</MenuLabel>
-                <DisplayPills
-                  value={display.lineSpacing}
-                  onChange={(v) => onChange({ lineSpacing: v })}
-                  options={[
-                    { value: "compact" as const, label: t("library.lineSpacing.compact") },
-                    { value: "cozy" as const, label: t("library.lineSpacing.cozy") },
-                    { value: "relaxed" as const, label: t("library.lineSpacing.relaxed") },
-                  ]}
-                />
-              </div>
+        {/* Line spacing */}
+        <div className="space-y-1.5">
+          <MenuLabel>{t("library.lineSpacing")}</MenuLabel>
+          <DisplayPills
+            value={display.lineSpacing}
+            onChange={(v) => onChange({ lineSpacing: v })}
+            options={[
+              { value: "compact" as const, label: t("library.lineSpacing.compact") },
+              { value: "cozy" as const, label: t("library.lineSpacing.cozy") },
+              { value: "relaxed" as const, label: t("library.lineSpacing.relaxed") },
+            ]}
+          />
+        </div>
 
-              {/* Reading width */}
-              <div className="space-y-1.5">
-                <MenuLabel>{t("library.readingWidth")}</MenuLabel>
-                <DisplayPills
-                  value={display.width}
-                  onChange={(v) => onChange({ width: v })}
-                  options={[
-                    { value: "normal" as const, label: t("library.readingWidth.normal") },
-                    { value: "wide" as const, label: t("library.readingWidth.wide") },
-                  ]}
-                />
-              </div>
-            </motion.div>
-          </>
-        )}
-      </AnimatePresence>
-    </div>
+        {/* Reading width */}
+        <div className="space-y-1.5">
+          <MenuLabel>{t("library.readingWidth")}</MenuLabel>
+          <DisplayPills
+            value={display.width}
+            onChange={(v) => onChange({ width: v })}
+            options={[
+              { value: "normal" as const, label: t("library.readingWidth.normal") },
+              { value: "wide" as const, label: t("library.readingWidth.wide") },
+            ]}
+          />
+        </div>
+      </PopoverContent>
+    </Popover>
   );
 }
 
@@ -1411,7 +1407,7 @@ function ArticleHeader({
   const { t } = useI18n();
 
   return (
-    <header className="shrink-0 h-12 flex items-center px-3 sm:px-4 gap-2 border-b border-border bg-card/60 backdrop-blur-md safe-pt">
+    <header className="shrink-0 h-12 flex items-center px-3 sm:px-4 gap-2 border-b border-border bg-card/60 backdrop-blur-md safe-pt relative z-20">
       <div className="flex items-center gap-2 text-xs text-muted-foreground flex-1 min-w-0">
         <span className="font-medium">{article.specialty}</span>
         {article.system && (
