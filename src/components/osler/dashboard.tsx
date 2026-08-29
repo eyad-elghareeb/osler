@@ -50,7 +50,8 @@ import { toast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 
 import { StreakCard } from "./streak-card";
-import { useOslerRouter } from "@/lib/osler/navigation";
+import { useOslerRouter, routeFor } from "@/lib/osler/navigation";
+import { ctxLinkAttrs, routeForContentNode } from "@/lib/osler/deep-link";
 import { useOslerSession } from "@/lib/osler/session-context";
 import {
   useActiveSession,
@@ -507,6 +508,7 @@ export function Dashboard({
                 whileHover={{ y: -2 }}
                 whileTap={{ scale: 0.99 }}
                 onClick={() => onOpenArticle?.(a.file)}
+                {...ctxLinkAttrs(routeFor("library", { article: a.file }), a.title)}
                 className="text-start osler-card--default group hover:border-primary/40 hover:shadow-e2 transition-all"
               >
                 <div className="flex items-center gap-2 mb-2 text-xs text-muted-foreground">
@@ -549,6 +551,7 @@ export function Dashboard({
                   whileHover={{ y: -2 }}
                   whileTap={{ scale: 0.99 }}
                   onClick={() => onOpenPack?.(node)}
+                  {...ctxLinkAttrs(routeForContentNode(node), node.title)}
                   className="text-start osler-card--default group hover:border-primary/40 hover:shadow-e2 transition-all"
                 >
                   <div className="flex items-start gap-3">

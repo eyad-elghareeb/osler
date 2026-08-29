@@ -66,6 +66,8 @@ import { ReportTicketDialog } from "@/components/osler/report-ticket-dialog";
 import type { TicketContext } from "@/lib/osler/support";
 
 import { useOslerRouter } from "@/lib/osler/navigation";
+import { routeFor } from "@/lib/osler/navigation";
+import { ctxLinkAttrs } from "@/lib/osler/deep-link";
 import { MOTION_TRANSITION, MOTION_SPRING } from "@/lib/osler/motion";
 
 interface LibraryProps {
@@ -785,6 +787,7 @@ function MobileHub({
                           onOpenArticle(a.file);
                         }
                       }}
+                      {...ctxLinkAttrs(routeFor("library", { article: a.file }), a.title)}
                       className={cn(
                         "w-full flex items-center gap-3 px-4 py-3 rounded-xl text-start transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
                         "bg-card border border-border hover:border-primary/30 hover:bg-primary/[0.02]",
@@ -1146,6 +1149,7 @@ function SidebarContent({
               <button
                 key={a.file}
                 onClick={() => onOpenArticle(a.file)}
+                {...ctxLinkAttrs(routeFor("library", { article: a.file }), a.title)}
                 className={cn(
                   "w-full flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm transition-colors text-left",
                   "hover:bg-muted/60",

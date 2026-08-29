@@ -77,7 +77,8 @@ function fmtTime(s: number): string {
 
 /* ── Component ─────────────────────────────────────────────────────── */
 
-import { useOslerRouter } from "@/lib/osler/navigation";
+import { useOslerRouter, routeFor } from "@/lib/osler/navigation";
+import { ctxLinkAttrs } from "@/lib/osler/deep-link";
 
 interface VideosStudioProps {
   /** Pre-selected video (used for deep links). */
@@ -461,6 +462,7 @@ export function VideosStudio({
                       initial={{ opacity: 0, y: 8 }}
                       animate={{ opacity: 1, y: 0 }}
                       transition={{ ...MOTION_TRANSITION.quick, delay: Math.min(idx * 0.04, 0.4) }}
+                      {...ctxLinkAttrs(routeFor("videos", { video: video.id }), video.title)}
                       dir={lang === "ar" ? "rtl" : undefined}
                       lang={lang}
                       className={cn(

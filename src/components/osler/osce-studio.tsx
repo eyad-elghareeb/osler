@@ -21,6 +21,7 @@ import FluidOrb from "@/components/ui/fluid-orb";
 import { AiMarkdown } from "@/components/osler/ai-markdown";
 import { MOTION_TRANSITION, MOTION_SPRING } from "@/lib/osler/motion";
 import { useOslerRouter, routeFor } from "@/lib/osler/navigation";
+import { ctxLinkAttrs } from "@/lib/osler/deep-link";
 import { MAX_TURNS, WARN_TURNS, EXAM_TIME, STORAGE, MAP_STEPS, formatTime, timerState, diffClass, userTurnCount, sanitizeModelText, isPediatric, normalizeStation, buildPatientSysPrompt, buildDataInterpSysPrompt, ExamResult, getApiKey, hasApiKey, getLiveModel, dataImageUrl, askPatient, askExaminer, scoreInterview, scoreDataInterpExam, TranscriptEntry, OscePhase } from "./osce/gemini";
 import { nodeFromPack, buildAchievements, launchConfetti, getSpeakerName, OsceStreamBubble } from "./osce/session-utils";
 import { DataTablesRenderer, DataImagesRenderer, PrintedMaterialsModal, LiveVoiceOverlay } from "./osce/renderers";
@@ -1191,6 +1192,7 @@ export function OsceStudio({
               void selectPack({ node, content });
             }
           }}
+          {...ctxLinkAttrs(routeFor("osce", { uid: node.uid }), node.title)}
           className={cn(
             "w-full h-full text-start group relative overflow-hidden bg-card border border-border rounded-xl p-5 hover:border-primary/40 hover:shadow-md transition-all duration-200 active:scale-[0.99] cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 flex flex-col",
             lang === "ar" && "osler-content-ar",

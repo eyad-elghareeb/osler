@@ -49,6 +49,7 @@ import { EmptyState, ComingSoonState } from "./ui-primitives";
 import { NavigationStack } from "./navigation-stack";
 import { useSwipeBackDismiss } from "@/hooks/use-swipe-back-dismiss";
 import { useOslerRouter, routeFor } from "@/lib/osler/navigation";
+import { ctxLinkAttrs } from "@/lib/osler/deep-link";
 
 type ViewMode = "decks" | "subdecks" | "study" | "complete";
 
@@ -896,6 +897,7 @@ export function FlashcardStudio({
                       else void startDeck(idx);
                     }
                   }}
+                  {...(isBranch ? {} : ctxLinkAttrs(routeFor("flashcards", { uid: node.uid }), node.title))}
                   className={cn(
                     "osler-fade-in text-start bg-card border border-border rounded-xl p-5 hover:border-primary/40 hover:shadow-md hover:bg-primary/[0.02] transition-colors group cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
                     node.lang === "ar" && "osler-content-ar",

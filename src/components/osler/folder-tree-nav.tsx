@@ -4,6 +4,7 @@ import * as React from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { ChevronRight, Folder, FileText } from "lucide-react";
 import type { ContentTreeNode } from "@/lib/osler/types";
+import { routeForContentNode } from "@/lib/osler/deep-link";
 import { cn } from "@/lib/utils";
 import { MOTION_TRANSITION } from "@/lib/osler/motion";
 
@@ -101,6 +102,9 @@ function TreeNodeItem({
         onClick={toggle}
         onKeyDown={handleKeyDown}
         aria-expanded={isBranch ? expanded : undefined}
+        // Leaf nodes carry their canonical deep link so the global context
+        // menu can copy/share a URL that opens this exact content.
+        {...(isBranch ? {} : { "data-ctx-link": routeForContentNode(node), "data-ctx-title": node.title })}
         className={cn(
           "w-full flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm transition-colors text-left",
           "hover:bg-muted/60 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30",
