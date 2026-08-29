@@ -34,7 +34,8 @@ Every white-label decision lives in **`public/osler.config.json`**. The schema i
     "tagline": "Personalised study platform",
     "githubRepo": "https://github.com/your-org/your-osler",
     "organisation": "Your Organisation",
-    "supportEmail": "admin@yourschool.edu"
+    "supportEmail": "admin@yourschool.edu",
+    "url": "https://your-osler.pages.dev"  // canonical origin — used for social link previews
   },
   "engines": {
     "quiz":      { "enabled": true  },
@@ -80,6 +81,7 @@ Every white-label decision lives in **`public/osler.config.json`**. The schema i
 | Section | Drives |
 |---|---|---|
 | `site.{name,shortName,tagline,githubRepo,organisation,supportEmail}` | `<title>`, OG/Twitter metadata, PWA manifest name, in-app brand mark, in-app About section, admin sidebar link, support link |
+| `site.url` | Canonical origin baked into og:image / twitter:image at build time (`metadataBase`). Set it to your deployed https URL, or social platforms render link previews without an image (Next's default base is `http://localhost:3000`). On Cloudflare Pages CI builds the `CF_PAGES_URL` env var is picked up automatically when this is empty. |
 | `engines.<id>.{enabled,label,singular,color,icon}` | **Plugin system** — toggle each of the 7 engines on/off; optional per-engine label/singular/color/icon overrides |
 | `themes.{default,custom[]}` | Default theme + custom oklch palettes with full token support (primary, primaryForeground, background, foreground, card, cardForeground, popover, popoverForeground, secondary, secondaryForeground, muted, mutedForeground, accent, destructive, border, input, ring, plus 9 sidebar* tokens); CSS variable overrides injected at runtime |
 | `cloud.{enabled,apiUrl,turnstileSiteKey,syncQbank,syncFlashcards}` | Optional Cloudflare Worker accounts + cross-device progress sync |
@@ -338,6 +340,7 @@ The `osler.config.json` schema is versioned (`schemaVersion`). Breaking changes 
 Going from a fresh fork to a fully white-labelled instance:
 
 - [ ] Edit `public/osler.config.json` → `site.name`, `site.shortName`, `site.tagline`, `site.githubRepo` (your fork URL), `site.organisation`
+- [ ] Set `site.url` to your deployed https origin so social link previews show your image (see the config table in §1)
 - [ ] Toggle engines in `engines` to match what your audience needs
 - [ ] Add at least one custom theme in `themes.custom` with your brand colours
 - [ ] Set `defaults.language.ui` to your audience's primary language

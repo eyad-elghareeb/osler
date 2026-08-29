@@ -253,10 +253,25 @@ function deployPages(project) {
 }
 
 // ── Frontend config wiring ─────────────────────────────────────────────
-function patchConfig(workerUrl) {
-  step("Patching public/osler.config.json cloud.apiUrl");
+function patchConfig(workerUrl, siteUrl) {
+  step("Patching public/osler.config.json (cloud.apiUrl, site.url)");
   patchFile(CONFIG_JSON, [[`"apiUrl": "http://localhost:8787"`, `"apiUrl": "${workerUrl}"`]]);
   console.log(`  ✓ cloud.apiUrl = ${workerUrl}`);
+  // The canonical origin feeds `metadataBase` at build time — without it,
+  // og:image resolves against http://localhost:3000 and social link
+  // previews ship without an image.
+  if (siteUrl) {
+    if (readFile(CONFIG_JSON).includes(`"url": "${siteUrl}"`)) {
+      console.log(`  ✓ site.url already = ${siteUrl}`);
+    } else if (/"url"\s*:\s*""/.test(readFile(CONFIG_JSON))) {
+      patchFile(CONFIG_JSON, [[`"url": ""`, `"url": "${siteUrl}"`]]);
+      console.log(`  ✓ site.url = ${siteUrl}`);
+    } else {
+      const text = readFile(CONFIG_JSON);
+      writeFile(CONFIG_JSON, text.replace(`"site": {`, `"site": {\n    "url": "${siteUrl}",`));
+      console.log(`  ✓ site.url = ${siteUrl} (added)`);
+    }
+  }
 }
 
 // ── Main ───────────────────────────────────────────────────────────────
@@ -288,7 +303,7 @@ async function main() {
     deployPages(args.project);
   }
 
-  if (workerUrl) patchConfig(workerUrl);
+  if (workerUrl) patchConfig(workerUrl, `https://${args.project}.pages.dev`);
 
   step("Deploy complete");
   console.log(`  Site:    https://${args.project}.pages.dev`);

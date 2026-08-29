@@ -10,7 +10,8 @@
     "tagline": "Medical Study Platform",
     "githubRepo": "https://github.com/eyad-elghareeb/osler",
     "organisation": "Osler Team",
-    "supportEmail": ""
+    "supportEmail": "",
+    "url": ""
   },
 
   "engines": {

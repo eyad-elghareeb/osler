@@ -233,6 +233,7 @@
       card.appendChild(labeled(t("config.site.githubRepo"), textInput(cfg.site.githubRepo, (v) => cfg.site.githubRepo = v), t("config.site.githubRepoHint")));
       card.appendChild(labeled(t("config.site.organisation"), textInput(cfg.site.organisation, (v) => cfg.site.organisation = v)));
       card.appendChild(labeled(t("config.site.supportEmail"), textInput(cfg.site.supportEmail || "", (v) => cfg.site.supportEmail = v)));
+      card.appendChild(labeled(t("config.site.url"), textInput(cfg.site.url || "", (v) => cfg.site.url = v), t("config.site.urlHint")));
       parent.appendChild(card);
     }
 

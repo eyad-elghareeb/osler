@@ -29,6 +29,8 @@ export interface BuildTimeSiteConfig {
   shortName: string;
   tagline: string;
   organisation: string;
+  /** Canonical site origin, when configured (see SiteConfig.url). */
+  url?: string;
 }
 
 const DEFAULTS: BuildTimeSiteConfig = {
@@ -58,6 +60,9 @@ export function getBuildTimeSiteConfig(): BuildTimeSiteConfig {
       shortName: typeof site?.shortName === "string" && site.shortName.trim() ? site.shortName.trim() : DEFAULTS.shortName,
       tagline: typeof site?.tagline === "string" && site.tagline.trim() ? site.tagline.trim() : DEFAULTS.tagline,
       organisation: typeof site?.organisation === "string" && site.organisation.trim() ? site.organisation.trim() : DEFAULTS.organisation,
+      // Only accept a well-formed origin — this value feeds `metadataBase`,
+      // which requires an absolute http(s) URL or metadata throws at build.
+      url: typeof site?.url === "string" && /^https?:\/\/\S+$/i.test(site.url.trim()) ? site.url.trim() : undefined,
     };
   } catch {
     // Missing file, bad JSON, or running somewhere fs isn't available —

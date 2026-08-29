@@ -130,6 +130,11 @@ export interface SiteConfig {
   organisation?: string;
   /** Optional support / contact email. */
   supportEmail?: string;
+  /** Optional canonical site origin (e.g. "https://my-osler.pages.dev").
+   *  Baked into og:image / twitter:image at build time as `metadataBase` —
+   *  without it Next resolves those images against http://localhost:3000
+   *  and social link previews render without an image. */
+  url?: string;
 }
 
 /** Quiz/QBank defaults applied on first use of the quiz builder. */

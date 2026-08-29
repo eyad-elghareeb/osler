@@ -68,7 +68,18 @@ const siteName = siteConfig.name;
 const siteTagline = siteConfig.tagline;
 const siteShortName = siteConfig.shortName;
 
+/**
+ * Absolute base for og:image / twitter:image / og:url resolution. Next
+ * defaults to `http://localhost:3000` when this is unset, which bakes an
+ * insecure localhost URL into the static HTML and breaks link previews on
+ * other devices. Prefer the configured canonical origin, falling back to
+ * the Cloudflare Pages build URL when deploying there.
+ */
+const siteUrl = siteConfig.url ?? process.env.CF_PAGES_URL;
+const metadataBase = siteUrl ? new URL(siteUrl) : undefined;
+
 export const metadata: Metadata = {
+  ...(metadataBase ? { metadataBase } : {}),
   title: `${siteName} — ${siteTagline}`,
   description:
     `${siteName} — Quiz, Question Bank, Flashcards, Written Prompts, and OSCE clinical cases.`,
