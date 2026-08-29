@@ -33,7 +33,7 @@ import { cn } from "@/lib/utils";
 import type { StringKey } from "@/lib/osler/i18n";
 import { haptic } from "@/lib/osler/native";
 import { getArticleViewContext } from "@/lib/osler/article-view-registry";
-import { resolveContentLink, type ResolvedContentLink } from "@/lib/osler/deep-link";
+import { resolveContentLink, absoluteDeepLink, type ResolvedContentLink } from "@/lib/osler/deep-link";
 import { MOTION_TRANSITION } from "@/lib/osler/motion";
 
 /** Keeps the native menu alive for editing surfaces and explicit opt-outs. */
@@ -55,6 +55,9 @@ export function ContentContextMenu() {
   const [pos, setPos] = React.useState({ x: 0, y: 0 });
   const [hasSelection, setHasSelection] = React.useState(false);
   const [contentLink, setContentLink] = React.useState<ResolvedContentLink | null>(null);
+  /** Pack/folder uid under the cursor (`data-ctx-export`) — "Export as PDF"
+   *  opens the QBank pack export dialog for it via `osler-pack-export-request`. */
+  const [exportUid, setExportUid] = React.useState<string | null>(null);
   const menuRef = React.useRef<HTMLDivElement | null>(null);
 
   const close = React.useCallback(() => setOpen(false), []);
@@ -66,6 +69,7 @@ export function ContentContextMenu() {
     haptic("selection");
     setHasSelection(!!selectionText);
     setContentLink(resolveContentLink(target));
+    setExportUid((target as HTMLElement | null)?.closest?.("[data-ctx-export]")?.getAttribute("data-ctx-export") ?? null);
     // Clamp with an estimated menu size; the frame below refines it.
     const x = Math.min(clientX, window.innerWidth - 230);
     const y = Math.min(clientY, window.innerHeight - 210);
@@ -194,7 +198,14 @@ export function ContentContextMenu() {
     }
   };
 
-  const currentLink = () => contentLink?.href ?? getArticleViewContext()?.link ?? window.location.href;
+  const currentLink = () => {
+    if (contentLink) return contentLink.href;
+    const viewLink = getArticleViewContext()?.link;
+    if (viewLink) return absoluteDeepLink(viewLink);
+    // Normalize the current URL through absoluteDeepLink so copied links
+    // always carry the canonical trailing slash (`/library/?article=…`).
+    return absoluteDeepLink(window.location.pathname + window.location.search);
+  };
   const currentTitle = () => contentLink?.title ?? getArticleViewContext()?.title ?? document.title;
 
   const copySelection = () =>
@@ -222,12 +233,16 @@ export function ContentContextMenu() {
 
   const exportPdf = () =>
     runAction(() => {
+      if (exportUid) {
+        window.dispatchEvent(new CustomEvent("osler-pack-export-request", { detail: { uid: exportUid } }));
+        return;
+      }
       getArticleViewContext()?.requestExportPdf?.();
     });
 
   const article = open ? getArticleViewContext() : null;
   const canShare = typeof navigator !== "undefined" && "share" in navigator;
-  const canExportPdf = !!article?.requestExportPdf;
+  const canExportPdf = !!article?.requestExportPdf || !!exportUid;
 
   const items: Array<{
     key: string;

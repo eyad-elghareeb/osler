@@ -25,10 +25,35 @@ type ArticleBlock =
   | { type: "p"; runs: ArticleRun[] }
   | { type: "list"; ordered: boolean; items: Array<{ runs: ArticleRun[]; depth: number }> }
   | { type: "quote"; text: string }
+  | { type: "callout"; kind: string; title: string; paragraphs: ArticleRun[][] }
   | { type: "code"; lines: string[] }
   | { type: "image"; src: string; alt: string }
   | { type: "table"; rows: string[][]; header: boolean }
   | { type: "hr" };
+
+/**
+ * Print accent per canonical callout id — the PDF is print-styled (fixed
+ * palette), so theme tokens don't apply; these mirror the on-screen accents
+ * with the render palette (blue informational, green positive, amber
+ * cautionary, red severe, gray neutral).
+ */
+const CALLOUT_ACCENTS: Record<string, RGB> = {
+  note: C.COBALT,
+  info: C.COBALT,
+  abstract: C.COBALT,
+  question: C.COBALT,
+  tip: C.EMERALD,
+  success: C.EMERALD,
+  warning: C.GOLD,
+  "exam-alert": C.GOLD,
+  danger: C.CRIMSON,
+  failure: C.CRIMSON,
+  bug: C.CRIMSON,
+  example: C.SLATE,
+  quote: C.SLATE,
+  "clinical-pearl": C.ROYAL,
+  mnemonic: C.ROYAL,
+};
 
 function mergeRuns(runs: ArticleRun[]): ArticleRun[] {
   const out: ArticleRun[] = [];
@@ -164,9 +189,39 @@ function parseArticleBlocks(html: string): ArticleBlock[] {
       case "ol":
         emitList(el, true, 0);
         return;
-      case "blockquote":
+      case "blockquote": {
+        if (el.classList.contains("osler-callout")) {
+          // Callout: accent title row + body paragraphs rendered with a
+          // colored rail (mirrors the on-screen admonition).
+          const kind = el.getAttribute("data-callout") ?? "note";
+          const title = (el.querySelector(".osler-callout-title")?.textContent ?? "").replace(/\s+/g, " ").trim();
+          const body = el.cloneNode(true) as Element;
+          body.querySelector(".osler-callout-title")?.remove();
+          const paragraphs: ArticleRun[][] = [];
+          const parts = Array.from(body.children);
+          if (parts.length === 0) {
+            const runs = mergeRuns(collectInline(body));
+            if (runs.some((r) => r.text.trim())) paragraphs.push(runs);
+          } else {
+            for (const part of parts) {
+              const tag = part.tagName.toLowerCase();
+              if (tag === "ul" || tag === "ol") {
+                for (const li of Array.from(part.querySelectorAll("li"))) {
+                  const runs = mergeRuns(collectInline(li));
+                  if (runs.some((r) => r.text.trim())) paragraphs.push([{ text: "•  " }, ...runs]);
+                }
+              } else {
+                const runs = mergeRuns(collectInline(part));
+                if (runs.some((r) => r.text.trim())) paragraphs.push(runs);
+              }
+            }
+          }
+          blocks.push({ type: "callout", kind, title, paragraphs });
+          return;
+        }
         blocks.push({ type: "quote", text: (el.textContent ?? "").replace(/\s+/g, " ").trim() });
         return;
+      }
       case "pre":
         blocks.push({ type: "code", lines: (el.textContent ?? "").replace(/\n{3,}/g, "\n\n").split("\n") });
         return;
@@ -519,6 +574,31 @@ export async function generateArticlePdf(cfg: ArticlePdfConfig): Promise<jsPDF> 
           italicAll: !hasArabic(block.text),
         });
         doc.y += sp(1.1, density);
+        break;
+      }
+      case "callout": {
+        const accent = CALLOUT_ACCENTS[block.kind] ?? C.COBALT;
+        doc.checkPage(sp(5, density));
+        doc.y += sp(0.5, density);
+        if (block.title) {
+          doc.checkPage(lh(9 * ts, 1.3) * 2);
+          const cTitleIsAr = hasArabic(block.title);
+          d.setFont(cTitleIsAr ? "Cairo" : F.Hm, hs("bold"));
+          d.setFontSize(9 * ts);
+          d.setTextColor(...accent);
+          const cTitleLines: string[] = d.splitTextToSize(
+            cTitleIsAr ? normalizeText(block.title) : normalizeText(block.title).toUpperCase(),
+            fw - 12,
+          );
+          if (cTitleIsAr) d.text(cTitleLines, x + fw - 6, doc.y, { align: "right" });
+          else d.text(cTitleLines, x + 6, doc.y);
+          doc.y += cTitleLines.length * lh(9 * ts, 1.3) + sp(0.3, density);
+        }
+        for (const runs of block.paragraphs) {
+          renderRichParagraph(doc, runs, x + 6, fw - 12, 9.6, C.CHARCOAL, { barColor: accent });
+          doc.y += sp(0.4, density);
+        }
+        doc.y += sp(0.7, density);
         break;
       }
       case "code": {

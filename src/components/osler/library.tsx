@@ -64,7 +64,7 @@ import { ReportTicketDialog } from "@/components/osler/report-ticket-dialog";
 import type { TicketContext } from "@/lib/osler/support";
 
 import { useOslerRouter, routeFor } from "@/lib/osler/navigation";
-import { ctxLinkAttrs } from "@/lib/osler/deep-link";
+import { ctxLinkAttrs, absoluteDeepLink } from "@/lib/osler/deep-link";
 import { MOTION_TRANSITION, MOTION_SPRING } from "@/lib/osler/motion";
 import { PdfViewer } from "./pdf-viewer";
 
@@ -334,7 +334,7 @@ export function Library({ initialArticleId, onNavigateBack: propOnNavigateBack }
   // article (`/library?article=…`). Web Share falls back to the clipboard
   // where unavailable; cancelling the share sheet is not an error.
   const articleDeepLink = React.useCallback(
-    () => new URL(routeFor("library", { article: activeFile ?? "" }), window.location.origin).toString(),
+    () => absoluteDeepLink(routeFor("library", { article: activeFile ?? "" })),
     [activeFile],
   );
   const handleCopyArticleLink = React.useCallback(async () => {
@@ -694,8 +694,12 @@ export function Library({ initialArticleId, onNavigateBack: propOnNavigateBack }
                         display.fontFamily === "sans"
                           ? "var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif"
                           : undefined,
+                      // Sans mode carries into headings via the CSS var;
+                      // serif mode falls back to the Playfair default.
+                      "--osler-reader-heading-font":
+                        display.fontFamily === "sans" ? "inherit" : undefined,
                       maxWidth: display.width === "wide" ? "1200px" : undefined,
-                    }}
+                    } as React.CSSProperties}
                   />
                 </motion.div>
               )}
@@ -1092,7 +1096,9 @@ function MobileReader({
                   display.fontFamily === "sans"
                     ? "var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif"
                     : undefined,
-              }}
+                "--osler-reader-heading-font":
+                  display.fontFamily === "sans" ? "inherit" : undefined,
+              } as React.CSSProperties}
             />
           </motion.div>
         )}

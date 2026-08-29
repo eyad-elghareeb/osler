@@ -116,22 +116,34 @@ function calloutBlockquoteDecorations(doc: import("@milkdown/kit/prose/model").N
     if (node.type.name !== "blockquote") return;
     const first = node.firstChild;
     if (!first || first.type.name !== "paragraph") return;
-    const textNode = first.firstChild;
-    const text = textNode?.isText ? textNode.text ?? "" : textNode?.textContent ?? "";
-    const parsed = parseCalloutMarker(text);
+    const parsed = parseCalloutMarker(first.textContent);
     if (!parsed) return;
     decorations.push(
       Decoration.node(pos, pos + node.nodeSize, {
         class: `osler-callout osler-callout--${parsed.type}`,
       }),
     );
-    // Style the marker paragraph as the callout title row (icon + accent).
-    const paragraphPos = pos + 1;
+    // Style only the title RUN — lazy-continuation lines share this
+    // paragraph, so a paragraph-level decoration would wrap the whole body
+    // in the title's uppercase accent styling. The marker stays visible in
+    // the editor (authors need the raw `[!type]` text).
+    const paragraphStart = pos + 1;
+    let titleEnd = paragraphStart + first.content.size;
+    let breakAt = -1;
+    first.forEach((child, offset) => {
+      if (breakAt < 0 && child.type.name === "hardbreak") {
+        breakAt = offset;
+        titleEnd = paragraphStart + offset;
+      }
+    });
     decorations.push(
-      Decoration.node(paragraphPos, paragraphPos + first.nodeSize, {
-        class: "osler-callout-title",
-      }),
+      Decoration.inline(paragraphStart, titleEnd, { class: "osler-callout-title" }),
     );
+    if (breakAt >= 0) {
+      decorations.push(
+        Decoration.inline(titleEnd, titleEnd + 1, { class: "osler-callout-title-break" }),
+      );
+    }
   });
   return DecorationSet.create(doc, decorations);
 }

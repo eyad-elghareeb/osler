@@ -3650,26 +3650,35 @@ html.osler-ar body,
 .osler-milkdown-article .milkdown .ProseMirror blockquote.osler-callout::before {
   display: none;
 }
+/* Title run — an INLINE decoration over the marker + title text only (body
+   text that shares the paragraph stays unstyled). Rendered as a block so
+   the body flows beneath it, mirroring the HTML pipeline's title paragraph. */
 .osler-callout .osler-callout-title,
-.osler-milkdown-editor .milkdown .ProseMirror blockquote.osler-callout > .osler-callout-title,
-.osler-milkdown-article .milkdown .ProseMirror blockquote.osler-callout > .osler-callout-title {
-  display: flex;
-  align-items: center;
-  gap: 0.4rem;
-  margin: 0 0 0.25rem 0 !important;
+.osler-milkdown-editor .milkdown .ProseMirror blockquote.osler-callout .osler-callout-title,
+.osler-milkdown-article .milkdown .ProseMirror blockquote.osler-callout .osler-callout-title {
+  display: block;
+  margin: 0 0 0.3rem 0 !important;
   font-weight: 600;
-  font-size: 0.85em;
+  font-size: 0.9em;
   letter-spacing: 0.02em;
   text-transform: uppercase;
   color: var(--callout-accent);
 }
+/* The hard break that ends the title line inside a shared paragraph — the
+   block-level title already starts a new line, so the break would add a
+   blank first body line. */
+.osler-callout-title-break {
+  display: none;
+}
 .osler-callout .osler-callout-title::before,
-.osler-milkdown-editor .milkdown .ProseMirror blockquote.osler-callout > .osler-callout-title::before,
-.osler-milkdown-article .milkdown .ProseMirror blockquote.osler-callout > .osler-callout-title::before {
+.osler-milkdown-editor .milkdown .ProseMirror blockquote.osler-callout .osler-callout-title::before,
+.osler-milkdown-article .milkdown .ProseMirror blockquote.osler-callout .osler-callout-title::before {
   content: "";
   inline-size: 1em;
   block-size: 1em;
-  flex-shrink: 0;
+  display: inline-block;
+  margin-inline-end: 0.45em;
+  vertical-align: -0.12em;
   background-color: currentColor;
   -webkit-mask: var(--callout-icon) center / contain no-repeat;
   mask: var(--callout-icon) center / contain no-repeat;
@@ -3815,6 +3824,12 @@ html.osler-ar body,
   --crepe-font-title: var(--font-playfair), var(--font-newsreader), Georgia, serif;
   --crepe-font-default: var(--font-newsreader), Georgia, serif;
   --crepe-font-code: var(--font-jetbrains-mono), var(--font-geist-mono), ui-monospace, monospace;
+  /* Reader scaling: code surfaces derive their sizes from this base —
+     `1em` ties them to the reader's inline font size / zoom setting. */
+  --crepe-base-font-size: 1em;
+  /* Typeface preference — the reader sets it to `inherit` when the user
+     picks Sans, so headings follow the body instead of staying Playfair. */
+  --osler-reader-heading-font: var(--font-playfair), var(--font-newsreader), Georgia, serif;
 }
 .dark .osler-milkdown-article,
 .dark .osler-milkdown-article .milkdown,
@@ -3842,40 +3857,42 @@ html.osler-ar body,
 .osler-milkdown-article .milkdown .ProseMirror h4,
 .osler-milkdown-article .milkdown .ProseMirror h5,
 .osler-milkdown-article .milkdown .ProseMirror h6 {
-  font-family: var(--font-playfair), var(--font-newsreader), Georgia, serif;
+  font-family: var(--osler-reader-heading-font);
   font-weight: 700;
   color: var(--foreground);
   line-height: 1.25;
   padding: 0 !important;
   text-wrap: balance;
 }
+/* Heading sizes are `em`-based so the reader's font-size and zoom options
+   scale the whole document, not just body text. */
 .osler-milkdown-article .milkdown .ProseMirror h1 {
-  font-size: 1.85rem;
+  font-size: 1.9em;
   margin: 0 0 0.5rem 0;
   letter-spacing: -0.01em;
 }
 .osler-milkdown-article .milkdown .ProseMirror h2 {
-  font-size: 1.35rem;
-  margin: 1.75rem 0 0.75rem;
-  padding-bottom: 0.35rem !important;
+  font-size: 1.4em;
+  margin: 1.75em 0 0.55em;
+  padding-bottom: 0.3em !important;
   border-bottom: 1px solid var(--border);
 }
 .osler-milkdown-article .milkdown .ProseMirror h3 {
-  font-size: 1.1rem;
-  margin: 1.4rem 0 0.5rem;
+  font-size: 1.15em;
+  margin: 1.4em 0 0.45em;
   color: var(--primary);
 }
 .osler-milkdown-article .milkdown .ProseMirror h4 {
-  font-size: 1rem;
-  margin: 1.2rem 0 0.5rem;
+  font-size: 1.05em;
+  margin: 1.2em 0 0.45em;
 }
 .osler-milkdown-article .milkdown .ProseMirror h5 {
-  font-size: 0.925rem;
-  margin: 1rem 0 0.4rem;
+  font-size: 0.975em;
+  margin: 1em 0 0.4em;
 }
 .osler-milkdown-article .milkdown .ProseMirror h6 {
-  font-size: 0.85rem;
-  margin: 1rem 0 0.4rem;
+  font-size: 0.9em;
+  margin: 1em 0 0.4em;
   color: var(--muted-foreground);
 }
 .osler-milkdown-article .milkdown .ProseMirror p {

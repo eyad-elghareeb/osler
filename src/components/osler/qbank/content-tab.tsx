@@ -12,6 +12,8 @@ import { useI18n } from "@/components/osler/i18n-provider";
 import { NavigationStack } from "@/components/osler/navigation-stack";
 import { EmptyState, ComingSoonState, HubSkeleton, MetricBar } from "@/components/osler/ui-primitives";
 import { PackEntry, ENGINE_ICONS, countQuestions } from "./shared";
+import { routeFor } from "@/lib/osler/navigation";
+import { ctxLinkAttrs } from "@/lib/osler/deep-link";
 
 
 
@@ -86,14 +88,12 @@ export const PackCard = React.memo(function PackCard({
   index,
   onLoadPack,
   onOpenPack,
-  onContextMenu,
 }: {
   node: ContentTreeNode;
   content: AnyContent | null | undefined;
   index: number;
   onLoadPack: (node: ContentTreeNode) => Promise<AnyContent | null>;
   onOpenPack?: (item: ContentTreeNode) => void;
-  onContextMenu?: (e: React.MouseEvent, item: ContentTreeNode) => void;
 }) {
   const { t, rtl } = useI18n();
   const meta = ENGINE_META[node.type as EngineType];
@@ -114,18 +114,16 @@ export const PackCard = React.memo(function PackCard({
       role="button"
       tabIndex={0}
       onClick={handleCardClick}
-      onContextMenu={(e) => {
-        if (onContextMenu) {
-          e.preventDefault();
-          onContextMenu(e, node);
-        }
-      }}
       onKeyDown={(e) => {
         if (e.key === "Enter" || e.key === " ") {
           e.preventDefault();
           handleCardClick();
         }
       }}
+      // The global context menu reads these: deep link for share/copy-link,
+      // export uid for "Export as PDF" (see content-context-menu.tsx).
+      data-ctx-export={node.uid}
+      {...ctxLinkAttrs(routeFor("qbank", { uid: node.uid }), node.title)}
       className={cn(
         "osler-fade-in text-start bg-card border border-border rounded-xl p-5 hover:border-primary/40 hover:shadow-md transition-all active:scale-[0.98] group flex flex-col gap-3 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
         isAr && "osler-content-ar",
@@ -194,14 +192,12 @@ export function ContentTab({
   onLoadPack,
   onOpenPack,
   onPickForCreateTest,
-  onContextMenu,
 }: {
   data: { items: PackEntry[]; trees: Record<string, ContentTreeNode[]> } | null;
   onLoadPack: (node: ContentTreeNode) => Promise<AnyContent | null>;
   onOpenPack?: (item: ContentTreeNode) => void;
   /** P1-2: leaf pack click hands off to Create Test instead of starting a quiz. */
   onPickForCreateTest?: (node: ContentTreeNode) => void;
-  onContextMenu?: (e: React.MouseEvent, item: ContentTreeNode) => void;
 }) {
   const { t, rtl, contentFilter } = useI18n();
   const [selectedFolders, setSelectedFolders] = React.useState<ContentTreeNode[]>([]);
@@ -318,13 +314,9 @@ export function ContentTab({
                   aria-label={node.title}
                   key={node.uid}
                   onClick={() => setSelectedFolders([node])}
-                  onContextMenu={(e) => {
-                    // Folders export too — the dialog collects every leaf
-                    // pack under the target.
-                    e.preventDefault();
-                    haptic("selection");
-                    onContextMenu?.(e, node);
-                  }}
+                  // Folders export too — the dialog collects every leaf
+                  // pack under the target.
+                  data-ctx-export={node.uid}
                   className="osler-fade-in text-start bg-card border border-border rounded-xl p-5 hover:border-primary/40 hover:shadow-md transition-all group flex flex-col gap-3 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 w-full"
                   style={{ animationDelay: `${idx * 0.04}s` }}
                 >
@@ -381,7 +373,7 @@ export function ContentTab({
             }
 
             // Leaf — render as a pack card (same pattern as flashcard leaf)
-            return <PackCard key={node.uid} node={node} content={contentByUid.get(node.uid)} index={idx} onLoadPack={onLoadPack} onOpenPack={handleNodeClick} onContextMenu={onContextMenu} />;
+            return <PackCard key={node.uid} node={node} content={contentByUid.get(node.uid)} index={idx} onLoadPack={onLoadPack} onOpenPack={handleNodeClick} />;
           })}
         </div>
       )}
@@ -455,11 +447,7 @@ export function ContentTab({
                     aria-label={child.title}
                     key={child.uid}
                     onClick={() => setSelectedFolders((folders) => [...folders, child])}
-                    onContextMenu={(e) => {
-                      e.preventDefault();
-                      haptic("selection");
-                      onContextMenu?.(e, child);
-                    }}
+                    data-ctx-export={child.uid}
                     className="osler-fade-in text-start bg-card border border-border rounded-xl p-5 hover:border-primary/40 hover:shadow-md transition-all group flex flex-col gap-3 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 w-full"
                     style={{ animationDelay: `${idx * 0.04}s` }}
                   >
@@ -505,7 +493,7 @@ export function ContentTab({
 
               // Leaf child — pack card
               const childContent = contentByUid.get(child.uid);
-              return <PackCard key={child.uid} node={child} content={childContent} index={idx} onLoadPack={onLoadPack} onOpenPack={handleNodeClick} onContextMenu={onContextMenu} />;
+              return <PackCard key={child.uid} node={child} content={childContent} index={idx} onLoadPack={onLoadPack} onOpenPack={handleNodeClick} />;
             })}
           </div>
         )}

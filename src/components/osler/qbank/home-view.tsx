@@ -88,7 +88,23 @@ export function HomeView({
   const [savedSessions, setSavedSessions] = React.useState<SavedSession[]>([]);
   const [exportDialogOpen, setExportDialogOpen] = React.useState(false);
   const [contextMenuNode, setContextMenuNode] = React.useState<ContentTreeNode | null>(null);
-  const [contextMenuPos, setContextMenuPos] = React.useState<{ x: number; y: number } | null>(null);
+
+  // Pack export moved into the app-wide context menu: the menu sees
+  // [data-ctx-export] on a pack/folder card and asks for the dialog via
+  // this event (the dialog needs the tree + loader that live here).
+  React.useEffect(() => {
+    const open = (e: Event) => {
+      const uid = (e as CustomEvent<{ uid?: string }>).detail?.uid;
+      if (!uid) return;
+      const node = (data?.items ?? []).find((entry) => entry.node.uid === uid)?.node
+        ?? Object.values(data?.trees ?? {}).flatMap((root) => flattenTree(root)).find((n) => n.uid === uid);
+      if (!node) return;
+      setContextMenuNode(node);
+      setExportDialogOpen(true);
+    };
+    window.addEventListener("osler-pack-export-request", open);
+    return () => window.removeEventListener("osler-pack-export-request", open);
+  }, [data]);
 
   // Hide-on-scroll / collapsible app bar — shared hysteresis hook (re-runs
   // its container lookup per tab). Mobile only: when scrolled down, the
@@ -99,13 +115,6 @@ export function HomeView({
   const isMobileHome = useIsMobile();
   const scrolledDown = useHideOnScroll(homeTab, { reservePx: 150 });
   const headerCollapsed = isMobileHome && scrolledDown;
-
-  const handleContextMenu = React.useCallback((e: React.MouseEvent, node: ContentTreeNode) => {
-    e.preventDefault();
-    setContextMenuNode(node);
-    setContextMenuPos({ x: e.clientX, y: e.clientY });
-    setExportDialogOpen(true);
-  }, []);
 
   const loadTreeData = React.useCallback(() => {
     loadCategoryTree("quiz")
@@ -247,7 +256,6 @@ export function HomeView({
                   onLoadPack={loadPack}
                   onOpenPack={onOpenPack}
                   onPickForCreateTest={onPickForCreateTest}
-                  onContextMenu={handleContextMenu}
                 />
               )}
               {homeTab === "create" && (

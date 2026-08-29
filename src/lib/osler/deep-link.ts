@@ -46,9 +46,23 @@ export function resolveContentLink(target: EventTarget | null): ResolvedContentL
   const path = holder?.getAttribute("data-ctx-link");
   if (!holder || !path) return null;
   return {
-    href: new URL(path, window.location.origin).toString(),
+    href: absoluteDeepLink(path),
     title: holder.getAttribute("data-ctx-title"),
   };
+}
+
+/**
+ * Canonical absolute URL for an app route. Static-export pages live at
+ * trailing-slash paths (`/library/?article=…`), so links copied for sharing
+ * must carry the slash — without it some hosts redirect or render a 404 and
+ * social platforms refuse to preview.
+ */
+export function absoluteDeepLink(path: string): string {
+  const match = /^([^?#]*)([?#].*)?$/.exec(path);
+  const pathname = match?.[1] ?? path;
+  const query = match?.[2] ?? "";
+  const normalized = pathname === "/" || pathname.endsWith("/") ? pathname : `${pathname}/`;
+  return new URL(`${normalized}${query}`, window.location.origin).toString();
 }
 
 /** Mark an element as linkable; returns `{}` (no-op spread) when `link` is

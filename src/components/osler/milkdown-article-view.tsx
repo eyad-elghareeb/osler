@@ -128,32 +128,46 @@ function buildArticleDecorations(
 ): DecorationSet {
   const decorations: Decoration[] = [];
 
-  // 1. Callout blockquotes — node decorations + hidden marker text.
+  // 1. Callout blockquotes — node decoration + title-run styling.
   view.state.doc.descendants((node, pos) => {
     if (node.type.name !== "blockquote") return;
     const first = node.firstChild;
     if (!first || first.type.name !== "paragraph") return;
-    const textNode = first.firstChild;
-    const text = textNode?.isText ? textNode.text ?? "" : "";
-    const parsed = parseCalloutMarker(text);
+    const parsed = parseCalloutMarker(first.textContent);
     if (!parsed) return;
     decorations.push(
       Decoration.node(pos, pos + node.nodeSize, {
         class: `osler-callout osler-callout--${parsed.type}`,
       }),
     );
-    const paragraphPos = pos + 1;
+    // Style only the title RUN (marker + title text before the first
+    // hard break). Lazy-continuation lines share this paragraph, so a
+    // paragraph-level decoration would wrap the whole body in the title's
+    // uppercase accent styling and lay it out beside the title.
+    const paragraphStart = pos + 1;
+    let titleEnd = paragraphStart + first.content.size;
+    let breakAt = -1;
+    first.forEach((child, offset) => {
+      if (breakAt < 0 && child.type.name === "hardbreak") {
+        breakAt = offset;
+        titleEnd = paragraphStart + offset;
+      }
+    });
     decorations.push(
-      Decoration.node(paragraphPos, paragraphPos + first.nodeSize, {
-        class: "osler-callout-title",
-      }),
+      Decoration.inline(paragraphStart, titleEnd, { class: "osler-callout-title" }),
     );
-    // Hide the raw `[!type]` marker (first text child of the paragraph).
-    const markerLen = MARKER_PREFIX_RE.exec(text)?.[1].length;
-    if (textNode?.isText && markerLen) {
-      const from = paragraphPos + 1;
+    // The break that ends the title line disappears under the block-level
+    // title span — keep it, or the body starts with a blank line.
+    if (breakAt >= 0) {
       decorations.push(
-        Decoration.inline(from, from + markerLen, {
+        Decoration.inline(titleEnd, titleEnd + 1, { class: "osler-callout-title-break" }),
+      );
+    }
+    // Hide the raw `[!type]` marker (first text child of the paragraph).
+    const markerLen = MARKER_PREFIX_RE.exec(first.textContent ?? "")?.[1].length;
+    if (markerLen) {
+      decorations.push(
+        Decoration.inline(paragraphStart, paragraphStart + markerLen, {
           class: "osler-callout-marker",
         }),
       );
