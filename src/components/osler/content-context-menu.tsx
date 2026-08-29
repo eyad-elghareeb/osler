@@ -197,7 +197,7 @@ export function ContentContextMenu() {
     }
   };
 
-  const currentLink = () => contentLink?.href ?? window.location.href;
+  const currentLink = () => contentLink?.href ?? getArticleViewContext()?.link ?? window.location.href;
   const currentTitle = () => contentLink?.title ?? getArticleViewContext()?.title ?? document.title;
 
   const copySelection = () =>

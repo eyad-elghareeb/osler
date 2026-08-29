@@ -16,6 +16,10 @@ export interface ArticleViewContext {
   /** Article title (used for Web Share). */
   title: string;
   specialty?: string;
+  /** Canonical deep link for the open content (e.g. `/library?article=…`),
+   *  shared with the context menu so Share / Copy link always produce a
+   *  URL that opens this exact article. */
+  link?: string;
   /** Opens the reader's PDF export dialog, if it has one. */
   requestExportPdf?: () => void;
 }

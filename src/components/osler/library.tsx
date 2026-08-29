@@ -26,6 +26,8 @@ import {
   ExternalLink,
   Download,
   MessageSquareWarning,
+  Share2,
+  Link2,
 } from "lucide-react";
 import {
   loadArticleTree,
@@ -165,6 +167,7 @@ export function Library({ initialArticleId, onNavigateBack: propOnNavigateBack }
     const ctx = {
       title: activeArticle.title,
       specialty: activeArticle.specialty,
+      link: routeFor("library", { article: activeFile ?? "" }),
       requestExportPdf: activeArticle.contentType === "md" ? () => setPdfDialogOpen(true) : undefined,
     };
     setArticleViewContext(ctx);
@@ -330,6 +333,38 @@ export function Library({ initialArticleId, onNavigateBack: propOnNavigateBack }
     setReportOpen(true);
   }, []);
   const { toast } = useToast();
+
+  // Share / copy link — canonical deep link so the URL opens this exact
+  // article (`/library?article=…`). Web Share falls back to the clipboard
+  // where unavailable; cancelling the share sheet is not an error.
+  const articleDeepLink = React.useCallback(
+    () => new URL(routeFor("library", { article: activeFile ?? "" }), window.location.origin).toString(),
+    [activeFile],
+  );
+  const handleCopyArticleLink = React.useCallback(async () => {
+    haptic("light");
+    try {
+      await navigator.clipboard.writeText(articleDeepLink());
+      toast({ title: t("contextMenu.linkCopied") });
+    } catch {
+      toast({ title: t("contextMenu.actionFailed"), variant: "destructive" });
+    }
+  }, [articleDeepLink, toast, t]);
+  const handleShareArticle = React.useCallback(async () => {
+    haptic("light");
+    const url = articleDeepLink();
+    try {
+      if (navigator.share) {
+        await navigator.share({ title: activeArticle?.title ?? document.title, url });
+      } else {
+        await navigator.clipboard.writeText(url);
+        toast({ title: t("contextMenu.linkCopied") });
+      }
+    } catch {
+      // user dismissed the share sheet — nothing to report
+    }
+  }, [activeArticle, articleDeepLink, toast, t]);
+
   const handleExportArticlePdf = React.useCallback(async (opts: PdfExportOptions) => {
     if (!activeArticle) return;
     try {
@@ -508,6 +543,7 @@ export function Library({ initialArticleId, onNavigateBack: propOnNavigateBack }
             hlCtrl={hlCtrl}
             onExportPdf={() => setPdfDialogOpen(true)}
             onReport={onReportProblem}
+            onShare={handleShareArticle}
           />
         ) : null
       }
@@ -610,6 +646,8 @@ export function Library({ initialArticleId, onNavigateBack: propOnNavigateBack }
               hlCtrl={hlCtrl}
               onExportPdf={() => setPdfDialogOpen(true)}
               onReport={onReportProblem}
+              onShare={handleShareArticle}
+              onCopyLink={handleCopyArticleLink}
             />
             <div className="flex-1 overflow-y-auto osler-scroll osler-tabbar-pad md:pb-0 relative flex flex-col">
               {loading ? (
@@ -867,6 +905,7 @@ function MobileReader({
   hlCtrl,
   onExportPdf,
   onReport,
+  onShare,
 }: {
   article: Article;
   articlePath: string;
@@ -882,6 +921,7 @@ function MobileReader({
   hlCtrl: ReturnType<typeof useArticleHighlighter>;
   onExportPdf: () => void;
   onReport: () => void;
+  onShare: () => void;
 }) {
   const { t } = useI18n();
   // NOTE: The swipe-to-go-back gesture is now handled by the parent
@@ -926,6 +966,15 @@ function MobileReader({
               onChange={onDisplayChange}
               buttonClassName="size-9 rounded-lg flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors"
             />
+
+            <button
+              onClick={onShare}
+              className="size-9 rounded-lg flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors"
+              title={t("contextMenu.share")}
+              aria-label={t("contextMenu.share")}
+            >
+              <Share2 className="size-4" />
+            </button>
 
             <button
               onClick={onToggleNotes}
@@ -1397,6 +1446,8 @@ function ArticleHeader({
   hlCtrl,
   onExportPdf,
   onReport,
+  onShare,
+  onCopyLink,
 }: {
   article: Article;
   isBookmarked: boolean;
@@ -1407,6 +1458,8 @@ function ArticleHeader({
   hlCtrl: ReturnType<typeof useArticleHighlighter>;
   onExportPdf: () => void;
   onReport: () => void;
+  onShare: () => void;
+  onCopyLink: () => void;
 }) {
   const { t } = useI18n();
 
@@ -1445,6 +1498,24 @@ function ArticleHeader({
             />
           </>
         )}
+
+        <button
+          onClick={onShare}
+          className="osler-icon-btn size-8"
+          title={t("contextMenu.share")}
+          aria-label={t("contextMenu.share")}
+        >
+          <Share2 className="size-4" />
+        </button>
+
+        <button
+          onClick={onCopyLink}
+          className="osler-icon-btn size-8"
+          title={t("contextMenu.copyLink")}
+          aria-label={t("contextMenu.copyLink")}
+        >
+          <Link2 className="size-4" />
+        </button>
 
         <button
           onClick={onToggleNotes}
