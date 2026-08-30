@@ -16,6 +16,17 @@ database_id = "REPLACE_WITH_D1_DATABASE_ID"
 binding = "CONTENT"
 bucket_name = "osler-content"
 
+# Durable Object that holds per-user WebSocket connections for realtime sync
+# pokes ("your other device just pushed — pull now"). SQLite-backed classes
+# are free-tier eligible; the hub hibernates between pokes, so idle sockets
+# cost neither duration nor requests.
+[durable_objects]
+bindings = [{ name = "USER_SYNC_HUB", class_name = "UserSyncHub" }]
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["UserSyncHub"]
+
 # Cron triggers — runs the cleanup job (expired sessions, OAuth states,
 # password-reset tokens, audit-log entries older than 1 year). The free tier
 # allows up to 5 cron triggers.

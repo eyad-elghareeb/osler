@@ -40,6 +40,10 @@ import { SYNC_KINDS, mergeKind, gzipString, gunzipBytes, gunzipBytesBounded, bas
 import { verifyAssertion } from "./cose";
 import { sendEmail, passwordResetEmail, verifyEmail } from "./email";
 import { handleMcpRequest, listApiTokens, mintApiToken, revokeApiToken } from "./mcp";
+import { UserSyncHub, mintRealtimeTicket, verifyRealtimeTicket, REALTIME_TICKET_TTL_MS } from "./realtime-hub";
+// Durable Object classes must be reachable from the entry module for the
+// wrangler migration to bind them.
+export { UserSyncHub };
 const PASSWORD_ITERATIONS = 100_000;
 const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 // After a session token's JWT `exp` passes, it may still be rotated through
@@ -82,6 +86,11 @@ const RATE_LIMIT_MAX: Record<string, number> = {
   "content": 240,
   "admin": 600,
   "sync": 30,
+  // Realtime sync pokes: one mint per (re)connect plus the upgrade itself.
+  // Legit reconnects are rare (page reloads, network switches); 30/min per IP
+  // still covers a classroom behind one NAT recovering from a Wi-Fi blip
+  // while capping a hostile client's connect-loop burn.
+  "realtime": 30,
   "search": 30,
   // Per-MCP-token budget, checked in addition to the shared per-IP "admin"
   // bucket below. The IP bucket alone means every agent token that happens
@@ -170,6 +179,10 @@ let googleKeys: { expiresAt: number; keys: JsonWebKey[] } = { expiresAt: 0, keys
 interface Env {
   DB: D1Database;
   CONTENT?: R2Bucket;
+  /** Realtime poke hub (per-user Durable Object). Optional binding: instances
+   *  that never applied the DO migration keep working — the sync routes
+   *  degrade to polling-only and clients fall back automatically. */
+  USER_SYNC_HUB?: DurableObjectNamespace<UserSyncHub>;
   JWT_SECRET: string;
   AUDIT_HMAC_KEY?: string;
   ALLOWED_ORIGIN: string;
@@ -488,7 +501,7 @@ function cors(origin: string): Record<string, string> {
   return {
     "access-control-allow-origin": origin,
     "access-control-allow-methods": "GET, POST, PUT, PATCH, DELETE, OPTIONS",
-    "access-control-allow-headers": "authorization, content-type, content-encoding, if-unmodified-since, x-sync-since-qbank, x-sync-since-flashcards, x-sync-since-sessions, x-sync-since-notes, x-sync-since-highlights, x-sync-since-articleHighlights, x-sync-since-writtenDrafts, x-sync-since-bookmarks, x-sync-since-achievements, x-sync-since-*",
+    "access-control-allow-headers": "authorization, content-type, content-encoding, if-unmodified-since, x-osler-realtime-conn, x-sync-since-qbank, x-sync-since-flashcards, x-sync-since-sessions, x-sync-since-notes, x-sync-since-highlights, x-sync-since-articleHighlights, x-sync-since-writtenDrafts, x-sync-since-bookmarks, x-sync-since-achievements, x-sync-since-*",
     "access-control-expose-headers": "x-request-id, content-encoding, content-type",
     "access-control-max-age": "86400",
     vary: "Origin",
@@ -5139,9 +5152,37 @@ export default {
         });
       }
 
+      // ── Realtime sync pokes (WebSocket) ──
+      // Browsers cannot set an Authorization header on a WS upgrade, so the
+      // client first mints a 60-second ticket (POST /v1/realtime/ticket) and
+      // passes it as a query param. The ticket is verified against JWT_SECRET
+      // AND the D1 session row (revoked/expired sessions can't open sockets),
+      // then the upgrade is forwarded to the user's hub DO.
+      if (request.method === "GET" && url.pathname === "/v1/realtime") {
+        if (!env.USER_SYNC_HUB) return json({ error: "Realtime sync is not configured" }, 503, origin, log);
+        if (request.headers.get("upgrade")?.toLowerCase() !== "websocket") return json({ error: "WebSocket upgrade required" }, 426, origin, log);
+        if (!rateLimit(ip, "realtime")) return json({ error: "Too many requests" }, 429, origin, log);
+        const verified = await verifyRealtimeTicket(env, url.searchParams.get("ticket") ?? "");
+        if (!verified) return json({ error: "Invalid realtime ticket" }, 401, origin, log);
+        const row = await env.DB.prepare("SELECT user_id FROM sessions WHERE id = ? AND revoked_at IS NULL AND expires_at > ?").bind(verified.sessionId, now()).first<{ user_id: string }>();
+        if (!row || row.user_id !== verified.userId) return json({ error: "Invalid realtime ticket" }, 401, origin, log);
+        const stub = env.USER_SYNC_HUB.getByName(verified.userId);
+        return stub.fetch(new Request(`https://user-sync-hub.ws/upgrade?conn=${encodeURIComponent(url.searchParams.get("conn") ?? "")}`, { headers: { upgrade: "websocket" } }));
+      }
+
       // ── From here on: authenticated routes ──
       const session = await requireUser(request, env);
       if (!session) return json({ error: "Authentication required" }, 401, origin, log);
+
+      // Mint a short-lived ticket for the /v1/realtime WebSocket upgrade. The
+      // ticket inherits the session's identity (sub + sid) so the upgrade can
+      // re-check the session row without the client exposing its bearer token
+      // in a URL.
+      if (request.method === "POST" && url.pathname === "/v1/realtime/ticket") {
+        if (!rateLimit(ip, "realtime")) return json({ error: "Too many requests" }, 429, origin, log);
+        const { ticket, expiresAt } = await mintRealtimeTicket(env, session.sessionId, session.user.id);
+        return json({ ticket, expiresAt, ttlMs: REALTIME_TICKET_TTL_MS }, 200, origin, log);
+      }
 
       // Admin namespace
       if (url.pathname.startsWith("/v1/admin")) {
@@ -5285,7 +5326,7 @@ export default {
       }
       if (request.method === "PUT" && url.pathname === "/v1/sync") {
         if (!rateLimit(ip, "sync")) return json({ error: "Too many requests" }, 429, origin, log);
-        const body = await readJsonBody(request, MAX_GZIP_BODY_BYTES); const statements: any[] = []; const response: Record<string, any> = {};
+        const body = await readJsonBody(request, MAX_GZIP_BODY_BYTES); const statements: any[] = []; const changedKinds: string[] = []; const response: Record<string, any> = {};
         const bodyKinds = new Set<string>();
         for (const kind of SYNC_KINDS) if (body[kind] && typeof body[kind] === "object") bodyKinds.add(kind);
         const kindsToSync = SYNC_KINDS.filter((kind) => bodyKinds.has(kind));
@@ -5336,8 +5377,19 @@ export default {
           // progress per user; raw_bytes tracks the uncompressed JSON so the
           // per-user budget is enforced on real content, not compressed size.
           statements.push(env.DB.prepare("INSERT INTO progress_documents (user_id, kind, payload, compressed, raw_bytes, updated_at) VALUES (?, ?, ?, 1, ?, ?) ON CONFLICT(user_id, kind) DO UPDATE SET payload = excluded.payload, compressed = 1, raw_bytes = excluded.raw_bytes, updated_at = excluded.updated_at").bind(session.user.id, kind, compressedB64, mergedBytes, updatedAt));
+          changedKinds.push(kind);
         }
-        if (statements.length) await env.DB.batch(statements);
+        if (statements.length) {
+          await env.DB.batch(statements);
+          // Fire-and-forget poke: the user's other connected devices pull
+          // immediately instead of waiting out their idle poll. The pushing
+          // connection (x-osler-realtime-conn) is skipped by the hub; a
+          // missing binding (unmigrated instance) or hub failure must never
+          // fail the sync response itself.
+          if (env.USER_SYNC_HUB) {
+            ctx.waitUntil(env.USER_SYNC_HUB.getByName(session.user.id).notify(request.headers.get("x-osler-realtime-conn") ?? "", changedKinds).catch(() => {}));
+          }
+        }
         return json(response, 200, origin, log);
       }
 
