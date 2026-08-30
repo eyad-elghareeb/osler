@@ -1080,16 +1080,14 @@ input, textarea, [contenteditable="true"], .osler-prose, .ai-chat-msg {
 }
 
 /* ── Mobile bottom tab bar ────────────────────────────────────────────────
- * Renders below the home indicator on phones. The bar is a translucent
- * material: the page scrolls underneath it and the blur + saturation lift
- * makes it read as floating chrome rather than an opaque strip. The
- * `safe-bottom` inset is applied via the .safe-bottom utility on the
- * inner <nav> so the tab bar visually sits above the home indicator.
+ * Renders below the home indicator on phones. The bar is fully opaque so
+ * scrolled content never shows through it; the hairline top border separates
+ * it from the page. The `safe-bottom` inset is applied via the .safe-bottom
+ * utility on the inner <nav> so the tab bar visually sits above the home
+ * indicator.
  */
 .osler-tabbar {
-  background: color-mix(in oklch, var(--background) 82%, transparent);
-  backdrop-filter: blur(20px) saturate(180%);
-  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  background: var(--background);
   border-top: 1px solid var(--border);
   padding-bottom: max(env(safe-area-inset-bottom, 0px), 0.5rem);
   min-height: calc(3rem + max(env(safe-area-inset-bottom, 0px), 0.5rem));
@@ -1263,15 +1261,14 @@ input, textarea, [contenteditable="true"], .osler-prose, .ai-chat-msg {
 [data-perf="low"] [class*="bg-card/"] { background-color: var(--card) !important; }
 [data-perf="low"] [class*="bg-popover/"] { background-color: var(--popover) !important; }
 [data-perf="low"] [class*="bg-background/"] { background-color: var(--background) !important; }
-[data-perf="low"] .osler-tabbar { background: var(--background) !important; }
 
 /* ── Reduced-transparency preference ─────────────────────────────────────
  * Users who disable transparency at the OS level get frostier surfaces:
  * every blurred material drops its backdrop pass and its translucent
- * neutral surface (bg-card/60, bg-background/xx, the tab bar tint) resolves
- * to the solid token. Accent tints (bg-primary/10 etc.) are left alone —
- * they're color, not material. !important beats component utilities since
- * this is an accessibility override. */
+ * neutral surface (bg-card/60, bg-background/xx) resolves to the solid
+ * token. Accent tints (bg-primary/10 etc.) are left alone — they're color,
+ * not material. !important beats component utilities since this is an
+ * accessibility override. */
 @media (prefers-reduced-transparency: reduce) {
   [class*="backdrop-blur"] {
     backdrop-filter: none !important;
@@ -1279,9 +1276,6 @@ input, textarea, [contenteditable="true"], .osler-prose, .ai-chat-msg {
   }
   [class*="bg-card/"] { background-color: var(--card) !important; }
   [class*="bg-background/"] { background-color: var(--background) !important; }
-  .osler-tabbar {
-    background: var(--background) !important;
-  }
 }
 
 /* ── Increased-contrast preference ───────────────────────────────────────
