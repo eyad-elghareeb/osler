@@ -98,6 +98,22 @@
   --radius-2xl: calc(var(--radius) + 8px);
 }
 
+/* Native form-control + scrollbar rendering follows the active theme:
+ * native <select> popups, date pickers, and scrollbars render in the
+ * matching scheme on every platform instead of defaulting to light. */
+:root {
+  color-scheme: dark;
+}
+.light {
+  color-scheme: light;
+}
+
+/* One theme-aware text-selection color app-wide (previously only the
+ * Milkdown editor surfaces styled ::selection). */
+::selection {
+  background: color-mix(in oklch, var(--primary) 25%, transparent);
+}
+
 /* Osler — Default = Dark (Navy + Light Blue)
  * Premium dark palette: deep navy with a subtle blue chroma for warmth,
  * elevated cards lifted a half-step above the background, and a refined
