@@ -521,7 +521,7 @@ export function LoginScreen({ onLogin, cloudAuthError }: LoginScreenProps) {
               hidden: { opacity: 0, y: 6 },
               visible: { opacity: 1, y: 0, transition: MOTION_TRANSITION.normal },
             }}
-            className="text-2xl md:text-3xl font-bold tracking-tight"
+            className="osler-display text-2xl md:text-3xl font-bold"
           >
             {t("login.title")}
           </motion.h1>

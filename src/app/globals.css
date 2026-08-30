@@ -512,6 +512,11 @@
 }
 .osler-page-header__title {
   @apply text-2xl md:text-3xl font-bold tracking-tight mb-1;
+  /* Editorial serif for page titles (brief-requested premium moment).
+   * Cairo follows so Arabic-UI titles fall back gracefully instead of
+   * rendering tofu — Playfair has no Arabic glyphs. */
+  font-family: var(--font-playfair), var(--font-cairo), Georgia, serif;
+  letter-spacing: -0.01em;
 }
 .osler-page-header__subtitle {
   @apply text-sm text-muted-foreground max-w-2xl;
@@ -525,6 +530,13 @@
 }
 .osler-page-header--inline .osler-page-header__subtitle {
   @apply text-xs;
+}
+
+/* Display serif — one utility for premium brand moments outside page
+ * headers (login wordmark, streak hero). Same Arabic fallback chain. */
+.osler-display {
+  font-family: var(--font-playfair), var(--font-cairo), Georgia, serif;
+  letter-spacing: -0.01em;
 }
 
 /* Section heading — small uppercase label that introduces a content block. */
