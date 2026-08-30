@@ -69,7 +69,10 @@ function SheetContent({
           side === "top" &&
             "data-[state=closed]:slide-out-to-top data-[state=open]:slide-in-from-top inset-x-0 top-0 h-auto border-b",
           side === "bottom" &&
-            "data-[state=closed]:slide-out-to-bottom data-[state=open]:slide-in-from-bottom inset-x-0 bottom-0 h-auto border-t",
+            // iOS-style bottom sheet: generous top radius so the sheet reads
+            // as a card floating over the dimmed page; overflow-hidden keeps
+            // children inside the curve.
+            "data-[state=closed]:slide-out-to-bottom data-[state=open]:slide-in-from-bottom inset-x-0 bottom-0 h-auto rounded-t-2xl border-t overflow-hidden",
           className
         )}
         {...props}

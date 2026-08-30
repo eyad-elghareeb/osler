@@ -1208,6 +1208,19 @@ input, textarea, [contenteditable="true"], .osler-prose, .ai-chat-msg {
   }
 }
 
+/* ── Shared overlay easing curve ──────────────────────────────────────────
+ * Every Radix overlay surface (dialogs, sheets, popovers, dropdown menus,
+ * selects, tooltips) animates with the app's one MOTION_EASE curve rather
+ * than tw-animate-css's default, so the whole modality system shares a
+ * single deceleration feel. Targets the data-slot attribute the shadcn
+ * primitives set; elements without animations are unaffected. */
+@layer utilities {
+  [data-slot$="-overlay"],
+  [data-slot$="-content"] {
+    animation-timing-function: cubic-bezier(0.32, 0.72, 0, 1);
+  }
+}
+
 /* ── Reduced-transparency preference ─────────────────────────────────────
  * Users who disable transparency at the OS level get frostier surfaces:
  * every blurred material drops its backdrop pass and its translucent
