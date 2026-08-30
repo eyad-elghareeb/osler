@@ -1181,6 +1181,44 @@ input, textarea, [contenteditable="true"], .osler-prose, .ai-chat-msg {
   }
 }
 
+/* ── Reduced-transparency preference ─────────────────────────────────────
+ * Users who disable transparency at the OS level get frostier surfaces:
+ * every blurred material drops its backdrop pass and its translucent
+ * neutral surface (bg-card/60, bg-background/xx, the tab bar tint) resolves
+ * to the solid token. Accent tints (bg-primary/10 etc.) are left alone —
+ * they're color, not material. !important beats component utilities since
+ * this is an accessibility override. */
+@media (prefers-reduced-transparency: reduce) {
+  [class*="backdrop-blur"] {
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+  }
+  [class*="bg-card/"] { background-color: var(--card) !important; }
+  [class*="bg-background/"] { background-color: var(--background) !important; }
+  .osler-tabbar {
+    background: var(--background) !important;
+  }
+}
+
+/* ── Increased-contrast preference ───────────────────────────────────────
+ * Users who ask for more contrast get stronger neutral tokens everywhere
+ * (borders, inputs, secondary text). !important so the override wins over
+ * the runtime-injected custom-theme variable blocks. */
+@media (prefers-contrast: more) {
+  :root, .dark, .light, [class*="theme-"] {
+    --border: oklch(1 0 0 / 24%) !important;
+    --border-strong: oklch(1 0 0 / 38%) !important;
+    --input: oklch(1 0 0 / 28%) !important;
+    --muted-foreground: oklch(0.82 0.01 240) !important;
+  }
+  .light, [class*="theme-"][class*="-light"] {
+    --border: oklch(0.74 0.02 240) !important;
+    --border-strong: oklch(0.6 0.03 240) !important;
+    --input: oklch(0.76 0.02 240) !important;
+    --muted-foreground: oklch(0.38 0.02 250) !important;
+  }
+}
+
 /* ── User-controlled animations toggle ────────────────────────────────────
  * When the user disables UI animations from Settings → Native Features,
  * we mirror the flag onto <html data-animations="off">. This kills all
