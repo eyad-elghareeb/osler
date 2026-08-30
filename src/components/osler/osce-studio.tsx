@@ -2634,8 +2634,8 @@ export function OsceStudio({
                         "flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold border",
                         b.color === "gold" && "border-warning/30 bg-warning-soft text-warning",
                         b.color === "green" && "border-success/30 bg-success-soft text-success",
-                        b.color === "blue" && "border-sky-500/30 bg-sky-500/10 text-sky-500",
-                        b.color === "purple" && "border-purple-500/30 bg-purple-500/10 text-purple-500"
+                        b.color === "blue" && "border-info/30 bg-info-soft text-info",
+                        b.color === "purple" && "border-primary/30 bg-primary-soft text-primary"
                       )}
                     >
                       <span>{b.icon}</span>
