@@ -387,7 +387,12 @@ export function stagedKeyFor(d: DroppedFile, destination: string): string {
   if (badSeg(dest) || badSeg(rel)) {
     throw new Error("Invalid path — cannot contain '..' or '\\'");
   }
-  return `content-staging/${dest ? `${dest}/` : ""}${rel}`;
+  // Dropping a folder that already starts with the destination's own name
+  // (e.g. dragging `library/` into destination "library") must not double the
+  // segment — that nesting surfaces as a phantom category folder in manifests.
+  const destTail = dest.split("/").pop() ?? "";
+  const deduped = rel.toLowerCase().startsWith(`${destTail.toLowerCase()}/`) ? rel.slice(destTail.length + 1) : rel;
+  return `content-staging/${dest ? `${dest}/` : ""}${deduped}`;
 }
 
 /** Upload a file into the private staging keyspace under `destination`,

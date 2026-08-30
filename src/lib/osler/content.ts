@@ -150,8 +150,9 @@ async function loadManifestTree(folder: string): Promise<ContentTreeNode[]> {
     const res = await fetchWithLocalFallback(manifestUrl(folder), localManifestUrl(folder));
     if (!res.ok) throw new Error(`Failed to load ${folder}/manifest.json: ${res.status}`);
     const manifest = (await res.json()) as CategoryManifest;
-    manifestTreeSyncCache.set(folder, manifest.items);
-    return manifest.items;
+    const items = unwrapCategoryDuplicateRoots(manifest.items, folder);
+    manifestTreeSyncCache.set(folder, items);
+    return items;
   })();
   manifestTreeMemo.set(folder, promise);
   try {
@@ -198,6 +199,21 @@ export function getCachedAllCategoryLeaves(): ContentTreeNode[] | null {
     }
   }
   return [...byUid.values()];
+}
+
+/**
+ * R2 content dropped with the category folder itself inside the selection
+ * (e.g. dragging a `library/` folder into the library destination) lands at
+ * `content-files/library/library/...`, and the manifest then wraps the whole
+ * category under a phantom "library" root. Hoist such nodes' children so the
+ * tree starts at the real folders; paths and uids are preserved verbatim so
+ * content URLs and progress keys stay stable. Nodes carrying their own files
+ * are left untouched — nothing is dropped.
+ */
+function unwrapCategoryDuplicateRoots(nodes: ContentTreeNode[], folder: string): ContentTreeNode[] {
+  return nodes.flatMap((node) =>
+    (node.files?.length ?? 0) === 0 && node.path.replace(/\/$/, "") === folder ? node.items : [node]
+  );
 }
 
 /**
