@@ -122,7 +122,11 @@
  * these tokens locally instead of inheriting the active theme from <html>. */
 :root,
 .dark {
-  --radius: 0.625rem;
+  /* Base radius — 12px lifts the whole scale into Apple's register:
+   * cards (radius-xl) land at 16px, menus (radius-lg) at 12px, buttons
+   * (radius-md) at 10px. Fixed radii (chat bubbles, chips, indicators)
+   * are unaffected. */
+  --radius: 0.75rem;
   --background: oklch(0.14 0.018 260);
   --foreground: oklch(0.96 0.005 240);
   --card: oklch(0.19 0.022 260);
