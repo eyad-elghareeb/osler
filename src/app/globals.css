@@ -436,6 +436,9 @@
    * settling mid-momentum), which could expand the bars right after a
    * collapse. Content here grows below the fold, so anchoring buys little. */
   overflow-anchor: none;
+  /* Keep scroll gestures inside the app column — no chained overscroll
+   * glow / pull-to-refresh leaking through to the document. */
+  overscroll-behavior-y: contain;
 }
 .osler-page::-webkit-scrollbar { width: 6px; height: 6px; }
 .osler-page::-webkit-scrollbar-track { background: transparent; }
@@ -628,6 +631,10 @@ button.osler-stat-tile--compact:hover {
 }
 .osler-segmented__item:disabled {
   @apply opacity-50 cursor-not-allowed;
+}
+/* Instant touch-down feedback while the sliding thumb is still in transit. */
+.osler-segmented__item:not(:disabled):active {
+  transform: scale(0.96);
 }
 .osler-segmented__thumb {
   @apply absolute inset-y-1 rounded-md bg-card border border-border-strong pointer-events-none;
@@ -1463,7 +1470,8 @@ html[dir="rtl"] {
   transition: border-color 0.15s ease, background 0.15s ease;
   align-items: flex-start;
 }
-.osler-option:hover:not(.osler-option-locked) {
+.osler-option:hover:not(.osler-option-locked),
+.osler-option:active:not(.osler-option-locked) {
   border-color: color-mix(in oklch, var(--primary) 50%, var(--border));
   background: color-mix(in oklch, var(--primary) 4%, var(--card));
 }
@@ -1882,7 +1890,8 @@ html[dir="rtl"] {
   background: var(--card);
   border-color: var(--border);
 }
-.qbank-choice:hover:not(:disabled):not(.qbank-choice-locked) {
+.qbank-choice:hover:not(:disabled):not(.qbank-choice-locked),
+.qbank-choice:active:not(:disabled):not(.qbank-choice-locked) {
   border-color: color-mix(in oklch, var(--primary) 50%, var(--border));
   background: color-mix(in oklch, var(--primary) 5%, var(--card));
 }
