@@ -5019,58 +5019,59 @@ export default {
 
         const esc = (s: string) => s.replace(/[<>&"]/g, (c: string) => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;", '"': "&quot;" }[c] || c));
 
-        const ENGINE: Record<string, { bg: string; border: string; text: string; label: string }> = {
-          quiz:      { bg: "#1e293b", border: "#3b82f6", text: "#93c5fd", label: "Quiz" },
-          bank:      { bg: "#1e293b", border: "#2563eb", text: "#93c5fd", label: "Question Bank" },
-          flashcard: { bg: "#1e293b", border: "#16a34a", text: "#86efac", label: "Flashcards" },
-          osce:      { bg: "#1e293b", border: "#dc2626", text: "#fca5a5", label: "OSCE Station" },
-          library:   { bg: "#1e293b", border: "#7c3aed", text: "#d8b4fe", label: "Clinical Library" },
-          video:     { bg: "#1e293b", border: "#0891b2", text: "#67e8f9", label: "Video Lesson" },
-          written:   { bg: "#1e293b", border: "#d97706", text: "#fcd34d", label: "Written Cases" },
+        // Brand + palette: hexes from the app icon (public/assets/icon.svg —
+        // navy gradient square, azure gradient pulse) and the app's design
+        // tokens, converted exactly like scripts/generate-social-images.js
+        // does at runtime — keep in sync.
+        const INK = { bg: "#0f172a", text: "#f3f5f8", muted: "#96a0a7", mutedDim: "#80878d" };
+        const BRAND = { markFrom: "#1e3a8a", markTo: "#0f172a", pulseFrom: "#60a5fa", pulseTo: "#3b82f6", cross: "#60a5fa" };
+        const ENGINE: Record<string, { color: string }> = {
+          quiz:      { color: "#2389e2" },
+          bank:      { color: "#1380c7" },
+          flashcard: { color: "#45ba50" },
+          osce:      { color: "#ff5c73" },
+          library:   { color: "#7f82e8" },
+          video:     { color: "#00b8ba" },
+          written:   { color: "#ecaa0b" },
         };
         const meta = ENGINE[type] || ENGINE.quiz;
 
-        // Truncate title to ~40 chars to fit within the card
-        const displayTitle = title.length > 42 ? title.slice(0, 40) + "…" : title;
-        const displaySub = sub.length > 60 ? sub.slice(0, 58) + "…" : sub;
+        // Truncate to fit the card (system fonts run wider than the static
+        // cards' Poppins, so the title cap is tighter here).
+        const displayTitle = title.length > 32 ? title.slice(0, 30) + "…" : title;
+        const displaySub = sub.length > 58 ? sub.slice(0, 56) + "…" : sub;
 
         const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 630" width="1200" height="630">
   <defs>
-    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#090d16"/>
-      <stop offset="50%" stop-color="#0f172a"/>
-      <stop offset="100%" stop-color="#1e3a8a"/>
+    <radialGradient id="depth" cx="0.16" cy="0.06" r="0.9">
+      <stop offset="0%" stop-color="#FFFFFF" stop-opacity="0.045"/>
+      <stop offset="55%" stop-color="#FFFFFF" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="mark-bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="${BRAND.markFrom}"/><stop offset="100%" stop-color="${BRAND.markTo}"/>
     </linearGradient>
-    <linearGradient id="ac" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#93c5fd"/><stop offset="100%" stop-color="#3b82f6"/>
+    <linearGradient id="mark-pulse" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="${BRAND.pulseFrom}"/><stop offset="100%" stop-color="${BRAND.pulseTo}"/>
     </linearGradient>
   </defs>
-  <rect width="1200" height="630" fill="url(#bg)"/>
-  <g opacity="0.04" stroke="#fff" stroke-width="1">
-    <line x1="0" y1="105" x2="1200" y2="105"/><line x1="0" y1="210" x2="1200" y2="210"/>
-    <line x1="0" y1="315" x2="1200" y2="315"/><line x1="0" y1="420" x2="1200" y2="420"/>
-    <line x1="0" y1="525" x2="1200" y2="525"/>
-    <line x1="200" y1="0" x2="200" y2="630"/><line x1="400" y1="0" x2="400" y2="630"/>
-    <line x1="600" y1="0" x2="600" y2="630"/><line x1="800" y1="0" x2="800" y2="630"/>
-    <line x1="1000" y1="0" x2="1000" y2="630"/>
+  <rect width="1200" height="630" fill="${INK.bg}"/>
+  <rect width="1200" height="630" fill="url(#depth)"/>
+  <g transform="translate(96 84)">
+    <g transform="scale(0.52)">
+      <rect width="100" height="100" rx="22" fill="url(#mark-bg)"/>
+      <g fill="${BRAND.cross}" opacity="0.18">
+        <rect x="44.1" y="28.5" width="11.7" height="43" rx="2.7"/>
+        <rect x="28.5" y="44.1" width="43" height="11.7" rx="2.7"/>
+      </g>
+      <path d="M18.75 50 L32.42 50 L40.23 34.37 L48.05 65.63 L55.86 42.19 L63.67 50 L81.25 50" fill="none" stroke="url(#mark-pulse)" stroke-width="4.7" stroke-linecap="round" stroke-linejoin="round"/>
+    </g>
+    <text x="72" y="34" font-family="system-ui,-apple-system,sans-serif" font-size="22" font-weight="500" fill="${INK.muted}">${esc(site)}</text>
   </g>
-  <!-- Logo mark -->
-  <g transform="translate(120,105)">
-    <rect x="0" y="0" width="70" height="70" rx="18" fill="#1e3a8a" stroke="#3b82f6" stroke-width="2"/>
-    <path d="M12 35 L22 35 L28 20 L35 50 L42 27 L49 35 L58 35" stroke="url(#ac)" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
-  </g>
-  <text x="210" y="150" font-family="system-ui,-apple-system,sans-serif" font-size="32" font-weight="800" fill="#ffffff">${esc(site)}</text>
-  <!-- Engine badge -->
-  <g transform="translate(120,210)">
-    <rect x="0" y="0" width="168" height="38" rx="19" fill="${meta.bg}" stroke="${meta.border}" stroke-width="1.5"/>
-    <text x="84" y="24" font-family="system-ui,sans-serif" font-size="15" font-weight="700" fill="${meta.text}" text-anchor="middle">${esc(meta.label)}</text>
-  </g>
-  <!-- Main title -->
-  <text x="120" y="330" font-family="system-ui,-apple-system,sans-serif" font-size="56" font-weight="800" fill="#f8fafc" letter-spacing="-0.02em">${esc(displayTitle)}</text>
-  ${displaySub ? `<text x="120" y="395" font-family="system-ui,-apple-system,sans-serif" font-size="26" font-weight="400" fill="#94a3b8">${esc(displaySub)}</text>` : ""}
-  <!-- Footer -->
-  <line x1="120" y1="520" x2="1080" y2="520" stroke="#334155" stroke-width="1"/>
-  <text x="120" y="560" font-family="system-ui,sans-serif" font-size="16" font-weight="500" fill="#64748b">Adaptive Medical Study · Offline Ready · Open Source</text>
+  <rect x="96" y="266" width="72" height="6" rx="3" fill="${meta.color}"/>
+  <text x="96" y="366" font-family="system-ui,-apple-system,sans-serif" font-size="56" font-weight="700" fill="${INK.text}" letter-spacing="-1">${esc(displayTitle)}</text>
+  ${displaySub ? `<text x="96" y="424" font-family="system-ui,-apple-system,sans-serif" font-size="24" font-weight="400" fill="${INK.muted}">${esc(displaySub)}</text>` : ""}
+  <line x1="96" y1="548" x2="1104" y2="548" stroke="#FFFFFF" stroke-opacity="0.08" stroke-width="1"/>
+  <text x="96" y="583" font-family="system-ui,-apple-system,sans-serif" font-size="16" font-weight="500" fill="${INK.mutedDim}">Offline-ready · Open source</text>
 </svg>`;
 
         return new Response(svg, {
