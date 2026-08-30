@@ -8,6 +8,7 @@ import {
   getDefaultTheme,
   type CustomThemeConfig,
 } from "@/lib/osler/config";
+import { withViewTransition } from "@/lib/osler/native";
 
 type Theme = "dark" | "light";
 
@@ -185,7 +186,10 @@ export function OslerThemeProvider({ children }: { children: React.ReactNode }) 
       if (typeof window !== "undefined") {
         localStorage.setItem("osler-theme", id);
       }
-      applyThemeClass(id, customThemes);
+      // Ease the dark↔light jump: browsers with the View Transitions API
+      // crossfade the old and new snapshots (direction "none" = plain fade);
+      // everything else applies the class instantly as before.
+      withViewTransition(() => applyThemeClass(id, customThemes), "none");
     },
     [customThemes],
   );
