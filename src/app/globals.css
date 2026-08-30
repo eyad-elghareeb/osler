@@ -98,6 +98,17 @@
   --radius-2xl: calc(var(--radius) + 8px);
 }
 
+/* Activity heatmap (SVG) — hover ring on cells; the grid scales via viewBox
+ * so it never becomes an inner scroll container. */
+.osler-heat-cell {
+  transition: opacity 150ms ease;
+  cursor: default;
+}
+.osler-heat-cell:hover {
+  stroke: var(--primary);
+  stroke-width: 1.5;
+}
+
 /* Native form-control + scrollbar rendering follows the active theme:
  * native <select> popups, date pickers, and scrollbars render in the
  * matching scheme on every platform instead of defaulting to light. */
