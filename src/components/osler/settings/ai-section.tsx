@@ -366,7 +366,7 @@ export function AiSettingsSection() {
             </div>
 
             {/* Live transcripts opt-in (default off) */}
-            <div className="flex items-start justify-between gap-3 pt-3 mt-1 border-t border-border/60">
+            <div className="flex items-start justify-between gap-3 pt-3 mt-1 border-t border-border">
               <div className="min-w-0 space-y-1">
                 <div className="text-xs font-semibold text-foreground">{t("settings.ai.liveTranscripts")}</div>
                 <p className="text-[11px] text-muted-foreground leading-relaxed">

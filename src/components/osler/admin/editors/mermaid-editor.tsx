@@ -609,7 +609,7 @@ function StepCard({
                         "flex items-center gap-1 px-2 py-1 rounded-md text-[11px] font-medium border transition-all whitespace-nowrap",
                         kind.bg,
                         kind.color,
-                        "border-border/30 hover:brightness-125",
+                        "border-border hover:brightness-125",
                       )}
                       title={t("admin.mermaid.insertKind", { kind: t(kind.medicalKey as any) })}
                     >
@@ -985,7 +985,7 @@ export function MermaidEditorModal({ open, initialCode, onSave, onClose }: Merma
                             className={cn(
                               "flex items-center gap-1 px-2 py-1 rounded-md text-[11px] font-medium border transition-all",
                               newStepKind === kind.value
-                                ? cn(kind.bg, kind.color, "border-border/60")
+                                ? cn(kind.bg, kind.color, "border-border")
                                 : "text-muted-foreground border-border hover:text-foreground",
                             )}
                           >

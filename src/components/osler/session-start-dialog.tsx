@@ -365,7 +365,7 @@ export function SessionStartDialog({
           </SectionList>
 
           {/* Footer — compact padding */}
-          <DialogFooter className="shrink-0 border-t border-border/80 bg-card px-5 py-3 sm:px-6 sm:py-3.5">
+          <DialogFooter className="shrink-0 border-t border-border bg-card px-5 py-3 sm:px-6 sm:py-3.5">
             <div className="flex w-full items-center justify-between gap-2">
               <div className="flex gap-2">
                 <Button type="button" variant="ghost" size="sm" onClick={onClose}>

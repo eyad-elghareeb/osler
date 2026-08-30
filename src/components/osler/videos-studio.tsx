@@ -936,7 +936,7 @@ function VideoPlayerView({
 
             {/* Description box */}
             {video.description && (
-              <div className="rounded-xl bg-card border border-border/80 p-4 space-y-2 text-sm leading-relaxed">
+              <div className="rounded-xl bg-card border border-border p-4 space-y-2 text-sm leading-relaxed">
                 <div className={cn(!showFullDescription && "line-clamp-3")}>
                   {video.description}
                 </div>
@@ -1008,7 +1008,7 @@ function VideoPlayerView({
                     "w-full text-start flex items-start gap-3 p-2 rounded-xl border transition-all duration-150 group",
                     isActive
                       ? "bg-primary/10 border-primary/40 shadow-sm"
-                      : "bg-card/60 hover:bg-card border-border/50 hover:border-border"
+                      : "bg-card/60 hover:bg-card border-border hover:border-border"
                   )}
                 >
                   {/* Thumbnail Box */}

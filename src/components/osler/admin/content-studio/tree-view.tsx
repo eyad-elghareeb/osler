@@ -202,7 +202,7 @@ function TreeRow({ node, depth, expanded, selectedIds, searching, onToggle, onSe
           )}
         </div>
         {isFolder && children.length > 0 && (
-          <span className="shrink-0 rounded-md border border-border/60 bg-muted/40 px-1 py-px text-[11px] font-medium tabular-nums text-muted-foreground">
+          <span className="shrink-0 rounded-md border border-border bg-muted/40 px-1 py-px text-[11px] font-medium tabular-nums text-muted-foreground">
             {children.length}
           </span>
         )}

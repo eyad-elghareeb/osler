@@ -1202,12 +1202,12 @@ export function FlashcardStudio({
                   />
                 </div>
                 <div className="flex items-center justify-center gap-2 mt-2 text-[11px] text-muted-foreground/40">
-                  <span><kbd className="px-1 py-0.5 rounded border border-border/30 text-[11px]">1</kbd> {t("flash.session.rateAgain")}</span>
-                  <span><kbd className="px-1 py-0.5 rounded border border-border/30 text-[11px]">2</kbd> {t("flash.session.rateHard")}</span>
-                  <span><kbd className="px-1 py-0.5 rounded border border-border/30 text-[11px]">3</kbd> {t("flash.session.rateGood")}</span>
-                  <span><kbd className="px-1 py-0.5 rounded border border-border/30 text-[11px]">4</kbd> {t("flash.session.rateEasy")}</span>
-                  <span className="hidden sm:inline"><kbd className="px-1 py-0.5 rounded border border-border/30 text-[11px]">←</kbd><kbd className="px-1 py-0.5 rounded border border-border/30 text-[11px]">→</kbd> {t("flash.keyboardNav")}</span>
-                  <span className="hidden sm:inline"><kbd className="px-1 py-0.5 rounded border border-border/30 text-[11px]">Esc</kbd> {t("flash.exit")}</span>
+                  <span><kbd className="px-1 py-0.5 rounded border border-border text-[11px]">1</kbd> {t("flash.session.rateAgain")}</span>
+                  <span><kbd className="px-1 py-0.5 rounded border border-border text-[11px]">2</kbd> {t("flash.session.rateHard")}</span>
+                  <span><kbd className="px-1 py-0.5 rounded border border-border text-[11px]">3</kbd> {t("flash.session.rateGood")}</span>
+                  <span><kbd className="px-1 py-0.5 rounded border border-border text-[11px]">4</kbd> {t("flash.session.rateEasy")}</span>
+                  <span className="hidden sm:inline"><kbd className="px-1 py-0.5 rounded border border-border text-[11px]">←</kbd><kbd className="px-1 py-0.5 rounded border border-border text-[11px]">→</kbd> {t("flash.keyboardNav")}</span>
+                  <span className="hidden sm:inline"><kbd className="px-1 py-0.5 rounded border border-border text-[11px]">Esc</kbd> {t("flash.exit")}</span>
                 </div>
               </div>
             </motion.div>

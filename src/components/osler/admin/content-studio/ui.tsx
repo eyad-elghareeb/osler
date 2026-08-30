@@ -140,7 +140,7 @@ export function NodeBadges({
           <Tooltip>
             <TooltipTrigger asChild>
               <span
-                className={cn(badgeWrapperCls, "border-border/70 bg-muted/60 text-muted-foreground")}
+                className={cn(badgeWrapperCls, "border-border bg-muted/60 text-muted-foreground")}
                 aria-label={t("admin.studio.badge.raw")}
               >
                 <FileCode className={variant === "compact" ? "size-2.5" : "size-3"} />

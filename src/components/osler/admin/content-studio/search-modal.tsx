@@ -257,7 +257,7 @@ export function ContentSearchModal({
         </div>
 
         {/* Category Scope Tabs */}
-        <div className="flex items-center gap-1.5 overflow-x-auto osler-scroll-x border-b border-border/60 bg-muted/20 px-4 py-2">
+        <div className="flex items-center gap-1.5 overflow-x-auto osler-scroll-x border-b border-border bg-muted/20 px-4 py-2">
           <Button
             type="button"
             variant="ghost"
@@ -346,7 +346,7 @@ export function ContentSearchModal({
                 >
                   {/* Left: Icon + Titles */}
                   <div className="flex min-w-0 flex-1 items-center gap-2.5">
-                    <div className="flex size-7 shrink-0 items-center justify-center rounded-md border border-border/80 bg-background/80 text-primary shadow-2xs">
+                    <div className="flex size-7 shrink-0 items-center justify-center rounded-md border border-border bg-background/80 text-primary shadow-2xs">
                       <NodeIcon node={item.node} className="size-3.5" />
                     </div>
 

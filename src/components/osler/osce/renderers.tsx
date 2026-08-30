@@ -50,7 +50,7 @@ export function DataTablesRenderer({ tables }: { tables?: OsceDataTable[] }) {
                   {(t.rows || []).map((r, ri) => (
                     <tr key={ri}>
                       {r.map((c, ci) => (
-                        <td key={ci} className={cn("px-2 py-1 border-b border-border/20", ci === r.length - 1 ? "font-medium" : "text-muted-foreground")}>
+                        <td key={ci} className={cn("px-2 py-1 border-b border-border", ci === r.length - 1 ? "font-medium" : "text-muted-foreground")}>
                           {c}
                         </td>
                       ))}

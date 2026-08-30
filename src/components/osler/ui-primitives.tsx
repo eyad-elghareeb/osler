@@ -1049,7 +1049,7 @@ export function SkeletonCard({ header = true, lines = 2, className }: SkeletonCa
         )}
         {lines > 0 && <SkeletonText lines={lines} />}
       </div>
-      <div className="pt-3 border-t border-border/40 flex items-center justify-between">
+      <div className="pt-3 border-t border-border flex items-center justify-between">
         <Skeleton className="h-3 w-1/4 max-w-[80px]" />
         <Skeleton className="size-4 rounded shrink-0" />
       </div>

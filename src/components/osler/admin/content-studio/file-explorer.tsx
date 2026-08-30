@@ -409,7 +409,7 @@ function GridTile({
         "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
         selected
           ? "border-primary/50 bg-primary/10 ring-1 ring-primary/30"
-          : "border-border/80 bg-card hover:border-border hover:bg-muted/40 hover:shadow-sm",
+          : "border-border bg-card hover:border-border hover:bg-muted/40 hover:shadow-sm",
         dropActive && "border-primary ring-2 ring-primary/50",
       )}
     >
@@ -459,7 +459,7 @@ function GridTile({
       </div>
 
       {/* Footer */}
-      <div className="flex w-full items-center justify-between gap-1 border-t border-border/40 pt-1 text-[11px] text-muted-foreground font-mono">
+      <div className="flex w-full items-center justify-between gap-1 border-t border-border pt-1 text-[11px] text-muted-foreground font-mono">
         {isFolder ? (
           <span className="tabular-nums font-sans text-muted-foreground font-medium">
             {node.items ? `${node.items.length} items` : t("admin.studio.folder")}
@@ -555,7 +555,7 @@ function ListRow({
       onClick={(e) => { haptic("selection"); onClick(e); }}
       onDoubleClick={() => { haptic("light"); onDoubleClick(); }}
       className={cn(
-        "grid h-auto w-full grid-cols-[minmax(0,1fr)_100px_70px_100px_100px] items-center gap-2 rounded-none border-b border-border/60 px-3 py-2 text-start text-xs transition-colors",
+        "grid h-auto w-full grid-cols-[minmax(0,1fr)_100px_70px_100px_100px] items-center gap-2 rounded-none border-b border-border px-3 py-2 text-start text-xs transition-colors",
         "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/40",
         selected ? "bg-primary/10" : "hover:bg-muted/40",
         dropActive && "bg-primary/5 ring-1 ring-inset ring-primary/40",
