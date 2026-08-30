@@ -1809,7 +1809,7 @@ export function OsceStudio({
         {/* ── Header ────────────────────────────────────────────
             Slimmer, cleaner header. The mic / end-call buttons live here so
             they're always reachable even when the voice overlay is minimised. */}
-        <header className="flex items-center gap-2 px-3 md:px-4 py-2.5 bg-card/70 backdrop-blur-xl border-b border-border shrink-0">
+        <header className="flex items-center gap-2 px-3 md:px-4 py-2.5 bg-card/60 backdrop-blur-md border-b border-border shrink-0">
           <button
             onClick={() => { stopTimer(); setPhase("lobby"); }}
             className="size-8 rounded-lg hover:bg-muted/60 flex items-center justify-center shrink-0 transition-colors"
@@ -2204,7 +2204,7 @@ export function OsceStudio({
             </AnimatePresence>
 
             {/* Input area */}
-            <div className="border-t border-border bg-card/70 backdrop-blur-xl shrink-0 p-3 md:px-6">
+            <div className="border-t border-border bg-card/60 backdrop-blur-md shrink-0 p-3 md:px-6">
               {/* Voice status pill (only when voice on AND overlay minimised) */}
               <AnimatePresence>
                 {voiceOn && !voiceOverlayOpen && (

@@ -173,7 +173,7 @@ export function MermaidModal({ svg, title, onClose }: MermaidModalProps) {
           }}
         >
           <div
-            className="osler-mermaid-svg bg-card/80 border border-border rounded-2xl shadow-2xl p-6 max-w-[90vw] max-h-[80vh] overflow-auto"
+            className="osler-mermaid-svg bg-card/60 backdrop-blur-md border border-border rounded-xl shadow-e4 p-6 max-w-[90vw] max-h-[80vh] overflow-auto"
             dangerouslySetInnerHTML={{ __html: svg }}
           />
         </div>

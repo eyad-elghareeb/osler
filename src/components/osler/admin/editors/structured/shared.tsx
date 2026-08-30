@@ -411,7 +411,7 @@ export function TagListField({
   }
   return (
     <Field label={label}>
-      <div className="flex flex-wrap gap-1.5 p-1.5 border border-border rounded-xl bg-background min-h-9">
+      <div className="flex flex-wrap gap-1.5 p-1.5 border border-border rounded-xl bg-card min-h-9">
         {tags.map((tag, i) => (
           <span
             key={`${tag}-${i}`}

@@ -62,7 +62,7 @@ export function TourStep() {
           const meta = getEngineMeta(type);
           const Icon = ENGINE_ICONS[type];
           return (
-            <div key={type} className="rounded-lg border border-border bg-background p-3">
+            <div key={type} className="rounded-lg border border-border bg-card p-3">
               <div className="flex items-center gap-2 mb-1">
                 <span
                   className="size-7 rounded-md flex items-center justify-center shrink-0"

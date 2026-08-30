@@ -973,7 +973,7 @@ export function MermaidEditorModal({ open, initialCode, onSave, onClose }: Merma
                     </button>
                   </div>
                 ) : (
-                  <div className="mt-2 p-3 rounded-xl border border-border bg-background">
+                  <div className="mt-2 p-3 rounded-xl border border-border bg-card">
                     <div className="flex gap-1.5 mb-2.5 flex-wrap">
                       {STEP_KINDS.filter((k) => k.value !== "start").map((kind) => {
                         const KIcon = kind.icon;
@@ -1197,7 +1197,7 @@ function MermaidTemplateGallery({ onPickPreset, onStartBlank, onClose }: Mermaid
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ ...MOTION_TRANSITION.quick, delay: idx * 0.05 }}
                 onClick={() => (card.id === blankId ? onStartBlank() : onPickPreset(card.id as (typeof PRESETS)[number]["id"]))}
-                className="group flex flex-col items-start gap-2.5 p-4 rounded-xl border border-border bg-background text-start hover:border-primary/40 hover:shadow-e2 transition-all"
+                className="group flex flex-col items-start gap-2.5 p-4 rounded-xl border border-border bg-card text-start hover:border-primary/40 hover:shadow-e2 transition-all"
               >
                 <div className={cn("w-10 h-10 rounded-xl flex items-center justify-center transition-transform group-hover:scale-105", card.bg)}>
                   <CIcon className={cn("w-5 h-5", card.color)} />

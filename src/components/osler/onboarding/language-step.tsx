@@ -44,7 +44,7 @@ export function LanguageStep() {
               }}
               className={cn(
                 "text-start p-3 rounded-lg border-2 transition-all flex items-center gap-3",
-                active ? "border-primary bg-primary/5" : "border-border bg-background hover:border-primary/40",
+                active ? "border-primary bg-primary/5" : "border-border bg-card hover:border-primary/40",
               )}
             >
               <div
@@ -93,7 +93,7 @@ export function LanguageStep() {
                 "px-3 py-1.5 rounded-full text-xs font-medium transition-colors border",
                 active
                   ? "bg-primary text-primary-foreground border-primary"
-                  : "bg-background text-muted-foreground border-border hover:text-foreground hover:border-primary/40",
+                  : "bg-card text-muted-foreground border-border hover:text-foreground hover:border-primary/40",
                 isRtl && !active && "osler-content-ar",
               )}
               dir={isRtl ? "rtl" : undefined}
