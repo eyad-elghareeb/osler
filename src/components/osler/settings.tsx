@@ -22,25 +22,27 @@ export type SettingsSection = "account" | "sessions" | "appearance" | "language"
 interface SectionMeta {
   id: SettingsSection;
   labelKey: StringKey;
+  /** One-line description shown on the mobile section list. */
+  descriptionKey: StringKey;
   icon: React.ComponentType<{ className?: string }>;
   /** English keywords for settings search. */
   keywords: string;
 }
 
 const SECTIONS: SectionMeta[] = [
-  { id: "account",    labelKey: "settings.section.account",   icon: User,         keywords: "account profile email password auth google sync status export delete logout cloud" },
-  { id: "sessions",   labelKey: "settings.section.sessions",  icon: MonitorSmartphone, keywords: "sessions devices sign out logout security active login revoke" },
-  { id: "appearance", labelKey: "settings.theme.title", icon: Palette, keywords: "theme appearance dark light color palette custom" },
-  { id: "language",  labelKey: "settings.section.language",  icon: Languages,    keywords: "language arabic english rtl ui direction locale" },
-  { id: "ai",        labelKey: "settings.section.ai",        icon: Sparkles,     keywords: "ai assistant gemini api key model osce voice" },
-  { id: "shortcuts", labelKey: "settings.section.shortcuts", icon: Keyboard,     keywords: "keyboard shortcuts hotkeys bindings" },
-  { id: "downloads", labelKey: "settings.section.downloads", icon: Download,     keywords: "downloads offline cache storage service worker" },
-  { id: "sync",      labelKey: "settings.section.sync",      icon: Smartphone,   keywords: "sync peer webrtc qr sync devices" },
-  { id: "native",    labelKey: "settings.section.native",    icon: Fingerprint,  keywords: "native haptics biometric fingerprint view transitions wake lock network animations" },
-  { id: "support",   labelKey: "settings.section.support",   icon: LifeBuoy,     keywords: "support help report problem bug ticket feedback contact admin issue" },
-  { id: "backup",    labelKey: "settings.section.backup",    icon: FileArchive,  keywords: "backup restore export import file" },
-  { id: "about",     labelKey: "settings.section.about",     icon: Info,         keywords: "about github repo version site name theme plugins config" },
-  { id: "danger",    labelKey: "settings.section.danger",    icon: AlertTriangle, keywords: "danger reset clear data delete wipe progress" },
+  { id: "account",    labelKey: "settings.section.account",   descriptionKey: "settings.section.account.desc",   icon: User,         keywords: "account profile email password auth google sync status export delete logout cloud" },
+  { id: "sessions",   labelKey: "settings.section.sessions",  descriptionKey: "settings.section.sessions.desc",  icon: MonitorSmartphone, keywords: "sessions devices sign out logout security active login revoke" },
+  { id: "appearance", labelKey: "settings.theme.title", descriptionKey: "settings.section.appearance.desc", icon: Palette, keywords: "theme appearance dark light color palette custom" },
+  { id: "language",  labelKey: "settings.section.language",  descriptionKey: "settings.section.language.desc",   icon: Languages,    keywords: "language arabic english rtl ui direction locale" },
+  { id: "ai",        labelKey: "settings.section.ai",        descriptionKey: "settings.section.ai.desc",         icon: Sparkles,     keywords: "ai assistant gemini api key model osce voice" },
+  { id: "shortcuts", labelKey: "settings.section.shortcuts", descriptionKey: "settings.section.shortcuts.desc",  icon: Keyboard,     keywords: "keyboard shortcuts hotkeys bindings" },
+  { id: "downloads", labelKey: "settings.section.downloads", descriptionKey: "settings.section.downloads.desc",  icon: Download,     keywords: "downloads offline cache storage service worker" },
+  { id: "sync",      labelKey: "settings.section.sync",      descriptionKey: "settings.section.sync.desc",       icon: Smartphone,   keywords: "sync peer webrtc qr sync devices" },
+  { id: "native",    labelKey: "settings.section.native",    descriptionKey: "settings.section.native.desc",     icon: Fingerprint,  keywords: "native haptics biometric fingerprint view transitions wake lock network animations" },
+  { id: "support",   labelKey: "settings.section.support",   descriptionKey: "settings.section.support.desc",    icon: LifeBuoy,     keywords: "support help report problem bug ticket feedback contact admin issue" },
+  { id: "backup",    labelKey: "settings.section.backup",    descriptionKey: "settings.section.backup.desc",     icon: FileArchive,  keywords: "backup restore export import file" },
+  { id: "about",     labelKey: "settings.section.about",     descriptionKey: "settings.section.about.desc",      icon: Info,         keywords: "about github repo version site name theme plugins config" },
+  { id: "danger",    labelKey: "settings.section.danger",    descriptionKey: "settings.section.danger.desc",     icon: AlertTriangle, keywords: "danger reset clear data delete wipe progress" },
 ];
 
 
@@ -225,7 +227,7 @@ export function Settings({
                       </span>
                       <span className="flex-1 min-w-0">
                         <span className="block text-sm font-medium truncate">{t(s.labelKey)}</span>
-                        <span className="block text-[11px] text-muted-foreground truncate">{s.keywords}</span>
+                        <span className="block text-[11px] text-muted-foreground truncate">{t(s.descriptionKey)}</span>
                       </span>
                       <ChevronRight className={cn("size-4 text-muted-foreground shrink-0", rtl && "rtl-flip-x")} />
                     </button>
