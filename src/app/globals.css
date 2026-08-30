@@ -214,6 +214,15 @@
 @layer base {
   * {
     @apply border-border outline-ring/50;
+    /* Kill the gray tap flash on touch devices app-wide — press feedback is
+     * owned by the :active styles below, which respond on touch-down. */
+    -webkit-tap-highlight-color: transparent;
+  }
+  /* Fast-tap interactive elements: `manipulation` allows pan + pinch but
+   * removes the double-tap-zoom gesture (and its ~300ms disambiguation
+   * delay) so taps commit instantly on every mobile browser. */
+  button, [role="button"], a, label, summary, input, select, textarea {
+    touch-action: manipulation;
   }
   body {
     @apply bg-background text-foreground;
@@ -514,6 +523,12 @@
 }
 .osler-card--interactive:hover {
   transform: translateY(-1px);
+}
+/* Press feedback lands on touch-down (before the click commits): the card
+ * presses flat into the surface instead of continuing to hover-lift. */
+.osler-card--interactive:active {
+  transform: translateY(0) scale(0.99);
+  transition-duration: 100ms;
 }
 
 /* Stat tile — label + big value, used in Dashboard, Profile, QBank/Flashcard hubs.
@@ -1060,6 +1075,11 @@ input, textarea, [contenteditable="true"], .osler-prose, .ai-chat-msg {
   -webkit-tap-highlight-color: transparent;
 }
 .osler-tabbar-item.active {
+  color: var(--primary);
+}
+/* Touch-down highlight — the tab tints immediately on press, before the
+ * navigation commits (the hover state already covers pointer devices). */
+.osler-tabbar-item:active {
   color: var(--primary);
 }
 /* Sliding active pill — rendered by <MobileTabBar> as a motion.span with

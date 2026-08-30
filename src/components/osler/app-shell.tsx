@@ -506,7 +506,7 @@ function NavButton({
     <button
       onClick={onClick}
       className={cn(
-        "relative h-9 px-3 rounded-md text-sm font-medium transition-colors flex items-center gap-2",
+        "relative h-9 px-3 rounded-md text-sm font-medium transition-colors flex items-center gap-2 active:scale-[0.97]",
         active
           ? "text-primary"
           : "text-muted-foreground hover:text-foreground hover:bg-muted/60"
