@@ -143,7 +143,7 @@ export function LabValuesSidebar({ open, onClose }: { open?: boolean; onClose: (
           <button
             key={t.id}
             onClick={() => setTab(t.id)}
-            className={`px-3 py-2 text-[10px] font-semibold uppercase tracking-wider transition-colors border-b-2 whitespace-nowrap ${
+            className={`px-3 py-2 text-[11px] font-semibold uppercase tracking-wider transition-colors border-b-2 whitespace-nowrap ${
               tab === t.id
                 ? "border-primary text-primary bg-card"
                 : "border-transparent text-muted-foreground hover:text-foreground"
@@ -165,11 +165,11 @@ export function LabValuesSidebar({ open, onClose }: { open?: boolean; onClose: (
                 <span className="text-xs font-medium text-foreground">
                   {lab.name}
                 </span>
-                <span className="text-[10px] font-semibold text-primary tabular-nums shrink-0">
+                <span className="text-[11px] font-semibold text-primary tabular-nums shrink-0">
                   {lab.range}
                 </span>
               </div>
-              <p className="text-[10px] text-muted-foreground mt-0.5 leading-relaxed">
+              <p className="text-[11px] text-muted-foreground mt-0.5 leading-relaxed">
                 {lab.note}
               </p>
             </div>
@@ -192,7 +192,7 @@ export function LabValuesSidebar({ open, onClose }: { open?: boolean; onClose: (
             {...dismissProps}
             className={isPhone
               ? "fixed inset-0 z-50 bg-card flex flex-col"
-              : "fixed right-0 top-12 bottom-0 z-50 border-l border-border bg-card shadow-xl flex flex-col"
+              : "fixed right-0 top-12 bottom-0 z-50 border-l border-border bg-card shadow-e4 flex flex-col"
             }
             style={
               isPhone

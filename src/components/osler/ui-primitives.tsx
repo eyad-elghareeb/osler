@@ -1049,7 +1049,7 @@ export function SkeletonCard({ header = true, lines = 2, className }: SkeletonCa
         )}
         {lines > 0 && <SkeletonText lines={lines} />}
       </div>
-      <div className="pt-3 border-t border-border/40 flex items-center justify-between">
+      <div className="pt-3 border-t border-border flex items-center justify-between">
         <Skeleton className="h-3 w-1/4 max-w-[80px]" />
         <Skeleton className="size-4 rounded shrink-0" />
       </div>
@@ -1136,7 +1136,7 @@ export function HubSkeleton({
  * ModeCard, LayoutOption, theme buttons, and the inline mode toggle —
  * every "card you tap to pick an option" in the app.
  *
- * Active state: border-primary + bg-primary/5 + shadow-sm (subtle lift).
+ * Active state: border-primary + bg-primary/5 + shadow-e1 (subtle lift).
  * Inactive state: border-border + bg-card + hover:border-primary/40.
  * Press feedback: scale 0.98 on tap (respects reduced motion via framer).
  */
@@ -1189,8 +1189,8 @@ export function SelectableCard({
         "flex items-start gap-2.5 rounded-xl border p-3 text-start transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
         fullWidth && "w-full",
         active
-          ? "border-primary bg-primary/5 shadow-sm"
-          : "border-border bg-card hover:border-primary/40 hover:bg-primary/[0.02] hover:shadow-sm",
+          ? "border-primary bg-primary/5 shadow-e1"
+          : "border-border bg-card hover:border-primary/40 hover:bg-primary/[0.02] hover:shadow-e1",
         disabled && "opacity-50 pointer-events-none",
         className,
       )}
@@ -1246,7 +1246,7 @@ export function Pill({ active, onClick, icon: Icon, children, disabled, classNam
       disabled={disabled}
       aria-pressed={active}
       className={cn(
-        "inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
+        "inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition-all duration-150 active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
         active
           ? "border-primary bg-primary/10 text-primary"
           : "border-border bg-card text-foreground hover:border-primary/40",

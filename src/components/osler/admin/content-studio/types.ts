@@ -123,44 +123,44 @@ export const ACCENT_CLASSES: Record<CategoryDef["accent"], {
   ring: string;       // focus ring color
 }> = {
   violet: {
-    tile: "bg-primary/5 hover:bg-primary/10 border-border/80 text-foreground",
+    tile: "bg-primary/5 hover:bg-primary/10 border-border text-foreground",
     tileActive: "bg-primary/10 border-primary/30 text-primary font-semibold shadow-xs",
     badge: "bg-primary/10 text-primary border-primary/20",
     dot: "bg-primary",
     ring: "ring-primary/30",
   },
   amber: {
-    tile: "bg-warning/5 hover:bg-warning/10 border-border/80 text-foreground",
+    tile: "bg-warning/5 hover:bg-warning/10 border-border text-foreground",
     tileActive: "bg-warning/10 border-warning/30 text-warning font-semibold shadow-xs",
     badge: "bg-warning/10 text-warning border-warning/20",
     dot: "bg-warning",
     ring: "ring-warning/30",
   },
   rose: {
-    tile: "bg-destructive/5 hover:bg-destructive/10 border-border/80 text-foreground",
+    tile: "bg-destructive/5 hover:bg-destructive/10 border-border text-foreground",
     tileActive: "bg-destructive/10 border-destructive/30 text-destructive font-semibold shadow-xs",
     badge: "bg-destructive/10 text-destructive border-destructive/20",
     dot: "bg-destructive",
     ring: "ring-destructive/30",
   },
   emerald: {
-    tile: "bg-success/5 hover:bg-success/10 border-border/80 text-foreground",
+    tile: "bg-success/5 hover:bg-success/10 border-border text-foreground",
     tileActive: "bg-success/10 border-success/30 text-success font-semibold shadow-xs",
     badge: "bg-success/10 text-success border-success/20",
     dot: "bg-success",
     ring: "ring-success/30",
   },
   sky: {
-    tile: "bg-info/5 hover:bg-info/10 border-border/80 text-foreground",
+    tile: "bg-info/5 hover:bg-info/10 border-border text-foreground",
     tileActive: "bg-info/10 border-info/30 text-info font-semibold shadow-xs",
     badge: "bg-info/10 text-info border-info/20",
     dot: "bg-info",
     ring: "ring-info/30",
   },
   slate: {
-    tile: "bg-muted/40 hover:bg-muted/70 border-border/80 text-foreground",
+    tile: "bg-muted/40 hover:bg-muted/70 border-border text-foreground",
     tileActive: "bg-muted/80 border-border text-foreground font-semibold shadow-xs",
-    badge: "bg-muted text-muted-foreground border-border/60",
+    badge: "bg-muted text-muted-foreground border-border",
     dot: "bg-muted-foreground",
     ring: "ring-border",
   },
@@ -169,7 +169,7 @@ export const ACCENT_CLASSES: Record<CategoryDef["accent"], {
 // ── Status badge colors (subtle semantic tones) ────────────────────────────
 
 export const STATUS_BADGE: Record<string, string> = {
-  draft: "bg-muted/70 text-muted-foreground border-border/70",
+  draft: "bg-muted/70 text-muted-foreground border-border",
   pending: "bg-warning/10 text-warning border-warning/25",
   published: "bg-success/10 text-success border-success/25",
   rejected: "bg-destructive/10 text-destructive border-destructive/25",

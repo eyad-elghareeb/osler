@@ -260,7 +260,7 @@ export function AiSettingsSection() {
           <label className="text-xs font-semibold text-muted-foreground flex items-center justify-between">
             <span>{t("settings.ai.apiKey")}</span>
             {draft.apiKey !== saved.apiKey && (
-              <span className="text-[10px] text-warning font-normal">{t("settings.ai.unsaved")}</span>
+              <span className="text-[11px] text-warning font-normal">{t("settings.ai.unsaved")}</span>
             )}
           </label>
           <input
@@ -366,7 +366,7 @@ export function AiSettingsSection() {
             </div>
 
             {/* Live transcripts opt-in (default off) */}
-            <div className="flex items-start justify-between gap-3 pt-3 mt-1 border-t border-border/60">
+            <div className="flex items-start justify-between gap-3 pt-3 mt-1 border-t border-border">
               <div className="min-w-0 space-y-1">
                 <div className="text-xs font-semibold text-foreground">{t("settings.ai.liveTranscripts")}</div>
                 <p className="text-[11px] text-muted-foreground leading-relaxed">

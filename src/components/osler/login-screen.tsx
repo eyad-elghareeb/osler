@@ -521,7 +521,7 @@ export function LoginScreen({ onLogin, cloudAuthError }: LoginScreenProps) {
               hidden: { opacity: 0, y: 6 },
               visible: { opacity: 1, y: 0, transition: MOTION_TRANSITION.normal },
             }}
-            className="text-2xl md:text-3xl font-bold tracking-tight"
+            className="osler-display text-2xl md:text-3xl font-bold"
           >
             {t("login.title")}
           </motion.h1>
@@ -565,7 +565,7 @@ export function LoginScreen({ onLogin, cloudAuthError }: LoginScreenProps) {
                 </>
               )}
             </Button>
-            <div className="flex items-center justify-center gap-1.5 my-3 text-[10px] text-muted-foreground">
+            <div className="flex items-center justify-center gap-1.5 my-3 text-[11px] text-muted-foreground">
               <span className="h-px bg-border flex-1 max-w-[60px]" />
               {t("common.or")}
               <span className="h-px bg-border flex-1 max-w-[60px]" />
@@ -668,7 +668,7 @@ export function LoginScreen({ onLogin, cloudAuthError }: LoginScreenProps) {
                   {showPassword ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
                 </button>
               </div>
-              {!cloudActive && <p className="text-[10px] text-muted-foreground mt-1">{t("login.demoNote")}</p>}
+              {!cloudActive && <p className="text-[11px] text-muted-foreground mt-1">{t("login.demoNote")}</p>}
             </div>
           ) : null}
 
@@ -812,7 +812,7 @@ export function LoginScreen({ onLogin, cloudAuthError }: LoginScreenProps) {
                           haptic("warning");
                         });
                       }}
-                      className="text-[10px] text-destructive hover:underline"
+                      className="text-[11px] text-destructive hover:underline"
                     >
                       {t("native.biometric.disable")}
                     </button>
@@ -864,7 +864,7 @@ export function LoginScreen({ onLogin, cloudAuthError }: LoginScreenProps) {
               </AnimatePresence>
 
               {!availability?.platformAuthenticator && availability?.supported && (
-                <p className="mt-2 text-[10px] text-muted-foreground/80 leading-relaxed">
+                <p className="mt-2 text-[11px] text-muted-foreground/80 leading-relaxed">
                   {t("native.biometric.unsupported")}
                 </p>
               )}
@@ -939,7 +939,7 @@ export function LoginScreen({ onLogin, cloudAuthError }: LoginScreenProps) {
           </DialogContent>
         </Dialog>
 
-        <p className="text-center text-[10px] text-muted-foreground mt-6">
+        <p className="text-center text-[11px] text-muted-foreground mt-6">
           {t("login.footer")}
         </p>
       </motion.div>

@@ -282,7 +282,7 @@ function ModuleCard({
               {t(def.titleKey)}
             </h3>
             {isRecent && (
-              <span className="text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded-full bg-primary/10 text-primary border border-primary/30">
+              <span className="text-[11px] uppercase tracking-wider px-1.5 py-0.5 rounded-full bg-primary/10 text-primary border border-primary/30">
                 {t("learn.continue")}
               </span>
             )}

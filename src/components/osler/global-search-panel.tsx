@@ -182,7 +182,7 @@ export function GlobalSearchPanel({
               <X className="size-3" />
             </button>
           ) : (
-            <kbd className="text-[10px] px-1.5 py-0.5 rounded border border-border text-muted-foreground shrink-0 hidden sm:inline-block">
+            <kbd className="text-[11px] px-1.5 py-0.5 rounded border border-border text-muted-foreground shrink-0 hidden sm:inline-block">
               ESC
             </kbd>
           )}
@@ -256,7 +256,7 @@ export function GlobalSearchPanel({
                     exit={{ opacity: 0 }}
                     transition={MOTION_TRANSITION.fast}
                   >
-                    <div className="text-[10px] uppercase tracking-wider text-muted-foreground px-2 py-1.5 flex items-center gap-1.5">
+                    <div className="text-[11px] uppercase tracking-wider text-muted-foreground px-2 py-1.5 flex items-center gap-1.5">
                       <Icon className="size-3" />
                       {t(SEARCH_GROUP_LABEL_KEY[group.kind])}
                     </div>
@@ -317,7 +317,7 @@ export function GlobalSearchPanel({
 
       {/* Keyboard footer — desktop only (hidden on mobile sheet) */}
       {flat.length > 0 && !isSheet && (
-        <div className="border-t border-border px-3 py-1.5 text-[10px] text-muted-foreground flex items-center gap-3">
+        <div className="border-t border-border px-3 py-1.5 text-[11px] text-muted-foreground flex items-center gap-3">
           <span className="flex items-center gap-1">
             <kbd className="px-1 py-0.5 rounded border border-border">↑</kbd>
             <kbd className="px-1 py-0.5 rounded border border-border">↓</kbd>

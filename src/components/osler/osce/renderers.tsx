@@ -32,14 +32,14 @@ export function DataTablesRenderer({ tables }: { tables?: OsceDataTable[] }) {
           {tables.map((t, i) => (
             <div key={i} className="bg-muted/20 border border-border rounded-lg p-3 overflow-x-auto">
               {t.title && (
-                <div className="text-[10px] font-bold text-primary uppercase tracking-wider mb-1.5">{t.title}</div>
+                <div className="text-[11px] font-bold text-primary uppercase tracking-wider mb-1.5">{t.title}</div>
               )}
               <table className="w-full text-[11px]">
                 {t.headers && t.headers.length > 0 && (
                   <thead>
                     <tr>
                       {t.headers.map((h, hi) => (
-                        <th key={hi} className="text-left px-2 py-1 font-bold text-muted-foreground border-b border-border text-[9px] uppercase tracking-wider">
+                        <th key={hi} className="text-left px-2 py-1 font-bold text-muted-foreground border-b border-border text-[11px] uppercase tracking-wider">
                           {h}
                         </th>
                       ))}
@@ -50,7 +50,7 @@ export function DataTablesRenderer({ tables }: { tables?: OsceDataTable[] }) {
                   {(t.rows || []).map((r, ri) => (
                     <tr key={ri}>
                       {r.map((c, ci) => (
-                        <td key={ci} className={cn("px-2 py-1 border-b border-border/20", ci === r.length - 1 ? "font-medium" : "text-muted-foreground")}>
+                        <td key={ci} className={cn("px-2 py-1 border-b border-border", ci === r.length - 1 ? "font-medium" : "text-muted-foreground")}>
                           {c}
                         </td>
                       ))}
@@ -96,7 +96,7 @@ export function DataImagesRenderer({
             return (
               <div key={i} className="bg-muted/20 border border-border rounded-lg overflow-hidden">
                 {im.title && (
-                  <div className="text-[10px] font-bold text-primary uppercase tracking-wider px-3 pt-3">{im.title}</div>
+                  <div className="text-[11px] font-bold text-primary uppercase tracking-wider px-3 pt-3">{im.title}</div>
                 )}
                 <button
                   className="w-full cursor-pointer text-left"
@@ -105,7 +105,7 @@ export function DataImagesRenderer({
                   <img src={src} alt={im.alt || im.caption || ""} className="w-full max-h-80 object-contain" loading="lazy" />
                 </button>
                 {im.caption && (
-                  <div className="text-[10px] text-muted-foreground px-3 pb-3 pt-1">{im.caption}</div>
+                  <div className="text-[11px] text-muted-foreground px-3 pb-3 pt-1">{im.caption}</div>
                 )}
               </div>
             );
@@ -141,7 +141,7 @@ export function PrintedMaterialsPanel({
     <div className="space-y-2">
       {data.scenario && (
         <div className="rounded-lg border border-border bg-muted/20 p-3">
-          <div className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground mb-1">
+          <div className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground mb-1">
             {t("osce.dataPresented.scenario")}
           </div>
           <p className="text-xs leading-relaxed">{data.scenario}</p>
@@ -149,7 +149,7 @@ export function PrintedMaterialsPanel({
       )}
       {images.length > 0 && (
         <div className="rounded-lg border border-border bg-card p-3">
-          <div className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground mb-2">
+          <div className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground mb-2">
             {t("osce.dataPresented.printedMaterials")}
           </div>
           <div className="grid grid-cols-2 gap-2">
@@ -169,7 +169,7 @@ export function PrintedMaterialsPanel({
                     loading="lazy"
                   />
                   {im.title && (
-                    <div className="text-[9px] font-semibold text-muted-foreground px-2 py-1 truncate group-hover:text-primary transition-colors">
+                    <div className="text-[11px] font-semibold text-muted-foreground px-2 py-1 truncate group-hover:text-primary transition-colors">
                       {im.title}
                     </div>
                   )}
@@ -178,7 +178,7 @@ export function PrintedMaterialsPanel({
             })}
           </div>
           {images.length > 1 && (
-            <p className="text-[9px] text-muted-foreground mt-1.5">{t("osce.dataPresented.enlarge")}</p>
+            <p className="text-[11px] text-muted-foreground mt-1.5">{t("osce.dataPresented.enlarge")}</p>
           )}
         </div>
       )}
@@ -411,7 +411,7 @@ export function LiveVoiceOverlay({
           </div>
           <div className="min-w-0">
             <div className="text-sm font-semibold truncate">{speakerName}</div>
-            <div className="text-[10px] text-muted-foreground truncate">{speakerRole}</div>
+            <div className="text-[11px] text-muted-foreground truncate">{speakerRole}</div>
           </div>
         </div>
         <div className="flex items-center gap-1.5 shrink-0">

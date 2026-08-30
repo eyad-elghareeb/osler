@@ -68,19 +68,19 @@ export function AboutSettingsSection() {
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
           <div>
-            <div className="text-[10px] uppercase text-muted-foreground">{t("settings.about.name")}</div>
+            <div className="text-[11px] uppercase text-muted-foreground">{t("settings.about.name")}</div>
             <div className="font-medium">{getSiteName()}</div>
           </div>
           <div>
-            <div className="text-[10px] uppercase text-muted-foreground">{t("settings.about.tagline")}</div>
+            <div className="text-[11px] uppercase text-muted-foreground">{t("settings.about.tagline")}</div>
             <div className="font-medium">{getSiteTagline()}</div>
           </div>
           <div>
-            <div className="text-[10px] uppercase text-muted-foreground">{t("settings.about.shortName")}</div>
+            <div className="text-[11px] uppercase text-muted-foreground">{t("settings.about.shortName")}</div>
             <div className="font-medium">{cfg.site.shortName}</div>
           </div>
           <div>
-            <div className="text-[10px] uppercase text-muted-foreground">{t("settings.about.organisation")}</div>
+            <div className="text-[11px] uppercase text-muted-foreground">{t("settings.about.organisation")}</div>
             <div className="font-medium">{cfg.site.organisation || "—"}</div>
           </div>
         </div>
@@ -104,7 +104,7 @@ export function AboutSettingsSection() {
         icon={Puzzle}
         defaultOpen
         actions={
-          <span className="text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded-full border border-border bg-muted/40 text-muted-foreground">
+          <span className="text-[11px] uppercase tracking-wider px-1.5 py-0.5 rounded-full border border-border bg-muted/40 text-muted-foreground">
             {t("settings.about.adminControlled")}
           </span>
         }

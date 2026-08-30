@@ -98,6 +98,33 @@
   --radius-2xl: calc(var(--radius) + 8px);
 }
 
+/* Activity heatmap (SVG) — hover ring on cells; the grid scales via viewBox
+ * so it never becomes an inner scroll container. */
+.osler-heat-cell {
+  transition: opacity 150ms ease;
+  cursor: default;
+}
+.osler-heat-cell:hover {
+  stroke: var(--primary);
+  stroke-width: 1.5;
+}
+
+/* Native form-control + scrollbar rendering follows the active theme:
+ * native <select> popups, date pickers, and scrollbars render in the
+ * matching scheme on every platform instead of defaulting to light. */
+:root {
+  color-scheme: dark;
+}
+.light {
+  color-scheme: light;
+}
+
+/* One theme-aware text-selection color app-wide (previously only the
+ * Milkdown editor surfaces styled ::selection). */
+::selection {
+  background: color-mix(in oklch, var(--primary) 25%, transparent);
+}
+
 /* Osler — Default = Dark (Navy + Light Blue)
  * Premium dark palette: deep navy with a subtle blue chroma for warmth,
  * elevated cards lifted a half-step above the background, and a refined
@@ -106,7 +133,11 @@
  * these tokens locally instead of inheriting the active theme from <html>. */
 :root,
 .dark {
-  --radius: 0.625rem;
+  /* Base radius — 12px lifts the whole scale into Apple's register:
+   * cards (radius-xl) land at 16px, menus (radius-lg) at 12px, buttons
+   * (radius-md) at 10px. Fixed radii (chat bubbles, chips, indicators)
+   * are unaffected. */
+  --radius: 0.75rem;
   --background: oklch(0.14 0.018 260);
   --foreground: oklch(0.96 0.005 240);
   --card: oklch(0.19 0.022 260);
@@ -214,6 +245,15 @@
 @layer base {
   * {
     @apply border-border outline-ring/50;
+    /* Kill the gray tap flash on touch devices app-wide — press feedback is
+     * owned by the :active styles below, which respond on touch-down. */
+    -webkit-tap-highlight-color: transparent;
+  }
+  /* Fast-tap interactive elements: `manipulation` allows pan + pinch but
+   * removes the double-tap-zoom gesture (and its ~300ms disambiguation
+   * delay) so taps commit instantly on every mobile browser. */
+  button, [role="button"], a, label, summary, input, select, textarea {
+    touch-action: manipulation;
   }
   body {
     @apply bg-background text-foreground;
@@ -347,13 +387,17 @@
 
 
 
-/* One-shot mount fade (re-render safe, no JS animation conflict) */
+/* One-shot mount fade (re-render safe, no JS animation conflict).
+ * fill-mode `backwards` (not `both`): `both` would pin the final keyframe's
+ * transform forever, which silently kills :hover / :active transforms on
+ * animated interactive cards. `backwards` still holds the hidden state
+ * during an animationDelay, then releases the transform once settled. */
 @keyframes osler-fade-in {
   from { opacity: 0; transform: translateY(8px); }
   to { opacity: 1; transform: translateY(0); }
 }
 .osler-fade-in {
-  animation: osler-fade-in 0.25s cubic-bezier(0.32, 0.72, 0, 1) both;
+  animation: osler-fade-in 0.25s cubic-bezier(0.32, 0.72, 0, 1) backwards;
 }
 
 /* ─── Shimmer skeleton (21st.dev-inspired) ─────────────────────────────
@@ -423,6 +467,9 @@
    * settling mid-momentum), which could expand the bars right after a
    * collapse. Content here grows below the fold, so anchoring buys little. */
   overflow-anchor: none;
+  /* Keep scroll gestures inside the app column — no chained overscroll
+   * glow / pull-to-refresh leaking through to the document. */
+  overscroll-behavior-y: contain;
 }
 .osler-page::-webkit-scrollbar { width: 6px; height: 6px; }
 .osler-page::-webkit-scrollbar-track { background: transparent; }
@@ -465,6 +512,11 @@
 }
 .osler-page-header__title {
   @apply text-2xl md:text-3xl font-bold tracking-tight mb-1;
+  /* Editorial serif for page titles (brief-requested premium moment).
+   * Cairo follows so Arabic-UI titles fall back gracefully instead of
+   * rendering tofu — Playfair has no Arabic glyphs. */
+  font-family: var(--font-playfair), var(--font-cairo), Georgia, serif;
+  letter-spacing: -0.01em;
 }
 .osler-page-header__subtitle {
   @apply text-sm text-muted-foreground max-w-2xl;
@@ -478,6 +530,13 @@
 }
 .osler-page-header--inline .osler-page-header__subtitle {
   @apply text-xs;
+}
+
+/* Display serif — one utility for premium brand moments outside page
+ * headers (login wordmark, streak hero). Same Arabic fallback chain. */
+.osler-display {
+  font-family: var(--font-playfair), var(--font-cairo), Georgia, serif;
+  letter-spacing: -0.01em;
 }
 
 /* Section heading — small uppercase label that introduces a content block. */
@@ -514,6 +573,12 @@
 }
 .osler-card--interactive:hover {
   transform: translateY(-1px);
+}
+/* Press feedback lands on touch-down (before the click commits): the card
+ * presses flat into the surface instead of continuing to hover-lift. */
+.osler-card--interactive:active {
+  transform: translateY(0) scale(0.99);
+  transition-duration: 100ms;
 }
 
 /* Stat tile — label + big value, used in Dashboard, Profile, QBank/Flashcard hubs.
@@ -609,6 +674,10 @@ button.osler-stat-tile--compact:hover {
 }
 .osler-segmented__item:disabled {
   @apply opacity-50 cursor-not-allowed;
+}
+/* Instant touch-down feedback while the sliding thumb is still in transit. */
+.osler-segmented__item:not(:disabled):active {
+  transform: scale(0.96);
 }
 .osler-segmented__thumb {
   @apply absolute inset-y-1 rounded-md bg-card border border-border-strong pointer-events-none;
@@ -1011,17 +1080,17 @@ input, textarea, [contenteditable="true"], .osler-prose, .ai-chat-msg {
 }
 
 /* ── Mobile bottom tab bar ────────────────────────────────────────────────
- * Renders below the home indicator on phones. The bar itself is opaque to
- * hide content scrolling underneath, with a subtle blur backdrop. The
+ * Renders below the home indicator on phones. The bar is a translucent
+ * material: the page scrolls underneath it and the blur + saturation lift
+ * makes it read as floating chrome rather than an opaque strip. The
  * `safe-bottom` inset is applied via the .safe-bottom utility on the
  * inner <nav> so the tab bar visually sits above the home indicator.
  */
 .osler-tabbar {
-  background: var(--background);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
+  background: color-mix(in oklch, var(--background) 82%, transparent);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
   border-top: 1px solid var(--border);
-  padding-bottom: env(safe-area-inset-bottom, 0px);
   padding-bottom: max(env(safe-area-inset-bottom, 0px), 0.5rem);
   min-height: calc(3rem + max(env(safe-area-inset-bottom, 0px), 0.5rem));
 }
@@ -1054,12 +1123,17 @@ input, textarea, [contenteditable="true"], .osler-prose, .ai-chat-msg {
   min-height: 48px;
   padding: 4px 8px;
   color: var(--muted-foreground);
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 500;
   transition: color 0.15s ease;
   -webkit-tap-highlight-color: transparent;
 }
 .osler-tabbar-item.active {
+  color: var(--primary);
+}
+/* Touch-down highlight — the tab tints immediately on press, before the
+ * navigation commits (the hover state already covers pointer devices). */
+.osler-tabbar-item:active {
   color: var(--primary);
 }
 /* Sliding active pill — rendered by <MobileTabBar> as a motion.span with
@@ -1158,6 +1232,74 @@ input, textarea, [contenteditable="true"], .osler-prose, .ai-chat-msg {
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
+  }
+}
+
+/* ── Shared overlay easing curve ──────────────────────────────────────────
+ * Every Radix overlay surface (dialogs, sheets, popovers, dropdown menus,
+ * selects, tooltips) animates with the app's one MOTION_EASE curve rather
+ * than tw-animate-css's default, so the whole modality system shares a
+ * single deceleration feel. Targets the data-slot attribute the shadcn
+ * primitives set; elements without animations are unaffected. Deliberately
+ * UNLAYERED: tw-animate-css's .animate-in sets the timing function in an
+ * unlayered rule, and unlayered declarations beat any @layer rule in the
+ * cascade — this must live in the same (unlayered) origin, later in source
+ * order, to win. */
+[data-slot$="-overlay"],
+[data-slot$="-content"],
+[data-slot="toast"] {
+  animation-timing-function: cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+/* ── Low-end device mode ──────────────────────────────────────────────────
+ * AnimationsProvider sets data-perf="low" on weak hardware (few cores,
+ * little RAM, or data-saver on). Backdrop blur is the dominant GPU cost on
+ * budget phones, so translucent materials resolve to their solid tokens —
+ * same design, frost-free. */
+[data-perf="low"] [class*="backdrop-blur"] {
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+[data-perf="low"] [class*="bg-card/"] { background-color: var(--card) !important; }
+[data-perf="low"] [class*="bg-popover/"] { background-color: var(--popover) !important; }
+[data-perf="low"] [class*="bg-background/"] { background-color: var(--background) !important; }
+[data-perf="low"] .osler-tabbar { background: var(--background) !important; }
+
+/* ── Reduced-transparency preference ─────────────────────────────────────
+ * Users who disable transparency at the OS level get frostier surfaces:
+ * every blurred material drops its backdrop pass and its translucent
+ * neutral surface (bg-card/60, bg-background/xx, the tab bar tint) resolves
+ * to the solid token. Accent tints (bg-primary/10 etc.) are left alone —
+ * they're color, not material. !important beats component utilities since
+ * this is an accessibility override. */
+@media (prefers-reduced-transparency: reduce) {
+  [class*="backdrop-blur"] {
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+  }
+  [class*="bg-card/"] { background-color: var(--card) !important; }
+  [class*="bg-background/"] { background-color: var(--background) !important; }
+  .osler-tabbar {
+    background: var(--background) !important;
+  }
+}
+
+/* ── Increased-contrast preference ───────────────────────────────────────
+ * Users who ask for more contrast get stronger neutral tokens everywhere
+ * (borders, inputs, secondary text). !important so the override wins over
+ * the runtime-injected custom-theme variable blocks. */
+@media (prefers-contrast: more) {
+  :root, .dark, .light, [class*="theme-"] {
+    --border: oklch(1 0 0 / 24%) !important;
+    --border-strong: oklch(1 0 0 / 38%) !important;
+    --input: oklch(1 0 0 / 28%) !important;
+    --muted-foreground: oklch(0.82 0.01 240) !important;
+  }
+  .light, [class*="theme-"][class*="-light"] {
+    --border: oklch(0.74 0.02 240) !important;
+    --border-strong: oklch(0.6 0.03 240) !important;
+    --input: oklch(0.76 0.02 240) !important;
+    --muted-foreground: oklch(0.38 0.02 250) !important;
   }
 }
 
@@ -1313,83 +1455,6 @@ html[dir="rtl"] {
  * (navy/blue OKLCH tokens, shadcn-style cards, Geist typography)
  * ═══════════════════════════════════════════════════════════════════════════ */
 
-/* ── Hub content grid (legacy) ────────────────────────────────────────────
- * This was the old hub-card recipe with a hover lift + accent bar. Renamed
- * to .osler-card--legacy so it no longer conflicts with the plain .osler-card
- * base class (which every .osler-card--default / --compact / --roomy inherits
- * from). Kept for backward-compat with any external CSS that still references
- * the hover-lift behaviour; new code should use .osler-card--interactive. */
-.osler-card--legacy {
-  background: var(--card);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  padding: 1.25rem;
-  transition: border-color 0.18s ease, transform 0.18s ease, box-shadow 0.18s ease;
-  cursor: pointer;
-  position: relative;
-  overflow: hidden;
-}
-.osler-card--legacy::before {
-  content: "";
-  position: absolute;
-  top: 0; left: 0; right: 0;
-  height: 3px;
-  background: linear-gradient(90deg, var(--primary), var(--accent));
-  opacity: 0;
-  transition: opacity 0.18s ease;
-}
-.osler-card--legacy:hover {
-  border-color: color-mix(in oklch, var(--primary) 50%, var(--border));
-  transform: translateY(-2px);
-  box-shadow: 0 8px 28px oklch(0 0 0 / 0.18);
-}
-.osler-card--legacy:hover::before { opacity: 1; }
-
-.osler-card-icon {
-  width: 40px; height: 40px;
-  border-radius: 10px;
-  background: color-mix(in oklch, var(--primary) 18%, transparent);
-  color: var(--primary);
-  display: inline-flex; align-items: center; justify-content: center;
-  margin-bottom: 0.85rem;
-}
-
-.osler-tag {
-  display: inline-flex; align-items: center;
-  font-size: 0.7rem; font-weight: 500;
-  padding: 0.15rem 0.5rem;
-  border-radius: 999px;
-  background: var(--muted);
-  color: var(--muted-foreground);
-  border: 1px solid var(--border);
-}
-
-/* ── Engine shared layout ───────────────────────────────────────────────── */
-.osler-engine-root {
-  display: flex; flex-direction: column;
-  height: 100%; min-height: 0;
-}
-.osler-engine-header {
-  display: flex; align-items: center; gap: 0.75rem;
-  padding: 0.85rem 1.25rem;
-  border-bottom: 1px solid var(--border);
-  background: var(--card);
-  flex-shrink: 0;
-}
-.osler-engine-body {
-  flex: 1; overflow-y: auto;
-  padding: 1.5rem;
-  display: flex; flex-direction: column;
-  gap: 1rem;
-}
-.osler-engine-footer {
-  display: flex; align-items: center; justify-content: space-between;
-  padding: 0.75rem 1.25rem;
-  border-top: 1px solid var(--border);
-  background: var(--card);
-  flex-shrink: 0;
-}
-
 /* ── Quiz / Bank question option rows ───────────────────────────────────── */
 .osler-option {
   display: flex; gap: 0.75rem;
@@ -1401,7 +1466,8 @@ html[dir="rtl"] {
   transition: border-color 0.15s ease, background 0.15s ease;
   align-items: flex-start;
 }
-.osler-option:hover:not(.osler-option-locked) {
+.osler-option:hover:not(.osler-option-locked),
+.osler-option:active:not(.osler-option-locked) {
   border-color: color-mix(in oklch, var(--primary) 50%, var(--border));
   background: color-mix(in oklch, var(--primary) 4%, var(--card));
 }
@@ -1443,16 +1509,6 @@ html[dir="rtl"] {
 .osler-explanation h4 {
   font-weight: 600; margin-bottom: 0.4rem;
   color: var(--foreground);
-}
-
-/* ── Flashcard ──────────────────────────────────────────────────────────── */
-/* Simplified: framer-motion handles flip animations; these are fallback
-   static card styles for any remaining .osler-flashcard usage. */
-.osler-flashcard {
-  width: 100%; max-width: 720px;
-  aspect-ratio: 16 / 10;
-  margin: 0 auto;
-  cursor: pointer;
 }
 
 /* ── OSCE case panel ────────────────────────────────────────────────────── */
@@ -1512,7 +1568,7 @@ html[dir="rtl"] {
   padding: 1.25rem;
   max-width: 520px;
   width: 100%;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+  box-shadow: var(--shadow-e4);
   max-height: calc(100vh - 2rem);
   overflow-y: auto;
   overscroll-behavior: contain;
@@ -1589,25 +1645,6 @@ html[dir="rtl"] {
   border: 1px solid var(--border);
 }
 
-/* ── AI Assistant chat bubble ───────────────────────────────────────────── */
-.osler-chat-bubble {
-  padding: 0.65rem 0.85rem;
-  border-radius: 12px;
-  font-size: 0.9rem; line-height: 1.55;
-  max-width: 80%;
-}
-.osler-chat-bubble.user {
-  background: var(--primary);
-  color: var(--primary-foreground);
-  border-bottom-right-radius: 4px;
-  margin-left: auto;
-}
-.osler-chat-bubble.assistant {
-  background: var(--muted);
-  color: var(--foreground);
-  border-bottom-left-radius: 4px;
-}
-
 /* ── Streaming-text caret — blinking bar appended to in-flight AI replies
    (OSCE conversation, AI assistant). Honours prefers-reduced-motion. ── */
 .osler-stream-caret {
@@ -1628,44 +1665,9 @@ html[dir="rtl"] {
   .osler-stream-caret { animation: none; }
 }
 
-/* ── Tracker stat cards ─────────────────────────────────────────────────── */
-.osler-stat {
-  background: var(--card);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  padding: 1rem 1.15rem;
-  display: flex; flex-direction: column; gap: 0.25rem;
-}
-.osler-stat-val { font-size: 1.5rem; font-weight: 700; }
-.osler-stat-lbl { font-size: 0.78rem; color: var(--muted-foreground); }
-
 /* ── Engine icon button ─────────────────────────────────────────────────── */
-.osler-icon-btn {
-  width: 36px; height: 36px;
-  display: inline-flex; align-items: center; justify-content: center;
-  border-radius: var(--radius-sm);
-  background: transparent;
-  color: var(--muted-foreground);
-  border: 1px solid transparent;
-  transition: background 0.15s ease, color 0.15s ease;
-}
-.osler-icon-btn:hover {
-  background: var(--muted);
-  color: var(--foreground);
-}
-
-/* ── Engine tag colors (per-type accent) ────────────────────────────────── */
-.osler-engine-quiz       { --engine-color: oklch(0.62 0.16 250); }
-.osler-engine-bank       { --engine-color: oklch(0.58 0.14 245); }
-.osler-engine-flashcard  { --engine-color: oklch(0.7 0.18 145); }
-.osler-engine-written    { --engine-color: oklch(0.78 0.16 80); }
-.osler-engine-osce       { --engine-color: oklch(0.7 0.2 16); }
-
-.osler-card.osler-engine-quiz       .osler-card-icon { background: color-mix(in oklch, oklch(0.62 0.16 250) 18%, transparent); color: oklch(0.62 0.16 250); }
-.osler-card.osler-engine-bank       .osler-card-icon { background: color-mix(in oklch, oklch(0.58 0.14 245) 18%, transparent); color: oklch(0.58 0.14 245); }
-.osler-card.osler-engine-flashcard  .osler-card-icon { background: color-mix(in oklch, oklch(0.7 0.18 145) 18%, transparent); color: oklch(0.7 0.18 145); }
-.osler-card.osler-engine-written    .osler-card-icon { background: color-mix(in oklch, oklch(0.78 0.16 80) 18%, transparent); color: oklch(0.78 0.16 80); }
-.osler-card.osler-engine-osce       .osler-card-icon { background: color-mix(in oklch, oklch(0.7 0.2 16) 18%, transparent); color: oklch(0.7 0.2 16); }
+/* (the canonical .osler-icon-btn recipe lives in the Design System section
+ * above; the duplicate that used to shadow it here was removed) */
 
 /* ── Scrollbar utility — deprecated. The global `*` selector in the
  * refined scrollbar system above now handles every element. This block
@@ -1708,208 +1710,10 @@ html[dir="rtl"] {
 
 /* ═══════════════════════════════════════════════════════════════════════════
  * QBank Studio
- * Navy topbar with exam-style question layout
+ * (the retired exam-skin classes — .qbank-topbar*, .qbank-nav-strip*,
+ * .qbank-choice*, .qbank-explanation-card* — were removed; the live
+ * surfaces style themselves with tokens in the components)
  * ═══════════════════════════════════════════════════════════════════════════ */
-
-/* ── QBank Studio topbar (navy/blue) ────────────────────────────────────── */
-.qbank-topbar {
-  background-color: var(--primary);
-  color: var(--primary-foreground);
-}
-.qbank-topbar-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 28px;
-  height: 28px;
-  border-radius: 8px;
-  background: color-mix(in oklch, var(--primary-foreground) 15%, transparent);
-  color: var(--primary-foreground);
-  transition: background 0.15s ease;
-  flex-shrink: 0;
-}
-.qbank-topbar-btn:hover {
-  background: color-mix(in oklch, var(--primary-foreground) 25%, transparent);
-}
-.qbank-topbar-btn.active {
-  background: color-mix(in oklch, var(--primary-foreground) 35%, transparent);
-}
-.qbank-topbar-btn:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
-}
-.qbank-topbar-timer {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 4px 10px;
-  border-radius: 8px;
-  background: color-mix(in oklch, var(--primary-foreground) 15%, transparent);
-  font-family: var(--font-geist-mono), ui-monospace, monospace;
-  font-variant-numeric: tabular-nums;
-  font-size: 0.875rem;
-}
-.qbank-topbar-timer.danger {
-  background: oklch(0.55 0.22 25);
-  color: white;
-}
-
-/* ── Question navigator (left strip) ─────────────────────────────────────── */
-.qbank-nav-strip {
-  display: flex;
-  flex-direction: column;
-  width: 48px;
-  flex-shrink: 0;
-  border-right: 1px solid var(--border);
-  background: var(--sidebar);
-  overflow-y: auto;
-}
-.qbank-nav-strip-item {
-  width: 100%;
-  aspect-ratio: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 10px;
-  font-weight: 600;
-  border-radius: 4px;
-  border: 1px solid transparent;
-  background: var(--sidebar);
-  color: var(--muted-foreground);
-  transition: all 0.15s ease;
-  margin-bottom: 2px;
-}
-.qbank-nav-strip-item:hover {
-  background: var(--sidebar-accent);
-}
-.qbank-nav-strip-item.current {
-  box-shadow: inset 0 0 0 2px var(--primary);
-  background: var(--sidebar-accent);
-  color: var(--foreground);
-}
-.qbank-nav-strip-item.flagged {
-  background: color-mix(in oklch, oklch(0.78 0.16 80) 20%, var(--sidebar));
-  color: oklch(0.78 0.16 80);
-}
-.qbank-nav-strip-item.correct {
-  background: color-mix(in oklch, oklch(0.62 0.16 250) 20%, var(--sidebar));
-  color: oklch(0.65 0.18 250);
-}
-.qbank-nav-strip-item.incorrect {
-  background: color-mix(in oklch, oklch(0.65 0.22 25) 20%, var(--sidebar));
-  color: oklch(0.7 0.2 22);
-}
-.qbank-nav-strip-item.answered {
-  background: color-mix(in oklch, var(--primary) 25%, var(--sidebar));
-  color: var(--primary);
-}
-
-/* ── QBank choice button (exam style) ────────────────────────────────────── */
-.qbank-choice {
-  width: 100%;
-  text-align: left;
-  padding: 0.75rem 0.875rem;
-  border-radius: 12px;
-  border-width: 2px;
-  border-style: solid;
-  display: flex;
-  align-items: flex-start;
-  gap: 0.75rem;
-  transition: all 0.18s ease;
-  cursor: pointer;
-  background: var(--card);
-  border-color: var(--border);
-}
-.qbank-choice:hover:not(:disabled):not(.qbank-choice-locked) {
-  border-color: color-mix(in oklch, var(--primary) 50%, var(--border));
-  background: color-mix(in oklch, var(--primary) 5%, var(--card));
-}
-.qbank-choice-locked,
-.qbank-choice:disabled {
-  cursor: default;
-}
-.qbank-choice-selected {
-  border-color: var(--primary);
-  background: color-mix(in oklch, var(--primary) 5%, var(--card));
-}
-.qbank-choice-correct {
-  border-color: oklch(0.55 0.18 250);
-  background: color-mix(in oklch, oklch(0.55 0.18 250) 10%, var(--card));
-}
-.qbank-choice-wrong {
-  border-color: oklch(0.62 0.22 25);
-  background: color-mix(in oklch, oklch(0.62 0.22 25) 10%, var(--card));
-}
-.qbank-choice-faded {
-  opacity: 0.6;
-}
-
-.qbank-choice-letter {
-  width: 28px;
-  height: 28px;
-  border-radius: 999px;
-  border: 2px solid var(--border);
-  background: var(--background);
-  color: var(--muted-foreground);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 0.875rem;
-  font-weight: 600;
-  flex-shrink: 0;
-}
-.qbank-choice-selected .qbank-choice-letter {
-  background: var(--primary);
-  color: var(--primary-foreground);
-  border-color: var(--primary);
-}
-.qbank-choice-correct .qbank-choice-letter {
-  background: oklch(0.55 0.18 250);
-  color: white;
-  border-color: oklch(0.55 0.18 250);
-}
-.qbank-choice-wrong .qbank-choice-letter {
-  background: oklch(0.62 0.22 25);
-  color: white;
-  border-color: oklch(0.62 0.22 25);
-}
-
-/* ── QBank explanation card ──────────────────────────────────────────────── */
-.qbank-explanation-card {
-  border-radius: 12px;
-  border-width: 2px;
-  border-style: solid;
-  overflow: hidden;
-}
-.qbank-explanation-card.correct { border-color: oklch(0.55 0.18 250); }
-.qbank-explanation-card.wrong   { border-color: oklch(0.62 0.22 25); }
-.qbank-explanation-header {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-  padding: 0.75rem 1rem;
-}
-.qbank-explanation-card.correct .qbank-explanation-header {
-  background: color-mix(in oklch, oklch(0.55 0.18 250) 10%, transparent);
-  color: oklch(0.7 0.18 250);
-}
-.qbank-explanation-card.wrong .qbank-explanation-header {
-  background: color-mix(in oklch, oklch(0.62 0.22 25) 10%, transparent);
-  color: oklch(0.7 0.2 22);
-}
-.qbank-explanation-icon {
-  width: 36px; height: 36px;
-  border-radius: 999px;
-  display: inline-flex; align-items: center; justify-content: center;
-  color: white;
-  flex-shrink: 0;
-}
-.qbank-explanation-card.correct .qbank-explanation-icon { background: oklch(0.55 0.18 250); }
-.qbank-explanation-card.wrong   .qbank-explanation-icon { background: oklch(0.62 0.22 25); }
-.qbank-explanation-body {
-  background: var(--card);
-  padding: 1rem 1.25rem;
-}
 
 /* ── QBank card (used in create-test form sections) ──────────────────────── */
 .qbank-card {
@@ -1986,49 +1790,6 @@ html[dir="rtl"] {
 }
 
 /* ── Library (AMBOSS-style article reader) ───────────────────────────────── */
-.library-toc {
-  background: var(--sidebar);
-  border-right: 1px solid var(--border);
-  overflow-y: auto;
-  width: 280px;
-  flex-shrink: 0;
-}
-.library-toc-item {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  padding: 0.4rem 0.5rem 0.4rem 0.75rem;
-  border-radius: 6px;
-  font-size: 0.825rem;
-  color: var(--muted-foreground);
-  cursor: pointer;
-  transition: background 0.15s ease, color 0.15s ease;
-  text-align: left;
-  width: 100%;
-}
-.library-toc-item:hover {
-  background: var(--sidebar-accent);
-  color: var(--foreground);
-}
-.library-toc-item.active {
-  background: color-mix(in oklch, var(--primary) 12%, transparent);
-  color: var(--primary);
-  font-weight: 500;
-}
-.library-toc-chevron {
-  width: 14px;
-  height: 14px;
-  transition: transform 0.18s ease;
-  flex-shrink: 0;
-}
-.library-toc-chevron.expanded {
-  transform: rotate(90deg);
-}
-.library-toc-children {
-  padding-left: 0.5rem;
-  border-left: 1px solid var(--border);
-  margin-left: 0.6rem;
-}
 
 .library-article {
   flex: 1;

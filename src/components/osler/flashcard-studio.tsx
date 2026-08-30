@@ -608,10 +608,10 @@ export function FlashcardStudio({
     if (clozeIdx !== null && card.text) {
       const html = renderCloze(card.text, clozeIdx, isFlipped, packPath);
       return (
-        <div className="relative w-full h-full overflow-hidden rounded-xl border border-border shadow-lg bg-card">
+        <div className="relative w-full h-full overflow-hidden rounded-xl border border-border shadow-e3 bg-card">
           <div className="absolute inset-0 flex flex-col">
             <div className="shrink-0 px-4 sm:px-6 pt-4 sm:pt-5 pb-2 border-b border-border">
-              <div className="text-[10px] uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+              <div className="text-[11px] uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
                 <Sparkles className="size-3" />
                 {t("flash.cloze")}
               </div>
@@ -644,11 +644,11 @@ export function FlashcardStudio({
 
     // ── Basic card ──────────────────────────────────────────────────
     return (
-      <div className="relative w-full h-full overflow-hidden rounded-xl border border-border shadow-lg">
+      <div className="relative w-full h-full overflow-hidden rounded-xl border border-border shadow-e3">
         {/* Back layer — full-card answer with a small question echo at top. */}
         <div className="absolute inset-0 flex flex-col bg-card rounded-xl">
           <div className="shrink-0 px-4 sm:px-6 pt-4 sm:pt-5 pb-2 border-b border-border">
-            <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1 flex items-center gap-1.5">
+            <div className="text-[11px] uppercase tracking-wider text-muted-foreground mb-1 flex items-center gap-1.5">
               <Lightbulb className="size-3" />
               {t("flash.question")}
             </div>
@@ -658,7 +658,7 @@ export function FlashcardStudio({
             />
           </div>
           <div className="flex-1 min-h-0 flex flex-col items-center justify-center p-4 sm:p-6 bg-[color-mix(in_oklch,var(--primary)_4%,var(--card))] rounded-b-xl overflow-y-auto osler-scroll">
-            <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-2 flex items-center gap-1.5">
+            <div className="text-[11px] uppercase tracking-wider text-muted-foreground mb-2 flex items-center gap-1.5">
               <Sparkles className="size-3" />
               {t("flash.answer")}
             </div>
@@ -899,7 +899,7 @@ export function FlashcardStudio({
                   }}
                   {...(isBranch ? {} : ctxLinkAttrs(routeFor("flashcards", { uid: node.uid }), node.title))}
                   className={cn(
-                    "osler-fade-in text-start bg-card border border-border rounded-xl p-5 hover:border-primary/40 hover:shadow-md hover:bg-primary/[0.02] transition-colors group cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
+                    "osler-fade-in text-start bg-card border border-border rounded-xl p-5 hover:border-primary/40 hover:shadow-e2 hover:bg-primary/[0.02] transition-colors group cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
                     node.lang === "ar" && "osler-content-ar",
                   )}
                   dir={node.lang === "ar" ? "rtl" : undefined}
@@ -1160,7 +1160,7 @@ export function FlashcardStudio({
               className="shrink-0 border-t border-border bg-card px-4 py-3 sm:py-3"
             >
               <div className="max-w-lg mx-auto">
-                <div className="text-[10px] uppercase tracking-wider text-muted-foreground text-center mb-2">
+                <div className="text-[11px] uppercase tracking-wider text-muted-foreground text-center mb-2">
                   {t("flash.ratePrompt")}
                 </div>
                 <div className="grid grid-cols-4 gap-1.5">
@@ -1201,13 +1201,13 @@ export function FlashcardStudio({
                     onRate={rateCard}
                   />
                 </div>
-                <div className="flex items-center justify-center gap-2 mt-2 text-[9px] text-muted-foreground/40">
-                  <span><kbd className="px-1 py-0.5 rounded border border-border/30 text-[8px]">1</kbd> {t("flash.session.rateAgain")}</span>
-                  <span><kbd className="px-1 py-0.5 rounded border border-border/30 text-[8px]">2</kbd> {t("flash.session.rateHard")}</span>
-                  <span><kbd className="px-1 py-0.5 rounded border border-border/30 text-[8px]">3</kbd> {t("flash.session.rateGood")}</span>
-                  <span><kbd className="px-1 py-0.5 rounded border border-border/30 text-[8px]">4</kbd> {t("flash.session.rateEasy")}</span>
-                  <span className="hidden sm:inline"><kbd className="px-1 py-0.5 rounded border border-border/30 text-[8px]">←</kbd><kbd className="px-1 py-0.5 rounded border border-border/30 text-[8px]">→</kbd> {t("flash.keyboardNav")}</span>
-                  <span className="hidden sm:inline"><kbd className="px-1 py-0.5 rounded border border-border/30 text-[8px]">Esc</kbd> {t("flash.exit")}</span>
+                <div className="flex items-center justify-center gap-2 mt-2 text-[11px] text-muted-foreground/40">
+                  <span><kbd className="px-1 py-0.5 rounded border border-border text-[11px]">1</kbd> {t("flash.session.rateAgain")}</span>
+                  <span><kbd className="px-1 py-0.5 rounded border border-border text-[11px]">2</kbd> {t("flash.session.rateHard")}</span>
+                  <span><kbd className="px-1 py-0.5 rounded border border-border text-[11px]">3</kbd> {t("flash.session.rateGood")}</span>
+                  <span><kbd className="px-1 py-0.5 rounded border border-border text-[11px]">4</kbd> {t("flash.session.rateEasy")}</span>
+                  <span className="hidden sm:inline"><kbd className="px-1 py-0.5 rounded border border-border text-[11px]">←</kbd><kbd className="px-1 py-0.5 rounded border border-border text-[11px]">→</kbd> {t("flash.keyboardNav")}</span>
+                  <span className="hidden sm:inline"><kbd className="px-1 py-0.5 rounded border border-border text-[11px]">Esc</kbd> {t("flash.exit")}</span>
                 </div>
               </div>
             </motion.div>
@@ -1295,7 +1295,7 @@ export function FlashcardStudio({
                         void startSubdeck(deckIndex, child.uid);
                       }
                     }}
-                    className="osler-fade-in text-left bg-card border border-border rounded-xl p-5 hover:border-primary/40 hover:shadow-md hover:bg-primary/[0.02] transition-colors group"
+                    className="osler-fade-in text-left bg-card border border-border rounded-xl p-5 hover:border-primary/40 hover:shadow-e2 hover:bg-primary/[0.02] transition-colors group"
                   >
                     <div className="flex items-center gap-3 mb-3">
                       <div
@@ -1388,8 +1388,8 @@ function RateButton({
     >
       <Icon className="size-4" />
       <span className="text-xs font-semibold">{label}</span>
-      <span className="text-[9px] opacity-70">{description}</span>
-      <kbd className="text-[8px] px-1 py-0.5 rounded border border-current/20 opacity-50">{shortcut}</kbd>
+      <span className="text-[11px] opacity-70">{description}</span>
+      <kbd className="text-[11px] px-1 py-0.5 rounded border border-current/20 opacity-50">{shortcut}</kbd>
     </Button>
   );
 }

@@ -16,7 +16,7 @@ export function ThemeStep() {
     variant === "dark" ? t("settings.theme.darkVariant") : t("settings.theme.lightVariant");
 
   const renderFamily = (family: ThemeFamily) => (
-    <div key={family.id} className="rounded-lg border border-border bg-background p-2.5">
+    <div key={family.id} className="rounded-lg border border-border bg-card p-2.5">
       <div className="text-sm font-semibold truncate mb-2">{family.name}</div>
       <div className="grid grid-cols-2 gap-2" role="group" aria-label={family.name}>
         {family.variants.map((option) => {

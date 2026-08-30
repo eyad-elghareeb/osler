@@ -687,7 +687,7 @@ export function MilkdownEditor({
       onPaste={handlePaste}
       onClick={handleMermaidClick}
       className={cn(
-        "osler-milkdown-editor relative flex flex-col rounded-lg border border-border bg-card overflow-visible",
+        "osler-milkdown-editor relative flex flex-col rounded-xl border border-border bg-card overflow-visible",
         "focus-within:border-primary/40 transition-colors",
         rtl && "osler-milkdown-editor--rtl",
         dragActive && "border-primary/60 ring-2 ring-primary/30",
@@ -752,7 +752,7 @@ export function MilkdownEditor({
       {/* Minimal word count — just the number, right-aligned, very subtle.
           shrink-0 prevents this from expanding. */}
       {showCounters && (
-        <div className="shrink-0 flex items-center justify-end px-2.5 py-0.5 border-t border-border/60 text-[10px] text-muted-foreground/70 tabular-nums">
+        <div className="shrink-0 flex items-center justify-end px-2.5 py-0.5 border-t border-border text-[11px] text-muted-foreground/70 tabular-nums">
           {words}
         </div>
       )}

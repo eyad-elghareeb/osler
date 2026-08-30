@@ -36,6 +36,22 @@ export function AnimationsProvider({ children }: { children: React.ReactNode }) 
     applyAnimationsFlag(isAnimationsEnabled());
   }, []);
 
+  // Low-end device detection (once): weak CPUs / little RAM / data-saver
+  // get `data-perf="low"` on <html>, which globals.css maps to solid
+  // surfaces without backdrop-filter passes — the dominant GPU cost on
+  // budget hardware. The design is identical, just frost-free.
+  React.useEffect(() => {
+    const nav = navigator as Navigator & {
+      deviceMemory?: number;
+      connection?: { saveData?: boolean };
+    };
+    const weak =
+      (nav.hardwareConcurrency !== undefined && nav.hardwareConcurrency <= 4) ||
+      (nav.deviceMemory !== undefined && nav.deviceMemory <= 2) ||
+      nav.connection?.saveData === true;
+    if (weak) document.documentElement.setAttribute("data-perf", "low");
+  }, []);
+
   return (
     <MotionConfig reducedMotion={enabled ? "user" : "always"} transition={MOTION_TRANSITION.normal}>
       {children}

@@ -1194,7 +1194,7 @@ export function OsceStudio({
           }}
           {...ctxLinkAttrs(routeFor("osce", { uid: node.uid }), node.title)}
           className={cn(
-            "w-full h-full text-start group relative overflow-hidden bg-card border border-border rounded-xl p-5 hover:border-primary/40 hover:shadow-md transition-all duration-200 active:scale-[0.99] cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 flex flex-col",
+            "w-full h-full text-start group relative overflow-hidden bg-card border border-border rounded-xl p-5 hover:border-primary/40 hover:shadow-e2 transition-all duration-200 active:scale-[0.99] cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 flex flex-col",
             lang === "ar" && "osler-content-ar",
           )}
           dir={lang === "ar" ? "rtl" : undefined}
@@ -1226,7 +1226,7 @@ export function OsceStudio({
               {tags.map((tag) => (
                 <span
                   key={tag}
-                  className="inline-flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded-full bg-muted/60 text-muted-foreground border border-border"
+                  className="inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full bg-muted/60 text-muted-foreground border border-border"
                 >
                   <Tag className="size-2.5" />
                   {tag}
@@ -1258,7 +1258,7 @@ export function OsceStudio({
           onClick={() => {
             setSelectedFolders((folders) => [...folders, node]);
           }}
-          className="osler-fade-in h-full w-full min-w-0 justify-start text-start bg-card border border-border rounded-xl p-5 hover:border-primary/40 hover:shadow-md hover:bg-card transition-all group flex items-center gap-3.5 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+          className="osler-fade-in h-full w-full min-w-0 justify-start text-start bg-card border border-border rounded-xl p-5 hover:border-primary/40 hover:shadow-e2 hover:bg-card transition-all group flex items-center gap-3.5 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
         >
           <div className="size-11 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-center shrink-0">
             <Folder className="size-5 text-primary" />
@@ -1448,7 +1448,7 @@ export function OsceStudio({
             visible at full opacity even when a subfolder view is open. */}
         {loadingPack && (
           <div className="fixed inset-0 z-50 bg-background/80 backdrop-blur-sm flex items-center justify-center pointer-events-none">
-            <div className="flex items-center gap-2 rounded-lg bg-card border border-border px-4 py-3 shadow-md">
+            <div className="flex items-center gap-2 rounded-lg bg-card border border-border px-4 py-3 shadow-e3">
               <Loader2 className="size-4 animate-spin text-primary" />
               <span className="text-sm font-medium">Loading pack…</span>
             </div>
@@ -1522,10 +1522,10 @@ export function OsceStudio({
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 flex-wrap mb-1">
-                    <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium">
+                    <span className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium">
                       {isDataInterp ? "Data Interpretation" : "Virtual Patient"}
                     </span>
-                    <span className={cn("text-[10px] font-semibold px-2 py-0.5 rounded-full border", diffClass(activeCase.difficulty))}>
+                    <span className={cn("text-[11px] font-semibold px-2 py-0.5 rounded-full border", diffClass(activeCase.difficulty))}>
                       {activeCase.difficulty}
                     </span>
                   </div>
@@ -1538,7 +1538,7 @@ export function OsceStudio({
             {/* Patient info */}
             {!isDataInterp && (
               <div className="bg-card border border-border rounded-xl p-4 mb-4">
-                <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium mb-2">Patient</p>
+                <p className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium mb-2">Patient</p>
                 <div className="flex items-center gap-3">
                   <div className="size-10 rounded-full bg-primary/10 border border-primary/20 flex items-center justify-center text-primary font-bold text-sm shrink-0">
                     {p.name[0]}
@@ -1553,14 +1553,14 @@ export function OsceStudio({
 
             {/* Task */}
             <div className="bg-card border border-border rounded-xl p-4 mb-4">
-              <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium mb-2">{t("osce.session.yourTask")}</p>
+              <p className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium mb-2">{t("osce.session.yourTask")}</p>
               <p className="text-sm leading-relaxed">{activeCase.task}</p>
             </div>
 
             {/* Data (if data-interp) */}
             {isDataInterp && activeCase.dataPresented?.scenario && (
               <div className="bg-card border border-border rounded-xl p-4 mb-4">
-                <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium mb-2">{t("osce.session.clinicalScenario")}</p>
+                <p className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium mb-2">{t("osce.session.clinicalScenario")}</p>
                 <p className="text-sm leading-relaxed">{activeCase.dataPresented.scenario}</p>
               </div>
             )}
@@ -1585,7 +1585,7 @@ export function OsceStudio({
                 <div key={label} className="bg-card border border-border rounded-xl p-3 text-center">
                   <Icon className="size-4 text-primary mx-auto mb-1" />
                   <div className="text-sm font-bold tabular-nums">{val}</div>
-                  <div className="text-[10px] text-muted-foreground mt-0.5">{label}</div>
+                  <div className="text-[11px] text-muted-foreground mt-0.5">{label}</div>
                 </div>
               ))}
             </div>
@@ -1593,7 +1593,7 @@ export function OsceStudio({
             {/* Station navigation (if multiple) */}
             {stations.length > 1 && (
               <div className="bg-card border border-border rounded-xl p-4 mb-4">
-                <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium mb-3">
+                <p className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium mb-3">
                   {t("osce.session.stations", { n: stations.length })}
                 </p>
                 <div className="flex flex-wrap gap-2">
@@ -1809,7 +1809,7 @@ export function OsceStudio({
         {/* ── Header ────────────────────────────────────────────
             Slimmer, cleaner header. The mic / end-call buttons live here so
             they're always reachable even when the voice overlay is minimised. */}
-        <header className="flex items-center gap-2 px-3 md:px-4 py-2.5 bg-card/70 backdrop-blur-xl border-b border-border shrink-0">
+        <header className="flex items-center gap-2 px-3 md:px-4 py-2.5 bg-card/60 backdrop-blur-md border-b border-border shrink-0">
           <button
             onClick={() => { stopTimer(); setPhase("lobby"); }}
             className="size-8 rounded-lg hover:bg-muted/60 flex items-center justify-center shrink-0 transition-colors"
@@ -1822,7 +1822,7 @@ export function OsceStudio({
             <div className="text-sm font-semibold truncate">
               {isDataInterp ? activeCase.examiner?.name || "Examiner" : activeCase.title}
             </div>
-            <div className="text-[10px] text-muted-foreground truncate">{activeCase.specialty}</div>
+            <div className="text-[11px] text-muted-foreground truncate">{activeCase.specialty}</div>
           </div>
           {/* Timer pill */}
           <div className="flex items-center gap-1.5 shrink-0 px-2.5 py-1 rounded-lg bg-muted/40 border border-border">
@@ -1906,7 +1906,7 @@ export function OsceStudio({
                     <div className="text-sm font-semibold truncate">
                       {isDataInterp ? activeCase.examiner?.name || "Examiner" : p.name}
                     </div>
-                    <div className="text-[10px] text-muted-foreground truncate">
+                    <div className="text-[11px] text-muted-foreground truncate">
                       {isDataInterp
                         ? activeCase.examiner?.title || "Consultant"
                         : `${p.age}y · ${p.gender} · ${activeCase.specialty}`}
@@ -1924,7 +1924,7 @@ export function OsceStudio({
                 <div className="bg-card border border-border rounded-xl p-3 shadow-e1">
                   <button
                     onClick={() => setMaterialsModalOpen(true)}
-                    className="w-full flex items-center justify-between text-[9px] font-bold uppercase tracking-wider text-muted-foreground group"
+                    className="w-full flex items-center justify-between text-[11px] font-bold uppercase tracking-wider text-muted-foreground group"
                   >
                     <span className="flex items-center gap-1.5">
                       <BarChart3 className="size-3.5 text-primary" />
@@ -1958,7 +1958,7 @@ export function OsceStudio({
 
               {/* Progress card */}
               <div className="bg-card border border-border rounded-xl p-3 space-y-2.5 shadow-e1">
-                <div className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground">{t("osce.home.progress")}</div>
+                <div className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">{t("osce.home.progress")}</div>
                 <div className="flex justify-between text-[11px]">
                   <span className="text-muted-foreground">Questions</span>
                   <span className="font-semibold tabular-nums">{turnCount} / {MAX_TURNS}</span>
@@ -1978,7 +1978,7 @@ export function OsceStudio({
               {/* Consultation map */}
               {!isDataInterp && (
                 <div className="bg-card border border-border rounded-xl p-3 shadow-e1">
-                  <div className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground mb-2">{t("osce.session.consultationMap")}</div>
+                  <div className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground mb-2">{t("osce.session.consultationMap")}</div>
                   <div className="flex flex-col gap-0.5">
                     {MAP_STEPS.map(([label, desc], i) => (
                       <div
@@ -2006,7 +2006,7 @@ export function OsceStudio({
               {/* Quick prompts */}
               {!isDataInterp && (
                 <div className="bg-card border border-border rounded-xl p-3 shadow-e1">
-                  <div className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground mb-2">{t("osce.session.quickPrompts")}</div>
+                  <div className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground mb-2">{t("osce.session.quickPrompts")}</div>
                   <div className="flex flex-col gap-1">
                     {[
                       [t("osce.session.prompt.open"), "Can you tell me more about what brought you in today?"],
@@ -2055,7 +2055,7 @@ export function OsceStudio({
                     {t("osce.dataPresented.printedMaterials")}
                     {(() => {
                       const n = (activeCase.dataPresented?.images || []).length;
-                      return n > 0 ? <span className="text-[10px] font-medium text-muted-foreground">({n})</span> : null;
+                      return n > 0 ? <span className="text-[11px] font-medium text-muted-foreground">({n})</span> : null;
                     })()}
                   </span>
                   <ChevronRight className="size-3.5" />
@@ -2099,7 +2099,7 @@ export function OsceStudio({
                   >
                     <div
                       className={cn(
-                        "text-[10px] font-semibold uppercase tracking-wider flex items-center gap-1",
+                        "text-[11px] font-semibold uppercase tracking-wider flex items-center gap-1",
                         isModel ? "text-primary/70" : "text-muted-foreground"
                       )}
                     >
@@ -2140,7 +2140,7 @@ export function OsceStudio({
                     exit={{ opacity: 0, y: -4 }}
                     className="self-start flex flex-col gap-1"
                   >
-                    <div className="text-[10px] font-semibold uppercase tracking-wider text-primary/70 flex items-center gap-1">
+                    <div className="text-[11px] font-semibold uppercase tracking-wider text-primary/70 flex items-center gap-1">
                       <Stethoscope className="size-2.5" />
                       {isDataInterp ? activeCase.examiner?.name || "Examiner" : speakerName}
                     </div>
@@ -2163,7 +2163,7 @@ export function OsceStudio({
                   animate={{ opacity: 1 }}
                   className="self-end flex flex-col gap-1 items-end max-w-[80%]"
                 >
-                  <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">{t("osce.session.you")}</div>
+                  <div className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">{t("osce.session.you")}</div>
                   <div className="px-3.5 py-2.5 rounded-2xl rounded-tr-sm bg-primary/5 border border-primary/10 text-sm text-muted-foreground italic">
                     {interimText}
                   </div>
@@ -2174,7 +2174,7 @@ export function OsceStudio({
                   professor speaks, only when transcripts are enabled. */}
               {voiceOn && isLiveTranscriptsOn() && modelInterim && (
                 <div className="self-start flex flex-col gap-1 max-w-[80%] md:max-w-[640px]">
-                  <div className="text-[10px] font-semibold uppercase tracking-wider text-primary/70 flex items-center gap-1">
+                  <div className="text-[11px] font-semibold uppercase tracking-wider text-primary/70 flex items-center gap-1">
                     <Stethoscope className="size-2.5" />
                     {isDataInterp ? activeCase.examiner?.name || t("osce.session.examiner") : speakerName}
                   </div>
@@ -2204,7 +2204,7 @@ export function OsceStudio({
             </AnimatePresence>
 
             {/* Input area */}
-            <div className="border-t border-border bg-card/70 backdrop-blur-xl shrink-0 p-3 md:px-6">
+            <div className="border-t border-border bg-card/60 backdrop-blur-md shrink-0 p-3 md:px-6">
               {/* Voice status pill (only when voice on AND overlay minimised) */}
               <AnimatePresence>
                 {voiceOn && !voiceOverlayOpen && (
@@ -2285,7 +2285,7 @@ export function OsceStudio({
               <div className="flex items-center gap-2 mt-2">
                 <span
                   className={cn(
-                    "text-[10px] font-semibold px-2 py-0.5 rounded-full border tabular-nums",
+                    "text-[11px] font-semibold px-2 py-0.5 rounded-full border tabular-nums",
                     turnCount >= WARN_TURNS
                       ? "border-destructive/30 text-destructive bg-destructive-soft"
                       : turnCount >= Math.floor(WARN_TURNS * 0.7)
@@ -2390,7 +2390,7 @@ export function OsceStudio({
                 animate={{ opacity: 1, scale: 1, y: 0 }}
                 exit={{ opacity: 0, scale: 0.95, y: 12 }}
                 transition={MOTION_SPRING.snappy}
-                className="bg-card border border-border rounded-xl p-6 max-w-sm w-full shadow-lg"
+                className="bg-card border border-border rounded-xl p-6 max-w-sm w-full shadow-e3"
                 onClick={(e) => e.stopPropagation()}
               >
                 <h3 className="text-base font-semibold mb-1">Reset Consultation?</h3>
@@ -2400,7 +2400,7 @@ export function OsceStudio({
                 <div className="flex gap-2 justify-end">
                   <button
                     onClick={() => setResetModalOpen(false)}
-                    className="h-9 px-4 rounded-lg border border-border text-sm font-medium hover:bg-muted/60 transition-colors"
+                    className="h-9 px-4 rounded-md border border-border text-sm font-medium hover:bg-muted/60 transition-colors"
                   >
                     Cancel
                   </button>
@@ -2499,7 +2499,7 @@ export function OsceStudio({
               <div className="flex items-center gap-5 flex-wrap">
                 <div className="size-20 rounded-full border-2 border-primary/30 bg-primary/10 flex flex-col items-center justify-center shrink-0">
                   <div className="text-2xl font-bold text-primary leading-none">{result.score}</div>
-                  <div className="text-[10px] text-muted-foreground mt-0.5">/ 100</div>
+                  <div className="text-[11px] text-muted-foreground mt-0.5">/ 100</div>
                 </div>
                 <div className="flex-1 min-w-[160px]">
                   <div className="text-lg font-bold mb-1">{band}</div>
@@ -2528,14 +2528,14 @@ export function OsceStudio({
               ].map((s) => (
                 <div key={s.label} className="bg-card border border-border rounded-xl p-3 text-center">
                   <div className={cn("text-base font-bold tabular-nums", s.color)}>{s.val}</div>
-                  <div className="text-[10px] text-muted-foreground mt-0.5">{s.label}</div>
+                  <div className="text-[11px] text-muted-foreground mt-0.5">{s.label}</div>
                 </div>
               ))}
             </div>
 
             {/* Domain scores */}
             <div className="bg-card border border-border rounded-xl p-4">
-              <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-bold mb-3 flex items-center gap-1.5">
+              <p className="text-[11px] uppercase tracking-wider text-muted-foreground font-bold mb-3 flex items-center gap-1.5">
                 <Activity className="size-3" /> Domain Scores
               </p>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -2575,7 +2575,7 @@ export function OsceStudio({
 
             {/* Feedback */}
             <div className="bg-card border border-border rounded-xl p-4">
-              <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-bold mb-2 flex items-center gap-1.5">
+              <p className="text-[11px] uppercase tracking-wider text-muted-foreground font-bold mb-2 flex items-center gap-1.5">
                 <Lightbulb className="size-3" /> Examiner Feedback
               </p>
               <AiMarkdown text={result.feedback} className="text-sm leading-relaxed" />
@@ -2589,12 +2589,12 @@ export function OsceStudio({
 
             {/* Criteria review */}
             <div className="bg-card border border-border rounded-xl p-4">
-              <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-bold mb-3 flex items-center gap-1.5">
+              <p className="text-[11px] uppercase tracking-wider text-muted-foreground font-bold mb-3 flex items-center gap-1.5">
                 <AlignLeft className="size-3" /> Criteria Review
               </p>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <h4 className="text-[10px] font-bold uppercase tracking-wider text-success mb-2">
+                  <h4 className="text-[11px] font-bold uppercase tracking-wider text-success mb-2">
                     Covered ({result.asked.length})
                   </h4>
                   <div className="space-y-1">
@@ -2606,7 +2606,7 @@ export function OsceStudio({
                   </div>
                 </div>
                 <div>
-                  <h4 className="text-[10px] font-bold uppercase tracking-wider text-destructive mb-2">
+                  <h4 className="text-[11px] font-bold uppercase tracking-wider text-destructive mb-2">
                     Missed ({result.missed.length})
                   </h4>
                   <div className="space-y-1">
@@ -2623,7 +2623,7 @@ export function OsceStudio({
             {/* Achievements */}
             {badges.length > 0 && (
               <div className="bg-card border border-border rounded-xl p-4">
-                <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-bold mb-3">
+                <p className="text-[11px] uppercase tracking-wider text-muted-foreground font-bold mb-3">
                   Achievements
                 </p>
                 <div className="flex flex-wrap gap-2">
@@ -2634,8 +2634,8 @@ export function OsceStudio({
                         "flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold border",
                         b.color === "gold" && "border-warning/30 bg-warning-soft text-warning",
                         b.color === "green" && "border-success/30 bg-success-soft text-success",
-                        b.color === "blue" && "border-sky-500/30 bg-sky-500/10 text-sky-500",
-                        b.color === "purple" && "border-purple-500/30 bg-purple-500/10 text-purple-500"
+                        b.color === "blue" && "border-info/30 bg-info-soft text-info",
+                        b.color === "purple" && "border-primary/30 bg-primary-soft text-primary"
                       )}
                     >
                       <span>{b.icon}</span>
@@ -2654,7 +2654,7 @@ export function OsceStudio({
                   setResult(null);
                   setPhase("conversation");
                 }}
-                className="h-10 px-4 rounded-lg border border-border text-sm font-medium hover:bg-muted/60 transition-colors flex items-center gap-2"
+                className="h-10 px-4 rounded-md border border-border text-sm font-medium hover:bg-muted/60 transition-colors flex items-center gap-2"
               >
                 <ChevronLeft className="size-3.5" /> Back to Consultation
               </button>
@@ -2675,7 +2675,7 @@ export function OsceStudio({
               </button>
               <button
                 onClick={() => setPhase("select")}
-                className="h-10 px-4 rounded-lg border border-border text-sm font-medium hover:bg-muted/60 transition-colors flex items-center gap-2"
+                className="h-10 px-4 rounded-md border border-border text-sm font-medium hover:bg-muted/60 transition-colors flex items-center gap-2"
               >
                 <Home className="size-3.5" /> All Scenarios
               </button>

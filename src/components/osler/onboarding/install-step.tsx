@@ -67,7 +67,7 @@ export function InstallStep() {
       <p className="text-sm text-muted-foreground mt-1 mb-5">{t("onboarding.install.subtitle")}</p>
 
       {installed ? (
-        <div className="rounded-lg border border-border bg-background p-4 flex items-start gap-3">
+        <div className="rounded-lg border border-border bg-card p-4 flex items-start gap-3">
           <span className="size-9 rounded-lg bg-success-soft text-success flex items-center justify-center shrink-0">
             <CheckCircle2 className="size-5" />
           </span>
@@ -85,7 +85,7 @@ export function InstallStep() {
             </Button>
           )}
 
-          <div className="rounded-lg border border-border bg-background p-4">
+          <div className="rounded-lg border border-border bg-card p-4">
             <div className="flex items-center gap-2 mb-3 text-xs font-semibold">
               <ListChecks className="size-4 text-primary" />
               {t("onboarding.install.manualTitle")}

@@ -149,7 +149,7 @@ export function AnalyticsApiPerformancePanel({ data, loading }: AnalyticsApiPerf
                       {t("admin.analytics.apiPerf.col.p50")}: <span className="font-mono tabular-nums text-foreground">{fmtMs(row.p50)}</span>
                     </span>
                     <span className={cn(
-                      "inline-flex items-center rounded-full border px-1.5 py-px text-[10px] font-medium font-mono tabular-nums",
+                      "inline-flex items-center rounded-full border px-1.5 py-px text-[11px] font-medium font-mono tabular-nums",
                       RATING_COLORS[r],
                     )}>
                       P95 {fmtMs(row.p95)}

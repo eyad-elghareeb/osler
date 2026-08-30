@@ -225,7 +225,7 @@ export function ApiTokensSection() {
                       <Badge
                         variant="outline"
                         className={cn(
-                          "text-[10px] shrink-0 font-medium",
+                          "text-[11px] shrink-0 font-medium",
                           isFullAdmin ? "border-destructive/40 bg-destructive/10 text-destructive" : "border-border bg-muted/40 text-muted-foreground"
                         )}
                       >
@@ -235,7 +235,7 @@ export function ApiTokensSection() {
                       <Badge
                         variant="outline"
                         className={cn(
-                          "text-[10px] shrink-0",
+                          "text-[11px] shrink-0",
                           status === "active" && "border-success/30 text-success",
                           status === "revoked" && "border-destructive/30 text-destructive",
                           status === "expired" && "border-warning/30 text-warning",

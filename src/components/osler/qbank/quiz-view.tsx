@@ -1297,7 +1297,7 @@ export function QuizView({
               {session.current + 1}/{session.questions.length}
             </span>
             {readonly && (
-              <span className="hidden sm:inline-flex text-[10px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded-full bg-primary-foreground/15 text-primary-foreground/80">
+              <span className="hidden sm:inline-flex text-[11px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded-full bg-primary-foreground/15 text-primary-foreground/80">
                 {t("qbank.review.title")}
               </span>
             )}
@@ -1414,7 +1414,7 @@ export function QuizView({
                 <button
                   key={i}
                   onClick={() => onJumpTo(i)}
-                  className={`w-full aspect-square rounded-md text-[10px] font-semibold border transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 ${bg}`}
+                  className={`w-full aspect-square rounded-md text-[11px] font-semibold border transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 ${bg}`}
                   title={`Q${i + 1}`}
                 >
                   {i + 1}
@@ -1929,7 +1929,7 @@ export function QuizView({
               initial={{ scale: 0.95, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.95, opacity: 0 }}
-              className="bg-card border border-border rounded-xl shadow-2xl max-w-lg w-full p-5 max-h-[80vh] overflow-y-auto"
+              className="bg-card border border-border rounded-xl shadow-e4 max-w-lg w-full p-5 max-h-[80vh] overflow-y-auto"
               onClick={(e) => e.stopPropagation()}
             >
               <div className="flex items-center justify-between mb-4">

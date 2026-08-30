@@ -161,7 +161,7 @@ export function LanguageSettingsSection() {
               <div className="text-xs font-medium">
                 {lang === "ar" ? "العربية" : "English"}
               </div>
-              <div className="text-[10px] text-muted-foreground">
+              <div className="text-[11px] text-muted-foreground">
                 {rtl ? "RTL" : "LTR"} · {lang}
               </div>
             </div>

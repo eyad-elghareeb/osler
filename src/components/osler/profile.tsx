@@ -196,7 +196,7 @@ export function Profile({
               animate={{ opacity: 1, y: 0 }}
               className="osler-card--roomy mb-6 flex items-center gap-4"
             >
-              <div className="w-16 h-16 rounded-full bg-gradient-to-br from-primary/80 to-primary/40 flex items-center justify-center text-2xl font-bold text-primary-foreground shrink-0 shadow-sm">
+              <div className="w-16 h-16 rounded-full bg-gradient-to-br from-primary/80 to-primary/40 flex items-center justify-center text-2xl font-bold text-primary-foreground shrink-0 shadow-e1">
                 {(cloudSession?.user.displayName || username).slice(0, 2).toUpperCase()}
               </div>
               <div className="flex-1 min-w-0">
@@ -205,7 +205,7 @@ export function Profile({
                     {cloudSession?.user.displayName || username}
                   </h1>
                   {cloudSession && (
-                    <Badge variant="outline" className="text-[10px] bg-primary/10 text-primary border-primary/30">
+                    <Badge variant="outline" className="text-[11px] bg-primary/10 text-primary border-primary/30">
                       <Cloud className="size-3 me-1" />
                       {cloudSession.user.role === "admin"
                         ? t("settings.account.admin")
@@ -220,11 +220,11 @@ export function Profile({
                 </p>
               </div>
               <div className="hidden sm:flex flex-col items-end gap-1">
-                <Badge variant="secondary" className="text-[10px]">
+                <Badge variant="secondary" className="text-[11px]">
                   <AnimatedFlame className="size-3 me-1" />
                   {progress.length > 0 ? t("profile.activeLearner") : t("profile.newHere")}
                 </Badge>
-                <span className="text-[10px] text-muted-foreground">
+                <span className="text-[11px] text-muted-foreground">
                   {t("profile.questionsAnswered", { n: attemptedTotal })}
                 </span>
               </div>
@@ -397,76 +397,98 @@ function ActivityHeatmapGrid() {
     return 4;
   };
 
+  // SVG with a viewBox — scales to the card width like the 30-day chart
+  // beside it, so the heatmap never becomes an inner scroll container.
+  // (The old fixed-size DOM grid overflowed phones inside overflow-x-auto.)
+  const CELL = 12, GAP = 3, GUTTER = 34, MONTH_ROW = 16;
+  const weekCount = weeks.length;
+  const svgW = GUTTER + weekCount * (CELL + GAP);
+  const svgH = MONTH_ROW + 7 * (CELL + GAP);
+  // Level 0 = empty day (muted fill + hairline ring), 1-4 ramp primary up.
+  const fills: ReadonlyArray<{ fill: string; opacity: number; ring?: boolean }> = [
+    { fill: "var(--muted)", opacity: 0.6, ring: true },
+    { fill: "var(--primary)", opacity: 0.25 },
+    { fill: "var(--primary)", opacity: 0.45 },
+    { fill: "var(--primary)", opacity: 0.65 },
+    { fill: "var(--primary)", opacity: 1 },
+  ];
+
   return (
-    <div className="overflow-x-auto osler-scroll-x pb-1" dir="ltr">
-          <div className="flex flex-col items-center min-w-max mx-auto">
-            {/* Weekday + month label gutter */}
-            <div className="flex gap-[3px]">
-              {/* Weekday gutter (rows Sun..Sat — label Mon/Wed/Fri like GitHub) */}
-              <div className="flex flex-col gap-[3px] me-1.5 w-7 shrink-0">
-                {[...Array(7)].map((_, di) => (
-                  <div
-                    key={di}
-                    className="h-3 flex items-center text-[10px] font-medium text-muted-foreground"
-                  >
-                    {[1, 3, 5].includes(di)
-                      ? new Date(Date.UTC(2024, 0, 7 + di)).toLocaleDateString(undefined, { weekday: "short" })
-                      : ""}
-                  </div>
-                ))}
-              </div>
-              <div className="flex flex-col gap-1">
-                {/* Month labels */}
-                <div className="flex gap-[3px] h-4 text-[10px] font-medium text-muted-foreground">
-                  {weeks.map((_, wi) => {
-                    const label = monthLabels.find((m) => m.week === wi);
-                    return (
-                      <div key={wi} className="w-3 shrink-0 relative">
-                        {label && (
-                          <span className="absolute whitespace-nowrap start-0">{label.label}</span>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-                {/* Week columns × 7 day rows */}
-                <div className="flex gap-[3px]">
-                  {weeks.map((week, wi) => (
-                    <div key={wi} className="flex flex-col gap-[3px]">
-                      {week.map((day, di) =>
-                        day ? (
-                          <div
-                            key={day.date}
-                            title={new Date(day.date + "T00:00:00Z").toLocaleDateString(undefined, {
-                              weekday: "short",
-                              month: "short",
-                              day: "numeric",
-                            }) + ` · ${t("dash.streak.questions", { n: day.count })}`}
-                            className={cn(
-                              "size-3 rounded-[3px] transition-all duration-150 hover:scale-125 hover:ring-1 hover:ring-primary/50",
-                              HEATMAP_LEVELS[levelOf(day.count)],
-                              day.count === 0 && "ring-1 ring-inset ring-border/50",
-                            )}
-                          />
-                        ) : (
-                          <div key={`pad-${wi}-${di}`} className="size-3 rounded-[3px]" />
-                        ),
-                      )}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-            {/* Legend */}
-            <div className="flex items-center gap-1.5 mt-3 text-[11px] text-muted-foreground">
-              <span>{t("profile.activity.less")}</span>
-              {HEATMAP_LEVELS.map((cls) => (
-                <div key={cls} className={cn("size-3 rounded-[3px]", cls)} />
-              ))}
-              <span>{t("profile.activity.more")}</span>
-            </div>
-          </div>
-        </div>
+    <div className="w-full flex flex-col items-center gap-3 pb-1" dir="ltr">
+      <svg
+        viewBox={`0 0 ${svgW} ${svgH}`}
+        style={{ maxWidth: svgW }}
+        className="w-full h-auto osler-heatmap"
+        role="img"
+        aria-label={t("profile.activity.more")}
+      >
+        {/* Weekday gutter labels (Mon / Wed / Fri, like GitHub) */}
+        {[1, 3, 5].map((di) => (
+          <text
+            key={di}
+            x={GUTTER - 8}
+            y={MONTH_ROW + di * (CELL + GAP) + CELL - 1.5}
+            textAnchor="end"
+            fontSize={11}
+            fill="var(--muted-foreground)"
+          >
+            {new Date(Date.UTC(2024, 0, 7 + di)).toLocaleDateString(undefined, { weekday: "short" })}
+          </text>
+        ))}
+        {/* Month labels — same mid-week convention as before */}
+        {monthLabels.map(({ week, label }) => (
+          <text
+            key={week}
+            x={GUTTER + week * (CELL + GAP)}
+            y={11}
+            fontSize={11}
+            fill="var(--muted-foreground)"
+          >
+            {label}
+          </text>
+        ))}
+        {/* Cells */}
+        {weeks.map((week, wi) =>
+          week.map((day, di) => {
+            const x = GUTTER + wi * (CELL + GAP);
+            const y = MONTH_ROW + di * (CELL + GAP);
+            if (!day) return <rect key={`p-${wi}-${di}`} x={x} y={y} width={CELL} height={CELL} rx={3} fill="transparent" />;
+            const lvl = fills[levelOf(day.count)];
+            return (
+              <rect
+                key={day.date}
+                x={x}
+                y={y}
+                width={CELL}
+                height={CELL}
+                rx={3}
+                fill={lvl.fill}
+                fillOpacity={lvl.opacity}
+                stroke={lvl.ring ? "var(--border)" : undefined}
+                strokeWidth={lvl.ring ? 1 : undefined}
+                className="osler-heat-cell"
+              >
+                <title>
+                  {new Date(day.date + "T00:00:00Z").toLocaleDateString(undefined, {
+                    weekday: "short",
+                    month: "short",
+                    day: "numeric",
+                  }) + ` · ${t("dash.streak.questions", { n: day.count })}`}
+                </title>
+              </rect>
+            );
+          }),
+        )}
+      </svg>
+      {/* Legend */}
+      <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+        <span>{t("profile.activity.less")}</span>
+        {HEATMAP_LEVELS.map((cls) => (
+          <div key={cls} className={cn("size-3 rounded-[3px]", cls)} />
+        ))}
+        <span>{t("profile.activity.more")}</span>
+      </div>
+    </div>
   );
 }
 
@@ -993,7 +1015,7 @@ const ProfileStreakSection = React.memo(function ProfileStreakSection() {
                   left: `${left}px`,
                 }}
               >
-                <div className="bg-popover border border-border text-popover-foreground rounded-lg px-2.5 py-1 text-[11px] font-medium shadow-lg whitespace-nowrap flex items-center gap-1.5">
+                <div className="bg-popover border border-border text-popover-foreground rounded-lg px-2.5 py-1 text-[11px] font-medium shadow-e3 whitespace-nowrap flex items-center gap-1.5">
                   <span className="text-foreground">
                     {activity[hovered].date === today
                       ? t("dash.streak.today")
@@ -1013,7 +1035,7 @@ const ProfileStreakSection = React.memo(function ProfileStreakSection() {
           </AnimatePresence>
 
           {/* Timeline Date Footer */}
-          <div className="flex justify-between items-center text-[10px] text-muted-foreground/70 mt-2 font-medium">
+          <div className="flex justify-between items-center text-[11px] text-muted-foreground/70 mt-2 font-medium">
             <span>
               {activity[0]?.date ? new Date(activity[0].date + "T00:00:00Z").toLocaleDateString(undefined, { month: "short", day: "numeric" }) : ""}
             </span>
@@ -1355,13 +1377,13 @@ function ProfileNoteCard({
   }, [note.body]);
 
   return (
-    <div className="group rounded-lg border border-border bg-card hover:border-primary/40 hover:bg-primary/5 transition-colors p-3.5 cursor-pointer">
+    <div className="group rounded-xl border border-border bg-card hover:border-primary/40 hover:bg-primary/5 transition-colors p-3.5 cursor-pointer">
       <div onClick={onOpen} className="space-y-1.5">
         <div className="flex items-start justify-between gap-2">
           <h4 className="text-sm font-semibold truncate flex-1">
             {note.title || <span className="italic text-muted-foreground">{t("qbank.notes.card.untitled")}</span>}
           </h4>
-          <div className="flex items-center gap-0.5 text-[10px] text-muted-foreground shrink-0">
+          <div className="flex items-center gap-0.5 text-[11px] text-muted-foreground shrink-0">
             <Clock className="size-3" />
             <span>{timeAgo(note.updatedAt, t)}</span>
           </div>
@@ -1376,20 +1398,20 @@ function ProfileNoteCard({
             {note.tags.slice(0, 5).map((tag) => (
               <span
                 key={tag}
-                className="px-1.5 py-0.5 rounded text-[10px] bg-muted text-muted-foreground"
+                className="px-1.5 py-0.5 rounded text-[11px] bg-muted text-muted-foreground"
               >
                 {tag}
               </span>
             ))}
             {note.tags.length > 5 && (
-              <span className="text-[10px] text-muted-foreground">
+              <span className="text-[11px] text-muted-foreground">
                 +{note.tags.length - 5}
               </span>
             )}
           </div>
         )}
         {note.packTitle && (
-          <div className="flex items-center gap-1 text-[10px] text-muted-foreground pt-0.5">
+          <div className="flex items-center gap-1 text-[11px] text-muted-foreground pt-0.5">
             <Folder className="size-3" />
             <span className="truncate">{note.packTitle}</span>
             {note.questionIdx !== undefined && (
@@ -1408,7 +1430,7 @@ function ProfileNoteCard({
               e.stopPropagation();
               onOpenInQBank();
             }}
-            className="px-2 py-0.5 rounded text-[10px] text-muted-foreground hover:text-foreground hover:bg-muted transition-colors flex items-center gap-1"
+            className="px-2 py-0.5 rounded text-[11px] text-muted-foreground hover:text-foreground hover:bg-muted transition-colors flex items-center gap-1"
             title={t("qbank.notes.card.openInQBank")}
           >
             <ExternalLink className="size-3" />
@@ -1420,7 +1442,7 @@ function ProfileNoteCard({
             e.stopPropagation();
             onDelete();
           }}
-          className="px-2 py-0.5 rounded text-[10px] text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors flex items-center gap-1"
+          className="px-2 py-0.5 rounded text-[11px] text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors flex items-center gap-1"
           title={t("qbank.notes.card.delete")}
         >
           <Trash2 className="size-3" />

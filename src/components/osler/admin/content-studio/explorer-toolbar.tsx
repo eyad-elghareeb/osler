@@ -151,7 +151,7 @@ export function ExplorerToolbar(props: ExplorerToolbarProps) {
       >
         <Search className="size-3.5 text-muted-foreground" />
         <span className="hidden lg:inline">{t("admin.studio.searchModal.title")}</span>
-        <kbd className="hidden md:inline-flex items-center gap-0.5 rounded border border-border bg-muted/60 px-1 font-mono text-[10px] text-muted-foreground">
+        <kbd className="hidden md:inline-flex items-center gap-0.5 rounded border border-border bg-muted/60 px-1 font-mono text-[11px] text-muted-foreground">
           Ctrl K
         </kbd>
       </Button>

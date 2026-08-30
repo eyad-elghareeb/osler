@@ -268,7 +268,7 @@ export function ContentContextMenu() {
           animate={{ opacity: 1, scale: 1 }}
           exit={{ opacity: 0, scale: 0.96 }}
           transition={MOTION_TRANSITION.fast}
-          className="fixed z-[100] min-w-[210px] rounded-xl border border-border bg-popover text-popover-foreground shadow-xl p-1.5"
+          className="fixed z-[100] min-w-[210px] rounded-xl border border-border bg-popover text-popover-foreground shadow-e4 p-1.5"
           style={{ left: pos.x, top: pos.y }}
           role="menu"
           aria-label={t("contextMenu.label")}

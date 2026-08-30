@@ -160,7 +160,7 @@ export function NavigationStack({
               transition={MOTION_SPRING.snappy}
               {...(isTop ? dismissProps : {})}
               className={cn(
-                "absolute inset-0 bg-background shadow-2xl",
+                "absolute inset-0 bg-background shadow-e4",
                 subpageClassName,
               )}
             >

@@ -67,7 +67,7 @@ function StatPill({ label, value }: { label: string; value: string | number }) {
   return (
     <div className="flex flex-1 flex-col items-center gap-0.5 rounded-lg bg-muted/40 px-2.5 py-2">
       <div className="text-base font-bold tabular-nums text-foreground">{value}</div>
-      <div className="text-[10px] font-medium text-muted-foreground">{label}</div>
+      <div className="text-[11px] font-medium text-muted-foreground">{label}</div>
     </div>
   );
 }
@@ -365,7 +365,7 @@ export function SessionStartDialog({
           </SectionList>
 
           {/* Footer — compact padding */}
-          <DialogFooter className="shrink-0 border-t border-border/80 bg-card px-5 py-3 sm:px-6 sm:py-3.5">
+          <DialogFooter className="shrink-0 border-t border-border bg-card px-5 py-3 sm:px-6 sm:py-3.5">
             <div className="flex w-full items-center justify-between gap-2">
               <div className="flex gap-2">
                 <Button type="button" variant="ghost" size="sm" onClick={onClose}>

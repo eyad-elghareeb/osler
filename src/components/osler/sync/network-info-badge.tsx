@@ -91,7 +91,7 @@ export function NetworkInfoBadge() {
         )}
 
         {info.saveData && (
-          <span className="ms-auto flex items-center gap-1 text-warning text-[10px] font-medium">
+          <span className="ms-auto flex items-center gap-1 text-warning text-[11px] font-medium">
             <Save className="size-3" />
             {t("native.network.saveData")}
           </span>
@@ -100,7 +100,7 @@ export function NetworkInfoBadge() {
 
       {/* Detail row: downlink + RTT */}
       {info.online && (info.downlink > 0 || info.rtt > 0) && (
-        <div className="flex items-center gap-3 text-[10px] text-muted-foreground tabular-nums">
+        <div className="flex items-center gap-3 text-[11px] text-muted-foreground tabular-nums">
           {info.downlink > 0 && (
             <span className="flex items-center gap-1">
               <Gauge className="size-3" />
@@ -124,7 +124,7 @@ export function NetworkInfoBadge() {
             initial={{ opacity: 0, height: 0 }}
             animate={{ opacity: 1, height: "auto" }}
             exit={{ opacity: 0, height: 0 }}
-            className="flex items-start gap-1.5 text-[10px] text-destructive"
+            className="flex items-start gap-1.5 text-[11px] text-destructive"
           >
             <AlertTriangle className="size-3 shrink-0 mt-0.5" />
             <span>{t("native.network.syncOffline")}</span>
@@ -135,7 +135,7 @@ export function NetworkInfoBadge() {
             initial={{ opacity: 0, height: 0 }}
             animate={{ opacity: 1, height: "auto" }}
             exit={{ opacity: 0, height: 0 }}
-            className="flex items-start gap-1.5 text-[10px] text-warning"
+            className="flex items-start gap-1.5 text-[11px] text-warning"
           >
             <AlertTriangle className="size-3 shrink-0 mt-0.5" />
             <span>{t("native.network.syncPoor")}</span>
@@ -146,7 +146,7 @@ export function NetworkInfoBadge() {
             initial={{ opacity: 0, height: 0 }}
             animate={{ opacity: 1, height: "auto" }}
             exit={{ opacity: 0, height: 0 }}
-            className="flex items-start gap-1.5 text-[10px] text-warning"
+            className="flex items-start gap-1.5 text-[11px] text-warning"
           >
             <AlertTriangle className="size-3 shrink-0 mt-0.5" />
             <span>{t("native.network.saveDataOn")}</span>

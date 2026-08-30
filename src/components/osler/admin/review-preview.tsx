@@ -140,7 +140,7 @@ export function ReviewPreview({
       {/* Staged group file selector */}
       {group && (
         <div className="shrink-0 border-b border-border p-3">
-          <div className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+          <div className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
             <FolderOpen className="size-3 shrink-0" />
             <span className="truncate font-mono">{group.dir || t("admin.review.stagedRoot")}</span>
           </div>
@@ -151,7 +151,7 @@ export function ReviewPreview({
                 type="button"
                 onClick={() => onSelectFile?.(group, f.key)}
                 className={cn(
-                  "rounded border px-1.5 py-0.5 font-mono text-[10px] transition-colors",
+                  "rounded border px-1.5 py-0.5 font-mono text-[11px] transition-colors",
                   f.key === fileKey
                     ? "border-primary/30 bg-primary/10 text-primary"
                     : "border-border bg-muted/40 text-muted-foreground hover:text-foreground",
@@ -218,7 +218,7 @@ export function ReviewPreview({
               ? <RenderedContentPreview node={node!} contentType={contentType} parsed={parsed} />
               : null
         ) : (
-          <pre className="whitespace-pre-wrap break-words font-mono text-[10px] text-foreground/90">
+          <pre className="whitespace-pre-wrap break-words font-mono text-[11px] text-foreground/90">
             {body}
           </pre>
         )}

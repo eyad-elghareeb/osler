@@ -337,7 +337,7 @@ export function VideosStudio({
                 defaultExpanded={tree.length > 0 ? [tree[0].uid] : []}
                 renderExtra={(node) =>
                   node.itemCount != null && node.itemCount > 0 ? (
-                    <span className="ml-auto text-[10px] text-muted-foreground/60 tabular-nums">
+                    <span className="ml-auto text-[11px] text-muted-foreground/60 tabular-nums">
                       {node.itemCount}
                     </span>
                   ) : null
@@ -466,7 +466,7 @@ export function VideosStudio({
                       dir={lang === "ar" ? "rtl" : undefined}
                       lang={lang}
                       className={cn(
-                        "text-start group bg-card border border-border rounded-xl overflow-hidden hover:border-primary/40 hover:shadow-md transition-all duration-200 active:scale-[0.99] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
+                        "text-start group bg-card border border-border rounded-xl overflow-hidden hover:border-primary/40 hover:shadow-e2 transition-all duration-200 active:scale-[0.99] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
                         lang === "ar" && "osler-content-ar"
                       )}
                     >
@@ -496,13 +496,13 @@ export function VideosStudio({
                         </div>
                         {/* Duration badge */}
                         {video.duration != null && (
-                          <div className="absolute bottom-2 end-2 px-1.5 py-0.5 rounded text-[10px] font-medium tabular-nums bg-black/70 text-white">
+                          <div className="absolute bottom-2 end-2 px-1.5 py-0.5 rounded text-[11px] font-medium tabular-nums bg-black/70 text-white">
                             {formatDuration(video.duration)}
                           </div>
                         )}
                         {/* Specialty badge */}
                         {video.specialty && (
-                          <div className="absolute top-2 start-2 px-2 py-0.5 rounded-full text-[10px] font-medium bg-black/60 text-white backdrop-blur-sm">
+                          <div className="absolute top-2 start-2 px-2 py-0.5 rounded-full text-[11px] font-medium bg-black/60 text-white backdrop-blur-sm">
                             {video.specialty}
                           </div>
                         )}
@@ -523,7 +523,7 @@ export function VideosStudio({
                             {video.tags.slice(0, 3).map((tag) => (
                               <span
                                 key={tag}
-                                className="inline-flex items-center gap-0.5 text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-muted/60 text-muted-foreground border border-border"
+                                className="inline-flex items-center gap-0.5 text-[11px] font-medium px-1.5 py-0.5 rounded-full bg-muted/60 text-muted-foreground border border-border"
                               >
                                 <Tag className="size-2" />
                                 {tag}
@@ -875,7 +875,7 @@ function VideoPlayerView({
         {/* Main Stage Column */}
         <div className="flex-1 min-w-0 flex flex-col overflow-y-auto lg:overflow-y-auto p-3 sm:p-4 lg:p-6 space-y-4">
           {/* Video Player Container */}
-          <div className="relative aspect-video w-full rounded-2xl overflow-hidden bg-black shadow-lg border border-border shrink-0">
+          <div className="relative aspect-video w-full rounded-xl overflow-hidden bg-black shadow-e3 border border-border shrink-0">
             {invidiousMode && videoId ? (
               <iframe
                 src={`https://${INVIDIOUS_HOST}/embed/${videoId}?autoplay=1${invidiousStart != null ? `&start=${invidiousStart}` : ""}`}
@@ -925,7 +925,7 @@ function VideoPlayerView({
                     >
                       <Clock className="size-3 text-muted-foreground" />
                       <span>{ch.title}</span>
-                      <span className="text-[10px] opacity-70 tabular-nums font-mono">
+                      <span className="text-[11px] opacity-70 tabular-nums font-mono">
                         ({fmtTime(ch.time)})
                       </span>
                     </button>
@@ -936,7 +936,7 @@ function VideoPlayerView({
 
             {/* Description box */}
             {video.description && (
-              <div className="rounded-xl bg-card border border-border/80 p-4 space-y-2 text-sm leading-relaxed">
+              <div className="rounded-xl bg-card border border-border p-4 space-y-2 text-sm leading-relaxed">
                 <div className={cn(!showFullDescription && "line-clamp-3")}>
                   {video.description}
                 </div>
@@ -1007,8 +1007,8 @@ function VideoPlayerView({
                   className={cn(
                     "w-full text-start flex items-start gap-3 p-2 rounded-xl border transition-all duration-150 group",
                     isActive
-                      ? "bg-primary/10 border-primary/40 shadow-sm"
-                      : "bg-card/60 hover:bg-card border-border/50 hover:border-border"
+                      ? "bg-primary/10 border-primary/40 shadow-e1"
+                      : "bg-card/60 hover:bg-card border-border hover:border-border"
                   )}
                 >
                   {/* Thumbnail Box */}
@@ -1025,7 +1025,7 @@ function VideoPlayerView({
                         <Play className="size-5 text-white fill-white" />
                       </div>
                     ) : v.duration != null ? (
-                      <div className="absolute bottom-1 end-1 px-1 py-0.5 rounded text-[10px] font-mono font-medium bg-black/75 text-white">
+                      <div className="absolute bottom-1 end-1 px-1 py-0.5 rounded text-[11px] font-mono font-medium bg-black/75 text-white">
                         {formatDuration(v.duration)}
                       </div>
                     ) : null}
@@ -1042,7 +1042,7 @@ function VideoPlayerView({
                       </p>
                     )}
                     {v.specialty && (
-                      <span className="inline-block mt-1 text-[10px] font-medium px-1.5 py-0.5 rounded bg-muted text-muted-foreground">
+                      <span className="inline-block mt-1 text-[11px] font-medium px-1.5 py-0.5 rounded bg-muted text-muted-foreground">
                         {v.specialty}
                       </span>
                     )}

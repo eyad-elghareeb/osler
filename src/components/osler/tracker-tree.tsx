@@ -348,7 +348,7 @@ export function TrackerTree({ nodes, label, defaultExpanded, selectedUid, onOpen
                 <div
                   className={cn(
                     "flex flex-col gap-0.5 py-0.5",
-                    depth < 3 && "ms-4 border-s ps-1.5 border-border/60",
+                    depth < 3 && "ms-4 border-s ps-1.5 border-border",
                   )}
                 >
                   {renderNodes(node.children, depth + 1)}

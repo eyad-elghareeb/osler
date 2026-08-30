@@ -969,17 +969,17 @@ function PreviewPane({ node }: { node: ContentTreeNode }) {
                 <span className="font-medium truncate">{child.name}</span>
               </div>
               {child.managed && (
-                <span className="mt-1 inline-block text-[10px] uppercase tracking-wider text-primary">
+                <span className="mt-1 inline-block text-[11px] uppercase tracking-wider text-primary">
                   {t("admin.content.tree.managedBadge")}
                 </span>
               )}
               {child.staged && (
-                <span className="mt-1 inline-block text-[10px] uppercase tracking-wider text-info">
+                <span className="mt-1 inline-block text-[11px] uppercase tracking-wider text-info">
                   {t("admin.content.tree.stagedBadge")}
                 </span>
               )}
               {!child.managed && !child.staged && child.r2Key && (
-                <span className="mt-1 inline-block text-[10px] uppercase tracking-wider text-muted-foreground">
+                <span className="mt-1 inline-block text-[11px] uppercase tracking-wider text-muted-foreground">
                   {t("admin.content.tree.looseBadge")}
                 </span>
               )}

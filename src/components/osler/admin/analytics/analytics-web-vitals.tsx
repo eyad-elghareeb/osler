@@ -123,7 +123,7 @@ export function AnalyticsWebVitalsPanel({ data, loading }: AnalyticsWebVitalsPan
                 <div className="grid grid-cols-4 gap-2 text-center">
                   {(["p50", "p75", "p95", "max"] as const).map((k) => (
                     <div key={k} className="rounded-md bg-muted/40 py-1.5 px-2">
-                      <div className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                      <div className="text-[11px] uppercase tracking-wider text-muted-foreground">
                         {t(`admin.analytics.webVitals.${k}` as any)}
                       </div>
                       <div className="text-sm font-mono font-medium tabular-nums">

@@ -837,7 +837,7 @@ function MobileHub({
                 <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                   {specialty}
                 </h3>
-                <span className="text-[10px] text-muted-foreground/40 ms-auto tabular-nums">
+                <span className="text-[11px] text-muted-foreground/40 ms-auto tabular-nums">
                   {articles.length === 1 ? t("library.oneArticle") : t("library.articlesCount", { n: articles.length })}
                 </span>
               </div>
@@ -985,7 +985,7 @@ function MobileReader({
 
           <div className="flex-1 min-w-0">
             <h1 className="text-sm font-semibold truncate">{article.title}</h1>
-            <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
+            <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
               <span>{article.specialty}</span>
               {article.readTimeMin && (
                 <>
@@ -1034,8 +1034,8 @@ function MobileReader({
             transition={MOTION_TRANSITION.normal}
             className="py-5"
           >
-            {/* Title at top of content */}
-            <h1 className="text-xl font-bold mb-1">{article.title}</h1>
+            {/* The title lives only in the top bar (loaded from metadata),
+                mirroring the desktop reader — no duplicate h1 in the body. */}
             <MilkdownArticleView
               markdown={article.content}
               articleDir={articleDirOf(articlePath)}
@@ -1235,7 +1235,7 @@ function SidebarContent({
           <div className="flex flex-col items-center justify-center py-10 text-center">
             <BookmarkX className="size-8 text-muted-foreground/40 mb-2" />
             <p className="text-xs text-muted-foreground">{t("library.noBookmarksYet")}</p>
-            <p className="text-[10px] text-muted-foreground/60 mt-1">
+            <p className="text-[11px] text-muted-foreground/60 mt-1">
               {t("library.bookmarkHint")}
             </p>
           </div>
@@ -1267,7 +1267,7 @@ function SidebarContent({
         )}
       </div>
 
-      <div className="px-3 py-2 border-t border-border text-[10px] text-muted-foreground flex items-center justify-between">
+      <div className="px-3 py-2 border-t border-border text-[11px] text-muted-foreground flex items-center justify-between">
         <span>{articleCount} articles</span>
         <span>{bookmarks.size} bookmarked</span>
       </div>
@@ -1281,7 +1281,7 @@ function SidebarContent({
 
 function MenuLabel({ children }: { children: React.ReactNode }) {
   return (
-    <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+    <div className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
       {children}
     </div>
   );
@@ -1669,7 +1669,7 @@ function EmptyState({
                   className="text-left text-xs px-3 py-2 rounded-md border border-border bg-card hover:border-primary/40 transition-colors"
                 >
                   <div className="font-medium truncate">{a.title}</div>
-                  <div className="text-muted-foreground text-[10px] mt-0.5">
+                  <div className="text-muted-foreground text-[11px] mt-0.5">
                     {a.specialty} &middot; {a.readTimeMin} min
                   </div>
                 </button>

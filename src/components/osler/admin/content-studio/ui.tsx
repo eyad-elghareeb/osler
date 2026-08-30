@@ -97,7 +97,7 @@ export function NodeBadges({
 
   const badgeWrapperCls = cn(
     "inline-flex items-center gap-1 rounded-md border transition-colors shadow-2xs",
-    variant === "compact" ? "p-0.5 text-[10px]" : "px-1.5 py-0.5 text-xs font-medium",
+    variant === "compact" ? "p-0.5 text-[11px]" : "px-1.5 py-0.5 text-xs font-medium",
   );
 
   return (
@@ -140,7 +140,7 @@ export function NodeBadges({
           <Tooltip>
             <TooltipTrigger asChild>
               <span
-                className={cn(badgeWrapperCls, "border-border/70 bg-muted/60 text-muted-foreground")}
+                className={cn(badgeWrapperCls, "border-border bg-muted/60 text-muted-foreground")}
                 aria-label={t("admin.studio.badge.raw")}
               >
                 <FileCode className={variant === "compact" ? "size-2.5" : "size-3"} />

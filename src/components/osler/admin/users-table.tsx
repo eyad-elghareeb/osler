@@ -188,7 +188,7 @@ export function UsersTable() {
                 initial={{ opacity: 0, y: 4 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ ...MOTION_TRANSITION.quick, delay: Math.min(i * 0.03, 0.3) }}
-                className="group rounded-xl border border-border bg-card hover:border-primary/40 hover:shadow-md transition-all"
+                className="group rounded-xl border border-border bg-card hover:border-primary/40 hover:shadow-e2 transition-all"
               >
                 <div className="flex items-center gap-3 p-3">
                   {/* Main hit target — opens the detail view */}
@@ -239,7 +239,7 @@ export function UsersTable() {
                         >
                           <ShieldCheck className="me-2 size-3.5" />
                           {t(`admin.users.roles.${r}` as any)}
-                          {user.role === r && <span className="ms-auto text-[10px] text-muted-foreground">✓</span>}
+                          {user.role === r && <span className="ms-auto text-[11px] text-muted-foreground">✓</span>}
                         </DropdownMenuItem>
                       ))}
                       <DropdownMenuSeparator />

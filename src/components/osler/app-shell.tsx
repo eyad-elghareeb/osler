@@ -309,7 +309,7 @@ export function AppShell({ children }: AppShellProps) {
               </div>
               <div className="hidden lg:block leading-tight text-start">
                 <div className="text-sm font-semibold">{t("app.name")}</div>
-                <div className="text-[10px] text-muted-foreground">
+                <div className="text-[11px] text-muted-foreground">
                   {t("app.tagline")}
                 </div>
               </div>
@@ -349,7 +349,7 @@ export function AppShell({ children }: AppShellProps) {
                   <span className="flex-1 text-start truncate min-w-0">
                     {searchPlaceholder}
                   </span>
-                  <kbd className="hidden xl:inline-flex items-center gap-0.5 text-[10px] px-1.5 py-0.5 rounded border border-border bg-background/60 font-mono shrink-0">
+                  <kbd className="hidden xl:inline-flex items-center gap-0.5 text-[11px] px-1.5 py-0.5 rounded border border-border bg-background/60 font-mono shrink-0">
                     Ctrl+K
                   </kbd>
                 </button>
@@ -394,7 +394,7 @@ export function AppShell({ children }: AppShellProps) {
                 title={syncStatus === "synced" ? t("settings.account.syncSynced") : syncStatus === "syncing" ? t("settings.account.syncSyncing") : t("settings.account.syncOffline")}
                 className="flex items-center gap-1.5 h-8 px-2 rounded-md border border-border bg-muted/40 hover:bg-muted/60 transition-colors shrink-0"
               >
-                <span className={cn("size-2 rounded-full shrink-0", syncStatus === "synced" ? "bg-success animate-pulse" : syncStatus === "syncing" ? "bg-warning animate-spin" : "bg-muted")} />
+                <span className={cn("size-2 rounded-full shrink-0", syncStatus === "synced" ? "bg-success" : syncStatus === "syncing" ? "bg-warning animate-pulse" : "bg-muted")} />
                 <Cloud className="size-3.5 text-muted-foreground" />
               </button>
             )}
@@ -506,7 +506,7 @@ function NavButton({
     <button
       onClick={onClick}
       className={cn(
-        "relative h-9 px-3 rounded-md text-sm font-medium transition-colors flex items-center gap-2",
+        "relative h-9 px-3 rounded-md text-sm font-medium transition-colors flex items-center gap-2 active:scale-[0.97]",
         active
           ? "text-primary"
           : "text-muted-foreground hover:text-foreground hover:bg-muted/60"
@@ -679,7 +679,7 @@ function MobileScrollAwayBar({
           </div>
           <div className="hidden sm:block leading-tight text-start min-w-0">
             <div className="text-sm font-semibold truncate">{t("app.name")}</div>
-            <div className="text-[10px] text-muted-foreground truncate">
+            <div className="text-[11px] text-muted-foreground truncate">
               {t("app.tagline")}
             </div>
           </div>
@@ -703,7 +703,7 @@ function MobileScrollAwayBar({
             title={syncStatus === "synced" ? t("settings.account.syncSynced") : syncStatus === "syncing" ? t("settings.account.syncSyncing") : t("settings.account.syncOffline")}
             className="hidden sm:flex items-center gap-1.5 h-8 px-2 rounded-md border border-border bg-muted/40 hover:bg-muted/60 transition-colors shrink-0"
           >
-            <span className={cn("size-2 rounded-full shrink-0", syncStatus === "synced" ? "bg-success animate-pulse" : syncStatus === "syncing" ? "bg-warning animate-spin" : "bg-muted")} />
+            <span className={cn("size-2 rounded-full shrink-0", syncStatus === "synced" ? "bg-success" : syncStatus === "syncing" ? "bg-warning animate-pulse" : "bg-muted")} />
             <Cloud className="size-3.5 text-muted-foreground" />
           </button>
         )}

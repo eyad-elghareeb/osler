@@ -62,7 +62,7 @@ export function CookieConsentBanner() {
           transition={{ duration: 0.25 }}
           className="fixed bottom-4 inset-x-4 md:inset-x-auto md:end-6 md:max-w-md z-50 pointer-events-auto"
         >
-          <div className="rounded-xl border border-border bg-card/95 backdrop-blur-md p-4 shadow-xl text-card-foreground">
+          <div className="rounded-xl border border-border bg-card/95 backdrop-blur-md p-4 shadow-e4 text-card-foreground">
             <div className="flex items-start gap-3">
               <div className="size-8 rounded-lg bg-primary/10 text-primary flex items-center justify-center shrink-0 mt-0.5">
                 <ShieldCheck className="size-4" />

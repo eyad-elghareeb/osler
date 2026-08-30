@@ -382,7 +382,7 @@ export function UploadDialog({
                   />
                 </div>
               </div>
-              <p className="text-[10px] text-muted-foreground/80 break-all">
+              <p className="text-[11px] text-muted-foreground/80 break-all">
                 {t("admin.content.upload.destinationPreview", { dest: destinationLabel })}
               </p>
             </div>

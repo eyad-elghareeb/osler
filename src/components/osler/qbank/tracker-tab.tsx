@@ -883,14 +883,14 @@ export function TrackerTab({
               <div className="flex-1 min-w-0">
                 <div className="text-sm font-semibold truncate">{activeSession.itemTitle}</div>
                 <div className="flex items-center gap-2 text-[11px] text-muted-foreground flex-wrap">
-                  <Badge variant="secondary" className="text-[10px] capitalize">
+                  <Badge variant="secondary" className="text-[11px] capitalize">
                     {ENGINE_META[activeSession.engine]?.label ?? activeSession.engine}
                   </Badge>
-                  <Badge variant="outline" className="text-[10px] capitalize">
+                  <Badge variant="outline" className="text-[11px] capitalize">
                     {activeSession.mode === "timed" ? t("qbank.home.timed") : t("qbank.home.tutor")}
                   </Badge>
                   {activeFlaggedCount > 0 && (
-                    <Badge variant="outline" className="text-[10px] capitalize text-warning border-warning/30">
+                    <Badge variant="outline" className="text-[11px] capitalize text-warning border-warning/30">
                       <Flag className="size-3 me-1" /> {activeFlaggedCount}
                     </Badge>
                   )}
@@ -1008,10 +1008,10 @@ export function TrackerTab({
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-1 flex-wrap">
                       <span className="text-sm font-semibold truncate">{s.packTitle}</span>
-                      <Badge variant="secondary" className="text-[10px] capitalize">
+                      <Badge variant="secondary" className="text-[11px] capitalize">
                         {ENGINE_META[s.engine]?.label ?? s.engine}
                       </Badge>
-                      <Badge variant="outline" className="text-[10px] capitalize">
+                      <Badge variant="outline" className="text-[11px] capitalize">
                         {s.mode === "timed" ? t("qbank.home.timed") : t("qbank.home.tutor")}
                       </Badge>
                     </div>

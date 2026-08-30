@@ -474,7 +474,7 @@ function StepCard({
               placeholder={t("admin.mermaid.stepNamePlaceholder")}
               labelKey="admin.mermaid.clickToEdit"
             />
-            <span className="text-[9px] uppercase tracking-wider font-medium text-muted-foreground">
+            <span className="text-[11px] uppercase tracking-wider font-medium text-muted-foreground">
               {t(kindMeta.medicalKey as any)}
             </span>
           </div>
@@ -502,14 +502,14 @@ function StepCard({
                   labelKey="admin.mermaid.clickToEdit"
                 />
                 {branch.targetId ? (
-                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-primary/10 text-primary border border-primary/20 truncate max-w-[100px]">
+                  <span className="text-[11px] px-1.5 py-0.5 rounded bg-primary/10 text-primary border border-primary/20 truncate max-w-[100px]">
                     {allSteps.find((s) => s.id === branch.targetId)?.label || branch.targetId}
                   </span>
                 ) : (
                   <button
                     type="button"
                     onClick={() => setShowBranchTarget(showBranchTarget === branch.id ? null : branch.id)}
-                    className="text-[10px] px-1.5 py-0.5 rounded border border-dashed border-border text-muted-foreground hover:text-primary hover:border-primary/30 transition-colors flex items-center gap-0.5"
+                    className="text-[11px] px-1.5 py-0.5 rounded border border-dashed border-border text-muted-foreground hover:text-primary hover:border-primary/30 transition-colors flex items-center gap-0.5"
                   >
                     {t("admin.mermaid.connect")}
                     <ArrowRight className="w-2.5 h-2.5 rtl-flip-x" />
@@ -543,7 +543,7 @@ function StepCard({
               <button
                 type="button"
                 onClick={() => onAddBranch(step.id)}
-                className="flex items-center gap-1 text-[10px] text-muted-foreground hover:text-warning transition-colors ps-5"
+                className="flex items-center gap-1 text-[11px] text-muted-foreground hover:text-warning transition-colors ps-5"
               >
                 <Plus className="w-2.5 h-2.5" /> {t("admin.mermaid.addBranch")}
               </button>
@@ -554,7 +554,7 @@ function StepCard({
         {showBranchTarget && (
           <div className="absolute start-0 end-0 top-full mt-1 z-30 rounded-lg border border-border bg-card shadow-e2 max-h-40 overflow-y-auto osler-scroll-y">
             {availableTargets.length === 0 ? (
-              <div className="p-3 text-[10px] text-muted-foreground text-center">{t("admin.mermaid.addMoreStepsFirst")}</div>
+              <div className="p-3 text-[11px] text-muted-foreground text-center">{t("admin.mermaid.addMoreStepsFirst")}</div>
             ) : (
               availableTargets.map((target) => (
                 <button
@@ -566,7 +566,7 @@ function StepCard({
                   }}
                   className="w-full flex items-center gap-2 px-3 py-2 text-xs text-foreground hover:bg-primary/10 hover:text-primary transition-colors text-start"
                 >
-                  <span className={cn("w-4 h-4 rounded flex items-center justify-center text-[8px] shrink-0", kindChipClass(target.kind))}>
+                  <span className={cn("w-4 h-4 rounded flex items-center justify-center text-[11px] shrink-0", kindChipClass(target.kind))}>
                     {target.id.charAt(0)}
                   </span>
                   <span className="truncate">{target.label}</span>
@@ -606,10 +606,10 @@ function StepCard({
                       key={kind.value}
                       onClick={() => onAddAfter(step.id, kind.value, t(kind.medicalKey as any))}
                       className={cn(
-                        "flex items-center gap-1 px-2 py-1 rounded-md text-[9px] font-medium border transition-all whitespace-nowrap",
+                        "flex items-center gap-1 px-2 py-1 rounded-md text-[11px] font-medium border transition-all whitespace-nowrap",
                         kind.bg,
                         kind.color,
-                        "border-border/30 hover:brightness-125",
+                        "border-border hover:brightness-125",
                       )}
                       title={t("admin.mermaid.insertKind", { kind: t(kind.medicalKey as any) })}
                     >
@@ -862,7 +862,7 @@ export function MermaidEditorModal({ open, initialCode, onSave, onClose }: Merma
       {isNewDiagram && !pickedTemplate ? (
         <MermaidTemplateGallery onPickPreset={loadPreset} onStartBlank={startBlank} onClose={onClose} />
       ) : (
-      <div className="w-full max-w-6xl h-[90vh] bg-card border border-border rounded-xl shadow-2xl flex flex-col overflow-hidden">
+      <div className="w-full max-w-6xl h-[90vh] bg-card border border-border rounded-xl shadow-e4 flex flex-col overflow-hidden">
         {/* Header */}
         <div className="flex items-center gap-3 px-4 py-3 shrink-0 border-b border-border bg-muted/30">
           <div className="w-8 h-8 rounded-xl flex items-center justify-center bg-primary/10 shrink-0">
@@ -870,7 +870,7 @@ export function MermaidEditorModal({ open, initialCode, onSave, onClose }: Merma
           </div>
           <div className="min-w-0">
             <h3 className="font-semibold text-sm text-foreground">{t("admin.mermaid.flowBuilder")}</h3>
-            <span className="text-[10px] uppercase tracking-wider font-medium text-muted-foreground">
+            <span className="text-[11px] uppercase tracking-wider font-medium text-muted-foreground">
               {t("admin.mermaid.flowBuilderSub")}
             </span>
           </div>
@@ -915,11 +915,11 @@ export function MermaidEditorModal({ open, initialCode, onSave, onClose }: Merma
                 >
                   <X className="w-3 h-3" />
                 </button>
-                <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wider font-semibold text-primary mb-1">
+                <div className="flex items-center gap-1.5 text-[11px] uppercase tracking-wider font-semibold text-primary mb-1">
                   <Sparkles className="w-3 h-3 shrink-0" />
                   {t("admin.mermaid.guideTitle")}
                 </div>
-                <ul className="text-[10px] text-muted-foreground leading-relaxed space-y-0.5">
+                <ul className="text-[11px] text-muted-foreground leading-relaxed space-y-0.5">
                   <li>1. {t("admin.mermaid.guideTip1")}</li>
                   <li>2. {t("admin.mermaid.guideTip2")}</li>
                   <li>3. {t("admin.mermaid.guideTip3")}</li>
@@ -928,7 +928,7 @@ export function MermaidEditorModal({ open, initialCode, onSave, onClose }: Merma
             )}
 
             <div className="px-4 pt-3 pb-2.5">
-              <span className="text-[10px] uppercase tracking-wider font-medium block mb-1.5 text-muted-foreground">
+              <span className="text-[11px] uppercase tracking-wider font-medium block mb-1.5 text-muted-foreground">
                 {t("admin.mermaid.diagramTitle")}
               </span>
               <Input
@@ -973,7 +973,7 @@ export function MermaidEditorModal({ open, initialCode, onSave, onClose }: Merma
                     </button>
                   </div>
                 ) : (
-                  <div className="mt-2 p-3 rounded-xl border border-border bg-background">
+                  <div className="mt-2 p-3 rounded-xl border border-border bg-card">
                     <div className="flex gap-1.5 mb-2.5 flex-wrap">
                       {STEP_KINDS.filter((k) => k.value !== "start").map((kind) => {
                         const KIcon = kind.icon;
@@ -983,9 +983,9 @@ export function MermaidEditorModal({ open, initialCode, onSave, onClose }: Merma
                             key={kind.value}
                             onClick={() => setNewStepKind(kind.value)}
                             className={cn(
-                              "flex items-center gap-1 px-2 py-1 rounded-md text-[9px] font-medium border transition-all",
+                              "flex items-center gap-1 px-2 py-1 rounded-md text-[11px] font-medium border transition-all",
                               newStepKind === kind.value
-                                ? cn(kind.bg, kind.color, "border-border/60")
+                                ? cn(kind.bg, kind.color, "border-border")
                                 : "text-muted-foreground border-border hover:text-foreground",
                             )}
                           >
@@ -1038,10 +1038,10 @@ export function MermaidEditorModal({ open, initialCode, onSave, onClose }: Merma
             </div>
 
             <div className="px-4 py-2 border-t border-border flex items-center justify-between shrink-0 gap-2">
-              <span className="text-[10px] text-muted-foreground tabular-nums">
+              <span className="text-[11px] text-muted-foreground tabular-nums">
                 {steps.length} {t(steps.length === 1 ? "admin.mermaid.stepSingular" : "admin.mermaid.stepPlural")}
               </span>
-              <span className="text-[10px] text-muted-foreground hidden sm:block">{t("admin.mermaid.hint")}</span>
+              <span className="text-[11px] text-muted-foreground hidden sm:block">{t("admin.mermaid.hint")}</span>
             </div>
           </div>
 
@@ -1060,7 +1060,7 @@ export function MermaidEditorModal({ open, initialCode, onSave, onClose }: Merma
               <button
                 type="button"
                 onClick={() => setZoom(1)}
-                className="shrink-0 min-w-11 h-7 px-1.5 rounded-md flex items-center justify-center text-[10px] font-medium tabular-nums text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors"
+                className="shrink-0 min-w-11 h-7 px-1.5 rounded-md flex items-center justify-center text-[11px] font-medium tabular-nums text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors"
                 title={t("admin.mermaid.zoomReset")}
                 aria-label={t("admin.mermaid.zoomReset")}
               >
@@ -1101,7 +1101,7 @@ export function MermaidEditorModal({ open, initialCode, onSave, onClose }: Merma
               <button
                 type="button"
                 onClick={() => setShowSyntax((s) => !s)}
-                className="w-full flex items-center gap-1.5 px-2.5 py-2 text-[10px] uppercase tracking-wider font-semibold text-muted-foreground hover:text-foreground transition-colors"
+                className="w-full flex items-center gap-1.5 px-2.5 py-2 text-[11px] uppercase tracking-wider font-semibold text-muted-foreground hover:text-foreground transition-colors"
               >
                 <ChevronDown className={cn("w-3 h-3 transition-transform", showSyntax && "rotate-180")} />
                 {t("admin.mermaid.generatedSyntax")}
@@ -1115,7 +1115,7 @@ export function MermaidEditorModal({ open, initialCode, onSave, onClose }: Merma
                     transition={MOTION_TRANSITION.quick}
                     className="overflow-hidden"
                   >
-                    <code className="text-[10px] font-[var(--font-code)] block whitespace-pre overflow-x-auto px-3 pb-2.5 leading-relaxed text-primary">
+                    <code className="text-[11px] font-[var(--font-code)] block whitespace-pre overflow-x-auto px-3 pb-2.5 leading-relaxed text-primary">
                       {generatedCode}
                     </code>
                   </motion.div>
@@ -1163,14 +1163,14 @@ function MermaidTemplateGallery({ onPickPreset, onStartBlank, onClose }: Mermaid
   ];
 
   return (
-    <div className="w-full max-w-2xl bg-card border border-border rounded-xl shadow-2xl flex flex-col overflow-hidden">
+    <div className="w-full max-w-2xl bg-card border border-border rounded-xl shadow-e4 flex flex-col overflow-hidden">
       <div className="flex items-center gap-3 px-4 py-3 shrink-0 border-b border-border bg-muted/30">
         <div className="w-8 h-8 rounded-xl flex items-center justify-center bg-primary/10 shrink-0">
           <GitMerge className="w-4 h-4 text-primary" />
         </div>
         <div className="min-w-0">
           <h3 className="font-semibold text-sm text-foreground">{t("admin.mermaid.startWithTemplate")}</h3>
-          <span className="text-[10px] uppercase tracking-wider font-medium text-muted-foreground">
+          <span className="text-[11px] uppercase tracking-wider font-medium text-muted-foreground">
             {t("admin.mermaid.startWithTemplateSub")}
           </span>
         </div>
@@ -1197,7 +1197,7 @@ function MermaidTemplateGallery({ onPickPreset, onStartBlank, onClose }: Mermaid
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ ...MOTION_TRANSITION.quick, delay: idx * 0.05 }}
                 onClick={() => (card.id === blankId ? onStartBlank() : onPickPreset(card.id as (typeof PRESETS)[number]["id"]))}
-                className="group flex flex-col items-start gap-2.5 p-4 rounded-xl border border-border bg-background text-start hover:border-primary/40 hover:shadow-e2 transition-all"
+                className="group flex flex-col items-start gap-2.5 p-4 rounded-xl border border-border bg-card text-start hover:border-primary/40 hover:shadow-e2 transition-all"
               >
                 <div className={cn("w-10 h-10 rounded-xl flex items-center justify-center transition-transform group-hover:scale-105", card.bg)}>
                   <CIcon className={cn("w-5 h-5", card.color)} />
@@ -1206,7 +1206,7 @@ function MermaidTemplateGallery({ onPickPreset, onStartBlank, onClose }: Mermaid
                   <div className="text-sm font-semibold text-foreground">{card.name}</div>
                   <div className="text-xs text-muted-foreground mt-0.5 leading-relaxed">{card.desc}</div>
                 </div>
-                <div className="mt-auto flex items-center gap-1 text-[10px] font-medium uppercase tracking-wider text-primary/80 group-hover:text-primary transition-colors">
+                <div className="mt-auto flex items-center gap-1 text-[11px] font-medium uppercase tracking-wider text-primary/80 group-hover:text-primary transition-colors">
                   {t("admin.mermaid.useTemplate")}
                   <ArrowRight className="w-3 h-3 rtl-flip-x" />
                 </div>
@@ -1217,7 +1217,7 @@ function MermaidTemplateGallery({ onPickPreset, onStartBlank, onClose }: Mermaid
       </div>
 
       <div className="px-4 py-3 shrink-0 border-t border-border flex items-center justify-between gap-2">
-        <span className="text-[10px] text-muted-foreground hidden sm:block">{t("admin.mermaid.hint")}</span>
+        <span className="text-[11px] text-muted-foreground hidden sm:block">{t("admin.mermaid.hint")}</span>
         <Button variant="outline" size="sm" onClick={onClose} className="h-8 px-3 ms-auto">
           {t("common.cancel")}
         </Button>

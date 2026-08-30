@@ -298,7 +298,7 @@ function TreeRow({
         )}
         {!isFolder && node.managed && (
           <span
-            className="meta rounded-full px-1.5 py-0.5 border text-[10px] uppercase tracking-wider bg-primary/10 text-primary border-primary/30"
+            className="meta rounded-full px-1.5 py-0.5 border text-[11px] uppercase tracking-wider bg-primary/10 text-primary border-primary/30"
             title={t("admin.content.tree.managedBadge")}
           >
             {t("admin.content.tree.managedBadge")}
@@ -306,7 +306,7 @@ function TreeRow({
         )}
         {!isFolder && node.staged && (
           <span
-            className="meta rounded-full px-1.5 py-0.5 border text-[10px] uppercase tracking-wider bg-info/15 text-info border-info/30"
+            className="meta rounded-full px-1.5 py-0.5 border text-[11px] uppercase tracking-wider bg-info/15 text-info border-info/30"
             title={t("admin.content.tree.stagedBadge")}
           >
             {t("admin.content.tree.stagedBadge")}
@@ -314,7 +314,7 @@ function TreeRow({
         )}
         {!isFolder && node.r2Key && !node.managed && !node.staged && (
           <span
-            className="meta rounded-full px-1.5 py-0.5 border text-[10px] uppercase tracking-wider bg-muted text-muted-foreground border-border"
+            className="meta rounded-full px-1.5 py-0.5 border text-[11px] uppercase tracking-wider bg-muted text-muted-foreground border-border"
             title={t("admin.content.tree.looseBadge")}
           >
             {t("admin.content.tree.looseBadge")}

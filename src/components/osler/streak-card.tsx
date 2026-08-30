@@ -50,7 +50,7 @@ const ActivityBarChart = React.memo(function ActivityBarChart({ activity, today 
               left: `${left}px`,
             }}
           >
-            <div className="relative bg-popover border border-border text-popover-foreground rounded-lg px-2.5 py-1.5 text-xs font-medium shadow-xl whitespace-nowrap flex items-center gap-1.5">
+            <div className="relative bg-popover border border-border text-popover-foreground rounded-lg px-2.5 py-1.5 text-xs font-medium shadow-e4 whitespace-nowrap flex items-center gap-1.5">
               <span className="text-foreground font-semibold">
                 {activity[hovered].date === today
                   ? `${t("dash.streak.today")} (${new Date(activity[hovered].date + "T00:00:00Z").toLocaleDateString(undefined, { weekday: "short" })})`
@@ -230,7 +230,7 @@ export const StreakCard = React.memo(function StreakCard() {
         <div className="flex items-start gap-4 flex-wrap text-start">
           <FlameCounter count={data.current} active={data.activeToday || data.current > 0} />
           <div className="flex flex-col justify-center gap-1 pt-0.5">
-            <div className="text-base font-bold text-foreground leading-tight flex items-center gap-1.5">
+            <div className="osler-display text-lg font-bold text-foreground leading-tight flex items-center gap-1.5">
               <span>{t("dash.streak.title")}</span>
               {data.activeToday && (
                 <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-success bg-success/15 px-2 py-0.5 rounded-full border border-success/30">

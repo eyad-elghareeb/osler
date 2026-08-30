@@ -370,9 +370,9 @@ export function NotesPanel({
         {view === "editor" && activeNote && (
           <>
             {saving ? (
-              <span className="text-[10px] text-muted-foreground shrink-0">{t("qbank.notes.editor.saving")}</span>
+              <span className="text-[11px] text-muted-foreground shrink-0">{t("qbank.notes.editor.saving")}</span>
             ) : (
-              <span className="text-[10px] text-success flex items-center gap-1 shrink-0">
+              <span className="text-[11px] text-success flex items-center gap-1 shrink-0">
                 <Check className="size-3" />
                 {t("qbank.notes.editor.saved")}
               </span>
@@ -494,7 +494,7 @@ export function NotesPanel({
             useFullscreen
               ? "fixed inset-0 z-[60] bg-card flex flex-col safe-screen"
               : cn(
-                  "fixed top-0 bottom-0 z-50 border-l border-border bg-card shadow-xl flex flex-col",
+                  "fixed top-0 bottom-0 z-50 border-l border-border bg-card shadow-e4 flex flex-col",
                   rtl ? "left-0 border-r border-l-0" : "right-0",
                 )
           }
@@ -615,7 +615,7 @@ function ListView({
                   key={tag}
                   onClick={() => onTagFilterChange(active ? null : tag)}
                   className={cn(
-                    "px-2 py-0.5 rounded-full text-[10px] font-medium border transition-colors",
+                    "px-2 py-0.5 rounded-full text-[11px] font-medium border transition-colors",
                     active
                       ? "bg-primary/15 text-primary border-primary/30"
                       : "text-muted-foreground border-border hover:text-foreground hover:bg-muted",
@@ -630,7 +630,7 @@ function ListView({
 
         {/* Pack scope toggle */}
         {hasPack && (
-          <div className="flex items-center gap-1 text-[10px]">
+          <div className="flex items-center gap-1 text-[11px]">
             <button
               onClick={onToggleScope}
               className={cn(
@@ -750,7 +750,7 @@ function NoteCard({
           <h4 className="text-sm font-semibold truncate flex-1">
             {note.title || <span className="italic text-muted-foreground">{t("qbank.notes.card.untitled")}</span>}
           </h4>
-          <div className="flex items-center gap-0.5 text-[10px] text-muted-foreground shrink-0">
+          <div className="flex items-center gap-0.5 text-[11px] text-muted-foreground shrink-0">
             <Clock className="size-3" />
             <span>{timeAgo(note.updatedAt, t)}</span>
           </div>
@@ -765,20 +765,20 @@ function NoteCard({
             {note.tags.slice(0, 4).map((tag) => (
               <span
                 key={tag}
-                className="px-1.5 py-0.5 rounded text-[10px] bg-muted text-muted-foreground"
+                className="px-1.5 py-0.5 rounded text-[11px] bg-muted text-muted-foreground"
               >
                 {tag}
               </span>
             ))}
             {note.tags.length > 4 && (
-              <span className="text-[10px] text-muted-foreground">
+              <span className="text-[11px] text-muted-foreground">
                 +{note.tags.length - 4}
               </span>
             )}
           </div>
         )}
         {note.packTitle && (
-          <div className="flex items-center gap-1 text-[10px] text-muted-foreground pt-1">
+          <div className="flex items-center gap-1 text-[11px] text-muted-foreground pt-1">
             <Folder className="size-3" />
             <span className="truncate">{note.packTitle}</span>
             {note.questionIdx !== undefined && (
@@ -797,7 +797,7 @@ function NoteCard({
         {onOpenInQBank && (
           <button
             onClick={onOpenInQBank}
-            className="px-2 py-0.5 rounded text-[10px] text-muted-foreground hover:text-foreground hover:bg-muted transition-colors flex items-center gap-1"
+            className="px-2 py-0.5 rounded text-[11px] text-muted-foreground hover:text-foreground hover:bg-muted transition-colors flex items-center gap-1"
             title={t("qbank.notes.card.openInQBank")}
           >
             <ExternalLink className="size-3" />
@@ -810,7 +810,7 @@ function NoteCard({
             haptic("light");
             downloadNoteMarkdown(note);
           }}
-          className="px-2 py-0.5 rounded text-[10px] text-muted-foreground hover:text-foreground hover:bg-muted transition-colors flex items-center gap-1"
+          className="px-2 py-0.5 rounded text-[11px] text-muted-foreground hover:text-foreground hover:bg-muted transition-colors flex items-center gap-1"
           title={t("qbank.notes.export")}
         >
           <Download className="size-3" />
@@ -822,7 +822,7 @@ function NoteCard({
             onRequestDelete();
           }}
           className={cn(
-            "px-2 py-0.5 rounded text-[10px] transition-colors flex items-center gap-1",
+            "px-2 py-0.5 rounded text-[11px] transition-colors flex items-center gap-1",
             confirming
               ? "bg-destructive/10 text-destructive font-medium"
               : "text-muted-foreground hover:text-destructive hover:bg-destructive/10",

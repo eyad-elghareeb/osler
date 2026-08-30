@@ -150,7 +150,7 @@ export function HighlighterToolbar({
           side="bottom"
           align="end"
           sideOffset={6}
-          className="w-auto p-1.5 rounded-xl border border-border bg-popover/95 backdrop-blur-md shadow-lg flex items-center gap-1.5 z-50 animate-in fade-in-0 zoom-in-95"
+          className="w-auto p-1.5 rounded-xl border border-border bg-popover/95 backdrop-blur-md shadow-e3 flex items-center gap-1.5 z-50 animate-in fade-in-0 zoom-in-95"
         >
           {/* Swatches */}
           <div className="flex items-center gap-1">

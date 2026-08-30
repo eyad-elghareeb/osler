@@ -153,7 +153,7 @@ export function OsceStreamBubble({
       transition={MOTION_TRANSITION.quick}
       className="flex flex-col gap-1 max-w-[80%] md:max-w-[640px] self-start"
     >
-      <div className="text-[10px] font-semibold uppercase tracking-wider text-primary/70 flex items-center gap-1">
+      <div className="text-[11px] font-semibold uppercase tracking-wider text-primary/70 flex items-center gap-1">
         <Stethoscope className="size-2.5" />
         {label}
       </div>
