@@ -394,7 +394,7 @@ export function AppShell({ children }: AppShellProps) {
                 title={syncStatus === "synced" ? t("settings.account.syncSynced") : syncStatus === "syncing" ? t("settings.account.syncSyncing") : t("settings.account.syncOffline")}
                 className="flex items-center gap-1.5 h-8 px-2 rounded-md border border-border bg-muted/40 hover:bg-muted/60 transition-colors shrink-0"
               >
-                <span className={cn("size-2 rounded-full shrink-0", syncStatus === "synced" ? "bg-success animate-pulse" : syncStatus === "syncing" ? "bg-warning animate-spin" : "bg-muted")} />
+                <span className={cn("size-2 rounded-full shrink-0", syncStatus === "synced" ? "bg-success" : syncStatus === "syncing" ? "bg-warning animate-pulse" : "bg-muted")} />
                 <Cloud className="size-3.5 text-muted-foreground" />
               </button>
             )}
@@ -703,7 +703,7 @@ function MobileScrollAwayBar({
             title={syncStatus === "synced" ? t("settings.account.syncSynced") : syncStatus === "syncing" ? t("settings.account.syncSyncing") : t("settings.account.syncOffline")}
             className="hidden sm:flex items-center gap-1.5 h-8 px-2 rounded-md border border-border bg-muted/40 hover:bg-muted/60 transition-colors shrink-0"
           >
-            <span className={cn("size-2 rounded-full shrink-0", syncStatus === "synced" ? "bg-success animate-pulse" : syncStatus === "syncing" ? "bg-warning animate-spin" : "bg-muted")} />
+            <span className={cn("size-2 rounded-full shrink-0", syncStatus === "synced" ? "bg-success" : syncStatus === "syncing" ? "bg-warning animate-pulse" : "bg-muted")} />
             <Cloud className="size-3.5 text-muted-foreground" />
           </button>
         )}

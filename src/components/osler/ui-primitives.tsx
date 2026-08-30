@@ -1246,7 +1246,7 @@ export function Pill({ active, onClick, icon: Icon, children, disabled, classNam
       disabled={disabled}
       aria-pressed={active}
       className={cn(
-        "inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
+        "inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition-all duration-150 active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
         active
           ? "border-primary bg-primary/10 text-primary"
           : "border-border bg-card text-foreground hover:border-primary/40",

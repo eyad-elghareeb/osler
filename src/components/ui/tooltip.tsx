@@ -6,7 +6,10 @@ import * as TooltipPrimitive from "@radix-ui/react-tooltip"
 import { cn } from "@/lib/utils"
 
 function TooltipProvider({
-  delayDuration = 0,
+  // Hover-intent: the first tooltip waits 300ms so casual cursor movement
+  // never flashes one; Radix's skip delay then opens any following tooltip
+  // instantly as the pointer moves across siblings.
+  delayDuration = 300,
   ...props
 }: React.ComponentProps<typeof TooltipPrimitive.Provider>) {
   return (
