@@ -47,6 +47,7 @@ import {
   type StatTileProps,
 } from "./ui-primitives";
 import { toast } from "@/hooks/use-toast";
+import { useCountUp } from "@/hooks/use-count-up";
 import { Button } from "@/components/ui/button";
 
 import { StreakCard } from "./streak-card";
@@ -189,6 +190,12 @@ export function Dashboard({
   const accuracy = stats.attempted
     ? Math.round((stats.correct / stats.attempted) * 100)
     : 0;
+  // Stat values count up on arrival (reduced-motion safe) — the same data
+  // moment the results view uses for its score.
+  const packsCount = useCountUp(stats.packs ?? 0);
+  const attemptedCount = useCountUp(stats.attempted ?? 0);
+  const correctCount = useCountUp(stats.correct ?? 0);
+  const accuracyCount = useCountUp(accuracy, { suffix: "%" });
 
   const [featuredArticles, setFeaturedArticles] = React.useState<Article[]>([]);
   const [articleCount, setArticleCount] = React.useState(() => getCachedAllArticles()?.length ?? 0);
@@ -396,28 +403,28 @@ export function Dashboard({
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
           <StatTile
             label={t("dash.packsStarted")}
-            value={stats.packs}
+            value={packsCount.display}
             icon={LibraryIcon}
             color="primary"
             onClick={() => onViewChange("qbank")}
           />
           <StatTile
             label={t("dash.attemptedLabel")}
-            value={stats.attempted}
+            value={attemptedCount.display}
             icon={Activity}
             color="primary"
             onClick={() => onViewChange("profile")}
           />
           <StatTile
             label={t("dash.correctLabel")}
-            value={stats.correct}
+            value={correctCount.display}
             icon={CheckCircle2}
             color="success"
             onClick={() => onViewChange("profile")}
           />
           <StatTile
             label={t("dash.accuracy")}
-            value={`${accuracy}%`}
+            value={accuracyCount.display}
             icon={Sparkles}
             color="warning"
             onClick={() => onViewChange("profile")}
