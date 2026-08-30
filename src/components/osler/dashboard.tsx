@@ -8,7 +8,6 @@ import {
   ListChecks,
   Layers,
   Bot,
-  BarChart3,
   Clock,
   CheckCircle2,
   Sparkles,
@@ -438,7 +437,9 @@ export function Dashboard({
             The variant lives on each card (not a wrapper div) so the buttons
             stay the direct grid children and keep equal-height stretching. */}
         <SectionHeading>{t("dash.quickActions")}</SectionHeading>
-        <Stagger className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-8">
+        {/* Profile is one tap away in the tab bar / avatar menu — the quick
+            action duplicated chrome navigation and left an orphan card. */}
+        <Stagger className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-8">
           <QuickAction
             icon={ListChecks}
             title={t("dash.qa.qbank.title")}
@@ -462,12 +463,6 @@ export function Dashboard({
             title={t("dash.qa.videos.title")}
             subtitle={t("dash.qa.videos.sub", { n: videoCount || "…" })}
             onClick={() => onViewChange("videos")}
-          />
-          <QuickAction
-            icon={BarChart3}
-            title={t("dash.qa.profile.title")}
-            subtitle={t("dash.qa.profile.sub")}
-            onClick={() => onViewChange("profile")}
           />
         </Stagger>
 

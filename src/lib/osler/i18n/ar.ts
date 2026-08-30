@@ -202,8 +202,6 @@ export const ar = {
     "dash.qa.library.sub": "{n} مقال طبي",
     "dash.qa.videos.title": "مكتبة الفيديوهات",
     "dash.qa.videos.sub": "{n} فيديو سريري",
-    "dash.qa.profile.title": "عرض الملف الشخصي",
-    "dash.qa.profile.sub": "شوف إحصائياتك وإنجازاتك",
     "dash.featuredArticles": "مقالات مميّزة",
     "dash.recentActivity": "النشاط الأخير",
     "dash.timeAgo.justNow": "الآن",

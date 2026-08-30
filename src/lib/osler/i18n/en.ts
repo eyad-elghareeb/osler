@@ -201,8 +201,6 @@ export const en = {
     "dash.qa.library.sub": "{n} medical articles",
     "dash.qa.videos.title": "Video Library",
     "dash.qa.videos.sub": "{n} clinical videos",
-    "dash.qa.profile.title": "View Profile",
-    "dash.qa.profile.sub": "See stats and achievements",
     "dash.featuredArticles": "Featured Articles",
     "dash.recentActivity": "Recent Activity",
     "dash.timeAgo.justNow": "just now",
