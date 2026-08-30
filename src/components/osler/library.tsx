@@ -1034,8 +1034,8 @@ function MobileReader({
             transition={MOTION_TRANSITION.normal}
             className="py-5"
           >
-            {/* Title at top of content */}
-            <h1 className="text-xl font-bold mb-1">{article.title}</h1>
+            {/* The title lives only in the top bar (loaded from metadata),
+                mirroring the desktop reader — no duplicate h1 in the body. */}
             <MilkdownArticleView
               markdown={article.content}
               articleDir={articleDirOf(articlePath)}
