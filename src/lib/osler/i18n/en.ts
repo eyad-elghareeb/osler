@@ -164,6 +164,7 @@ export const en = {
     "settings.account.syncSynced": "Synced with Cloud",
     "settings.account.syncSyncing": "Syncing progress…",
     "settings.account.syncOffline": "Offline mode",
+    "settings.account.syncOff": "Sync is off",
     "settings.account.lastSynced": "Last synced: {time}",
     "settings.account.syncNow": "Sync Now",
     "settings.account.quotaTitle": "Cloud storage used",
@@ -1344,11 +1345,12 @@ export const en = {
     "sync.cloud.signInTitle": "Sign in to enable cloud sync",
     "sync.cloud.signInDesc": "Create or sign in to a Cloud account to back up your progress, achievements, and settings across all devices.",
     "sync.cloud.signIn": "Sign in",
-    "sync.cloud.realtimeTitle": "Realtime sync",
-    "sync.cloud.realtimeDesc": "Push sync pokes to your other devices instantly over a live connection. Off by default — devices fall back to periodic polling.",
+    "sync.cloud.optInTitle": "Cloud sync",
+    "sync.cloud.optInDesc": "Keep this device's progress in sync with your other devices over a live connection. Enable it only if you study on more than one device — when off, nothing is sent to the cloud.",
+    "sync.cloud.optOutNote": "Sync is off — your progress stays on this device only.",
     "sync.cloud.realtimeConnected": "Live — changes arrive instantly",
     "sync.cloud.realtimeConnecting": "Connecting…",
-    "sync.cloud.realtimeOff": "Off",
+    "sync.cloud.realtimeOff": "Not connected",
 
     "sync.network.activeConnections": "Active Connections ({n})",
 

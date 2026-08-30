@@ -151,7 +151,7 @@ export function AppShell({ children }: AppShellProps) {
   const [searchOpen, setSearchOpen] = React.useState(false);
   const [query, setQuery] = React.useState("");
   const [cloudSession, setCloudSession] = React.useState<CloudSession | null>(() => sessionContextCloudSession || readCloudSession());
-  const [syncStatus, setSyncStatus] = React.useState<"synced" | "syncing" | "offline">("synced");
+  const [syncStatus, setSyncStatus] = React.useState<"off" | "synced" | "syncing" | "offline">("off");
 
   React.useEffect(() => {
     // Always sync from the session context — including when it becomes
@@ -391,7 +391,7 @@ export function AppShell({ children }: AppShellProps) {
               <button
                 onClick={() => navigate("settings", { section: "account" })}
                 aria-label={t("settings.account.syncTitle")}
-                title={syncStatus === "synced" ? t("settings.account.syncSynced") : syncStatus === "syncing" ? t("settings.account.syncSyncing") : t("settings.account.syncOffline")}
+                title={syncStatus === "synced" ? t("settings.account.syncSynced") : syncStatus === "syncing" ? t("settings.account.syncSyncing") : syncStatus === "off" ? t("settings.account.syncOff") : t("settings.account.syncOffline")}
                 className="flex items-center gap-1.5 h-8 px-2 rounded-md border border-border bg-muted/40 hover:bg-muted/60 transition-colors shrink-0"
               >
                 <span className={cn("size-2 rounded-full shrink-0", syncStatus === "synced" ? "bg-success" : syncStatus === "syncing" ? "bg-warning animate-pulse" : "bg-muted")} />
@@ -629,7 +629,7 @@ function MobileScrollAwayBar({
   view: OslerView;
   cloudSession: CloudSession | null;
   username?: string | null;
-  syncStatus: "synced" | "syncing" | "offline";
+  syncStatus: "off" | "synced" | "syncing" | "offline";
   isDark: boolean;
   /** Admins get the same shield shortcut the desktop top bar shows. */
   isAdminUser?: boolean;
@@ -700,7 +700,7 @@ function MobileScrollAwayBar({
           <button
             onClick={() => navigate("settings", { section: "account" })}
             aria-label={t("settings.account.syncTitle")}
-            title={syncStatus === "synced" ? t("settings.account.syncSynced") : syncStatus === "syncing" ? t("settings.account.syncSyncing") : t("settings.account.syncOffline")}
+            title={syncStatus === "synced" ? t("settings.account.syncSynced") : syncStatus === "syncing" ? t("settings.account.syncSyncing") : syncStatus === "off" ? t("settings.account.syncOff") : t("settings.account.syncOffline")}
             className="hidden sm:flex items-center gap-1.5 h-8 px-2 rounded-md border border-border bg-muted/40 hover:bg-muted/60 transition-colors shrink-0"
           >
             <span className={cn("size-2 rounded-full shrink-0", syncStatus === "synced" ? "bg-success" : syncStatus === "syncing" ? "bg-warning animate-pulse" : "bg-muted")} />

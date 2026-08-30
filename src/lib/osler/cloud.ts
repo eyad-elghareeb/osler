@@ -2,11 +2,8 @@ import { getConfig, loadConfig } from "@/lib/osler/config";
 import { storage, settings, SYNC_KINDS, type SyncKind } from "@/lib/osler/storage";
 import {
   getRealtimeConnId,
-  isRealtimeOpen,
-  refreshRealtime,
   startRealtime,
   stopRealtime,
-  subscribeRealtimeHealth,
 } from "./cloud/realtime";
 
 const SESSION_STORAGE_KEY = "osler-cloud-session-v1";
@@ -16,13 +13,6 @@ const SESSION_STORAGE_KEY = "osler-cloud-session-v1";
 export const SESSION_EXPIRED_FLAG = "osler-cloud-session-expired";
 const SYNC_DEBOUNCE_MS = 4_000;
 const MIN_SYNC_INTERVAL_MS = 20_000;
-// Idle devices pull the latest remote progress on a fixed cadence so changes
-// made on another device converge without waiting for a local edit. When the
-// realtime socket is healthy the poll stretches out — pokes deliver "something
-// changed" instantly, and the poll is just a slow safety net (dropped socket,
-// missed frame).
-const SYNC_PULL_INTERVAL_MS = 120_000;
-const REALTIME_PULL_INTERVAL_MS = 15 * 60_000;
 // Rotate the token through /v1/auth/refresh once it's within this window of
 // its expiry, so an active session never dies mid-use.
 const REFRESH_AHEAD_MS = 6 * 60 * 60 * 1000;
@@ -624,29 +614,36 @@ export async function fetchMySupportTickets(): Promise<unknown[] | null> {
   return result.tickets;
 }
 
-/* ── Realtime sync (opt-in) ──────────────────────────────────────────────── */
+/* ── Cloud sync (opt-in) ─────────────────────────────────────────────────── */
 
-const REALTIME_SYNC_PREF = "cloud-realtime-sync";
-let realtimeEnabledPref = false;
+const CLOUD_SYNC_PREF = "cloud-sync-enabled";
+let syncEnabledPref = false;
 
-/** Whether the user opted into realtime sync pokes on this device. */
-export async function getRealtimeSyncEnabled(): Promise<boolean> {
+/** Whether the user opted into cloud sync on this device. Off by default:
+ *  a signed-in user who never enables sync makes zero sync requests — nothing
+ *  is pushed, pulled, or polled — which keeps the free-tier DB/bandwidth
+ *  budget for the devices that actually need cross-device sync. */
+export async function getCloudSyncEnabled(): Promise<boolean> {
   try {
-    realtimeEnabledPref = (await settings.getBool(REALTIME_SYNC_PREF)) === true;
+    syncEnabledPref = (await settings.getBool(CLOUD_SYNC_PREF)) === true;
   } catch {
-    realtimeEnabledPref = false;
+    syncEnabledPref = false;
   }
-  return realtimeEnabledPref;
+  return syncEnabledPref;
 }
 
-export async function setRealtimeSyncEnabled(value: boolean): Promise<void> {
-  realtimeEnabledPref = value;
+/** Window event fired by `setCloudSyncEnabled` (detail: { enabled }) so the
+ *  session provider can start/stop the sync loop live, without a reload. */
+export const CLOUD_SYNC_PREF_EVENT = "osler-cloud-sync-pref";
+
+export async function setCloudSyncEnabled(value: boolean): Promise<void> {
+  syncEnabledPref = value;
   try {
-    await settings.set(REALTIME_SYNC_PREF, value ? "true" : "false");
+    await settings.set(CLOUD_SYNC_PREF, value ? "true" : "false");
   } catch { /* private mode — session-scoped only */ }
-  // Apply immediately — connect or drop the live socket without waiting for
-  // the next sync lifecycle event.
-  refreshRealtime();
+  try {
+    window.dispatchEvent(new CustomEvent(CLOUD_SYNC_PREF_EVENT, { detail: { enabled: value } }));
+  } catch { /* ignore */ }
 }
 
 let stopSync: (() => void) | null = null;
@@ -671,6 +668,21 @@ export function getSyncQuota(): { usedBytes: number; limitBytes: number } | null
   return syncQuota;
 }
 
+export type CloudSyncStatus = "off" | "synced" | "syncing" | "offline";
+
+let lastSyncStatus: CloudSyncStatus = "off";
+
+/** Publish a sync-status transition to the UI (shell dot + status card) and
+ *  cache it so late-mounting surfaces can initialize truthily. */
+export function notifySyncStatus(state: CloudSyncStatus, syncedAt?: number): void {
+  lastSyncStatus = state;
+  window.dispatchEvent(new CustomEvent("osler-cloud-sync-status", { detail: { state, ...(syncedAt != null ? { syncedAt } : {}) } }));
+}
+
+export function getSyncStatus(): CloudSyncStatus {
+  return lastSyncStatus;
+}
+
 export function syncCloudNow(): void {
   forceSync?.();
 }
@@ -687,7 +699,6 @@ export function startCloudSync(session: CloudSession): () => void {
   const serverUpdatedAt: Record<string, number> = {};
   let retryCount = 0;
   let timer: ReturnType<typeof setTimeout> | null = null;
-  let pullTimer: ReturnType<typeof setTimeout> | null = null;
 
   const runSync = async (pullOnly = false) => {
     if (stopped || syncing) return;
@@ -704,7 +715,7 @@ export function startCloudSync(session: CloudSession): () => void {
     syncing = true;
     dirtyKindsDuringSync.clear();
     const kindsToPush = new Set(dirtyKinds);
-    window.dispatchEvent(new CustomEvent("osler-cloud-sync-status", { detail: { state: "syncing" } }));
+    notifySyncStatus("syncing");
     try {
       await storage.ensureCacheHydrated();
 
@@ -794,7 +805,7 @@ export function startCloudSync(session: CloudSession): () => void {
             dirtyKinds.delete(kind);
           }
           lastSyncAt = Date.now();
-          window.dispatchEvent(new CustomEvent("osler-cloud-sync-status", { detail: { state: "synced", syncedAt: lastSyncAt } }));
+          notifySyncStatus("synced", lastSyncAt);
         }
       } else {
         lastSyncAt = Date.now();
@@ -824,7 +835,7 @@ export function startCloudSync(session: CloudSession): () => void {
           lastSyncAt = 0;
         }
       } else {
-        window.dispatchEvent(new CustomEvent("osler-cloud-sync-status", { detail: { state: "offline" } }));
+        notifySyncStatus("offline");
       }
     } finally {
       syncing = false;
@@ -863,29 +874,11 @@ export function startCloudSync(session: CloudSession): () => void {
 
   const onOnline = () => schedule();
 
-  const startPolling = () => {
-    if (pullTimer) clearTimeout(pullTimer);
-    if (stopped) return;
-    pullTimer = setTimeout(() => {
-      if (stopped) return;
-      void runSync(true);
-      startPolling();
-    }, isRealtimeOpen() ? REALTIME_PULL_INTERVAL_MS : SYNC_PULL_INTERVAL_MS);
-  };
-  const stopPolling = () => {
-    if (pullTimer) {
-      clearTimeout(pullTimer);
-      pullTimer = null;
-    }
-  };
-
+  // One pull when the tab returns to the foreground — covers pokes missed
+  // while the realtime socket was closed (hidden tab, offline). Event-driven,
+  // not a cadence: an idle visible tab makes no sync requests at all.
   const onVisible = () => {
-    if (document.visibilityState === "visible") {
-      startPolling();
-      if (!syncing) void runSync(true);
-    } else {
-      stopPolling();
-    }
+    if (document.visibilityState === "visible" && !syncing) void runSync(true);
   };
 
   const syncEvents = [
@@ -903,11 +896,12 @@ export function startCloudSync(session: CloudSession): () => void {
   window.addEventListener("online", onOnline);
   document.addEventListener("visibilitychange", onVisible);
 
-  // Realtime pokes (opt-in): a live socket turns the idle poll into an
-  // instant "pull now" when another device pushes. The pref loads async, so
-  // the socket opens once it resolves; until then polling is unchanged.
+  // The live socket IS the pull signal now: a poke from another device
+  // triggers an instant pull, and the socket closes whenever the tab hides,
+  // goes offline, or hits Data Saver. Nothing polls on a timer — sync only
+  // runs here because the user opted in upstream (session provider).
   startRealtime({
-    isEnabled: () => realtimeEnabledPref,
+    isEnabled: () => syncEnabledPref && !stopped,
     getApiUrl: () => resolvedApiUrl(),
     getAccessToken: () => currentSession?.token ?? null,
     onSyncPoke: () => {
@@ -918,16 +912,7 @@ export function startCloudSync(session: CloudSession): () => void {
       void runSync(true);
     },
   });
-  void getRealtimeSyncEnabled().then(() => refreshRealtime());
-  // Socket dropped: fall back to the fast poll immediately instead of
-  // waiting out the stretched realtime-cadence timer.
-  const unsubRealtimeHealth = subscribeRealtimeHealth(() => {
-    if (!stopped && typeof document !== "undefined" && document.visibilityState === "visible") startPolling();
-  });
 
-  if (typeof document !== "undefined" && document.visibilityState === "visible") {
-    startPolling();
-  }
   void runSync(true);
 
   forceSync = () => {
@@ -941,8 +926,6 @@ export function startCloudSync(session: CloudSession): () => void {
   stopSync = () => {
     stopped = true;
     if (timer) clearTimeout(timer);
-    stopPolling();
-    unsubRealtimeHealth();
     stopRealtime();
     for (const event of syncEvents) window.removeEventListener(event, schedule);
     window.removeEventListener("online", onOnline);

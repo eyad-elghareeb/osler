@@ -3,9 +3,12 @@
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import {
+  CLOUD_SYNC_PREF_EVENT,
   cloudEnabled,
   clearCloudSession,
   consumeGoogleLogin,
+  getCloudSyncEnabled,
+  notifySyncStatus,
   readCloudSession,
   readStoredCloudSession,
   refreshCloudSession,
@@ -43,8 +46,10 @@ const LOCAL_SESSION_KEY = "osler-local-session";
  *     unauthenticated users to /login.
  *
  * Restore flow on mount:
- *   1. If cloud is enabled and there's a valid CloudSession, restore it and
- *      start sync (sessionStorage first, then the localStorage mirror).
+ *   1. If cloud is enabled and there's a valid CloudSession, restore it
+ *      (sessionStorage first, then the localStorage mirror). Cloud sync
+ *      itself is opt-in — it only starts if the user enabled it (see the
+ *      sync effect below).
  *   2. If the persisted session is expired, rotate it via /v1/auth/refresh.
  *      Only a truly dead session falls through to the login screen.
  *   3. Otherwise check for a local-mode guest session (sessionStorage, then
@@ -187,11 +192,36 @@ export function OslerSessionProvider({ children }: { children: React.ReactNode }
     };
   }, []);
 
-  // Start cloud sync only when we have a real CloudSession with a token.
+  // Cloud sync is opt-in per device: the loop only runs while the user
+  // enabled it (Settings → Sync). A signed-in user who never opts in makes
+  // zero sync requests, so the free-tier DB/bandwidth is spent only on the
+  // devices that actually use cross-device sync.
+  const [syncPref, setSyncPref] = React.useState<{ loaded: boolean; enabled: boolean }>({ loaded: false, enabled: false });
   React.useEffect(() => {
-    if (!cloudSession?.token) return;
+    let cancelled = false;
+    void getCloudSyncEnabled().then((enabled) => {
+      if (!cancelled) setSyncPref({ loaded: true, enabled });
+    });
+    const onPref = (e: Event) => setSyncPref({ loaded: true, enabled: (e as CustomEvent).detail?.enabled === true });
+    window.addEventListener(CLOUD_SYNC_PREF_EVENT, onPref);
+    return () => {
+      cancelled = true;
+      window.removeEventListener(CLOUD_SYNC_PREF_EVENT, onPref);
+    };
+  }, []);
+
+  // Start cloud sync only when we have a real CloudSession with a token AND
+  // the user opted in. When a session exists but sync is off, surface an
+  // explicit "off" status so the shell's sync dot never claims a phantom
+  // "synced" state.
+  React.useEffect(() => {
+    if (!cloudSession?.token || !syncPref.loaded) return;
+    if (!syncPref.enabled) {
+      notifySyncStatus("off");
+      return;
+    }
     return startCloudSync(cloudSession);
-  }, [cloudSession]);
+  }, [cloudSession, syncPref]);
 
   // Cloud session expiration listener (fired by sync on 401).
   React.useEffect(() => {

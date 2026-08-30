@@ -13,35 +13,43 @@ import {
   cloudEnabled,
   syncCloudNow,
   getSyncQuota,
-  getRealtimeSyncEnabled,
-  setRealtimeSyncEnabled,
+  getSyncStatus,
+  notifySyncStatus,
+  getCloudSyncEnabled,
+  setCloudSyncEnabled,
+  type CloudSyncStatus,
 } from "@/lib/osler/cloud";
 import { getRealtimeState, REALTIME_STATE_EVENT, type RealtimeState } from "@/lib/osler/cloud/realtime";
 import { haptic } from "@/lib/osler/native";
 
 /**
- * CloudSyncStatusCard — the canonical "Cloud Sync Status" card shared by the
- * Account settings section and the Sync settings section.
+ * CloudSyncStatusCard — the canonical "Cloud Sync" card shared by the Account
+ * settings section and the Sync settings section.
  *
- * Signed-in: live status dot (synced / syncing / offline), last-synced time,
- * a "Sync Now" button, and the storage-quota bar.
- * Signed-out / disabled: a compact prompt to sign in from Account settings.
+ * Cloud sync is opt-in per device: the master switch starts/stops the whole
+ * sync lifecycle (loop + live socket). When sync is on, the card shows the
+ * live status dot (synced / syncing / offline), last-synced time, the live
+ * connection state, and the storage-quota bar. When off (or signed out), it
+ * stays a compact prompt and makes no requests.
  */
 export function CloudSyncStatusCard() {
   const { t } = useI18n();
   const { navigate } = useOslerRouter();
   const [session, setSession] = React.useState<{ token: string } | null>(() => readCloudSession());
   const [cloudActive, setCloudActive] = React.useState(false);
-  const [syncState, setSyncState] = React.useState<"synced" | "syncing" | "offline">("synced");
+  const [syncOn, setSyncOn] = React.useState<boolean | null>(null);
+  const [syncState, setSyncState] = React.useState<CloudSyncStatus>(() => getSyncStatus());
   const [lastSyncedAt, setLastSyncedAt] = React.useState<number | null>(null);
   const [quota, setQuota] = React.useState<{ usedBytes: number; limitBytes: number } | null>(null);
-  const [realtimeOn, setRealtimeOn] = React.useState<boolean | null>(null);
   const [realtimeState, setRealtimeState] = React.useState<RealtimeState>(() => getRealtimeState());
 
   React.useEffect(() => {
     let cancelled = false;
     void cloudEnabled().then((enabled) => {
       if (!cancelled) setCloudActive(enabled);
+    });
+    void getCloudSyncEnabled().then((enabled) => {
+      if (!cancelled) setSyncOn(enabled);
     });
     return () => {
       cancelled = true;
@@ -51,8 +59,10 @@ export function CloudSyncStatusCard() {
   React.useEffect(() => {
     const onSyncStatus = (e: Event) => {
       const detail = (e as CustomEvent).detail;
-      if (detail?.state) setSyncState(detail.state);
-      if (detail?.syncedAt) setLastSyncedAt(detail.syncedAt);
+      if (detail?.state) {
+        setSyncState(detail.state);
+        if (detail.syncedAt) setLastSyncedAt(detail.syncedAt);
+      }
     };
     const onSyncQuota = (e: Event) => {
       const detail = (e as CustomEvent).detail;
@@ -71,25 +81,21 @@ export function CloudSyncStatusCard() {
   }, []);
 
   React.useEffect(() => {
-    let cancelled = false;
-    void getRealtimeSyncEnabled().then((enabled) => {
-      if (!cancelled) setRealtimeOn(enabled);
-    });
     const onRealtimeState = (e: Event) => {
       const next = (e as CustomEvent).detail?.state;
       if (next) setRealtimeState(next);
     };
     window.addEventListener(REALTIME_STATE_EVENT, onRealtimeState);
-    return () => {
-      cancelled = true;
-      window.removeEventListener(REALTIME_STATE_EVENT, onRealtimeState);
-    };
+    return () => window.removeEventListener(REALTIME_STATE_EVENT, onRealtimeState);
   }, []);
 
-  const handleRealtimeToggle = (next: boolean) => {
+  const handleSyncToggle = (next: boolean) => {
     haptic("light");
-    setRealtimeOn(next);
-    void setRealtimeSyncEnabled(next);
+    setSyncOn(next);
+    // notifySyncStatus("off") fires from the session provider when the loop
+    // stops; when it starts, the first cycle emits "syncing" on its own.
+    if (!next) notifySyncStatus("off");
+    void setCloudSyncEnabled(next);
   };
 
   const handleManualSync = () => {
@@ -146,52 +152,66 @@ export function CloudSyncStatusCard() {
         <Cloud className="size-4 text-primary" />
         {t("settings.account.syncTitle")}
       </h3>
-      <div className="flex items-center justify-between gap-3 p-3.5 rounded-lg border border-border bg-card">
-        <div className="flex items-center gap-3">
-          <div
-            className={cn(
-              "size-3 rounded-full shrink-0",
-              syncState === "synced"
-                ? "bg-success animate-pulse"
-                : syncState === "syncing"
-                  ? "bg-warning animate-spin"
-                  : "bg-muted",
-            )}
-          />
-          <div>
-            <div className="text-sm font-semibold">
-              {syncState === "synced"
-                ? t("settings.account.syncSynced")
-                : syncState === "syncing"
-                  ? t("settings.account.syncSyncing")
-                  : t("settings.account.syncOffline")}
-            </div>
-            <div className="text-[11px] text-muted-foreground">
-              {lastSyncedAt
-                ? t("settings.account.lastSynced", { time: new Date(lastSyncedAt).toLocaleTimeString() })
-                : t("login.footer")}
-            </div>
-          </div>
-        </div>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={handleManualSync}
-          disabled={syncState === "syncing"}
-          className="gap-1.5 text-xs"
-        >
-          <RefreshCw className={cn("size-3.5", syncState === "syncing" && "animate-spin")} />
-          {t("settings.account.syncNow")}
-        </Button>
-      </div>
-      <div className="mt-3.5 pt-3.5 border-t border-border flex items-start justify-between gap-3">
+      {/* Master opt-in — the single control for the whole sync lifecycle. */}
+      <div className="flex items-start justify-between gap-3 p-3.5 rounded-lg border border-border bg-card">
         <div className="min-w-0">
           <p className="text-sm font-semibold flex items-center gap-1.5">
             <Zap className="size-3.5 text-primary" />
-            {t("sync.cloud.realtimeTitle")}
+            {t("sync.cloud.optInTitle")}
           </p>
-          <p className="text-xs text-muted-foreground mt-0.5">{t("sync.cloud.realtimeDesc")}</p>
-          <p className="text-[11px] text-muted-foreground mt-1.5 flex items-center gap-1.5">
+          <p className="text-xs text-muted-foreground mt-0.5">{t("sync.cloud.optInDesc")}</p>
+        </div>
+        <Switch
+          checked={!!syncOn}
+          onCheckedChange={handleSyncToggle}
+          disabled={syncOn === null}
+          aria-label={t("sync.cloud.optInTitle")}
+          className="shrink-0"
+        />
+      </div>
+      {syncOn && (
+        <>
+          <div className="mt-3.5 flex items-center justify-between gap-3 p-3.5 rounded-lg border border-border bg-card">
+            <div className="flex items-center gap-3">
+              <div
+                className={cn(
+                  "size-3 rounded-full shrink-0",
+                  syncState === "synced"
+                    ? "bg-success animate-pulse"
+                    : syncState === "syncing"
+                      ? "bg-warning animate-spin"
+                      : "bg-muted",
+                )}
+              />
+              <div>
+                <div className="text-sm font-semibold">
+                  {syncState === "synced"
+                    ? t("settings.account.syncSynced")
+                    : syncState === "syncing"
+                      ? t("settings.account.syncSyncing")
+                      : syncState === "offline"
+                        ? t("settings.account.syncOffline")
+                        : t("settings.account.syncOff")}
+                </div>
+                <div className="text-[11px] text-muted-foreground">
+                  {lastSyncedAt
+                    ? t("settings.account.lastSynced", { time: new Date(lastSyncedAt).toLocaleTimeString() })
+                    : t("login.footer")}
+                </div>
+              </div>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleManualSync}
+              disabled={syncState === "syncing"}
+              className="gap-1.5 text-xs"
+            >
+              <RefreshCw className={cn("size-3.5", syncState === "syncing" && "animate-spin")} />
+              {t("settings.account.syncNow")}
+            </Button>
+          </div>
+          <p className="text-[11px] text-muted-foreground mt-2.5 px-1 flex items-center gap-1.5">
             <span
               className={cn(
                 "size-1.5 rounded-full shrink-0",
@@ -208,37 +228,31 @@ export function CloudSyncStatusCard() {
                 ? t("sync.cloud.realtimeOff")
                 : t("sync.cloud.realtimeConnecting")}
           </p>
-        </div>
-        <Switch
-          checked={!!realtimeOn}
-          onCheckedChange={handleRealtimeToggle}
-          disabled={realtimeOn === null}
-          aria-label={t("sync.cloud.realtimeTitle")}
-          className="shrink-0"
-        />
-      </div>
-      {quota && quota.limitBytes > 0 && (
-        <div className="mt-3.5">
-          <div className="flex items-center justify-between text-[11px] text-muted-foreground mb-1.5">
-            <span>{t("settings.account.quotaTitle")}</span>
-            <span>
-              {t("settings.account.quotaUsed", {
-                used: formatQuotaMB(quota.usedBytes),
-                limit: formatQuotaMB(quota.limitBytes),
-              })}
-            </span>
-          </div>
-          <div className="h-1.5 rounded-full bg-muted overflow-hidden">
-            <div
-              className={cn(
-                "h-full rounded-full",
-                quotaPct >= 90 ? "bg-destructive" : quotaPct >= 70 ? "bg-warning" : "bg-success",
-              )}
-              style={{ width: `${Math.min(100, quotaPct)}%` }}
-            />
-          </div>
-        </div>
+          {quota && quota.limitBytes > 0 && (
+            <div className="mt-3.5">
+              <div className="flex items-center justify-between text-[11px] text-muted-foreground mb-1.5">
+                <span>{t("settings.account.quotaTitle")}</span>
+                <span>
+                  {t("settings.account.quotaUsed", {
+                    used: formatQuotaMB(quota.usedBytes),
+                    limit: formatQuotaMB(quota.limitBytes),
+                  })}
+                </span>
+              </div>
+              <div className="h-1.5 rounded-full bg-muted overflow-hidden">
+                <div
+                  className={cn(
+                    "h-full rounded-full",
+                    quotaPct >= 90 ? "bg-destructive" : quotaPct >= 70 ? "bg-warning" : "bg-success",
+                  )}
+                  style={{ width: `${Math.min(100, quotaPct)}%` }}
+                />
+              </div>
+            </div>
+          )}
+        </>
       )}
+      {syncOn === false && <p className="text-xs text-muted-foreground mt-3.5">{t("sync.cloud.optOutNote")}</p>}
     </Card>
   );
 }

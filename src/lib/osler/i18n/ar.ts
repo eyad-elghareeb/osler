@@ -165,6 +165,7 @@ export const ar = {
     "settings.account.syncSynced": "متزامن مع السحابة",
     "settings.account.syncSyncing": "جارٍ مزامنة التقدّم…",
     "settings.account.syncOffline": "وضع عدم الاتصال",
+    "settings.account.syncOff": "المزامنة معطّلة",
     "settings.account.lastSynced": "آخر مزامنة: {time}",
     "settings.account.syncNow": "مزامنة الآن",
     "settings.account.quotaTitle": "التخزين السحابي المستخدم",
@@ -1339,11 +1340,12 @@ export const ar = {
     "sync.cloud.signInTitle": "سجّل الدخول لتفعيل المزامنة السحابية",
     "sync.cloud.signInDesc": "أنشئ حسابًا أو سجّل الدخول إلى حساب سحابي لنسخ تقدمك وإنجازاتك وإعداداتك احتياطيًا عبر جميع أجهزتك.",
     "sync.cloud.signIn": "تسجيل الدخول",
-    "sync.cloud.realtimeTitle": "المزامنة الفورية",
-    "sync.cloud.realtimeDesc": "إرسال نبضات المزامنة فورًا إلى أجهزتك الأخرى عبر اتصال مباشر. معطّلة افتراضيًا — تعود الأجهزة إلى المزامنة الدورية.",
+    "sync.cloud.optInTitle": "المزامنة السحابية",
+    "sync.cloud.optInDesc": "حافظ على تزامن تقدّم هذا الجهاز مع أجهزتك الأخرى عبر اتصال مباشر. فعّلها فقط إذا كنت تدرس على أكثر من جهاز — عند الإيقاف، لا يُرسل أي شيء إلى السحابة.",
+    "sync.cloud.optOutNote": "المزامنة معطّلة — يبقى تقدّمك على هذا الجهاز فقط.",
     "sync.cloud.realtimeConnected": "مباشر — تصل التغييرات فورًا",
     "sync.cloud.realtimeConnecting": "جارٍ الاتصال…",
-    "sync.cloud.realtimeOff": "معطّل",
+    "sync.cloud.realtimeOff": "غير متصل",
 
     "sync.network.activeConnections": "الاتصالات النشطة ({n})",
 

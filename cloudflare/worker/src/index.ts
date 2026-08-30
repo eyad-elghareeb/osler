@@ -180,8 +180,8 @@ interface Env {
   DB: D1Database;
   CONTENT?: R2Bucket;
   /** Realtime poke hub (per-user Durable Object). Optional binding: instances
-   *  that never applied the DO migration keep working — the sync routes
-   *  degrade to polling-only and clients fall back automatically. */
+   *  that never applied the DO migration keep working — sync still runs over
+   *  plain HTTP (push + foreground pull), just without instant pokes. */
   USER_SYNC_HUB?: DurableObjectNamespace<UserSyncHub>;
   JWT_SECRET: string;
   AUDIT_HMAC_KEY?: string;
@@ -5382,7 +5382,8 @@ export default {
         if (statements.length) {
           await env.DB.batch(statements);
           // Fire-and-forget poke: the user's other connected devices pull
-          // immediately instead of waiting out their idle poll. The pushing
+          // immediately over the realtime hub (clients no longer idle-poll).
+          // The pushing
           // connection (x-osler-realtime-conn) is skipped by the hub; a
           // missing binding (unmigrated instance) or hub failure must never
           // fail the sync response itself.

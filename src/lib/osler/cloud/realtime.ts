@@ -1,11 +1,12 @@
 // ---------------------------------------------------------------------------
-// Realtime sync pokes (opt-in).
+// Realtime sync pokes (part of the opt-in cloud sync).
 //
 // A single WebSocket to the Worker's /v1/realtime endpoint that receives tiny
 // "your other device pushed — pull now" frames, so cross-device sync
-// converges in seconds instead of waiting out the idle poll. The socket
-// carries no sync data — a poke just triggers the normal HTTP pull in
-// cloud.ts, so the idempotent merge/409 machinery stays authoritative.
+// converges in seconds. The socket carries no sync data — a poke just
+// triggers the normal HTTP pull in cloud.ts, so the idempotent merge/409
+// machinery stays authoritative. There is no polling fallback: pulls happen
+// on pokes, local pushes, foregrounding, or a manual "Sync Now".
 //
 // Free-tier economics (mirrors the worker's UserSyncHub):
 //   - The socket is only open while the app is visible and online; a hidden
@@ -16,9 +17,8 @@
 //   - Auth: browsers can't set an Authorization header on a WS upgrade, so a
 //     60-second ticket is minted first (POST /v1/realtime/ticket) and passed
 //     as a query param.
-//   - Everything degrades silently: unsupported, disabled (opt-in off),
-//     Data Saver, or repeated failures just leave the existing polling
-//     cadence in charge.
+//   - Everything degrades silently: unsupported, Data Saver, or repeated
+//     failures just leave sync to pushes + foreground pulls (and Sync Now).
 // ---------------------------------------------------------------------------
 
 import { readNetworkInfo, subscribeNetworkInfo } from "@/lib/osler/native";
@@ -53,7 +53,6 @@ let heartbeatTimer: ReturnType<typeof setInterval> | null = null;
 let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 let unsubNetwork: (() => void) | null = null;
 let bound = false;
-const healthListeners = new Set<(open: boolean) => void>();
 
 /** Stable per-tab connection id — lets the hub skip the socket that caused a
  *  push (it just wrote that data locally; it doesn't need to pull it). */
@@ -73,27 +72,9 @@ export function getRealtimeState(): RealtimeState {
   return state;
 }
 
-export function isRealtimeOpen(): boolean {
-  return state === "open" && !!ws;
-}
-
-/** Fires on open↔closed transitions. The initial value is NOT delivered —
- *  read `isRealtimeOpen()` directly when wiring up. */
-export function subscribeRealtimeHealth(cb: (open: boolean) => void): () => void {
-  healthListeners.add(cb);
-  return () => healthListeners.delete(cb);
-}
-
 function setState(next: RealtimeState): void {
   if (state === next) return;
-  const wasOpen = state === "open";
   state = next;
-  const isOpen = next === "open";
-  if (wasOpen !== isOpen) {
-    for (const fn of [...healthListeners]) {
-      try { fn(isOpen); } catch { /* listener error must not break the loop */ }
-    }
-  }
   try {
     window.dispatchEvent(new CustomEvent(REALTIME_STATE_EVENT, { detail: { state: next } }));
   } catch { /* ignore */ }
@@ -260,12 +241,6 @@ export function startRealtime(options: RealtimeOptions): void {
     window.addEventListener("online", onOnline);
     unsubNetwork = subscribeNetworkInfo(onOnline);
   }
-  evaluate();
-}
-
-/** Re-evaluate without tearing down listeners (e.g. the opt-in flipped). */
-export function refreshRealtime(): void {
-  if (!opts) return;
   evaluate();
 }
 
