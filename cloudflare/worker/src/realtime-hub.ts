@@ -95,7 +95,9 @@ export async function verifyRealtimeTicket(secrets: { JWT_SECRET: string }, tick
   if (!payload || !signature || !timingSafeEqual(signature, await hmac(payload, secrets.JWT_SECRET))) return null;
   try {
     const claims = JSON.parse(decoder.decode(unb64url(payload))) as { typ?: unknown; sub?: unknown; sid?: unknown; exp?: unknown };
-    if (claims?.typ !== "rt" || typeof claims.sub !== "string" || typeof claims.sid !== "string" || Number(claims.exp) * 1000 <= Date.now()) return null;
+    // Inverted expiry comparison: `Number(...) <= Date.now()` would accept a
+    // missing/NaN exp (NaN comparisons are always false).
+    if (claims?.typ !== "rt" || typeof claims.sub !== "string" || typeof claims.sid !== "string" || !(Number(claims.exp) > Date.now() / 1000)) return null;
     return { userId: claims.sub, sessionId: claims.sid };
   } catch {
     return null;
@@ -140,7 +142,11 @@ export class UserSyncHub extends DurableObject<Record<string, unknown>> {
   // violation (or a deliberate wake-up flood): close immediately so it can
   // never loop. Each wake is billed at the 20:1 message ratio, so this guard
   // is what caps a hostile client's burn at one twentieth of a request.
-  override async webSocketMessage(ws: WebSocket, _message: string | ArrayBuffer): Promise<void> {
+  // (An exact "ping" is tolerated as a no-op rather than closed: if the
+  // auto-response pair were ever unavailable, closing would turn every
+  // heartbeat into a reconnect storm.)
+  override async webSocketMessage(ws: WebSocket, message: string | ArrayBuffer): Promise<void> {
+    if (message === "ping") return;
     try {
       ws.close(1008, "unexpected message");
     } catch {
@@ -159,12 +165,13 @@ export class UserSyncHub extends DurableObject<Record<string, unknown>> {
     if (safeKinds.length === 0) return;
     const frame = JSON.stringify({ t: "sync", kinds: safeKinds });
     for (const ws of this.ctx.getWebSockets()) {
-      const attachment = (ws as WebSocket & { deserializeAttachment<T>(): unknown }).deserializeAttachment<SocketAttachment>() as SocketAttachment | null;
-      if (origin && attachment?.conn === origin) continue;
       try {
+        const attachment = (ws as WebSocket & { deserializeAttachment<T>(): unknown }).deserializeAttachment<SocketAttachment>() as SocketAttachment | null;
+        if (origin && attachment?.conn === origin) continue;
         ws.send(frame);
       } catch {
-        // Broken/half-closed socket — the next sync pull reconciles it.
+        // Broken/half-closed socket (or missing attachment) — the next sync
+        // pull reconciles it.
       }
     }
   }

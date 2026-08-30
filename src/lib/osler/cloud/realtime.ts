@@ -171,6 +171,9 @@ async function connect(): Promise<void> {
     const res = await fetch(`${apiUrl}/v1/realtime/ticket`, {
       method: "POST",
       headers: { authorization: `Bearer ${token}` },
+      // A hung mint must not wedge the module in "connecting" until the next
+      // visibility flip — bound it and let the backoff path recover.
+      ...(typeof AbortSignal !== "undefined" && AbortSignal.timeout ? { signal: AbortSignal.timeout(10_000) } : {}),
     });
     if (!res.ok) throw new Error(`ticket ${res.status}`);
     const body = await res.json() as { ticket?: unknown };
