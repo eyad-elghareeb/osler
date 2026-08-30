@@ -494,7 +494,7 @@ export function NotesPanel({
             useFullscreen
               ? "fixed inset-0 z-[60] bg-card flex flex-col safe-screen"
               : cn(
-                  "fixed top-0 bottom-0 z-50 border-l border-border bg-card shadow-xl flex flex-col",
+                  "fixed top-0 bottom-0 z-50 border-l border-border bg-card shadow-e4 flex flex-col",
                   rtl ? "left-0 border-r border-l-0" : "right-0",
                 )
           }

@@ -188,7 +188,7 @@ export function UsersTable() {
                 initial={{ opacity: 0, y: 4 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ ...MOTION_TRANSITION.quick, delay: Math.min(i * 0.03, 0.3) }}
-                className="group rounded-xl border border-border bg-card hover:border-primary/40 hover:shadow-md transition-all"
+                className="group rounded-xl border border-border bg-card hover:border-primary/40 hover:shadow-e2 transition-all"
               >
                 <div className="flex items-center gap-3 p-3">
                   {/* Main hit target — opens the detail view */}

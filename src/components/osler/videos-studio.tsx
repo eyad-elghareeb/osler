@@ -466,7 +466,7 @@ export function VideosStudio({
                       dir={lang === "ar" ? "rtl" : undefined}
                       lang={lang}
                       className={cn(
-                        "text-start group bg-card border border-border rounded-xl overflow-hidden hover:border-primary/40 hover:shadow-md transition-all duration-200 active:scale-[0.99] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
+                        "text-start group bg-card border border-border rounded-xl overflow-hidden hover:border-primary/40 hover:shadow-e2 transition-all duration-200 active:scale-[0.99] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
                         lang === "ar" && "osler-content-ar"
                       )}
                     >
@@ -875,7 +875,7 @@ function VideoPlayerView({
         {/* Main Stage Column */}
         <div className="flex-1 min-w-0 flex flex-col overflow-y-auto lg:overflow-y-auto p-3 sm:p-4 lg:p-6 space-y-4">
           {/* Video Player Container */}
-          <div className="relative aspect-video w-full rounded-xl overflow-hidden bg-black shadow-lg border border-border shrink-0">
+          <div className="relative aspect-video w-full rounded-xl overflow-hidden bg-black shadow-e3 border border-border shrink-0">
             {invidiousMode && videoId ? (
               <iframe
                 src={`https://${INVIDIOUS_HOST}/embed/${videoId}?autoplay=1${invidiousStart != null ? `&start=${invidiousStart}` : ""}`}
@@ -1007,7 +1007,7 @@ function VideoPlayerView({
                   className={cn(
                     "w-full text-start flex items-start gap-3 p-2 rounded-xl border transition-all duration-150 group",
                     isActive
-                      ? "bg-primary/10 border-primary/40 shadow-sm"
+                      ? "bg-primary/10 border-primary/40 shadow-e1"
                       : "bg-card/60 hover:bg-card border-border hover:border-border"
                   )}
                 >

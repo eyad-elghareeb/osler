@@ -40,7 +40,7 @@ export function EditorNavigator({
   const allCollapsed = Object.values(collapsed).filter((_, i) => i < items).every(Boolean);
   const noneCollapsed = Object.values(collapsed).filter((_, i) => i < items).every((v) => !v);
   return (
-    <div className="sticky top-2 z-10 border border-border rounded-lg bg-card/90 backdrop-blur-sm p-2 space-y-2 shadow-sm">
+    <div className="sticky top-2 z-10 border border-border rounded-lg bg-card/90 backdrop-blur-sm p-2 space-y-2 shadow-e1">
       <div className="flex items-center gap-1 mb-1">
         <ListChecks className="size-3.5 text-primary" />
         <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">

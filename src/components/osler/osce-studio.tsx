@@ -1194,7 +1194,7 @@ export function OsceStudio({
           }}
           {...ctxLinkAttrs(routeFor("osce", { uid: node.uid }), node.title)}
           className={cn(
-            "w-full h-full text-start group relative overflow-hidden bg-card border border-border rounded-xl p-5 hover:border-primary/40 hover:shadow-md transition-all duration-200 active:scale-[0.99] cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 flex flex-col",
+            "w-full h-full text-start group relative overflow-hidden bg-card border border-border rounded-xl p-5 hover:border-primary/40 hover:shadow-e2 transition-all duration-200 active:scale-[0.99] cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 flex flex-col",
             lang === "ar" && "osler-content-ar",
           )}
           dir={lang === "ar" ? "rtl" : undefined}
@@ -1258,7 +1258,7 @@ export function OsceStudio({
           onClick={() => {
             setSelectedFolders((folders) => [...folders, node]);
           }}
-          className="osler-fade-in h-full w-full min-w-0 justify-start text-start bg-card border border-border rounded-xl p-5 hover:border-primary/40 hover:shadow-md hover:bg-card transition-all group flex items-center gap-3.5 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+          className="osler-fade-in h-full w-full min-w-0 justify-start text-start bg-card border border-border rounded-xl p-5 hover:border-primary/40 hover:shadow-e2 hover:bg-card transition-all group flex items-center gap-3.5 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
         >
           <div className="size-11 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-center shrink-0">
             <Folder className="size-5 text-primary" />
@@ -1448,7 +1448,7 @@ export function OsceStudio({
             visible at full opacity even when a subfolder view is open. */}
         {loadingPack && (
           <div className="fixed inset-0 z-50 bg-background/80 backdrop-blur-sm flex items-center justify-center pointer-events-none">
-            <div className="flex items-center gap-2 rounded-lg bg-card border border-border px-4 py-3 shadow-md">
+            <div className="flex items-center gap-2 rounded-lg bg-card border border-border px-4 py-3 shadow-e3">
               <Loader2 className="size-4 animate-spin text-primary" />
               <span className="text-sm font-medium">Loading pack…</span>
             </div>
@@ -2390,7 +2390,7 @@ export function OsceStudio({
                 animate={{ opacity: 1, scale: 1, y: 0 }}
                 exit={{ opacity: 0, scale: 0.95, y: 12 }}
                 transition={MOTION_SPRING.snappy}
-                className="bg-card border border-border rounded-xl p-6 max-w-sm w-full shadow-lg"
+                className="bg-card border border-border rounded-xl p-6 max-w-sm w-full shadow-e3"
                 onClick={(e) => e.stopPropagation()}
               >
                 <h3 className="text-base font-semibold mb-1">Reset Consultation?</h3>

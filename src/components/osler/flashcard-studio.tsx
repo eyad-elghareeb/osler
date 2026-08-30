@@ -608,7 +608,7 @@ export function FlashcardStudio({
     if (clozeIdx !== null && card.text) {
       const html = renderCloze(card.text, clozeIdx, isFlipped, packPath);
       return (
-        <div className="relative w-full h-full overflow-hidden rounded-xl border border-border shadow-lg bg-card">
+        <div className="relative w-full h-full overflow-hidden rounded-xl border border-border shadow-e3 bg-card">
           <div className="absolute inset-0 flex flex-col">
             <div className="shrink-0 px-4 sm:px-6 pt-4 sm:pt-5 pb-2 border-b border-border">
               <div className="text-[11px] uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
@@ -644,7 +644,7 @@ export function FlashcardStudio({
 
     // ── Basic card ──────────────────────────────────────────────────
     return (
-      <div className="relative w-full h-full overflow-hidden rounded-xl border border-border shadow-lg">
+      <div className="relative w-full h-full overflow-hidden rounded-xl border border-border shadow-e3">
         {/* Back layer — full-card answer with a small question echo at top. */}
         <div className="absolute inset-0 flex flex-col bg-card rounded-xl">
           <div className="shrink-0 px-4 sm:px-6 pt-4 sm:pt-5 pb-2 border-b border-border">
@@ -899,7 +899,7 @@ export function FlashcardStudio({
                   }}
                   {...(isBranch ? {} : ctxLinkAttrs(routeFor("flashcards", { uid: node.uid }), node.title))}
                   className={cn(
-                    "osler-fade-in text-start bg-card border border-border rounded-xl p-5 hover:border-primary/40 hover:shadow-md hover:bg-primary/[0.02] transition-colors group cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
+                    "osler-fade-in text-start bg-card border border-border rounded-xl p-5 hover:border-primary/40 hover:shadow-e2 hover:bg-primary/[0.02] transition-colors group cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
                     node.lang === "ar" && "osler-content-ar",
                   )}
                   dir={node.lang === "ar" ? "rtl" : undefined}
@@ -1295,7 +1295,7 @@ export function FlashcardStudio({
                         void startSubdeck(deckIndex, child.uid);
                       }
                     }}
-                    className="osler-fade-in text-left bg-card border border-border rounded-xl p-5 hover:border-primary/40 hover:shadow-md hover:bg-primary/[0.02] transition-colors group"
+                    className="osler-fade-in text-left bg-card border border-border rounded-xl p-5 hover:border-primary/40 hover:shadow-e2 hover:bg-primary/[0.02] transition-colors group"
                   >
                     <div className="flex items-center gap-3 mb-3">
                       <div

@@ -192,7 +192,7 @@ export function LabValuesSidebar({ open, onClose }: { open?: boolean; onClose: (
             {...dismissProps}
             className={isPhone
               ? "fixed inset-0 z-50 bg-card flex flex-col"
-              : "fixed right-0 top-12 bottom-0 z-50 border-l border-border bg-card shadow-xl flex flex-col"
+              : "fixed right-0 top-12 bottom-0 z-50 border-l border-border bg-card shadow-e4 flex flex-col"
             }
             style={
               isPhone

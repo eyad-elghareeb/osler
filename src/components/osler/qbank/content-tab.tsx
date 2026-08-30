@@ -125,7 +125,7 @@ export const PackCard = React.memo(function PackCard({
       data-ctx-export={node.uid}
       {...ctxLinkAttrs(routeFor("qbank", { uid: node.uid }), node.title)}
       className={cn(
-        "osler-fade-in text-start bg-card border border-border rounded-xl p-5 hover:border-primary/40 hover:shadow-md transition-all active:scale-[0.98] group flex flex-col gap-3 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
+        "osler-fade-in text-start bg-card border border-border rounded-xl p-5 hover:border-primary/40 hover:shadow-e2 transition-all active:scale-[0.98] group flex flex-col gap-3 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
         isAr && "osler-content-ar",
       )}
       dir={isAr ? "rtl" : undefined}
@@ -317,7 +317,7 @@ export function ContentTab({
                   // Folders export too — the dialog collects every leaf
                   // pack under the target.
                   data-ctx-export={node.uid}
-                  className="osler-fade-in text-start bg-card border border-border rounded-xl p-5 hover:border-primary/40 hover:shadow-md transition-all group flex flex-col gap-3 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 w-full"
+                  className="osler-fade-in text-start bg-card border border-border rounded-xl p-5 hover:border-primary/40 hover:shadow-e2 transition-all group flex flex-col gap-3 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 w-full"
                   style={{ animationDelay: `${idx * 0.04}s` }}
                 >
                   {/* Top row: folder icon + title + pack count.
@@ -448,7 +448,7 @@ export function ContentTab({
                     key={child.uid}
                     onClick={() => setSelectedFolders((folders) => [...folders, child])}
                     data-ctx-export={child.uid}
-                    className="osler-fade-in text-start bg-card border border-border rounded-xl p-5 hover:border-primary/40 hover:shadow-md transition-all group flex flex-col gap-3 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 w-full"
+                    className="osler-fade-in text-start bg-card border border-border rounded-xl p-5 hover:border-primary/40 hover:shadow-e2 transition-all group flex flex-col gap-3 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 w-full"
                     style={{ animationDelay: `${idx * 0.04}s` }}
                   >
                     <div className="flex items-center gap-3.5">

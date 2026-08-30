@@ -862,7 +862,7 @@ export function MermaidEditorModal({ open, initialCode, onSave, onClose }: Merma
       {isNewDiagram && !pickedTemplate ? (
         <MermaidTemplateGallery onPickPreset={loadPreset} onStartBlank={startBlank} onClose={onClose} />
       ) : (
-      <div className="w-full max-w-6xl h-[90vh] bg-card border border-border rounded-xl shadow-2xl flex flex-col overflow-hidden">
+      <div className="w-full max-w-6xl h-[90vh] bg-card border border-border rounded-xl shadow-e4 flex flex-col overflow-hidden">
         {/* Header */}
         <div className="flex items-center gap-3 px-4 py-3 shrink-0 border-b border-border bg-muted/30">
           <div className="w-8 h-8 rounded-xl flex items-center justify-center bg-primary/10 shrink-0">
@@ -1163,7 +1163,7 @@ function MermaidTemplateGallery({ onPickPreset, onStartBlank, onClose }: Mermaid
   ];
 
   return (
-    <div className="w-full max-w-2xl bg-card border border-border rounded-xl shadow-2xl flex flex-col overflow-hidden">
+    <div className="w-full max-w-2xl bg-card border border-border rounded-xl shadow-e4 flex flex-col overflow-hidden">
       <div className="flex items-center gap-3 px-4 py-3 shrink-0 border-b border-border bg-muted/30">
         <div className="w-8 h-8 rounded-xl flex items-center justify-center bg-primary/10 shrink-0">
           <GitMerge className="w-4 h-4 text-primary" />

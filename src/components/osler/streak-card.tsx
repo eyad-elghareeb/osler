@@ -50,7 +50,7 @@ const ActivityBarChart = React.memo(function ActivityBarChart({ activity, today 
               left: `${left}px`,
             }}
           >
-            <div className="relative bg-popover border border-border text-popover-foreground rounded-lg px-2.5 py-1.5 text-xs font-medium shadow-xl whitespace-nowrap flex items-center gap-1.5">
+            <div className="relative bg-popover border border-border text-popover-foreground rounded-lg px-2.5 py-1.5 text-xs font-medium shadow-e4 whitespace-nowrap flex items-center gap-1.5">
               <span className="text-foreground font-semibold">
                 {activity[hovered].date === today
                   ? `${t("dash.streak.today")} (${new Date(activity[hovered].date + "T00:00:00Z").toLocaleDateString(undefined, { weekday: "short" })})`

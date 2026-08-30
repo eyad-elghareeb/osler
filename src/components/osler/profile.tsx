@@ -196,7 +196,7 @@ export function Profile({
               animate={{ opacity: 1, y: 0 }}
               className="osler-card--roomy mb-6 flex items-center gap-4"
             >
-              <div className="w-16 h-16 rounded-full bg-gradient-to-br from-primary/80 to-primary/40 flex items-center justify-center text-2xl font-bold text-primary-foreground shrink-0 shadow-sm">
+              <div className="w-16 h-16 rounded-full bg-gradient-to-br from-primary/80 to-primary/40 flex items-center justify-center text-2xl font-bold text-primary-foreground shrink-0 shadow-e1">
                 {(cloudSession?.user.displayName || username).slice(0, 2).toUpperCase()}
               </div>
               <div className="flex-1 min-w-0">
@@ -993,7 +993,7 @@ const ProfileStreakSection = React.memo(function ProfileStreakSection() {
                   left: `${left}px`,
                 }}
               >
-                <div className="bg-popover border border-border text-popover-foreground rounded-lg px-2.5 py-1 text-[11px] font-medium shadow-lg whitespace-nowrap flex items-center gap-1.5">
+                <div className="bg-popover border border-border text-popover-foreground rounded-lg px-2.5 py-1 text-[11px] font-medium shadow-e3 whitespace-nowrap flex items-center gap-1.5">
                   <span className="text-foreground">
                     {activity[hovered].date === today
                       ? t("dash.streak.today")

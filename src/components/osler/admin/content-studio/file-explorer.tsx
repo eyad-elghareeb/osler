@@ -222,7 +222,7 @@ export function FileExplorer({
   // ── Direct-staging upload overlay ──────────────────────────────────────
   const uploadOverlay = uploadJob ? (
     <div className="pointer-events-none absolute inset-x-3 bottom-3 z-30">
-      <div className="rounded-lg border border-border bg-card/95 p-2.5 shadow-lg backdrop-blur">
+      <div className="rounded-lg border border-border bg-card/95 p-2.5 shadow-e3 backdrop-blur">
         <div className="flex items-center gap-2 text-xs">
           <Loader2 className="size-3.5 animate-spin text-primary" />
           <span className="min-w-0 flex-1 truncate">
@@ -409,7 +409,7 @@ function GridTile({
         "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
         selected
           ? "border-primary/50 bg-primary/10 ring-1 ring-primary/30"
-          : "border-border bg-card hover:border-border hover:bg-muted/40 hover:shadow-sm",
+          : "border-border bg-card hover:border-border hover:bg-muted/40 hover:shadow-e1",
         dropActive && "border-primary ring-2 ring-primary/50",
       )}
     >

@@ -61,7 +61,7 @@ function SheetContent({
           // Enter at the slow motion token (280ms), exit faster — surfaces
           // should leave quicker than they arrive. Previously the enter ran
           // 500ms, well past the app's ≤0.3s motion budget.
-          "bg-card data-[state=open]:animate-in data-[state=closed]:animate-out fill-mode-both fixed z-50 flex flex-col gap-4 shadow-lg transition ease-in-out data-[state=closed]:duration-200 data-[state=open]:duration-[280ms]",
+          "bg-card data-[state=open]:animate-in data-[state=closed]:animate-out fill-mode-both fixed z-50 flex flex-col gap-4 shadow-e3 transition ease-in-out data-[state=closed]:duration-200 data-[state=open]:duration-[280ms]",
           side === "right" &&
             "data-[state=closed]:slide-out-to-right data-[state=open]:slide-in-from-right inset-y-0 right-0 h-full w-3/4 border-l sm:max-w-sm",
           side === "left" &&

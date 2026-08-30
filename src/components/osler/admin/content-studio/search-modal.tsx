@@ -222,7 +222,7 @@ export function ContentSearchModal({
   return (
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
       <DialogContent
-        className="max-w-2xl gap-0 p-0 overflow-hidden rounded-xl border border-border bg-card shadow-2xl"
+        className="max-w-2xl gap-0 p-0 overflow-hidden rounded-xl border border-border bg-card shadow-e4"
         onKeyDown={handleKeyDown}
       >
         <DialogHeader className="sr-only">

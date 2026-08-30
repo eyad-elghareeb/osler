@@ -1929,7 +1929,7 @@ export function QuizView({
               initial={{ scale: 0.95, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.95, opacity: 0 }}
-              className="bg-card border border-border rounded-xl shadow-2xl max-w-lg w-full p-5 max-h-[80vh] overflow-y-auto"
+              className="bg-card border border-border rounded-xl shadow-e4 max-w-lg w-full p-5 max-h-[80vh] overflow-y-auto"
               onClick={(e) => e.stopPropagation()}
             >
               <div className="flex items-center justify-between mb-4">

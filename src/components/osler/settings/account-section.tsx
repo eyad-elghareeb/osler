@@ -204,7 +204,7 @@ export function AccountSettingsSection() {
       {/* Account Overview Header */}
       <Card className="p-5">
         <div className="flex items-center gap-4">
-          <div className="size-14 rounded-full bg-gradient-to-br from-primary to-primary/60 flex items-center justify-center text-xl font-bold text-primary-foreground shrink-0 shadow-sm">
+          <div className="size-14 rounded-full bg-gradient-to-br from-primary to-primary/60 flex items-center justify-center text-xl font-bold text-primary-foreground shrink-0 shadow-e1">
             {account.user.displayName.slice(0, 2).toUpperCase()}
           </div>
           <div className="flex-1 min-w-0">
@@ -378,7 +378,7 @@ export function AccountSettingsSection() {
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.95 }}
-              className="bg-card border border-border rounded-xl p-6 max-w-md w-full space-y-4 shadow-xl"
+              className="bg-card border border-border rounded-xl p-6 max-w-md w-full space-y-4 shadow-e4"
             >
               <div className="flex items-center gap-3 text-destructive">
                 <AlertTriangle className="size-6 shrink-0" />

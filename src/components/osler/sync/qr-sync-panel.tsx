@@ -154,7 +154,7 @@ export function PeerLinkQrPanel({
       <div className="flex items-start gap-4">
         {/* QR — own peer link */}
         <div className="shrink-0">
-          <div className="size-[140px] sm:size-[160px] rounded-xl bg-white p-2 shadow-sm flex items-center justify-center">
+          <div className="size-[140px] sm:size-[160px] rounded-xl bg-white p-2 shadow-e1 flex items-center justify-center">
             {qrUrl ? (
               <img src={qrUrl} alt="My Peer QR" className="size-full" />
             ) : peerId ? (

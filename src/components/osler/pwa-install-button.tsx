@@ -124,7 +124,7 @@ export function PwaInstallButton({ className }: { className?: string }) {
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 6, scale: 0.96 }}
             transition={MOTION_TRANSITION.quick}
-            className="absolute right-0 top-11 z-50 w-64 rounded-lg border border-border bg-popover p-3 text-xs shadow-lg"
+            className="absolute right-0 top-11 z-50 w-64 rounded-lg border border-border bg-popover p-3 text-xs shadow-e3"
           >
             <div className="mb-2 flex items-center justify-between">
               <span className="font-medium">{t("pwa.installOsler")}</span>
