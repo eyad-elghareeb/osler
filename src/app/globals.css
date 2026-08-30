@@ -1246,7 +1246,8 @@ input, textarea, [contenteditable="true"], .osler-prose, .ai-chat-msg {
  * cascade — this must live in the same (unlayered) origin, later in source
  * order, to win. */
 [data-slot$="-overlay"],
-[data-slot$="-content"] {
+[data-slot$="-content"],
+[data-slot="toast"] {
   animation-timing-function: cubic-bezier(0.32, 0.72, 0, 1);
 }
 
