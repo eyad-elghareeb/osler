@@ -1355,7 +1355,7 @@ function ProfileNoteCard({
   }, [note.body]);
 
   return (
-    <div className="group rounded-lg border border-border bg-card hover:border-primary/40 hover:bg-primary/5 transition-colors p-3.5 cursor-pointer">
+    <div className="group rounded-xl border border-border bg-card hover:border-primary/40 hover:bg-primary/5 transition-colors p-3.5 cursor-pointer">
       <div onClick={onOpen} className="space-y-1.5">
         <div className="flex items-start justify-between gap-2">
           <h4 className="text-sm font-semibold truncate flex-1">

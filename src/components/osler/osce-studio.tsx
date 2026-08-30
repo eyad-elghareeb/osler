@@ -2400,7 +2400,7 @@ export function OsceStudio({
                 <div className="flex gap-2 justify-end">
                   <button
                     onClick={() => setResetModalOpen(false)}
-                    className="h-9 px-4 rounded-lg border border-border text-sm font-medium hover:bg-muted/60 transition-colors"
+                    className="h-9 px-4 rounded-md border border-border text-sm font-medium hover:bg-muted/60 transition-colors"
                   >
                     Cancel
                   </button>
@@ -2654,7 +2654,7 @@ export function OsceStudio({
                   setResult(null);
                   setPhase("conversation");
                 }}
-                className="h-10 px-4 rounded-lg border border-border text-sm font-medium hover:bg-muted/60 transition-colors flex items-center gap-2"
+                className="h-10 px-4 rounded-md border border-border text-sm font-medium hover:bg-muted/60 transition-colors flex items-center gap-2"
               >
                 <ChevronLeft className="size-3.5" /> Back to Consultation
               </button>
@@ -2675,7 +2675,7 @@ export function OsceStudio({
               </button>
               <button
                 onClick={() => setPhase("select")}
-                className="h-10 px-4 rounded-lg border border-border text-sm font-medium hover:bg-muted/60 transition-colors flex items-center gap-2"
+                className="h-10 px-4 rounded-md border border-border text-sm font-medium hover:bg-muted/60 transition-colors flex items-center gap-2"
               >
                 <Home className="size-3.5" /> All Scenarios
               </button>

@@ -687,7 +687,7 @@ export function MilkdownEditor({
       onPaste={handlePaste}
       onClick={handleMermaidClick}
       className={cn(
-        "osler-milkdown-editor relative flex flex-col rounded-lg border border-border bg-card overflow-visible",
+        "osler-milkdown-editor relative flex flex-col rounded-xl border border-border bg-card overflow-visible",
         "focus-within:border-primary/40 transition-colors",
         rtl && "osler-milkdown-editor--rtl",
         dragActive && "border-primary/60 ring-2 ring-primary/30",

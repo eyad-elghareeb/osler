@@ -244,7 +244,7 @@ export function FloatingArticleModal({
             {...dismissProps}
             className={isPhone
               ? "bg-card flex flex-col overflow-hidden h-full w-full"
-              : "bg-card border border-border rounded-2xl shadow-2xl w-full max-w-5xl h-[85vh] flex flex-col overflow-hidden"
+              : "bg-card border border-border rounded-xl shadow-e4 w-full max-w-5xl h-[85vh] flex flex-col overflow-hidden"
             }
           >
             {/* Header */}

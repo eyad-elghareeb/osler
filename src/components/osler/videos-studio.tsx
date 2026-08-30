@@ -875,7 +875,7 @@ function VideoPlayerView({
         {/* Main Stage Column */}
         <div className="flex-1 min-w-0 flex flex-col overflow-y-auto lg:overflow-y-auto p-3 sm:p-4 lg:p-6 space-y-4">
           {/* Video Player Container */}
-          <div className="relative aspect-video w-full rounded-2xl overflow-hidden bg-black shadow-lg border border-border shrink-0">
+          <div className="relative aspect-video w-full rounded-xl overflow-hidden bg-black shadow-lg border border-border shrink-0">
             {invidiousMode && videoId ? (
               <iframe
                 src={`https://${INVIDIOUS_HOST}/embed/${videoId}?autoplay=1${invidiousStart != null ? `&start=${invidiousStart}` : ""}`}

@@ -208,7 +208,7 @@ export function Settings({
               <div className="text-[11px] uppercase tracking-wider text-muted-foreground px-1 mb-2">
                 {t("settings.mobileHomeSubtitle")}
               </div>
-              <div className="rounded-lg border border-border overflow-hidden bg-card">
+              <div className="rounded-xl border border-border overflow-hidden bg-card">
                 {SECTIONS.map((s, idx) => {
                   const I = s.icon;
                   return (

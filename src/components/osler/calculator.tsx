@@ -141,7 +141,7 @@ export function CalculatorModal({ onClose }: { onClose: () => void }) {
       exit={{ opacity: 0, y: 20 }}
       transition={MOTION_SPRING.soft}
       ref={ref}
-      className="fixed z-50 bg-card border border-border rounded-2xl shadow-2xl w-64 overflow-hidden"
+      className="fixed z-50 bg-card border border-border rounded-xl shadow-e4 w-64 overflow-hidden"
       style={pos ? { left: pos.x, top: pos.y } : { right: 16, bottom: 80 }}
     >
       <div
