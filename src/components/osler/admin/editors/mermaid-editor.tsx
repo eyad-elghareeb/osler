@@ -474,7 +474,7 @@ function StepCard({
               placeholder={t("admin.mermaid.stepNamePlaceholder")}
               labelKey="admin.mermaid.clickToEdit"
             />
-            <span className="text-[9px] uppercase tracking-wider font-medium text-muted-foreground">
+            <span className="text-[11px] uppercase tracking-wider font-medium text-muted-foreground">
               {t(kindMeta.medicalKey as any)}
             </span>
           </div>
@@ -566,7 +566,7 @@ function StepCard({
                   }}
                   className="w-full flex items-center gap-2 px-3 py-2 text-xs text-foreground hover:bg-primary/10 hover:text-primary transition-colors text-start"
                 >
-                  <span className={cn("w-4 h-4 rounded flex items-center justify-center text-[8px] shrink-0", kindChipClass(target.kind))}>
+                  <span className={cn("w-4 h-4 rounded flex items-center justify-center text-[11px] shrink-0", kindChipClass(target.kind))}>
                     {target.id.charAt(0)}
                   </span>
                   <span className="truncate">{target.label}</span>
@@ -606,7 +606,7 @@ function StepCard({
                       key={kind.value}
                       onClick={() => onAddAfter(step.id, kind.value, t(kind.medicalKey as any))}
                       className={cn(
-                        "flex items-center gap-1 px-2 py-1 rounded-md text-[9px] font-medium border transition-all whitespace-nowrap",
+                        "flex items-center gap-1 px-2 py-1 rounded-md text-[11px] font-medium border transition-all whitespace-nowrap",
                         kind.bg,
                         kind.color,
                         "border-border/30 hover:brightness-125",
@@ -983,7 +983,7 @@ export function MermaidEditorModal({ open, initialCode, onSave, onClose }: Merma
                             key={kind.value}
                             onClick={() => setNewStepKind(kind.value)}
                             className={cn(
-                              "flex items-center gap-1 px-2 py-1 rounded-md text-[9px] font-medium border transition-all",
+                              "flex items-center gap-1 px-2 py-1 rounded-md text-[11px] font-medium border transition-all",
                               newStepKind === kind.value
                                 ? cn(kind.bg, kind.color, "border-border/60")
                                 : "text-muted-foreground border-border hover:text-foreground",

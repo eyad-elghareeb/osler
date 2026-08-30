@@ -39,7 +39,7 @@ export function DataTablesRenderer({ tables }: { tables?: OsceDataTable[] }) {
                   <thead>
                     <tr>
                       {t.headers.map((h, hi) => (
-                        <th key={hi} className="text-left px-2 py-1 font-bold text-muted-foreground border-b border-border text-[9px] uppercase tracking-wider">
+                        <th key={hi} className="text-left px-2 py-1 font-bold text-muted-foreground border-b border-border text-[11px] uppercase tracking-wider">
                           {h}
                         </th>
                       ))}
@@ -141,7 +141,7 @@ export function PrintedMaterialsPanel({
     <div className="space-y-2">
       {data.scenario && (
         <div className="rounded-lg border border-border bg-muted/20 p-3">
-          <div className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground mb-1">
+          <div className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground mb-1">
             {t("osce.dataPresented.scenario")}
           </div>
           <p className="text-xs leading-relaxed">{data.scenario}</p>
@@ -149,7 +149,7 @@ export function PrintedMaterialsPanel({
       )}
       {images.length > 0 && (
         <div className="rounded-lg border border-border bg-card p-3">
-          <div className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground mb-2">
+          <div className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground mb-2">
             {t("osce.dataPresented.printedMaterials")}
           </div>
           <div className="grid grid-cols-2 gap-2">
@@ -169,7 +169,7 @@ export function PrintedMaterialsPanel({
                     loading="lazy"
                   />
                   {im.title && (
-                    <div className="text-[9px] font-semibold text-muted-foreground px-2 py-1 truncate group-hover:text-primary transition-colors">
+                    <div className="text-[11px] font-semibold text-muted-foreground px-2 py-1 truncate group-hover:text-primary transition-colors">
                       {im.title}
                     </div>
                   )}
@@ -178,7 +178,7 @@ export function PrintedMaterialsPanel({
             })}
           </div>
           {images.length > 1 && (
-            <p className="text-[9px] text-muted-foreground mt-1.5">{t("osce.dataPresented.enlarge")}</p>
+            <p className="text-[11px] text-muted-foreground mt-1.5">{t("osce.dataPresented.enlarge")}</p>
           )}
         </div>
       )}

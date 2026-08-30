@@ -181,7 +181,7 @@ function CategoryTile({
               <span className="truncate text-[11px] font-semibold">{label}</span>
               <span
                 className={cn(
-                  "shrink-0 rounded-full px-1.5 py-px text-[9px] font-medium tabular-nums",
+                  "shrink-0 rounded-full px-1.5 py-px text-[11px] font-medium tabular-nums",
                   active ? cls.badge : "bg-muted text-muted-foreground",
                 )}
               >

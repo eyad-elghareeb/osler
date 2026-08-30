@@ -1924,7 +1924,7 @@ export function OsceStudio({
                 <div className="bg-card border border-border rounded-xl p-3 shadow-e1">
                   <button
                     onClick={() => setMaterialsModalOpen(true)}
-                    className="w-full flex items-center justify-between text-[9px] font-bold uppercase tracking-wider text-muted-foreground group"
+                    className="w-full flex items-center justify-between text-[11px] font-bold uppercase tracking-wider text-muted-foreground group"
                   >
                     <span className="flex items-center gap-1.5">
                       <BarChart3 className="size-3.5 text-primary" />
@@ -1958,7 +1958,7 @@ export function OsceStudio({
 
               {/* Progress card */}
               <div className="bg-card border border-border rounded-xl p-3 space-y-2.5 shadow-e1">
-                <div className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground">{t("osce.home.progress")}</div>
+                <div className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">{t("osce.home.progress")}</div>
                 <div className="flex justify-between text-[11px]">
                   <span className="text-muted-foreground">Questions</span>
                   <span className="font-semibold tabular-nums">{turnCount} / {MAX_TURNS}</span>
@@ -1978,7 +1978,7 @@ export function OsceStudio({
               {/* Consultation map */}
               {!isDataInterp && (
                 <div className="bg-card border border-border rounded-xl p-3 shadow-e1">
-                  <div className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground mb-2">{t("osce.session.consultationMap")}</div>
+                  <div className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground mb-2">{t("osce.session.consultationMap")}</div>
                   <div className="flex flex-col gap-0.5">
                     {MAP_STEPS.map(([label, desc], i) => (
                       <div
@@ -2006,7 +2006,7 @@ export function OsceStudio({
               {/* Quick prompts */}
               {!isDataInterp && (
                 <div className="bg-card border border-border rounded-xl p-3 shadow-e1">
-                  <div className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground mb-2">{t("osce.session.quickPrompts")}</div>
+                  <div className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground mb-2">{t("osce.session.quickPrompts")}</div>
                   <div className="flex flex-col gap-1">
                     {[
                       [t("osce.session.prompt.open"), "Can you tell me more about what brought you in today?"],

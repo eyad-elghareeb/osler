@@ -73,7 +73,7 @@ export function EditorNavigator({
           type="button"
           onClick={() => { for (let i = 0; i < items; i++) if (!(collapsed[i] ?? false)) onToggleCollapse(i); }}
           disabled={allCollapsed}
-          className="flex-1 text-[9px] font-medium px-1.5 py-1 rounded border border-border hover:border-primary/40 disabled:opacity-40"
+          className="flex-1 text-[11px] font-medium px-1.5 py-1 rounded border border-border hover:border-primary/40 disabled:opacity-40"
         >
           Collapse all
         </button>
@@ -81,7 +81,7 @@ export function EditorNavigator({
           type="button"
           onClick={() => { for (let i = 0; i < items; i++) if (collapsed[i] ?? false) onToggleCollapse(i); }}
           disabled={noneCollapsed}
-          className="flex-1 text-[9px] font-medium px-1.5 py-1 rounded border border-border hover:border-primary/40 disabled:opacity-40"
+          className="flex-1 text-[11px] font-medium px-1.5 py-1 rounded border border-border hover:border-primary/40 disabled:opacity-40"
         >
           Expand all
         </button>
