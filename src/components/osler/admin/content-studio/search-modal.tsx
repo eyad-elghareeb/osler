@@ -251,7 +251,7 @@ export function ContentSearchModal({
               <X className="size-3.5" />
             </Button>
           )}
-          <span className="hidden sm:inline-flex items-center rounded-md border border-border bg-muted/60 px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground">
+          <span className="hidden sm:inline-flex items-center rounded-md border border-border bg-muted/60 px-1.5 py-0.5 font-mono text-[11px] text-muted-foreground">
             ESC
           </span>
         </div>

@@ -260,7 +260,7 @@ export function AiSettingsSection() {
           <label className="text-xs font-semibold text-muted-foreground flex items-center justify-between">
             <span>{t("settings.ai.apiKey")}</span>
             {draft.apiKey !== saved.apiKey && (
-              <span className="text-[10px] text-warning font-normal">{t("settings.ai.unsaved")}</span>
+              <span className="text-[11px] text-warning font-normal">{t("settings.ai.unsaved")}</span>
             )}
           </label>
           <input

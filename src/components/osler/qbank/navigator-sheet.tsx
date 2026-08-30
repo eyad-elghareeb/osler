@@ -190,7 +190,7 @@ export function QuestionNavigatorSheet(p: QuestionNavigatorSheetProps) {
           </div>
 
           {/* Compact legend */}
-          <div className="mt-3 pt-2.5 border-t border-border flex flex-wrap gap-x-3 gap-y-1.5 text-[10px] text-muted-foreground">
+          <div className="mt-3 pt-2.5 border-t border-border flex flex-wrap gap-x-3 gap-y-1.5 text-[11px] text-muted-foreground">
             <LegendSwatch className="bg-sidebar border border-border" label={t("qbank.home.unanswered")} />
             {showOutcome ? (
               <>

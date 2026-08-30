@@ -108,12 +108,12 @@ export function ShortcutsSettingsSection() {
                                 onReset={() => handleResetOne(a.id)}
                               />
                               {!isDefault && currentBinding && (
-                                <div className="text-[10px] text-muted-foreground mt-1">
+                                <div className="text-[11px] text-muted-foreground mt-1">
                                   {t("settings.shortcuts.default")}: <span className="font-mono">{describeBinding(a.defaultBinding)}</span>
                                 </div>
                               )}
                               {!currentBinding && (
-                                <div className="text-[10px] text-muted-foreground mt-1">{t("settings.shortcuts.disabled")}</div>
+                                <div className="text-[11px] text-muted-foreground mt-1">{t("settings.shortcuts.disabled")}</div>
                               )}
                             </td>
                           </tr>
@@ -209,7 +209,7 @@ function KeyCaptureInput({
         />
         <button
           onClick={() => setCapturing(false)}
-          className="text-[10px] text-muted-foreground hover:text-foreground shrink-0"
+          className="text-[11px] text-muted-foreground hover:text-foreground shrink-0"
         >
           {t("settings.shortcuts.cancel")}
         </button>

@@ -205,7 +205,7 @@ export function MoveContentDialog({
                   >
                     <FolderOpen className={cn("size-3 shrink-0", folderRowCls)} />
                     <span className="min-w-0 flex-1 truncate text-start">{f.label}</span>
-                    <span className="hidden sm:inline shrink-0 font-mono text-[10px] text-muted-foreground opacity-60 truncate max-w-[45%] text-end">
+                    <span className="hidden sm:inline shrink-0 font-mono text-[11px] text-muted-foreground opacity-60 truncate max-w-[45%] text-end">
                       {f.path}
                     </span>
                     {active && <Check className="ms-auto size-3 shrink-0 text-primary" />}

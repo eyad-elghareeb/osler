@@ -234,7 +234,7 @@ export function QuizSettingsPanel({
                   >
                     {opt.sample}
                   </span>
-                  <span className="text-[10px] text-muted-foreground">
+                  <span className="text-[11px] text-muted-foreground">
                     {t(`qbank.settings.fontFamily.${opt.id}`)}
                   </span>
                 </button>
@@ -483,7 +483,7 @@ function Field({
         <div className="flex-1 min-w-0 space-y-1">
           <label className="text-[11px] font-semibold text-foreground block">{label}</label>
           {description && (
-            <p className="text-[10px] text-muted-foreground leading-relaxed">
+            <p className="text-[11px] text-muted-foreground leading-relaxed">
               {description}
             </p>
           )}
@@ -497,13 +497,13 @@ function Field({
       <div className="flex items-center justify-between gap-2">
         <label className="text-[11px] font-semibold text-foreground">{label}</label>
         {hint && (
-          <span className="text-[10px] font-mono tabular-nums text-muted-foreground">
+          <span className="text-[11px] font-mono tabular-nums text-muted-foreground">
             {hint}
           </span>
         )}
       </div>
       {description && (
-        <p className="text-[10px] text-muted-foreground leading-relaxed -mt-0.5">
+        <p className="text-[11px] text-muted-foreground leading-relaxed -mt-0.5">
           {description}
         </p>
       )}
@@ -582,7 +582,7 @@ function LayoutOption({
       <Icon className="size-4" />
       <div>
         <div className="text-xs font-semibold text-foreground">{label}</div>
-        <div className="text-[10px] text-muted-foreground">{description}</div>
+        <div className="text-[11px] text-muted-foreground">{description}</div>
       </div>
     </button>
   );

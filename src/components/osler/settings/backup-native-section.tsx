@@ -155,7 +155,7 @@ export function NativeSettingsSection() {
               </Button>
             </div>
             {!hapticsOn && (
-              <p className="text-[10px] text-muted-foreground/70 mt-2">
+              <p className="text-[11px] text-muted-foreground/70 mt-2">
                 {t("native.haptics.unsupported")}
               </p>
             )}
@@ -186,7 +186,7 @@ export function NativeSettingsSection() {
               disabled
             />
             {!vtOn && (
-              <p className="text-[10px] text-muted-foreground/70 mt-2">
+              <p className="text-[11px] text-muted-foreground/70 mt-2">
                 {t("native.viewTransitions.desc")}
               </p>
             )}
@@ -212,7 +212,7 @@ export function NativeSettingsSection() {
               label={t("animations.enable")}
             />
             {!animationsOn && (
-              <p className="text-[10px] text-muted-foreground/70 mt-2">
+              <p className="text-[11px] text-muted-foreground/70 mt-2">
                 {t("animations.reduceHint")}
               </p>
             )}

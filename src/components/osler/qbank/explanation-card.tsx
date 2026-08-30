@@ -150,7 +150,7 @@ export function ExplanationCard({
           {q.tags && q.tags.length > 0 && (
             <div className="mt-4 pt-3 border-t border-border flex flex-wrap gap-1.5">
               {q.tags.map((t) => (
-                <Badge key={t} variant="outline" className="text-[10px] rounded-md">
+                <Badge key={t} variant="outline" className="text-[11px] rounded-md">
                   #{t}
                 </Badge>
               ))}
@@ -215,9 +215,9 @@ export function ExplanationCard({
         )}
         {q.tags && q.tags.length > 0 && (
           <div className="mt-4 pt-3 border-t border-border flex flex-wrap gap-1.5">
-            <Badge variant="secondary" className="text-[10px] rounded-md capitalize">{q.difficulty ?? "standard"}</Badge>
+            <Badge variant="secondary" className="text-[11px] rounded-md capitalize">{q.difficulty ?? "standard"}</Badge>
             {q.tags.map((t) => (
-              <Badge key={t} variant="outline" className="text-[10px] rounded-md">
+              <Badge key={t} variant="outline" className="text-[11px] rounded-md">
                 #{t}
               </Badge>
             ))}

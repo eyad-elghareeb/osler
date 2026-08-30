@@ -175,7 +175,7 @@ function TreeRow({ node, depth, expanded, selectedIds, searching, onToggle, onSe
         {/* Drop target overlay */}
         {dropActive && (
           <span className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center rounded-md bg-primary/10">
-            <span className="max-w-[90%] truncate rounded bg-primary px-2 py-0.5 text-[10px] font-semibold text-primary-foreground">
+            <span className="max-w-[90%] truncate rounded bg-primary px-2 py-0.5 text-[11px] font-semibold text-primary-foreground">
               {t("admin.studio.dropOnFolder", { name: node.name })}
             </span>
           </span>
@@ -196,13 +196,13 @@ function TreeRow({ node, depth, expanded, selectedIds, searching, onToggle, onSe
             {node.name}
           </span>
           {!isFolder && node.r2Key && node.r2Key.split("/").pop() !== node.name && (
-            <span className="truncate font-mono text-[10px] text-muted-foreground/60">
+            <span className="truncate font-mono text-[11px] text-muted-foreground/60">
               {node.r2Key.split("/").pop()}
             </span>
           )}
         </div>
         {isFolder && children.length > 0 && (
-          <span className="shrink-0 rounded-md border border-border/60 bg-muted/40 px-1 py-px text-[10px] font-medium tabular-nums text-muted-foreground">
+          <span className="shrink-0 rounded-md border border-border/60 bg-muted/40 px-1 py-px text-[11px] font-medium tabular-nums text-muted-foreground">
             {children.length}
           </span>
         )}

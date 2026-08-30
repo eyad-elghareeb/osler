@@ -231,7 +231,7 @@ export function FileExplorer({
               total: String(uploadJob.total),
             })}
           </span>
-          <span className="font-mono text-[10px] text-muted-foreground truncate">
+          <span className="font-mono text-[11px] text-muted-foreground truncate">
             {uploadJob.dest}
           </span>
         </div>
@@ -452,14 +452,14 @@ function GridTile({
           {node.name}
         </p>
         {hasDistinctSlug && (
-          <p className="w-full truncate font-mono text-[10px] text-muted-foreground/80">
+          <p className="w-full truncate font-mono text-[11px] text-muted-foreground/80">
             {rawKey}
           </p>
         )}
       </div>
 
       {/* Footer */}
-      <div className="flex w-full items-center justify-between gap-1 border-t border-border/40 pt-1 text-[10px] text-muted-foreground font-mono">
+      <div className="flex w-full items-center justify-between gap-1 border-t border-border/40 pt-1 text-[11px] text-muted-foreground font-mono">
         {isFolder ? (
           <span className="tabular-nums font-sans text-muted-foreground font-medium">
             {node.items ? `${node.items.length} items` : t("admin.studio.folder")}
@@ -585,7 +585,7 @@ function ListRow({
             <NodeBadges node={node} variant="compact" />
           </div>
           {hasDistinctSlug && (
-            <p className="truncate font-mono text-[10px] text-muted-foreground/80">{rawKey}</p>
+            <p className="truncate font-mono text-[11px] text-muted-foreground/80">{rawKey}</p>
           )}
         </div>
       </div>
@@ -593,7 +593,7 @@ function ListRow({
       {/* Status */}
       <div>
         {status ? (
-          <span className={cn("rounded-full border px-1.5 py-0.5 text-[10px] uppercase tracking-wider font-medium", STATUS_BADGE[status])}>
+          <span className={cn("rounded-full border px-1.5 py-0.5 text-[11px] uppercase tracking-wider font-medium", STATUS_BADGE[status])}>
             {t(`admin.studio.row${status.charAt(0).toUpperCase() + status.slice(1)}` as any)}
           </span>
         ) : (

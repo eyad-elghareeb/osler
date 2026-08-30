@@ -643,10 +643,10 @@ function SessionRow({
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2 mb-1 flex-wrap">
           <span className="text-sm font-semibold truncate">{s.packTitle}</span>
-          <Badge variant="secondary" className="text-[10px] capitalize">
+          <Badge variant="secondary" className="text-[11px] capitalize">
             {ENGINE_META[s.engine]?.label ?? s.engine}
           </Badge>
-          <Badge variant="outline" className="text-[10px] capitalize">
+          <Badge variant="outline" className="text-[11px] capitalize">
             {s.mode === "timed" ? t("qbank.home.timed") : t("qbank.home.tutor")}
           </Badge>
         </div>

@@ -330,7 +330,7 @@ export function FloatingArticleModal({
                           <BookOpen className="size-3.5 text-muted-foreground shrink-0 mt-0.5" />
                           <div className="flex-1 min-w-0">
                             <div className="truncate">{a.title}</div>
-                            <div className="text-[10px] text-muted-foreground">
+                            <div className="text-[11px] text-muted-foreground">
                               {a.specialty} · {a.readTimeMin} min
                             </div>
                           </div>

@@ -163,7 +163,7 @@ export function NetworkSyncPanel() {
             </div>
 
             {(roomId || peerId) && (
-              <div className="text-[10px] text-muted-foreground mb-3 font-mono break-all">
+              <div className="text-[11px] text-muted-foreground mb-3 font-mono break-all">
                 {peerId && <>{t("sync.network.peerId", { id: peerId })}</>}
                 {roomId && <> · {t("sync.network.room", { id: roomId })}</>}
                 {transport?.deviceName && (
@@ -255,7 +255,7 @@ export function NetworkSyncPanel() {
         {roomId ? (
           <div className="flex items-center justify-between gap-2">
             <span className="font-[var(--font-code)] text-lg font-bold tracking-widest text-primary select-all">{roomId}</span>
-            <span className="text-[10px] text-muted-foreground hidden sm:block">{t("sync.network.roomHint")}</span>
+            <span className="text-[11px] text-muted-foreground hidden sm:block">{t("sync.network.roomHint")}</span>
           </div>
         ) : (
           <p className="text-xs text-muted-foreground">{t("sync.network.roomStartHint")}</p>
@@ -314,7 +314,7 @@ export function NetworkSyncPanel() {
                     </div>
                     <div className="min-w-0">
                       <div className="text-sm font-medium truncate">{device.name}</div>
-                      <div className="text-[10px] text-muted-foreground">
+                      <div className="text-[11px] text-muted-foreground">
                         {Math.max(0, Math.round((Date.now() - device.lastSeen) / 1000))}s ago
                       </div>
                     </div>
@@ -367,7 +367,7 @@ export function NetworkSyncPanel() {
                   />
                   <div className="min-w-0">
                     <div className="text-xs font-medium truncate">{c.label}</div>
-                    <div className="text-[10px] text-muted-foreground">{c.status}</div>
+                    <div className="text-[11px] text-muted-foreground">{c.status}</div>
                   </div>
                 </div>
               </div>

@@ -450,7 +450,7 @@ export function UserDetailView({ userId }: UserDetailViewProps) {
                   onClick={() => changeRole(r)}
                 >
                   {t(`admin.users.roles.${r}` as any)}
-                  {user.role === r && <span className="ms-auto text-[10px] text-muted-foreground">✓</span>}
+                  {user.role === r && <span className="ms-auto text-[11px] text-muted-foreground">✓</span>}
                 </DropdownMenuItem>
               ))}
             </DropdownMenuContent>

@@ -440,7 +440,7 @@ export function AiAssistant({
                     className="flex-1 h-8 rounded-lg border border-border bg-card px-3 text-xs outline-none focus:border-primary"
                   />
                 </div>
-                <p className="text-[10px] text-muted-foreground">
+                <p className="text-[11px] text-muted-foreground">
                   {t("ai.apiKeyHint")}{" "}
                   <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener" className="text-primary underline">
                     AI Studio
@@ -595,13 +595,13 @@ export function AiAssistant({
           </Button>
         </div>
         <div className="flex items-center justify-between mt-1.5">
-          <p className="text-[10px] text-muted-foreground hidden sm:block">
+          <p className="text-[11px] text-muted-foreground hidden sm:block">
             {t("ai.enterHint")}
           </p>
           <button
             type="button"
             onClick={clear}
-            className="text-[10px] text-muted-foreground hover:text-foreground transition-colors"
+            className="text-[11px] text-muted-foreground hover:text-foreground transition-colors"
           >
             {t("ai.clearChat")}
           </button>
@@ -702,7 +702,7 @@ function ChatBubble({ msg, isStreaming }: { msg: Message; isStreaming?: boolean 
       {/* Speaker label — mirrors the OSCE conversation bubbles */}
       <div
         className={cn(
-          "text-[10px] font-semibold uppercase tracking-wider flex items-center gap-1",
+          "text-[11px] font-semibold uppercase tracking-wider flex items-center gap-1",
           isUser ? "text-muted-foreground" : "text-primary/70"
         )}
       >

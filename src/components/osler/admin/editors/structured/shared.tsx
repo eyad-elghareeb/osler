@@ -97,7 +97,7 @@ export function Field({
         <label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
           {label}
         </label>
-        {hint && <span className="text-[10px] text-muted-foreground/70">{hint}</span>}
+        {hint && <span className="text-[11px] text-muted-foreground/70">{hint}</span>}
       </div>
       {children}
     </div>
@@ -175,11 +175,11 @@ export function ListToolbar({
         <div className="flex items-center gap-1">
           <Button size="xs" variant="ghost" onClick={ctx.collapseAll} title="Collapse all">
             <ChevronsDown className="size-3 me-0.5" />
-            <span className="text-[10px]">Collapse</span>
+            <span className="text-[11px]">Collapse</span>
           </Button>
           <Button size="xs" variant="ghost" onClick={ctx.expandAll} title="Expand all">
             <ChevronsUp className="size-3 me-0.5" />
-            <span className="text-[10px]">Expand</span>
+            <span className="text-[11px]">Expand</span>
           </Button>
         </div>
       )}
@@ -326,7 +326,7 @@ export function ItemRow({
         )}
         <Badge
           variant="outline"
-          className={`font-mono text-[10px] px-1.5 py-0 ${collapsible ? "cursor-pointer" : ""}`}
+          className={`font-mono text-[11px] px-1.5 py-0 ${collapsible ? "cursor-pointer" : ""}`}
           onClick={collapsible ? toggleCollapse : undefined}
         >
           {title}

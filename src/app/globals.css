@@ -1069,7 +1069,7 @@ input, textarea, [contenteditable="true"], .osler-prose, .ai-chat-msg {
   min-height: 48px;
   padding: 4px 8px;
   color: var(--muted-foreground);
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 500;
   transition: color 0.15s ease;
   -webkit-tap-highlight-color: transparent;

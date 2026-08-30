@@ -154,7 +154,7 @@ function CategoryTile({
             {/* Drop target overlay */}
             {dropActive && (
               <span className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center rounded-md bg-primary/10">
-                <span className="max-w-[90%] truncate rounded bg-primary px-2 py-0.5 text-[10px] font-semibold text-primary-foreground">
+                <span className="max-w-[90%] truncate rounded bg-primary px-2 py-0.5 text-[11px] font-semibold text-primary-foreground">
                   {dropLabel}
                 </span>
               </span>

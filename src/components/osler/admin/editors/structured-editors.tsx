@@ -43,7 +43,7 @@ export function EditorNavigator({
     <div className="sticky top-2 z-10 border border-border rounded-lg bg-card/90 backdrop-blur-sm p-2 space-y-2 shadow-sm">
       <div className="flex items-center gap-1 mb-1">
         <ListChecks className="size-3.5 text-primary" />
-        <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+        <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
           Navigator ({items})
         </span>
       </div>
@@ -56,7 +56,7 @@ export function EditorNavigator({
               type="button"
               onClick={() => onJumpTo(i)}
               className={cn(
-                "aspect-square rounded text-[10px] font-semibold tabular-nums border transition-all hover:border-primary/40",
+                "aspect-square rounded text-[11px] font-semibold tabular-nums border transition-all hover:border-primary/40",
                 isCollapsed
                   ? "bg-muted/50 text-muted-foreground border-border"
                   : "bg-primary/10 text-primary border-primary/30",

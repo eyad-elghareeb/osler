@@ -161,7 +161,7 @@ export function CalculatorModal({ onClose }: { onClose: () => void }) {
       </div>
       <div className="p-2.5">
         <div className="bg-muted rounded-lg p-2 mb-2 text-right">
-          <div className="text-[10px] text-muted-foreground h-3 tabular-nums truncate">
+          <div className="text-[11px] text-muted-foreground h-3 tabular-nums truncate">
             {equation || "\u00A0"}
           </div>
           <div className="text-xl font-semibold tabular-nums truncate">

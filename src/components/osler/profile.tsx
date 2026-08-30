@@ -205,7 +205,7 @@ export function Profile({
                     {cloudSession?.user.displayName || username}
                   </h1>
                   {cloudSession && (
-                    <Badge variant="outline" className="text-[10px] bg-primary/10 text-primary border-primary/30">
+                    <Badge variant="outline" className="text-[11px] bg-primary/10 text-primary border-primary/30">
                       <Cloud className="size-3 me-1" />
                       {cloudSession.user.role === "admin"
                         ? t("settings.account.admin")
@@ -220,11 +220,11 @@ export function Profile({
                 </p>
               </div>
               <div className="hidden sm:flex flex-col items-end gap-1">
-                <Badge variant="secondary" className="text-[10px]">
+                <Badge variant="secondary" className="text-[11px]">
                   <AnimatedFlame className="size-3 me-1" />
                   {progress.length > 0 ? t("profile.activeLearner") : t("profile.newHere")}
                 </Badge>
-                <span className="text-[10px] text-muted-foreground">
+                <span className="text-[11px] text-muted-foreground">
                   {t("profile.questionsAnswered", { n: attemptedTotal })}
                 </span>
               </div>
@@ -407,7 +407,7 @@ function ActivityHeatmapGrid() {
                 {[...Array(7)].map((_, di) => (
                   <div
                     key={di}
-                    className="h-3 flex items-center text-[10px] font-medium text-muted-foreground"
+                    className="h-3 flex items-center text-[11px] font-medium text-muted-foreground"
                   >
                     {[1, 3, 5].includes(di)
                       ? new Date(Date.UTC(2024, 0, 7 + di)).toLocaleDateString(undefined, { weekday: "short" })
@@ -417,7 +417,7 @@ function ActivityHeatmapGrid() {
               </div>
               <div className="flex flex-col gap-1">
                 {/* Month labels */}
-                <div className="flex gap-[3px] h-4 text-[10px] font-medium text-muted-foreground">
+                <div className="flex gap-[3px] h-4 text-[11px] font-medium text-muted-foreground">
                   {weeks.map((_, wi) => {
                     const label = monthLabels.find((m) => m.week === wi);
                     return (
@@ -1013,7 +1013,7 @@ const ProfileStreakSection = React.memo(function ProfileStreakSection() {
           </AnimatePresence>
 
           {/* Timeline Date Footer */}
-          <div className="flex justify-between items-center text-[10px] text-muted-foreground/70 mt-2 font-medium">
+          <div className="flex justify-between items-center text-[11px] text-muted-foreground/70 mt-2 font-medium">
             <span>
               {activity[0]?.date ? new Date(activity[0].date + "T00:00:00Z").toLocaleDateString(undefined, { month: "short", day: "numeric" }) : ""}
             </span>
@@ -1361,7 +1361,7 @@ function ProfileNoteCard({
           <h4 className="text-sm font-semibold truncate flex-1">
             {note.title || <span className="italic text-muted-foreground">{t("qbank.notes.card.untitled")}</span>}
           </h4>
-          <div className="flex items-center gap-0.5 text-[10px] text-muted-foreground shrink-0">
+          <div className="flex items-center gap-0.5 text-[11px] text-muted-foreground shrink-0">
             <Clock className="size-3" />
             <span>{timeAgo(note.updatedAt, t)}</span>
           </div>
@@ -1376,20 +1376,20 @@ function ProfileNoteCard({
             {note.tags.slice(0, 5).map((tag) => (
               <span
                 key={tag}
-                className="px-1.5 py-0.5 rounded text-[10px] bg-muted text-muted-foreground"
+                className="px-1.5 py-0.5 rounded text-[11px] bg-muted text-muted-foreground"
               >
                 {tag}
               </span>
             ))}
             {note.tags.length > 5 && (
-              <span className="text-[10px] text-muted-foreground">
+              <span className="text-[11px] text-muted-foreground">
                 +{note.tags.length - 5}
               </span>
             )}
           </div>
         )}
         {note.packTitle && (
-          <div className="flex items-center gap-1 text-[10px] text-muted-foreground pt-0.5">
+          <div className="flex items-center gap-1 text-[11px] text-muted-foreground pt-0.5">
             <Folder className="size-3" />
             <span className="truncate">{note.packTitle}</span>
             {note.questionIdx !== undefined && (
@@ -1408,7 +1408,7 @@ function ProfileNoteCard({
               e.stopPropagation();
               onOpenInQBank();
             }}
-            className="px-2 py-0.5 rounded text-[10px] text-muted-foreground hover:text-foreground hover:bg-muted transition-colors flex items-center gap-1"
+            className="px-2 py-0.5 rounded text-[11px] text-muted-foreground hover:text-foreground hover:bg-muted transition-colors flex items-center gap-1"
             title={t("qbank.notes.card.openInQBank")}
           >
             <ExternalLink className="size-3" />
@@ -1420,7 +1420,7 @@ function ProfileNoteCard({
             e.stopPropagation();
             onDelete();
           }}
-          className="px-2 py-0.5 rounded text-[10px] text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors flex items-center gap-1"
+          className="px-2 py-0.5 rounded text-[11px] text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors flex items-center gap-1"
           title={t("qbank.notes.card.delete")}
         >
           <Trash2 className="size-3" />

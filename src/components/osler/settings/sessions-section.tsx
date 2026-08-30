@@ -196,7 +196,7 @@ export function SessionsSettingsSection() {
                       {describeDevice(info.userAgent)}
                     </span>
                     {info.current && (
-                      <span className="text-[10px] uppercase font-semibold px-1.5 py-0.5 rounded-full bg-primary/15 text-primary shrink-0">
+                      <span className="text-[11px] uppercase font-semibold px-1.5 py-0.5 rounded-full bg-primary/15 text-primary shrink-0">
                         {t("settings.sessions.current")}
                       </span>
                     )}

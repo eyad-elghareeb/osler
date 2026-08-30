@@ -97,7 +97,7 @@ export function NodeBadges({
 
   const badgeWrapperCls = cn(
     "inline-flex items-center gap-1 rounded-md border transition-colors shadow-2xs",
-    variant === "compact" ? "p-0.5 text-[10px]" : "px-1.5 py-0.5 text-xs font-medium",
+    variant === "compact" ? "p-0.5 text-[11px]" : "px-1.5 py-0.5 text-xs font-medium",
   );
 
   return (

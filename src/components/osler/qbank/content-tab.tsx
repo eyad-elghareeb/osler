@@ -144,7 +144,7 @@ export const PackCard = React.memo(function PackCard({
           <div className="flex items-center gap-2">
             <h3 className="font-semibold text-sm truncate text-foreground leading-snug">{node.title}</h3>
             {isAr && (
-              <span className="text-[10px] px-1.5 py-0.5 rounded bg-primary/15 text-primary font-semibold shrink-0">
+              <span className="text-[11px] px-1.5 py-0.5 rounded bg-primary/15 text-primary font-semibold shrink-0">
                 {t("lang.badge.ar")}
               </span>
             )}

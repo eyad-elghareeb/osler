@@ -211,7 +211,7 @@ export function AccountSettingsSection() {
             <div className="flex items-center gap-2">
               <h2 className="text-lg font-bold truncate">{account.user.displayName}</h2>
               <span className={cn(
-                "text-[10px] uppercase font-semibold px-2 py-0.5 rounded-full border",
+                "text-[11px] uppercase font-semibold px-2 py-0.5 rounded-full border",
                 account.user.role === "admin"
                   ? "bg-primary/10 text-primary border-primary/30"
                   : "bg-muted text-muted-foreground border-border"

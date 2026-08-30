@@ -309,7 +309,7 @@ export function AppShell({ children }: AppShellProps) {
               </div>
               <div className="hidden lg:block leading-tight text-start">
                 <div className="text-sm font-semibold">{t("app.name")}</div>
-                <div className="text-[10px] text-muted-foreground">
+                <div className="text-[11px] text-muted-foreground">
                   {t("app.tagline")}
                 </div>
               </div>
@@ -349,7 +349,7 @@ export function AppShell({ children }: AppShellProps) {
                   <span className="flex-1 text-start truncate min-w-0">
                     {searchPlaceholder}
                   </span>
-                  <kbd className="hidden xl:inline-flex items-center gap-0.5 text-[10px] px-1.5 py-0.5 rounded border border-border bg-background/60 font-mono shrink-0">
+                  <kbd className="hidden xl:inline-flex items-center gap-0.5 text-[11px] px-1.5 py-0.5 rounded border border-border bg-background/60 font-mono shrink-0">
                     Ctrl+K
                   </kbd>
                 </button>
@@ -679,7 +679,7 @@ function MobileScrollAwayBar({
           </div>
           <div className="hidden sm:block leading-tight text-start min-w-0">
             <div className="text-sm font-semibold truncate">{t("app.name")}</div>
-            <div className="text-[10px] text-muted-foreground truncate">
+            <div className="text-[11px] text-muted-foreground truncate">
               {t("app.tagline")}
             </div>
           </div>

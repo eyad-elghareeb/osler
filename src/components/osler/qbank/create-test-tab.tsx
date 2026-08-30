@@ -798,7 +798,7 @@ export function CreateTestTab({
                     </div>
                     <div className="flex-1 min-w-0">
                       <span className="text-xs font-medium truncate block">{node.title}</span>
-                      <span className="text-[10px] text-muted-foreground">
+                      <span className="text-[11px] text-muted-foreground">
                         {ENGINE_META[node.type as EngineType].label}
                         {content && ` · ${countQuestions(content)} questions`}
                       </span>
@@ -865,7 +865,7 @@ export function CheckboxColumn({
           title={t("qbank.home.selectAll")}
         />
         <span className="text-xs font-semibold uppercase tracking-wider text-foreground flex-1">{title}</span>
-        <span className="text-[10px] text-muted-foreground tabular-nums">
+        <span className="text-[11px] text-muted-foreground tabular-nums">
           {selected.length}/{items.length}
         </span>
       </div>
@@ -890,7 +890,7 @@ export function CheckboxColumn({
                 <span className={`text-sm flex-1 truncate ${isSel ? "text-foreground font-medium" : "text-foreground"}`}>
                   {item.label}
                 </span>
-                <span className="text-[10px] text-muted-foreground tabular-nums shrink-0">({item.count})</span>
+                <span className="text-[11px] text-muted-foreground tabular-nums shrink-0">({item.count})</span>
               </label>
             );
           })

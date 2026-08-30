@@ -611,7 +611,7 @@ export function FlashcardStudio({
         <div className="relative w-full h-full overflow-hidden rounded-xl border border-border shadow-lg bg-card">
           <div className="absolute inset-0 flex flex-col">
             <div className="shrink-0 px-4 sm:px-6 pt-4 sm:pt-5 pb-2 border-b border-border">
-              <div className="text-[10px] uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+              <div className="text-[11px] uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
                 <Sparkles className="size-3" />
                 {t("flash.cloze")}
               </div>
@@ -648,7 +648,7 @@ export function FlashcardStudio({
         {/* Back layer — full-card answer with a small question echo at top. */}
         <div className="absolute inset-0 flex flex-col bg-card rounded-xl">
           <div className="shrink-0 px-4 sm:px-6 pt-4 sm:pt-5 pb-2 border-b border-border">
-            <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1 flex items-center gap-1.5">
+            <div className="text-[11px] uppercase tracking-wider text-muted-foreground mb-1 flex items-center gap-1.5">
               <Lightbulb className="size-3" />
               {t("flash.question")}
             </div>
@@ -658,7 +658,7 @@ export function FlashcardStudio({
             />
           </div>
           <div className="flex-1 min-h-0 flex flex-col items-center justify-center p-4 sm:p-6 bg-[color-mix(in_oklch,var(--primary)_4%,var(--card))] rounded-b-xl overflow-y-auto osler-scroll">
-            <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-2 flex items-center gap-1.5">
+            <div className="text-[11px] uppercase tracking-wider text-muted-foreground mb-2 flex items-center gap-1.5">
               <Sparkles className="size-3" />
               {t("flash.answer")}
             </div>
@@ -1160,7 +1160,7 @@ export function FlashcardStudio({
               className="shrink-0 border-t border-border bg-card px-4 py-3 sm:py-3"
             >
               <div className="max-w-lg mx-auto">
-                <div className="text-[10px] uppercase tracking-wider text-muted-foreground text-center mb-2">
+                <div className="text-[11px] uppercase tracking-wider text-muted-foreground text-center mb-2">
                   {t("flash.ratePrompt")}
                 </div>
                 <div className="grid grid-cols-4 gap-1.5">

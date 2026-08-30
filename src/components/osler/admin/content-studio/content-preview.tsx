@@ -117,7 +117,7 @@ function PreviewImages({
             className="max-h-24 rounded border border-border object-contain"
           />
           {img.caption && (
-            <figcaption className="mt-0.5 text-[10px] text-muted-foreground">{img.caption}</figcaption>
+            <figcaption className="mt-0.5 text-[11px] text-muted-foreground">{img.caption}</figcaption>
           )}
         </figure>
       ))}
@@ -172,7 +172,7 @@ function useReveal(total: number) {
 
 function MetaPill({ label }: { label: string }) {
   return (
-    <span className="rounded-full border border-border bg-muted/40 px-1.5 py-px text-[10px] text-muted-foreground">
+    <span className="rounded-full border border-border bg-muted/40 px-1.5 py-px text-[11px] text-muted-foreground">
       {label}
     </span>
   );
@@ -209,7 +209,7 @@ function QuizPreview({ data, r2Key }: { data: any; r2Key?: string }) {
                   {correct ? (
                     <CheckCircle2 className="mt-px size-2.5 shrink-0" />
                   ) : (
-                    <span className="mt-px w-2.5 shrink-0 text-center text-[10px] text-muted-foreground">
+                    <span className="mt-px w-2.5 shrink-0 text-center text-[11px] text-muted-foreground">
                       {letters[oi] ?? oi + 1}
                     </span>
                   )}
@@ -288,7 +288,7 @@ function BankPassage({ passage, index, r2Key }: { passage: any; index: number; r
                       {correct ? (
                         <CheckCircle2 className="mt-px size-2.5 shrink-0" />
                       ) : (
-                        <span className="mt-px w-2.5 shrink-0 text-center text-[10px] text-muted-foreground">
+                        <span className="mt-px w-2.5 shrink-0 text-center text-[11px] text-muted-foreground">
                           {letters[oi] ?? oi + 1}
                         </span>
                       )}
@@ -338,7 +338,7 @@ function FlashcardPreview({ data }: { data: any }) {
         const isCloze = c?.type === "cloze" || !!c?.text;
         return (
           <div key={c?.id ?? i} className="rounded-md border border-border bg-card p-1.5">
-            <span className="mb-0.5 block text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+            <span className="mb-0.5 block text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
               {t(isCloze ? "admin.studio.preview.cloze" : "admin.studio.preview.basic")} #{i + 1}
             </span>
             {isCloze ? (
@@ -385,7 +385,7 @@ function WrittenPreview({ data }: { data: any }) {
           <p className="text-xs"><MarkdownBody compact md={p?.prompt ?? ""} r2Key={undefined} /></p>
           {Array.isArray(p?.rubric) && p.rubric.length > 0 && (
             <div className="mt-1 border-t border-border pt-1">
-              <p className="mb-0.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+              <p className="mb-0.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
                 {t("admin.studio.preview.rubric")}
               </p>
               <ul className="list-inside list-disc space-y-px text-[11px] text-muted-foreground">

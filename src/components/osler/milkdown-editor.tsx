@@ -752,7 +752,7 @@ export function MilkdownEditor({
       {/* Minimal word count — just the number, right-aligned, very subtle.
           shrink-0 prevents this from expanding. */}
       {showCounters && (
-        <div className="shrink-0 flex items-center justify-end px-2.5 py-0.5 border-t border-border/60 text-[10px] text-muted-foreground/70 tabular-nums">
+        <div className="shrink-0 flex items-center justify-end px-2.5 py-0.5 border-t border-border/60 text-[11px] text-muted-foreground/70 tabular-nums">
           {words}
         </div>
       )}

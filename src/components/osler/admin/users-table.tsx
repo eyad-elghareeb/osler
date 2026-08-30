@@ -239,7 +239,7 @@ export function UsersTable() {
                         >
                           <ShieldCheck className="me-2 size-3.5" />
                           {t(`admin.users.roles.${r}` as any)}
-                          {user.role === r && <span className="ms-auto text-[10px] text-muted-foreground">✓</span>}
+                          {user.role === r && <span className="ms-auto text-[11px] text-muted-foreground">✓</span>}
                         </DropdownMenuItem>
                       ))}
                       <DropdownMenuSeparator />

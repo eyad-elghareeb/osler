@@ -32,7 +32,7 @@ export function DataTablesRenderer({ tables }: { tables?: OsceDataTable[] }) {
           {tables.map((t, i) => (
             <div key={i} className="bg-muted/20 border border-border rounded-lg p-3 overflow-x-auto">
               {t.title && (
-                <div className="text-[10px] font-bold text-primary uppercase tracking-wider mb-1.5">{t.title}</div>
+                <div className="text-[11px] font-bold text-primary uppercase tracking-wider mb-1.5">{t.title}</div>
               )}
               <table className="w-full text-[11px]">
                 {t.headers && t.headers.length > 0 && (
@@ -96,7 +96,7 @@ export function DataImagesRenderer({
             return (
               <div key={i} className="bg-muted/20 border border-border rounded-lg overflow-hidden">
                 {im.title && (
-                  <div className="text-[10px] font-bold text-primary uppercase tracking-wider px-3 pt-3">{im.title}</div>
+                  <div className="text-[11px] font-bold text-primary uppercase tracking-wider px-3 pt-3">{im.title}</div>
                 )}
                 <button
                   className="w-full cursor-pointer text-left"
@@ -105,7 +105,7 @@ export function DataImagesRenderer({
                   <img src={src} alt={im.alt || im.caption || ""} className="w-full max-h-80 object-contain" loading="lazy" />
                 </button>
                 {im.caption && (
-                  <div className="text-[10px] text-muted-foreground px-3 pb-3 pt-1">{im.caption}</div>
+                  <div className="text-[11px] text-muted-foreground px-3 pb-3 pt-1">{im.caption}</div>
                 )}
               </div>
             );
@@ -411,7 +411,7 @@ export function LiveVoiceOverlay({
           </div>
           <div className="min-w-0">
             <div className="text-sm font-semibold truncate">{speakerName}</div>
-            <div className="text-[10px] text-muted-foreground truncate">{speakerRole}</div>
+            <div className="text-[11px] text-muted-foreground truncate">{speakerRole}</div>
           </div>
         </div>
         <div className="flex items-center gap-1.5 shrink-0">

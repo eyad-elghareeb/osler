@@ -164,13 +164,13 @@ export function PeerLinkQrPanel({
             ) : (
               <div className="size-full flex flex-col items-center justify-center gap-1.5 px-2">
                 <QrCode className="size-7 text-muted-foreground/50" />
-                <span className="text-[10px] text-muted-foreground text-center leading-tight">
+                <span className="text-[11px] text-muted-foreground text-center leading-tight">
                   {t("sync.qr.peerLinkIdle")}
                 </span>
               </div>
             )}
           </div>
-          <div className="mt-2 text-[10px] text-muted-foreground text-center font-mono break-all px-1">
+          <div className="mt-2 text-[11px] text-muted-foreground text-center font-mono break-all px-1">
             {peerId || "—"}
           </div>
         </div>
@@ -266,7 +266,7 @@ export function PeerLinkQrPanel({
                 <div className="absolute inset-0 pointer-events-none flex items-center justify-center">
                   <div className="size-40 border-2 border-white/70 rounded-lg shadow-[0_0_0_9999px_rgba(0,0,0,0.35)]" />
                 </div>
-                <div className="absolute top-2 start-2 flex items-center gap-1 text-[10px] text-white/90 bg-black/50 rounded px-2 py-1">
+                <div className="absolute top-2 start-2 flex items-center gap-1 text-[11px] text-white/90 bg-black/50 rounded px-2 py-1">
                   <Camera className="size-3" />
                   {t("sync.qr.scanningHint")}
                 </div>

@@ -205,7 +205,7 @@ export function Settings({
           rtl={rtl}
           home={
             <div className="max-w-2xl mx-auto px-4 py-3">
-              <div className="text-[10px] uppercase tracking-wider text-muted-foreground px-1 mb-2">
+              <div className="text-[11px] uppercase tracking-wider text-muted-foreground px-1 mb-2">
                 {t("settings.mobileHomeSubtitle")}
               </div>
               <div className="rounded-lg border border-border overflow-hidden bg-card">
@@ -287,7 +287,7 @@ export function Settings({
           <div className="grid grid-cols-1 md:grid-cols-[220px_1fr] lg:grid-cols-[260px_1fr] gap-6">
             {/* Sidebar */}
             <aside className="md:sticky md:top-6 md:self-start">
-              <div className="text-[10px] uppercase tracking-wider text-muted-foreground px-2 mb-1.5">
+              <div className="text-[11px] uppercase tracking-wider text-muted-foreground px-2 mb-1.5">
                 {t("settings.sidebarTitle")}
               </div>
               <nav className="space-y-0.5">
