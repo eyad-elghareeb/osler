@@ -1011,17 +1011,17 @@ input, textarea, [contenteditable="true"], .osler-prose, .ai-chat-msg {
 }
 
 /* ── Mobile bottom tab bar ────────────────────────────────────────────────
- * Renders below the home indicator on phones. The bar itself is opaque to
- * hide content scrolling underneath, with a subtle blur backdrop. The
+ * Renders below the home indicator on phones. The bar is a translucent
+ * material: the page scrolls underneath it and the blur + saturation lift
+ * makes it read as floating chrome rather than an opaque strip. The
  * `safe-bottom` inset is applied via the .safe-bottom utility on the
  * inner <nav> so the tab bar visually sits above the home indicator.
  */
 .osler-tabbar {
-  background: var(--background);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
+  background: color-mix(in oklch, var(--background) 82%, transparent);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
   border-top: 1px solid var(--border);
-  padding-bottom: env(safe-area-inset-bottom, 0px);
   padding-bottom: max(env(safe-area-inset-bottom, 0px), 0.5rem);
   min-height: calc(3rem + max(env(safe-area-inset-bottom, 0px), 0.5rem));
 }
