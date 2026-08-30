@@ -1,9 +1,10 @@
 "use client";
 
 import * as React from "react";
-import { Cloud, RefreshCw, LogIn, CloudOff } from "lucide-react";
+import { Cloud, RefreshCw, LogIn, CloudOff, Zap } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
 import { useI18n } from "@/components/osler/i18n-provider";
 import { useOslerRouter } from "@/lib/osler/navigation";
@@ -12,7 +13,10 @@ import {
   cloudEnabled,
   syncCloudNow,
   getSyncQuota,
+  getRealtimeSyncEnabled,
+  setRealtimeSyncEnabled,
 } from "@/lib/osler/cloud";
+import { getRealtimeState, REALTIME_STATE_EVENT, type RealtimeState } from "@/lib/osler/cloud/realtime";
 import { haptic } from "@/lib/osler/native";
 
 /**
@@ -31,6 +35,8 @@ export function CloudSyncStatusCard() {
   const [syncState, setSyncState] = React.useState<"synced" | "syncing" | "offline">("synced");
   const [lastSyncedAt, setLastSyncedAt] = React.useState<number | null>(null);
   const [quota, setQuota] = React.useState<{ usedBytes: number; limitBytes: number } | null>(null);
+  const [realtimeOn, setRealtimeOn] = React.useState<boolean | null>(null);
+  const [realtimeState, setRealtimeState] = React.useState<RealtimeState>(() => getRealtimeState());
 
   React.useEffect(() => {
     let cancelled = false;
@@ -63,6 +69,28 @@ export function CloudSyncStatusCard() {
       window.removeEventListener("osler-cloud-sync-quota", onSyncQuota);
     };
   }, []);
+
+  React.useEffect(() => {
+    let cancelled = false;
+    void getRealtimeSyncEnabled().then((enabled) => {
+      if (!cancelled) setRealtimeOn(enabled);
+    });
+    const onRealtimeState = (e: Event) => {
+      const next = (e as CustomEvent).detail?.state;
+      if (next) setRealtimeState(next);
+    };
+    window.addEventListener(REALTIME_STATE_EVENT, onRealtimeState);
+    return () => {
+      cancelled = true;
+      window.removeEventListener(REALTIME_STATE_EVENT, onRealtimeState);
+    };
+  }, []);
+
+  const handleRealtimeToggle = (next: boolean) => {
+    haptic("light");
+    setRealtimeOn(next);
+    void setRealtimeSyncEnabled(next);
+  };
 
   const handleManualSync = () => {
     haptic("selection");
@@ -155,6 +183,39 @@ export function CloudSyncStatusCard() {
           <RefreshCw className={cn("size-3.5", syncState === "syncing" && "animate-spin")} />
           {t("settings.account.syncNow")}
         </Button>
+      </div>
+      <div className="mt-3.5 pt-3.5 border-t border-border flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-sm font-semibold flex items-center gap-1.5">
+            <Zap className="size-3.5 text-primary" />
+            {t("sync.cloud.realtimeTitle")}
+          </p>
+          <p className="text-xs text-muted-foreground mt-0.5">{t("sync.cloud.realtimeDesc")}</p>
+          <p className="text-[11px] text-muted-foreground mt-1.5 flex items-center gap-1.5">
+            <span
+              className={cn(
+                "size-1.5 rounded-full shrink-0",
+                realtimeState === "open"
+                  ? "bg-success"
+                  : realtimeState === "off"
+                    ? "bg-muted"
+                    : "bg-warning animate-pulse",
+              )}
+            />
+            {realtimeState === "open"
+              ? t("sync.cloud.realtimeConnected")
+              : realtimeState === "off"
+                ? t("sync.cloud.realtimeOff")
+                : t("sync.cloud.realtimeConnecting")}
+          </p>
+        </div>
+        <Switch
+          checked={!!realtimeOn}
+          onCheckedChange={handleRealtimeToggle}
+          disabled={realtimeOn === null}
+          aria-label={t("sync.cloud.realtimeTitle")}
+          className="shrink-0"
+        />
       </div>
       {quota && quota.limitBytes > 0 && (
         <div className="mt-3.5">

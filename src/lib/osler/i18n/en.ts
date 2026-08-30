@@ -1346,6 +1346,11 @@ export const en = {
     "sync.cloud.signInTitle": "Sign in to enable cloud sync",
     "sync.cloud.signInDesc": "Create or sign in to a Cloud account to back up your progress, achievements, and settings across all devices.",
     "sync.cloud.signIn": "Sign in",
+    "sync.cloud.realtimeTitle": "Realtime sync",
+    "sync.cloud.realtimeDesc": "Push sync pokes to your other devices instantly over a live connection. Off by default — devices fall back to periodic polling.",
+    "sync.cloud.realtimeConnected": "Live — changes arrive instantly",
+    "sync.cloud.realtimeConnecting": "Connecting…",
+    "sync.cloud.realtimeOff": "Off",
 
     "sync.network.activeConnections": "Active Connections ({n})",
 

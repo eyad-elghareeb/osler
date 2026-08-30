@@ -1341,6 +1341,11 @@ export const ar = {
     "sync.cloud.signInTitle": "سجّل الدخول لتفعيل المزامنة السحابية",
     "sync.cloud.signInDesc": "أنشئ حسابًا أو سجّل الدخول إلى حساب سحابي لنسخ تقدمك وإنجازاتك وإعداداتك احتياطيًا عبر جميع أجهزتك.",
     "sync.cloud.signIn": "تسجيل الدخول",
+    "sync.cloud.realtimeTitle": "المزامنة الفورية",
+    "sync.cloud.realtimeDesc": "إرسال نبضات المزامنة فورًا إلى أجهزتك الأخرى عبر اتصال مباشر. معطّلة افتراضيًا — تعود الأجهزة إلى المزامنة الدورية.",
+    "sync.cloud.realtimeConnected": "مباشر — تصل التغييرات فورًا",
+    "sync.cloud.realtimeConnecting": "جارٍ الاتصال…",
+    "sync.cloud.realtimeOff": "معطّل",
 
     "sync.network.activeConnections": "الاتصالات النشطة ({n})",
 

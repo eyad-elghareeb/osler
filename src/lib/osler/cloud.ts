@@ -1,5 +1,13 @@
 import { getConfig, loadConfig } from "@/lib/osler/config";
-import { storage, SYNC_KINDS, type SyncKind } from "@/lib/osler/storage";
+import { storage, settings, SYNC_KINDS, type SyncKind } from "@/lib/osler/storage";
+import {
+  getRealtimeConnId,
+  isRealtimeOpen,
+  refreshRealtime,
+  startRealtime,
+  stopRealtime,
+  subscribeRealtimeHealth,
+} from "./cloud/realtime";
 
 const SESSION_STORAGE_KEY = "osler-cloud-session-v1";
 /** Set in sessionStorage when a stored cloud session could not be restored
@@ -8,9 +16,13 @@ const SESSION_STORAGE_KEY = "osler-cloud-session-v1";
 export const SESSION_EXPIRED_FLAG = "osler-cloud-session-expired";
 const SYNC_DEBOUNCE_MS = 4_000;
 const MIN_SYNC_INTERVAL_MS = 20_000;
-// Idle devices still pull the latest remote progress every minute so changes
-// made on another device converge here without waiting for a local edit.
+// Idle devices pull the latest remote progress on a fixed cadence so changes
+// made on another device converge without waiting for a local edit. When the
+// realtime socket is healthy the poll stretches out — pokes deliver "something
+// changed" instantly, and the poll is just a slow safety net (dropped socket,
+// missed frame).
 const SYNC_PULL_INTERVAL_MS = 120_000;
+const REALTIME_PULL_INTERVAL_MS = 15 * 60_000;
 // Rotate the token through /v1/auth/refresh once it's within this window of
 // its expiry, so an active session never dies mid-use.
 const REFRESH_AHEAD_MS = 6 * 60 * 60 * 1000;
@@ -612,6 +624,31 @@ export async function fetchMySupportTickets(): Promise<unknown[] | null> {
   return result.tickets;
 }
 
+/* ── Realtime sync (opt-in) ──────────────────────────────────────────────── */
+
+const REALTIME_SYNC_PREF = "cloud-realtime-sync";
+let realtimeEnabledPref = false;
+
+/** Whether the user opted into realtime sync pokes on this device. */
+export async function getRealtimeSyncEnabled(): Promise<boolean> {
+  try {
+    realtimeEnabledPref = (await settings.getBool(REALTIME_SYNC_PREF)) === true;
+  } catch {
+    realtimeEnabledPref = false;
+  }
+  return realtimeEnabledPref;
+}
+
+export async function setRealtimeSyncEnabled(value: boolean): Promise<void> {
+  realtimeEnabledPref = value;
+  try {
+    await settings.set(REALTIME_SYNC_PREF, value ? "true" : "false");
+  } catch { /* private mode — session-scoped only */ }
+  // Apply immediately — connect or drop the live socket without waiting for
+  // the next sync lifecycle event.
+  refreshRealtime();
+}
+
 let stopSync: (() => void) | null = null;
 let forceSync: (() => void) | null = null;
 
@@ -645,11 +682,12 @@ export function startCloudSync(session: CloudSession): () => void {
   const dirtyKinds = new Set<SyncKind>();
   const dirtyKindsDuringSync = new Set<SyncKind>();
   let syncing = false;
+  let pokePending = false;
   let lastSyncAt = 0;
   const serverUpdatedAt: Record<string, number> = {};
   let retryCount = 0;
   let timer: ReturnType<typeof setTimeout> | null = null;
-  let pullTimer: ReturnType<typeof setInterval> | null = null;
+  let pullTimer: ReturnType<typeof setTimeout> | null = null;
 
   const runSync = async (pullOnly = false) => {
     if (stopped || syncing) return;
@@ -739,6 +777,9 @@ export function startCloudSync(session: CloudSession): () => void {
           for (const kind of activeKindsToPush) {
             if (serverUpdatedAt[kind] > 0) headers[`x-sync-since-${kind}`] = String(serverUpdatedAt[kind]);
           }
+          // Lets the realtime hub skip this connection when poking (it just
+          // pushed; it doesn't need to pull its own change back).
+          headers["x-osler-realtime-conn"] = getRealtimeConnId();
           const payload = storage.exportSyncSnapshot(activeKindsToPush);
           const pushedResult = await request<Record<string, { records: Record<string, unknown>; updatedAt: number }>>("/v1/sync", {
             method: "PUT",
@@ -787,6 +828,15 @@ export function startCloudSync(session: CloudSession): () => void {
       }
     } finally {
       syncing = false;
+      // A poke arrived while this cycle was running — one deferred pull
+      // covers it. (When dirty kinds remain, the retry below pulls too.)
+      if (pokePending) {
+        pokePending = false;
+        if (dirtyKinds.size === 0 && !stopped && navigator.onLine) {
+          if (timer) clearTimeout(timer);
+          timer = setTimeout(() => void runSync(true), 1_000);
+        }
+      }
       if (dirtyKinds.size > 0 && !stopped && navigator.onLine) {
         if (timer) clearTimeout(timer);
         const backoff = Math.min(RETRY_BASE_MS * 2 ** retryCount, RETRY_MAX_MS);
@@ -814,12 +864,17 @@ export function startCloudSync(session: CloudSession): () => void {
   const onOnline = () => schedule();
 
   const startPolling = () => {
-    if (pullTimer) clearInterval(pullTimer);
-    pullTimer = setInterval(() => void runSync(true), SYNC_PULL_INTERVAL_MS);
+    if (pullTimer) clearTimeout(pullTimer);
+    if (stopped) return;
+    pullTimer = setTimeout(() => {
+      if (stopped) return;
+      void runSync(true);
+      startPolling();
+    }, isRealtimeOpen() ? REALTIME_PULL_INTERVAL_MS : SYNC_PULL_INTERVAL_MS);
   };
   const stopPolling = () => {
     if (pullTimer) {
-      clearInterval(pullTimer);
+      clearTimeout(pullTimer);
       pullTimer = null;
     }
   };
@@ -848,6 +903,28 @@ export function startCloudSync(session: CloudSession): () => void {
   window.addEventListener("online", onOnline);
   document.addEventListener("visibilitychange", onVisible);
 
+  // Realtime pokes (opt-in): a live socket turns the idle poll into an
+  // instant "pull now" when another device pushes. The pref loads async, so
+  // the socket opens once it resolves; until then polling is unchanged.
+  startRealtime({
+    isEnabled: () => realtimeEnabledPref,
+    getApiUrl: () => resolvedApiUrl(),
+    getAccessToken: () => currentSession?.token ?? null,
+    onSyncPoke: () => {
+      if (syncing) {
+        pokePending = true;
+        return;
+      }
+      void runSync(true);
+    },
+  });
+  void getRealtimeSyncEnabled().then(() => refreshRealtime());
+  // Socket dropped: fall back to the fast poll immediately instead of
+  // waiting out the stretched realtime-cadence timer.
+  const unsubRealtimeHealth = subscribeRealtimeHealth(() => {
+    if (!stopped && typeof document !== "undefined" && document.visibilityState === "visible") startPolling();
+  });
+
   if (typeof document !== "undefined" && document.visibilityState === "visible") {
     startPolling();
   }
@@ -865,6 +942,8 @@ export function startCloudSync(session: CloudSession): () => void {
     stopped = true;
     if (timer) clearTimeout(timer);
     stopPolling();
+    unsubRealtimeHealth();
+    stopRealtime();
     for (const event of syncEvents) window.removeEventListener(event, schedule);
     window.removeEventListener("online", onOnline);
     document.removeEventListener("visibilitychange", onVisible);
