@@ -84,11 +84,32 @@ async function fetchSidecarMeta(filePath: string): Promise<ArticleSidecarMeta | 
   if (sidecarCache.has(sidePath)) return sidecarCache.get(sidePath)!;
   let result: ArticleSidecarMeta | null = null;
   try {
-    const res = await fetchWithLocalFallback(
-      contentFileUrl("library", sidePath),
-      localContentUrl("library", sidePath),
-    );
-    if (res.ok) {
+    // Prefer the bundled (same-origin) sidecar first: it is the source of
+    // truth for open-source deployments and avoids a cross-origin Worker
+    // 404 when the sidecar simply doesn't exist. Fall back to the Worker
+    // URL only if the local file misses, so a missing sidecar costs one
+    // 404 instead of two and an existing local sidecar costs zero Worker
+    // requests.
+    let res: Response | null = null;
+    try {
+      const localRes = await fetch(localContentUrl("library", sidePath));
+      if (localRes.ok) res = localRes;
+      else if (localRes.status !== 404) res = localRes;
+      else {
+        const remoteUrl = contentFileUrl("library", sidePath);
+        if (remoteUrl !== localContentUrl("library", sidePath)) {
+          const remoteRes = await fetch(remoteUrl);
+          if (remoteRes.ok) res = remoteRes;
+        }
+      }
+    } catch {
+      // local fetch throw (offline) — try remote as fallback
+      try {
+        const remoteRes = await fetch(contentFileUrl("library", sidePath));
+        if (remoteRes.ok) res = remoteRes;
+      } catch {}
+    }
+    if (res?.ok) {
       const parsed = JSON.parse(await res.text());
       if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
         result = parsed as ArticleSidecarMeta;

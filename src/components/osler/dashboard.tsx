@@ -29,9 +29,9 @@ import {
 import { enabledEngines } from "@/lib/osler/config";
 import type { AnyContent, ContentTreeNode } from "@/lib/osler/types";
 import { storage } from "@/lib/osler/storage";
-import { listAllArticles, loadArticleContent, getCachedAllArticles } from "@/lib/osler/articles";
+import { listAllArticles, getCachedAllArticles } from "@/lib/osler/articles";
 import { listAllVideos, getCachedVideoCount } from "@/lib/osler/videos";
-import type { Article } from "@/lib/osler/articles";
+import type { ArticleMeta } from "@/lib/osler/articles";
 import type { OslerView } from "./app-shell";
 import { useI18n } from "./i18n-provider";
 import { cn } from "@/lib/utils";
@@ -196,7 +196,7 @@ export function Dashboard({
   const correctCount = useCountUp(stats.correct ?? 0);
   const accuracyCount = useCountUp(accuracy, { suffix: "%" });
 
-  const [featuredArticles, setFeaturedArticles] = React.useState<Article[]>([]);
+  const [featuredArticles, setFeaturedArticles] = React.useState<ArticleMeta[]>([]);
   const [articleCount, setArticleCount] = React.useState(() => getCachedAllArticles()?.length ?? 0);
   const [videoCount, setVideoCount] = React.useState(() => getCachedVideoCount() ?? 0);
   const [featuredLoading, setFeaturedLoading] = React.useState(true);
@@ -206,10 +206,10 @@ export function Dashboard({
       try {
         const all = await listAllArticles();
         setArticleCount(all.length);
-        const previews = await Promise.all(
-          all.slice(0, 3).map((a) => loadArticleContent(a.file))
-        );
-        setFeaturedArticles(previews.filter(Boolean) as Article[]);
+        // Featured cards are metadata-only previews — no HTML/sidecar fetch,
+        // so the dashboard never fires the {.meta.json} lookup that otherwise
+        // spams the console with 404s for articles without a sidecar.
+        setFeaturedArticles(all.slice(0, 3));
       } catch {}
       setFeaturedLoading(false);
     })();
@@ -526,9 +526,7 @@ export function Dashboard({
                   {a.title}
                 </h3>
                 <p className="text-xs text-muted-foreground line-clamp-2">
-                  {/* Strip HTML for preview */}
-                  {a.html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim().slice(0, 120)}
-                  …
+                  {a.system ?? a.specialty ?? ""}
                 </p>
               </motion.button>
             ))}
