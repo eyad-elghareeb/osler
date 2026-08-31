@@ -75,7 +75,8 @@ export function Dashboard({
   const session = useOslerSession();
   const { navigate } = useOslerRouter();
 
-  const username = propUsername || session.username || "User";
+  const rawUsername = propUsername || session.username || "User";
+  const username = rawUsername.charAt(0).toUpperCase() + rawUsername.slice(1);
   const onViewChange = propOnViewChange || navigate;
   const onOpenArticle = propOnOpenArticle || ((id: string) => navigate("library", { article: id }));
   const onOpenPack = propOnOpenPack || ((node: ContentTreeNode) => {
