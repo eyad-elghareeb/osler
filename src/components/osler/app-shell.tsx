@@ -36,7 +36,6 @@ import {
 } from "@/components/ui/popover";
 import {
   Sheet,
-  SheetContent,
   SheetHeader,
   SheetTitle,
   SheetDescription,
@@ -50,7 +49,7 @@ import { PwaInstallButton } from "./pwa-install-button";
 import { LightboxProvider } from "./lightbox-provider";
 import { GlobalSearchPanel } from "./global-search-panel";
 import { ContentContextMenu } from "./content-context-menu";
-import { SwipeableSheetBody } from "./ui-primitives";
+import { SwipeableSheetContent } from "./ui-primitives";
 import type { SearchResult } from "@/lib/osler/search";
 import { VIEW_PLACEHOLDER_KEY } from "@/lib/osler/search";
 import type { StringKey } from "@/lib/osler/i18n";
@@ -417,21 +416,19 @@ export function AppShell({ children }: AppShellProps) {
           so the keyboard has room and the result list is comfortably
           reachable with one thumb. */}
       <Sheet open={searchOpen && isMobile} onOpenChange={setSearchOpen}>
-        <SheetContent side="bottom" className="h-[85vh] p-0">
-          <SwipeableSheetBody onClose={() => setSearchOpen(false)}>
-            <SheetHeader className="sr-only">
-              <SheetTitle>{t("common.search")}</SheetTitle>
-              <SheetDescription>{t("search.globalPlaceholder")}</SheetDescription>
-            </SheetHeader>
-            <GlobalSearchPanel
-              query={query}
-              onQueryChange={setQuery}
-              onSelect={handleSearchSelect}
-              view={view}
-              variant="sheet"
-            />
-          </SwipeableSheetBody>
-        </SheetContent>
+        <SwipeableSheetContent onClose={() => setSearchOpen(false)} className="h-[85vh] p-0">
+          <SheetHeader className="sr-only">
+            <SheetTitle>{t("common.search")}</SheetTitle>
+            <SheetDescription>{t("search.globalPlaceholder")}</SheetDescription>
+          </SheetHeader>
+          <GlobalSearchPanel
+            query={query}
+            onQueryChange={setQuery}
+            onSelect={handleSearchSelect}
+            view={view}
+            variant="sheet"
+          />
+        </SwipeableSheetContent>
       </Sheet>
 
       {/* Main content — viewport container for views.

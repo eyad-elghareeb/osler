@@ -12,7 +12,7 @@ import { HIGHLIGHT_COLOR_KEYS, ERASER_TOOL } from "@/lib/osler/highlight-palette
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
+import { Sheet, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { HighlightedContent } from "@/components/osler/highlighted-content";
 import { HighlighterToolbar } from "@/components/osler/highlighter-toolbar";
 import { useShortcutBindings } from "@/hooks/use-shortcuts";
@@ -24,7 +24,7 @@ import { useQuizSettings } from "@/hooks/use-quiz-settings";
 import { haptic } from "@/lib/osler/native";
 import { gradeWithAI, createManualEvaluation } from "@/lib/osler/grading";
 import { useI18n } from "@/components/osler/i18n-provider";
-import { ToolButton, SwipeableSheetBody } from "@/components/osler/ui-primitives";
+import { ToolButton, SwipeableSheetContent } from "@/components/osler/ui-primitives";
 import { MOTION_TRANSITION } from "@/lib/osler/motion";
 import type { StringKey } from "@/lib/osler/i18n";
 import { choiceLetter, matchSingleChordBinding, questionAssetBase, renderQuestionText, imageListOf, ContentImageFigure, TestMode, SessionData, SessionQuestion, SessionToolRow, formatTime, formatMs } from "./shared";
@@ -1796,80 +1796,78 @@ export function QuizView({
                       <Wrench className="size-4" />
                     </Button>
                   </SheetTrigger>
-                  <SheetContent
-                    side="bottom"
-                    className="px-0 pt-0 pb-[max(env(safe-area-inset-bottom,0px),0.75rem)] rounded-t-2xl data-[state=open]:duration-200 data-[state=closed]:duration-150"
+                  <SwipeableSheetContent
+                    onClose={() => setToolsOpen(false)}
+                    className="px-0 pt-0 pb-[max(env(safe-area-inset-bottom,0px),0.75rem)] data-[state=open]:duration-200 data-[state=closed]:duration-150"
                   >
-                    <SwipeableSheetBody onClose={() => setToolsOpen(false)}>
-                      <SheetHeader className="flex-row items-center justify-between gap-2 px-4 pt-2.5 pb-1">
-                        <SheetTitle className="flex items-center gap-2 text-sm font-semibold">
-                          <span className="size-7 rounded-lg bg-primary/10 border border-primary/20 text-primary flex items-center justify-center shrink-0">
-                            <Wrench className="size-4" />
-                          </span>
-                          {t("qbank.session.tools")}
-                        </SheetTitle>
-                      </SheetHeader>
-                      <div className="px-2">
+                    <SheetHeader className="flex-row items-center justify-between gap-2 px-4 pt-2.5 pb-1">
+                      <SheetTitle className="flex items-center gap-2 text-sm font-semibold">
+                        <span className="size-7 rounded-lg bg-primary/10 border border-primary/20 text-primary flex items-center justify-center shrink-0">
+                          <Wrench className="size-4" />
+                        </span>
+                        {t("qbank.session.tools")}
+                      </SheetTitle>
+                    </SheetHeader>
+                    <div className="px-2">
+                      <SessionToolRow
+                        icon={CalcIcon}
+                        label={t("qbank.session.calculator")}
+                        active={calculatorOpen}
+                        onClick={() => { haptic("light"); setToolsOpen(false); onToggleCalculator(); }}
+                      />
+                      <SessionToolRow
+                        icon={FlaskConical}
+                        label={t("qbank.session.labValues")}
+                        active={labValuesOpen}
+                        onClick={() => { haptic("light"); setToolsOpen(false); onToggleLabValues(); }}
+                      />
+                      <SessionToolRow
+                        icon={Sparkles}
+                        label={t("qbank.session.aiAssistant")}
+                        active={aiAssistantOpen}
+                        onClick={() => { haptic("light"); setToolsOpen(false); onToggleAiAssistant(); }}
+                      />
+                      <SessionToolRow
+                        icon={NotebookPen}
+                        label={t("qbank.notes.title")}
+                        active={notesOpen}
+                        onClick={() => { haptic("light"); setToolsOpen(false); onToggleNotes(); }}
+                      />
+                      {submitted && session.mode === "tutor" && (
                         <SessionToolRow
-                          icon={CalcIcon}
-                          label={t("qbank.session.calculator")}
-                          active={calculatorOpen}
-                          onClick={() => { haptic("light"); setToolsOpen(false); onToggleCalculator(); }}
+                          icon={RotateCcw}
+                          label={t("qbank.session.retry")}
+                          onClick={() => { haptic("light"); setToolsOpen(false); onRetry(); }}
                         />
-                        <SessionToolRow
-                          icon={FlaskConical}
-                          label={t("qbank.session.labValues")}
-                          active={labValuesOpen}
-                          onClick={() => { haptic("light"); setToolsOpen(false); onToggleLabValues(); }}
-                        />
-                        <SessionToolRow
-                          icon={Sparkles}
-                          label={t("qbank.session.aiAssistant")}
-                          active={aiAssistantOpen}
-                          onClick={() => { haptic("light"); setToolsOpen(false); onToggleAiAssistant(); }}
-                        />
-                        <SessionToolRow
-                          icon={NotebookPen}
-                          label={t("qbank.notes.title")}
-                          active={notesOpen}
-                          onClick={() => { haptic("light"); setToolsOpen(false); onToggleNotes(); }}
-                        />
-                        {submitted && session.mode === "tutor" && (
-                          <SessionToolRow
-                            icon={RotateCcw}
-                            label={t("qbank.session.retry")}
-                            onClick={() => { haptic("light"); setToolsOpen(false); onRetry(); }}
-                          />
-                        )}
+                      )}
 
-                        {/* Articles - inline, scrollable picker */}
-                        <div className="mt-1 border-t border-border pt-3 pb-1 px-1">
-                          <div className="flex items-center gap-2 px-2 pb-1.5 text-[11px] uppercase tracking-wider text-muted-foreground font-medium">
-                            <BookOpen className="size-3.5" />
-                            {t("qbank.session.openArticle")}
-                          </div>
-                          <div className="max-h-48 overflow-y-auto osler-scroll">
-                            {articleList.length === 0 ? (
-                              <p className="px-2 py-2 text-sm text-muted-foreground">
-                                {t("qbank.session.noArticles")}
-                              </p>
-                            ) : (
-                              articleList.map((a) => (
-                                <button
-                                  key={a.file}
-                                  onClick={() => { haptic("light"); setToolsOpen(false); onOpenArticle(a.file); }}
-                                  className="w-full text-start px-3 py-2 hover:bg-muted flex items-center gap-2 rounded-lg text-sm text-foreground"
-                                >
-                                  <FileText className="size-4 shrink-0 text-muted-foreground" />
-                                  <span className="truncate">{a.title}</span>
-                                </button>
-                              ))
-                            )}
-                          </div>
+                      {/* Articles - inline, scrollable picker */}
+                      <div className="mt-1 border-t border-border pt-3 pb-1 px-1">
+                        <div className="flex items-center gap-2 px-2 pb-1.5 text-[11px] uppercase tracking-wider text-muted-foreground font-medium">
+                          <BookOpen className="size-3.5" />
+                          {t("qbank.session.openArticle")}
+                        </div>
+                        <div className="max-h-48 overflow-y-auto osler-scroll">
+                          {articleList.length === 0 ? (
+                            <p className="px-2 py-2 text-sm text-muted-foreground">
+                              {t("qbank.session.noArticles")}
+                            </p>
+                          ) : (
+                            articleList.map((a) => (
+                              <button
+                                key={a.file}
+                                onClick={() => { haptic("light"); setToolsOpen(false); onOpenArticle(a.file); }}
+                                className="w-full text-start px-3 py-2 hover:bg-muted flex items-center gap-2 rounded-lg text-sm text-foreground"
+                              >
+                                <FileText className="size-4 shrink-0 text-muted-foreground" />
+                                <span className="truncate">{a.title}</span>
+                              </button>
+                            ))
+                          )}
                         </div>
                       </div>
-                    </SwipeableSheetBody>
-                  </SheetContent>
+                    </div>
+                  </SwipeableSheetContent>
                 </Sheet>
               </>
             )}

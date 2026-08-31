@@ -29,7 +29,9 @@
  */
 
 import * as React from "react";
-import { Loader2, ChevronRight, Check, ChevronsUpDown, Construction, type LucideIcon } from "lucide-react";
+import { Loader2, ChevronRight, Check, ChevronsUpDown, Construction, X as XIcon, type LucideIcon } from "lucide-react";
+import * as SheetPrimitive from "@radix-ui/react-dialog";
+import { SheetOverlay, SheetPortal } from "@/components/ui/sheet";
 import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
 import {
   Command,
@@ -1410,82 +1412,112 @@ export function SectionItem({ children, className }: SectionItemProps) {
   );
 }
 
-/* ─── SwipeableSheetBody ──────────────────────────────────────────────
- * Full-surface drag-to-close body for bottom sheets. The grab strip at
- * the top arms the gesture, but the ENTIRE sheet tracks the finger 1:1 —
- * iOS sheet physics: downward travel is free (the sheet departs), upward
- * is locked; a fast flick commits the dismiss regardless of distance; a
- * release below the threshold springs the sheet back with the release
- * velocity handed off, so there is no seam between gesture and motion.
+/* ─── SwipeableSheetContent ───────────────────────────────────────────
+ * Bottom sheet whose ENTIRE surface — background, border, radius, close
+ * button and content — tracks the finger. It renders the sheet shell
+ * itself on a motion element (motion.create on Radix's Dialog Content)
+ * instead of nesting a drag wrapper inside <SheetContent>: a body-only
+ * wrapper leaves the shell parked while its children slide out of it.
  *
- * The strip is a full-width 44px touch target (`h-11`) with `touch-none`
- * so the pointer stream survives the browser's scroll intent; the body
- * below keeps native scrolling because the drag never starts there
- * (`dragListener={false}` + `dragControls`).
+ * iOS sheet physics: a 44px full-width grab strip arms the gesture
+ * (dragControls — the scrollable body below keeps native scrolling since
+ * dragListener is false), downward travel is free and upward is locked,
+ * a fast flick commits the dismiss regardless of distance, and a release
+ * below the threshold springs back with the release velocity handed off.
+ * A committed dismiss just calls onClose(): Radix's own exit animation
+ * (slide-out-to-bottom) continues from the current drag offset, so there
+ * is no seam between the gesture and the close.
  *
- * Usage inside a <SheetContent side="bottom">:
- *   <SwipeableSheetBody onClose={() => setOpen(false)}>
+ * Usage instead of <SheetContent side="bottom">:
+ *   <SwipeableSheetContent onClose={() => setOpen(false)}>
  *     ...sheet content...
- *   </SwipeableSheetBody>
+ *   </SwipeableSheetContent>
  */
 
-interface SwipeableSheetBodyProps {
-  /** Called when the user drags or flicks far enough to close the sheet. */
-  onClose: () => void;
-  /** Extra classes for the body column (the wrapper reproduces gap-4). */
-  className?: string;
-  children: React.ReactNode;
-}
+// Radix's Content re-declares React's DOM onDrag*/onAnimationStart handlers,
+// which collide with framer-motion's same-named gesture/animation props on the
+// merged component type — omitting them lets framer's signatures win.
+type SheetContentProps = Omit<
+  React.ComponentProps<typeof SheetPrimitive.Content>,
+  "onDrag" | "onDragStart" | "onDragEnd" | "onAnimationStart"
+>;
+const MotionSheetContent = motion.create(
+  SheetPrimitive.Content as React.ForwardRefExoticComponent<
+    SheetContentProps & React.RefAttributes<HTMLDivElement>
+  >,
+);
+
+// Mirrors the side="bottom" recipe in @/components/ui/sheet — keep in sync.
+// Two deliberate deviations: `transition` is dropped because Tailwind's
+// transition-property includes `transform`, which would lag framer's
+// per-frame drag updates behind the finger; and `fill-mode-both` is
+// scoped to the closed state, because a forwards-filling ENTER animation
+// keeps claiming `transform` while open and would mask the drag offset.
+const SWIPEABLE_SHEET_CLASSES = cn(
+  "bg-card data-[state=open]:animate-in data-[state=closed]:animate-out fixed inset-x-0 bottom-0 z-50 flex flex-col gap-4 rounded-t-2xl border-t shadow-e3 overflow-hidden",
+  "data-[state=open]:slide-in-from-bottom data-[state=open]:duration-[280ms]",
+  "data-[state=closed]:slide-out-to-bottom data-[state=closed]:duration-200 data-[state=closed]:[animation-fill-mode:both]",
+);
 
 /** Dismiss commits past this drag distance (px) or downward velocity (px/s). */
 const SHEET_DISMISS_DISTANCE = 96;
 const SHEET_DISMISS_VELOCITY = 500;
 
-export function SwipeableSheetBody({ onClose, className, children }: SwipeableSheetBodyProps) {
+type SwipeableSheetContentProps = SheetContentProps & {
+  /** Called when the user drags or flicks far enough to close the sheet. */
+  onClose: () => void;
+};
+
+export function SwipeableSheetContent({ onClose, className, children, ...props }: SwipeableSheetContentProps) {
+  const { t } = useI18n();
   const dragControls = useDragControls();
   const animateControls = useAnimationControls();
   const onCloseRef = React.useRef(onClose);
   onCloseRef.current = onClose;
 
   return (
-    <motion.div
-      drag="y"
-      dragListener={false}
-      dragControls={dragControls}
-      dragConstraints={{ top: 0, bottom: 0 }}
-      dragElastic={{ top: 0, bottom: 1 }}
-      dragMomentum={false}
-      animate={animateControls}
-      onDragStart={() => haptic("selection")}
-      onDragEnd={(_, info) => {
-        const { offset, velocity } = info;
-        if (offset.y > SHEET_DISMISS_DISTANCE || velocity.y > SHEET_DISMISS_VELOCITY) {
-          haptic("selection");
-          // Velocity handoff — the sheet keeps departing at release speed;
-          // Radix's own exit (slide + overlay fade) runs in parallel.
-          void animateControls.start({
-            y: "110%",
-            transition: { ...MOTION_SPRING.snappy, velocity: velocity.y },
-          });
-          onCloseRef.current();
-        } else {
-          animateControls.start({
-            y: 0,
-            transition: { ...MOTION_SPRING.soft, velocity: velocity.y },
-          });
-        }
-      }}
-      className={cn("flex min-h-0 flex-1 flex-col gap-4", className)}
-    >
-      <div
-        aria-hidden
-        onPointerDown={(e) => dragControls.start(e)}
-        className="flex h-11 w-full shrink-0 touch-none cursor-grab items-center justify-center select-none active:cursor-grabbing"
+    <SheetPortal>
+      <SheetOverlay />
+      <MotionSheetContent
+        data-slot="sheet-content"
+        drag="y"
+        dragListener={false}
+        dragControls={dragControls}
+        dragConstraints={{ top: 0, bottom: 0 }}
+        dragElastic={{ top: 0, bottom: 1 }}
+        dragMomentum={false}
+        animate={animateControls}
+        onDragStart={() => haptic("selection")}
+        onDragEnd={(_, info) => {
+          const { offset, velocity } = info;
+          if (offset.y > SHEET_DISMISS_DISTANCE || velocity.y > SHEET_DISMISS_VELOCITY) {
+            haptic("selection");
+            // Radix's exit slide picks up from the current drag offset.
+            onCloseRef.current();
+          } else {
+            animateControls.start({
+              y: 0,
+              transition: { ...MOTION_SPRING.soft, velocity: velocity.y },
+            });
+          }
+        }}
+        className={cn(SWIPEABLE_SHEET_CLASSES, className)}
+        {...props}
       >
-        <div className="h-1.5 w-12 rounded-full bg-muted-foreground/40" />
-      </div>
-      {children}
-    </motion.div>
+        <div
+          aria-hidden
+          onPointerDown={(e) => dragControls.start(e)}
+          className="flex h-11 w-full shrink-0 touch-none cursor-grab items-center justify-center select-none active:cursor-grabbing"
+        >
+          <div className="h-1.5 w-12 rounded-full bg-muted-foreground/40" />
+        </div>
+        <div className="flex min-h-0 flex-1 flex-col gap-4">{children}</div>
+        <SheetPrimitive.Close className="ring-offset-background focus:ring-ring data-[state=open]:bg-secondary absolute top-4 right-4 rounded-xs opacity-70 transition-opacity hover:opacity-100 focus:ring-2 focus:ring-offset-2 focus:outline-hidden disabled:pointer-events-none">
+          <XIcon className="size-4" />
+          <span className="sr-only">{t("common.close")}</span>
+        </SheetPrimitive.Close>
+      </MotionSheetContent>
+    </SheetPortal>
   );
 }
 
@@ -1493,11 +1525,10 @@ export function SwipeableSheetBody({ onClose, className, children }: SwipeableSh
  * Wraps the content of a side sheet (right or left) so the user can
  * swipe horizontally to dismiss it — the same gesture iOS Settings uses.
  *
- * The Radix Sheet content controls its own enter/exit transform, so we
- * can't make the SheetContent itself draggable. Instead, this wrapper
- * goes *inside* the SheetContent and makes the inner content draggable.
- * When the drag commits, it calls `onClose` which triggers the Radix
- * exit animation.
+ * Unlike SwipeableSheetContent (which drags the sheet shell itself), the
+ * horizontal case keeps the gesture on a wrapper that goes *inside* the
+ * SheetContent and drags the inner content. When the drag commits, it
+ * calls `onClose` which triggers the Radix exit animation.
  *
  * Usage:
  *   <SheetContent side="right" ...>
