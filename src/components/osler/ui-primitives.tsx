@@ -41,7 +41,7 @@ import {
   CommandGroup,
   CommandItem,
 } from "@/components/ui/command";
-import { motion, AnimatePresence, animate, useMotionValue } from "framer-motion";
+import { motion, AnimatePresence, animate, useMotionValue, useReducedMotion } from "framer-motion";
 import { cn } from "@/lib/utils";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
@@ -1476,6 +1476,11 @@ export function SwipeableSheetContent({ onClose, className, children, ...props }
   // so the sheet mirrors the finger exactly on every frame. Framer's
   // `animate()` takes over only on release, for the smooth settle/exit.
   const y = useMotionValue(0);
+  const reduceMotion = useReducedMotion();
+  // Locks re-grabs while the dismiss fly-out is in flight — stopping that
+  // animation resolves its promise, which would fire onClose under the
+  // user's finger if they caught the sheet mid-exit.
+  const dismissLock = React.useRef(false);
   const gesture = React.useRef<{ startY: number; startOffset: number; current: number; samples: { t: number; y: number }[] } | null>(null);
   const onCloseRef = React.useRef(onClose);
   onCloseRef.current = onClose;
@@ -1488,12 +1493,14 @@ export function SwipeableSheetContent({ onClose, className, children, ...props }
     if (el) el.style.transform = `translateY(${px}px) translateZ(0)`;
   };
 
-  // Release velocity from ~80-120ms of recent pointer samples (px/s, +down).
+  // Release velocity from ~100-140ms of recent pointer samples (px/s, +down).
+  // Time-based, not frame-based — pointermove can fire at 120-240Hz, where a
+  // fixed sample count spans too little time and produces noisy velocities.
   const releaseVelocity = () => {
     const g = gesture.current;
     if (!g || g.samples.length === 0) return 0;
     const last = g.samples[g.samples.length - 1];
-    const ref = g.samples.find((s) => last.t - s.t > 80) ?? g.samples[0];
+    const ref = g.samples.find((s) => last.t - s.t > 100) ?? g.samples[0];
     const dt = last.t - ref.t;
     return dt > 0 ? ((last.y - ref.y) / dt) * 1000 : 0;
   };
@@ -1509,11 +1516,17 @@ export function SwipeableSheetContent({ onClose, className, children, ...props }
     y.jump(offset);
     if (offset > SHEET_DISMISS_DISTANCE || velocity > SHEET_DISMISS_VELOCITY) {
       haptic("light");
-      // Fly the sheet out with the finger's release velocity BEFORE closing —
-      // the Radix closed-state slide then starts from an already-translated
-      // surface, so the gesture→exit handoff is seamless.
+      // Velocity-aware near-critical spring: a flick carries its momentum
+      // out, a slow drag glides. (A tween would IGNORE `velocity` — only
+      // springs consume it.) The Radix closed-state slide then starts from
+      // an already-translated surface, so the handoff is seamless.
+      dismissLock.current = true;
       const height = contentRef.current?.offsetHeight ?? 0;
-      animate(y, height, { type: "tween", ease: "easeIn", duration: 0.2, velocity }).then(() => onCloseRef.current());
+      animate(y, height, { type: "spring", stiffness: 500, damping: 45, velocity }).then(() => onCloseRef.current());
+    } else if (reduceMotion) {
+      // Direct manipulation is fine under reduced motion, but physics
+      // settles aren't — snap instead of spring.
+      y.jump(0);
     } else {
       // Snappy return with release velocity — native iOS sheet feel.
       animate(y, 0, { ...MOTION_SPRING.snappy, velocity });
@@ -1535,24 +1548,41 @@ export function SwipeableSheetContent({ onClose, className, children, ...props }
         <div
           aria-hidden
           onPointerDown={(e) => {
+            if (dismissLock.current) return; // the sheet is already leaving
             e.currentTarget.setPointerCapture(e.pointerId);
             y.stop(); // a settling spring must never fight the finger
-            // Finish the Radix enter animation if the user grabs mid-slide —
-            // a running CSS animation claims `transform` and would eat the
-            // first frames of the drag (the sheet feels dead to the touch).
-            contentRef.current?.getAnimations().forEach((a) => a.finish());
-            gesture.current = { startY: e.clientY, startOffset: y.get(), current: y.get(), samples: [{ t: performance.now(), y: y.get() }] };
+            // "Catch" the sheet mid-enter: a running CSS animation claims
+            // transform and would eat the drag. Read its LIVE translateY and
+            // seed the gesture from there instead of finish()ing (which
+            // teleports the sheet to rest under the finger).
+            let seed = y.get();
+            const anims = contentRef.current?.getAnimations() ?? [];
+            if (anims.length) {
+              try {
+                const m42 = new DOMMatrix(getComputedStyle(contentRef.current!).transform).m42;
+                if (Number.isFinite(m42)) seed = Math.max(0, m42);
+              } catch {
+                // transform "none" or unsupported matrix — seed stays at y
+              }
+              anims.forEach((a) => a.finish());
+              y.jump(seed);
+              applyY(seed);
+            }
+            gesture.current = { startY: e.clientY, startOffset: seed, current: seed, samples: [{ t: performance.now(), y: seed }] };
             haptic("selection");
           }}
           onPointerMove={(e) => {
             const g = gesture.current;
             if (!g) return;
-            const next = Math.max(0, g.startOffset + e.clientY - g.startY);
+            const raw = g.startOffset + e.clientY - g.startY;
+            // Upward travel meets resistance (⅓ rubber-band) instead of a
+            // dead stop — release springs the overshoot back to rest.
+            const next = raw < 0 ? raw / 3 : raw;
             g.current = next;
             applyY(next); // instant paint, same task as the event
             y.set(next); // keep framer in sync so re-renders can't snap back
             g.samples.push({ t: performance.now(), y: next });
-            if (g.samples.length > 6) g.samples.shift();
+            if (g.samples.length > 14) g.samples.shift();
           }}
           onPointerUp={endGesture}
           onPointerCancel={endGesture}
