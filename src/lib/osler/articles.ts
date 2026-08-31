@@ -408,7 +408,9 @@ async function loadLeafMeta(node: ContentTreeNode): Promise<ArticleMeta[]> {
         } as ArticleMeta;
       }
 
-      // Default: markdown
+      // Default: markdown — list view uses frontmatter only (no sidecar fetch)
+      // to avoid N× 404s for articles without a sidecar. Full sidecar merge
+      // happens in loadArticleContent() when the article is actually opened.
       const res = await fetchWithLocalFallback(contentFileUrl("library", filePath), localContentUrl("library", filePath));
       if (!res.ok) return null;
       const text = await res.text();
@@ -423,7 +425,6 @@ async function loadLeafMeta(node: ContentTreeNode): Promise<ArticleMeta[]> {
         lang: (meta.lang === "ar" || meta.lang === "en") ? meta.lang : (node.lang ?? "en"),
         contentType: "md",
       };
-      applySidecarMeta(articleMeta, await fetchSidecarMeta(filePath));
       return articleMeta;
     })
   );
