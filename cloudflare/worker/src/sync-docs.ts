@@ -16,6 +16,7 @@ export const SYNC_KINDS = [
   "writtenDrafts",
   "bookmarks",
   "achievements",
+  "settings",
 ] as const;
 
 export type SyncKind = (typeof SYNC_KINDS)[number];
@@ -171,7 +172,7 @@ function mergeDictDeep(remote: Record<string, any>, local: Record<string, any>, 
 export function mergeKind(remote: Record<string, any>, local: Record<string, any>, kind: SyncKind): MergeResult {
   const cfg = TIMESTAMP_KIND[kind];
   if (cfg) return mergeBy(remote, local, cfg);
-  if (kind === "bookmarks") return mergeUnion(remote, local);
+  if (kind === "bookmarks" || kind === "settings") return mergeUnion(remote, local);
   if (kind === "writtenDrafts") return mergeDictDeep(remote, local);
   return mergeItemArrays(remote, local);
 }

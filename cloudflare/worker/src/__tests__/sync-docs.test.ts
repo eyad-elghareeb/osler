@@ -119,7 +119,7 @@ describe("mergeKind — bookmarks", () => {
 
 describe("SYNC_KINDS", () => {
   it("covers every kind merged by the worker", () => {
-    expect(SYNC_KINDS).toEqual(["qbank", "flashcards", "sessions", "notes", "highlights", "articleHighlights", "writtenDrafts", "bookmarks", "achievements"]);
+    expect(SYNC_KINDS).toEqual(["qbank", "flashcards", "sessions", "notes", "highlights", "articleHighlights", "writtenDrafts", "bookmarks", "achievements", "settings"]);
   });
 });
 

@@ -242,6 +242,8 @@ export async function registerCloudAccount(input: {
 }): Promise<CloudSession> {
   const session = await request<CloudSession>("/v1/auth/register", { method: "POST", body: JSON.stringify(input) });
   saveCloudSession(session);
+  // New account has no server settings yet — the first device's local
+  // settings will be pushed on the first sync; no pull needed here.
   return session;
 }
 
@@ -268,9 +270,12 @@ export async function loginCloudAccount(input: {
 }): Promise<CloudSession> {
   const session = await request<CloudSession>("/v1/auth/login", { method: "POST", body: JSON.stringify(input) });
   saveCloudSession(session);
-  // Best-effort: pull the user's saved Gemini API key from the cloud DB so
-  // they don't have to re-enter it on this device.
+  // Best-effort: pull the user's saved Gemini API key and account-level
+  // settings so they don't have to re-enter them on this device. Settings
+  // is account-level and always synced — a device that enabled cloud sync
+  // on another machine will pick up `cloud-sync-enabled=true` here.
   void syncGeminiKeyFromCloud();
+  void pullSettingsFromCloud(session);
   return session;
 }
 
@@ -285,6 +290,7 @@ export async function consumeGoogleLogin(ticket: string): Promise<CloudSession> 
   const session = await request<CloudSession>("/v1/auth/google/consume", { method: "POST", body: JSON.stringify({ ticket }) });
   saveCloudSession(session);
   void syncGeminiKeyFromCloud();
+  void pullSettingsFromCloud(session);
   return session;
 }
 
@@ -389,6 +395,38 @@ export async function syncGeminiKeyFromCloud(): Promise<void> {
   }
 }
 
+/**
+ * Pull the account-level settings snapshot (always synced) so a new device
+ * inherits the account's preferences — notably `cloud-sync-enabled` — on its
+ * first login. Best-effort: no-ops when offline or when the settings doc
+ * hasn't been created yet (e.g. first-ever login on the account).
+ */
+export async function pullSettingsFromCloud(sessionOverride?: CloudSession): Promise<void> {
+  if (typeof window === "undefined") return;
+  try {
+    const session = sessionOverride ?? readCloudSession();
+    if (!session?.token) return;
+    const apiUrl = resolvedApiUrl();
+    if (!apiUrl) return;
+    await storage.ensureCacheHydrated();
+    const remote = await request<Record<string, { records: Record<string, unknown>; updatedAt: number }>>(
+      `/v1/sync?kinds=settings`,
+      {},
+      session.token,
+    );
+    if (remote.settings) {
+      await storage.mergeCloudSnapshot(remote);
+      // Keep the in-memory pref in sync so the realtime hub and the
+      // session provider see the new value without an extra IDB read.
+      try {
+        syncEnabledPref = (await settings.getBool(CLOUD_SYNC_PREF)) === true;
+      } catch {}
+    }
+  } catch {
+    // silent – settings sync is best-effort on login/restore
+  }
+}
+
 /** Helper: resolve the cloud API URL the same way admin-api.ts does. */
 function resolvedApiUrl(): string | null {
   if (typeof process !== "undefined" && process.env.NEXT_PUBLIC_CLOUD_API_URL) {
@@ -459,6 +497,8 @@ export async function biometricAuthenticateComplete(input: {
 }): Promise<CloudSession> {
   const session = await request<CloudSession>("/v1/biometric/authenticate-complete", { method: "POST", body: JSON.stringify(input) });
   saveCloudSession(session);
+  void syncGeminiKeyFromCloud();
+  void pullSettingsFromCloud(session);
   return session;
 }
 
@@ -644,6 +684,21 @@ export async function setCloudSyncEnabled(value: boolean): Promise<void> {
   try {
     window.dispatchEvent(new CustomEvent(CLOUD_SYNC_PREF_EVENT, { detail: { enabled: value } }));
   } catch { /* ignore */ }
+  // Push the settings doc immediately so another device's next login sees
+  // the new value without waiting for the debounced sync loop (which may
+  // not even be running on this device if the user just enabled sync).
+  try {
+    const session = readCloudSession();
+    if (session?.token) {
+      void (async () => {
+        try {
+          await storage.ensureCacheHydrated();
+          const payload = storage.exportSyncSnapshot(["settings"] as SyncKind[]);
+          await request("/v1/sync", { method: "PUT", body: JSON.stringify(payload) }, session.token);
+        } catch {}
+      })();
+    }
+  } catch {}
 }
 
 let stopSync: (() => void) | null = null;
@@ -662,6 +717,8 @@ const EVENT_TO_KIND: Record<string, SyncKind> = {
   "osler-written-drafts-changed": "writtenDrafts",
   "osler-bookmarks-changed": "bookmarks",
   "osler-achievements-changed": "achievements",
+  "osler-settings-changed": "settings",
+  "osler-quiz-settings-changed": "settings",
 };
 
 export function getSyncQuota(): { usedBytes: number; limitBytes: number } | null {
@@ -743,6 +800,13 @@ export function startCloudSync(session: CloudSession): () => void {
         const remoteTime = remoteTimestamps[kind] ?? 0;
         const localServerTime = serverUpdatedAt[kind] ?? 0;
         if (remoteTime > localServerTime) {
+          // settings is account-level and always synced, even when other
+          // content kinds are disabled — it carries the sync-enabled flag
+          // itself so a new device picks it up on its next login.
+          if (kind === "settings") {
+            kindsToPull.push(kind as SyncKind);
+            continue;
+          }
           if (kind === "qbank" && !config.cloud.syncQbank) continue;
           if (kind === "flashcards" && !config.cloud.syncFlashcards) continue;
           if (kind !== "qbank" && kind !== "flashcards" && !config.cloud.syncContent) continue;
@@ -773,10 +837,14 @@ export function startCloudSync(session: CloudSession): () => void {
         }
       }
 
-      // 3. Selective Push
+      // 3. Selective Push — settings always pushes (account-level).
       if (kindsToPush.size > 0) {
         const activeKindsToPush: SyncKind[] = [];
         for (const kind of kindsToPush) {
+          if (kind === "settings") {
+            activeKindsToPush.push(kind);
+            continue;
+          }
           if (kind === "qbank" && !config.cloud.syncQbank) continue;
           if (kind === "flashcards" && !config.cloud.syncFlashcards) continue;
           if (kind !== "qbank" && kind !== "flashcards" && !config.cloud.syncContent) continue;

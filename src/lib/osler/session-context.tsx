@@ -9,6 +9,7 @@ import {
   consumeGoogleLogin,
   getCloudSyncEnabled,
   notifySyncStatus,
+  pullSettingsFromCloud,
   readCloudSession,
   readStoredCloudSession,
   refreshCloudSession,
@@ -209,6 +210,16 @@ export function OslerSessionProvider({ children }: { children: React.ReactNode }
       window.removeEventListener(CLOUD_SYNC_PREF_EVENT, onPref);
     };
   }, []);
+
+  // Pull account-level settings on every authenticated session (restore or
+  // fresh login) so a device that enabled sync elsewhere picks up
+  // `cloud-sync-enabled=true` without manual toggle. This runs even when
+  // the local sync pref is still `false` — the merge dispatches
+  // `osler-cloud-sync-pref` which flips `syncPref` and starts the loop.
+  React.useEffect(() => {
+    if (!cloudSession?.token) return;
+    void pullSettingsFromCloud(cloudSession);
+  }, [cloudSession]);
 
   // Start cloud sync only when we have a real CloudSession with a token AND
   // the user opted in. When a session exists but sync is off, surface an

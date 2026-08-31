@@ -25,6 +25,7 @@ export const SYNC_KINDS = [
   "writtenDrafts",
   "bookmarks",
   "achievements",
+  "settings",
 ] as const;
 
 export type SyncKind = (typeof SYNC_KINDS)[number];
@@ -803,6 +804,15 @@ export const storage = {
     if (shouldExport("achievements")) {
       snapshot.achievements = { records: achievements.getAll() as unknown as Record<string, unknown> };
     }
+    if (shouldExport("settings")) {
+      const settingsRecords: Record<string, unknown> = {};
+      for (const [k, v] of memoryCache) {
+        if (k.startsWith("settings:")) {
+          settingsRecords[k.replace("settings:", "")] = v;
+        }
+      }
+      snapshot.settings = { records: settingsRecords };
+    }
     return snapshot;
   },
 
@@ -913,6 +923,49 @@ export const storage = {
         await idbPutBatch("achievements", entries);
         entries.forEach((e) => setCached("achievements", e.key, e.value));
         dispatchChange("osler-achievements-changed");
+      }
+    }
+
+    // settings: key/value map (string or JSON object), last writer wins per key (union).
+    const settingsRecords = snapshot.settings?.records;
+    if (settingsRecords && typeof settingsRecords === "object") {
+      let settingsChanged = false;
+      let syncPrefChanged = false;
+      let newSyncPref: boolean | null = null;
+      const batch: Array<{ key: string; value: unknown }> = [];
+      for (const [key, incoming] of Object.entries(settingsRecords)) {
+        if (!isSafeImportKey(key)) continue;
+        const current = getCached<unknown>("settings", key);
+        // Use JSON stringify for deep compare (handles object values like quiz-settings).
+        if (JSON.stringify(current) !== JSON.stringify(incoming)) {
+          batch.push({ key, value: incoming });
+          setCached("settings", key, incoming);
+          // Keep quiz-settings in-memory cache in sync when it arrives from cloud.
+          if (key === QUIZ_SETTINGS_KEY && incoming && typeof incoming === "object") {
+            cachedQuizSettings = { ...DEFAULT_QUIZ_SETTINGS, ...(incoming as QuizSettings) };
+          }
+          settingsChanged = true;
+          if (key === "cloud-sync-enabled" && typeof incoming === "string") {
+            syncPrefChanged = true;
+            newSyncPref = incoming === "true";
+          }
+        }
+      }
+      if (batch.length) {
+        await idbPutBatch("settings", batch);
+      }
+      if (settingsChanged) {
+        dispatchChange("osler-settings-changed");
+        // Also refresh quiz-settings listeners if that key changed.
+        if (batch.some((b) => b.key === QUIZ_SETTINGS_KEY) && typeof window !== "undefined") {
+          window.dispatchEvent(new CustomEvent(QUIZ_SETTINGS_EVENT));
+          quizSettingsSubscribers.forEach((cb) => {
+            try { cb(); } catch (e) { console.warn(e); }
+          });
+        }
+        if (syncPrefChanged && newSyncPref !== null && typeof window !== "undefined") {
+          window.dispatchEvent(new CustomEvent("osler-cloud-sync-pref", { detail: { enabled: newSyncPref } }));
+        }
       }
     }
   },
@@ -1499,6 +1552,7 @@ export const settings = {
   async set(key: string, value: string): Promise<void> {
     setCached("settings", key, value);
     await idbPut("settings", key, value);
+    dispatchChange("osler-settings-changed");
   },
 
   async getBool(key: string): Promise<boolean> {
@@ -1797,6 +1851,7 @@ export const quizSettings = {
     await idbPut("settings", QUIZ_SETTINGS_KEY, next);
     if (typeof window !== "undefined") {
       window.dispatchEvent(new CustomEvent(QUIZ_SETTINGS_EVENT));
+      window.dispatchEvent(new CustomEvent("osler-settings-changed"));
       quizSettingsSubscribers.forEach((cb) => {
         try { cb(); } catch (e) { console.warn(e); }
       });
