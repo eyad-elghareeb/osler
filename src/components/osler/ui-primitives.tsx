@@ -41,7 +41,7 @@ import {
   CommandGroup,
   CommandItem,
 } from "@/components/ui/command";
-import { motion, AnimatePresence, useAnimationControls, useDragControls } from "framer-motion";
+import { motion, AnimatePresence, animate, useMotionValue, useDragControls } from "framer-motion";
 import { cn } from "@/lib/utils";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
@@ -1471,7 +1471,10 @@ type SwipeableSheetContentProps = SheetContentProps & {
 export function SwipeableSheetContent({ onClose, className, children, ...props }: SwipeableSheetContentProps) {
   const { t } = useI18n();
   const dragControls = useDragControls();
-  const animateControls = useAnimationControls();
+  const contentRef = React.useRef<HTMLDivElement>(null);
+  // Direct motion value: drag writes it per-frame and imperative animations
+  // hand off the finger's release velocity with zero React indirection.
+  const y = useMotionValue(0);
   const onCloseRef = React.useRef(onClose);
   onCloseRef.current = onClose;
 
@@ -1479,6 +1482,7 @@ export function SwipeableSheetContent({ onClose, className, children, ...props }
     <SheetPortal>
       <SheetOverlay />
       <MotionSheetContent
+        ref={contentRef}
         data-slot="sheet-content"
         drag="y"
         dragListener={false}
@@ -1486,18 +1490,30 @@ export function SwipeableSheetContent({ onClose, className, children, ...props }
         dragConstraints={{ top: 0, bottom: 0 }}
         dragElastic={{ top: 0, bottom: 1 }}
         dragMomentum={false}
-        animate={animateControls}
+        // Promote to its own compositor layer — dragging a fixed surface over
+        // a complex page repaints every frame otherwise (mobile jank).
+        style={{ y, willChange: "transform" }}
         onDragStart={() => haptic("selection")}
         onDragEnd={(_, info) => {
           const { offset, velocity } = info;
           if (offset.y > SHEET_DISMISS_DISTANCE || velocity.y > SHEET_DISMISS_VELOCITY) {
-            haptic("selection");
-            // Radix's exit slide picks up from the current drag offset.
-            onCloseRef.current();
+            haptic("light");
+            // Fly the sheet out with the finger's release velocity BEFORE
+            // closing — the Radix closed-state slide then starts from an
+            // already-translated surface, so the gesture→exit handoff is
+            // seamless instead of snapping to a fixed-duration CSS tween.
+            const height = contentRef.current?.offsetHeight ?? 0;
+            animate(y, height, {
+              type: "tween",
+              ease: "easeIn",
+              duration: 0.2,
+              velocity: velocity.y,
+            }).then(() => onCloseRef.current());
           } else {
-            animateControls.start({
-              y: 0,
-              transition: { ...MOTION_SPRING.soft, velocity: velocity.y },
+            // Snappy return with release velocity — native iOS sheet feel.
+            animate(y, 0, {
+              ...MOTION_SPRING.snappy,
+              velocity: velocity.y,
             });
           }
         }}
