@@ -39,7 +39,7 @@ import {
   CommandGroup,
   CommandItem,
 } from "@/components/ui/command";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion, AnimatePresence, useAnimationControls, useDragControls } from "framer-motion";
 import { cn } from "@/lib/utils";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
@@ -52,6 +52,7 @@ import {
   pressFeedback,
 } from "@/lib/osler/motion";
 import { useSwipeBackDismiss } from "@/hooks/use-swipe-back-dismiss";
+import { haptic } from "@/lib/osler/native";
 import { useI18n } from "./i18n-provider";
 
 /* ─── PageHeader ─────────────────────────────────────────────────────── */
@@ -1409,42 +1410,81 @@ export function SectionItem({ children, className }: SectionItemProps) {
   );
 }
 
-/* ─── SwipeableSheetHandle ────────────────────────────────────────────
- * A grab handle for bottom sheets that lets the user drag down to close.
- * Renders a visual grab bar that follows the finger via framer-motion drag.
+/* ─── SwipeableSheetBody ──────────────────────────────────────────────
+ * Full-surface drag-to-close body for bottom sheets. The grab strip at
+ * the top arms the gesture, but the ENTIRE sheet tracks the finger 1:1 —
+ * iOS sheet physics: downward travel is free (the sheet departs), upward
+ * is locked; a fast flick commits the dismiss regardless of distance; a
+ * release below the threshold springs the sheet back with the release
+ * velocity handed off, so there is no seam between gesture and motion.
  *
- * Uses `drag="y"` with `dragSnapToOrigin` so the sheet either snaps back
- * (if the drag didn't pass the threshold) or closes (if it did).
- * Velocity-aware: a fast flick closes even below the distance threshold.
+ * The strip is a full-width 44px touch target (`h-11`) with `touch-none`
+ * so the pointer stream survives the browser's scroll intent; the body
+ * below keeps native scrolling because the drag never starts there
+ * (`dragListener={false}` + `dragControls`).
  *
  * Usage inside a <SheetContent side="bottom">:
- *   <SwipeableSheetHandle onClose={() => setOpen(false)} />
- *   <SheetHeader>...</SheetHeader>
+ *   <SwipeableSheetBody onClose={() => setOpen(false)}>
+ *     ...sheet content...
+ *   </SwipeableSheetBody>
  */
 
-interface SwipeableSheetHandleProps {
-  /** Called when the user drags far enough to close the sheet. */
+interface SwipeableSheetBodyProps {
+  /** Called when the user drags or flicks far enough to close the sheet. */
   onClose: () => void;
+  /** Extra classes for the body column (the wrapper reproduces gap-4). */
   className?: string;
+  children: React.ReactNode;
 }
 
-export function SwipeableSheetHandle({ onClose, className }: SwipeableSheetHandleProps) {
-  const dismiss = useSwipeBackDismiss({
-    onDismiss: onClose,
-    direction: "vertical",
-    threshold: 80,
-    velocityThreshold: 400,
-  });
+/** Dismiss commits past this drag distance (px) or downward velocity (px/s). */
+const SHEET_DISMISS_DISTANCE = 96;
+const SHEET_DISMISS_VELOCITY = 500;
+
+export function SwipeableSheetBody({ onClose, className, children }: SwipeableSheetBodyProps) {
+  const dragControls = useDragControls();
+  const animateControls = useAnimationControls();
+  const onCloseRef = React.useRef(onClose);
+  onCloseRef.current = onClose;
 
   return (
     <motion.div
-      {...dismiss}
-      className={cn(
-        "flex justify-center pt-2.5 pb-1 shrink-0 cursor-grab active:cursor-grabbing",
-        className,
-      )}
+      drag="y"
+      dragListener={false}
+      dragControls={dragControls}
+      dragConstraints={{ top: 0, bottom: 0 }}
+      dragElastic={{ top: 0, bottom: 1 }}
+      dragMomentum={false}
+      animate={animateControls}
+      onDragStart={() => haptic("selection")}
+      onDragEnd={(_, info) => {
+        const { offset, velocity } = info;
+        if (offset.y > SHEET_DISMISS_DISTANCE || velocity.y > SHEET_DISMISS_VELOCITY) {
+          haptic("selection");
+          // Velocity handoff — the sheet keeps departing at release speed;
+          // Radix's own exit (slide + overlay fade) runs in parallel.
+          void animateControls.start({
+            y: "110%",
+            transition: { ...MOTION_SPRING.snappy, velocity: velocity.y },
+          });
+          onCloseRef.current();
+        } else {
+          animateControls.start({
+            y: 0,
+            transition: { ...MOTION_SPRING.soft, velocity: velocity.y },
+          });
+        }
+      }}
+      className={cn("flex min-h-0 flex-1 flex-col gap-4", className)}
     >
-      <div className="h-1 w-10 rounded-full bg-border" />
+      <div
+        aria-hidden
+        onPointerDown={(e) => dragControls.start(e)}
+        className="flex h-11 w-full shrink-0 touch-none cursor-grab items-center justify-center select-none active:cursor-grabbing"
+      >
+        <div className="h-1.5 w-12 rounded-full bg-muted-foreground/40" />
+      </div>
+      {children}
     </motion.div>
   );
 }
