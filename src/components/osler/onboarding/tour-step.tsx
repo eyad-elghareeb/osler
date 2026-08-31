@@ -55,29 +55,29 @@ export function TourStep() {
   return (
     <div>
       <h2 className="text-lg font-bold tracking-tight">{t("onboarding.tour.title")}</h2>
-      <p className="text-sm text-muted-foreground mt-1 mb-5">{t("onboarding.tour.subtitle")}</p>
+      <p className="text-sm text-muted-foreground mt-1 mb-4">{t("onboarding.tour.subtitle")}</p>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+      <div className="grid grid-cols-2 gap-2">
         {engines.map((type) => {
           const meta = getEngineMeta(type);
           const Icon = ENGINE_ICONS[type];
           return (
-            <div key={type} className="rounded-lg border border-border bg-card p-3">
-              <div className="flex items-center gap-2 mb-1">
+            <div key={type} className="rounded-lg border border-border bg-card p-2.5 sm:p-3">
+              <div className="flex items-center gap-2">
                 <span
-                  className="size-7 rounded-md flex items-center justify-center shrink-0"
+                  className="size-6 sm:size-7 rounded-md flex items-center justify-center shrink-0"
                   style={{
                     background: `color-mix(in oklch, ${meta.color} 15%, transparent)`,
                     color: meta.color,
                   }}
                 >
-                  <Icon className="size-3.5" />
+                  <Icon className="size-3 sm:size-3.5" />
                 </span>
-                <span className="text-sm font-semibold truncate">
+                <span className="text-xs sm:text-sm font-semibold leading-none truncate">
                   {t(`onboarding.tour.${type}.name` as StringKey)}
                 </span>
               </div>
-              <p className="text-xs text-muted-foreground leading-relaxed">
+              <p className="hidden sm:block text-xs text-muted-foreground leading-relaxed mt-1">
                 {t(`onboarding.tour.${type}.desc` as StringKey)}
               </p>
             </div>
@@ -85,13 +85,13 @@ export function TourStep() {
         })}
       </div>
 
-      <div className="mt-4 pt-4 border-t border-border space-y-2">
+      <div className="mt-3 pt-3 border-t border-border space-y-1.5 sm:space-y-2">
         {EXTRAS.map(({ icon: Icon, key }) => (
-          <div key={key} className="flex items-center gap-2.5 text-xs text-muted-foreground">
-            <span className="size-6 rounded-md bg-primary/10 text-primary flex items-center justify-center shrink-0">
+          <div key={key} className="flex items-center gap-2 sm:gap-2.5 text-xs text-muted-foreground">
+            <span className="size-5 sm:size-6 rounded-md bg-primary/10 text-primary flex items-center justify-center shrink-0">
               <Icon className="size-3" />
             </span>
-            <span>{t(key as StringKey)}</span>
+            <span className="leading-tight">{t(key as StringKey)}</span>
           </div>
         ))}
       </div>

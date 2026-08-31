@@ -102,7 +102,7 @@ export function OnboardingWizard({ onComplete }: { onComplete: () => void }) {
       {/* min-h-full inside a scrollable h-full frame: centers when short,
           scrolls instead of clipping when a step is taller than the viewport */}
       <div className="h-full overflow-y-auto relative">
-        <div className="min-h-full flex items-center justify-center p-4 safe-py">
+        <div className="min-h-full flex items-center justify-center px-4 py-6 sm:p-4 safe-py pt-[max(1.5rem,env(safe-area-inset-top))] sm:pt-4">
           <motion.div
             initial={{ opacity: 0, y: 12 }}
             animate={{ opacity: 1, y: 0 }}
