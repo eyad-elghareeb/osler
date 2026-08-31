@@ -41,7 +41,7 @@ import {
   CommandGroup,
   CommandItem,
 } from "@/components/ui/command";
-import { motion, AnimatePresence, animate, useMotionValue, useDragControls } from "framer-motion";
+import { motion, AnimatePresence, animate, useMotionValue } from "framer-motion";
 import { cn } from "@/lib/utils";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
@@ -1470,13 +1470,45 @@ type SwipeableSheetContentProps = SheetContentProps & {
 
 export function SwipeableSheetContent({ onClose, className, children, ...props }: SwipeableSheetContentProps) {
   const { t } = useI18n();
-  const dragControls = useDragControls();
   const contentRef = React.useRef<HTMLDivElement>(null);
-  // Direct motion value: drag writes it per-frame and imperative animations
-  // hand off the finger's release velocity with zero React indirection.
+  // Direct motion value, written 1:1 from pointermove — no framer drag
+  // machinery (dragConstraints/dragElastic/dragControls) in the hot path,
+  // so the sheet mirrors the finger exactly on every frame. Framer's
+  // `animate()` takes over only on release, for the smooth settle/exit.
   const y = useMotionValue(0);
+  const gesture = React.useRef<{ startY: number; startOffset: number; samples: { t: number; y: number }[] } | null>(null);
   const onCloseRef = React.useRef(onClose);
   onCloseRef.current = onClose;
+
+  // Release velocity from ~80-120ms of recent pointer samples (px/s, +down).
+  const releaseVelocity = () => {
+    const g = gesture.current;
+    if (!g || g.samples.length === 0) return 0;
+    const last = g.samples[g.samples.length - 1];
+    const ref = g.samples.find((s) => last.t - s.t > 80) ?? g.samples[0];
+    const dt = last.t - ref.t;
+    return dt > 0 ? ((last.y - ref.y) / dt) * 1000 : 0;
+  };
+
+  const endGesture = (e: React.PointerEvent) => {
+    const g = gesture.current;
+    gesture.current = null;
+    if (!g) return;
+    e.currentTarget.releasePointerCapture(e.pointerId);
+    const offset = y.get();
+    const velocity = releaseVelocity();
+    if (offset > SHEET_DISMISS_DISTANCE || velocity > SHEET_DISMISS_VELOCITY) {
+      haptic("light");
+      // Fly the sheet out with the finger's release velocity BEFORE closing —
+      // the Radix closed-state slide then starts from an already-translated
+      // surface, so the gesture→exit handoff is seamless.
+      const height = contentRef.current?.offsetHeight ?? 0;
+      animate(y, height, { type: "tween", ease: "easeIn", duration: 0.2, velocity }).then(() => onCloseRef.current());
+    } else {
+      // Snappy return with release velocity — native iOS sheet feel.
+      animate(y, 0, { ...MOTION_SPRING.snappy, velocity });
+    }
+  };
 
   return (
     <SheetPortal>
@@ -1484,45 +1516,30 @@ export function SwipeableSheetContent({ onClose, className, children, ...props }
       <MotionSheetContent
         ref={contentRef}
         data-slot="sheet-content"
-        drag="y"
-        dragListener={false}
-        dragControls={dragControls}
-        dragConstraints={{ top: 0, bottom: 0 }}
-        dragElastic={{ top: 0, bottom: 1 }}
-        dragMomentum={false}
         // Promote to its own compositor layer — dragging a fixed surface over
         // a complex page repaints every frame otherwise (mobile jank).
         style={{ y, willChange: "transform" }}
-        onDragStart={() => haptic("selection")}
-        onDragEnd={(_, info) => {
-          const { offset, velocity } = info;
-          if (offset.y > SHEET_DISMISS_DISTANCE || velocity.y > SHEET_DISMISS_VELOCITY) {
-            haptic("light");
-            // Fly the sheet out with the finger's release velocity BEFORE
-            // closing — the Radix closed-state slide then starts from an
-            // already-translated surface, so the gesture→exit handoff is
-            // seamless instead of snapping to a fixed-duration CSS tween.
-            const height = contentRef.current?.offsetHeight ?? 0;
-            animate(y, height, {
-              type: "tween",
-              ease: "easeIn",
-              duration: 0.2,
-              velocity: velocity.y,
-            }).then(() => onCloseRef.current());
-          } else {
-            // Snappy return with release velocity — native iOS sheet feel.
-            animate(y, 0, {
-              ...MOTION_SPRING.snappy,
-              velocity: velocity.y,
-            });
-          }
-        }}
         className={cn(SWIPEABLE_SHEET_CLASSES, className)}
         {...props}
       >
         <div
           aria-hidden
-          onPointerDown={(e) => dragControls.start(e)}
+          onPointerDown={(e) => {
+            e.currentTarget.setPointerCapture(e.pointerId);
+            y.stop(); // a settling spring must never fight the finger
+            gesture.current = { startY: e.clientY, startOffset: y.get(), samples: [{ t: performance.now(), y: y.get() }] };
+            haptic("selection");
+          }}
+          onPointerMove={(e) => {
+            const g = gesture.current;
+            if (!g) return;
+            const next = Math.max(0, g.startOffset + e.clientY - g.startY);
+            y.set(next);
+            g.samples.push({ t: performance.now(), y: next });
+            if (g.samples.length > 6) g.samples.shift();
+          }}
+          onPointerUp={endGesture}
+          onPointerCancel={endGesture}
           className="flex h-11 w-full shrink-0 touch-none cursor-grab items-center justify-center select-none active:cursor-grabbing"
         >
           <div className="h-1.5 w-12 rounded-full bg-muted-foreground/40" />
