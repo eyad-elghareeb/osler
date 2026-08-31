@@ -1,0 +1,25 @@
+# Fix Next static-export RSC prefetch 404s: the client requests
+# /<segment>/__next.<hash>.<segment>.txt but the static export emits
+# /<segment>/__next.<hash>/<segment>.txt (slash, not dot). Rewrite dot
+# → slash with a 200 so the RSC payload is found and prefetch/navigation
+# succeeds without a client-side fallback.
+#
+# Each rule mirrors the pattern the app router uses for route-group (app)
+# segments. Query string (?_rsc=…) is preserved automatically.
+
+/settings/__next.:hash.:seg.txt /settings/__next.:hash/:seg.txt 200
+/settings/__next.:hash.:seg.__PAGE__.txt /settings/__next.:hash/:seg/__PAGE__.txt 200
+/profile/__next.:hash.:seg.txt /profile/__next.:hash/:seg.txt 200
+/profile/__next.:hash.:seg.__PAGE__.txt /profile/__next.:hash/:seg/__PAGE__.txt 200
+/videos/__next.:hash.:seg.txt /videos/__next.:hash/:seg.txt 200
+/videos/__next.:hash.:seg.__PAGE__.txt /videos/__next.:hash/:seg/__PAGE__.txt 200
+/osce/__next.:hash.:seg.txt /osce/__next.:hash/:seg.txt 200
+/osce/__next.:hash.:seg.__PAGE__.txt /osce/__next.:hash/:seg/__PAGE__.txt 200
+/flashcards/__next.:hash.:seg.txt /flashcards/__next.:hash/:seg.txt 200
+/flashcards/__next.:hash.:seg.__PAGE__.txt /flashcards/__next.:hash/:seg/__PAGE__.txt 200
+/library/__next.:hash.:seg.txt /library/__next.:hash/:seg.txt 200
+/library/__next.:hash.:seg.__PAGE__.txt /library/__next.:hash/:seg/__PAGE__.txt 200
+/learn/__next.:hash.:seg.txt /learn/__next.:hash/:seg.txt 200
+/learn/__next.:hash.:seg.__PAGE__.txt /learn/__next.:hash/:seg/__PAGE__.txt 200
+/qbank/__next.:hash.:seg.txt /qbank/__next.:hash/:seg.txt 200
+/qbank/__next.:hash.:seg.__PAGE__.txt /qbank/__next.:hash/:seg/__PAGE__.txt 200
