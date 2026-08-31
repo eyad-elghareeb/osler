@@ -26,8 +26,7 @@ import { useSwipeBackDismiss } from "@/hooks/use-swipe-back-dismiss";
 import { GEMINI_CLOUD_SYNCED_FLAG } from "@/lib/osler/cloud";
 import { Combobox } from "@/components/osler/ui-primitives";
 import { ThinkingStatus } from "@/components/osler/thinking-status";
-import { useTypewriter } from "@/hooks/use-typewriter";
-import { AiMarkdown } from "@/components/osler/ai-markdown";
+import { StreamingMarkdown } from "@/components/osler/streaming-markdown";
 import { MOTION_TRANSITION, MOTION_SPRING } from "@/lib/osler/motion";
 
 const MODELS = [
@@ -682,13 +681,13 @@ function EmptyState({ onSuggestion }: { onSuggestion: (s: string) => void }) {
 function ChatBubble({ msg, isStreaming }: { msg: Message; isStreaming?: boolean }) {
   const { t } = useI18n();
   const isUser = msg.role === "user";
-  // Only messages that arrived live get the typewriter reveal; history
-  // loaded from storage renders in full. The latch keeps the animation
-  // running until it catches up even after `loading` flips false.
+  // Only messages that arrived live get the streaming-word reveal
+  // (transitions.dev P30); history from storage renders static. The latch
+  // keeps the animation running until it catches the final word even after
+  // `loading` flips false — matching the previous typewriter behaviour.
   const everStreamedRef = React.useRef(isStreaming === true);
   if (isStreaming) everStreamedRef.current = true;
-  const shown = useTypewriter(msg.content, !isUser && everStreamedRef.current);
-  const revealing = shown.length < msg.content.length;
+  const animate = !isUser && everStreamedRef.current;
   return (
     <motion.div
       initial={{ opacity: 0, y: 6 }}
@@ -717,11 +716,7 @@ function ChatBubble({ msg, isStreaming }: { msg: Message; isStreaming?: boolean 
             : "bg-card border border-border text-foreground rounded-tl-sm shadow-e1"
         )}
       >
-        {isUser ? (
-          <p>{msg.content}</p>
-        ) : (
-          <AiMarkdown text={shown} writing={isStreaming || revealing} />
-        )}
+        {isUser ? <p>{msg.content}</p> : <StreamingMarkdown text={msg.content} animate={animate} />}
       </div>
     </motion.div>
   );

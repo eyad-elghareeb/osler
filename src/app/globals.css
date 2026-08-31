@@ -980,6 +980,35 @@ button.osler-stat-tile--compact:hover {
   .ai-chat-msg.is-writing > ol:last-child > li:last-child::after { animation: none; }
 }
 
+/* ── Streaming text (transitions.dev P30 — words resolve through a soft cross-blur)
+ * Each word fades from opacity 0 + 1px blur over 350ms; JS reveals them 60ms
+ * apart so the paragraph condenses out of thin air rather than popping. Used
+ * by StreamingMarkdown in the AI assistant bubble. Honors reduced-motion via
+ * the media query and the [data-animations="off"] toggle. */
+.t-stream-w {
+  opacity: 0;
+  filter: blur(1px);
+  transition:
+    opacity 350ms cubic-bezier(0.22, 1, 0.36, 1),
+    filter 350ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.t-stream-w.is-in {
+  opacity: 1;
+  filter: blur(0);
+}
+@media (prefers-reduced-motion: reduce) {
+  .t-stream-w {
+    transition: none !important;
+    filter: none !important;
+    opacity: 1 !important;
+  }
+}
+[data-animations="off"] .t-stream-w {
+  transition: none !important;
+  filter: none !important;
+  opacity: 1 !important;
+}
+
 /* ═══════════════════════════════════════════════════════════════════════════
  * Mobile / Tauri-mobile responsive layer
  *
