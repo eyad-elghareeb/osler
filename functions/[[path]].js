@@ -21,13 +21,13 @@ export async function onRequest(context) {
     // Try dot → slash rewrite for the plain segment payload
     // e.g. /settings/__next.!KGFwcCk.settings.txt → /settings/__next.!KGFwcCk/settings.txt
     let rewritten = pathname.replace(
-      /^(\/[^/]+)\/__next\.([^/]+)\.([^/.]+)\.txt$/,
+      /^(\/[^/]+)\/__next\.([^.]+)\.([^.]+)\.txt$/,
       "$1/__next.$2/$3.txt"
     );
     // If still unchanged, try the __PAGE__ variant
     if (rewritten === pathname) {
       rewritten = pathname.replace(
-        /^(\/[^/]+)\/__next\.([^/]+)\.([^/.]+)\.__PAGE__\.txt$/,
+        /^(\/[^/]+)\/__next\.([^.]+)\.([^.]+)\.__PAGE__\.txt$/,
         "$1/__next.$2/$3/__PAGE__.txt"
       );
     }
