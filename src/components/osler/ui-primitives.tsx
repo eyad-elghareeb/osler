@@ -1476,9 +1476,17 @@ export function SwipeableSheetContent({ onClose, className, children, ...props }
   // so the sheet mirrors the finger exactly on every frame. Framer's
   // `animate()` takes over only on release, for the smooth settle/exit.
   const y = useMotionValue(0);
-  const gesture = React.useRef<{ startY: number; startOffset: number; samples: { t: number; y: number }[] } | null>(null);
+  const gesture = React.useRef<{ startY: number; startOffset: number; current: number; samples: { t: number; y: number }[] } | null>(null);
   const onCloseRef = React.useRef(onClose);
   onCloseRef.current = onClose;
+
+  // During the drag the transform is written STRAIGHT to the DOM inside the
+  // pointer event — the paint lands in that frame with zero scheduler hop.
+  // (Framer's y.set() rides its frame loop, which costs one frame of lag.)
+  const applyY = (px: number) => {
+    const el = contentRef.current;
+    if (el) el.style.transform = `translateY(${px}px) translateZ(0)`;
+  };
 
   // Release velocity from ~80-120ms of recent pointer samples (px/s, +down).
   const releaseVelocity = () => {
@@ -1495,8 +1503,10 @@ export function SwipeableSheetContent({ onClose, className, children, ...props }
     gesture.current = null;
     if (!g) return;
     e.currentTarget.releasePointerCapture(e.pointerId);
-    const offset = y.get();
+    const offset = g.current;
     const velocity = releaseVelocity();
+    // Re-sync framer with the manually-applied drag offset, then hand off.
+    y.jump(offset);
     if (offset > SHEET_DISMISS_DISTANCE || velocity > SHEET_DISMISS_VELOCITY) {
       haptic("light");
       // Fly the sheet out with the finger's release velocity BEFORE closing —
@@ -1527,14 +1537,20 @@ export function SwipeableSheetContent({ onClose, className, children, ...props }
           onPointerDown={(e) => {
             e.currentTarget.setPointerCapture(e.pointerId);
             y.stop(); // a settling spring must never fight the finger
-            gesture.current = { startY: e.clientY, startOffset: y.get(), samples: [{ t: performance.now(), y: y.get() }] };
+            // Finish the Radix enter animation if the user grabs mid-slide —
+            // a running CSS animation claims `transform` and would eat the
+            // first frames of the drag (the sheet feels dead to the touch).
+            contentRef.current?.getAnimations().forEach((a) => a.finish());
+            gesture.current = { startY: e.clientY, startOffset: y.get(), current: y.get(), samples: [{ t: performance.now(), y: y.get() }] };
             haptic("selection");
           }}
           onPointerMove={(e) => {
             const g = gesture.current;
             if (!g) return;
             const next = Math.max(0, g.startOffset + e.clientY - g.startY);
-            y.set(next);
+            g.current = next;
+            applyY(next); // instant paint, same task as the event
+            y.set(next); // keep framer in sync so re-renders can't snap back
             g.samples.push({ t: performance.now(), y: next });
             if (g.samples.length > 6) g.samples.shift();
           }}
