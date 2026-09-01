@@ -218,7 +218,7 @@ export function ImageLightbox({ open, onOpenChange, src, alt, fileName, sizeByte
             onError={(e) => {
               const el = e.currentTarget as HTMLImageElement;
               el.style.opacity = "0.3";
-              el.style.background = "oklch(0.92 0 0)";
+              el.style.background = "var(--muted)";
             }}
           />
         </div>
@@ -226,3 +226,4 @@ export function ImageLightbox({ open, onOpenChange, src, alt, fileName, sizeByte
     </Dialog>
   );
 }
+

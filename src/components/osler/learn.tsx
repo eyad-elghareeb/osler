@@ -50,12 +50,6 @@ interface ModuleCardDef {
   icon: LucideIcon;
   titleKey: string;
   descKey: string;
-  /** Tailwind background tint for the icon chip (uses module color). */
-  tint: string;
-  /** Foreground color for the icon chip. */
-  tintFg: string;
-  /** Top accent gradient color. */
-  accent: string;
 }
 
 const ALL_MODULES: ModuleCardDef[] = [
@@ -65,9 +59,6 @@ const ALL_MODULES: ModuleCardDef[] = [
     icon: BookOpen,
     titleKey: "learn.library.title",
     descKey: "learn.library.desc",
-    tint: "bg-[oklch(0.65_0.15_280/0.15)]",
-    tintFg: "text-[oklch(0.65_0.15_280)]",
-    accent: "oklch(0.65 0.15 280)",
   },
   {
     id: "flashcards",
@@ -75,9 +66,6 @@ const ALL_MODULES: ModuleCardDef[] = [
     icon: Layers,
     titleKey: "learn.flashcards.title",
     descKey: "learn.flashcards.desc",
-    tint: "bg-[oklch(0.7_0.18_145/0.15)]",
-    tintFg: "text-[oklch(0.7_0.18_145)]",
-    accent: "oklch(0.7 0.18 145)",
   },
   {
     id: "osce",
@@ -85,9 +73,6 @@ const ALL_MODULES: ModuleCardDef[] = [
     icon: Stethoscope,
     titleKey: "learn.osce.title",
     descKey: "learn.osce.desc",
-    tint: "bg-[oklch(0.7_0.2_16/0.15)]",
-    tintFg: "text-[oklch(0.7_0.2_16)]",
-    accent: "oklch(0.7 0.2 16)",
   },
   {
     id: "videos",
@@ -95,9 +80,6 @@ const ALL_MODULES: ModuleCardDef[] = [
     icon: PlayCircle,
     titleKey: "learn.videos.title",
     descKey: "learn.videos.desc",
-    tint: "bg-[oklch(0.68_0.18_195/0.15)]",
-    tintFg: "text-[oklch(0.68_0.18_195)]",
-    accent: "oklch(0.68 0.18 195)",
   },
 ];
 
@@ -250,11 +232,7 @@ function ModuleCard({
   t: (k: any, p?: any) => string;
 }) {
   const Icon = def.icon;
-  // Pull override metadata (label/color/icon) from osler.config so the
-  // module card reflects the user's customisation. The title still flows
-  // through i18n so RTL/Arabic users see a translated label.
   const meta = getEngineMeta(def.engine);
-  void meta; // referenced for side-effect of pulling overrides; title uses i18n key.
   return (
     <motion.button
       type="button"
@@ -264,13 +242,14 @@ function ModuleCard({
       className="group relative text-start bg-card border border-border rounded-xl p-5 md:p-6 overflow-hidden transition-colors hover:border-primary/40"
     >
       <div className="flex items-start gap-4">
-        {/* Icon chip */}
+        {/* Icon chip — themed via ENGINE_META so custom palettes and the
+            selected theme's tokens flow through (no hardcoded oklch). */}
         <div
-          className={cn(
-            "w-12 h-12 rounded-lg flex items-center justify-center shrink-0",
-            def.tint,
-            def.tintFg,
-          )}
+          className="w-12 h-12 rounded-lg flex items-center justify-center shrink-0"
+          style={{
+            backgroundColor: `color-mix(in oklch, ${meta.color} 15%, transparent)`,
+            color: meta.color,
+          }}
         >
           <Icon className="size-6" />
         </div>

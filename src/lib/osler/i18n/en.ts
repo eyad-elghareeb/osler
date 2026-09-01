@@ -2988,6 +2988,8 @@ export const en = {
     "onboarding.theme.title": "Pick a theme",
     "onboarding.theme.subtitle":
       "Light or dark, plus curated color families. Change anytime in Settings \u2192 Appearance.",
+    "onboarding.theme.viewMore": "View more ({n} more)",
+    "onboarding.theme.viewLess": "Show less",
 
     "onboarding.ai.title": "Unlock the AI tutor",
     "onboarding.ai.subtitle":

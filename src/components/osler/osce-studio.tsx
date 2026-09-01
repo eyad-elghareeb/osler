@@ -2490,9 +2490,9 @@ export function OsceStudio({
                 className="absolute top-0 left-0 right-0 h-0.5"
                 style={{
                   background: `linear-gradient(90deg, ${
-                    result.score >= 75 ? "oklch(0.65 0.18 145)" :
-                    result.score >= 50 ? "oklch(0.78 0.16 80)" :
-                    "oklch(0.68 0.21 22)"
+                    result.score >= 75 ? "var(--success)" :
+                    result.score >= 50 ? "var(--warning)" :
+                    "var(--destructive)"
                   }, transparent)`,
                 }}
               />

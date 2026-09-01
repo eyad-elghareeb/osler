@@ -1143,7 +1143,7 @@ function R2Preview({ node }: { node: ContentTreeNode }) {
                 onError={(e) => {
                   const el = e.currentTarget as HTMLImageElement;
                   el.style.opacity = "0.3";
-                  el.style.background = "oklch(0.92 0 0)";
+                  el.style.background = "var(--muted)";
                 }}
               />
               <span className="absolute inset-0 flex items-center justify-center bg-primary/0 text-primary opacity-0 transition-opacity group-hover:bg-primary/10 group-hover:opacity-100 rounded-lg">
@@ -1656,3 +1656,4 @@ function buildUnifiedTree(
 // Avoid pulling the i18n hook into the buildUnifiedTree helper (which runs
 // inside useMemo). The default English fallback is acceptable here.
 function t_en_untitled(): string { return "Untitled"; }
+

@@ -2981,6 +2981,8 @@ export const ar = {
     "onboarding.theme.title": "اختر مظهرك",
     "onboarding.theme.subtitle":
       "فاتح أو داكن، إضافة إلى عائلات ألوان منتقاة. يمكنك التغيير في أي وقت من الإعدادات ← المظهر.",
+    "onboarding.theme.viewMore": "عرض المزيد ({n} أخرى)",
+    "onboarding.theme.viewLess": "عرض أقل",
 
     "onboarding.ai.title": "فعّل المساعد الذكي",
     "onboarding.ai.subtitle":

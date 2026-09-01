@@ -23,7 +23,7 @@ import {
   GraduationCap,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { ENGINE_META, loadContentByUid, collectPackUrls } from "@/lib/osler/content";
+import { ENGINE_META, getEngineMeta, loadContentByUid, collectPackUrls } from "@/lib/osler/content";
 import type {
   FlashcardContent,
   FlashcardSubdeck,
@@ -62,7 +62,7 @@ interface FlashcardStudioProps {
   onNavigateBack?: () => void;
 }
 
-const FLASHCARD_COLOR = "oklch(0.7 0.18 145)";
+const FLASHCARD_COLOR = ENGINE_META.flashcard.color;
 
 const SUBDECK_ICONS: Record<string, string> = {
   cardiology: "heart",
@@ -910,7 +910,7 @@ export function FlashcardStudio({
                     <div
                       className="size-11 rounded-xl flex items-center justify-center shrink-0"
                       style={{
-                        backgroundColor: `${FLASHCARD_COLOR}/15`,
+                        backgroundColor: `color-mix(in oklch, ${FLASHCARD_COLOR} 15%, transparent)`,
                         color: FLASHCARD_COLOR,
                       }}
                     >
@@ -1301,7 +1301,7 @@ export function FlashcardStudio({
                       <div
                         className="size-11 rounded-xl flex items-center justify-center shrink-0"
                         style={{
-                          backgroundColor: `${FLASHCARD_COLOR}/15`,
+                          backgroundColor: `color-mix(in oklch, ${FLASHCARD_COLOR} 15%, transparent)`,
                           color: FLASHCARD_COLOR,
                         }}
                       >

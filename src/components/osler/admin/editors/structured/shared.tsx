@@ -644,7 +644,7 @@ export function ImageListField({
                       // rectangle so the user can still see something is there.
                       const el = e.currentTarget as HTMLImageElement;
                       el.style.opacity = "0.3";
-                      el.style.background = "oklch(0.92 0 0)";
+                      el.style.background = "var(--muted)";
                     }}
                   />
                   <span className="absolute inset-0 flex items-center justify-center bg-primary/0 text-primary opacity-0 transition-opacity group-hover:bg-primary/10 group-hover:opacity-100">

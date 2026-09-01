@@ -28,7 +28,7 @@ import {
   resolveThumbnail,
   formatDuration,
 } from "@/lib/osler/videos";
-import { collectPackUrls, findNodeByUid, getCachedCategoryTree } from "@/lib/osler/content";
+import { ENGINE_META, collectPackUrls, findNodeByUid, getCachedCategoryTree } from "@/lib/osler/content";
 import { settings } from "@/lib/osler/storage";
 import type { VideoResource, ContentTreeNode } from "@/lib/osler/types";
 import { cn } from "@/lib/utils";
@@ -58,7 +58,7 @@ import { MOTION_TRANSITION } from "@/lib/osler/motion";
 
 /* ── Constants ─────────────────────────────────────────────────────── */
 
-const VIDEO_COLOR = "oklch(0.68 0.18 195)";
+const VIDEO_COLOR = ENGINE_META.video.color;
 
 const PLAYBACK_RATES = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2];
 
