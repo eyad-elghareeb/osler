@@ -1524,34 +1524,82 @@ export function SwipeableSheetContent({ onClose, className, children, ...props }
 
   // Reopen restore — see the component doc comment. Runs once on mount
   // (fresh mount while open) and again whenever data-state flips back to
-  // "open" (Radix element reuse on a quick reopen). Motion values and refs
-  // are stable; applyY only touches the DOM node.
-  React.useEffect(() => {
-    const el = contentRef.current;
-    if (!el || typeof MutationObserver === "undefined") return;
-    const restore = () => {
+  // "open" (Radix element reuse on a quick reopen). Must run in layout
+  // phase BEFORE the browser paints the enter animation: the CSS slide
+  // keyframe's implicit end is the element's current inline transform, so
+  // a stale `translateY(<height>px)` from the dismissed gesture would make
+  // the re-enter animate to off-screen and stick there (the bug in Variant
+  // B — a fresh mount whose DOM node was reused still carried 560px). An
+  // after-paint effect is too late — the animation already snapshotted its
+  // end state. Clearing the direct inline transform + motion value before
+  // paint, and stopping the in-flight dismiss spring, keeps the enter at 0.
+  // Reopen detection must survive both mount styles Radix uses:
+  // - fresh mount after full unmount (new DOM node, new component instance)
+  // - element reuse when reopening before the exit animation finishes
+  // A per-element observer attached once at mount misses the second mount
+  // when the component instance is reused (effect with [] doesn't re-run and
+  // the old node is detached). Observing the portal subtree catches every
+  // data-state flip regardless of which instance or DOM node carries it, and
+  // the initial poll handles the case where data-state is already "open"
+  // before the observer attaches.
+  React.useLayoutEffect(() => {
+    if (typeof MutationObserver === "undefined") return;
+    let mo: MutationObserver | null = null;
+    let rafId = 0;
+    let cancelled = false;
+    const restore = (target: HTMLElement) => {
       dismissCancelRef.current?.();
       dismissCancelRef.current = null;
       dismissLock.current = false;
       y.stop();
-      y.jump(0);
-      applyY(0);
-      scrim.jump(1);
+      y.set(0);
+      target.style.transform = "";
+      if (contentRef.current) contentRef.current.style.transform = "";
+      scrim.set(1);
+      const overlay = findScrim();
+      if (overlay) overlay.style.opacity = "";
     };
-    if (el.getAttribute("data-state") === "open") restore();
-    const mo = new MutationObserver(() => {
-      if (el.getAttribute("data-state") === "open") restore();
-    });
-    mo.observe(el, { attributes: true, attributeFilter: ["data-state"] });
+    const checkNode = (node: HTMLElement | null) => {
+      if (!node || node.getAttribute("data-state") !== "open") return;
+      const stale = !!node.style.transform && node.style.transform !== "" && node.style.transform !== "none";
+      const offY = y.get() > 20;
+      if (stale || offY) restore(node);
+    };
+    const poll = () => {
+      if (cancelled) return;
+      const node = contentRef.current ?? (document.querySelector('[data-slot="sheet-content"]') as HTMLElement | null);
+      if (node) {
+        checkNode(node);
+      } else {
+        rafId = requestAnimationFrame(poll) as unknown as number;
+        return;
+      }
+      mo = new MutationObserver((mutants) => {
+        for (const m of mutants) {
+          const t = m.target as HTMLElement;
+          if (m.type === "attributes" && t.getAttribute?.("data-slot") === "sheet-content") {
+            checkNode(t);
+          }
+          if (m.type === "childList") {
+            for (const n of Array.from(m.addedNodes)) {
+              const el = n as HTMLElement;
+              if (el?.getAttribute?.("data-slot") === "sheet-content") checkNode(el);
+              const inner = el?.querySelector?.('[data-slot="sheet-content"]') as HTMLElement | null;
+              if (inner) checkNode(inner);
+            }
+          }
+        }
+      });
+      mo.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ["data-state"] });
+    };
+    poll();
     return () => {
-      mo.disconnect();
-      // A dismiss fly-out still in flight at unmount has nothing left to
-      // close — don't let its resolved promise call onClose into a dying
-      // parent.
+      cancelled = true;
+      if (rafId) cancelAnimationFrame(rafId);
+      mo?.disconnect();
       dismissCancelRef.current?.();
       dismissCancelRef.current = null;
     };
-    // Runs once per mount — deps are refs + stable motion values.
   }, []);
 
   React.useEffect(
@@ -1580,7 +1628,9 @@ export function SwipeableSheetContent({ onClose, className, children, ...props }
     const g = gesture.current;
     gesture.current = null;
     if (!g) return;
-    e.currentTarget.releasePointerCapture(e.pointerId);
+    try {
+      e.currentTarget.releasePointerCapture(e.pointerId);
+    } catch {}
     const offset = g.current;
     const velocity = releaseVelocity();
     // Re-sync framer with the manually-applied drag offset, then hand off.
