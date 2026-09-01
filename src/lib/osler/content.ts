@@ -25,7 +25,7 @@ import type {
   VideoContent,
 } from "./types";
 import { isEngineEnabled, getEngineOverride, enabledEngines, loadConfig } from "./config";
-import { onContentVersionChange } from "./content-version";
+import { onContentVersionChange, currentContentVersion } from "./content-version";
 import { clearArticlesCache } from "./articles";
 import { clearVideosCache } from "./videos";
 import {
@@ -34,6 +34,7 @@ import {
   localContentUrl,
   localManifestUrl,
   packBasePath as resolvePackBasePath,
+  cacheBust,
 } from "./content-url";
 
 let hasWarnedAboutRemoteFallback = false;
@@ -103,12 +104,20 @@ export function packBasePath(node: ContentTreeNode): string {
 /**
  * All cacheable URLs for a leaf node: its data files plus any images in its
  * `images/` subfolder. Returns an empty array for branch nodes.
+ * Each URL is cache-busted with `?v=` when a content version is known so
+ * the SW CacheFirst path treats it as immutable (bandwidth/Worker win).
  */
 export function nodeUrls(node: ContentTreeNode): string[] {
   if (node.items.length > 0) return [];
   const base = packBasePath(node);
-  const urls = (node.files ?? []).map((f) => `${base}${f}`);
-  for (const img of node.images ?? []) urls.push(`${base}images/${img}`);
+  // packBasePath is a directory prefix (no ?v=) — bust the final file URLs.
+  function bust(url: string): string {
+    const v = currentContentVersion();
+    if (!v || url.includes("v=")) return url;
+    return `${url}${url.includes("?") ? "&" : "?"}v=${encodeURIComponent(v)}`;
+  }
+  const urls = (node.files ?? []).map((f) => bust(`${base}${f}`));
+  for (const img of node.images ?? []) urls.push(bust(`${base}images/${img}`));
   return urls;
 }
 
@@ -271,12 +280,16 @@ export async function loadNodeContent(node: ContentTreeNode): Promise<AnyContent
     throw new Error(`No JSON data files in ${node.path}`);
   }
 
-  const base = contentFileUrl(folder, node.path);
-  const localBase = localContentUrl(folder, node.path);
+  // Build file URLs via the version-aware helper so both primary and fallback
+  // carry `?v=` when a publish has bumped the content version. Using the
+  // per-file contentFileUrl (not base+file) guarantees the `?v=` lands after
+  // the filename and the SW CacheFirst path treats it as immutable.
   const results = await Promise.all(
     dataFiles.map(async (file) => {
-      const res = await fetchWithLocalFallback(`${base}${file}`, `${localBase}${file}`);
-      if (!res.ok) throw new Error(`Failed to load ${base}${file}: ${res.status}`);
+      const primary = contentFileUrl(folder, `${node.path}${file}`);
+      const fallback = cacheBust(localContentUrl(folder, `${node.path}${file}`));
+      const res = await fetchWithLocalFallback(primary, fallback);
+      if (!res.ok) throw new Error(`Failed to load ${primary}: ${res.status}`);
       return (await res.json()) as Record<string, unknown>;
     })
   );

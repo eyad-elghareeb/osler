@@ -20,12 +20,28 @@
   Cache-Control: public, max-age=2592000
 
 # ── Local content packs — short cache, network-first via SW ──
+# When a ?v= content-version is present the URL is effectively immutable
+# (new publishes get a new stamp), so SW + CDN can hold it long. Without
+# ?v= we still serve stale-while-revalidate so a slow revalidate never
+# blocks first paint and offline cache wins via SW NetworkFirst.
 /osler-content/*
-  Cache-Control: public, max-age=300
+  Cache-Control: public, max-age=300, stale-while-revalidate=86400
+
+# ── Content version & site config — never cache at edge/browser cache ──
+# Polling with `cache: no-store` bypasses the browser cache, but edge
+# (Pages) would still cache without these headers. Kept tiny; must be fresh.
+/osler-content/content-version.json
+  Cache-Control: no-cache, no-store, must-revalidate
+/osler.config.json
+  Cache-Control: public, max-age=60, must-revalidate
 
 # ── Service worker — NEVER cache (always fetch fresh) ──
 /sw.js
   Cache-Control: no-cache, no-store, must-revalidate
+
+# ── SW sourcemap — dev only, never cache in prod ──
+/sw.js.map
+  Cache-Control: no-store
 
 # ── Manifest — short cache ──
 /manifest.webmanifest

@@ -39,7 +39,6 @@ import {
   type ArticleHighlightItem,
 } from "@/lib/osler/article-highlights";
 import { resolveHighlightColor } from "@/lib/osler/highlight-palette";
-import { renderMermaidToSvg } from "@/components/osler/admin/editors/mermaid-editor";
 import { MermaidModal } from "./mermaid-modal";
 
 /* ── Markdown prep ────────────────────────────────────────────────────── */
@@ -297,8 +296,9 @@ function InnerArticleView({ markdown, highlights }: InnerArticleViewProps) {
   }, [highlights]);
 
   useEditor((root) => {
-    // Inline mermaid preview — same behavior as the notes editor (debounced,
-    // sequence-guarded so rapid swaps cancel stale renders).
+    // Inline mermaid preview — lazy-loaded so the 400 KB mermaid parser
+    // stays out of the main bundle. Users who never write mermaid diagrams
+    // never download it. Sequence-guarded + debounced like the notes editor.
     let previewSeq = 0;
     let previewTimer: number | null = null;
     const renderMermaidPreview = (
@@ -310,7 +310,8 @@ function InnerArticleView({ markdown, highlights }: InnerArticleViewProps) {
       const seq = ++previewSeq;
       if (previewTimer) window.clearTimeout(previewTimer);
       previewTimer = window.setTimeout(() => {
-        void renderMermaidToSvg(content)
+        void import("@/components/osler/admin/editors/mermaid-editor")
+          .then((mod) => mod.renderMermaidToSvg(content))
           .then((svg) => {
             if (seq !== previewSeq) return;
             applyPreview(`<div class="osler-mermaid-render">${svg}</div>`);

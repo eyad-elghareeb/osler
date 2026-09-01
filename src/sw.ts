@@ -18,7 +18,7 @@
  */
 
 import type { RuntimeCaching } from "serwist";
-import { NetworkFirst, Serwist } from "serwist";
+import { CacheFirst, NetworkFirst, StaleWhileRevalidate, Serwist } from "serwist";
 
 declare const self: ServiceWorkerGlobalScope;
 
@@ -28,17 +28,79 @@ declare const self: ServiceWorkerGlobalScope;
 declare const __OSLER_SW_BUILD_ID__: string;
 
 const CONTENT_CACHE = "osler-content-v1";
+const STATIC_CACHE = "osler-static-v1";
+const IMAGE_CACHE = "osler-images-v1";
 
 const runtimeCaching: RuntimeCaching[] = [
-  // Content packs: network-first, offline fallback to cache.
-  // Matches local /osler-content/ AND remote Worker /v1/content/ endpoints.
+  // App shell code — hashed /_next/static/* is immutable but CacheFirst
+  // makes revisits offline-first (localfirst) and instant. Without this,
+  // each chunk would need a network round trip even though it never changes.
+  {
+    matcher: ({ url }) => url.pathname.startsWith("/_next/static/"),
+    handler: new CacheFirst({
+      cacheName: STATIC_CACHE,
+      plugins: [
+        {
+          cacheWillUpdate: async ({ response }) => {
+            if (response && response.status === 200) return response;
+            return null;
+          },
+        },
+      ],
+    }),
+  },
+  // Content packs — split by cache-bust to save bandwidth + Worker hits:
+  //  • Versioned (?v=…): CacheFirst — immutable. First load caches; every
+  //    revisit hits local cache only. A publish bumps ?v, making a new cache
+  //    key that fetches fresh. Zero Worker/R2 cost for repeat views.
+  //  • Unversioned (initial boot before version known, fallback fetches):
+  //    NetworkFirst with timeout — tries network for up to 3s then falls
+  //    back to cache so spotty networks stay usable while online publishes
+  //    still land without a hard refresh.
   {
     matcher: ({ url }) => {
+      if (!url.searchParams.has("v")) return false;
+      const p = url.pathname;
+      return p.startsWith("/osler-content/") || p.startsWith("/v1/content/") || p.startsWith("/v1/content-manifests/");
+    },
+    handler: new CacheFirst({
+      cacheName: CONTENT_CACHE,
+      plugins: [
+        {
+          cacheWillUpdate: async ({ response }) => {
+            if (response && response.status === 200) return response;
+            return null;
+          },
+        },
+      ],
+    }),
+  },
+  {
+    matcher: ({ url }) => {
+      if (url.searchParams.has("v")) return false;
       const p = url.pathname;
       return p.startsWith("/osler-content/") || p.startsWith("/v1/content/") || p.startsWith("/v1/content-manifests/");
     },
     handler: new NetworkFirst({
       cacheName: CONTENT_CACHE,
+      networkTimeoutSeconds: 3,
+      plugins: [
+        {
+          cacheWillUpdate: async ({ response }) => {
+            if (response && response.status === 200) return response;
+            return null;
+          },
+        },
+      ],
+    }),
+  },
+  // Thumbnails + content images: stale-while-revalidate so a cached image
+  // paints instantly and refreshes in the background. Offline-friendly and
+  // keeps YouTube hqdefault (remote) from blocking hub first paint.
+  {
+    matcher: ({ request, url }) => request.destination === "image" || url.pathname.includes("/images/"),
+    handler: new StaleWhileRevalidate({
+      cacheName: IMAGE_CACHE,
       plugins: [
         {
           cacheWillUpdate: async ({ response }) => {

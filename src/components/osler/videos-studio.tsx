@@ -20,7 +20,6 @@ import {
   ArrowDownUp,
   Check,
 } from "lucide-react";
-import Plyr from "plyr";
 import "plyr/dist/plyr.css";
 import {
   loadVideoTree,
@@ -567,7 +566,7 @@ function VideoPlayerView({
 }: PlayerViewProps) {
   const { t, rtl } = useI18n();
   const containerRef = React.useRef<HTMLDivElement>(null);
-  const plyrRef = React.useRef<Plyr | null>(null);
+  const plyrRef = React.useRef<any>(null);
   const youtubeRef = React.useRef<any>(null);
 
   const [isFullscreen, setIsFullscreen] = React.useState(false);
@@ -637,9 +636,12 @@ function VideoPlayerView({
 
     let destroyed = false;
 
-    // Helper to init Plyr with a given video element
-    function initPlyr(el: HTMLVideoElement) {
-      const p = new Plyr(el, {
+    // Helper to init Plyr with a given video element — lazy-loads the heavy
+    // `plyr` dep only when a non-YouTube video is actually played, keeping it
+    // out of the main bundle for users who never open the Videos hub.
+    async function initPlyr(el: HTMLVideoElement) {
+      const { default: Plyr } = await import("plyr");
+      const p = new (Plyr as any)(el, {
         controls: [
           "play-large", "play", "progress", "current-time",
           "duration", "mute", "volume", "settings", "pip", "fullscreen",
@@ -735,9 +737,20 @@ function VideoPlayerView({
       videoEl.src = video.source.url;
       videoEl.playsInline = true;
       containerRef.current.appendChild(videoEl);
-      const p = initPlyr(videoEl);
+      let plyrInstance: any = null;
+      let cancelled = false;
+      void initPlyr(videoEl).then((p) => {
+        if (cancelled || destroyed) {
+          try { p.destroy(); } catch {}
+          return;
+        }
+        plyrInstance = p;
+      });
       return () => {
-        p.destroy();
+        cancelled = true;
+        if (plyrInstance) {
+          try { plyrInstance.destroy(); } catch {}
+        }
         plyrRef.current = null;
       };
     }

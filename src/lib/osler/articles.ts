@@ -8,7 +8,7 @@ import rehypeStringify from "rehype-stringify";
 import type { Plugin } from "unified";
 import { CALLOUT_DEFAULT_TITLES, parseCalloutMarker } from "./callouts";
 import { loadCategoryTree, fetchWithLocalFallback } from "./content";
-import { contentFileUrl, localContentUrl } from "./content-url";
+import { contentFileUrl, localContentUrl, cacheBust } from "./content-url";
 import { loadConfig } from "./config";
 import type { ContentTreeNode, ContentLang } from "./types";
 
@@ -32,7 +32,7 @@ export function resolveArticleAsset(src: string, articleDir: string): string {
     return src;
   }
   const base = src.includes("/") ? src : `images/${src}`;
-  return `${libraryBaseUrl()}${articleDir}${base}`;
+  return cacheBust(`${libraryBaseUrl()}${articleDir}${base}`);
 }
 
 export interface ArticleMeta {

@@ -32,7 +32,10 @@ if (!fs.existsSync(OUTDIR)) {
   fs.mkdirSync(OUTDIR, { recursive: true });
 }
 
-const isProd = process.env.NODE_ENV === "production";
+const isProd =
+  process.argv.includes("--prod") ||
+  process.env.NODE_ENV === "production" ||
+  process.env.NEXT_PHASE === "phase-production-build";
 
 /**
  * Per-build identity baked into sw.js. Every `npm run build` produces
@@ -84,6 +87,15 @@ esbuild
   .then(() => {
     const stat = fs.statSync(OUTFILE);
     console.log(`[build-sw] ${path.relative(ROOT, OUTFILE)} (${(stat.size / 1024).toFixed(1)} KB)`);
+    // Production must never ship a sourcemap (saves 300+ KB bandwidth and
+    // avoids exposing source). Dev builds keep it for debugging.
+    const mapFile = `${OUTFILE}.map`;
+    if (isProd && fs.existsSync(mapFile)) {
+      try {
+        fs.unlinkSync(mapFile);
+        console.log(`[build-sw] removed sourcemap for production`);
+      } catch {}
+    }
   })
   .catch((err) => {
     console.error("[build-sw] build failed:", err);

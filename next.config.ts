@@ -31,6 +31,21 @@ const nextConfig: NextConfig = {
     ignoreBuildErrors: true,
   },
   reactStrictMode: false,
+  compress: true,
+  poweredByHeader: false,
+  productionBrowserSourceMaps: false,
+  // Slice heavy icon/chart/animation packages so they stay out of the main
+  // chunk until first use. Next tree-shakes them per-entry in dev and splits
+  // them into secondary chunks in production.
+  experimental: {
+    optimizePackageImports: [
+      "lucide-react",
+      "recharts",
+      "framer-motion",
+      "date-fns",
+      "react-markdown",
+    ],
+  },
 };
 
 export default nextConfig;
