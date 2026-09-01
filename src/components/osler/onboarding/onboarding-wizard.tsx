@@ -14,6 +14,7 @@ import { TourStep } from "./tour-step";
 import { LanguageStep } from "./language-step";
 import { ThemeStep } from "./theme-step";
 import { AiStep } from "./ai-step";
+import { SyncStep } from "./sync-step";
 import { InstallStep } from "./install-step";
 import { ConsentStep } from "./consent-step";
 
@@ -35,13 +36,17 @@ export function isOnboardingComplete(): boolean {
 function markOnboardingComplete(withConsent: boolean) {
   try {
     localStorage.setItem(ONBOARDING_KEY, "1");
-    if (withConsent) localStorage.setItem("osler_cookie_consent", "1");
+    // Cookie banner is gone — onboarding is the sole consent surface (user
+    // approves in the final step, and Skip now also implies consent). Always
+    // mark cookie consent when onboarding completes so no banner is needed.
+    localStorage.setItem("osler_cookie_consent", "1");
+    void withConsent; // keep param for clarity; consent is implied by completion
   } catch {
     // ignore — private mode
   }
 }
 
-const STEPS = [WelcomeStep, TourStep, LanguageStep, ThemeStep, AiStep, InstallStep, ConsentStep];
+const STEPS = [WelcomeStep, TourStep, LanguageStep, ThemeStep, AiStep, SyncStep, InstallStep, ConsentStep];
 
 export function OnboardingWizard({ onComplete }: { onComplete: () => void }) {
   const { t, rtl } = useI18n();
@@ -51,8 +56,8 @@ export function OnboardingWizard({ onComplete }: { onComplete: () => void }) {
   const isLast = index === total - 1;
   const Step = STEPS[index];
 
-  // While the wizard owns the consent decision, tell the cookie banner to
-  // hold off — users agree inside the wizard instead of on a banner.
+  // Signal that the first-run wizard is active (consent is handled here,
+  // so no separate cookie banner is needed — see the removal in layout.tsx).
   React.useEffect(() => {
     document.documentElement.setAttribute("data-osler-onboarding", "");
     return () => document.documentElement.removeAttribute("data-osler-onboarding");
@@ -127,7 +132,7 @@ export function OnboardingWizard({ onComplete }: { onComplete: () => void }) {
               <Button
                 variant="ghost"
                 size="sm"
-                onClick={() => finish(false)}
+                onClick={() => finish(true)}
                 className="text-muted-foreground hover:text-foreground text-xs"
               >
                 {t("onboarding.skip")}

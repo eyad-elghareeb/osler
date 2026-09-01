@@ -158,7 +158,6 @@ export const viewport = {
 
 import { OslerSessionProvider } from "@/lib/osler/session-context";
 import { RouteGuard } from "@/components/osler/route-guard";
-import { CookieConsentBanner } from "@/components/osler/cookie-consent-banner";
 
 export default function RootLayout({
   children,
@@ -200,7 +199,6 @@ export default function RootLayout({
                   </AnalyticsProvider>
                 </RouteGuard>
               </OslerSessionProvider>
-              <CookieConsentBanner />
             </OslerI18nProvider>
           </OslerThemeProvider>
         </SerwistProvider>

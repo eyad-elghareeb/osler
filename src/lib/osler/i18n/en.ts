@@ -3031,6 +3031,21 @@ export const en = {
     "onboarding.install.later":
       "Not now? You can install anytime from the top bar.",
 
+    "onboarding.sync.title": "Stay in sync — when you want to",
+    "onboarding.sync.subtitle":
+      "Your progress is saved locally by default and works fully offline. Enable sync when you’re ready to keep it across devices.",
+    "onboarding.sync.point.local":
+      "Local-first: progress, notes, and highlights live in this browser — fast and offline-ready.",
+    "onboarding.sync.point.cloud":
+      "Cloud sync (opt-in): create an account and turn it on to back up and restore across devices.",
+    "onboarding.sync.point.p2p":
+      "Direct sync: use QR or file backup to move data device-to-device without a cloud account.",
+    "onboarding.sync.howTitle": "Where to enable:",
+    "onboarding.sync.howBody":
+      "Settings → Sync (or Settings → Account → Cloud Sync when signed in). It’s off by default to save bandwidth and worker costs — turn it on anytime.",
+    "onboarding.sync.offlineNote":
+      "Offline first — Osler never blocks you when offline. Sync just keeps other devices up to date when you’re back online.",
+
     "onboarding.consent.title": "Privacy & terms",
     "onboarding.consent.subtitle": "One last thing before you dive in.",
     "onboarding.consent.point.local":
