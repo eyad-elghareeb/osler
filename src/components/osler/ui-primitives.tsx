@@ -1634,17 +1634,21 @@ export function SwipeableSheetContent({ onClose, className, children, ...props }
     const offset = g.current;
     const velocity = releaseVelocity();
     // Re-sync framer with the manually-applied drag offset, then hand off.
+    // During drag we wrote direct DOM + overlay opacity; the motion values
+    // stayed at their pre-drag rest, so jump them to the live progress
+    // before the spring takes over (otherwise the spring would start from 0).
+    const progress = g.height > 0 ? Math.max(0, Math.min(offset / g.height, 1)) : 0;
     y.jump(offset);
+    scrim.jump(1 - progress * 0.7);
     if (offset > SHEET_DISMISS_DISTANCE || velocity > SHEET_DISMISS_VELOCITY) {
       haptic("light");
-      // Velocity-aware near-critical spring: a flick carries its momentum
-      // out, a slow drag glides. (A tween would IGNORE `velocity` — only
-      // springs consume it.) The Radix closed-state slide then starts from
-      // an already-translated surface, so the handoff is seamless. The
-      // scrim keeps its dragged-down inline opacity — the overlay's exit
-      // fade takes over from there, and the reopen restore resets it.
+      // Faster, tighter dismiss — vaul uses 0.5s cubic-bezier(.32,.72,0,1);
+      // framer's spring with higher stiffness feels more native for a
+      // finger flick (21st.dev sheets use ~700-900 stiffness). The Radix
+      // closed-state slide starts from the already-translated surface, so
+      // the handoff is seamless; overlay keeps its dragged opacity.
       dismissLock.current = true;
-      const dismissAnim = animate(y, g.height, { type: "spring", stiffness: 500, damping: 45, velocity });
+      const dismissAnim = animate(y, g.height, { type: "spring", stiffness: 800, damping: 32, mass: 0.4, velocity });
       let cancelled = false;
       dismissCancelRef.current = () => {
         cancelled = true;
@@ -1658,14 +1662,17 @@ export function SwipeableSheetContent({ onClose, className, children, ...props }
       // settles aren't — snap instead of spring.
       y.jump(0);
       scrim.jump(1);
+      applyY(0);
+      const overlay = findScrim();
+      if (overlay) overlay.style.opacity = "";
     } else {
-      // Snappy return with release velocity — native iOS sheet feel. The
-      // scrim brightens back in lockstep so the page "returns" with the
-      // sheet; its velocity is rescaled px/s → fraction/s (the sheet height
-      // is the gesture's full 0→1 travel), since a raw px/s figure would
-      // violently overshoot a 0–1 opacity range.
-      animate(y, 0, { ...MOTION_SPRING.snappy, velocity });
-      animate(scrim, 1, { ...MOTION_SPRING.snappy, velocity: g.height > 0 ? velocity / g.height : 0 });
+      // Fast return — iOS sheet snaps back with the release velocity.
+      // Use a stiffer spring than the previous snappy (380/30) so the
+      // sheet catches the finger instead of lagging behind it. Scrim
+      // velocity is rescaled px/s → fraction/s.
+      const scrimVel = g.height > 0 ? velocity / g.height : 0;
+      animate(y, 0, { type: "spring", stiffness: 600, damping: 28, mass: 0.3, velocity });
+      animate(scrim, 1, { type: "spring", stiffness: 600, damping: 28, mass: 0.3, velocity: scrimVel * -0.7 });
     }
   };
 
@@ -1721,10 +1728,14 @@ export function SwipeableSheetContent({ onClose, className, children, ...props }
             // dead stop — release springs the overshoot back to rest.
             const next = raw < 0 ? raw / 3 : raw;
             g.current = next;
-            applyY(next); // instant paint, same task as the event
-            y.set(next); // keep framer in sync so re-renders can't snap back
+            // 1:1 direct DOM write — no framer batch, no next-frame lag.
+            // `y` is left untouched until release so its style prop doesn't
+            // fight the direct transform mid-gesture (vaul does the same:
+            // `transition: none` + direct `translate3d` during drag).
+            applyY(next);
             const progress = g.height > 0 ? Math.max(0, Math.min(next / g.height, 1)) : 0;
-            scrim.set(1 - progress * 0.7); // the page behind "lets go" with the sheet
+            const overlay = findScrim();
+            if (overlay) overlay.style.opacity = (1 - progress * 0.7).toFixed(3);
             g.samples.push({ t: performance.now(), y: next });
             if (g.samples.length > 14) g.samples.shift();
           }}
