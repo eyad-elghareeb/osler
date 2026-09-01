@@ -1424,9 +1424,19 @@ export function SectionItem({ children, className }: SectionItemProps) {
  * dragListener is false), downward travel is free and upward is locked,
  * a fast flick commits the dismiss regardless of distance, and a release
  * below the threshold springs back with the release velocity handed off.
- * A committed dismiss just calls onClose(): Radix's own exit animation
- * (slide-out-to-bottom) continues from the current drag offset, so there
- * is no seam between the gesture and the close.
+ * The Radix overlay scrim tracks the drag (brightens as the sheet travels
+ * down) and brightens back in lockstep on release. A committed dismiss just
+ * calls onClose(): Radix's own exit animation (slide-out-to-bottom)
+ * continues from the current drag offset, so there is no seam between the
+ * gesture and the close.
+ *
+ * Reopen safety: Radix REUSES this element when the sheet is reopened
+ * before the exit animation finishes (and keeps it mounted indefinitely if
+ * that animation never completes — backgrounded tab). A committed dismiss
+ * leaves the drag offset at the sheet's full height, so a reused instance
+ * would remount off-screen behind the dimmed overlay with a dead grab
+ * handle. The data-state watcher below re-synchronizes the whole gesture
+ * surface whenever the sheet reports "open" again.
  *
  * Usage instead of <SheetContent side="bottom">:
  *   <SwipeableSheetContent onClose={() => setOpen(false)}>
@@ -1476,12 +1486,23 @@ export function SwipeableSheetContent({ onClose, className, children, ...props }
   // so the sheet mirrors the finger exactly on every frame. Framer's
   // `animate()` takes over only on release, for the smooth settle/exit.
   const y = useMotionValue(0);
+  // Scrim opacity rides the same gesture (1 → 0.3 at full travel) — the iOS
+  // cue that the page behind is "letting go". Applied to the Radix overlay
+  // (the content's previous sibling in the portal) through the change
+  // listener below; reaching 1 clears the inline style so the stylesheet
+  // owns the resting state again.
+  const scrim = useMotionValue(1);
+  const scrimElRef = React.useRef<HTMLElement | null>(null);
   const reduceMotion = useReducedMotion();
   // Locks re-grabs while the dismiss fly-out is in flight — stopping that
   // animation resolves its promise, which would fire onClose under the
   // user's finger if they caught the sheet mid-exit.
   const dismissLock = React.useRef(false);
-  const gesture = React.useRef<{ startY: number; startOffset: number; current: number; samples: { t: number; y: number }[] } | null>(null);
+  // Cancels the dismiss fly-out's onClose callback — stopping the spring
+  // (reopen-restore) resolves its promise, and that stale close must not
+  // re-close a sheet the user just reopened.
+  const dismissCancelRef = React.useRef<(() => void) | null>(null);
+  const gesture = React.useRef<{ startY: number; startOffset: number; current: number; height: number; samples: { t: number; y: number }[] } | null>(null);
   const onCloseRef = React.useRef(onClose);
   onCloseRef.current = onClose;
 
@@ -1492,6 +1513,56 @@ export function SwipeableSheetContent({ onClose, className, children, ...props }
     const el = contentRef.current;
     if (el) el.style.transform = `translateY(${px}px) translateZ(0)`;
   };
+
+  // The overlay is rendered immediately before the content in the portal.
+  const findScrim = (): HTMLElement | null => {
+    if (scrimElRef.current?.isConnected) return scrimElRef.current;
+    const sib = contentRef.current?.previousElementSibling as HTMLElement | null;
+    if (sib?.dataset.slot === "sheet-overlay") scrimElRef.current = sib;
+    return scrimElRef.current;
+  };
+
+  // Reopen restore — see the component doc comment. Runs once on mount
+  // (fresh mount while open) and again whenever data-state flips back to
+  // "open" (Radix element reuse on a quick reopen). Motion values and refs
+  // are stable; applyY only touches the DOM node.
+  React.useEffect(() => {
+    const el = contentRef.current;
+    if (!el || typeof MutationObserver === "undefined") return;
+    const restore = () => {
+      dismissCancelRef.current?.();
+      dismissCancelRef.current = null;
+      dismissLock.current = false;
+      y.stop();
+      y.jump(0);
+      applyY(0);
+      scrim.jump(1);
+    };
+    if (el.getAttribute("data-state") === "open") restore();
+    const mo = new MutationObserver(() => {
+      if (el.getAttribute("data-state") === "open") restore();
+    });
+    mo.observe(el, { attributes: true, attributeFilter: ["data-state"] });
+    return () => {
+      mo.disconnect();
+      // A dismiss fly-out still in flight at unmount has nothing left to
+      // close — don't let its resolved promise call onClose into a dying
+      // parent.
+      dismissCancelRef.current?.();
+      dismissCancelRef.current = null;
+    };
+    // Runs once per mount — deps are refs + stable motion values.
+  }, []);
+
+  React.useEffect(
+    () =>
+      scrim.on("change", (v) => {
+        const el = findScrim();
+        if (el) el.style.opacity = v >= 1 ? "" : v.toFixed(3);
+      }),
+    // Runs once per mount — deps are refs + stable motion values.
+    [],
+  );
 
   // Release velocity from ~100-140ms of recent pointer samples (px/s, +down).
   // Time-based, not frame-based — pointermove can fire at 120-240Hz, where a
@@ -1519,17 +1590,32 @@ export function SwipeableSheetContent({ onClose, className, children, ...props }
       // Velocity-aware near-critical spring: a flick carries its momentum
       // out, a slow drag glides. (A tween would IGNORE `velocity` — only
       // springs consume it.) The Radix closed-state slide then starts from
-      // an already-translated surface, so the handoff is seamless.
+      // an already-translated surface, so the handoff is seamless. The
+      // scrim keeps its dragged-down inline opacity — the overlay's exit
+      // fade takes over from there, and the reopen restore resets it.
       dismissLock.current = true;
-      const height = contentRef.current?.offsetHeight ?? 0;
-      animate(y, height, { type: "spring", stiffness: 500, damping: 45, velocity }).then(() => onCloseRef.current());
+      const dismissAnim = animate(y, g.height, { type: "spring", stiffness: 500, damping: 45, velocity });
+      let cancelled = false;
+      dismissCancelRef.current = () => {
+        cancelled = true;
+      };
+      dismissAnim.then(() => {
+        dismissCancelRef.current = null;
+        if (!cancelled) onCloseRef.current();
+      });
     } else if (reduceMotion) {
       // Direct manipulation is fine under reduced motion, but physics
       // settles aren't — snap instead of spring.
       y.jump(0);
+      scrim.jump(1);
     } else {
-      // Snappy return with release velocity — native iOS sheet feel.
+      // Snappy return with release velocity — native iOS sheet feel. The
+      // scrim brightens back in lockstep so the page "returns" with the
+      // sheet; its velocity is rescaled px/s → fraction/s (the sheet height
+      // is the gesture's full 0→1 travel), since a raw px/s figure would
+      // violently overshoot a 0–1 opacity range.
       animate(y, 0, { ...MOTION_SPRING.snappy, velocity });
+      animate(scrim, 1, { ...MOTION_SPRING.snappy, velocity: g.height > 0 ? velocity / g.height : 0 });
     }
   };
 
@@ -1568,7 +1654,13 @@ export function SwipeableSheetContent({ onClose, className, children, ...props }
               y.jump(seed);
               applyY(seed);
             }
-            gesture.current = { startY: e.clientY, startOffset: seed, current: seed, samples: [{ t: performance.now(), y: seed }] };
+            gesture.current = {
+              startY: e.clientY,
+              startOffset: seed,
+              current: seed,
+              height: contentRef.current?.offsetHeight ?? 0,
+              samples: [{ t: performance.now(), y: seed }],
+            };
             haptic("selection");
           }}
           onPointerMove={(e) => {
@@ -1581,6 +1673,8 @@ export function SwipeableSheetContent({ onClose, className, children, ...props }
             g.current = next;
             applyY(next); // instant paint, same task as the event
             y.set(next); // keep framer in sync so re-renders can't snap back
+            const progress = g.height > 0 ? Math.max(0, Math.min(next / g.height, 1)) : 0;
+            scrim.set(1 - progress * 0.7); // the page behind "lets go" with the sheet
             g.samples.push({ t: performance.now(), y: next });
             if (g.samples.length > 14) g.samples.shift();
           }}
