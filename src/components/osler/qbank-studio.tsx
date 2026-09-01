@@ -62,6 +62,12 @@ interface QBankStudioProps {
    *  but with `onlyMode: "wrong"` and no `isReview` flag. */
   retakeSessionId?: string | null;
 }
+
+/** URL params that tie the current URL to a QBank session. When an
+ * in-progress quiz is running and a navigation drops ALL of them, the user
+ * is leaving the session — typically the hardware/browser back button. */
+const SESSION_URL_PARAMS = ["uid", "resume", "review", "retake", "session"];
+
 export function QBankStudio({
   activeItem: activeItemProp,
   activeContent: activeContentProp,
@@ -762,6 +768,14 @@ export function QBankStudio({
       pendingQuestionLimitRef.current = 0;
       startSession(activeItem, activeContent, { maxQuestions: limit || undefined });
     } else if (!activeItem) {
+      // Android/browser back just dropped ?uid while a guardable quiz runs:
+      // keep the session mounted and let the back-press guard open the exit
+      // dialog (below). Wiping here would quit directly — exactly what the
+      // guard exists to prevent. "Stay" walks history forward to restore the
+      // uid; Save/Discard run the normal exit flows on the already-clean URL.
+      if (mode === "quiz" && session && !session.completedAt && !session.isReview) {
+        return;
+      }
       // Reset unconditionally on `!activeItem` (not gated on `mode`) — by
       // the time the URL actually drops `uid`, `exitToHome` has usually
       // already set mode to "home" synchronously, so a `mode !== "home"`
@@ -911,6 +925,50 @@ export function QBankStudio({
     } else {
       exitToHome();
     }
+  };
+
+  // ── Back-press guard ────────────────────────────────────────────────
+  // Android/browser back during an in-progress session must behave like the
+  // close button: prompt Save / Discard / Stay instead of quitting. Every
+  // session URL carries a marker (?uid, ?resume, ?review, ?retake — or a
+  // pushed ?session=1 for custom pools that run at a bare /qbank), so a back
+  // press lands on /qbank and merely drops the marker. The popstate listener
+  // catches exactly that, the !activeItem reset above skips guardable
+  // sessions, and the shared exit dialog asks the user. "Stay" walks history
+  // forward to restore the marker URL the back press dropped.
+  const backGuardRef = React.useRef(false);
+  React.useEffect(() => {
+    if (mode !== "quiz" || !session || session.completedAt || session.isReview) return;
+    const hasMarker = () => {
+      const p = new URLSearchParams(window.location.search);
+      return SESSION_URL_PARAMS.some((k) => !!p.get(k));
+    };
+    // Custom pools run at a bare /qbank — push a marker entry so the first
+    // back press lands on /qbank (interceptable above) instead of leaving
+    // the route entirely, which unmounts the studio and can't be prompted.
+    // Skipped while a back press is being handled so the marker entry stays
+    // one history.forward() away for "Stay". If pushState is unavailable,
+    // back falls back to the route exit (auto-saved, resumable later).
+    if (!hasMarker() && !backGuardRef.current) {
+      try {
+        window.history.pushState(window.history.state, "", "/qbank?session=1");
+      } catch {}
+    }
+    const onPop = () => {
+      if (hasMarker() || backGuardRef.current) return;
+      backGuardRef.current = true;
+      setExitConfirmOpen(true);
+    };
+    window.addEventListener("popstate", onPop);
+    return () => window.removeEventListener("popstate", onPop);
+    // The URL props re-run this when the router adds/drops session params
+    // (popstate AND app-driven replaces), so the marker is (re-)asserted
+    // whenever a guardable session is live without one.
+  }, [mode, session?.sessionId, session?.completedAt, session?.isReview, uid, forceResume, reviewSessionId, retakeSessionId]);
+
+  const stayFromBackGuard = () => {
+    if (!backGuardRef.current) return;
+    window.history.forward(); // restore the session URL the back press dropped
   };
 
   // Live remaining time for timed mode is owned by the isolated <QBankTimer>
@@ -1286,7 +1344,15 @@ export function QBankStudio({
           packTitle={activeItem?.title}
           currentQuestionIdx={session.current}
         />
-        <AlertDialog open={exitConfirmOpen} onOpenChange={setExitConfirmOpen}>
+        <AlertDialog
+          open={exitConfirmOpen}
+          onOpenChange={(open) => {
+            // Any close (button action, Escape, overlay) retires a pending
+            // back-press guard — the URL decision already happened.
+            if (!open) backGuardRef.current = false;
+            setExitConfirmOpen(open);
+          }}
+        >
           <AlertDialogContent>
             <AlertDialogHeader>
               <AlertDialogTitle>{t("qbank.exit.title")}</AlertDialogTitle>
@@ -1296,7 +1362,9 @@ export function QBankStudio({
             </AlertDialogHeader>
             <AlertDialogFooter className="flex-col-reverse gap-2 sm:flex-row sm:justify-end">
               <AlertDialogCancel asChild>
-                <Button variant="ghost">{t("qbank.exit.stay")}</Button>
+                <Button variant="ghost" onClick={stayFromBackGuard}>
+                  {t("qbank.exit.stay")}
+                </Button>
               </AlertDialogCancel>
               <AlertDialogAction
                 className={cn(buttonVariants({ variant: "destructive" }))}
