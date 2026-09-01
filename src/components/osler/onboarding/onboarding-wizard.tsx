@@ -36,11 +36,7 @@ export function isOnboardingComplete(): boolean {
 function markOnboardingComplete(withConsent: boolean) {
   try {
     localStorage.setItem(ONBOARDING_KEY, "1");
-    // Cookie banner is gone — onboarding is the sole consent surface (user
-    // approves in the final step, and Skip now also implies consent). Always
-    // mark cookie consent when onboarding completes so no banner is needed.
-    localStorage.setItem("osler_cookie_consent", "1");
-    void withConsent; // keep param for clarity; consent is implied by completion
+    if (withConsent) localStorage.setItem("osler_cookie_consent", "1");
   } catch {
     // ignore — private mode
   }
@@ -129,14 +125,16 @@ export function OnboardingWizard({ onComplete }: { onComplete: () => void }) {
                 </div>
                 <span className="text-sm font-semibold">{t("app.name")}</span>
               </div>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => finish(true)}
-                className="text-muted-foreground hover:text-foreground text-xs"
-              >
-                {t("onboarding.skip")}
-              </Button>
+              {!isLast && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => go(total - 1)}
+                  className="text-muted-foreground hover:text-foreground text-xs"
+                >
+                  {t("onboarding.skip")}
+                </Button>
+              )}
             </div>
 
             <div
