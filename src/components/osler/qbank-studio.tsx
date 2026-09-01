@@ -135,6 +135,17 @@ export function QBankStudio({
   const activeContent = activeContentProp ?? selfPack?.content ?? null;
   const [mode, setMode] = React.useState<QuizMode>("home");
   const [session, setSession] = React.useState<SessionData | null>(null);
+
+  // Immersive chrome is declarative on `mode` so EVERY exit path restores the
+  // mobile bars: explicit exits (exitToHome / saveAndExit), Android back
+  // dropping ?uid mid-quiz (the !activeItem reset branch), and unmount. The
+  // previous imperative setImmersiveMode(true/false) scatter left the flag
+  // stuck true on any abrupt exit, keeping the tab bar + scroll-away bar
+  // hidden until the next start/exit cycle.
+  React.useEffect(() => {
+    setImmersiveMode(mode !== "home");
+    return () => setImmersiveMode(false);
+  }, [mode]);
   const [testMode, setTestMode] = React.useState<TestMode>("tutor");
   const [homeTab, setHomeTab] = React.useState<HomeTab>(() => {
     try {
@@ -403,7 +414,6 @@ export function QBankStudio({
       setSession(candidate);
       setTestMode(candidate.mode);
       setMode("quiz");
-      setImmersiveMode(true);
       precacheSessionPack(candidate.itemId, candidate.engine);
       return true;
     }
@@ -471,7 +481,6 @@ export function QBankStudio({
       const sessionId = `custom-${Date.now()}`;
       const totalTime = (meta.timerMinutes ?? pool.length) * 60;
       await archiveDisplacedActive();
-      setImmersiveMode(true);
       setSession({
         itemId: sessionId,
         itemTitle: meta.title,
@@ -677,7 +686,6 @@ export function QBankStudio({
           Date.now() - (active.startedAt ?? 0) < 7 * 24 * 60 * 60 * 1000
         ) {
           restoreBlockedRef.current = true;
-          setImmersiveMode(true);
           setSession(active);
           setTestMode(active.mode);
           setMode("quiz");
@@ -692,8 +700,6 @@ export function QBankStudio({
       // starting another pack from the hub) must never silently destroy the
       // in-progress progress. Stale and review sessions are skipped.
       await archiveDisplacedActive();
-
-      setImmersiveMode(true);
 
       // Load existing written drafts
       const drafts = writtenDrafts.get(item.uid);
@@ -795,7 +801,6 @@ export function QBankStudio({
     setPendingCreateTestSourceUid(activeItem.uid);
     setHomeTab("create");
     setMode("home");
-    setImmersiveMode(false);
     navigate("qbank");
   }, [activeItem, navigate]);
 
@@ -863,7 +868,6 @@ export function QBankStudio({
     // see `!session && mode === "home"` as true again, and reopen the
     // dialog it was just asked to close. The effect's own `!activeItem`
     // branch clears startPromptUid once the navigation has truly landed.
-    setImmersiveMode(false);
     // Always land on the bare /qbank URL: deep-link params (?uid / ?resume /
     // ?review / ?retake) must not survive an exit, or the next mount replays
     // them. Sessions resumed via ?resume=1 (and custom sessions) have no
@@ -894,7 +898,6 @@ export function QBankStudio({
     keepProgressOnExitRef.current = true;
     setMode("home");
     setSession(null);
-    setImmersiveMode(false);
     onExit();
   };
 
