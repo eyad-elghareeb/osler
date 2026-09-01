@@ -94,6 +94,19 @@ function setChromeHidden(next: boolean) {
   for (const notify of listeners) notify(next);
 }
 
+/** Full chrome reset — gesture accumulators, active scroller, per-element
+ * gesture state, and the hidden flag. Shared by the retryKey effect
+ * (view/tab switches) and by consumer unmounts. */
+function resetChrome(c: ChromeController) {
+  c.down = 0;
+  c.up = 0;
+  c.activeEl = null;
+  if (c.ro) for (const el of Array.from(c.observed)) c.ro.unobserve(el);
+  c.observed.clear();
+  c.states = new WeakMap();
+  setChromeHidden(false);
+}
+
 function ensureController(): ChromeController {
   if (ctrl || typeof window === "undefined") return ctrl!;
 
@@ -251,6 +264,20 @@ export function useHideOnScroll(
         document.removeEventListener("scroll", c.onScroll, { capture: true });
         c.attached = false;
       }
+      // Reset unconditionally — for the OTHERS-REMAIN case, a subpage
+      // consumer going away (article reader closed, QBank hub header folded
+      // back in) hands the page to a layer the controller no longer tracks:
+      // without this reset the shared `hidden` flag and the stale activeEl
+      // outlive the unmount, the scroll-away bar stays collapsed at the top
+      // of the revealed page, and the ResizeObserver safety net can't
+      // recover it (it only expands the ACTIVE element, which now points at
+      // a detached scroller — a typical back-gesture exit fires no scroll
+      // events). For the LAST consumer, a stale `hidden = true` would be
+      // silently swallowed by setChromeHidden's no-op guard: the next
+      // consumer to mount never hears the collapse it "already" missed, so
+      // its bar would never hide. Remaining consumers re-seed from real
+      // scroll events — this only ever costs a one-shot expand.
+      resetChrome(c);
     };
   }, []);
 
@@ -261,14 +288,7 @@ export function useHideOnScroll(
 
   // A view/tab switch always resets the chrome: fresh scrollers everywhere.
   React.useEffect(() => {
-    const c = ensureController();
-    c.down = 0;
-    c.up = 0;
-    c.activeEl = null;
-    if (c.ro) for (const el of Array.from(c.observed)) c.ro.unobserve(el);
-    c.observed.clear();
-    c.states = new WeakMap();
-    setChromeHidden(false);
+    resetChrome(ensureController());
   }, [retryKey]);
 
   return hidden;
