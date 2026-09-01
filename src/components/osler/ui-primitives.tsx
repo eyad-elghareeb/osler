@@ -1633,46 +1633,67 @@ export function SwipeableSheetContent({ onClose, className, children, ...props }
     } catch {}
     const offset = g.current;
     const velocity = releaseVelocity();
-    // Re-sync framer with the manually-applied drag offset, then hand off.
-    // During drag we wrote direct DOM + overlay opacity; the motion values
-    // stayed at their pre-drag rest, so jump them to the live progress
-    // before the spring takes over (otherwise the spring would start from 0).
+    const el = contentRef.current;
+    const overlay = findScrim();
+    // Sync motion values for the restore guard (stale check uses y.get()).
     const progress = g.height > 0 ? Math.max(0, Math.min(offset / g.height, 1)) : 0;
     y.jump(offset);
     scrim.jump(1 - progress * 0.7);
     if (offset > SHEET_DISMISS_DISTANCE || velocity > SHEET_DISMISS_VELOCITY) {
       haptic("light");
-      // Faster, tighter dismiss — vaul uses 0.5s cubic-bezier(.32,.72,0,1);
-      // framer's spring with higher stiffness feels more native for a
-      // finger flick (21st.dev sheets use ~700-900 stiffness). The Radix
-      // closed-state slide starts from the already-translated surface, so
-      // the handoff is seamless; overlay keeps its dragged opacity.
       dismissLock.current = true;
-      const dismissAnim = animate(y, g.height, { type: "spring", stiffness: 800, damping: 32, mass: 0.4, velocity });
+      // vaul/21st.dev use a single 0.22-0.3s cubic-bezier(.32,.72,0,1)
+      // for both directions — no spring mass, so small drags don't feel
+      // heavy. Dismiss keeps the dragged overlay opacity and lets Radix
+      // exit fade take over; we just slide the sheet out.
+      if (el) {
+        el.style.transition = "transform 0.22s cubic-bezier(0.32, 0.72, 0, 1)";
+        el.style.transform = `translateY(${g.height}px) translateZ(0)`;
+        y.set(g.height);
+      }
       let cancelled = false;
       dismissCancelRef.current = () => {
         cancelled = true;
+        if (el) el.style.transition = "";
       };
-      dismissAnim.then(() => {
+      const done = () => {
         dismissCancelRef.current = null;
         if (!cancelled) onCloseRef.current();
-      });
+      };
+      if (el) el.addEventListener("transitionend", done, { once: true });
+      else done();
+      // Fallback if transitionend never fires (e.g. display:none)
+      setTimeout(done, 260);
     } else if (reduceMotion) {
-      // Direct manipulation is fine under reduced motion, but physics
-      // settles aren't — snap instead of spring.
-      y.jump(0);
-      scrim.jump(1);
-      applyY(0);
-      const overlay = findScrim();
-      if (overlay) overlay.style.opacity = "";
+      if (el) {
+        el.style.transition = "none";
+        el.style.transform = "";
+      }
+      y.set(0);
+      scrim.set(1);
+      if (overlay) {
+        overlay.style.transition = "none";
+        overlay.style.opacity = "";
+      }
     } else {
-      // Fast return — iOS sheet snaps back with the release velocity.
-      // Use a stiffer spring than the previous snappy (380/30) so the
-      // sheet catches the finger instead of lagging behind it. Scrim
-      // velocity is rescaled px/s → fraction/s.
-      const scrimVel = g.height > 0 ? velocity / g.height : 0;
-      animate(y, 0, { type: "spring", stiffness: 600, damping: 28, mass: 0.3, velocity });
-      animate(scrim, 1, { type: "spring", stiffness: 600, damping: 28, mass: 0.3, velocity: scrimVel * -0.7 });
+      // Fluid return — same curve as vaul, short enough that a 10px
+      // nudge snaps back instantly instead of lingering.
+      if (el) {
+        el.style.transition = "transform 0.22s cubic-bezier(0.32, 0.72, 0, 1)";
+        el.style.transform = "translateY(0px) translateZ(0)";
+        y.set(0);
+      }
+      if (overlay) {
+        overlay.style.transition = "opacity 0.22s cubic-bezier(0.32, 0.72, 0, 1)";
+        overlay.style.opacity = "";
+      }
+      scrim.set(1);
+      const clearTransition = () => {
+        if (el) el.style.transition = "";
+        if (overlay) overlay.style.transition = "";
+      };
+      if (el) el.addEventListener("transitionend", clearTransition, { once: true });
+      setTimeout(clearTransition, 260);
     }
   };
 
@@ -1694,6 +1715,10 @@ export function SwipeableSheetContent({ onClose, className, children, ...props }
             if (dismissLock.current) return; // the sheet is already leaving
             e.currentTarget.setPointerCapture(e.pointerId);
             y.stop(); // a settling spring must never fight the finger
+            // Kill any in-flight CSS transition so the next pointermove lands 1:1.
+            if (contentRef.current) contentRef.current.style.transition = "none";
+            const _overlay = findScrim();
+            if (_overlay) _overlay.style.transition = "none";
             // "Catch" the sheet mid-enter: a running CSS animation claims
             // transform and would eat the drag. Read its LIVE translateY and
             // seed the gesture from there instead of finish()ing (which
