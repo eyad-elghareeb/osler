@@ -402,7 +402,7 @@ export const en = {
     "qbank.written.cropInfo": "Drag the box or resize handles to select the answer area",
     "qbank.written.cropRetake": "Retake",
     "qbank.written.cropUse": "Crop & Use",
-    "qbank.written.cameraPermissionDenied": "Camera permission denied. Use Upload instead.",
+    "qbank.written.cameraPermissionDenied": "Camera permission denied. Re-enable it in your browser’s site settings, or use Upload instead.",
     "qbank.written.noCamera": "No camera found. Use Upload instead.",
     "qbank.written.cameraSecureContext": "Camera requires HTTPS or localhost. Use Upload instead.",
     "qbank.written.photoCaptured": "Photo captured.",
@@ -721,6 +721,10 @@ export const en = {
     "osce.session.voiceOverlay.endCall": "End call",
     "osce.session.voiceOverlay.micDenied": "Microphone access denied",
     "osce.session.voiceOverlay.connectionLost": "Connection lost",
+    "osce.session.voice.micUnavailable":
+      "Microphone is not available here. Voice mode needs a secure connection (HTTPS) or an installed app.",
+    "osce.session.voice.micDenied":
+      "Microphone blocked: {msg}. Re-enable it in this site’s settings (lock icon in the address bar → Permissions) and retry.",
 
     "settings.ai.liveTranscripts": "Live Transcripts",
     "settings.ai.liveTranscriptsDesc":
@@ -2948,6 +2952,7 @@ export const en = {
     "onboarding.welcome.chip.tour": "Quick tour",
     "onboarding.welcome.chip.ai": "AI tutor",
     "onboarding.welcome.chip.install": "Install",
+    "onboarding.welcome.chip.permissions": "Permissions",
     "onboarding.welcome.chip.consent": "Privacy",
 
     "onboarding.tour.title": "What\u2019s inside",
@@ -3045,6 +3050,25 @@ export const en = {
       "Settings → Sync (or Settings → Account → Cloud Sync when signed in). It’s off by default to save bandwidth and worker costs — turn it on anytime.",
     "onboarding.sync.offlineNote":
       "Offline first — Osler never blocks you when offline. Sync just keeps other devices up to date when you’re back online.",
+
+    "onboarding.permissions.title": "Allow microphone & camera",
+    "onboarding.permissions.subtitle":
+      "Two optional permissions power Osler’s most hands-on features — everything else works without them.",
+    "onboarding.permissions.micTitle": "Microphone",
+    "onboarding.permissions.micDesc":
+      "Talk with the simulated OSCE patient by voice during clinical station practice.",
+    "onboarding.permissions.cameraTitle": "Camera",
+    "onboarding.permissions.cameraDesc":
+      "Photograph your handwritten answers in Written Sets so they can be transcribed and graded.",
+    "onboarding.permissions.allow": "Allow",
+    "onboarding.permissions.allowed": "Allowed",
+    "onboarding.permissions.denied": "Blocked",
+    "onboarding.permissions.deniedHint":
+      "Blocked by the browser. Re-enable it in this site’s settings (tap the lock icon in the address bar → Permissions), then reload.",
+    "onboarding.permissions.unavailableHint":
+      "Unavailable here — this feature needs a secure connection (HTTPS) or an installed app.",
+    "onboarding.permissions.skipNote":
+      "Optional — if you skip, Osler asks again the first time you use the feature.",
 
     "onboarding.consent.title": "Privacy & terms",
     "onboarding.consent.subtitle": "One last thing before you dive in.",

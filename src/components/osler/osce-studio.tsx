@@ -383,7 +383,7 @@ export function OsceStudio({
     stopGeminiLive();
     if (!hasApiKey()) { setError("API key required for Gemini Live mode."); return; }
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-      setError("Microphone not accessible.");
+      setError(t("osce.session.voice.micUnavailable"));
       return;
     }
     setVoicePhase("listening");
@@ -730,7 +730,7 @@ export function OsceStudio({
       })
       .catch((err) => {
         stopGeminiLive();
-        setError("Microphone access denied: " + err.message);
+        setError(t("osce.session.voice.micDenied", { msg: err instanceof Error ? err.message : String(err) }));
       });
   }
 

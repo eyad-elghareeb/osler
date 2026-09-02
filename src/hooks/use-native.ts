@@ -14,6 +14,10 @@ import {
   type NetworkInfo,
   checkBiometricAvailability,
   type BiometricAvailability,
+  queryMediaPermission,
+  requestMediaPermission,
+  type MediaPermissionKind,
+  type MediaPermissionState,
 } from "@/lib/osler/native";
 
 /* ── Network Information ──────────────────────────────────────────── */
@@ -47,6 +51,37 @@ export function useBiometricAvailability(): {
     return cancel;
   }, [refresh]);
   return { availability, refresh };
+}
+
+/* ── Media permissions (microphone / camera) ─────────────────────── */
+
+export function useMediaPermissions(kinds: MediaPermissionKind[]): {
+  states: Record<MediaPermissionKind, MediaPermissionState | null>;
+  request: (kind: MediaPermissionKind) => Promise<MediaPermissionState>;
+} {
+  const key = kinds.join(",");
+  const [states, setStates] = React.useState<Record<MediaPermissionKind, MediaPermissionState | null>>(
+    () => Object.fromEntries(kinds.map((k) => [k, null])) as Record<MediaPermissionKind, MediaPermissionState | null>,
+  );
+  const refresh = React.useCallback(() => {
+    let cancelled = false;
+    key.split(",").forEach((kind) => {
+      queryMediaPermission(kind as MediaPermissionKind).then((state) => {
+        if (!cancelled) setStates((prev) => ({ ...prev, [kind]: state }));
+      });
+    });
+    return () => { cancelled = true; };
+  }, [key]);
+  React.useEffect(() => {
+    const cancel = refresh();
+    return cancel;
+  }, [refresh]);
+  const request = React.useCallback(async (kind: MediaPermissionKind) => {
+    const state = await requestMediaPermission(kind);
+    setStates((prev) => ({ ...prev, [kind]: state }));
+    return state;
+  }, []);
+  return { states, request };
 }
 
 /* ── Document visibility (used by wake-lock + viewport helpers) ──── */

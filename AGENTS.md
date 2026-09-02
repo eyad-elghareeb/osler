@@ -614,6 +614,7 @@ Osler is a PWA that should feel like a native app. The native-feature library li
 | `biometric.ts` | WebAuthn | `enrollBiometric(username)` for first-time setup, `authenticateWithBiometric()` for quick unlock, `disableBiometric()` to revoke. Used in `login-screen.tsx` and Settings. |
 | `network-info.ts` | Network Information API | `useNetworkInfo()` hook exposes `{ type, effectiveType, downlink, rtt, saveData, online }`. iOS Safari reports `available: false` — handle it. |
 | `wake-lock.ts` | Screen Wake Lock API | `acquireWakeLock(predicate)` / `releaseWakeLock()`. Auto re-acquires on visibility regained. Used in `videos-studio.tsx` player view. |
+| `permissions.ts` | Permissions API + getUserMedia | `queryMediaPermission(kind)` / `requestMediaPermission(kind)` for `microphone` / `camera`. Request must run on a user gesture; browsers without the descriptors (iOS Safari, Firefox) fall back to `"prompt"`. Used by the onboarding Permissions step; OSCE voice mode and the written-answer photo capture need these at runtime. |
 
 Rules:
 - Every interactive surface should fire at least one haptic on user action. Pick the right pattern from `HAPTIC_PATTERNS`.

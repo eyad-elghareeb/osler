@@ -403,7 +403,7 @@ export const ar = {
     "qbank.written.cropInfo": "اسحب الصندوق أو مقابض التغيير لتحديد منطقة الإجابة",
     "qbank.written.cropRetake": "إعادة التقاط",
     "qbank.written.cropUse": "قص واستخدام",
-    "qbank.written.cameraPermissionDenied": "تم رفض إذن الكاميرا. استخدم الرفع بدلاً من ذلك.",
+    "qbank.written.cameraPermissionDenied": "تم رفض إذن الكاميرا. أعد تفعيله من إعدادات الموقع في متصفحك، أو استخدم الرفع بدلاً من ذلك.",
     "qbank.written.noCamera": "لم يتم العثور على كاميرا. استخدم الرفع بدلاً من ذلك.",
     "qbank.written.cameraSecureContext": "تتطلب الكاميرا HTTPS أو localhost. استخدم الرفع بدلاً من ذلك.",
     "qbank.written.photoCaptured": "تم التقاط الصورة.",
@@ -722,6 +722,10 @@ export const ar = {
     "osce.session.voiceOverlay.endCall": "إنهاء المكالمة",
     "osce.session.voiceOverlay.micDenied": "تم رفض الوصول إلى الميكروفون",
     "osce.session.voiceOverlay.connectionLost": "انقطع الاتصال",
+    "osce.session.voice.micUnavailable":
+      "الميكروفون غير متاح هنا. يحتاج وضع الصوت إلى اتصال آمن (HTTPS) أو تطبيقًا مثبتًا.",
+    "osce.session.voice.micDenied":
+      "تم حجب الميكروفون: {msg}. أعد تفعيله من إعدادات هذا الموقع في متصفحك (أيقونة القفل في شريط العنوان ← الأذونات) ثم حاول مجددًا.",
 
     "settings.ai.liveTranscripts": "النصوص المباشرة",
     "settings.ai.liveTranscriptsDesc":
@@ -2941,6 +2945,7 @@ export const ar = {
     "onboarding.welcome.chip.tour": "جولة سريعة",
     "onboarding.welcome.chip.ai": "المساعد الذكي",
     "onboarding.welcome.chip.install": "التثبيت",
+    "onboarding.welcome.chip.permissions": "الأذونات",
     "onboarding.welcome.chip.consent": "الخصوصية",
 
     "onboarding.tour.title": "ماذا يوجد بالداخل",
@@ -3038,6 +3043,25 @@ export const ar = {
       "الإعدادات ← المزامنة (أو الإعدادات ← الحساب ← المزامنة السحابية عند تسجيل الدخول). معطّلة افتراضيًا لتوفير النطاق وتكلفة الخادم — فعّلها في أي وقت.",
     "onboarding.sync.offlineNote":
       "أولاً دون اتصال — لا يمنعك Osler أبدًا عند عدم الاتصال. المزامنة فقط تُحدّث الأجهزة الأخرى عند عودتك للاتصال.",
+
+    "onboarding.permissions.title": "السماح بالميكروفون والكاميرا",
+    "onboarding.permissions.subtitle":
+      "إذنان اختياريان يفعّلان أكثر ميزات Osler تفاعلًا — وكل شيء آخر يعمل بدونهما.",
+    "onboarding.permissions.micTitle": "الميكروفون",
+    "onboarding.permissions.micDesc":
+      "تحدّث مع المريض المحاكى بالصوت أثناء التدرب على محطات الـ OSCE السريرية.",
+    "onboarding.permissions.cameraTitle": "الكاميرا",
+    "onboarding.permissions.cameraDesc":
+      "التقط صورًا لإجاباتك المكتوبة بخط اليد في الأوراق الكتابية لتحويلها إلى نص وتقييمها.",
+    "onboarding.permissions.allow": "سماح",
+    "onboarding.permissions.allowed": "مسموح",
+    "onboarding.permissions.denied": "محظور",
+    "onboarding.permissions.deniedHint":
+      "حجبه المتصفح. أعد تفعيله من إعدادات هذا الموقع (اضغط أيقونة القفل في شريط العنوان ← الأذونات) ثم أعد تحميل الصفحة.",
+    "onboarding.permissions.unavailableHint":
+      "غير متاح هنا — تتطلب هذه الميزة اتصالًا آمنًا (HTTPS) أو تطبيقًا مثبتًا.",
+    "onboarding.permissions.skipNote":
+      "اختياري — إن تخطّيته، سيطلب Osler الإذن مجددًا عند أول استخدام للميزة.",
 
     "onboarding.consent.title": "الخصوصية والشروط",
     "onboarding.consent.subtitle": "أمر أخير قبل أن تبدأ.",

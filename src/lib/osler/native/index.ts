@@ -7,6 +7,7 @@
  *   - biometric        → WebAuthn (biometric quick unlock)
  *   - networkInfo      → Network Information API
  *   - wakeLock         → Screen Wake Lock API
+ *   - permissions      → Permissions API (microphone / camera checks)
  */
 
 export * from "./haptics";
@@ -14,3 +15,4 @@ export * from "./view-transitions";
 export * from "./biometric";
 export * from "./network-info";
 export * from "./wake-lock";
+export * from "./permissions";

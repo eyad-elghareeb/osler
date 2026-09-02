@@ -16,6 +16,7 @@ import { ThemeStep } from "./theme-step";
 import { AiStep } from "./ai-step";
 import { SyncStep } from "./sync-step";
 import { InstallStep } from "./install-step";
+import { PermissionsStep } from "./permissions-step";
 import { ConsentStep } from "./consent-step";
 
 // localStorage (not the IndexedDB store) is deliberate: like the cookie-consent
@@ -42,7 +43,7 @@ function markOnboardingComplete(withConsent: boolean) {
   }
 }
 
-const STEPS = [WelcomeStep, TourStep, LanguageStep, ThemeStep, AiStep, SyncStep, InstallStep, ConsentStep];
+const STEPS = [WelcomeStep, TourStep, LanguageStep, ThemeStep, AiStep, SyncStep, InstallStep, PermissionsStep, ConsentStep];
 
 export function OnboardingWizard({ onComplete }: { onComplete: () => void }) {
   const { t, rtl } = useI18n();
