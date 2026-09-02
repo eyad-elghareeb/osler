@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { Github, Info, ExternalLink, Palette, Puzzle, ScrollText, ShieldCheck } from "lucide-react";
+import { Code2, Info, ExternalLink, Palette, Puzzle, ScrollText, ShieldCheck } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { AnimatedDisclosure } from "@/components/osler/ui-primitives";
@@ -128,7 +128,7 @@ export function AboutSettingsSection() {
 
       <AnimatedDisclosure
         label={t("settings.about.github")}
-        icon={Github}
+        icon={Code2}
       >
         <a
           href={repo}

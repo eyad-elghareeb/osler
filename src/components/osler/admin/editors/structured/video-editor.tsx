@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { CheckCircle2, Plus, Trash2, Youtube, Tags } from "lucide-react";
+import { CheckCircle2, CirclePlay, Plus, Trash2, Tags } from "lucide-react";
 import { useI18n } from "@/components/osler/i18n-provider";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -215,7 +215,7 @@ export function VideoEditor({ value, onChange, readOnly, r2KeyBase, rawR2Key }: 
                 <Field label="YouTube URL or video ID">
                   <div className="space-y-1.5">
                     <div className="flex items-center gap-2">
-                      <Youtube className="size-4 text-destructive shrink-0" />
+                      <CirclePlay className="size-4 text-destructive shrink-0" />
                       <Input
                         value={source.id ?? ""}
                         onChange={(e) => {
