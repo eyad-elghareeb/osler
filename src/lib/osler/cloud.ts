@@ -13,6 +13,10 @@ const SESSION_STORAGE_KEY = "osler-cloud-session-v1";
 export const SESSION_EXPIRED_FLAG = "osler-cloud-session-expired";
 const SYNC_DEBOUNCE_MS = 4_000;
 const MIN_SYNC_INTERVAL_MS = 20_000;
+// Realtime pokes arrive per pushing device — a burst of N devices pushing at
+// once would otherwise trigger N full pull cycles. One trailing pull covers
+// them all (each pull HEADs the server for what actually changed).
+const POKE_PULL_DEBOUNCE_MS = 1_500;
 // Rotate the token through /v1/auth/refresh once it's within this window of
 // its expiry, so an active session never dies mid-use.
 const REFRESH_AHEAD_MS = 6 * 60 * 60 * 1000;
@@ -754,6 +758,7 @@ export function startCloudSync(session: CloudSession): () => void {
   const dirtyKindsDuringSync = new Set<SyncKind>();
   let syncing = false;
   let pokePending = false;
+  let pokeTimer: ReturnType<typeof setTimeout> | null = null;
   let lastSyncAt = 0;
   const serverUpdatedAt: Record<string, number> = {};
   let retryCount = 0;
@@ -979,7 +984,11 @@ export function startCloudSync(session: CloudSession): () => void {
         pokePending = true;
         return;
       }
-      void runSync(true);
+      if (pokeTimer) clearTimeout(pokeTimer);
+      pokeTimer = setTimeout(() => {
+        pokeTimer = null;
+        void runSync(true);
+      }, POKE_PULL_DEBOUNCE_MS);
     },
   });
 
@@ -996,6 +1005,10 @@ export function startCloudSync(session: CloudSession): () => void {
   stopSync = () => {
     stopped = true;
     if (timer) clearTimeout(timer);
+    if (pokeTimer) {
+      clearTimeout(pokeTimer);
+      pokeTimer = null;
+    }
     stopRealtime();
     for (const event of syncEvents) window.removeEventListener(event, schedule);
     window.removeEventListener("online", onOnline);
