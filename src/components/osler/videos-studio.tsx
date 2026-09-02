@@ -640,7 +640,11 @@ function VideoPlayerView({
     // `plyr` dep only when a non-YouTube video is actually played, keeping it
     // out of the main bundle for users who never open the Videos hub.
     async function initPlyr(el: HTMLVideoElement) {
-      const { default: Plyr } = await import("plyr");
+      // plyr's types are `export =` + `export default`; TS 7 resolves the
+      // dynamic-import namespace to the class itself, so fall back to it
+      // when `.default` is absent (the ESM bundle always has one).
+      const mod = await import("plyr");
+      const Plyr = (mod as { default?: unknown }).default ?? mod;
       const p = new (Plyr as any)(el, {
         controls: [
           "play-large", "play", "progress", "current-time",

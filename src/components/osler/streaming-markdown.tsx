@@ -115,7 +115,9 @@ export function StreamingMarkdown({
   // but their label text gets the same word treatment.
   function wrapChildren(children: React.ReactNode): React.ReactNode {
     const arr = React.Children.toArray(children);
-    return arr.flatMap((child) => {
+    // Explicit ReactNode return: pass-through branches return the raw child,
+    // and TS7's stricter flatMap typing no longer infers that union itself.
+    return arr.flatMap((child): React.ReactNode => {
       if (typeof child === "string") {
         const parts = (child as string).split(/(\s+)/);
         return parts.map((part, i) => {
