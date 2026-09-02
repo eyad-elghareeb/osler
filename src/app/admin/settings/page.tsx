@@ -58,17 +58,18 @@ import type { LucideIcon } from "lucide-react";
 interface AdminSectionDef {
   id: string;
   labelKey: string;
+  descriptionKey: string;
   icon: LucideIcon;
 }
 
 const SECTIONS: AdminSectionDef[] = [
-  { id: "appearance", labelKey: "admin.settings.section.appearance", icon: Palette },
-  { id: "language", labelKey: "admin.settings.section.language", icon: Languages },
-  { id: "ai", labelKey: "admin.settings.section.ai", icon: Sparkles },
-  { id: "apiTokens", labelKey: "admin.settings.section.apiTokens", icon: Bot },
-  { id: "behavior", labelKey: "admin.settings.section.behavior", icon: RotateCcw },
-  { id: "about", labelKey: "admin.settings.section.about", icon: Info },
-  { id: "danger", labelKey: "admin.settings.section.danger", icon: ShieldAlert },
+  { id: "appearance", labelKey: "admin.settings.section.appearance", descriptionKey: "admin.settings.section.appearance.desc", icon: Palette },
+  { id: "language", labelKey: "admin.settings.section.language", descriptionKey: "admin.settings.section.language.desc", icon: Languages },
+  { id: "ai", labelKey: "admin.settings.section.ai", descriptionKey: "admin.settings.section.ai.desc", icon: Sparkles },
+  { id: "apiTokens", labelKey: "admin.settings.section.apiTokens", descriptionKey: "admin.settings.section.apiTokens.desc", icon: Bot },
+  { id: "behavior", labelKey: "admin.settings.section.behavior", descriptionKey: "admin.settings.section.behavior.desc", icon: RotateCcw },
+  { id: "about", labelKey: "admin.settings.section.about", descriptionKey: "admin.settings.section.about.desc", icon: Info },
+  { id: "danger", labelKey: "admin.settings.section.danger", descriptionKey: "admin.settings.section.danger.desc", icon: ShieldAlert },
 ];
 
 function renderSection(id: string) {
@@ -111,6 +112,78 @@ export default function AdminSettingsPage() {
 
   const activeMeta = SECTIONS.find((s) => s.id === section);
 
+  // ── Mobile: iOS NavigationController-style stacked pages, mirroring the
+  // main app's Settings (full-height NavigationStack, eyebrow + described
+  // section rows, plain back link + section h1 on sub-pages). ──────────────
+  if (isMobile) {
+    return (
+      <AdminRouteGuard>
+        <div className="h-full flex flex-col">
+          <NavigationStack
+            className="flex-1 min-h-0"
+            homeClassName="osler-page"
+            subpageClassName="osler-page"
+            rtl={rtl}
+            home={
+              <div className="max-w-2xl mx-auto px-4 py-3">
+                <div className="text-[11px] uppercase tracking-wider text-muted-foreground px-1 mb-2">
+                  {t("admin.settings.mobileHomeSubtitle")}
+                </div>
+                <div className="rounded-xl border border-border overflow-hidden bg-card">
+                  {SECTIONS.map((s, idx) => {
+                    const I = s.icon;
+                    return (
+                      <button
+                        key={s.id}
+                        onClick={() => pickSection(s.id)}
+                        className={cn(
+                          "w-full text-start px-4 py-3 flex items-center gap-3 hover:bg-muted/60 transition-colors",
+                          idx > 0 && "border-t border-border",
+                        )}
+                      >
+                        <span className="size-8 rounded-md bg-primary/10 text-primary flex items-center justify-center shrink-0">
+                          <I className="size-4" />
+                        </span>
+                        <span className="flex-1 min-w-0">
+                          <span className="block text-sm font-medium truncate">{t(s.labelKey as any)}</span>
+                          <span className="block text-[11px] text-muted-foreground truncate">{t(s.descriptionKey as any)}</span>
+                        </span>
+                        <ChevronRight className={cn("size-4 text-muted-foreground shrink-0", rtl && "rtl-flip-x")} />
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            }
+            subpage={
+              mobileHome ? null : (
+                <div className="px-4 py-4">
+                  <div className="flex items-center gap-2 mb-4">
+                    <button
+                      onClick={goHome}
+                      className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors osler-touch-target -ms-1 ps-1"
+                      aria-label={t("admin.settings.backToList")}
+                    >
+                      <ArrowLeft className={cn("size-4", rtl && "rtl-flip-x")} />
+                      <span>{t("admin.settings.backToList")}</span>
+                    </button>
+                  </div>
+                  <h1 className="text-xl md:text-2xl font-bold tracking-tight flex items-center gap-2 mb-4">
+                    {renderIcon(activeMeta)}
+                    {activeMeta ? t(activeMeta.labelKey as any) : t("admin.settings.title")}
+                  </h1>
+                  {renderSection(section)}
+                </div>
+              )
+            }
+            onBack={goHome}
+          />
+        </div>
+      </AdminRouteGuard>
+    );
+  }
+
+  // ── Desktop: sidebar + content pane ───────────────────────────────
   return (
     <AdminRouteGuard>
       <div className="osler-page osler-has-scroll">
@@ -122,117 +195,49 @@ export default function AdminSettingsPage() {
             subtitle={t("admin.settings.subtitle")}
           />
 
-          {isMobile ? (
-            // ── Mobile: iOS-style section list + pushed sub-pages ─────
-            <div className="h-full min-h-[60vh]">
-              <NavigationStack
-                className="h-full"
-                homeClassName="osler-page osler-has-scroll"
-                subpageClassName="osler-page osler-has-scroll"
-                rtl={rtl}
-                home={
-                  <div className="px-1 py-1">
-                    <div className="overflow-hidden rounded-xl border border-border bg-card">
-                      {SECTIONS.map((s, idx) => {
-                        const I = s.icon;
-                        return (
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="default"
-                            key={s.id}
-                            onClick={() => pickSection(s.id)}
-                            className={cn(
-                              "h-auto w-full justify-start rounded-none px-4 py-3 text-start",
-                              idx > 0 && "border-t border-border",
-                            )}
-                          >
-                            <span className="size-8 rounded-md bg-primary/10 text-primary flex items-center justify-center shrink-0">
-                              <I className="size-4" />
-                            </span>
-                            <span className="flex-1 min-w-0">
-                              <span className="block text-sm font-medium truncate">{t(s.labelKey as any)}</span>
-                            </span>
-                            <ChevronRight className={cn("size-4 text-muted-foreground shrink-0", rtl && "rtl-flip-x")} />
-                          </Button>
-                        );
-                      })}
-                    </div>
-                  </div>
-                }
-                subpage={
-                  mobileHome ? null : (
-                    <div className="px-4 py-4">
-                      <div className="flex items-center gap-2 mb-4">
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          onClick={goHome}
-                          className="-ms-1 ps-1 text-muted-foreground hover:text-foreground"
-                          aria-label={t("settings.backToList")}
-                        >
-                          <ArrowLeft className={cn("size-4", rtl && "rtl-flip-x")} />
-                          <span>{t("admin.settings.backToList")}</span>
-                        </Button>
-                      </div>
-                      <h1 className="text-xl md:text-2xl font-bold tracking-tight flex items-center gap-2 mb-4">
-                        {renderIcon(activeMeta)}
-                        {activeMeta ? t(activeMeta.labelKey as any) : t("admin.settings.title")}
-                      </h1>
-                      {renderSection(section)}
-                    </div>
-                  )
-                }
-                onBack={goHome}
-              />
-            </div>
-          ) : (
-            // ── Desktop: sidebar + content pane ───────────────────────
-            <div className="grid grid-cols-1 md:grid-cols-[220px_1fr] lg:grid-cols-[260px_1fr] gap-6">
-              <aside className="md:sticky md:top-0 md:self-start">
-                <div className="osler-section-heading">{t("admin.settings.sidebarTitle")}</div>
-                <nav className="space-y-0.5">
-                  {SECTIONS.map((s) => {
-                    const I = s.icon;
-                    const active = section === s.id;
-                    return (
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        key={s.id}
-                        onClick={() => pickSection(s.id)}
-                        className={cn(
-                          "relative h-9 w-full justify-start text-start font-medium",
-                          active
-                            ? "border border-primary/30 bg-primary/10 text-primary"
-                            : "text-muted-foreground hover:text-foreground hover:bg-muted/60",
-                        )}
-                      >
-                        <I className="size-4 shrink-0" />
-                        <span className="truncate">{t(s.labelKey as any)}</span>
-                      </Button>
-                    );
-                  })}
-                </nav>
-              </aside>
+          <div className="grid grid-cols-1 md:grid-cols-[220px_1fr] lg:grid-cols-[260px_1fr] gap-6 mt-6">
+            <aside className="md:sticky md:top-0 md:self-start">
+              <div className="osler-section-heading">{t("admin.settings.sidebarTitle")}</div>
+              <nav className="space-y-0.5">
+                {SECTIONS.map((s) => {
+                  const I = s.icon;
+                  const active = section === s.id;
+                  return (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      key={s.id}
+                      onClick={() => pickSection(s.id)}
+                      className={cn(
+                        "relative h-9 w-full justify-start text-start font-medium",
+                        active
+                          ? "border border-primary/30 bg-primary/10 text-primary"
+                          : "text-muted-foreground hover:text-foreground hover:bg-muted/60",
+                      )}
+                    >
+                      <I className="size-4 shrink-0" />
+                      <span className="truncate">{t(s.labelKey as any)}</span>
+                    </Button>
+                  );
+                })}
+              </nav>
+            </aside>
 
-              <div className="min-w-0">
-                <AnimatePresence mode="wait">
-                  <motion.div
-                    key={section}
-                    initial={{ opacity: 0, y: 6 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: -6 }}
-                    transition={MOTION_TRANSITION.quick}
-                  >
-                    {renderSection(section)}
-                  </motion.div>
-                </AnimatePresence>
-              </div>
+            <div className="min-w-0">
+              <AnimatePresence mode="wait">
+                <motion.div
+                  key={section}
+                  initial={{ opacity: 0, y: 6 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -6 }}
+                  transition={MOTION_TRANSITION.quick}
+                >
+                  {renderSection(section)}
+                </motion.div>
+              </AnimatePresence>
             </div>
-          )}
+          </div>
         </div>
       </div>
     </AdminRouteGuard>

@@ -20,6 +20,7 @@
 
 import * as React from "react";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
 import { useI18n } from "@/components/osler/i18n-provider";
 import { cn } from "@/lib/utils";
 import { formatBytes } from "./editors/image-upload";
@@ -159,36 +160,18 @@ export function ImageLightbox({ open, onOpenChange, src, alt, fileName, sizeByte
             {sizeBytes != null ? formatBytes(sizeBytes) : ""}
           </span>
           <div className="flex items-center gap-0.5 shrink-0 border-s border-border ps-2 ms-1">
-            <button
-              type="button"
-              onClick={() => zoomBy(-0.4)}
-              disabled={scale <= MIN_SCALE}
-              title={t("admin.preview.zoomOut")}
-              className="size-7 rounded-md flex items-center justify-center text-muted-foreground hover:bg-muted/60 hover:text-foreground disabled:opacity-40 disabled:pointer-events-none transition-colors"
-            >
+            <Button type="button" variant="ghost" size="iconSm" onClick={() => zoomBy(-0.4)} disabled={scale <= MIN_SCALE} title={t("admin.preview.zoomOut")}>
               <ZoomOut className="size-3.5" />
-            </button>
+            </Button>
             <span className="text-[11px] tabular-nums text-muted-foreground w-9 text-center">
               {Math.round(scale * 100)}%
             </span>
-            <button
-              type="button"
-              onClick={() => zoomBy(0.4)}
-              disabled={scale >= MAX_SCALE}
-              title={t("admin.preview.zoomIn")}
-              className="size-7 rounded-md flex items-center justify-center text-muted-foreground hover:bg-muted/60 hover:text-foreground disabled:opacity-40 disabled:pointer-events-none transition-colors"
-            >
+            <Button type="button" variant="ghost" size="iconSm" onClick={() => zoomBy(0.4)} disabled={scale >= MAX_SCALE} title={t("admin.preview.zoomIn")}>
               <ZoomIn className="size-3.5" />
-            </button>
-            <button
-              type="button"
-              onClick={resetView}
-              disabled={scale === MIN_SCALE}
-              title={t("admin.preview.zoomReset")}
-              className="size-7 rounded-md flex items-center justify-center text-muted-foreground hover:bg-muted/60 hover:text-foreground disabled:opacity-40 disabled:pointer-events-none transition-colors"
-            >
+            </Button>
+            <Button type="button" variant="ghost" size="iconSm" onClick={resetView} disabled={scale === MIN_SCALE} title={t("admin.preview.zoomReset")}>
               <Maximize2 className="size-3.5" />
-            </button>
+            </Button>
           </div>
         </div>
         <div
