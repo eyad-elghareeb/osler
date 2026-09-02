@@ -53,7 +53,11 @@
   X-Content-Type-Options: nosniff
   X-Frame-Options: DENY
   Referrer-Policy: strict-origin-when-cross-origin
-  Permissions-Policy: camera=(), microphone=(), geolocation=(), browsing-topics=(), join-ad-interest-group=(), run-ad-auction=()
+  # camera/microphone must be (self) — the app legitimately uses them
+  # (OSCE voice mode, written-answer photo capture). An empty allowlist ()
+  # disables the feature for the whole origin, so getUserMedia fails with
+  # NotAllowedError and Chrome never shows the permission prompt.
+  Permissions-Policy: camera=(self), microphone=(self), geolocation=(), browsing-topics=(), join-ad-interest-group=(), run-ad-auction=()
   Cross-Origin-Opener-Policy: same-origin
   Cross-Origin-Resource-Policy: same-origin
   Strict-Transport-Security: max-age=31536000; includeSubDomains; preload
