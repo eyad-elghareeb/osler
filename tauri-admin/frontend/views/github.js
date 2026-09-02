@@ -22,6 +22,9 @@
   const { invoke, toast, helpers, requireProject } = window.OslerAdmin;
   const { el, svgIcon, escapeHtml, t } = helpers;
 
+  /** Re-render this view when the shared view registry has it mounted. */
+  const rerender = () => window.OslerAdminViews?._githubRerender?.();
+
   // ── State ────────────────────────────────────────────────────────────
   // The view re-renders on auth state changes and tab switches. We keep the
   // state at module scope so the OAuth polling loop (which calls refresh())
@@ -85,11 +88,11 @@
         if (a && a.authenticated) {
           stopOAuthPoll();
           toast(t("gh.toast.signedIn", { user: a.login }), "success");
-          window.OslerAdminViews._githubRerender && window.OslerAdminViews._githubRerender();
+          rerender();
         } else if (a && a.oauthError) {
           stopOAuthPoll();
           toast(t("toast.error", { msg: a.oauthError }), "error");
-          window.OslerAdminViews._githubRerender && window.OslerAdminViews._githubRerender();
+          rerender();
         }
       } catch (e) {
         // ignore — keep polling
@@ -222,7 +225,7 @@
         state.repos = [];
         state.prs = [];
         toast(t("gh.toast.signedOut"), "info");
-        window.OslerAdminViews._githubRerender && window.OslerAdminViews._githubRerender();
+        rerender();
       } catch (e) {
         toast(t("toast.error", { msg: String(e) }), "error");
       }
@@ -255,7 +258,7 @@
       }, tab.label);
       btn.addEventListener("click", () => {
         state.activeTab = tab.id;
-        window.OslerAdminViews._githubRerender && window.OslerAdminViews._githubRerender();
+        rerender();
         // Lazy-load tab content
         if (tab.id === "repos" && state.repos.length === 0) loadRepos();
         if (tab.id === "prs") loadPRs();
@@ -270,7 +273,7 @@
   async function loadRepos() {
     if (state.reposLoading) return;
     state.reposLoading = true;
-    window.OslerAdminViews._githubRerender && window.OslerAdminViews._githubRerender();
+    rerender();
     try {
       const res = await invoke("gh_list_user_repos", { perPage: 50 });
       state.repos = res.repos || [];
@@ -278,7 +281,7 @@
       toast(t("toast.error", { msg: String(e) }), "error");
     } finally {
       state.reposLoading = false;
-      window.OslerAdminViews._githubRerender && window.OslerAdminViews._githubRerender();
+      rerender();
     }
   }
 
@@ -345,7 +348,7 @@
         state.activeTab = "clone";
         // Pre-fill the clone form
         window.__oslerGhClonePreset = r.cloneUrl || ("https://github.com/" + r.fullName + ".git");
-        window.OslerAdminViews._githubRerender && window.OslerAdminViews._githubRerender();
+        rerender();
       });
       actions.appendChild(cloneBtn);
       const openBtn = el("button", { class: "btn btn-sm btn-ghost", type: "button" }, t("gh.repo.open"));
@@ -487,7 +490,7 @@
         cloneBtn.addEventListener("click", () => {
           state.activeTab = "clone";
           window.__oslerGhClonePreset = res.cloneUrl || ("https://github.com/" + res.fullName + ".git");
-          window.OslerAdminViews._githubRerender && window.OslerAdminViews._githubRerender();
+          rerender();
         });
         actions.appendChild(cloneBtn);
         result.appendChild(actions);
@@ -513,7 +516,7 @@
   async function loadPRs() {
     if (state.prsLoading) return;
     state.prsLoading = true;
-    window.OslerAdminViews._githubRerender && window.OslerAdminViews._githubRerender();
+    rerender();
     try {
       // Determine owner/repo from the current project's origin remote.
       const ident = await invoke("git_repo_identity");
@@ -528,7 +531,7 @@
       toast(t("toast.error", { msg: String(e) }), "error");
     } finally {
       state.prsLoading = false;
-      window.OslerAdminViews._githubRerender && window.OslerAdminViews._githubRerender();
+      rerender();
     }
   }
 

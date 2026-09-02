@@ -57,6 +57,10 @@ function McpAuthorizeInner() {
     haptic("warning");
     if (!redirectUri) return;
     const sep = redirectUri.includes("?") ? "&" : "?";
+    // OAuth callbacks land on the client's registered origin (claude.ai,
+    // localhost, a custom app scheme) — a full browser navigation is
+    // required, not router.push.
+    // eslint-disable-next-line @next/next/no-location-assign-relative-destination
     window.location.href = `${redirectUri}${sep}error=access_denied&state=${encodeURIComponent(state)}`;
   };
 

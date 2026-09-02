@@ -4502,6 +4502,7 @@ async function handleAdmin(request: Request, env: Env, session: Session, url: UR
 }
 // ─── Main fetch handler ─────────────────────────────────────────────────────
 
+// eslint-disable-next-line import/no-anonymous-default-export -- a default-exported handler object is the Cloudflare Workers platform convention.
 export default {
   async scheduled(event: ScheduledEvent, env: Env, ctx: ExecutionContext) {
     if (env.DB) {

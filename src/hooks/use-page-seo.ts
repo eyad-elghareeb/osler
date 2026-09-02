@@ -120,6 +120,5 @@ export function usePageSeo(options?: PageSeoOptions) {
     }
     setMeta("property", "og:title", fullTitle);
     setMeta("name", "twitter:title", fullTitle);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pathname, searchParams?.toString(), options?.title, options?.description, options?.engineType, siteName, siteTagline]);
 }

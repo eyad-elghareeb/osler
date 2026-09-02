@@ -283,6 +283,8 @@ export function startGoogleLogin(): void {
   if (typeof window === "undefined") return;
   const config = getConfig();
   const returnUrl = `${window.location.origin}/login`;
+  // Cross-origin hop to the Worker (which 302s to Google) — router.push can't leave the app origin.
+  // eslint-disable-next-line @next/next/no-location-assign-relative-destination
   window.location.assign(`${config.cloud.apiUrl.replace(/\/$/, "")}/v1/auth/google/start?returnTo=${encodeURIComponent(returnUrl)}`);
 }
 
