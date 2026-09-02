@@ -7,7 +7,7 @@
  */
 
 export const SERVER_NAME = "osler-admin";
-export const SERVER_VERSION = "2.1.0";
+export const SERVER_VERSION = "2.2.0";
 export const PROTOCOL_VERSION = "2025-06-18";
 
 export const SERVER_INSTRUCTIONS = `# Osler Medical Study Platform — Content Authoring & Admin MCP Server
@@ -56,6 +56,11 @@ Your API token has one of two privilege levels:
    - Call \`get_instance_overview\` at the start of a session to check token scope, current content counts, and the live content version stamp.
    - Call \`list_review_queue\` to inspect pending items awaiting review or rejected items needing revisions.
    - Call \`get_content_version\` to verify the current client-facing cache-buster stamp.
+
+4. **PDF Import**:
+   - \`parse_qbank_pdf\` and \`parse_written_pdf\` turn exam-style PDFs (supplied inline as base64) into draft quiz/written bodies via layout heuristics — numbered questions, A–E options, inline or tabular answer keys, marks annotations, model answers, marking schemes.
+   - Parsing is best-effort: check the returned \`warnings\` and resolve every missing answer before uploading; use \`parse_pdf\` for raw page text when the layout is unrecognized (e.g. scanned PDFs return no text at all).
+   - Pipeline: parse → review/fix the draft → \`validate_content\` → \`create_content_pack\`.
 
 ---
 

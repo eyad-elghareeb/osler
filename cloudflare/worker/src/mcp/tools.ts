@@ -8,6 +8,8 @@
  */
 
 import type { McpEnv } from "./auth";
+import { decodePdfInput, extractPdfPages } from "./pdf-text";
+import { parseMcqText, parseWrittenText } from "./pdf-structure";
 
 export interface McpLog {
   info(msg: string, extra?: Record<string, unknown>): void;
@@ -433,6 +435,90 @@ export const TOOLS: ToolDef[] = [
       }
       const errors = ctx.validateContent(contentType, parsed);
       return { errors, valid: errors.length === 0 };
+    },
+  },
+  {
+    name: "parse_pdf",
+    description:
+      "Extract text from a PDF you supply inline (base64 or data URI), page by page. Use it to read exam papers, lecture notes or question lists before authoring. For structured import of MCQs or written questions prefer parse_qbank_pdf / parse_written_pdf.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        pdfDataUri: str("The PDF as a data URI (data:application/pdf;base64,…) or raw base64. Max 20 MB."),
+        maxPages: { type: "number", description: "Optional page cap (default 120)" },
+      },
+      required: ["pdfDataUri"],
+    },
+    async run(_ctx, args) {
+      const bytes = decodePdfInput(String(args?.pdfDataUri ?? ""));
+      const maxPages = Math.min(400, Math.max(1, Number(args?.maxPages) || 120));
+      const result = await extractPdfPages(bytes, maxPages);
+      const likelyScanned = result.pages.every((p) => !p.trim());
+      return {
+        pageCount: result.pageCount,
+        truncated: result.truncated,
+        likelyScanned,
+        ...(likelyScanned
+          ? { note: "No text layer detected — the PDF is probably scanned images. OCR is not available; transcribe the content yourself from the source." }
+          : {}),
+        pages: result.pages.map((text, i) => ({ page: i + 1, text })),
+      };
+    },
+  },
+  {
+    name: "parse_qbank_pdf",
+    description:
+      "Parse an exam-style PDF (base64/data URI) into a draft Osler QBank pack. Detects numbered questions, A–E options, answer keys (inline 'Answer: B' lines or a trailing key table) and explanations. Returns a draft { questions: [...] } plus warnings — review flagged items, then validate with contentType 'quiz' and upload via create_content_pack.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        pdfDataUri: str("The PDF as a data URI (data:application/pdf;base64,…) or raw base64. Max 20 MB."),
+        maxPages: { type: "number", description: "Optional page cap (default 120)" },
+      },
+      required: ["pdfDataUri"],
+    },
+    async run(_ctx, args) {
+      const bytes = decodePdfInput(String(args?.pdfDataUri ?? ""));
+      const maxPages = Math.min(400, Math.max(1, Number(args?.maxPages) || 120));
+      const result = await extractPdfPages(bytes, maxPages);
+      const parsed = parseMcqText(result.pages);
+      return {
+        pageCount: result.pageCount,
+        truncated: result.truncated,
+        detected: parsed.stats,
+        warnings: parsed.warnings,
+        draft: { questions: parsed.questions },
+        nextSteps:
+          "Questions missing 'correct' (see warnings) must be resolved before upload. Verify stems/options against the source, add difficulty and tags, then call validate_content (contentType 'quiz') and upload with create_content_pack.",
+      };
+    },
+  },
+  {
+    name: "parse_written_pdf",
+    description:
+      "Parse a written-exam PDF (base64/data URI) into a draft Osler Written pack. Detects numbered prompts, marks annotations like '(10 marks)', model-answer sections and marking schemes. Returns a draft { prompts: [...] } plus warnings — review flagged items, then validate with contentType 'written' and upload via create_content_pack.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        pdfDataUri: str("The PDF as a data URI (data:application/pdf;base64,…) or raw base64. Max 20 MB."),
+        maxPages: { type: "number", description: "Optional page cap (default 120)" },
+      },
+      required: ["pdfDataUri"],
+    },
+    async run(_ctx, args) {
+      const bytes = decodePdfInput(String(args?.pdfDataUri ?? ""));
+      const maxPages = Math.min(400, Math.max(1, Number(args?.maxPages) || 120));
+      const result = await extractPdfPages(bytes, maxPages);
+      const parsed = parseWrittenText(result.pages);
+      return {
+        pageCount: result.pageCount,
+        truncated: result.truncated,
+        detected: parsed.stats,
+        warnings: parsed.warnings,
+        draft: { prompts: parsed.prompts },
+        nextSteps:
+          "Default rubrics (single criterion) should be replaced with graded marking schemes where possible. Verify prompts against the source, then call validate_content (contentType 'written') and upload with create_content_pack.",
+      };
     },
   },
   {

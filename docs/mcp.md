@@ -134,6 +134,9 @@ bearer_token_env_var = "OSLER_MCP_TOKEN"
 | `update_draft_body` | Replace a draft's body (≤1 MB) |
 | `upload_asset` | Upload one asset (data URI or text) into a pack |
 | `validate_content` | Run the server-side schema validator |
+| `parse_pdf` | Extract page-by-page text from a PDF supplied inline (base64, ≤20 MB) |
+| `parse_qbank_pdf` | Parse an exam PDF into a draft `{ questions }` — options, inline/tabular answer keys, explanations |
+| `parse_written_pdf` | Parse a written-exam PDF into a draft `{ prompts }` — marks, model answers, marking schemes |
 | `submit_for_review` | Draft → pending approval queue |
 | `create_content_pack` | **Batch:** draft + body + up to 30 assets + optional validation + optional submit, one call |
 | `read_content_file` | Read a student-facing pack/manifest file |
