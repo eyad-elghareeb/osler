@@ -122,6 +122,51 @@ describe("mergeKind — highlights / articleHighlights", () => {
     expect(r.records["u:q1"].find((h: any) => h.id === "h1").text).toBe("new");
   });
 
+  it("propagates note deletion via a tombstone (updatedAt-ranked per-key merge)", () => {
+    const now = Date.now();
+    const live = { id: "n1", title: "t", body: "b", createdAt: now - 60_000, updatedAt: now - 60_000 };
+    const tombstone = { id: "n1", title: "", body: "", createdAt: now - 60_000, updatedAt: now, deletedAt: now };
+    // Deleting device pushes; server doc still has the live note.
+    const pushed = mergeKind({ n1: live }, { n1: tombstone }, "notes");
+    expect(pushed.records.n1.deletedAt).toBe(now);
+    // A stale device re-pushes its live copy — the tombstone wins.
+    const stale = mergeKind({ n1: tombstone }, { n1: live }, "notes");
+    expect(stale.records.n1.deletedAt).toBe(now);
+  });
+
+  it("writtenDrafts: a cleared draft's tombstone beats older live drafts, and a newer re-save wins", () => {
+    const now = Date.now();
+    const liveOld = { text: "draft", rubricChecked: [], submitted: false, updatedAt: now - 60_000 };
+    const tombstone = { deletedAt: now, updatedAt: now };
+    // Clearing device pushes its tombstone over the server's live draft.
+    const cleared = mergeKind({ pack1: { q1: liveOld } }, { pack1: { q1: tombstone } }, "writtenDrafts");
+    expect(cleared.records.pack1.q1.deletedAt).toBe(now);
+    // Stale device re-pushes the old live draft — stays cleared.
+    const stale = mergeKind({ pack1: { q1: tombstone } }, { pack1: { q1: liveOld } }, "writtenDrafts");
+    expect(stale.records.pack1.q1.deletedAt).toBe(now);
+    // Re-saving the draft afterwards (newer updatedAt) revives it.
+    const redraft = { text: "v2", rubricChecked: [true], submitted: false, updatedAt: now + 5_000 };
+    const revived = mergeKind({ pack1: { q1: tombstone } }, { pack1: { q1: redraft } }, "writtenDrafts");
+    expect(revived.records.pack1.q1.text).toBe("v2");
+  });
+
+  it("bookmarks: removal propagates via deletedAt and a later re-add revives", () => {
+    const now = Date.now();
+    // Device B removed the bookmark → its doc marks the tombstone.
+    const removed = mergeKind({ "lib/a.md": { a: now - 60_000 } }, { "lib/a.md": { a: now - 60_000, d: now } }, "bookmarks");
+    expect(removed.records["lib/a.md"].d).toBe(now);
+    // Stale device still reports the bare add — stays removed.
+    const stale = mergeKind({ "lib/a.md": { a: now - 60_000, d: now } }, { "lib/a.md": { a: now - 60_000 } }, "bookmarks");
+    expect(stale.records["lib/a.md"].d).toBe(now);
+    // Legacy `1` docs migrate: a deletion out-ranks an unknown-time add.
+    const legacy = mergeKind({ "lib/b.md": 1 as any }, { "lib/b.md": { a: 0, d: now } }, "bookmarks");
+    expect(legacy.records["lib/b.md"].d).toBe(now);
+    // Re-adding on any device (newer a) revives the bookmark.
+    const revived = mergeKind({ "lib/a.md": { a: now - 60_000, d: now } }, { "lib/a.md": { a: now + 1_000 } }, "bookmarks");
+    expect(revived.records["lib/a.md"].d).toBe(now);
+    expect(revived.records["lib/a.md"].a).toBe(now + 1_000);
+  });
+
   it("prunes tombstones past the retention window", () => {
     const now = Date.now();
     const expired = { id: "h1", deletedAt: now - 91 * 86_400_000, updatedAt: now - 91 * 86_400_000 };
@@ -135,17 +180,17 @@ describe("mergeKind — highlights / articleHighlights", () => {
 });
 
 describe("mergeKind — bookmarks", () => {
-  it("unions bookmark paths and wins on add", () => {
-    const remote = { "physics/thermo": 1 };
-    const local = { "cardio/mi": 1 };
+  it("unions bookmark paths and wins on add (two-phase LWW entries)", () => {
+    const remote = { "physics/thermo": { a: 100 } };
+    const local = { "cardio/mi": { a: 200 } };
     const r = mergeKind(remote, local, "bookmarks");
-    expect(r.records).toEqual({ "physics/thermo": 1, "cardio/mi": 1 });
+    expect(r.records).toEqual({ "physics/thermo": { a: 100 }, "cardio/mi": { a: 200 } });
     expect(r.changed).toBe(true);
   });
 
   it("reports no change when nothing new is added", () => {
-    const remote = { "a": 1, "b": 1 };
-    const r = mergeKind(remote, { "b": 1 }, "bookmarks");
+    const remote = { "a": { a: 1 }, "b": { a: 2 } };
+    const r = mergeKind(remote, { "b": { a: 2 } }, "bookmarks");
     expect(r.changed).toBe(false);
   });
 });

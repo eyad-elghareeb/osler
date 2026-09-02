@@ -150,9 +150,9 @@ function mergeItemArrays(remote: Record<string, any>, local: Record<string, any>
   return { records: out, changed, json };
 }
 
-/** Set union (bookmarks): `Record<path, 1>`. Removal is not propagated — a
- *  bookmark removed on one device will be re-added by the union until removed
- *  on every device. Accepted trade-off for a plain localStorage set. */
+/** Set union (settings): `Record<key, value>`. Removal is not propagated — a
+ *  removed key reappears until removed on every device. Settings keys are
+ *  never deleted, so this is safe for its only remaining user. */
 function mergeUnion(remote: Record<string, any>, local: Record<string, any>): MergeResult {
   const out: Record<string, any> = { ...remote };
   let changed = false;
@@ -167,11 +167,40 @@ function mergeUnion(remote: Record<string, any>, local: Record<string, any>): Me
   return { records: out, changed, json };
 }
 
+/** Two-phase last-writer-wins set (bookmarks): `Record<path, { a: addedAt,
+ *  d?: deletedAt }>`. Each counter is a grow-only max, so the merge converges
+ *  regardless of push order; a path is live iff `a > (d ?? 0)`. This is what
+ *  lets a bookmark removed on one device STAY removed everywhere, while a
+ *  later re-add (newer `a`) revives it. Legacy `1` values migrate to {a: 0}. */
+function mergeBookmarkEntries(remote: Record<string, any>, local: Record<string, any>): MergeResult {
+  const out: Record<string, any> = { ...remote };
+  let changed = false;
+  for (const [k, v] of Object.entries(local || {})) {
+    if (!isSafeRecordKey(k)) continue;
+    const inc = normalizeBookmarkEntry(v);
+    const cur = k in out ? normalizeBookmarkEntry(out[k]) : { a: 0 };
+    const merged = { a: Math.max(inc.a ?? 0, cur.a ?? 0), ...(inc.d || cur.d ? { d: Math.max(inc.d ?? 0, cur.d ?? 0) } : {}) };
+    if (!(k in out) || JSON.stringify(out[k]) !== JSON.stringify(merged)) {
+      out[k] = merged;
+      changed = true;
+    }
+  }
+  const json = changed ? JSON.stringify(out) : "";
+  return { records: out, changed, json };
+}
+
+/** Legacy bookmarks stored bare `1`s; treat anything without `a` as added at 0. */
+function normalizeBookmarkEntry(v: any): { a?: number; d?: number } {
+  if (v && typeof v === "object") return { a: Number(v.a) || 0, ...(v.d ? { d: Number(v.d) } : {}) };
+  return { a: 0 };
+}
+
 /** Deep dict merge for nested key-value data (e.g. writtenDrafts:
- *  `Record<packUid, Record<questionIdx, WrittenDraft>>`). Incoming wins per
- *  leaf value (no timestamps available), so repeated sync of the same data
- *  converges. A device that writes a newer draft after another device synced
- *  an older one will overwrite — acceptable trade-off without version fields. */
+ *  `Record<packUid, Record<questionIdx, WrittenDraft>>`). Leaves carry an
+ *  optional `updatedAt` — when both sides have one, the newer wins (this is
+ *  what lets a draft cleared on one device stay cleared: the tombstone's
+ *  updatedAt out-ranks the older live draft); without timestamps the incoming
+ *  value wins (legacy data), so repeated sync still converges. */
 function mergeDictDeep(remote: Record<string, any>, local: Record<string, any>, depth = 0): MergeResult {
   if (depth > 4) return mergeUnion(remote, local);
   const out: Record<string, any> = { ...remote };
@@ -181,6 +210,13 @@ function mergeDictDeep(remote: Record<string, any>, local: Record<string, any>, 
     if (v && typeof v === "object" && !Array.isArray(v) && out[k] && typeof out[k] === "object" && !Array.isArray(out[k])) {
       const sub = mergeDictDeep(out[k], v, depth + 1);
       if (sub.changed) { out[k] = sub.records; changed = true; }
+    } else if (
+      v && typeof v === "object" && !Array.isArray(v) && typeof v.updatedAt === "number" &&
+      out[k] && typeof out[k] === "object" && !Array.isArray(out[k]) && typeof out[k].updatedAt === "number"
+    ) {
+      // LWW leaves: the tombstone's newer updatedAt keeps a deletion alive
+      // against an older live draft arriving from another device.
+      if (v.updatedAt >= out[k].updatedAt && JSON.stringify(out[k]) !== JSON.stringify(v)) { out[k] = v; changed = true; }
     } else {
       if (JSON.stringify(out[k]) !== JSON.stringify(v)) { out[k] = v; changed = true; }
     }
@@ -192,7 +228,8 @@ function mergeDictDeep(remote: Record<string, any>, local: Record<string, any>, 
 export function mergeKind(remote: Record<string, any>, local: Record<string, any>, kind: SyncKind): MergeResult {
   const cfg = TIMESTAMP_KIND[kind];
   if (cfg) return mergeBy(remote, local, cfg);
-  if (kind === "bookmarks" || kind === "settings") return mergeUnion(remote, local);
+  if (kind === "bookmarks") return mergeBookmarkEntries(remote, local);
+  if (kind === "settings") return mergeUnion(remote, local);
   if (kind === "writtenDrafts") return mergeDictDeep(remote, local);
   return mergeItemArrays(remote, local);
 }

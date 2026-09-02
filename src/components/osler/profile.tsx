@@ -161,7 +161,7 @@ export function Profile({
     (sum, r) => sum + (r.reviewCount ?? 0),
     0,
   );
-  const notesCount = notesStore.listSync().length;
+  const notesCount = notesStore.countLive();
 
   const achievementStats: AchievementStats = {
     attempted: attemptedTotal,

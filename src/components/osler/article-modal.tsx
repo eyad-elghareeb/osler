@@ -10,13 +10,13 @@ import { MilkdownArticleView, articleDirOf } from "./milkdown-article-view";
 import { PdfViewer } from "./pdf-viewer";
 import { setArticleViewContext, clearArticleViewContext } from "@/lib/osler/article-view-registry";
 import { routeFor } from "@/lib/osler/navigation";
+import { articleBookmarks } from "@/lib/osler/storage";
 import { useI18n } from "@/components/osler/i18n-provider";
 import { HighlighterToolbar } from "./highlighter-toolbar";
 import { usePlatform } from "@/hooks/use-platform";
 import { useSwipeBackDismiss } from "@/hooks/use-swipe-back-dismiss";
 import { MOTION_TRANSITION, MOTION_SPRING } from "@/lib/osler/motion";
 
-const BOOKMARKS_KEY = "osler-article-bookmarks";
 
 interface FloatingArticleModalProps {
   articleId: string | null;
@@ -150,10 +150,10 @@ export function FloatingArticleModal({
   // Load bookmarks
   React.useEffect(() => {
     if (typeof window === "undefined") return;
-    try {
-      const raw = localStorage.getItem(BOOKMARKS_KEY);
-      if (raw) setBookmarks(new Set(JSON.parse(raw)));
-    } catch {}
+    setBookmarks(new Set(articleBookmarks.live()));
+    const reload = () => setBookmarks(new Set(articleBookmarks.live()));
+    window.addEventListener("osler-bookmarks-changed", reload);
+    return () => window.removeEventListener("osler-bookmarks-changed", reload);
   }, []);
 
   // Load all articles for sidebar
@@ -169,16 +169,9 @@ export function FloatingArticleModal({
 
   const toggleBookmark = React.useCallback(() => {
     if (!activeId) return;
-    setBookmarks((prev) => {
-      const next = new Set(prev);
-      if (next.has(activeId)) next.delete(activeId);
-      else next.add(activeId);
-      if (typeof window !== "undefined") {
-        localStorage.setItem(BOOKMARKS_KEY, JSON.stringify(Array.from(next)));
-        window.dispatchEvent(new CustomEvent("osler-bookmarks-changed"));
-      }
-      return next;
-    });
+    // Deletion is a first-class LWW tombstone (storage layer), so an
+    // un-bookmark survives cross-device sync instead of resurrecting.
+    setBookmarks(new Set(articleBookmarks.toggle(activeId)));
   }, [activeId]);
 
   // Keyboard shortcuts

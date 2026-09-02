@@ -34,6 +34,7 @@ import {
   type Article,
 } from "@/lib/osler/articles";
 import { contentFileUrl } from "@/lib/osler/content-url";
+import { articleBookmarks } from "@/lib/osler/storage";
 import type { ContentTreeNode } from "@/lib/osler/types";
 import { cn } from "@/lib/utils";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -77,7 +78,6 @@ interface LibraryProps {
 
 type SidebarTab = "toc" | "bookmarks";
 
-const BOOKMARKS_KEY = "osler-article-bookmarks";
 
 /* ── Reader display preferences ──────────────────────────────────── */
 /* Zoom + text size + typeface + line spacing + reading width — one
@@ -293,10 +293,10 @@ export function Library({ initialArticleId, onNavigateBack: propOnNavigateBack }
   // Load bookmarks
   React.useEffect(() => {
     if (typeof window === "undefined") return;
-    try {
-      const raw = localStorage.getItem(BOOKMARKS_KEY);
-      if (raw) setBookmarks(new Set(JSON.parse(raw)));
-    } catch {}
+    setBookmarks(new Set(articleBookmarks.live()));
+    const reload = () => setBookmarks(new Set(articleBookmarks.live()));
+    window.addEventListener("osler-bookmarks-changed", reload);
+    return () => window.removeEventListener("osler-bookmarks-changed", reload);
   }, []);
 
   // Open initial article
@@ -318,16 +318,9 @@ export function Library({ initialArticleId, onNavigateBack: propOnNavigateBack }
   }, []);
 
   const toggleBookmark = (filePath: string) => {
-    setBookmarks((prev) => {
-      const next = new Set(prev);
-      if (next.has(filePath)) next.delete(filePath);
-      else next.add(filePath);
-      if (typeof window !== "undefined") {
-        localStorage.setItem(BOOKMARKS_KEY, JSON.stringify(Array.from(next)));
-        window.dispatchEvent(new CustomEvent("osler-bookmarks-changed"));
-      }
-      return next;
-    });
+    // Deletion is a first-class LWW tombstone (storage layer), so an
+    // un-bookmark survives cross-device sync instead of resurrecting.
+    setBookmarks(new Set(articleBookmarks.toggle(filePath)));
   };
 
   const articleContentRef = React.useRef<HTMLDivElement>(null);

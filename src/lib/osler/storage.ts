@@ -9,8 +9,96 @@ import type { AchievementRecord } from "./achievements";
 const DB_NAME = "osler-db-v1";
 const DB_VERSION = 5;
 
-/** localStorage key holding the set of bookmarked library article paths. */
+/** localStorage key holding the bookmark state for library article paths —
+ *  `Record<path, { a: addedAt, d?: deletedAt }>` (two-phase LWW set). Each
+ *  counter is grow-only, so deletions propagate across sync and a later
+ *  re-add (newer `a`) revives the path. Legacy data stored a bare array of
+ *  paths (or `path: 1` docs) and migrates lazily on read: `a` starts at 0,
+ *  which means a deletion always out-ranks a legacy add. */
 export const ARTICLE_BOOKMARKS_KEY = "osler-article-bookmarks";
+
+export interface BookmarkEntry {
+  a: number;
+  d?: number;
+}
+
+/** Reads + migrates the stored bookmark state. */
+function readBookmarkState(): Record<string, BookmarkEntry> {
+  if (typeof window === "undefined") return {};
+  try {
+    const raw = localStorage.getItem(ARTICLE_BOOKMARKS_KEY);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed)) {
+      // Legacy: bare array of live paths.
+      return Object.fromEntries(parsed.filter((p) => typeof p === "string").map((p) => [p, { a: 0 }]));
+    }
+    const out: Record<string, BookmarkEntry> = {};
+    for (const [k, v] of Object.entries(parsed)) {
+      if (typeof k !== "string" || !v) continue;
+      if (typeof v === "number" || typeof v === "boolean") out[k] = { a: 0 };
+      else if (typeof v === "object" && typeof (v as BookmarkEntry).a === "number") {
+        out[k] = { a: (v as BookmarkEntry).a, ...((v as BookmarkEntry).d ? { d: (v as BookmarkEntry).d } : {}) };
+      }
+    }
+    return out;
+  } catch {
+    return {};
+  }
+}
+
+function writeBookmarkState(state: Record<string, BookmarkEntry>): void {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.setItem(ARTICLE_BOOKMARKS_KEY, JSON.stringify(state));
+  } catch {}
+}
+
+/** Live (non-deleted) bookmarked paths — the UI view of the set. */
+function liveBookmarkPaths(state: Record<string, BookmarkEntry>): string[] {
+  return Object.entries(state)
+    .filter(([, e]) => e.a > (e.d ?? 0))
+    .map(([p]) => p);
+}
+
+export const articleBookmarks = {
+  /** Bookmarked paths (tombstoned removals excluded). */
+  live(): string[] {
+    return liveBookmarkPaths(readBookmarkState());
+  },
+
+  /** Toggle a path; persists the LWW counters and reports the new live set. */
+  toggle(path: string): string[] {
+    const state = readBookmarkState();
+    const entry = state[path];
+    if (!entry || entry.a <= (entry.d ?? 0)) {
+      state[path] = { a: Date.now() };
+    } else {
+      state[path] = { a: entry.a, d: Date.now() };
+    }
+    writeBookmarkState(state);
+    return liveBookmarkPaths(state);
+  },
+
+  /** Max-merge a remote bookmark doc into the local state (used by pulls). */
+  merge(state: Record<string, BookmarkEntry>): boolean {
+    const local = readBookmarkState();
+    let changed = false;
+    for (const [path, inc] of Object.entries(state)) {
+      if (typeof path !== "string" || !inc || typeof inc !== "object") continue;
+      const cur = local[path] ?? { a: 0 };
+      const mergedA = Math.max(cur.a ?? 0, Number(inc.a) || 0);
+      const mergedD = Math.max(cur.d ?? 0, Number(inc.d) || 0);
+      const merged: BookmarkEntry = { a: mergedA, ...(mergedD > 0 ? { d: mergedD } : {}) };
+      if (JSON.stringify(local[path]) !== JSON.stringify(merged)) {
+        local[path] = merged;
+        changed = true;
+      }
+    }
+    if (changed) writeBookmarkState(local);
+    return changed;
+  },
+};
 
 /** Every content kind synced to the cloud, mirroring the worker's SYNC_KINDS.
  *  The GET response also carries a `quota` field, which callers must skip when
@@ -148,16 +236,6 @@ async function idbDelete(storeName: string, key: string): Promise<void> {
   }));
 }
 
-async function idbClear(storeName: string): Promise<void> {
-  const db = await openDB();
-  return trackWrite(new Promise((resolve, reject) => {
-    const tx = db.transaction(storeName, "readwrite");
-    const store = tx.objectStore(storeName);
-    store.clear();
-    tx.oncomplete = () => resolve();
-    tx.onerror = () => reject(tx.error);
-  }));
-}
 
 /** Imported sync keys (P2P / QR / file) are untrusted. "__proto__" etc. as
  *  data keys would set object prototypes when records are merged into plain
@@ -322,6 +400,13 @@ function mergeDictDeep(current: Record<string, any>, incoming: Record<string, an
     if (v && typeof v === "object" && !Array.isArray(v) && out[k] && typeof out[k] === "object" && !Array.isArray(out[k])) {
       const sub = mergeDictDeep(out[k], v, depth + 1);
       if (sub.changed) { out[k] = sub.records; changed = true; }
+    } else if (
+      v && typeof v === "object" && !Array.isArray(v) && typeof (v as any).updatedAt === "number" &&
+      out[k] && typeof out[k] === "object" && !Array.isArray(out[k]) && typeof (out[k] as any).updatedAt === "number"
+    ) {
+      // LWW leaves (writtenDrafts): the newer updatedAt wins, so a cleared
+      // draft's tombstone out-ranks older live drafts arriving from elsewhere.
+      if ((v as any).updatedAt >= (out[k] as any).updatedAt && JSON.stringify(out[k]) !== JSON.stringify(v)) { out[k] = v; changed = true; }
     } else {
       if (JSON.stringify(out[k]) !== JSON.stringify(v)) { out[k] = v; changed = true; }
     }
@@ -339,6 +424,9 @@ export interface QuestionRecord {
   correct: boolean;
   flagged: boolean;
   timestamp: number;
+  /** Tombstone from a progress reset — union merges rank by `timestamp`, so a
+   *  reset out-ranks the older live record on every replica. Readers filter. */
+  deletedAt?: number;
   /**
    * Soft-dismissed flag — set to true when a question was answered correctly
    * during a "remove on correct" review session. Records are never deleted,
@@ -422,10 +510,18 @@ export interface WrittenDraft {
   evaluation?: WrittenEvaluation | null;
   childAnswers?: string[];
   childEvaluations?: (WrittenEvaluation | null)[];
+  /** LWW stamp for sync (mergeDictDeep ranks leaves by it) and tombstone
+   *  marker: a cleared draft is `{ deletedAt, updatedAt }` with content
+   *  dropped, so the clearing out-ranks older live drafts elsewhere. */
+  updatedAt?: number;
+  deletedAt?: number;
 }
 
 export interface SavedSession {
   id: string;
+  /** Tombstone from sessions.delete — carried so the deletion survives the
+   *  per-key union merge (ranked via completedAt). */
+  deletedAt?: number;
   packUid: string;
   packTitle: string;
   engine: EngineType;
@@ -566,34 +662,41 @@ export const storage = {
   },
 
   getRecord(uid: string, qid: string): QuestionRecord | null {
-    return getCached<QuestionRecord>("progress", `${uid}:${qid}`);
+    const record = getCached<QuestionRecord>("progress", `${uid}:${qid}`);
+    return record?.deletedAt ? null : record;
   },
 
   async clearPack(uid: string) {
-    // Gather all keys for this pack from cache
-    const keysToDelete: string[] = [];
-    for (const [k] of memoryCache) {
-      if (k.startsWith(`progress:${uid}:`)) {
-        keysToDelete.push(k.replace("progress:", ""));
-        memoryCache.delete(k);
+    // Tombstone every record of the pack instead of deleting: the cloud merge
+    // is a per-key union ranked by timestamp, so a plain delete would be
+    // resurrected by the next pull from a device that still holds the records.
+    const now = Date.now();
+    for (const [k, v] of memoryCache) {
+      if (k.startsWith(`progress:${uid}:`) && !(v as QuestionRecord).deletedAt) {
+        const record = { ...(v as QuestionRecord), timestamp: now, deletedAt: now };
+        setCached("progress", k.replace("progress:", ""), record);
+        idbPut("progress", k.replace("progress:", ""), record).catch(console.warn);
       }
-    }
-    for (const key of keysToDelete) {
-      await idbDelete("progress", key).catch(console.warn);
     }
     dispatchChange("osler-progress-changed");
   },
 
   async clearAll() {
-    clearCached("progress");
-    await idbClear("progress").catch(console.warn);
+    const now = Date.now();
+    for (const [k, v] of memoryCache) {
+      if (k.startsWith("progress:") && !(v as QuestionRecord).deletedAt) {
+        const record = { ...(v as QuestionRecord), timestamp: now, deletedAt: now };
+        setCached("progress", k.replace("progress:", ""), record);
+        idbPut("progress", k.replace("progress:", ""), record).catch(console.warn);
+      }
+    }
     dispatchChange("osler-progress-changed");
   },
 
   packProgress(uid: string): PackProgress {
     const records: QuestionRecord[] = [];
     for (const [k, v] of memoryCache) {
-      if (k.startsWith("progress:") && (v as QuestionRecord).uid === uid) {
+      if (k.startsWith("progress:") && (v as QuestionRecord).uid === uid && !(v as QuestionRecord).deletedAt) {
         records.push(v as QuestionRecord);
       }
     }
@@ -612,7 +715,7 @@ export const storage = {
   allProgress(): PackProgress[] {
     const byUid = new Map<string, QuestionRecord[]>();
     for (const [k, v] of memoryCache) {
-      if (k.startsWith("progress:")) {
+      if (k.startsWith("progress:") && !(v as QuestionRecord).deletedAt) {
         const r = v as QuestionRecord;
         const list = byUid.get(r.uid) ?? [];
         list.push(r);
@@ -814,17 +917,7 @@ export const storage = {
       snapshot.articleHighlights = { records: storage.exportArticleHighlights() as unknown as Record<string, unknown> };
     }
     if (shouldExport("bookmarks")) {
-      const bookmarkRecords: Record<string, unknown> = {};
-      if (typeof window !== "undefined") {
-        try {
-          const raw = localStorage.getItem(ARTICLE_BOOKMARKS_KEY);
-          if (raw) {
-            const list = JSON.parse(raw);
-            if (Array.isArray(list)) for (const path of list) if (typeof path === "string") bookmarkRecords[path] = 1;
-          }
-        } catch {}
-      }
-      snapshot.bookmarks = { records: bookmarkRecords };
+      snapshot.bookmarks = { records: readBookmarkState() as unknown as Record<string, unknown> };
     }
     if (shouldExport("writtenDrafts")) {
       const writtenDraftRecords: Record<string, unknown> = {};
@@ -911,22 +1004,9 @@ export const storage = {
 
     const bookmarkRecords = snapshot.bookmarks?.records;
     if (bookmarkRecords && typeof bookmarkRecords === "object" && typeof window !== "undefined") {
-      try {
-        const raw = localStorage.getItem(ARTICLE_BOOKMARKS_KEY);
-        const current = raw ? (JSON.parse(raw) as string[]).filter((p) => typeof p === "string") : [];
-        const set = new Set(current);
-        let changed = false;
-        for (const path of Object.keys(bookmarkRecords)) {
-          if (!set.has(path)) {
-            set.add(path);
-            changed = true;
-          }
-        }
-        if (changed) {
-          localStorage.setItem(ARTICLE_BOOKMARKS_KEY, JSON.stringify(Array.from(set)));
-          window.dispatchEvent(new CustomEvent("osler-bookmarks-changed"));
-        }
-      } catch {}
+      if (articleBookmarks.merge(bookmarkRecords as Record<string, BookmarkEntry>)) {
+        window.dispatchEvent(new CustomEvent("osler-bookmarks-changed"));
+      }
     }
 
     // writtenDrafts: deep-dict merge per pack per question, incoming-wins at leaf
@@ -1074,11 +1154,15 @@ export const storage = {
         value: value as HighlightItem[],
       }))
       .filter((e) => isSafeImportKey(e.key) && Array.isArray(e.value));
-    if (articleHlEntries.length > 0) {
-      await idbPutBatch("articleHighlights", articleHlEntries);
-      for (const e of articleHlEntries) {
-        setCached("articleHighlights", e.key, e.value);
+    for (const e of articleHlEntries) {
+      const current = getCached<HighlightItem[]>("articleHighlights", e.key) ?? [];
+      const merged = pruneHighlightTombstones(mergeItemArraysById(current, e.value, (h) => itemVersion(h)));
+      if (merged.length !== current.length || merged.some((it, i) => it !== current[i])) {
+        setCached("articleHighlights", e.key, merged);
+        await idbPut("articleHighlights", e.key, merged);
       }
+    }
+    if (articleHlEntries.length > 0) {
       dispatchChange("osler-article-highlights-changed");
     }
 
@@ -1129,7 +1213,7 @@ export const sessions = {
     for (const [k, v] of memoryCache) {
       // The active (in-progress) session lives under __active__ — it is NOT a
       // finished, reviewable session and must not appear in the saved list.
-      if (k.startsWith("sessions:session:") && k !== "sessions:session:__active__") {
+      if (k.startsWith("sessions:session:") && k !== "sessions:session:__active__" && !(v as SavedSession).deletedAt) {
         sessions.push(v as SavedSession);
       }
     }
@@ -1145,13 +1229,18 @@ export const sessions = {
 
   delete(id: string) {
     const key = sessionKey(id);
-    deleteCached("sessions", key);
-    idbDelete("sessions", key).catch(console.warn);
+    const existing = getCached<SavedSession>("sessions", key);
+    if (!existing || existing.deletedAt) return;
+    // Tombstone so the deletion wins the per-key union merge on every device.
+    const tombstone: SavedSession = { ...existing, completedAt: Date.now(), deletedAt: Date.now() };
+    setCached("sessions", key, tombstone);
+    idbPut("sessions", key, tombstone).catch(console.warn);
     dispatchChange("osler-sessions-changed");
   },
 
   get(id: string): SavedSession | null {
-    return getCached<SavedSession>("sessions", sessionKey(id));
+    const session = getCached<SavedSession>("sessions", sessionKey(id));
+    return session?.deletedAt ? null : session;
   },
 
   subscribe(cb: () => void): () => void {
@@ -1383,20 +1472,32 @@ function writtenDraftsKey(packUid: string): string {
 
 export const writtenDrafts = {
   get(packUid: string): Record<string, WrittenDraft> {
-    return getCached<Record<string, WrittenDraft>>("writtenDrafts", writtenDraftsKey(packUid)) ?? {};
+    const drafts = getCached<Record<string, WrittenDraft>>("writtenDrafts", writtenDraftsKey(packUid)) ?? {};
+    return Object.fromEntries(Object.entries(drafts).filter(([, d]) => d && !d.deletedAt));
   },
 
   save(packUid: string, drafts: Record<string, WrittenDraft>) {
     const key = writtenDraftsKey(packUid);
-    setCached("writtenDrafts", key, drafts);
-    idbPut("writtenDrafts", key, drafts).catch(console.warn);
+    // Stamp every leaf for LWW sync — merges rank leaves by updatedAt, so a
+    // cleared draft's tombstone loses to a subsequently re-saved draft.
+    const now = Date.now();
+    const stamped = Object.fromEntries(
+      Object.entries(drafts).map(([qid, d]) => [qid, d && !d.deletedAt ? { ...d, updatedAt: now } : d]),
+    );
+    setCached("writtenDrafts", key, stamped);
+    idbPut("writtenDrafts", key, stamped).catch(console.warn);
     dispatchChange("osler-written-drafts-changed");
   },
 
   clear(packUid: string) {
     const key = writtenDraftsKey(packUid);
-    deleteCached("writtenDrafts", key);
-    idbDelete("writtenDrafts", key).catch(console.warn);
+    const current = getCached<Record<string, WrittenDraft>>("writtenDrafts", key) ?? {};
+    const now = Date.now();
+    const tombstoned = Object.fromEntries(
+      Object.entries(current).map(([qid, d]) => [qid, d && !d.deletedAt ? { updatedAt: now, deletedAt: now } as WrittenDraft : d]),
+    );
+    setCached("writtenDrafts", key, tombstoned);
+    idbPut("writtenDrafts", key, tombstoned).catch(console.warn);
     dispatchChange("osler-written-drafts-changed");
   },
 };
@@ -1410,6 +1511,8 @@ export interface FlashcardReviewRecord {
   lastReviewed: number;
   reviewCount: number;
   correctCount: number;
+  /** Tombstone from a deck reset — merges rank by `lastReviewed`. */
+  deletedAt?: number;
 }
 
 function flashcardKey(deckUid: string, cardId: string): string {
@@ -1418,10 +1521,10 @@ function flashcardKey(deckUid: string, cardId: string): string {
 
 export const flashcardReview = {
   get(cardId: string): FlashcardReviewRecord | null {
-    // Search through cache for this cardId
+    // Search through cache for this cardId (tombstoned resets read as absent)
     for (const [k, v] of memoryCache) {
       if (k.startsWith("flashcardReviews:") && k.endsWith(`:${cardId}`)) {
-        return v as FlashcardReviewRecord;
+        return (v as FlashcardReviewRecord).deletedAt ? null : (v as FlashcardReviewRecord);
       }
     }
     return null;
@@ -1498,17 +1601,35 @@ export const flashcardReview = {
   },
 
   clearDeck(deckUid: string, cardIds: string[]) {
+    // Tombstone every card's record (even ones never reviewed here) so the
+    // reset out-ranks the records other devices still hold.
+    const now = Date.now();
     for (const id of cardIds) {
       const key = flashcardKey(deckUid, id);
-      deleteCached("flashcardReviews", key);
-      idbDelete("flashcardReviews", key).catch(console.warn);
+      const existing = getCached<FlashcardReviewRecord>("flashcardReviews", key);
+      if (existing?.deletedAt) continue;
+      const tombstone: FlashcardReviewRecord = {
+        ease: 0, interval: 0, dueDate: 0, lastReviewed: now, reviewCount: 0, correctCount: 0, deletedAt: now,
+      };
+      setCached("flashcardReviews", key, tombstone);
+      idbPut("flashcardReviews", key, tombstone).catch(console.warn);
     }
     dispatchChange("osler-flashcard-changed");
   },
 
   async clearAll() {
-    clearCached("flashcardReviews");
-    await idbClear("flashcardReviews").catch(console.warn);
+    // Tombstone every record (same semantics as clearDeck) so a full reset
+    // propagates to every synced device instead of being resurrected by pulls.
+    const now = Date.now();
+    for (const [k, v] of memoryCache) {
+      if (k.startsWith("flashcardReviews:") && !(v as FlashcardReviewRecord).deletedAt) {
+        const tombstone: FlashcardReviewRecord = {
+          ease: 0, interval: 0, dueDate: 0, lastReviewed: now, reviewCount: 0, correctCount: 0, deletedAt: now,
+        };
+        setCached("flashcardReviews", k.replace("flashcardReviews:", ""), tombstone);
+        idbPut("flashcardReviews", k.replace("flashcardReviews:", ""), tombstone).catch(console.warn);
+      }
+    }
     dispatchChange("osler-flashcard-changed");
   },
 
@@ -1670,6 +1791,8 @@ export interface NoteRecord {
   questionIdx?: number; // optional: which question in the pack
   createdAt: number;
   updatedAt: number;
+  /** Tombstone from notes.delete — content dropped; ranked by `updatedAt`. */
+  deletedAt?: number;
 }
 
 async function idbGetAllNotes(): Promise<NoteRecord[]> {
@@ -1743,22 +1866,28 @@ if (typeof window !== "undefined") {
 export const notes = {
   async list(): Promise<NoteRecord[]> {
     const cached = await ensureNotesCache();
-    return [...cached].sort((a, b) => b.updatedAt - a.updatedAt);
+    return [...cached].filter((n) => !n.deletedAt).sort((a, b) => b.updatedAt - a.updatedAt);
   },
 
+  /** Raw view (tombstones included) — sync exports only. */
   listSync(): NoteRecord[] {
     return notesCache ? [...notesCache].sort((a, b) => b.updatedAt - a.updatedAt) : [];
   },
 
+  /** Live count for UI stats (tombstones excluded). */
+  countLive(): number {
+    return notesCache ? notesCache.filter((n) => !n.deletedAt).length : 0;
+  },
+
   async get(id: string): Promise<NoteRecord | null> {
     const cached = await ensureNotesCache();
-    return cached.find((n) => n.id === id) ?? null;
+    return cached.find((n) => n.id === id && !n.deletedAt) ?? null;
   },
 
   async listByPack(packUid: string): Promise<NoteRecord[]> {
     const cached = await ensureNotesCache();
     return cached
-      .filter((n) => n.packUid === packUid)
+      .filter((n) => n.packUid === packUid && !n.deletedAt)
       .sort((a, b) => b.updatedAt - a.updatedAt);
   },
 
@@ -1782,9 +1911,18 @@ export const notes = {
   },
 
   async delete(id: string): Promise<void> {
-    await idbDeleteNote(id);
-    if (notesCache) {
-      notesCache = notesCache.filter((n) => n.id !== id);
+    // Tombstone instead of removing: notes merge per-key by updatedAt, so a
+    // plain delete would be resurrected by the next pull from a device that
+    // still holds the note.
+    const existing = notesCache?.find((n) => n.id === id);
+    if (existing && !existing.deletedAt) {
+      const tombstone: NoteRecord = { ...existing, title: "", body: "", tags: [], updatedAt: Date.now(), deletedAt: Date.now() };
+      await idbPutNote(tombstone);
+      if (notesCache) {
+        const idx = notesCache.findIndex((n) => n.id === id);
+        if (idx >= 0) notesCache[idx] = tombstone;
+        else notesCache.push(tombstone);
+      }
     }
     notifyNotesChanged();
   },
