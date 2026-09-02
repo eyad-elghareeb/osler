@@ -266,4 +266,129 @@ export const PROMPTS: McpPromptDef[] = [
       ].join("\n");
     },
   },
+  {
+    name: "flashcards_from_notes",
+    title: "Flashcard deck from notes",
+    description: "Turn lecture notes, a PDF, or any source text into an SM-2-ready flashcard deck mixing basic and cloze cards.",
+    arguments: [
+      { name: "sourceDescription", description: "Path/text/URL of the source material", required: true },
+      { name: "deckTitle", description: "Display title for the new deck" },
+      { name: "targetCategory", description: 'Subfolder path (e.g. "pharm/antibiotics")' },
+      { name: "language", description: '"en" or "ar"' },
+      { name: "clozeRatio", description: "Rough share of cloze cards, e.g. \"0.5\" (default: mix ~50/50)" },
+    ],
+    build(args) {
+      return [
+        `Source: ${args.sourceDescription}`,
+        args.deckTitle ? `Deck title: ${args.deckTitle}` : "",
+        args.targetCategory ? `Target category path: ${args.targetCategory}` : "",
+        args.language ? `Language: ${args.language}` : "",
+        args.clozeRatio ? `Cloze ratio: ${args.clozeRatio}` : "",
+        "",
+        "Instructions:",
+        "1. Read the source material and extract atomic, testable facts — one concept per card.",
+        "2. Write basic cards as crisp question → answer pairs, and cloze cards using Anki {{c1::answer::hint}} syntax (number multiple clozes per card when they belong to one fact).",
+        "3. Assemble JSON matching { \"cards\": [...] } — basic cards need id/front/back; cloze cards need id/type:\"cloze\"/text.",
+        "4. Validate with `validate_content`, then upload with `create_content_pack`.",
+      ].filter(Boolean).join("\n");
+    },
+  },
+  {
+    name: "osce_station_from_case",
+    title: "OSCE station from a case",
+    description: "Author a full OSCE station — patient profile, hidden state, exam task, and a scored rubric — from a clinical case description.",
+    arguments: [
+      { name: "caseDescription", description: "The clinical case, presentation, or source text", required: true },
+      { name: "stationTitle", description: "Display title for the station" },
+      { name: "targetCategory", description: 'Subfolder path (e.g. "emergency/chest-pain")' },
+      { name: "difficulty", description: "\"easy\", \"medium\", or \"hard\"" },
+      { name: "timeMinutes", description: "Station time limit in minutes (default 8)" },
+    ],
+    build(args) {
+      return [
+        `Case: ${args.caseDescription}`,
+        args.stationTitle ? `Station title: ${args.stationTitle}` : "",
+        args.targetCategory ? `Target category path: ${args.targetCategory}` : "",
+        args.difficulty ? `Difficulty: ${args.difficulty}` : "",
+        args.timeMinutes ? `Time limit: ${args.timeMinutes} min` : "",
+        "",
+        "Instructions:",
+        "1. Design the station: patient name/age/gender, chief complaint, vital signs, a focused task, and a hidden profile (history + responses) the simulated patient keeps until asked.",
+        "2. Write an objective rubric — 8-15 checkable items with points, covering history, examination, interpretation, and management.",
+        "3. Assemble JSON matching { \"stations\": [...] } (see server instructions §3.4 for the exact shape).",
+        "4. Validate with `validate_content`, then upload with `create_content_pack`.",
+      ].filter(Boolean).join("\n");
+    },
+  },
+  {
+    name: "written_set_from_topic",
+    title: "Written set from a topic",
+    description: "Create long-form written assignments: clinical prompts with model answers and point-allocated marking rubrics.",
+    arguments: [
+      { name: "topic", description: "Topic or source material for the prompts", required: true },
+      { name: "setTitle", description: "Display title for the written set" },
+      { name: "targetCategory", description: 'Subfolder path (e.g. "pathology/inflammation")' },
+      { name: "count", description: "Number of prompts to author (default 3)" },
+      { name: "language", description: '"en" or "ar"' },
+    ],
+    build(args) {
+      return [
+        `Topic: ${args.topic}`,
+        args.setTitle ? `Set title: ${args.setTitle}` : "",
+        args.targetCategory ? `Target category path: ${args.targetCategory}` : "",
+        args.count ? `Prompts: ${args.count}` : "",
+        args.language ? `Language: ${args.language}` : "",
+        "",
+        "Instructions:",
+        "1. Author structured clinical prompts that test reasoning and management, not recall alone.",
+        "2. For each prompt write a model answer and a rubric with 4-8 criteria, each carrying maxPoints.",
+        "3. Assemble JSON matching { \"prompts\": [...] } (see server instructions §3.5).",
+        "4. Validate with `validate_content`, then upload with `create_content_pack`.",
+      ].filter(Boolean).join("\n");
+    },
+  },
+  {
+    name: "content_quality_review",
+    title: "Review a pack's quality",
+    description: "Audit an existing pack (or draft) for medical accuracy, schema compliance, and house style — returns a prioritized fix list you can apply.",
+    arguments: [
+      { name: "objectTitleOrId", description: "Content object id or title to review", required: true },
+      { name: "focus", description: "Optional focus area: \"accuracy\", \"style\", \"difficulty\", \"schema\"" },
+    ],
+    build(args) {
+      return [
+        `Target: ${args.objectTitleOrId}`,
+        args.focus ? `Focus: ${args.focus}` : "",
+        "",
+        "Instructions:",
+        "1. Locate the object with `list_content_objects`, then fetch its body with `get_content_object`.",
+        "2. Read the matching engine schema from the server instructions and check the body against it (or run `validate_content` directly).",
+        "3. Review medical correctness, explanation quality, difficulty spread, tag hygiene, and house style (British/US consistency, zero-based `correct` index, image paths under images/).",
+        "4. Produce a prioritized fix list; apply safe fixes with `update_draft_body` (or `update_published_content` with the bodySha1 guard, admin scope) and re-validate.",
+      ].filter(Boolean).join("\n");
+    },
+  },
+  {
+    name: "translate_pack",
+    title: "Translate a pack",
+    description: "Translate an existing content pack into Arabic (or another target language) while preserving JSON schema, ids, and image references.",
+    arguments: [
+      { name: "objectTitleOrId", description: "Content object id or title to translate", required: true },
+      { name: "targetLanguage", description: "Target language (default \"ar\")", required: true },
+      { name: "newPackTitle", description: "Title for the translated copy" },
+    ],
+    build(args) {
+      return [
+        `Target object: ${args.objectTitleOrId}`,
+        `Target language: ${args.targetLanguage}`,
+        args.newPackTitle ? `New pack title: ${args.newPackTitle}` : "",
+        "",
+        "Instructions:",
+        "1. Fetch the source with `list_content_objects` + `get_content_object` (or `read_content_file` for published packs).",
+        "2. Translate all user-facing strings — keep ids, keys, image paths, and the JSON shape byte-compatible; adapt clinical terminology to the target locale's conventions rather than translating literally.",
+        "3. Set the pack's lang field to the target language.",
+        "4. Validate with `validate_content`, then upload the translated copy with `create_content_pack` (do not overwrite the original).",
+      ].filter(Boolean).join("\n");
+    },
+  },
 ];

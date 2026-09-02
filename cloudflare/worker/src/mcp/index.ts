@@ -117,7 +117,15 @@ export async function handleMcpRequest(request: Request, env: any & McpEnv, orig
   if (request.method !== "POST") return jsonError(405, "MCP transport is POST-only (Streamable HTTP)");
 
   const auth = await verifyApiToken(env, request);
-  if (!auth) return jsonError(401, "Valid API token required (Authorization: Bearer osler_mcp_...) — mint one from the web admin panel", { "www-authenticate": "Bearer" });
+  if (!auth) {
+    // RFC 9728 resource-metadata pointer so OAuth-capable MCP clients
+    // (Claude, Cursor, …) auto-discover the authorization flow instead of
+    // surfacing a bare 401 to the user.
+    const resourceMetadata = `${new URL(request.url).origin}/.well-known/oauth-protected-resource`;
+    return jsonError(401, "Valid API token required (Authorization: Bearer osler_mcp_...) — mint one from the web admin panel, or connect via OAuth", {
+      "www-authenticate": `Bearer resource_metadata="${resourceMetadata}"`,
+    });
+  }
 
   if (host.rateLimitToken && !host.rateLimitToken(auth.tokenId)) {
     return jsonError(429, "Too many MCP requests for this token — slow down, or mint a second token to run parallel workloads");

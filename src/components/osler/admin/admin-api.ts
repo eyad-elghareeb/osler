@@ -732,3 +732,25 @@ export async function getMcpEndpoint(): Promise<string> {
   return `${await getApiBase()}/v1/mcp`;
 }
 
+/** MCP OAuth consent — called by the /admin/mcp-authorize page with the
+ *  admin's own session; the worker validates the client + redirect_uri and
+ *  mints a single-use authorization code for the connecting MCP client. */
+export const mcpOAuth = {
+  authorize: (params: {
+    clientId: string;
+    redirectUri: string;
+    state: string;
+    codeChallenge: string;
+    codeChallengeMethod: string;
+    scope: string;
+  }) =>
+    req<{ redirect_to: string }>("/v1/mcp/oauth/authorize", "POST", {
+      client_id: params.clientId,
+      redirect_uri: params.redirectUri,
+      state: params.state,
+      code_challenge: params.codeChallenge,
+      code_challenge_method: params.codeChallengeMethod,
+      scope: params.scope,
+    }),
+};
+

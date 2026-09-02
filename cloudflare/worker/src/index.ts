@@ -40,6 +40,7 @@ import { SYNC_KINDS, mergeKind, gzipString, gunzipBytes, gunzipBytesBounded, bas
 import { verifyAssertion } from "./cose";
 import { sendEmail, passwordResetEmail, verifyEmail } from "./email";
 import { handleMcpRequest, listApiTokens, mintApiToken, revokeApiToken } from "./mcp";
+import { handleAuthorizeGet, handleAuthorizePost, handleProtectedResource, handleRegister, handleServerMetadata, handleToken, type McpOAuthHost } from "./mcp/oauth";
 import { UserSyncHub, mintRealtimeTicket, verifyRealtimeTicket, REALTIME_TICKET_TTL_MS } from "./realtime-hub";
 // Durable Object classes must be reachable from the entry module for the
 // wrangler migration to bind them.
@@ -5101,6 +5102,43 @@ export default {
         const session = await requireUser(request, env);
         if (!session) return json({ error: "Authentication required" }, 401, origin, log);
         return handleSupportTicketsMine(env, session, origin, log);
+      }
+
+      // ── MCP OAuth 2.1 (browser-based client authorization) ──
+      // Lets MCP clients connect by pasting the server URL: the client
+      // discovers the well-known metadata documents, registers itself
+      // dynamically, and the admin approves the request in the web UI
+      // (consent page on ALLOWED_ORIGIN, authenticated with their normal
+      // Osler session). Exchanged codes mint ordinary api_tokens rows, so
+      // OAuth-granted access appears in — and is revocable from — the same
+      // admin-panel token list as manual tokens. See mcp/oauth.ts.
+      if (
+        url.pathname === "/.well-known/oauth-protected-resource" ||
+        url.pathname === "/.well-known/oauth-authorization-server" ||
+        url.pathname.startsWith("/v1/mcp/oauth/")
+      ) {
+        const oauthHost: McpOAuthHost = {
+          requireAdminSession: async (req) => {
+            const s = await requireUser(req, env);
+            return s && isAdminOrContent(s)
+              ? { id: s.user.id, username: s.user.username, displayName: s.user.display_name, role: s.user.role }
+              : null;
+          },
+          rateLimit: (key, bucket) => rateLimit(key, bucket),
+          sha256,
+          auditLog: (actorId, action, targetId, detail) => auditLog(env, actorId, action, targetId, detail),
+          now,
+        };
+        if (request.method === "GET" && url.pathname === "/.well-known/oauth-protected-resource") return handleProtectedResource(request, origin);
+        if (request.method === "GET" && url.pathname === "/.well-known/oauth-authorization-server") return handleServerMetadata(request, origin);
+        if (url.pathname === "/v1/mcp/oauth/register") return handleRegister(request, env, origin, ip, oauthHost);
+        if (url.pathname === "/v1/mcp/oauth/authorize") {
+          return request.method === "GET"
+            ? handleAuthorizeGet(request, env, origin, ip, oauthHost)
+            : handleAuthorizePost(request, env, origin, ip, oauthHost);
+        }
+        if (url.pathname === "/v1/mcp/oauth/token") return handleToken(request, env, origin, ip, oauthHost);
+        return json({ error: "Not found" }, 404, origin, log);
       }
 
       // ── MCP endpoint for AI agents ──

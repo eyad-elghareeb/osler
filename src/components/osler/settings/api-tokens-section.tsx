@@ -1,12 +1,12 @@
 "use client";
 
 import * as React from "react";
-import { Bot, Copy, Check, KeyRound, Plus, Trash2, Loader2, ShieldCheck, Shield, AlertTriangle } from "lucide-react";
+import { Bot, Copy, Check, KeyRound, Plus, Trash2, Loader2, ShieldCheck, Shield, AlertTriangle, Plug, MousePointer2, MonitorSmartphone } from "lucide-react";
 import { useI18n } from "@/components/osler/i18n-provider";
 import { haptic } from "@/lib/osler/native";
 import { toast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
-import { OslerCard, EmptyState } from "@/components/osler/ui-primitives";
+import { OslerCard, EmptyState, AnimatedDisclosure } from "@/components/osler/ui-primitives";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -38,6 +38,13 @@ const EXPIRY_OPTIONS = [
   { value: "90", labelKey: "admin.tokens.expiry.d90" },
   { value: "365", labelKey: "admin.tokens.expiry.d365" },
 ];
+
+/** Per-client setup lines for the one-click OAuth connect flow. */
+const CLIENTS = [
+  { icon: MonitorSmartphone, labelKey: "admin.tokens.connect.claude", stepsKey: "admin.tokens.connect.claudeSteps" },
+  { icon: MousePointer2, labelKey: "admin.tokens.connect.cursor", stepsKey: "admin.tokens.connect.cursorSteps" },
+  { icon: Plug, labelKey: "admin.tokens.connect.generic", stepsKey: "admin.tokens.connect.genericSteps" },
+] as const;
 
 /** Admin → Settings → "AI Agents" section: mint/revoke MCP API tokens. */
 export function ApiTokensSection() {
@@ -131,59 +138,79 @@ export function ApiTokensSection() {
               {copied === "endpoint" ? <Check className="size-3.5 text-success" /> : <Copy className="size-3.5" />}
             </Button>
           </div>
-          <p className="text-xs text-muted-foreground mt-1">{t("admin.tokens.connectHint")}</p>
         </div>
 
-        {/* Create Token Form */}
-        <div>
-          <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{t("admin.tokens.new")}</Label>
-          <div className="mt-1.5 flex flex-col sm:flex-row flex-wrap items-stretch sm:items-center gap-2">
-            <Input
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder={t("admin.tokens.namePlaceholder")}
-              maxLength={80}
-              onKeyDown={(e) => e.key === "Enter" && create()}
-              className="flex-1 min-w-[180px]"
-            />
-            {isAdminUser && (
-              <div className="w-full sm:w-auto sm:min-w-[160px]">
-                <Select value={scope} onValueChange={(v) => { haptic("selection"); setScope(v as any); }}>
-                  <SelectTrigger><SelectValue placeholder={t("admin.tokens.scope.label")} /></SelectTrigger>
+        {/* One-click connect — OAuth flow, per-client setup lines */}
+        <div className="rounded-xl border border-border overflow-hidden">
+          {CLIENTS.map((c, idx) => (
+            <div key={c.labelKey} className={cn("flex items-start gap-3 px-3.5 py-3 bg-card", idx > 0 && "border-t border-border")}>
+              <span className="size-8 rounded-md bg-primary/10 text-primary flex items-center justify-center shrink-0">
+                <c.icon className="size-4" />
+              </span>
+              <div className="min-w-0">
+                <div className="text-sm font-medium">{t(c.labelKey as never)}</div>
+                <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">{t(c.stepsKey as never)}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+        <p className="text-xs text-muted-foreground mt-3 flex items-start gap-1.5">
+          <ShieldCheck className="size-3.5 text-success shrink-0 mt-0.5" />
+          <span>{t("admin.tokens.connect.approveNote")}</span>
+        </p>
+
+        {/* Manual token minting — advanced escape hatch */}
+        <AnimatedDisclosure label={t("admin.tokens.connect.manual")} icon={KeyRound} className="mt-4">
+          <div>
+            <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{t("admin.tokens.new")}</Label>
+            <div className="mt-1.5 flex flex-col sm:flex-row flex-wrap items-stretch sm:items-center gap-2">
+              <Input
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder={t("admin.tokens.namePlaceholder")}
+                maxLength={80}
+                onKeyDown={(e) => e.key === "Enter" && create()}
+                className="flex-1 min-w-[180px]"
+              />
+              {isAdminUser && (
+                <div className="w-full sm:w-auto sm:min-w-[160px]">
+                  <Select value={scope} onValueChange={(v) => { haptic("selection"); setScope(v as any); }}>
+                    <SelectTrigger><SelectValue placeholder={t("admin.tokens.scope.label")} /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="content_admin">{t("admin.tokens.scope.contentAdmin")}</SelectItem>
+                      <SelectItem value="admin">{t("admin.tokens.scope.admin")}</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+              <div className="w-full sm:w-auto sm:min-w-[120px]">
+                <Select value={expiry} onValueChange={(v) => { haptic("selection"); setExpiry(v); }}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="content_admin">{t("admin.tokens.scope.contentAdmin")}</SelectItem>
-                    <SelectItem value="admin">{t("admin.tokens.scope.admin")}</SelectItem>
+                    {EXPIRY_OPTIONS.map((o) => (
+                      <SelectItem key={o.value} value={o.value}>{t(o.labelKey as any)}</SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>
-            )}
-            <div className="w-full sm:w-auto sm:min-w-[120px]">
-              <Select value={expiry} onValueChange={(v) => { haptic("selection"); setExpiry(v); }}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {EXPIRY_OPTIONS.map((o) => (
-                    <SelectItem key={o.value} value={o.value}>{t(o.labelKey as any)}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <Button type="button" onClick={create} disabled={!name.trim() || creating} className="shrink-0">
+                {creating ? <Loader2 className="size-4 animate-spin" /> : <Plus className="size-4" />}
+                {t("admin.tokens.create")}
+              </Button>
             </div>
-            <Button type="button" onClick={create} disabled={!name.trim() || creating} className="shrink-0">
-              {creating ? <Loader2 className="size-4 animate-spin" /> : <Plus className="size-4" />}
-              {t("admin.tokens.create")}
-            </Button>
-          </div>
 
-          {/* Admin Scope Warning Alert */}
-          {isAdminUser && scope === "admin" && (
-            <div className="mt-2.5 rounded-xl border border-destructive/30 bg-destructive/10 p-3 flex items-start gap-2.5">
-              <AlertTriangle className="size-4 text-destructive shrink-0 mt-0.5" />
-              <div className="text-xs text-destructive leading-relaxed">
-                <span className="font-semibold">{t("admin.tokens.adminWarningTitle")}: </span>
-                {t("admin.tokens.adminWarning")}
+            {/* Admin Scope Warning Alert */}
+            {isAdminUser && scope === "admin" && (
+              <div className="mt-2.5 rounded-xl border border-destructive/30 bg-destructive/10 p-3 flex items-start gap-2.5">
+                <AlertTriangle className="size-4 text-destructive shrink-0 mt-0.5" />
+                <div className="text-xs text-destructive leading-relaxed">
+                  <span className="font-semibold">{t("admin.tokens.adminWarningTitle")}: </span>
+                  {t("admin.tokens.adminWarning")}
+                </div>
               </div>
-            </div>
-          )}
-        </div>
+            )}
+          </div>
+        </AnimatedDisclosure>
 
         {/* One-time secret reveal */}
         {createdToken && (

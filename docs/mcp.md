@@ -37,11 +37,45 @@ you want a human to review first.
 
 1. Apply the migration: `npm run db:migrate` (in `cloudflare/worker/`).
 2. Deploy the worker: `npm run deploy:worker`.
-3. In the web admin panel open **Settings → AI Agents**, copy the endpoint URL,
-   create a token (optionally with an expiry), and copy it — it is shown once.
-4. Connect your client.
+3. Connect your client (OAuth below — recommended — or a manual token from **Settings → AI Agents**).
 
-### Claude Code
+### Claude (web & desktop) — OAuth, no token copying
+
+1. In Claude: **Settings → Connectors → Add custom connector** (desktop:
+   **Settings → Connectors → Browse connectors → Add custom connector**).
+2. Paste the MCP endpoint URL: `https://<worker-host>/v1/mcp`.
+3. A browser window opens asking you to sign in to your Osler admin site and
+   approve the client. Approve — you're connected.
+
+Under the hood the client discovers the OAuth metadata automatically
+(`/.well-known/oauth-authorization-server`), registers itself (dynamic
+client registration, PKCE S256), and exchanges the authorization code for a
+`content_admin`-scoped token. That token is an ordinary row in
+**Settings → AI Agents** — visible, renameable by re-minting, and revocable
+like any manual token; audit actions `mcp_oauth_authorize` /
+`mcp_oauth_token_grant` record who approved what.
+
+### Cursor / generic clients
+
+```json
+{
+  "mcpServers": {
+    "osler-admin": {
+      "url": "https://<worker-host>/v1/mcp",
+      "headers": { "Authorization": "Bearer osler_mcp_..." }
+    }
+  }
+}
+```
+
+Cursor and other OAuth-aware clients can also just take the URL — leave the
+headers empty and complete the browser sign-in when prompted.
+
+### Manual token (any client)
+
+Mint a token in **Settings → AI Agents** (optionally with an expiry), then:
+
+#### Claude Code
 
 ```bash
 claude mcp add --transport http osler-admin https://<worker-host>/v1/mcp \
@@ -105,9 +139,20 @@ bearer_token_env_var = "OSLER_MCP_TOKEN"
 | `read_content_file` | Read a student-facing pack/manifest file |
 | `list_content_files` | Browse `content-files/` keys |
 
-The server also exposes prompts: `qbank_from_pdf` and `flashcards_from_notes`
-(see `cloudflare/worker/src/mcp/instructions.ts`), plus a detailed
-`instructions` field on `initialize` describing every engine's JSON shape
+The server also exposes **prompts** — these surface in the client's slash
+(`/`) menu (Claude, Cursor, Codex, …) as ready-made workflows:
+
+| Prompt | Purpose |
+|---|---|
+| `qbank_from_pdf` | Parse a PDF/notes into a best-of-five QBank pack |
+| `flashcards_from_notes` | Turn notes into a basic + cloze flashcard deck |
+| `osce_station_from_case` | Author a full OSCE station with scored rubric |
+| `written_set_from_topic` | Written prompts with model answers + rubrics |
+| `article_with_sidecar` | Library article with sidecar metadata |
+| `content_quality_review` | Audit an existing pack and apply safe fixes |
+| `translate_pack` | Translate a pack (schema/ids/images preserved) |
+
+The `instructions` field on `initialize` describes every engine's JSON shape
 (`quiz`, `bank`, `written`, `flashcard`, `osce`, `video`, `library`).
 
 ## Example: PDF → QBank pipeline
@@ -127,6 +172,12 @@ The server also exposes prompts: `qbank_from_pdf` and `flashcards_from_notes`
   `ExecutionContext.waitUntil` so it survives the response being returned)
   and audit-logged (`mcp_*` actions chain into the tamper-evident audit log).
 - Revoke instantly from Settings → AI Agents; expiry is enforced per request.
+- **OAuth flow**: authorization codes are single-use, 10-minute TTL, SHA-256
+  hashed, and bound to client_id + redirect_uri + PKCE (S256 only — `plain`
+  is refused). Registered redirect URIs must be `https://`, loopback
+  `http://localhost[:port]`, or a custom app scheme, and never carry a
+  fragment. Exchanged tokens are always `content_admin` — OAuth never grants
+  the unrestricted admin tier — and land in the same revocable token list.
 - Non-POST requests are rejected before any token lookup, so scans/bots
   hitting this public path don't cost a D1 round-trip.
 - Rate limiting is layered: requests first pass through the worker's shared
