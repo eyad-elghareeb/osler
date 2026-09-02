@@ -285,6 +285,33 @@ function mergeItemArraysById<T>(current: T[], incoming: T[], version: (item: T) 
   return Array.from(byId.values());
 }
 
+/* ── Highlight tombstones (sync deletions) ──────────────────────────── */
+/* A deletion is recorded as `{ id, deletedAt, updatedAt }` so the union
+ * merges (here and in the worker's sync-docs) rank it above the older live
+ * item — otherwise a deleted highlight is resurrected by the next pull.
+ * Tombstones must SURVIVE into exports/snapshots; only readers filter them. */
+
+/** Retention window; must stay in sync with TOMBSTONE_TTL_MS in the worker's
+ *  sync-docs.ts (pruning is deterministic per replica, so they converge). */
+const HIGHLIGHT_TOMBSTONE_TTL_MS = 90 * 86_400_000;
+
+function isLiveHighlight(h: HighlightItem | undefined | null): boolean {
+  return !!h && h.deletedAt == null;
+}
+
+/** Replacement record for a deleted highlight — content dropped on purpose
+ *  (readers filter tombstones out, so color/text are never observed). */
+function tombstoneHighlight(id: string): HighlightItem {
+  const now = Date.now();
+  return { id, deletedAt: now, updatedAt: now } as HighlightItem;
+}
+
+/** Drops tombstones past the retention window (deterministic by deletedAt). */
+function pruneHighlightTombstones(list: HighlightItem[]): HighlightItem[] {
+  const cutoff = Date.now() - HIGHLIGHT_TOMBSTONE_TTL_MS;
+  return list.filter((h) => isLiveHighlight(h) || (h.deletedAt ?? 0) > cutoff);
+}
+
 /** Deep dict merge (e.g. writtenDrafts: Record<pack, Record<question, draft>>).
  *  Incoming wins per leaf — no timestamps exist on the data. Idempotent. */
 function mergeDictDeep(current: Record<string, any>, incoming: Record<string, any>, depth = 0): { records: Record<string, any>; changed: boolean } {
@@ -361,6 +388,13 @@ export interface HighlightItem {
   target?: string;
   ranges?: { start: number; end: number }[];
   createdAt?: string;
+  /** Tombstone (sync) fields: a deletion is stored as `{ id, deletedAt,
+   *  updatedAt }` — content dropped — so the deletion out-ranks the older
+   *  live item during union merges on every replica. Tombstones are
+   *  invisible to readers (filtered by isLiveHighlight) and pruned past a
+   *  retention window. */
+  deletedAt?: number;
+  updatedAt?: number;
 }
 
 export interface StickyNoteData {
@@ -863,7 +897,9 @@ export const storage = {
       for (const [key, incoming] of Object.entries(docs)) {
         if (!Array.isArray(incoming)) continue;
         const current = getCached<HighlightItem[]>(kind, key) ?? [];
-        const merged = mergeItemArraysById(current, incoming, (h) => itemVersion(h));
+        // Raw merge (tombstones included) — readers filter; pruning here
+        // mirrors the worker's merge so old tombstones GC everywhere.
+        const merged = pruneHighlightTombstones(mergeItemArraysById(current, incoming, (h) => itemVersion(h)));
         if (merged.length !== current.length || merged.some((it, i) => it !== current[i])) {
           changed = true;
           setCached(kind, key, merged);
@@ -1178,7 +1214,7 @@ function highlightsKey(packUid: string, questionIdx?: number): string {
 export const highlights = {
   get(packUid: string, questionIdx: number): HighlightItem[] {
     const key = highlightsKey(packUid, questionIdx);
-    return getCached<HighlightItem[]>("highlights", key) ?? [];
+    return (getCached<HighlightItem[]>("highlights", key) ?? []).filter(isLiveHighlight);
   },
 
   getAll(packUid: string): Record<number, HighlightItem[]> {
@@ -1187,7 +1223,7 @@ export const highlights = {
     for (const [k, v] of memoryCache) {
       if (k.startsWith(prefix)) {
         const idx = parseInt(k.replace(prefix, ""), 10);
-        if (!isNaN(idx)) result[idx] = v as HighlightItem[];
+        if (!isNaN(idx)) result[idx] = (v as HighlightItem[]).filter(isLiveHighlight);
       }
     }
     return result;
@@ -1203,33 +1239,41 @@ export const highlights = {
   },
 
   remove(packUid: string, questionIdx: number, id: string) {
-    const existing = highlights.get(packUid, questionIdx);
-    const updated = existing.filter((h) => h.id !== id);
     const key = highlightsKey(packUid, questionIdx);
-    setCached("highlights", key, updated);
-    idbPut("highlights", key, updated).catch(console.warn);
-    dispatchChange("osler-highlights-changed");
+    const current = getCached<HighlightItem[]>("highlights", key) ?? [];
+    // Tombstone instead of removing: the union merge on every replica (and
+    // the worker's) is monotonic, so a plain removal would be resurrected by
+    // the next pull from a device that still holds the live item.
+    const updated = current.map((h) => (h.id === id && isLiveHighlight(h) ? tombstoneHighlight(h.id) : h));
+    if (updated.some((h, i) => h !== current[i])) {
+      setCached("highlights", key, updated);
+      idbPut("highlights", key, updated).catch(console.warn);
+      dispatchChange("osler-highlights-changed");
+    }
   },
 
   clear(packUid: string, questionIdx: number) {
     const key = highlightsKey(packUid, questionIdx);
-    deleteCached("highlights", key);
-    idbDelete("highlights", key).catch(console.warn);
+    const current = getCached<HighlightItem[]>("highlights", key) ?? [];
+    const updated = pruneHighlightTombstones(current.map((h) => (isLiveHighlight(h) ? tombstoneHighlight(h.id) : h)));
+    setCached("highlights", key, updated);
+    idbPut("highlights", key, updated).catch(console.warn);
     dispatchChange("osler-highlights-changed");
   },
 
   clearAll(packUid: string) {
     const prefix = `highlights:${packUid}:`;
     const keys: string[] = [];
-    for (const [k] of memoryCache) {
-      if (k.startsWith(prefix)) keys.push(k);
+    for (const [k, v] of memoryCache) {
+      if (k.startsWith(prefix) && Array.isArray(v) && (v as HighlightItem[]).some(isLiveHighlight)) keys.push(k);
     }
     for (const k of keys) {
       const rawKey = k.replace("highlights:", "");
-      memoryCache.delete(k);
-      idbDelete("highlights", rawKey).catch(console.warn);
+      const updated = pruneHighlightTombstones((memoryCache.get(k) as HighlightItem[]).map((h) => (isLiveHighlight(h) ? tombstoneHighlight(h.id) : h)));
+      setCached("highlights", rawKey, updated);
+      idbPut("highlights", rawKey, updated).catch(console.warn);
     }
-    dispatchChange("osler-highlights-changed");
+    if (keys.length) dispatchChange("osler-highlights-changed");
   },
 };
 
@@ -1237,18 +1281,29 @@ export const highlights = {
 
 export const articleHighlights = {
   get(articleId: string): HighlightItem[] {
-    return getCached<HighlightItem[]>("articleHighlights", articleId) ?? [];
+    return (getCached<HighlightItem[]>("articleHighlights", articleId) ?? []).filter(isLiveHighlight);
   },
 
   save(articleId: string, items: HighlightItem[]) {
-    setCached("articleHighlights", articleId, items);
-    idbPut("articleHighlights", articleId, items).catch(console.warn);
+    // Whole-list replace from the caller's (filtered) view — derive deletions
+    // by diffing against the raw stored list, so a removed highlight becomes
+    // a tombstone instead of silently resurrecting on the next pull.
+    const current = getCached<HighlightItem[]>("articleHighlights", articleId) ?? [];
+    const incomingIds = new Set(items.filter(isLiveHighlight).map((h) => h.id));
+    const tombstones = current
+      .filter((h) => h && typeof h === "object" && h.id && !incomingIds.has(h.id))
+      .map((h) => (isLiveHighlight(h) ? tombstoneHighlight(h.id) : h));
+    const merged = pruneHighlightTombstones([...items, ...tombstones]);
+    setCached("articleHighlights", articleId, merged);
+    idbPut("articleHighlights", articleId, merged).catch(console.warn);
     dispatchChange("osler-article-highlights-changed");
   },
 
   clear(articleId: string) {
-    deleteCached("articleHighlights", articleId);
-    idbDelete("articleHighlights", articleId).catch(console.warn);
+    const current = getCached<HighlightItem[]>("articleHighlights", articleId) ?? [];
+    const updated = pruneHighlightTombstones(current.map((h) => (isLiveHighlight(h) ? tombstoneHighlight(h.id) : h)));
+    setCached("articleHighlights", articleId, updated);
+    idbPut("articleHighlights", articleId, updated).catch(console.warn);
     dispatchChange("osler-article-highlights-changed");
   },
 };

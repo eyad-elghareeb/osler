@@ -88,8 +88,20 @@ function itemVersion(item: any): number {
   return Number.isFinite(n) ? n : 0;
 }
 
+/** Tombstone retention window. A deleted highlight/article-highlight is kept
+ *  as `{ id, deletedAt, updatedAt }` so its deletion out-ranks the older live
+ *  item during merges; after this window the tombstone is pruned (a device
+ *  offline longer than that may see one deleted item resurrect — accepted). */
+export const TOMBSTONE_TTL_MS = 90 * 86_400_000;
+
+function isLiveItem(item: any): boolean {
+  return item?.deletedAt == null;
+}
+
 /** Union of two item lists by `id`; a later createdAt/updatedAt wins, ties go
- *  to the incoming item. Converges because it is monotonic (only adds/replaces). */
+ *  to the incoming item. Deletions propagate via tombstones (newer version
+ *  beats the older live item), and stale tombstones are pruned past
+ *  TOMBSTONE_TTL_MS so the lists don't grow forever. */
 function mergeItemLists(current: any[], incoming: any[]): { list: any[]; changed: boolean } {
   const byId = new Map<string, any>();
   let changed = false;
@@ -108,7 +120,15 @@ function mergeItemLists(current: any[], incoming: any[]): { list: any[]; changed
       changed = true;
     }
   }
-  return { list: changed ? Array.from(byId.values()) : (current || []), changed };
+  let list = Array.from(byId.values());
+  // Prune expired tombstones (deterministic by deletedAt, so all replicas
+  // converge on the same cutoff).
+  const pruned = list.filter((item) => isLiveItem(item) || Date.now() - item.deletedAt <= TOMBSTONE_TTL_MS);
+  if (pruned.length !== list.length) {
+    list = pruned;
+    changed = true;
+  }
+  return { list: changed ? list : (current || []), changed };
 }
 
 /** Array-valued kinds (highlights / articleHighlights): `Record<key, item[]>`

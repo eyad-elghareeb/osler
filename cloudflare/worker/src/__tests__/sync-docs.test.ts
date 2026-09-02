@@ -99,6 +99,39 @@ describe("mergeKind — highlights / articleHighlights", () => {
     const r = mergeKind(doc, doc, "articleHighlights");
     expect(r.changed).toBe(false);
   });
+
+  it("a tombstone (deletedAt) out-ranks the older live item on every replica", () => {
+    // Device B deleted highlight h1 → its doc carries only the tombstone.
+    const now = Date.now();
+    const tombstone = { id: "h1", deletedAt: now - 1_000, updatedAt: now - 1_000 };
+    const live = { id: "h1", text: "still there", color: "yellow", createdAt: now - 60_000 };
+    // Push from the deleting device: server doc holds the live item.
+    const pushed = mergeKind({ "u:q1": [live] }, { "u:q1": [tombstone] }, "highlights");
+    expect(pushed.records["u:q1"].find((h: any) => h.id === "h1").deletedAt).toBe(now - 1_000);
+    expect(pushed.changed).toBe(true);
+    // Another device that missed the deletion pushes its stale live copy —
+    // the tombstone must win so the highlight is not resurrected.
+    const stale = mergeKind({ "u:q1": [tombstone] }, { "u:q1": [live] }, "highlights");
+    expect(stale.records["u:q1"].find((h: any) => h.id === "h1").deletedAt).toBe(now - 1_000);
+  });
+
+  it("keeps live items created after the tombstone (re-highlight is not suppressed)", () => {
+    const tombstone = { id: "h1", deletedAt: 5_000, updatedAt: 5_000 };
+    const rehighlight = { id: "h1", text: "new", color: "green", createdAt: 9_000 };
+    const r = mergeKind({ "u:q1": [tombstone] }, { "u:q1": [rehighlight] }, "highlights");
+    expect(r.records["u:q1"].find((h: any) => h.id === "h1").text).toBe("new");
+  });
+
+  it("prunes tombstones past the retention window", () => {
+    const now = Date.now();
+    const expired = { id: "h1", deletedAt: now - 91 * 86_400_000, updatedAt: now - 91 * 86_400_000 };
+    const fresh = { id: "h2", deletedAt: now - 1_000, updatedAt: now - 1_000 };
+    const r = mergeKind({}, { "u:q1": [expired, fresh] }, "articleHighlights");
+    const ids = r.records["u:q1"].map((h: any) => h.id);
+    expect(ids).not.toContain("h1");
+    expect(ids).toContain("h2");
+    expect(r.changed).toBe(true);
+  });
 });
 
 describe("mergeKind — bookmarks", () => {
