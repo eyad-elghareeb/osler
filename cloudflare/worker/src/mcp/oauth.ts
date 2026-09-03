@@ -21,8 +21,11 @@
  *    + PKCE challenge (S256 only — the MCP spec forbids `plain`).
  *  - Codes exchange for rows in the SAME api_tokens table manual tokens use,
  *    so OAuth-granted access shows up (and is revocable) in the existing
- *    admin panel list. Scope is always content_admin: OAuth never grants the
- *    unrestricted admin tier.
+ *    admin panel list. The granted scope is chosen by the approver on the
+ *    consent page: `content_admin` by default, or the unrestricted `admin`
+ *    tier — but only an approver who is themselves `admin` can grant `admin`;
+ *    a `content_admin` approver is capped at granting `content_admin`, so
+ *    privilege can never escalate through OAuth.
  *  - The consent step reuses the SPA's normal session auth on the Pages
  *    origin: GET authorize redirects there with the original params; the
  *    consent page POSTs them back with the admin's bearer token. Nothing
@@ -93,7 +96,7 @@ function oauthError(status: number, error: string, description: string, origin: 
   return oauthJson({ error, error_description: description }, status, origin);
 }
 
-const SUPPORTED_SCOPES = ["content_admin"];
+const SUPPORTED_SCOPES = ["content_admin", "admin"];
 
 /**
  * Redirect URIs we accept at registration:
@@ -306,13 +309,25 @@ export async function handleAuthorizePost(request: Request, env: McpOAuthEnv, or
   const check = await validateAuthorize(env, params, resourceUrl(request));
   if ("error" in check) return oauthError(400, check.error, check.description, origin);
 
+  // The approver picks the granted scope on the consent page (exactly one).
+  // Anti-escalation: only an `admin` approver may grant the unrestricted
+  // `admin` tier; a `content_admin` approver can only grant `content_admin`.
+  const requested = params.scope ? params.scope.split(/[\s+]/).filter(Boolean) : ["content_admin"];
+  if (requested.length !== 1 || !SUPPORTED_SCOPES.includes(requested[0])) {
+    return oauthError(400, "invalid_scope", "Request exactly one scope: content_admin or admin", origin);
+  }
+  const scope = requested[0];
+  if (scope === "admin" && session.role !== "admin") {
+    return oauthError(403, "access_denied", "Only admins can grant full admin access", origin);
+  }
+
   const code = `osler_ac_${randomId(32)}`;
   await env.DB.prepare(
     "INSERT INTO mcp_oauth_codes (code_hash, client_id, user_id, scope, redirect_uri, code_challenge, expires_at, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
   )
-    .bind(await sha256B64Url(code), params.clientId, session.id, params.scope || "content_admin", params.redirectUri, params.codeChallenge, host.now() + CODE_TTL_MS, host.now())
+    .bind(await sha256B64Url(code), params.clientId, session.id, scope, params.redirectUri, params.codeChallenge, host.now() + CODE_TTL_MS, host.now())
     .run();
-  await host.auditLog(session.id, "mcp_oauth_authorize", null, { client_id: params.clientId, client_name: check.client_name, redirect_uri: params.redirectUri, scope: params.scope || "content_admin" });
+  await host.auditLog(session.id, "mcp_oauth_authorize", null, { client_id: params.clientId, client_name: check.client_name, redirect_uri: params.redirectUri, scope });
 
   // Best-effort cleanup of this client's expired codes (one DELETE, immune to failure).
   void env.DB.prepare("DELETE FROM mcp_oauth_codes WHERE client_id = ? AND expires_at < ?").bind(params.clientId, host.now()).run().catch(() => undefined);
@@ -368,6 +383,13 @@ export async function handleToken(request: Request, env: McpOAuthEnv, origin: st
   if (!user || !["admin", "content_admin"].includes(user.role)) {
     return deny(400, "invalid_grant", "Authorizing user no longer exists or lost admin access", "user_invalid", clientId);
   }
+  // The granted scope was role-checked at authorize time; re-check here in
+  // case the approver was demoted between approval and exchange, and distrust
+  // any scope value outside the supported set.
+  const grantedScope = String(claimed.scope ?? "content_admin");
+  if (!SUPPORTED_SCOPES.includes(grantedScope) || (grantedScope === "admin" && user.role !== "admin")) {
+    return deny(400, "invalid_grant", "Granted scope is no longer valid for this user", "scope_invalid", clientId);
+  }
 
   // Mint the api token (same table/format as manual tokens — mcp/auth.ts).
   const raw = randomId(32);
@@ -376,15 +398,15 @@ export async function handleToken(request: Request, env: McpOAuthEnv, origin: st
   await env.DB.prepare(
     "INSERT INTO api_tokens (id, user_id, name, prefix, token_hash, scopes, created_at, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
   )
-    .bind(crypto.randomUUID(), user.id, `MCP · ${String(client?.client_name ?? "client").slice(0, 64)}`, token.slice(0, "osler_mcp_".length + 6), await sha256B64Url(token), "content_admin", host.now(), null)
+    .bind(crypto.randomUUID(), user.id, `MCP · ${String(client?.client_name ?? "client").slice(0, 64)}`, token.slice(0, "osler_mcp_".length + 6), await sha256B64Url(token), grantedScope, host.now(), null)
     .run();
-  await host.auditLog(user.id, "mcp_oauth_token_grant", null, { client_id: claimed.client_id, scope: "content_admin" });
+  await host.auditLog(user.id, "mcp_oauth_token_grant", null, { client_id: claimed.client_id, scope: grantedScope });
 
   return oauthJson(
     {
       access_token: token,
       token_type: "Bearer",
-      scope: "content_admin",
+      scope: grantedScope,
       // Long-lived like a manually minted token; revocable from the admin panel.
     },
     200,

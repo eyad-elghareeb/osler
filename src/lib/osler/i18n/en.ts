@@ -1925,6 +1925,10 @@ export const en = {
     "mcp.auth.scopeDesc":
       "Create and edit drafts, upload assets, validate, and submit work for review. Publishing, deleting, and config changes stay locked behind admin-only tools.",
     "mcp.auth.signedInAs": "Approving as",
+    "mcp.auth.scopeLabel": "Access level",
+    "mcp.auth.scopeAdmin": "Full admin",
+    "mcp.auth.scopeAdminDesc":
+      "Everything in content authoring, plus approving and publishing content, deleting objects, editing published files, and changing site configuration. Only grant this to agents you fully trust.",
     "mcp.auth.allow": "Authorize access",
     "mcp.auth.deny": "Deny",
     "mcp.auth.errorTitle": "Authorization failed",

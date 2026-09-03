@@ -177,6 +177,12 @@ function AdminShellInner({ children }: AdminShellProps) {
   const isCAdmin = identity?.user.role === "content_admin";
   const canAccess = isAdmin || isCAdmin;
 
+  // The MCP OAuth consent page is a decision point, not admin work: it
+  // renders bare — no sidebar, header, or badges — just the authorization
+  // card (or the sign-in prompt when logged out). Providers stay mounted so
+  // the page keeps its identity context and theme.
+  const isAuthorizeRoute = (pathname ?? "").replace(/\/$/, "") === "/admin/mcp-authorize";
+
   // ── Render: loading
   if (loading) {
     return (
@@ -188,6 +194,15 @@ function AdminShellInner({ children }: AdminShellProps) {
 
   // ── Render: not logged in
   if (!identity) {
+    if (isAuthorizeRoute) {
+      return (
+        <div className="flex min-h-screen items-center justify-center bg-background px-4 py-10 safe-pt safe-pb">
+          <div className="w-full max-w-md">
+            <AdminLoginPrompt onSuccess={setIdentity} />
+          </div>
+        </div>
+      );
+    }
     return (
       <div className="flex h-screen flex-col bg-background">
         <header className="flex h-14 shrink-0 items-center border-b border-border bg-background/80 backdrop-blur-md px-4 safe-pt">
@@ -223,6 +238,15 @@ function AdminShellInner({ children }: AdminShellProps) {
           </Button>
         </div>
       </div>
+    );
+  }
+
+  // ── Render: OAuth consent goes bare (no nav chrome)
+  if (canAccess && isAuthorizeRoute) {
+    return (
+      <AdminProvider identity={identity}>
+        <div className="min-h-screen bg-background safe-pt safe-pb">{children}</div>
+      </AdminProvider>
     );
   }
 

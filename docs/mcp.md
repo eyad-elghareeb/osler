@@ -50,10 +50,17 @@ you want a human to review first.
 Under the hood the client discovers the OAuth metadata automatically
 (`/.well-known/oauth-authorization-server`), registers itself (dynamic
 client registration, PKCE S256), and exchanges the authorization code for a
-`content_admin`-scoped token. That token is an ordinary row in
-**Settings → AI Agents** — visible, renameable by re-minting, and revocable
-like any manual token; audit actions `mcp_oauth_authorize` /
-`mcp_oauth_token_grant` record who approved what.
+token whose scope you pick on the consent page: **Content authoring**
+(`content_admin`, the default — capped at the authoring surface above) or
+**Full admin** (`admin` — the unrestricted tier, gated behind the same
+admin-only tools as a manual admin token). Only an approver with role
+`admin` is offered the full-admin option, and the worker enforces that
+server-side: a `content_admin` approver can only ever grant
+`content_admin`, so privilege can never escalate through OAuth. That token
+is an ordinary row in **Settings → AI Agents** — visible, renameable by
+re-minting, and revocable like any manual token; audit actions
+`mcp_oauth_authorize` / `mcp_oauth_token_grant` record who approved what
+(including the granted scope).
 
 ### Cursor / generic clients
 
@@ -179,8 +186,10 @@ The `instructions` field on `initialize` describes every engine's JSON shape
   hashed, and bound to client_id + redirect_uri + PKCE (S256 only — `plain`
   is refused). Registered redirect URIs must be `https://`, loopback
   `http://localhost[:port]`, or a custom app scheme, and never carry a
-  fragment. Exchanged tokens are always `content_admin` — OAuth never grants
-  the unrestricted admin tier — and land in the same revocable token list.
+  fragment. The granted scope is approver-chosen (`content_admin` default,
+  `admin` only grantable by `admin` approvers — enforced at both authorize
+  and token time, including a demotion re-check), and exchanged tokens land
+  in the same revocable token list.
 - Non-POST requests are rejected before any token lookup, so scans/bots
   hitting this public path don't cost a D1 round-trip.
 - Rate limiting is layered: requests first pass through the worker's shared

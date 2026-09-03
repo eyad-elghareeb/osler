@@ -3,14 +3,14 @@
 import * as React from "react";
 import { Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Bot, ShieldCheck, TriangleAlert } from "lucide-react";
+import { Bot, PenLine, ShieldCheck, TriangleAlert } from "lucide-react";
 
 import { useI18n } from "@/components/osler/i18n-provider";
 import { useAdminIdentity } from "@/components/osler/admin/admin-context";
 import { mcpOAuth } from "@/components/osler/admin/admin-api";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { OslerCard, LoadingState } from "@/components/osler/ui-primitives";
+import { OslerCard, LoadingState, FormField, SegmentedControl } from "@/components/osler/ui-primitives";
 import { haptic } from "@/lib/osler/native";
 
 /**
@@ -51,6 +51,13 @@ function McpAuthorizeInner() {
   const clientName = params.get("client_name") || clientId;
   const oauthError = params.get("error") as AuthzError | null;
 
+  // Only `admin` approvers may grant the unrestricted tier — content_admin
+  // approvers are capped at content authoring (enforced server-side too).
+  const canGrantAdmin = identity.user.role === "admin";
+  const [grantScope, setGrantScope] = React.useState<"content_admin" | "admin">(
+    scope === "admin" && identity.user.role === "admin" ? "admin" : "content_admin",
+  );
+
   // Deny: per RFC 6749 §4.1.2.1 the user-agent is redirected back to the
   // client with error=access_denied — no server call needed.
   const deny = () => {
@@ -70,7 +77,7 @@ function McpAuthorizeInner() {
     setBusy(true);
     setFailed(null);
     try {
-      const { redirect_to } = await mcpOAuth.authorize({ clientId, redirectUri, state, codeChallenge, codeChallengeMethod, scope });
+      const { redirect_to } = await mcpOAuth.authorize({ clientId, redirectUri, state, codeChallenge, codeChallengeMethod, scope: grantScope });
       haptic("success");
       window.location.href = redirect_to;
     } catch (e: any) {
@@ -123,11 +130,33 @@ function McpAuthorizeInner() {
           <span className="text-sm font-semibold truncate">{clientName}</span>
           <Badge variant="outline" className="ms-auto shrink-0 border-primary/30 bg-primary/10 text-primary">
             <ShieldCheck className="size-3 me-1" />
-            {t("mcp.auth.scopeBadge")}
+            {grantScope === "admin" ? t("mcp.auth.scopeAdmin") : t("mcp.auth.scopeBadge")}
           </Badge>
         </div>
         <p className="text-xs text-muted-foreground mt-3 leading-relaxed">{t("mcp.auth.scopeDesc")}</p>
       </div>
+
+      {canGrantAdmin && (
+        <FormField
+          label={t("mcp.auth.scopeLabel")}
+          hint={grantScope === "admin" ? t("mcp.auth.scopeAdminDesc") : t("mcp.auth.scopeDesc")}
+          className="mt-4"
+        >
+          <SegmentedControl
+            label={t("mcp.auth.scopeLabel")}
+            fullWidth
+            value={grantScope}
+            onChange={(v) => {
+              haptic("selection");
+              setGrantScope(v);
+            }}
+            options={[
+              { value: "content_admin", label: t("mcp.auth.scopeBadge"), icon: PenLine },
+              { value: "admin", label: t("mcp.auth.scopeAdmin"), icon: ShieldCheck },
+            ]}
+          />
+        </FormField>
+      )}
 
       {identity?.user && (
         <p className="text-xs text-muted-foreground mt-3">
