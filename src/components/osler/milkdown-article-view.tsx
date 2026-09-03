@@ -50,14 +50,26 @@ import { MermaidModal } from "./mermaid-modal";
  * touched; link targets and code fences pass through untouched.
  */
 function resolveMarkdownImages(markdown: string, articleDir: string): string {
-  if (!markdown.includes("](")) return markdown;
-  return markdown.replace(
-    /(!\[[^\]]*\]\()(\s*)([^)\s]+)((?:\s+"[^"]*")?\s*\))/g,
-    (full, head: string, sp: string, src: string, tail: string) => {
-      if (/^(https?:)?\/\//.test(src) || src.startsWith("data:")) return full;
-      return `${head}${sp}${resolveArticleAsset(src, articleDir)}${tail}`;
-    },
-  );
+  let text = markdown;
+  if (text.includes("](")) {
+    text = text.replace(
+      /(!\[[^\]]*\]\()(\s*)([^)\s]+)((?:\s+"[^"]*")?\s*\))/g,
+      (full, head: string, sp: string, src: string, tail: string) => {
+        if (/^(https?:)?\/\//.test(src) || src.startsWith("data:")) return full;
+        return `${head}${sp}${resolveArticleAsset(src, articleDir)}${tail}`;
+      },
+    );
+  }
+  if (/<img\s+/i.test(text)) {
+    text = text.replace(
+      /(<img\s+[^>]*?src=["'])([^"']+)(["'][^>]*?>)/gi,
+      (full, head: string, src: string, tail: string) => {
+        if (/^(https?:)?\/\//.test(src) || src.startsWith("data:")) return full;
+        return `${head}${resolveArticleAsset(src, articleDir)}${tail}`;
+      },
+    );
+  }
+  return text;
 }
 
 /** Directory part of an article file path ("" when the file is root-level). */

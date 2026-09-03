@@ -31,6 +31,7 @@ const ENGINE_ICONS: Record<EngineType, LucideIcon> = {
   osce: Stethoscope,
   library: BookOpenText,
   video: PlayCircle,
+  mixed: Layers,
 };
 
 const EXTRAS = [

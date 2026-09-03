@@ -133,10 +133,15 @@ export function renderQuestionText(text: string, q: SessionQuestion, item?: Cont
   return renderRichText(text, base.category, base.path);
 }
 
-/** Normalize a ContentImage field (single or array) to an array. */
-export function imageListOf(field?: ContentImage | ContentImage[]): ContentImage[] {
+/** Normalize a ContentImage field (single, array, or string/string[]) to an array of ContentImage. */
+export function imageListOf(
+  field?: ContentImage | ContentImage[] | string | string[],
+): ContentImage[] {
   if (!field) return [];
-  return Array.isArray(field) ? field : [field];
+  const list = Array.isArray(field) ? field : [field];
+  return list
+    .map((item) => (typeof item === "string" ? { src: item } : item))
+    .filter((item): item is ContentImage => Boolean(item?.src));
 }
 
 /** A content image that opens the lightbox when tapped/clicked. Used for stem,
@@ -154,18 +159,29 @@ export function ContentImageFigure({
   className: string;
 }) {
   const { openLightbox } = useLightbox();
+  const [loadError, setLoadError] = React.useState(false);
   const src = resolveContentAsset(img.src, category, path);
+
   return (
     <figure key={img.src} className="m-0">
-      <img
-        src={src}
-        alt={img.alt ?? ""}
-        onClick={(e) => {
-          e.stopPropagation();
-          openLightbox(src, img.alt ?? "");
-        }}
-        className={cn(className, "cursor-zoom-in")}
-      />
+      {loadError ? (
+        <div className="flex flex-col items-center justify-center p-4 rounded-lg border border-border bg-muted/30 text-xs text-muted-foreground my-2">
+          <span className="font-mono text-[11px] truncate max-w-xs">{img.src}</span>
+          <span className="text-[10px] opacity-70 mt-0.5">{img.alt || "Image could not be loaded"}</span>
+        </div>
+      ) : (
+        <img
+          src={src}
+          alt={img.alt ?? ""}
+          loading="lazy"
+          onError={() => setLoadError(true)}
+          onClick={(e) => {
+            e.stopPropagation();
+            openLightbox(src, img.alt ?? "");
+          }}
+          className={cn(className, "cursor-zoom-in")}
+        />
+      )}
       {img.caption && (
         <figcaption className="text-center text-xs text-muted-foreground mt-1.5">
           {img.caption}
@@ -271,6 +287,7 @@ export const ENGINE_ICONS: Record<
   osce: Activity,
   library: BookOpen,
   video: VideoIcon,
+  mixed: Layers,
 };
 
 /** Single tool row inside the mobile session tools sheet. */

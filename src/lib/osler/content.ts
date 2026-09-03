@@ -18,6 +18,7 @@ import type {
   OsceContent,
   QuizContent,
   WrittenContent,
+  MixedContent,
   ContentTreeNode,
   CategoryManifest,
   Flashcard,
@@ -83,6 +84,7 @@ const CATEGORY_PATHS: Record<string, string> = {
   quiz: "qbank",
   bank: "qbank",
   written: "qbank",
+  mixed: "qbank",
   flashcard: "flashcard",
   osce: "osce",
   library: "library",
@@ -317,7 +319,16 @@ export async function loadNodeContent(node: ContentTreeNode): Promise<AnyContent
 function buildContent(node: ContentTreeNode, data: Record<string, unknown[]>, effectiveType?: EngineType): AnyContent {
   // Use explicit `type` from data file if present, otherwise fall back to effectiveType, then node.type
   const explicitType = data.type?.[0] as EngineType | undefined;
-  const nodeType = explicitType || effectiveType || node.type || "quiz";
+  let nodeType = explicitType || effectiveType || node.type || "quiz";
+
+  // Auto-detect mixed content if not already set but contains both questions and prompts
+  if (nodeType !== "flashcard" && nodeType !== "osce" && nodeType !== "video") {
+    const hasMCQs = (data.questions && data.questions.length > 0) || (data.passages && data.passages.length > 0);
+    const hasWritten = data.prompts && data.prompts.length > 0;
+    if (hasMCQs && hasWritten) {
+      nodeType = "mixed";
+    }
+  }
 
   const meta = {
     uid: node.uid,
@@ -325,6 +336,8 @@ function buildContent(node: ContentTreeNode, data: Record<string, unknown[]>, ef
     description: `Content pack: ${node.title}`,
     lang: node.lang ?? "en",
   };
+
+  const chapters = data.chapters as unknown as BankContent["chapters"];
 
   switch (nodeType) {
     case "flashcard": {
@@ -340,16 +353,39 @@ function buildContent(node: ContentTreeNode, data: Record<string, unknown[]>, ef
       return { meta, type: "flashcard", cards, subdecks } as FlashcardContent;
     }
     case "quiz":
-      return { meta, type: "quiz", questions: data.questions ?? [] } as QuizContent;
+      return {
+        meta,
+        type: "quiz",
+        chapters,
+        questions: data.questions ?? [],
+        prompts: data.prompts as unknown as QuizContent["prompts"],
+      } as QuizContent;
     case "bank":
       return {
         meta,
         type: "bank",
+        chapters,
         passages: data.passages as unknown as BankContent["passages"],
         questions: data.questions as unknown as BankContent["questions"],
+        prompts: data.prompts as unknown as BankContent["prompts"],
       } as BankContent;
     case "written":
-      return { meta, type: "written", prompts: data.prompts ?? [] } as WrittenContent;
+      return {
+        meta,
+        type: "written",
+        chapters,
+        prompts: data.prompts ?? [],
+        questions: data.questions as unknown as WrittenContent["questions"],
+      } as WrittenContent;
+    case "mixed":
+      return {
+        meta,
+        type: "mixed",
+        chapters,
+        passages: data.passages as unknown as MixedContent["passages"],
+        questions: data.questions as unknown as MixedContent["questions"],
+        prompts: data.prompts as unknown as MixedContent["prompts"],
+      } as MixedContent;
     case "osce":
       return { meta, type: "osce", stations: data.stations ?? [] } as OsceContent;
     case "video":
@@ -615,6 +651,9 @@ export function isOsce(c: AnyContent): c is OsceContent {
 export function isVideo(c: AnyContent): c is VideoContent {
   return c.type === "video";
 }
+export function isMixed(c: AnyContent): c is MixedContent {
+  return c.type === "mixed";
+}
 
 /* ── Engine metadata helpers ────────────────────────────────────────── */
 
@@ -654,6 +693,12 @@ export const ENGINE_META: Record<
     singular: "Video",
     color: "oklch(0.68 0.18 195)",
     icon: "video",
+  },
+  mixed: {
+    label: "Mixed QBank",
+    singular: "Mixed",
+    color: "oklch(0.65 0.16 260)",
+    icon: "layers",
   },
 };
 

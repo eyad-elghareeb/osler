@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   ArrowUpDown,
   ArrowDown,
+  BookmarkCheck,
   BookOpen,
   ClipboardCheck,
   Clock,
@@ -28,10 +29,11 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { cn } from "@/lib/utils";
-import { countQuestions } from "@/lib/osler/qbank-pool";
+import { countQuestions, getChapters, contentToQuestions } from "@/lib/osler/qbank-pool";
 import type { OnlyMode } from "@/lib/osler/qbank-pool";
-import type { AnyContent, ContentTreeNode } from "@/lib/osler/types";
+import type { AnyContent, BankContent, ContentTreeNode } from "@/lib/osler/types";
 import type {
   SessionMode,
   SessionOrder,
@@ -92,9 +94,28 @@ export function SessionStartDialog({
   onClose,
 }: SessionStartDialogProps) {
   const { t } = useI18n();
-  const isBank = content.type === "bank" || content.type === "written";
-  const totalQuestions = countQuestions(content);
-  const passageCount = content.type === "bank" ? content.passages?.length ?? 0 : 0;
+  const isBank = content.type === "bank" || content.type === "written" || content.type === "mixed";
+  const chapters = React.useMemo(() => getChapters(content), [content]);
+  const [selectedChapters, setSelectedChapters] = React.useState<string[]>([]);
+
+  React.useEffect(() => {
+    if (!open) return;
+    const chs = getChapters(content);
+    setSelectedChapters(chs.map((c) => c.id));
+  }, [open, content]);
+
+  const rawQuestions = React.useMemo(() => contentToQuestions(content), [content]);
+
+  const activeQuestions = React.useMemo(() => {
+    if (chapters.length === 0 || selectedChapters.length === 0) return rawQuestions;
+    const set = new Set(selectedChapters);
+    return rawQuestions.filter(
+      (q) => (q.chapter && set.has(q.chapter)) || (q.chapterId && set.has(q.chapterId)),
+    );
+  }, [rawQuestions, chapters, selectedChapters]);
+
+  const totalQuestions = chapters.length > 0 ? activeQuestions.length : countQuestions(content);
+  const passageCount = content.type === "bank" || content.type === "mixed" ? (content as BankContent).passages?.length ?? 0 : 0;
   const progress = storageProgress(item.uid, totalQuestions);
   const description = content.meta.description?.startsWith("Content pack:")
     ? t("qbank.launch.subtitle", { title: item.title })
@@ -142,6 +163,7 @@ export function SessionStartDialog({
       questionCount: selectedCount,
       order,
       onlyMode,
+      chapters: chapters.length > 0 ? selectedChapters : undefined,
       timerMinutes: mode === "timed" ? Math.max(1, Math.min(720, timerMinutes || 1)) : undefined,
     });
   };
@@ -254,6 +276,83 @@ export function SessionStartDialog({
                 </AnimatePresence>
               </div>
             </SectionItem>
+
+            {/* Chapters section — shown whenever chapters are defined */}
+            {chapters.length > 0 && (
+              <SectionItem>
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <SectionLabel icon={BookmarkCheck}>{t("qbank.chapters.title")}</SectionLabel>
+                    <div className="flex gap-2 text-xs">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          haptic("selection");
+                          setSelectedChapters(chapters.map((c) => c.id));
+                        }}
+                        className="text-primary hover:underline font-medium"
+                      >
+                        {t("qbank.chapters.selectAll")}
+                      </button>
+                      <span className="text-muted-foreground">·</span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          haptic("selection");
+                          setSelectedChapters([]);
+                        }}
+                        className="text-muted-foreground hover:text-foreground font-medium"
+                      >
+                        {t("qbank.chapters.clear")}
+                      </button>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-48 overflow-y-auto osler-scroll pr-1">
+                    {chapters.map((ch) => {
+                      const isSelected = selectedChapters.includes(ch.id);
+                      return (
+                        <button
+                          type="button"
+                          key={ch.id}
+                          onClick={() => {
+                            haptic("selection");
+                            setSelectedChapters((prev) =>
+                              prev.includes(ch.id)
+                                ? prev.filter((id) => id !== ch.id)
+                                : [...prev, ch.id],
+                            );
+                          }}
+                          className={cn(
+                            "flex items-center justify-between p-2.5 rounded-xl border text-start transition-colors text-xs",
+                            isSelected
+                              ? "border-primary bg-primary/5 text-foreground font-medium"
+                              : "border-border text-muted-foreground hover:border-primary/40",
+                          )}
+                        >
+                          <div className="flex items-center gap-2 min-w-0">
+                            <Checkbox
+                              checked={isSelected}
+                              onCheckedChange={() => {
+                                setSelectedChapters((prev) =>
+                                  prev.includes(ch.id)
+                                    ? prev.filter((id) => id !== ch.id)
+                                    : [...prev, ch.id],
+                                );
+                              }}
+                              className="size-3.5 shrink-0"
+                            />
+                            <span className="truncate">{ch.title}</span>
+                          </div>
+                          <span className="tabular-nums opacity-60 text-[11px] shrink-0 ms-2">
+                            {ch.count}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              </SectionItem>
+            )}
 
             {/* Filter by progress — bank packs only */}
             {isBank && (

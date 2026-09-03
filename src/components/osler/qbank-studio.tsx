@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { X, Home, ListChecks } from "lucide-react";
 import { loadContentByUid, loadNodeByUid, nodeUrls } from "@/lib/osler/content";
 import { toast } from "@/hooks/use-toast";
-import { contentToQuestions as poolContentToQuestions, filterPoolByProgress, pickQuestions, type PoolQuestion, type OnlyMode } from "@/lib/osler/qbank-pool";
+import { contentToQuestions as poolContentToQuestions, filterPoolByProgress, filterPoolByChapters, filterPoolByQuestionType, filterPoolByDifficulty, pickQuestions, type PoolQuestion, type OnlyMode } from "@/lib/osler/qbank-pool";
 import type { AnyContent, EngineType, ContentTreeNode } from "@/lib/osler/types";
 import { storage, sessions, writtenDrafts, quizSettings as quizSettingsStore, type SavedSession, type WrittenDraft, type HighlightItem } from "@/lib/osler/storage";
 import { listAllArticles } from "@/lib/osler/articles";
@@ -646,11 +646,24 @@ export function QBankStudio({
     async (
       item: ContentTreeNode,
       content: AnyContent,
-      options: { maxQuestions?: number; order?: SessionOrder; mode?: SessionMode; timerMinutes?: number; onlyMode?: OnlyMode } = {},
+      options: { maxQuestions?: number; order?: SessionOrder; mode?: SessionMode; timerMinutes?: number; onlyMode?: OnlyMode; chapters?: string[]; questionType?: "all" | "mcq" | "written"; difficulty?: "all" | "easy" | "medium" | "hard" } = {},
     ) => {
       let questions = contentToQuestions(content, item.uid, item.title, item);
       if (questions.length === 0) return;
       const sessionMode = options.mode ?? testMode;
+      // Apply chapter filter before progress filter.
+      if (options.chapters && options.chapters.length > 0) {
+        const filtered = filterPoolByChapters(questions as PoolQuestion[], options.chapters);
+        if (filtered.length > 0) questions = filtered as typeof questions;
+      }
+      // Apply question type filter.
+      if (options.questionType && options.questionType !== "all") {
+        questions = filterPoolByQuestionType(questions as PoolQuestion[], options.questionType) as typeof questions;
+      }
+      // Apply difficulty filter.
+      if (options.difficulty && options.difficulty !== "all") {
+        questions = filterPoolByDifficulty(questions as PoolQuestion[], options.difficulty) as typeof questions;
+      }
       // Apply progress filter (new/wrong/flagged/all) before picking questions.
       // Pass the pack uid as fallbackUid so single-pack paths (where
       // sourceUid may not be stamped on every question) still resolve
@@ -757,7 +770,7 @@ export function QBankStudio({
   // `session` are only read here, never watched.
   React.useEffect(() => {
     if (activeItem && activeContent) {
-      if ((activeContent.type === "quiz" || activeContent.type === "bank" || activeContent.type === "written") && !session && mode === "home") {
+      if ((activeContent.type === "quiz" || activeContent.type === "bank" || activeContent.type === "written" || activeContent.type === "mixed") && !session && mode === "home") {
         if (startPromptUid !== activeItem.uid) {
           setStartPromptUid(activeItem.uid);
           setStartDialogOpen(true);
@@ -801,6 +814,9 @@ export function QBankStudio({
       mode: options.mode,
       timerMinutes: options.timerMinutes,
       onlyMode: options.onlyMode,
+      chapters: options.chapters,
+      questionType: options.questionType,
+      difficulty: options.difficulty,
     });
   }, [activeContent, activeItem, startSession]);
 

@@ -598,7 +598,7 @@ export function ImageListField({
               value={img.src ?? ""}
               onChange={(e) => commit(arr.map((a, idx) => (idx === i ? { ...a, src: e.target.value } : a)))}
               readOnly={readOnly}
-              placeholder="ecg.png or images/ecg.png"
+              placeholder="images/ecg.png or https://cdn.com/..."
               className="text-xs"
             />
             <Input

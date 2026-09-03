@@ -40,21 +40,23 @@ function escapeAttr(value: string): string {
     .replace(/'/g, "&#39;");
 }
 
-/** Block dangerous URL schemes; anything not http(s)/mailto/data:image is dropped. */
+/** Block dangerous URL schemes; anything not http(s)/mailto/data:image or relative path is dropped. */
 function safeUrl(url: string): string | null {
   const trimmed = url.trim();
   if (/^(https?:|mailto:)/i.test(trimmed)) return trimmed;
-  if (/^data:image\/(png|jpeg|jpg|gif|webp|avif|bmp);/i.test(trimmed)) return trimmed;
+  if (/^\/\//i.test(trimmed)) return trimmed;
+  if (/^data:image\/(png|jpeg|jpg|gif|webp|avif|bmp|svg\+xml);/i.test(trimmed)) return trimmed;
+  // Allow relative filenames and paths (not containing an explicit scheme like javascript:)
+  if (!/^[a-z0-9+.-]+:/i.test(trimmed)) return trimmed;
   return null;
 }
 
 /**
  * Render a small, safe markdown subset to HTML. Escapes first, then applies
  * bold / italic / inline-code / links / line-breaks. Inline images
- * `![alt](src)` are extracted before escaping so their markup survives, then
- * resolved against the pack folder. The resolved src is attribute-escaped and
- * scheme-checked so a hostile pack can't break out of the attribute or inject
- * markup through the unescaped URL path.
+ * `![alt](src)` and `<img src="...">` are extracted before escaping so their
+ * markup survives, then resolved against the pack folder or direct CDN URLs.
+ * The resolved src is attribute-escaped and scheme-checked.
  *
  * `opts.imageSrc`, when provided, rewrites each resolved image URL right
  * before it is attribute-escaped — used by the Anki exporter to map resolved
@@ -68,9 +70,9 @@ export function renderRichText(
 ): string {
   const imageSrc = opts?.imageSrc;
   if (!text) return "";
-  // Pull inline images out first so the escaping pass doesn't mangle them.
+  // Pull inline markdown and HTML images out first so the escaping pass doesn't mangle them.
   const imgTokens: string[] = [];
-  const src = text.replace(
+  let src = text.replace(
     /!\[([^\]]*)\]\(([^\s)]+)\)/g,
     (_full, alt: string, url: string) => {
       const checked = safeUrl(url);
@@ -78,7 +80,21 @@ export function renderRichText(
       const resolved = resolveContentAsset(checked, category, packPath);
       const finalSrc = escapeAttr(imageSrc ? imageSrc(resolved) : resolved);
       const altAttr = escapeAttr(alt ?? "");
-      imgTokens.push(`<img src="${finalSrc}" alt="${altAttr}" loading="lazy">`);
+      imgTokens.push(`<img src="${finalSrc}" alt="${altAttr}" loading="lazy" class="max-h-96 w-auto rounded-lg mx-auto my-2 cursor-zoom-in">`);
+      return `\u0000IMG${imgTokens.length - 1}\u0000`;
+    },
+  );
+
+  src = src.replace(
+    /<img\s+([^>]*?)src=["']([^"']+)["']([^>]*?)\/?>/gi,
+    (_full, before: string, url: string, after: string) => {
+      const checked = safeUrl(url);
+      if (!checked) return "";
+      const resolved = resolveContentAsset(checked, category, packPath);
+      const finalSrc = escapeAttr(imageSrc ? imageSrc(resolved) : resolved);
+      const altMatch = `${before} ${after}`.match(/alt=["']([^"']*)["']/i);
+      const altAttr = escapeAttr(altMatch ? altMatch[1] : "");
+      imgTokens.push(`<img src="${finalSrc}" alt="${altAttr}" loading="lazy" class="max-h-96 w-auto rounded-lg mx-auto my-2 cursor-zoom-in">`);
       return `\u0000IMG${imgTokens.length - 1}\u0000`;
     },
   );

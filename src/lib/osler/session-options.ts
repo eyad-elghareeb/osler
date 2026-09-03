@@ -9,4 +9,7 @@ export interface SessionStartOptions {
   order: SessionOrder;
   timerMinutes?: number;
   onlyMode?: import("./qbank-pool").OnlyMode;
+  chapters?: string[];
+  questionType?: "all" | "mcq" | "written";
+  difficulty?: "all" | "easy" | "medium" | "hard";
 }

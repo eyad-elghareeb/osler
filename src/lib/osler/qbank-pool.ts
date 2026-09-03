@@ -27,13 +27,16 @@ import type {
   BankContent,
   BankPassage,
   BankQuestion,
+  ContentChapter,
   ContentImage,
   EngineType,
   FlashcardContent,
+  MixedContent,
   OsceContent,
   QuizContent,
   QuizQuestion,
   WrittenContent,
+  WrittenPrompt,
   ContentTreeNode,
 } from "./types";
 import { storage } from "./storage";
@@ -44,6 +47,7 @@ function categoryFolderForEngine(type: EngineType): string {
     quiz: "qbank",
     bank: "qbank",
     written: "qbank",
+    mixed: "qbank",
     flashcard: "flashcard",
     osce: "osce",
     library: "library",
@@ -82,6 +86,8 @@ export interface PoolQuestion {
   redFlags?: string[];
   differential?: string[];
   children?: PoolQuestionChild[];
+  chapter?: string;
+  chapterId?: string;
   /**
    * Originating pack uid. Always set when produced by `buildQuestionPool`.
    * May be undefined for legacy single-pack paths that call `contentToQuestions`
@@ -96,6 +102,12 @@ export interface PoolQuestion {
   sourceCategory?: string;
 }
 
+export interface ChapterSummary {
+  id: string;
+  title: string;
+  count: number;
+}
+
 export type OnlyMode = "all" | "wrong" | "flagged" | "new";
 export type OrderMode = "sequential" | "random";
 
@@ -105,18 +117,145 @@ export function countQuestions(content: AnyContent | null | undefined): number {
   if (!content) return 0;
   switch (content.type) {
     case "quiz":
-      return content.questions.length;
+      return content.questions.length + (content.prompts?.length ?? 0);
     case "bank":
-      return (content.passages ?? []).reduce((a, p) => a + p.questions.length, 0) + (content.questions?.length ?? 0);
+      return (
+        (content.passages ?? []).reduce((a, p) => a + p.questions.length, 0) +
+        (content.questions?.length ?? 0) +
+        (content.prompts?.length ?? 0)
+      );
+    case "mixed":
+      return (
+        (content.passages ?? []).reduce((a, p) => a + p.questions.length, 0) +
+        (content.questions?.length ?? 0) +
+        (content.prompts?.length ?? 0)
+      );
     case "flashcard":
       return content.cards.length;
     case "written":
-      return content.prompts.length;
+      return content.prompts.length + (content.questions?.length ?? 0);
     case "osce":
       return content.stations.length;
     default:
       return 0;
   }
+}
+
+/* ── Chapter parsing & resolution ────────────────────────────────────── */
+
+export function parseChapterRange(rangeStr?: string): { start: number; end: number } | null {
+  if (!rangeStr) return null;
+  const match = rangeStr.match(/(\d+)\s*[-–—:]\s*(\d+)/);
+  if (!match) return null;
+  const start = parseInt(match[1], 10);
+  const end = parseInt(match[2], 10);
+  if (isNaN(start) || isNaN(end)) return null;
+  return { start: Math.min(start, end), end: Math.max(start, end) };
+}
+
+export function resolveQuestionChapter(
+  chapters: ContentChapter[] | undefined,
+  q: { id?: string; chapter?: string; chapterId?: string; passageId?: string },
+  qIndex: number, // 1-based index in the pack
+): { chapter?: string; chapterId?: string } {
+  if (chapters && chapters.length > 0) {
+    for (const ch of chapters) {
+      if (ch.questionIds && q.id && ch.questionIds.includes(q.id)) {
+        return { chapter: ch.title, chapterId: ch.id };
+      }
+      if (ch.passageIds && q.passageId && ch.passageIds.includes(q.passageId)) {
+        return { chapter: ch.title, chapterId: ch.id };
+      }
+      if (ch.start != null && ch.end != null && qIndex >= ch.start && qIndex <= ch.end) {
+        return { chapter: ch.title, chapterId: ch.id };
+      }
+      if (ch.from != null && ch.to != null && qIndex >= ch.from && qIndex <= ch.to) {
+        return { chapter: ch.title, chapterId: ch.id };
+      }
+      const parsed = parseChapterRange(ch.range);
+      if (parsed && qIndex >= parsed.start && qIndex <= parsed.end) {
+        return { chapter: ch.title, chapterId: ch.id };
+      }
+      if (q.chapterId && q.chapterId === ch.id) {
+        return { chapter: ch.title, chapterId: ch.id };
+      }
+      if (q.chapter && (q.chapter === ch.id || q.chapter === ch.title)) {
+        return { chapter: ch.title, chapterId: ch.id };
+      }
+    }
+  }
+  if (q.chapter) {
+    return { chapter: q.chapter, chapterId: q.chapterId ?? q.chapter };
+  }
+  return {};
+}
+
+/** Normalize image fields (accepting string, ContentImage, or arrays of either) */
+export function normalizeContentImages(
+  img?: ContentImage | ContentImage[] | string | string[],
+): ContentImage | ContentImage[] | undefined {
+  if (!img) return undefined;
+  if (Array.isArray(img)) {
+    const list = img
+      .map((item) => (typeof item === "string" ? { src: item } : item))
+      .filter((item): item is ContentImage => Boolean(item?.src));
+    return list.length > 0 ? list : undefined;
+  }
+  return typeof img === "string" ? { src: img } : img;
+}
+
+/** Normalize choiceImages array */
+export function normalizeChoiceImages(
+  images?: unknown[],
+): (ContentImage | ContentImage[] | undefined)[] | undefined {
+  if (!Array.isArray(images) || images.length === 0) return undefined;
+  return images.map((item) =>
+    normalizeContentImages(item as ContentImage | ContentImage[] | string | string[]),
+  );
+}
+
+/**
+ * Extract summary of chapters for a given content pack (including question count per chapter).
+ */
+export function getChapters(content: AnyContent | null | undefined): ChapterSummary[] {
+  if (!content) return [];
+  const questions = contentToQuestions(content);
+  if (questions.length === 0) return [];
+
+  const chaptersProp: ContentChapter[] =
+    (content as QuizContent | BankContent | MixedContent | WrittenContent).chapters ?? [];
+
+  if (chaptersProp.length > 0) {
+    return chaptersProp.map((ch) => {
+      const matchingCount = questions.filter(
+        (q) => q.chapterId === ch.id || q.chapter === ch.title,
+      ).length;
+      return {
+        id: ch.id,
+        title: ch.title,
+        count: matchingCount,
+      };
+    });
+  }
+
+  // If no root chapters array was declared, look for distinct question chapters
+  const map = new Map<string, { id: string; title: string; count: number }>();
+  for (const q of questions) {
+    if (q.chapter) {
+      const key = q.chapterId || q.chapter;
+      const existing = map.get(key);
+      if (existing) {
+        existing.count++;
+      } else {
+        map.set(key, { id: key, title: q.chapter, count: 1 });
+      }
+    }
+  }
+  return Array.from(map.values());
+}
+
+export function hasChapters(content: AnyContent | null | undefined): boolean {
+  return getChapters(content).length > 0;
 }
 
 /* ── Single-pack conversion ─────────────────────────────────────────── */
@@ -140,53 +279,154 @@ export function contentToQuestions(
     ? categoryFolderForEngine(sourceNode.type)
     : undefined;
   const out: PoolQuestion[] = [];
-  if (content.type === "quiz") {
-    (content as QuizContent).questions.forEach((q) => {
-      out.push({
+
+  const chaptersProp: ContentChapter[] | undefined =
+    (content as QuizContent | BankContent | MixedContent | WrittenContent).chapters;
+
+  const addMcqQuestion = (
+    q: QuizQuestion | BankQuestion | any,
+    passage?: BankPassage,
+  ) => {
+    const qIndex = out.length + 1;
+    const { chapter, chapterId } = resolveQuestionChapter(
+      chaptersProp,
+      {
         id: q.id,
-        stem: q.question,
-        images: q.images,
-        choiceImages: q.options.map((_o, i) =>
-          (q as QuizQuestion & { choiceImages?: (ContentImage | ContentImage[] | undefined)[] }).choiceImages?.[i],
-        ),
-        choices: q.options,
-        correct: q.correct,
-        explanation: q.explanation,
-        explanationImages: q.explanationImages,
-        tags: q.tags,
-        difficulty: q.difficulty ? `${q.difficulty}/5` : undefined,
-        sourceUid,
-        sourceTitle,
-        sourcePath,
-        sourceCategory,
-      });
+        chapter: q.chapter ?? passage?.chapter,
+        chapterId: q.chapterId ?? passage?.chapterId,
+        passageId: q.passageId ?? passage?.id,
+      },
+      qIndex,
+    );
+    const rawImages = passage?.images ?? q.images ?? q.image;
+    const rawChoiceImages = q.choiceImages;
+    const rawExplImages = q.explanationImages ?? q.explanationImage;
+
+    out.push({
+      id: q.id,
+      stem: passage?.content
+        ? `${passage.content}\n\n${q.question ?? q.stem ?? ""}`
+        : (q.question ?? q.stem ?? ""),
+      images: normalizeContentImages(rawImages),
+      choiceImages: normalizeChoiceImages(
+        Array.isArray(rawChoiceImages)
+          ? rawChoiceImages
+          : q.options?.map((_o: any, i: number) => (q as any).choiceImages?.[i]),
+      ),
+      choices: q.options ?? q.choices ?? [],
+      correct: typeof q.correct === "number" ? q.correct : 0,
+      explanation: q.explanation ?? "",
+      explanationImages: normalizeContentImages(rawExplImages),
+      tags: q.tags,
+      difficulty: q.difficulty ? `${q.difficulty}/5` : undefined,
+      chapter,
+      chapterId,
+      sourceUid,
+      sourceTitle,
+      sourcePath,
+      sourceCategory,
     });
+  };
+
+  const addWrittenPrompt = (p: WrittenPrompt | any) => {
+    const qIndex = out.length + 1;
+    const { chapter, chapterId } = resolveQuestionChapter(
+      chaptersProp,
+      {
+        id: p.id,
+        chapter: p.chapter,
+        chapterId: p.chapterId,
+      },
+      qIndex,
+    );
+    const children = p.children?.map((c: any) => ({
+      id: c.id,
+      label: c.label,
+      question: c.question,
+      modelAnswer: c.modelAnswer,
+      rubric: c.rubric,
+      explanation: c.explanation,
+    }));
+    const rawImages = p.images ?? p.image;
+    const rawExplImages = p.explanationImages ?? p.explanationImage;
+
+    out.push({
+      id: p.id,
+      stem: p.prompt ?? p.question ?? "",
+      images: normalizeContentImages(rawImages),
+      choices: [],
+      correct: -1,
+      modelAnswer: p.modelAnswer,
+      explanation:
+        p.explanation ??
+        (Array.isArray(p.rubric) && p.rubric.length > 0
+          ? `Self-grading rubric:\n${p.rubric.map((r: string, i: number) => `${i + 1}. ${r}`).join("\n")}`
+          : ""),
+      explanationImages: normalizeContentImages(rawExplImages),
+      rubric: p.rubric,
+      tags: p.tags,
+      difficulty: p.difficulty ? `${p.difficulty}/5` : undefined,
+      children,
+      chapter,
+      chapterId,
+      sourceUid,
+      sourceTitle,
+      sourcePath,
+      sourceCategory,
+    });
+  };
+
+  if (content.type === "quiz") {
+    const quiz = content as QuizContent;
+    for (const q of quiz.questions ?? []) {
+      if ((q as any).options && (q as any).options.length > 0) {
+        addMcqQuestion(q);
+      } else if ((q as any).rubric || (q as any).modelAnswer || (q as any).prompt) {
+        addWrittenPrompt(q);
+      } else {
+        addMcqQuestion(q);
+      }
+    }
+    for (const p of quiz.prompts ?? []) {
+      addWrittenPrompt(p);
+    }
   } else if (content.type === "bank") {
     const bank = content as BankContent;
-    const addBankQuestion = (q: BankQuestion, passage?: BankPassage) => {
-      out.push({
-        id: q.id,
-        stem: passage?.content ? `${passage.content}\n\n${q.question}` : q.question,
-        images: passage?.images ?? q.images,
-        choiceImages: q.options.map((_o, i) =>
-          (q as BankQuestion & { choiceImages?: (ContentImage | ContentImage[] | undefined)[] }).choiceImages?.[i],
-        ),
-        choices: q.options,
-        correct: q.correct,
-        explanation: q.explanation,
-        explanationImages: q.explanationImages,
-        tags: q.tags,
-        difficulty: q.difficulty ? `${q.difficulty}/5` : undefined,
-        sourceUid,
-        sourceTitle,
-        sourcePath,
-        sourceCategory,
-      });
-    };
     for (const passage of bank.passages ?? []) {
-      for (const question of passage.questions) addBankQuestion(question, passage);
+      for (const question of passage.questions) addMcqQuestion(question, passage);
     }
-    for (const question of bank.questions ?? []) addBankQuestion(question);
+    for (const question of bank.questions ?? []) {
+      if ((question as any).options && (question as any).options.length > 0) {
+        addMcqQuestion(question);
+      } else if ((question as any).rubric || (question as any).modelAnswer || (question as any).prompt) {
+        addWrittenPrompt(question);
+      } else {
+        addMcqQuestion(question);
+      }
+    }
+    for (const p of bank.prompts ?? []) {
+      addWrittenPrompt(p);
+    }
+  } else if (content.type === "mixed") {
+    const mixed = content as MixedContent;
+    for (const passage of mixed.passages ?? []) {
+      for (const question of passage.questions) addMcqQuestion(question, passage);
+    }
+    for (const q of mixed.questions ?? []) {
+      const anyQ = q as any;
+      if (anyQ.type === "written" || (!anyQ.options && (anyQ.rubric || anyQ.modelAnswer || anyQ.prompt))) {
+        addWrittenPrompt(anyQ);
+      } else {
+        addMcqQuestion(anyQ);
+      }
+    }
+    for (const p of mixed.prompts ?? []) {
+      addWrittenPrompt(p);
+    }
+  } else if (content.type === "written") {
+    const written = content as WrittenContent;
+    for (const p of written.prompts ?? []) addWrittenPrompt(p);
+    for (const q of written.questions ?? []) addMcqQuestion(q);
   } else if (content.type === "flashcard") {
     (content as FlashcardContent).cards.forEach((c) => {
       out.push({
@@ -196,34 +436,6 @@ export function contentToQuestions(
         correct: -1,
         explanation: c.back ?? c.extra ?? "",
         tags: c.tags,
-        sourceUid,
-        sourceTitle,
-      });
-    });
-  } else if (content.type === "written") {
-    (content as WrittenContent).prompts.forEach((p) => {
-      const children = p.children?.map((c) => ({
-        id: c.id,
-        label: c.label,
-        question: c.question,
-        modelAnswer: c.modelAnswer,
-        rubric: c.rubric,
-        explanation: c.explanation,
-      }));
-      out.push({
-        id: p.id,
-        stem: p.prompt,
-        choices: [],
-        correct: -1,
-        modelAnswer: p.modelAnswer,
-        explanation: p.explanation ?? (
-          p.rubric.length > 0
-            ? `Self-grading rubric:\n${p.rubric.map((r, i) => `${i + 1}. ${r}`).join("\n")}`
-            : ""
-        ),
-        rubric: p.rubric,
-        tags: p.tags,
-        children,
         sourceUid,
         sourceTitle,
       });
@@ -262,8 +474,8 @@ export interface PoolSourceEntry {
 /**
  * Build a merged question pool from multiple source packs.
  *
- * Rules (see plan §2):
- *   - `quiz`, `bank`, and `written` may be freely mixed in one pool.
+ * Rules:
+ *   - `quiz`, `bank`, `written`, and `mixed` may be freely mixed in one pool.
  *     MCQ questions (quiz/bank) have `correct >= 0` and choices; written
  *     questions have `correct === -1` and rubric/modelAnswer. Per-question
  *     detection drives the rendering branch at runtime.
@@ -292,9 +504,7 @@ export function buildQuestionPool(entries: PoolSourceEntry[]): PoolQuestion[] {
 
 /**
  * Filter a pool to questions whose `tags` array contains at least one of the
- * given `tags`. Operates on the *question-level* tags (SessionQuestion.tags),
- * not the pack-level `meta.tags` — this is the fix for the half-built tag
- * filter in the old CreateTestTab.
+ * given `tags`. Operates on the *question-level* tags (SessionQuestion.tags).
  *
  * Empty `tags` array returns the pool unchanged.
  */
@@ -302,6 +512,61 @@ export function filterPoolByTags(pool: PoolQuestion[], tags: string[]): PoolQues
   if (!tags || tags.length === 0) return pool;
   const set = new Set(tags);
   return pool.filter((q) => Array.isArray(q.tags) && q.tags.some((t) => set.has(t)));
+}
+
+/* ── Chapter filtering ──────────────────────────────────────────────── */
+
+/**
+ * Filter a pool to questions belonging to any of the selected chapters (by chapter title or id).
+ */
+export function filterPoolByChapters(pool: PoolQuestion[], chapters: string[]): PoolQuestion[] {
+  if (!chapters || chapters.length === 0) return pool;
+  const set = new Set(chapters);
+  return pool.filter(
+    (q) => (q.chapter && set.has(q.chapter)) || (q.chapterId && set.has(q.chapterId)),
+  );
+}
+
+/* ── Question Type filtering ────────────────────────────────────────── */
+
+/**
+ * Filter a pool by question type ("all" | "mcq" | "written").
+ */
+export function filterPoolByQuestionType(
+  pool: PoolQuestion[],
+  type?: "all" | "mcq" | "written",
+): PoolQuestion[] {
+  if (!type || type === "all") return pool;
+  if (type === "mcq") return pool.filter((q) => q.correct >= 0);
+  if (type === "written") return pool.filter((q) => q.correct < 0);
+  return pool;
+}
+
+/* ── Difficulty filtering ───────────────────────────────────────────── */
+
+/**
+ * Filter a pool by difficulty rating ("all" | "easy" | "medium" | "hard").
+ */
+export function filterPoolByDifficulty(
+  pool: PoolQuestion[],
+  difficulty?: "all" | "easy" | "medium" | "hard",
+): PoolQuestion[] {
+  if (!difficulty || difficulty === "all") return pool;
+  return pool.filter((q) => {
+    if (!q.difficulty) return false;
+    const num = parseInt(q.difficulty, 10);
+    if (isNaN(num)) {
+      const lower = q.difficulty.toLowerCase();
+      if (difficulty === "easy") return lower.includes("easy");
+      if (difficulty === "medium") return lower.includes("med");
+      if (difficulty === "hard") return lower.includes("hard");
+      return false;
+    }
+    if (difficulty === "easy") return num <= 2;
+    if (difficulty === "medium") return num === 3;
+    if (difficulty === "hard") return num >= 4;
+    return false;
+  });
 }
 
 /* ── Progress filtering ─────────────────────────────────────────────── */
@@ -312,10 +577,6 @@ export function filterPoolByTags(pool: PoolQuestion[], tags: string[]): PoolQues
  *   - "all"      → return pool unchanged
  *   - "wrong"    → only questions whose most recent record is incorrect
  *   - "flagged"  → only questions whose most recent record has flagged=true
- *
- * Uses `storage.getRecord(sourceUid, id)` for O(1) lookup per question.
- * Questions without a sourceUid fall back to no record (so they're excluded
- * from "wrong"/"flagged" — there's nothing to be wrong or flagged yet).
  */
 export function filterPoolByProgress(
   pool: PoolQuestion[],
@@ -341,11 +602,6 @@ export function filterPoolByProgress(
 
 /**
  * Pick `count` questions from a pool, optionally shuffled.
- *
- *   - "sequential" → first `count` questions, in original order
- *   - "random"     → Fisher-Yates shuffle of the pool, then take `count`
- *
- * Always returns at most `pool.length` items (no overflow).
  */
 export function pickQuestions(
   pool: PoolQuestion[],
@@ -367,28 +623,20 @@ export function pickQuestions(
 /* ── Engine-family helper (for source picker UI) ────────────────────── */
 
 /**
- * Return the merge family for an engine type. Packs of the same family may
- * be combined into one session; packs from different families may not.
- *
- *   - quiz/bank → "mcq"
- *   - written   → "written"
- *   - others    → null (not pool-able)
- *
- * Note: quiz/bank and written CAN be mixed — this function only classifies
- * individual types. The source picker uses `canPoolTogether` for mixing logic.
+ * Return the merge family for an engine type.
  */
-export function poolFamilyForEngine(type: EngineType): "mcq" | "written" | null {
+export function poolFamilyForEngine(type: EngineType): "mcq" | "written" | "mixed" | null {
   if (type === "quiz" || type === "bank") return "mcq";
   if (type === "written") return "written";
+  if (type === "mixed") return "mixed";
   return null;
 }
 
 /**
  * Given a list of selected engine types, return the family they all share
- * (or null if mixed). Used by the source picker to determine if all selected
- * packs belong to a single family.
+ * (or null if mixed).
  */
-export function sharedPoolFamily(types: EngineType[]): "mcq" | "written" | null {
+export function sharedPoolFamily(types: EngineType[]): "mcq" | "written" | "mixed" | null {
   if (types.length === 0) return null;
   const first = poolFamilyForEngine(types[0]);
   if (!first) return null;
@@ -400,12 +648,12 @@ export function sharedPoolFamily(types: EngineType[]): "mcq" | "written" | null 
 
 /**
  * Check if a set of engine types can be pooled together.
- * quiz/bank/written are all compatible. flashcard/osce/video cannot participate.
+ * quiz/bank/written/mixed are all compatible. flashcard/osce/video cannot participate.
  */
 export function canPoolTogether(types: EngineType[]): boolean {
   return types.every((t) => {
     const f = poolFamilyForEngine(t);
-    return f === "mcq" || f === "written";
+    return f === "mcq" || f === "written" || f === "mixed";
   });
 }
 

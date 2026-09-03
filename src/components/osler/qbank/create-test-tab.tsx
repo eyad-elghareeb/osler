@@ -3,7 +3,7 @@
 import * as React from "react";
 import { ChevronRight, Minus, Flag, X, Clock, RotateCcw, Plus, ListChecks, Timer as TimerIcon, Sparkles, FileText, Folder, Layers, ArrowLeft, ArrowUpDown, Tag } from "lucide-react";
 import { ENGINE_META } from "@/lib/osler/content";
-import { buildQuestionPool, filterPoolByTags, filterPoolByProgress, pickQuestions, poolFamilyForEngine, sharedPoolFamily, canPoolTogether, type PoolQuestion, type OnlyMode, type OrderMode } from "@/lib/osler/qbank-pool";
+import { buildQuestionPool, filterPoolByTags, filterPoolByProgress, filterPoolByChapters, filterPoolByQuestionType, filterPoolByDifficulty, getChapters, pickQuestions, poolFamilyForEngine, sharedPoolFamily, canPoolTogether, type ChapterSummary, type PoolQuestion, type OnlyMode, type OrderMode } from "@/lib/osler/qbank-pool";
 import type { AnyContent, EngineType, ContentTreeNode } from "@/lib/osler/types";
 import { sessions, type WrittenDraft } from "@/lib/osler/storage";
 import { cn } from "@/lib/utils";
@@ -135,6 +135,12 @@ export function CreateTestTab({
   // Tree search (mirrors the Content tab pattern).
   // Folder navigation for source picker (flashcard-style deck browser).
   const [selectedFolders, setSelectedFolders] = React.useState<ContentTreeNode[]>([]);
+  // Chapter filter — populated when selected sources have chapters defined.
+  const [selectedChapterIds, setSelectedChapterIds] = React.useState<string[]>([]);
+  // Question type filter for mixed/chapterized packs.
+  const [questionType, setQuestionType] = React.useState<"all" | "mcq" | "written">("all");
+  // Difficulty filter.
+  const [difficulty, setDifficulty] = React.useState<"all" | "easy" | "medium" | "hard">("all");
   // Ref for scrolling a pre-selected source into view.
   const preselectScrollRef = React.useRef<HTMLElement | null>(null);
 
@@ -246,6 +252,27 @@ export function CreateTestTab({
     [selectedEntries],
   );
 
+  // Available chapters across selected sources (populated when chapters are defined).
+  const availableChapters = React.useMemo(() => {
+    const chapters: ChapterSummary[] = [];
+    for (const entry of selectedEntries) {
+      if (!entry.content) continue;
+      const chs = getChapters(entry.content);
+      for (const ch of chs) {
+        if (!chapters.find((c) => c.id === ch.id)) chapters.push(ch);
+      }
+    }
+    return chapters;
+  }, [selectedEntries]);
+
+  // Prune selectedChapterIds when source selection changes.
+  React.useEffect(() => {
+    if (selectedChapterIds.length === 0) return;
+    const available = new Set(availableChapters.map((c) => c.id));
+    const next = selectedChapterIds.filter((id) => available.has(id));
+    if (next.length !== selectedChapterIds.length) setSelectedChapterIds(next);
+  }, [availableChapters, selectedChapterIds]);
+
   // Available question-level tags across the selected sources only (P2-3).
   // Recomputed when selection changes.
   const availableTags = React.useMemo(() => {
@@ -265,12 +292,15 @@ export function CreateTestTab({
     if (next.length !== selectedTags.length) setSelectedTags(next);
   }, [availableTags, selectedTags]);
 
-  // Final pool after tag + progress filters are applied.
+  // Final pool after all filters are applied.
   const filteredPool = React.useMemo(() => {
     let pool = filterPoolByTags(mergedPool, selectedTags);
+    if (selectedChapterIds.length > 0) pool = filterPoolByChapters(pool, selectedChapterIds);
+    if (questionType !== "all") pool = filterPoolByQuestionType(pool, questionType);
+    if (difficulty !== "all") pool = filterPoolByDifficulty(pool, difficulty);
     pool = filterPoolByProgress(pool, onlyMode);
     return pool;
-  }, [mergedPool, selectedTags, onlyMode]);
+  }, [mergedPool, selectedTags, selectedChapterIds, questionType, difficulty, onlyMode]);
 
   const totalAvailable = filteredPool.length;
   const desiredCount = Math.max(1, Math.min(parseInt(countInput) || 1, Math.max(1, totalAvailable)));
@@ -620,12 +650,122 @@ export function CreateTestTab({
           </div>
         </OslerCard>
 
+        {/* Chapter filter — only shown when selected sources have chapters */}
+        {availableChapters.length > 0 && (
+          <OslerCard>
+            <SectionHeading number={5} icon={Layers}
+              description={t("qbank.create.chapters")}
+              actions={
+                <div className="flex items-center gap-1">
+                  <Button variant="ghost" size="sm" className="h-6 text-xs px-2"
+                    onClick={() => { haptic("selection"); setSelectedChapterIds(availableChapters.map((c) => c.id)); }}
+                  >
+                    {t("qbank.chapters.selectAll")}
+                  </Button>
+                  <Button variant="ghost" size="sm" className="h-6 text-xs px-2"
+                    onClick={() => { haptic("selection"); setSelectedChapterIds([]); }}
+                  >
+                    {t("qbank.chapters.clear")}
+                  </Button>
+                </div>
+              }
+            >
+              {t("qbank.chapters.title")}
+            </SectionHeading>
+            <div className="mt-3 max-h-56 overflow-y-auto osler-scroll space-y-1">
+              {availableChapters.map((ch) => {
+                const isChecked = selectedChapterIds.includes(ch.id) || selectedChapterIds.length === 0;
+                return (
+                  <label
+                    key={ch.id}
+                    className={cn(
+                      "flex items-center gap-3 px-3 py-2 rounded-lg cursor-pointer transition-colors",
+                      selectedChapterIds.includes(ch.id) ? "bg-primary/8" : "hover:bg-muted/60",
+                    )}
+                  >
+                    <Checkbox
+                      checked={selectedChapterIds.length === 0 || selectedChapterIds.includes(ch.id)}
+                      onCheckedChange={() => {
+                        haptic("light");
+                        setSelectedChapterIds((prev) =>
+                          prev.includes(ch.id)
+                            ? prev.filter((x) => x !== ch.id)
+                            : [...prev, ch.id],
+                        );
+                      }}
+                      className="size-4"
+                    />
+                    <span className="text-sm flex-1 truncate">{ch.title}</span>
+                    <span className="text-[11px] text-muted-foreground tabular-nums shrink-0">({ch.count})</span>
+                  </label>
+                );
+              })}
+            </div>
+          </OslerCard>
+        )}
+
+        {/* Question type + difficulty */}
+        <OslerCard>
+          <SectionHeading number={availableChapters.length > 0 ? 6 : 5} icon={ListChecks}
+            description={t("qbank.create.questionType") + " / " + t("qbank.create.difficulty")}
+          >
+            {t("qbank.create.questionType")}
+          </SectionHeading>
+          <div className="mt-3 space-y-3">
+            <div className="flex flex-wrap gap-2">
+              {([
+                { id: "all" as const, label: t("qbank.create.questionTypeAll") },
+                { id: "mcq" as const, label: t("qbank.create.questionTypeMcq") },
+                { id: "written" as const, label: t("qbank.create.questionTypeWritten") },
+              ]).map((opt) => (
+                <Pill key={opt.id} active={questionType === opt.id}
+                  onClick={() => { haptic("selection"); setQuestionType(opt.id); }}
+                >
+                  {opt.label}
+                </Pill>
+              ))}
+            </div>
+            <div className="border-t border-border pt-3">
+              <p className="text-xs text-muted-foreground mb-2">{t("qbank.create.difficulty")}</p>
+              <div className="flex flex-wrap gap-2">
+                {([
+                  { id: "all" as const, label: t("qbank.create.difficultyAll") },
+                  { id: "easy" as const, label: t("qbank.create.difficultyEasy") },
+                  { id: "medium" as const, label: t("qbank.create.difficultyMedium") },
+                  { id: "hard" as const, label: t("qbank.create.difficultyHard") },
+                ]).map((opt) => (
+                  <Pill key={opt.id} active={difficulty === opt.id}
+                    onClick={() => { haptic("selection"); setDifficulty(opt.id); }}
+                  >
+                    {opt.label}
+                  </Pill>
+                ))}
+              </div>
+            </div>
+          </div>
+        </OslerCard>
+
         {/* Count + order (P4-1) */}
         <OslerCard>
-          <SectionHeading number={5} icon={ArrowUpDown} description={t("qbank.home.questionOrder")}>
+          <SectionHeading number={availableChapters.length > 0 ? 7 : 6} icon={ArrowUpDown} description={t("qbank.home.questionOrder")}>
             {t("qbank.create.countStepper")}
           </SectionHeading>
           <div className="mt-3 flex flex-wrap items-center gap-3">
+            {/* Quick count presets */}
+            <div className="flex items-center gap-1">
+              {[10, 20, 40].filter((n) => n <= totalAvailable).map((n) => (
+                <button
+                  key={n}
+                  onClick={() => { haptic("light"); setCountInput(String(n)); if (!timerEditedRef.current) setTimerMinutes(String(n)); }}
+                  className={cn(
+                    "px-2.5 py-1 rounded-lg text-xs font-medium border transition-colors",
+                    desiredCount === n ? "border-primary bg-primary/10 text-primary" : "border-border bg-card text-muted-foreground hover:border-primary/40 hover:text-foreground",
+                  )}
+                >
+                  {n}
+                </button>
+              ))}
+            </div>
             {/* Stepper */}
             <div className="flex items-center gap-1">
               <button

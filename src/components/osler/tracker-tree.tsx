@@ -42,6 +42,7 @@ const PACK_ICONS: Record<EngineType, React.ComponentType<{ className?: string }>
   osce: ClipboardCheck,
   library: BookOpen,
   video: BookOpen,
+  mixed: BookOpen,
 };
 
 function CountChip({ count, kind }: { count: number; kind: "wrong" | "flagged" }) {

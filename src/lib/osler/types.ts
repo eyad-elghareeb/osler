@@ -1,16 +1,15 @@
 /**
  * Osler content schemas — TypeScript types matching Osler v1 content packs.
  * Each engine (quiz, bank, flashcard, written, osce) has its own content shape.
- */
-
-export type EngineType =
+ */export type EngineType =
   | "quiz"
   | "bank"
   | "flashcard"
   | "written"
   | "osce"
   | "library"
-  | "video";
+  | "video"
+  | "mixed";
 
 /** Content language. `en` is the default when omitted. */
 export type ContentLang = "en" | "ar";
@@ -26,6 +25,29 @@ export interface ContentMeta {
   updatedAt?: string;
   /** Language this content was authored in. Drives `dir` on the rendered body. */
   lang?: ContentLang;
+}
+
+/* ── Content Chapters ─────────────────────────────────────────────── */
+
+/**
+ * Root-level chapter definition for a chapterized content pack.
+ * Supports:
+ *  - 1-based question index ranges: `start: 1, end: 40` or `from: 1, to: 40`
+ *  - range string: `range: "1-40"` or `range: "q1-q40"`
+ *  - explicit question ids: `questionIds: ["q-001", "q-002"]`
+ *  - explicit passage ids: `passageIds: ["p-001"]`
+ */
+export interface ContentChapter {
+  id: string;
+  title: string;
+  description?: string;
+  start?: number;
+  end?: number;
+  from?: number;
+  to?: number;
+  range?: string;
+  questionIds?: string[];
+  passageIds?: string[];
 }
 
 /* ── Content Tree (folder-based discovery) ─────────────────────────── */
@@ -93,7 +115,8 @@ export interface CategoryManifest {
 
 /* ── Quiz ────────────────────────────────────────────────────────────── */
 /** An image attached to a question. `src` resolves like flashcard assets —
- *  a bare filename is looked up in the pack's `images/` subfolder. */
+ *  a bare filename is looked up in the pack's `images/` subfolder.
+ *  Can also be an external CDN link (http://, https://, //). */
 export interface ContentImage {
   src: string;
   alt?: string;
@@ -103,21 +126,25 @@ export interface ContentImage {
 export interface QuizQuestion {
   id: string;
   question: string;
-  /** Optional image(s) shown above the stem (resolved against the pack folder). */
-  images?: ContentImage | ContentImage[];
+  /** Optional image(s) shown above the stem (resolved against the pack folder or direct CDN URL). */
+  images?: ContentImage | ContentImage[] | string | string[];
   options: string[];
   correct: number;
   explanation: string;
   /** Optional image(s) shown below the explanation. */
-  explanationImages?: ContentImage | ContentImage[];
+  explanationImages?: ContentImage | ContentImage[] | string | string[];
   tags?: string[];
   difficulty?: number;
+  chapter?: string;
+  chapterId?: string;
 }
 
 export interface QuizContent {
   meta: ContentMeta;
   type: "quiz";
+  chapters?: ContentChapter[];
   questions: QuizQuestion[];
+  prompts?: WrittenPrompt[];
 }
 
 /* ── Bank (passage-based) ────────────────────────────────────────────── */
@@ -127,31 +154,67 @@ export interface BankQuestion {
   passageId?: string;
   question: string;
   /** Optional image(s) shown above the question stem. */
-  images?: ContentImage | ContentImage[];
+  images?: ContentImage | ContentImage[] | string | string[];
   options: string[];
   correct: number;
   explanation: string;
   /** Optional image(s) shown below the explanation. */
-  explanationImages?: ContentImage | ContentImage[];
+  explanationImages?: ContentImage | ContentImage[] | string | string[];
   tags?: string[];
   difficulty?: number;
+  chapter?: string;
+  chapterId?: string;
 }
 
 export interface BankPassage {
   id: string;
   content: string;
   /** Optional image(s) shown alongside the passage text. */
-  images?: ContentImage | ContentImage[];
+  images?: ContentImage | ContentImage[] | string | string[];
   questions: BankQuestion[];
+  chapter?: string;
+  chapterId?: string;
 }
 
 export interface BankContent {
   meta: ContentMeta;
   type: "bank";
+  chapters?: ContentChapter[];
   /** Passage-backed questions are optional so banks can also be flat. */
   passages?: BankPassage[];
   /** Flat bank questions used when a source has no passages. */
   questions?: BankQuestion[];
+  prompts?: WrittenPrompt[];
+}
+
+/* ── Mixed (MCQ + Written) ───────────────────────────────────────────── */
+export interface MixedQuestion {
+  id: string;
+  type?: "mcq" | "written";
+  question?: string;
+  prompt?: string;
+  images?: ContentImage | ContentImage[] | string | string[];
+  options?: string[];
+  correct?: number;
+  explanation?: string;
+  explanationImages?: ContentImage | ContentImage[] | string | string[];
+  modelAnswer?: string;
+  rubric?: string[];
+  wordLimit?: number;
+  tags?: string[];
+  difficulty?: number;
+  chapter?: string;
+  chapterId?: string;
+  children?: WrittenPromptChild[];
+}
+
+export interface MixedContent {
+  meta: ContentMeta;
+  type: "mixed";
+  chapters?: ContentChapter[];
+  passages?: BankPassage[];
+  questions?: (QuizQuestion | BankQuestion | MixedQuestion)[];
+  prompts?: WrittenPrompt[];
 }
 
 /* ── Flashcard Subdeck ─────────────────────────────────────────────── */
@@ -235,13 +298,17 @@ export interface WrittenPrompt {
   wordLimit?: number;
   explanation?: string;
   tags?: string[];
+  chapter?: string;
+  chapterId?: string;
   children?: WrittenPromptChild[];
 }
 
 export interface WrittenContent {
   meta: ContentMeta;
   type: "written";
+  chapters?: ContentChapter[];
   prompts: WrittenPrompt[];
+  questions?: QuizQuestion[];
 }
 
 /* ── OSCE ────────────────────────────────────────────────────────────── */
@@ -387,4 +454,5 @@ export type AnyContent =
   | FlashcardContent
   | WrittenContent
   | OsceContent
-  | VideoContent;
+  | VideoContent
+  | MixedContent;
