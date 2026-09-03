@@ -330,16 +330,23 @@ export async function handleAuthorizePost(request: Request, env: McpOAuthEnv, or
  */
 export async function handleToken(request: Request, env: McpOAuthEnv, origin: string, ip: string, host: McpOAuthHost): Promise<Response> {
   if (!host.rateLimit(ip, "mcp:token")) return oauthError(429, "rate_limited", "Too many token requests", origin);
+  // Denied exchanges are otherwise invisible in tail (no request detail is
+  // logged), so warn with the failing branch and public identifiers only —
+  // never the code or verifier.
+  const deny = (status: number, error: string, description: string, reason: string, clientId = ""): Response => {
+    console.warn(JSON.stringify({ level: "warn", msg: "mcp_token_denied", reason, client_id: clientId || undefined }));
+    return oauthError(status, error, description, origin);
+  };
   const body = await readBody(request);
   if (body.get("grant_type") !== "authorization_code") {
-    return oauthError(400, "unsupported_grant_type", "Only authorization_code is supported", origin);
+    return deny(400, "unsupported_grant_type", "Only authorization_code is supported", "bad_grant_type");
   }
   const code = body.get("code") ?? "";
   const verifier = body.get("code_verifier") ?? "";
   const clientId = body.get("client_id") ?? "";
   const redirectUri = body.get("redirect_uri") ?? "";
   if (!code || !verifier || !clientId || !redirectUri) {
-    return oauthError(400, "invalid_request", "code, code_verifier, client_id and redirect_uri are required", origin);
+    return deny(400, "invalid_request", "code, code_verifier, client_id and redirect_uri are required", "missing_params", clientId);
   }
 
   // Atomic single-use claim: the conditional UPDATE either claims the code
@@ -349,17 +356,17 @@ export async function handleToken(request: Request, env: McpOAuthEnv, origin: st
   )
     .bind(host.now(), await sha256B64Url(code), host.now())
     .first<any>();
-  if (!claimed) return oauthError(400, "invalid_grant", "Code is invalid, expired, or already used", origin);
+  if (!claimed) return deny(400, "invalid_grant", "Code is invalid, expired, or already used", "claim_miss", clientId);
   if (claimed.client_id !== clientId || claimed.redirect_uri !== redirectUri) {
-    return oauthError(400, "invalid_grant", "Code does not match this client or redirect_uri", origin);
+    return deny(400, "invalid_grant", "Code does not match this client or redirect_uri", "client_mismatch", clientId);
   }
   if ((await sha256B64Url(verifier)) !== claimed.code_challenge) {
-    return oauthError(400, "invalid_grant", "PKCE verification failed", origin);
+    return deny(400, "invalid_grant", "PKCE verification failed", "pkce_mismatch", clientId);
   }
 
   const user = await env.DB.prepare("SELECT id, role FROM users WHERE id = ?").bind(claimed.user_id).first<any>();
   if (!user || !["admin", "content_admin"].includes(user.role)) {
-    return oauthError(400, "invalid_grant", "Authorizing user no longer exists or lost admin access", origin);
+    return deny(400, "invalid_grant", "Authorizing user no longer exists or lost admin access", "user_invalid", clientId);
   }
 
   // Mint the api token (same table/format as manual tokens — mcp/auth.ts).
