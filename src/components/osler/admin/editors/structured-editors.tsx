@@ -20,6 +20,7 @@ export const OsceEditor = mk(() => import("./structured/osce-editor").then((m) =
 export const VideoEditor = mk(() => import("./structured/video-editor").then((m) => ({ default: m.VideoEditor })));
 export const WrittenEditor = mk(() => import("./structured/written-editor").then((m) => ({ default: m.WrittenEditor })));
 export const BankEditor = mk(() => import("./structured/bank-editor").then((m) => ({ default: m.BankEditor })));
+export const MixedEditor = mk(() => import("./structured/mixed-editor").then((m) => ({ default: m.MixedEditor })));
 export const LibraryArticleEditor = mk(() => import("./structured/library-article-editor").then((m) => ({ default: m.LibraryArticleEditor })));
 export type { StructuredEditorProps } from "./structured/shared";
 

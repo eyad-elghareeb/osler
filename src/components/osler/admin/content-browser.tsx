@@ -79,7 +79,7 @@ import {
   type DroppedFile,
 } from "@/components/osler/admin/content-dropzone";
 
-const CONTENT_TYPES: ContentType[] = ["quiz", "bank", "flashcard", "written", "osce", "library", "video"];
+const CONTENT_TYPES: ContentType[] = ["quiz", "bank", "flashcard", "written", "mixed", "osce", "library", "video"];
 
 /** Category folders exposed in the unified browser. Each one is also a
  *  student-facing R2 keyspace (content-files/<folder>/...). */

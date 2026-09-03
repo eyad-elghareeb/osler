@@ -96,6 +96,7 @@ export function contentTypeToFolder(ct: ContentType): string {
     case "quiz":
     case "bank":
     case "written":
+    case "mixed":
       return "qbank";
     case "flashcard": return "flashcard";
     case "osce": return "osce";

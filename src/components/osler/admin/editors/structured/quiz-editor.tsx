@@ -6,7 +6,7 @@ import { useI18n } from "@/components/osler/i18n-provider";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { StructuredEditorProps, Field, CollapseContext, questionSnippet, useCollapseState, ListToolbar, arrayMove, ItemRow, TagListField, ImageListField, MilkdownEditor } from "./shared";
+import { StructuredEditorProps, Field, CollapseContext, questionSnippet, useCollapseState, ListToolbar, arrayMove, ItemRow, TagListField, ImageListField, MilkdownEditor, ChaptersEditor } from "./shared";
 import { PassagesEditor } from "./bank-editor";
 
 /**
@@ -20,7 +20,7 @@ import { PassagesEditor } from "./bank-editor";
  * content_object's R2 folder via the adminApi.uploadFile helper.
  */
 
-export function QuizEditor({ value, onChange, readOnly, r2KeyBase, rawR2Key }: StructuredEditorProps) {
+export function QuizEditor({ value, onChange, readOnly, r2KeyBase, rawR2Key, hideChapters }: StructuredEditorProps) {
   const { t } = useI18n();
   const dndScope = React.useId();
   const questions: any[] = Array.isArray(value?.questions) ? value.questions : [];
@@ -66,6 +66,7 @@ export function QuizEditor({ value, onChange, readOnly, r2KeyBase, rawR2Key }: S
   return (
     <CollapseContext.Provider value={collapseState}>
       <div className="space-y-3">
+        {!hideChapters && <ChaptersEditor value={value} onChange={onChange} readOnly={readOnly} />}
         <ListToolbar onAdd={addQuestion} addLabel={t("admin.content.editor.addQuestion")} readOnly={readOnly} showCollapseControls />
         {questions.length === 0 ? (
           <p className="text-sm text-muted-foreground text-center py-6">{t("admin.structured.noQuestions")}</p>
@@ -126,7 +127,7 @@ export function QuizEditor({ value, onChange, readOnly, r2KeyBase, rawR2Key }: S
               readOnly={readOnly}
               r2KeyBase={r2KeyBase}
               rawR2Key={rawR2Key}
-              hint="Reference as ecg.png or images/ecg.png"
+              hint="ecg.png, images/ecg.png, or an https:// CDN URL"
             />
             <ChoiceImagesEditor
               choices={q.options ?? q.choices ?? []}
@@ -143,6 +144,7 @@ export function QuizEditor({ value, onChange, readOnly, r2KeyBase, rawR2Key }: S
               readOnly={readOnly}
               r2KeyBase={r2KeyBase}
               rawR2Key={rawR2Key}
+              hint="ecg.png, images/ecg.png, or an https:// CDN URL"
             />
             <TagListField
               label="Tags"
@@ -159,6 +161,17 @@ export function QuizEditor({ value, onChange, readOnly, r2KeyBase, rawR2Key }: S
                 onChange={(e) => patchQuestion(i, { difficulty: Number(e.target.value) })}
                 readOnly={readOnly}
                 className="w-24"
+              />
+            </Field>
+            <Field label={t("admin.structured.chapterRef")} hint="Matches a chapter id or title above">
+              <Input
+                value={q.chapter ?? q.chapterId ?? ""}
+                onChange={(e) => {
+                  const v = e.target.value || undefined;
+                  patchQuestion(i, q.chapterId && !q.chapter ? { chapterId: v } : { chapter: v });
+                }}
+                readOnly={readOnly}
+                placeholder="ch-001"
               />
             </Field>
           </ItemRow>

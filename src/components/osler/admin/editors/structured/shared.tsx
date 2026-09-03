@@ -78,6 +78,9 @@ export interface StructuredEditorProps {
    *  by LibraryArticleEditor; edited through the Metadata panel and persisted
    *  by the parent alongside the body. */
   meta?: Record<string, unknown> | null;
+  /** Hide the pack-level ChaptersEditor section. Used by MixedEditor, which
+   *  renders one shared chapters section above its embedded sub-editors. */
+  hideChapters?: boolean;
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────────
@@ -779,3 +782,149 @@ export function StringListField({
 //   { questions: [{ id, question, options[], correct, explanation, images,
 //                   choiceImages[], explanationImages, tags[], difficulty }] }
 // Also handles bank-style passages: { passages: [{ id, content, questions: [...] }] }
+
+// ── Chapters editor (chapterized qbank packs) ────────────────────────────
+//
+// Edits the top-level `chapters` array (ContentChapter): { id, title,
+// description?, start/end, from/to, range?, questionIds?, passageIds? }.
+// Mirrors the addressing modes resolved by resolveQuestionChapter in
+// @/lib/osler/qbank-pool. Per-question chapter assignment lives on the
+// question forms (chapter/chapterId input); this editor manages the
+// pack-level chapter definitions.
+export function ChaptersEditor({ value, onChange, readOnly }: StructuredEditorProps) {
+  const { t } = useI18n();
+  const dndScope = React.useId();
+  const chapters: any[] = Array.isArray(value?.chapters) ? value.chapters : [];
+  const collapseState = useCollapseState(chapters.length);
+
+  function update(next: any[]) {
+    onChange({ ...value, chapters: next });
+  }
+  function addChapter() {
+    update([...chapters, { id: `ch-${String(Date.now()).slice(-6)}`, title: "" }]);
+  }
+  function moveChapter(i: number, delta: number) {
+    const j = i + delta;
+    if (j < 0 || j >= chapters.length) return;
+    const next = [...chapters];
+    [next[i], next[j]] = [next[j], next[i]];
+    update(next);
+  }
+  function removeChapter(i: number) {
+    update(chapters.filter((_, idx) => idx !== i));
+  }
+  function patchChapter(i: number, patch: any) {
+    update(chapters.map((c, idx) => (idx === i ? { ...c, ...patch } : c)));
+  }
+  const csv = (v: unknown): string => (Array.isArray(v) ? v.join(", ") : "");
+  const parseCsv = (s: string): string[] =>
+    s.split(",").map((x) => x.trim()).filter(Boolean);
+
+  return (
+    <CollapseContext.Provider value={collapseState}>
+      <div className="space-y-3">
+        <SectionLabel>{t("admin.structured.chaptersOptional")}</SectionLabel>
+        <ListToolbar onAdd={addChapter} addLabel={t("admin.structured.addChapter")} readOnly={readOnly} showCollapseControls />
+        {chapters.length === 0 ? (
+          <p className="text-sm text-muted-foreground text-center py-4">{t("admin.structured.noChapters")}</p>
+        ) : (
+          chapters.map((c, i) => (
+            <ItemRow
+              key={i}
+              index={i}
+              total={chapters.length}
+              onMove={(d) => moveChapter(i, d)}
+              onRemove={() => removeChapter(i)}
+              readOnly={readOnly}
+              dragScope={dndScope}
+              onDragReorder={(from, to) => update(arrayMove(chapters, from, to))}
+              title={c.title ? `${i + 1}. ${c.title}` : `Chapter ${i + 1}`}
+              collapsible
+            >
+              <Field label="ID">
+                <Input
+                  value={c.id ?? ""}
+                  onChange={(e) => patchChapter(i, { id: e.target.value })}
+                  readOnly={readOnly}
+                  className="font-mono text-xs"
+                  placeholder="ch-001"
+                />
+              </Field>
+              <Field label={t("admin.structured.chapterTitle")}>
+                <Input
+                  value={c.title ?? ""}
+                  onChange={(e) => patchChapter(i, { title: e.target.value })}
+                  readOnly={readOnly}
+                  placeholder="Arrhythmias"
+                />
+              </Field>
+              <Field label={t("admin.structured.chapterDescription")}>
+                <Input
+                  value={c.description ?? ""}
+                  onChange={(e) => patchChapter(i, { description: e.target.value })}
+                  readOnly={readOnly}
+                />
+              </Field>
+              <div className="grid grid-cols-3 gap-2">
+                <Field label={t("admin.structured.chapterStart")}>
+                  <Input
+                    type="number"
+                    min={1}
+                    value={c.start ?? c.from ?? ""}
+                    onChange={(e) => {
+                      const v = e.target.value === "" ? undefined : Number(e.target.value);
+                      patchChapter(i, { start: v, from: undefined });
+                    }}
+                    readOnly={readOnly}
+                    className="tabular-nums"
+                    placeholder="1"
+                  />
+                </Field>
+                <Field label={t("admin.structured.chapterEnd")}>
+                  <Input
+                    type="number"
+                    min={1}
+                    value={c.end ?? c.to ?? ""}
+                    onChange={(e) => {
+                      const v = e.target.value === "" ? undefined : Number(e.target.value);
+                      patchChapter(i, { end: v, to: undefined });
+                    }}
+                    readOnly={readOnly}
+                    className="tabular-nums"
+                    placeholder="40"
+                  />
+                </Field>
+                <Field label={t("admin.structured.chapterRange")} hint="1-40">
+                  <Input
+                    value={c.range ?? ""}
+                    onChange={(e) => patchChapter(i, { range: e.target.value || undefined })}
+                    readOnly={readOnly}
+                    placeholder="1-40"
+                  />
+                </Field>
+              </div>
+              <Field label={t("admin.structured.chapterQuestionIds")} hint="a, b, c">
+                <Input
+                  value={csv(c.questionIds)}
+                  onChange={(e) => patchChapter(i, { questionIds: parseCsv(e.target.value) })}
+                  readOnly={readOnly}
+                  className="font-mono text-xs"
+                  placeholder="q-001, q-002"
+                />
+              </Field>
+              <Field label={t("admin.structured.chapterPassageIds")} hint="a, b, c">
+                <Input
+                  value={csv(c.passageIds)}
+                  onChange={(e) => patchChapter(i, { passageIds: parseCsv(e.target.value) })}
+                  readOnly={readOnly}
+                  className="font-mono text-xs"
+                  placeholder="p-001"
+                />
+              </Field>
+            </ItemRow>
+          ))
+        )}
+      </div>
+    </CollapseContext.Provider>
+  );
+}

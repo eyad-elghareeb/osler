@@ -137,7 +137,7 @@ export interface AdminSession {
   revoked_at: number | null;
 }
 
-export type ContentType = "quiz" | "bank" | "flashcard" | "written" | "osce" | "library" | "video";
+export type ContentType = "quiz" | "bank" | "flashcard" | "written" | "mixed" | "osce" | "library" | "video";
 export type ContentStatus = "draft" | "pending" | "published" | "rejected";
 
 export interface ContentObject {

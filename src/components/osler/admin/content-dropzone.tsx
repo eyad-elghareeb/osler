@@ -282,6 +282,7 @@ function guessContentType(filename: string): ContentType {
   if (lower.includes("flashcard") || lower.includes("cards")) return "flashcard";
   if (lower.includes("osce") || lower.includes("station")) return "osce";
   if (lower.includes("video")) return "video";
+  if (lower.includes("mixed")) return "mixed";
   if (lower.includes("written") || lower.includes("prompt")) return "written";
   if (lower.includes("bank") || lower.includes("passage")) return "bank";
   // default for .json without hints

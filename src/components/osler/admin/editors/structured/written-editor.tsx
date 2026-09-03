@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
-import { StructuredEditorProps, Field, SectionLabel, CollapseContext, useCollapseState, ListToolbar, arrayMove, ItemRow, TagListField, MilkdownEditor } from "./shared";
+import { StructuredEditorProps, Field, SectionLabel, CollapseContext, useCollapseState, ListToolbar, arrayMove, ItemRow, TagListField, MilkdownEditor, ChaptersEditor } from "./shared";
 
 /**
  * Structured content editors — full React port of
@@ -20,7 +20,7 @@ import { StructuredEditorProps, Field, SectionLabel, CollapseContext, useCollaps
  * content_object's R2 folder via the adminApi.uploadFile helper.
  */
 
-export function WrittenEditor({ value, onChange, readOnly, r2KeyBase, rawR2Key }: StructuredEditorProps) {
+export function WrittenEditor({ value, onChange, readOnly, r2KeyBase, rawR2Key, hideChapters }: StructuredEditorProps) {
   const { t } = useI18n();
   const dndScope = React.useId();
   const prompts: any[] = Array.isArray(value?.prompts) ? value.prompts : [];
@@ -61,6 +61,7 @@ export function WrittenEditor({ value, onChange, readOnly, r2KeyBase, rawR2Key }
   return (
     <CollapseContext.Provider value={collapseState}>
       <div className="space-y-3">
+        {!hideChapters && <ChaptersEditor value={value} onChange={onChange} readOnly={readOnly} />}
         <ListToolbar onAdd={addPrompt} addLabel={t("admin.structured.addPrompt")} readOnly={readOnly} showCollapseControls />
         {prompts.length === 0 ? (
           <p className="text-sm text-muted-foreground text-center py-6">{t("admin.structured.noPrompts")}</p>
@@ -139,6 +140,17 @@ export function WrittenEditor({ value, onChange, readOnly, r2KeyBase, rawR2Key }
                 onChange={(e) => patchPrompt(i, { wordLimit: Number(e.target.value) })}
                 readOnly={readOnly}
                 className="w-24"
+              />
+            </Field>
+            <Field label={t("admin.structured.chapterRef")} hint="Matches a chapter id or title above">
+              <Input
+                value={p.chapter ?? p.chapterId ?? ""}
+                onChange={(e) => {
+                  const v = e.target.value || undefined;
+                  patchPrompt(i, p.chapterId && !p.chapter ? { chapterId: v } : { chapter: v });
+                }}
+                readOnly={readOnly}
+                placeholder="ch-001"
               />
             </Field>
 

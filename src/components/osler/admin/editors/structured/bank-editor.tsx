@@ -4,7 +4,7 @@ import * as React from "react";
 import { Tags } from "lucide-react";
 import { useI18n } from "@/components/osler/i18n-provider";
 import { Input } from "@/components/ui/input";
-import { StructuredEditorProps, Field, SectionLabel, CollapseContext, questionSnippet, useCollapseState, ListToolbar, arrayMove, ItemRow, TagListField, ImageListField, MilkdownEditor } from "./shared";
+import { StructuredEditorProps, Field, SectionLabel, CollapseContext, questionSnippet, useCollapseState, ListToolbar, arrayMove, ItemRow, TagListField, ImageListField, MilkdownEditor, ChaptersEditor } from "./shared";
 import { QuizEditor, ChoicesEditor } from "./quiz-editor";
 
 /**
@@ -19,6 +19,7 @@ import { QuizEditor, ChoicesEditor } from "./quiz-editor";
  */
 
 export function PassagesEditor({ value, onChange, readOnly, r2KeyBase, rawR2Key }: StructuredEditorProps) {
+  const { t } = useI18n();
   const dndScope = React.useId();
   const passages: any[] = Array.isArray(value?.passages) ? value.passages : [];
   const collapseState = useCollapseState(passages.length);
@@ -81,6 +82,17 @@ export function PassagesEditor({ value, onChange, readOnly, r2KeyBase, rawR2Key 
   className="min-h-[120px]"
 />
           </Field>
+          <Field label={t("admin.structured.chapterRef")} hint="Assigns the whole passage to a chapter">
+            <Input
+              value={p.chapter ?? p.chapterId ?? ""}
+              onChange={(e) => {
+                const v = e.target.value || undefined;
+                patchPassage(i, p.chapterId && !p.chapter ? { chapterId: v } : { chapter: v });
+              }}
+              readOnly={readOnly}
+              placeholder="ch-001"
+            />
+          </Field>
           <Field label="Questions">
             <QuizEditor
               value={{ questions: p.questions ?? [] }}
@@ -99,23 +111,39 @@ export function PassagesEditor({ value, onChange, readOnly, r2KeyBase, rawR2Key 
 
 // ── Flashcard editor (basic + cloze + subdecks) ────────────────────────────
 
-export function BankEditor({ value, onChange, readOnly, r2KeyBase, rawR2Key }: StructuredEditorProps) {
+export function BankEditor({ value, onChange, readOnly, r2KeyBase, rawR2Key, hideChapters }: StructuredEditorProps) {
   const hasPassages = Array.isArray(value?.passages) && value.passages.length > 0;
   const hasFlatQuestions = Array.isArray(value?.questions) && value.questions.length > 0;
+  const passthrough = { readOnly, r2KeyBase, rawR2Key };
+
+  // Chapters stay visible in every shape — the section edits value.chapters
+  // directly and preserves all other keys.
+  const chapters = <ChaptersEditor value={value} onChange={onChange} readOnly={readOnly} />;
 
   // If only passages (classic mode), delegate to PassagesEditor
   if (hasPassages && !hasFlatQuestions) {
-    return <PassagesEditor value={value} onChange={onChange} readOnly={readOnly} r2KeyBase={r2KeyBase} rawR2Key={rawR2Key} />;
+    return (
+      <div className="space-y-4">
+        {!hideChapters && chapters}
+        <PassagesEditor value={value} onChange={onChange} {...passthrough} />
+      </div>
+    );
   }
 
   // If only flat questions, render them directly with the bank question shape
   if (!hasPassages && hasFlatQuestions) {
-    return <BankFlatQuestionsEditor value={value} onChange={onChange} readOnly={readOnly} r2KeyBase={r2KeyBase} rawR2Key={rawR2Key} />;
+    return (
+      <div className="space-y-4">
+        {!hideChapters && chapters}
+        <BankFlatQuestionsEditor value={value} onChange={onChange} {...passthrough} />
+      </div>
+    );
   }
 
   // Both passages and flat questions — render in sections
   return (
     <div className="space-y-4">
+      {!hideChapters && chapters}
       {hasPassages && (
         <div>
           <SectionLabel>Passages</SectionLabel>
@@ -232,6 +260,7 @@ export function BankFlatQuestionsEditor({ value, onChange, readOnly, r2KeyBase, 
                 readOnly={readOnly}
                 r2KeyBase={r2KeyBase}
                 rawR2Key={rawR2Key}
+                hint="ecg.png, images/ecg.png, or an https:// CDN URL"
               />
               <ImageListField
                 label="Explanation image(s)"
@@ -240,6 +269,7 @@ export function BankFlatQuestionsEditor({ value, onChange, readOnly, r2KeyBase, 
                 readOnly={readOnly}
                 r2KeyBase={r2KeyBase}
                 rawR2Key={rawR2Key}
+                hint="ecg.png, images/ecg.png, or an https:// CDN URL"
               />
               <TagListField
                 label="Tags"
@@ -256,6 +286,17 @@ export function BankFlatQuestionsEditor({ value, onChange, readOnly, r2KeyBase, 
                   onChange={(e) => patchQuestion(i, { difficulty: Number(e.target.value) })}
                   readOnly={readOnly}
                   className="w-24"
+                />
+              </Field>
+              <Field label={t("admin.structured.chapterRef")} hint="Matches a chapter id or title above">
+                <Input
+                  value={q.chapter ?? q.chapterId ?? ""}
+                  onChange={(e) => {
+                    const v = e.target.value || undefined;
+                    patchQuestion(i, q.chapterId && !q.chapter ? { chapterId: v } : { chapter: v });
+                  }}
+                  readOnly={readOnly}
+                  placeholder="ch-001"
                 />
               </Field>
             </ItemRow>

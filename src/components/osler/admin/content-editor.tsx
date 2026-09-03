@@ -69,6 +69,7 @@ import {
   LibraryArticleEditor,
   WrittenEditor,
   BankEditor,
+  MixedEditor,
 } from "@/components/osler/admin/editors/structured-editors";
 import { r2KeyToWorkerUrl } from "@/components/osler/admin/editors/image-upload";
 
@@ -1238,6 +1239,12 @@ function inferContentTypeFromR2Key(key: string, body: string): ContentType | nul
   if (!key.endsWith(".json")) return null;
   try {
     const j = JSON.parse(body);
+    if (typeof j.type === "string" && j.type.trim()) return j.type.trim() as ContentType;
+    const jHasMcq =
+      (Array.isArray(j.questions) && j.questions.length > 0) ||
+      (Array.isArray(j.passages) && j.passages.length > 0);
+    const jHasWritten = Array.isArray(j.prompts) && j.prompts.length > 0;
+    if (jHasMcq && jHasWritten) return "mixed";
     if (Array.isArray(j.questions)) return "quiz";
     if (Array.isArray(j.passages)) return "bank";
     if (Array.isArray(j.prompts)) return "written";
@@ -1264,6 +1271,16 @@ function FormEditorSwitch({
   rawR2Key?: string;
 }) {
   const { t } = useI18n();
+  // Mixed packs (MCQ questions/passages + written prompts) get the dedicated
+  // MixedEditor — checked before the prompts/questions branches below, which
+  // would otherwise show only half the pack.
+  const hasMcq =
+    (Array.isArray(parsed?.questions) && parsed.questions.length > 0) ||
+    (Array.isArray(parsed?.passages) && parsed.passages.length > 0);
+  const hasWritten = Array.isArray(parsed?.prompts) && parsed.prompts.length > 0;
+  if (hasMcq && hasWritten) {
+    return <MixedEditor value={parsed} onChange={onChange} readOnly={readOnly} r2KeyBase={r2KeyBase} rawR2Key={rawR2Key} />;
+  }
   if (Array.isArray(parsed?.stations)) {
     return <OsceEditor value={parsed} onChange={onChange} readOnly={readOnly} r2KeyBase={r2KeyBase} rawR2Key={rawR2Key} />;
   }

@@ -56,7 +56,7 @@ export function NodeIcon({ node, className }: { node: ContentTreeNode; className
 
   // Type-aware file icon
   const ct = node.cloudObject?.content_type;
-  if (ct === "quiz" || ct === "bank" || ct === "written") {
+  if (ct === "quiz" || ct === "bank" || ct === "written" || ct === "mixed") {
     return <ListChecks className={className} />;
   }
   if (ct === "flashcard") return <Brain className={className} />;

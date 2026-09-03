@@ -48,6 +48,12 @@ const PREVIEW_LIMIT = 5;
 export function inferContentType(parsed: unknown): ContentType | null {
   const data = parsed as Record<string, unknown> | null;
   if (!data || typeof data !== "object") return null;
+  if (typeof data.type === "string" && (data.type as string).trim()) return (data.type as string).trim() as ContentType;
+  const hasMcq =
+    (Array.isArray(data.questions) && data.questions.length > 0) ||
+    (Array.isArray(data.passages) && data.passages.length > 0);
+  const hasWritten = Array.isArray(data.prompts) && data.prompts.length > 0;
+  if (hasMcq && hasWritten) return "mixed";
   if (Array.isArray(data.questions)) return "quiz";
   if (Array.isArray(data.passages)) return "bank";
   if (Array.isArray(data.cards)) return "flashcard";
@@ -497,6 +503,17 @@ export function RenderedContentPreview({
         return <BankPreview data={data} r2Key={node.r2Key} />;
       case "written":
         return <WrittenPreview data={data} />;
+      case "mixed": {
+        const hasPassages = Array.isArray(data?.passages) && data.passages.length > 0;
+        const hasQuestions = Array.isArray(data?.questions) && data.questions.length > 0;
+        const hasPrompts = Array.isArray(data?.prompts) && data.prompts.length > 0;
+        return (
+          <>
+            {hasPassages ? <BankPreview data={data} r2Key={node.r2Key} /> : hasQuestions ? <QuizPreview data={data} r2Key={node.r2Key} /> : null}
+            {hasPrompts ? <WrittenPreview data={data} /> : null}
+          </>
+        );
+      }
       case "flashcard":
         return <FlashcardPreview data={data} />;
       case "osce":

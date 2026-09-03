@@ -70,7 +70,7 @@ import { CATEGORIES, folderPathOf } from "./types";
 import type { DialogState } from "./use-content-actions";
 import type { ContentTreeNode } from "@/components/osler/admin/content-tree-pane";
 
-const CONTENT_TYPES: ContentType[] = ["quiz", "bank", "flashcard", "written", "osce", "library", "video"];
+const CONTENT_TYPES: ContentType[] = ["quiz", "bank", "flashcard", "written", "mixed", "osce", "library", "video"];
 
 // ── PathInputDialog (New file / New folder / Rename) ────────────────────────
 

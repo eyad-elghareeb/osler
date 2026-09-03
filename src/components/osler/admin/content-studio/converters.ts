@@ -11,6 +11,7 @@
  *
  * Supported conversions:
  *
+ *   quiz/bank/written ↔ mixed — mixed keeps both halves; splitting drops one.
  *   quiz    ↔ bank     — both use the `passages` shape; trivially swappable.
  *   quiz/bank → flashcard — one card per question (front=stem, back=explanation).
  *   flashcard → quiz    — one open-ended question per card (no choices).
@@ -49,11 +50,13 @@ export function convertOptionsFrom(from: ContentType): ConvertOption[] {
   switch (from) {
     case "quiz":
       opts.push({ target: "bank", label: "Bank", description: "Wrap questions into a single passage-bank (lossless).", lossless: true });
+      opts.push({ target: "mixed", label: "Mixed pack", description: "Keep questions, add an empty written-prompts section.", lossless: true });
       opts.push({ target: "flashcard", label: "Flashcards", description: "One card per question: front = stem, back = explanation.", lossless: false });
       opts.push({ target: "library", label: "Library article", description: "Render questions as a markdown study sheet.", lossless: false });
       break;
     case "bank":
       opts.push({ target: "quiz", label: "Quiz", description: "Flatten passages into a flat question list (lossless).", lossless: true });
+      opts.push({ target: "mixed", label: "Mixed pack", description: "Keep passages, add an empty written-prompts section.", lossless: true });
       opts.push({ target: "flashcard", label: "Flashcards", description: "One card per question across all passages.", lossless: false });
       opts.push({ target: "library", label: "Library article", description: "Render passages as a markdown study sheet.", lossless: false });
       break;
@@ -66,8 +69,15 @@ export function convertOptionsFrom(from: ContentType): ConvertOption[] {
       opts.push({ target: "quiz", label: "Quiz", description: "Each `## ` heading becomes a stem; body becomes the explanation.", lossless: false });
       break;
     case "written":
+      opts.push({ target: "mixed", label: "Mixed pack", description: "Keep prompts, add an empty MCQ section.", lossless: true });
       opts.push({ target: "library", label: "Library article", description: "Render prompts as a markdown study sheet.", lossless: false });
       opts.push({ target: "flashcard", label: "Flashcards", description: "One card per prompt: front = prompt, back = model answer.", lossless: false });
+      break;
+    case "mixed":
+      opts.push({ target: "quiz", label: "Quiz", description: "Keep the MCQ half (questions + flattened passages); drop prompts.", lossless: false });
+      opts.push({ target: "bank", label: "Bank", description: "Keep passages (or wrap questions); drop prompts.", lossless: false });
+      opts.push({ target: "written", label: "Written", description: "Keep the prompts half; drop MCQ content.", lossless: false });
+      opts.push({ target: "library", label: "Library article", description: "Render both halves as a markdown study sheet.", lossless: false });
       break;
     case "osce":
       opts.push({ target: "library", label: "Library article", description: "Render stations as a markdown study sheet.", lossless: false });
@@ -99,11 +109,14 @@ export function convertContent(
       return convertFromLibrary(to, body);
     case "written":
       return convertFromWritten(to, parsed);
+    case "mixed":
+      return convertFromMixed(to, parsed);
     case "osce":
       return convertFromOsce(to, parsed);
     case "video":
       return convertFromVideo(to, parsed);
   }
+  throw new Error(`Unsupported conversion from: ${from}`);
 }
 
 // ── Per-source converters ───────────────────────────────────────────────────
@@ -143,6 +156,16 @@ function convertFromQuiz(to: ContentType, parsed: any): ConvertResult {
       contentType: "library",
       body: `# Converted Quiz\n\n${md}`,
       summary: `Rendered ${questions.length} question(s) as a markdown study sheet.`,
+      itemCount: questions.length,
+    };
+  }
+  if (to === "mixed") {
+    const questions = Array.isArray(parsed?.questions) ? parsed.questions : [];
+    const out = { ...parsed, type: "mixed", prompts: [] as any[] };
+    return {
+      contentType: "mixed",
+      body: JSON.stringify(out, null, 2),
+      summary: `Kept ${questions.length} question(s); add written prompts in the Mixed editor.`,
       itemCount: questions.length,
     };
   }
@@ -187,6 +210,15 @@ function convertFromBank(to: ContentType, parsed: any): ConvertResult {
       contentType: "library",
       body: `# Converted Passage Bank\n\n${md}`,
       summary: `Rendered ${passages.length} passage(s) as a markdown study sheet.`,
+      itemCount: passages.length,
+    };
+  }
+  if (to === "mixed") {
+    const out = { ...parsed, type: "mixed", prompts: [] as any[] };
+    return {
+      contentType: "mixed",
+      body: JSON.stringify(out, null, 2),
+      summary: `Kept ${passages.length} passage(s); add written prompts in the Mixed editor.`,
       itemCount: passages.length,
     };
   }
@@ -290,7 +322,77 @@ function convertFromWritten(to: ContentType, parsed: any): ConvertResult {
       itemCount: cards.length,
     };
   }
+  if (to === "mixed") {
+    const out = { ...parsed, type: "mixed", questions: [] as any[] };
+    return {
+      contentType: "mixed",
+      body: JSON.stringify(out, null, 2),
+      summary: `Kept ${prompts.length} prompt(s); add MCQ questions in the Mixed editor.`,
+      itemCount: prompts.length,
+    };
+  }
   throw new Error(`Unsupported conversion: written → ${to}`);
+}
+
+function mixedMcq(parsed: any): { questions: any[]; passages: any[] } {
+  const questions = Array.isArray(parsed?.questions) ? parsed.questions : [];
+  const passages = Array.isArray(parsed?.passages) ? parsed.passages : [];
+  return { questions, passages };
+}
+
+function convertFromMixed(to: ContentType, parsed: any): ConvertResult {
+  const { questions, passages } = mixedMcq(parsed);
+  const prompts = Array.isArray(parsed?.prompts) ? parsed.prompts : [];
+  const chapters = Array.isArray(parsed?.chapters) ? parsed.chapters : undefined;
+  const flatMcq = [...questions, ...passages.flatMap((p: any) => Array.isArray(p.questions) ? p.questions : [])];
+
+  if (to === "quiz") {
+    const out: any = { questions: flatMcq };
+    if (chapters) out.chapters = chapters;
+    return {
+      contentType: "quiz",
+      body: JSON.stringify(out, null, 2),
+      summary: `Kept ${flatMcq.length} MCQ question(s); dropped ${prompts.length} written prompt(s).`,
+      itemCount: flatMcq.length,
+    };
+  }
+  if (to === "bank") {
+    const out: any = passages.length > 0
+      ? { passages }
+      : { passages: [{ id: "p-1", content: "", questions }] };
+    if (chapters) out.chapters = chapters;
+    return {
+      contentType: "bank",
+      body: JSON.stringify(out, null, 2),
+      summary: `Kept ${passages.length > 0 ? passages.length : 1} passage(s); dropped ${prompts.length} written prompt(s).`,
+      itemCount: flatMcq.length,
+    };
+  }
+  if (to === "written") {
+    const out: any = { prompts };
+    if (chapters) out.chapters = chapters;
+    return {
+      contentType: "written",
+      body: JSON.stringify(out, null, 2),
+      summary: `Kept ${prompts.length} prompt(s); dropped ${flatMcq.length} MCQ question(s).`,
+      itemCount: prompts.length,
+    };
+  }
+  if (to === "library") {
+    const mcqMd = flatMcq.map((q: any, i: number) =>
+      `## Q${i + 1}. ${stripMd(q.question ?? q.stem ?? "")}\n\n${stripMd(q.explanation ?? "")}\n`,
+    ).join("\n");
+    const promptMd = prompts.map((p: any, i: number) =>
+      `## Prompt ${i + 1}\n\n${stripMd(p.prompt ?? p.stem ?? "")}\n\n**Model answer:**\n\n${stripMd(p.modelAnswer ?? p.answer ?? "")}\n`,
+    ).join("\n");
+    return {
+      contentType: "library",
+      body: `# Converted Mixed Pack\n\n${mcqMd}\n${promptMd}`,
+      summary: `Rendered ${flatMcq.length} MCQ question(s) + ${prompts.length} prompt(s) as a markdown study sheet.`,
+      itemCount: flatMcq.length + prompts.length,
+    };
+  }
+  throw new Error(`Unsupported conversion: mixed → ${to}`);
 }
 
 function convertFromOsce(to: ContentType, parsed: any): ConvertResult {
