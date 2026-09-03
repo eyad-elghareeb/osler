@@ -47,8 +47,8 @@ function makeCtx(overrides: Partial<McpCtx> = {}): McpCtx {
 }
 
 async function call(ctx: McpCtx, method: string, params?: any) {
-  const responses = await handleRpc(ctx, { jsonrpc: "2.0", id: 1, method, params });
-  return responses?.[0] as any;
+  const response = await handleRpc(ctx, { jsonrpc: "2.0", id: 1, method, params });
+  return (Array.isArray(response) ? response[0] : response) as any;
 }
 
 describe("MCP protocol", () => {
@@ -86,6 +86,18 @@ describe("MCP protocol", () => {
   it("notifications alone yield a null payload (HTTP 202)", async () => {
     const payload = await handleRpc(makeCtx(), { jsonrpc: "2.0", method: "notifications/initialized" });
     expect(payload).toBeNull();
+  });
+
+  it("mirrors the request shape: single object for single requests, array for batches", async () => {
+    const single = await handleRpc(makeCtx(), { jsonrpc: "2.0", id: 1, method: "tools/list" });
+    expect(Array.isArray(single)).toBe(false);
+    expect((single as any).result.tools).toBeDefined();
+    const batch = await handleRpc(makeCtx(), [
+      { jsonrpc: "2.0", id: 1, method: "tools/list" },
+      { jsonrpc: "2.0", id: 2, method: "ping" },
+    ]);
+    expect(Array.isArray(batch)).toBe(true);
+    expect(batch).toHaveLength(2);
   });
 });
 

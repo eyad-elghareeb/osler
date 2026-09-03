@@ -53,7 +53,7 @@ const draftKey = (base: string) => `${base}/draft.json`;
 const pendingKey = (base: string) => `${base}/pending.json`;
 const publishedKey = (base: string) => `${base}/published.json`;
 
-function rpcResponse(payload: unknown[] | null, origin: string): Response {
+function rpcResponse(payload: unknown[] | unknown | null, origin: string): Response {
   if (!payload) return new Response(null, { status: 202 });
   return new Response(JSON.stringify(payload), {
     status: 200,
@@ -141,7 +141,8 @@ export async function handleMcpRequest(request: Request, env: any & McpEnv, orig
   try {
     body = bodyRead.text ? JSON.parse(bodyRead.text) : {};
   } catch {
-    return rpcResponse([{ jsonrpc: "2.0", id: null, error: { code: ERR_PARSE, message: "Invalid JSON body" } }], origin);
+    // Unparseable input can't be a known batch — answer a single error object.
+    return rpcResponse({ jsonrpc: "2.0", id: null, error: { code: ERR_PARSE, message: "Invalid JSON body" } }, origin);
   }
 
   const ctx: McpCtx = {
@@ -171,9 +172,9 @@ export async function handleMcpRequest(request: Request, env: any & McpEnv, orig
   };
 
   log.info("mcp_request", { tokenId: auth.tokenId, username: auth.username, scope: auth.scope });
-  const payload = await handleRpc(ctx, body).catch((e: any) => [
-    { jsonrpc: "2.0", id: null, error: { code: -32000, message: String(e?.message ?? "Internal error") } },
-  ]);
+  const payload = await handleRpc(ctx, body).catch((e: any) => (
+    { jsonrpc: "2.0", id: null, error: { code: -32000, message: String(e?.message ?? "Internal error") } }
+  ));
   return rpcResponse(payload, origin);
 }
 

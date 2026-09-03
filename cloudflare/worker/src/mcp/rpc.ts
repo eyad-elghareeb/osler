@@ -50,8 +50,13 @@ function toolText(value: unknown): string {
 }
 
 /** Handles one batch-or-single JSON-RPC payload. Returns null for pure notifications (→ HTTP 202). */
-export async function handleRpc(ctx: McpCtx, body: unknown): Promise<unknown[] | null> {
-  const entries = Array.isArray(body) ? body : [body];
+export async function handleRpc(ctx: McpCtx, body: unknown): Promise<unknown[] | unknown | null> {
+  // JSON-RPC 2.0 §6: the response shape mirrors the request — a batch gets an
+  // array, a single request gets a single object. Strict clients (Claude)
+  // reject an array-wrapped single response, surfacing as "connected but
+  // error" despite every HTTP status being 200.
+  const isBatch = Array.isArray(body);
+  const entries = isBatch ? body : [body];
   if (!entries.length) return [error(null, ERR_PARSE, "Empty batch")];
   if (entries.length > MAX_BATCH_SIZE) {
     return [error(null, ERR_PARAMS, `Batch too large — max ${MAX_BATCH_SIZE} requests per call, got ${entries.length}`)];
@@ -83,7 +88,8 @@ export async function handleRpc(ctx: McpCtx, body: unknown): Promise<unknown[] |
   }
   // A payload made only of notifications produces no response at all (HTTP 202).
   const meaningful = responses.filter((r) => r !== null);
-  return meaningful.length ? meaningful : null;
+  if (!meaningful.length) return null;
+  return isBatch ? meaningful : meaningful[0];
 }
 
 const NOTIFICATION_RESULT = Symbol("notification");
