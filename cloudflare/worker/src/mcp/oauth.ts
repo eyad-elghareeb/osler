@@ -188,7 +188,13 @@ export async function handleRegister(request: Request, env: McpOAuthEnv, origin:
   if (!redirectUris.length || !redirectUris.every(isValidRedirectUri)) {
     return oauthError(400, "invalid_redirect_uri", "redirect_uris must be https, loopback http, or custom app-scheme URIs without fragments", origin);
   }
-  if (body?.grant_types && !(Array.isArray(body.grant_types) && body.grant_types.every((g: string) => g === "authorization_code"))) {
+  // Most OAuth clients (Claude included) request ["authorization_code",
+  // "refresh_token"] at registration. We only issue long-lived access
+  // tokens and implement no refresh flow, so grant just the code flow here
+  // (RFC 7591: the server returns the granted subset) instead of rejecting
+  // the registration outright — rejecting broke Claude with a bare
+  // "Couldn't register" error.
+  if (body?.grant_types && !(Array.isArray(body.grant_types) && body.grant_types.every((g: string) => g === "authorization_code" || g === "refresh_token"))) {
     return oauthError(400, "invalid_client_metadata", "Only the authorization_code grant is supported", origin);
   }
 
