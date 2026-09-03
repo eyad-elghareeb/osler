@@ -583,6 +583,7 @@ export function CameraModal({
  * WRITTEN ENGINE VIEW
  * ───────────────────────────────────────────────────────────────────────── */
 export function WrittenEngineView({
+  contentDir = "auto",
   question,
   draft,
   submitted,
@@ -598,6 +599,8 @@ export function WrittenEngineView({
   onChildPassFail,
   childGrading,
 }: {
+  /** Direction of the CONTENT (from the pack's lang), not the UI. */
+  contentDir?: "rtl" | "ltr" | "auto";
   question: SessionQuestion;
   draft: WrittenDraft;
   submitted: boolean;
@@ -659,16 +662,18 @@ export function WrittenEngineView({
             </span>
           </div>
 
-          <MilkdownEditor
-            value={draft.text}
-            onChange={onTextChange}
-            placeholder={t("qbank.written.placeholder")}
-            className="osler-written-area"
-            // Written answers use a separate "Photo" camera capture mode
-            // for handwritten answers — disable image upload in the
-            // editor itself to avoid confusion.
-            enableImageUpload={false}
-          />
+          <div dir={contentDir}>
+            <MilkdownEditor
+              value={draft.text}
+              onChange={onTextChange}
+              placeholder={t("qbank.written.placeholder")}
+              className="osler-written-area"
+              // Written answers use a separate "Photo" camera capture mode
+              // for handwritten answers — disable image upload in the
+              // editor itself to avoid confusion.
+              enableImageUpload={false}
+            />
+          </div>
           {transcribing && (
             <div className="flex items-center gap-2 text-xs text-muted-foreground bg-muted/30 rounded-lg px-3 py-2 mt-2">
               <Loader2 className="size-3.5 animate-spin" />
@@ -741,7 +746,7 @@ export function WrittenEngineView({
                     {child.label || t("qbank.written.partLabel", { n: ci + 1 })}
                   </div>
                   {child.question && (
-                    <div className="text-sm text-foreground mb-1.5">{child.question}</div>
+                    <div className="text-sm text-foreground mb-1.5" dir={contentDir}>{child.question}</div>
                   )}
                   <MilkdownEditor
                     value={childAns}

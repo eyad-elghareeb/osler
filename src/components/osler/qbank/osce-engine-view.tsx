@@ -73,18 +73,21 @@ import { SessionQuestion } from "./shared";
 
 
 export function OsceEngineView({
+  contentDir = "auto",
   question,
   rubricState,
   submitted,
   onRubricToggle,
 }: {
+  /** Direction of the station CONTENT (from the pack's lang), not the UI. */
+  contentDir?: "rtl" | "ltr" | "auto";
   question: SessionQuestion;
   rubricState: boolean[];
   submitted: boolean;
   onRubricToggle: (idx: number) => void;
 }) {
   return (
-    <div className="mt-6 space-y-4">
+    <div className="mt-6 space-y-4" dir={contentDir}>
       {/* Patient scenario */}
       <div className="osler-osce-patient">
         <div className="osler-osce-patient-avatar">
@@ -111,7 +114,7 @@ export function OsceEngineView({
             {question.redFlags.map((flag, i) => (
               <li key={i} className="text-sm flex items-start gap-2">
                 <span className="text-destructive mt-1">•</span>
-                <span className="leading-relaxed">{flag}</span>
+                <span className="leading-relaxed" dir="auto">{flag}</span>
               </li>
             ))}
           </ul>

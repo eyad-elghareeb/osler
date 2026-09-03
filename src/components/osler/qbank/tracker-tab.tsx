@@ -1181,6 +1181,7 @@ export function TrackerTab({
         }}
         defaultTitle={sessionPdfTargetId ? sessionList.find((s) => s.id === sessionPdfTargetId)?.packTitle ?? t("qbank.tracker.title") : t("qbank.tracker.title")}
         defaultAuthor={username ?? undefined}
+        contentLang={sessionPdfTargetId ? sessionList.find((s) => s.id === sessionPdfTargetId)?.packLang : undefined}
         variant="results"
         onExport={(opts) => {
           const s = sessionList.find((s) => s.id === sessionPdfTargetId);

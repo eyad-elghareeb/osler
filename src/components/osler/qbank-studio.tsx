@@ -713,6 +713,7 @@ export function QBankStudio({
       setSession({
         itemId: item.uid,
         itemTitle: item.title,
+        packLang: item.lang,
         engine: item.type,
         mode: sessionMode,
         questions,

@@ -509,6 +509,7 @@ export function SessionHistoryView() {
               : t("pdf.tpl.results")
           }
           variant="results"
+          contentLang={pdfTargetId ? previewSessions.find((sess) => sess.id === pdfTargetId)?.packLang : undefined}
           onExport={(opts) => {
             const s = previewSessions.find((sess) => sess.id === pdfTargetId);
             if (s) void handleExportSession(s, opts);

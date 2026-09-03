@@ -191,6 +191,9 @@ export type HomeTab = "content" | "create" | "tracker";
 export interface SessionData {
   itemId: string;
   itemTitle: string;
+  /** Declared language of the pack — drives content direction (RTL for
+   *  Arabic packs regardless of the UI language) and PDF export language. */
+  packLang?: string;
   engine: EngineType;
   mode: TestMode;
   questions: SessionQuestion[];
@@ -424,6 +427,7 @@ export function saveSession(s: SessionData) {
     id: s.sessionId,
     packUid: s.itemId,
     packTitle: s.itemTitle,
+    packLang: s.packLang,
     engine: s.engine,
     mode: s.mode,
     totalQuestions: total,

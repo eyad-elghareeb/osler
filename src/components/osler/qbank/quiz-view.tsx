@@ -30,6 +30,7 @@ import type { StringKey } from "@/lib/osler/i18n";
 import { choiceLetter, matchSingleChordBinding, questionAssetBase, renderQuestionText, imageListOf, ContentImageFigure, TestMode, SessionData, SessionQuestion, SessionToolRow, formatTime, formatMs } from "./shared";
 import { QuestionNavigatorSheet } from "./navigator-sheet";
 import { ExplanationCard } from "./explanation-card";
+import { dirForContent } from "@/lib/osler/i18n";
 import { PeerChoicePercent } from "./peer-choice-percent";
 import type { QuestionChoiceStats } from "@/lib/osler/question-stats";
 import { WrittenEngineView, WrittenEvaluationPanel } from "./written-engine";
@@ -617,7 +618,7 @@ export function QuizView({
 
         {/* Stem */}
         <div className="relative">
-          <div className="osler-prose" style={stemStyle} dir="auto" data-hl-region="stem">
+          <div className="osler-prose" style={stemStyle} dir={dirForContent(activeItem.lang)} lang={activeItem.lang ?? undefined} data-hl-region="stem">
             <HighlightedContent
               html={renderQuestionText(question.stem, question, activeItem)}
               highlights={qHighlights}
@@ -717,7 +718,8 @@ export function QuizView({
                   <div
                     className={`flex-1 min-w-0 osler-prose ${quizSettingsState.textAffectsChoices ? "" : "text-[14px] leading-relaxed"} pt-0.5 select-text ${hasStrikethrough ? "line-through text-muted-foreground" : ""}`}
                     style={choiceStyle}
-                    dir="auto"
+                    dir={dirForContent(activeItem.lang)}
+                    lang={activeItem.lang ?? undefined}
                   >
                     <HighlightedContent
                       html={renderQuestionText(choice, question, activeItem)}
@@ -750,6 +752,7 @@ export function QuizView({
         {/* Written engine: textarea + grading (interactive only — too complex for previews) */}
         {interactive && qIsWritten && (
           <WrittenEngineView
+            contentDir={dirForContent(activeItem.lang)}
             question={question}
             draft={qWrittenDraft}
             submitted={qSubmitted}
@@ -820,6 +823,7 @@ export function QuizView({
         {/* OSCE engine: red flags + differential + rubric (interactive only) */}
         {interactive && session.engine === "osce" && (
           <OsceEngineView
+            contentDir={dirForContent(activeItem.lang)}
             question={question}
             rubricState={qRubricState}
             submitted={qSubmitted}

@@ -524,6 +524,8 @@ export interface SavedSession {
   deletedAt?: number;
   packUid: string;
   packTitle: string;
+  /** Declared pack language (content direction + PDF export language). */
+  packLang?: string;
   engine: EngineType;
   mode: "tutor" | "timed";
   totalQuestions: number;

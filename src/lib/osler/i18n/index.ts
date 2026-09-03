@@ -137,6 +137,18 @@ export function isRtl(lang: UiLang): boolean {
 }
 
 /**
+ * Direction for CONTENT rendering, independent of the UI language: a pack
+ * declares its lang, and Arabic content must display RTL even in an English
+ * UI (and vice versa). Undeclared content returns "auto" — the browser picks
+ * the direction from the text itself (first strong character).
+ */
+export function dirForContent(lang?: string | null): "rtl" | "ltr" | "auto" {
+  if (lang && lang.startsWith("ar")) return "rtl";
+  if (lang && lang.startsWith("en")) return "ltr";
+  return "auto";
+}
+
+/**
  * Inline script that runs before React hydration to set <html lang> and <html dir>
  * from localStorage. Prevents a flash of LTR when the user previously picked Arabic.
  *

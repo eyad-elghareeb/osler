@@ -25,7 +25,7 @@ import { useI18n } from "./i18n-provider";
 import { cn } from "@/lib/utils";
 import { haptic } from "@/lib/osler/native";
 import type { PdfPageConfig, PdfLang } from "@/lib/osler/pdf";
-import { loadUiLang } from "@/lib/osler/i18n";
+import { loadUiLang, type StringKey } from "@/lib/osler/i18n";
 
 export interface PdfExportOptions {
   title: string;
@@ -44,6 +44,17 @@ export interface PdfExportOptions {
   lang?: PdfLang;
 }
 
+/** How the export picks its language: "auto" follows the content's declared
+ *  language (falling back to the site language when the content has none),
+ *  "site" forces the UI language, "en"/"ar" force explicitly. */
+type PdfLangMode = "auto" | "site" | "en" | "ar";
+const LANG_MODES: Array<{ value: PdfLangMode; labelKey: StringKey }> = [
+  { value: "auto", labelKey: "pdf.lang.auto" },
+  { value: "site", labelKey: "pdf.lang.site" },
+  { value: "en", labelKey: "pdf.lang.en" },
+  { value: "ar", labelKey: "pdf.lang.ar" },
+];
+
 interface PdfExportDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -56,6 +67,9 @@ interface PdfExportDialogProps {
    *  - article: typography only (no question-specific options) */
   variant?: "quiz" | "results" | "dashboard" | "article";
   defaultAuthor?: string;
+  /** The content's declared language, when known (pack / article metadata).
+   *  Drives the "Auto" language mode. */
+  contentLang?: string | null;
   onExport: (options: PdfExportOptions) => void | Promise<void>;
 }
 
@@ -68,16 +82,19 @@ function PillRow<T extends string>({
   value,
   onChange,
   options,
+  disabled,
 }: {
   value: T;
   onChange: (v: T) => void;
   options: Array<{ value: T; label: string; className?: string }>;
+  disabled?: boolean;
 }) {
   return (
     <div className="flex gap-1.5 flex-wrap">
       {options.map((opt) => (
         <button
           key={opt.value}
+          disabled={disabled}
           type="button"
           role="radio"
           aria-checked={value === opt.value}
@@ -108,6 +125,7 @@ export function PdfExportDialog({
   defaultSubtitle,
   variant = "quiz",
   defaultAuthor,
+  contentLang,
   onExport,
 }: PdfExportDialogProps) {
   const { t } = useI18n();
@@ -125,6 +143,7 @@ export function PdfExportDialog({
   const [showReview, setShowReview] = React.useState(true);
   const [fontSize, setFontSize] = React.useState<"small" | "medium" | "large">("medium");
   const [fontType, setFontType] = React.useState<"serif" | "sans">("serif");
+  const [langMode, setLangMode] = React.useState<PdfLangMode>("auto");
   const [exporting, setExporting] = React.useState(false);
   const [showAdvanced, setShowAdvanced] = React.useState(false);
 
@@ -153,7 +172,11 @@ export function PdfExportDialog({
         showReview,
         fontSize,
         fontType,
-        lang: loadUiLang(),
+        lang:
+          langMode === "en" ? "en"
+          : langMode === "ar" ? "ar"
+          : langMode === "site" ? loadUiLang()
+          : ((contentLang?.startsWith("ar") ? "ar" : contentLang?.startsWith("en") ? "en" : loadUiLang()) as PdfLang),
       });
       // Success feedback lives here — the old pre-export haptic fired even
       // when generation threw.
@@ -210,6 +233,19 @@ export function PdfExportDialog({
           <div className="flex items-center justify-between">
             <Label className="text-xs">{t("pdf.includeCover")}</Label>
             <Switch checked={includeCover} onCheckedChange={(v) => { haptic("selection"); setIncludeCover(v); }} disabled={exporting} aria-label={t("pdf.includeCover")} />
+          </div>
+
+          {/* Language — Auto follows the content's declared language (e.g. an
+              Arabic pack exports as a fully Arabic paper even in an English
+              UI); Site forces the UI language; en/ar force explicitly. */}
+          <div className="space-y-1">
+            <Label className="text-xs">{t("pdf.lang")}</Label>
+            <PillRow
+              value={langMode}
+              onChange={(v) => { haptic("selection"); setLangMode(v); }}
+              disabled={exporting}
+              options={LANG_MODES.map((m) => ({ value: m.value, label: t(m.labelKey) }))}
+            />
           </div>
 
           {/* Style mode pills */}

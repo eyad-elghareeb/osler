@@ -11,6 +11,7 @@ import { cn } from "@/lib/utils";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { setImmersiveMode } from "@/components/osler/immersive-mode";
 import { useI18n } from "@/components/osler/i18n-provider";
+import { dirForContent } from "@/lib/osler/i18n";
 import { HubSkeleton, EmptyState, ComingSoonState } from "@/components/osler/ui-primitives";
 import { Button } from "@/components/ui/button";
 import { ContentCacheButton } from "@/components/osler/content-cache-button";
@@ -1195,10 +1196,10 @@ export function OsceStudio({
           {...ctxLinkAttrs(routeFor("osce", { uid: node.uid }), node.title)}
           className={cn(
             "w-full h-full text-start group relative overflow-hidden bg-card border border-border rounded-xl p-5 hover:border-primary/40 hover:shadow-e2 transition-all duration-200 active:scale-[0.99] cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 flex flex-col",
-            lang === "ar" && "osler-content-ar",
+            node.lang === "ar" && "osler-content-ar",
           )}
-          dir={lang === "ar" ? "rtl" : undefined}
-          lang={lang ?? undefined}
+          dir={dirForContent(node.lang)}
+          lang={node.lang ?? undefined}
         >
           <div className="absolute top-0 left-0 right-0 h-0.5 bg-gradient-to-r from-primary/60 to-primary/20 opacity-0 group-hover:opacity-100 transition-opacity" />
           <div className="flex items-start justify-between gap-3 mb-3">

@@ -1954,6 +1954,21 @@ html.osler-ar kbd {
   border-right: 4px solid currentColor;
 }
 
+/* Content bodies marked lang="ar" (via dirForContent + the lang attribute on
+   qbank stems/choices/explanations, flashcard faces, library articles) get
+   the same Arabic treatment as .osler-content-ar, regardless of UI language.
+   Direction itself comes from the dir attribute; this covers the Cairo font
+   and the callout/warning border mirroring. */
+:lang(ar).osler-prose,
+:lang(ar).library-article {
+  font-family: var(--font-cairo), var(--font-geist-sans), system-ui, sans-serif;
+}
+:lang(ar) .callout,
+:lang(ar) .warning {
+  border-left: none;
+  border-right: 4px solid currentColor;
+}
+
 /* When UI is RTL, mirror common asymmetric patterns.
    We rely on Tailwind logical properties (ms-, me-, ps-, pe-, start-, end-)
    in component code wherever possible. This block catches stragglers. */

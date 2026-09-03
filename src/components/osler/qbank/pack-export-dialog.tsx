@@ -195,7 +195,10 @@ export function PackExportDialog({
         twoCol,
         fontSize,
         fontType,
-        lang: loadUiLang(),
+        // Content export: the folder's declared language wins (an Arabic
+        // pack exports an Arabic paper even in an English UI); the site
+        // language is only the fallback for undeclared nodes.
+        lang: node.lang?.startsWith("ar") ? "ar" : node.lang?.startsWith("en") ? "en" : loadUiLang(),
         chapters,
       };
       const doc = await generateQuizCompilationPdf(cfg);

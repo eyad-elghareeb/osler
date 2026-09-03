@@ -44,6 +44,7 @@ import { Button } from "@/components/ui/button";
 import { haptic } from "@/lib/osler/native";
 import { setImmersiveMode } from "./immersive-mode";
 import { useI18n } from "./i18n-provider";
+import { dirForContent } from "@/lib/osler/i18n";
 import { ContentCacheButton } from "./content-cache-button";
 import { EmptyState, ComingSoonState } from "./ui-primitives";
 import { NavigationStack } from "./navigation-stack";
@@ -434,6 +435,26 @@ export function FlashcardStudio({
     return map;
   }, [tree, leafContent]);
 
+  // Card id → declared pack lang, so study faces follow the CONTENT's
+  // direction (Arabic decks render RTL even when the UI is English).
+  const cardLangById = React.useMemo(() => {
+    const map = new Map<string, string | undefined>();
+    const walk = (node: ContentTreeNode) => {
+      if (node.items.length === 0) {
+        const content = leafContent.get(node.uid);
+        if (content?.type === "flashcard") {
+          for (const card of (content as FlashcardContent).cards) {
+            map.set(card.id, node.lang);
+          }
+        }
+        return;
+      }
+      node.items.forEach(walk);
+    };
+    tree.forEach(walk);
+    return map;
+  }, [tree, leafContent]);
+
   const currentCard = currentDeckCards[cardIndex];
   const isSessionCard = currentCard
     ? sessionCards.includes(currentCard.reviewId)
@@ -654,6 +675,8 @@ export function FlashcardStudio({
             </div>
             <div
               className="text-xs sm:text-sm leading-snug max-w-lg osler-prose text-muted-foreground line-clamp-3"
+              dir={dirForContent(cardLangById.get(card.id))}
+              lang={cardLangById.get(card.id) ?? undefined}
               dangerouslySetInnerHTML={{ __html: renderCardMarkdown(card.front ?? "", packPath) }}
             />
           </div>
@@ -664,6 +687,8 @@ export function FlashcardStudio({
             </div>
             <div
               className="text-sm sm:text-base leading-relaxed max-w-lg osler-prose text-center"
+              dir={dirForContent(cardLangById.get(card.id))}
+              lang={cardLangById.get(card.id) ?? undefined}
               dangerouslySetInnerHTML={{ __html: renderCardMarkdown(card.back ?? "", packPath) }}
             />
             {renderImages(backImages, packPath)}
@@ -686,6 +711,8 @@ export function FlashcardStudio({
           {renderImages(frontImages, packPath)}
           <div
             className="text-lg sm:text-xl leading-relaxed max-w-lg osler-prose text-center"
+            dir={dirForContent(cardLangById.get(card.id))}
+            lang={cardLangById.get(card.id) ?? undefined}
             dangerouslySetInnerHTML={{ __html: renderCardMarkdown(card.front ?? "", packPath) }}
           />
           <div className="mt-auto pt-6 text-xs text-muted-foreground/60">

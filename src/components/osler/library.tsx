@@ -583,6 +583,7 @@ export function Library({ initialArticleId, onNavigateBack: propOnNavigateBack }
           defaultTitle={activeArticle?.title ?? t("pdf.tpl.article")}
           defaultSubtitle={activeArticle?.specialty}
           variant="article"
+          contentLang={activeArticle?.lang}
           onExport={handleExportArticlePdf}
         />
         {notesPanel}
@@ -857,7 +858,7 @@ function MobileHub({
                         a.lang === "ar" && "osler-content-ar",
                       )}
                       dir={a.lang === "ar" ? "rtl" : undefined}
-                      lang={a.lang ?? undefined}
+                     
                     >
                       <div className={cn(
                         "size-10 rounded-lg flex items-center justify-center shrink-0",

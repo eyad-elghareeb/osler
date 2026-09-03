@@ -8,6 +8,7 @@ import { highlights, type HighlightItem } from "@/lib/osler/storage";
 import { Badge } from "@/components/ui/badge";
 import { HighlightedContent } from "@/components/osler/highlighted-content";
 import { useI18n } from "@/components/osler/i18n-provider";
+import { dirForContent } from "@/lib/osler/i18n";
 import { MOTION_TRANSITION } from "@/lib/osler/motion";
 import { choiceLetter, questionAssetBase, renderQuestionText, imageListOf, ContentImageFigure, SessionQuestion, Lightbulb } from "./shared";
 
@@ -127,7 +128,7 @@ export function ExplanationCard({
             <Lightbulb className="size-4 text-primary" />
             <h3 className="text-sm font-semibold text-foreground">{t("qbank.explanation.title")}</h3>
           </div>
-          <div className="osler-prose text-[14px]" style={{ whiteSpace: "pre-wrap" }} dir="auto">
+          <div className="osler-prose text-[14px]" style={{ whiteSpace: "pre-wrap" }} dir={dirForContent(lang)} lang={lang ?? undefined}>
             <HighlightedContent
               html={renderQuestionText(q.explanation || t("qbank.explanation.noExplanation"), q, item)}
               highlights={hl}
