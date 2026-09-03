@@ -680,8 +680,14 @@ button.osler-stat-tile--compact:hover {
   transform: scale(0.96);
 }
 .osler-segmented__thumb {
-  @apply absolute inset-y-1 rounded-md bg-card border border-border-strong pointer-events-none;
+  @apply absolute inset-0 rounded-md bg-card border border-border-strong pointer-events-none;
   box-shadow: var(--shadow-e1);
+}
+/* Labels + icons paint above the sliding thumb (positioned elements otherwise
+ * cover in-flow text). */
+.osler-segmented__item > *:not(.osler-segmented__thumb) {
+  position: relative;
+  z-index: 1;
 }
 
 /* Form field — Origin UI grouped field pattern.
