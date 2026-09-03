@@ -155,18 +155,17 @@ The network panel surfaces live connection info from the **Network Information A
 <details open>
 <summary><strong>📱 Native App Feel</strong> — PWA-grade UX</summary>
 
-Osler is built to feel like a real native app, not a website. Six browser-native APIs are wired in through a typed wrapper library at `src/lib/osler/native/`:
+Osler is built to feel like a real native app, not a website. Five browser-native APIs are wired in through a typed wrapper library at `src/lib/osler/native/`:
 
 | Feature | API | Where it shows up |
 |---|---|---|
 | **Slide transitions** | View Transitions API | Every view-level navigation in `app-shell.tsx` — forward/backward push animation with RTL-aware slide direction |
-| **Biometric unlock** | WebAuthn | Login screen "Unlock with biometric" button (Face ID / Touch ID / Windows Hello), plus enrollment + disable in Settings |
 | **Viewport for phones** | `viewport-fit: cover` + PWA meta tags | Layout extends under the notch; safe-area utilities handle insets; standalone mode when launched from home screen |
 | **Vibration haptics** | Vibration API | Tab-bar taps, button presses, form submits, sync actions, video controls, error/success feedback (Android) |
 | **Network info** | Network Information API | Live network badge in the sync panel showing Wi-Fi/cellular, effective type, downlink, RTT, Data Saver |
 | **Screen wake lock** | Screen Wake Lock API | Auto-acquired while a video is playing; toggle button in the video player top bar |
 
-Every feature is **feature-detected and degrades gracefully** — iOS Safari silently ignores vibration, Firefox falls back to instant transitions, older browsers skip biometric, etc. The app never breaks when an API is missing.
+Every feature is **feature-detected and degrades gracefully** — iOS Safari silently ignores vibration, Firefox falls back to instant transitions, etc. The app never breaks when an API is missing.
 </details>
 
 <br>
@@ -213,7 +212,7 @@ Every feature is **feature-detected and degrades gracefully** — iOS Safari sil
 | **Markdown** | unified + remark + rehype + react-markdown + remark-gfm |
 | **Video** | YouTube IFrame API + Plyr + Invidious |
 | **Sync** | PeerJS (WebRTC) + MQTT relay + QR (LZ-string + CRC32) |
-| **Native PWA** | Vibration API · View Transitions API · WebAuthn · Network Information API · Screen Wake Lock API |
+| **Native PWA** | Vibration API · View Transitions API · Network Information API · Screen Wake Lock API |
 | **Notifications** | sonner |
 | **Tables** | @tanstack/react-table |
 | **Carousel** | embla-carousel-react |
@@ -265,7 +264,7 @@ src/
 │   ├── use-content-tree.ts
 │   ├── use-content-cache.ts
 │   ├── use-gestures.ts
-│   ├── use-native.ts          # useNetworkInfo, useBiometricAvailability, useDocumentVisibility
+│   ├── use-native.ts          # useNetworkInfo, useMediaPermissions, useDocumentVisibility
 │   ├── use-shortcuts.ts
 │   └── ...
 └── <a href="src/lib">lib</a>/
@@ -284,7 +283,6 @@ src/
     │   ├── native/            # PWA native-feature wrappers
     │   │   ├── haptics.ts         # Vibration API
     │   │   ├── view-transitions.ts # View Transitions API
-    │   │   ├── biometric.ts       # WebAuthn (Face ID / Touch ID)
     │   │   ├── network-info.ts    # Network Information API
     │   │   └── wake-lock.ts       # Screen Wake Lock API
     │   └── sync/              # Cross-device sync
@@ -448,7 +446,6 @@ Fully installable. Service worker auto-updates on new builds. Cross-platform ins
 
 **Native app feel** — once installed, Osler behaves like a real native app:
 - **Slide transitions** between views via the View Transitions API (forward/backward push navigation, RTL-aware)
-- **Biometric unlock** via WebAuthn (Face ID / Touch ID / Windows Hello) — skip the username field on returning sessions
 - **Vibration haptics** on every meaningful tap (tab switches, button presses, form submits, sync actions)
 - **Screen wake lock** while a video is playing so the screen doesn't auto-lock mid-lecture
 - **Network Information API** surfaces live Wi-Fi/cellular type, effective type, downlink, RTT, and Data Saver state in the sync panel

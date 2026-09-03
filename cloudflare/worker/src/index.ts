@@ -37,7 +37,6 @@
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
 import { SYNC_KINDS, mergeKind, gzipString, gunzipBytes, gunzipBytesBounded, base64ToBytes } from "./sync-docs";
-import { verifyAssertion } from "./cose";
 import { sendEmail, passwordResetEmail, verifyEmail } from "./email";
 import { handleMcpRequest, listApiTokens, mintApiToken, revokeApiToken } from "./mcp";
 import { handleAuthorizeGet, handleAuthorizePost, handleProtectedResource, handleRegister, handleServerMetadata, handleToken, type McpOAuthHost } from "./mcp/oauth";
@@ -82,7 +81,6 @@ const RATE_LIMIT_MAX: Record<string, number> = {
   "auth:google:consume": 12,
   "auth:refresh": 30,
   "guest": 12,
-  "biometric": 6,
   "ip:global": 600,
   "content": 240,
   "admin": 600,
@@ -196,8 +194,6 @@ interface Env {
   EMAIL_FROM?: string;
   APP_ORIGIN?: string;
   GEMINI_ENCRYPTION_KEY?: string;
-  WEBAUTHN_RP_NAME?: string;
-  WEBAUTHN_RP_ID?: string;
   CONTENT_ONLY_MANAGED?: string | boolean;
   /** Minimum respondents before students see peer percentages (default 5). */
   QBANK_STATS_MIN_SAMPLE?: string;
@@ -1011,7 +1007,6 @@ async function cleanupStale(env: Env, _log?: Logger): Promise<void> {
       env.DB.prepare("DELETE FROM auth_handoffs WHERE expires_at < ?").bind(now()),
       env.DB.prepare("DELETE FROM password_reset_tokens WHERE expires_at < ?").bind(now()),
       env.DB.prepare("DELETE FROM email_verify_tokens WHERE expires_at < ?").bind(now()),
-      env.DB.prepare("DELETE FROM biometric_sessions WHERE expires_at < ? OR used_at IS NOT NULL").bind(now()),
       env.DB.prepare("DELETE FROM sessions WHERE expires_at < ? OR revoked_at IS NOT NULL").bind(now()),
       // Lockout rows past their lock window are dead weight - drop them.
       env.DB.prepare("DELETE FROM login_failures WHERE locked_until IS NOT NULL AND locked_until < ?").bind(now() - LOGIN_LOCKOUT_MS),
@@ -1953,187 +1948,6 @@ function validateContent(contentType: string, parsed: any): string[] {
   } else if (contentType === "library") {}
   return errors;
 }
-/* ── Biometric helpers ── */
-function windowOrigin(env: Env): string {
-  try { return new URL(env.ALLOWED_ORIGIN).hostname; } catch { return "localhost"; }
-}
-
-function decodeClientDataJSON(b64: string): { type: string; challenge: string; origin: string; crossOrigin?: boolean } | null {
-  try {
-    const raw = unb64url(b64);
-    return JSON.parse(decoder.decode(raw));
-  } catch { return null; }
-}
-
-/* ── Biometric (WebAuthn) handlers ── */
-async function handleBiometricRegister(_request: Request, env: Env, session: Session, log: Logger): Promise<Response> {
-  if (!env.WEBAUTHN_RP_NAME || !env.WEBAUTHN_RP_ID) return json({ error: "WebAuthn not configured" }, 503, "", log);
-  const existing = await env.DB.prepare("SELECT id FROM biometric_credentials WHERE user_id = ?").bind(session.user.id).all();
-  if ((existing.results?.length ?? 0) >= 10) return json({ error: "Maximum 10 credentials per user" }, 400, "", log);
-  const challenge = new Uint8Array(32);
-  crypto.getRandomValues(challenge);
-  const credentialId = id();
-  const b64Challenge = btoa(String.fromCharCode(...challenge));
-  const rpId = env.WEBAUTHN_RP_ID;
-  await env.DB.prepare("INSERT INTO biometric_sessions (id, user_id, challenge, rp_id, created_at, expires_at) VALUES (?, ?, ?, ?, ?, ?)").bind(credentialId, session.user.id, b64Challenge, rpId, now(), now() + 5 * 60 * 1000).run();
-  return json({
-    publicKey: {
-      rp: { name: env.WEBAUTHN_RP_NAME, id: rpId },
-      user: { id: btoa(session.user.id), name: session.user.username, displayName: session.user.display_name },
-      challenge: Array.from(challenge),
-      pubKeyCredParams: [{ type: "public-key", alg: -7 }],
-      authenticatorSelection: { authenticatorAttachment: "platform", residentKey: "required", userVerification: "required" },
-      attestation: "none",
-      sessionId: credentialId,
-    }
-  }, 200, "", log);
-}
-
-async function handleBiometricRegisterComplete(request: Request, env: Env, session: Session, log: Logger): Promise<Response> {
-  const body = await readJson(request);
-  const sessionId = typeof body.sessionId === "string" ? body.sessionId : "";
-  const credData = body.credential;
-  if (!sessionId || !credData) return json({ error: "sessionId and credential required" }, 400, "", log);
-  const bs = await env.DB.prepare("SELECT * FROM biometric_sessions WHERE id = ? AND user_id = ? AND used_at IS NULL AND expires_at > ?").bind(sessionId, session.user.id, now()).first<any>();
-  if (!bs) return json({ error: "Invalid or expired session" }, 400, "", log);
-  await env.DB.prepare("UPDATE biometric_sessions SET used_at = ? WHERE id = ?").bind(now(), sessionId).run();
-  const rawId = typeof credData.rawId === "string" ? credData.rawId : JSON.stringify(credData.rawId || credData.id || "");
-  const clientDataJSON = typeof credData.clientDataJSON === "string" ? credData.clientDataJSON : "";
-  const attestationObject = typeof credData.attestationObject === "string" ? credData.attestationObject : "";
-  if (!rawId || !clientDataJSON || !attestationObject) return json({ error: "Incomplete credential data" }, 400, "", log);
-  const cdj = decodeClientDataJSON(clientDataJSON);
-  if (!cdj || cdj.type !== "webauthn.create") return json({ error: "Invalid client data" }, 400, "", log);
-  const storedB64url = bs.challenge.replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
-  if (cdj.challenge !== storedB64url) return json({ error: "Challenge mismatch" }, 400, "", log);
-  const rpOrigin = env.ALLOWED_ORIGIN.replace(/\/$/, "");
-  if (cdj.origin !== rpOrigin) return json({ error: "Origin mismatch" }, 400, "", log);
-  // Seed the rollback detector with the authenticator's initial counter.
-  let seedSignCount = 0;
-  try {
-    const attBytes = unb64url(attestationObject);
-    if (attBytes.length > 37) {
-      seedSignCount = ((attBytes[33] << 24) | (attBytes[34] << 16) | (attBytes[35] << 8) | attBytes[36]) >>> 0;
-    }
-  } catch {}
-  await env.DB.prepare("INSERT INTO biometric_credentials (id, user_id, credential_id, credential_data_json, sign_count, device_name, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)").bind(id(), session.user.id, rawId, JSON.stringify({ clientDataJSON, attestationObject, rawId }), seedSignCount, typeof body.deviceName === "string" ? body.deviceName.trim().slice(0, 100) : "Unknown device", now()).run();
-  return json({ ok: true }, 200, "", log);
-}
-
-async function handleBiometricAuthenticate(request: Request, env: Env, _session: Session | null, log: Logger): Promise<Response> {
-  let uid: string | null = null;
-  if (_session) uid = _session.user.id;
-  if (!uid) {
-    const body = await readJson(request);
-    let userId = typeof body.userId === "string" ? body.userId.trim() : "";
-    // Uniform no-challenge response for unknown users/ids: returning
-    // distinct 404s here would leak which usernames have accounts.
-    const NOT_REGISTERED = () => json({ error: "Biometric unlock is not available for this account" }, 404, "", log);
-    if (!userId && typeof body.username === "string" && body.username.trim()) {
-      // The login screen's quick unlock only knows the locally-stored
-      // username, not the account's row id — resolve it case-insensitively.
-      const byName = await env.DB.prepare("SELECT id FROM users WHERE username = ? COLLATE NOCASE").bind(body.username.trim()).first<any>();
-      if (!byName) return NOT_REGISTERED();
-      userId = byName.id;
-    }
-    if (!userId) return json({ error: "userId or username required" }, 400, "", log);
-    const user = await env.DB.prepare("SELECT id FROM users WHERE id = ?").bind(userId).first();
-    if (!user) return NOT_REGISTERED();
-    uid = userId;
-  }
-  const creds = await env.DB.prepare("SELECT * FROM biometric_credentials WHERE user_id = ?").bind(uid).all<any>();
-  if (!creds.results?.length) {
-    return json({ error: "Biometric unlock is not available for this account" }, 404, "", log);
-  }
-  const challenge = new Uint8Array(32);
-  crypto.getRandomValues(challenge);
-  const b64Challenge = btoa(String.fromCharCode(...challenge));
-  const sessionId = id();
-  await env.DB.prepare("INSERT INTO biometric_sessions (id, user_id, challenge, rp_id, created_at, expires_at) VALUES (?, ?, ?, ?, ?, ?)").bind(sessionId, uid, b64Challenge, env.WEBAUTHN_RP_ID || windowOrigin(env), now(), now() + 5 * 60 * 1000).run();
-  return json({
-    publicKey: {
-      challenge: Array.from(challenge),
-      allowCredentials: creds.results.map((c: any) => ({ id: c.credential_id, type: "public-key", transports: ["internal"] })),
-      userVerification: "required",
-      sessionId,
-    }
-  }, 200, "", log);
-}
-
-async function handleBiometricAuthenticateComplete(request: Request, env: Env, _session: Session | null, log: Logger): Promise<Response> {
-  const body = await readJson(request);
-  const sessionId = typeof body.sessionId === "string" ? body.sessionId : "";
-  const credData = body.credential;
-  if (!sessionId || !credData) return json({ error: "sessionId and credential required" }, 400, "", log);
-  const bs = await env.DB.prepare("SELECT * FROM biometric_sessions WHERE id = ? AND used_at IS NULL AND expires_at > ?").bind(sessionId, now()).first<any>();
-  if (!bs) return json({ error: "Invalid or expired session" }, 400, "", log);
-  await env.DB.prepare("UPDATE biometric_sessions SET used_at = ? WHERE id = ?").bind(now(), sessionId).run();
-
-  const rawId = typeof credData.rawId === "string" ? credData.rawId : typeof credData.id === "string" ? credData.id : "";
-  const responseData = credData.response || {};
-  const clientDataJSON = typeof responseData.clientDataJSON === "string" ? responseData.clientDataJSON : (typeof credData.clientDataJSON === "string" ? credData.clientDataJSON : "");
-  if (!rawId || !clientDataJSON) return json({ error: "Incomplete assertion data" }, 400, "", log);
-
-  const cdj = decodeClientDataJSON(clientDataJSON);
-  if (!cdj || cdj.type !== "webauthn.get") return json({ error: "Invalid client data" }, 400, "", log);
-  const storedB64url = bs.challenge.replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
-  if (cdj.challenge !== storedB64url) return json({ error: "Challenge mismatch" }, 400, "", log);
-  const rpOrigin = env.ALLOWED_ORIGIN.replace(/\/$/, "");
-  if (cdj.origin !== rpOrigin) return json({ error: "Origin mismatch" }, 400, "", log);
-
-  // The clientDataJSON above is fully attacker-supplied, so the ONLY thing
-  // that proves possession of the enrolled key is the assertion signature.
-  // Before this, the handler issued a session based solely on the client's
-  // (leakable) credential id — a full account-takeover for any user with a
-  // registered biometric. Fetch the stored enrollment and verify the ECDSA
-  // signature over authenticatorData || SHA256(clientDataJSON) now.
-  const credential = await env.DB.prepare("SELECT * FROM biometric_credentials WHERE credential_id = ? AND user_id = ?").bind(rawId, bs.user_id).first<any>();
-  if (!credential) return json({ error: "Credential not found" }, 400, "", log);
-  const authenticatorData = typeof responseData.authenticatorData === "string" ? responseData.authenticatorData : "";
-  const assertionSignature = typeof responseData.signature === "string" ? responseData.signature : "";
-  if (!authenticatorData || !assertionSignature) return json({ error: "Assertion data missing" }, 400, "", log);
-  const rpId = bs.rp_id || windowOrigin(env);
-  const storedCred: { attestationObject?: string } = (() => { try { return JSON.parse(credential.credential_data_json ?? "{}"); } catch { return {}; } })();
-  const verified = await verifyAssertion(storedCred.attestationObject ?? "", rpId, authenticatorData, assertionSignature, clientDataJSON);
-  if (!verified) return json({ error: "Biometric verification failed" }, 401, "", log);
-  // Sign-count rollback detection: a genuine hardware authenticator
-  // increments its counter on every assertion. A counter that goes backwards
-  // (or never moves from a non-zero seed) indicates a cloned key — reject and
-  // force re-enrollment. Software passkeys that legitimately always report 0
-  // are exempt (counter stays 0 from enrollment onward).
-  try {
-    const authDataBytes = unb64url(authenticatorData);
-    const currentCount = ((authDataBytes[33] << 24) | (authDataBytes[34] << 16) | (authDataBytes[35] << 8) | authDataBytes[36]) >>> 0;
-    const storedCount = Number(credential.sign_count ?? 0) >>> 0;
-    if (storedCount > 0 && (currentCount === 0 || currentCount < storedCount)) {
-      await env.DB.prepare("DELETE FROM biometric_credentials WHERE id = ?").bind(credential.id).run();
-      return json({ error: "Credential failed integrity check — re-enroll this device" }, 401, "", log);
-    }
-    if (currentCount !== storedCount) {
-      await env.DB.prepare("UPDATE biometric_credentials SET sign_count = ? WHERE id = ?").bind(currentCount, credential.id).run();
-    }
-  } catch {
-    // Malformed counter bytes already fail signature verification above.
-  }
-
-  const user = await env.DB.prepare("SELECT * FROM users WHERE id = ?").bind(bs.user_id).first<any>();
-  if (!user) return json({ error: "User not found" }, 404, "", log);
-  return json(await issueSession(user, env, request.headers.get("user-agent")), 200, "", log);
-}
-
-async function handleBiometricCredentials(request: Request, env: Env, session: Session, log: Logger): Promise<Response> {
-  const creds = await env.DB.prepare("SELECT id, credential_id, device_name, created_at FROM biometric_credentials WHERE user_id = ? ORDER BY created_at ASC").bind(session.user.id).all();
-  return json({ credentials: creds.results || [] }, 200, "", log);
-}
-
-async function handleBiometricDelete(request: Request, env: Env, session: Session, log: Logger, _url: URL): Promise<Response> {
-  const credentialId = _url.pathname.split("/").pop() || "";
-  if (!credentialId) return json({ error: "credentialId required" }, 400, "", log);
-  const cred = await env.DB.prepare("SELECT * FROM biometric_credentials WHERE id = ? AND user_id = ?").bind(credentialId, session.user.id).first();
-  if (!cred) return json({ error: "Credential not found" }, 404, "", log);
-  await env.DB.prepare("DELETE FROM biometric_credentials WHERE id = ? AND user_id = ?").bind(credentialId, session.user.id).run();
-  return json({ ok: true }, 200, "", log);
-}
-
 /* ── Search handler (M8) ── */
 async function handleSearch(request: Request, env: Env, session: Session, log: Logger): Promise<Response> {
   const q = (new URL(request.url).searchParams.get("q") || "").trim();
@@ -4879,44 +4693,6 @@ export default {
           env.DB.prepare("UPDATE email_verify_tokens SET used_at = ? WHERE id = ?").bind(now(), row.id),
         ]);
         return json({ ok: true, verified: true }, 200, origin, log);
-      }
-
-      // ── Biometric (M1) ──
-      if (url.pathname.startsWith("/v1/biometric")) {
-        if (request.method === "GET" && url.pathname === "/v1/biometric/register") {
-          const session = await requireUser(request, env);
-          if (!session) return json({ error: "Authentication required" }, 401, origin, log);
-          if (!rateLimit(ip, "biometric")) return json({ error: "Too many requests" }, 429, origin, log);
-          return handleBiometricRegister(request, env, session, log);
-        }
-        if (request.method === "POST" && url.pathname === "/v1/biometric/register-complete") {
-          const session = await requireUser(request, env);
-          if (!session) return json({ error: "Authentication required" }, 401, origin, log);
-          if (!rateLimit(ip, "biometric")) return json({ error: "Too many requests" }, 429, origin, log);
-          return handleBiometricRegisterComplete(request, env, session, log);
-        }
-        if (request.method === "POST" && url.pathname === "/v1/biometric/authenticate") {
-          if (!rateLimit(ip, "biometric")) return json({ error: "Too many requests" }, 429, origin, log);
-          const session = await requireUser(request, env).catch(() => null);
-          return handleBiometricAuthenticate(request, env, session, log);
-        }
-        if (request.method === "POST" && url.pathname === "/v1/biometric/authenticate-complete") {
-          if (!rateLimit(ip, "biometric")) return json({ error: "Too many requests" }, 429, origin, log);
-          const session = await requireUser(request, env).catch(() => null);
-          return handleBiometricAuthenticateComplete(request, env, session, log);
-        }
-        if (request.method === "GET" && url.pathname === "/v1/biometric/credentials") {
-          const session = await requireUser(request, env);
-          if (!session) return json({ error: "Authentication required" }, 401, origin, log);
-          return handleBiometricCredentials(request, env, session, log);
-        }
-        const bmDel = url.pathname.match(/^\/v1\/biometric\/credentials\/([^/]+)$/);
-        if (bmDel && request.method === "DELETE") {
-          const session = await requireUser(request, env);
-          if (!session) return json({ error: "Authentication required" }, 401, origin, log);
-          return handleBiometricDelete(request, env, session, log, url);
-        }
-        return json({ error: "Not found" }, 404, origin, log);
       }
 
       // ── Search (M8) ──

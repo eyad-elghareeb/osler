@@ -1,11 +1,10 @@
 "use client";
 
 import * as React from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
 import {
   Activity,
   ArrowRight,
-  Fingerprint,
   Loader2,
   ShieldCheck,
   ShieldAlert,
@@ -23,14 +22,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { useI18n } from "./i18n-provider";
-import { useBiometricAvailability } from "@/hooks/use-native";
-import {
-  enrollBiometric,
-  authenticateWithBiometric,
-  getBiometricUsername,
-  disableBiometric,
-  haptic,
-} from "@/lib/osler/native";
+import { haptic } from "@/lib/osler/native";
 import { cn } from "@/lib/utils";
 import { MOTION_SPRING, MOTION_TRANSITION } from "@/lib/osler/motion";
 import { getConfig } from "@/lib/osler/config";
@@ -83,11 +75,6 @@ export function LoginScreen({ onLogin, cloudAuthError }: LoginScreenProps) {
   const [passwordConfirm, setPasswordConfirm] = React.useState("");
   const [showPassword, setShowPassword] = React.useState(false);
   const [showPasswordConfirm, setShowPasswordConfirm] = React.useState(false);
-  const [biometricStatus, setBiometricStatus] = React.useState<
-
-    "idle" | "enrolling" | "authenticating" | "error"
-  >("idle");
-  const [biometricMsg, setBiometricMsg] = React.useState<string>("");
   const [cloudMode, setCloudMode] = React.useState<"login" | "register" | "reset" | "verify">("login");
   const [cloudActive, setCloudActive] = React.useState(false);
   const [cloudGoogleActive, setCloudGoogleActive] = React.useState(false);
@@ -214,8 +201,6 @@ export function LoginScreen({ onLogin, cloudAuthError }: LoginScreenProps) {
     onLogin(name);
   };
 
-  const { availability, refresh: refreshBiometric } = useBiometricAvailability();
-
   React.useEffect(() => {
     let cancelled = false;
     void cloudEnabled().then((enabled) => {
@@ -315,14 +300,6 @@ export function LoginScreen({ onLogin, cloudAuthError }: LoginScreenProps) {
     };
   }, [cloudActive]);
 
-  // Pre-fill the username field if a biometric credential is already enrolled.
-  React.useEffect(() => {
-    if (availability?.enrolled) {
-      const stored = getBiometricUsername();
-      if (stored) setUsername(stored);
-    }
-  }, [availability?.enrolled]);
-
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (cloudActive) {
@@ -385,74 +362,6 @@ export function LoginScreen({ onLogin, cloudAuthError }: LoginScreenProps) {
     haptic("success");
     onLogin(name);
   };
-
-  // ── Biometric enrollment (first-time setup) ─────────────────────────
-  const handleEnrollBiometric = async () => {
-    if (!availability?.platformAuthenticator) return;
-    const name = username.trim();
-    if (!name) {
-      setBiometricStatus("error");
-      setBiometricMsg(t("login.username"));
-      haptic("error");
-      return;
-    }
-    setBiometricStatus("enrolling");
-    setBiometricMsg("");
-    const result = await enrollBiometric(name);
-    if (result.ok) {
-      haptic("success");
-      refreshBiometric();
-      // Immediately try to authenticate so the user is signed in.
-      const auth = await authenticateWithBiometric();
-      if (auth.ok) {
-        haptic("success");
-        onLogin(auth.username);
-        return;
-      }
-      // If for some reason auth fails right after enrollment, fall back to manual.
-      setBiometricStatus("idle");
-    } else {
-      setBiometricStatus("error");
-      setBiometricMsg(
-        result.message ||
-          (result.reason === "cancelled"
-            ? t("native.biometric.cancelled")
-            : t("native.biometric.unsupported")),
-      );
-      haptic("error");
-    }
-  };
-
-  // ── Biometric authentication (quick unlock for returning user) ──────
-  const handleQuickUnlock = async () => {
-    if (!availability?.enrolled) return;
-    setBiometricStatus("authenticating");
-    setBiometricMsg("");
-    haptic("light");
-    const result = await authenticateWithBiometric();
-    if (result.ok) {
-      haptic("success");
-      onLogin(result.username);
-    } else {
-      setBiometricStatus("error");
-      setBiometricMsg(
-        result.message && !availability?.cloudBacked
-          ? result.message
-          : result.reason === "cancelled"
-            ? t("native.biometric.cancelled")
-            : t("native.biometric.cloudError"),
-      );
-      haptic("error");
-    }
-  };
-
-  const canEnroll = !cloudActive && !!availability?.supported && !!availability?.platformAuthenticator;
-  // Quick unlock works in both modes, but a credential enrolled locally
-  // (login screen, no cloud session) must not silently log a cloud user into
-  // the local guest experience — only cloud-backed credentials unlock in
-  // cloud mode.
-  const canQuickUnlock = !!availability?.enrolled && !!availability?.enabled && (!cloudActive || !!availability?.cloudBacked);
-  const biometricSupported = canEnroll || canQuickUnlock;
 
   const checkUsername = async () => {
     if (!cloudActive || cloudMode !== "register" || !username.trim()) return;
@@ -535,43 +444,6 @@ export function LoginScreen({ onLogin, cloudAuthError }: LoginScreenProps) {
             {t("login.subtitle")}
           </motion.p>
         </motion.div>
-
-        {/* Biometric quick-unlock — shown above the form when a credential
-            is already enrolled on this device. Looks like a native "Sign
-            In with Face ID" button. */}
-        {canQuickUnlock && (
-          <motion.div
-            initial={{ opacity: 0, y: -8 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ ...MOTION_TRANSITION.normal, delay: 0.15 }}
-            className="mb-3"
-          >
-            <Button
-              type="button"
-              size="lg"
-              onClick={handleQuickUnlock}
-              disabled={biometricStatus === "authenticating" || biometricStatus === "enrolling"}
-              className="w-full h-10 rounded-md gap-2.5"
-            >
-              {biometricStatus === "authenticating" ? (
-                <>
-                  <Loader2 className="size-4 animate-spin" />
-                  {t("native.biometric.unlocking")}
-                </>
-              ) : (
-                <>
-                  <Fingerprint className="size-4" />
-                  {t("native.biometric.quickUnlock")}
-                </>
-              )}
-            </Button>
-            <div className="flex items-center justify-center gap-1.5 my-3 text-[11px] text-muted-foreground">
-              <span className="h-px bg-border flex-1 max-w-[60px]" />
-              {t("common.or")}
-              <span className="h-px bg-border flex-1 max-w-[60px]" />
-            </div>
-          </motion.div>
-        )}
 
         <form
           onSubmit={submit}
@@ -781,93 +653,6 @@ export function LoginScreen({ onLogin, cloudAuthError }: LoginScreenProps) {
               {(cloudMode === "reset" || cloudMode === "verify") && <Button type="button" variant="link" size="sm" onClick={() => { setCloudMode("login"); setResetToken(""); setVerifyState("idle"); }}>
                 {t("login.backToSignIn")}
               </Button>}
-            </div>
-          )}
-
-          {/* Biometric enrollment row — only render if the device supports it.
-              If a credential is already enrolled, this becomes a "disable"
-              button so the user can revoke it from the login screen. */}
-          {biometricSupported && (
-            <div className="pt-2 border-t border-border">
-              <AnimatePresence mode="wait">
-                {availability?.enrolled ? (
-                  <motion.div
-                    key="enrolled"
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    exit={{ opacity: 0 }}
-                    className="flex items-center gap-2 text-xs text-muted-foreground"
-                  >
-                    <ShieldCheck className="size-3.5 text-success shrink-0" />
-                    <span className="flex-1">
-                      {t("native.biometric.enrolled", {
-                        user: getBiometricUsername() ?? username,
-                      })}
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        void disableBiometric().then(() => {
-                          refreshBiometric();
-                          haptic("warning");
-                        });
-                      }}
-                      className="text-[11px] text-destructive hover:underline"
-                    >
-                      {t("native.biometric.disable")}
-                    </button>
-                  </motion.div>
-                ) : (
-                  <motion.div
-                    key="enroll"
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    exit={{ opacity: 0 }}
-                  >
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="default"
-                      onClick={handleEnrollBiometric}
-                      disabled={biometricStatus === "enrolling" || !username.trim()}
-                      className="w-full gap-2 text-xs"
-                    >
-                      {biometricStatus === "enrolling" ? (
-                        <>
-                          <Loader2 className="size-3.5 animate-spin" />
-                          {t("native.biometric.unlocking")}
-                        </>
-                      ) : (
-                        <>
-                          <Fingerprint className="size-3.5" />
-                          {t("native.biometric.enroll")}
-                        </>
-                      )}
-                    </Button>
-                  </motion.div>
-                )}
-              </AnimatePresence>
-
-              {/* Inline error message */}
-              <AnimatePresence>
-                {biometricStatus === "error" && biometricMsg && (
-                  <motion.div
-                    initial={{ opacity: 0, height: 0 }}
-                    animate={{ opacity: 1, height: "auto" }}
-                    exit={{ opacity: 0, height: 0 }}
-                    className="mt-2 flex items-start gap-1.5 text-[11px] text-destructive"
-                  >
-                    <ShieldAlert className="size-3 shrink-0 mt-0.5" />
-                    <span>{biometricMsg}</span>
-                  </motion.div>
-                )}
-              </AnimatePresence>
-
-              {!availability?.platformAuthenticator && availability?.supported && (
-                <p className="mt-2 text-[11px] text-muted-foreground/80 leading-relaxed">
-                  {t("native.biometric.unsupported")}
-                </p>
-              )}
             </div>
           )}
 

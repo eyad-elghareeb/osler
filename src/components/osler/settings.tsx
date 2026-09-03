@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Settings as SettingsIcon, Sparkles, AlertTriangle, Keyboard, Languages, Download, Smartphone, FileArchive, Fingerprint, ArrowLeft, ChevronRight, Info, Palette, User, Loader2, LifeBuoy, MonitorSmartphone } from "lucide-react";
+import { Settings as SettingsIcon, Sparkles, AlertTriangle, Keyboard, Languages, Download, Smartphone, FileArchive, Vibrate, ArrowLeft, ChevronRight, Info, Palette, User, Loader2, LifeBuoy, MonitorSmartphone } from "lucide-react";
 import { storage } from "@/lib/osler/storage";
 import { SyncSettingsSection } from "@/components/osler/sync/sync-settings-section";
 import { useI18n } from "@/components/osler/i18n-provider";
@@ -38,7 +38,7 @@ const SECTIONS: SectionMeta[] = [
   { id: "shortcuts", labelKey: "settings.section.shortcuts", descriptionKey: "settings.section.shortcuts.desc",  icon: Keyboard,     keywords: "keyboard shortcuts hotkeys bindings" },
   { id: "downloads", labelKey: "settings.section.downloads", descriptionKey: "settings.section.downloads.desc",  icon: Download,     keywords: "downloads offline cache storage service worker" },
   { id: "sync",      labelKey: "settings.section.sync",      descriptionKey: "settings.section.sync.desc",       icon: Smartphone,   keywords: "sync peer webrtc qr sync devices" },
-  { id: "native",    labelKey: "settings.section.native",    descriptionKey: "settings.section.native.desc",     icon: Fingerprint,  keywords: "native haptics biometric fingerprint view transitions wake lock network animations" },
+  { id: "native",    labelKey: "settings.section.native",    descriptionKey: "settings.section.native.desc",     icon: Vibrate,  keywords: "native haptics view transitions wake lock network animations" },
   { id: "support",   labelKey: "settings.section.support",   descriptionKey: "settings.section.support.desc",    icon: LifeBuoy,     keywords: "support help report problem bug ticket feedback contact admin issue" },
   { id: "backup",    labelKey: "settings.section.backup",    descriptionKey: "settings.section.backup.desc",     icon: FileArchive,  keywords: "backup restore export import file" },
   { id: "about",     labelKey: "settings.section.about",     descriptionKey: "settings.section.about.desc",      icon: Info,         keywords: "about github repo version site name theme plugins config" },

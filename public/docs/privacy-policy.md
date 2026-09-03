@@ -86,7 +86,6 @@ We implement industry-standard security measures:
 - All data in transit is encrypted via TLS
 - Passwords are hashed using bcrypt before storage
 - API tokens are stored as hashes (the plaintext is shown only once at creation)
-- Biometric authentication is supported via WebAuthn (credentials never leave your device)
 
 ## 9. Cookies and Local Storage
 

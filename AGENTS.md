@@ -38,9 +38,9 @@
     - **shadcn/ui** (`@/components/ui/*`) — 49 primitives already vendored. Use them for dialogs, dropdowns, popovers, tabs, etc. Never re-implement a shadcn component.
     - **framer-motion** — for any animation. Never raw `requestAnimationFrame` transitions.
     - **lucide-react** — for icons. Never inline SVGs.
-    - **`@/lib/osler/native`** — for Vibration, View Transitions, WebAuthn, Network Information, Wake Lock. Never call `navigator.vibrate()` / `navigator.credentials.*` / `navigator.wakeLock.*` directly — go through the wrappers.
+    - **`@/lib/osler/native`** — for Vibration, View Transitions, Network Information, Wake Lock. Never call `navigator.vibrate()` / `navigator.wakeLock.*` directly — go through the wrappers.
     - **`@/lib/osler/pdf/`** — for PDF exports (QBank test papers, Flashcard notes, Dashboard stats, Articles). Import only from the module's public barrel `@/lib/osler/pdf`; engines are lazy-loaded so jsPDF is fetched on first export. Never instantiate `jsPDF` or handle Arabic shaping manually — go through the PDF module, `arabic.ts`, and `pdf-export-dialog.tsx`.
-    - **`@/lib/osler/storage`** — for any persistent state. Never touch `localStorage` or IndexedDB directly (biometric credential ID is the documented exception, see `biometric.ts`).
+    - **`@/lib/osler/storage`** — for any persistent state. Never touch `localStorage` or IndexedDB directly.
     - **`@/lib/osler/cloud`** — for Cloudflare Worker account sessions, Google OAuth, profile/password updates, data export, account deletion, and automated cloud sync. Never bypass `cloud.ts` or make direct fetch calls to the Worker endpoints outside of it.
     - **`@/lib/osler/sync`** — for P2P cross-device sync. Never open a new PeerJS / MQTT channel outside the existing `NetworkTransport`.
     - **`@tanstack/react-query`** + **`zustand`** are in deps but largely unused. Prefer the existing `storage` singleton + React local state unless a feature genuinely needs query caching or cross-component stores.
@@ -277,7 +277,7 @@ Always use `<Button>` from `@/components/ui/button` — never hand-roll a `<butt
 **Rules:**
 
 - **Never** hand-roll a `<button>` element with `bg-primary text-primary-foreground text-sm font-medium` — use `<Button>` instead.
-- **Never** mix `rounded-md`, `rounded-xl`, `rounded-lg` for primary actions within the same form. Login screen used to have `h-12 rounded-xl` biometric + `h-10 rounded-md` submit — that was a bug; both are now `<Button size="lg">`.
+- **Never** mix `rounded-md`, `rounded-xl`, `rounded-lg` for primary actions within the same form. All login-screen actions are `<Button size="lg">`.
 - **Icon buttons**: prefer `variant="ghost" size="icon"` (or `iconSm`/`iconLg`) over hand-rolled `<button className="size-9 rounded-md ...">`. The `.osler-icon-btn` CSS class is also available for non-component cases (e.g. avatar triggers in the app shell).
 
 ### Icon button sizing — old vs new
@@ -611,7 +611,6 @@ Osler is a PWA that should feel like a native app. The native-feature library li
 |---|---|---|
 | `haptics.ts` | Vibration API | `haptic("selection")` on tab taps, `haptic("success")` on form submit, `haptic("error")` on validation failure. iOS Safari silently no-ops — that's expected. |
 | `view-transitions.ts` | View Transitions API | `withViewTransition(() => setState(...), "forward")` for any view-level navigation. Direction is `forward` / `backward` / `none`. The `app-shell.tsx` `handleViewChange` wrapper is the canonical example. |
-| `biometric.ts` | WebAuthn | `enrollBiometric(username)` for first-time setup, `authenticateWithBiometric()` for quick unlock, `disableBiometric()` to revoke. Used in `login-screen.tsx` and Settings. |
 | `network-info.ts` | Network Information API | `useNetworkInfo()` hook exposes `{ type, effectiveType, downlink, rtt, saveData, online }`. iOS Safari reports `available: false` — handle it. |
 | `wake-lock.ts` | Screen Wake Lock API | `acquireWakeLock(predicate)` / `releaseWakeLock()`. Auto re-acquires on visibility regained. Used in `videos-studio.tsx` player view. |
 | `permissions.ts` | Permissions API + getUserMedia | `queryMediaPermission(kind)` / `requestMediaPermission(kind)` for `microphone` / `camera`. Request must run on a user gesture; browsers without the descriptors (iOS Safari, Firefox) fall back to `"prompt"`. Used by the onboarding Permissions step; OSCE voice mode and the written-answer photo capture need these at runtime. |

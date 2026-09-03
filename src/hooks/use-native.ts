@@ -12,8 +12,6 @@ import {
   readNetworkInfo,
   subscribeNetworkInfo,
   type NetworkInfo,
-  checkBiometricAvailability,
-  type BiometricAvailability,
   queryMediaPermission,
   requestMediaPermission,
   type MediaPermissionKind,
@@ -30,27 +28,6 @@ export function useNetworkInfo(): NetworkInfo {
     return unsub;
   }, []);
   return info;
-}
-
-/* ── Biometric availability (async) ──────────────────────────────── */
-
-export function useBiometricAvailability(): {
-  availability: BiometricAvailability | null;
-  refresh: () => void;
-} {
-  const [availability, setAvailability] = React.useState<BiometricAvailability | null>(null);
-  const refresh = React.useCallback(() => {
-    let cancelled = false;
-    checkBiometricAvailability().then((a) => {
-      if (!cancelled) setAvailability(a);
-    });
-    return () => { cancelled = true; };
-  }, []);
-  React.useEffect(() => {
-    const cancel = refresh();
-    return cancel;
-  }, [refresh]);
-  return { availability, refresh };
 }
 
 /* ── Media permissions (microphone / camera) ─────────────────────── */
