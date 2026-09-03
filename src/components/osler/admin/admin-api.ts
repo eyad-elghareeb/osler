@@ -87,7 +87,7 @@ export interface TicketUserInfo {
   createdAt: number | null;
 }
 
-/** A user-reported support ticket (see cloudflare/worker/migrations/0021_support_tickets.sql). */
+/** A user-reported support ticket (see cloudflare/worker/migrations/0001_schema.sql). */
 export interface AdminSupportTicket {
   id: string;
   userId: string | null;
@@ -443,7 +443,7 @@ export const adminApi = {
 // Reads the privacy-preserving performance & usage telemetry collected by the
 // AnalyticsProvider and stored in D1 `analytics_events`. See
 // `src/lib/osler/analytics.ts` for the collection contract and
-// `cloudflare/worker/migrations/0012_analytics_events.sql` for the schema.
+// `cloudflare/worker/migrations/0001_schema.sql` for the schema.
 
 export type AnalyticsRange = "24h" | "7d" | "30d";
 

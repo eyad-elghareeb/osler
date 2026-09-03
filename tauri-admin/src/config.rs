@@ -24,8 +24,7 @@ const CONFIG_REL: &str = "public/osler.config.json";
 /// doesn't need to ship a template file alongside the Rust binary.
 const DEFAULT_CONFIG_TEMPLATE: &str = include_str!("../default-osler-config.json");
 const CLOUDFLARE_WORKER_SOURCE: &str = include_str!("../../cloudflare/worker/src/index.ts");
-const CLOUDFLARE_MIGRATION: &str = include_str!("../../cloudflare/worker/migrations/0001_initial.sql");
-const CLOUDFLARE_MIGRATION_0002: &str = include_str!("../../cloudflare/worker/migrations/0002_accounts_and_google.sql");
+const CLOUDFLARE_SCHEMA: &str = include_str!("../../cloudflare/worker/migrations/0001_schema.sql");
 const CLOUDFLARE_PACKAGE: &str = include_str!("../../cloudflare/worker/package.json");
 const CLOUDFLARE_DEV_VARS: &str = include_str!("../../cloudflare/worker/.dev.vars.example");
 const CLOUDFLARE_README: &str = include_str!("../../cloudflare/worker/README.md");
@@ -334,8 +333,7 @@ fn generate_instance_sync(opts: InstanceOptions) -> Result<Value, String> {
         }
         let files = [
             (worker_src.join("index.mjs"), CLOUDFLARE_WORKER_SOURCE, "cloudflare/worker/src/index.mjs"),
-            (migration_dir.join("0001_initial.sql"), CLOUDFLARE_MIGRATION, "cloudflare/worker/migrations/0001_initial.sql"),
-            (migration_dir.join("0002_accounts_and_google.sql"), CLOUDFLARE_MIGRATION_0002, "cloudflare/worker/migrations/0002_accounts_and_google.sql"),
+            (migration_dir.join("0001_schema.sql"), CLOUDFLARE_SCHEMA, "cloudflare/worker/migrations/0001_schema.sql"),
             (worker_root.join("package.json"), CLOUDFLARE_PACKAGE, "cloudflare/worker/package.json"),
             (worker_root.join(".dev.vars.example"), CLOUDFLARE_DEV_VARS, "cloudflare/worker/.dev.vars.example"),
             (worker_root.join("README.md"), CLOUDFLARE_README, "cloudflare/worker/README.md"),

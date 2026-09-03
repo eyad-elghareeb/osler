@@ -176,7 +176,7 @@ npx wrangler secret put TURNSTILE_SECRET_KEY
 
 ```bash
 npm run db:migrate
-# → Runs every .sql file in cloudflare/worker/migrations/ in order
+# → Applies the consolidated schema (cloudflare/worker/migrations/0001_schema.sql)
 ```
 
 Verify the schema:
@@ -186,7 +186,7 @@ npx wrangler d1 execute osler-cloud --remote \
   --command "SELECT name FROM sqlite_master WHERE type='table';"
 ```
 
-You should see `users`, `sessions`, `oauth_states`, `reset_tokens`, `admin_audit`, and any future tables added by migrations.
+You should see `users`, `sessions`, `oauth_states`, `password_reset_tokens`, `admin_audit`, and the other tables from the consolidated schema.
 
 ### Step 4: Configure `wrangler.toml`
 
@@ -1163,7 +1163,7 @@ git push origin main
 
 ### Database rollback — important caveats
 
-- **D1 migrations are forward-only.** Never edit existing migration files. If a migration broke something, write a new migration that undoes it (e.g. `0006_revert_0005.sql`).
+- **D1 migrations are forward-only.** Never edit the consolidated `0001_schema.sql` baseline. If a migration broke something, write a new migration that undoes it (e.g. `0002_revert_login_lockout.sql`).
 - **IndexedDB on user devices cannot be rolled back.** If a frontend change corrupted local progress, users will need to either restore from a `.osler-backup` file or clear IndexedDB.
 - **Cloud sync:** if the Worker rolled out a new sync protocol version, old clients may fail to sync until they reload and pick up the new frontend. Communicate maintenance windows in advance.
 

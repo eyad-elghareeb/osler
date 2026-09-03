@@ -319,7 +319,7 @@ Restart `wrangler dev`.
 cd cloudflare/worker && npm run tail
 ```
 
-**Fix.** Confirm migration `0004_security_indexes.sql` was applied (see [3.3](#33-migration-applied-locally-but-not-on-production)). If you've added a new query, ensure it has a covering index.
+**Fix.** Confirm the consolidated schema `0001_schema.sql` was applied (see [3.3](#33-migration-applied-locally-but-not-on-production)). If you've added a new query, ensure it has a covering index.
 
 ### 2.9 Worker returns `429 Too Many Requests` for legit traffic
 
@@ -382,7 +382,7 @@ npx wrangler d1 execute osler-cloud --remote --command "SELECT * FROM d1_migrati
 
 ```bash
 npx wrangler d1 execute osler-cloud --remote --command \
-  "DELETE FROM d1_migrations WHERE id = '0003_admin.sql';"
+  "DELETE FROM d1_migrations WHERE id = '0001_schema.sql';"
 npx wrangler d1 execute osler-cloud --remote --command "DROP TABLE IF EXISTS content_objects; DROP TABLE IF EXISTS admin_audit;"
 npm run db:migrate
 ```
@@ -422,7 +422,7 @@ npx wrangler d1 execute osler-cloud --remote --command \
 grep -rn "has_password" cloudflare/worker/migrations/
 ```
 
-Apply any pending migrations. If you've forked a migration, keep the file name (`0001_initial.sql`) but add an `ALTER TABLE` at the end so existing deployments get the new column idempotently (`ALTER TABLE ... ADD COLUMN ... ` — note SQLite doesn't support `IF NOT EXISTS` on `ADD COLUMN`, so wrap in a try/catch by checking `pragma_table_info`).
+Apply any pending migrations. If you've forked the schema, keep the file name (`0001_schema.sql`) but add an `ALTER TABLE` at the end so existing deployments get the new column idempotently (`ALTER TABLE ... ADD COLUMN ... ` — note SQLite doesn't support `IF NOT EXISTS` on `ADD COLUMN`, so wrap in a try/catch by checking `pragma_table_info`).
 
 ### 3.5 `wrangler d1 execute` reports `SQLITE_BUSY`
 
@@ -1012,7 +1012,7 @@ cd cloudflare/worker && npm run tail
 
 **Symptom.** `/v1/admin/users?q=...` returns 504 after ~30 seconds.
 
-**Likely cause.** The `LIKE` search across `username / display_name / email` is doing a full table scan. Without the security indexes from migration 0004, this is O(N) and grows with user count.
+**Likely cause.** The `LIKE` search across `username / display_name / email` is doing a full table scan. Without the security indexes from the consolidated schema, this is O(N) and grows with user count.
 
 **Diagnose.** Check the index list:
 

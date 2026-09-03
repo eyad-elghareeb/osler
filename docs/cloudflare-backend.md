@@ -11,11 +11,7 @@ For the **full HTTP API reference**, see [`api-reference.md`](./api-reference.md
 | File | Purpose |
 | --- | --- |
 | `src/index.ts` | Email/password & Google OAuth authentication, PBKDF2 password hashing, HMAC-signed session tokens with server-side revocation, roles (`student` / `content_admin` / `admin`), password reset, account management, content management (R2-backed draft/pending/published workflow), admin audit log, rate limiting, security headers, and sync API. |
-| `migrations/0001_initial.sql` | Base D1 schema for users, sessions, password-reset tokens, and progress documents. |
-| `migrations/0002_accounts_and_google.sql` | Google identity links (`auth_identities`), OAuth state tokens (`oauth_states`), and single-use handoffs (`auth_handoffs`). |
-| `migrations/0003_admin.sql` | R2-backed content objects (`content_objects` with draft/pending/published/rejected workflow) and admin audit log (`admin_audit`). |
-| `migrations/0004_security_indexes.sql` | Performance & security indexes for session enumeration, audit-log reads, and per-user content listing. |
-| `migrations/0018_content_origin_key.sql` | `content_objects.origin_r2_key` + index — records the loose file a managed object was adopted from so adopt() is exactly idempotent (one file ↔ one object). |
+| `migrations/0001_schema.sql` | Consolidated D1 schema in one file (first-time setup applies a single migration): users, sessions, password-reset tokens, and progress documents; Google identity links (`auth_identities`), OAuth state tokens (`oauth_states`), and single-use handoffs (`auth_handoffs`); R2-backed content objects (`content_objects` with draft/pending/published/rejected workflow) and admin audit log (`admin_audit`); FTS5 search index + triggers; analytics events; login lockout; QBank choice stats; support tickets; MCP API tokens + OAuth clients/codes; webhook registry; and all performance/security indexes. |
 | `wrangler.toml` | Workers, D1 + R2 config, and hourly cron trigger for cleanup. |
 | `.dev.vars.example` | Secret names template (never commit `.dev.vars`). |
 | `.env.example` | Same reference, suitable for documentation purposes. |
@@ -46,7 +42,7 @@ cp .env.example .dev.vars
 npx wrangler d1 create osler-cloud
 # Paste the returned database_id into wrangler.toml
 npx wrangler secret put JWT_SECRET
-npm run db:migrate          # applies migrations 0001, 0002, 0003, 0004
+npm run db:migrate          # applies the consolidated schema (0001_schema.sql)
 npm run deploy
 ```
 
@@ -107,7 +103,7 @@ address verified asserts its ownership.
 - **Account Management**: Users can update their display name and email, set/change password, export account data as JSON, and permanently delete their account with password confirmation.
 - **Roles**: `student` (default), `content_admin` (can create and edit their own content but not approve/publish), and `admin` (full access: manage users, approve/reject/publish content, view audit logs, revoke sessions). Admin role allows accessing administrative features.
 - **Sessions**: HMAC-SHA-256 signed session tokens with server-side revocation in D1. Session tokens are kept in `sessionStorage` (per-tab fast path) mirrored to `localStorage` (cross-tab / cross-restart persistence), with sliding expiry via `POST /v1/auth/refresh` (rotation; 48-hour grace on top of the 7-day token TTL). Per-user session cap of 12 concurrent sessions; oldest is auto-revoked when the cap is exceeded. The frontend is a static export - route gating is client-side (`RouteGuard`), no httpOnly cookie - see [`security.md`](./security.md#route-gating-client-side-no-middleware).
-- **Brute-force protection**: Login failures are counted per identifier+IP in D1 (`login_failures`, migration 0017) — 8 consecutive failures lock the pair for 15 minutes, shared across all worker isolates. The per-IP in-memory rate limiter bounds request bursts; enable Turnstile for full protection against distributed stuffing.
+- **Brute-force protection**: Login failures are counted per identifier+IP in D1 (`login_failures`) — 8 consecutive failures lock the pair for 15 minutes, shared across all worker isolates. The per-IP in-memory rate limiter bounds request bursts; enable Turnstile for full protection against distributed stuffing.
 - **Password Recovery**: Supported via optional Resend API key (`RESEND_API_KEY`, `EMAIL_FROM`, `APP_ORIGIN`). Reset links are valid for 30 minutes and single-use.
 - **Rate Limiting**: Auth endpoints (login, register, reset, google/consume, username-available) are rate-limited per IP using an in-memory LRU bucket, as is admin content management (600/min). Global per-IP cap of 600 requests/min across all rate-limited routes. Returns HTTP 429 when exceeded. For harder guarantees, front the Worker with Cloudflare Rate Limiting Rules in the dashboard.
 - **Audit Log**: Every administrative action (role change, user delete, password reset, session revocation, content create/submit/approve/reject/publish/unpublish/delete) is recorded in `admin_audit`. Retained for 1 year (365 days), pruned by the hourly cron trigger. Viewable at `/admin/audit`.
@@ -254,10 +250,11 @@ npm run db:list              # list applied/pending migrations
 
 Always run `npm run db:migrate:local` first when developing new migrations to catch syntax errors before touching production.
 
-> **Note:** after applying `0018_content_origin_key.sql`, existing adopted
-> drafts keep working — only *new* adoptions persist their origin key, and
-> the adopt endpoint falls back gracefully if the column is missing (the
-> lookup is wrapped in try/catch).
+> **Note:** the schema used to live in 25 migration files (`0001_initial.sql`
+> through `0025_mcp_oauth.sql`). Those were consolidated into the single
+> `migrations/0001_schema.sql` baseline — first-time setup applies one file.
+> The forward-only rule resumes from here: never edit `0001_schema.sql`, put
+> new changes in `0002_*.sql`, `0003_*.sql`, ...
 
 ### Content lifecycle guarantees
 

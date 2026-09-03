@@ -36,7 +36,7 @@ npx wrangler secret put RESEND_API_KEY
 npx wrangler secret put TURNSTILE_SECRET_KEY
 # Set TURNSTILE_ENABLED="true" in wrangler.toml
 
-# 6. Apply all D1 migrations (0001, 0002, 0003, 0004)
+# 6. Apply the D1 schema (single consolidated migration)
 npm run db:migrate
 
 # 7. Deploy
@@ -69,10 +69,7 @@ cloudflare/worker/
 ├── src/
 │   └── index.mjs              # Worker entry point (single file, zero deps)
 ├── migrations/
-│   ├── 0001_initial.sql       # users, sessions, password_reset_tokens, progress_documents
-│   ├── 0002_accounts_and_google.sql  # auth_identities, oauth_states, auth_handoffs
-│   ├── 0003_admin.sql         # content_objects, admin_audit
-│   └── 0004_security_indexes.sql     # performance & security indexes
+│   └── 0001_schema.sql        # consolidated schema: users, sessions, sync docs, OAuth, content_objects, admin_audit, FTS, analytics, lockout, tickets, tokens, MCP OAuth (replaces the old 0001-0025 chain)
 ├── .dev.vars.example          # local secrets template (gitignored)
 ├── .env.example               # documentation reference for env vars
 ├── package.json
