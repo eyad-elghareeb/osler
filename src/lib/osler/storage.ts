@@ -1062,6 +1062,9 @@ export const storage = {
           if (key === QUIZ_SETTINGS_KEY && incoming && typeof incoming === "object") {
             cachedQuizSettings = { ...DEFAULT_QUIZ_SETTINGS, ...(incoming as QuizSettings) };
           }
+          if (key === DAILY_GOAL_SETTINGS_KEY && incoming && typeof incoming === "object") {
+            cachedDailyGoal = { ...DEFAULT_DAILY_GOAL, ...(incoming as DailyGoalSettings) };
+          }
           settingsChanged = true;
           if (key === "cloud-sync-enabled" && typeof incoming === "string") {
             syncPrefChanged = true;
@@ -1078,6 +1081,12 @@ export const storage = {
         if (batch.some((b) => b.key === QUIZ_SETTINGS_KEY) && typeof window !== "undefined") {
           window.dispatchEvent(new CustomEvent(QUIZ_SETTINGS_EVENT));
           quizSettingsSubscribers.forEach((cb) => {
+            try { cb(); } catch (e) { console.warn(e); }
+          });
+        }
+        if (batch.some((b) => b.key === DAILY_GOAL_SETTINGS_KEY) && typeof window !== "undefined") {
+          window.dispatchEvent(new CustomEvent(DAILY_GOAL_EVENT));
+          dailyGoalSubscribers.forEach((cb) => {
             try { cb(); } catch (e) { console.warn(e); }
           });
         }
@@ -2070,6 +2079,109 @@ export const quizSettings = {
   },
 };
 
+/* ── Daily Goal (configurable questions target per day) ──────────────── */
+
+export interface DailyGoalSettings {
+  target: number;
+}
+
+export const DEFAULT_DAILY_GOAL: DailyGoalSettings = {
+  target: 50,
+};
+
+export const DAILY_GOAL_SETTINGS_KEY = "daily-goal-settings-v1";
+export const DAILY_GOAL_EVENT = "osler-daily-goal-changed";
+export const dailyGoalSubscribers = new Set<() => void>();
+
+let cachedDailyGoal: DailyGoalSettings | null = null;
+let dailyGoalHydrated = false;
+
+// Fast initial synchronous read from localStorage if present
+if (typeof window !== "undefined") {
+  try {
+    const raw = localStorage.getItem(DAILY_GOAL_SETTINGS_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (typeof parsed?.target === "number" && parsed.target > 0) {
+        cachedDailyGoal = { target: Math.round(parsed.target) };
+      }
+    }
+  } catch {}
+}
+
+async function hydrateDailyGoal(): Promise<void> {
+  if (dailyGoalHydrated) return;
+  dailyGoalHydrated = true;
+  try {
+    const raw = await idbGet<DailyGoalSettings>("settings", DAILY_GOAL_SETTINGS_KEY);
+    if (raw && typeof raw.target === "number" && raw.target > 0) {
+      cachedDailyGoal = { target: Math.round(raw.target) };
+    } else if (!cachedDailyGoal) {
+      cachedDailyGoal = { ...DEFAULT_DAILY_GOAL };
+    }
+  } catch (e) {
+    console.warn("Failed to hydrate daily goal settings:", e);
+    if (!cachedDailyGoal) cachedDailyGoal = { ...DEFAULT_DAILY_GOAL };
+  }
+}
+
+if (typeof window !== "undefined") {
+  hydrateDailyGoal().catch(console.warn);
+}
+
+export const dailyGoal = {
+  getSync(): DailyGoalSettings {
+    if (!cachedDailyGoal) {
+      const fromCache = getCached<DailyGoalSettings>("settings", DAILY_GOAL_SETTINGS_KEY);
+      if (fromCache && typeof fromCache.target === "number" && fromCache.target > 0) {
+        cachedDailyGoal = fromCache;
+      }
+    }
+    return cachedDailyGoal ? { ...cachedDailyGoal } : { ...DEFAULT_DAILY_GOAL };
+  },
+
+  async get(): Promise<DailyGoalSettings> {
+    await hydrateDailyGoal();
+    return dailyGoal.getSync();
+  },
+
+  async save(patch: Partial<DailyGoalSettings>): Promise<DailyGoalSettings> {
+    await hydrateDailyGoal();
+    const current = cachedDailyGoal ?? DEFAULT_DAILY_GOAL;
+    const target = patch.target != null && patch.target > 0 ? Math.round(patch.target) : current.target;
+    const next: DailyGoalSettings = { target };
+    cachedDailyGoal = next;
+    setCached("settings", DAILY_GOAL_SETTINGS_KEY, next);
+    try {
+      localStorage.setItem(DAILY_GOAL_SETTINGS_KEY, JSON.stringify(next));
+    } catch {}
+    await idbPut("settings", DAILY_GOAL_SETTINGS_KEY, next);
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent(DAILY_GOAL_EVENT));
+      window.dispatchEvent(new CustomEvent("osler-settings-changed"));
+      dailyGoalSubscribers.forEach((cb) => {
+        try { cb(); } catch (e) { console.warn(e); }
+      });
+    }
+    return next;
+  },
+
+  async reset(): Promise<DailyGoalSettings> {
+    return dailyGoal.save(DEFAULT_DAILY_GOAL);
+  },
+
+  subscribe(cb: () => void): () => void {
+    if (typeof window === "undefined") return () => {};
+    dailyGoalSubscribers.add(cb);
+    const handler = () => cb();
+    window.addEventListener(DAILY_GOAL_EVENT, handler);
+    return () => {
+      dailyGoalSubscribers.delete(cb);
+      window.removeEventListener(DAILY_GOAL_EVENT, handler);
+    };
+  },
+};
+
 /* ── Streak (daily consecutive-day tracking) ─────────────────────────── */
 
 /**
@@ -2236,6 +2348,36 @@ export const streak = {
     return Array.from(counts.entries())
       .sort(([a], [b]) => a.localeCompare(b))
       .map(([date, count]) => ({ date, count }));
+  },
+
+  /**
+   * Return counts of questions answered today (UTC date matching streak logic).
+   */
+  todayCount(): { total: number; qbank: number; flashcards: number; correct: number } {
+    const today = todayUtc();
+    let qbank = 0;
+    let flashcards = 0;
+    let correct = 0;
+    for (const [k, v] of memoryCache) {
+      if (k.startsWith("progress:")) {
+        const r = v as QuestionRecord;
+        if (r?.timestamp && toUtcDay(r.timestamp) === today) {
+          qbank++;
+          if (r.correct) correct++;
+        }
+      } else if (k.startsWith("flashcardReviews:")) {
+        const r = v as FlashcardReviewRecord;
+        if (r?.lastReviewed && toUtcDay(r.lastReviewed) === today) {
+          flashcards++;
+        }
+      }
+    }
+    return {
+      total: qbank + flashcards,
+      qbank,
+      flashcards,
+      correct,
+    };
   },
 
   /** Subscribe to any data changes that may affect streak (progress + flashcards). */

@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Trash2, AlertTriangle, Save, Download, User, Cloud, LogOut, KeyRound, Database, ShieldCheck, Loader2 } from "lucide-react";
+import { Trash2, AlertTriangle, Save, Download, User, Cloud, LogOut, KeyRound, Database, ShieldCheck, Loader2, Target, CheckCircle2 } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { CloudSyncStatusCard } from "@/components/osler/sync/cloud-sync-status";
@@ -10,12 +10,25 @@ import { useI18n } from "@/components/osler/i18n-provider";
 import { cn } from "@/lib/utils";
 import { haptic } from "@/lib/osler/native";
 import { readCloudSession, getCloudAccount, updateCloudAccount, changeCloudPassword, exportCloudAccount, deleteCloudAccount, logoutCloudAccount, cloudEnabled, CloudApiError, type CloudSession, type CloudAccount } from "@/lib/osler/cloud";
+import { dailyGoal } from "@/lib/osler/storage";
+
 export function AccountSettingsSection() {
   const { t } = useI18n();
   const [session, setSession] = React.useState<CloudSession | null>(() => readCloudSession());
   const [account, setAccount] = React.useState<CloudAccount | null>(null);
   const [loading, setLoading] = React.useState(true);
   const [cloudActive, setCloudActive] = React.useState(false);
+
+  // Daily Goal state
+  const [goalTarget, setGoalTarget] = React.useState(() => dailyGoal.getSync().target);
+  const [goalSavedMsg, setGoalSavedMsg] = React.useState(false);
+
+  React.useEffect(() => {
+    const unsub = dailyGoal.subscribe(() => {
+      setGoalTarget(dailyGoal.getSync().target);
+    });
+    return unsub;
+  }, []);
 
   // Profile Form state
   const [displayName, setDisplayName] = React.useState("");
@@ -232,6 +245,83 @@ export function AccountSettingsSection() {
 
       {/* Cloud Sync Status */}
       <CloudSyncStatusCard />
+
+      {/* Daily Goal Settings */}
+      <Card className="p-5">
+        <div className="flex items-start justify-between gap-3 mb-2">
+          <div className="flex items-center gap-2">
+            <Target className="size-4 text-primary" />
+            <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              {t("dash.goal.title")}
+            </h3>
+          </div>
+          {goalSavedMsg && (
+            <span className="inline-flex items-center gap-1 text-[11px] text-success font-medium animate-in fade-in duration-150">
+              <CheckCircle2 className="size-3.5" />
+              {t("dash.goal.saved")}
+            </span>
+          )}
+        </div>
+
+        <p className="text-xs text-muted-foreground mb-4">
+          {t("dash.goal.dialogSubtitle")}
+        </p>
+
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-3">
+          {[25, 50, 100, 150].map((presetVal) => {
+            const isSelected = goalTarget === presetVal;
+            return (
+              <button
+                key={presetVal}
+                type="button"
+                onClick={async () => {
+                  setGoalTarget(presetVal);
+                  await dailyGoal.save({ target: presetVal });
+                  setGoalSavedMsg(true);
+                  haptic("selection");
+                  setTimeout(() => setGoalSavedMsg(false), 2000);
+                }}
+                className={cn(
+                  "p-2.5 rounded-lg border text-start transition-all flex flex-col justify-between h-16",
+                  isSelected
+                    ? "border-primary bg-primary/10 text-primary font-bold shadow-xs"
+                    : "border-border bg-card hover:border-border/80 text-foreground"
+                )}
+              >
+                <div className="flex items-center justify-between w-full">
+                  <span className="text-base font-bold tabular-nums">{presetVal}</span>
+                  {isSelected && <CheckCircle2 className="size-3 text-primary shrink-0" />}
+                </div>
+                <span className="text-[10px] font-medium text-muted-foreground">
+                  {t("dash.streak.questions", { n: presetVal })}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+
+        <div className="flex items-center gap-3 pt-1">
+          <label className="text-xs text-muted-foreground whitespace-nowrap">
+            {t("dash.goal.customTarget")}:
+          </label>
+          <input
+            type="number"
+            min="5"
+            max="500"
+            value={goalTarget}
+            onChange={async (e) => {
+              const val = parseInt(e.target.value, 10);
+              if (!isNaN(val) && val > 0) {
+                setGoalTarget(val);
+                await dailyGoal.save({ target: val });
+                setGoalSavedMsg(true);
+                setTimeout(() => setGoalSavedMsg(false), 2000);
+              }
+            }}
+            className="w-24 h-8 px-2.5 bg-background border border-border rounded-md text-xs font-semibold outline-none focus:border-primary tabular-nums"
+          />
+        </div>
+      </Card>
 
       {/* Profile Details Form */}
       <Card className="p-5">

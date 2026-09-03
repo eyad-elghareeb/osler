@@ -224,6 +224,27 @@ export const en = {
     "dash.streak.riskTitle": "Streak at risk",
     "dash.streak.timeLeft": "{time} left",
 
+    "dash.goal.title": "Daily Goal",
+    "dash.goal.subtitle": "Close your activity rings each day",
+    "dash.goal.achieved": "Goal Achieved!",
+    "dash.goal.progress": "{current} of {target} questions",
+    "dash.goal.percentAchieved": "{percent}% achieved",
+    "dash.goal.ringQuestions": "Questions Goal",
+    "dash.goal.ringCorrect": "Correct Answers",
+    "dash.goal.ringStreak": "Streak Progress",
+    "dash.goal.questionsLabel": "{n} questions",
+    "dash.goal.correctLabel": "{n} correct",
+    "dash.goal.changeGoal": "Change Goal",
+    "dash.goal.dialogTitle": "Set Daily Goal",
+    "dash.goal.dialogSubtitle": "Choose how many questions you want to solve each day to build consistency.",
+    "dash.goal.customTarget": "Custom goal (questions/day)",
+    "dash.goal.presetCasual": "Casual (25)",
+    "dash.goal.presetStandard": "Standard (50)",
+    "dash.goal.presetIntensive": "Intensive (100)",
+    "dash.goal.presetMastery": "Mastery (150)",
+    "dash.goal.save": "Save Goal",
+    "dash.goal.saved": "Goal updated",
+
     "profile.streak.title": "Consistency & Study Streak",
     "profile.streak.days30": "30 Days",
     "profile.streak.modeActivity": "Activity",
@@ -2990,6 +3011,7 @@ export const en = {
     "onboarding.welcome.chip.language": "Language",
     "onboarding.welcome.chip.theme": "Theme",
     "onboarding.welcome.chip.tour": "Quick tour",
+    "onboarding.welcome.chip.goal": "Daily goal",
     "onboarding.welcome.chip.ai": "AI tutor",
     "onboarding.welcome.chip.install": "Install",
     "onboarding.welcome.chip.permissions": "Permissions",
@@ -3025,6 +3047,20 @@ export const en = {
       "Download packs once and keep studying offline.",
     "onboarding.tour.extra.pdf":
       "Export question papers, notes and stats as polished PDFs.",
+
+    "onboarding.goal.title": "Daily Goal & Streaks",
+    "onboarding.goal.subtitle":
+      "Build a lasting medical study habit. Close your activity rings and protect your streak chain.",
+    "onboarding.goal.streakCardTitle": "How Streaks Work",
+    "onboarding.goal.streakCardDesc":
+      "Answer questions every day to increment your streak. You have a generous 48-hour restore window if life gets busy, keeping your momentum alive.",
+    "onboarding.goal.ringsCardTitle": "Activity Rings",
+    "onboarding.goal.ringsCardDesc":
+      "Apple Health style activity rings display your daily solved questions, accuracy, and consistency at a glance right on your dashboard.",
+    "onboarding.goal.selectTarget": "Choose your daily questions target",
+    "onboarding.goal.targetCustom": "Custom number of questions",
+    "onboarding.goal.perDay": "questions / day",
+    "onboarding.goal.changeLater": "You can change this anytime from your dashboard or settings.",
 
     "onboarding.language.title": "Choose your language",
     "onboarding.language.subtitle":

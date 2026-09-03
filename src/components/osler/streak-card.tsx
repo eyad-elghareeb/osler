@@ -2,14 +2,16 @@
 
 import * as React from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { TrendingUp, CalendarCheck, Hourglass } from "lucide-react";
-import { streak, type StreakData, type DailyActivity } from "@/lib/osler/storage";
+import { TrendingUp, CalendarCheck, Hourglass, Target, CheckCircle2 } from "lucide-react";
+import { streak, dailyGoal, type StreakData, type DailyActivity } from "@/lib/osler/storage";
 import { useI18n } from "@/components/osler/i18n-provider";
 import { cn } from "@/lib/utils";
 import { useChartTooltip } from "@/hooks/use-chart-tooltip";
 import { OslerCard } from "./ui-primitives";
 import { AnimatedFlame } from "./animated-icons";
 import { MOTION_TRANSITION, MOTION_SPRING } from "@/lib/osler/motion";
+import { ActivityRings, type ActivityRingData } from "./activity-rings";
+import { DailyGoalDialog } from "./daily-goal-dialog";
 
 /* ── Bar chart ────────────────────────────────────────────────────────── */
 
@@ -211,23 +213,61 @@ export const StreakCard = React.memo(function StreakCard() {
   const [activity, setActivity] = React.useState<DailyActivity[]>(() =>
     streak.dailyActivity(CHART_DAYS)
   );
+  const [goalSettings, setGoalSettings] = React.useState(() => dailyGoal.getSync());
+  const [todayCounts, setTodayCounts] = React.useState(() => streak.todayCount());
+  const [dialogOpen, setDialogOpen] = React.useState(false);
 
   React.useEffect(() => {
     const refresh = () => {
       setData(streak.compute());
       setActivity(streak.dailyActivity(CHART_DAYS));
+      setTodayCounts(streak.todayCount());
     };
-    const unsub = streak.subscribe(refresh);
-    return unsub;
+    const unsubStreak = streak.subscribe(refresh);
+    const unsubGoal = dailyGoal.subscribe(() => setGoalSettings(dailyGoal.getSync()));
+    return () => {
+      unsubStreak();
+      unsubGoal();
+    };
   }, []);
 
   const today = new Date().toISOString().slice(0, 10);
+  const target = Math.max(1, goalSettings.target);
+  const percentAchieved = Math.round((todayCounts.total / target) * 100);
+  const isAchieved = todayCounts.total >= target;
+
+  const rings: [ActivityRingData, ActivityRingData, ActivityRingData] = React.useMemo(() => {
+    return [
+      {
+        label: t("dash.goal.ringQuestions"),
+        current: todayCounts.total,
+        target,
+        color: "var(--primary)",
+        unit: "q",
+      },
+      {
+        label: t("dash.goal.ringCorrect"),
+        current: todayCounts.correct,
+        target: Math.max(1, todayCounts.total),
+        color: "var(--success)",
+        unit: "c",
+      },
+      {
+        label: t("dash.goal.ringStreak"),
+        current: data.activeToday ? 1 : 0,
+        target: 1,
+        color: "var(--warning)",
+        unit: "d",
+      },
+    ];
+  }, [t, todayCounts, target, data.activeToday]);
 
   return (
     <OslerCard padding="roomy" className="mb-6 overflow-hidden">
-      {/* Top row: flame + streak count / longest */}
-      <div className="flex items-start justify-between gap-4 flex-wrap mb-5">
-        <div className="flex items-start gap-4 flex-wrap text-start">
+      {/* Top section: Two columns on desktop (Streak + Goal Rings summary) */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-center mb-6 pb-6 border-b border-border/70">
+        {/* Left column: Flame + Streak Stats */}
+        <div className="lg:col-span-5 flex items-start gap-4 flex-wrap text-start">
           <FlameCounter count={data.current} active={data.activeToday || data.current > 0} />
           <div className="flex flex-col justify-center gap-1 pt-0.5">
             <div className="osler-display text-lg font-bold text-foreground leading-tight flex items-center gap-1.5">
@@ -245,10 +285,52 @@ export const StreakCard = React.memo(function StreakCard() {
           </div>
         </div>
 
-        {/* Activity label */}
-        <div className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground self-center">
-          <TrendingUp className="size-3.5 text-primary" />
-          {t("dash.streak.activity")}
+        {/* Right column: Apple Health style Activity Rings & Goal achievement */}
+        <div className="lg:col-span-7 flex items-center justify-between sm:justify-end gap-5 bg-muted/20 rounded-xl p-3.5 sm:p-4 border border-border/50">
+          <div className="flex flex-col text-start justify-center gap-1">
+            <div className="flex items-center gap-1.5">
+              <Target className="size-4 text-primary" />
+              <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                {t("dash.goal.title")}
+              </span>
+              {isAchieved && (
+                <span className="inline-flex items-center gap-1 text-[10px] font-bold text-success bg-success/15 px-1.5 py-0.5 rounded-full border border-success/30">
+                  <CheckCircle2 className="size-3" />
+                  {t("dash.goal.achieved")}
+                </span>
+              )}
+            </div>
+
+            <div className="text-xl sm:text-2xl font-black tabular-nums tracking-tight text-foreground">
+              {todayCounts.total}{" "}
+              <span className="text-xs sm:text-sm font-semibold text-muted-foreground">
+                / {target} {t("dash.goal.questionsLabel", { n: "" }).trim()}
+              </span>
+            </div>
+
+            <div className="flex items-center gap-3 text-xs text-muted-foreground">
+              <span className="font-semibold text-primary tabular-nums">
+                {t("dash.goal.percentAchieved", { percent: percentAchieved })}
+              </span>
+              <span>·</span>
+              <button
+                type="button"
+                onClick={() => setDialogOpen(true)}
+                className="text-xs font-medium text-muted-foreground hover:text-foreground underline underline-offset-4 transition-colors"
+              >
+                {t("dash.goal.changeGoal")}
+              </button>
+            </div>
+          </div>
+
+          <ActivityRings
+            rings={rings}
+            size={96}
+            strokeWidth={8}
+            gap={3}
+            onClick={() => setDialogOpen(true)}
+            className="hover:scale-105 transition-transform"
+          />
         </div>
       </div>
 
@@ -257,8 +339,25 @@ export const StreakCard = React.memo(function StreakCard() {
         <StreakRestoreBanner deadline={data.restoreDeadlineMs} />
       )}
 
-      {/* Bar chart */}
+      {/* Activity label + Bar chart */}
+      <div className="flex items-center justify-between mb-3">
+        <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+          {t("dash.streak.activity")}
+        </span>
+        <div className="flex items-center gap-1 text-[11px] text-muted-foreground">
+          <TrendingUp className="size-3.5 text-primary" />
+          <span className="tabular-nums font-semibold">{t("dash.streak.questions", { n: todayCounts.total })}</span>
+          <span>{t("dash.streak.today").toLowerCase()}</span>
+        </div>
+      </div>
+
       <ActivityBarChart activity={activity} today={today} />
+
+      <DailyGoalDialog
+        open={dialogOpen}
+        onOpenChange={setDialogOpen}
+        currentTarget={goalSettings.target}
+      />
     </OslerCard>
   );
 });

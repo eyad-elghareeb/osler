@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { Activity, Camera, Compass, Download, Languages, Palette, ShieldCheck, Sparkles } from "lucide-react";
+import { Activity, Camera, Compass, Download, Languages, Palette, ShieldCheck, Sparkles, Target } from "lucide-react";
 
 import { useI18n } from "@/components/osler/i18n-provider";
 
@@ -12,6 +12,7 @@ export function WelcomeStep() {
     { icon: Languages, label: t("onboarding.welcome.chip.language") },
     { icon: Palette, label: t("onboarding.welcome.chip.theme") },
     { icon: Compass, label: t("onboarding.welcome.chip.tour") },
+    { icon: Target, label: t("onboarding.welcome.chip.goal") },
     { icon: Sparkles, label: t("onboarding.welcome.chip.ai") },
     { icon: Download, label: t("onboarding.welcome.chip.install") },
     { icon: Camera, label: t("onboarding.welcome.chip.permissions") },

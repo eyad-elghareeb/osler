@@ -225,6 +225,27 @@ export const ar = {
     "dash.streak.riskTitle": "السلسلة في خطر",
     "dash.streak.timeLeft": "متبقٍ {time}",
 
+    "dash.goal.title": "الهدف اليومي",
+    "dash.goal.subtitle": "أغلق حلقات نشاطك كل يوم",
+    "dash.goal.achieved": "تم تحقيق الهدف!",
+    "dash.goal.progress": "{current} من {target} سؤال",
+    "dash.goal.percentAchieved": "تم إنجاز {percent}%",
+    "dash.goal.ringQuestions": "هدف الأسئلة",
+    "dash.goal.ringCorrect": "الإجابات الصحيحة",
+    "dash.goal.ringStreak": "الاستمرارية اليومية",
+    "dash.goal.questionsLabel": "{n} سؤال",
+    "dash.goal.correctLabel": "{n} صحيح",
+    "dash.goal.changeGoal": "تعديل الهدف",
+    "dash.goal.dialogTitle": "تحديد الهدف اليومي",
+    "dash.goal.dialogSubtitle": "اختر عدد الأسئلة التي ترغب في حلها يومياً لبناء استمرارية قوية.",
+    "dash.goal.customTarget": "هدف مخصص (سؤال/يوم)",
+    "dash.goal.presetCasual": "هادئ (25)",
+    "dash.goal.presetStandard": "معياري (50)",
+    "dash.goal.presetIntensive": "مكثف (100)",
+    "dash.goal.presetMastery": "احترافي (150)",
+    "dash.goal.save": "حفظ الهدف",
+    "dash.goal.saved": "تم تحديث الهدف",
+
     "profile.streak.title": "الاستمرارية ورصيد الأيام المتتالية",
     "profile.streak.days30": "30 يومًا",
     "profile.streak.modeActivity": "النشاط",
@@ -2983,6 +3004,7 @@ export const ar = {
     "onboarding.welcome.chip.language": "اللغة",
     "onboarding.welcome.chip.theme": "المظهر",
     "onboarding.welcome.chip.tour": "جولة سريعة",
+    "onboarding.welcome.chip.goal": "الهدف اليومي",
     "onboarding.welcome.chip.ai": "المساعد الذكي",
     "onboarding.welcome.chip.install": "التثبيت",
     "onboarding.welcome.chip.permissions": "الأذونات",
@@ -3018,6 +3040,20 @@ export const ar = {
       "نزّل الحزم مرة واحدة وواصل المذاكرة دون اتصال.",
     "onboarding.tour.extra.pdf":
       "صدّر أوراق الأسئلة والملاحظات والإحصاءات كملفات PDF أنيقة.",
+
+    "onboarding.goal.title": "الهدف اليومي والاستمرارية",
+    "onboarding.goal.subtitle":
+      "ابنِ عادة مذاكرة طبية تدوم. أغلق حلقات نشاطك اليومية وحافظ على استمرارية سلسلتك.",
+    "onboarding.goal.streakCardTitle": "كيف تعمل سلاسل الأيام المتتالية؟",
+    "onboarding.goal.streakCardDesc":
+      "أجب على الأسئلة يومياً لزيادة عدد أيام سلسلتك. نوفر نافذة مرنة مدتها 48 ساعة لتفادي انقطاع السلسلة عند انشغالك.",
+    "onboarding.goal.ringsCardTitle": "حلقات النشاط (Activity Rings)",
+    "onboarding.goal.ringsCardDesc":
+      "حلقات نشاط دائرية على طريقة Apple Health تعرض عدد الأسئلة المنجزة، وصحتها، واستمراريتك بلمحة واحدة في لوحة التحكم.",
+    "onboarding.goal.selectTarget": "اختر هدفك اليومي من الأسئلة",
+    "onboarding.goal.targetCustom": "عدد مخصص من الأسئلة",
+    "onboarding.goal.perDay": "سؤال / يوم",
+    "onboarding.goal.changeLater": "يمكنك تعديل هذا الهدف في أي وقت من لوحة التحكم أو الإعدادات.",
 
     "onboarding.language.title": "اختر لغتك",
     "onboarding.language.subtitle":

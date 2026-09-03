@@ -11,6 +11,7 @@ import { cn } from "@/lib/utils";
 import { MOTION_TRANSITION } from "@/lib/osler/motion";
 import { WelcomeStep } from "./welcome-step";
 import { TourStep } from "./tour-step";
+import { GoalStep } from "./goal-step";
 import { LanguageStep } from "./language-step";
 import { ThemeStep } from "./theme-step";
 import { AiStep } from "./ai-step";
@@ -43,7 +44,7 @@ function markOnboardingComplete(withConsent: boolean) {
   }
 }
 
-const STEPS = [WelcomeStep, TourStep, LanguageStep, ThemeStep, AiStep, SyncStep, InstallStep, PermissionsStep, ConsentStep];
+const STEPS = [WelcomeStep, TourStep, GoalStep, LanguageStep, ThemeStep, AiStep, SyncStep, InstallStep, PermissionsStep, ConsentStep];
 
 export function OnboardingWizard({ onComplete }: { onComplete: () => void }) {
   const { t, rtl } = useI18n();
